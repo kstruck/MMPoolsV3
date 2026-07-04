@@ -5,6 +5,7 @@ import { Trophy, Grid3X3, Lock, ArrowRight, ArrowLeft, Check } from 'lucide-reac
 import { Header } from './Header';
 import { Footer } from './Footer';
 import type { User } from '../types';
+import { canAccessPoolCreation } from '../utils/auth';
 
 interface CreatePoolSelectionProps {
     onSelectSquares: () => void;
@@ -30,6 +31,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
     onSelectProps
 }) => {
     const navigate = useNavigate();
+    const canCreate = canAccessPoolCreation(user);
 
     // Prevent unused variable TS errors for offseason options
     React.useEffect(() => {
@@ -78,8 +80,9 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* GAMEDAY SQUARES CARD */}
                             <button
-                                onClick={onSelectSquares}
-                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col"
+                                onClick={canCreate ? onSelectSquares : undefined}
+                                disabled={!canCreate}
+                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
                             >
                                 <div className="absolute top-4 right-4 bg-brandred-600/10 p-2.5 rounded-xl group-hover:bg-brandred-600 transition-colors">
                                     <Grid3X3 size={20} className="text-brandred-600 group-hover:text-white" />
@@ -92,14 +95,15 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                     <li className="flex items-center gap-2"><Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> Custom settings &amp; pricing</li>
                                 </ul>
                                 <span className="inline-flex items-center gap-1.5 text-gold-700 dark:text-gold-400 text-sm font-display font-bold uppercase tracking-[0.05em] group-hover:translate-x-1 transition-transform mt-auto">
-                                    Setup Squares <ArrowRight size={14} />
+                                    {canCreate ? <>Setup Squares <ArrowRight size={14} /></> : 'Coming Soon'}
                                 </span>
                             </button>
 
                             {/* WEEKLY PICK'EM CARD */}
                             <button
-                                onClick={() => navigate('/nfl-wizard?type=NFL_PICKEM')}
-                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col"
+                                onClick={canCreate ? () => navigate('/nfl-wizard?type=NFL_PICKEM') : undefined}
+                                disabled={!canCreate}
+                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
                             >
                                 <div className="absolute top-4 right-4 bg-navy-600/10 dark:bg-navy-600/30 p-2.5 rounded-xl group-hover:bg-navy-700 transition-colors">
                                     <Trophy size={20} className="text-navy-700 dark:text-[#9FB0CC] group-hover:text-white" />
@@ -112,14 +116,15 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                     <li className="flex items-center gap-2"><Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> Live leaderboards &amp; scoring</li>
                                 </ul>
                                 <span className="inline-flex items-center gap-1.5 text-gold-700 dark:text-gold-400 text-sm font-display font-bold uppercase tracking-[0.05em] group-hover:translate-x-1 transition-transform mt-auto">
-                                    Setup Pick'em <ArrowRight size={14} />
+                                    {canCreate ? <>Setup Pick'em <ArrowRight size={14} /></> : 'Coming Soon'}
                                 </span>
                             </button>
 
                             {/* SURVIVOR CARD */}
                             <button
-                                onClick={() => navigate('/nfl-wizard?type=NFL_SURVIVOR')}
-                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col"
+                                onClick={canCreate ? () => navigate('/nfl-wizard?type=NFL_SURVIVOR') : undefined}
+                                disabled={!canCreate}
+                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
                             >
                                 <div className="absolute top-4 right-4 bg-navy-950/10 dark:bg-navy-950/60 p-2.5 rounded-xl group-hover:bg-navy-950 transition-colors">
                                     <Trophy size={20} className="text-navy-800 dark:text-[#9FB0CC] group-hover:text-white" />
@@ -132,14 +137,15 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                     <li className="flex items-center gap-2"><Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> Automated tiebreakers &amp; lists</li>
                                 </ul>
                                 <span className="inline-flex items-center gap-1.5 text-gold-700 dark:text-gold-400 text-sm font-display font-bold uppercase tracking-[0.05em] group-hover:translate-x-1 transition-transform mt-auto">
-                                    Setup Survivor <ArrowRight size={14} />
+                                    {canCreate ? <>Setup Survivor <ArrowRight size={14} /></> : 'Coming Soon'}
                                 </span>
                             </button>
 
                             {/* MARGIN CARD */}
                             <button
-                                onClick={() => navigate('/nfl-wizard?type=NFL_MARGIN')}
-                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col"
+                                onClick={canCreate ? () => navigate('/nfl-wizard?type=NFL_MARGIN') : undefined}
+                                disabled={!canCreate}
+                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
                             >
                                 <div className="absolute top-4 right-4 bg-gold-500/15 p-2.5 rounded-xl group-hover:bg-gold-foil transition-colors">
                                     <Trophy size={20} className="text-gold-700 dark:text-gold-400 group-hover:text-navy-950" />
@@ -152,7 +158,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                     <li className="flex items-center gap-2"><Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> Progressive live standings</li>
                                 </ul>
                                 <span className="inline-flex items-center gap-1.5 text-gold-700 dark:text-gold-400 text-sm font-display font-bold uppercase tracking-[0.05em] group-hover:translate-x-1 transition-transform mt-auto">
-                                    Setup Margin <ArrowRight size={14} />
+                                    {canCreate ? <>Setup Margin <ArrowRight size={14} /></> : 'Coming Soon'}
                                 </span>
                             </button>
                         </div>
@@ -168,8 +174,9 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
 
                         {/* PROPS / SIDE HUSTLE OPTION */}
                         <button
-                            onClick={onSelectProps}
-                            className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-8 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover w-full"
+                            onClick={canCreate ? onSelectProps : undefined}
+                            disabled={!canCreate}
+                            className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-8 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover w-full disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
                         >
                             <div className="absolute top-4 right-4 bg-gold-500/15 p-3 rounded-xl group-hover:bg-gold-foil transition-colors">
                                 <Grid3X3 size={32} className="text-gold-700 dark:text-gold-400 group-hover:text-navy-950" />
@@ -183,7 +190,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                 <li className="flex items-center gap-2"><Check size={16} className="text-gold-600 dark:text-gold-400 shrink-0" /> Real-time leaderboard</li>
                             </ul>
                             <span className="inline-flex items-center gap-2 text-gold-700 dark:text-gold-400 font-display font-bold uppercase tracking-[0.05em] group-hover:translate-x-1 transition-transform">
-                                Create Props Pool <ArrowRight size={16} />
+                                {canCreate ? <>Create Props Pool <ArrowRight size={16} /></> : 'Pool Creation Coming Soon'}
                             </span>
                         </button>
                     </div>

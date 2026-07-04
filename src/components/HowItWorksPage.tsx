@@ -4,7 +4,7 @@ import { Footer } from './Footer';
 import type { User } from '../types';
 import { HelpCircle, CheckCircle, Shield, Trophy, LayoutGrid, BookOpen, AlertCircle, Mail, Sparkles, Zap, Star, Lightbulb, MessageCircle } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
-import { isSuperAdmin } from '../utils/auth';
+import { canAccessPoolCreation } from '../utils/auth';
 import { emailService } from '../services/emailService';
 import { logger } from '../utils/logger';
 import { Input, Select, FieldLabel, Checkbox, Button } from './ui';
@@ -301,15 +301,16 @@ Sent via March Melee Pools Central FAQ Support Form
         }
     };
 
-    const chromeCard = 'bg-navy-900 border border-[rgba(230,206,150,0.16)]';
+    const canCreate = canAccessPoolCreation(props.user);
+    const contentCard = 'bg-card border border-line';
     const textareaClass =
         'w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-3 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none resize-none';
 
     return (
-        <div className="bg-navy-950 min-h-screen text-[#EDF1F8] font-body flex flex-col">
+        <div className="bg-page min-h-screen text-[color:var(--text)] font-body flex flex-col">
             <Header {...props} />
 
-            {/* Title / Hero */}
+            {/* Title / Hero — navy chrome (always dark) */}
             <div className="relative overflow-hidden bg-navy-900 border-b border-[rgba(230,206,150,0.16)]">
                 <div className={`absolute top-0 left-0 w-full h-full bg-gradient-to-b from-navy-600/10 to-transparent pointer-events-none`} />
                 <div className="max-w-7xl mx-auto px-6 py-12 md:py-16 relative z-10">
@@ -334,8 +335,8 @@ Sent via March Melee Pools Central FAQ Support Form
 
                     {/* Sidebar Navigation (Pool Types) */}
                     <div className="w-full lg:w-64 shrink-0">
-                        <div className={`${chromeCard} p-4 rounded-2xl sticky top-28 space-y-2`}>
-                            <h3 className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#7C8BA6] px-3 mb-4">Select Pool Type</h3>
+                        <div className={`${contentCard} p-4 rounded-2xl sticky top-28 space-y-2`}>
+                            <h3 className="font-display font-bold uppercase text-xs tracking-[0.08em] text-faint px-3 mb-4">Select Pool Type</h3>
                             {POOL_TYPES.map((type) => {
                                 const IconComp = type.icon;
                                 const isSelected = activeSport === type.id;
@@ -345,11 +346,11 @@ Sent via March Melee Pools Central FAQ Support Form
                                         onClick={() => handleSportChange(type.id)}
                                         className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left font-display font-bold uppercase tracking-[0.05em] text-sm transition-all group ${
                                             isSelected
-                                                ? 'bg-navy-800 text-white border-l-4 border-gold-500 shadow-md'
-                                                : 'text-[#9FB0CC] hover:text-white hover:bg-navy-900/60'
+                                                ? 'bg-surface text-[color:var(--text)] border-l-4 border-gold-500 shadow-md'
+                                                : 'text-muted hover:text-[color:var(--text)] hover:bg-surface'
                                         }`}
                                     >
-                                        <IconComp size={16} className={`${isSelected ? 'text-gold-400' : 'text-[#7C8BA6] group-hover:text-[#9FB0CC]'}`} />
+                                        <IconComp size={16} className={`${isSelected ? 'text-gold-600 dark:text-gold-400' : 'text-faint group-hover:text-muted'}`} />
                                         {type.name}
                                     </button>
                                 );
@@ -360,7 +361,7 @@ Sent via March Melee Pools Central FAQ Support Form
                     {/* Content Pane */}
                     <div className="flex-grow">
                         {/* Sub Navigation (View Modes) */}
-                        <div className={`flex ${chromeCard} p-1.5 rounded-2xl gap-1 mb-8`}>
+                        <div className={`flex ${contentCard} p-1.5 rounded-2xl gap-1 mb-8`}>
                             {[
                                 { id: 'overview' as ViewMode, label: 'How it Works', icon: BookOpen },
                                 { id: 'strategy' as ViewMode, label: 'Strategy Guide', icon: Lightbulb },
@@ -376,7 +377,7 @@ Sent via March Melee Pools Central FAQ Support Form
                                         className={`flex-grow md:flex-grow-0 inline-flex items-center justify-center gap-1.5 px-4 md:px-6 py-3 rounded-xl font-display font-bold uppercase tracking-[0.05em] text-xs md:text-sm text-center transition-all ${
                                             isViewSelected
                                                 ? 'bg-gold-foil text-navy-900 shadow-[0_6px_16px_rgba(140,109,51,0.28)]'
-                                                : 'text-[#9FB0CC] hover:text-white hover:bg-navy-800'
+                                                : 'text-muted hover:text-[color:var(--text)] hover:bg-surface'
                                         }`}
                                     >
                                         <TabIcon size={14} /> {tab.label}
@@ -388,22 +389,22 @@ Sent via March Melee Pools Central FAQ Support Form
                         {/* VIEW 1: OVERVIEW */}
                         {activeView === 'overview' && (
                             <div className="space-y-12">
-                                <div className="border-b border-[rgba(230,206,150,0.16)] pb-6">
-                                    <h2 className="font-display font-extrabold uppercase text-2xl md:text-3xl leading-[0.95] text-white mb-3">{activeData.title} Overview</h2>
-                                    <p className="font-body text-[#9FB0CC] text-base leading-relaxed">{activeData.description}</p>
+                                <div className="border-b border-line pb-6">
+                                    <h2 className="font-display font-extrabold uppercase text-2xl md:text-3xl leading-[0.95] text-[color:var(--text)] mb-3">{activeData.title} Overview</h2>
+                                    <p className="font-body text-muted text-base leading-relaxed">{activeData.description}</p>
                                 </div>
 
                                 <div className="space-y-6">
-                                    <h3 className="font-display font-bold uppercase text-lg tracking-[0.08em] text-white">{activeData.stepsTitle}</h3>
+                                    <h3 className="font-display font-bold uppercase text-lg tracking-[0.08em] text-[color:var(--text)]">{activeData.stepsTitle}</h3>
                                     <div className="space-y-4">
                                         {activeData.steps.map((step, idx) => (
-                                            <div key={idx} className={`flex gap-4 items-start p-5 rounded-2xl ${chromeCard} hover:border-gold-500/40 transition-all`}>
-                                                <div className="bg-gold-500/15 text-gold-400 font-display font-extrabold text-lg w-10 h-10 rounded-full flex items-center justify-center shrink-0 border border-gold-500/25 num">
+                                            <div key={idx} className={`flex gap-4 items-start p-5 rounded-2xl ${contentCard} hover:border-gold-500/40 transition-all`}>
+                                                <div className="bg-gold-500/15 text-gold-600 dark:text-gold-400 font-display font-extrabold text-lg w-10 h-10 rounded-full flex items-center justify-center shrink-0 border border-gold-500/25 num">
                                                     {idx + 1}
                                                 </div>
                                                 <div>
-                                                    <h4 className="font-display font-bold uppercase text-lg text-white mb-1">{step.title}</h4>
-                                                    <p className="font-body text-[#9FB0CC] text-sm leading-relaxed">{step.desc}</p>
+                                                    <h4 className="font-display font-bold uppercase text-lg text-[color:var(--text)] mb-1">{step.title}</h4>
+                                                    <p className="font-body text-muted text-sm leading-relaxed">{step.desc}</p>
                                                 </div>
                                             </div>
                                         ))}
@@ -411,10 +412,10 @@ Sent via March Melee Pools Central FAQ Support Form
                                 </div>
 
                                 <div className="bg-gold-500/10 border border-gold-500/25 rounded-2xl p-6 flex gap-4">
-                                    <Shield className="text-gold-400 shrink-0 mt-0.5" size={28} />
+                                    <Shield className="text-gold-600 dark:text-gold-400 shrink-0 mt-0.5" size={28} />
                                     <div>
-                                        <h4 className="font-display font-bold uppercase text-white mb-2">Fairness Guarantee</h4>
-                                        <p className="text-sm font-body text-[#9FB0CC] leading-relaxed">{activeData.fairness}</p>
+                                        <h4 className="font-display font-bold uppercase text-[color:var(--text)] mb-2">Fairness Guarantee</h4>
+                                        <p className="text-sm font-body text-muted leading-relaxed">{activeData.fairness}</p>
                                     </div>
                                 </div>
                             </div>
@@ -423,31 +424,31 @@ Sent via March Melee Pools Central FAQ Support Form
                         {/* VIEW 2: STRATEGY GUIDE */}
                         {activeView === 'strategy' && (
                             <div className="space-y-8">
-                                <div className="border-b border-[rgba(230,206,150,0.16)] pb-6">
-                                    <h2 className="font-display font-extrabold uppercase text-2xl md:text-3xl leading-[0.95] text-white mb-3">{activeData.strategyTitle}</h2>
-                                    <p className="font-body text-[#9FB0CC] text-sm italic">Master optimal game theory and secure seasonal or tournament leverage.</p>
+                                <div className="border-b border-line pb-6">
+                                    <h2 className="font-display font-extrabold uppercase text-2xl md:text-3xl leading-[0.95] text-[color:var(--text)] mb-3">{activeData.strategyTitle}</h2>
+                                    <p className="font-body text-muted text-sm italic">Master optimal game theory and secure seasonal or tournament leverage.</p>
                                 </div>
 
                                 <div className="space-y-8">
                                     {activeData.strategySections.map((section, idx) => (
-                                        <div key={idx} className={`p-6 md:p-8 ${chromeCard} rounded-3xl space-y-3`}>
+                                        <div key={idx} className={`p-6 md:p-8 ${contentCard} rounded-3xl space-y-3`}>
                                             <div className="flex items-center gap-2">
                                                 <div className="h-2 w-2 rounded-full bg-gold-500" />
-                                                <h4 className="font-display font-bold uppercase text-xl text-white">{section.title}</h4>
+                                                <h4 className="font-display font-bold uppercase text-xl text-[color:var(--text)]">{section.title}</h4>
                                             </div>
-                                            <p className="font-body text-[#EDF1F8] text-base leading-relaxed pl-4 border-l border-[rgba(230,206,150,0.16)]">{section.content}</p>
+                                            <p className="font-body text-[color:var(--text)] text-base leading-relaxed pl-4 border-l border-line">{section.content}</p>
                                         </div>
                                     ))}
                                 </div>
 
                                 {/* Custom Content for Brackets Guide from the original Article */}
                                 {activeSport === 'brackets' && (
-                                    <div className={`mt-12 ${chromeCard} p-8 rounded-3xl space-y-6`}>
-                                        <h3 className="font-display font-bold uppercase text-xl text-white">Running a Charity Tournament Bracket</h3>
-                                        <p className="font-body text-[#9FB0CC] text-sm leading-relaxed">
+                                    <div className={`mt-12 ${contentCard} p-8 rounded-3xl space-y-6`}>
+                                        <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)]">Running a Charity Tournament Bracket</h3>
+                                        <p className="font-body text-muted text-sm leading-relaxed">
                                             Charity pools are incredibly popular in 2026. Setting up a Charity Bracket is simple: designate a fixed percentage (e.g., 50% or 100%) of entries to be directly donated to a 501(c)(3) charity. The platform tracks collection transparently, so everyone in your Slack or email chain can see the cumulative impact.
                                         </p>
-                                        <p className="font-body text-[#9FB0CC] text-sm leading-relaxed">
+                                        <p className="font-body text-muted text-sm leading-relaxed">
                                             Ensure that you communicate the charity details, deadline locks, and receipt verifications early on to foster trust and excitement.
                                         </p>
                                     </div>
@@ -458,29 +459,29 @@ Sent via March Melee Pools Central FAQ Support Form
                         {/* VIEW 3: FAQ */}
                         {activeView === 'faq' && (
                             <div className="space-y-8">
-                                <div className="border-b border-[rgba(230,206,150,0.16)] pb-6">
-                                    <h2 className="font-display font-extrabold uppercase text-2xl md:text-3xl leading-[0.95] text-white mb-3">Frequently Asked Questions</h2>
-                                    <p className="font-body text-[#9FB0CC] text-sm">Have rules questions? Review the comprehensive answers below.</p>
+                                <div className="border-b border-line pb-6">
+                                    <h2 className="font-display font-extrabold uppercase text-2xl md:text-3xl leading-[0.95] text-[color:var(--text)] mb-3">Frequently Asked Questions</h2>
+                                    <p className="font-body text-muted text-sm">Have rules questions? Review the comprehensive answers below.</p>
                                 </div>
 
                                 <div className="grid gap-4">
                                     {activeData.faqs.map((faq, i) => (
-                                        <details key={i} className={`group ${chromeCard} rounded-xl overflow-hidden transition-all`}>
-                                            <summary className="flex justify-between items-center p-6 cursor-pointer font-display font-bold uppercase text-white hover:bg-navy-800/60 transition-colors list-none">
+                                        <details key={i} className={`group ${contentCard} rounded-xl overflow-hidden transition-all`}>
+                                            <summary className="flex justify-between items-center p-6 cursor-pointer font-display font-bold uppercase text-[color:var(--text)] hover:bg-surface transition-colors list-none">
                                                 {faq.q}
-                                                <span className="text-gold-400 group-open:rotate-180 transition-transform">▼</span>
+                                                <span className="text-gold-600 dark:text-gold-400 group-open:rotate-180 transition-transform">▼</span>
                                             </summary>
-                                            <div className="px-6 pb-6 font-body text-[#9FB0CC] text-sm leading-relaxed border-t border-[rgba(230,206,150,0.16)] pt-4">
+                                            <div className="px-6 pb-6 font-body text-muted text-sm leading-relaxed border-t border-line pt-4">
                                                 {faq.a}
                                             </div>
                                         </details>
                                     ))}
                                 </div>
 
-                                <div className={`p-6 ${chromeCard} rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4 mt-12`}>
+                                <div className={`p-6 ${contentCard} rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4 mt-12`}>
                                     <div>
-                                        <h4 className="font-display font-bold uppercase text-white mb-1">Didn't find your answer?</h4>
-                                        <p className="text-xs font-body text-[#9FB0CC]">Our technical customer service team is standing by to resolve any issue.</p>
+                                        <h4 className="font-display font-bold uppercase text-[color:var(--text)] mb-1">Didn't find your answer?</h4>
+                                        <p className="text-xs font-body text-muted">Our technical customer service team is standing by to resolve any issue.</p>
                                     </div>
                                     <button
                                         onClick={() => handleViewChange('contact')}
@@ -495,9 +496,9 @@ Sent via March Melee Pools Central FAQ Support Form
                         {/* VIEW 4: CONTACT SUPPORT */}
                         {activeView === 'contact' && (
                             <div className="space-y-8">
-                                <div className="border-b border-[rgba(230,206,150,0.16)] pb-6">
-                                    <h2 className="font-display font-extrabold uppercase text-2xl md:text-3xl leading-[0.95] text-white mb-3">Contact Technical Support</h2>
-                                    <p className="font-body text-[#9FB0CC] text-sm">Send us a ticket, and our support representatives will respond within 48 hours.</p>
+                                <div className="border-b border-line pb-6">
+                                    <h2 className="font-display font-extrabold uppercase text-2xl md:text-3xl leading-[0.95] text-[color:var(--text)] mb-3">Contact Technical Support</h2>
+                                    <p className="font-body text-muted text-sm">Send us a ticket, and our support representatives will respond within 48 hours.</p>
                                 </div>
 
                                 {/* Form Alerts */}
@@ -505,8 +506,8 @@ Sent via March Melee Pools Central FAQ Support Form
                                     <div className="bg-[#0F7B4A]/15 border border-[#0F7B4A]/40 rounded-2xl p-6 flex gap-3">
                                         <CheckCircle className="text-emerald-400 shrink-0" size={24} />
                                         <div>
-                                            <h4 className="font-display font-bold uppercase text-white mb-1">Message Sent Successfully!</h4>
-                                            <p className="font-body text-[#9FB0CC] text-sm">Thank you. We have received your query and will reply within 48 hours.</p>
+                                            <h4 className="font-display font-bold uppercase text-[color:var(--text)] mb-1">Message Sent Successfully!</h4>
+                                            <p className="font-body text-muted text-sm">Thank you. We have received your query and will reply within 48 hours.</p>
                                         </div>
                                     </div>
                                 )}
@@ -515,16 +516,16 @@ Sent via March Melee Pools Central FAQ Support Form
                                     <div className="bg-brandred-600/15 border border-brandred-600/35 rounded-2xl p-6 flex gap-3">
                                         <AlertCircle className="text-brandred-500 shrink-0" size={24} />
                                         <div>
-                                            <h4 className="font-display font-bold uppercase text-white mb-1">Failed to Send Message</h4>
-                                            <p className="font-body text-[#9FB0CC] text-sm">Something went wrong. Please check your network connection or try again.</p>
+                                            <h4 className="font-display font-bold uppercase text-[color:var(--text)] mb-1">Failed to Send Message</h4>
+                                            <p className="font-body text-muted text-sm">Something went wrong. Please check your network connection or try again.</p>
                                         </div>
                                     </div>
                                 )}
 
-                                <form onSubmit={handleSupportSubmit} className={`${chromeCard} rounded-3xl p-6 md:p-8 space-y-6`}>
+                                <form onSubmit={handleSupportSubmit} className={`${contentCard} rounded-3xl p-6 md:p-8 space-y-6`}>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
-                                            <FieldLabel className="text-[#EDF1F8]">Your Name</FieldLabel>
+                                            <FieldLabel className="text-[color:var(--text)]">Your Name</FieldLabel>
                                             <Input
                                                 type="text"
                                                 required
@@ -534,7 +535,7 @@ Sent via March Melee Pools Central FAQ Support Form
                                             />
                                         </div>
                                         <div>
-                                            <FieldLabel className="text-[#EDF1F8]">Your Email</FieldLabel>
+                                            <FieldLabel className="text-[color:var(--text)]">Your Email</FieldLabel>
                                             <Input
                                                 type="email"
                                                 required
@@ -546,7 +547,7 @@ Sent via March Melee Pools Central FAQ Support Form
                                     </div>
 
                                     <div>
-                                        <FieldLabel className="text-[#EDF1F8]">Inquiry Category</FieldLabel>
+                                        <FieldLabel className="text-[color:var(--text)]">Inquiry Category</FieldLabel>
                                         <Select
                                             required
                                             value={supportData.supportType}
@@ -562,7 +563,7 @@ Sent via March Melee Pools Central FAQ Support Form
                                     </div>
 
                                     <div>
-                                        <FieldLabel className="text-[#EDF1F8]">Your Message</FieldLabel>
+                                        <FieldLabel className="text-[color:var(--text)]">Your Message</FieldLabel>
                                         <textarea
                                             required
                                             rows={6}
@@ -580,7 +581,7 @@ Sent via March Melee Pools Central FAQ Support Form
                                             onChange={(e) => setSupportData({ ...supportData, sendCopy: e.target.checked })}
                                             className="mt-1"
                                         />
-                                        <label htmlFor="sendCopy" className="text-xs font-body text-[#9FB0CC] cursor-pointer">
+                                        <label htmlFor="sendCopy" className="text-xs font-body text-muted cursor-pointer">
                                             Send me a confirmation copy of this ticket for my records
                                         </label>
                                     </div>
@@ -610,26 +611,26 @@ Sent via March Melee Pools Central FAQ Support Form
 
                         {/* CTA Box (Active for overview/strategy/faq views) */}
                         {activeView !== 'contact' && (
-                            <div className={`mt-16 ${chromeCard} rounded-3xl p-8 text-center relative overflow-hidden group`}>
+                            <div className={`mt-16 ${contentCard} rounded-3xl p-8 text-center relative overflow-hidden group`}>
                                 <div className="absolute inset-0 bg-gold-500/5 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
                                 <div className="relative z-10">
-                                    <h3 className="font-display font-extrabold uppercase text-2xl leading-[0.95] text-white mb-2">Ready to kick off your pool?</h3>
-                                    <p className="text-sm font-body text-[#9FB0CC] mb-8 max-w-lg mx-auto">
+                                    <h3 className="font-display font-extrabold uppercase text-2xl leading-[0.95] text-[color:var(--text)] mb-2">Ready to kick off your pool?</h3>
+                                    <p className="text-sm font-body text-muted mb-8 max-w-lg mx-auto">
                                         Create a free {activeData.title} now. Live score boards, automatic payouts, and automated standings. Zero spreadsheet headaches.
                                     </p>
                                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
                                         <button
-                                            onClick={isSuperAdmin(props.user) ? props.onCreatePool : undefined}
-                                            disabled={!isSuperAdmin(props.user)}
+                                            onClick={canCreate ? props.onCreatePool : undefined}
+                                            disabled={!canCreate}
                                             className="inline-flex items-center justify-center gap-2 bg-brandred-600 text-white hover:bg-brandred-500 px-8 py-3.5 rounded-md font-display font-bold uppercase tracking-[0.05em] text-sm transition-all duration-150 hover:-translate-y-px shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-                                            title={isSuperAdmin(props.user) ? `Create a ${activeData.title}` : "Commissioners can host soon"}
+                                            title={canCreate ? `Create a ${activeData.title}` : "Pool creation is coming soon"}
                                         >
-                                            {activeData.ctaText}
+                                            {canCreate ? activeData.ctaText : 'Pool Creation Coming Soon'}
                                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
                                         </button>
                                         <button
                                             onClick={() => window.location.href = '/browse'}
-                                            className="px-8 py-3.5 bg-navy-800 hover:bg-navy-700 text-white font-display font-bold uppercase tracking-[0.05em] text-sm rounded-md transition-all"
+                                            className="px-8 py-3.5 bg-surface hover:bg-card border border-line text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em] text-sm rounded-md transition-all"
                                         >
                                             Join a Public Pool
                                         </button>
