@@ -83,7 +83,10 @@ const defaultValues: Record<string, unknown> = {
   paymentInstructions: '',
   paymentHandles: { venmo: '', zelle: '', cashapp: '', paypal: '', googlePay: '' },
   branding: { logoUrl: '', primaryColor: '', secondaryColor: '' },
-  props: { cost: 0, maxCards: 1, questions: [{ text: '', options: ['', ''] }] },
+  // Empty array, not a pre-seeded blank question: a blank question fails the
+  // schema's min(1)-text/min(2)-options validation, which would silently
+  // block "Next" on the setup step before the commissioner touches anything.
+  props: { cost: 0, maxCards: 1, questions: [] },
   _tosAccepted: false,
 };
 

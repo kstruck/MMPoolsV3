@@ -51,10 +51,16 @@ export function WizardShell(props: WizardShellProps) {
   const tosAccepted = Boolean(methods.watch(TOS_FIELD));
 
   const goNext = async () => {
+    setSubmitError(null);
     const ok = step.fields && step.fields.length > 0
       ? await methods.trigger(step.fields as never)
       : true;
-    if (!ok) return;
+    if (!ok) {
+      // trigger() failing is otherwise silent — the button just does nothing,
+      // identical class of bug as an unhandled final-submit validation failure.
+      setSubmitError(`Please fix the highlighted fields before continuing: ${step.fields!.join(', ')}.`);
+      return;
+    }
     setStepIndex((i) => {
       const next = Math.min(i + 1, steps.length - 1);
       setMaxVisited((m) => Math.max(m, next));
@@ -67,24 +73,38 @@ export function WizardShell(props: WizardShellProps) {
     if (i <= maxVisited) setStepIndex(i);
   };
 
-  const submit = methods.handleSubmit(async () => {
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      // handleSubmit gates on validation, but its argument is the zod-STRIPPED
-      // output (unknown keys removed) — that would drop legit config the schema
-      // doesn't enumerate (reminders, teams, lockDate…). Use the full form state
-      // instead; the callable re-gates and persists the original payload.
-      const { [TOS_FIELD]: _tos, ...clean } = methods.getValues() as Record<string, unknown>;
-      void _tos;
-      await onSubmit(clean);
-      clear();
-    } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : 'Something went wrong creating the pool.');
-    } finally {
-      setSubmitting(false);
-    }
-  });
+  const submit = methods.handleSubmit(
+    async () => {
+      setSubmitting(true);
+      setSubmitError(null);
+      try {
+        // handleSubmit gates on validation, but its argument is the zod-STRIPPED
+        // output (unknown keys removed) — that would drop legit config the schema
+        // doesn't enumerate (reminders, teams, lockDate…). Use the full form state
+        // instead; the callable re-gates and persists the original payload.
+        const { [TOS_FIELD]: _tos, ...clean } = methods.getValues() as Record<string, unknown>;
+        void _tos;
+        await onSubmit(clean);
+        clear();
+      } catch (e) {
+        setSubmitError(e instanceof Error ? e.message : 'Something went wrong creating the pool.');
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    // handleSubmit validates the FULL schema on final submit, not just the
+    // visible step — a field on an earlier step (or a form/schema type
+    // mismatch) can fail validation invisibly, leaving the button inert with
+    // no feedback. Surface it instead of failing silently.
+    (errors) => {
+      const badFields = Object.keys(errors).filter((k) => k !== TOS_FIELD);
+      setSubmitError(
+        badFields.length > 0
+          ? `Some fields need attention before launching: ${badFields.join(', ')}. Check earlier steps.`
+          : 'Please accept the Terms of Service to continue.',
+      );
+    },
+  );
 
   const resumeDraft = () => {
     if (existing) methods.reset(existing.data);
