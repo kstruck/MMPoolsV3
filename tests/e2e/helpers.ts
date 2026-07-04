@@ -16,7 +16,11 @@ export async function registerFreshUser(page: Page, email: string): Promise<void
   }
   await page.locator('input[type="text"]').first().fill(`E2E ${email}`);
   await page.locator('input[type="email"]').fill(email);
-  await page.locator('input[type="password"]').fill('testpass123');
+  // Auth emulator enforces a password policy (upper case + non-alphanumeric
+  // required) — a plain lowercase/digits password fails registration silently
+  // client-side (a toast/console error, no thrown navigation error), which
+  // otherwise manifests downstream as every subsequent step timing out.
+  await page.locator('input[type="password"]').fill('TestPass123!');
   await page.getByRole('button', { name: /Create Account/i }).click();
   // Registration redirects to /participant on success.
   await page.waitForURL(/\/participant/, { timeout: 15_000 });
@@ -113,7 +117,9 @@ export async function advanceToReview(page: Page): Promise<void> {
 
 /** Fills #name (must be on the Basics step), then advances to Review and accepts TOS. */
 export async function fillBasicsAndAdvanceToReview(page: Page, poolName: string): Promise<void> {
-  await page.locator('#name').fill(poolName);
+  const name = page.locator('#name');
+  await name.waitFor({ state: 'visible', timeout: 15_000 });
+  await name.fill(poolName);
   await advanceToReview(page);
 }
 

@@ -20,28 +20,46 @@ import {
 const RUN_ID = `${Date.now()}`;
 
 /**
- * Navigates to a /create/:type route, re-promoting and retrying if the route
- * bounces us back to "/" (canAccessPoolCreation gate failed).
+ * Navigates to a /create/:type route after ensuring the client reflects the
+ * SUPER_ADMIN role, retrying if the route bounces back to "/" (the
+ * canAccessPoolCreation gate reading a still-PARTICIPANT client user).
  *
- * There's a real, pre-existing, unrelated client/server async race around
- * `users/{uid}.role` becoming visible to the app's live Firestore listener
- * right after a fresh registration (observed independently of this harness —
- * onUserCreated's auth trigger throws on every invocation due to a broken
- * `admin.firestore.FieldValue.serverTimestamp()` call and never writes
- * anything, ruling it out as the cause; the actual source is a separate
- * client-side sync race, out of scope for this test to fix). Retrying the
- * promotion + navigation sidesteps it without depending on diagnosing that
- * race further — it's test-harness robustness, not a wizard-code workaround.
+ * The promotion is an out-of-band Firestore REST write (see promoteToSuperAdmin)
+ * — the app only learns about it through its user-doc read on auth init. A
+ * page.reload() re-runs onAuthStateChanged -> syncUserToFirestore's getDoc,
+ * which (with the in-memory cache the app uses in emulator mode — see
+ * src/firebase.ts) hits the emulator directly and returns the fresh role.
+ * The live onSnapshot listener does NOT deliver an out-of-band write against
+ * the Firestore emulator, so the reload is the deterministic mechanism here,
+ * not a race workaround.
  */
 async function gotoCreateRoute(page: Page, email: string, path: string): Promise<void> {
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    await promoteToSuperAdmin(email); // idempotent; verified server-side before returning
-    await page.goto(path);
-    await page.waitForLoadState('networkidle').catch(() => {});
-    if (page.url().endsWith(path)) return;
-    await page.waitForTimeout(1000);
+  // The role is already promoted server-side (registerAsAdmin). A reload makes
+  // the client re-read it: onAuthStateChanged -> syncUserToFirestore's getDoc,
+  // which with the in-memory cache used in emulator mode (see src/firebase.ts)
+  // hits the emulator directly and returns SUPER_ADMIN. Wait for the header to
+  // reflect it before navigating, so the route guard doesn't evaluate while the
+  // async auth chain is still resolving (which would bounce us to "/").
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await page.goto('/');
+    await page.reload();
+    const promoted = await page
+      .getByText('(SUPER_ADMIN)')
+      .first()
+      .waitFor({ state: 'visible', timeout: 20_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (promoted) break;
+    await promoteToSuperAdmin(email); // re-assert in case a stray write reset it
   }
-  throw new Error(`gotoCreateRoute: never reached ${path} after 5 attempts; landed on ${page.url()}`);
+  await page.goto(path); // goto waits for 'load'; do NOT wait for networkidle —
+  // Firestore's onSnapshot holds a persistent channel so the page is never idle.
+  // Route-guard redirects are synchronous on first render, so a short settle is
+  // enough to know whether we stuck on the route or bounced to "/".
+  await page.waitForTimeout(500);
+  if (!page.url().endsWith(path)) {
+    throw new Error(`gotoCreateRoute: bounced off ${path}; landed on ${page.url()}`);
+  }
 }
 
 async function registerAsAdmin(page: Page, email: string): Promise<void> {
