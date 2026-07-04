@@ -1,6 +1,7 @@
 
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { UserRecord } from "firebase-functions/v1/auth";
 import { onCall, CallableRequest } from "firebase-functions/v2/https";
 
@@ -31,9 +32,9 @@ export const onUserCreated = functions.auth.user().onCreate(async (user: UserRec
                 email: email || "",
                 picture: photoURL || null,
                 registrationMethod: method,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                createdAt: FieldValue.serverTimestamp(),
 
-                lastLogin: admin.firestore.FieldValue.serverTimestamp(),
+                lastLogin: FieldValue.serverTimestamp(),
                 role: 'PARTICIPANT'
             });
             console.log(`[UserSync] Successfully synced user ${uid} (${email}) to Firestore.`);
@@ -41,7 +42,7 @@ export const onUserCreated = functions.auth.user().onCreate(async (user: UserRec
             console.log(`[UserSync] User ${uid} already exists in Firestore. Using merge just in case.`);
             await userRef.set({
                 email: email || "", // Ensure email is up to date
-                lastLogin: admin.firestore.FieldValue.serverTimestamp()
+                lastLogin: FieldValue.serverTimestamp()
             }, { merge: true });
         }
     } catch (error) {
@@ -81,7 +82,7 @@ export const syncAllUsers = onCall(async (request: CallableRequest) => {
                 picture: user.photoURL || null,
                 registrationMethod: method,
                 // Don't overwrite createdAt if it exists, but ensure sync timestamp
-                syncedAt: admin.firestore.FieldValue.serverTimestamp()
+                syncedAt: FieldValue.serverTimestamp()
             };
 
             batch.set(userRef, userData, { merge: true });
