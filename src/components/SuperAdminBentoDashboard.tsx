@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import type { GlobalStats } from '../services/dbService';
 import {
   Trophy,
@@ -12,10 +12,35 @@ import {
   ArrowRight,
   RefreshCw,
   Play,
-  Heart
+  Heart,
+  Mail,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../firebase';
 import { useToast } from './ui/Toast';
+import { getUserMessage } from '../utils/errorMessages';
+import { dbService } from '../services/dbService';
 import { Badge, Button } from './ui';
+
+interface HealthCheck {
+  label: string;
+  ok: boolean;
+  latencyMs: number;
+  detail: string;
+}
+interface HealthSnapshot {
+  at: number;
+  checks: { espn: HealthCheck; firestore: HealthCheck; email: HealthCheck; functions: HealthCheck };
+}
+
+const CHECK_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
+  espn: Server,
+  firestore: Database,
+  functions: Cpu,
+  email: Mail,
+};
 
 interface SuperAdminBentoDashboardProps {
   stats: GlobalStats | null;
@@ -30,6 +55,36 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
     "System Initialized successfully.",
     "Firebase security rules verified."
   ]);
+  const [health, setHealth] = useState<HealthSnapshot | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
+  const [isProbing, setIsProbing] = useState(false);
+  const [revenue, setRevenue] = useState<{ totalRevenue?: number; last30dRevenue?: number } | null>(null);
+
+  // Platform revenue (Stripe income) — distinct from prize volume (GMV) below.
+  useEffect(() => {
+    const unsub = dbService.subscribeToRevenueStats((r) => setRevenue(r as { totalRevenue?: number } | null));
+    return unsub;
+  }, []);
+
+  const runHealthCheck = useCallback(async () => {
+    setIsProbing(true);
+    setHealthError(null);
+    try {
+      const fn = httpsCallable<void, HealthSnapshot>(functions, 'getAdminHealthSnapshot');
+      const res = await fn();
+      setHealth(res.data);
+    } catch (err) {
+      setHealthError(getUserMessage(err));
+      toast.error('Health check failed. See the status card for detail.');
+    } finally {
+      setIsProbing(false);
+    }
+  }, [toast]);
+
+  const checkEntries = health
+    ? (Object.entries(health.checks) as [string, HealthCheck][])
+    : [];
+  const allOk = checkEntries.length > 0 && checkEntries.every(([, c]) => c.ok);
 
   const handleRefreshStats = () => {
     setIsRefreshing(true);
@@ -133,18 +188,34 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
             </div>
 
             {/* Metric D */}
-            <div className="bg-surface border border-line p-4 rounded-2xl relative overflow-hidden group hover:border-gold-500/40 transition-colors duration-150">
+            <div className="bg-surface border border-line p-4 rounded-2xl relative overflow-hidden group hover:border-gold-500/40 transition-colors duration-150" title="Total prize money across all pools — player money, not platform income.">
               <div className="absolute top-3 right-3 p-1.5 rounded-lg bg-gold-500/10 text-gold-600 dark:text-gold-400">
                 <Coins size={16} />
               </div>
               <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.16em] block mb-1">
-                Total Revenue
+                Prize Volume (GMV)
               </span>
               <span className="text-2xl font-display font-bold text-gold-700 dark:text-gold-400 num leading-none">
                 ${(stats?.totalRevenue || 0).toLocaleString()}
               </span>
             </div>
 
+          </div>
+
+          {/* Platform Revenue — real Stripe income (admin_stats/revenue), distinct from GMV above. */}
+          <div className="bg-surface border border-gold-500/40 p-5 rounded-2xl flex items-center justify-between shadow-card mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-gold-500/15 border border-gold-500/40 rounded-xl text-gold-600 dark:text-gold-400">
+                <Coins size={20} />
+              </div>
+              <div>
+                <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.16em] block mb-0.5">Platform Revenue</span>
+                <span className="text-xl font-display font-bold text-gold-700 dark:text-gold-400 num">${(revenue?.totalRevenue || 0).toLocaleString()}</span>
+              </div>
+            </div>
+            <span className="text-[10px] font-display font-bold text-gold-700 dark:text-gold-400 bg-gold-500/10 px-3 py-1 rounded-full uppercase tracking-[0.08em]">
+              ${(revenue?.last30dRevenue || 0).toLocaleString()} / 30d
+            </span>
           </div>
 
           {/* Charity Glow Metric */}
@@ -180,46 +251,70 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
           <div className="flex justify-between items-center mb-6">
             <div>
               <h3 className="text-xs font-display font-bold text-muted uppercase tracking-[0.16em]">API Status Center</h3>
-              <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em]">System Integration Services</p>
+              <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em]">Live Integration Probe</p>
             </div>
-            <Activity size={18} className="text-[#0F7B4A] animate-pulse" />
+            <button
+              onClick={runHealthCheck}
+              disabled={isProbing}
+              className="flex items-center gap-2 px-3 py-2 bg-surface hover:bg-card border border-line rounded-xl transition-all duration-150 text-muted hover:text-[color:var(--text)] active:scale-95 disabled:opacity-50 text-[10px] font-display font-bold uppercase tracking-[0.08em]"
+            >
+              <RefreshCw size={14} className={isProbing ? 'animate-spin' : ''} />
+              {isProbing ? 'Probing' : 'Run Check'}
+            </button>
           </div>
 
-          {/* Glowing Health meters list */}
-          <div className="space-y-3.5">
-            {[
-              { service: 'ESPN NFL API Sync', status: 'OPERATIONAL', latency: '42ms', icon: Server },
-              { service: 'Firebase Cloud Functions', status: 'HEALTHY', latency: '12ms', icon: Cpu },
-              { service: 'Firestore Database Security Rules', status: 'SECURED', latency: 'A+', icon: ShieldCheck },
-              { service: 'SendGrid Email Relay', status: 'OPERATIONAL', latency: '110ms', icon: Server }
-            ].map((feed, idx) => (
-              <div
-                key={idx}
-                className="flex justify-between items-center p-3.5 bg-surface border border-line rounded-2xl transition-all duration-150 hover:border-gold-500/40"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-card border border-line flex items-center justify-center text-muted">
-                    <feed.icon size={16} />
-                  </div>
-                  <div>
-                    <span className="text-xs font-display font-bold text-[color:var(--text)] block uppercase leading-none mb-1 tracking-[0.05em]">{feed.service}</span>
-                    <span className="text-[9px] font-display font-bold text-faint uppercase tracking-[0.08em] num">Response Latency: {feed.latency}</span>
-                  </div>
-                </div>
+          {!health && !healthError && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Activity size={28} className="text-muted mb-3" />
+              <p className="text-xs text-muted font-body font-semibold">No live data yet — run a health check to probe ESPN, Firestore, Cloud Functions, and email delivery.</p>
+            </div>
+          )}
 
-                <Badge status="paid" className="text-[9px] px-3 py-1">
-                  {feed.status}
-                </Badge>
-              </div>
-            ))}
-          </div>
+          {healthError && (
+            <div className="flex items-center gap-3 p-4 bg-[#FBEEDD] border border-[#F2D6B0] rounded-2xl text-[#B4530A]">
+              <AlertTriangle size={18} />
+              <span className="text-xs font-body font-semibold">{healthError}</span>
+            </div>
+          )}
+
+          {health && (
+            <div className="space-y-3.5">
+              {checkEntries.map(([key, c]) => {
+                const Icon = CHECK_ICONS[key] ?? Server;
+                return (
+                  <div
+                    key={key}
+                    className="flex justify-between items-center p-3.5 bg-surface border border-line rounded-2xl transition-all duration-150 hover:border-gold-500/40"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-card border border-line flex items-center justify-center text-muted">
+                        <Icon size={16} />
+                      </div>
+                      <div>
+                        <span className="text-xs font-display font-bold text-[color:var(--text)] block uppercase leading-none mb-1 tracking-[0.05em]">{c.label}</span>
+                        <span className="text-[9px] font-display font-bold text-faint uppercase tracking-[0.08em] num">{c.latencyMs}ms · {c.detail}</span>
+                      </div>
+                    </div>
+                    <Badge status={c.ok ? 'paid' : 'unpaid'} className="text-[9px] px-3 py-1">
+                      {c.ok ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />}
+                      {c.ok ? 'OK' : 'FAIL'}
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="mt-8 pt-4 border-t border-line flex justify-between items-center text-[10px] text-faint font-display font-bold uppercase tracking-[0.08em]">
           <span>Systems monitor</span>
-          <span className="text-[#0F7B4A]">
-            All Integrations Online
-          </span>
+          {health ? (
+            <span className={`num ${allOk ? 'text-[#0F7B4A]' : 'text-[#B4530A]'}`}>
+              {allOk ? 'All checks passed' : 'Degradation detected'} · {new Date(health.at).toLocaleTimeString()}
+            </span>
+          ) : (
+            <span className="text-faint">Idle</span>
+          )}
         </div>
       </div>
 

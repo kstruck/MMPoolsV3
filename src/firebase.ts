@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
-import { getFunctions } from "firebase/functions";
+import { getAuth, connectAuthEmulator } from "firebase/auth";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator } from "firebase/firestore";
+import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
 
 const firebaseConfig = {
@@ -33,8 +33,24 @@ if (recaptchaSiteKey) {
 
 export const auth = getAuth(app);
 // Offline persistence: cached reads + queued writes survive spotty connections
-// (users pick on phones in stadiums/bars — the network there is the worst case)
-export const db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-});
+// (users pick on phones in stadiums/bars — the network there is the worst case).
+// E2E exception: persistentLocalCache serves stale IndexedDB reads and does not
+// reliably propagate out-of-band writes against the Firestore emulator, which
+// makes deterministic role/state assertions impossible. Fall back to the SDK's
+// default in-memory cache (no localCache option) only in emulator mode.
+const useEmulator = import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true';
+export const db = useEmulator
+    ? initializeFirestore(app, {})
+    : initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
 export const functions = getFunctions(app);
+
+// E2E-only: point the client at local emulators instead of the real project.
+// Opt-in via VITE_USE_FIREBASE_EMULATOR=true (set only in .env.e2e); never set
+// in normal dev/prod, so this has zero effect outside a Playwright run.
+if (useEmulator) {
+    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    connectFirestoreEmulator(db, '127.0.0.1', 8080);
+    connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+}

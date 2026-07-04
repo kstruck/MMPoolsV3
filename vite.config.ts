@@ -1,11 +1,19 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const rootDir = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vitejs.dev/config/
 export default defineConfig({
   base: '/',
   resolve: {
     alias: {
+      // Canonical contracts shared with functions/ (pool-type enum, schemas,
+      // payment-handle adapter, editability matrix). Same source functions/
+      // gets via the predeploy copy.
+      '@shared': path.resolve(rootDir, 'shared'),
       'firebase-functions/v2/https': '/tests/mocks/firebase-functions-v2-https.ts',
       'firebase-functions/v2/scheduler': '/tests/mocks/firebase-functions-v2.ts',
       'firebase-functions/v2/firestore': '/tests/mocks/firebase-functions-v2.ts',
@@ -36,6 +44,10 @@ export default defineConfig({
     target: 'es2020',
   },
   test: {
-    exclude: ['node_modules/**', 'functions/**', '**/.claude/**']
+    // shared/ is a standalone package (own tsconfig + package.json); its
+    // self-checks run via `npx tsc -p shared && node shared/dist/...`, not root vitest.
+    // tests/e2e/** are Playwright specs (own `test`/`expect`, own runner via
+    // `npx playwright test`) — vitest's runner errors if it loads them.
+    exclude: ['node_modules/**', 'functions/**', '**/.claude/**', 'shared/**', 'tests/e2e/**']
   }
 })

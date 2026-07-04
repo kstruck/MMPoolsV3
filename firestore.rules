@@ -278,6 +278,27 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ADMIN AUDIT LOG (T7) — forensic trail of admin actions, keyed by actor.
+    // Written exclusively by Cloud Functions (writeAdminAudit); read by admins.
+    match /admin_audit/{entryId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    // BILLING CHARGES (T14) — platform revenue ledger (Stripe charges). Sensitive
+    // company income, so admin-only read and functions-only write. NOT under the
+    // public stats/* — that holds only prize volume/charity.
+    match /billingCharges/{chargeId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    // ADMIN STATS (T14) — SUPER_ADMIN-only aggregates (e.g. revenue rollup).
+    match /admin_stats/{docId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
     // TOURNAMENTS (March Madness Data)
     match /tournaments/{tournamentId} {
       allow read: if true;

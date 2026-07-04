@@ -4,6 +4,13 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { BracketPool } from "./types";
 import { Timestamp } from "firebase-admin/firestore";
 import * as crypto from "crypto";
+import { assertPoolCreationAllowed } from "./lib/systemGuards";
+import {
+    validateCreateInput,
+    assertNotBanned,
+    freeBilling,
+    writePoolCreationSideEffects,
+} from "./lib/poolCreation";
 
 
 
@@ -26,6 +33,14 @@ export const createBracketPool = onCall(async (request) => {
         console.error("Missing required fields");
         throw new HttpsError("invalid-argument", "Missing required fields.");
     }
+
+    // Feature-flag + maintenance guard (server-authoritative).
+    await assertPoolCreationAllowed("BRACKET");
+
+    // Shared validation gate + ban check.
+    validateCreateInput('BRACKET', request.data);
+    const claimRole = request.auth.token.role as string | undefined;
+    assertNotBanned(claimRole, undefined);
 
     // Resolve tournament ID based on type
     const isConference = tournamentType && tournamentType !== 'ncaa';
@@ -84,9 +99,32 @@ export const createBracketPool = onCall(async (request) => {
         createdAt: now,
         updatedAt: now,
     };
-    console.log("New Pool Object:", JSON.stringify(newPool, null, 2));
+    // free plan, no auto-lock (server-authoritative)
+    (newPool as any).billing = freeBilling();
 
-    await poolRef.set(newPool);
+    // Transaction: create pool + uniform side-effect bundle (managedPools,
+    // POOL_CREATED activity, role upgrade). Bracket previously wrote no owner
+    // index — managedPools is added here for cross-type consistency. No
+    // participations (join-time only for bracket). Slug is finalized on publish.
+    const userRef = db.collection("users").doc(uid);
+    await db.runTransaction(async (t) => {
+        const userDoc = await t.get(userRef);
+        if (!userDoc.exists) {
+            throw new HttpsError("not-found", "User profile not found.");
+        }
+        const currentRole = userDoc.data()?.role as string | undefined;
+        assertNotBanned(claimRole, currentRole);
+
+        t.set(poolRef, newPool);
+        writePoolCreationSideEffects(t, {
+            uid,
+            poolId: poolRef.id,
+            poolName: name,
+            poolType: 'BRACKET',
+            nowMs: now,
+            currentRole,
+        });
+    });
     console.log("Pool created successfully:", poolRef.id);
 
     // Add audit log

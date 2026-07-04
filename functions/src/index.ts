@@ -17,7 +17,7 @@ export { runReminders, onWinnerComputed } from "./reminders";
 export { autoLockPools } from "./autoLock"; // NEW: Dedicated 1-minute auto-lock scheduler
 export { onPoolLocked, recalculateGlobalStats } from "./statsTrigger";
 export { onUserCreated as createParticipantProfile, createClaimCode, claimMySquares, claimByCode, syncParticipantIndices } from "./participant";
-export { createPool, recalculatePoolWinners, toggleWinnerPaid, fixParticipantIds } from "./poolOps";
+export { createPool, updatePoolSettings, recalculatePoolWinners, toggleWinnerPaid, fixParticipantIds } from "./poolOps";
 export { backfillPools } from "./backfill";
 export { createBracketPool, publishBracketPool, joinBracketPool } from "./bracketPools";
 export { createBracketEntry, updateBracketEntry, submitBracketEntry, deleteBracketEntry } from "./bracketEntries";
@@ -51,6 +51,12 @@ export { creditReferralOnPayment, generateReferralToken, resolveReferralToken } 
 
 // --- SERVER TIME (client clock-drift correction for countdown/lock UI) ---
 export { getServerTime } from "./serverTime";
+
+// --- ADMIN HEALTH (real Super-Admin Overview vitals; replaces fake status card) ---
+export { getAdminHealthSnapshot } from "./adminHealth";
+
+// --- REVENUE AGGREGATES (platform revenue from billingCharges → admin_stats/revenue) ---
+export { aggregateRevenueDaily, recomputeRevenue } from "./revenueAggregates";
 
 // --- EMAIL PREFERENCES (unsubscribe compliance + category preferences) ---
 export { emailUnsubscribe } from "./emailUnsubscribeHttp";

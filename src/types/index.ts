@@ -894,6 +894,9 @@ export interface PoolTheme {
   grid: ThemeGrid;
   branding?: ThemeBranding;
   previewImage?: string;     // Auto-generated or uploaded
+  // Pool types this theme is offered for (T13). Absent/empty => all types,
+  // so existing (March-Madness-era) themes keep showing everywhere.
+  appliesTo?: PoolType[];
 }
 
 // --- SYSTEM TYPES ---
@@ -911,6 +914,9 @@ export interface SystemSettings {
   currentSeason: number;
   propCategories: string[]; // Dynamic categories for prop seeds
   loyaltyTiers?: LoyaltyTier[];
+  // Per-pool-type creation flags (T5). Missing/partial => fail open to all-enabled.
+  // Server enforces via functions/src/lib/systemGuards; this is the client mirror.
+  poolTypeFlags?: Partial<Record<PoolType, boolean>>;
 }
 
 

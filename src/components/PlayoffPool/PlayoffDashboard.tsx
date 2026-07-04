@@ -112,12 +112,6 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        {isManager && (
-                            <Button variant="ghost" size="sm" onClick={() => window.location.href = `/playoff-wizard/${pool.id}`}>
-                                <Settings size={16} /> Manage Pool
-                            </Button>
-                        )}
-
                         <Button variant="ghost" size="sm" onClick={onBack}>
                             Back
                         </Button>

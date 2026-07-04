@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { renderEmailHtml } from "./emailStyles";
 import { courierAuthToken, sendCourierSMS } from "./notifications/smsService";
 import { sendEmail } from "./reminders";
+import { writeAdminAudit } from "./lib/adminAudit";
 
 
 
@@ -45,9 +46,26 @@ export const deleteUserAccount = functions.https.onCall(async (request) => {
         // We'll leave pool references for now, as they might be needed for history.
         // If "Delete Pools" logic exists, it handles pool deletion separately.
 
+        await writeAdminAudit({
+            actorUid: callerUid,
+            actorEmail: request.auth.token.email as string | undefined,
+            action: "USER_DELETED",
+            targetType: "user",
+            targetId: targetUid,
+            status: "success",
+        });
         return { success: true, message: "User account and profile deleted." };
     } catch (error: any) {
         console.error(`[DeleteUser] Failed:`, error);
+        await writeAdminAudit({
+            actorUid: callerUid,
+            actorEmail: request.auth.token.email as string | undefined,
+            action: "USER_DELETED",
+            targetType: "user",
+            targetId: targetUid,
+            status: "error",
+            error: error?.message,
+        });
         throw new functions.https.HttpsError("internal", error.message);
     }
 });
@@ -101,10 +119,27 @@ export const sendAdminPasswordReset = functions.https.onCall(async (request) => 
         // 4. Queue Email (Write to 'mail' collection)
         await sendEmail(db, email, subject, fullHtml, { type: "PASSWORD_RESET", transactional: true });
 
+        await writeAdminAudit({
+            actorUid: request.auth.uid,
+            actorEmail: request.auth.token.email as string | undefined,
+            action: "PASSWORD_RESET_SENT",
+            targetType: "user",
+            metadata: { email },
+            status: "success",
+        });
         return { success: true, message: "Reset email queued." };
 
     } catch (error: any) {
         console.error(`[PasswordReset] Failed:`, error);
+        await writeAdminAudit({
+            actorUid: request.auth.uid,
+            actorEmail: request.auth.token.email as string | undefined,
+            action: "PASSWORD_RESET_SENT",
+            targetType: "user",
+            metadata: { email },
+            status: "error",
+            error: error?.message,
+        });
         throw new functions.https.HttpsError("internal", error.message);
     }
 });

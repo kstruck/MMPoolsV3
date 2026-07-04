@@ -101,7 +101,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
 
                             {/* WEEKLY PICK'EM CARD */}
                             <button
-                                onClick={canCreate ? () => navigate('/nfl-wizard?type=NFL_PICKEM') : undefined}
+                                onClick={canCreate ? () => navigate('/create/pickem') : undefined}
                                 disabled={!canCreate}
                                 className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
                             >
@@ -122,7 +122,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
 
                             {/* SURVIVOR CARD */}
                             <button
-                                onClick={canCreate ? () => navigate('/nfl-wizard?type=NFL_SURVIVOR') : undefined}
+                                onClick={canCreate ? () => navigate('/create/survivor') : undefined}
                                 disabled={!canCreate}
                                 className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
                             >
@@ -143,7 +143,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
 
                             {/* MARGIN CARD */}
                             <button
-                                onClick={canCreate ? () => navigate('/nfl-wizard?type=NFL_MARGIN') : undefined}
+                                onClick={canCreate ? () => navigate('/create/margin') : undefined}
                                 disabled={!canCreate}
                                 className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
                             >

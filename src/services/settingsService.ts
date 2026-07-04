@@ -6,8 +6,13 @@ import type { SystemSettings } from '../types';
 const SETTINGS_DOC_REF = doc(db, 'system', 'config');
 
 const DEFAULT_SETTINGS: SystemSettings = {
-    enableBracketPools: false, // Default to OFF
+    enableBracketPools: false, // Legacy dead flag; superseded by poolTypeFlags (T5)
     maintenanceMode: false,
+    // Fail open: all pool types enabled by default (mirrors prior live posture).
+    poolTypeFlags: {
+        SQUARES: true, BRACKET: true, NFL_PLAYOFFS: true, PROPS: true,
+        NFL_PICKEM: true, NFL_SURVIVOR: true, NFL_MARGIN: true,
+    },
     currentSeason: 2026,
     propCategories: ['Game', 'Player', 'Offense', 'Defense', 'Yards', 'TD', 'FG', 'Fun'],
     loyaltyTiers: [

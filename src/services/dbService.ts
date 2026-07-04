@@ -603,14 +603,19 @@ export const dbService = {
         }
     },
 
+    // Safety ceilings on pool subscriptions (T9). Chosen well above current
+    // scale so no pool is hidden today; when a cap is hit we warn rather than
+    // silently truncate (a future ticket adds real pagination).
     subscribeToPools: (callback: (pools: Pool[]) => void, onError?: (error: Error) => void, ownerId?: string) => {
+        const CAP = 500;
         let q;
         if (ownerId) {
-            q = query(collection(db, "pools"), or(where("ownerId", "==", ownerId), where("managerUid", "==", ownerId)));
+            q = query(collection(db, "pools"), or(where("ownerId", "==", ownerId), where("managerUid", "==", ownerId)), limit(CAP));
         } else {
-            q = query(collection(db, "pools"), where("isPublic", "==", true));
+            q = query(collection(db, "pools"), where("isPublic", "==", true), limit(CAP));
         }
         return onSnapshot(q, (snapshot) => {
+            if (snapshot.size >= CAP) logger.warn(`subscribeToPools hit the ${CAP}-pool cap; results truncated. Add pagination.`);
             const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Pool));
             callback(pools);
         }, (error) => {
@@ -620,8 +625,10 @@ export const dbService = {
     },
 
     subscribeToParticipatingPools: (userId: string, callback: (pools: Pool[]) => void, onError?: (error: Error) => void) => {
-        const q = query(collection(db, "pools"), where("participantIds", "array-contains", userId));
+        const CAP = 200;
+        const q = query(collection(db, "pools"), where("participantIds", "array-contains", userId), limit(CAP));
         return onSnapshot(q, (snapshot) => {
+            if (snapshot.size >= CAP) logger.warn(`subscribeToParticipatingPools hit the ${CAP}-pool cap for a user; results truncated.`);
             const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Pool));
             callback(pools);
         }, (error) => {
@@ -631,12 +638,35 @@ export const dbService = {
     },
 
     subscribeToAllPools: (callback: (pools: Pool[]) => void, onError?: (error: Error) => void) => {
-        const q = query(collection(db, "pools"));
+        const CAP = 500;
+        const q = query(collection(db, "pools"), limit(CAP));
         return onSnapshot(q, (snapshot) => {
+            if (snapshot.size >= CAP) logger.warn(`subscribeToAllPools hit the ${CAP}-pool admin cap; results truncated. Add pagination.`);
             const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Pool));
             callback(pools);
         }, (error) => {
             logger.error("Admin Pool Subscription Error:", error);
+            if (onError) onError(error);
+        });
+    },
+
+    // Platform revenue rollup (T14) — admin_stats/revenue, SUPER_ADMIN read.
+    subscribeToRevenueStats: (callback: (rev: Record<string, unknown> | null) => void, onError?: (error: Error) => void) => {
+        return onSnapshot(doc(db, "admin_stats", "revenue"), (snap) => {
+            callback(snap.exists() ? snap.data() : null);
+        }, (error) => {
+            logger.error("Revenue Stats Subscription Error:", error);
+            if (onError) onError(error);
+        });
+    },
+
+    // Admin Audit Log reader (T7). Most-recent admin actions across the platform.
+    subscribeToAdminAudit: (callback: (entries: Record<string, unknown>[]) => void, onError?: (error: Error) => void, max = 100) => {
+        const q = query(collection(db, "admin_audit"), orderBy("at", "desc"), limit(max));
+        return onSnapshot(q, (snapshot) => {
+            callback(snapshot.docs.map(d => ({ ...d.data(), id: d.id })));
+        }, (error) => {
+            logger.error("Admin Audit Subscription Error:", error);
             if (onError) onError(error);
         });
     },

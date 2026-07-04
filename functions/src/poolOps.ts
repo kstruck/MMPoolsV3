@@ -1,7 +1,17 @@
 import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import { writeAuditEvent } from './audit';
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { assertPoolCreationAllowed } from './lib/systemGuards';
+import { isPoolType, type PoolType } from './shared/poolTypes';
+import {
+    validateCreateInput,
+    assertNotBanned,
+    freeBilling,
+    writePoolCreationSideEffects,
+} from './lib/poolCreation';
+import { buildPoolSettingsUpdate } from './lib/poolUpdate';
 
 // Helper to determine if user can manage pool
 export const assertPoolOwnerOrSuperAdmin = (pool: any, uid: string, userRole?: string) => {
@@ -57,9 +67,24 @@ export const createPool = onCall(async (request) => {
 
         const isSquaresPool = !data.type || data.type === 'SQUARES';
 
+        // Feature-flag + maintenance guard (server-authoritative).
+        await assertPoolCreationAllowed(data.type || 'SQUARES');
+
         if (isSquaresPool && data.costPerSquare === undefined) {
             throw new HttpsError('invalid-argument', 'Missing required field: costPerSquare');
         }
+
+        // Resolve + validate the pool type against the shared CreatePoolInput
+        // schema (gate: throws on invalid; original payload is still persisted).
+        const rawType = data.type || 'SQUARES';
+        if (!isPoolType(rawType)) {
+            throw new HttpsError('invalid-argument', `Unknown pool type: ${rawType}`);
+        }
+        const poolType: PoolType = rawType;
+        validateCreateInput(poolType, data);
+
+        const claimRole = request.auth.token.role as string | undefined;
+        assertNotBanned(claimRole, undefined);
 
         const poolsRef = db.collection('pools');
         const userRef = db.collection('users').doc(uid);
@@ -69,10 +94,11 @@ export const createPool = onCall(async (request) => {
         const poolId = poolRef.id;
 
         // Prepare Pool Data
-        const now = admin.firestore.Timestamp.now();
+        const now = Timestamp.now();
 
         const newPool: any = {
             ...data,
+            type: poolType, // server-authoritative; never trust/omit the client's
             id: poolId,
             createdByUid: uid,
             ownerId: uid,
@@ -81,6 +107,7 @@ export const createPool = onCall(async (request) => {
             status: 'DRAFT',
             isLocked: false,
             isPublic: data.isPublic !== undefined ? data.isPublic : true, // Explicitly set for rules
+            billing: freeBilling(), // free plan, no auto-lock (server-authoritative)
         };
 
         // Initialize Squares-specific data
@@ -100,31 +127,36 @@ export const createPool = onCall(async (request) => {
         if (newPool.gameId === undefined) delete newPool.gameId;
         if (newPool.startTime === undefined) delete newPool.startTime;
 
-        // Transaction
+        // Transaction: create pool + uniform side-effect bundle (managedPools,
+        // POOL_CREATED activity, role upgrade) + pool audit — all atomic.
         await db.runTransaction(async (t) => {
             const userDoc = await t.get(userRef);
             if (!userDoc.exists) {
                 throw new HttpsError('not-found', 'User profile not found.');
             }
 
-            const userData = userDoc.data();
-            const currentRole = userData?.role || 'PARTICIPANT';
+            const currentRole = userDoc.data()?.role as string | undefined;
+            assertNotBanned(claimRole, currentRole);
 
-            // 1. Create Pool
             t.set(poolRef, newPool);
 
-            // 2. Upgrade Role if needed
-            if (currentRole === 'PARTICIPANT') {
-                t.update(userRef, { role: 'POOL_MANAGER' });
-            }
-
-            // 3. Write Manager Index
-            const indexRef = userRef.collection('managedPools').doc(poolId);
-            t.set(indexRef, {
+            writePoolCreationSideEffects(t, {
+                uid,
                 poolId,
-                createdAt: now,
-                name: newPool.name
+                poolName: newPool.name,
+                poolType,
+                nowMs: now.toMillis(),
+                currentRole,
             });
+
+            await writeAuditEvent({
+                poolId,
+                type: 'POOL_CREATED',
+                message: `Pool "${newPool.name}" (${poolType}) created by ${uid}`,
+                severity: 'INFO',
+                actor: { uid, role: 'ADMIN', label: 'Host' },
+                payload: { type: poolType },
+            }, t);
         });
 
         return { success: true, poolId };
@@ -136,6 +168,64 @@ export const createPool = onCall(async (request) => {
         // Wrap unknown errors
         throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`, error);
     }
+});
+
+// ============ UPDATE POOL SETTINGS ============
+// Validated server-side edit path for pool settings. Replaces the rules-gated
+// client dbService.updatePool for the wizard edit flow (Phase B shell edit
+// mode). Enforces ownership + the per-type editability matrix by lifecycle
+// phase, and reconciles payment handles. Other direct-updatePool consumers
+// (dashboards, SuperAdmin, simulators) keep their current path for now.
+export const updatePoolSettings = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const uid = request.auth.uid;
+    const { poolId, updates } = request.data || {};
+    if (!poolId || typeof poolId !== 'string') {
+        throw new HttpsError('invalid-argument', 'poolId is required.');
+    }
+    if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+        throw new HttpsError('invalid-argument', 'updates object is required.');
+    }
+
+    const db = admin.firestore();
+    const poolRef = db.collection('pools').doc(poolId);
+    const snap = await poolRef.get();
+    if (!snap.exists) {
+        throw new HttpsError('not-found', 'Pool not found.');
+    }
+
+    const pool = snap.data();
+    const claimRole = request.auth.token.role as string | undefined;
+    assertNotBanned(claimRole, undefined);
+    assertPoolOwnerOrSuperAdmin(pool, uid, claimRole);
+
+    // Pure gate: validates each key against the editability matrix for the
+    // pool's lifecycle phase; throws failed-precondition on any disallowed key.
+    const { set, clearLegacy } = buildPoolSettingsUpdate(pool, updates as Record<string, unknown>);
+
+    const patch: Record<string, unknown> = {
+        ...set,
+        updatedAt: Timestamp.now(),
+    };
+    for (const key of clearLegacy) {
+        patch[key] = admin.firestore.FieldValue.delete();
+    }
+
+    await poolRef.update(patch);
+
+    await writeAuditEvent({
+        poolId,
+        type: 'POOL_STATUS_CHANGED',
+        message: `Pool settings updated by ${uid}`,
+        severity: 'INFO',
+        actor: { uid, role: 'ADMIN', label: 'Host' },
+        payload: { keys: Object.keys(set) },
+    });
+
+    return { success: true };
 });
 
 // ============ RECALCULATE POOL WINNERS ============

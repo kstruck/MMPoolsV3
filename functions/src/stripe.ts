@@ -8,6 +8,7 @@ import { defineSecret } from "firebase-functions/params";
 import { HttpsError } from "firebase-functions/v2/https";
 
 import Stripe from "stripe";
+import { recordBillingCharge } from "./lib/billingCharges";
 
 const db = admin.firestore();
 
@@ -198,6 +199,10 @@ export const createCheckoutSession = functions.https.onCall({ cors: true, secret
                 }
             }
 
+            await recordBillingCharge(db, {
+                userId, kind: "bundle", amount: serverPrice ?? 0, bundleType,
+                stripeSessionId: mockUrl.split("session_id=")[1] || `mock_bundle_${bundleType}`,
+            });
             return { sessionUrl: mockUrl };
         }
 
@@ -374,6 +379,12 @@ export const createCheckoutSession = functions.https.onCall({ cors: true, secret
             "billing.stripeSessionId": `mock_local_dev_session_${Date.now()}`,
             "billing.tier": tier || "premium_tier",
             "billing.maxPlayersAllowed": Number(maxPlayersAllowed) || 10,
+        });
+
+        await recordBillingCharge(db, {
+            userId, kind: "pool", amount: serverPrice ?? 0, poolId,
+            tier: tier || "premium_tier", couponCode,
+            stripeSessionId: mockUrl.split("session_id=")[1] || `mock_pool_${poolId}`,
         });
 
         if (couponCode) {
@@ -564,6 +575,10 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                         }
                     }
                     console.log(`[Stripe Webhook] User ${userId} bundle ${bundleType} successfully activated`);
+                    await recordBillingCharge(db, {
+                        userId, kind: "bundle", amount: (session.amount_total || 0) / 100,
+                        bundleType, stripeSessionId: session.id,
+                    });
                 } catch (err) {
                     console.error("[Stripe Webhook] Error updating user bundle:", err);
                     await evtRef.delete();
@@ -602,6 +617,12 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                 });
 
                 console.log(`[Stripe Webhook] Pool ${poolId} billing updated to active`);
+
+                await recordBillingCharge(db, {
+                    userId, kind: "pool", amount: (session.amount_total || 0) / 100,
+                    poolId, tier: tier || "standard_tier", couponCode,
+                    stripeSessionId: session.id,
+                });
 
                 if (couponCode) {
                     try {

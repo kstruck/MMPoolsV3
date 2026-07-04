@@ -12,8 +12,9 @@ export const inspectPoolState = onRequest(async (req, res) => {
     try {
         const token = authHeader.split('Bearer ')[1];
         const decoded = await admin.auth().verifyIdToken(token);
-        const userDoc = await admin.firestore().collection("users").doc(decoded.uid).get();
-        if (userDoc.data()?.role !== 'SUPER_ADMIN') {
+        // Use the tamper-proof JWT custom claim, not the mutable Firestore
+        // users/{uid}.role field (which a compromised user doc could forge).
+        if (decoded.role !== 'SUPER_ADMIN') {
             res.status(403).send("Forbidden: Super Admin access required");
             return;
         }
