@@ -22,6 +22,7 @@ import { SuperAdminBentoDashboard } from './SuperAdminBentoDashboard';
 import { simulatePoolGame, seedTestTournament, simulateRound, resetTournament } from '../utils/simulationUtils';
 import { SuperAdminBillingPanel } from './admin/SuperAdminBillingPanel';
 import { AdminAuditViewer } from './admin/AdminAuditViewer';
+import { useEnsureAdminClaims } from '../hooks/useEnsureAdminClaims';
 import { SuperAdminNFLSpreads } from './admin/SuperAdminNFLSpreads';
 import { useToast } from './ui/Toast';
 import { getUserMessage } from '../utils/errorMessages';
@@ -39,6 +40,10 @@ type PoolLike = { [key: string]: unknown };
 export const SuperAdmin: React.FC = () => {
     const navigate = useNavigate();
     const toast = useToast();
+    // Mirror the SUPER_ADMIN Firestore role onto the auth token claim (which the
+    // Firestore rules check) before any admin-only subscription runs. This page
+    // only mounts for admins (App gate), so always ensure.
+    const claimsReady = useEnsureAdminClaims(true);
     // --- STATE ---
     const [pools, setPools] = useState<Pool[]>([]);
     const [users, setUsers] = useState<User[]>([]);
@@ -1078,6 +1083,15 @@ export const SuperAdmin: React.FC = () => {
             { id: 'settings', label: 'Settings', icon: <Settings size={16} /> },
         ]
     };
+
+    if (!claimsReady) {
+        return (
+            <div className="w-[80%] mx-auto py-24 flex flex-col items-center justify-center text-muted font-body">
+                <RefreshCw size={24} className="animate-spin mb-3 text-gold-500" />
+                <p className="text-sm font-display font-bold uppercase tracking-[0.08em]">Syncing admin session…</p>
+            </div>
+        );
+    }
 
     return (
         <div className="w-[80%] mx-auto py-4 md:py-6 relative font-body text-[color:var(--text)]">
