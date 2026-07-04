@@ -70,21 +70,21 @@ Sent via March Melee Pools Support Form
         }
     };
 
-    const labelCls = 'text-[#EDF1F8]';
+    const labelCls = 'text-[color:var(--text)]';
     const textareaClass =
         'w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-3 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none resize-none';
 
-    /* Marketing/support page is navy chrome end-to-end — always dark in both themes. */
+    /* Support page content flips light/dark; only nav/hero/footer chrome stays navy. */
     return (
-        <div className="min-h-screen bg-navy-950 text-[#EDF1F8] font-body">
+        <div className="min-h-screen bg-page text-[color:var(--text)] font-body">
             {/* Content */}
             <div className="max-w-3xl mx-auto px-6 py-16">
                 <div className="text-center mb-12">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gold-500/10 border border-gold-500/25 rounded-full mb-4">
-                        <Mail className="text-gold-400" size={32} />
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gold-500/15 border border-gold-500/25 rounded-full mb-4">
+                        <Mail className="text-gold-600 dark:text-gold-400" size={32} />
                     </div>
-                    <h1 className="font-display font-extrabold uppercase text-4xl leading-[0.95] text-white mb-4">Contact Support</h1>
-                    <p className="text-lg font-body text-[#9FB0CC]">
+                    <h1 className="font-display font-extrabold uppercase text-4xl leading-[0.95] text-[color:var(--text)] mb-4">Contact Support</h1>
+                    <p className="text-lg font-body text-muted">
                         We're here to help! Send us a message and we'll respond within 48 hours.
                     </p>
                 </div>
@@ -92,10 +92,10 @@ Sent via March Melee Pools Support Form
                 {/* Success Message */}
                 {submitStatus === 'success' && (
                     <div className="mb-8 bg-[#0F7B4A]/15 border border-[#0F7B4A]/40 rounded-xl p-6 flex items-start gap-3">
-                        <CheckCircle className="text-emerald-400 shrink-0" size={24} />
+                        <CheckCircle className="text-[#0F7B4A] dark:text-emerald-400 shrink-0" size={24} />
                         <div>
-                            <h3 className="font-display font-bold uppercase text-white mb-1">Message Sent Successfully!</h3>
-                            <p className="text-[#9FB0CC] text-sm">
+                            <h3 className="font-display font-bold uppercase text-[color:var(--text)] mb-1">Message Sent Successfully!</h3>
+                            <p className="text-muted text-sm">
                                 Thank you for contacting us. We'll get back to you within 48 hours.
                             </p>
                         </div>
@@ -107,8 +107,8 @@ Sent via March Melee Pools Support Form
                     <div className="mb-8 bg-brandred-600/15 border border-brandred-600/35 rounded-xl p-6 flex items-start gap-3">
                         <AlertCircle className="text-brandred-500 shrink-0" size={24} />
                         <div>
-                            <h3 className="font-display font-bold uppercase text-white mb-1">Error Sending Message</h3>
-                            <p className="text-[#9FB0CC] text-sm">
+                            <h3 className="font-display font-bold uppercase text-[color:var(--text)] mb-1">Error Sending Message</h3>
+                            <p className="text-muted text-sm">
                                 Something went wrong. Please try again or email us directly.
                             </p>
                         </div>
@@ -116,7 +116,7 @@ Sent via March Melee Pools Support Form
                 )}
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-2xl p-8 space-y-6">
+                <form onSubmit={handleSubmit} className="bg-card border border-line rounded-2xl p-8 space-y-6">
                     {/* Name */}
                     <div>
                         <FieldLabel className={labelCls}>
@@ -185,14 +185,14 @@ Sent via March Melee Pools Support Form
                             onChange={(e) => setFormData({ ...formData, sendCopy: e.target.checked })}
                             className="mt-1"
                         />
-                        <label htmlFor="sendCopy" className="text-sm font-body text-[#9FB0CC] cursor-pointer">
+                        <label htmlFor="sendCopy" className="text-sm font-body text-muted cursor-pointer">
                             Send me a copy of this message for my records
                         </label>
                     </div>
 
                     {/* SLA Notice */}
-                    <div className="bg-navy-950 border border-gold-500/25 rounded-xl p-4">
-                        <p className="text-sm font-body text-[#EDF1F8]">
+                    <div className="bg-surface border border-gold-500/25 rounded-xl p-4">
+                        <p className="text-sm font-body text-[color:var(--text)]">
                             <strong>Response Time:</strong> We aim to respond to all support requests within 48 hours during business days.
                         </p>
                     </div>

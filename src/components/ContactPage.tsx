@@ -71,16 +71,16 @@ export const ContactPage: React.FC<ContactPageProps> = ({
         }
     };
 
-    const labelCls = 'text-[#EDF1F8]';
+    const labelCls = 'text-[color:var(--text)]';
     const textareaClass =
         'w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-3 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none resize-none';
 
     return (
-        <div className="min-h-screen bg-navy-950 text-white font-body flex flex-col">
+        <div className="min-h-screen bg-page text-[color:var(--text)] font-body flex flex-col">
             <Header user={user} isManager={false} onOpenAuth={onLogin} onLogout={onLogout} onCreatePool={onCreatePool} />
 
             <main className="flex-1">
-                {/* Hero */}
+                {/* Hero band — navy chrome (always dark) */}
                 <div className="relative overflow-hidden bg-gradient-to-b from-navy-900 to-navy-950 border-b border-[rgba(230,206,150,0.16)]">
                     <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(230,206,150,0.10),transparent)]" />
                     <div className="relative max-w-4xl mx-auto px-6 py-20 text-center">
@@ -102,51 +102,51 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                     {/* Sidebar Info */}
                     <div className="lg:col-span-1 space-y-8">
                         <div>
-                            <h2 className="font-display font-bold uppercase text-lg text-white mb-4">Other ways to reach us</h2>
+                            <h2 className="font-display font-bold uppercase text-lg text-[color:var(--text)] mb-4">Other ways to reach us</h2>
                             <div className="space-y-4">
                                 <a href="mailto:support@marchmeleepools.com" className="flex items-start gap-3 group">
-                                    <div className="w-9 h-9 bg-gold-500/10 border border-gold-500/25 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-gold-500/20 transition-colors">
-                                        <Mail size={16} className="text-gold-400" />
+                                    <div className="w-9 h-9 bg-gold-500/15 border border-gold-500/25 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-gold-500/20 transition-colors">
+                                        <Mail size={16} className="text-gold-600 dark:text-gold-400" />
                                     </div>
                                     <div>
-                                        <p className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#7C8BA6]">Email</p>
-                                        <p className="text-sm text-[#9FB0CC] group-hover:text-white transition-colors">support@marchmeleepools.com</p>
+                                        <p className="font-display font-bold uppercase text-xs tracking-[0.08em] text-faint">Email</p>
+                                        <p className="text-sm text-muted group-hover:text-[color:var(--text)] transition-colors">support@marchmeleepools.com</p>
                                     </div>
                                 </a>
                                 <div className="flex items-start gap-3">
-                                    <div className="w-9 h-9 bg-navy-700/50 border border-[rgba(230,206,150,0.16)] rounded-lg flex items-center justify-center shrink-0">
-                                        <Clock size={16} className="text-[#9FB0CC]" />
+                                    <div className="w-9 h-9 bg-navy-600/15 border border-line rounded-lg flex items-center justify-center shrink-0">
+                                        <Clock size={16} className="text-navy-700 dark:text-[#9FB0CC]" />
                                     </div>
                                     <div>
-                                        <p className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#7C8BA6]">Response Time</p>
-                                        <p className="text-sm text-[#9FB0CC]">Within 48 business hours</p>
+                                        <p className="font-display font-bold uppercase text-xs tracking-[0.08em] text-faint">Response Time</p>
+                                        <p className="text-sm text-muted">Within 48 business hours</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3">
-                                    <div className="w-9 h-9 bg-gold-500/10 border border-gold-500/25 rounded-lg flex items-center justify-center shrink-0">
-                                        <MapPin size={16} className="text-gold-400" />
+                                    <div className="w-9 h-9 bg-gold-500/15 border border-gold-500/25 rounded-lg flex items-center justify-center shrink-0">
+                                        <MapPin size={16} className="text-gold-600 dark:text-gold-400" />
                                     </div>
                                     <div>
-                                        <p className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#7C8BA6]">Based in</p>
-                                        <p className="text-sm text-[#9FB0CC]">United States</p>
+                                        <p className="font-display font-bold uppercase text-xs tracking-[0.08em] text-faint">Based in</p>
+                                        <p className="text-sm text-muted">United States</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3">
-                                    <div className="w-9 h-9 bg-navy-700/50 border border-[rgba(230,206,150,0.16)] rounded-lg flex items-center justify-center shrink-0">
-                                        <Phone size={16} className="text-[#9FB0CC]" />
+                                    <div className="w-9 h-9 bg-navy-600/15 border border-line rounded-lg flex items-center justify-center shrink-0">
+                                        <Phone size={16} className="text-navy-700 dark:text-[#9FB0CC]" />
                                     </div>
                                     <div>
-                                        <p className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#7C8BA6]">SMS / Text</p>
-                                        <p className="text-sm text-[#9FB0CC] num">(980) 375-4395</p>
+                                        <p className="font-display font-bold uppercase text-xs tracking-[0.08em] text-faint">SMS / Text</p>
+                                        <p className="text-sm text-muted num">(980) 375-4395</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-2xl p-5">
-                            <h3 className="font-display font-bold uppercase text-sm text-white mb-2 flex items-center gap-1.5"><Rocket size={14} className="text-gold-400" /> Quick Help</h3>
-                            <p className="text-xs text-[#9FB0CC] mb-3">Most common questions are answered in our support guide.</p>
-                            <a href="/support" className="font-display font-bold uppercase tracking-[0.05em] text-xs text-gold-400 hover:text-gold-300 underline underline-offset-2 transition-colors">
+                        <div className="bg-card border border-line rounded-2xl p-5">
+                            <h3 className="font-display font-bold uppercase text-sm text-[color:var(--text)] mb-2 flex items-center gap-1.5"><Rocket size={14} className="text-gold-600 dark:text-gold-400" /> Quick Help</h3>
+                            <p className="text-xs text-muted mb-3">Most common questions are answered in our support guide.</p>
+                            <a href="/support" className="font-display font-bold uppercase tracking-[0.05em] text-xs text-gold-600 dark:text-gold-400 hover:text-gold-700 dark:hover:text-gold-300 underline underline-offset-2 transition-colors">
                                 Visit Support Center →
                             </a>
                         </div>
@@ -156,10 +156,10 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                     <div className="lg:col-span-2">
                         {status === 'success' && (
                             <div className="mb-6 bg-[#0F7B4A]/15 border border-[#0F7B4A]/40 rounded-xl p-5 flex items-start gap-3">
-                                <CheckCircle className="text-emerald-400 shrink-0 mt-0.5" size={20} />
+                                <CheckCircle className="text-[#0F7B4A] dark:text-emerald-400 shrink-0 mt-0.5" size={20} />
                                 <div>
-                                    <h3 className="font-display font-bold uppercase text-white mb-1">Message sent!</h3>
-                                    <p className="text-sm text-[#9FB0CC]">We'll get back to you within 48 business hours. Check your inbox for a confirmation.</p>
+                                    <h3 className="font-display font-bold uppercase text-[color:var(--text)] mb-1">Message sent!</h3>
+                                    <p className="text-sm text-muted">We'll get back to you within 48 business hours. Check your inbox for a confirmation.</p>
                                 </div>
                             </div>
                         )}
@@ -167,15 +167,15 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                             <div className="mb-6 bg-brandred-600/15 border border-brandred-600/35 rounded-xl p-5 flex items-start gap-3">
                                 <AlertCircle className="text-brandred-500 shrink-0 mt-0.5" size={20} />
                                 <div>
-                                    <h3 className="font-display font-bold uppercase text-white mb-1">Something went wrong</h3>
-                                    <p className="text-sm text-[#9FB0CC]">Please try again or email us directly at support@marchmeleepools.com.</p>
+                                    <h3 className="font-display font-bold uppercase text-[color:var(--text)] mb-1">Something went wrong</h3>
+                                    <p className="text-sm text-muted">Please try again or email us directly at support@marchmeleepools.com.</p>
                                 </div>
                             </div>
                         )}
 
                         <form
                             onSubmit={handleSubmit}
-                            className="bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-2xl p-8 space-y-5"
+                            className="bg-card border border-line rounded-2xl p-8 space-y-5"
                         >
                             <div className="grid sm:grid-cols-2 gap-5">
                                 <div>
@@ -240,7 +240,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                                     checked={formData.sendCopy}
                                     onChange={(e) => setFormData({ ...formData, sendCopy: e.target.checked })}
                                 />
-                                <label htmlFor="sendCopy" className="text-sm font-body text-[#9FB0CC] cursor-pointer">
+                                <label htmlFor="sendCopy" className="text-sm font-body text-muted cursor-pointer">
                                     Send me a copy of this message
                                 </label>
                             </div>
