@@ -2,6 +2,7 @@
     "name": "functions",
     "scripts": {
         "build": "node scripts/copy-shared.mjs && tsc",
+        "typecheck": "node scripts/copy-shared.mjs && tsc --noEmit",
         "test": "node scripts/copy-shared.mjs && vitest run",
         "test:emulator": "node scripts/copy-shared.mjs && firebase emulators:exec --only firestore --project demo-mmp \"vitest run --config vitest.emulator.config.ts\"",
         "serve": "npm run build && firebase emulators:start --only functions",

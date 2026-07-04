@@ -33,9 +33,11 @@ jobs:
       - name: Build (tsc -b + vite + prerender)
         run: npm run build:static
 
-      # REQUIRED: Cloud Functions typecheck
+      # REQUIRED: Cloud Functions typecheck. Use the npm script (not bare tsc)
+      # so it first mirrors repo-root shared/ into src/shared/ — that dir is
+      # generated (gitignored), so a bare `tsc --noEmit` can't resolve it.
       - name: Typecheck functions
-        run: npx tsc --noEmit
+        run: npm run typecheck
         working-directory: functions
 
       # REQUIRED: full test suite (scoring engines, billing/checkout, onboarding).
