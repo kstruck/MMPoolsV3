@@ -52,7 +52,7 @@ const TournamentSimulator = React.lazy(() => import('./components/TournamentSimu
 import { authService } from './services/authService';
 import { dbService, type GlobalStats } from './services/dbService';
 import type { User, Pool } from './types';
-import { isSuperAdmin } from './utils/auth';
+import { isSuperAdmin, canAccessPoolCreation } from './utils/auth';
 import { logger } from './utils/logger';
 
 // Loading spinner for lazy-loaded routes
@@ -354,9 +354,9 @@ const App: React.FC = () => {
             <TournamentSimulator user={user} />
           } />
 
-          {/* Creation Wizards */}
+          {/* Creation Wizards — gated by POOL_CREATION_ENABLED (super admins bypass) */}
           <Route path="/create-pool" element={
-            user ? (
+            user && canAccessPoolCreation(user) ? (
               <CreatePoolSelection
                 user={user}
                 isManager={false}
@@ -371,7 +371,7 @@ const App: React.FC = () => {
             ) : <Navigate to="/" replace />
           } />
           <Route path="/bracket-wizard" element={
-            user ? (
+            user && canAccessPoolCreation(user) ? (
               <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <BracketWizard user={user} onSuccess={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
@@ -380,7 +380,7 @@ const App: React.FC = () => {
             ) : <Navigate to="/" replace />
           } />
           <Route path="/playoff-wizard" element={
-            user ? (
+            user && canAccessPoolCreation(user) ? (
               <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <PlayoffWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
@@ -389,7 +389,7 @@ const App: React.FC = () => {
             ) : <Navigate to="/" replace />
           } />
           <Route path="/props-wizard" element={
-            user ? (
+            user && canAccessPoolCreation(user) ? (
               <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <PropsWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
@@ -399,7 +399,7 @@ const App: React.FC = () => {
           } />
 
           <Route path="/grid-wizard" element={
-            user ? (
+            user && canAccessPoolCreation(user) ? (
               <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <SetupWizard user={user} onComplete={() => { }} onBack={() => navigate('/create-pool')} />
@@ -409,7 +409,7 @@ const App: React.FC = () => {
           } />
 
           <Route path="/nfl-wizard" element={
-            user ? (
+            user && canAccessPoolCreation(user) ? (
               <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <NFLPoolWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />

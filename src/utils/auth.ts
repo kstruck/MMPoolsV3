@@ -28,6 +28,19 @@ export const canCreatePool = (user: User | null | undefined): boolean => {
     return user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN';
 };
 
+/**
+ * Master switch for public pool creation. Flip to `true` when ready to let
+ * users create their own pools. While `false`, only super admins can reach
+ * creation flows (for internal setup/testing); everyone else sees grayed-out,
+ * "coming soon" creation entry points.
+ */
+export const POOL_CREATION_ENABLED = false;
+
+/** Whether this user may access pool-creation flows given the master switch. */
+export const canAccessPoolCreation = (user: User | null | undefined): boolean => {
+    return POOL_CREATION_ENABLED || isSuperAdmin(user);
+};
+
 /** Check if user can manage entries (owner or super admin, used in bracket/playoff pools) */
 export const canManageEntries = (user: User | null | undefined, pool: { ownerId?: string; managerUid?: string } | null | undefined): boolean => {
     return isPoolManager(user, pool);

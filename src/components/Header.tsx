@@ -3,7 +3,7 @@ import { Logo } from './Logo';
 import type { User } from '../types';
 import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { authService } from '../services/authService';
-import { isSuperAdmin, canCreatePool } from '../utils/auth';
+import { isSuperAdmin, canCreatePool, canAccessPoolCreation } from '../utils/auth';
 import { logger } from '../utils/logger';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ThemeToggle } from './ui/ThemeToggle';
@@ -172,17 +172,17 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 )}
 
                                 <button
-                                    onClick={isSuperAdmin(user) ? onCreatePool : undefined}
-                                    disabled={!isSuperAdmin(user)}
+                                    onClick={canAccessPoolCreation(user) ? onCreatePool : undefined}
+                                    disabled={!canAccessPoolCreation(user)}
                                     className={cn(
                                         chromeBtn,
-                                        isSuperAdmin(user)
+                                        canAccessPoolCreation(user)
                                             ? 'bg-brandred-600 text-white hover:bg-brandred-500 shadow-[0_6px_16px_rgba(196,52,46,0.28)]'
                                             : 'bg-navy-800 text-white/40 cursor-not-allowed hover:translate-y-0'
                                     )}
-                                    title={isSuperAdmin(user) ? "Create a new pool" : "Pool creation is coming soon"}
+                                    title={canAccessPoolCreation(user) ? "Create a new pool" : "Pool creation is coming soon"}
                                 >
-                                    <LayoutGrid size={14} /> {(isManager || canCreatePool(user)) ? "Create a New Pool" : "Create your own pool"}
+                                    <LayoutGrid size={14} /> {canAccessPoolCreation(user) ? "Create a New Pool" : "Pool Creation Coming Soon"}
                                 </button>
 
                                 {isSuperAdmin(user) && (
