@@ -64,5 +64,27 @@ describe('functions export surface', () => {
   );
 });
 
-// TODO(step 3): once the 15→8 tab consolidation lands, assert the tab registry
-// equals the eight CONTEXT.md "Super-Admin Dashboard" tabs exactly.
+describe('8-tab consolidation — the canonical Super-Admin Dashboard tabs', () => {
+  const admin = read('src/components/SuperAdmin.tsx');
+  // The NavGroup type union is the single source of the top-level tab set.
+  const m = admin.match(/type NavGroup =\s*([^;]+);/);
+  const tops = (m?.[1] ?? '').match(/'([^']+)'/g)?.map((s) => s.replace(/'/g, '')) ?? [];
+
+  it('has exactly the eight CONTEXT.md tabs, no more, no fewer', () => {
+    expect([...tops].sort()).toEqual(
+      ['Members', 'Monetization', 'Operations', 'Overview', 'Pools', 'System', 'Test Suite', 'Themes'].sort()
+    );
+  });
+
+  it('routes every legacy render block under a tab (no orphaned activeTab section)', () => {
+    // Every render block id must appear in navStructure so it stays reachable.
+    const renderIds = new Set(
+      [...admin.matchAll(/activeTab === '(\w+)'/g)].map((x) => x[1])
+    );
+    const navIds = new Set(
+      [...admin.matchAll(/\{\s*id:\s*'(\w+)',\s*label:/g)].map((x) => x[1])
+    );
+    const orphans = [...renderIds].filter((id) => !navIds.has(id));
+    expect(orphans).toEqual([]);
+  });
+});

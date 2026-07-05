@@ -53,9 +53,10 @@ export const SuperAdmin: React.FC = () => {
     const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
 
     // UI State
-    // UI State
-    type NavGroup = 'Dashboard' | 'Management' | 'Game Ops' | 'Configuration';
-    const [activeGroup, setActiveGroup] = useState<NavGroup>('Dashboard');
+    // The eight canonical Super-Admin Dashboard tabs (CONTEXT.md). Each top tab
+    // owns one or more sub-tabs (the legacy render blocks, reused unchanged).
+    type NavGroup = 'Overview' | 'Pools' | 'Members' | 'Operations' | 'Test Suite' | 'Monetization' | 'Themes' | 'System';
+    const [activeGroup, setActiveGroup] = useState<NavGroup>('Overview');
     const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'operations' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'tournament' | 'stats' | 'nfl' | 'billing' | 'loyalty'>('overview');
     const [searchTerm, setSearchTerm] = useState('');
     const [roleChange, setRoleChange] = useState<{ user: User; role: string } | null>(null);
@@ -1074,32 +1075,40 @@ export const SuperAdmin: React.FC = () => {
         return true;
     });
 
-    // --- NAVIGATION STRUCTURE ---
-    const navStructure = {
-        'Dashboard': [
-            { id: 'overview', label: 'Overview', icon: <Activity size={16} /> },
+    // --- NAVIGATION STRUCTURE (8 canonical tabs; sub-tabs reuse legacy render blocks) ---
+    const navStructure: Record<NavGroup, { id: string; label: string; icon: React.ReactNode }[]> = {
+        'Overview': [
+            { id: 'overview', label: 'Dashboard', icon: <Activity size={16} /> },
             { id: 'stats', label: 'Stats', icon: <Activity size={16} /> },
-            { id: 'system', label: 'System Status', icon: <Activity size={16} /> },
         ],
-        'Management': [
-            { id: 'users', label: `Users(${users.length})`, icon: <Users size={16} /> },
-            { id: 'referrals', label: 'Referrals', icon: <Users size={16} /> },
-            { id: 'loyalty', label: 'Loyalty Tiers', icon: <Shield size={16} /> },
-        ],
-        'Game Ops': [
-            { id: 'pools', label: `Pools(${filteredPools.length})`, icon: <Shield size={16} /> },
-            { id: 'operations', label: 'Operations', icon: <Settings size={16} /> },
+        'Pools': [
+            { id: 'pools', label: `All Pools(${filteredPools.length})`, icon: <Shield size={16} /> },
             { id: 'tournament', label: 'Tournament', icon: <Trophy size={16} /> },
             { id: 'playoffs', label: 'Playoffs', icon: <Trophy size={16} /> },
             { id: 'props', label: 'Global Props', icon: <List size={16} /> },
             { id: 'nfl', label: 'NFL Schedule', icon: <Shield size={16} /> },
         ],
-        'Configuration': [
-            { id: 'themes', label: `Themes(${themes.length})`, icon: <Palette size={16} /> },
-            { id: 'testing', label: 'AI Testing', icon: <Bot size={16} /> },
+        'Members': [
+            { id: 'users', label: `Users(${users.length})`, icon: <Users size={16} /> },
+            { id: 'referrals', label: 'Referrals', icon: <Users size={16} /> },
+            { id: 'loyalty', label: 'Loyalty Tiers', icon: <Shield size={16} /> },
+        ],
+        'Operations': [
+            { id: 'operations', label: 'Operations', icon: <Settings size={16} /> },
+        ],
+        'Test Suite': [
+            { id: 'testing', label: 'Test Suite', icon: <Bot size={16} /> },
+        ],
+        'Monetization': [
             { id: 'billing', label: 'Monetization', icon: <Shield size={16} /> },
+        ],
+        'Themes': [
+            { id: 'themes', label: `Themes(${themes.length})`, icon: <Palette size={16} /> },
+        ],
+        'System': [
+            { id: 'system', label: 'System Status', icon: <Activity size={16} /> },
             { id: 'settings', label: 'Settings', icon: <Settings size={16} /> },
-        ]
+        ],
     };
 
     if (!claimsReady) {
@@ -1148,7 +1157,8 @@ export const SuperAdmin: React.FC = () => {
                     ))}
                 </div>
 
-                {/* Level 2: Tabs */}
+                {/* Level 2: Sub-tabs (only when the active tab has more than one section) */}
+                {navStructure[activeGroup].length > 1 && (
                 <div className="flex flex-wrap gap-2 border-b border-line pb-1">
                     {navStructure[activeGroup].map(tab => (
                         <button
@@ -1163,6 +1173,7 @@ export const SuperAdmin: React.FC = () => {
                         </button>
                     ))}
                 </div>
+                )}
             </div>
 
             {/* ============ OVERVIEW TAB ============ */}
@@ -2558,7 +2569,26 @@ export const SuperAdmin: React.FC = () => {
             )}
 
 
-            {activeTab === 'testing' && <SimpleTestingDashboard />}
+            {activeTab === 'testing' && (
+                <div className="space-y-6 w-full">
+                    {/* Simulation tools — consolidated into the single Test Suite tab (T12 UI merge). */}
+                    <div className="bg-card border border-line rounded-2xl p-5 flex items-center justify-between gap-4 shadow-card">
+                        <div>
+                            <h3 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
+                                <PlayCircle size={18} className="text-gold-500" /> Pool Simulation
+                            </h3>
+                            <p className="text-muted font-body text-sm mt-1">Drive a pool through a full lifecycle against live engines to verify counts, standings, and payouts.</p>
+                        </div>
+                        <button
+                            onClick={() => setShowSimDashboard(true)}
+                            className="shrink-0 bg-navy-800 hover:bg-navy-700 text-white font-display font-bold uppercase tracking-[0.05em] px-5 py-3 rounded-xl text-sm transition-all duration-150 hover:-translate-y-px shadow-card whitespace-nowrap flex items-center gap-2"
+                        >
+                            <PlayCircle size={16} /> Open Simulation Dashboard
+                        </button>
+                    </div>
+                    <SimpleTestingDashboard />
+                </div>
+            )}
 
             {activeTab === 'system' && (
                 <div className="space-y-6 w-full">
