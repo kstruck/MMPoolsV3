@@ -66,8 +66,22 @@ describe('functions export surface', () => {
     'adminAdjustUserCredits',
     'searchUsersByEmail',
     'closePool',
+    'autoClosePools',
   ])('exports %s', (name) => {
     expect(index).toContain(name);
+  });
+});
+
+describe('autoClosePools — safe by default', () => {
+  const sweep = read('functions/src/autoClosePools.ts');
+  it('is a scheduled job', () => {
+    expect(sweep).toContain('onSchedule');
+  });
+  it('has a kill-switch and dry-run default', () => {
+    expect(sweep).toContain('enabled');
+    expect(sweep).toContain('dryRun');
+    // Disabled unless config explicitly sets enabled === true.
+    expect(sweep).toContain('cfg?.enabled === true');
   });
 });
 
