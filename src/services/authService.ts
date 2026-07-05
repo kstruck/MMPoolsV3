@@ -39,7 +39,7 @@ const mapUser = (firebaseUser: FirebaseUser | null): User | null => {
     email: firebaseUser.email || "",
     picture: firebaseUser.photoURL || null, // FIX: Use null, not undefined
     registrationMethod: method,
-    role: 'PARTICIPANT', // Default, will be overwritten by Firestore data if exists
+    role: 'MEMBER', // Default, will be overwritten by Firestore data if exists
     provider: method === 'email' ? 'password' : 'google',
     referralCode: firebaseUser.uid, // Use UID as referral code
     emailVerified: firebaseUser.emailVerified
@@ -118,7 +118,7 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
       ...existingData,
       name: user.name,
       picture: user.picture,
-      role: existingData.role || 'PARTICIPANT',
+      role: existingData.role || 'MEMBER',
       provider: existingData.provider || 'password',
       emailVerified: user.emailVerified,
       welcomeEmailSent: welcomeSent

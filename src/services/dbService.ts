@@ -662,6 +662,13 @@ export const dbService = {
 
     // Change a user's canonical role (T6). Server (setUserRole) validates the
     // caller is SUPER_ADMIN, dual-writes claim + doc, and revokes tokens on demotion.
+    // One-time role backfill (T6). Rewrites legacy stored roles → canonical in
+    // doc + claim. dryRun=true reports counts without writing. SUPER_ADMIN only.
+    backfillUserRoles: async (dryRun: boolean): Promise<{ dryRun: boolean; wouldMigrate?: number; migrated?: number; more: boolean }> => {
+        const fn = httpsCallable<{ dryRun: boolean }, { dryRun: boolean; wouldMigrate?: number; migrated?: number; more: boolean }>(functions, 'backfillUserRoles');
+        return (await fn({ dryRun })).data;
+    },
+
     setUserRole: async (targetUid: string, role: string): Promise<void> => {
         const fn = httpsCallable<{ targetUid: string; role: string }, { success: boolean; role: string }>(functions, 'setUserRole');
         await fn({ targetUid, role });

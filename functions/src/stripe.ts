@@ -157,13 +157,13 @@ export const createCheckoutSession = functions.https.onCall({ cors: true, secret
             if (bundleType === "buy_3") {
                 await userRef.update({
                     freePoolsAvailable: FieldValue.increment(3),
-                    role: "POOL_MANAGER"
+                    role: "COMMISSIONER"
                 });
             } else if (bundleType === "unlimited_1yr") {
                 await userRef.update({
                     activeBundleType: "unlimited_1yr",
                     bundleExpiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
-                    role: "POOL_MANAGER"
+                    role: "COMMISSIONER"
                 });
             } else {
                 // Dynamic Admin Bundle Mock Checkout Payout
@@ -194,7 +194,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true, secret
                     
                     await userRef.update({
                         poolCredits: FieldValue.arrayUnion(...creditsSpawned),
-                        role: "POOL_MANAGER"
+                        role: "COMMISSIONER"
                     });
                     console.log(`[Dynamic Bundle Mock] Credited user ${userId} with ${dynamicBundle.poolsIncluded} pool credits for bundle ${bundleType}`);
                 }
@@ -533,13 +533,13 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                     if (bundleType === "buy_3") {
                         await userRef.update({
                             freePoolsAvailable: FieldValue.increment(3),
-                            role: "POOL_MANAGER"
+                            role: "COMMISSIONER"
                         });
                     } else if (bundleType === "unlimited_1yr") {
                         await userRef.update({
                             activeBundleType: "unlimited_1yr",
                             bundleExpiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
-                            role: "POOL_MANAGER"
+                            role: "COMMISSIONER"
                         });
                     } else {
                         // Dynamic Admin Bundle webhook completion
@@ -570,7 +570,7 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                             
                             await userRef.update({
                                 poolCredits: FieldValue.arrayUnion(...creditsSpawned),
-                                role: "POOL_MANAGER"
+                                role: "COMMISSIONER"
                             });
                             console.log(`[Stripe Webhook] Credited user ${userId} with ${dynamicBundle.poolsIncluded} pool credits for bundle ${bundleType}`);
                         }

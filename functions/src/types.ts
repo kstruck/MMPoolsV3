@@ -243,7 +243,9 @@ export interface User {
     name: string;
     picture?: string | null; // Allow null for Firebase compatibility
     registrationMethod?: 'google' | 'email' | 'unknown';
-    role?: 'POOL_MANAGER' | 'PARTICIPANT' | 'SUPER_ADMIN';
+    // Canonical roles (T6) + legacy values still present until the backfill runs.
+    // Read through normalizeRole() — never compare raw.
+    role?: 'SUPER_ADMIN' | 'MODERATOR' | 'COMMISSIONER' | 'MEMBER' | 'BANNED' | 'POOL_MANAGER' | 'PARTICIPANT';
     provider?: 'password' | 'google';
 }
 

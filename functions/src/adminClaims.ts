@@ -169,3 +169,58 @@ export const syncMyClaims = onCall(async (request) => {
     message: `Auth custom claims synced with Firestore. Role is now ${role}.`,
   };
 });
+
+/**
+ * backfillUserRoles (T6) — one-time migration of EXISTING stored data. Rewrites
+ * legacy global roles (POOL_MANAGER/PARTICIPANT/MANAGER/USER) to canonical
+ * values in BOTH the users/{uid}.role doc AND the Auth custom claim, so
+ * canonical role-filtered queries (where('role','==','MEMBER')) stop silently
+ * missing legacy docs. SUPER_ADMIN only. dryRun (default true) reports counts
+ * without writing. Bounded per run; re-run until remaining === 0.
+ */
+const LEGACY_ROLE_VALUES = ["POOL_MANAGER", "PARTICIPANT", "MANAGER", "USER"];
+const BACKFILL_MAX = 400;
+
+export const backfillUserRoles = onCall(async (request) => {
+  const caller = await assertCallerRole(request, "SUPER_ADMIN");
+  const dryRun = (request.data as { dryRun?: boolean })?.dryRun !== false; // default true
+
+  const snap = await admin.firestore()
+    .collection("users")
+    .where("role", "in", LEGACY_ROLE_VALUES)
+    .limit(BACKFILL_MAX + 1)
+    .get();
+
+  const docs = snap.docs.slice(0, BACKFILL_MAX);
+  const more = snap.size > BACKFILL_MAX;
+
+  if (dryRun) {
+    await writeAdminAudit({
+      actorUid: caller.uid, actorEmail: caller.email,
+      action: "ROLE_BACKFILL", targetType: "user",
+      metadata: { dryRun: true, wouldMigrate: docs.length, more },
+      status: "success",
+    });
+    return { success: true, dryRun: true, wouldMigrate: docs.length, more };
+  }
+
+  let migrated = 0;
+  for (const d of docs) {
+    const canonical = normalizeRole(d.data()?.role as string);
+    try {
+      await d.ref.update({ role: canonical });
+      await admin.auth().setCustomUserClaims(d.id, { role: canonical });
+      migrated++;
+    } catch (e) {
+      console.error(`[backfillUserRoles] failed for ${d.id}:`, e);
+    }
+  }
+
+  await writeAdminAudit({
+    actorUid: caller.uid, actorEmail: caller.email,
+    action: "ROLE_BACKFILL", targetType: "user",
+    metadata: { dryRun: false, migrated, more },
+    status: "success",
+  });
+  return { success: true, dryRun: false, migrated, more };
+});

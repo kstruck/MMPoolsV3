@@ -29,7 +29,7 @@ export { onAnnouncementCreated } from "./announcements";
 export { submitPlayoffPicks, calculatePlayoffScores, updateGlobalPlayoffResults, checkPlayoffScores, onPlayoffConfigUpdate, syncPlayoffPools, managePlayoffEntry } from "./playoffPools";
 export { joinWaitlist, onSquareReleased } from "./waitlist";
 export { generateTestScenario, validateTestResults, generateTestReport } from "./aiTesting";
-export { setUserRole, setSuperAdminClaim, syncMyClaims } from "./adminClaims";
+export { setUserRole, setSuperAdminClaim, syncMyClaims, backfillUserRoles } from "./adminClaims";
 export { logAdminAction } from "./adminOps";
 export { adminSaveBillingConfig, adminManageCoupon, adminUpdatePoolBilling, adminAdjustUserCredits } from "./adminBillingOps";
 export { initializeBigEastTournamentHttp, initializeBig12TournamentHttp } from "./conferenceTournaments";
