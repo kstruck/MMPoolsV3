@@ -5,7 +5,7 @@ import { writeAuditEvent } from "./audit";
 import { checkBillingAccess } from "./billing";
 import { writeLedgerEvent } from "./paymentLedger";
 import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields } from "./poolOps";
-import { assertPoolCreationAllowed, assertNotMaintenance } from "./lib/systemGuards";
+import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } from "./lib/systemGuards";
 import { isPoolType, type PoolType } from "./shared/poolTypes";
 import {
   validateCreateInput,
@@ -200,6 +200,7 @@ export const submitNFLPicks = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'User must be logged in.');
   }
+  await assertNotBannedLive(request.auth.uid);
 
   const uid = request.auth.uid;
   const db = admin.firestore();

@@ -667,6 +667,13 @@ export const dbService = {
         await fn({ targetUid, role });
     },
 
+    // Admin one-off email to a user (step 6c). Server (SUPER_ADMIN/MODERATOR)
+    // sends + dual-writes the user's activity log (EMAIL_SENT) + admin_audit.
+    sendUserEmail: async (targetUid: string, subject: string, body: string): Promise<void> => {
+        const fn = httpsCallable<{ targetUid: string; subject: string; body: string }, { success: boolean }>(functions, 'sendUserEmail');
+        await fn({ targetUid, subject, body });
+    },
+
     // Close a pool into its terminal COMPLETED state (T2). Server dual-writes the
     // canonical status + legacy fields + closedVia:'ADMIN_CLOSE', and the triggers
     // skip it — zero member emails, zero stats deltas. Principal enforced server-side.

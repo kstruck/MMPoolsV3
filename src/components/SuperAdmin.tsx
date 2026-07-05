@@ -760,6 +760,21 @@ export const SuperAdmin: React.FC = () => {
         }
     };
 
+    // Admin one-off email (step 6c) — server sends + logs to activity + audit.
+    const handleEmailUser = async (user: User) => {
+        if (!user.email) { toast.error('That user has no email on file.'); return; }
+        const subject = window.prompt(`Email subject for ${user.email}:`)?.trim();
+        if (!subject) return;
+        const body = window.prompt('Message body:')?.trim();
+        if (!body) return;
+        try {
+            await dbService.sendUserEmail(user.id, subject, body);
+            toast.success(`Email queued to ${user.email}.`);
+        } catch (e) {
+            toast.error(getUserMessage(e, 'Failed to send email.'));
+        }
+    };
+
     // Role change (T6) — routed through the guardrail modal + setUserRole callable.
     const applyRoleChange = async () => {
         if (!roleChange) return;
@@ -1687,6 +1702,11 @@ export const SuperAdmin: React.FC = () => {
                                                         <Settings size={14} /> Reset
                                                     </div>
                                                 </button>
+                                                <button
+                                                    onClick={() => handleEmailUser(u)}
+                                                    title="Send a one-off email (logged to their activity + admin audit)"
+                                                    className="text-navy-700 dark:text-gold-400 hover:bg-navy-600/10 text-xs font-display font-bold uppercase tracking-[0.05em] border border-navy-600/40 px-2 py-1 rounded transition-colors"
+                                                >Email</button>
                                                 <button onClick={() => handleEditUser(u)} className="text-navy-700 dark:text-gold-400 hover:bg-navy-600/10 text-xs font-display font-bold uppercase tracking-[0.05em] border border-navy-600/40 px-2 py-1 rounded transition-colors">Edit</button>
                                                 <button onClick={() => handleDeleteUser(u)} className="text-brandred-500 hover:bg-brandred-600/10 transition-colors border border-brandred-600/40 px-2 py-1 rounded"><Trash2 size={16} /></button>
                                             </td>

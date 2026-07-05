@@ -67,8 +67,23 @@ describe('functions export surface', () => {
     'searchUsersByEmail',
     'closePool',
     'autoClosePools',
+    'sendUserEmail',
   ])('exports %s', (name) => {
     expect(index).toContain(name);
+  });
+});
+
+describe('step 6c — one-off email + live ban guard', () => {
+  it('sendUserEmail dual-writes activity + audit', () => {
+    const um = read('functions/src/userManagement.ts');
+    expect(um).toContain('EMAIL_SENT');
+    expect(um).toContain('writeAdminAudit');
+  });
+  it('assertNotBannedLive guards the submit/reserve paths', () => {
+    expect(read('functions/src/lib/systemGuards.ts')).toContain('assertNotBannedLive');
+    expect(read('functions/src/bracketEntries.ts')).toContain('assertNotBannedLive');
+    expect(read('functions/src/nflPools.ts')).toContain('assertNotBannedLive');
+    expect(read('functions/src/squares.ts')).toContain('assertNotBannedLive');
   });
 });
 
