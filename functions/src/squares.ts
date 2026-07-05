@@ -7,11 +7,15 @@ import { sendEmail } from "./reminders";
 import { renderEmailHtml } from "./emailStyles";
 import { checkBillingAccess } from "./billing";
 import { SQUARE_PRIVATE, buildSquarePrivate } from "./squarePrivate";
+import { assertNotBannedLive } from "./lib/systemGuards";
 
 
 export const reserveSquare = onCall(async (request) => {
     // 0. Ensure Admin Init (Lazy)
     const db = admin.firestore();
+
+    // Banned users can't reserve (guests/anonymous are unaffected — no account).
+    if (request.auth) await assertNotBannedLive(request.auth.uid);
 
     const { poolId, squareId, customerDetails, guestDeviceKey, pickedAsName } = request.data;
 

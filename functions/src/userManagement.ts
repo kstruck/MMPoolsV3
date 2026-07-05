@@ -1,6 +1,6 @@
 import * as functions from "firebase-functions/v2";
 import * as admin from "firebase-admin";
-import { renderEmailHtml } from "./emailStyles";
+import { renderEmailHtml, escapeHtml } from "./emailStyles";
 import { courierAuthToken, sendCourierSMS } from "./notifications/smsService";
 import { sendEmail } from "./reminders";
 import { writeAdminAudit } from "./lib/adminAudit";
@@ -256,4 +256,59 @@ export const searchUsersByEmail = functions.https.onCall(async (request) => {
 
     const users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     return { users, count: users.length };
+});
+
+/**
+ * sendUserEmail (step 6c) — admin one-off email to a single user.
+ * SUPER_ADMIN or MODERATOR (both may email any user per CONTEXT.md User
+ * Management). Dual-writes the CONTEXT.md contract: EMAIL_SENT on the target
+ * user's activity subcollection + an actor-side admin_audit entry.
+ */
+export const sendUserEmail = functions.https.onCall(async (request) => {
+    if (!request.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "Must be logged in.");
+    }
+    const role = request.auth.token.role;
+    if (role !== "SUPER_ADMIN" && role !== "MODERATOR") {
+        throw new functions.https.HttpsError("permission-denied", "Only admins can email users.");
+    }
+
+    const { targetUid, subject, body } = request.data as { targetUid?: string; subject?: string; body?: string };
+    if (!targetUid || !subject?.trim() || !body?.trim()) {
+        throw new functions.https.HttpsError("invalid-argument", "targetUid, subject and body are required.");
+    }
+
+    const db = admin.firestore();
+    const userSnap = await db.doc(`users/${targetUid}`).get();
+    const email = userSnap.data()?.email as string | undefined;
+    if (!email) {
+        throw new functions.https.HttpsError("failed-precondition", "That user has no email on file.");
+    }
+
+    // Escape the admin-authored body — it must never be injected as raw HTML.
+    const html = renderEmailHtml(subject.trim(), `<p>${escapeHtml(body.trim()).replace(/\n/g, "<br/>")}</p>`);
+    await sendEmail(db, email, subject.trim(), html, { type: "ADMIN_ONEOFF", transactional: true });
+
+    try {
+        await db.collection("users").doc(targetUid).collection("activity").add({
+            type: "EMAIL_SENT",
+            at: admin.firestore.FieldValue.serverTimestamp(),
+            actorUid: request.auth.uid,
+            subject: subject.trim().slice(0, 200),
+        });
+    } catch (e) {
+        console.warn("[sendUserEmail] activity-log write failed (non-fatal):", e);
+    }
+
+    await writeAdminAudit({
+        actorUid: request.auth.uid,
+        actorEmail: request.auth.token.email as string | undefined,
+        action: "EMAIL_SENT",
+        targetType: "user",
+        targetId: targetUid,
+        metadata: { subject: subject.trim().slice(0, 200) },
+        status: "success",
+    });
+
+    return { success: true };
 });

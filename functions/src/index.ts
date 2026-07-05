@@ -12,7 +12,7 @@ export { purchasePropCard, gradeProp, updatePropCard } from './propBets';
 export { syncGameStatus, fixPoolScores, simulateGameUpdate } from "./scoreUpdates";
 export { onWinnerUpdate, onAIRequest, onWeeklyRecapCreated } from "./aiCommissioner";
 export { onUserCreated, syncAllUsers } from "./userSync";
-export { deleteUserAccount, sendAdminPasswordReset, sendSecuritySMSAlert, testSmsHttp, searchUsersByEmail } from "./userManagement";
+export { deleteUserAccount, sendAdminPasswordReset, sendSecuritySMSAlert, testSmsHttp, searchUsersByEmail, sendUserEmail } from "./userManagement";
 export { runReminders, onWinnerComputed } from "./reminders";
 export { autoLockPools } from "./autoLock"; // NEW: Dedicated 1-minute auto-lock scheduler
 export { autoClosePools } from "./autoClosePools"; // T2: daily stuck-pool close sweep (dry-run + kill-switch)

@@ -5,6 +5,7 @@ import { checkBillingAccess } from "./billing";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
+import { assertNotBannedLive } from "./lib/systemGuards";
 
 
 
@@ -334,6 +335,7 @@ export const submitBracketEntry = onCall(async (request) => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "User must be logged in.");
     }
+    await assertNotBannedLive(request.auth.uid);
     const db = admin.firestore();
     return submitBracketEntryInternal(request.auth.uid, request.data, db);
 });
