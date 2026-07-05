@@ -597,6 +597,7 @@ export const SuperAdmin: React.FC = () => {
         });
         if (ok) {
             await dbService.deletePropSeed(id);
+            dbService.logAdminAction({ action: 'DELETE_PROP_SEED', targetType: 'propSeed', targetId: id, status: 'success' });
         }
     };
 
@@ -608,6 +609,7 @@ export const SuperAdmin: React.FC = () => {
         });
         if (ok) {
             await dbService.deletePool(id);
+            dbService.logAdminAction({ action: 'DELETE_POOL', targetType: 'pool', targetId: id, status: 'success' });
         }
     };
 
@@ -620,9 +622,11 @@ export const SuperAdmin: React.FC = () => {
         if (!ok) return;
         try {
             await dbService.updateBracketPool(pool.id, { status: 'COMPLETED' });
+            dbService.logAdminAction({ action: 'CLOSE_POOL', targetType: 'pool', targetId: pool.id, metadata: { name: pool.name }, status: 'success' });
             toast.success(`"${pool.name}" has been closed and marked as Completed.`);
         } catch (e: unknown) {
             logger.error('Close pool error:', e);
+            dbService.logAdminAction({ action: 'CLOSE_POOL', targetType: 'pool', targetId: pool.id, status: 'error', error: getUserMessage(e, 'error') });
             toast.error(getUserMessage(e, 'Error closing pool.'));
         }
     };
@@ -638,10 +642,12 @@ export const SuperAdmin: React.FC = () => {
             const functions = getFunctions();
             const initFn = httpsCallable(functions, 'initializeBig12TournamentHttp');
             const result = await initFn({ tournamentId: 'big12-2026', overwrite: true });
+            dbService.logAdminAction({ action: 'REINIT_TOURNAMENT', targetType: 'tournament', targetId: 'big12-2026', status: 'success' });
             toast.success('✅ Big 12 tournament re-initialized successfully! The next sync (within 10 min) will pull live game results from ESPN.');
             logger.info('Big12 reinit result:', result);
         } catch (e: unknown) {
             logger.error('Reinit failed:', e);
+            dbService.logAdminAction({ action: 'REINIT_TOURNAMENT', targetType: 'tournament', targetId: 'big12-2026', status: 'error', error: getUserMessage(e, 'error') });
             toast.error(getUserMessage(e, 'Error re-initializing tournament.'));
         }
     };
@@ -699,12 +705,13 @@ export const SuperAdmin: React.FC = () => {
         if (ok) {
             try {
                 await dbService.deleteUserAccount(user.id);
-                // Also try to delete from Firestore directly just in case the cloud function didn't catch edge cases or if we want faster UI feedback,
-                // but the cloud function does it. We'll just refresh.
+                dbService.logAdminAction({ action: 'DELETE_USER_ACCOUNT', targetType: 'user', targetId: user.id, metadata: { email: user.email }, status: 'success' });
+                // The cloud function removes both Auth + Firestore; just refresh.
                 fetchUsers();
                 toast.success(`User ${user.name} deleted successfully.`);
             } catch (e: unknown) {
                 logger.error("Delete failed", e);
+                dbService.logAdminAction({ action: 'DELETE_USER_ACCOUNT', targetType: 'user', targetId: user.id, status: 'error', error: getUserMessage(e, 'error') });
                 toast.error(getUserMessage(e, "Error deleting user."));
             }
         }
@@ -1598,8 +1605,10 @@ export const SuperAdmin: React.FC = () => {
                                         if (ok) {
                                             try {
                                                 const res = await dbService.recalculateGlobalStats();
+                                                dbService.logAdminAction({ action: 'RECALCULATE_GLOBAL_STATS', targetType: 'stats', status: 'success' });
                                                 toast.success(res.message + " Total: $" + res.totalPrizes);
                                             } catch (e) {
+                                                dbService.logAdminAction({ action: 'RECALCULATE_GLOBAL_STATS', targetType: 'stats', status: 'error', error: getUserMessage(e, 'error') });
                                                 toast.error(getUserMessage(e, "Failed to recalculate stats."));
                                             }
                                         }
@@ -2402,6 +2411,7 @@ export const SuperAdmin: React.FC = () => {
                                                 });
                                                 if (ok) {
                                                     await dbService.deleteTheme(theme.id);
+                                                    dbService.logAdminAction({ action: 'DELETE_THEME', targetType: 'theme', targetId: theme.id, metadata: { name: theme.name }, status: 'success' });
                                                 }
                                             }}
                                             className="text-xs text-brandred-500 hover:bg-brandred-600/10 px-2 py-1.5 rounded"
@@ -3028,6 +3038,7 @@ export const SuperAdmin: React.FC = () => {
                                             try {
                                                 // Imported statically
                                                 await resetTournament(2025);
+                                                dbService.logAdminAction({ action: 'RESET_TOURNAMENT', targetType: 'tournament', targetId: '2025', status: 'success' });
                                                 toast.success("Tournament reset.");
                                             } catch (e: unknown) {
                                                 toast.error(getUserMessage(e, "Failed to reset tournament."));
