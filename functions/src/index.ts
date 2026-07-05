@@ -30,6 +30,7 @@ export { joinWaitlist, onSquareReleased } from "./waitlist";
 export { generateTestScenario, validateTestResults, generateTestReport } from "./aiTesting";
 export { setUserRole, setSuperAdminClaim, syncMyClaims } from "./adminClaims";
 export { logAdminAction } from "./adminOps";
+export { adminSaveBillingConfig, adminManageCoupon, adminUpdatePoolBilling, adminAdjustUserCredits } from "./adminBillingOps";
 export { initializeBigEastTournamentHttp, initializeBig12TournamentHttp } from "./conferenceTournaments";
 export { scoreBracketEntries, finalizeTournamentPayouts } from "./bracketScoring";
 

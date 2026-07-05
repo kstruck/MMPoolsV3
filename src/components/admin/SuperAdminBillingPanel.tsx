@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { canCreatePools } from '../../utils/roles';
 import { db, auth } from '../../firebase';
-import { 
-    collection, doc, onSnapshot, setDoc, updateDoc, 
-    addDoc, deleteDoc, query, orderBy 
+import {
+    collection, doc, onSnapshot, query, orderBy
 } from 'firebase/firestore';
 import { dbService } from '../../services/dbService';
 import type { BillingConfig, Pool, PoolBilling, Coupon, ReferralConfig, User, BillingBundle } from '../../types';
@@ -134,9 +133,8 @@ export const SuperAdminBillingPanel: React.FC = () => {
             if (docSnap.exists()) {
                 setConfig(docSnap.data() as BillingConfig);
             } else {
-                setDoc(docRef, DEFAULT_BILLING_CONFIG).then(() => {
-                    setConfig(DEFAULT_BILLING_CONFIG);
-                });
+                setConfig(DEFAULT_BILLING_CONFIG);
+                dbService.adminSaveBillingConfig('billing', DEFAULT_BILLING_CONFIG as unknown as Record<string, unknown>).catch(() => {});
             }
         });
         return () => unsubscribe();
@@ -149,9 +147,8 @@ export const SuperAdminBillingPanel: React.FC = () => {
             if (docSnap.exists()) {
                 setReferralConfig(docSnap.data() as ReferralConfig);
             } else {
-                setDoc(docRef, DEFAULT_REFERRAL_CONFIG).then(() => {
-                    setReferralConfig(DEFAULT_REFERRAL_CONFIG);
-                });
+                setReferralConfig(DEFAULT_REFERRAL_CONFIG);
+                dbService.adminSaveBillingConfig('referral', DEFAULT_REFERRAL_CONFIG as unknown as Record<string, unknown>).catch(() => {});
             }
         });
         return () => unsubscribe();
@@ -252,8 +249,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
         setIsSaving(true);
         setSaveSuccess(false);
         try {
-            const docRef = doc(db, 'settings', 'billing_config');
-            await setDoc(docRef, config);
+            await dbService.adminSaveBillingConfig('billing', config as unknown as Record<string, unknown>);
             setSaveSuccess(true);
             setTimeout(() => setSaveSuccess(false), 2000);
         } catch (error) {
@@ -269,8 +265,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
         setIsSaving(true);
         setSaveSuccess(false);
         try {
-            const docRef = doc(db, 'settings', 'referral_config');
-            await setDoc(docRef, referralConfig);
+            await dbService.adminSaveBillingConfig('referral', referralConfig as unknown as Record<string, unknown>);
             setSaveSuccess(true);
             setTimeout(() => setSaveSuccess(false), 2000);
         } catch (error) {
@@ -303,7 +298,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
             if (newCouponExpiresAt) couponData.expiresAt = new Date(newCouponExpiresAt).getTime();
             if (newCouponAllowedTypes.length > 0) couponData.allowedPoolTypes = newCouponAllowedTypes;
 
-            await addDoc(collection(db, 'coupons'), couponData);
+            await dbService.adminManageCoupon({ op: 'create', data: couponData });
             setNewCouponCode('');
             setNewCouponMaxUses('');
             setNewCouponPerUserLimit('');
@@ -323,7 +318,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
         const ok = await toast.confirm({ title: 'Delete Coupon?', message: `Are you sure you want to delete coupon ${code}?`, confirmLabel: 'Delete', danger: true });
         if (!ok) return;
         try {
-            await deleteDoc(doc(db, 'coupons', couponId));
+            await dbService.adminManageCoupon({ op: 'delete', couponId });
         } catch (error) {
             console.error("Failed to delete coupon:", error);
             toast.error("Deletion failed.");
@@ -334,9 +329,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
     const handleToggleCouponActive = async (coupon: Coupon) => {
         if (!coupon.id) return;
         try {
-            await updateDoc(doc(db, 'coupons', coupon.id), {
-                isActive: !coupon.isActive
-            });
+            await dbService.adminManageCoupon({ op: 'toggle', couponId: coupon.id, data: { isActive: !coupon.isActive } });
         } catch (err) {
             console.error(err);
         }
@@ -345,11 +338,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
     // 11. Save Pool Billing overrides
     const handleSavePoolOverride = async (poolId: string) => {
         try {
-            const poolRef = doc(db, 'pools', poolId);
-            await updateDoc(poolRef, {
-                billing: poolOverrideData,
-                updatedAt: Date.now()
-            });
+            await dbService.adminUpdatePoolBilling({ poolId, action: 'override', data: poolOverrideData as unknown as Record<string, unknown> });
             setEditingPoolId('');
             toast.success("Pool billing parameters overridden successfully!");
         } catch (error) {
@@ -363,13 +352,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
         const ok = await toast.confirm({ title: 'Extend Trial?', message: `Extend trial for "${pool.name}" by 14 days?`, confirmLabel: 'Extend' });
         if (!ok) return;
         try {
-            const poolRef = doc(db, 'pools', pool.id);
-            const currentEnd = pool.billing?.trialEndsAt || Date.now();
-            await updateDoc(poolRef, {
-                'billing.status': 'trial',
-                'billing.trialEndsAt': currentEnd + (14 * 24 * 60 * 60 * 1000),
-                updatedAt: Date.now()
-            });
+            await dbService.adminUpdatePoolBilling({ poolId: pool.id, action: 'extendTrial' });
             toast.success(`Trial extended by 14 days for "${pool.name}"`);
         } catch (error) {
             console.error("Extend trial failed:", error);
@@ -382,12 +365,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
         const ok = await toast.confirm({ title: 'Reset Grace Period?', message: `Reset grace period for "${pool.name}"? This will move it from locked/grace back to grace_period with ${config.gracePeriodDays} days.`, confirmLabel: 'Reset', danger: true });
         if (!ok) return;
         try {
-            const poolRef = doc(db, 'pools', pool.id);
-            await updateDoc(poolRef, {
-                'billing.status': 'grace_period',
-                'billing.gracePeriodEndsAt': Date.now() + (config.gracePeriodDays * 24 * 60 * 60 * 1000),
-                updatedAt: Date.now()
-            });
+            await dbService.adminUpdatePoolBilling({ poolId: pool.id, action: 'resetGrace', data: { gracePeriodDays: config.gracePeriodDays } });
             toast.success(`Grace period reset for "${pool.name}" — ${config.gracePeriodDays} days from now.`);
         } catch (error) {
             console.error("Reset grace failed:", error);
@@ -398,10 +376,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
     // 12. Save User Referral balance manual overrides
     const handleSaveUserReferralOverride = async (userId: string) => {
         try {
-            await dbService.updateUser(userId, {
-                referralCredits: editReferralCredits,
-                freePoolsAvailable: editFreePools
-            });
+            await dbService.adminAdjustUserCredits(userId, editReferralCredits, editFreePools);
             setEditingUserId('');
             toast.success("User referral credit balances updated!");
             

@@ -667,6 +667,26 @@ export const dbService = {
         await fn({ targetUid, role });
     },
 
+    // Audited billing/monetization admin ops (step 2). Each is SUPER_ADMIN-only
+    // server-side and writes admin_audit; replaces direct client Firestore writes.
+    adminSaveBillingConfig: async (kind: 'billing' | 'referral', config: Record<string, unknown>): Promise<void> => {
+        const fn = httpsCallable<{ kind: string; config: Record<string, unknown> }, { success: boolean }>(functions, 'adminSaveBillingConfig');
+        await fn({ kind, config });
+    },
+    adminManageCoupon: async (payload: { op: 'create' | 'delete' | 'toggle'; couponId?: string; data?: Record<string, unknown> }): Promise<{ couponId?: string }> => {
+        const fn = httpsCallable<typeof payload, { success: boolean; couponId?: string }>(functions, 'adminManageCoupon');
+        const res = await fn(payload);
+        return { couponId: res.data.couponId };
+    },
+    adminUpdatePoolBilling: async (payload: { poolId: string; action: 'override' | 'extendTrial' | 'resetGrace'; data?: Record<string, unknown> }): Promise<void> => {
+        const fn = httpsCallable<typeof payload, { success: boolean }>(functions, 'adminUpdatePoolBilling');
+        await fn(payload);
+    },
+    adminAdjustUserCredits: async (targetUid: string, referralCredits: number, freePoolsAvailable: number): Promise<void> => {
+        const fn = httpsCallable<{ targetUid: string; referralCredits: number; freePoolsAvailable: number }, { success: boolean }>(functions, 'adminAdjustUserCredits');
+        await fn({ targetUid, referralCredits, freePoolsAvailable });
+    },
+
     // Record an admin_audit entry for an Operations-panel action (T7).
     logAdminAction: async (entry: { action: string; targetType?: string; targetId?: string; metadata?: Record<string, unknown>; status?: 'success' | 'error'; error?: string }): Promise<void> => {
         try {

@@ -56,12 +56,35 @@ describe('T6 — role-management UI is present', () => {
 
 describe('functions export surface', () => {
   const index = read('functions/src/index.ts');
-  it.each(['setUserRole', 'logAdminAction', 'getAdminHealthSnapshot'])(
-    'exports %s',
-    (name) => {
-      expect(index).toContain(name);
-    }
-  );
+  it.each([
+    'setUserRole',
+    'logAdminAction',
+    'getAdminHealthSnapshot',
+    'adminSaveBillingConfig',
+    'adminManageCoupon',
+    'adminUpdatePoolBilling',
+    'adminAdjustUserCredits',
+  ])('exports %s', (name) => {
+    expect(index).toContain(name);
+  });
+});
+
+describe('step 2 — money-adjacent admin writes go through audited callables', () => {
+  const panel = read('src/components/admin/SuperAdminBillingPanel.tsx');
+  it('no direct client coupon writes', () => {
+    expect(panel).not.toMatch(/addDoc\(\s*collection\(db,\s*'coupons'/);
+    expect(panel).not.toMatch(/deleteDoc\(\s*doc\(db,\s*'coupons'/);
+  });
+  it('no direct client billing/referral config writes', () => {
+    expect(panel).not.toMatch(/setDoc\([^)]*'billing_config'/);
+    expect(panel).not.toMatch(/setDoc\([^)]*'referral_config'/);
+  });
+  it('uses the audited billing callables', () => {
+    expect(panel).toContain('dbService.adminSaveBillingConfig');
+    expect(panel).toContain('dbService.adminManageCoupon');
+    expect(panel).toContain('dbService.adminUpdatePoolBilling');
+    expect(panel).toContain('dbService.adminAdjustUserCredits');
+  });
 });
 
 describe('8-tab consolidation — the canonical Super-Admin Dashboard tabs', () => {
