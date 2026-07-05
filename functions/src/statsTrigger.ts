@@ -6,6 +6,7 @@ import * as admin from "firebase-admin";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml } from "./emailStyles";
 import { getSquareEmails } from "./squarePrivate";
+import { isAdminCloseTransition, ADMIN_CLOSE } from "./lib/lifecycle";
 
 // Helper to calculate total pot and charity for a pool
 const calculatePoolPot = async (db: admin.firestore.Firestore, poolId: string, pool: any): Promise<{ prizePot: number; charityAmount: number }> => {
@@ -49,6 +50,11 @@ export const onPoolLocked = onDocumentUpdated("pools/{poolId}", async (event) =>
     try {
         const before = event.data.before.data();
         const after = event.data.after.data();
+
+        // T2: an admin close dual-writes isLocked/isFinal/scores.gameStatus to make
+        // the pool leave open/live lists — but must NOT fire member emails or stat
+        // increments. Skip the whole side-effect path on that transition.
+        if (isAdminCloseTransition(before, after)) return;
 
         // Trigger only when transitioning from unlocked -> locked
         if (!before.isLocked && after.isLocked) {
@@ -131,6 +137,9 @@ export const recalculateGlobalStats = onCall({
             try {
                 const pool = doc.data();
                 if (!pool) continue; // Safety check
+                // T2: admin-closed pools are locked for lifecycle reasons only — their
+                // economics must never be recomputed with the squares-only pot logic.
+                if (pool.closedVia === ADMIN_CLOSE) continue;
 
                 const { prizePot, charityAmount } = await calculatePoolPot(db, doc.id, pool);
                 if (!isNaN(prizePot)) {

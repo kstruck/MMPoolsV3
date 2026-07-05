@@ -45,6 +45,7 @@ export interface LifecycleReadable {
   status?: string;
   isLocked?: boolean;
   isFinal?: boolean;
+  closedVia?: string;
   scores?: { gameStatus?: string };
 }
 
@@ -57,15 +58,17 @@ export interface LifecycleReadable {
  * status-aware so those pools chip correctly the moment T2 ships.
  */
 export function getPoolLifecycleState(pool: LifecycleReadable): PoolLifecycleState {
+  // Terminal for every type: canceled or admin-closed pools are done (T2).
+  if (pool.status === 'CANCELED' || pool.status === 'COMPLETED' || pool.closedVia || pool.isFinal) return 'final';
+
   if (pool.type === 'SQUARES') {
     const gs = pool.scores?.gameStatus;
-    if (gs === 'post' || pool.isFinal) return 'final';
+    if (gs === 'post') return 'final';
     if (gs === 'in') return 'live';
     return pool.isLocked ? 'locked' : 'open';
   }
   // String-status types.
   const status = pool.status;
-  if (status === 'COMPLETED' || pool.isFinal) return 'final';
   if (status === 'LIVE') return 'live';
   if (status === 'LOCKED' || pool.isLocked) return 'locked';
   return 'open';

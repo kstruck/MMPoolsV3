@@ -273,7 +273,8 @@ export type AuditEventType =
     | 'SCHEDULE_FLEX'
     | 'DEADLINE_EXTENDED'
     | 'PROXY_PICK_SUBMITTED'
-    | 'POOL_CANCELED';
+    | 'POOL_CANCELED'
+    | 'POOL_CLOSED';
 
 export interface AuditLogEvent {
     id: string;
