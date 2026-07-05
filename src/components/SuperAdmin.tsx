@@ -23,6 +23,7 @@ import { SuperAdminBentoDashboard } from './SuperAdminBentoDashboard';
 import { simulatePoolGame, seedTestTournament, simulateRound, resetTournament } from '../utils/simulationUtils';
 import { SuperAdminBillingPanel } from './admin/SuperAdminBillingPanel';
 import { AdminAuditViewer } from './admin/AdminAuditViewer';
+import { OperationsPanel } from './admin/OperationsPanel';
 import { useEnsureAdminClaims } from '../hooks/useEnsureAdminClaims';
 import { SuperAdminNFLSpreads } from './admin/SuperAdminNFLSpreads';
 import { useToast } from './ui/Toast';
@@ -54,7 +55,7 @@ export const SuperAdmin: React.FC = () => {
     // UI State
     type NavGroup = 'Dashboard' | 'Management' | 'Game Ops' | 'Configuration';
     const [activeGroup, setActiveGroup] = useState<NavGroup>('Dashboard');
-    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'tournament' | 'stats' | 'nfl' | 'billing' | 'loyalty'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'operations' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'tournament' | 'stats' | 'nfl' | 'billing' | 'loyalty'>('overview');
     const [searchTerm, setSearchTerm] = useState('');
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
@@ -1072,6 +1073,7 @@ export const SuperAdmin: React.FC = () => {
         ],
         'Game Ops': [
             { id: 'pools', label: `Pools(${filteredPools.length})`, icon: <Shield size={16} /> },
+            { id: 'operations', label: 'Operations', icon: <Settings size={16} /> },
             { id: 'tournament', label: 'Tournament', icon: <Trophy size={16} /> },
             { id: 'playoffs', label: 'Playoffs', icon: <Trophy size={16} /> },
             { id: 'props', label: 'Global Props', icon: <List size={16} /> },
@@ -1155,6 +1157,9 @@ export const SuperAdmin: React.FC = () => {
                     <SuperAdminBentoDashboard stats={liveStats} />
                 </div>
             )}
+
+            {/* ============ OPERATIONS TAB (T7) ============ */}
+            {activeTab === 'operations' && <OperationsPanel />}
 
             {/* ============ TOURNAMENT TAB ============ */}
             {activeTab === 'tournament' && (
