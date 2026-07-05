@@ -667,6 +667,14 @@ export const dbService = {
         await fn({ targetUid, role });
     },
 
+    // Server-side user lookup by email prefix (step 6b) — indexed, paged; avoids
+    // scanning the full user list. SUPER_ADMIN/MODERATOR only, enforced server-side.
+    searchUsersByEmail: async (prefix: string, limit = 25): Promise<User[]> => {
+        const fn = httpsCallable<{ prefix: string; limit: number }, { users: User[]; count: number }>(functions, 'searchUsersByEmail');
+        const res = await fn({ prefix, limit });
+        return res.data.users;
+    },
+
     // Audited billing/monetization admin ops (step 2). Each is SUPER_ADMIN-only
     // server-side and writes admin_audit; replaces direct client Firestore writes.
     adminSaveBillingConfig: async (kind: 'billing' | 'referral', config: Record<string, unknown>): Promise<void> => {

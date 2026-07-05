@@ -60,6 +60,9 @@ export const SuperAdmin: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'operations' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'tournament' | 'stats' | 'nfl' | 'billing' | 'loyalty'>('overview');
     const [searchTerm, setSearchTerm] = useState('');
     const [roleChange, setRoleChange] = useState<{ user: User; role: string } | null>(null);
+    const [emailSearch, setEmailSearch] = useState('');
+    const [emailSearchResults, setEmailSearchResults] = useState<User[] | null>(null);
+    const [emailSearching, setEmailSearching] = useState(false);
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
     const [sportFilter, setSportFilter] = useState<string>('ALL');
@@ -732,6 +735,21 @@ export const SuperAdmin: React.FC = () => {
 
     const handleViewUser = (user: User) => {
         setViewingUser(user);
+    };
+
+    // Server-side email search (step 6b) — indexed lookup, no full-list scan.
+    const runEmailSearch = async () => {
+        const p = emailSearch.trim();
+        if (!p) { setEmailSearchResults(null); return; }
+        setEmailSearching(true);
+        try {
+            const results = await dbService.searchUsersByEmail(p, 25);
+            setEmailSearchResults(results);
+        } catch (e) {
+            toast.error(getUserMessage(e, 'User search failed.'));
+        } finally {
+            setEmailSearching(false);
+        }
     };
 
     // Role change (T6) — routed through the guardrail modal + setUserRole callable.
@@ -1502,6 +1520,50 @@ export const SuperAdmin: React.FC = () => {
             {
                 activeTab === 'users' && (
                     <div className="bg-card rounded-xl border border-line overflow-hidden shadow-card w-full">
+                        {/* Server-side email search (step 6b) — finds any user by email prefix without scanning the full list. */}
+                        <div className="p-4 border-b border-line bg-surface w-full">
+                            <div className="flex flex-wrap gap-2 items-center">
+                                <input
+                                    value={emailSearch}
+                                    onChange={(e) => setEmailSearch(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') runEmailSearch(); }}
+                                    placeholder="Find any user by email…"
+                                    className="flex-1 min-w-[200px] bg-card border border-line rounded-lg px-3 py-2 text-sm text-[color:var(--text)] focus:outline-none focus:border-gold-500"
+                                />
+                                <button
+                                    onClick={runEmailSearch}
+                                    disabled={emailSearching}
+                                    className="text-xs bg-gold-500 hover:bg-gold-400 disabled:opacity-50 text-navy-900 px-4 py-2 rounded-lg transition-colors font-display font-bold uppercase tracking-[0.05em]"
+                                >
+                                    {emailSearching ? 'Searching…' : 'Search'}
+                                </button>
+                                {emailSearchResults !== null && (
+                                    <button
+                                        onClick={() => { setEmailSearch(''); setEmailSearchResults(null); }}
+                                        className="text-xs bg-surface hover:bg-card border border-line text-muted px-3 py-2 rounded-lg transition-colors font-display font-bold uppercase tracking-[0.05em]"
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
+                            {emailSearchResults !== null && (
+                                <div className="mt-3 space-y-1">
+                                    {emailSearchResults.length === 0 ? (
+                                        <p className="text-xs text-muted font-body">No users match “{emailSearch.trim()}”.</p>
+                                    ) : emailSearchResults.map(u => (
+                                        <button
+                                            key={u.id}
+                                            onClick={() => handleViewUser(u)}
+                                            className="w-full flex items-center justify-between gap-3 bg-card border border-line rounded-lg px-3 py-2 hover:border-gold-500/40 transition-colors text-left"
+                                        >
+                                            <span className="text-sm font-display font-bold text-[color:var(--text)] truncate">{u.name || 'Anonymous'}</span>
+                                            <span className="text-xs text-muted font-body truncate">{u.email}</span>
+                                            <span className={`shrink-0 text-[10px] uppercase font-display font-bold tracking-[0.08em] px-2 py-1 rounded border ${roleBadge(u.role).className}`}>{roleBadge(u.role).label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                         <div className="p-4 border-b border-line bg-surface flex justify-between items-center w-full">
                             <h2 className="text-xl font-display font-bold uppercase tracking-[0.05em]">Registered Users</h2>
                             <div className="flex gap-2">
