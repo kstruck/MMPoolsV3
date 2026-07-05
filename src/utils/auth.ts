@@ -1,15 +1,20 @@
 import type { User } from '../types';
 import { POOLS_OPEN } from '../config/season';
+import { normalizeRole, canCreatePools } from './roles';
 
 /**
  * Centralized role-check utilities.
  * Use these instead of inline `user.role === 'SUPER_ADMIN'` checks
  * to keep authorization logic in one place and easy to audit.
+ *
+ * All role reads go through normalizeRole() so legacy stored values
+ * (POOL_MANAGER/PARTICIPANT/…) fold to the canonical set — no legacy value
+ * ever reaches a comparison, even before every write site is migrated.
  */
 
 /** Check if a user has the SUPER_ADMIN role */
 export const isSuperAdmin = (user: User | null | undefined): boolean => {
-    return user?.role === 'SUPER_ADMIN';
+    return normalizeRole(user?.role) === 'SUPER_ADMIN';
 };
 
 /** Check if a user is the pool owner or designated manager */
@@ -23,10 +28,10 @@ export const isPoolManager = (user: User | null | undefined, pool: { ownerId?: s
     return isPoolOwner(user, pool) || isSuperAdmin(user);
 };
 
-/** Check if a user can create pools (managers and above) */
+/** Check if a user can create pools (COMMISSIONER and above, incl. legacy POOL_MANAGER) */
 export const canCreatePool = (user: User | null | undefined): boolean => {
     if (!user) return false;
-    return user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN';
+    return canCreatePools(user.role);
 };
 
 /**

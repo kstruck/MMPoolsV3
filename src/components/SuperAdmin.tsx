@@ -1,4 +1,6 @@
 import { logger } from '../utils/logger';
+import { CANONICAL_ROLES, normalizeRole, roleBadge } from '../utils/roles';
+import { ConfirmActionModal } from './admin/ConfirmActionModal';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { GameState, Pool, User, SystemSettings, PropSeed, PlayoffTeam, PoolTheme, LoyaltyTier } from '../types';
@@ -22,6 +24,7 @@ import { SuperAdminBentoDashboard } from './SuperAdminBentoDashboard';
 import { simulatePoolGame, seedTestTournament, simulateRound, resetTournament } from '../utils/simulationUtils';
 import { SuperAdminBillingPanel } from './admin/SuperAdminBillingPanel';
 import { AdminAuditViewer } from './admin/AdminAuditViewer';
+import { OperationsPanel } from './admin/OperationsPanel';
 import { useEnsureAdminClaims } from '../hooks/useEnsureAdminClaims';
 import { SuperAdminNFLSpreads } from './admin/SuperAdminNFLSpreads';
 import { useToast } from './ui/Toast';
@@ -53,8 +56,9 @@ export const SuperAdmin: React.FC = () => {
     // UI State
     type NavGroup = 'Dashboard' | 'Management' | 'Game Ops' | 'Configuration';
     const [activeGroup, setActiveGroup] = useState<NavGroup>('Dashboard');
-    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'tournament' | 'stats' | 'nfl' | 'billing' | 'loyalty'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'operations' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'tournament' | 'stats' | 'nfl' | 'billing' | 'loyalty'>('overview');
     const [searchTerm, setSearchTerm] = useState('');
+    const [roleChange, setRoleChange] = useState<{ user: User; role: string } | null>(null);
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
     const [sportFilter, setSportFilter] = useState<string>('ALL');
@@ -729,6 +733,19 @@ export const SuperAdmin: React.FC = () => {
         setViewingUser(user);
     };
 
+    // Role change (T6) — routed through the guardrail modal + setUserRole callable.
+    const applyRoleChange = async () => {
+        if (!roleChange) return;
+        const { user: u, role } = roleChange;
+        setRoleChange(null);
+        try {
+            await dbService.setUserRole(u.id, role);
+            toast.success(`${u.email || u.id} is now ${role}.`);
+        } catch (e) {
+            toast.error(getUserMessage(e, 'Failed to change role.'));
+        }
+    };
+
     const saveUserChanges = async () => {
         if (!editingUser) return;
         try {
@@ -1071,6 +1088,7 @@ export const SuperAdmin: React.FC = () => {
         ],
         'Game Ops': [
             { id: 'pools', label: `Pools(${filteredPools.length})`, icon: <Shield size={16} /> },
+            { id: 'operations', label: 'Operations', icon: <Settings size={16} /> },
             { id: 'tournament', label: 'Tournament', icon: <Trophy size={16} /> },
             { id: 'playoffs', label: 'Playoffs', icon: <Trophy size={16} /> },
             { id: 'props', label: 'Global Props', icon: <List size={16} /> },
@@ -1154,6 +1172,22 @@ export const SuperAdmin: React.FC = () => {
                     <SuperAdminBentoDashboard stats={liveStats} />
                 </div>
             )}
+
+            {/* ============ OPERATIONS TAB (T7) ============ */}
+            {activeTab === 'operations' && <OperationsPanel />}
+
+            {/* Role-change guardrail (T6): typed-confirm for SUPER_ADMIN / BANNED grants. */}
+            <ConfirmActionModal
+                open={!!roleChange}
+                title="Change user role"
+                description={roleChange ? `Set ${roleChange.user.email || roleChange.user.id} from ${normalizeRole(roleChange.user.role)} to ${roleChange.role}.` : ''}
+                blastRadius={roleChange && (roleChange.role === 'SUPER_ADMIN' || roleChange.role === 'BANNED') ? `${roleChange.role} is a high-impact role — confirm carefully.` : undefined}
+                confirmToken={roleChange && (roleChange.role === 'SUPER_ADMIN' || roleChange.role === 'BANNED') ? (roleChange.user.email || roleChange.user.id) : undefined}
+                destructive={roleChange?.role === 'SUPER_ADMIN' || roleChange?.role === 'BANNED'}
+                confirmLabel="Change role"
+                onConfirm={applyRoleChange}
+                onCancel={() => setRoleChange(null)}
+            />
 
             {/* ============ TOURNAMENT TAB ============ */}
             {activeTab === 'tournament' && (
@@ -1531,9 +1565,19 @@ export const SuperAdmin: React.FC = () => {
                                             </td>
                                             <td className="p-4 text-muted font-body">{u.email}</td>
                                             <td className="p-4">
-                                                <span className={`text-[10px] uppercase font-display font-bold tracking-[0.08em] px-2 py-1 rounded border ${u.role === 'SUPER_ADMIN' ? 'bg-brandred-600/10 text-brandred-500 border-brandred-600/25' : u.role === 'POOL_MANAGER' ? 'bg-navy-600/10 text-navy-700 dark:text-gold-400 border-navy-600/25' : 'bg-surface text-muted border-line'}`}>
-                                                    {u.role || 'USER'}
-                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`text-[10px] uppercase font-display font-bold tracking-[0.08em] px-2 py-1 rounded border ${roleBadge(u.role).className}`}>
+                                                        {roleBadge(u.role).label}
+                                                    </span>
+                                                    <select
+                                                        aria-label={`Change role for ${u.email || u.id}`}
+                                                        value={normalizeRole(u.role)}
+                                                        onChange={(e) => setRoleChange({ user: u, role: e.target.value })}
+                                                        className="bg-surface border border-line rounded text-[10px] text-muted px-1 py-1 focus:outline-none focus:border-gold-500"
+                                                    >
+                                                        {CANONICAL_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                                                    </select>
+                                                </div>
                                             </td>
                                             <td className="p-4">
                                                 <span className={`text-[10px] uppercase font-display font-bold tracking-[0.08em] px-2 py-1 rounded border ${u.registrationMethod === 'google' ? 'bg-gold-500/10 text-gold-700 dark:text-gold-400 border-gold-500/25' : 'bg-navy-600/10 text-navy-700 dark:text-gold-400 border-navy-600/25'}`}>

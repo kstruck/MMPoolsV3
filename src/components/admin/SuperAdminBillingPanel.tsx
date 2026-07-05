@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { canCreatePools } from '../../utils/roles';
 import { db, auth } from '../../firebase';
 import { 
     collection, doc, onSnapshot, setDoc, updateDoc, 
@@ -1413,7 +1414,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
                                     </thead>
                                     <tbody>
                                         {filteredUsers
-                                            .filter(u => u.role === 'POOL_MANAGER' || u.role === 'SUPER_ADMIN')
+                                            .filter(u => canCreatePools(u.role))
                                             .map((u) => {
                                                 const isEditing = editingUserId === u.id;
                                                 return (
