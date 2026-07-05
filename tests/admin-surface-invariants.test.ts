@@ -70,6 +70,19 @@ describe('functions export surface', () => {
   });
 });
 
+describe('step 5 — destructive admin actions write an audit trail', () => {
+  const admin = read('src/components/SuperAdmin.tsx');
+  it.each(['DELETE_POOL', 'DELETE_USER_ACCOUNT', 'REINIT_TOURNAMENT', 'RESET_TOURNAMENT', 'DELETE_THEME'])(
+    'logs %s via logAdminAction',
+    (action) => {
+      expect(admin).toContain(action);
+    }
+  );
+  it('uses the audited logAdminAction path', () => {
+    expect(admin).toContain('dbService.logAdminAction');
+  });
+});
+
 describe('step 6b — server-side user email search', () => {
   it('userSync writes the lowercased searchEmail field', () => {
     expect(read('functions/src/userSync.ts')).toContain('searchEmail');
