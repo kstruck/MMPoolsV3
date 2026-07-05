@@ -119,6 +119,20 @@ export const sendAdminPasswordReset = functions.https.onCall(async (request) => 
         // 4. Queue Email (Write to 'mail' collection)
         await sendEmail(db, email, subject, fullHtml, { type: "PASSWORD_RESET", transactional: true });
 
+        // 4b. Activity Log dual-write (CONTEXT.md): record PASSWORD_RESET_SENT on the
+        // target user's own activity subcollection, not just the actor-side admin_audit.
+        try {
+            const targetUser = await auth.getUserByEmail(email);
+            await db.collection("users").doc(targetUser.uid).collection("activity").add({
+                type: "PASSWORD_RESET_SENT",
+                at: admin.firestore.FieldValue.serverTimestamp(),
+                actorUid: request.auth.uid,
+            });
+        } catch (e) {
+            // Non-fatal: the reset email already went out; the actor-side audit still records it.
+            console.warn("[PasswordReset] activity-log write failed (non-fatal):", e);
+        }
+
         await writeAdminAudit({
             actorUid: request.auth.uid,
             actorEmail: request.auth.token.email as string | undefined,

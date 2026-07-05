@@ -3592,6 +3592,32 @@ export const SuperAdmin: React.FC = () => {
                             </div>
 
                             <div className="p-6">
+                                {/* Unified profile facts (T6): role + referrals + loyalty + account in one place. */}
+                                {(() => {
+                                    const ownedCount = pools.filter(p => {
+                                        const owner = p.type === 'BRACKET' ? (p as unknown as PoolLike).managerUid as string : (p as unknown as PoolLike).ownerId as string;
+                                        return owner === viewingUser.id;
+                                    }).length;
+                                    const tier = [...activeTiers].reverse().find(t => ownedCount >= (t.minPools || 0));
+                                    const facts = [
+                                        { label: 'Role', value: roleBadge(viewingUser.role).label },
+                                        { label: 'Referrals', value: String(getComputedReferrals(viewingUser.id)) },
+                                        { label: 'Loyalty Tier', value: tier?.name || '—' },
+                                        { label: 'Method', value: (viewingUser.registrationMethod || 'email').toUpperCase() },
+                                        { label: 'Pools Owned', value: String(ownedCount) },
+                                    ];
+                                    return (
+                                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+                                            {facts.map(f => (
+                                                <div key={f.label} className="bg-surface border border-line rounded-xl p-3">
+                                                    <p className="text-[9px] uppercase tracking-[0.16em] text-muted font-display font-bold mb-1">{f.label}</p>
+                                                    <p className="text-sm font-display font-bold text-[color:var(--text)] truncate">{f.value}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    );
+                                })()}
+
                                 <h3 className="text-xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4 flex items-center gap-2">
                                     <Activity size={20} className="text-gold-500" /> Pools Managed by {viewingUser.name.split(' ')[0]}
                                 </h3>
