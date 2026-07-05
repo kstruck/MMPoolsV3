@@ -6,7 +6,7 @@ import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { User } from "./types";
 import { NFLGame, SurvivorEntry, MarginEntry } from "./nflPoolTypes";
-import { ADMIN_CLOSE, isTerminalStatus } from "./lib/lifecycle";
+import { ADMIN_CLOSE, isTerminalStatus, adminCloseUpdate } from "./lib/lifecycle";
 import { writeAdminAudit } from "./lib/adminAudit";
 
 // Commissioner exception tools (UX overhaul Phase 3.6).
@@ -418,14 +418,7 @@ export const closePool = onCall(async (request) => {
     }
 
     const now = Date.now();
-    await poolRef.update({
-        status: "COMPLETED",
-        isLocked: true,
-        isFinal: true,
-        "scores.gameStatus": "post",
-        closedVia: ADMIN_CLOSE,
-        closedAt: now,
-    });
+    await poolRef.update(adminCloseUpdate(now));
 
     await writeAuditEvent({
         poolId: pool.id,

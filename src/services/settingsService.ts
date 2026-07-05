@@ -18,7 +18,9 @@ const DEFAULT_SETTINGS: SystemSettings = {
     loyaltyTiers: [
         { id: 'tier_contender', name: 'Contender', minPools: 0, description: 'Accrued based on lifetime pool entries' },
         { id: 'tier_vanguard', name: 'Vanguard Hall', minPools: 6, description: 'Accrued based on lifetime pool entries' }
-    ]
+    ],
+    // Auto-close sweep OFF by default; safe posture (the daily job no-ops).
+    autoClose: { enabled: false, dryRun: true },
 };
 
 export const settingsService = {

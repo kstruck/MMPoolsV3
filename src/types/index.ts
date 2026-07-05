@@ -919,6 +919,8 @@ export interface SystemSettings {
   // Per-pool-type creation flags (T5). Missing/partial => fail open to all-enabled.
   // Server enforces via functions/src/lib/systemGuards; this is the client mirror.
   poolTypeFlags?: Partial<Record<PoolType, boolean>>;
+  // Auto-close sweep (T2). Kill-switch OFF by default; dryRun defaults true when enabled.
+  autoClose?: { enabled?: boolean; dryRun?: boolean };
 }
 
 

@@ -2945,6 +2945,39 @@ export const SuperAdmin: React.FC = () => {
                                 </button>
                             </div>
 
+                            {/* Auto-Close sweep (T2). Kill-switch OFF by default; when enabled it
+                                runs daily but stays in dry-run (reports only) until Dry-Run is off. */}
+                            <div className="flex items-center justify-between p-4 bg-surface rounded-lg border border-line">
+                                <div>
+                                    <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)]">Auto-Close Sweep</h4>
+                                    <p className="text-sm text-muted">Daily job that closes stuck-open finished pools. {settings?.autoClose?.enabled ? (settings?.autoClose?.dryRun === false ? 'ENABLED — closing live.' : 'Enabled — dry-run (reports only).') : 'Disabled.'}</p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        onClick={() => settingsService.update({ autoClose: { enabled: !settings?.autoClose?.enabled, dryRun: settings?.autoClose?.dryRun !== false } })}
+                                        title="Enable / disable the daily sweep"
+                                        className={`transition-colors ${settings?.autoClose?.enabled ? 'text-gold-500' : 'text-faint'}`}
+                                    >
+                                        {settings?.autoClose?.enabled ? <ToggleRight size={40} className="fill-gold-500/20" /> : <ToggleLeft size={40} />}
+                                    </button>
+                                    {settings?.autoClose?.enabled && (
+                                        <button
+                                            onClick={async () => {
+                                                if (settings?.autoClose?.dryRun === false) {
+                                                    settingsService.update({ autoClose: { enabled: true, dryRun: true } });
+                                                } else {
+                                                    const ok = await toast.confirm({ title: 'Arm live auto-close?', message: 'Turning off dry-run lets the daily sweep actually close pools. Review a few dry-run audit reports first.', danger: true });
+                                                    if (ok) settingsService.update({ autoClose: { enabled: true, dryRun: false } });
+                                                }
+                                            }}
+                                            className={`text-[10px] font-display font-bold uppercase tracking-[0.08em] px-3 py-2 rounded-lg border ${settings?.autoClose?.dryRun === false ? 'bg-brandred-600/10 text-brandred-500 border-brandred-600/25' : 'bg-surface text-muted border-line'}`}
+                                        >
+                                            {settings?.autoClose?.dryRun === false ? 'Live — click for dry-run' : 'Dry-run — click to arm live'}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
                             {/* Per-pool-type creation flags (T5). Server-enforced: disabling a
                                 type blocks its create callable end-to-end, not just the UI. */}
                             <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">

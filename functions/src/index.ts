@@ -15,6 +15,7 @@ export { onUserCreated, syncAllUsers } from "./userSync";
 export { deleteUserAccount, sendAdminPasswordReset, sendSecuritySMSAlert, testSmsHttp, searchUsersByEmail } from "./userManagement";
 export { runReminders, onWinnerComputed } from "./reminders";
 export { autoLockPools } from "./autoLock"; // NEW: Dedicated 1-minute auto-lock scheduler
+export { autoClosePools } from "./autoClosePools"; // T2: daily stuck-pool close sweep (dry-run + kill-switch)
 export { onPoolLocked, recalculateGlobalStats } from "./statsTrigger";
 export { onUserCreated as createParticipantProfile, createClaimCode, claimMySquares, claimByCode, syncParticipantIndices } from "./participant";
 export { createPool, updatePoolSettings, recalculatePoolWinners, toggleWinnerPaid, fixParticipantIds } from "./poolOps";
