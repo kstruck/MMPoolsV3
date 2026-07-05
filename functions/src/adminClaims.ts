@@ -1,82 +1,171 @@
 /**
- * Admin Claims - Cloud Functions for managing Custom Claims
- * Used to set/remove SUPER_ADMIN role as a Custom Claim on Firebase Auth tokens.
- * This is the ONLY way the isSuperAdmin() Firestore rule can be satisfied.
+ * Admin Claims — Cloud Functions for managing user roles via Custom Claims.
+ *
+ * The canonical role model lives in ./lib/roles.ts (T6). The custom claim
+ * (request.auth.token.role) is authoritative for Firestore rules; the
+ * users/{uid}.role field is the mirror for display + the token-refresh fallback.
  */
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { CANONICAL_ROLES, normalizeRole, type CanonicalRole } from "./lib/roles";
+import { writeAdminAudit } from "./lib/adminAudit";
+
+/** Roles ranked low→high for detecting a downward change (token revocation). */
+const ROLE_RANK: Record<CanonicalRole, number> = {
+  BANNED: 0,
+  MEMBER: 1,
+  COMMISSIONER: 2,
+  MODERATOR: 3,
+  SUPER_ADMIN: 4,
+};
 
 /**
- * setSuperAdminClaim
- * Callable function that allows an existing SUPER_ADMIN to promote or demote another user.
- * Requires: { targetUid: string, isSuperAdmin: boolean }
+ * Assert the caller holds one of `allowedRoles` per BOTH the JWT claim AND the
+ * Firestore users/{uid}.role doc (normalized). Requiring both agree blocks a
+ * demoted-but-not-yet-refreshed token from acting on a stale claim. Returns the
+ * caller's uid + email for audit logging.
  */
-export const setSuperAdminClaim = onCall(async (request) => {
-    // 1. Must be authenticated
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "Must be logged in.");
-    }
+export async function assertCallerRole(
+  request: { auth?: { uid: string; token: Record<string, unknown> } | null },
+  ...allowedRoles: CanonicalRole[]
+): Promise<{ uid: string; email?: string }> {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be logged in.");
+  }
+  const uid = request.auth.uid;
+  const claimRole = normalizeRole((request.auth.token.role as string) ?? null);
 
-    // 2. Caller must already be a SUPER_ADMIN (via custom claim)
-    const callerClaims = request.auth.token;
-    if (callerClaims.role !== "SUPER_ADMIN") {
-        throw new HttpsError("permission-denied", "Only Super Admins can manage admin claims.");
-    }
+  const snap = await admin.firestore().doc(`users/${uid}`).get();
+  const docRole = normalizeRole((snap.data()?.role as string) ?? null);
 
-    const { targetUid, isSuperAdmin } = request.data as { targetUid: string; isSuperAdmin: boolean };
-
-    if (!targetUid || typeof isSuperAdmin !== "boolean") {
-        throw new HttpsError("invalid-argument", "targetUid (string) and isSuperAdmin (boolean) are required.");
-    }
-
-    // 3. Verify target user exists
-    await admin.auth().getUser(targetUid); // throws if not found
-
-    // 4. Set or remove the custom claim
-    const newClaims = isSuperAdmin ? { role: "SUPER_ADMIN" } : { role: "PARTICIPANT" };
-    await admin.auth().setCustomUserClaims(targetUid, newClaims);
-
-    // 5. Mirror the role in Firestore for display purposes (not used for security checks)
-    await admin.firestore().doc(`users/${targetUid}`).set(
-        { role: newClaims.role },
-        { merge: true }
+  const allowed = new Set(allowedRoles);
+  if (!allowed.has(claimRole) || !allowed.has(docRole)) {
+    throw new HttpsError(
+      "permission-denied",
+      "Caller lacks the required role (claim and profile must agree)."
     );
+  }
+  return { uid, email: (request.auth.token.email as string) ?? undefined };
+}
 
-    return {
-        success: true,
-        message: `User ${targetUid} is now ${newClaims.role}.`,
-    };
+/**
+ * setUserRole — the single authoritative role-change callable (T6).
+ * Caller must be SUPER_ADMIN (claim + doc agree). Accepts any canonical role.
+ *
+ * Write sequence is NOT atomic across Auth and Firestore: set the custom claim
+ * first, then mirror the Firestore field. If the mirror write fails the function
+ * throws and the admin re-runs — setCustomUserClaims is idempotent, so this is
+ * the accepted split-brain recovery path. On any downward change the target's
+ * refresh tokens are revoked so a stale elevated token cannot linger.
+ */
+export const setUserRole = onCall(async (request) => {
+  const caller = await assertCallerRole(request, "SUPER_ADMIN");
+
+  const { targetUid, role } = request.data as { targetUid: string; role: string };
+  if (!targetUid || typeof targetUid !== "string") {
+    throw new HttpsError("invalid-argument", "targetUid (string) is required.");
+  }
+  if (!role || !(CANONICAL_ROLES as readonly string[]).includes(role)) {
+    throw new HttpsError(
+      "invalid-argument",
+      `role must be one of: ${CANONICAL_ROLES.join(", ")}.`
+    );
+  }
+  const nextRole = role as CanonicalRole;
+
+  // Determine prior role for downward-change detection (best-effort).
+  const targetDoc = await admin.firestore().doc(`users/${targetUid}`).get();
+  const priorRole = normalizeRole((targetDoc.data()?.role as string) ?? null);
+
+  await admin.auth().getUser(targetUid); // throws not-found if target is missing
+
+  // (a) authoritative claim, then (b) Firestore mirror.
+  await admin.auth().setCustomUserClaims(targetUid, { role: nextRole });
+  await admin.firestore().doc(`users/${targetUid}`).set({ role: nextRole }, { merge: true });
+
+  // Revoke refresh tokens on any downward move (demotion or ban).
+  if (ROLE_RANK[nextRole] < ROLE_RANK[priorRole]) {
+    await admin.auth().revokeRefreshTokens(targetUid);
+  }
+
+  await writeAdminAudit({
+    actorUid: caller.uid,
+    actorEmail: caller.email,
+    action: "ROLE_CHANGED",
+    targetType: "user",
+    targetId: targetUid,
+    metadata: { from: priorRole, to: nextRole },
+    status: "success",
+  });
+
+  return { success: true, role: nextRole, message: `User ${targetUid} is now ${nextRole}.` };
 });
 
 /**
- * syncMyClaims
- * Synchronizes the current user's Auth custom claims with their Firestore user document role.
- * This resolves the bootstrap catch-22 where a user is set as SUPER_ADMIN in the database
- * but lacks the custom claim on their Auth token to perform administrative writes or triggers.
+ * setSuperAdminClaim — DEPRECATED. Kept as a thin passthrough so any un-migrated
+ * caller keeps working; new code uses setUserRole. Grants/revokes SUPER_ADMIN,
+ * demoting to MEMBER (canonical) rather than the legacy PARTICIPANT.
+ */
+export const setSuperAdminClaim = onCall(async (request) => {
+  const caller = await assertCallerRole(request, "SUPER_ADMIN");
+  const { targetUid, isSuperAdmin } = request.data as { targetUid: string; isSuperAdmin: boolean };
+  if (!targetUid || typeof isSuperAdmin !== "boolean") {
+    throw new HttpsError("invalid-argument", "targetUid (string) and isSuperAdmin (boolean) are required.");
+  }
+  const nextRole: CanonicalRole = isSuperAdmin ? "SUPER_ADMIN" : "MEMBER";
+
+  const targetDoc = await admin.firestore().doc(`users/${targetUid}`).get();
+  const priorRole = normalizeRole((targetDoc.data()?.role as string) ?? null);
+
+  await admin.auth().getUser(targetUid);
+  await admin.auth().setCustomUserClaims(targetUid, { role: nextRole });
+  await admin.firestore().doc(`users/${targetUid}`).set({ role: nextRole }, { merge: true });
+  if (ROLE_RANK[nextRole] < ROLE_RANK[priorRole]) {
+    await admin.auth().revokeRefreshTokens(targetUid);
+  }
+
+  await writeAdminAudit({
+    actorUid: caller.uid,
+    actorEmail: caller.email,
+    action: "ROLE_CHANGED",
+    targetType: "user",
+    targetId: targetUid,
+    metadata: { from: priorRole, to: nextRole, via: "setSuperAdminClaim" },
+    status: "success",
+  });
+
+  return { success: true, message: `User ${targetUid} is now ${nextRole}.` };
+});
+
+/**
+ * syncMyClaims — self-only bootstrap recovery for the SUPER_ADMIN catch-22
+ * (Firestore says SUPER_ADMIN but the token lacks the claim, so no admin write
+ * can succeed to fix it). Hardened per PLAN-USER-MGMT:
+ *  - self-only: a caller may only sync THEIR OWN claims.
+ *  - privileged mint gated on Firestore role: only re-mints a privileged claim
+ *    when the rules-protected users/{uid}.role already says so. Non-privileged
+ *    users just get their (normalized) role reflected — no escalation is possible
+ *    because rules forbid a user from writing their own role field.
+ *  - legacy values are normalized (PARTICIPANT→MEMBER) before minting.
  */
 export const syncMyClaims = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "Must be logged in.");
-    }
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be logged in.");
+  }
+  const uid = request.auth.uid;
 
-    const uid = request.auth.uid;
-    const userDoc = await admin.firestore().doc(`users/${uid}`).get();
+  const userDoc = await admin.firestore().doc(`users/${uid}`).get();
+  if (!userDoc.exists) {
+    throw new HttpsError("not-found", "User document not found in Firestore.");
+  }
 
-    if (!userDoc.exists) {
-        throw new HttpsError("not-found", "User document not found in Firestore.");
-    }
+  const role = normalizeRole((userDoc.data()?.role as string) ?? null);
+  await admin.auth().setCustomUserClaims(uid, { role });
 
-    const userData = userDoc.data();
-    const role = userData?.role || "PARTICIPANT";
-
-    // Set custom claim to match their Firestore role
-    const claims = { role };
-    await admin.auth().setCustomUserClaims(uid, claims);
-
-    return {
-        success: true,
-        role,
-        message: `Auth custom claims synced with Firestore. Role is now ${role}.`
-    };
+  return {
+    success: true,
+    role,
+    message: `Auth custom claims synced with Firestore. Role is now ${role}.`,
+  };
 });
