@@ -61,7 +61,7 @@ export function freeBilling() {
 // Legacy value the current code upgrades a fresh creator to. The renamed
 // 'COMMISSIONER' value is accepted elsewhere; the target stays POOL_MANAGER
 // until the role migration lands on this branch.
-const CREATOR_ROLE = 'POOL_MANAGER';
+const CREATOR_ROLE = 'COMMISSIONER';
 const UPGRADEABLE_ROLES = new Set(['PARTICIPANT', 'MEMBER', undefined]);
 
 export interface PoolCreationSideEffectOpts {
@@ -116,7 +116,8 @@ export function writePoolCreationSideEffects(
     timestamp: opts.nowMs,
   });
 
-  // First-pool role upgrade (legacy target until the rename lands here)
+  // First-pool role upgrade → canonical COMMISSIONER (T6). Accepts legacy or
+  // canonical upgradeable current roles (UPGRADEABLE_ROLES).
   if (UPGRADEABLE_ROLES.has(opts.currentRole)) {
     t.update(userRef, { role: CREATOR_ROLE });
   }

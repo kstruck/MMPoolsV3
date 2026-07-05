@@ -68,8 +68,20 @@ describe('functions export surface', () => {
     'closePool',
     'autoClosePools',
     'sendUserEmail',
+    'backfillUserRoles',
   ])('exports %s', (name) => {
     expect(index).toContain(name);
+  });
+});
+
+describe('T6 write-path sweep — global-role writers are canonical', () => {
+  it('userSync + authService default to MEMBER, not PARTICIPANT', () => {
+    expect(read('functions/src/userSync.ts')).toContain("role: 'MEMBER'");
+    expect(read('src/services/authService.ts')).not.toMatch(/role:\s*'PARTICIPANT'/);
+  });
+  it('pool-creation upgrade + stripe write COMMISSIONER', () => {
+    expect(read('functions/src/lib/poolCreation.ts')).toContain("CREATOR_ROLE = 'COMMISSIONER'");
+    expect(read('functions/src/stripe.ts')).not.toMatch(/role:\s*"POOL_MANAGER"/);
   });
 });
 

@@ -760,6 +760,25 @@ export const SuperAdmin: React.FC = () => {
         }
     };
 
+    // One-time role backfill (T6) — dry-run first, then confirm to migrate live.
+    const handleBackfillRoles = async () => {
+        try {
+            const dry = await dbService.backfillUserRoles(true);
+            if (!dry.wouldMigrate) { toast.success('No legacy roles found — nothing to migrate.'); return; }
+            const ok = await toast.confirm({
+                title: 'Migrate legacy roles?',
+                message: `${dry.wouldMigrate} user(s) still have legacy roles${dry.more ? ' (more beyond this batch)' : ''}. Rewrite them to canonical values (doc + auth claim)?`,
+                danger: true,
+            });
+            if (!ok) return;
+            const res = await dbService.backfillUserRoles(false);
+            toast.success(`Migrated ${res.migrated} user(s).${res.more ? ' Run again for the rest.' : ''}`);
+            fetchUsers();
+        } catch (e) {
+            toast.error(getUserMessage(e, 'Backfill failed.'));
+        }
+    };
+
     // Admin one-off email (step 6c) — server sends + logs to activity + audit.
     const handleEmailUser = async (user: User) => {
         if (!user.email) { toast.error('That user has no email on file.'); return; }
@@ -1609,6 +1628,13 @@ export const SuperAdmin: React.FC = () => {
                                     className="text-xs bg-navy-800 hover:bg-navy-700 text-white px-3 py-1 rounded transition-colors flex items-center gap-1 font-display font-bold uppercase tracking-[0.05em]"
                                 >
                                     Force Sync
+                                </button>
+                                <button
+                                    onClick={handleBackfillRoles}
+                                    title="Migrate legacy roles (POOL_MANAGER/PARTICIPANT) to canonical (dry-run first)"
+                                    className="text-xs bg-surface hover:bg-card border border-line text-[color:var(--text)] px-3 py-1 rounded transition-colors flex items-center gap-1 font-display font-bold uppercase tracking-[0.05em]"
+                                >
+                                    Backfill Roles
                                 </button>
                                 {/* Admin Actions */}
                                 <button

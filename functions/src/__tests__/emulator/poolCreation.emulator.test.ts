@@ -58,7 +58,7 @@ describe('createPool side-effect bundle (emulator)', () => {
     expect(participations.size).toBe(0);
 
     const user = (await db.collection('users').doc('u1').get()).data() as Record<string, any>;
-    expect(user.role).toBe('POOL_MANAGER');
+    expect(user.role).toBe('COMMISSIONER'); // T6 canonical (was POOL_MANAGER)
   });
 
   it('NFL_PICKEM: also writes the participations index + OPEN status', async () => {
