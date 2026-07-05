@@ -44,11 +44,11 @@ export function canCreatePools(role: string | null | undefined): boolean {
 export function roleBadge(role: string | null | undefined): { label: CanonicalRole; className: string } {
   const r = normalizeRole(role);
   const colors: Record<CanonicalRole, string> = {
-    SUPER_ADMIN: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
-    MODERATOR: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-    COMMISSIONER: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
-    MEMBER: 'bg-slate-700/40 text-slate-300 border-slate-600/40',
-    BANNED: 'bg-red-900/40 text-red-300 border-red-700/50',
+    SUPER_ADMIN: 'bg-brandred-600/10 text-brandred-500 border-brandred-600/25',
+    MODERATOR: 'bg-gold-500/10 text-gold-700 dark:text-gold-400 border-gold-500/25',
+    COMMISSIONER: 'bg-navy-600/10 text-navy-700 dark:text-gold-400 border-navy-600/25',
+    MEMBER: 'bg-surface text-muted border-line',
+    BANNED: 'bg-brandred-900/20 text-brandred-500 border-brandred-700/40',
   };
   return { label: r, className: colors[r] };
 }

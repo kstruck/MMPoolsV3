@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { roleBadge } from '../utils/roles';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { GameState, Pool, User, SystemSettings, PropSeed, PlayoffTeam, PoolTheme, LoyaltyTier } from '../types';
@@ -1531,8 +1532,8 @@ export const SuperAdmin: React.FC = () => {
                                             </td>
                                             <td className="p-4 text-muted font-body">{u.email}</td>
                                             <td className="p-4">
-                                                <span className={`text-[10px] uppercase font-display font-bold tracking-[0.08em] px-2 py-1 rounded border ${u.role === 'SUPER_ADMIN' ? 'bg-brandred-600/10 text-brandred-500 border-brandred-600/25' : u.role === 'POOL_MANAGER' ? 'bg-navy-600/10 text-navy-700 dark:text-gold-400 border-navy-600/25' : 'bg-surface text-muted border-line'}`}>
-                                                    {u.role || 'USER'}
+                                                <span className={`text-[10px] uppercase font-display font-bold tracking-[0.08em] px-2 py-1 rounded border ${roleBadge(u.role).className}`}>
+                                                    {roleBadge(u.role).label}
                                                 </span>
                                             </td>
                                             <td className="p-4">

@@ -512,7 +512,9 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'POOL_MANAGER' | 'PARTICIPANT' | 'SUPER_ADMIN';
+  // Canonical roles (T6) + legacy values still present in stored docs until the
+  // backfill runs. Read through normalizeRole()/roleBadge() — never compare raw.
+  role: 'SUPER_ADMIN' | 'MODERATOR' | 'COMMISSIONER' | 'MEMBER' | 'BANNED' | 'POOL_MANAGER' | 'PARTICIPANT';
   provider: 'password' | 'google';
   picture?: string | null; // Allow null for Firebase compatibility
   registrationMethod?: 'google' | 'email' | 'unknown';
