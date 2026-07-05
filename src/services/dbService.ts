@@ -660,6 +660,13 @@ export const dbService = {
         });
     },
 
+    // Change a user's canonical role (T6). Server (setUserRole) validates the
+    // caller is SUPER_ADMIN, dual-writes claim + doc, and revokes tokens on demotion.
+    setUserRole: async (targetUid: string, role: string): Promise<void> => {
+        const fn = httpsCallable<{ targetUid: string; role: string }, { success: boolean; role: string }>(functions, 'setUserRole');
+        await fn({ targetUid, role });
+    },
+
     // Record an admin_audit entry for an Operations-panel action (T7).
     logAdminAction: async (entry: { action: string; targetType?: string; targetId?: string; metadata?: Record<string, unknown>; status?: 'success' | 'error'; error?: string }): Promise<void> => {
         try {
