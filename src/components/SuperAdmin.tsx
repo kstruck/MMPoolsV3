@@ -621,12 +621,13 @@ export const SuperAdmin: React.FC = () => {
         });
         if (!ok) return;
         try {
-            await dbService.updateBracketPool(pool.id, { status: 'COMPLETED' });
-            dbService.logAdminAction({ action: 'CLOSE_POOL', targetType: 'pool', targetId: pool.id, metadata: { name: pool.name }, status: 'success' });
+            // T2: routes through the closePool callable — dual-writes the terminal
+            // status + legacy fields + closedVia so triggers stay silent and the pool
+            // leaves every open/live surface. Server writes its own admin_audit entry.
+            await dbService.closePool(pool.id);
             toast.success(`"${pool.name}" has been closed and marked as Completed.`);
         } catch (e: unknown) {
             logger.error('Close pool error:', e);
-            dbService.logAdminAction({ action: 'CLOSE_POOL', targetType: 'pool', targetId: pool.id, status: 'error', error: getUserMessage(e, 'error') });
             toast.error(getUserMessage(e, 'Error closing pool.'));
         }
     };

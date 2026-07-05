@@ -6,6 +6,8 @@ import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { User } from "./types";
 import { NFLGame, SurvivorEntry, MarginEntry } from "./nflPoolTypes";
+import { ADMIN_CLOSE, isTerminalStatus } from "./lib/lifecycle";
+import { writeAdminAudit } from "./lib/adminAudit";
 
 // Commissioner exception tools (UX overhaul Phase 3.6).
 // Real seasons have exceptions — a member in the hospital, a mis-set deadline,
@@ -390,4 +392,59 @@ export const cancelPool = onCall(async (request) => {
     }
 
     return { success: true, emailed };
+});
+
+// closePool (T2) — settles a pool into its terminal COMPLETED state. Unlike
+// cancelPool (which voids a dead pool + emails members), this is the normal
+// "the contest is over" close: it dual-writes the canonical status AND the
+// legacy fields non-admin screens read (isLocked/isFinal/scores.gameStatus:'post')
+// so the pool leaves every open/live surface, plus closedVia:'ADMIN_CLOSE' — the
+// flag that makes onPoolLocked / onGameComplete / recalculateGlobalStats skip it,
+// so an admin close produces ZERO member emails and ZERO stats deltas.
+// Principal: ownerId || managerUid || SUPER_ADMIN (loadPoolAndAssertManager).
+export const closePool = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "User must be logged in.");
+    }
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+    const { poolId } = (request.data || {}) as { poolId?: string };
+
+    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth.token.role as string | undefined);
+
+    // CANCELED (and an already-COMPLETED close) are terminal — never overwrite.
+    if (isTerminalStatus(pool.status as string | undefined)) {
+        throw new HttpsError("failed-precondition", `This pool is already ${pool.status} and cannot be closed.`);
+    }
+
+    const now = Date.now();
+    await poolRef.update({
+        status: "COMPLETED",
+        isLocked: true,
+        isFinal: true,
+        "scores.gameStatus": "post",
+        closedVia: ADMIN_CLOSE,
+        closedAt: now,
+    });
+
+    await writeAuditEvent({
+        poolId: pool.id,
+        type: "POOL_CLOSED",
+        message: `Pool "${pool.name}" was closed (COMPLETED) by an admin.`,
+        severity: "WARNING",
+        actor: { uid, role: "ADMIN", label: "Admin" },
+        payload: { previousStatus: pool.status ?? null, closedVia: ADMIN_CLOSE },
+    });
+
+    await writeAdminAudit({
+        actorUid: uid,
+        actorEmail: request.auth.token.email as string | undefined,
+        action: "POOL_CLOSED",
+        targetType: "pool",
+        targetId: pool.id,
+        metadata: { name: pool.name, previousStatus: pool.status ?? null },
+        status: "success",
+    });
+
+    return { success: true };
 });

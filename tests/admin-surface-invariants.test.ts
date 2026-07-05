@@ -65,8 +65,27 @@ describe('functions export surface', () => {
     'adminUpdatePoolBilling',
     'adminAdjustUserCredits',
     'searchUsersByEmail',
+    'closePool',
   ])('exports %s', (name) => {
     expect(index).toContain(name);
+  });
+});
+
+describe('T2 — closePool trigger guards are wired', () => {
+  it('onPoolLocked skips the admin-close transition', () => {
+    expect(read('functions/src/statsTrigger.ts')).toContain('isAdminCloseTransition');
+  });
+  it('onGameComplete skips the admin-close transition', () => {
+    expect(read('functions/src/postGameEmail.ts')).toContain('isAdminCloseTransition');
+  });
+  it('recalculateGlobalStats excludes admin-closed pools', () => {
+    expect(read('functions/src/statsTrigger.ts')).toContain('ADMIN_CLOSE');
+  });
+  it('closePool dual-writes closedVia + legacy terminal fields', () => {
+    const pe = read('functions/src/poolExceptions.ts');
+    expect(pe).toContain('closedVia');
+    expect(pe).toContain('isFinal');
+    expect(pe).toContain('scores.gameStatus');
   });
 });
 

@@ -65,7 +65,7 @@ export { emailUnsubscribe } from "./emailUnsubscribeHttp";
 export { manageEmailPrefs } from "./emailPrefsPage";
 
 // --- COMMISSIONER EXCEPTION TOOLS (audited mid-season corrections) ---
-export { extendWeekDeadline, proxyPick, cancelPool } from "./poolExceptions";
+export { extendWeekDeadline, proxyPick, cancelPool, closePool } from "./poolExceptions";
 
 // --- POOL INVITES (bulk email invites) ---
 export { sendPoolInvites } from "./invites";

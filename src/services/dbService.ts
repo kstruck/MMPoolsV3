@@ -667,6 +667,14 @@ export const dbService = {
         await fn({ targetUid, role });
     },
 
+    // Close a pool into its terminal COMPLETED state (T2). Server dual-writes the
+    // canonical status + legacy fields + closedVia:'ADMIN_CLOSE', and the triggers
+    // skip it — zero member emails, zero stats deltas. Principal enforced server-side.
+    closePool: async (poolId: string): Promise<void> => {
+        const fn = httpsCallable<{ poolId: string }, { success: boolean }>(functions, 'closePool');
+        await fn({ poolId });
+    },
+
     // Server-side user lookup by email prefix (step 6b) — indexed, paged; avoids
     // scanning the full user list. SUPER_ADMIN/MODERATOR only, enforced server-side.
     searchUsersByEmail: async (prefix: string, limit = 25): Promise<User[]> => {

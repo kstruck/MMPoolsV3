@@ -2,6 +2,7 @@ import * as functions from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
 import { sendEmail } from "./reminders";
+import { isAdminCloseTransition } from "./lib/lifecycle";
 
 
 
@@ -11,6 +12,7 @@ interface PoolData {
     urlSlug?: string;
     costPerSquare?: number;
     postGameEmailSent?: boolean;
+    closedVia?: string;
     scores?: {
         gameStatus?: 'pre' | 'in' | 'post';
         final?: { home: number; away: number };
@@ -41,6 +43,10 @@ export const onGameComplete = functions.firestore.onDocumentUpdated(
         const after = event.data?.after.data() as PoolData | undefined;
 
         if (!before || !after) return;
+
+        // T2: skip the post-game email when scores.gameStatus:'post' was written by
+        // an admin close (dual-write), not a real game finishing.
+        if (isAdminCloseTransition(before, after)) return;
 
         // Only trigger when game status changes to 'post' (game ended)
         if (before.scores?.gameStatus === after.scores?.gameStatus) return;
