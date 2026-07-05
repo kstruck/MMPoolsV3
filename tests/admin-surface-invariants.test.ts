@@ -64,8 +64,18 @@ describe('functions export surface', () => {
     'adminManageCoupon',
     'adminUpdatePoolBilling',
     'adminAdjustUserCredits',
+    'searchUsersByEmail',
   ])('exports %s', (name) => {
     expect(index).toContain(name);
+  });
+});
+
+describe('step 6b — server-side user email search', () => {
+  it('userSync writes the lowercased searchEmail field', () => {
+    expect(read('functions/src/userSync.ts')).toContain('searchEmail');
+  });
+  it('admin Users tab uses the indexed search callable', () => {
+    expect(read('src/components/SuperAdmin.tsx')).toContain('dbService.searchUsersByEmail');
   });
 });
 

@@ -223,3 +223,37 @@ export const testSmsHttp = functions.https.onRequest({ secrets: [courierAuthToke
     const success = await sendCourierSMS(phone, "This is a test message from March Melee Pools 🏀");
     res.send({ success, phone_raw: phone, phone_e164: e164, token_present: !!courierAuthToken.value() });
 });
+
+/**
+ * searchUsersByEmail — paged admin user lookup by email prefix (step 6b).
+ * Replaces scanning the full user list for the common "find a user" flow.
+ * SUPER_ADMIN or MODERATOR (both view users per CONTEXT.md User Management).
+ * Uses the searchEmail (lowercased) field + Firestore's default single-field
+ * index, so it stays cheap as the userbase grows.
+ */
+export const searchUsersByEmail = functions.https.onCall(async (request) => {
+    if (!request.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "Must be logged in.");
+    }
+    const role = request.auth.token.role;
+    if (role !== "SUPER_ADMIN" && role !== "MODERATOR") {
+        throw new functions.https.HttpsError("permission-denied", "Admins only.");
+    }
+
+    const { prefix, limit } = request.data as { prefix?: string; limit?: number };
+    const p = (prefix || "").trim().toLowerCase();
+    if (!p) {
+        throw new functions.https.HttpsError("invalid-argument", "A non-empty email prefix is required.");
+    }
+    const cap = Math.min(typeof limit === "number" && limit > 0 ? limit : 25, 50);
+
+    const snap = await admin.firestore().collection("users")
+        .orderBy("searchEmail")
+        .startAt(p)
+        .endAt(p + "")
+        .limit(cap)
+        .get();
+
+    const users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    return { users, count: users.length };
+});

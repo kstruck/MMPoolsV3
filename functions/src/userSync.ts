@@ -30,6 +30,7 @@ export const onUserCreated = functions.auth.user().onCreate(async (user: UserRec
                 id: uid,
                 name,
                 email: email || "",
+                searchEmail: (email || "").toLowerCase(), // lowercase for admin prefix search
                 picture: photoURL || null,
                 registrationMethod: method,
                 createdAt: FieldValue.serverTimestamp(),
@@ -42,6 +43,7 @@ export const onUserCreated = functions.auth.user().onCreate(async (user: UserRec
             console.log(`[UserSync] User ${uid} already exists in Firestore. Using merge just in case.`);
             await userRef.set({
                 email: email || "", // Ensure email is up to date
+                searchEmail: (email || "").toLowerCase(),
                 lastLogin: FieldValue.serverTimestamp()
             }, { merge: true });
         }
@@ -79,6 +81,7 @@ export const syncAllUsers = onCall(async (request: CallableRequest) => {
                 id: user.uid,
                 name: user.displayName || user.email?.split('@')[0] || 'Unknown',
                 email: user.email || '',
+                searchEmail: (user.email || '').toLowerCase(), // backfills searchEmail for existing users
                 picture: user.photoURL || null,
                 registrationMethod: method,
                 // Don't overwrite createdAt if it exists, but ensure sync timestamp
