@@ -1,18 +1,30 @@
 # Phase 0 — Deploy Checklist (action required by Kevin)
 
-Branch: `fix/superadmin-phase0-control` (commit `42c7c57`). Code is written, typechecked, and tested locally (functions build + root build: 0 errors; 203/203 root + 96/96 functions tests). **Nothing has been deployed to prod.** Do these in order.
+Branch: `fix/superadmin-phase0-control` (13 commits, PR #139). All green locally (functions build + root build: 0 errors; 204/204 root + 96/96 functions tests). **Partial deploy in progress** — see per-step status notes. Do the rest in order.
 
 ## 1. Review + merge the branch
 - `git checkout fix/superadmin-phase0-control` and skim the diff, or open a PR to `main`.
 - CI (ci.yml) will re-run build + tests + nginx validate.
 
 ## 2. Deploy Cloud Functions (needed BEFORE the rules, or client error logging breaks)
-The new `logClientError` callable must exist before `system_logs` create is locked, else front-end error telemetry silently drops. The new `scheduledHealthCheck` (hourly) + updated `getAdminHealthSnapshot` persist to `health/latest`.
+The new `logClientError` callable must exist before `system_logs` create is locked, else front-end error telemetry silently drops. The new `scheduledHealthCheck` (hourly) + updated `getAdminHealthSnapshot` persist to `health/latest`. Phase 3.1 also changed `onUserCreated` / `syncAllUsers` (write `searchName`) and `searchUsersByEmail` (match name OR email).
+
+**Simplest — deploy all functions (avoids missing any):**
 ```
 npm --prefix functions install     # only if deps changed
-npx firebase deploy --only functions:logClientError,functions:getAdminHealthSnapshot,functions:scheduledHealthCheck,functions:adminInitTournament,functions:syncBracketTournament --project gridiron-gamble-uzuqo
+npx firebase deploy --only functions --project gridiron-gamble-uzuqo
 ```
-(Or deploy all functions if easier.) Verify `logClientError` + `scheduledHealthCheck` show in the Firebase console functions list. `scheduledHealthCheck` will also create a Cloud Scheduler job (approve any prompt). Note: Phase 1.2 also added a `computeAdminHealthSnapshot` helper — no separate deploy, it ships inside adminHealth.
+
+**Or the exact changed set (all 8):**
+```
+npx firebase deploy --only functions:logClientError,functions:getAdminHealthSnapshot,functions:scheduledHealthCheck,functions:adminInitTournament,functions:syncBracketTournament,functions:onUserCreated,functions:syncAllUsers,functions:searchUsersByEmail --project gridiron-gamble-uzuqo
+```
+
+Changed functions this PR: `logClientError` (NEW), `scheduledHealthCheck` (NEW), `getAdminHealthSnapshot`, `adminInitTournament`, `syncBracketTournament`, `onUserCreated`, `syncAllUsers`, `searchUsersByEmail`.
+
+Verify `logClientError` + `scheduledHealthCheck` show in the Firebase console functions list. `scheduledHealthCheck` creates a Cloud Scheduler job (approve any prompt). Note: `computeAdminHealthSnapshot` is a helper inside adminHealth — no separate deploy.
+
+> **Status (updated during deploy):** the first 5 (`logClientError`, `getAdminHealthSnapshot`, `scheduledHealthCheck`, `adminInitTournament`, `syncBracketTournament`) are DEPLOYED. Still to deploy: **`onUserCreated`, `syncAllUsers`, `searchUsersByEmail`** (the Phase 3.1 name-search set).
 
 ## 3. Deploy Firestore rules (AFTER functions are live)
 ```
