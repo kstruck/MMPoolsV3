@@ -196,17 +196,20 @@ export const SuperAdmin: React.FC = () => {
         });
         if (!ok) return;
         try {
-            const entryRef = doc(db, 'pools', viewingPool.id, 'entries', entryId);
-            await deleteDoc(entryRef);
-            setViewingPoolEntries(prev => prev.filter(entry => entry.id !== entryId));
-            
             if (viewingPool.type === 'BRACKET') {
-                const poolRef = doc(db, 'pools', viewingPool.id);
-                const currentCount = (viewingPool as any).entryCount || 0;
-                const newCount = Math.max(0, currentCount - 1);
-                await updateDoc(poolRef, { entryCount: newCount });
-                setViewingPool(prev => prev ? { ...prev, entryCount: newCount } as any : null);
+                // Route through the server callable: it deletes the entry AND
+                // decrements entryCount in ONE transaction and writes an audit
+                // entry. The old client-side `entryCount = current - 1` math raced
+                // the transactional FieldValue.increment(-1) and could corrupt the
+                // count under concurrent joins/deletes.
+                const delFn = httpsCallable(getFunctions(), 'deleteBracketEntry');
+                await delFn({ poolId: viewingPool.id, entryId });
+                setViewingPool(prev => prev ? { ...prev, entryCount: Math.max(0, ((prev as any).entryCount || 0) - 1) } as any : null);
+            } else {
+                const entryRef = doc(db, 'pools', viewingPool.id, 'entries', entryId);
+                await deleteDoc(entryRef);
             }
+            setViewingPoolEntries(prev => prev.filter(entry => entry.id !== entryId));
             toast.success('Entry successfully deleted.');
         } catch (err: unknown) {
             logger.error("Failed to delete entry", err);
