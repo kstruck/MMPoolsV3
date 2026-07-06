@@ -1541,7 +1541,7 @@ export const SuperAdmin: React.FC = () => {
                                     value={emailSearch}
                                     onChange={(e) => setEmailSearch(e.target.value)}
                                     onKeyDown={(e) => { if (e.key === 'Enter') runEmailSearch(); }}
-                                    placeholder="Find any user by email…"
+                                    placeholder="Find any user by name or email…"
                                     className="flex-1 min-w-[200px] bg-card border border-line rounded-lg px-3 py-2 text-sm text-[color:var(--text)] focus:outline-none focus:border-gold-500"
                                 />
                                 <button

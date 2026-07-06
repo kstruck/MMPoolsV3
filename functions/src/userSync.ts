@@ -31,6 +31,7 @@ export const onUserCreated = functions.auth.user().onCreate(async (user: UserRec
                 name,
                 email: email || "",
                 searchEmail: (email || "").toLowerCase(), // lowercase for admin prefix search
+                searchName: name.toLowerCase(), // lowercase for admin name prefix search
                 picture: photoURL || null,
                 registrationMethod: method,
                 createdAt: FieldValue.serverTimestamp(),
@@ -44,6 +45,7 @@ export const onUserCreated = functions.auth.user().onCreate(async (user: UserRec
             await userRef.set({
                 email: email || "", // Ensure email is up to date
                 searchEmail: (email || "").toLowerCase(),
+                searchName: name.toLowerCase(),
                 lastLogin: FieldValue.serverTimestamp()
             }, { merge: true });
         }
@@ -77,11 +79,13 @@ export const syncAllUsers = onCall(async (request: CallableRequest) => {
                 else if (pid === 'password') method = 'email';
             }
 
+            const syncName = user.displayName || user.email?.split('@')[0] || 'Unknown';
             const userData = {
                 id: user.uid,
-                name: user.displayName || user.email?.split('@')[0] || 'Unknown',
+                name: syncName,
                 email: user.email || '',
                 searchEmail: (user.email || '').toLowerCase(), // backfills searchEmail for existing users
+                searchName: syncName.toLowerCase(), // backfills searchName for existing users
                 picture: user.photoURL || null,
                 registrationMethod: method,
                 // Don't overwrite createdAt if it exists, but ensure sync timestamp

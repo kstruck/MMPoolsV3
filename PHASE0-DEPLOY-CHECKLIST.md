@@ -30,6 +30,16 @@ The client changes (crash fix, per-tab ErrorBoundary, formatPoolMatchup, errorHa
 - [ ] Trigger any client error (or check Firebase logs) → confirm a `system_logs` doc is still written via `logClientError` (App Check must be configured for the web app, else these drop — see item 7).
 - [ ] Pools tab rows for NFL/PROPS pools show a real matchup label, not "undefined @undefined".
 
+## 5b. Backfill `searchName` (after functions + frontend deploy)
+Phase 3.1 added a `searchName` field (lowercased name) written by `onUserCreated`
++ `syncAllUsers`, and `searchUsersByEmail` now matches name OR email. Existing
+users don't have `searchName` until backfilled:
+- Deploy functions (`userSync`, `userManagement`) with the rest.
+- In the dashboard: Members → **Force Sync** (runs `syncAllUsers`) once to backfill
+  `searchName` for all existing users. Until then, server-side name search returns
+  nothing for un-synced users (the instant client-side Members filter still works).
+- Firestore auto-creates the single-field index on `searchName` — no index config needed.
+
 ## 6. Rotate the plaintext Stripe test secret (I could NOT do this — your action)
 `functions/.env` lines 1-2 contain a commented-out but real-format Stripe TEST secret key + webhook secret in cleartext. Even commented + gitignored, delete them from the file and rotate in the Stripe dashboard (test mode). Prod secrets are already in Secret Manager and are fine.
 
