@@ -8,7 +8,7 @@ import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
-import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw, Wrench, Ticket, Megaphone, Globe, PartyPopper } from 'lucide-react';
+import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw, Wrench, Ticket, Megaphone, Globe, PartyPopper, Mail, KeyRound } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
 import { getPoolSport, getPoolLifecycleState, formatPoolMatchup } from '../utils/poolSport';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -3778,6 +3778,28 @@ export const SuperAdmin: React.FC = () => {
                             </div>
 
                             <div className="p-6">
+                                {/* Member actions — reuse the row handlers so every user action
+                                    is reachable from the detail popup, not just the table row. */}
+                                <div className="flex flex-wrap gap-2 mb-6">
+                                    <button
+                                        onClick={() => handleEmailUser(viewingUser)}
+                                        className="text-xs bg-navy-800 hover:bg-navy-700 text-white px-3 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 transition-colors"
+                                    >
+                                        <Mail size={14} /> Email User
+                                    </button>
+                                    <button
+                                        onClick={() => handleResetPassword(viewingUser)}
+                                        className="text-xs bg-navy-800 hover:bg-navy-700 text-white px-3 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 transition-colors"
+                                    >
+                                        <KeyRound size={14} /> Reset Password
+                                    </button>
+                                    <button
+                                        onClick={() => { const u = viewingUser; setViewingUser(null); handleEditUser(u); }}
+                                        className="text-xs bg-gold-500 hover:bg-gold-400 text-navy-900 px-3 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 transition-colors"
+                                    >
+                                        <Wrench size={14} /> Edit User
+                                    </button>
+                                </div>
                                 {/* Unified profile facts (T6): role + referrals + loyalty + account in one place. */}
                                 {(() => {
                                     const ownedCount = pools.filter(p => {
