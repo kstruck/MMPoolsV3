@@ -3913,7 +3913,14 @@ export const SuperAdmin: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="bg-card p-6 rounded-xl border border-line shadow-card">
+                        {/* When editing (gear clicked), the form floats as a modal so a
+                            low seed in the list can be edited without scrolling to the top.
+                            When adding, it stays inline. */}
+                        <div
+                            className={editingSeed ? "fixed inset-0 z-50 bg-black/70 flex items-start justify-center overflow-y-auto p-6" : ""}
+                            onClick={editingSeed ? (e) => { if (e.target === e.currentTarget) { setEditingSeed(null); setSeedText(''); setSeedOpt1(''); setSeedOpt2(''); } } : undefined}
+                        >
+                        <div className={`bg-card p-6 rounded-xl border border-line shadow-card${editingSeed ? ' max-w-2xl w-full mt-10 shadow-2xl' : ''}`}>
                             <h3 className="text-xl font-display font-bold uppercase tracking-[0.05em] mb-4">{editingSeed ? 'Edit Seed Question' : 'Add New Seed Question'}</h3>
                             <div className="grid gap-4 bg-surface border border-line p-4 rounded-lg">
                                 <input
@@ -3972,6 +3979,7 @@ export const SuperAdmin: React.FC = () => {
                                     </button>
                                 </div>
                             </div>
+                        </div>
                         </div>
 
                         <div className="bg-card rounded-xl border border-line overflow-hidden">
