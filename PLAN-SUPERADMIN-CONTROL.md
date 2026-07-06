@@ -13,16 +13,20 @@ _Locked via grill-with-docs + 5 Codex rounds — by Claude + Kevin. Terms per CO
 - ✅ Phase 2.6 — Tournament Simulator moved from global header into Test Suite; `/tournament-sim` route guarded (commit 1b2fc55)
 - ✅ Members filters — client-side name/email search + role/method/sort (partial 3.1; commit dc5e75a)
 - ✅ Partial 2.3 — Maintenance Mode toggle now confirmed
+- ✅ Phase 2.1 (core) — global fixPoolScores + scoreBracketEntries → Operations; System-tab dups removed (commit a6ead5f)
+- ✅ Phase 2.4 (the race) — bracket entry delete routed through the atomic `deleteBracketEntry` callable; client entryCount math removed (commit 719f141)
+- ✅ Phase 3.2 (actions) — Member popup now has Email / Reset Password / Edit User (commit 797e38b)
+- ✅ Test Suite — scenarios segmented by pool type + per-scenario description (commit 0a79e4e)
 
 - ✅ Phase 2.1 (core) — added global `fixPoolScores` + `scoreBracketEntries` cards to Operations; removed the System-tab duplicates (Fix Scoring / Fix Participants / Init Big East) + their dead handlers
 
 **PENDING (needs product decisions, new callables, and/or deploy — left for sign-off):**
 - Phase 2.1 (remainder) — **DECISION NEEDED:** conference re-init location (you said "put Big12/BigEast on the Tournament screen"; CONTEXT.md says Operations is the sole home for init — pick one). Relocate Export Emails from System → Members. Remove the Tournament-tab Big 12 panic banner once its home is settled.
 - Phase 2.2 — Re-init March Madness: no param-less callable exists (adminInitTournament needs tournamentId/season/gender); today it's the per-tournament "Re-initialize Skeleton" in TournamentManager. Decide whether to add a dedicated MM Operations card or point users at the Tournament tab.
-- Phase 2.4/2.5 — full privileged-write→callable migration incl. the entryCount race; legacy-callable auth standardization
+- Phase 2.4 (remainder) — pool-settings save + paid-status toggle direct client writes (non-racy) → callables; Phase 2.5 legacy-callable auth standardization on `assertCallerRole` + audit
 - Phase 3.1 remainder — server-side `searchName` field + backfill in `syncAllUsers` (at-scale name search)
-- Phase 3.2+ — richer Member detail popup (edit fields / reset / email inside popup; pools-joined; activity log)
-- Test Suite segmentation by pool type + missing NFL pick'em/survivor/margin scenarios
+- Phase 3.2 remainder — in-popup field editing, pools-JOINED list, per-user activity log
+- Test Suite — author NFL pick'em/survivor/margin scenarios (+ simulator support); the type groups already render once they exist
 - NFL Schedule → NFL Pools management buildout
 - Phase 4/5 — health/monitoring hardening, dead-code + config reconciliation, canonical-role migration (5.6)
 
