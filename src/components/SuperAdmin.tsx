@@ -71,6 +71,14 @@ export const SuperAdmin: React.FC = () => {
     const [priceFilter, setPriceFilter] = useState<'all' | 'low' | 'mid' | 'high'>('all');
     const [charityFilter, setCharityFilter] = useState(false);
 
+    // Member (Users tab) client-side filters — the full user list is already
+    // loaded, so name/email search + role/method filters run instantly with no
+    // backend round-trip (server email search above is kept for scale).
+    const [memberSearch, setMemberSearch] = useState('');
+    const [memberRoleFilter, setMemberRoleFilter] = useState<string>('ALL');
+    const [memberMethodFilter, setMemberMethodFilter] = useState<'ALL' | 'google' | 'email'>('ALL');
+    const [memberSort, setMemberSort] = useState<'created_desc' | 'created_asc' | 'name'>('created_desc');
+
     // Log Filters
     const [logStatusFilter, setLogStatusFilter] = useState<string>('ALL');
     const [logTagFilter, setLogTagFilter] = useState<string>('ALL');
@@ -1083,6 +1091,26 @@ export const SuperAdmin: React.FC = () => {
             ((p as unknown as PoolLike).ownerId as string || '').toLowerCase().includes(lowSearch);
     });
 
+    // Members (Users tab) — client-side name/email search + role/method filter + sort.
+    const visibleMembers = users
+        .filter(u => {
+            if (memberRoleFilter !== 'ALL' && normalizeRole(u.role) !== memberRoleFilter) return false;
+            if (memberMethodFilter === 'google' && u.registrationMethod !== 'google') return false;
+            if (memberMethodFilter === 'email' && u.registrationMethod === 'google') return false;
+            if (memberSearch.trim()) {
+                const q = memberSearch.trim().toLowerCase();
+                const hay = `${u.name || ''} ${u.email || ''}`.toLowerCase();
+                if (!hay.includes(q)) return false;
+            }
+            return true;
+        })
+        .sort((a, b) => {
+            if (memberSort === 'name') return (a.name || '').localeCompare(b.name || '');
+            const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return memberSort === 'created_asc' ? at - bt : bt - at;
+        });
+
     const poolsBySport = filteredPools.reduce((acc, pool) => {
         const sport = getPoolSport(pool);
         if (!acc[sport]) acc[sport] = [];
@@ -1668,6 +1696,46 @@ export const SuperAdmin: React.FC = () => {
                                 </button>
                             </div>
                         </div>
+                        {/* Client-side member filters — search by name OR email, filter by
+                            role / registration method, sort by created date or name. */}
+                        <div className="p-4 border-b border-line bg-surface flex flex-wrap gap-2 items-center w-full">
+                            <input
+                                value={memberSearch}
+                                onChange={(e) => setMemberSearch(e.target.value)}
+                                placeholder="Filter by name or email…"
+                                className="flex-1 min-w-[200px] bg-card border border-line rounded-lg px-3 py-2 text-sm text-[color:var(--text)] focus:outline-none focus:border-gold-500"
+                            />
+                            <select
+                                aria-label="Filter by role"
+                                value={memberRoleFilter}
+                                onChange={(e) => setMemberRoleFilter(e.target.value)}
+                                className="bg-card border border-line rounded-lg px-3 py-2 text-sm text-[color:var(--text)] focus:outline-none focus:border-gold-500"
+                            >
+                                <option value="ALL">All roles</option>
+                                {CANONICAL_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                            <select
+                                aria-label="Filter by registration method"
+                                value={memberMethodFilter}
+                                onChange={(e) => setMemberMethodFilter(e.target.value as 'ALL' | 'google' | 'email')}
+                                className="bg-card border border-line rounded-lg px-3 py-2 text-sm text-[color:var(--text)] focus:outline-none focus:border-gold-500"
+                            >
+                                <option value="ALL">All methods</option>
+                                <option value="email">Email</option>
+                                <option value="google">Google</option>
+                            </select>
+                            <select
+                                aria-label="Sort members"
+                                value={memberSort}
+                                onChange={(e) => setMemberSort(e.target.value as 'created_desc' | 'created_asc' | 'name')}
+                                className="bg-card border border-line rounded-lg px-3 py-2 text-sm text-[color:var(--text)] focus:outline-none focus:border-gold-500"
+                            >
+                                <option value="created_desc">Newest first</option>
+                                <option value="created_asc">Oldest first</option>
+                                <option value="name">Name A–Z</option>
+                            </select>
+                            <span className="text-xs text-muted font-body num whitespace-nowrap">{visibleMembers.length} of {users.length}</span>
+                        </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left">
                                 <thead className="font-display font-bold text-xs text-muted uppercase tracking-[0.08em] bg-surface">
@@ -1683,7 +1751,7 @@ export const SuperAdmin: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-line">
-                                    {users.map(u => (
+                                    {visibleMembers.map(u => (
                                         <tr key={u.id} className="hover:bg-surface transition-colors">
                                             <td className="p-4 font-medium">
                                                 <button onClick={() => handleViewUser(u)} className="hover:text-gold-600 dark:hover:text-gold-400 hover:underline font-bold text-left">{u.name}</button>
