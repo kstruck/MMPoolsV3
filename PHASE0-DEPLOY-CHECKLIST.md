@@ -7,18 +7,18 @@ Branch: `fix/superadmin-phase0-control` (commit `42c7c57`). Code is written, typ
 - CI (ci.yml) will re-run build + tests + nginx validate.
 
 ## 2. Deploy Cloud Functions (needed BEFORE the rules, or client error logging breaks)
-The new `logClientError` callable must exist before `system_logs` create is locked, else front-end error telemetry silently drops.
+The new `logClientError` callable must exist before `system_logs` create is locked, else front-end error telemetry silently drops. The new `scheduledHealthCheck` (hourly) + updated `getAdminHealthSnapshot` persist to `health/latest`.
 ```
 npm --prefix functions install     # only if deps changed
-npx firebase deploy --only functions:logClientError,functions:adminInitTournament,functions:syncBracketTournament --project gridiron-gamble-uzuqo
+npx firebase deploy --only functions:logClientError,functions:getAdminHealthSnapshot,functions:scheduledHealthCheck,functions:adminInitTournament,functions:syncBracketTournament --project gridiron-gamble-uzuqo
 ```
-(Or deploy all functions if easier.) Verify `logClientError` shows in the Firebase console functions list.
+(Or deploy all functions if easier.) Verify `logClientError` + `scheduledHealthCheck` show in the Firebase console functions list. `scheduledHealthCheck` will also create a Cloud Scheduler job (approve any prompt). Note: Phase 1.2 also added a `computeAdminHealthSnapshot` helper — no separate deploy, it ships inside adminHealth.
 
 ## 3. Deploy Firestore rules (AFTER functions are live)
 ```
 npx firebase deploy --only firestore:rules --project gridiron-gamble-uzuqo
 ```
-Changed rules: `pools` create `sim-*` now SUPER_ADMIN-only; `pools/*/entries` write now SUPER_ADMIN-only for the sim path; `system_logs` create now functions-only.
+Changed rules: `pools` create `sim-*` now SUPER_ADMIN-only; `pools/*/entries` write now SUPER_ADMIN-only for the sim path; `system_logs` create now functions-only; new `health/{doc}` collection (functions-write, SUPER_ADMIN-read).
 
 ## 4. Deploy the frontend (nginx/Coolify — per your normal www deploy)
 The client changes (crash fix, per-tab ErrorBoundary, formatPoolMatchup, errorHandler repoint, TournamentSimulator status fix) ship with the normal www build/deploy. firebase.json rewrites do NOT apply to www (nginx/Coolify) — deploy through your usual Coolify path.

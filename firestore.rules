@@ -277,6 +277,14 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    // PLATFORM HEALTH — the health/latest snapshot doc (Overview API Status Center).
+    // Written only by functions (getAdminHealthSnapshot callable + scheduledHealthCheck,
+    // via Admin SDK, which bypasses rules); readable by SUPER_ADMIN only.
+    match /health/{docId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
     // SYSTEM LOGS
     // Create is functions-only (via the App-Check-gated logClientError callable +
     // server-side loggers, which use the Admin SDK and bypass rules). Previously
