@@ -3070,7 +3070,17 @@ export const SuperAdmin: React.FC = () => {
                                     <p className="text-sm text-muted">Disable all write actions for users.</p>
                                 </div>
                                 <button
-                                    onClick={() => settingsService.update({ maintenanceMode: !settings?.maintenanceMode })}
+                                    onClick={async () => {
+                                        const turningOn = !settings?.maintenanceMode;
+                                        const ok = await toast.confirm({
+                                            title: turningOn ? 'Enable maintenance mode?' : 'Disable maintenance mode?',
+                                            message: turningOn
+                                                ? 'This disables ALL write actions for every user platform-wide (joins, picks, payments). Confirm you want to take the site read-only.'
+                                                : 'This re-enables write actions for all users.',
+                                            danger: turningOn,
+                                        });
+                                        if (ok) settingsService.update({ maintenanceMode: turningOn });
+                                    }}
                                     className={`transition-colors ${settings?.maintenanceMode ? 'text-gold-500' : 'text-faint'} `}
                                 >
                                     {settings?.maintenanceMode ? <ToggleRight size={40} className="fill-gold-500/20" /> : <ToggleLeft size={40} />}

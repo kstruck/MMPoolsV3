@@ -1,5 +1,29 @@
 # Plan: Super-Admin Dashboard — Full Control, Gap Closure & Consolidation
-_Locked via grill-with-docs — by Claude + Kevin. Terms per CONTEXT.md. Compiled 2026-07-05 from a live production walkthrough + four parallel code reviews. Awaiting sign-off before any code is written._
+_Locked via grill-with-docs + 5 Codex rounds — by Claude + Kevin. Terms per CONTEXT.md. Compiled 2026-07-05 from a live production walkthrough + four parallel code reviews._
+
+## Implementation status (overnight 2026-07-05 → 07-06, branch `fix/superadmin-phase0-control`)
+**DONE + verified locally (typecheck/build/tests green), NOT deployed — see PHASE0-DEPLOY-CHECKLIST.md:**
+- ✅ Phase 0.1 — crash fix (SimulationDashboard SQUARES-only + guards) + `formatPoolMatchup` + per-type card render (commit 42c7c57)
+- ✅ Phase 0.2 — per-tab ErrorBoundary (fallback + resetKey)
+- ✅ Phase 0.3 — `sim-*` rules tightened to isSuperAdmin (interim); `system_logs` locked functions-only + `logClientError` callable (App-Check-gated); invalid `PUBLISHED` status → `OPEN`
+- ✅ Phase 0.4 — non-canonical `'ADMIN'` authz branches removed (espnBracket ×2)
+- ✅ Phase 1.1 — derived `closed` lifecycle state + CLOSED filter chip + per-row status badge (commit 1b2fc55)
+- ✅ Phase 1.2 — `computeAdminHealthSnapshot` helper + hourly `scheduledHealthCheck` + `health/latest` persistence + client hydrate/last-checked (commit 0a412f4)
+- ✅ Phase 1.3 — Global Props seed editor as modal (commit d8928e0)
+- ✅ Phase 2.6 — Tournament Simulator moved from global header into Test Suite; `/tournament-sim` route guarded (commit 1b2fc55)
+- ✅ Members filters — client-side name/email search + role/method/sort (partial 3.1; commit dc5e75a)
+- ✅ Partial 2.3 — Maintenance Mode toggle now confirmed
+
+**PENDING (needs product decisions, new callables, and/or deploy — left for sign-off):**
+- Phase 2.1/2.2/2.4/2.5 — Operations consolidation (add missing Operations cards BEFORE deleting dups; Re-init March Madness; full privileged-write→callable migration incl. the entryCount race; legacy-callable auth standardization)
+- Phase 3.1 remainder — server-side `searchName` field + backfill in `syncAllUsers` (at-scale name search)
+- Phase 3.2+ — richer Member detail popup (edit fields / reset / email inside popup; pools-joined; activity log)
+- Test Suite segmentation by pool type + missing NFL pick'em/survivor/margin scenarios
+- NFL Schedule → NFL Pools management buildout
+- Phase 4/5 — health/monitoring hardening, dead-code + config reconciliation, canonical-role migration (5.6)
+
+---
+
 
 ## Goal
 Make the Super-Admin Dashboard a surface where a SUPER_ADMIN has complete, safe, legible control of the platform: every card wired to real data, every button working and non-crashing, every capability in exactly one tab (per the CONTEXT.md 8-tab contract), every destructive action behind an explain-then-confirm guardrail and recorded in the Admin Audit Log. Close the specific gaps found in the walkthrough and eliminate the duplicate/legacy surfaces that make the dashboard dangerous.
