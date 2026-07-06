@@ -163,7 +163,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
                 slug: `sim-${Date.now()}`,
                 slugLower: `sim-${Date.now()}`,
                 isListedPublic: false,
-                status: 'PUBLISHED',
+                status: 'OPEN', // was invalid 'PUBLISHED'; BRACKET status enum is DRAFT|OPEN|LOCKED|LIVE|COMPLETED
                 lockAt: Date.now() + 86400000,
                 settings: POOL_SETTINGS,
                 managerUid: user?.id || 'simulator',

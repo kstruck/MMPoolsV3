@@ -10,7 +10,8 @@ import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
 import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw, Wrench, Ticket, Megaphone, Globe, PartyPopper } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
-import { getPoolSport, getPoolLifecycleState } from '../utils/poolSport';
+import { getPoolSport, getPoolLifecycleState, formatPoolMatchup } from '../utils/poolSport';
+import { ErrorBoundary } from './ErrorBoundary';
 import { POOL_TYPES, resolvePoolTypeFlags } from '../utils/featureFlags';
 import { db } from '../firebase';
 import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -1217,7 +1218,20 @@ export const SuperAdmin: React.FC = () => {
                 )}
             </div>
 
-            {/* ============ OVERVIEW TAB ============ */}
+            {/* Per-tab error boundary: a crash in one panel shows a scoped fallback
+                instead of white-screening the whole app; switching tabs (resetKey)
+                clears it. */}
+            <ErrorBoundary
+                resetKey={activeTab}
+                fallback={
+                    <div className="bg-card p-8 rounded-xl border border-brandred-600/30 text-center">
+                        <h3 className="text-lg font-display font-bold uppercase text-brandred-500 mb-2">This panel hit an error</h3>
+                        <p className="text-sm text-muted font-body mb-4">The rest of the dashboard is fine — switch tabs and come back, or reload.</p>
+                        <button onClick={() => window.location.reload()} className="px-4 py-2 bg-navy-800 hover:bg-navy-700 text-white rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em]">Reload</button>
+                    </div>
+                }
+            >
+
             {/* ============ OVERVIEW TAB ============ */}
             {activeTab === 'overview' && (
                 <div className="w-full">
@@ -1410,7 +1424,7 @@ export const SuperAdmin: React.FC = () => {
                                                     const isBracket = pool.type === 'BRACKET';
                                                     // Normalize data access
                                                     const createdAt = typeof pool.createdAt === 'number' ? new Date(pool.createdAt).toLocaleDateString() : (pool.createdAt?.seconds ? new Date(pool.createdAt.seconds * 1000).toLocaleDateString() : 'N/A');
-                                                    const matchUp = isBracket ? 'Tournament Bracket' : `${(pool as GameState).awayTeam} @${(pool as GameState).homeTeam} `;
+                                                    const matchUp = formatPoolMatchup(pool as unknown as { type?: string; awayTeam?: string; homeTeam?: string });
                                                     const poolLike = pool as unknown as PoolLike;
                                                     const ownerId = isBracket ? poolLike.managerUid as string : poolLike.ownerId as string;
                                                     const contact = users.find(u => u.id === ownerId)?.email || (isBracket ? 'N/A' : (pool as GameState).contactEmail);
@@ -3769,7 +3783,7 @@ export const SuperAdmin: React.FC = () => {
                                                         <div>
                                                             <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] text-lg group-hover:text-gold-600 dark:group-hover:text-gold-400 transition-colors">{pool.name}</h4>
                                                             <p className="text-xs text-muted uppercase font-display font-bold tracking-[0.08em] mt-1">
-                                                                {isBracket ? 'Tournament Bracket' : `${(pool as GameState).awayTeam} vs ${(pool as GameState).homeTeam}`}
+                                                                {formatPoolMatchup(pool as unknown as { type?: string; awayTeam?: string; homeTeam?: string })}
                                                             </p>
                                                         </div>
                                                         {!isBracket && (pool as GameState).charity?.enabled && <Heart size={16} className="text-brandred-500 fill-brandred-500" />}
@@ -3783,7 +3797,13 @@ export const SuperAdmin: React.FC = () => {
                                                             </>
                                                         ) : (
                                                             <>
-                                                                <div>Squares: <span className="text-[color:var(--text)] font-mono num">{(pool as GameState).squares.filter(s => s.owner).length}/100</span></div>
+                                                                {/* SQUARES pools carry `.squares`; NFL season + PROPS pools do not
+                                                                    — guard so a non-squares pool can't crash the card. */}
+                                                                {pool.type === 'SQUARES' ? (
+                                                                    <div>Squares: <span className="text-[color:var(--text)] font-mono num">{((pool as GameState).squares ?? []).filter(s => s.owner).length}/100</span></div>
+                                                                ) : (
+                                                                    <div>Entries: <span className="text-[color:var(--text)] font-mono num">{(pool as unknown as PoolLike).entryCount as number || 0}</span></div>
+                                                                )}
                                                                 <div>Status: <span className={(pool as GameState).isLocked ? "text-brandred-500 font-bold" : "text-gold-600 dark:text-gold-400 font-bold"}>{(pool as GameState).isLocked ? 'LOCKED' : 'OPEN'}</span></div>
                                                             </>
                                                         )}
@@ -4316,6 +4336,7 @@ export const SuperAdmin: React.FC = () => {
                 </div>
             )}
 
+            </ErrorBoundary>
         </div >
     );
 };

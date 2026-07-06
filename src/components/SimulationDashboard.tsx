@@ -21,8 +21,12 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
     const [isLoading, setIsLoading] = useState(false);
     const [winners, setWinners] = useState<Winner[]>([]);
 
-    // Filter for Football squares pools only
-    const validPools = pools.filter(p => p.type !== 'BRACKET');
+    // Filter for Football squares pools only. This dashboard drives the squares
+    // engine (simulatePoolGame + fillGridWithBlanks) and reads `.squares`, which
+    // only SQUARES pools have. Previously filtered `!== 'BRACKET'`, which let
+    // PROPS/PICKEM/SURVIVOR/MARGIN pools through and crashed the whole app via
+    // the global ErrorBoundary on `.squares.filter` (undefined).
+    const validPools = pools.filter(p => p.type === 'SQUARES');
 
     useEffect(() => {
         if (selectedPoolId) {
@@ -152,7 +156,7 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                                     <div className="font-display font-bold uppercase text-[color:var(--text)] group-hover:text-gold-700 dark:group-hover:text-gold-400">{p.name}</div>
                                     <div className="text-xs text-faint font-mono mt-1">{p.id}</div>
                                     <div className="text-xs text-muted font-body mt-2 num">
-                                        {(p as GameState).squares.filter((s: Square) => s.owner).length}/100 Filled • {(p as GameState).isLocked ? 'LOCKED' : 'OPEN'}
+                                        {((p as GameState).squares ?? []).filter((s: Square) => s.owner).length}/100 Filled • {(p as GameState).isLocked ? 'LOCKED' : 'OPEN'}
                                     </div>
                                 </button>
                             ))}
@@ -253,7 +257,7 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                                 <Users size={18} /> Fill Grid
                             </button>
                             <div className="text-center text-xs text-faint font-body mt-2 num">
-                                Current Fill: {selectedPool?.squares.filter(s => s.owner).length}/100
+                                Current Fill: {(selectedPool?.squares ?? []).filter(s => s.owner).length}/100
                             </div>
                         </div>
                     </div>

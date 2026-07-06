@@ -7,22 +7,38 @@ interface ErrorBoundaryState {
     error: Error | null;
 }
 
+interface ErrorBoundaryProps {
+    children: React.ReactNode;
+    /** Optional compact fallback (e.g. a single panel) instead of the full-screen one. */
+    fallback?: React.ReactNode;
+    /** When this value changes, the boundary resets — e.g. pass the active tab id so
+     *  switching tabs clears a crashed panel instead of stranding the whole surface. */
+    resetKey?: unknown;
+}
+
 /**
- * Global Error Boundary — catches unhandled React rendering errors
- * and shows a friendly fallback UI instead of a white screen.
- * Logs all caught errors to Firestore via the ErrorHandler service.
+ * Error Boundary — catches unhandled React rendering errors and shows a friendly
+ * fallback instead of a white screen. Logs caught errors via the ErrorHandler service.
+ * Used globally (default full-screen fallback) AND per-tab in SuperAdmin (compact
+ * `fallback` + `resetKey`) so one panel's crash no longer takes down the app.
  */
 export class ErrorBoundary extends React.Component<
-    { children: React.ReactNode },
+    ErrorBoundaryProps,
     ErrorBoundaryState
 > {
-    constructor(props: { children: React.ReactNode }) {
+    constructor(props: ErrorBoundaryProps) {
         super(props);
         this.state = { hasError: false, error: null };
     }
 
     static getDerivedStateFromError(error: Error): ErrorBoundaryState {
         return { hasError: true, error };
+    }
+
+    componentDidUpdate(prevProps: ErrorBoundaryProps): void {
+        if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+            this.setState({ hasError: false, error: null });
+        }
     }
 
     componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
@@ -53,6 +69,9 @@ export class ErrorBoundary extends React.Component<
 
     render() {
         if (this.state.hasError) {
+            if (this.props.fallback !== undefined) {
+                return this.props.fallback;
+            }
             return (
                 <div className="min-h-screen bg-navy-950 flex items-center justify-center p-6">
                     <div className="max-w-md w-full bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-2xl p-8 text-center shadow-panel">

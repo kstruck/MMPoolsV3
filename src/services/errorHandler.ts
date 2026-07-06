@@ -1,5 +1,5 @@
-import { collection, addDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../firebase';
 import { logger } from '../utils/logger';
 
 export const ErrorSeverity = {
@@ -92,12 +92,19 @@ class ErrorHandler {
         }
 
         try {
-            await addDoc(collection(db, 'system_logs'), {
-                ...errorLog,
-                type: 'error'
+            // system_logs is functions-only write now; funnel through the
+            // App-Check-gated logClientError callable instead of a direct addDoc.
+            const logFn = httpsCallable(functions, 'logClientError');
+            await logFn({
+                message: errorLog.message,
+                code: errorLog.code,
+                stack: errorLog.stack,
+                url: errorLog.url,
+                context: errorLog.context,
+                severity: errorLog.severity,
             });
         } catch (e) {
-            logger.warn('Failed to log error to Firestore:', e);
+            logger.warn('Failed to log error via logClientError callable:', e);
         }
     }
 }

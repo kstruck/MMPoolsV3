@@ -37,7 +37,45 @@ export function getPoolSport(pool: SportClassifiable): string {
   return getLeagueDisplayName(pool.league);
 }
 
-export type PoolLifecycleState = 'open' | 'locked' | 'live' | 'final';
+export type PoolLifecycleState = 'open' | 'locked' | 'live' | 'final' | 'closed';
+
+/** Minimal shape needed to render a pool's matchup label across all types. */
+export interface MatchupReadable {
+  type?: string;
+  awayTeam?: string;
+  homeTeam?: string;
+  name?: string;
+}
+
+/**
+ * Human matchup/subtitle label for a pool, per type. Prevents the
+ * "undefined @undefined" bug that came from assuming every non-BRACKET pool is
+ * a squares GameState with awayTeam/homeTeam (NFL season + PROPS pools have
+ * neither). Single source of truth for every admin list/card that showed a
+ * matchup string.
+ */
+export function formatPoolMatchup(pool: MatchupReadable): string {
+  switch (pool.type) {
+    case 'BRACKET':
+      return 'Tournament Bracket';
+    case 'NFL_PLAYOFFS':
+      return 'NFL Playoff Challenge';
+    case 'NFL_PICKEM':
+      return "Weekly Pick'em";
+    case 'NFL_SURVIVOR':
+      return 'Survivor Pool';
+    case 'NFL_MARGIN':
+      return 'Margin Pool';
+    case 'PROPS':
+      return 'Prop Bet Pool';
+    case 'SQUARES':
+    default: {
+      // Only squares pools carry a real away/home matchup.
+      if (pool.awayTeam && pool.homeTeam) return `${pool.awayTeam} @ ${pool.homeTeam}`;
+      return 'Squares Pool';
+    }
+  }
+}
 
 /** Minimal shape needed to read a pool's lifecycle state across all types. */
 export interface LifecycleReadable {
@@ -58,7 +96,11 @@ export interface LifecycleReadable {
  * status-aware so those pools chip correctly the moment T2 ships.
  */
 export function getPoolLifecycleState(pool: LifecycleReadable): PoolLifecycleState {
-  // Terminal for every type: canceled or admin-closed pools are done (T2).
+  // Admin-closed pools get a distinct `closed` state so the UI can show/filter
+  // them separately from natural finals. Raw stored status stays COMPLETED —
+  // this is a derived label only, not a status migration.
+  if (pool.closedVia === 'ADMIN_CLOSE') return 'closed';
+  // Terminal for every other type: canceled/completed/otherwise-closed pools are done (T2).
   if (pool.status === 'CANCELED' || pool.status === 'COMPLETED' || pool.closedVia || pool.isFinal) return 'final';
 
   if (pool.type === 'SQUARES') {

@@ -984,8 +984,11 @@ export const adminInitTournament = onCall(async (request) => {
         role = userDoc.data()?.role;
     }
 
-    if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'Must be an admin to initialize tournament.');
+    // 'ADMIN' is NOT a canonical role (roles are SUPER_ADMIN|MODERATOR|COMMISSIONER|
+    // MEMBER|BANNED). The old 'ADMIN' branch was a latent authz hole: writing "ADMIN"
+    // to any user doc would silently grant tournament-init power. SUPER_ADMIN only.
+    if (role !== 'SUPER_ADMIN') {
+        throw new HttpsError('permission-denied', 'Must be a super admin to initialize tournament.');
     }
 
     const { tournamentId, seasonYear, gender, teams } = request.data;
@@ -1009,8 +1012,9 @@ export const syncBracketTournament = onCall(async (request) => {
         role = userDoc.data()?.role;
     }
 
-    if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'Admin only.');
+    // 'ADMIN' is not a canonical role — SUPER_ADMIN only (see adminInitTournament).
+    if (role !== 'SUPER_ADMIN') {
+        throw new HttpsError('permission-denied', 'Super admin only.');
     }
 
     const db = admin.firestore();

@@ -83,8 +83,14 @@ service cloud.firestore {
         || isSuperAdmin()
       );
                     
-      // NO CREATE via Client (Must use createPool function), unless it's a simulation
-      allow create: if (request.resource.data.slug.matches('^sim-.*') && request.auth != null);
+      // NO CREATE via Client (must use createPool function). The ONLY exception is
+      // the admin Test Suite / Tournament Simulator, which seeds sim-* pools client-side.
+      // Restricted to SUPER_ADMIN: previously any authenticated user could create a
+      // pool doc directly by prefixing the slug with "sim-", bypassing createPool and
+      // setting arbitrary ownerId/managerUid/billing (privilege-escalation + billing
+      // bypass). Admins run the Test Suite, so this keeps it working while closing the
+      // hole. TODO(Phase 2): move sim writes to audited test-only callables and drop this.
+      allow create: if request.resource.data.slug.matches('^sim-.*') && isSuperAdmin();
 
       // WINNERS (Subcollection)
       match /winners/{winnerId} {
@@ -191,11 +197,11 @@ service cloud.firestore {
           get(/databases/$(database)/documents/pools/$(poolId)).data.isLocked == true ||
           isSuperAdmin()
         );
-        allow write: if isSuperAdmin() || (
-          request.auth != null && 
-          request.resource.data.ownerUid == request.auth.uid &&
-          get(/databases/$(database)/documents/pools/$(poolId)).data.slug.matches('^sim-.*')
-        );
+        // Entries are written server-side (bracketEntries/poolOps callables) or by
+        // SUPER_ADMIN (Test Suite). The former sim-* client-write branch let any authed
+        // user inject entries into a sim pool; removed. Sim entries go through the
+        // isSuperAdmin() path (the Test Suite runs as an admin).
+        allow write: if isSuperAdmin();
       }
 
       // SHARE CLICK TRACKING
@@ -272,10 +278,13 @@ service cloud.firestore {
     }
 
     // SYSTEM LOGS
+    // Create is functions-only (via the App-Check-gated logClientError callable +
+    // server-side loggers, which use the Admin SDK and bypass rules). Previously
+    // `create: if request.auth != null` let any authed user inject arbitrary docs
+    // into this admin-visible log (log spoofing / stored-content injection).
     match /system_logs/{document=**} {
       allow read: if isSuperAdmin();
-      allow create: if request.auth != null;
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     // ADMIN AUDIT LOG (T7) — forensic trail of admin actions, keyed by actor.
