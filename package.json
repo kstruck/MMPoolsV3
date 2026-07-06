@@ -17,7 +17,7 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@google/genai": "^1.31.0",
+    "@google/genai": "^2.10.0",
     "@hookform/resolvers": "^5.4.0",
     "canvas-confetti": "^1.9.4",
     "express": "^5.2.1",
