@@ -416,9 +416,10 @@ const App: React.FC = () => {
             ) : <Navigate to="/" />
           } />
 
-          {/* Tournament Simulator */}
+          {/* Tournament Simulator — SUPER_ADMIN only (writes require it post rules
+              hardening; the page is a testing tool launched from the Test Suite tab). */}
           <Route path="/tournament-sim" element={
-            <TournamentSimulator user={user} />
+            isAdmin ? <TournamentSimulator user={user} /> : <Navigate to="/" />
           } />
 
           {/* Creation Wizards — gated by POOL_CREATION_ENABLED (super admins bypass) */}

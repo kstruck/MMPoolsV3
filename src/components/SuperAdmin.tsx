@@ -67,7 +67,7 @@ export const SuperAdmin: React.FC = () => {
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
     const [sportFilter, setSportFilter] = useState<string>('ALL');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'locked' | 'live' | 'final'>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'locked' | 'live' | 'final' | 'closed'>('all');
     const [priceFilter, setPriceFilter] = useState<'all' | 'low' | 'mid' | 'high'>('all');
     const [charityFilter, setCharityFilter] = useState(false);
 
@@ -1058,6 +1058,7 @@ export const SuperAdmin: React.FC = () => {
             if (statusFilter === 'locked' && state !== 'locked') return false;
             if (statusFilter === 'live' && state !== 'live') return false;
             if (statusFilter === 'final' && state !== 'final') return false;
+            if (statusFilter === 'closed' && state !== 'closed') return false;
         }
 
         // Price filter
@@ -1168,13 +1169,9 @@ export const SuperAdmin: React.FC = () => {
                 <h1 className="text-3xl font-display font-extrabold uppercase leading-none flex items-center gap-3">
                     <Shield className="text-gold-500" /> Super Admin Dashboard
                 </h1>
-                <button
-                    onClick={() => navigate('/tournament-sim')}
-                    className="flex items-center gap-2 bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px shadow-red-cta"
-                >
-                    <Trophy size={18} />
-                    Tournament Simulator
-                </button>
+                {/* Tournament Simulator lives in the Test Suite tab now (CONTEXT.md:
+                    Test Suite is the sole home for testing/simulation tools). Removed
+                    the global-header button that showed on every tab. */}
             </div>
 
             {/* TWO-LEVEL NAVIGATION */}
@@ -1342,11 +1339,12 @@ export const SuperAdmin: React.FC = () => {
                                     { id: 'open', label: 'Open' },
                                     { id: 'locked', label: 'Locked' },
                                     { id: 'live', label: 'Live' },
-                                    { id: 'final', label: 'Final' }
+                                    { id: 'final', label: 'Final' },
+                                    { id: 'closed', label: 'Closed' }
                                 ].map(status => (
                                     <button
                                         key={status.id}
-                                        onClick={() => setStatusFilter(status.id as 'all' | 'open' | 'locked' | 'live' | 'final')}
+                                        onClick={() => setStatusFilter(status.id as 'all' | 'open' | 'locked' | 'live' | 'final' | 'closed')}
                                         className={`px-3 py-1 rounded text-xs font-display font-bold uppercase tracking-[0.05em] transition-colors ${statusFilter === status.id
                                             ? status.id === 'live' ? 'bg-brandred-600 text-white' : 'bg-navy-800 text-white'
                                             : 'bg-surface text-muted hover:bg-card border border-line'
@@ -1464,6 +1462,21 @@ export const SuperAdmin: React.FC = () => {
                                                                     )}
                                                                 </button>
                                                                 <div className="text-[10px] text-faint font-mono mt-0.5">{pool.id}</div>
+                                                                {(() => {
+                                                                    const lc = getPoolLifecycleState(pool);
+                                                                    const styles: Record<string, string> = {
+                                                                        open: 'bg-gold-500/15 text-gold-600 dark:text-gold-400',
+                                                                        locked: 'bg-navy-700/40 text-[color:var(--text)]',
+                                                                        live: 'bg-brandred-600 text-white',
+                                                                        final: 'bg-surface text-muted border border-line',
+                                                                        closed: 'bg-[#3B4A66]/30 text-[#9FB0CC] border border-[#3B4A66]/50',
+                                                                    };
+                                                                    return (
+                                                                        <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-display font-bold uppercase tracking-[0.08em] ${styles[lc]}`}>
+                                                                            {lc}
+                                                                        </span>
+                                                                    );
+                                                                })()}
                                                             </td>
                                                             <td className="p-4 text-muted font-body text-sm num">
                                                                 {createdAt}
@@ -2691,6 +2704,23 @@ export const SuperAdmin: React.FC = () => {
                             className="shrink-0 bg-navy-800 hover:bg-navy-700 text-white font-display font-bold uppercase tracking-[0.05em] px-5 py-3 rounded-xl text-sm transition-all duration-150 hover:-translate-y-px shadow-card whitespace-nowrap flex items-center gap-2"
                         >
                             <PlayCircle size={16} /> Open Simulation Dashboard
+                        </button>
+                    </div>
+                    {/* Tournament Simulator — relocated here from the global header (CONTEXT.md:
+                        Test Suite is the sole home for simulation tools). This is the NCAA
+                        bracket-tournament simulator, distinct from Pool Simulation above. */}
+                    <div className="bg-card border border-line rounded-2xl p-5 flex items-center justify-between gap-4 shadow-card">
+                        <div>
+                            <h3 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
+                                <Trophy size={18} className="text-brandred-500" /> Tournament Simulator
+                            </h3>
+                            <p className="text-muted font-body text-sm mt-1">Seed a full NCAA bracket tournament + synthetic entries and advance it round-by-round to verify bracket scoring end-to-end.</p>
+                        </div>
+                        <button
+                            onClick={() => navigate('/tournament-sim')}
+                            className="shrink-0 bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] px-5 py-3 rounded-xl text-sm transition-all duration-150 hover:-translate-y-px shadow-red-cta whitespace-nowrap flex items-center gap-2"
+                        >
+                            <Trophy size={16} /> Open Tournament Simulator
                         </button>
                     </div>
                     <SimpleTestingDashboard />
