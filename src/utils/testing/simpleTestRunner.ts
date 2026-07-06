@@ -186,11 +186,12 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
 /**
  * Get list of available test scenarios for UI dropdown
  */
-export function getAvailableScenarios(): Array<{ id: string; name: string; description: string }> {
+export function getAvailableScenarios(): Array<{ id: string; name: string; description: string; poolType: string }> {
     return SCENARIO_LIST.map(s => ({
         id: s.id,
         name: s.name,
-        description: s.description
+        description: s.description,
+        poolType: s.poolType ?? 'SQUARES',
     }));
 }
 
