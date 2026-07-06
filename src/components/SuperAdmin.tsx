@@ -981,47 +981,9 @@ export const SuperAdmin: React.FC = () => {
 
     // Tab state
 
-    // --- BIG EAST TOURNAMENT INIT ---
-    const [isInitializingBigEast, setIsInitializingBigEast] = useState(false);
-
-    const handleInitBigEast = async () => {
-        const ok = await toast.confirm({
-            title: 'Initialize the Big East Tournament data?',
-            message: 'This will seed all teams and games into Firestore. Run this once before the tournament starts.',
-        });
-        if (!ok) return;
-        setIsInitializingBigEast(true);
-        try {
-            const functions = getFunctions();
-            const initFn = httpsCallable(functions, 'initializeBigEastTournamentHttp');
-            const result = await initFn({}) as { data?: { tournamentId?: string } };
-            toast.success(`✅ Big East Tournament initialized! Tournament ID: ${result.data?.tournamentId || 'N/A'}`);
-        } catch (err: unknown) {
-            logger.error('Big East init error:', err);
-            toast.error(getUserMessage(err, '❌ Failed to initialize Big East Tournament.'));
-        } finally {
-            setIsInitializingBigEast(false);
-        }
-    };
-
-    // Fix Participant IDs Handler
-    const handleFixParticipantIds = async () => {
-        const runLive = await toast.confirm({
-            title: 'Run Backfill for Participant IDs?',
-            message: 'Confirm = Run LIVE (Writes to DB). Cancel = DRY RUN (Logs Only).',
-            confirmLabel: 'Run LIVE',
-            cancelLabel: 'Dry Run',
-        });
-        const dryRun = !runLive;
-
-        try {
-            const result = await dbService.fixParticipantIds(dryRun);
-            toast.success(`Participant ID Backfill Complete (${dryRun ? 'DRY RUN' : 'LIVE'}): Processed: ${result.processed} pools, Updated: ${result.updated} pools`);
-        } catch (error: unknown) {
-            logger.error('Fix Participant IDs Error:', error);
-            toast.error(getUserMessage(error, 'Failed to fix participant IDs.'));
-        }
-    };
+    // Big East init + Fix Participant IDs handlers removed — these global ops
+    // now live only in the Operations tab (initializeBigEastTournamentHttp,
+    // fixParticipantIds), per the CONTEXT.md "one home" contract.
 
     const handleImportNFLSchedule = async () => {
         setIsImportingNfl(true);
@@ -2874,38 +2836,10 @@ export const SuperAdmin: React.FC = () => {
                                         <ArrowDown size={12} /> Export Emails
                                     </button>
 
-                                    <button
-                                        onClick={async () => {
-                                            const ok = await toast.confirm({
-                                                title: 'Run Retroactive Score Fix?',
-                                                message: 'This will scan all active pools and repair missing score events.',
-                                            });
-                                            if (ok) {
-                                                try {
-                                                    if (dbService.fixPoolScores) {
-                                                        await dbService.fixPoolScores();
-                                                        toast.success('Fix Complete.');
-                                                    }
-                                                } catch { toast.error('Fix Failed'); }
-                                            }
-                                        }}
-                                        className="text-xs bg-navy-800 hover:bg-navy-700 px-3 py-1 rounded text-white transition-colors font-display font-bold uppercase tracking-[0.05em]"
-                                    >
-                                        Fix Scoring
-                                    </button>
-                                    <button
-                                        onClick={handleFixParticipantIds}
-                                        className="text-xs bg-navy-800 hover:bg-navy-700 px-3 py-1 rounded text-white transition-colors font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1"
-                                    >
-                                        <Users size={12} /> Fix Participants
-                                    </button>
-                                    <button
-                                        onClick={handleInitBigEast}
-                                        disabled={isInitializingBigEast}
-                                        className="text-xs bg-navy-800 hover:bg-navy-700 disabled:opacity-50 px-3 py-1 rounded text-white transition-colors font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1"
-                                    >
-                                        <Trophy size={12} /> {isInitializingBigEast ? 'Initializing...' : 'Init Big East'}
-                                    </button>
+                                    {/* Fix Scoring / Fix Participants / Init Big East removed —
+                                        these are global ops and now live only in the Operations
+                                        tab (fixPoolScores, fixParticipantIds, Big East re-init),
+                                        per the CONTEXT.md "one home" contract. */}
                                     <button
                                         onClick={() => {
                                             if (dbService.getSystemLogs) {

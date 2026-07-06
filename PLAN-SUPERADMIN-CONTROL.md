@@ -14,8 +14,12 @@ _Locked via grill-with-docs + 5 Codex rounds — by Claude + Kevin. Terms per CO
 - ✅ Members filters — client-side name/email search + role/method/sort (partial 3.1; commit dc5e75a)
 - ✅ Partial 2.3 — Maintenance Mode toggle now confirmed
 
+- ✅ Phase 2.1 (core) — added global `fixPoolScores` + `scoreBracketEntries` cards to Operations; removed the System-tab duplicates (Fix Scoring / Fix Participants / Init Big East) + their dead handlers
+
 **PENDING (needs product decisions, new callables, and/or deploy — left for sign-off):**
-- Phase 2.1/2.2/2.4/2.5 — Operations consolidation (add missing Operations cards BEFORE deleting dups; Re-init March Madness; full privileged-write→callable migration incl. the entryCount race; legacy-callable auth standardization)
+- Phase 2.1 (remainder) — **DECISION NEEDED:** conference re-init location (you said "put Big12/BigEast on the Tournament screen"; CONTEXT.md says Operations is the sole home for init — pick one). Relocate Export Emails from System → Members. Remove the Tournament-tab Big 12 panic banner once its home is settled.
+- Phase 2.2 — Re-init March Madness: no param-less callable exists (adminInitTournament needs tournamentId/season/gender); today it's the per-tournament "Re-initialize Skeleton" in TournamentManager. Decide whether to add a dedicated MM Operations card or point users at the Tournament tab.
+- Phase 2.4/2.5 — full privileged-write→callable migration incl. the entryCount race; legacy-callable auth standardization
 - Phase 3.1 remainder — server-side `searchName` field + backfill in `syncAllUsers` (at-scale name search)
 - Phase 3.2+ — richer Member detail popup (edit fields / reset / email inside popup; pools-joined; activity log)
 - Test Suite segmentation by pool type + missing NFL pick'em/survivor/margin scenarios
