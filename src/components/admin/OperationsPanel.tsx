@@ -173,6 +173,14 @@ export const OperationsPanel: React.FC = () => {
             </div>
           ))}
         </div>
+
+        <p className="text-xs text-slate-500 mt-4 border-t border-slate-800 pt-3">
+          <span className="text-slate-400 font-semibold">March Madness / men&apos;s tournament re-init</span> is
+          tournament-scoped (it depends on which season&apos;s bracket you mean), so it lives on the
+          <span className="text-indigo-300"> Tournament</span> tab → Tournament Manager → select the tournament →
+          <span className="text-indigo-300"> Re-initialize Skeleton</span>. The Big 12 / Big East cards above are
+          fixed conference skeletons, which is why they can run param-lessly from here.
+        </p>
       </div>
 
       {log.length > 0 && (

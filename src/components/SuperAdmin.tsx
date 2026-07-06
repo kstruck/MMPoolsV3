@@ -644,49 +644,42 @@ export const SuperAdmin: React.FC = () => {
         }
     };
 
-    const handleReinitBig12Tournament = async () => {
-        const ok = await toast.confirm({
-            title: 'Re-initialize big12-2026 tournament with CORRECT 2026 seeds?',
-            message: 'This will overwrite the current tournament skeleton in Firestore with the real ESPN seedings. Do this now to fix the bracket structure.',
-            danger: true,
-        });
-        if (!ok) return;
-        try {
-            const functions = getFunctions();
-            const initFn = httpsCallable(functions, 'initializeBig12TournamentHttp');
-            const result = await initFn({ tournamentId: 'big12-2026', overwrite: true });
-            dbService.logAdminAction({ action: 'REINIT_TOURNAMENT', targetType: 'tournament', targetId: 'big12-2026', status: 'success' });
-            toast.success('✅ Big 12 tournament re-initialized successfully! The next sync (within 10 min) will pull live game results from ESPN.');
-            logger.info('Big12 reinit result:', result);
-        } catch (e: unknown) {
-            logger.error('Reinit failed:', e);
-            dbService.logAdminAction({ action: 'REINIT_TOURNAMENT', targetType: 'tournament', targetId: 'big12-2026', status: 'error', error: getUserMessage(e, 'error') });
-            toast.error(getUserMessage(e, 'Error re-initializing tournament.'));
-        }
-    };
+    // Big 12 re-init + Score Bracket Entries handlers removed — both are global
+    // ops now living only in the Operations tab (initializeBig12TournamentHttp,
+    // scoreBracketEntries), per the CONTEXT.md "one home" contract.
 
-    const [isScoringBrackets, setIsScoringBrackets] = React.useState(false);
-    const handleScoreBracketEntries = async () => {
-        const ok = await toast.confirm({
-            title: 'Score all locked bracket entries now?',
-            message: 'This will recalculate scores for every participant in every locked bracket pool.',
-        });
-        if (!ok) return;
-        setIsScoringBrackets(true);
-        try {
-            const functions = getFunctions();
-            const scoreFn = httpsCallable(functions, 'scoreBracketEntries');
-            const result = await scoreFn({});
-            const data = result.data as { message?: string; scored?: number };
-            toast.success(`✅ ${data?.message ?? 'Scoring complete!'} (${data?.scored ?? '?'} pools scored)`);
-        } catch (e: unknown) {
-            logger.error('Score bracket entries failed:', e);
-            toast.error(getUserMessage(e, 'Error scoring brackets.'));
-        } finally {
-            setIsScoringBrackets(false);
-        }
-    };
+    // Export a CSV of all member + guest emails. Lives on the Members tab (it's a
+    // membership/marketing export, not a System-log action). Guest PII comes from
+    // the per-pool squarePrivate subcollection (audit H1).
+    const handleExportEmails = async () => {
+        const allEmails = new Map<string, string>(); // email -> name
+        users.forEach(u => allEmails.set(u.email.toLowerCase(), u.name));
 
+        const squarePools = pools.filter(p => (p as unknown as PoolLike).squares);
+        const privLists = await Promise.all(
+            squarePools.map(p => dbService.getSquarePrivateEmails(p.id).catch(() => []))
+        );
+        privLists.forEach(list => {
+            list.forEach(({ email, name }) => {
+                const e = email.toLowerCase();
+                if (!allEmails.has(e)) allEmails.set(e, name || 'Guest');
+            });
+        });
+
+        const headers = ['Name', 'Email'];
+        const rows = Array.from(allEmails.entries()).map(([email, name]) => `"${name}", "${email}"`);
+        const csvContent = [headers.join(','), ...rows].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `mmp_emails_${new Date().toISOString().slice(0, 10)}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     const handleForceReopenPool = async (pool: Pool) => {
         if (pool.type !== 'BRACKET') {
@@ -1248,31 +1241,9 @@ export const SuperAdmin: React.FC = () => {
             {/* ============ TOURNAMENT TAB ============ */}
             {activeTab === 'tournament' && (
                 <div className="space-y-6">
-                    {/* ⚠️ BIG 12 RE-INIT BANNER */}
-                    <div className="bg-brandred-600/5 border border-brandred-600/40 rounded-xl p-5 flex items-center justify-between gap-4">
-                        <div>
-                            <h3 className="text-brandred-500 font-display font-bold uppercase tracking-[0.05em] text-lg flex items-center gap-2">
-                                <Trophy size={20} className="text-brandred-500" />
-                                Big 12 2026 — Bracket Re-Initialization Required
-                            </h3>
-                            <p className="text-muted font-body text-sm mt-1">
-                                The seeds were incorrect. Click to overwrite the Firestore tournament skeleton with the correct 2026 ESPN seedings (Arizona #1, Houston #2, ASU #12 vs Baylor #13, etc).
-                            </p>
-                        </div>
-                        <button
-                            onClick={handleReinitBig12Tournament}
-                            className="shrink-0 bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] px-5 py-3 rounded-xl text-sm transition-all duration-150 hover:-translate-y-px shadow-red-cta whitespace-nowrap flex items-center gap-2"
-                        >
-                            <Wrench size={16} /> Re-Init Big 12 Now
-                        </button>
-                        <button
-                            onClick={handleScoreBracketEntries}
-                            disabled={isScoringBrackets}
-                            className="shrink-0 bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] px-5 py-3 rounded-xl text-sm transition-all duration-150 hover:-translate-y-px shadow-card whitespace-nowrap flex items-center gap-2"
-                        >
-                            <Trophy size={16} /> {isScoringBrackets ? 'Scoring...' : 'Score Bracket Entries'}
-                        </button>
-                    </div>
+                    {/* Big 12 re-init + Score Bracket Entries moved to the Operations tab
+                        (initializeBig12TournamentHttp, scoreBracketEntries) — one home per
+                        capability. Per-tournament management stays here in TournamentManager. */}
                     <TournamentManager />
                 </div>
             )}
@@ -1658,6 +1629,12 @@ export const SuperAdmin: React.FC = () => {
                                     className="text-xs bg-surface hover:bg-card border border-line text-[color:var(--text)] px-3 py-1 rounded transition-colors flex items-center gap-1 font-display font-bold uppercase tracking-[0.05em]"
                                 >
                                     <Activity size={12} /> Refresh List
+                                </button>
+                                <button
+                                    onClick={handleExportEmails}
+                                    className="text-xs bg-navy-800 hover:bg-navy-700 text-white px-3 py-1 rounded transition-colors flex items-center gap-1 font-display font-bold uppercase tracking-[0.05em]"
+                                >
+                                    <ArrowDown size={12} /> Export Emails
                                 </button>
                             </div>
                         </div>
@@ -2796,48 +2773,8 @@ export const SuperAdmin: React.FC = () => {
                                     System Logs
                                 </h3>
                                 <div className="flex gap-2">
-                                    {/* Email Export Button */}
-                                    <button
-                                        onClick={async () => {
-                                            // 1. Collect Users
-                                            const allEmails = new Map<string, string>(); // email -> name
-                                            users.forEach(u => allEmails.set(u.email.toLowerCase(), u.name));
-
-                                            // 2. Scan Pools for Guests — PII now lives in the
-                                            // squarePrivate subcollection (audit H1), fetched per pool.
-                                            const squarePools = pools.filter(p => (p as unknown as PoolLike).squares);
-                                            const privLists = await Promise.all(
-                                                squarePools.map(p => dbService.getSquarePrivateEmails(p.id).catch(() => []))
-                                            );
-                                            privLists.forEach(list => {
-                                                list.forEach(({ email, name }) => {
-                                                    const e = email.toLowerCase();
-                                                    if (!allEmails.has(e)) {
-                                                        allEmails.set(e, name || 'Guest');
-                                                    }
-                                                });
-                                            });
-
-                                            // 3. Generate CSV
-                                            const headers = ['Name', 'Email'];
-                                            const rows = Array.from(allEmails.entries()).map(([email, name]) => `"${name}", "${email}"`);
-                                            const csvContent = [headers.join(','), ...rows].join('\n');
-
-                                            // 4. Download
-                                            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                                            const url = URL.createObjectURL(blob);
-                                            const link = document.createElement('a');
-                                            link.setAttribute('href', url);
-                                            link.setAttribute('download', `mmp_emails_${new Date().toISOString().slice(0, 10)}.csv`);
-                                            link.style.visibility = 'hidden';
-                                            document.body.appendChild(link);
-                                            link.click();
-                                            document.body.removeChild(link);
-                                        }}
-                                        className="text-xs bg-navy-800 hover:bg-navy-700 px-3 py-1 rounded text-white transition-colors font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1"
-                                    >
-                                        <ArrowDown size={12} /> Export Emails
-                                    </button>
+                                    {/* Export Emails moved to the Members tab (membership/marketing
+                                        export, not a System-log action). */}
 
                                     {/* Fix Scoring / Fix Participants / Init Big East removed —
                                         these are global ops and now live only in the Operations

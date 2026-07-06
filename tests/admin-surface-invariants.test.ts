@@ -120,7 +120,7 @@ describe('T2 — closePool trigger guards are wired', () => {
 
 describe('step 5 — destructive admin actions write an audit trail', () => {
   const admin = read('src/components/SuperAdmin.tsx');
-  it.each(['DELETE_POOL', 'DELETE_USER_ACCOUNT', 'REINIT_TOURNAMENT', 'RESET_TOURNAMENT', 'DELETE_THEME'])(
+  it.each(['DELETE_POOL', 'DELETE_USER_ACCOUNT', 'RESET_TOURNAMENT', 'DELETE_THEME'])(
     'logs %s via logAdminAction',
     (action) => {
       expect(admin).toContain(action);
@@ -128,6 +128,20 @@ describe('step 5 — destructive admin actions write an audit trail', () => {
   );
   it('uses the audited logAdminAction path', () => {
     expect(admin).toContain('dbService.logAdminAction');
+  });
+
+  // Tournament re-init (incl. Big 12 / Big East) moved to the Operations tab,
+  // which audits EVERY op via an OP_<id> action on both success and error.
+  const ops = read('src/components/admin/OperationsPanel.tsx');
+  it('OperationsPanel audits every op via logAdminAction (success + error)', () => {
+    expect(ops).toContain('dbService.logAdminAction');
+    expect(ops).toContain('OP_');
+    expect(ops).toContain("status: 'success'");
+    expect(ops).toContain("status: 'error'");
+  });
+  it('conference tournament re-inits live in Operations', () => {
+    expect(ops).toContain('initializeBig12TournamentHttp');
+    expect(ops).toContain('initializeBigEastTournamentHttp');
   });
 });
 
