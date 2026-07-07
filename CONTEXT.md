@@ -54,7 +54,25 @@ A Commissioner's identifier on a peer-to-peer payment service (Venmo, Zelle, Cas
 Per-entry bookkeeping flag a Commissioner sets to record that a Member has paid the Entry Fee. Informational only; does not gate participation by itself.
 
 ### Billing
-The commissioner-side subscription relationship between a Commissioner and the platform for a Pool (trial, tier, price, coupon). Paid via Stripe. Entirely separate from Entry Fees, which flow between Members and Commissioners.
+The commissioner-side subscription relationship between a Commissioner and the platform for a Pool (trial, tier, price, coupon) or a Bundle. Paid via Stripe. Entirely separate from Entry Fees, which flow between Members and Commissioners.
+
+### Bundle
+A prepaid multi-pool purchase made by a Commissioner. Exactly two kinds: a Credit Bundle, which grants a fixed number of Pool Credits, and an Unlimited Pass, which grants unlimited pool activations for a fixed term. Bundle products are defined by a Super Admin in the billing configuration and purchased via Stripe.
+
+### Pool Credit
+A single redeemable right to activate one Pool, granted by purchasing a Credit Bundle or by Super-Admin adjustment. A Pool Credit never expires on its own; it remains redeemable until it is used or a Super Admin revokes it. A Pool Credit may carry constraints (allowed pool format, maximum players per pool).
+
+### Unlimited Pass
+A Bundle granting unlimited Pool activations during its stated term (e.g. one year). Unlike Pool Credits, an Unlimited Pass expires at the end of its term. A Super Admin may also revoke it early.
+
+### Coupon
+A discount code a Commissioner applies to a Billing purchase (pool activation or Bundle). Attributes: discount (percentage or flat), active flag, optional expiration date, optional global max uses, optional per-user limit, optional allowed pool formats. A Coupon use belongs to exactly one completed purchase; abandoned checkouts do not consume uses.
+
+### Coupon Template
+A saved, reusable Coupon definition (e.g. "Black Friday", "Pre-Season") from which a Super Admin mints new Coupons. A template is never itself redeemable.
+
+### Billing Charge
+An immutable ledger record of one completed platform payment (pool activation, Bundle purchase, or its refund/dispute adjustment). The Billing Charge ledger is the source of truth for the accounting view in the Monetization tab.
 
 ### Pool Draft
 An in-progress, unlaunched Pool configuration a Commissioner is building in the creation wizard. Exists only on the Commissioner's device; becomes a Pool when launched.
@@ -73,21 +91,6 @@ The Super-Admin Dashboard tab that is the sole home for simulation and testing t
 
 ### Pool Lifecycle State
 The derived status of a Pool over its life: `OPEN` (accepting entries), `LOCKED` (entries closed, awaiting/underway play), `LIVE` (games in progress), `FINAL` (scored, results settled), `CLOSED` (archived by admin/commissioner via `closePool`, removed from active operation). Computed by `getPoolLifecycleState`. Distinct from the raw `status` field; `CLOSED` is set by the `closePool` callable and must be visible in every Pool listing.
-
-### Scenario
-A JSON fixture in `src/utils/testing/scenarios/` describing one Test Suite run: the pool configuration to create, the simulated entries/picks/results, and the assertions that must hold. A Scenario is executed by exactly one Simulator, selected by the Scenario's pool type.
-
-### Simulator
-A per-pool-type driver in `src/utils/testing/simulators/` that executes a Scenario against live Firestore as the Super Admin: creates a real Pool, writes entries, advances results, triggers scoring, and reads back state for assertions. Simulators create and clean up their own Test Pools and test users.
-
-### Test Pool
-A real Pool created in production Firestore by a Simulator during a Test Suite run. Deleted by cleanup at the end of the run; never a Pool that Members interact with.
-
-### Upset Bonus
-An optional bracket scoring add-on: a correct pick where the winner's seed number is higher than the loser's earns extra points equal to (winner seed − loser seed) × a Commissioner-chosen multiplier. Composable with any Scoring System; not a Scoring System itself.
-
-### Scoring System
-The named multiplier table a bracket Pool uses to award points per round for correct picks: `CLASSIC`, `ESPN`, `FIBONACCI`, or `CUSTOM` (Commissioner-supplied per-round values). The former `UPSET` option is retired as a Scoring System and re-expressed as the Upset Bonus add-on.
 
 ### Health Snapshot
 The result of probing external integrations (ESPN API, Firestore, email delivery, Cloud Functions) via the `getAdminHealthSnapshot` callable, surfaced in the Overview tab's API Status Center. A Health Snapshot is a point-in-time reading; persisting a history of snapshots and running them on a schedule is a stated goal.
