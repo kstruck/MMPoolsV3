@@ -159,14 +159,18 @@ export function generateControlEntries(): GeneratedEntry[] {
     const tournament = generateTournament2025();
     const games = Object.values(tournament.games);
 
+    // Seed number embedded in the team id (e.g. 'E1-Duke' → 1). 99 = unparseable.
+    const seedOf = (teamId: string): number => {
+        const m = teamId.match(/^[A-Za-z]+(\d+)-/);
+        return m ? parseInt(m[1], 10) : 99;
+    };
+
+    // 'chalk' = always the better (lower) seed, 'upset' = always the worse seed —
+    // seed-based, NOT correctness-based: a true chalk bracket misses real upsets
+    // (2025 had several), so AllChalk can never exactly tie PerfectBracket.
+    // 'half' keeps the alternating right/wrong pattern against actual results.
     const generateSpecific = (mode: 'chalk' | 'upset' | 'half'): Record<string, string> => {
         const picks: Record<string, string> = {};
-        const isCorrect = (_slotId: string, round: number, count: number) => {
-            if (mode === 'chalk') return true;
-            if (mode === 'upset') return false;
-            // Alternating pattern for HalfRight
-            return (round + count) % 2 === 0;
-        };
 
         let count = 0;
         for (let r = 1; r <= 6; r++) {
@@ -174,7 +178,6 @@ export function generateControlEntries(): GeneratedEntry[] {
             for (const g of roundGames) {
                 count++;
                 const slotId = buildSlotId(g.id);
-                const winner = getCorrectPicks()[slotId];
 
                 let team1: string, team2: string;
                 if (r === 1) {
@@ -186,8 +189,17 @@ export function generateControlEntries(): GeneratedEntry[] {
                     team2 = picks[buildSlotId(feeders[1].id)];
                 }
 
-                const loser = (team1 === winner) ? team2 : team1;
-                picks[slotId] = isCorrect(slotId, r, count) ? winner : (loser || team2);
+                if (mode === 'half') {
+                    const winner = getCorrectPicks()[slotId];
+                    const loser = (team1 === winner) ? team2 : team1;
+                    picks[slotId] = (r + count) % 2 === 0 ? winner : (loser || team2);
+                } else {
+                    // Equal seeds (e.g. two 1-seeds in the Final Four): team1 for
+                    // chalk, team2 for upset — deterministic either way.
+                    const favorite = seedOf(team2) < seedOf(team1) ? team2 : team1;
+                    const underdog = favorite === team1 ? team2 : team1;
+                    picks[slotId] = mode === 'chalk' ? favorite : underdog;
+                }
             }
         }
         return picks;
@@ -196,8 +208,10 @@ export function generateControlEntries(): GeneratedEntry[] {
     return [
         {
             userName: 'AllChalk',
+            // 130, not 128: must never share PerfectBracket's exact tiebreaker,
+            // or a same-score run comes down to unstable sort order.
             picks: generateSpecific('chalk'),
-            tiebreakerPrediction: 128,
+            tiebreakerPrediction: 130,
         },
         {
             userName: 'AllUpset',
