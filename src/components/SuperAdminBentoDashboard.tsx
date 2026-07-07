@@ -15,7 +15,8 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
-import { functions } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { functions, db } from '../firebase';
 import { useToast } from './ui/Toast';
 import { getUserMessage } from '../utils/errorMessages';
 import { dbService } from '../services/dbService';
@@ -54,6 +55,23 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
   useEffect(() => {
     const unsub = dbService.subscribeToRevenueStats((r) => setRevenue(r as { totalRevenue?: number } | null));
     return unsub;
+  }, []);
+
+  // Hydrate from the persisted health/latest snapshot (written hourly by the
+  // scheduler + on every manual Run Check) so the card shows recent status
+  // without requiring a click. Manual Run Check overwrites this in state.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, 'health', 'latest'));
+        const data = snap.data() as { latest?: HealthSnapshot } | undefined;
+        if (!cancelled && data?.latest) setHealth(data.latest);
+      } catch {
+        // Non-fatal: card falls back to "run a health check" empty state.
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const runHealthCheck = useCallback(async () => {
@@ -197,7 +215,9 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
           <div className="flex justify-between items-center mb-6">
             <div>
               <h3 className="text-xs font-display font-bold text-muted uppercase tracking-[0.16em]">API Status Center</h3>
-              <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em]">Live Integration Probe</p>
+              <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em]">
+                {health ? `Last checked ${new Date(health.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : 'Live Integration Probe · auto-checks hourly'}
+              </p>
             </div>
             <button
               onClick={runHealthCheck}

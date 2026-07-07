@@ -243,18 +243,24 @@ export const searchUsersByEmail = functions.https.onCall(async (request) => {
     const { prefix, limit } = request.data as { prefix?: string; limit?: number };
     const p = (prefix || "").trim().toLowerCase();
     if (!p) {
-        throw new functions.https.HttpsError("invalid-argument", "A non-empty email prefix is required.");
+        throw new functions.https.HttpsError("invalid-argument", "A non-empty search prefix is required.");
     }
     const cap = Math.min(typeof limit === "number" && limit > 0 ? limit : 25, 50);
 
-    const snap = await admin.firestore().collection("users")
-        .orderBy("searchEmail")
-        .startAt(p)
-        .endAt(p + "")
-        .limit(cap)
-        .get();
+    // Match by email OR name prefix. Firestore cannot OR across fields, so run
+    // both prefix queries and merge. searchName is backfilled by syncAllUsers.
+    const col = admin.firestore().collection("users");
+    const CH = String.fromCharCode(0xF8FF);
+    const [emailSnap, nameSnap] = await Promise.all([
+        col.orderBy("searchEmail").startAt(p).endAt(p + CH).limit(cap).get(),
+        col.orderBy("searchName").startAt(p).endAt(p + CH).limit(cap).get(),
+    ]);
 
-    const users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const byId = new Map();
+    for (const d of [...emailSnap.docs, ...nameSnap.docs]) {
+        if (!byId.has(d.id)) byId.set(d.id, { id: d.id, ...d.data() });
+    }
+    const users = Array.from(byId.values()).slice(0, cap);
     return { users, count: users.length };
 });
 

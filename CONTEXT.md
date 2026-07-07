@@ -61,3 +61,18 @@ An in-progress, unlaunched Pool configuration a Commissioner is building in the 
 
 ### Password Reset
 An admin-triggered action that sends a Firebase password-reset email to a User via the `mail` collection + Trigger Email extension. Callable by SUPER_ADMIN or MODERATOR. Logged as `PASSWORD_RESET_SENT` in the target User's Activity Log.
+
+### Super-Admin Dashboard
+The single admin surface for SUPER_ADMIN users, organized as exactly eight tabs: Overview, Pools, Members, Operations, Test Suite, Monetization, Themes, System. Every admin capability lives in exactly one tab; no capability is duplicated across tabs.
+
+### Operations
+The Super-Admin Dashboard tab that is the sole home for one-off administrative data actions (initialize, import, sync, backfill, score, fix). Every action runs behind an explain-then-confirm guardrail and is recorded in the Admin Audit Log.
+
+### Test Suite
+The Super-Admin Dashboard tab that is the sole home for simulation and testing tools (pool simulations, tournament simulation, AI testing). Testing capabilities exist nowhere else in the admin surface.
+
+### Pool Lifecycle State
+The derived status of a Pool over its life: `OPEN` (accepting entries), `LOCKED` (entries closed, awaiting/underway play), `LIVE` (games in progress), `FINAL` (scored, results settled), `CLOSED` (archived by admin/commissioner via `closePool`, removed from active operation). Computed by `getPoolLifecycleState`. Distinct from the raw `status` field; `CLOSED` is set by the `closePool` callable and must be visible in every Pool listing.
+
+### Health Snapshot
+The result of probing external integrations (ESPN API, Firestore, email delivery, Cloud Functions) via the `getAdminHealthSnapshot` callable, surfaced in the Overview tab's API Status Center. A Health Snapshot is a point-in-time reading; persisting a history of snapshots and running them on a schedule is a stated goal.

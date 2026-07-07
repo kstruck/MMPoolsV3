@@ -55,8 +55,11 @@ export { creditReferralOnPayment, generateReferralToken, resolveReferralToken } 
 // --- SERVER TIME (client clock-drift correction for countdown/lock UI) ---
 export { getServerTime } from "./serverTime";
 
+// --- CLIENT ERROR TELEMETRY (App-Check-gated sink; system_logs is functions-only) ---
+export { logClientError } from "./logClientError";
+
 // --- ADMIN HEALTH (real Super-Admin Overview vitals; replaces fake status card) ---
-export { getAdminHealthSnapshot } from "./adminHealth";
+export { getAdminHealthSnapshot, scheduledHealthCheck } from "./adminHealth";
 
 // --- REVENUE AGGREGATES (platform revenue from billingCharges → admin_stats/revenue) ---
 export { aggregateRevenueDaily, recomputeRevenue } from "./revenueAggregates";

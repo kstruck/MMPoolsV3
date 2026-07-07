@@ -10,12 +10,13 @@ import { Wrench, RefreshCw, Database, Trophy, Users, CheckCircle2, XCircle } fro
 /**
  * Consolidated global operations (T7). Every GLOBAL batch/maintenance action
  * lives here behind one explain-then-confirm guardrail and writes an
- * admin_audit entry. Per-pool fixes (fixPoolScores, scoreBracketEntries)
- * stay as per-pool row actions in the Pools tab, per the plan's IA note.
+ * admin_audit entry. GLOBAL fixes (fixPoolScores/scoreBracketEntries with no
+ * id) live here; the PER-POOL variants stay as row actions in the Pools tab.
  *
- * NOTE (remaining T7): the equivalent buttons still present in the legacy
- * Tournament/NFL/System tabs should be removed so each action lives in
- * exactly one place — deferred to a browser-verified follow-up.
+ * The legacy System-tab duplicates (Fix Scoring / Fix Participants / Init Big
+ * East) were removed in favour of these cards. Still open (needs a product
+ * decision): whether the conference re-inits belong here or on the Tournament
+ * tab, plus a March Madness re-init and relocating Export Emails to Members.
  */
 
 interface OpAction {
@@ -87,6 +88,24 @@ const ACTIONS: OpAction[] = [
     run: () => call('fixParticipantIds', { dryRun: false }),
   },
   {
+    id: 'fixPoolScores',
+    label: 'Fix Pool Scores (global)',
+    description: 'Re-run scoring across every in-progress/final pool (no poolId = global). Repairs missed score/winner updates.',
+    blastRadius: 'Re-scores and may rewrite winners on all live/final pools.',
+    destructive: true,
+    icon: Wrench,
+    run: () => call('fixPoolScores'),
+  },
+  {
+    id: 'scoreBracketEntries',
+    label: 'Score Bracket Entries (global)',
+    description: 'Re-score every tournament that has at least one linked BRACKET pool (no tournamentId = all active).',
+    blastRadius: 'Recomputes entry scores across all active bracket tournaments.',
+    destructive: true,
+    icon: Trophy,
+    run: () => call('scoreBracketEntries'),
+  },
+  {
     id: 'initializeBig12TournamentHttp',
     label: 'Re-init Big 12 Tournament',
     description: 'Reset the Big 12 conference tournament skeleton.',
@@ -154,6 +173,14 @@ export const OperationsPanel: React.FC = () => {
             </div>
           ))}
         </div>
+
+        <p className="text-xs text-slate-500 mt-4 border-t border-slate-800 pt-3">
+          <span className="text-slate-400 font-semibold">March Madness / men&apos;s tournament re-init</span> is
+          tournament-scoped (it depends on which season&apos;s bracket you mean), so it lives on the
+          <span className="text-indigo-300"> Tournament</span> tab → Tournament Manager → select the tournament →
+          <span className="text-indigo-300"> Re-initialize Skeleton</span>. The Big 12 / Big East cards above are
+          fixed conference skeletons, which is why they can run param-lessly from here.
+        </p>
       </div>
 
       {log.length > 0 && (

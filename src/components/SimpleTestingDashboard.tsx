@@ -11,6 +11,19 @@ import {
 } from '../utils/testing/simpleTestRunner';
 import type { SimpleTestResult } from '../utils/testing/simpleTestRunner';
 
+// Group scenarios by pool type in the picker so it reads as segmented lists,
+// not one long flat dropdown.
+const POOL_TYPE_ORDER = ['SQUARES', 'BRACKET', 'NFL_PLAYOFFS', 'PROPS', 'NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
+const POOL_TYPE_LABELS: Record<string, string> = {
+    SQUARES: 'Squares',
+    BRACKET: 'Bracket (March Madness)',
+    NFL_PLAYOFFS: 'NFL Playoffs',
+    PROPS: 'Prop Bets',
+    NFL_PICKEM: "NFL Pick'em",
+    NFL_SURVIVOR: 'NFL Survivor',
+    NFL_MARGIN: 'NFL Margin',
+};
+
 export const SimpleTestingDashboard: React.FC = () => {
     const [selectedScenario, setSelectedScenario] = useState<string>('');
     const [isRunning, setIsRunning] = useState(false);
@@ -97,8 +110,12 @@ export const SimpleTestingDashboard: React.FC = () => {
                             className="w-full bg-surface border border-line rounded-lg px-4 py-3 text-[color:var(--text)] font-body appearance-none cursor-pointer focus:ring-2 focus:ring-navy-600"
                         >
                             <option value="">Select a scenario...</option>
-                            {scenarios.map(s => (
-                                <option key={s.id} value={s.id}>{s.name}</option>
+                            {POOL_TYPE_ORDER.filter(pt => scenarios.some(s => s.poolType === pt)).map(pt => (
+                                <optgroup key={pt} label={POOL_TYPE_LABELS[pt] ?? pt}>
+                                    {scenarios.filter(s => s.poolType === pt).map(s => (
+                                        <option key={s.id} value={s.id}>{s.name}</option>
+                                    ))}
+                                </optgroup>
                             ))}
                         </select>
                         <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted pointer-events-none" />
@@ -128,6 +145,18 @@ export const SimpleTestingDashboard: React.FC = () => {
                         Run All (<span className="num">{scenarios.length}</span>)
                     </button>
                 </div>
+
+                {/* Explain the selected scenario: what it does + why. */}
+                {selectedScenario && (() => {
+                    const s = scenarios.find(sc => sc.id === selectedScenario);
+                    if (!s) return null;
+                    return (
+                        <div className="mt-4 bg-surface border border-line rounded-lg p-4">
+                            <p className="text-[10px] font-display font-bold uppercase tracking-[0.08em] text-muted mb-1">{POOL_TYPE_LABELS[s.poolType] ?? s.poolType} · what this tests</p>
+                            <p className="text-sm text-[color:var(--text)] font-body">{s.description}</p>
+                        </div>
+                    );
+                })()}
 
                 {isRunning && (
                     <div className="mt-4 flex items-center gap-2 font-body text-gold-700 dark:text-gold-400">

@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 
 /**
@@ -103,20 +104,25 @@ async function checkEmail(db: admin.firestore.Firestore): Promise<Check> {
   });
 }
 
-export const getAdminHealthSnapshot = onCall(async (request) => {
-  if (!request.auth || request.auth.token.role !== "SUPER_ADMIN") {
-    throw new HttpsError("permission-denied", "Only Super Admin may read platform health.");
-  }
+export type HealthSnapshot = {
+  at: number;
+  checks: Record<string, { label: string; ok: boolean; latencyMs: number; detail: string }>;
+};
 
-  const db = admin.firestore();
+/**
+ * Pure health probe — runs the ESPN/Firestore/email/functions checks and
+ * returns a snapshot. Shared by the SUPER_ADMIN callable AND the hourly
+ * scheduler (a scheduler can't invoke the auth-gated onCall directly).
+ */
+export async function computeAdminHealthSnapshot(
+  db: admin.firestore.Firestore
+): Promise<HealthSnapshot> {
   const functionStarted = Date.now();
-
   const [espn, firestore, email] = await Promise.all([
     checkEspn(),
     checkFirestore(db),
     checkEmail(db),
   ]);
-
   return {
     at: Date.now(),
     checks: {
@@ -131,4 +137,44 @@ export const getAdminHealthSnapshot = onCall(async (request) => {
       },
     },
   };
+}
+
+const HEALTH_DOC = "health/latest";
+const HISTORY_CAP = 24; // ~1 day of hourly points, bounded in-doc (no TTL infra).
+
+/**
+ * Persist a snapshot to the single admin-only health/latest doc: newest snapshot
+ * + a bounded history array. functions-only write / SUPER_ADMIN read (firestore.rules).
+ */
+async function persistSnapshot(
+  db: admin.firestore.Firestore,
+  snapshot: HealthSnapshot
+): Promise<void> {
+  const ref = db.doc(HEALTH_DOC);
+  const existing = (await ref.get()).data() as { history?: HealthSnapshot[] } | undefined;
+  const history = [...(existing?.history ?? []), snapshot].slice(-HISTORY_CAP);
+  await ref.set({ latest: snapshot, history, updatedAt: snapshot.at });
+}
+
+export const getAdminHealthSnapshot = onCall(async (request) => {
+  if (!request.auth || request.auth.token.role !== "SUPER_ADMIN") {
+    throw new HttpsError("permission-denied", "Only Super Admin may read platform health.");
+  }
+  const db = admin.firestore();
+  const snapshot = await computeAdminHealthSnapshot(db);
+  // Manual "Run Check" writes the same store the UI history reads, so the
+  // last-run timestamp is never stale after a manual probe.
+  await persistSnapshot(db, snapshot);
+  return snapshot;
+});
+
+/**
+ * Hourly automated health probe → persists to health/latest so the Overview
+ * API Status Center shows real, recent status without a manual click, and keeps
+ * a short rolling history.
+ */
+export const scheduledHealthCheck = onSchedule("every 60 minutes", async () => {
+  const db = admin.firestore();
+  const snapshot = await computeAdminHealthSnapshot(db);
+  await persistSnapshot(db, snapshot);
 });

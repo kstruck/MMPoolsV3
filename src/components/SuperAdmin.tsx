@@ -8,9 +8,10 @@ import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
-import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw, Wrench, Ticket, Megaphone, Globe, PartyPopper } from 'lucide-react';
+import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw, Wrench, Ticket, Megaphone, Globe, PartyPopper, Mail, KeyRound } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
-import { getPoolSport, getPoolLifecycleState } from '../utils/poolSport';
+import { getPoolSport, getPoolLifecycleState, formatPoolMatchup } from '../utils/poolSport';
+import { ErrorBoundary } from './ErrorBoundary';
 import { POOL_TYPES, resolvePoolTypeFlags } from '../utils/featureFlags';
 import { db } from '../firebase';
 import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -66,9 +67,17 @@ export const SuperAdmin: React.FC = () => {
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
     const [sportFilter, setSportFilter] = useState<string>('ALL');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'locked' | 'live' | 'final'>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'locked' | 'live' | 'final' | 'closed'>('all');
     const [priceFilter, setPriceFilter] = useState<'all' | 'low' | 'mid' | 'high'>('all');
     const [charityFilter, setCharityFilter] = useState(false);
+
+    // Member (Users tab) client-side filters — the full user list is already
+    // loaded, so name/email search + role/method filters run instantly with no
+    // backend round-trip (server email search above is kept for scale).
+    const [memberSearch, setMemberSearch] = useState('');
+    const [memberRoleFilter, setMemberRoleFilter] = useState<string>('ALL');
+    const [memberMethodFilter, setMemberMethodFilter] = useState<'ALL' | 'google' | 'email'>('ALL');
+    const [memberSort, setMemberSort] = useState<'created_desc' | 'created_asc' | 'name'>('created_desc');
 
     // Log Filters
     const [logStatusFilter, setLogStatusFilter] = useState<string>('ALL');
@@ -187,17 +196,20 @@ export const SuperAdmin: React.FC = () => {
         });
         if (!ok) return;
         try {
-            const entryRef = doc(db, 'pools', viewingPool.id, 'entries', entryId);
-            await deleteDoc(entryRef);
-            setViewingPoolEntries(prev => prev.filter(entry => entry.id !== entryId));
-            
             if (viewingPool.type === 'BRACKET') {
-                const poolRef = doc(db, 'pools', viewingPool.id);
-                const currentCount = (viewingPool as any).entryCount || 0;
-                const newCount = Math.max(0, currentCount - 1);
-                await updateDoc(poolRef, { entryCount: newCount });
-                setViewingPool(prev => prev ? { ...prev, entryCount: newCount } as any : null);
+                // Route through the server callable: it deletes the entry AND
+                // decrements entryCount in ONE transaction and writes an audit
+                // entry. The old client-side `entryCount = current - 1` math raced
+                // the transactional FieldValue.increment(-1) and could corrupt the
+                // count under concurrent joins/deletes.
+                const delFn = httpsCallable(getFunctions(), 'deleteBracketEntry');
+                await delFn({ poolId: viewingPool.id, entryId });
+                setViewingPool(prev => prev ? { ...prev, entryCount: Math.max(0, ((prev as any).entryCount || 0) - 1) } as any : null);
+            } else {
+                const entryRef = doc(db, 'pools', viewingPool.id, 'entries', entryId);
+                await deleteDoc(entryRef);
             }
+            setViewingPoolEntries(prev => prev.filter(entry => entry.id !== entryId));
             toast.success('Entry successfully deleted.');
         } catch (err: unknown) {
             logger.error("Failed to delete entry", err);
@@ -632,49 +644,42 @@ export const SuperAdmin: React.FC = () => {
         }
     };
 
-    const handleReinitBig12Tournament = async () => {
-        const ok = await toast.confirm({
-            title: 'Re-initialize big12-2026 tournament with CORRECT 2026 seeds?',
-            message: 'This will overwrite the current tournament skeleton in Firestore with the real ESPN seedings. Do this now to fix the bracket structure.',
-            danger: true,
-        });
-        if (!ok) return;
-        try {
-            const functions = getFunctions();
-            const initFn = httpsCallable(functions, 'initializeBig12TournamentHttp');
-            const result = await initFn({ tournamentId: 'big12-2026', overwrite: true });
-            dbService.logAdminAction({ action: 'REINIT_TOURNAMENT', targetType: 'tournament', targetId: 'big12-2026', status: 'success' });
-            toast.success('✅ Big 12 tournament re-initialized successfully! The next sync (within 10 min) will pull live game results from ESPN.');
-            logger.info('Big12 reinit result:', result);
-        } catch (e: unknown) {
-            logger.error('Reinit failed:', e);
-            dbService.logAdminAction({ action: 'REINIT_TOURNAMENT', targetType: 'tournament', targetId: 'big12-2026', status: 'error', error: getUserMessage(e, 'error') });
-            toast.error(getUserMessage(e, 'Error re-initializing tournament.'));
-        }
-    };
+    // Big 12 re-init + Score Bracket Entries handlers removed — both are global
+    // ops now living only in the Operations tab (initializeBig12TournamentHttp,
+    // scoreBracketEntries), per the CONTEXT.md "one home" contract.
 
-    const [isScoringBrackets, setIsScoringBrackets] = React.useState(false);
-    const handleScoreBracketEntries = async () => {
-        const ok = await toast.confirm({
-            title: 'Score all locked bracket entries now?',
-            message: 'This will recalculate scores for every participant in every locked bracket pool.',
-        });
-        if (!ok) return;
-        setIsScoringBrackets(true);
-        try {
-            const functions = getFunctions();
-            const scoreFn = httpsCallable(functions, 'scoreBracketEntries');
-            const result = await scoreFn({});
-            const data = result.data as { message?: string; scored?: number };
-            toast.success(`✅ ${data?.message ?? 'Scoring complete!'} (${data?.scored ?? '?'} pools scored)`);
-        } catch (e: unknown) {
-            logger.error('Score bracket entries failed:', e);
-            toast.error(getUserMessage(e, 'Error scoring brackets.'));
-        } finally {
-            setIsScoringBrackets(false);
-        }
-    };
+    // Export a CSV of all member + guest emails. Lives on the Members tab (it's a
+    // membership/marketing export, not a System-log action). Guest PII comes from
+    // the per-pool squarePrivate subcollection (audit H1).
+    const handleExportEmails = async () => {
+        const allEmails = new Map<string, string>(); // email -> name
+        users.forEach(u => allEmails.set(u.email.toLowerCase(), u.name));
 
+        const squarePools = pools.filter(p => (p as unknown as PoolLike).squares);
+        const privLists = await Promise.all(
+            squarePools.map(p => dbService.getSquarePrivateEmails(p.id).catch(() => []))
+        );
+        privLists.forEach(list => {
+            list.forEach(({ email, name }) => {
+                const e = email.toLowerCase();
+                if (!allEmails.has(e)) allEmails.set(e, name || 'Guest');
+            });
+        });
+
+        const headers = ['Name', 'Email'];
+        const rows = Array.from(allEmails.entries()).map(([email, name]) => `"${name}", "${email}"`);
+        const csvContent = [headers.join(','), ...rows].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `mmp_emails_${new Date().toISOString().slice(0, 10)}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     const handleForceReopenPool = async (pool: Pool) => {
         if (pool.type !== 'BRACKET') {
@@ -991,47 +996,9 @@ export const SuperAdmin: React.FC = () => {
 
     // Tab state
 
-    // --- BIG EAST TOURNAMENT INIT ---
-    const [isInitializingBigEast, setIsInitializingBigEast] = useState(false);
-
-    const handleInitBigEast = async () => {
-        const ok = await toast.confirm({
-            title: 'Initialize the Big East Tournament data?',
-            message: 'This will seed all teams and games into Firestore. Run this once before the tournament starts.',
-        });
-        if (!ok) return;
-        setIsInitializingBigEast(true);
-        try {
-            const functions = getFunctions();
-            const initFn = httpsCallable(functions, 'initializeBigEastTournamentHttp');
-            const result = await initFn({}) as { data?: { tournamentId?: string } };
-            toast.success(`✅ Big East Tournament initialized! Tournament ID: ${result.data?.tournamentId || 'N/A'}`);
-        } catch (err: unknown) {
-            logger.error('Big East init error:', err);
-            toast.error(getUserMessage(err, '❌ Failed to initialize Big East Tournament.'));
-        } finally {
-            setIsInitializingBigEast(false);
-        }
-    };
-
-    // Fix Participant IDs Handler
-    const handleFixParticipantIds = async () => {
-        const runLive = await toast.confirm({
-            title: 'Run Backfill for Participant IDs?',
-            message: 'Confirm = Run LIVE (Writes to DB). Cancel = DRY RUN (Logs Only).',
-            confirmLabel: 'Run LIVE',
-            cancelLabel: 'Dry Run',
-        });
-        const dryRun = !runLive;
-
-        try {
-            const result = await dbService.fixParticipantIds(dryRun);
-            toast.success(`Participant ID Backfill Complete (${dryRun ? 'DRY RUN' : 'LIVE'}): Processed: ${result.processed} pools, Updated: ${result.updated} pools`);
-        } catch (error: unknown) {
-            logger.error('Fix Participant IDs Error:', error);
-            toast.error(getUserMessage(error, 'Failed to fix participant IDs.'));
-        }
-    };
+    // Big East init + Fix Participant IDs handlers removed — these global ops
+    // now live only in the Operations tab (initializeBigEastTournamentHttp,
+    // fixParticipantIds), per the CONTEXT.md "one home" contract.
 
     const handleImportNFLSchedule = async () => {
         setIsImportingNfl(true);
@@ -1076,6 +1043,7 @@ export const SuperAdmin: React.FC = () => {
             if (statusFilter === 'locked' && state !== 'locked') return false;
             if (statusFilter === 'live' && state !== 'live') return false;
             if (statusFilter === 'final' && state !== 'final') return false;
+            if (statusFilter === 'closed' && state !== 'closed') return false;
         }
 
         // Price filter
@@ -1099,6 +1067,26 @@ export const SuperAdmin: React.FC = () => {
             p.id.toLowerCase().includes(lowSearch) ||
             ((p as unknown as PoolLike).ownerId as string || '').toLowerCase().includes(lowSearch);
     });
+
+    // Members (Users tab) — client-side name/email search + role/method filter + sort.
+    const visibleMembers = users
+        .filter(u => {
+            if (memberRoleFilter !== 'ALL' && normalizeRole(u.role) !== memberRoleFilter) return false;
+            if (memberMethodFilter === 'google' && u.registrationMethod !== 'google') return false;
+            if (memberMethodFilter === 'email' && u.registrationMethod === 'google') return false;
+            if (memberSearch.trim()) {
+                const q = memberSearch.trim().toLowerCase();
+                const hay = `${u.name || ''} ${u.email || ''}`.toLowerCase();
+                if (!hay.includes(q)) return false;
+            }
+            return true;
+        })
+        .sort((a, b) => {
+            if (memberSort === 'name') return (a.name || '').localeCompare(b.name || '');
+            const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return memberSort === 'created_asc' ? at - bt : bt - at;
+        });
 
     const poolsBySport = filteredPools.reduce((acc, pool) => {
         const sport = getPoolSport(pool);
@@ -1186,13 +1174,9 @@ export const SuperAdmin: React.FC = () => {
                 <h1 className="text-3xl font-display font-extrabold uppercase leading-none flex items-center gap-3">
                     <Shield className="text-gold-500" /> Super Admin Dashboard
                 </h1>
-                <button
-                    onClick={() => navigate('/tournament-sim')}
-                    className="flex items-center gap-2 bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px shadow-red-cta"
-                >
-                    <Trophy size={18} />
-                    Tournament Simulator
-                </button>
+                {/* Tournament Simulator lives in the Test Suite tab now (CONTEXT.md:
+                    Test Suite is the sole home for testing/simulation tools). Removed
+                    the global-header button that showed on every tab. */}
             </div>
 
             {/* TWO-LEVEL NAVIGATION */}
@@ -1236,7 +1220,20 @@ export const SuperAdmin: React.FC = () => {
                 )}
             </div>
 
-            {/* ============ OVERVIEW TAB ============ */}
+            {/* Per-tab error boundary: a crash in one panel shows a scoped fallback
+                instead of white-screening the whole app; switching tabs (resetKey)
+                clears it. */}
+            <ErrorBoundary
+                resetKey={activeTab}
+                fallback={
+                    <div className="bg-card p-8 rounded-xl border border-brandred-600/30 text-center">
+                        <h3 className="text-lg font-display font-bold uppercase text-brandred-500 mb-2">This panel hit an error</h3>
+                        <p className="text-sm text-muted font-body mb-4">The rest of the dashboard is fine — switch tabs and come back, or reload.</p>
+                        <button onClick={() => window.location.reload()} className="px-4 py-2 bg-navy-800 hover:bg-navy-700 text-white rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em]">Reload</button>
+                    </div>
+                }
+            >
+
             {/* ============ OVERVIEW TAB ============ */}
             {activeTab === 'overview' && (
                 <div className="w-full">
@@ -1263,31 +1260,9 @@ export const SuperAdmin: React.FC = () => {
             {/* ============ TOURNAMENT TAB ============ */}
             {activeTab === 'tournament' && (
                 <div className="space-y-6">
-                    {/* ⚠️ BIG 12 RE-INIT BANNER */}
-                    <div className="bg-brandred-600/5 border border-brandred-600/40 rounded-xl p-5 flex items-center justify-between gap-4">
-                        <div>
-                            <h3 className="text-brandred-500 font-display font-bold uppercase tracking-[0.05em] text-lg flex items-center gap-2">
-                                <Trophy size={20} className="text-brandred-500" />
-                                Big 12 2026 — Bracket Re-Initialization Required
-                            </h3>
-                            <p className="text-muted font-body text-sm mt-1">
-                                The seeds were incorrect. Click to overwrite the Firestore tournament skeleton with the correct 2026 ESPN seedings (Arizona #1, Houston #2, ASU #12 vs Baylor #13, etc).
-                            </p>
-                        </div>
-                        <button
-                            onClick={handleReinitBig12Tournament}
-                            className="shrink-0 bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] px-5 py-3 rounded-xl text-sm transition-all duration-150 hover:-translate-y-px shadow-red-cta whitespace-nowrap flex items-center gap-2"
-                        >
-                            <Wrench size={16} /> Re-Init Big 12 Now
-                        </button>
-                        <button
-                            onClick={handleScoreBracketEntries}
-                            disabled={isScoringBrackets}
-                            className="shrink-0 bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] px-5 py-3 rounded-xl text-sm transition-all duration-150 hover:-translate-y-px shadow-card whitespace-nowrap flex items-center gap-2"
-                        >
-                            <Trophy size={16} /> {isScoringBrackets ? 'Scoring...' : 'Score Bracket Entries'}
-                        </button>
-                    </div>
+                    {/* Big 12 re-init + Score Bracket Entries moved to the Operations tab
+                        (initializeBig12TournamentHttp, scoreBracketEntries) — one home per
+                        capability. Per-tournament management stays here in TournamentManager. */}
                     <TournamentManager />
                 </div>
             )}
@@ -1347,11 +1322,12 @@ export const SuperAdmin: React.FC = () => {
                                     { id: 'open', label: 'Open' },
                                     { id: 'locked', label: 'Locked' },
                                     { id: 'live', label: 'Live' },
-                                    { id: 'final', label: 'Final' }
+                                    { id: 'final', label: 'Final' },
+                                    { id: 'closed', label: 'Closed' }
                                 ].map(status => (
                                     <button
                                         key={status.id}
-                                        onClick={() => setStatusFilter(status.id as 'all' | 'open' | 'locked' | 'live' | 'final')}
+                                        onClick={() => setStatusFilter(status.id as 'all' | 'open' | 'locked' | 'live' | 'final' | 'closed')}
                                         className={`px-3 py-1 rounded text-xs font-display font-bold uppercase tracking-[0.05em] transition-colors ${statusFilter === status.id
                                             ? status.id === 'live' ? 'bg-brandred-600 text-white' : 'bg-navy-800 text-white'
                                             : 'bg-surface text-muted hover:bg-card border border-line'
@@ -1429,7 +1405,7 @@ export const SuperAdmin: React.FC = () => {
                                                     const isBracket = pool.type === 'BRACKET';
                                                     // Normalize data access
                                                     const createdAt = typeof pool.createdAt === 'number' ? new Date(pool.createdAt).toLocaleDateString() : (pool.createdAt?.seconds ? new Date(pool.createdAt.seconds * 1000).toLocaleDateString() : 'N/A');
-                                                    const matchUp = isBracket ? 'Tournament Bracket' : `${(pool as GameState).awayTeam} @${(pool as GameState).homeTeam} `;
+                                                    const matchUp = formatPoolMatchup(pool as unknown as { type?: string; awayTeam?: string; homeTeam?: string });
                                                     const poolLike = pool as unknown as PoolLike;
                                                     const ownerId = isBracket ? poolLike.managerUid as string : poolLike.ownerId as string;
                                                     const contact = users.find(u => u.id === ownerId)?.email || (isBracket ? 'N/A' : (pool as GameState).contactEmail);
@@ -1469,6 +1445,21 @@ export const SuperAdmin: React.FC = () => {
                                                                     )}
                                                                 </button>
                                                                 <div className="text-[10px] text-faint font-mono mt-0.5">{pool.id}</div>
+                                                                {(() => {
+                                                                    const lc = getPoolLifecycleState(pool);
+                                                                    const styles: Record<string, string> = {
+                                                                        open: 'bg-gold-500/15 text-gold-600 dark:text-gold-400',
+                                                                        locked: 'bg-navy-700/40 text-[color:var(--text)]',
+                                                                        live: 'bg-brandred-600 text-white',
+                                                                        final: 'bg-surface text-muted border border-line',
+                                                                        closed: 'bg-[#3B4A66]/30 text-[#9FB0CC] border border-[#3B4A66]/50',
+                                                                    };
+                                                                    return (
+                                                                        <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-display font-bold uppercase tracking-[0.08em] ${styles[lc]}`}>
+                                                                            {lc}
+                                                                        </span>
+                                                                    );
+                                                                })()}
                                                             </td>
                                                             <td className="p-4 text-muted font-body text-sm num">
                                                                 {createdAt}
@@ -1569,7 +1560,7 @@ export const SuperAdmin: React.FC = () => {
                                     value={emailSearch}
                                     onChange={(e) => setEmailSearch(e.target.value)}
                                     onKeyDown={(e) => { if (e.key === 'Enter') runEmailSearch(); }}
-                                    placeholder="Find any user by email…"
+                                    placeholder="Find any user by name or email…"
                                     className="flex-1 min-w-[200px] bg-card border border-line rounded-lg px-3 py-2 text-sm text-[color:var(--text)] focus:outline-none focus:border-gold-500"
                                 />
                                 <button
@@ -1665,7 +1656,53 @@ export const SuperAdmin: React.FC = () => {
                                 >
                                     <Activity size={12} /> Refresh List
                                 </button>
+                                <button
+                                    onClick={handleExportEmails}
+                                    className="text-xs bg-navy-800 hover:bg-navy-700 text-white px-3 py-1 rounded transition-colors flex items-center gap-1 font-display font-bold uppercase tracking-[0.05em]"
+                                >
+                                    <ArrowDown size={12} /> Export Emails
+                                </button>
                             </div>
+                        </div>
+                        {/* Client-side member filters — search by name OR email, filter by
+                            role / registration method, sort by created date or name. */}
+                        <div className="p-4 border-b border-line bg-surface flex flex-wrap gap-2 items-center w-full">
+                            <input
+                                value={memberSearch}
+                                onChange={(e) => setMemberSearch(e.target.value)}
+                                placeholder="Filter by name or email…"
+                                className="flex-1 min-w-[200px] bg-card border border-line rounded-lg px-3 py-2 text-sm text-[color:var(--text)] focus:outline-none focus:border-gold-500"
+                            />
+                            <select
+                                aria-label="Filter by role"
+                                value={memberRoleFilter}
+                                onChange={(e) => setMemberRoleFilter(e.target.value)}
+                                className="bg-card border border-line rounded-lg px-3 py-2 text-sm text-[color:var(--text)] focus:outline-none focus:border-gold-500"
+                            >
+                                <option value="ALL">All roles</option>
+                                {CANONICAL_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                            <select
+                                aria-label="Filter by registration method"
+                                value={memberMethodFilter}
+                                onChange={(e) => setMemberMethodFilter(e.target.value as 'ALL' | 'google' | 'email')}
+                                className="bg-card border border-line rounded-lg px-3 py-2 text-sm text-[color:var(--text)] focus:outline-none focus:border-gold-500"
+                            >
+                                <option value="ALL">All methods</option>
+                                <option value="email">Email</option>
+                                <option value="google">Google</option>
+                            </select>
+                            <select
+                                aria-label="Sort members"
+                                value={memberSort}
+                                onChange={(e) => setMemberSort(e.target.value as 'created_desc' | 'created_asc' | 'name')}
+                                className="bg-card border border-line rounded-lg px-3 py-2 text-sm text-[color:var(--text)] focus:outline-none focus:border-gold-500"
+                            >
+                                <option value="created_desc">Newest first</option>
+                                <option value="created_asc">Oldest first</option>
+                                <option value="name">Name A–Z</option>
+                            </select>
+                            <span className="text-xs text-muted font-body num whitespace-nowrap">{visibleMembers.length} of {users.length}</span>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left">
@@ -1682,7 +1719,7 @@ export const SuperAdmin: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-line">
-                                    {users.map(u => (
+                                    {visibleMembers.map(u => (
                                         <tr key={u.id} className="hover:bg-surface transition-colors">
                                             <td className="p-4 font-medium">
                                                 <button onClick={() => handleViewUser(u)} className="hover:text-gold-600 dark:hover:text-gold-400 hover:underline font-bold text-left">{u.name}</button>
@@ -2705,6 +2742,23 @@ export const SuperAdmin: React.FC = () => {
                             <PlayCircle size={16} /> Open Simulation Dashboard
                         </button>
                     </div>
+                    {/* Tournament Simulator — relocated here from the global header (CONTEXT.md:
+                        Test Suite is the sole home for simulation tools). This is the NCAA
+                        bracket-tournament simulator, distinct from Pool Simulation above. */}
+                    <div className="bg-card border border-line rounded-2xl p-5 flex items-center justify-between gap-4 shadow-card">
+                        <div>
+                            <h3 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
+                                <Trophy size={18} className="text-brandred-500" /> Tournament Simulator
+                            </h3>
+                            <p className="text-muted font-body text-sm mt-1">Seed a full NCAA bracket tournament + synthetic entries and advance it round-by-round to verify bracket scoring end-to-end.</p>
+                        </div>
+                        <button
+                            onClick={() => navigate('/tournament-sim')}
+                            className="shrink-0 bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] px-5 py-3 rounded-xl text-sm transition-all duration-150 hover:-translate-y-px shadow-red-cta whitespace-nowrap flex items-center gap-2"
+                        >
+                            <Trophy size={16} /> Open Tournament Simulator
+                        </button>
+                    </div>
                     <SimpleTestingDashboard />
                 </div>
             )}
@@ -2745,81 +2799,13 @@ export const SuperAdmin: React.FC = () => {
                                     System Logs
                                 </h3>
                                 <div className="flex gap-2">
-                                    {/* Email Export Button */}
-                                    <button
-                                        onClick={async () => {
-                                            // 1. Collect Users
-                                            const allEmails = new Map<string, string>(); // email -> name
-                                            users.forEach(u => allEmails.set(u.email.toLowerCase(), u.name));
+                                    {/* Export Emails moved to the Members tab (membership/marketing
+                                        export, not a System-log action). */}
 
-                                            // 2. Scan Pools for Guests — PII now lives in the
-                                            // squarePrivate subcollection (audit H1), fetched per pool.
-                                            const squarePools = pools.filter(p => (p as unknown as PoolLike).squares);
-                                            const privLists = await Promise.all(
-                                                squarePools.map(p => dbService.getSquarePrivateEmails(p.id).catch(() => []))
-                                            );
-                                            privLists.forEach(list => {
-                                                list.forEach(({ email, name }) => {
-                                                    const e = email.toLowerCase();
-                                                    if (!allEmails.has(e)) {
-                                                        allEmails.set(e, name || 'Guest');
-                                                    }
-                                                });
-                                            });
-
-                                            // 3. Generate CSV
-                                            const headers = ['Name', 'Email'];
-                                            const rows = Array.from(allEmails.entries()).map(([email, name]) => `"${name}", "${email}"`);
-                                            const csvContent = [headers.join(','), ...rows].join('\n');
-
-                                            // 4. Download
-                                            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                                            const url = URL.createObjectURL(blob);
-                                            const link = document.createElement('a');
-                                            link.setAttribute('href', url);
-                                            link.setAttribute('download', `mmp_emails_${new Date().toISOString().slice(0, 10)}.csv`);
-                                            link.style.visibility = 'hidden';
-                                            document.body.appendChild(link);
-                                            link.click();
-                                            document.body.removeChild(link);
-                                        }}
-                                        className="text-xs bg-navy-800 hover:bg-navy-700 px-3 py-1 rounded text-white transition-colors font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1"
-                                    >
-                                        <ArrowDown size={12} /> Export Emails
-                                    </button>
-
-                                    <button
-                                        onClick={async () => {
-                                            const ok = await toast.confirm({
-                                                title: 'Run Retroactive Score Fix?',
-                                                message: 'This will scan all active pools and repair missing score events.',
-                                            });
-                                            if (ok) {
-                                                try {
-                                                    if (dbService.fixPoolScores) {
-                                                        await dbService.fixPoolScores();
-                                                        toast.success('Fix Complete.');
-                                                    }
-                                                } catch { toast.error('Fix Failed'); }
-                                            }
-                                        }}
-                                        className="text-xs bg-navy-800 hover:bg-navy-700 px-3 py-1 rounded text-white transition-colors font-display font-bold uppercase tracking-[0.05em]"
-                                    >
-                                        Fix Scoring
-                                    </button>
-                                    <button
-                                        onClick={handleFixParticipantIds}
-                                        className="text-xs bg-navy-800 hover:bg-navy-700 px-3 py-1 rounded text-white transition-colors font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1"
-                                    >
-                                        <Users size={12} /> Fix Participants
-                                    </button>
-                                    <button
-                                        onClick={handleInitBigEast}
-                                        disabled={isInitializingBigEast}
-                                        className="text-xs bg-navy-800 hover:bg-navy-700 disabled:opacity-50 px-3 py-1 rounded text-white transition-colors font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1"
-                                    >
-                                        <Trophy size={12} /> {isInitializingBigEast ? 'Initializing...' : 'Init Big East'}
-                                    </button>
+                                    {/* Fix Scoring / Fix Participants / Init Big East removed —
+                                        these are global ops and now live only in the Operations
+                                        tab (fixPoolScores, fixParticipantIds, Big East re-init),
+                                        per the CONTEXT.md "one home" contract. */}
                                     <button
                                         onClick={() => {
                                             if (dbService.getSystemLogs) {
@@ -2984,7 +2970,17 @@ export const SuperAdmin: React.FC = () => {
                                     <p className="text-sm text-muted">Disable all write actions for users.</p>
                                 </div>
                                 <button
-                                    onClick={() => settingsService.update({ maintenanceMode: !settings?.maintenanceMode })}
+                                    onClick={async () => {
+                                        const turningOn = !settings?.maintenanceMode;
+                                        const ok = await toast.confirm({
+                                            title: turningOn ? 'Enable maintenance mode?' : 'Disable maintenance mode?',
+                                            message: turningOn
+                                                ? 'This disables ALL write actions for every user platform-wide (joins, picks, payments). Confirm you want to take the site read-only.'
+                                                : 'This re-enables write actions for all users.',
+                                            danger: turningOn,
+                                        });
+                                        if (ok) settingsService.update({ maintenanceMode: turningOn });
+                                    }}
                                     className={`transition-colors ${settings?.maintenanceMode ? 'text-gold-500' : 'text-faint'} `}
                                 >
                                     {settings?.maintenanceMode ? <ToggleRight size={40} className="fill-gold-500/20" /> : <ToggleLeft size={40} />}
@@ -3745,6 +3741,28 @@ export const SuperAdmin: React.FC = () => {
                             </div>
 
                             <div className="p-6">
+                                {/* Member actions — reuse the row handlers so every user action
+                                    is reachable from the detail popup, not just the table row. */}
+                                <div className="flex flex-wrap gap-2 mb-6">
+                                    <button
+                                        onClick={() => handleEmailUser(viewingUser)}
+                                        className="text-xs bg-navy-800 hover:bg-navy-700 text-white px-3 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 transition-colors"
+                                    >
+                                        <Mail size={14} /> Email User
+                                    </button>
+                                    <button
+                                        onClick={() => handleResetPassword(viewingUser)}
+                                        className="text-xs bg-navy-800 hover:bg-navy-700 text-white px-3 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 transition-colors"
+                                    >
+                                        <KeyRound size={14} /> Reset Password
+                                    </button>
+                                    <button
+                                        onClick={() => { const u = viewingUser; setViewingUser(null); handleEditUser(u); }}
+                                        className="text-xs bg-gold-500 hover:bg-gold-400 text-navy-900 px-3 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 transition-colors"
+                                    >
+                                        <Wrench size={14} /> Edit User
+                                    </button>
+                                </div>
                                 {/* Unified profile facts (T6): role + referrals + loyalty + account in one place. */}
                                 {(() => {
                                     const ownedCount = pools.filter(p => {
@@ -3795,7 +3813,7 @@ export const SuperAdmin: React.FC = () => {
                                                         <div>
                                                             <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] text-lg group-hover:text-gold-600 dark:group-hover:text-gold-400 transition-colors">{pool.name}</h4>
                                                             <p className="text-xs text-muted uppercase font-display font-bold tracking-[0.08em] mt-1">
-                                                                {isBracket ? 'Tournament Bracket' : `${(pool as GameState).awayTeam} vs ${(pool as GameState).homeTeam}`}
+                                                                {formatPoolMatchup(pool as unknown as { type?: string; awayTeam?: string; homeTeam?: string })}
                                                             </p>
                                                         </div>
                                                         {!isBracket && (pool as GameState).charity?.enabled && <Heart size={16} className="text-brandred-500 fill-brandred-500" />}
@@ -3809,7 +3827,13 @@ export const SuperAdmin: React.FC = () => {
                                                             </>
                                                         ) : (
                                                             <>
-                                                                <div>Squares: <span className="text-[color:var(--text)] font-mono num">{(pool as GameState).squares.filter(s => s.owner).length}/100</span></div>
+                                                                {/* SQUARES pools carry `.squares`; NFL season + PROPS pools do not
+                                                                    — guard so a non-squares pool can't crash the card. */}
+                                                                {pool.type === 'SQUARES' ? (
+                                                                    <div>Squares: <span className="text-[color:var(--text)] font-mono num">{((pool as GameState).squares ?? []).filter(s => s.owner).length}/100</span></div>
+                                                                ) : (
+                                                                    <div>Entries: <span className="text-[color:var(--text)] font-mono num">{(pool as unknown as PoolLike).entryCount as number || 0}</span></div>
+                                                                )}
                                                                 <div>Status: <span className={(pool as GameState).isLocked ? "text-brandred-500 font-bold" : "text-gold-600 dark:text-gold-400 font-bold"}>{(pool as GameState).isLocked ? 'LOCKED' : 'OPEN'}</span></div>
                                                             </>
                                                         )}
@@ -3889,7 +3913,14 @@ export const SuperAdmin: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="bg-card p-6 rounded-xl border border-line shadow-card">
+                        {/* When editing (gear clicked), the form floats as a modal so a
+                            low seed in the list can be edited without scrolling to the top.
+                            When adding, it stays inline. */}
+                        <div
+                            className={editingSeed ? "fixed inset-0 z-50 bg-black/70 flex items-start justify-center overflow-y-auto p-6" : ""}
+                            onClick={editingSeed ? (e) => { if (e.target === e.currentTarget) { setEditingSeed(null); setSeedText(''); setSeedOpt1(''); setSeedOpt2(''); } } : undefined}
+                        >
+                        <div className={`bg-card p-6 rounded-xl border border-line shadow-card${editingSeed ? ' max-w-2xl w-full mt-10 shadow-2xl' : ''}`}>
                             <h3 className="text-xl font-display font-bold uppercase tracking-[0.05em] mb-4">{editingSeed ? 'Edit Seed Question' : 'Add New Seed Question'}</h3>
                             <div className="grid gap-4 bg-surface border border-line p-4 rounded-lg">
                                 <input
@@ -3948,6 +3979,7 @@ export const SuperAdmin: React.FC = () => {
                                     </button>
                                 </div>
                             </div>
+                        </div>
                         </div>
 
                         <div className="bg-card rounded-xl border border-line overflow-hidden">
@@ -4342,6 +4374,7 @@ export const SuperAdmin: React.FC = () => {
                 </div>
             )}
 
+            </ErrorBoundary>
         </div >
     );
 };
