@@ -10,7 +10,7 @@ export const squaresCreateInputSchema = contactFieldsSchema.extend({
   maxSquaresPerPlayer: z.number().int().min(0).optional(),
   homeTeam: z.string().optional(),
   awayTeam: z.string().optional(),
-  gameId: z.string().optional(),
+  gameId: z.string().nullish(), // nullable + optional: a squares pool with no game assigned yet sends null
   gameTime: z.number().optional(),
   seasonType: z.enum(['1', '2', '3']).optional(),
   week: z.number().int().optional(),

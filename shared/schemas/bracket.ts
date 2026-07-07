@@ -5,7 +5,11 @@
 import { z } from 'zod';
 import { payoutsSchema, paymentHandlesSchema } from './common';
 
-export const bracketScoringSystemSchema = z.enum(['CLASSIC', 'UPSET', 'CUSTOM']);
+// Union of every scoring system the bracket engine implements (CLASSIC/ESPN/
+// FIBONACCI/CUSTOM — see functions/src/bracketScoring.ts) plus what the wizard
+// offers (UPSET). ESPN/FIBONACCI were missing, so createPool rejected any pool
+// (incl. Test Suite scenarios) requesting them even though the engine scores them.
+export const bracketScoringSystemSchema = z.enum(['CLASSIC', 'ESPN', 'FIBONACCI', 'CUSTOM', 'UPSET']);
 
 // All settings sub-fields are optional: createBracketPool applies defaults for
 // any that are missing (bracketPools.ts:70-87).
