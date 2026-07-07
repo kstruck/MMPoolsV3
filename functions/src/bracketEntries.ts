@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { Tournament, BracketPool, BracketEntry } from "./types";
 import { checkBillingAccess } from "./billing";
+import { assertPaidParticipantCeiling } from "./poolOps";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
@@ -43,6 +44,9 @@ export const createBracketEntry = onCall(async (request) => {
                 throw new HttpsError("failed-precondition", "This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.");
             }
         }
+        // Paid-ceiling gate (NOTES-WAVE2 A2, PLAN 6b(iii)): a PAID pool cannot
+        // exceed its purchased entry ceiling. No-op for free/trial pools.
+        assertPaidParticipantCeiling(poolData.billing, poolData.entryCount || 0);
 
         // Check lock status — only OPEN pools accept new entries
         if (poolData.status !== 'OPEN' && poolData.status !== 'DRAFT') {

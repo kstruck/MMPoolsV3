@@ -19,6 +19,13 @@ import { createBracketEntry } from '../functions/src/bracketEntries';
 describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // clearAllMocks() does NOT drain the mockResolvedValueOnce queue, so a
+        // test that consumes a different number of get() calls than it queued
+        // would leak leftover return values into the next test. Reset the
+        // queue-based mocks so each test's mock setup is self-contained.
+        mockGet.mockReset();
+        mockTransactionGet.mockReset();
+        mockTransactionUpdate.mockReset();
 
         // Standard transaction callback mock
         mockRunTransaction.mockImplementation(async (callback) => {
@@ -306,56 +313,65 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
             );
         });
 
-        it('should throw invalid-argument if fields are missing', async () => {
+        // Buy-flow overhaul (PLAN Phase 2): the checkout contract is hardened —
+        // the client no longer sends price/tier/successUrl/cancelUrl; the server
+        // prices from billing_config + validated add-ons and derives redirect
+        // URLs from an allowlisted origin. poolType is a validated enum.
+        it('should throw invalid-argument if required fields are missing (schema-validated)', async () => {
             const req = {
                 auth: standardAuth,
-                data: { poolId: '', poolName: 'March Madness', poolType: 'BRACKET', tier: 'premium_tier', price: 29.00 }
+                data: { poolId: '', poolName: 'March Madness', poolType: 'BRACKET', estimatedPlayers: 20 }
             } as any;
 
-            await expect(createCheckoutSession(req)).rejects.toThrowError(
-                'poolId, poolName, tier, and price are required.'
-            );
+            // Empty poolId fails the checkout input schema.
+            await expect(createCheckoutSession(req)).rejects.toThrowError(/Invalid checkout request: poolId/);
         });
 
-        it('should throw invalid-argument if price is negative', async () => {
+        it('should throw invalid-argument for an unknown pool format', async () => {
             const req = {
                 auth: standardAuth,
-                data: { poolId: 'pool-123', poolName: 'March Madness', poolType: 'BRACKET', tier: 'premium_tier', price: -5.00 }
+                data: { poolId: 'pool-123', poolName: 'March Madness', poolType: 'NOT_A_FORMAT', estimatedPlayers: 20 }
             } as any;
 
-            await expect(createCheckoutSession(req)).rejects.toThrowError(
-                'Price must be non-negative.'
-            );
+            await expect(createCheckoutSession(req)).rejects.toThrowError(/Invalid checkout request: poolType/);
         });
 
         it('should throw not-found if the pool document is missing', async () => {
             const req = {
                 auth: standardAuth,
-                data: { poolId: 'missing-pool', poolName: 'March Madness', poolType: 'BRACKET', tier: 'premium_tier', price: 29.00 }
+                data: { poolId: 'missing-pool', poolName: 'March Madness', poolType: 'BRACKET', estimatedPlayers: 20 }
             } as any;
 
-            // Authoritative price is resolved from billing_config first, then the pool is fetched.
-            mockGet.mockResolvedValueOnce({ exists: true, data: () => ({ pricing: { bracket: [{ min: 0, max: 10, price: 29 }] } }) });
+            // Pool is fetched FIRST now (before pricing). Missing pool → not-found.
             mockGet.mockResolvedValueOnce({ exists: false });
 
             await expect(createCheckoutSession(req)).rejects.toThrowError('Pool not found.');
         });
 
-        it('should successfully create checkout session and return URL with resolved origin (referrer)', async () => {
+        it('should create a checkout session with a server-derived success URL (allowlisted origin)', async () => {
             const req = {
                 auth: standardAuth,
-                data: { poolId: 'pool-123', poolName: 'Best Bracket', poolType: 'BRACKET', tier: 'premium_tier', price: 49.00, couponCode: 'HELLO' },
+                data: { poolId: 'pool-123', poolName: 'Best Bracket', poolType: 'BRACKET', estimatedPlayers: 20, couponCode: 'HELLO' },
                 rawRequest: {
                     headers: {
-                        referer: 'http://localhost:5173/wizard/summary'
+                        // localhost:5173 IS in the allowlist → used as the redirect origin.
+                        origin: 'http://localhost:5173'
                     }
                 }
             } as any;
 
-            // Authoritative price resolved from billing_config first, then the pool.
-            mockGet.mockResolvedValueOnce({ exists: true, data: () => ({ pricing: { bracket: [{ min: 0, max: 10, price: 49 }] } }) });
-            mockGet.mockResolvedValueOnce({ exists: true });
-            mockGet.mockResolvedValueOnce({ empty: true }); // coupon 'HELLO' lookup — not a 100%-off coupon
+            mockGet.mockResolvedValueOnce({ exists: true, data: () => ({ type: 'BRACKET', ownerId: 'user-123' }) }); // pool
+            mockGet.mockResolvedValueOnce({ exists: true, data: () => ({
+                freePlayerThreshold: 10,
+                gracePeriodDays: 7,
+                pricing: { season: [], bracket: [{ min: 11, max: 25, price: 49 }], squares: [], props: [] },
+                features: { aiCommissioner: { isPremium: true, addonPrice: 19 }, whatIfSimulator: { isPremium: true, addonPrice: 9 }, customBranding: { isPremium: true, addonPrice: 29 } },
+            }) }); // billing_config
+            mockGet.mockResolvedValueOnce({ empty: true }); // resolveCouponForQuote: coupon 'HELLO' not found
+
+            // Transaction reads: fresh pool (no pending, not active), then coupon (empty).
+            mockTransactionGet.mockResolvedValueOnce({ exists: true, data: () => ({ billing: {} }) }); // pool in txn
+            mockTransactionGet.mockResolvedValueOnce({ empty: true, docs: [] }); // coupon in txn
 
             const result = await createCheckoutSession(req);
 
@@ -369,44 +385,47 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
                         price_data: {
                             currency: 'usd',
                             product_data: {
-                                name: 'Best Bracket — Premium Hosting',
+                                name: 'Best Bracket — Standard Hosting',
                                 description: 'One-time hosting fee for your BRACKET pool'
                             },
-                            unit_amount: 4900 // 49.00 * 100
+                            unit_amount: 4900 // server-priced: bracket tier for 20 players = $49
                         },
                         quantity: 1
                     }
                 ],
-                metadata: {
+                // reservationId is a random UUID → assert the stable metadata subset.
+                metadata: expect.objectContaining({
                     poolId: 'pool-123',
                     userId: 'user-123',
-                    tier: 'premium_tier',
                     poolType: 'BRACKET',
-                    couponCode: 'HELLO',
-                    referralCredits: '0',
-                    maxPlayersAllowed: '10'
-                }
+                    tier: 'standard_tier',
+                    maxPlayersAllowed: '20'
+                })
             }));
         });
 
-        it('should fallback to default domain if referer/origin headers are missing', async () => {
+        it('should fall back to the production origin when no allowlisted header is present', async () => {
             const req = {
                 auth: standardAuth,
-                data: { poolId: 'pool-123', poolName: 'Survivor Pool', poolType: 'NFL_SEASON', tier: 'standard_tier', price: 19.99 },
-                rawRequest: {
-                    headers: {}
-                }
+                data: { poolId: 'pool-123', poolName: 'Pickem Pool', poolType: 'NFL_PICKEM', estimatedPlayers: 30 },
+                rawRequest: { headers: {} }
             } as any;
 
-            // Authoritative price resolved from billing_config first, then the pool.
-            mockGet.mockResolvedValueOnce({ exists: true, data: () => ({ pricing: { season: [{ min: 0, max: 10, price: 19.99 }] } }) });
-            mockGet.mockResolvedValueOnce({ exists: true });
+            mockGet.mockResolvedValueOnce({ exists: true, data: () => ({ type: 'NFL_PICKEM', ownerId: 'user-123' }) }); // pool
+            mockGet.mockResolvedValueOnce({ exists: true, data: () => ({
+                freePlayerThreshold: 10,
+                gracePeriodDays: 7,
+                pricing: { season: [{ min: 11, max: 50, price: 59 }], bracket: [], squares: [], props: [] },
+                features: { aiCommissioner: { isPremium: true, addonPrice: 19 }, whatIfSimulator: { isPremium: true, addonPrice: 9 }, customBranding: { isPremium: true, addonPrice: 29 } },
+            }) }); // billing_config
+
+            mockTransactionGet.mockResolvedValueOnce({ exists: true, data: () => ({ billing: {} }) }); // pool in txn (no coupon this time)
 
             await createCheckoutSession(req);
 
             expect(mockCreateSession).toHaveBeenCalledWith(expect.objectContaining({
-                success_url: 'https://marchmelee.com/pool/pool-123?payment=success&session_id={CHECKOUT_SESSION_ID}',
-                cancel_url: 'https://marchmelee.com/pool/pool-123?payment=cancelled'
+                success_url: 'https://www.marchmeleepools.com/pool/pool-123?payment=success&session_id={CHECKOUT_SESSION_ID}',
+                cancel_url: 'https://www.marchmeleepools.com/pool/pool-123?payment=cancelled'
             }));
         });
     });

@@ -1,10 +1,16 @@
+import { useMemo } from 'react';
 import type { User } from '../../../types';
 import { dbService } from '../../../services/dbService';
 import { squaresCreateInputSchema } from '@shared/schemas';
-import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, StepReview } from '../index';
+import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep } from '../index';
 import { TextField, NumberField, SelectField } from '../fields';
 import type { WizardStepDef } from '../types';
 import { buildSquaresPayload } from './buildSquaresPayload';
+
+// Creates the SQUARES pool and RESOLVES its poolId (no navigation) for LaunchStep.
+async function createSquaresPool(values: Record<string, unknown>): Promise<string> {
+  return dbService.createPool(buildSquaresPayload(values));
+}
 
 // Squares-specific slot: the matchup + grid rules.
 function StepSquaresDetails() {
@@ -27,14 +33,6 @@ function StepSquaresDetails() {
   );
 }
 
-const steps: WizardStepDef[] = [
-  { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
-  { id: 'grid', title: 'Matchup & grid', Component: StepSquaresDetails },
-  { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="costPerSquare" feeLabel="Cost per square ($)" /> },
-  { id: 'branding', title: 'Branding', Component: StepBranding },
-  { id: 'review', title: 'Review', Component: () => <StepReview feeField="costPerSquare" /> },
-];
-
 const defaultValues: Record<string, unknown> = {
   type: 'SQUARES',
   name: '', managerName: '', contactEmail: '', isPublic: true,
@@ -43,11 +41,35 @@ const defaultValues: Record<string, unknown> = {
   paymentInstructions: '',
   paymentHandles: { venmo: '', zelle: '', cashapp: '', paypal: '', googlePay: '' },
   branding: { logoUrl: '', primaryColor: '', secondaryColor: '' },
+  // Launch inputs (LaunchStep). A 10x10 grid is 100 squares, but "players" is a
+  // separate estimate (one player can own many squares); leave it for the
+  // commissioner to estimate. All add-ons default off.
+  estimatedPlayers: 0,
+  addons: { aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: false },
   _tosAccepted: false,
 };
 
 export function CreateSquaresPool(props: { user: User; onComplete: (poolId: string) => void; onCancel: () => void }) {
   const { user, onComplete, onCancel } = props;
+  const steps: WizardStepDef[] = useMemo(() => [
+    { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
+    { id: 'grid', title: 'Matchup & grid', Component: StepSquaresDetails },
+    { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="costPerSquare" feeLabel="Cost per square ($)" /> },
+    { id: 'branding', title: 'Branding', Component: StepBranding },
+    {
+      id: 'launch', title: 'Launch', ownsSubmit: true,
+      Component: () => (
+        <LaunchStep
+          uid={user.id}
+          poolType="SQUARES"
+          feeField="costPerSquare"
+          createPool={createSquaresPool}
+          onCreated={onComplete}
+        />
+      ),
+    },
+  ], [user.id, onComplete]);
+
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-10">
       <div className="mx-auto mb-6 max-w-2xl">
@@ -61,8 +83,8 @@ export function CreateSquaresPool(props: { user: User; onComplete: (poolId: stri
         userId={user.id}
         submitLabel="Launch pool"
         onSubmit={async (values) => {
-          const poolId = await dbService.createPool(buildSquaresPayload(values));
-          onComplete(poolId);
+          // Fallback only — LaunchStep owns the create → launch flow (see Bracket).
+          onComplete(await createSquaresPool(values));
         }}
         onCancel={onCancel}
       />

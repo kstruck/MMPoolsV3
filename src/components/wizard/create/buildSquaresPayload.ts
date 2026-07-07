@@ -1,4 +1,5 @@
 import { writePaymentHandles, CLEAR } from '@shared/paymentHandles';
+import { readLaunchFields } from './launchFields';
 
 // Maps validated wizard values to the SQUARES pool payload for
 // dbService.createPool. Fee is costPerSquare (top-level, not settings.entryFee).
@@ -18,6 +19,7 @@ export function buildSquaresPayload(values: Record<string, unknown>): Record<str
   });
 
   return dropUndefined({
+    ...readLaunchFields(values),
     type: 'SQUARES',
     name: v.name,
     costPerSquare: Number(v.costPerSquare ?? 0),

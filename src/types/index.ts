@@ -959,45 +959,35 @@ export interface PoolBilling {
   };
 }
 
-export interface BillingTierPrice {
-  min: number;
-  max: number;
-  price: number;
-}
+// Billing config: the canonical contract is shared/schemas/billingConfig.ts
+// (zod schema + inferred types) — the exact source Cloud Functions consume via
+// the copy-shared mirror. Re-exported here so existing `from '../types'`
+// imports keep working. Parse/normalize helpers (BillingConfigSchema,
+// normalizeLegacyPackage) are value exports — import those directly from
+// '@shared/schemas/billingConfig'.
+export type {
+  BillingConfig,
+  BillingConfigInput,
+  PricingTier,
+  PricingKey,
+  FormatTierMap,
+  Package as BillingPackage,
+  CreditBundlePackage,
+  UnlimitedPassPackage,
+  HeroPromo,
+  BillingFeatureFlag,
+} from '@shared/schemas/billingConfig';
 
-export interface BillingConfig {
-  freePlayerThreshold: number;
-  gracePeriodDays: number;
-  pricing: {
-    season: BillingTierPrice[];
-    bracket: BillingTierPrice[];
-    squares: BillingTierPrice[];
-    props: BillingTierPrice[];
-  };
-  features: {
-    aiCommissioner: { isPremium: boolean; addonPrice: number };
-    whatIfSimulator: { isPremium: boolean; addonPrice: number };
-    customBranding: { isPremium: boolean; addonPrice: number };
-    smsNotifications?: { isPremium: boolean; addonPrice: number };
-  };
-  packages?: {
-    buy_3: number;
-    unlimited_1yr: number;
-  };
-  packagesList?: BillingBundle[];
-}
+/** @deprecated Legacy alias — use PricingTier from '@shared/schemas/billingConfig'. */
+export type BillingTierPrice = import('@shared/schemas/billingConfig').PricingTier;
 
-export interface BillingBundle {
-  id: string;
-  name: string;
-  description: string;
-  poolType: 'ALL' | PoolType;
-  maxPlayersPerPool: number; // e.g. 25, 50, 100, 9999 for unlimited
-  poolsIncluded: number; // e.g. 3, or 9999 for unlimited
-  durationDays: number; // e.g. 365, or 0 for never expires
-  price: number;
-  isActive: boolean;
-}
+/**
+ * @deprecated Legacy packagesList item shape (durationDays=0 => never expires,
+ * poolsIncluded>=9999 => unlimited). New bundle products use `BillingPackage`
+ * (CREDIT_BUNDLE | UNLIMITED_PASS); convert old Firestore data with
+ * normalizeLegacyPackage from '@shared/schemas/billingConfig'.
+ */
+export type BillingBundle = import('@shared/schemas/billingConfig').LegacyBillingBundle;
 
 export interface UserPoolCredit {
   id: string; // unique credit token ID

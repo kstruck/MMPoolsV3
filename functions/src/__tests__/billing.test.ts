@@ -48,21 +48,32 @@ describe('enforceBillingStatus — billing status transitions', () => {
   const defaultBillingConfig: BillingConfig = {
     freePlayerThreshold: 10,
     gracePeriodDays: 7,
+    trialDays: 14,
     pricing: {
-      season: {
-        tier1: { min: 0, max: 10, price: 0 },
-        tier2: { min: 11, max: 25, price: 29 },
-        tier3: { min: 26, max: 50, price: 49 },
-        tier4: { min: 51, max: 999, price: 79 },
-      },
-      bracket: {
-        tier1: { min: 0, max: 10, price: 0 },
-        tier2: { min: 11, max: 25, price: 19 },
-        tier3: { min: 26, max: 50, price: 39 },
-        tier4: { min: 51, max: 999, price: 59 },
-      },
-      squares: { flatPrice: 9 },
-      props: { flatPrice: 9 },
+      season: [
+        { min: 0, max: 10, price: 0 },
+        { min: 11, max: 25, price: 29 },
+        { min: 26, max: 50, price: 49 },
+        { min: 51, max: 999, price: 79 },
+      ],
+      bracket: [
+        { min: 0, max: 10, price: 0 },
+        { min: 11, max: 25, price: 19 },
+        { min: 26, max: 50, price: 39 },
+        { min: 51, max: 999, price: 59 },
+      ],
+      // flat pricing = a single all-encompassing tier
+      squares: [{ min: 0, max: 9999, price: 9 }],
+      props: [{ min: 0, max: 9999, price: 9 }],
+    },
+    formatTierMap: {
+      SQUARES: 'squares',
+      BRACKET: 'bracket',
+      NFL_PLAYOFFS: 'bracket',
+      PROPS: 'props',
+      NFL_PICKEM: 'season',
+      NFL_SURVIVOR: 'season',
+      NFL_MARGIN: 'season',
     },
     features: {
       aiCommissioner: { isPremium: true, addonPrice: 10 },
@@ -70,6 +81,7 @@ describe('enforceBillingStatus — billing status transitions', () => {
       whatIfSimulator: { isPremium: true, addonPrice: 5 },
       customBranding: { isPremium: false, addonPrice: 0 },
     },
+    packagesList: [],
   };
 
   it('should identify pools with expired trials for transition to grace_period', () => {
@@ -393,21 +405,32 @@ describe('Tier pricing calculation', () => {
   const billingConfig: BillingConfig = {
     freePlayerThreshold: 10,
     gracePeriodDays: 7,
+    trialDays: 14,
     pricing: {
-      season: {
-        tier1: { min: 0, max: 10, price: 0 },
-        tier2: { min: 11, max: 25, price: 29 },
-        tier3: { min: 26, max: 50, price: 49 },
-        tier4: { min: 51, max: 999, price: 79 },
-      },
-      bracket: {
-        tier1: { min: 0, max: 10, price: 0 },
-        tier2: { min: 11, max: 25, price: 19 },
-        tier3: { min: 26, max: 50, price: 39 },
-        tier4: { min: 51, max: 999, price: 59 },
-      },
-      squares: { flatPrice: 9 },
-      props: { flatPrice: 9 },
+      season: [
+        { min: 0, max: 10, price: 0 },
+        { min: 11, max: 25, price: 29 },
+        { min: 26, max: 50, price: 49 },
+        { min: 51, max: 999, price: 79 },
+      ],
+      bracket: [
+        { min: 0, max: 10, price: 0 },
+        { min: 11, max: 25, price: 19 },
+        { min: 26, max: 50, price: 39 },
+        { min: 51, max: 999, price: 59 },
+      ],
+      // flat pricing = a single all-encompassing tier
+      squares: [{ min: 0, max: 9999, price: 9 }],
+      props: [{ min: 0, max: 9999, price: 9 }],
+    },
+    formatTierMap: {
+      SQUARES: 'squares',
+      BRACKET: 'bracket',
+      NFL_PLAYOFFS: 'bracket',
+      PROPS: 'props',
+      NFL_PICKEM: 'season',
+      NFL_SURVIVOR: 'season',
+      NFL_MARGIN: 'season',
     },
     features: {
       aiCommissioner: { isPremium: true, addonPrice: 10 },
@@ -415,22 +438,16 @@ describe('Tier pricing calculation', () => {
       whatIfSimulator: { isPremium: true, addonPrice: 5 },
       customBranding: { isPremium: false, addonPrice: 0 },
     },
+    packagesList: [],
   };
 
   function getTierPrice(
     playerCount: number,
     poolType: 'season' | 'bracket' | 'squares' | 'props'
   ): number {
-    if (poolType === 'squares') return billingConfig.pricing.squares.flatPrice;
-    if (poolType === 'props') return billingConfig.pricing.props.flatPrice;
-
     const tiers = billingConfig.pricing[poolType];
-    for (const tier of [tiers.tier1, tiers.tier2, tiers.tier3, tiers.tier4]) {
-      if (playerCount >= tier.min && playerCount <= tier.max) {
-        return tier.price;
-      }
-    }
-    return tiers.tier4.price; // fallback to highest tier
+    const match = tiers.find((tier) => playerCount >= tier.min && playerCount <= tier.max);
+    return (match ?? tiers[tiers.length - 1]).price; // fallback to highest tier
   }
 
   it('should return $0 for ≤10 players in a season pool (free tier)', () => {

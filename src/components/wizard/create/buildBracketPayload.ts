@@ -1,4 +1,5 @@
 import { readPaymentHandles } from '@shared/paymentHandles';
+import { readLaunchFields } from './launchFields';
 
 // Maps validated wizard values to the createBracketPool callable payload
 // ({ name, seasonYear, gender, tournamentType, settings }). Bracket stores
@@ -12,6 +13,7 @@ export function buildBracketPayload(values: Record<string, unknown>): Record<str
   const handles = readPaymentHandles({ paymentHandles: v.paymentHandles });
 
   return dropUndefined({
+    ...readLaunchFields(values),
     name: v.name,
     seasonYear: Number(v.seasonYear),
     gender: v.gender || 'mens',

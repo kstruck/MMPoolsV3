@@ -190,7 +190,12 @@ export function WizardShell(props: WizardShellProps) {
             {stepIndex === 0 ? 'Cancel' : 'Back'}
           </button>
 
-          {isLast ? (
+          {step.ownsSubmit ? (
+            // The step owns its primary action(s) (e.g. LaunchStep: Start Trial /
+            // Activate now / Redeem / Launch free) and its own Terms gate. The
+            // shell renders no footer submit here to avoid a duplicate/inert CTA.
+            <span aria-hidden="true" />
+          ) : isLast ? (
             <button
               type="button"
               onClick={submit}

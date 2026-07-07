@@ -39,4 +39,21 @@ describe('buildPropsPayload', () => {
     expect(p.venmo).toBe('@me');
     expect(p.paymentHandles.venmo).toBe('@me');
   });
+
+  it('carries top-level launch fields (estimatedPlayers + addons) the server reads for free/trial', () => {
+    const p = buildPropsPayload({
+      ...base,
+      estimatedPlayers: 12,
+      addons: { aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: true },
+    }) as Record<string, any>;
+    expect(p.estimatedPlayers).toBe(12);
+    expect(p.addons.customBranding).toBe(true);
+    expect(propsCreateInputSchema.safeParse(p).success).toBe(true);
+  });
+
+  it('omits estimatedPlayers when blank/0 and defaults all addons to false', () => {
+    const p = buildPropsPayload(base) as Record<string, any>;
+    expect('estimatedPlayers' in p).toBe(false);
+    expect(p.addons).toEqual({ aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: false });
+  });
 });

@@ -5,17 +5,29 @@ import {
     collection, doc, onSnapshot, query, orderBy
 } from 'firebase/firestore';
 import { dbService } from '../../services/dbService';
-import type { BillingConfig, Pool, PoolBilling, Coupon, ReferralConfig, User, BillingBundle } from '../../types';
+import type { BillingConfig, Pool, PoolBilling, Coupon, ReferralConfig, User } from '../../types';
+import {
+    DEFAULT_TRIAL_DAYS,
+    DEFAULT_FORMAT_TIER_MAP,
+    normalizeLegacyPackage,
+    type Package,
+} from '@shared/schemas/billingConfig';
 import {
     Shield, Zap, Search, Save, CheckCircle,
     ToggleLeft, ToggleRight, Calendar, Plus, Trash2, Ticket, Award,
-    Trophy, Settings, Gift, Target, KeyRound
+    Trophy, Settings, Gift, Target, KeyRound, BarChart3
 } from 'lucide-react';
 import { useToast } from '../ui/Toast';
+import { MonetizationDashboard } from './monetization/MonetizationDashboard';
 
+// Canonical default (matches shared/schemas/billingConfig BillingConfigSchema so
+// the auto-seed below passes the adminSaveBillingConfig validation gate): now
+// includes trialDays, formatTierMap, and an empty packagesList (bundles live in
+// packagesList as typed Package[]). `packages` stays as a legacy back-compat map.
 const DEFAULT_BILLING_CONFIG: BillingConfig = {
     freePlayerThreshold: 10,
     gracePeriodDays: 7,
+    trialDays: DEFAULT_TRIAL_DAYS,
     pricing: {
         season: [
             { min: 11, max: 25, price: 29 },
@@ -42,11 +54,13 @@ const DEFAULT_BILLING_CONFIG: BillingConfig = {
             { min: 101, max: 9999, price: 39 }
         ]
     },
+    formatTierMap: { ...DEFAULT_FORMAT_TIER_MAP },
     features: {
         aiCommissioner: { isPremium: true, addonPrice: 19 },
         whatIfSimulator: { isPremium: true, addonPrice: 9 },
         customBranding: { isPremium: true, addonPrice: 29 }
     },
+    packagesList: [],
     packages: {
         buy_3: 49.00,
         unlimited_1yr: 129.00
@@ -59,7 +73,7 @@ const DEFAULT_REFERRAL_CONFIG: ReferralConfig = {
     rewardType: 'free_pool'
 };
 
-type AdminSubTab = 'tiers' | 'features' | 'packages' | 'coupons' | 'referrals' | 'pools';
+type AdminSubTab = 'tiers' | 'features' | 'packages' | 'coupons' | 'referrals' | 'pools' | 'monetization';
 
 export const SuperAdminBillingPanel: React.FC = () => {
     const toast = useToast();
@@ -98,14 +112,15 @@ export const SuperAdminBillingPanel: React.FC = () => {
     const [editReferralCredits, setEditReferralCredits] = useState<number>(0);
     const [editFreePools, setEditFreePools] = useState<number>(0);
 
-    // New Dynamic Bundle Form State
+    // New Dynamic Bundle Form State (canonical Package: CREDIT_BUNDLE | UNLIMITED_PASS)
+    const [newBundleKind, setNewBundleKind] = useState<'CREDIT_BUNDLE' | 'UNLIMITED_PASS'>('CREDIT_BUNDLE');
     const [newBundleName, setNewBundleName] = useState<string>('');
     const [newBundleDesc, setNewBundleDesc] = useState<string>('');
     const [newBundlePrice, setNewBundlePrice] = useState<number>(39);
     const [newBundlePoolType, setNewBundlePoolType] = useState<string>('ALL');
     const [newBundleMaxPlayers, setNewBundleMaxPlayers] = useState<number>(50);
     const [newBundlePoolsIncluded, setNewBundlePoolsIncluded] = useState<number>(3);
-    const [newBundleDuration, setNewBundleDuration] = useState<number>(0);
+    const [newBundleTermDays, setNewBundleTermDays] = useState<number>(365);
 
     // Sync custom claims on mount for active session to resolve catch-22 permissions issue
     useEffect(() => {
@@ -191,24 +206,39 @@ export const SuperAdminBillingPanel: React.FC = () => {
         loadUsers();
     }, [subTab]);
 
-    // 5.5. Dynamic Bundle Helpers
+    // 5.5. Dynamic Bundle Helpers — construct a canonical Package (kind-tagged).
     const handleAddBundle = () => {
         if (!newBundleName.trim() || !newBundleDesc.trim()) {
             toast.error("Name and description are required.");
             return;
         }
 
-        const newBundle: BillingBundle = {
+        const base = {
             id: `bundle_${Date.now()}`,
             name: newBundleName.trim(),
             description: newBundleDesc.trim(),
             price: newBundlePrice,
-            poolType: newBundlePoolType as any,
+            poolType: newBundlePoolType as Package['poolType'],
             maxPlayersPerPool: newBundleMaxPlayers,
-            poolsIncluded: newBundlePoolsIncluded,
-            durationDays: newBundleDuration,
-            isActive: true
+            isActive: true,
         };
+
+        let newBundle: Package;
+        if (newBundleKind === 'UNLIMITED_PASS') {
+            if (newBundleTermDays < 1) {
+                toast.error("An Unlimited Pass needs a term of at least 1 day.");
+                return;
+            }
+            newBundle = { ...base, kind: 'UNLIMITED_PASS', termDays: Math.round(newBundleTermDays) };
+        } else {
+            // CREDIT_BUNDLE — creditsTotal capped at 100 (product-smell ceiling).
+            const credits = Math.round(newBundlePoolsIncluded);
+            if (credits < 1 || credits > 100) {
+                toast.error("A Credit Bundle must include between 1 and 100 pool credits.");
+                return;
+            }
+            newBundle = { ...base, kind: 'CREDIT_BUNDLE', poolsIncluded: credits };
+        }
 
         const currentList = Array.isArray(config.packagesList) ? config.packagesList : [];
         setConfig({
@@ -217,13 +247,14 @@ export const SuperAdminBillingPanel: React.FC = () => {
         });
 
         // Reset Form
+        setNewBundleKind('CREDIT_BUNDLE');
         setNewBundleName('');
         setNewBundleDesc('');
         setNewBundlePrice(39);
         setNewBundlePoolType('ALL');
         setNewBundleMaxPlayers(50);
         setNewBundlePoolsIncluded(3);
-        setNewBundleDuration(0);
+        setNewBundleTermDays(365);
     };
 
     const handleDeleteBundle = async (bundleId: string) => {
@@ -462,8 +493,23 @@ export const SuperAdminBillingPanel: React.FC = () => {
                     >
                         <KeyRound size={13} /> Pool Overrides
                     </button>
+                    <button
+                        onClick={() => setSubTab('monetization')}
+                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-all flex items-center gap-1.5 ${
+                            subTab === 'monetization' ? 'bg-navy-800 text-white' : 'text-muted hover:text-[color:var(--text)]'
+                        }`}
+                    >
+                        <BarChart3 size={13} /> Accounting
+                    </button>
                 </div>
             </div>
+
+            {/* TAB: MONETIZATION — accounting, coupon-abuse alerts, templates (PLAN Phase 6) */}
+            {subTab === 'monetization' && (
+                <div className="animate-in fade-in duration-300">
+                    <MonetizationDashboard />
+                </div>
+            )}
 
             {/* TAB 1: TIERS & BASE PRICING */}
             {subTab === 'tiers' && (
@@ -1130,8 +1176,20 @@ export const SuperAdminBillingPanel: React.FC = () => {
                         {/* Left: Bundle Creator Form */}
                         <div className="lg:col-span-5 bg-surface p-6 border border-line rounded-2xl space-y-4">
                             <h3 className="font-display font-bold text-gold-500 flex items-center gap-1.5 border-b border-line pb-2 text-sm uppercase tracking-[0.08em]">
-                                <Gift size={16} className="text-gold-500" /> Spawn Custom Credit Bundle
+                                <Gift size={16} className="text-gold-500" /> Spawn Bundle Product
                             </h3>
+
+                            <div>
+                                <label className="block text-[10px] font-display font-bold text-muted uppercase tracking-[0.08em] mb-1.5">Product Kind</label>
+                                <select
+                                    value={newBundleKind}
+                                    onChange={(e) => setNewBundleKind(e.target.value as 'CREDIT_BUNDLE' | 'UNLIMITED_PASS')}
+                                    className="w-full px-3 py-2 bg-page border-[1.5px] border-line rounded-lg text-[color:var(--text)] font-bold text-xs font-body"
+                                >
+                                    <option value="CREDIT_BUNDLE">Credit Bundle (N pool credits, never expire)</option>
+                                    <option value="UNLIMITED_PASS">Unlimited Pass (unlimited pools for a term)</option>
+                                </select>
+                            </div>
 
                             <div>
                                 <label className="block text-[10px] font-display font-bold text-muted uppercase tracking-[0.08em] mb-1.5">Bundle Name</label>
@@ -1200,28 +1258,34 @@ export const SuperAdminBillingPanel: React.FC = () => {
                                     />
                                     <span className="text-[8px] text-faint mt-0.5 block text-center font-body num">9999 = Unlimited</span>
                                 </div>
-                                <div>
-                                    <label className="block text-[10px] font-display font-bold text-muted uppercase tracking-[0.08em] mb-1.5" title="Number of pool credits included in this package">Pools Included</label>
-                                    <input
-                                        type="number"
-                                        required
-                                        value={newBundlePoolsIncluded}
-                                        onChange={(e) => setNewBundlePoolsIncluded(Math.max(1, parseInt(e.target.value) || 1))}
-                                        className="num w-full px-3 py-2 bg-page border-[1.5px] border-line rounded-lg text-[color:var(--text)] font-bold text-xs text-center"
-                                    />
-                                    <span className="text-[8px] text-faint mt-0.5 block text-center font-body num">9999 = Unlimited</span>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-display font-bold text-muted uppercase tracking-[0.08em] mb-1.5" title="Period of validity for the credits in days. 0 = never expires">Duration (Days)</label>
-                                    <input
-                                        type="number"
-                                        required
-                                        value={newBundleDuration}
-                                        onChange={(e) => setNewBundleDuration(Math.max(0, parseInt(e.target.value) || 0))}
-                                        className="num w-full px-3 py-2 bg-page border-[1.5px] border-line rounded-lg text-[color:var(--text)] font-bold text-xs text-center"
-                                    />
-                                    <span className="text-[8px] text-faint mt-0.5 block text-center font-body num">0 = No Expiration</span>
-                                </div>
+                                {newBundleKind === 'CREDIT_BUNDLE' ? (
+                                    <div>
+                                        <label className="block text-[10px] font-display font-bold text-muted uppercase tracking-[0.08em] mb-1.5" title="Number of pool credits included (max 100)">Pool Credits</label>
+                                        <input
+                                            type="number"
+                                            required
+                                            min={1}
+                                            max={100}
+                                            value={newBundlePoolsIncluded}
+                                            onChange={(e) => setNewBundlePoolsIncluded(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
+                                            className="num w-full px-3 py-2 bg-page border-[1.5px] border-line rounded-lg text-[color:var(--text)] font-bold text-xs text-center"
+                                        />
+                                        <span className="text-[8px] text-faint mt-0.5 block text-center font-body num">1–100 · never expire</span>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <label className="block text-[10px] font-display font-bold text-muted uppercase tracking-[0.08em] mb-1.5" title="Pass validity in days">Term (Days)</label>
+                                        <input
+                                            type="number"
+                                            required
+                                            min={1}
+                                            value={newBundleTermDays}
+                                            onChange={(e) => setNewBundleTermDays(Math.max(1, parseInt(e.target.value) || 1))}
+                                            className="num w-full px-3 py-2 bg-page border-[1.5px] border-line rounded-lg text-[color:var(--text)] font-bold text-xs text-center"
+                                        />
+                                        <span className="text-[8px] text-faint mt-0.5 block text-center font-body num">e.g. 365 = 1 year</span>
+                                    </div>
+                                )}
                             </div>
 
                             <button
@@ -1249,18 +1313,32 @@ export const SuperAdminBillingPanel: React.FC = () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {(Array.isArray(config.packagesList) ? config.packagesList : []).map((b) => (
+                                        {(Array.isArray(config.packagesList) ? config.packagesList : []).map(normalizeLegacyPackage).map((b) => (
                                             <tr key={b.id} className="border-b border-line hover:bg-page">
                                                 <td className="p-3 max-w-[200px] truncate">
-                                                    <div className="font-bold text-[color:var(--text)] text-xs font-body">{b.name}</div>
+                                                    <div className="font-bold text-[color:var(--text)] text-xs font-body flex items-center gap-1.5">
+                                                        {b.name}
+                                                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-display font-bold uppercase tracking-[0.05em] ${b.kind === 'UNLIMITED_PASS' ? 'bg-navy-800/15 text-navy-700 dark:text-[#9FB0CC]' : 'bg-gold-500/15 text-gold-700 dark:text-gold-400'}`}>
+                                                            {b.kind === 'UNLIMITED_PASS' ? 'Pass' : 'Credits'}
+                                                        </span>
+                                                    </div>
                                                     <div className="text-[9px] text-faint mt-0.5 leading-normal whitespace-normal font-body">{b.description}</div>
                                                 </td>
                                                 <td className="p-3 text-[10px] text-muted font-medium">
                                                     <div className="flex flex-col gap-0.5 font-mono">
                                                         <span>Pool: <strong className="text-gold-700 dark:text-gold-400">{b.poolType}</strong></span>
                                                         <span>Max Size: <strong className="text-gold-700 dark:text-gold-400 num">{b.maxPlayersPerPool === 9999 ? '∞' : `${b.maxPlayersPerPool} players`}</strong></span>
-                                                        <span>Count: <strong className="text-gold-700 dark:text-gold-400 num">{b.poolsIncluded === 9999 ? '∞' : `${b.poolsIncluded} pools`}</strong></span>
-                                                        <span>Valid: <strong className="text-gold-700 dark:text-gold-400 num">{b.durationDays === 0 ? 'Never Exp' : `${b.durationDays} days`}</strong></span>
+                                                        {b.kind === 'CREDIT_BUNDLE' ? (
+                                                            <>
+                                                                <span>Count: <strong className="text-gold-700 dark:text-gold-400 num">{`${b.poolsIncluded} credits`}</strong></span>
+                                                                <span>Valid: <strong className="text-gold-700 dark:text-gold-400 num">Never Exp</strong></span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <span>Count: <strong className="text-gold-700 dark:text-gold-400 num">∞ pools</strong></span>
+                                                                <span>Valid: <strong className="text-gold-700 dark:text-gold-400 num">{`${b.termDays} days`}</strong></span>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 </td>
                                                 <td className="p-3 text-center font-bold text-gold-700 dark:text-gold-400 font-mono text-xs num">

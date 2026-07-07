@@ -1,12 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../../firebase';
-import { doc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where } from 'firebase/firestore';
 import { dbService } from '../../services/dbService';
 import {
     Ticket, CheckCircle, AlertTriangle, ShieldCheck,
     CreditCard, ArrowRight, Sparkles, Gift, Rocket, Wallet
 } from 'lucide-react';
-import type { BillingConfig, Coupon } from '../../types';
+import type { BillingConfig } from '../../types';
+import type { PoolQuote, PoolQuoteInput, AddonSelection } from '@shared/schemas/quote';
+
+// Lightweight applied-coupon shape derived from the server quote's couponState
+// (the full `coupons` doc is no longer read on the client — ADR-0002).
+type AppliedCoupon = {
+    code: string;
+    discountType: 'percentage' | 'flat';
+    discountValue: number;
+};
 
 interface BillingInvoiceCardProps {
     poolId?: string;
@@ -25,9 +34,14 @@ interface BillingInvoiceCardProps {
     onFeatureToggle?: (featureKey: 'aiCommissioner' | 'whatIfSimulator' | 'customBranding' | 'smsNotifications', enabled: boolean) => void; // NEW
 }
 
+// Display-only fallback. The server (getPoolQuote) is the price authority; this
+// config only drives which add-on toggles/labels render before the first quote
+// returns. Kept schema-complete (trialDays / formatTierMap / packagesList) so it
+// satisfies the BillingConfig output type.
 const DEFAULT_BILLING_CONFIG: BillingConfig = {
     freePlayerThreshold: 10,
     gracePeriodDays: 7,
+    trialDays: 14,
     pricing: {
         season: [
             { min: 11, max: 25, price: 29 },
@@ -54,11 +68,22 @@ const DEFAULT_BILLING_CONFIG: BillingConfig = {
             { min: 101, max: 9999, price: 39 }
         ]
     },
+    formatTierMap: {
+        SQUARES: 'squares',
+        BRACKET: 'bracket',
+        NFL_PLAYOFFS: 'bracket',
+        PROPS: 'props',
+        NFL_PICKEM: 'season',
+        NFL_SURVIVOR: 'season',
+        NFL_MARGIN: 'season',
+    },
     features: {
         aiCommissioner: { isPremium: true, addonPrice: 19 },
         whatIfSimulator: { isPremium: true, addonPrice: 9 },
-        customBranding: { isPremium: true, addonPrice: 29 }
-    }
+        customBranding: { isPremium: true, addonPrice: 29 },
+        smsNotifications: { isPremium: true, addonPrice: 9 }
+    },
+    packagesList: []
 };
 
 export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
@@ -68,7 +93,8 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     estimatedPlayers,
     hasAiCommissioner = false,
     hasWhatIfSimulator = false,
-    hasCustomBranding = true, // Default to true as custom branding is standard/premium depending on config
+    hasCustomBranding = false, // Premium add-on — opt-in only, never auto-charged
+    hasSmsNotifications = false,
     isWizard = false,
     pricePaid = 0, // NEW
     onTosAcceptChange,
@@ -78,16 +104,23 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
 }) => {
     const [config, setConfig] = useState<BillingConfig>(DEFAULT_BILLING_CONFIG);
     const [couponInput, setCouponInput] = useState(initialCouponCode);
-    const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
+    // Coupon state now comes from the server quote (getPoolQuote) — no direct
+    // `coupons` Firestore query (ADR-0002: coupons are admin-read-only).
+    const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
     const [couponError, setCouponError] = useState<string | null>(null);
     const [couponSuccess, setCouponSuccess] = useState<string | null>(null);
     const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
     const [tosAccepted, setTosAccepted] = useState(false);
 
+    // Server-computed quote (single price authority). All money numbers below are
+    // derived from this — the client performs NO price math.
+    const [quote, setQuote] = useState<PoolQuote | null>(null);
+
     // Local addon selection states for the Setup Wizard (Included in trial!)
     const [localAi, setLocalAi] = useState(hasAiCommissioner);
     const [localSim, setLocalSim] = useState(hasWhatIfSimulator);
     const [localBranding, setLocalBranding] = useState(hasCustomBranding);
+    const [localSms, setLocalSms] = useState(hasSmsNotifications);
 
     useEffect(() => {
         setLocalAi(hasAiCommissioner);
@@ -101,11 +134,16 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         setLocalBranding(hasCustomBranding);
     }, [hasCustomBranding]);
 
-    const handleToggleFeature = (key: 'aiCommissioner' | 'whatIfSimulator' | 'customBranding', enabled: boolean) => {
+    useEffect(() => {
+        setLocalSms(hasSmsNotifications);
+    }, [hasSmsNotifications]);
+
+    const handleToggleFeature = (key: 'aiCommissioner' | 'whatIfSimulator' | 'customBranding' | 'smsNotifications', enabled: boolean) => {
         if (key === 'aiCommissioner') setLocalAi(enabled);
         if (key === 'whatIfSimulator') setLocalSim(enabled);
         if (key === 'customBranding') setLocalBranding(enabled);
-        
+        if (key === 'smsNotifications') setLocalSms(enabled);
+
         if (onFeatureToggle) {
             onFeatureToggle(key, enabled);
         }
@@ -185,48 +223,85 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         return () => unsubscribe();
     }, []);
 
-    // Calculate Pricing based on configuration rules
-    const getBasePrice = () => {
-        const pType = poolType.toUpperCase();
-        const players = Number(estimatedPlayers) || 0;
-
-        // Free tier exemption
-        if (players <= config.freePlayerThreshold) {
-            return 0;
-        }
-
-        let tiers: any[] = [];
-        if (pType === 'SQUARES') {
-            tiers = config.pricing.squares || [];
-        } else if (pType === 'PROPS') {
-            tiers = config.pricing.props || [];
-        } else if (pType === 'BRACKET' || pType === 'NFL_PLAYOFFS') {
-            tiers = config.pricing.bracket || [];
-        } else {
-            tiers = config.pricing.season || [];
-        }
-
-        const matched = (Array.isArray(tiers) ? tiers : []).find(t => players >= t.min && players <= t.max);
-        if (matched) return matched.price;
-
-        if (Array.isArray(tiers) && tiers.length > 0) {
-            const sorted = [...tiers].sort((a, b) => b.min - a.min);
-            return sorted[0].price;
-        }
-
-        return 0;
+    // The current add-on selection sent to the server for pricing (SMS included —
+    // the pre-overhaul card omitted SMS from the subtotal; that bug is fixed by
+    // routing every add-on through the server quote).
+    const selectedAddons: AddonSelection = {
+        aiCommissioner: !!localAi,
+        smsNotifications: !!localSms,
+        whatIfSimulator: !!localSim,
+        customBranding: !!localBranding,
     };
 
-    const basePrice = getBasePrice();
+    // Fetch the authoritative server quote whenever inputs change (debounced).
+    // getPoolQuote validates the coupon AND itemizes the price — the client does
+    // no price math and no direct `coupons` query.
+    useEffect(() => {
+        let cancelled = false;
+        // Only the seven server pool formats are priceable; skip unknowns.
+        const normalizedType = poolType.toUpperCase();
+        const t = setTimeout(async () => {
+            setIsValidatingCoupon(!!couponInput.trim());
+            try {
+                const q = await dbService.getPoolQuote({
+                    poolType: normalizedType as PoolQuoteInput['poolType'],
+                    estimatedPlayers: Number(estimatedPlayers) || 0,
+                    addons: selectedAddons,
+                    couponCode: couponInput.trim() ? couponInput.trim().toUpperCase() : undefined,
+                });
+                if (cancelled) return;
+                setQuote(q);
 
-    // Features add-on cost (only charged if marked as premium in active config)
-    const aiCost = (localAi && config.features.aiCommissioner?.isPremium) ? config.features.aiCommissioner.addonPrice : 0;
-    const simCost = (localSim && config.features.whatIfSimulator?.isPremium) ? config.features.whatIfSimulator.addonPrice : 0;
-    const brandingCost = (localBranding && config.features.customBranding?.isPremium) ? config.features.customBranding.addonPrice : 0;
-    
-    // Pro-rate the subtotal
-    const subtotalRaw = basePrice + aiCost + simCost + brandingCost;
-    const subtotal = Math.max(0, subtotalRaw - pricePaid);
+                // Reflect coupon state from the server response.
+                if (couponInput.trim()) {
+                    if (q.couponState?.valid) {
+                        setAppliedCoupon({
+                            code: q.couponState.code,
+                            discountType: q.couponState.discountType || 'percentage',
+                            discountValue: q.couponState.discountValue || 0,
+                        });
+                        setCouponSuccess(`Success! Applied ${q.couponState.discountLabel || 'discount'} to your order.`);
+                        setCouponError(null);
+                    } else {
+                        setAppliedCoupon(null);
+                        setCouponSuccess(null);
+                        setCouponError(q.couponState?.reason || 'Invalid coupon code.');
+                    }
+                } else {
+                    setAppliedCoupon(null);
+                    setCouponSuccess(null);
+                    setCouponError(null);
+                }
+            } catch (err: any) {
+                if (cancelled) return;
+                console.error('[BillingInvoiceCard] Quote error:', err);
+                // Leave the last good quote in place; only surface coupon errors.
+                if (couponInput.trim()) {
+                    setCouponError(err?.message || 'Error validating coupon. Please try again.');
+                }
+            } finally {
+                if (!cancelled) setIsValidatingCoupon(false);
+            }
+        }, 300);
+        return () => {
+            cancelled = true;
+            clearTimeout(t);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [poolType, estimatedPlayers, localAi, localSim, localBranding, localSms, couponInput]);
+
+    // --- Derived display values, ALL sourced from the server quote ---
+    const basePrice = quote?.basePrice ?? 0;
+    const addonAmount = (key: 'aiCommissioner' | 'whatIfSimulator' | 'customBranding' | 'smsNotifications') =>
+        quote?.addonLines.find(l => l.key === key)?.amount ?? 0;
+    const aiCost = addonAmount('aiCommissioner');
+    const simCost = addonAmount('whatIfSimulator');
+    const brandingCost = addonAmount('customBranding');
+    const smsCost = addonAmount('smsNotifications');
+
+    // Server subtotal already includes every add-on (incl. SMS). Previous
+    // payments credit is a client-side display adjustment on top.
+    const subtotal = Math.max(0, (quote?.subtotal ?? 0) - pricePaid);
 
     const hasUnlimitedPass = !!(managerProfile?.activeBundleType === 'unlimited_1yr' && managerProfile?.bundleExpiresAt && managerProfile.bundleExpiresAt > Date.now());
     const freePoolsAvailable = managerProfile?.freePoolsAvailable || 0;
@@ -234,35 +309,29 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     // Scan poolCredits array for any matching eligible credits
     const getEligibleCustomCredit = () => {
         if (!Array.isArray(managerProfile?.poolCredits)) return null;
-        
+
         const normalizedType = poolType.toUpperCase();
         const playersCount = Number(estimatedPlayers) || 0;
-        
+
         return managerProfile.poolCredits.find((c: any) => {
             if (c.isUsed) return false;
             if (c.expiresAt && c.expiresAt < Date.now()) return false;
-            
+
             // Match poolType restriction
             const matchesType = c.poolType === 'ALL' || c.poolType === normalizedType;
             // Match player size constraint
             const matchesSize = playersCount <= c.maxPlayersPerPool;
-            
+
             return matchesType && matchesSize;
         });
     };
 
     const eligibleCredit = getEligibleCustomCredit();
 
-    // Apply Coupon discount
-    const getDiscountAmount = () => {
-        if (!appliedCoupon) return 0;
-        if (appliedCoupon.discountType === 'percentage') {
-            return subtotal * (appliedCoupon.discountValue / 100);
-        }
-        return appliedCoupon.discountValue;
-    };
-
-    const discount = Math.min(subtotal, getDiscountAmount());
+    // Coupon discount comes from the server quote (clamped there). We re-apply
+    // the client-only previous-payments credit proportionally to the displayed
+    // subtotal so the itemized line stays consistent.
+    const discount = Math.min(subtotal, quote?.discount ?? 0);
     const standardTotal = Math.max(0, subtotal - discount);
     const total = (hasUnlimitedPass || (useCredit && (freePoolsAvailable > 0 || !!eligibleCredit))) ? 0 : standardTotal;
 
@@ -273,85 +342,23 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         }
     }, [appliedCoupon, total, onCouponAppliedChange]);
 
-    // Reusable Coupon Application & Verification
-    const applyCouponCode = async (codeToApply: string) => {
-        if (!codeToApply.trim()) return;
-
-        setIsValidatingCoupon(true);
-        setCouponError(null);
-        setCouponSuccess(null);
-
-        try {
-            const code = codeToApply.toUpperCase().trim();
-            const q = query(collection(db, 'coupons'), where('code', '==', code));
-            const snap = await getDocs(q);
-
-            if (snap.empty) {
-                setCouponError('Invalid coupon code.');
-                setAppliedCoupon(null);
-                return;
-            }
-
-            const coupon = { id: snap.docs[0].id, ...snap.docs[0].data() } as Coupon;
-            const now = Date.now();
-
-            // Client-side validations matching backend rules
-            if (!coupon.isActive) {
-                setCouponError('This coupon is no longer active.');
-                setAppliedCoupon(null);
-                return;
-            }
-            if (coupon.expiresAt && coupon.expiresAt < now) {
-                setCouponError('This coupon has expired.');
-                setAppliedCoupon(null);
-                return;
-            }
-            if (coupon.maxUses !== undefined && coupon.usesCount >= coupon.maxUses) {
-                setCouponError('This coupon has reached its maximum uses.');
-                setAppliedCoupon(null);
-                return;
-            }
-            if (coupon.allowedPoolTypes && coupon.allowedPoolTypes.length > 0) {
-                const normalizedType = poolType.toUpperCase();
-                if (!coupon.allowedPoolTypes.includes(normalizedType as any)) {
-                    setCouponError(`This coupon is not valid for ${poolType} pools.`);
-                    setAppliedCoupon(null);
-                    return;
-                }
-            }
-
-            // Success!
-            setAppliedCoupon(coupon);
-            const discountDesc = coupon.discountType === 'percentage' 
-                ? `${coupon.discountValue}% off` 
-                : `$${coupon.discountValue} off`;
-            setCouponSuccess(`Success! Applied ${discountDesc} to your order.`);
-        } catch (err: any) {
-            console.error('[BillingInvoiceCard] Coupon error:', err);
-            setCouponError('Error validating coupon. Please try again.');
-            setAppliedCoupon(null);
-        } finally {
-            setIsValidatingCoupon(false);
-        }
-    };
-
-    // Auto-apply initialCouponCode whenever it is changed or provided
+    // Auto-apply initialCouponCode whenever it is changed or provided. The actual
+    // validation happens in the quote effect above (keyed on couponInput).
     useEffect(() => {
         if (initialCouponCode) {
             setCouponInput(initialCouponCode);
-            applyCouponCode(initialCouponCode);
         } else {
-            setAppliedCoupon(null);
             setCouponInput('');
             setCouponSuccess(null);
             setCouponError(null);
         }
     }, [initialCouponCode, poolType]);
 
-    // Handle manual form Coupon Code Verification
+    // Handle manual form Coupon Code Verification — just set the input; the quote
+    // effect re-validates server-side and updates couponState.
     const handleApplyCoupon = async (e: React.FormEvent) => {
         e.preventDefault();
-        await applyCouponCode(couponInput);
+        setCouponInput(couponInput.trim().toUpperCase());
     };
 
     const handleRemoveCoupon = () => {
@@ -370,7 +377,8 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         }
     };
 
-    // Stripe Checkout Trigger
+    // Stripe Checkout Trigger — server prices everything and derives redirect
+    // URLs; the client no longer sends price/tier/successUrl/cancelUrl.
     const handleCheckout = async () => {
         if (!poolId) {
             setCheckoutError('Pool ID is missing. Cannot proceed to checkout.');
@@ -385,19 +393,16 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
             const response = await dbService.createCheckoutSession({
                 poolId,
                 poolName,
-                poolType,
-                tier: (basePrice === 0 && subtotal === 0 && !useCredit && !hasUnlimitedPass) ? 'free_tier' : 'premium_tier',
-                price: total,
+                poolType: poolType.toUpperCase(),
+                estimatedPlayers: Number(estimatedPlayers) || 0,
+                addons: selectedAddons,
                 couponCode: appliedCoupon?.code || undefined,
-                maxPlayersAllowed: estimatedPlayers,
                 usedCredit: useCredit,
                 customCreditId: (useCredit && eligibleCredit) ? eligibleCredit.id : undefined,
-                successUrl: `${window.location.origin}/payment-success?poolId=${poolId}`,
-                cancelUrl: window.location.href
-            } as any);
+            });
 
             if (response?.sessionUrl) {
-                // Redirect securely to Stripe Sandbox
+                // Redirect securely to Stripe (or the server-computed success URL).
                 window.location.href = response.sessionUrl;
             } else {
                 setCheckoutError('Failed to generate checkout session url.');
@@ -533,19 +538,23 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         </div>
                     )}
 
-                    {/* Optional Trial Upgrades & Add-ons */}
-                    {isWizard && (
+                    {/* Optional Add-ons — available in the wizard (free during trial) AND at paid activation (opt-in, priced into the total below) */}
+                    {(
                         <div className="bg-surface border border-line rounded-xl p-4 space-y-3">
                             <h4 className="text-xs font-display font-bold uppercase tracking-[0.08em] flex items-center gap-1.5 text-gold-500">
-                                <Sparkles size={14} /> Optional Trial Upgrades & Add-ons
+                                <Sparkles size={14} /> {isWizard ? 'Optional Trial Upgrades & Add-ons' : 'Optional Premium Add-ons'}
                             </h4>
                             <p className="text-[11px] text-muted leading-normal">
-                                Toggle premium addons for your pool trial. They are <strong className="text-[#0F7B4A]">100% FREE during the 14-day trial</strong> so you can test them out! If you decide to keep them, they'll be included when you eventually upgrade.
+                                {isWizard
+                                    ? <>Toggle premium addons for your pool trial. They are <strong className="text-[#0F7B4A]">100% FREE during the 14-day trial</strong> so you can test them out! If you decide to keep them, they'll be included when you eventually upgrade.</>
+                                    : <>Add premium features to this pool — each is <strong className="text-gold-500">optional</strong> and priced into your total below. Toggle only what you want.</>
+                                }
                             </p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
                                 {[
                                     { key: 'aiCommissioner' as const, label: 'AI Commissioner', desc: 'Auto trash-talk, weekly reviews, and dispute resolution.', value: localAi },
                                     ...( poolType.toUpperCase() === 'BRACKET' ? [{ key: 'whatIfSimulator' as const, label: 'What-If Simulator', desc: 'Interactively simulate potential game results to view projected standings.', value: localSim }] : [] ),
+                                    // SMS Notifications add-on disabled for now (product decision 2026-07-07). Re-add here to bring it back.
                                     { key: 'customBranding' as const, label: 'Custom Branding', desc: 'Upload headers, customized color schemes, and manager logos.', value: localBranding }
                                 ].map(({ key, label, desc, value }) => {
                                     const feat = config.features[key];
@@ -610,6 +619,14 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                 </span>
                             </div>
                         )}
+                        {localSms && config.features.smsNotifications?.isPremium && (
+                            <div className="flex justify-between items-center text-muted text-xs">
+                                <span className="flex items-center gap-1.5"><Sparkles size={11} className="text-gold-500" /> SMS Notifications Addon</span>
+                                <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
+                                    +${smsCost.toFixed(2)} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
+                                </span>
+                            </div>
+                        )}
 
                         {pricePaid > 0 && (
                             <div className="flex justify-between items-center text-muted text-xs border-t border-dashed border-line pt-2 animate-in fade-in duration-200">
@@ -653,7 +670,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                 <input
                                     type="text"
                                     value={couponInput}
-                                    onChange={(e) => setCouponInput(e.target.value)}
+                                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
                                     disabled={appliedCoupon !== null || isValidatingCoupon}
                                     className="w-full bg-page border-[1.5px] border-line focus:border-navy-600 rounded-xl pl-9 pr-4 py-2.5 text-[color:var(--text)] text-xs outline-none uppercase font-mono disabled:opacity-50"
                                     placeholder="e.g. MELEEFREE"
@@ -780,11 +797,14 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                     <div className="space-y-3.5 max-h-[380px] overflow-y-auto pr-1">
                         {Array.isArray(config.packagesList) && config.packagesList.filter(b => b.isActive).length > 0 ? (
                             config.packagesList.filter(b => b.isActive).map((b) => {
-                                const isUnlimited = b.poolsIncluded >= 9999;
+                                // Package is a discriminated union: poolsIncluded lives only on
+                                // CREDIT_BUNDLE; UNLIMITED_PASS carries termDays instead.
+                                const isUnlimited = b.kind === 'UNLIMITED_PASS';
+                                const poolsIncluded = b.kind === 'CREDIT_BUNDLE' ? b.poolsIncluded : 0;
                                 const badgeLabel = isUnlimited ? 'Unlimited Pass' : b.poolType === 'ALL' ? 'Universal Pack' : `${b.poolType} Pack`;
-                                const pricePerPoolLabel = isUnlimited 
-                                    ? 'unlimited hosting' 
-                                    : `$${(b.price / b.poolsIncluded).toFixed(2)} / pool`;
+                                const pricePerPoolLabel = isUnlimited || poolsIncluded <= 0
+                                    ? 'unlimited hosting'
+                                    : `$${(b.price / poolsIncluded).toFixed(2)} / pool`;
 
                                 return (
                                     <div key={b.id} className="bg-page border border-line rounded-xl p-4 flex flex-col justify-between hover:border-gold-500/40 transition-all shadow-md group">
@@ -821,16 +841,11 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                                     setIsCheckoutLoading(true);
                                                     setCheckoutError(null);
                                                     try {
+                                                        // Server prices the bundle and derives redirect URLs.
                                                         const response = await dbService.createCheckoutSession({
-                                                            price: Number(b.price),
                                                             bundleType: b.id,
                                                             poolId: `bundle_${b.id}`,
-                                                            poolName: b.name,
-                                                            poolType: 'BUNDLE',
-                                                            tier: 'bundle',
-                                                            successUrl: `${window.location.origin}/payment-success?poolId=bundle_${b.id}`,
-                                                            cancelUrl: window.location.href
-                                                        } as any);
+                                                        });
                                                         if (response?.sessionUrl) {
                                                             window.location.href = response.sessionUrl;
                                                         } else {
@@ -889,15 +904,9 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                                 setCheckoutError(null);
                                                 try {
                                                     const response = await dbService.createCheckoutSession({
-                                                        price: config.packages?.buy_3 ?? 49.00,
                                                         bundleType: 'buy_3',
                                                         poolId: 'bundle_buy_3',
-                                                        poolName: '3-Pool Bundle Package',
-                                                        poolType: 'BUNDLE',
-                                                        tier: 'bundle',
-                                                        successUrl: `${window.location.origin}/payment-success?poolId=bundle_buy_3`,
-                                                        cancelUrl: window.location.href
-                                                    } as any);
+                                                    });
                                                     if (response?.sessionUrl) {
                                                         window.location.href = response.sessionUrl;
                                                     } else {
@@ -953,15 +962,9 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                                 setCheckoutError(null);
                                                 try {
                                                     const response = await dbService.createCheckoutSession({
-                                                        price: config.packages?.unlimited_1yr ?? 129.00,
                                                         bundleType: 'unlimited_1yr',
                                                         poolId: 'bundle_unlimited_1yr',
-                                                        poolName: '1-Year Unlimited Pool Pass',
-                                                        poolType: 'BUNDLE',
-                                                        tier: 'bundle',
-                                                        successUrl: `${window.location.origin}/payment-success?poolId=bundle_unlimited_1yr`,
-                                                        cancelUrl: window.location.href
-                                                    } as any);
+                                                    });
                                                     if (response?.sessionUrl) {
                                                         window.location.href = response.sessionUrl;
                                                     } else {

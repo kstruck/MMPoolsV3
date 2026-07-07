@@ -690,30 +690,38 @@ export interface PoolBilling {
         whatIfSimulator: boolean;
         customBranding: boolean;
     };
+    // Buy-flow overhaul (NOTES-WAVE2 A4). Written by the checkout/webhook path via
+    // the Admin SDK (dotted paths / `as any`), so these are documented here for
+    // legibility rather than being a compile requirement.
+    // - pendingSessionId: the live checkout reservation gating one session per pool
+    //   (createCheckoutSession idempotency, PLAN Phase 2 #6d).
+    // - paid: the paid ceiling snapshot copied from the reservation on successful
+    //   payment/redemption; enforced on edit (updatePoolSettings) and join.
+    pendingSessionId?: { reservationId: string; at: number };
+    paid?: { tier: string; maxPlayersAllowed: number; addons: string[]; at: number };
 }
 
-export interface BillingTierPrice {
-    min: number;
-    max: number;
-    price: number;
-}
+// Billing config: the canonical contract is the zod schema in
+// shared/schemas/billingConfig.ts (mirrored into ./shared by copy-shared).
+// This file previously duplicated a drifted interface (tier1..tier4 records,
+// flatPrice squares/props) that never matched the real settings/billing_config
+// doc — re-export the shared inferred types instead of re-declaring them.
+export type {
+    BillingConfig,
+    BillingConfigInput,
+    PricingTier,
+    PricingKey,
+    FormatTierMap,
+    Package,
+    CreditBundlePackage,
+    UnlimitedPassPackage,
+    HeroPromo,
+    BillingFeatureFlag,
+    LegacyBillingBundle,
+} from "./shared/schemas/billingConfig";
 
-export interface BillingConfig {
-    freePlayerThreshold: number;
-    gracePeriodDays: number;
-    pricing: {
-        season: { tier1: BillingTierPrice; tier2: BillingTierPrice; tier3: BillingTierPrice; tier4: BillingTierPrice };
-        bracket: { tier1: BillingTierPrice; tier2: BillingTierPrice; tier3: BillingTierPrice; tier4: BillingTierPrice };
-        squares: { flatPrice: number };
-        props: { flatPrice: number };
-    };
-    features: {
-        aiCommissioner: { isPremium: boolean; addonPrice: number };
-        smsNotifications: { isPremium: boolean; addonPrice: number };
-        whatIfSimulator: { isPremium: boolean; addonPrice: number };
-        customBranding: { isPremium: boolean; addonPrice: number };
-    };
-}
+/** @deprecated Legacy alias — use PricingTier from shared/schemas/billingConfig. */
+export type BillingTierPrice = import("./shared/schemas/billingConfig").PricingTier;
 
 export interface Coupon {
     id?: string;

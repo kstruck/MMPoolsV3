@@ -5,10 +5,12 @@ import { BracketPool } from "./types";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import * as crypto from "crypto";
 import { assertPoolCreationAllowed } from "./lib/systemGuards";
+import { computeLaunchMode } from "./poolOps";
+import { loadBillingConfig } from "./billing";
 import {
     validateCreateInput,
     assertNotBanned,
-    freeBilling,
+    billingForLaunch,
     writePoolCreationSideEffects,
 } from "./lib/poolCreation";
 
@@ -99,8 +101,14 @@ export const createBracketPool = onCall(async (request) => {
         createdAt: now,
         updatedAt: now,
     };
-    // free plan, no auto-lock (server-authoritative)
-    (newPool as any).billing = freeBilling();
+    // Launch billing mode (NOTES-WAVE2 A1): free when the requested entry cap is
+    // ≤ the free threshold AND no paid add-on; trial otherwise. A bracket create
+    // with no cap / no add-on stays 'free' (unchanged behavior). Config read
+    // fails open to defaults inside loadBillingConfig.
+    const billingConfig = await loadBillingConfig(db);
+    const launchMode = computeLaunchMode(request.data, billingConfig.freePlayerThreshold);
+    // free or trial per server-computed launch mode (server-authoritative)
+    (newPool as any).billing = billingForLaunch(launchMode, billingConfig.trialDays, now);
 
     // Transaction: create pool + uniform side-effect bundle (managedPools,
     // POOL_CREATED activity, role upgrade). Bracket previously wrote no owner

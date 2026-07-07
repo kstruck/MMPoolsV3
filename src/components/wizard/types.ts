@@ -10,6 +10,11 @@ export interface WizardStepDef {
   title: string;
   fields?: string[];
   Component: ComponentType;
+  // When true, this (final) step renders its OWN primary action(s) and the shell
+  // suppresses its footer Next/Submit button + TOS gate for it. Used by the
+  // LaunchStep, which owns the create → trial/checkout/redeem state machine and
+  // its own Terms gate. The shell still renders Back/Cancel navigation.
+  ownsSubmit?: boolean;
 }
 
 export type WizardMode = 'create' | 'edit';

@@ -8,9 +8,11 @@ import { isPoolType, type PoolType } from './shared/poolTypes';
 import {
     validateCreateInput,
     assertNotBanned,
-    freeBilling,
+    billingForLaunch,
+    type LaunchBillingMode,
     writePoolCreationSideEffects,
 } from './lib/poolCreation';
+import { loadBillingConfig } from './billing';
 import { buildPoolSettingsUpdate } from './lib/poolUpdate';
 
 // Helper to determine if user can manage pool
@@ -45,6 +47,144 @@ export const stripPrivilegedPoolFields = <T extends Record<string, any>>(data: T
     }
     return clean;
 };
+
+// =============================================================================
+// Buy-flow launch mode + paid-ceiling enforcement (NOTES-WAVE2 A1/A2, PLAN 6b)
+// Pure, firebase-free helpers so the create/join callables stay thin and the
+// logic is unit-testable (mirrors billingForLaunch / buildPoolSettingsUpdate).
+// =============================================================================
+
+// The paid add-on flags a create payload can carry. Any one of these set truthy
+// disqualifies a launch from the free plan (the server prices them; the pending
+// snapshot / billing.paid.addons is the authority once paid).
+const PAID_ADDON_KEYS = [
+    'aiCommissioner',
+    'smsNotifications',
+    'whatIfSimulator',
+    'customBranding',
+] as const;
+
+/** True if the create payload requests any paid add-on. Add-ons may arrive as a
+ *  top-level `addons` object or as sibling flags; we accept both shapes so a
+ *  bracket/nfl/squares payload is handled without a per-type schema here. */
+export function payloadHasPaidAddon(data: Record<string, any> | null | undefined): boolean {
+    if (!data || typeof data !== 'object') return false;
+    const addons = (data.addons && typeof data.addons === 'object') ? data.addons : data;
+    return PAID_ADDON_KEYS.some((k) => addons?.[k] === true);
+}
+
+/** Best-effort player estimate from a create payload. Different pool types name
+ *  the cap differently (bracket/playoff: settings.maxEntriesTotal; some payloads:
+ *  top-level maxPlayers / estimatedPlayers). Returns undefined when no estimate
+ *  is present — the caller then defaults to 'free' (see computeLaunchMode). A
+ *  cap of -1 / 0 means "unlimited/unset" and is treated as no estimate. */
+export function estimatedPlayersFromPayload(data: Record<string, any> | null | undefined): number | undefined {
+    if (!data || typeof data !== 'object') return undefined;
+    const candidates = [
+        data.estimatedPlayers,
+        data.maxPlayers,
+        data.maxEntriesTotal,
+        data.settings?.maxEntriesTotal,
+        data.settings?.maxPlayers,
+    ];
+    for (const c of candidates) {
+        if (typeof c === 'number' && Number.isFinite(c) && c > 0) return c;
+    }
+    return undefined;
+}
+
+/**
+ * Launch billing mode (NOTES-WAVE2 A1, PLAN Phase 2 #5): 'free' when the player
+ * estimate is at or below the free threshold AND no paid add-on is selected;
+ * 'trial' otherwise. When the payload carries NO player estimate (many create
+ * payloads don't — e.g. squares is a fixed 100-grid, NFL pools have no cap
+ * field), a launch with no paid add-on defaults to 'free' — behavior-equivalent
+ * to today's always-free launch. Any paid add-on always forces 'trial'.
+ */
+export function computeLaunchMode(
+    data: Record<string, any> | null | undefined,
+    freePlayerThreshold: number,
+): LaunchBillingMode {
+    const hasAddon = payloadHasPaidAddon(data);
+    if (hasAddon) return 'trial';
+    const estimate = estimatedPlayersFromPayload(data);
+    if (estimate === undefined) return 'free'; // no estimate → free (unchanged behavior)
+    return estimate <= freePlayerThreshold ? 'free' : 'trial';
+}
+
+/**
+ * Join/enter paid-ceiling gate (NOTES-WAVE2 A2, PLAN 6b(iii)). Throws when a
+ * PAID pool (billing.paid stamped at activation) is at or above its paid
+ * participant ceiling. No-op for free/trial pools (they keep their existing
+ * tier lock — the 10-player free-plan check that already lives at each site).
+ */
+export function assertPaidParticipantCeiling(
+    billing: { paid?: { maxPlayersAllowed?: number } } | null | undefined,
+    currentParticipantCount: number,
+): void {
+    const paid = billing?.paid;
+    if (!paid || typeof paid.maxPlayersAllowed !== 'number') return;
+    if (currentParticipantCount >= paid.maxPlayersAllowed) {
+        throw new HttpsError(
+            'failed-precondition',
+            'This pool has reached its paid participant ceiling. Upgrade to add more.',
+        );
+    }
+}
+
+/**
+ * updatePoolSettings paid-ceiling gate (NOTES-WAVE2 A2(1), PLAN 6b(ii)). Given
+ * the resolved settings patch, rejects a change that raises the player cap or
+ * enables a paid add-on beyond the paid snapshot. Only enforces when
+ * billing.paid exists — free/trial pools have no paid ceiling here (their cap is
+ * enforced at join against the tier limit), so this is a no-op for them, per the
+ * spec ("Do NOT block if billing.paid is absent").
+ */
+export function assertPaidCeilingForUpdate(
+    billing: { paid?: { maxPlayersAllowed?: number; addons?: string[] } } | null | undefined,
+    set: Record<string, unknown>,
+): void {
+    const paid = billing?.paid;
+    if (!paid) return; // free/trial: no paid ceiling to enforce on edit
+
+    // 1) Player-cap raise. The cap can arrive as a top-level key or nested in the
+    //    settings blob (bracket/playoff use settings.maxEntriesTotal).
+    const requestedCap = ((): number | undefined => {
+        const top = set.maxPlayers ?? set.maxEntriesTotal;
+        if (typeof top === 'number' && Number.isFinite(top)) return top;
+        const s = set.settings;
+        if (s && typeof s === 'object') {
+            const nested = (s as any).maxEntriesTotal ?? (s as any).maxPlayers;
+            if (typeof nested === 'number' && Number.isFinite(nested)) return nested;
+        }
+        return undefined;
+    })();
+    // A cap of -1/0 means "unlimited/unset" — treat as raising beyond any ceiling.
+    if (requestedCap !== undefined && typeof paid.maxPlayersAllowed === 'number') {
+        const raisesCap = requestedCap <= 0 || requestedCap > paid.maxPlayersAllowed;
+        if (raisesCap) {
+            throw new HttpsError(
+                'failed-precondition',
+                'Raising the player cap beyond the paid ceiling requires an upgrade payment.',
+            );
+        }
+    }
+
+    // 2) Enabling a paid add-on not already in the paid snapshot. Add-ons may be
+    //    edited as top-level flags or under branding/featuresUnlocked.
+    const paidAddons = new Set(Array.isArray(paid.addons) ? paid.addons : []);
+    const requestedAddons = (set.featuresUnlocked && typeof set.featuresUnlocked === 'object')
+        ? (set.featuresUnlocked as Record<string, unknown>)
+        : set;
+    for (const key of PAID_ADDON_KEYS) {
+        if ((requestedAddons as any)?.[key] === true && !paidAddons.has(key)) {
+            throw new HttpsError(
+                'failed-precondition',
+                'Enabling a paid add-on beyond the paid ceiling requires an upgrade payment.',
+            );
+        }
+    }
+}
 
 // V2 Create Pool Function
 export const createPool = onCall(async (request) => {
@@ -96,6 +236,12 @@ export const createPool = onCall(async (request) => {
         // Prepare Pool Data
         const now = Timestamp.now();
 
+        // Launch billing mode (NOTES-WAVE2 A1): free when player estimate ≤ the
+        // free threshold AND no paid add-on; trial otherwise. Config read fails
+        // open to defaults inside loadBillingConfig, so this never stalls create.
+        const billingConfig = await loadBillingConfig(db);
+        const launchMode = computeLaunchMode(data, billingConfig.freePlayerThreshold);
+
         const newPool: any = {
             ...data,
             type: poolType, // server-authoritative; never trust/omit the client's
@@ -107,7 +253,8 @@ export const createPool = onCall(async (request) => {
             status: 'DRAFT',
             isLocked: false,
             isPublic: data.isPublic !== undefined ? data.isPublic : true, // Explicitly set for rules
-            billing: freeBilling(), // free plan, no auto-lock (server-authoritative)
+            // free or trial per server-computed launch mode (server-authoritative)
+            billing: billingForLaunch(launchMode, billingConfig.trialDays, now.toMillis()),
         };
 
         // Initialize Squares-specific data
@@ -205,6 +352,11 @@ export const updatePoolSettings = onCall(async (request) => {
     // Pure gate: validates each key against the editability matrix for the
     // pool's lifecycle phase; throws failed-precondition on any disallowed key.
     const { set, clearLegacy } = buildPoolSettingsUpdate(pool, updates as Record<string, unknown>);
+
+    // Paid-ceiling gate (NOTES-WAVE2 A2, PLAN 6b(ii)): a PAID pool cannot raise
+    // its player cap or enable a paid add-on beyond the paid snapshot without a
+    // re-quote + delta payment. No-op for free/trial pools (billing.paid absent).
+    assertPaidCeilingForUpdate(pool?.billing as any, set);
 
     const patch: Record<string, unknown> = {
         ...set,

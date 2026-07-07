@@ -1,11 +1,17 @@
+import { useMemo } from 'react';
 import { useFieldArray, useFormContext, Controller } from 'react-hook-form';
 import type { User } from '../../../types';
 import { dbService } from '../../../services/dbService';
 import { propsCreateInputSchema } from '@shared/schemas';
-import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, StepReview } from '../index';
+import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep } from '../index';
 import { TextField, NumberField, Field } from '../fields';
 import type { WizardStepDef } from '../types';
 import { buildPropsPayload } from './buildPropsPayload';
+
+// Creates the PROPS pool and RESOLVES its poolId (no navigation) for LaunchStep.
+async function createPropsPool(values: Record<string, unknown>): Promise<string> {
+  return dbService.createPool(buildPropsPayload(values));
+}
 
 const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500';
 
@@ -68,14 +74,6 @@ function StepPropsSetup() {
   );
 }
 
-const steps: WizardStepDef[] = [
-  { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
-  { id: 'setup', title: 'Props setup', fields: ['props.questions'], Component: StepPropsSetup },
-  { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="props.cost" feeLabel="Cost per card ($)" /> },
-  { id: 'branding', title: 'Branding', Component: StepBranding },
-  { id: 'review', title: 'Review', Component: () => <StepReview feeField="props.cost" /> },
-];
-
 const defaultValues: Record<string, unknown> = {
   type: 'PROPS',
   name: '', managerName: '', contactEmail: '', isPublic: true,
@@ -87,11 +85,33 @@ const defaultValues: Record<string, unknown> = {
   // schema's min(1)-text/min(2)-options validation, which would silently
   // block "Next" on the setup step before the commissioner touches anything.
   props: { cost: 0, maxCards: 1, questions: [] },
+  // Launch inputs (LaunchStep): player estimate + add-ons drive free vs trial.
+  estimatedPlayers: 0,
+  addons: { aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: false },
   _tosAccepted: false,
 };
 
 export function CreatePropsPool(props: { user: User; onComplete: (poolId: string) => void; onCancel: () => void }) {
   const { user, onComplete, onCancel } = props;
+  const steps: WizardStepDef[] = useMemo(() => [
+    { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
+    { id: 'setup', title: 'Props setup', fields: ['props.questions'], Component: StepPropsSetup },
+    { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="props.cost" feeLabel="Cost per card ($)" /> },
+    { id: 'branding', title: 'Branding', Component: StepBranding },
+    {
+      id: 'launch', title: 'Launch', ownsSubmit: true,
+      Component: () => (
+        <LaunchStep
+          uid={user.id}
+          poolType="PROPS"
+          feeField="props.cost"
+          createPool={createPropsPool}
+          onCreated={onComplete}
+        />
+      ),
+    },
+  ], [user.id, onComplete]);
+
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-10">
       <div className="mx-auto mb-6 max-w-2xl">
@@ -105,8 +125,8 @@ export function CreatePropsPool(props: { user: User; onComplete: (poolId: string
         userId={user.id}
         submitLabel="Launch pool"
         onSubmit={async (values) => {
-          const poolId = await dbService.createPool(buildPropsPayload(values));
-          onComplete(poolId);
+          // Fallback only — LaunchStep owns the create → launch flow (see Bracket).
+          onComplete(await createPropsPool(values));
         }}
         onCancel={onCancel}
       />

@@ -30,4 +30,21 @@ describe('buildBracketPayload', () => {
     expect('zelle' in p.settings.paymentHandles).toBe(false);
     expect(p.venmo).toBeUndefined(); // no legacy top-level for bracket
   });
+
+  it('carries top-level launch fields (estimatedPlayers + addons) the server reads for free/trial', () => {
+    const p = buildBracketPayload({
+      ...base,
+      estimatedPlayers: 25,
+      addons: { aiCommissioner: true, smsNotifications: false, whatIfSimulator: false, customBranding: false },
+    }) as Record<string, any>;
+    expect(p.estimatedPlayers).toBe(25);
+    expect(p.addons).toEqual({ aiCommissioner: true, smsNotifications: false, whatIfSimulator: false, customBranding: false });
+    expect(bracketCreateInputSchema.safeParse(p).success).toBe(true);
+  });
+
+  it('omits estimatedPlayers when blank/0 and defaults all addons to false', () => {
+    const p = buildBracketPayload(base) as Record<string, any>;
+    expect('estimatedPlayers' in p).toBe(false); // no estimate → server treats as free
+    expect(p.addons).toEqual({ aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: false });
+  });
 });

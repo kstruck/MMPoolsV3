@@ -58,4 +58,24 @@ describe('buildNFLPayload', () => {
     expect(p.type).toBe('NFL_MARGIN');
     expect(marginCreateInputSchema.safeParse(p).success).toBe(true);
   });
+
+  it('carries top-level launch fields (estimatedPlayers + addons) the server reads for free/trial', () => {
+    const p = buildNFLPayload(
+      {
+        ...pickemBase,
+        estimatedPlayers: 50,
+        addons: { aiCommissioner: false, smsNotifications: false, whatIfSimulator: true, customBranding: false },
+      },
+      'NFL_PICKEM',
+    ) as Record<string, any>;
+    expect(p.estimatedPlayers).toBe(50);
+    expect(p.addons.whatIfSimulator).toBe(true);
+    expect(pickemCreateInputSchema.safeParse(p).success).toBe(true);
+  });
+
+  it('omits estimatedPlayers when blank/0 and defaults all addons to false', () => {
+    const p = buildNFLPayload(pickemBase, 'NFL_PICKEM') as Record<string, any>;
+    expect('estimatedPlayers' in p).toBe(false);
+    expect(p.addons).toEqual({ aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: false });
+  });
 });

@@ -1,14 +1,20 @@
+import { useMemo } from 'react';
 import { useFormContext } from 'react-hook-form';
 import type { User } from '../../../types';
 import { dbService } from '../../../services/dbService';
 import { playoffCreateInputSchema } from '@shared/schemas';
 import {
-  WizardShell, StepBasics, StepFeeAndPayment, StepBranding, StepReminders, StepReview,
+  WizardShell, StepBasics, StepFeeAndPayment, StepBranding, StepReminders, LaunchStep,
 } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
 import { TextField, NumberField, Field } from '../fields';
 import type { WizardStepDef } from '../types';
 import { buildPlayoffPayload } from './buildPlayoffPayload';
+
+// Creates the NFL_PLAYOFFS pool and RESOLVES its poolId (no navigation) for LaunchStep.
+async function createPlayoffPool(values: Record<string, unknown>): Promise<string> {
+  return dbService.createPool(buildPlayoffPayload(values));
+}
 
 // Playoff-specific slot: season, lock date, and round scoring.
 function StepPlayoffDetails() {
@@ -33,16 +39,6 @@ function StepPlayoffDetails() {
   );
 }
 
-const steps: WizardStepDef[] = [
-  { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
-  { id: 'details', title: 'Playoff details', fields: ['season'], Component: StepPlayoffDetails },
-  { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="settings.entryFee" /> },
-  { id: 'payouts', title: 'Payouts', Component: () => <StepPayouts payoutsField="settings.payouts" /> },
-  { id: 'branding', title: 'Branding', Component: StepBranding },
-  { id: 'reminders', title: 'Reminders', Component: StepReminders },
-  { id: 'review', title: 'Review', Component: () => <StepReview feeField="settings.entryFee" /> },
-];
-
 const defaultValues: Record<string, unknown> = {
   type: 'NFL_PLAYOFFS',
   name: '', managerName: '', contactEmail: '', isPublic: true,
@@ -51,6 +47,9 @@ const defaultValues: Record<string, unknown> = {
   paymentHandles: { venmo: '', zelle: '', cashapp: '', paypal: '', googlePay: '' },
   branding: { logoUrl: '', primaryColor: '', secondaryColor: '' },
   reminders: { auto24h: true, auto1h: true, autoLock: true, announceWinner: true },
+  // Launch inputs (LaunchStep): player estimate + add-ons drive free vs trial.
+  estimatedPlayers: 0,
+  addons: { aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: false },
   settings: {
     entryFee: 0,
     isListedPublic: true,
@@ -62,6 +61,27 @@ const defaultValues: Record<string, unknown> = {
 
 export function CreatePlayoffPool(props: { user: User; onComplete: (poolId: string) => void; onCancel: () => void }) {
   const { user, onComplete, onCancel } = props;
+  const steps: WizardStepDef[] = useMemo(() => [
+    { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
+    { id: 'details', title: 'Playoff details', fields: ['season'], Component: StepPlayoffDetails },
+    { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="settings.entryFee" /> },
+    { id: 'payouts', title: 'Payouts', Component: () => <StepPayouts payoutsField="settings.payouts" /> },
+    { id: 'branding', title: 'Branding', Component: StepBranding },
+    { id: 'reminders', title: 'Reminders', Component: StepReminders },
+    {
+      id: 'launch', title: 'Launch', ownsSubmit: true,
+      Component: () => (
+        <LaunchStep
+          uid={user.id}
+          poolType="NFL_PLAYOFFS"
+          feeField="settings.entryFee"
+          createPool={createPlayoffPool}
+          onCreated={onComplete}
+        />
+      ),
+    },
+  ], [user.id, onComplete]);
+
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-10">
       <div className="mx-auto mb-6 max-w-2xl">
@@ -75,8 +95,8 @@ export function CreatePlayoffPool(props: { user: User; onComplete: (poolId: stri
         userId={user.id}
         submitLabel="Launch pool"
         onSubmit={async (values) => {
-          const poolId = await dbService.createPool(buildPlayoffPayload(values));
-          onComplete(poolId);
+          // Fallback only — LaunchStep owns the create → launch flow (see Bracket).
+          onComplete(await createPlayoffPool(values));
         }}
         onCancel={onCancel}
       />

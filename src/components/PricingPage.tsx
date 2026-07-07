@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { User, Pool, BillingConfig } from '../types';
+import { DEFAULT_TRIAL_DAYS, DEFAULT_FORMAT_TIER_MAP, normalizeLegacyPackage } from '@shared/schemas/billingConfig';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { db } from '../firebase';
@@ -8,24 +9,13 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { dbService } from '../services/dbService';
 import {
     CheckCircle, Sparkles, Zap,
-    ArrowRight, LayoutGrid, Users, HelpCircle,
+    ArrowRight, LayoutGrid, Users,
     ChevronRight, HelpCircle as InfoIcon, X
 } from 'lucide-react';
 import { BillingInvoiceCard } from './billing/BillingInvoiceCard';
+import { UpgradeInfoPopover } from './pricing/UpgradeInfoPopover';
+import { EstimateSummaryCard } from './pricing/EstimateSummaryCard';
 import { canAccessPoolCreation } from '../utils/auth';
-
-const UpgradeTooltip: React.FC<{ title: string; description: string }> = ({ title, description }) => {
-    return (
-        <span className="relative group inline-block ml-1">
-            <HelpCircle size={14} className="text-faint hover:text-muted cursor-help inline shrink-0 transition-colors" />
-            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-card border border-line p-3.5 rounded-xl text-[11px] leading-relaxed text-[color:var(--text)] font-body opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-panel z-50 backdrop-blur-md">
-                <strong className="text-gold-600 dark:text-gold-400 block mb-1 font-display font-bold uppercase tracking-[0.08em] text-[10px]">{title}</strong>
-                {description}
-                <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[color:var(--card)]" />
-            </span>
-        </span>
-    );
-};
 
 interface PricingPageProps {
     user?: User | null;
@@ -72,20 +62,13 @@ const DEFAULT_BILLING_CONFIG: BillingConfig = {
         whatIfSimulator: { isPremium: true, addonPrice: 9 },
         customBranding: { isPremium: true, addonPrice: 29 }
     },
+    trialDays: DEFAULT_TRIAL_DAYS,
+    formatTierMap: DEFAULT_FORMAT_TIER_MAP,
+    packagesList: [],
     packages: {
         buy_3: 49.00,
         unlimited_1yr: 129.00
     }
-};
-
-// Active promo banner — surfaces best available pre-season coupon.
-// Update window/code/discount as promos roll forward.
-const ACTIVE_PROMO = {
-    code: 'EARLYBIRD30',
-    discount: 30,
-    label: 'EARLY BIRD',
-    endsAt: new Date('2026-07-31T23:59:59').getTime(),
-    blurb: 'Pre-season launch — lock in 30% off your NFL or NCAA pool before July 31.'
 };
 
 /* Hero band stays navy chrome (always dark); the pricing content below flips light/dark. */
@@ -117,6 +100,19 @@ export const PricingPage: React.FC<PricingPageProps> = ({
     const [calcAi, setCalcAi] = useState<boolean>(false);
     const [calcSms, setCalcSms] = useState<boolean>(false);
     const [calcSim, setCalcSim] = useState<boolean>(false);
+    const [calcBranding, setCalcBranding] = useState<boolean>(false);
+
+    // Explicit visitor-state machine — all render branching below keys off this.
+    const visitorState: 'anon' | 'noPools' | 'hasTrialPools' = !user
+        ? 'anon'
+        : userPools.length > 0
+            ? 'hasTrialPools'
+            : 'noPools';
+
+    // Optional config-driven hero promo (shared BillingConfig schema field).
+    const heroPromo = config.heroPromo;
+    const heroPromoEndsAt = heroPromo?.endsAt != null ? new Date(heroPromo.endsAt).getTime() : Number.NaN;
+    const showHeroPromo = Boolean(heroPromo?.code) && Number.isFinite(heroPromoEndsAt) && heroPromoEndsAt > Date.now();
 
     // Fetch monetization configuration
     useEffect(() => {
@@ -145,20 +141,24 @@ export const PricingPage: React.FC<PricingPageProps> = ({
         return () => unsubscribe();
     }, [user?.id]);
 
+    // Keep selection in sync when the ?poolId= deep link changes after mount.
+    useEffect(() => {
+        if (targetPoolId) setSelectedPoolId(targetPoolId);
+    }, [targetPoolId]);
+
     // Handle Selected Pool monitoring
     useEffect(() => {
-        const poolIdToLoad = selectedPoolId || targetPoolId;
-        if (!poolIdToLoad) {
+        if (!selectedPoolId) {
             setSelectedPoolData(null);
             return;
         }
 
-        const unsubscribe = dbService.subscribeToPool(poolIdToLoad, (pool) => {
+        const unsubscribe = dbService.subscribeToPool(selectedPoolId, (pool) => {
             if (pool) {
                 setSelectedPoolData(pool);
                 // Synchronize calculator inputs to match selected pool for convenience
                 setCalcPoolType(pool.type);
-                setCalcPlayers((pool as any).settings?.maxEntriesTotal === -1 ? 40 : ((pool as any).settings?.maxEntriesTotal || 40));
+                setCalcPlayers((pool as any).estimatedPlayers || ((pool as any).settings?.maxEntriesTotal > 0 ? (pool as any).settings.maxEntriesTotal : 30));
                 setCalcAi(pool.billing?.featuresUnlocked?.aiCommissioner || false);
                 setCalcSms(pool.billing?.featuresUnlocked?.smsNotifications || false);
                 setCalcSim(pool.billing?.featuresUnlocked?.whatIfSimulator || false);
@@ -167,7 +167,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
             console.error('[PricingPage] Error fetching pool details:', err);
         });
         return () => unsubscribe();
-    }, [selectedPoolId, targetPoolId]);
+    }, [selectedPoolId]);
 
     return (
         <div className="min-h-screen text-[color:var(--text)] font-body bg-page flex flex-col">
@@ -201,21 +201,45 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                         Start every pool with a <strong className="text-white">14-day free trial</strong>. Upgrade anytime to unlock premium tools, live scoring syncs, AI updates, and SMS alerts.
                     </p>
 
-                    {ACTIVE_PROMO.endsAt > Date.now() && (
-                        <div className="mt-6 inline-flex flex-col sm:flex-row items-center gap-3.5 px-6 py-4 rounded-3xl border border-gold-500/25 bg-navy-900/60 backdrop-blur-md shadow-panel relative overflow-hidden group max-w-3xl mx-auto">
+                    {showHeroPromo && heroPromo && (
+                        <div className="mt-6 inline-flex flex-col sm:flex-row items-center gap-3.5 px-6 py-4 rounded-3xl border border-gold-500/25 bg-navy-900/60 backdrop-blur-md shadow-panel relative overflow-hidden max-w-3xl mx-auto">
                             {/* Inner soft glow */}
                             <div className="absolute inset-0 bg-gradient-to-r from-gold-500/5 via-gold-400/5 to-gold-500/5 opacity-50 pointer-events-none" />
 
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gold-500/10 border border-gold-400/35 font-display font-bold text-[10px] uppercase tracking-[0.08em] text-gold-300 shadow-sm shrink-0">
-                                <Sparkles size={12} className="animate-live-pulse" /> {ACTIVE_PROMO.label}
+                                <Sparkles size={12} className="animate-live-pulse" /> {heroPromo.discountLabel || 'Limited-Time Offer'}
                             </span>
                             <span className="text-xs sm:text-sm text-[#EDF1F8] font-body leading-relaxed text-left">
-                                {ACTIVE_PROMO.blurb} Use code{' '}
+                                Limited-time promo — use code{' '}
                                 <code className="px-2 py-0.5 rounded-md bg-navy-950 border border-gold-400/40 text-gold-300 font-mono font-black text-xs shadow-inner">
-                                    {ACTIVE_PROMO.code}
+                                    {heroPromo.code}
                                 </code>{' '}
-                                at checkout — save <span className="num">{ACTIVE_PROMO.discount}%</span>.
+                                at checkout.
                             </span>
+                        </div>
+                    )}
+
+                    {/* Anonymous visitors get a direct, login-free path into the wizard. */}
+                    {visitorState === 'anon' && (
+                        <div className="pt-2 space-y-3">
+                            <button
+                                onClick={canCreate ? () => navigate('/create-pool') : undefined}
+                                disabled={!canCreate}
+                                title={canCreate ? 'Start building your pool — no account needed' : 'Pool creation is coming soon'}
+                                className="inline-flex items-center justify-center gap-2 bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-4 px-8 rounded-2xl text-sm transition-all duration-150 hover:-translate-y-px shadow-red-cta group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                            >
+                                {canCreate ? (
+                                    <>
+                                        Build Your Pool — Free to Start
+                                        <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                                    </>
+                                ) : (
+                                    'Pool Creation Coming Soon'
+                                )}
+                            </button>
+                            <p className="text-xs text-[#9FB0CC] font-body">
+                                No account needed to start building — pools of <span className="num">{config.freePlayerThreshold}</span> players or fewer host free.
+                            </p>
                         </div>
                     )}
                 </div>
@@ -229,7 +253,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                     <div className="lg:col-span-7 space-y-8">
 
                         {/* Pool Upgrade Select (If Logged In & Has Trial Pools) */}
-                        {user && userPools.length > 0 && (
+                        {visitorState === 'hasTrialPools' && (
                             <div className="bg-card border border-gold-500/25 rounded-3xl p-6 space-y-4 shadow-panel">
                                 <h3 className="font-display font-bold uppercase text-lg text-[color:var(--text)] flex items-center gap-2">
                                     <Sparkles className="text-gold-600 dark:text-gold-400" size={20} />
@@ -275,8 +299,9 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                             </div>
                         )}
 
-                        {/* Interactive Billing Calculator Panel */}
-                        <div className={`${contentCard} p-6 md:p-8 rounded-3xl space-y-6 shadow-panel backdrop-blur-md hover:border-gold-500/40 transition-all duration-300 relative overflow-hidden group`}>
+                        {/* Interactive Billing Calculator Panel — hidden when a specific pool is selected (that pool's checkout on the right is authoritative; the estimator is for exploring pricing before you pick a pool) */}
+                        {!selectedPoolData && (
+                        <div className={`${contentCard} p-6 md:p-8 rounded-3xl space-y-6 shadow-panel backdrop-blur-md hover:border-gold-500/40 transition-all duration-300 relative overflow-hidden`}>
                             {/* Inner background blob */}
                             <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-gold-500/5 blur-2xl pointer-events-none" />
 
@@ -288,6 +313,11 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                 <p className="text-xs font-body text-muted leading-relaxed">
                                     Estimate your custom hosting plan based on format, estimated participant size, and premium additions.
                                 </p>
+                                {visitorState !== 'hasTrialPools' && (
+                                    <p className="text-[10px] font-display font-bold uppercase tracking-[0.08em] text-gold-600 dark:text-gold-400">
+                                        Estimate only — launch a pool to purchase
+                                    </p>
+                                )}
                             </div>
 
                             <div className="space-y-6 relative z-10">
@@ -310,6 +340,8 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                 onClick={() => {
                                                     setCalcPoolType(f.k);
                                                     if (f.k === 'SQUARES') setCalcPlayers(100);
+                                                    // What-If Simulator is a Bracket-only add-on (matches the checkout gating); clear it when switching to another format.
+                                                    if (f.k.toUpperCase() !== 'BRACKET') setCalcSim(false);
                                                 }}
                                                 className={`py-3.5 px-3 rounded-2xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all border ${
                                                     calcPoolType === f.k
@@ -373,7 +405,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                     <div>
                                                         <span className="text-sm font-display font-bold uppercase text-[color:var(--text)] block flex items-center gap-1">
                                                             AI Commissioner Newsletter
-                                                            <UpgradeTooltip
+                                                            <UpgradeInfoPopover
                                                                 title="AI commissioner"
                                                                 description="Generates weekly recaps, round-by-round highlights, and humorous trash-talking articles automatically. Uses state-of-the-art Gemini AI tailored exactly to your pool's rules and active standings."
                                                             />
@@ -401,7 +433,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                     <div>
                                                         <span className="text-sm font-display font-bold uppercase text-[color:var(--text)] block flex items-center gap-1">
                                                             Smart SMS Broadcasts
-                                                            <UpgradeTooltip
+                                                            <UpgradeInfoPopover
                                                                 title="smart sms broadcasts"
                                                                 description="Keeps your players active and engaged! Automatically sends SMS notifications to all players when bracket locks are near, pick deadlines approach, payouts are declared, or scores change."
                                                             />
@@ -418,7 +450,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                             </label>
                                         )}
 
-                                        {config.features.whatIfSimulator.isPremium && (
+                                        {config.features.whatIfSimulator.isPremium && calcPoolType.toUpperCase() === 'BRACKET' && (
                                             <label className={`flex items-center justify-between cursor-pointer p-4 bg-surface border rounded-2xl hover:border-gold-500/30 hover:bg-card transition-all duration-300 ${
                                                 calcSim ? 'border-gold-500 bg-gradient-to-r from-gold-500/5 to-transparent' : 'border-line'
                                             }`}>
@@ -429,7 +461,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                     <div>
                                                         <span className="text-sm font-display font-bold uppercase text-[color:var(--text)] block flex items-center gap-1">
                                                             Standings What-If Simulator
-                                                            <UpgradeTooltip
+                                                            <UpgradeInfoPopover
                                                                 title="what-if standings simulator"
                                                                 description="Enables the interactive simulator dashboard for all players! Participants can model future match outcomes and instantly visualize changes in standings and potential cash payouts."
                                                             />
@@ -445,64 +477,159 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                 />
                                             </label>
                                         )}
+
+                                        {config.features.customBranding?.isPremium && (
+                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-surface border rounded-2xl hover:border-gold-500/30 hover:bg-card transition-all duration-300 ${
+                                                calcBranding ? 'border-gold-500 bg-gradient-to-r from-gold-500/5 to-transparent' : 'border-line'
+                                            }`}>
+                                                <div className="flex gap-3 items-center">
+                                                    <div className={`p-2.5 rounded-xl bg-navy-600/15 text-navy-700 dark:text-[#9FB0CC] border border-line`}>
+                                                        <Sparkles size={16} />
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-sm font-display font-bold uppercase text-[color:var(--text)] block flex items-center gap-1">
+                                                            Premium Custom Branding & Covers
+                                                            <UpgradeInfoPopover
+                                                                title="custom branding"
+                                                                description="Upload custom headers and cover images, set your own color scheme, and add manager logos so your pool looks unmistakably yours."
+                                                            />
+                                                        </span>
+                                                        <span className="text-xs font-body text-muted">Custom headers, colors & logos (+<span className="num">${config.features.customBranding.addonPrice}</span>)</span>
+                                                    </div>
+                                                </div>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={calcBranding}
+                                                    onChange={(e) => setCalcBranding(e.target.checked)}
+                                                    className="w-5 h-5 rounded border-line bg-surface text-gold-500 focus:ring-gold-500 cursor-pointer"
+                                                />
+                                            </label>
+                                        )}
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-
-                    {/* RIGHT COLUMN: Real-Time Quote & Invoice checkout */}
-                    <div className="lg:col-span-5 space-y-6">
-
-                        {/* Title Context depending on selected / calculator mode */}
-                        {selectedPoolData ? (
-                            <div className="bg-card border border-gold-500/25 p-5 rounded-2xl space-y-2">
-                                <h4 className="text-sm font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-1.5">
-                                    <Sparkles size={16} className="text-gold-600 dark:text-gold-400" /> Pay For Selected Pool
-                                </h4>
-                                <div className="text-xs font-body text-muted leading-relaxed">
-                                    You are preparing checkout for: <strong className="text-[color:var(--text)] font-mono">{selectedPoolData.name}</strong>.
-                                    Applying a validated coupon below updates your Stripe session total immediately!
-                                </div>
-                            </div>
-                        ) : (
-                            <div className={`${contentCard} p-5 rounded-2xl space-y-2`}>
-                                <h4 className="text-xs font-display font-bold uppercase tracking-[0.08em] text-faint flex items-center gap-1.5">
-                                    <InfoIcon size={14} className="text-gold-600 dark:text-gold-400" /> Interactive Quote Mode
-                                </h4>
-                                <p className="text-xs font-body text-muted leading-relaxed">
-                                    This quote reflects estimated hosting plans. To complete actual payment, select one of your trial pools above or launch a new pool!
-                                </p>
-                            </div>
                         )}
 
-                        <BillingInvoiceCard
-                            poolId={selectedPoolId || undefined}
-                            poolName={selectedPoolData?.name || `${calcPoolType.toLowerCase()} pool`}
-                            poolType={calcPoolType}
-                            estimatedPlayers={calcPlayers}
-                            hasAiCommissioner={calcAi}
-                            hasSmsNotifications={calcSms}
-                            hasWhatIfSimulator={calcSim}
-                            isWizard={false} // Renders "Complete Payment & Upgrade" button
-                            pricePaid={selectedPoolData?.billing?.pricePaid || 0}
-                            initialCouponCode={selectedPoolData?.billing?.couponCode || ''}
-                        />
+                        {/* When paying for a specific pool: adjust participant estimate. Format is fixed to the pool (changing it would mean re-running the wizard), but size drives price so it stays editable. */}
+                        {selectedPoolData && (
+                            <div className={`${contentCard} p-6 rounded-3xl space-y-4 shadow-panel`}>
+                                <h3 className="font-display font-bold uppercase text-lg text-[color:var(--text)] flex items-center gap-2">
+                                    <LayoutGrid size={20} className="text-gold-600 dark:text-gold-400" />
+                                    Adjust Participant Estimate
+                                </h3>
+                                <p className="text-xs font-body text-muted leading-relaxed">
+                                    Pricing scales with pool size. Estimate how many players <strong className="text-[color:var(--text)]">{selectedPoolData.name}</strong> will have — change it anytime before paying.
+                                </p>
+                                <div className="space-y-4 bg-surface p-5 rounded-2xl border border-line">
+                                    <div className="flex justify-between items-center text-xs font-display font-bold uppercase text-muted">
+                                        <span className="tracking-[0.16em] text-[10px]">Estimated Participants</span>
+                                        <span className="text-gold-600 dark:text-gold-400 text-sm font-mono font-black bg-gold-500/10 px-3 py-1 rounded-full border border-gold-500/25 num">{calcPlayers} Players</span>
+                                    </div>
+                                    <div className="flex gap-4 items-center">
+                                        <input type="range" min="1" max="150" value={calcPlayers}
+                                            onChange={(e) => setCalcPlayers(Number(e.target.value))}
+                                            className="flex-grow h-2 rounded-lg appearance-none cursor-pointer bg-line accent-gold-600 focus:outline-none" />
+                                        <input type="number" value={calcPlayers} min={1}
+                                            onChange={(e) => setCalcPlayers(Math.max(1, Number(e.target.value) || 1))}
+                                            className="w-16 bg-card border border-line rounded-xl px-2 py-2 text-center text-[color:var(--text)] font-bold outline-none font-mono num focus:border-gold-500/50 transition-colors" />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
-                        {/* Direct Create CTA if not paying for existing pool */}
-                        {!selectedPoolId && (
-                            <button
-                                onClick={canCreate ? () => {
-                                    if (user) navigate('/create-pool');
-                                    else onLogin();
-                                } : undefined}
-                                disabled={!canCreate}
-                                className="w-full bg-surface hover:bg-card text-[color:var(--text)] border border-line hover:border-gold-500/40 py-4 px-6 rounded-2xl text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line"
-                                title={canCreate ? 'Launch a new pool' : 'Pool creation is coming soon'}
-                            >
-                                {canCreate ? <>Launch a New Pool Instead
-                                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" /></> : 'Pool Creation Coming Soon'}
-                            </button>
+                    {/* RIGHT COLUMN: state-driven — real checkout for trial pools, estimate-only quote otherwise */}
+                    <div className="lg:col-span-5 space-y-6">
+                        {visitorState === 'hasTrialPools' ? (
+                            selectedPoolData ? (
+                                <>
+                                    <div className="bg-card border border-gold-500/25 p-5 rounded-2xl space-y-2">
+                                        <h4 className="text-sm font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-1.5">
+                                            <Sparkles size={16} className="text-gold-600 dark:text-gold-400" /> Pay For Selected Pool
+                                        </h4>
+                                        <div className="text-xs font-body text-muted leading-relaxed">
+                                            You are preparing checkout for: <strong className="text-[color:var(--text)] font-mono">{selectedPoolData.name}</strong>.
+                                            Applying a validated coupon below updates your Stripe session total immediately!
+                                        </div>
+                                    </div>
+
+                                    <BillingInvoiceCard
+                                        poolId={selectedPoolId || undefined}
+                                        poolName={selectedPoolData.name}
+                                        poolType={calcPoolType}
+                                        estimatedPlayers={calcPlayers}
+                                        hasAiCommissioner={false}
+                                        hasSmsNotifications={false}
+                                        hasWhatIfSimulator={false}
+                                        hasCustomBranding={false}
+                                        isWizard={false} // Renders "Complete Payment & Upgrade" button
+                                        pricePaid={selectedPoolData.billing?.pricePaid || 0}
+                                        initialCouponCode={selectedPoolData.billing?.couponCode || ''}
+                                    />
+                                </>
+                            ) : (
+                                <>
+                                    {/* No pool picked yet — nudge toward the trial list instead of a dead pay button */}
+                                    <div className="bg-card border border-gold-500/25 p-5 rounded-2xl space-y-2">
+                                        <h4 className="text-sm font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-1.5">
+                                            <InfoIcon size={16} className="text-gold-600 dark:text-gold-400" /> Pick a Pool to Check Out
+                                        </h4>
+                                        <p className="text-xs font-body text-muted leading-relaxed">
+                                            Choose one of your trial pools from the <strong className="text-[color:var(--text)]">Your Trial Pools Awaiting Activation</strong> list to load its checkout here.
+                                        </p>
+                                    </div>
+
+                                    <EstimateSummaryCard
+                                        config={config}
+                                        poolType={calcPoolType}
+                                        players={calcPlayers}
+                                        hasAiCommissioner={calcAi}
+                                        hasSmsNotifications={calcSms}
+                                        hasWhatIfSimulator={calcSim}
+                                        hasCustomBranding={calcBranding}
+                                    />
+
+                                    <button
+                                        onClick={canCreate ? () => navigate('/create-pool') : undefined}
+                                        disabled={!canCreate}
+                                        className="w-full bg-surface hover:bg-card text-[color:var(--text)] border border-line hover:border-gold-500/40 py-4 px-6 rounded-2xl text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line"
+                                        title={canCreate ? 'Launch a new pool' : 'Pool creation is coming soon'}
+                                    >
+                                        {canCreate ? <>Launch a New Pool Instead
+                                        <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" /></> : 'Pool Creation Coming Soon'}
+                                    </button>
+                                </>
+                            )
+                        ) : (
+                            <>
+                                {/* anon / noPools: estimate only — no payment or checkout card is rendered */}
+                                <EstimateSummaryCard
+                                    config={config}
+                                    poolType={calcPoolType}
+                                    players={calcPlayers}
+                                    hasAiCommissioner={calcAi}
+                                    hasSmsNotifications={calcSms}
+                                    hasWhatIfSimulator={calcSim}
+                                    hasCustomBranding={calcBranding}
+                                />
+
+                                <button
+                                    onClick={canCreate ? () => navigate('/create-pool') : undefined}
+                                    disabled={!canCreate}
+                                    className="w-full bg-brandred-600 hover:bg-brandred-500 text-white py-4 px-6 rounded-2xl text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                                    title={canCreate ? 'Launch a new pool' : 'Pool creation is coming soon'}
+                                >
+                                    {canCreate ? (
+                                        <>
+                                            {visitorState === 'anon' ? 'Build Your Pool — Free to Start' : 'Create Your Pool'}
+                                            <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                                        </>
+                                    ) : (
+                                        'Pool Creation Coming Soon'
+                                    )}
+                                </button>
+                            </>
                         )}
                     </div>
                 </div>
@@ -524,9 +651,9 @@ export const PricingPage: React.FC<PricingPageProps> = ({
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto pt-6 justify-center">
                         {/* Dynamic Custom Bundles */}
-                        {Array.isArray(config.packagesList) && config.packagesList.filter(b => b.isActive).length > 0 ? (
-                            config.packagesList.filter(b => b.isActive).map((b) => {
-                                const isUnlimited = b.poolsIncluded >= 9999;
+                        {Array.isArray(config.packagesList) && config.packagesList.map(normalizeLegacyPackage).filter(b => b.isActive).length > 0 ? (
+                            config.packagesList.map(normalizeLegacyPackage).filter(b => b.isActive).map((b) => {
+                                const isUnlimited = b.kind === 'UNLIMITED_PASS';
 
                                 const badgeLabel = isUnlimited ? 'Unlimited Pass' : b.poolType === 'ALL' ? 'Universal Pack' : `${b.poolType} Pack`;
                                 const pricePerPoolLabel = isUnlimited
@@ -549,7 +676,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                             <div className="bg-surface p-4 rounded-2xl border border-line space-y-2 text-[10px] font-mono text-muted num">
                                                 <div className="flex justify-between">Format: <strong className="text-[color:var(--text)]">{b.poolType}</strong></div>
                                                 <div className="flex justify-between">Max size per pool: <strong className="text-[color:var(--text)]">{b.maxPlayersPerPool === 9999 ? 'Unlimited' : `${b.maxPlayersPerPool} players`}</strong></div>
-                                                <div className="flex justify-between">Validity: <strong className="text-[color:var(--text)]">{b.durationDays === 0 ? 'No expiration' : `${b.durationDays} days`}</strong></div>
+                                                <div className="flex justify-between">Validity: <strong className="text-[color:var(--text)]">{b.kind === 'UNLIMITED_PASS' ? `${b.termDays} days` : 'No expiration'}</strong></div>
                                             </div>
 
                                             <div className="pt-2 flex items-baseline gap-1.5">
