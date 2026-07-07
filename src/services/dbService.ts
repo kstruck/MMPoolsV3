@@ -718,6 +718,67 @@ export const dbService = {
         await fn({ targetUid, referralCredits, freePoolsAvailable });
     },
 
+    // --- Canonical entitlements (Bundles + Pool Credits) — PLAN Phase 4 #14-17 ---
+
+    /** SUPER_ADMIN: grant a CREDIT_BUNDLE or UNLIMITED_PASS to a user (audited). */
+    adminGrantEntitlement: async (payload: {
+        targetUid: string;
+        productKind: 'CREDIT_BUNDLE' | 'UNLIMITED_PASS';
+        reason: string;
+        name?: string;
+        price?: number;
+        poolType?: string;
+        maxPlayersPerPool?: number;
+        creditsTotal?: number;
+        termDays?: number;
+    }): Promise<{ bundleId?: string }> => {
+        const fn = httpsCallable<typeof payload, { success: boolean; bundleId?: string }>(functions, 'adminGrantEntitlement');
+        const res = await fn(payload);
+        return { bundleId: res.data.bundleId };
+    },
+
+    /** SUPER_ADMIN: revoke a whole bundle, a single credit, or expire a pass early (audited). */
+    adminRevokeEntitlement: async (payload: {
+        bundleId: string;
+        scope: 'bundle' | 'credit' | 'pass';
+        creditId?: string;
+        reason: string;
+    }): Promise<{ revokedCredits?: number }> => {
+        const fn = httpsCallable<typeof payload, { success: boolean; revokedCredits?: number }>(functions, 'adminRevokeEntitlement');
+        const res = await fn(payload);
+        return { revokedCredits: res.data.revokedCredits };
+    },
+
+    /** Redeem one owned Pool Credit to activate a trial pool. */
+    redeemPoolCredit: async (payload: { poolId: string; bundleId?: string; creditId?: string }): Promise<{ bundleId?: string; creditId?: string; bundleStatus?: string }> => {
+        const fn = httpsCallable<typeof payload, { success: boolean; bundleId?: string; creditId?: string; bundleStatus?: string }>(functions, 'redeemPoolCredit');
+        const res = await fn(payload);
+        return { bundleId: res.data.bundleId, creditId: res.data.creditId, bundleStatus: res.data.bundleStatus };
+    },
+
+    /**
+     * Subscribe to the current user's bundles (owner-scoped). Read-only display
+     * for the "My Bundles & Credits" dashboard card. Client reads of bundles
+     * require the firestore rules Wave 5 adds; until then the listener will hit
+     * permission-denied — `onError` receives it and callers degrade gracefully
+     * (the card hides rather than crashing).
+     */
+    subscribeToMyBundles: (
+        uid: string,
+        callback: (bundles: Array<Record<string, unknown>>) => void,
+        onError?: (error: Error) => void
+    ) => {
+        const q = query(collection(db, 'bundles'), where('ownerId', '==', uid));
+        return onSnapshot(
+            q,
+            (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+            (error) => {
+                logger.warn('subscribeToMyBundles failed (bundles rules pending Wave 5?):', error);
+                if (onError) onError(error);
+            }
+        );
+    },
+
     // Record an admin_audit entry for an Operations-panel action (T7).
     logAdminAction: async (entry: { action: string; targetType?: string; targetId?: string; metadata?: Record<string, unknown>; status?: 'success' | 'error'; error?: string }): Promise<void> => {
         try {

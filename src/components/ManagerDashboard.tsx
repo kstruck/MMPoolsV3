@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   Filter,
@@ -20,7 +20,10 @@ import {
   TrendingUp,
   Users,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Ticket,
+  Clock,
+  Gift
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -34,6 +37,7 @@ import {
   Pie
 } from 'recharts';
 import type { GameState, Pool, User } from '../types';
+import { dbService } from '../services/dbService';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
@@ -440,6 +444,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                         )}
                     </div>
                 )}
+
+                {/* My Bundles & Credits (read-only entitlement transparency) */}
+                <MyBundlesCard user={user} />
 
                 {isLoading ? (
                     <div className="text-center py-20">
@@ -870,6 +877,155 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                 </div>
             )}
             <Footer />
+        </div>
+    );
+};
+
+// ---------------------------------------------------------------------------
+// My Bundles & Credits — read-only transparency card (PLAN Phase 4 #15).
+// ---------------------------------------------------------------------------
+
+interface BundleView {
+    id: string;
+    productKind?: 'CREDIT_BUNDLE' | 'UNLIMITED_PASS';
+    source?: 'PURCHASE' | 'ADMIN_GRANT' | 'REFERRAL' | 'MIGRATION';
+    productSnapshot?: { name?: string; price?: number; poolType?: string; maxPlayersPerPool?: number };
+    creditsTotal?: number;
+    creditsUsed?: number;
+    termEndsAt?: number;
+    status?: 'active' | 'revoked' | 'exhausted' | 'expired';
+    revokedReason?: string;
+    createdAt?: number;
+}
+
+const SOURCE_LABEL: Record<string, string> = {
+    PURCHASE: 'Purchased',
+    ADMIN_GRANT: 'Granted',
+    REFERRAL: 'Referral reward',
+    MIGRATION: 'Migrated',
+};
+
+const STATUS_STYLE: Record<string, string> = {
+    active: 'bg-[#E4F5EC] border-[#BEE7D0] text-[#0F7B4A]',
+    exhausted: 'bg-[#FBEEDD] border-[#F2D6B0] text-[#B4530A]',
+    revoked: 'bg-brandred-600/10 border-brandred-600/40 text-brandred-600',
+    expired: 'bg-surface border-line text-faint',
+};
+
+function daysUntil(ts: number): string {
+    const ms = ts - Date.now();
+    if (ms <= 0) return 'expired';
+    const days = Math.ceil(ms / (24 * 60 * 60 * 1000));
+    return days === 1 ? '1 day left' : `${days} days left`;
+}
+
+/**
+ * Owner-scoped bundles/credits display. Reads via dbService.subscribeToMyBundles.
+ * Client reads of `bundles` require the firestore rules Wave 5 adds; until then
+ * the listener errors with permission-denied — we swallow it and hide the card
+ * (never crash the dashboard). Purely read-only: no grant/redeem here.
+ */
+export const MyBundlesCard: React.FC<{ user: User | null }> = ({ user }) => {
+    const [bundles, setBundles] = useState<BundleView[]>([]);
+    const [denied, setDenied] = useState(false);
+    const [loaded, setLoaded] = useState(false);
+
+    useEffect(() => {
+        if (!user?.id) return;
+        setDenied(false);
+        setLoaded(false);
+        const unsub = dbService.subscribeToMyBundles(
+            user.id,
+            (list) => {
+                setBundles(list as unknown as BundleView[]);
+                setLoaded(true);
+            },
+            (err) => {
+                // permission-denied is expected until Wave 5 rules land — hide, don't crash.
+                if ((err as { code?: string })?.code === 'permission-denied') setDenied(true);
+                setLoaded(true);
+            }
+        );
+        return () => unsub();
+    }, [user?.id]);
+
+    // Hide entirely when reads are blocked (rules pending) or the user owns none.
+    if (denied) return null;
+    if (loaded && bundles.length === 0) return null;
+    if (!loaded) return null;
+
+    const sorted = [...bundles].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+    return (
+        <div className="bg-card border border-line rounded-3xl p-5 mb-8 shadow-card">
+            <div className="flex items-center gap-2 mb-4">
+                <Gift size={16} className="text-gold-600 dark:text-gold-400" />
+                <h3 className="text-xs font-display font-bold uppercase tracking-[0.16em] text-muted">My Bundles &amp; Credits</h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {sorted.map((b) => {
+                    const isPass = b.productKind === 'UNLIMITED_PASS';
+                    const remaining = Math.max(0, (b.creditsTotal || 0) - (b.creditsUsed || 0));
+                    const status = b.status || 'active';
+                    const snap = b.productSnapshot || {};
+                    return (
+                        <div key={b.id} className="bg-surface border border-line rounded-2xl p-4">
+                            <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                    <div className="font-display font-bold text-[color:var(--text)] text-sm flex items-center gap-1.5">
+                                        {isPass ? <Zap size={14} className="text-navy-700 dark:text-[#9FB0CC]" /> : <Ticket size={14} className="text-gold-600 dark:text-gold-400" />}
+                                        <span className="truncate">{snap.name || (isPass ? 'Unlimited Pass' : 'Credit Bundle')}</span>
+                                    </div>
+                                    <div className="text-[10px] text-faint font-body mt-0.5">
+                                        {SOURCE_LABEL[b.source || ''] || b.source || ''}
+                                        {typeof snap.price === 'number' && snap.price > 0 && b.source === 'PURCHASE' ? ` · $${snap.price.toFixed(2)}` : ''}
+                                    </div>
+                                </div>
+                                <span className={`shrink-0 px-2 py-0.5 rounded-full font-display font-bold text-[9px] uppercase tracking-[0.05em] border ${STATUS_STYLE[status] || STATUS_STYLE.expired}`}>
+                                    {status}
+                                </span>
+                            </div>
+
+                            {/* Body: credits remaining OR pass expiry */}
+                            <div className="mt-3 flex items-baseline gap-2">
+                                {isPass ? (
+                                    <span className="flex items-center gap-1.5 text-xs font-body text-muted">
+                                        <Clock size={12} />
+                                        {typeof b.termEndsAt === 'number' ? daysUntil(b.termEndsAt) : 'no term'}
+                                    </span>
+                                ) : (
+                                    <>
+                                        <span className="text-2xl font-display font-extrabold num text-[color:var(--text)]">{remaining}</span>
+                                        <span className="text-[10px] text-faint font-body uppercase tracking-[0.08em]">of {b.creditsTotal || 0} credits left</span>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Per-credit constraints (from the product snapshot) */}
+                            <div className="mt-2 flex flex-wrap gap-1.5 text-[9px] font-mono">
+                                {snap.poolType && snap.poolType !== 'ALL' && (
+                                    <span className="px-1.5 py-0.5 rounded bg-page border border-line text-muted">{snap.poolType}</span>
+                                )}
+                                {typeof snap.maxPlayersPerPool === 'number' && snap.maxPlayersPerPool < 9999 && (
+                                    <span className="px-1.5 py-0.5 rounded bg-page border border-line text-muted">≤ {snap.maxPlayersPerPool} players</span>
+                                )}
+                                {(!snap.poolType || snap.poolType === 'ALL') && (!snap.maxPlayersPerPool || snap.maxPlayersPerPool >= 9999) && (
+                                    <span className="px-1.5 py-0.5 rounded bg-page border border-line text-faint">Any pool</span>
+                                )}
+                            </div>
+
+                            {/* Revocation notice */}
+                            {(status === 'revoked' || status === 'expired') && b.revokedReason && (
+                                <div className="mt-2 flex items-start gap-1.5 text-[10px] text-brandred-600 font-body">
+                                    <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                                    <span>{status === 'revoked' ? 'Revoked' : 'Ended'}: {b.revokedReason}</span>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
         </div>
     );
 };

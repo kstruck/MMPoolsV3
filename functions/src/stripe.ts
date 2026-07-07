@@ -25,7 +25,6 @@ import { HttpsError } from "firebase-functions/v2/https";
 
 import Stripe from "stripe";
 import {
-    recordBillingCharge,
     writeBillingChargeTxn,
     type BillingCharge,
 } from "./lib/billingCharges";
@@ -43,6 +42,15 @@ import {
     stalePendingReservationIds,
     type CouponUsageEntry,
 } from "./lib/couponReservation";
+import { grantEntitlementTxn } from "./entitlements";
+import {
+    normalizeLegacyPackage,
+    type Package,
+} from "./shared/schemas/billingConfig";
+import {
+    MAX_CREDITS_PER_BUNDLE,
+    type ProductSnapshot,
+} from "./shared/schemas/bundle";
 
 const db = admin.firestore();
 
@@ -495,8 +503,9 @@ async function createBundleCheckout(
     if (!stripe) {
         console.log(`[Stripe Mockup] Mock bundle checkout for ${bundleType}.`);
         const mockSessionId = `mock_bundle_session_${Date.now()}`;
-        await grantBundle(userId, bundleType, dynamicBundle);
-        await recordBillingCharge(db, { userId, kind: "bundle", amount: serverPrice, bundleType, stripeSessionId: mockSessionId });
+        // grantBundle writes the canonical bundle + credit docs + ledger row in
+        // one txn (source PURCHASE, keyed off the mock session id).
+        await grantBundle(userId, bundleType, { stripeSessionId: mockSessionId, amount: serverPrice });
         return { sessionUrl: `${origin}/pricing?payment=success&session_id=${mockSessionId}` };
     }
 
@@ -530,43 +539,109 @@ async function createBundleCheckout(
     }
 }
 
-/** Grants a bundle's entitlement to a user (credits / unlimited pass). Shared by mock + webhook. */
-async function grantBundle(userId: string, bundleType: string, dynamicBundle: any): Promise<void> {
-    const userRef = db.collection("users").doc(userId);
-    if (bundleType === "buy_3") {
-        await userRef.update({ freePoolsAvailable: FieldValue.increment(3), role: "COMMISSIONER" });
-    } else if (bundleType === "unlimited_1yr") {
-        await userRef.update({ activeBundleType: "unlimited_1yr", bundleExpiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000, role: "COMMISSIONER" });
-    } else {
-        let bundle = dynamicBundle;
-        if (!bundle) {
-            try {
-                const packagesList = (await db.collection("settings").doc("billing_config").get()).data()?.packagesList || [];
-                bundle = packagesList.find((b: any) => b.id === bundleType);
-            } catch (err) {
-                console.error("[Stripe] Failed to load dynamic bundle for grant:", err);
-            }
-        }
-        if (bundle) {
-            const validityDays = Number(bundle.durationDays ?? bundle.termDays) || 0;
-            const expiresAt = validityDays > 0 ? Date.now() + validityDays * 24 * 60 * 60 * 1000 : 0;
-            const creditsSpawned = [];
-            const count = Number(bundle.poolsIncluded) || 0;
-            for (let i = 0; i < count; i++) {
-                creditsSpawned.push({
-                    id: `credit_${bundleType}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-                    bundleId: bundleType,
-                    poolType: bundle.poolType,
-                    maxPlayersPerPool: Number(bundle.maxPlayersPerPool) || 50,
-                    expiresAt,
-                    isUsed: false,
-                });
-            }
-            if (creditsSpawned.length > 0) {
-                await userRef.update({ poolCredits: FieldValue.arrayUnion(...creditsSpawned), role: "COMMISSIONER" });
-            }
-        }
+/**
+ * Resolves a bundleType (packagesList item id, or the flat legacy buy_3 /
+ * unlimited_1yr keys) to the canonical Package shape. Returns undefined if it
+ * cannot be resolved (caller fails the webhook so Stripe retries).
+ *
+ * Legacy flat keys are mapped to sane canonical products (matching the old
+ * grantBundle semantics: buy_3 → 3 credits; unlimited_1yr → 1-year pass).
+ */
+async function resolveBundlePackage(bundleType: string): Promise<Package | undefined> {
+    let cfg: any = null;
+    try {
+        cfg = (await db.collection("settings").doc("billing_config").get()).data();
+    } catch (err) {
+        console.error("[Stripe] Failed to load billing_config for bundle resolve:", err);
     }
+    const packagesList: unknown[] = Array.isArray(cfg?.packagesList) ? cfg.packagesList : [];
+    const raw = packagesList.find((b: any) => b?.id === bundleType);
+    if (raw) return normalizeLegacyPackage(raw);
+
+    // Flat legacy fallbacks (settings.packages.{buy_3,unlimited_1yr} prices).
+    if (bundleType === "buy_3") {
+        return normalizeLegacyPackage({
+            id: "buy_3", name: "3-Pool Bundle Package",
+            description: "Get 3 pool credits to use on any pool type",
+            price: Number(cfg?.packages?.buy_3) || 0,
+            poolType: "ALL", maxPlayersPerPool: 9999,
+            poolsIncluded: 3, durationDays: 0, isActive: true,
+        });
+    }
+    if (bundleType === "unlimited_1yr") {
+        return normalizeLegacyPackage({
+            id: "unlimited_1yr", name: "1-Year Unlimited Pool Pass",
+            description: "Create unlimited pools of any type for 1 year",
+            price: Number(cfg?.packages?.unlimited_1yr) || 0,
+            poolType: "ALL", maxPlayersPerPool: 9999,
+            poolsIncluded: 1, durationDays: 365, isActive: true,
+        });
+    }
+    return undefined;
+}
+
+/**
+ * Grants a purchased bundle into the CANONICAL entitlement model (PLAN #14):
+ * ONE bundles/{id} doc + N credit docs (N = creditsTotal, capped 100) in a
+ * single transaction, source PURCHASE, with the ledger row written in the SAME
+ * txn. Idempotent: the bundle id is derived from the Stripe session id, so a
+ * webhook retry re-creates the same doc rather than granting twice.
+ *
+ * Does NOT write the legacy users.freePoolsAvailable / poolCredits / activeBundleType
+ * fields any more — those readers are flipped to the new model at cutover.
+ * Shared by the mock path (no session id → generated tag) and the webhook.
+ */
+async function grantBundle(
+    userId: string,
+    bundleType: string,
+    opts: { stripeSessionId?: string; paymentIntentId?: string; amount?: number } = {}
+): Promise<void> {
+    const pkg = await resolveBundlePackage(bundleType);
+    if (!pkg) {
+        throw new HttpsError("internal", `Unable to resolve bundle '${bundleType}' for entitlement grant.`);
+    }
+
+    const snapshot: ProductSnapshot = {
+        name: pkg.name,
+        price: pkg.price,
+        poolType: pkg.poolType,
+        maxPlayersPerPool: pkg.maxPlayersPerPool,
+    };
+    // Deterministic bundle id → webhook retries are idempotent.
+    const bundleId = opts.stripeSessionId
+        ? `purchase_${opts.stripeSessionId}`
+        : `purchase_${bundleType}_${Date.now()}`;
+
+    const isPass = pkg.kind === "UNLIMITED_PASS";
+    const creditsTotal = isPass ? 0 : Math.min(MAX_CREDITS_PER_BUNDLE, Math.max(1, pkg.poolsIncluded));
+    const termEndsAt = isPass ? Date.now() + pkg.termDays * 24 * 60 * 60 * 1000 : undefined;
+
+    await db.runTransaction(async (txn) => {
+        // Idempotency: if this purchase bundle already exists, do nothing.
+        const existing = await txn.get(db.collection("bundles").doc(bundleId));
+        if (existing.exists) {
+            console.log(`[Stripe] Bundle ${bundleId} already granted; skipping (idempotent).`);
+            return;
+        }
+        grantEntitlementTxn(txn, {
+            ownerId: userId,
+            productKind: pkg.kind,
+            source: "PURCHASE",
+            productSnapshot: snapshot,
+            creditsTotal,
+            creditConstraints: {
+                poolType: pkg.poolType === "ALL" ? undefined : pkg.poolType,
+                maxPlayersPerPool: pkg.maxPlayersPerPool >= 9999 ? undefined : pkg.maxPlayersPerPool,
+            },
+            termEndsAt,
+            stripeSessionId: opts.stripeSessionId,
+            paymentIntentId: opts.paymentIntentId,
+            ledgerAmount: typeof opts.amount === "number" ? opts.amount : pkg.price,
+            bundleId,
+        });
+        // Promote to COMMISSIONER (mirrors legacy behavior) — user doc write only.
+        txn.set(db.collection("users").doc(userId), { role: "COMMISSIONER" }, { merge: true });
+    });
 }
 
 /**
@@ -766,16 +841,16 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                 const session = event.data.object;
                 const metadata = session.metadata || {};
 
-                // Bundle purchase.
+                // Bundle purchase — grant into the canonical entitlement model.
+                // The bundle + credit docs + the ledger row are written in ONE
+                // transaction (grantBundle); a failure fails the webhook and
+                // Stripe retries. The grant is idempotent on the session id.
                 if (metadata.bundleType) {
                     try {
-                        await grantBundle(metadata.userId, metadata.bundleType, null);
-                        await recordBillingCharge(db, {
-                            userId: metadata.userId, kind: "bundle",
-                            amount: (session.amount_total || 0) / 100,
-                            bundleType: metadata.bundleType,
+                        await grantBundle(metadata.userId, metadata.bundleType, {
                             stripeSessionId: session.id,
                             paymentIntentId: session.payment_intent as string | undefined,
+                            amount: (session.amount_total || 0) / 100,
                         });
                     } catch (err) {
                         console.error("[Stripe Webhook] Bundle grant failed:", err);
