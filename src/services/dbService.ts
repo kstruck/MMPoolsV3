@@ -27,6 +27,111 @@ export { db };
 import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament, BanterMessage, NFLGame, WeeklyRecap } from "../types";
 import type { PoolQuoteInput, PoolQuote, AddonSelection } from "@shared/schemas/quote";
 
+// --- Monetization dashboard read shapes (PLAN-BUYFLOW-OVERHAUL Phase 6) -------
+// Firestore is untyped; these are the client-side views of the docs the
+// Monetization tab reads. Kept permissive (optional fields) so a partially
+// populated / legacy doc never throws.
+
+/** billingCharges/{id} — one immutable ledger row (amounts in dollars). */
+export interface MonetizationBillingCharge {
+    id: string;
+    userId?: string;
+    kind?: 'pool' | 'bundle' | 'refund' | 'dispute';
+    amount?: number;
+    poolId?: string;
+    bundleType?: string;
+    tier?: string;
+    couponCode?: string;
+    stripeSessionId?: string;
+    paymentIntentId?: string;
+    chargeId?: string;
+    relatedChargeId?: string;
+    at?: number;
+}
+
+/** coupons/{id} — includes the reservation-aware usageLog. */
+export interface MonetizationCouponUsage {
+    reservationId?: string;
+    userId?: string;
+    poolId?: string;
+    status?: 'pending' | 'confirmed' | 'released';
+    reservedAt?: number;
+    confirmedAt?: number;
+    releasedAt?: number;
+    sessionId?: string;
+    usedAt?: number;
+}
+export interface MonetizationCoupon {
+    id: string;
+    code: string;
+    discountType?: 'percentage' | 'flat';
+    discountValue?: number;
+    isActive?: boolean;
+    maxUses?: number;
+    usesCount?: number;
+    expiresAt?: number;
+    createdAt?: number;
+    perUserLimit?: number;
+    allowedPoolTypes?: string[];
+    usageLog?: MonetizationCouponUsage[];
+}
+
+/** bundles/{id} — canonical entitlement doc (owner-scoped). */
+export interface MonetizationBundle {
+    id: string;
+    ownerId?: string;
+    productKind?: 'CREDIT_BUNDLE' | 'UNLIMITED_PASS';
+    source?: string;
+    productSnapshot?: { name?: string; price?: number; poolType?: string; maxPlayersPerPool?: number };
+    creditsTotal?: number;
+    creditsUsed?: number;
+    termEndsAt?: number;
+    status?: 'active' | 'revoked' | 'exhausted' | 'expired';
+    stripeSessionId?: string;
+    paymentIntentId?: string;
+    createdAt?: number;
+    revokedReason?: string;
+    revokedAt?: number;
+}
+
+/** monetization_alerts/{id} — abuse/housekeeping + Wave-2 refund/dispute alerts. */
+export interface MonetizationAlert {
+    id: string;
+    type?: string;
+    couponCode?: string;
+    couponId?: string;
+    poolId?: string;
+    userId?: string;
+    sessionId?: string;
+    chargeId?: string;
+    paymentIntentId?: string;
+    amount?: number;
+    message?: string;
+    detail?: Record<string, unknown>;
+    status?: 'open' | 'acked';
+    source?: string;
+    createdAt?: number;
+    updatedAt?: number;
+    acknowledgedBy?: string;
+    acknowledgedAt?: number;
+}
+
+/** couponTemplates/{id} — reusable coupon definition (never redeemable itself). */
+export interface MonetizationCouponTemplate {
+    id: string;
+    name: string;
+    notes?: string;
+    discountType?: 'percentage' | 'flat';
+    discountValue?: number;
+    isActive?: boolean;
+    maxUses?: number;
+    expiresAt?: number;
+    perUserLimit?: number;
+    allowedPoolTypes?: string[];
+    createdAt?: number;
+    updatedAt?: number;
+}
+
 /** Heartbeat written by the scheduled ESPN score sync (functions/src/scoreUpdates.ts) */
 export interface ScoreSyncStatus {
     lastSyncAt: number;
@@ -1407,6 +1512,148 @@ export const dbService = {
             });
             throw error;
         }
+    },
+
+    // ===================================================================
+    // Monetization dashboard (PLAN-BUYFLOW-OVERHAUL Phase 6 #21-23).
+    // SUPER_ADMIN-only reads (billingCharges/coupons/couponTemplates/
+    // monetization_alerts) + template/ack callables. Reads are guarded: until
+    // the Wave-5 firestore.rules land, some client reads return
+    // permission-denied — every listener wires `onError` so the surface
+    // degrades (shows an empty/locked state) rather than crashing.
+    // ===================================================================
+
+    /**
+     * Subscribe to the immutable billingCharges ledger (SUPER_ADMIN read). The
+     * accounting view derives ALL revenue numbers from these rows client-side.
+     * Ordered newest-first; capped for safety.
+     */
+    subscribeToBillingCharges: (
+        callback: (charges: MonetizationBillingCharge[]) => void,
+        onError?: (error: Error) => void,
+        max = 2000
+    ) => {
+        const q = query(collection(db, 'billingCharges'), orderBy('at', 'desc'), limit(max));
+        return onSnapshot(
+            q,
+            (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) } as MonetizationBillingCharge))),
+            (error) => {
+                logger.warn('subscribeToBillingCharges failed (billingCharges rules require SUPER_ADMIN):', error);
+                if (onError) onError(error);
+            }
+        );
+    },
+
+    /**
+     * Subscribe to the coupons collection (SUPER_ADMIN read per ADR-0002). Feeds
+     * the coupon-usage panel (per-coupon timelines, remaining uses, expiring).
+     */
+    subscribeToCoupons: (
+        callback: (coupons: MonetizationCoupon[]) => void,
+        onError?: (error: Error) => void
+    ) => {
+        const q = query(collection(db, 'coupons'), orderBy('createdAt', 'desc'));
+        return onSnapshot(
+            q,
+            (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) } as MonetizationCoupon))),
+            (error) => {
+                logger.warn('subscribeToCoupons failed (coupons rules require SUPER_ADMIN):', error);
+                if (onError) onError(error);
+            }
+        );
+    },
+
+    /**
+     * Subscribe to all bundles (SUPER_ADMIN read all). Powers the bundle
+     * liability panel — outstanding unredeemed credits across active bundles.
+     */
+    subscribeToAllBundles: (
+        callback: (bundles: MonetizationBundle[]) => void,
+        onError?: (error: Error) => void,
+        max = 2000
+    ) => {
+        const q = query(collection(db, 'bundles'), limit(max));
+        return onSnapshot(
+            q,
+            (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) } as MonetizationBundle))),
+            (error) => {
+                logger.warn('subscribeToAllBundles failed (bundles rules require SUPER_ADMIN read-all, pending Wave 5):', error);
+                if (onError) onError(error);
+            }
+        );
+    },
+
+    /**
+     * Subscribe to monetization_alerts (SUPER_ADMIN read). Surfaces the coupon
+     * abuse / housekeeping alerts written by monetizationAlerts AND the Wave-2
+     * refund/dispute/double-charge alerts. Newest-first.
+     */
+    subscribeToMonetizationAlerts: (
+        callback: (alerts: MonetizationAlert[]) => void,
+        onError?: (error: Error) => void,
+        max = 200
+    ) => {
+        const q = query(collection(db, 'monetization_alerts'), orderBy('createdAt', 'desc'), limit(max));
+        return onSnapshot(
+            q,
+            (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) } as MonetizationAlert))),
+            (error) => {
+                logger.warn('subscribeToMonetizationAlerts failed (rules require SUPER_ADMIN, pending Wave 5):', error);
+                if (onError) onError(error);
+            }
+        );
+    },
+
+    /**
+     * Subscribe to couponTemplates (SUPER_ADMIN direct client read; writes are
+     * functions-only). Powers the template list in the Monetization tab.
+     */
+    subscribeToCouponTemplates: (
+        callback: (templates: MonetizationCouponTemplate[]) => void,
+        onError?: (error: Error) => void
+    ) => {
+        const q = query(collection(db, 'couponTemplates'), orderBy('createdAt', 'desc'));
+        return onSnapshot(
+            q,
+            (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) } as MonetizationCouponTemplate))),
+            (error) => {
+                logger.warn('subscribeToCouponTemplates failed (couponTemplates rules require SUPER_ADMIN, pending Wave 5):', error);
+                if (onError) onError(error);
+            }
+        );
+    },
+
+    /** SUPER_ADMIN: create a coupon template (also the "save as template" path). Audited. */
+    createCouponTemplate: async (template: Record<string, unknown>): Promise<{ templateId?: string }> => {
+        const fn = httpsCallable<Record<string, unknown>, { success: boolean; templateId?: string }>(functions, 'createCouponTemplate');
+        const res = await fn(template);
+        return { templateId: res.data.templateId };
+    },
+
+    /** SUPER_ADMIN: update an existing coupon template. Audited. */
+    updateCouponTemplate: async (templateId: string, template: Record<string, unknown>): Promise<void> => {
+        const fn = httpsCallable<{ templateId: string; template: Record<string, unknown> }, { success: boolean }>(functions, 'updateCouponTemplate');
+        await fn({ templateId, template });
+    },
+
+    /** SUPER_ADMIN: delete a coupon template. Audited. */
+    deleteCouponTemplate: async (templateId: string): Promise<void> => {
+        const fn = httpsCallable<{ templateId: string }, { success: boolean }>(functions, 'deleteCouponTemplate');
+        await fn({ templateId });
+    },
+
+    /** SUPER_ADMIN: mint a real coupon from a template (a fresh code + zero counters). Audited. */
+    mintCouponFromTemplate: async (templateId: string, code: string): Promise<{ couponId?: string; code?: string }> => {
+        const fn = httpsCallable<{ templateId: string; code: string }, { success: boolean; couponId?: string; code?: string }>(functions, 'mintCouponFromTemplate');
+        const res = await fn({ templateId, code });
+        return { couponId: res.data.couponId, code: res.data.code };
+    },
+
+    /** SUPER_ADMIN: flip a monetization alert open<->acked. Audited. */
+    acknowledgeMonetizationAlert: async (alertId: string, status: 'acked' | 'open' = 'acked'): Promise<{ status?: string }> => {
+        const fn = httpsCallable<{ alertId: string; status: 'acked' | 'open' }, { success: boolean; status?: string }>(functions, 'acknowledgeMonetizationAlert');
+        const res = await fn({ alertId, status });
+        return { status: res.data.status };
     }
 };
 

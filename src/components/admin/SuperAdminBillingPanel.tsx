@@ -15,9 +15,10 @@ import {
 import {
     Shield, Zap, Search, Save, CheckCircle,
     ToggleLeft, ToggleRight, Calendar, Plus, Trash2, Ticket, Award,
-    Trophy, Settings, Gift, Target, KeyRound
+    Trophy, Settings, Gift, Target, KeyRound, BarChart3
 } from 'lucide-react';
 import { useToast } from '../ui/Toast';
+import { MonetizationDashboard } from './monetization/MonetizationDashboard';
 
 // Canonical default (matches shared/schemas/billingConfig BillingConfigSchema so
 // the auto-seed below passes the adminSaveBillingConfig validation gate): now
@@ -72,7 +73,7 @@ const DEFAULT_REFERRAL_CONFIG: ReferralConfig = {
     rewardType: 'free_pool'
 };
 
-type AdminSubTab = 'tiers' | 'features' | 'packages' | 'coupons' | 'referrals' | 'pools';
+type AdminSubTab = 'tiers' | 'features' | 'packages' | 'coupons' | 'referrals' | 'pools' | 'monetization';
 
 export const SuperAdminBillingPanel: React.FC = () => {
     const toast = useToast();
@@ -492,8 +493,23 @@ export const SuperAdminBillingPanel: React.FC = () => {
                     >
                         <KeyRound size={13} /> Pool Overrides
                     </button>
+                    <button
+                        onClick={() => setSubTab('monetization')}
+                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-all flex items-center gap-1.5 ${
+                            subTab === 'monetization' ? 'bg-navy-800 text-white' : 'text-muted hover:text-[color:var(--text)]'
+                        }`}
+                    >
+                        <BarChart3 size={13} /> Accounting
+                    </button>
                 </div>
             </div>
+
+            {/* TAB: MONETIZATION — accounting, coupon-abuse alerts, templates (PLAN Phase 6) */}
+            {subTab === 'monetization' && (
+                <div className="animate-in fade-in duration-300">
+                    <MonetizationDashboard />
+                </div>
+            )}
 
             {/* TAB 1: TIERS & BASE PRICING */}
             {subTab === 'tiers' && (

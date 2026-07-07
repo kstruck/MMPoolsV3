@@ -43,3 +43,4 @@ export * from './props';
 export * from './nfl';
 export * from './quote';
 export * from './bundle';
+export * from './couponTemplate';

@@ -34,6 +34,15 @@ export { logAdminAction } from "./adminOps";
 export { adminSaveBillingConfig, adminManageCoupon, adminUpdatePoolBilling, adminAdjustUserCredits } from "./adminBillingOps";
 // Canonical entitlements (Bundles + Pool Credits) — PLAN Phase 4 #14-17.
 export { adminGrantEntitlement, adminRevokeEntitlement, redeemPoolCredit } from "./entitlements";
+// Monetization tab — accounting alerts + coupon templates (PLAN Phase 6 #22-23).
+export { monetizationAlerts } from "./monetizationAlerts"; // scheduled ~6h abuse/housekeeping alert sweep (dry-run + kill-switch)
+export {
+    createCouponTemplate,
+    updateCouponTemplate,
+    deleteCouponTemplate,
+    mintCouponFromTemplate,
+    acknowledgeMonetizationAlert,
+} from "./couponTemplates";
 export { initializeBigEastTournamentHttp, initializeBig12TournamentHttp } from "./conferenceTournaments";
 export { scoreBracketEntries, finalizeTournamentPayouts } from "./bracketScoring";
 
