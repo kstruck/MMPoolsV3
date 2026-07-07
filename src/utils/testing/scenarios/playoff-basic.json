@@ -101,8 +101,8 @@
         },
         {
             "type": "playoffWinner",
-            "expected": "Alice",
-            "message": "Alice should win (ranked KC #1 - the Super Bowl winner)"
+            "expected": "Carol",
+            "message": "Carol should win — Rank'Em awards rankings[team] x round multiplier per win (higher value = more points): Carol 595, Bob 513, Alice 473. Alice put her LOWEST value (1) on KC, the deepest-running team."
         },
         {
             "type": "poolStatus",
