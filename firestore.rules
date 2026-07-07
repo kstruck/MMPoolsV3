@@ -341,11 +341,62 @@ service cloud.firestore {
       allow create: if false;
     }
 
-    // COUPONS — admin-only writes, no client reads needed (validated server-side)
+    // COUPONS — SUPER_ADMIN-only reads (ADR-0002): usageLog now holds per-user
+    // reservation activity (userId/poolId/status), so coupons are no longer
+    // client-readable by ordinary users. Buyer-side validation goes through the
+    // getPoolQuote callable, which returns only sanitized coupon state. The admin
+    // coupon manager + Monetization accounting tab read as SUPER_ADMIN.
     match /coupons/{couponId} {
-      allow read: if request.auth != null;
+      allow read: if isSuperAdmin();
       // Server-only (adminManageCoupon, Admin SDK bypasses rules) — audited writes.
       allow write: if false;
+    }
+
+    // COUPON TEMPLATES — reusable coupon definitions (Black Friday / Pre-Season).
+    // SUPER_ADMIN reads (powers the Monetization > Templates tab); all writes go
+    // through the couponTemplates callables (Admin SDK), audited.
+    match /couponTemplates/{templateId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    // CHECKOUT SESSIONS — pending billable snapshot + coupon reservation linkage
+    // written at checkout by createCheckoutSession (Admin SDK) and cleared by the
+    // webhook. Server-only; no client access (holds nothing the client needs, and
+    // exposing it would leak reservation state).
+    match /checkoutSessions/{reservationId} {
+      allow read, write: if false;
+    }
+
+    // MONETIZATION ALERTS — coupon-abuse / refund / dispute / double-charge review
+    // items. Computed by the monetizationAlerts job + written by the money webhook
+    // (Admin SDK). SUPER_ADMIN reads the alert center; writes functions-only. The
+    // acknowledgeMonetizationAlert callable flips status server-side.
+    match /monetization_alerts/{alertId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    // BUNDLES (canonical entitlements) — a commissioner's prepaid Pool Credits /
+    // Unlimited Pass. Owner reads their own (the "My Bundles & Credits" dashboard
+    // card); SUPER_ADMIN reads any (admin panel + accounting). Grants/revokes go
+    // through the adminGrantEntitlement / adminRevokeEntitlement callables and the
+    // Stripe webhook (Admin SDK) — no client writes.
+    match /bundles/{bundleId} {
+      allow read: if request.auth != null
+        && (resource.data.ownerId == request.auth.uid || isSuperAdmin());
+      allow write: if false;
+
+      // Per-credit redeemable docs. Readable only by the parent bundle's owner
+      // (or SUPER_ADMIN); ownership is checked by get()-ing the parent bundle.
+      match /credits/{creditId} {
+        allow read: if request.auth != null
+          && (
+            get(/databases/$(database)/documents/bundles/$(bundleId)).data.ownerId == request.auth.uid
+            || isSuperAdmin()
+          );
+        allow write: if false;
+      }
     }
 
     // REFERRALS — read-only for users (their own referrals), writes via Cloud Functions only
