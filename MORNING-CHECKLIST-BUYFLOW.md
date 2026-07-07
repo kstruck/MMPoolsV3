@@ -12,7 +12,11 @@ _These did not stop the build; I picked a safe default and flagged it here. Chan
 
 2. **NFL & Squares pools launch `free` (not `trial`) at creation** — their create payloads carry no player-count field, so the free/trial rule can't see a size and defaults to `free`. This is behavior-equivalent to today and NOT a money hole: the existing join-time 10-player free lock forces payment at the 11th participant, and paid-ceiling enforcement kicks in once paid. _Default: kept._ Action: confirm you're OK gating NFL/Squares at join (11th player) rather than at creation. If you want NFL pools to estimate size at creation, the wizard launch step (Wave 4) can pass an estimate.
 
-_(more will be appended as later waves run)_
+3. **Anonymous (logged-out) users still cannot enter the wizard** — the plan's target was try-before-signup (build a device-local draft, sign in at the launch step). The launch step itself is built and takes a uid, but the wizard routes are still behind the existing auth gate (that's an upstream `App.tsx` routing change, outside the wave's scope). _Default: kept the auth gate._ Action: decide if you want anon wizard entry now; it's a follow-up routing task, not a buy-flow blocker. Everything else in the flow works for logged-in users.
+
+4. **"Redeem a Pool Credit" in the wizard needs the bundles rules deployed** — the launch step only shows the Redeem option when it can read the user's bundles, which requires the Wave-5 `bundles` read rule (in this branch, deploys with the rest). Until rules deploy, the option just stays hidden (no crash). No action beyond deploying rules; noted so it's not mistaken for a bug during UAT before deploy.
+
+_(complete — see sections B–D)_
 
 ---
 
@@ -33,12 +37,67 @@ _Filled in as waves complete. Stripe dashboard, secret rotation, Coolify deploy,
 
 ## C. Pre-existing issues found (not caused by this work; fix later unless noted)
 
-- **SMS add-on never charged** (BillingInvoiceCard subtotal omits SMS; estimator advertises +$9). Being fixed inside Wave 2 server-side pricing since it's a money-correctness bug.
-- Duplicate Firestore listeners on `settings/billing_config` (PricingPage + BillingInvoiceCard) — perf nit.
-- PricingPage top-level bundle buttons lack loading/disabled state during checkout redirect — polish.
+- **SMS add-on never charged** — ✅ FIXED in Wave 2 (server prices all add-ons incl. SMS in getPoolQuote; BillingInvoiceCard now shows it).
+- Duplicate Firestore listeners on `settings/billing_config` (PricingPage + BillingInvoiceCard) — perf nit, not addressed.
+- PricingPage top-level bundle buttons lack loading/disabled state during checkout redirect — polish, not addressed.
+- `PropsWizard/PropsWizard.tsx` is a legacy separate wizard (the live Props flow is `wizard/create/CreatePropsPool.tsx`). Left untouched; candidate for deletion in a later cleanup.
 
 ---
 
 ## D. Morning run order (do these top-to-bottom)
 
-_Finalized in the last wave. Placeholder until then._
+All work is on branch `feat/buyflow-overhaul` (worktree `D:\mmp-buyflow`), committed, not pushed unless the final summary says otherwise. Firebase project: `gridiron-gamble-uzuqo`. Use `npx firebase` (no global CLI).
+
+### Step 1 — Review the branch (~15 min)
+1. Read this whole file, then skim `PLAN-BUYFLOW-OVERHAUL.md` and the per-wave `NOTES-WAVE*.md` at the worktree root.
+2. Look at the diff: `cd D:\mmp-buyflow && git log --oneline main..feat/buyflow-overhaul` then `git diff main...feat/buyflow-overhaul --stat`. (If a PR was opened, review it there instead.)
+
+### Step 2 — Local verification (prove it's green on your machine, ~5 min)
+```
+cd D:\mmp-buyflow
+npm install
+npm --prefix functions install
+npm --prefix functions run build      # expect exit 0
+npm --prefix functions run test       # expect 288 passing
+npx tsc --noEmit -p tsconfig.app.json # expect 0 errors
+npx vitest run                        # expect 226 passing
+```
+Optional (needs Java): validate rules in the emulator —
+```
+npx firebase emulators:exec --only firestore "node functions/scripts/monetization.rules.test.mjs && node functions/scripts/squarePrivate.rules.test.mjs"
+```
+
+### Step 3 — Merge to main
+3. Merge `feat/buyflow-overhaul` → `main` (via the PR, or `git checkout main && git merge feat/buyflow-overhaul`).
+
+### Step 4 — Deploy (functions BEFORE rules — repo ritual)
+4. `npm --prefix functions install` (avoids the stripe/fft TS2307 on deploy).
+5. `npx firebase deploy --only functions` — this creates two NEW scheduled jobs (`releaseStaleCouponReservations`, `monetizationAlerts`), both OFF/dry-run by default, and the new callables (`getPoolQuote`, `adminGrantEntitlement`, `adminRevokeEntitlement`, `redeemPoolCredit`, coupon-template + alert callables). Confirm Cloud Scheduler is enabled for the project if prompted.
+6. `npx firebase deploy --only firestore:rules,firestore:indexes` — **this is where the new rules get compiled + validated.** A syntax error blocks the deploy (it will NOT corrupt prod); if it complains, tell me and I'll fix. The `bundles` composite index may take a few minutes to build.
+7. Trigger the **www frontend deploy in Coolify** (pushing to main does NOT deploy the frontend — nginx serves it). This ships the pricing-page + wizard + admin dashboard changes.
+
+### Step 5 — Stripe configuration (external, required before money-path UAT)
+8. Stripe Dashboard → Developers → Webhooks → your `handleStripeWebhook` endpoint → enable events: `checkout.session.expired`, `charge.refunded`, `charge.dispute.created` (see §B).
+9. Rotate `STRIPE_SECRET_KEY` to a real Stripe TEST key: `npx firebase functions:secrets:set STRIPE_SECRET_KEY` then re-deploy functions. **Until this is done, checkout is mock-free — every "purchase" activates for $0** (§B).
+10. Confirm the redirect host is `https://www.marchmeleepools.com`, or set `BUYFLOW_ALLOWED_ORIGINS` (§B).
+
+### Step 6 — Smoke test (money path, Stripe sandbox)
+11. Run the money-path UAT from `PLAN-BUYFLOW-OVERHAUL.md` → Test plan → Layer 3 (17-item checklist: each visitor type, each pool format across tier boundaries, coupons incl. the max-uses race and per-user limit, bundles + redemption, refund, alerts). Record evidence (screenshot + `billingCharges` row + Stripe dashboard link) per the plan.
+12. Verify the **Accounting** tab (Super-Admin → Billing → Accounting): revenue cards populate from the ledger, coupon usage timeline, bundle liability, user money profile search.
+
+### Step 7 — Optional enables (after a dry-run review each)
+13. Coupon-reservation sweep: `system/config.couponSweep = { enabled: true, dryRun: false }` (§B). Safe to leave off.
+14. Coupon-abuse alerts: `system/config.monetizationAlerts = { enabled: true, dryRun: false, velocityThreshold: 10, notifyEmail: "kstruck@gmail.com" }` (§B).
+
+### Step 8 — Entitlement migration (ONLY if real bundle owners already exist in prod)
+15. If nobody has purchased a bundle under the OLD system yet, **skip** — the new model starts clean. Otherwise run the freeze→dry-run→commit→verify→unfreeze sequence in §B. Check first: any `users/*` docs with a non-zero `freePoolsAvailable` / non-empty `poolCredits` / an `activeBundleType`? None → skip.
+
+### Step 9 — Resolve the §A decisions
+16. Answer the four decisions in section A (deep-link, NFL/Squares launch-free, anon wizard entry, redeem-needs-rules). All have safe defaults already in place; none block deploy.
+
+---
+
+### What's done vs. what needs you
+**Done overnight (code complete, tests green, committed):** tooltip fix, visitor-state pricing page, server-authoritative quote engine, coupon reserve/confirm/release with hard limits, refund/dispute handling, transactional ledger, launch billing mode, paid-ceiling enforcement, canonical bundles/credits + admin grant/revoke + redemption, migration script (unrun), accounting dashboard + alert center + coupon templates, wizard launch step across all 7 flows, Firestore rules + index for every new collection, runnable rules test.
+
+**Needs you (can't be automated / external):** deploy (functions/rules/indexes/Coolify), Stripe webhook events + test-key rotation, the money-path UAT in Stripe sandbox, the optional job enables, the migration (if applicable), and the four §A decisions.
