@@ -41,3 +41,4 @@ export * from './bracket';
 export * from './playoff';
 export * from './props';
 export * from './nfl';
+export * from './quote';

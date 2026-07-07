@@ -54,8 +54,58 @@ export function validateCreateInput(type: PoolType, data: unknown): void {
 // behavior-equivalent to today's absent-billing (checkBillingAccess and
 // enforceBillingStatus both treat missing and 'free' identically) but makes the
 // state legible. See PHASE-A-INVENTORY.md §5.
+
+/** All paid features explicitly locked. Stamped on free/trial launches so
+ *  deny-by-default access checks (billing.ts checkBillingAccess) are legible and
+ *  a missing flag never accidentally unlocks a paid feature. */
+export const LOCKED_FEATURES = {
+  aiCommissioner: false,
+  smsNotifications: false,
+  whatIfSimulator: false,
+  customBranding: false,
+} as const;
+
+export type LaunchBillingMode = 'free' | 'trial';
+
+/**
+ * Launch billing mode (PLAN Phase 2, amends ADR-0001 point 5). The create
+ * callables compute a server-validated mode and stamp it here:
+ *   - 'free'  → { status:'free', tier:'free_tier', pricePaid:0 } (as today) +
+ *               explicit locked features.
+ *   - 'trial' → { status:'trial', trialEndsAt: now + trialDays*86400000,
+ *               tier:'standard_tier', pricePaid:0 } + explicit locked features.
+ *
+ * `trialDays` comes from billing_config (default 14). `nowMs` is injected for
+ * deterministic tests. Backward-compatible: {@link freeBilling} delegates here
+ * with 'free' so existing callers keep working unchanged in shape (plus the new
+ * explicit featuresUnlocked stamp).
+ */
+export function billingForLaunch(
+  mode: LaunchBillingMode = 'free',
+  trialDays = 14,
+  nowMs: number = Date.now(),
+) {
+  if (mode === 'trial') {
+    return {
+      status: 'trial' as const,
+      tier: 'standard_tier' as const,
+      pricePaid: 0,
+      trialEndsAt: nowMs + Math.max(1, Math.round(trialDays)) * 24 * 60 * 60 * 1000,
+      featuresUnlocked: { ...LOCKED_FEATURES },
+    };
+  }
+  return {
+    status: 'free' as const,
+    tier: 'free_tier' as const,
+    pricePaid: 0,
+    featuresUnlocked: { ...LOCKED_FEATURES },
+  };
+}
+
+/** @deprecated Use billingForLaunch('free'). Retained so existing create
+ *  callables keep compiling/working; now stamps explicit locked features too. */
 export function freeBilling() {
-  return { status: 'free' as const, tier: 'free_tier', pricePaid: 0 };
+  return billingForLaunch('free');
 }
 
 // Legacy value the current code upgrades a fresh creator to. The renamed

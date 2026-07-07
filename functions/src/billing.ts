@@ -5,13 +5,49 @@ import * as admin from "firebase-admin";
 import { Pool, PoolBilling, Coupon } from "./types";
 import {
     BillingConfigSchema,
+    BillingConfig,
     DEFAULT_GRACE_PERIOD_DAYS,
     DEFAULT_TRIAL_DAYS,
+    DEFAULT_FORMAT_TIER_MAP,
 } from "./shared/schemas/billingConfig";
+import {
+    poolQuoteInputSchema,
+    type CouponQuoteState,
+    type PoolQuote,
+} from "./shared/schemas/quote";
+import { computeQuote, discountLabel, type QuoteCoupon } from "./lib/quoteEngine";
+import { validateCouponRules } from "./lib/couponReservation";
 import { HttpsError } from "firebase-functions/v2/https";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { renderEmailHtml, escapeHtml, BASE_URL } from "./emailStyles";
 import { sendEmail } from "./reminders";
+
+// Fail-open billing config for readers (never stall the buy-flow on a malformed
+// doc). Mirrors the enforceBillingStatus pattern: parse settings/billing_config,
+// fall back to schema defaults on missing/invalid. Returns the fully-defaulted
+// BillingConfig (trialDays/formatTierMap/packagesList materialized).
+export async function loadBillingConfig(
+    dbRef: admin.firestore.Firestore
+): Promise<BillingConfig> {
+    const snap = await dbRef.collection("settings").doc("billing_config").get();
+    const parsed = BillingConfigSchema.safeParse(snap.data() ?? {});
+    if (parsed.success) return parsed.data;
+    // Malformed/partial doc → defaults. A missing doc parses successfully only
+    // if all required fields have defaults; pricing/features do not, so build a
+    // minimal safe fallback here.
+    return BillingConfigSchema.parse({
+        freePlayerThreshold: 10,
+        gracePeriodDays: DEFAULT_GRACE_PERIOD_DAYS,
+        trialDays: DEFAULT_TRIAL_DAYS,
+        pricing: { season: [], bracket: [], squares: [], props: [] },
+        formatTierMap: DEFAULT_FORMAT_TIER_MAP,
+        features: {
+            aiCommissioner: { isPremium: true, addonPrice: 0 },
+            whatIfSimulator: { isPremium: true, addonPrice: 0 },
+            customBranding: { isPremium: true, addonPrice: 0 },
+        },
+    });
+}
 
 const db = admin.firestore();
 
@@ -186,32 +222,10 @@ export const enforceBillingStatus = functions.scheduler.onSchedule("every day 03
 //    Checks if a pool is accessible and optionally if a premium feature is unlocked
 // =============================================================================
 
-export function checkBillingAccess(
-    billing: PoolBilling | undefined,
-    feature?: string
-): { allowed: boolean; reason?: string } {
-    // No billing record = free pool, always allowed
-    if (!billing) {
-        return { allowed: true };
-    }
-
-    // Locked pool requires payment
-    if (billing.status === "locked") {
-        return { allowed: false, reason: "Pool is locked. Payment required." };
-    }
-
-    // Check specific feature access
-    if (feature) {
-        const featureKey = feature as keyof PoolBilling["featuresUnlocked"];
-        if (billing.featuresUnlocked && featureKey in billing.featuresUnlocked) {
-            if (!billing.featuresUnlocked[featureKey]) {
-                return { allowed: false, reason: "Feature requires premium upgrade." };
-            }
-        }
-    }
-
-    return { allowed: true };
-}
+// Deny-by-default paid-feature gate (PLAN Phase 4 #6c) — pure logic lives in
+// ./lib/billingAccess so it is importable/testable without Firebase init.
+export { checkBillingAccess, PAID_FEATURE_KEYS } from "./lib/billingAccess";
+import { checkBillingAccess } from "./lib/billingAccess";
 
 export const validateBillingAccess = functions.https.onCall(async (request) => {
     const { poolId, feature } = request.data as { poolId: string; feature?: string };
@@ -427,5 +441,118 @@ export const onPoolParticipantChange = onDocumentWritten("pools/{poolId}", async
 
     if (Object.keys(updates).length > 0) {
         await db.collection("pools").doc(poolId).update(updates);
+    }
+});
+
+// =============================================================================
+// 5. getPoolQuote — Callable Function (single price authority, PLAN Phase 2)
+//    Input:  { poolType, estimatedPlayers, addons:{...}, couponCode? }
+//    Output: itemized { basePrice, addonLines[], discount, total,
+//                       couponState:{valid,reason?,discountLabel?}, freeTierEligible }
+//    NO price math anywhere on the client — the client renders this verbatim.
+// =============================================================================
+
+/**
+ * Loads a coupon by code and returns a sanitized quote state (never leaks other
+ * users' usage). Validates every rule against current state incl. live
+ * reservations (ADR-0002). Shared shape used by getPoolQuote and reused by
+ * checkout. Returns undefined when no code was supplied.
+ */
+export async function resolveCouponForQuote(
+    dbRef: admin.firestore.Firestore,
+    couponCode: string | undefined,
+    ctx: { userId: string; poolType: string; now: number }
+): Promise<{ state: CouponQuoteState; coupon?: QuoteCoupon } | undefined> {
+    if (!couponCode) return undefined;
+    const code = couponCode.toUpperCase().trim();
+
+    const snap = await dbRef
+        .collection("coupons")
+        .where("code", "==", code)
+        .limit(1)
+        .get();
+
+    if (snap.empty) {
+        return { state: { code, valid: false, reason: "Invalid coupon code." } };
+    }
+
+    const coupon = snap.docs[0].data() as Coupon;
+    const result = validateCouponRules(
+        {
+            isActive: coupon.isActive,
+            expiresAt: coupon.expiresAt,
+            maxUses: coupon.maxUses,
+            perUserLimit: coupon.perUserLimit,
+            allowedPoolTypes: coupon.allowedPoolTypes as string[] | undefined,
+            usageLog: coupon.usageLog as any,
+        },
+        ctx
+    );
+
+    if (!result.valid) {
+        return { state: { code, valid: false, reason: result.reason } };
+    }
+
+    return {
+        state: {
+            code,
+            valid: true,
+            discountLabel: discountLabel(coupon.discountType, coupon.discountValue),
+            discountType: coupon.discountType,
+            discountValue: coupon.discountValue,
+        },
+        coupon: {
+            code,
+            discountType: coupon.discountType,
+            discountValue: coupon.discountValue,
+        },
+    };
+}
+
+export const getPoolQuote = functions.https.onCall({ cors: true }, async (request): Promise<PoolQuote> => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "You must be signed in to get a quote.");
+    }
+    const userId = request.auth.uid;
+
+    // Validate input shape (coerces estimatedPlayers, defaults addon booleans).
+    const parsed = poolQuoteInputSchema.safeParse(request.data);
+    if (!parsed.success) {
+        const issue = parsed.error.issues[0];
+        throw new HttpsError(
+            "invalid-argument",
+            `Invalid quote request: ${issue?.path?.join(".") || "(root)"} — ${issue?.message ?? "validation failed"}`
+        );
+    }
+    const { poolType, estimatedPlayers, addons, couponCode } = parsed.data;
+
+    const config = await loadBillingConfig(db);
+
+    // Resolve coupon (validated) BEFORE computing so the quote can apply it.
+    let couponState: CouponQuoteState | undefined;
+    let coupon: QuoteCoupon | undefined;
+    if (couponCode) {
+        const resolved = await resolveCouponForQuote(db, couponCode, {
+            userId,
+            poolType,
+            now: Date.now(),
+        });
+        couponState = resolved?.state;
+        coupon = resolved?.coupon;
+    }
+
+    try {
+        // computeQuote throws (plain Error) when the format is unmapped in
+        // formatTierMap — surface as invalid-argument.
+        return computeQuote({
+            config,
+            poolType,
+            estimatedPlayers,
+            addons,
+            couponState,
+            coupon,
+        });
+    } catch (e: any) {
+        throw new HttpsError("invalid-argument", e?.message || "Unable to price this pool format.");
     }
 });

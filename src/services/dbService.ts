@@ -25,6 +25,7 @@ import { userRepository } from "./userRepository";
 import { errorHandler, ErrorSeverity } from "./errorHandler";
 export { db };
 import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament, BanterMessage, NFLGame, WeeklyRecap } from "../types";
+import type { PoolQuoteInput, PoolQuote, AddonSelection } from "@shared/schemas/quote";
 
 /** Heartbeat written by the scheduled ESPN score sync (functions/src/scoreUpdates.ts) */
 export interface ScoreSyncStatus {
@@ -1303,17 +1304,39 @@ export const dbService = {
         }
     },
 
+    // Server is the single price authority (PLAN Phase 2): fetch an itemized,
+    // coupon-inclusive quote. The client renders this verbatim — NO price math.
+    async getPoolQuote(params: PoolQuoteInput): Promise<PoolQuote> {
+        try {
+            const fn = httpsCallable<PoolQuoteInput, PoolQuote>(functions, 'getPoolQuote');
+            const result = await fn(params);
+            return result.data;
+        } catch (error: any) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'getPoolQuote', params }
+            });
+            throw error;
+        }
+    },
+
+    // Checkout hardened (PLAN Phase 2 #6): server prices the pool + validated
+    // add-on booleans and derives redirect URLs from an allowlisted origin — the
+    // client no longer sends `price`, `tier`, `successUrl`, or `cancelUrl`.
+    // `bundleType` is still accepted for the multi-pool bundle store path.
     async createCheckoutSession(params: {
         poolId: string;
-        poolName: string;
-        poolType: string;
-        tier: string;
-        price: number;
+        poolName?: string;
+        poolType?: string;
+        estimatedPlayers?: number;
+        addons?: AddonSelection;
         couponCode?: string;
-        referralCredits?: number;
+        usedCredit?: boolean;
+        customCreditId?: string;
+        bundleType?: string;
     }): Promise<{ sessionUrl: string }> {
         try {
-            const fn = httpsCallable<any, { sessionUrl: string }>(functions, 'createCheckoutSession');
+            const fn = httpsCallable<typeof params, { sessionUrl: string }>(functions, 'createCheckoutSession');
             const result = await fn(params);
             return result.data;
         } catch (error: any) {

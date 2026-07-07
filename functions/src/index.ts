@@ -41,10 +41,11 @@ export { createNFLPool, joinNFLPool, submitNFLPicks, executeSurvivorRebuy, score
 export { sendManualReminder } from "./manualReminders";
 
 // --- BILLING & MONETIZATION ---
-export { enforceBillingStatus, validateBillingAccess, redeemCoupon, onPoolParticipantChange } from "./billing";
+export { enforceBillingStatus, validateBillingAccess, redeemCoupon, onPoolParticipantChange, getPoolQuote } from "./billing";
 
 // --- STRIPE PAYMENTS ---
-export { createCheckoutSession, handleStripeWebhook } from "./stripe";
+// releaseStaleCouponReservations: 30-min sweep releasing stale coupon holds (ADR-0002; dry-run + kill-switch)
+export { createCheckoutSession, handleStripeWebhook, releaseStaleCouponReservations } from "./stripe";
 
 // --- SOCIAL LINK PREVIEWS (per-pool OG tags for /join/:id shares) ---
 export { joinPreview } from "./joinPreview";

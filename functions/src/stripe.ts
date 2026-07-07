@@ -1,21 +1,52 @@
 // Set the secrets before deploy:
 //   firebase functions:secrets:set STRIPE_SECRET_KEY
 //   firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
+//
+// Buy-flow overhaul (PLAN Phases 2/3/5, ADR-0002):
+//   - createCheckoutSession is a price authority: it computes the itemized quote
+//     server-side (billing.ts computeQuote), NEVER trusts the client price, and
+//     prices validated add-on booleans.
+//   - Redirect URLs are derived from an ALLOWLISTED origin + fixed route
+//     templates (open-redirect fix); client-supplied successUrl/cancelUrl are
+//     ignored.
+//   - Coupon uses are reserved (server reservationId) at checkout, confirmed at
+//     the completion webhook, released on expiry/failure/sweep.
+//   - Pool-level checkout idempotency via billing.pendingSessionId.
+//   - Ledger rows are written in the SAME transaction as the pool/bundle
+//     mutation in the webhook (a ledger failure fails the webhook → Stripe
+//     retries). Refunds/disputes write linked negative adjustment rows + alerts.
 
 import * as functions from "firebase-functions/v2";
 import { FieldValue } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
+import { randomUUID } from "crypto";
 import { defineSecret } from "firebase-functions/params";
 import { HttpsError } from "firebase-functions/v2/https";
 
 import Stripe from "stripe";
-import { recordBillingCharge } from "./lib/billingCharges";
+import {
+    recordBillingCharge,
+    writeBillingChargeTxn,
+    type BillingCharge,
+} from "./lib/billingCharges";
+import { loadBillingConfig, resolveCouponForQuote } from "./billing";
+import { computeQuote, pricedAddonKeys } from "./lib/quoteEngine";
+import {
+    checkoutPoolInputSchema,
+    type PendingBillableSnapshot,
+} from "./shared/schemas/quote";
+import {
+    validateCouponRules,
+    makeReservationEntry,
+    makeConfirmedEntry,
+    transitionReservation,
+    stalePendingReservationIds,
+    type CouponUsageEntry,
+} from "./lib/couponReservation";
 
 const db = admin.firestore();
 
 // --- Stripe Config Secrets (Secret Manager, not plain config) ---
-// defineSecret keeps the value out of the deployed config; it must be bound to
-// each function that reads it via `secrets: [...]` (below) or .value() throws.
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
 
@@ -40,377 +71,366 @@ function getStripe() {
 }
 
 // =============================================================================
+// Redirect-origin allowlist (open-redirect fix — PLAN Phase 2 #6)
+// successUrl/cancelUrl are NO LONGER accepted from the client. The server picks
+// a safe origin (from the request Origin header IF it is allowlisted, else the
+// production origin) and builds fixed route templates.
+// =============================================================================
+
+const PRODUCTION_ORIGIN = "https://www.marchmeleepools.com";
+
+/** Allowlisted origins. Extendable via BUYFLOW_ALLOWED_ORIGINS (comma-separated). */
+function allowedOrigins(): string[] {
+    const base = [
+        PRODUCTION_ORIGIN,
+        "https://marchmeleepools.com",
+        "https://marchmelee.com",
+        "https://www.marchmelee.com",
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:5199",
+    ];
+    const extra = (process.env.BUYFLOW_ALLOWED_ORIGINS || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    return [...new Set([...base, ...extra])];
+}
+
+/** Normalizes an origin string to `protocol//host` or returns null if unparseable. */
+function normalizeOrigin(raw: string | undefined): string | null {
+    if (!raw) return null;
+    try {
+        const u = new URL(raw);
+        return `${u.protocol}//${u.host}`;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The safe origin to build redirect URLs from. Uses the request Origin/Referer
+ * ONLY when it is in the allowlist; otherwise falls back to the production
+ * origin. Client-supplied redirect URLs are never used.
+ */
+function safeRedirectOrigin(rawRequest: any): string {
+    const headerOrigin =
+        normalizeOrigin(rawRequest?.headers?.origin as string) ||
+        normalizeOrigin(rawRequest?.headers?.referer as string);
+    if (headerOrigin && allowedOrigins().includes(headerOrigin)) {
+        return headerOrigin;
+    }
+    return PRODUCTION_ORIGIN;
+}
+
+function poolSuccessUrl(origin: string, poolId: string): string {
+    return `${origin}/pool/${encodeURIComponent(poolId)}?payment=success&session_id={CHECKOUT_SESSION_ID}`;
+}
+function poolCancelUrl(origin: string, poolId: string): string {
+    return `${origin}/pool/${encodeURIComponent(poolId)}?payment=cancelled`;
+}
+function bundleSuccessUrl(origin: string): string {
+    return `${origin}/pricing?payment=success&session_id={CHECKOUT_SESSION_ID}`;
+}
+function bundleCancelUrl(origin: string): string {
+    return `${origin}/pricing?payment=cancelled`;
+}
+
+// A live pending checkout is considered valid for the Stripe session lifetime
+// (24h). Beyond that, a new checkout may replace it.
+const PENDING_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+
+// =============================================================================
 // 1. createCheckoutSession — Callable Function (onCall v2)
-//    Creates a Stripe Checkout Session for one-time pool payment or packages/bundles
 // =============================================================================
 
 export const createCheckoutSession = functions.https.onCall({ cors: true, secrets: [stripeSecretKey] }, async (request) => {
-    // --- Auth Check ---
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "You must be signed in to create a checkout session.");
     }
-
     const userId = request.auth.uid;
-    const {
-        poolId,
-        poolName,
-        poolType,
-        tier,
-        price,
-        couponCode,
-        referralCredits,
-        maxPlayersAllowed,
-        bundleType, // buy_3 or unlimited_1yr
-        usedCredit, // boolean indicating if they are applying a pool credit
-        customCreditId, // dynamic credit ID
-        successUrl, // Optional custom success redirect URL
-        cancelUrl, // Optional custom cancel redirect URL
-    } = request.data as any;
-
+    const data = request.data as any;
+    const bundleType = data?.bundleType as string | undefined;
     const isBundlePurchase = !!bundleType;
 
-    // --- Validate Required Fields ---
+    const origin = safeRedirectOrigin(request.rawRequest);
+
+    // =====================================================================
+    // BUNDLE PURCHASE PATH (no coupons/reservations; server-priced)
+    // =====================================================================
     if (isBundlePurchase) {
-        if (price === undefined || price < 0) {
-            throw new HttpsError("invalid-argument", "Price is required for bundle purchase.");
-        }
-    } else {
-        if (!poolId || !poolName || !tier || price === undefined) {
-            throw new HttpsError("invalid-argument", "poolId, poolName, tier, and price are required.");
-        }
-        if (price < 0) {
-            throw new HttpsError("invalid-argument", "Price must be non-negative.");
-        }
+        return createBundleCheckout(userId, bundleType!, origin, request.auth.token?.email);
     }
 
-    // --- Determine Authoritative Server Price (BEFORE any checkout path) ---
-    // Never trust the client-supplied `price`. Resolve it from billing_config so
-    // neither the bundle path nor the standard path can be charged a tampered amount.
-    let serverPrice: number | undefined;
-    try {
-        const billingConfigDoc = await db.collection("settings").doc("billing_config").get();
-        const configData = billingConfigDoc.data();
-        if (configData) {
-            if (isBundlePurchase) {
-                const packagesList = configData.packagesList || [];
-                const dynamicBundle = packagesList.find((b: any) => b.id === bundleType);
-                if (dynamicBundle) {
-                    serverPrice = dynamicBundle.price;
-                } else if (bundleType === "buy_3" && configData.packages?.buy_3) {
-                    serverPrice = configData.packages.buy_3;
-                } else if (bundleType === "unlimited_1yr" && configData.packages?.unlimited_1yr) {
-                    serverPrice = configData.packages.unlimited_1yr;
-                }
-            } else {
-                if (tier === "free_tier") {
-                    serverPrice = 0;
-                } else {
-                    let pricingArray: any[] = [];
-                    if (poolType === "NFL_SEASON" || poolType === "NFL_PICKEM" || poolType === "NFL_SURVIVOR" || poolType === "NFL_MARGIN") {
-                        pricingArray = configData.pricing?.season || [];
-                    } else if (poolType === "BRACKET" || poolType === "NFL_PLAYOFFS") {
-                        pricingArray = configData.pricing?.bracket || [];
-                    } else if (poolType === "SQUARES") {
-                        pricingArray = configData.pricing?.squares || [];
-                    } else if (poolType === "PROPS") {
-                        pricingArray = configData.pricing?.props || [];
-                    }
-
-                    const players = Number(maxPlayersAllowed) || 10;
-                    const applicableTier = pricingArray.find((t: any) => players >= t.min && players <= t.max);
-                    if (applicableTier) {
-                        serverPrice = applicableTier.price;
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        console.error("Failed to fetch authoritative price", e);
+    // =====================================================================
+    // STANDARD POOL PURCHASE PATH
+    // =====================================================================
+    const parsed = checkoutPoolInputSchema.safeParse(data);
+    if (!parsed.success) {
+        const issue = parsed.error.issues[0];
+        throw new HttpsError(
+            "invalid-argument",
+            `Invalid checkout request: ${issue?.path?.join(".") || "(root)"} — ${issue?.message ?? "validation failed"}`
+        );
     }
+    const { poolId, poolName, poolType, estimatedPlayers, addons, couponCode, usedCredit, customCreditId } = parsed.data;
 
-    if (serverPrice === undefined) {
-        throw new HttpsError("internal", "Unable to resolve authoritative server price for this pool type/tier.");
-    }
-
-    // --- Build the base URL for redirect ---
-    const rawOrigin = (request.rawRequest?.headers?.origin as string) || (request.rawRequest?.headers?.referer as string) || "https://marchmelee.com";
-    const originUrl = rawOrigin.endsWith("/") ? rawOrigin.slice(0, -1) : rawOrigin;
-    
-    let cleanedOrigin = originUrl;
-    try {
-        const urlObj = new URL(originUrl);
-        cleanedOrigin = `${urlObj.protocol}//${urlObj.host}`;
-    } catch {
-        // Fallback
-    }
-
-    // --- Bundle Purchase Path ---
-    if (isBundlePurchase) {
-        const baseUrl = successUrl || `${cleanedOrigin}/pricing`;
-        const stripe = getStripe();
-
-        if (!stripe) {
-            console.log(`[Stripe Mockup] STRIPE_SECRET_KEY is missing/placeholder. Activating mock dev sandbox bundle checkout for ${bundleType}.`);
-            const mockUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}payment=success&session_id=mock_bundle_session_${Date.now()}`;
-            
-            const userRef = db.collection("users").doc(userId);
-            if (bundleType === "buy_3") {
-                await userRef.update({
-                    freePoolsAvailable: FieldValue.increment(3),
-                    role: "COMMISSIONER"
-                });
-            } else if (bundleType === "unlimited_1yr") {
-                await userRef.update({
-                    activeBundleType: "unlimited_1yr",
-                    bundleExpiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
-                    role: "COMMISSIONER"
-                });
-            } else {
-                // Dynamic Admin Bundle Mock Checkout Payout
-                let dynamicBundle: any = null;
-                try {
-                    const billingConfigDoc = await db.collection("settings").doc("billing_config").get();
-                    const packagesList = billingConfigDoc.data()?.packagesList || [];
-                    dynamicBundle = packagesList.find((b: any) => b.id === bundleType);
-                } catch (err) {
-                    console.error("Failed to query dynamic bundle config inside sandbox checkout:", err);
-                }
-
-                if (dynamicBundle) {
-                    const creditsSpawned = [];
-                    const validityDays = Number(dynamicBundle.durationDays) || 0;
-                    const expiresAt = validityDays > 0 ? Date.now() + validityDays * 24 * 60 * 60 * 1000 : 0;
-                    
-                    for (let i = 0; i < dynamicBundle.poolsIncluded; i++) {
-                        creditsSpawned.push({
-                            id: `credit_${bundleType}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-                            bundleId: bundleType,
-                            poolType: dynamicBundle.poolType,
-                            maxPlayersPerPool: Number(dynamicBundle.maxPlayersPerPool) || 50,
-                            expiresAt,
-                            isUsed: false
-                        });
-                    }
-                    
-                    await userRef.update({
-                        poolCredits: FieldValue.arrayUnion(...creditsSpawned),
-                        role: "COMMISSIONER"
-                    });
-                    console.log(`[Dynamic Bundle Mock] Credited user ${userId} with ${dynamicBundle.poolsIncluded} pool credits for bundle ${bundleType}`);
-                }
-            }
-
-            await recordBillingCharge(db, {
-                userId, kind: "bundle", amount: serverPrice ?? 0, bundleType,
-                stripeSessionId: mockUrl.split("session_id=")[1] || `mock_bundle_${bundleType}`,
-            });
-            return { sessionUrl: mockUrl };
-        }
-
-        try {
-            const session = await stripe.checkout.sessions.create({
-                mode: "payment",
-                payment_method_types: ["card"],
-                line_items: [
-                    {
-                        price_data: {
-                            currency: "usd",
-                            product_data: {
-                                name: bundleType === "buy_3" ? "3-Pool Bundle Package" : "1-Year Unlimited Pool Pass",
-                                description: bundleType === "buy_3" ? "Get 3 pool credits to use on any pool type" : "Create unlimited pools of any type for 1 year",
-                            },
-                            unit_amount: Math.round(serverPrice * 100),
-                        },
-                        quantity: 1,
-                    },
-                ],
-                success_url: successUrl ? `${successUrl}${successUrl.includes('?') ? '&' : '?'}payment=success&session_id={CHECKOUT_SESSION_ID}` : `${baseUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-                cancel_url: cancelUrl ? `${cancelUrl}${cancelUrl.includes('?') ? '&' : '?'}payment=cancelled` : `${baseUrl}?payment=cancelled`,
-                metadata: {
-                    userId,
-                    bundleType,
-                },
-                customer_email: request.auth.token.email || undefined,
-            });
-
-            console.log(`[Stripe] Bundle checkout session created: ${session.id} for user ${userId}`);
-            return { sessionUrl: session.url };
-        } catch (err: any) {
-            console.error("[Stripe] Bundle Checkout Error:", err);
-            throw new HttpsError("internal", `Failed to create bundle checkout session: ${err.message}`);
-        }
-    }
-
-    // --- Standard Pool Purchase Path ---
     // --- Verify pool exists ---
     const poolDoc = await db.collection("pools").doc(poolId).get();
     if (!poolDoc.exists) {
         throw new HttpsError("not-found", "Pool not found.");
     }
+    const poolData = poolDoc.data() as any;
 
-    const poolData = typeof poolDoc.data === "function" ? poolDoc.data() : ((poolDoc as any).data || {});
-    const existingPricePaid = poolData?.billing?.pricePaid || 0;
-    const baseUrl = successUrl || `${cleanedOrigin}/pool/${poolId}`;
+    // --- Authoritative quote (single price authority; client price never trusted) ---
+    const config = await loadBillingConfig(db);
+    const resolvedCoupon = couponCode
+        ? await resolveCouponForQuote(db, couponCode, { userId, poolType, now: Date.now() })
+        : undefined;
 
-    // --- Enforce 1 Free Pool limit ---
-    if (tier === "free_tier") {
-        const activeFreePoolsSnap = await db.collection("pools")
-            .where("ownerId", "==", userId)
-            .where("billing.status", "==", "active")
-            .where("billing.tier", "==", "free_tier")
-            .get();
-        
-        const activeFreePools = activeFreePoolsSnap.docs.filter(doc => doc.id !== poolId);
-        if (activeFreePools.length > 0) {
-            throw new HttpsError("failed-precondition", "You already have an active free pool. You are only allowed 1 active free pool at any time.");
+    let quote;
+    try {
+        quote = computeQuote({
+            config,
+            poolType,
+            estimatedPlayers,
+            addons,
+            couponState: resolvedCoupon?.state,
+            coupon: resolvedCoupon?.coupon,
+        });
+    } catch (e: any) {
+        throw new HttpsError("invalid-argument", e?.message || "Unable to price this pool format.");
+    }
+    const serverPrice = quote.total;
+
+    // Pending billable snapshot — copied to billing.paid ONLY on success.
+    const snapshot: PendingBillableSnapshot = {
+        tier: quote.tier,
+        maxPlayersAllowed: estimatedPlayers,
+        addons: pricedAddonKeys(quote.addonLines),
+    };
+    const featuresUnlocked = {
+        aiCommissioner: addons.aiCommissioner === true,
+        smsNotifications: addons.smsNotifications === true,
+        whatIfSimulator: addons.whatIfSimulator === true,
+        customBranding: addons.customBranding === true,
+    };
+
+    // --- Enforce 1 active free pool limit (unchanged rule) ---
+    if (quote.tier === "free_tier" || serverPrice === 0) {
+        if (quote.freeTierEligible || snapshot.tier === "free_tier") {
+            const activeFreePoolsSnap = await db.collection("pools")
+                .where("ownerId", "==", userId)
+                .where("billing.status", "==", "active")
+                .where("billing.tier", "==", "free_tier")
+                .get();
+            const others = activeFreePoolsSnap.docs.filter((d) => d.id !== poolId);
+            if (others.length > 0 && snapshot.tier === "free_tier") {
+                throw new HttpsError("failed-precondition", "You already have an active free pool. You are only allowed 1 active free pool at any time.");
+            }
         }
     }
 
-    // --- Verify and deduct credits if used ---
-    let validatedFreeReason = false;
+    // --- Validate free-activation reason if $0 but NOT free-tier eligible ---
+    // ($0 must come from a 100% coupon, a credit, or free-tier — never a bare price.)
+    let usedCreditValidated = false;
     if (usedCredit) {
         const userDoc = await db.collection("users").doc(userId).get();
         const userData = userDoc.data();
         if (customCreditId) {
-            const poolCredits = userData?.poolCredits || [];
-            const creditObj = poolCredits.find((c: any) => c.id === customCreditId);
+            const creditObj = (userData?.poolCredits || []).find((c: any) => c.id === customCreditId);
             if (!creditObj || creditObj.isUsed) {
                 throw new HttpsError("failed-precondition", "Specific custom pool credit is missing or already used.");
             }
-        } else {
-            const freePoolsAvailable = userData?.freePoolsAvailable || 0;
-            if (freePoolsAvailable <= 0) {
-                throw new HttpsError("failed-precondition", "No universal pool credits available.");
-            }
+        } else if ((userData?.freePoolsAvailable || 0) <= 0) {
+            throw new HttpsError("failed-precondition", "No universal pool credits available.");
         }
-        validatedFreeReason = true;
+        usedCreditValidated = true;
     }
 
-    if (couponCode) {
-        const couponQuery = await db.collection("coupons")
-            .where("code", "==", couponCode)
-            .limit(1)
-            .get();
-
-        if (!couponQuery.empty) {
-            const couponData = couponQuery.docs[0].data();
-            const now = Date.now();
-            if (couponData.isActive && (!couponData.expiresAt || couponData.expiresAt > now)) {
-                if (couponData.maxUses === undefined || (couponData.usesCount || 0) < couponData.maxUses) {
-                    if (couponData.discountType === "percentage" && couponData.discountValue === 100) {
-                        validatedFreeReason = true;
-                    }
-                }
-            }
-        }
-    }
-
-    // --- Secure $0 Stripe Bypass for 100% Off Coupons, Credit usage, or Unlimited Pass ---
-    // serverPrice was resolved authoritatively above (client `price` is never trusted).
+    // =====================================================================
+    // FREE PATH ($0) — activate + confirm coupon reservation ATOMICALLY, no Stripe
+    // =====================================================================
     if (serverPrice === 0) {
-        if (!validatedFreeReason && tier !== "free_tier") {
+        const couponIsFullDiscount = !!resolvedCoupon?.state.valid && quote.discount >= quote.subtotal && quote.subtotal > 0;
+        if (!usedCreditValidated && snapshot.tier !== "free_tier" && !couponIsFullDiscount) {
             throw new HttpsError("failed-precondition", "No valid free-activation reason provided.");
         }
-        const poolRef = db.collection("pools").doc(poolId);
-        await poolRef.update({
-            "billing.status": "active",
-            "billing.pricePaid": existingPricePaid + 0,
-            "billing.stripeSessionId": usedCredit ? (customCreditId ? `pool_credit_use_${customCreditId}` : "pool_credit_use") : "free_promo_bypass",
-            "billing.tier": tier || "premium_tier",
-            "billing.maxPlayersAllowed": Number(maxPlayersAllowed) || 10,
+
+        const reservationId = randomUUID();
+        const activationTag = usedCredit
+            ? (customCreditId ? `pool_credit_use_${customCreditId}` : "pool_credit_use")
+            : (couponIsFullDiscount ? `free_promo_${reservationId}` : "free_tier_activation");
+
+        await db.runTransaction(async (txn) => {
+            const poolRef = db.collection("pools").doc(poolId);
+            const freshPool = await txn.get(poolRef);
+            const freshBilling = (freshPool.data() as any)?.billing;
+            // No-op if already active (idempotency; avoid double credit spend).
+            if (freshBilling?.status === "active") {
+                throw new HttpsError("failed-precondition", "This pool is already active.");
+            }
+
+            // Coupon confirm (write reservation directly as confirmed).
+            let couponRef: FirebaseFirestore.DocumentReference | null = null;
+            let confirmedLog: CouponUsageEntry[] | null = null;
+            if (couponIsFullDiscount && couponCode) {
+                const code = couponCode.toUpperCase().trim();
+                const cSnap = await txn.get(db.collection("coupons").where("code", "==", code).limit(1));
+                if (!cSnap.empty) {
+                    couponRef = cSnap.docs[0].ref;
+                    const c = cSnap.docs[0].data() as any;
+                    // Re-validate against current state inside the txn.
+                    const v = validateCouponRules(
+                        { isActive: c.isActive, expiresAt: c.expiresAt, maxUses: c.maxUses, perUserLimit: c.perUserLimit, allowedPoolTypes: c.allowedPoolTypes, usageLog: c.usageLog },
+                        { userId, poolType, now: Date.now() }
+                    );
+                    if (!v.valid) throw new HttpsError("failed-precondition", v.reason);
+                    confirmedLog = [
+                        ...((c.usageLog as CouponUsageEntry[]) || []),
+                        makeConfirmedEntry({ reservationId, userId, poolId, now: Date.now() }),
+                    ];
+                }
+            }
+
+            // Deduct credit inside the txn.
+            if (usedCredit) {
+                const userRef = db.collection("users").doc(userId);
+                const uSnap = await txn.get(userRef);
+                const uData = uSnap.data() as any;
+                if (customCreditId) {
+                    const updated = (uData?.poolCredits || []).map((c: any) =>
+                        c.id === customCreditId ? { ...c, isUsed: true, usedForPoolId: poolId } : c
+                    );
+                    txn.update(userRef, { poolCredits: updated });
+                } else {
+                    txn.update(userRef, { freePoolsAvailable: FieldValue.increment(-1) });
+                }
+            }
+
+            // Activate pool + stamp paid snapshot + explicit featuresUnlocked.
+            txn.update(poolRef, {
+                "billing.status": "active",
+                "billing.pricePaid": ((freshBilling?.pricePaid as number) || 0) + 0,
+                "billing.stripeSessionId": activationTag,
+                "billing.tier": snapshot.tier === "free_tier" ? "free_tier" : (snapshot.tier || "premium_tier"),
+                "billing.maxPlayersAllowed": snapshot.maxPlayersAllowed,
+                "billing.pendingSessionId": FieldValue.delete(),
+                "billing.featuresUnlocked": featuresUnlocked,
+                "billing.paid": {
+                    tier: snapshot.tier,
+                    maxPlayersAllowed: snapshot.maxPlayersAllowed,
+                    addons: snapshot.addons,
+                    at: Date.now(),
+                },
+            });
+
+            if (couponRef && confirmedLog) {
+                txn.update(couponRef, { usesCount: FieldValue.increment(1), usageLog: confirmedLog });
+            }
+
+            // Ledger row ($0) in the same txn.
+            writeBillingChargeTxn(txn, db, {
+                userId, kind: "pool", amount: 0, poolId,
+                tier: snapshot.tier, couponCode: couponCode?.toUpperCase().trim(),
+                stripeSessionId: activationTag,
+            });
         });
 
-        if (usedCredit) {
-            if (customCreditId) {
-                const userDoc = await db.collection("users").doc(userId).get();
-                const userData = userDoc.data();
-                const poolCredits = userData?.poolCredits || [];
-                const updatedCredits = poolCredits.map((c: any) => 
-                    c.id === customCreditId ? { ...c, isUsed: true, usedForPoolId: poolId } : c
-                );
-                await db.collection("users").doc(userId).update({
-                    poolCredits: updatedCredits
-                });
-                console.log(`[Custom Credit] User ${userId} used custom credit ${customCreditId} for pool ${poolId}`);
-            } else {
-                await db.collection("users").doc(userId).update({
-                    freePoolsAvailable: FieldValue.increment(-1)
-                });
-                console.log(`[Pool Credit] User ${userId} used a credit to activate pool ${poolId}`);
-            }
-        }
-
-        if (couponCode) {
-            try {
-                const couponQuery = await db.collection("coupons")
-                    .where("code", "==", couponCode)
-                    .limit(1)
-                    .get();
-
-                if (!couponQuery.empty) {
-                    const couponDoc = couponQuery.docs[0];
-                    const usageEntry = { userId, poolId, usedAt: Date.now() };
-
-                    await couponDoc.ref.update({
-                        usesCount: FieldValue.increment(1),
-                        usageLog: FieldValue.arrayUnion(usageEntry),
-                    });
-                    console.log(`[Stripe Bypass] Coupon ${couponCode} recorded for user ${userId}`);
-                }
-            } catch (couponErr) {
-                console.error("[Stripe Bypass] Error processing coupon:", couponErr);
-            }
-        }
-
-        console.log(`[Stripe Bypass] Pool ${poolId} activated for free by user ${userId}`);
-        return { sessionUrl: `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}payment=success` };
+        console.log(`[Checkout] Pool ${poolId} activated for free by ${userId} (${activationTag})`);
+        return { sessionUrl: `${origin}/pool/${encodeURIComponent(poolId)}?payment=success` };
     }
 
-    // --- Create Stripe Checkout Session ---
-    const stripe = getStripe();
+    // =====================================================================
+    // PAID PATH — reserve coupon + set pending idempotency, THEN create session
+    // =====================================================================
+    const reservationId = randomUUID();
+    // Only a coupon that actually applied a discount is reserved + carried in
+    // metadata (so the webhook confirms exactly the reservation we made). A
+    // supplied-but-invalid code is dropped here and the pool pays full price.
+    const appliedCouponCode = resolvedCoupon?.state.valid ? couponCode?.toUpperCase().trim() : undefined;
 
-    if (!stripe) {
-        console.log(`[Stripe Mockup] STRIPE_SECRET_KEY is missing/placeholder. Activating mock dev sandbox checkout for pool ${poolId}.`);
-        const mockUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}payment=success&session_id=mock_local_dev_session_${Date.now()}`;
-        
+    // Transaction: pool-level idempotency + coupon reservation + session record.
+    await db.runTransaction(async (txn) => {
         const poolRef = db.collection("pools").doc(poolId);
-        await poolRef.update({
-            "billing.status": "active",
-            "billing.pricePaid": existingPricePaid + serverPrice,
-            "billing.stripeSessionId": `mock_local_dev_session_${Date.now()}`,
-            "billing.tier": tier || "premium_tier",
-            "billing.maxPlayersAllowed": Number(maxPlayersAllowed) || 10,
-        });
+        const freshPool = await txn.get(poolRef);
+        const freshBilling = (freshPool.data() as any)?.billing;
 
-        await recordBillingCharge(db, {
-            userId, kind: "pool", amount: serverPrice ?? 0, poolId,
-            tier: tier || "premium_tier", couponCode,
-            stripeSessionId: mockUrl.split("session_id=")[1] || `mock_pool_${poolId}`,
-        });
-
-        if (couponCode) {
-            try {
-                const couponQuery = await db.collection("coupons")
-                    .where("code", "==", couponCode)
-                    .limit(1)
-                    .get();
-
-                if (!couponQuery.empty) {
-                    const couponDoc = couponQuery.docs[0];
-                    const usageEntry = { userId, poolId, usedAt: Date.now() };
-
-                    await couponDoc.ref.update({
-                        usesCount: FieldValue.increment(1),
-                        usageLog: FieldValue.arrayUnion(usageEntry),
-                    });
-                    console.log(`[Stripe Mockup] Coupon ${couponCode} usage simulated for user ${userId}`);
-                }
-            } catch (couponErr) {
-                console.error("[Stripe Mockup] Error simulating coupon:", couponErr);
-            }
+        // Reject a second live checkout on this pool (idempotency).
+        const pending = freshBilling?.pendingSessionId as { reservationId?: string; at?: number } | undefined;
+        if (pending && typeof pending.at === "number" && Date.now() - pending.at < PENDING_SESSION_TTL_MS) {
+            throw new HttpsError("failed-precondition", "A checkout is already in progress for this pool. Please complete or cancel it before starting another.");
+        }
+        if (freshBilling?.status === "active") {
+            throw new HttpsError("failed-precondition", "This pool is already active.");
         }
 
-        return { sessionUrl: mockUrl };
+        // Coupon reservation — ONLY reserve a coupon that actually applied a
+        // discount at quote time (a supplied-but-invalid code proceeds at full
+        // price, it never blocks checkout). Re-validate against current state
+        // inside the txn to enforce hard limits under contention (TOCTOU).
+        if (couponCode && resolvedCoupon?.state.valid) {
+            const code = couponCode.toUpperCase().trim();
+            const cSnap = await txn.get(db.collection("coupons").where("code", "==", code).limit(1));
+            if (cSnap.empty) throw new HttpsError("not-found", "Coupon code not found.");
+            const cRef = cSnap.docs[0].ref;
+            const c = cSnap.docs[0].data() as any;
+            const v = validateCouponRules(
+                { isActive: c.isActive, expiresAt: c.expiresAt, maxUses: c.maxUses, perUserLimit: c.perUserLimit, allowedPoolTypes: c.allowedPoolTypes, usageLog: c.usageLog },
+                { userId, poolType, now: Date.now() }
+            );
+            if (!v.valid) throw new HttpsError("failed-precondition", v.reason);
+            const newLog = [
+                ...((c.usageLog as CouponUsageEntry[]) || []),
+                makeReservationEntry({ reservationId, userId, poolId, now: Date.now() }),
+            ];
+            txn.update(cRef, { usesCount: FieldValue.increment(1), usageLog: newLog });
+        }
+
+        // Pending billable snapshot lives on the SESSION record (NOT the live pool).
+        txn.set(db.collection("checkoutSessions").doc(reservationId), {
+            reservationId,
+            poolId,
+            userId,
+            poolType,
+            status: "pending",
+            couponCode: appliedCouponCode ?? null,
+            pendingSnapshot: snapshot,
+            featuresUnlocked,
+            amount: serverPrice,
+            createdAt: Date.now(),
+        });
+
+        // Pool-level idempotency marker.
+        txn.update(poolRef, {
+            "billing.pendingSessionId": { reservationId, at: Date.now() },
+        });
+    });
+
+    // --- Create the Stripe session (or mock) with reservationId in metadata ---
+    const stripe = getStripe();
+    const metadata = {
+        poolId,
+        userId,
+        tier: snapshot.tier,
+        poolType,
+        reservationId,
+        couponCode: appliedCouponCode || "",
+        maxPlayersAllowed: String(snapshot.maxPlayersAllowed),
+        addons: snapshot.addons.join(","),
+    };
+
+    if (!stripe) {
+        // Mock dev sandbox: emulate a completed session inline (activate now).
+        console.log(`[Stripe Mockup] Missing/placeholder key — mock checkout for pool ${poolId}.`);
+        const mockSessionId = `mock_local_dev_session_${Date.now()}`;
+        await finalizePoolPayment({
+            sessionId: mockSessionId,
+            paymentIntentId: `mock_pi_${Date.now()}`,
+            amountTotalCents: Math.round(serverPrice * 100),
+            metadata,
+        });
+        return { sessionUrl: `${origin}/pool/${encodeURIComponent(poolId)}?payment=success&session_id=${mockSessionId}` };
     }
 
     try {
@@ -422,7 +442,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true, secret
                     price_data: {
                         currency: "usd",
                         product_data: {
-                            name: `${poolName} — ${tier === "premium_tier" ? "Premium" : "Standard"} Hosting`,
+                            name: `${poolName} — ${snapshot.tier === "premium_tier" ? "Premium" : "Standard"} Hosting`,
                             description: `One-time hosting fee for your ${poolType} pool`,
                         },
                         unit_amount: Math.round(serverPrice * 100),
@@ -430,32 +450,262 @@ export const createCheckoutSession = functions.https.onCall({ cors: true, secret
                     quantity: 1,
                 },
             ],
-            success_url: successUrl ? `${successUrl}${successUrl.includes('?') ? '&' : '?'}payment=success&session_id={CHECKOUT_SESSION_ID}` : `${baseUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: cancelUrl ? `${cancelUrl}${cancelUrl.includes('?') ? '&' : '?'}payment=cancelled` : `${baseUrl}?payment=cancelled`,
-            metadata: {
-                poolId,
-                userId,
-                tier,
-                poolType,
-                couponCode: couponCode || "",
-                referralCredits: referralCredits?.toString() || "0",
-                maxPlayersAllowed: maxPlayersAllowed?.toString() || "10",
-            },
+            success_url: poolSuccessUrl(origin, poolId),
+            cancel_url: poolCancelUrl(origin, poolId),
+            metadata,
             customer_email: request.auth.token.email || undefined,
         });
-
-        console.log(`[Stripe] Checkout session created: ${session.id} for pool ${poolId} by user ${userId}`);
+        console.log(`[Stripe] Checkout session ${session.id} created for pool ${poolId} (reservation ${reservationId})`);
         return { sessionUrl: session.url };
-    } catch (err: unknown) {
-        const error = err as Error;
-        console.error("[Stripe] Error creating checkout session:", error.message);
-        throw new HttpsError("internal", `Failed to create checkout session: ${error.message}`);
+    } catch (err: any) {
+        // Session creation failed → release the reservation + clear pending marker (best effort).
+        console.error("[Stripe] Error creating checkout session:", err?.message);
+        await releaseReservationBestEffort(reservationId, poolId, appliedCouponCode).catch((e) =>
+            console.error("[Stripe] Failed to release reservation after session error:", e)
+        );
+        throw new HttpsError("internal", `Failed to create checkout session: ${err?.message}`);
     }
 });
 
+/** Bundle checkout — server-priced, server-derived redirect URLs, no coupons. */
+async function createBundleCheckout(
+    userId: string,
+    bundleType: string,
+    origin: string,
+    email: string | undefined
+): Promise<{ sessionUrl: string | null }> {
+    // Authoritative bundle price from billing_config.
+    let serverPrice: number | undefined;
+    let dynamicBundle: any = null;
+    try {
+        const cfg = (await db.collection("settings").doc("billing_config").get()).data();
+        const packagesList = cfg?.packagesList || [];
+        dynamicBundle = packagesList.find((b: any) => b.id === bundleType) || null;
+        if (dynamicBundle) serverPrice = dynamicBundle.price;
+        else if (bundleType === "buy_3" && cfg?.packages?.buy_3) serverPrice = cfg.packages.buy_3;
+        else if (bundleType === "unlimited_1yr" && cfg?.packages?.unlimited_1yr) serverPrice = cfg.packages.unlimited_1yr;
+    } catch (e) {
+        console.error("[Stripe] Failed to resolve bundle price:", e);
+    }
+    if (serverPrice === undefined) {
+        throw new HttpsError("internal", "Unable to resolve authoritative bundle price.");
+    }
+
+    const stripe = getStripe();
+    if (!stripe) {
+        console.log(`[Stripe Mockup] Mock bundle checkout for ${bundleType}.`);
+        const mockSessionId = `mock_bundle_session_${Date.now()}`;
+        await grantBundle(userId, bundleType, dynamicBundle);
+        await recordBillingCharge(db, { userId, kind: "bundle", amount: serverPrice, bundleType, stripeSessionId: mockSessionId });
+        return { sessionUrl: `${origin}/pricing?payment=success&session_id=${mockSessionId}` };
+    }
+
+    try {
+        const session = await stripe.checkout.sessions.create({
+            mode: "payment",
+            payment_method_types: ["card"],
+            line_items: [
+                {
+                    price_data: {
+                        currency: "usd",
+                        product_data: {
+                            name: bundleType === "buy_3" ? "3-Pool Bundle Package" : bundleType === "unlimited_1yr" ? "1-Year Unlimited Pool Pass" : (dynamicBundle?.name || "Pool Bundle"),
+                            description: dynamicBundle?.description || (bundleType === "buy_3" ? "Get 3 pool credits to use on any pool type" : "Create unlimited pools of any type for 1 year"),
+                        },
+                        unit_amount: Math.round(serverPrice * 100),
+                    },
+                    quantity: 1,
+                },
+            ],
+            success_url: bundleSuccessUrl(origin),
+            cancel_url: bundleCancelUrl(origin),
+            metadata: { userId, bundleType },
+            customer_email: email || undefined,
+        });
+        console.log(`[Stripe] Bundle checkout ${session.id} created for user ${userId}`);
+        return { sessionUrl: session.url };
+    } catch (err: any) {
+        console.error("[Stripe] Bundle Checkout Error:", err);
+        throw new HttpsError("internal", `Failed to create bundle checkout session: ${err?.message}`);
+    }
+}
+
+/** Grants a bundle's entitlement to a user (credits / unlimited pass). Shared by mock + webhook. */
+async function grantBundle(userId: string, bundleType: string, dynamicBundle: any): Promise<void> {
+    const userRef = db.collection("users").doc(userId);
+    if (bundleType === "buy_3") {
+        await userRef.update({ freePoolsAvailable: FieldValue.increment(3), role: "COMMISSIONER" });
+    } else if (bundleType === "unlimited_1yr") {
+        await userRef.update({ activeBundleType: "unlimited_1yr", bundleExpiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000, role: "COMMISSIONER" });
+    } else {
+        let bundle = dynamicBundle;
+        if (!bundle) {
+            try {
+                const packagesList = (await db.collection("settings").doc("billing_config").get()).data()?.packagesList || [];
+                bundle = packagesList.find((b: any) => b.id === bundleType);
+            } catch (err) {
+                console.error("[Stripe] Failed to load dynamic bundle for grant:", err);
+            }
+        }
+        if (bundle) {
+            const validityDays = Number(bundle.durationDays ?? bundle.termDays) || 0;
+            const expiresAt = validityDays > 0 ? Date.now() + validityDays * 24 * 60 * 60 * 1000 : 0;
+            const creditsSpawned = [];
+            const count = Number(bundle.poolsIncluded) || 0;
+            for (let i = 0; i < count; i++) {
+                creditsSpawned.push({
+                    id: `credit_${bundleType}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                    bundleId: bundleType,
+                    poolType: bundle.poolType,
+                    maxPlayersPerPool: Number(bundle.maxPlayersPerPool) || 50,
+                    expiresAt,
+                    isUsed: false,
+                });
+            }
+            if (creditsSpawned.length > 0) {
+                await userRef.update({ poolCredits: FieldValue.arrayUnion(...creditsSpawned), role: "COMMISSIONER" });
+            }
+        }
+    }
+}
+
+/**
+ * Finalizes a completed pool payment in ONE transaction: confirm coupon
+ * reservation, copy pending snapshot → billing.paid + featuresUnlocked, activate
+ * pool, write the ledger row. If the pool is ALREADY active, no-ops the charge
+ * and writes a DOUBLE_CHARGE_REVIEW monetization alert instead. Idempotent by
+ * session id (ledger doc id = session id) and by the reservation status flip.
+ */
+async function finalizePoolPayment(args: {
+    sessionId: string;
+    paymentIntentId?: string;
+    amountTotalCents: number;
+    metadata: Record<string, string>;
+}): Promise<void> {
+    const { sessionId, paymentIntentId, amountTotalCents, metadata } = args;
+    const poolId = metadata.poolId;
+    const userId = metadata.userId;
+    const reservationId = metadata.reservationId;
+    const couponCode = metadata.couponCode || undefined;
+    const amount = amountTotalCents / 100;
+
+    await db.runTransaction(async (txn) => {
+        const poolRef = db.collection("pools").doc(poolId);
+        const poolSnap = await txn.get(poolRef);
+        const billing = (poolSnap.data() as any)?.billing;
+
+        // Session record holds the authoritative pending snapshot.
+        let snapshot: PendingBillableSnapshot | undefined;
+        let featuresUnlocked: Record<string, boolean> | undefined;
+        let sessionRef: FirebaseFirestore.DocumentReference | null = null;
+        if (reservationId) {
+            sessionRef = db.collection("checkoutSessions").doc(reservationId);
+            const sSnap = await txn.get(sessionRef);
+            const sData = sSnap.data() as any;
+            snapshot = sData?.pendingSnapshot;
+            featuresUnlocked = sData?.featuresUnlocked;
+        }
+
+        // --- DOUBLE-CHARGE GUARD: pool already active → no-op + alert ---
+        if (billing?.status === "active") {
+            const alertRef = db.collection("monetization_alerts").doc(`DOUBLE_CHARGE_${sessionId}`);
+            txn.set(alertRef, {
+                type: "DOUBLE_CHARGE_REVIEW",
+                poolId,
+                userId,
+                sessionId,
+                paymentIntentId: paymentIntentId ?? null,
+                amount,
+                status: "open",
+                createdAt: Date.now(),
+            }, { merge: true });
+            if (reservationId && sessionRef) {
+                txn.set(sessionRef, { status: "confirmed", sessionId, doubleCharge: true, confirmedAt: Date.now() }, { merge: true });
+            }
+            console.warn(`[Stripe Webhook] DOUBLE-CHARGE: session ${sessionId} arrived for already-active pool ${poolId}; charge no-op'd, alert written.`);
+            return;
+        }
+
+        const tier = (snapshot?.tier || metadata.tier || "standard_tier");
+        const maxPlayersAllowed = snapshot?.maxPlayersAllowed ?? (Number(metadata.maxPlayersAllowed) || 10);
+        const unlocked = featuresUnlocked || {
+            aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: false,
+        };
+
+        // Confirm coupon reservation (flip pending → confirmed) in this txn.
+        if (couponCode && reservationId) {
+            const code = couponCode.toUpperCase().trim();
+            const cSnap = await txn.get(db.collection("coupons").where("code", "==", code).limit(1));
+            if (!cSnap.empty) {
+                const cRef = cSnap.docs[0].ref;
+                const cLog = (cSnap.docs[0].data() as any).usageLog as CouponUsageEntry[] | undefined;
+                const t = transitionReservation(cLog, reservationId, "confirmed", Date.now(), sessionId);
+                if (t.changed) txn.update(cRef, { usageLog: t.usageLog });
+            }
+        }
+
+        // Activate pool + copy pending snapshot → billing.paid + featuresUnlocked.
+        txn.update(poolRef, {
+            "billing.status": "active",
+            "billing.pricePaid": ((billing?.pricePaid as number) || 0) + amount,
+            "billing.stripeSessionId": sessionId,
+            "billing.tier": tier,
+            "billing.maxPlayersAllowed": maxPlayersAllowed,
+            "billing.pendingSessionId": FieldValue.delete(),
+            "billing.featuresUnlocked": unlocked,
+            "billing.paid": {
+                tier,
+                maxPlayersAllowed,
+                addons: snapshot?.addons ?? [],
+                at: Date.now(),
+            },
+        });
+
+        if (sessionRef) {
+            txn.set(sessionRef, { status: "confirmed", sessionId, confirmedAt: Date.now() }, { merge: true });
+        }
+
+        // Ledger row IN THE SAME TXN (failure fails the webhook → Stripe retries).
+        const charge: BillingCharge = {
+            userId, kind: "pool", amount, poolId,
+            tier, couponCode: couponCode?.toUpperCase().trim(),
+            stripeSessionId: sessionId,
+            paymentIntentId,
+        };
+        writeBillingChargeTxn(txn, db, charge);
+    });
+    console.log(`[Stripe Webhook] Pool ${poolId} activated via session ${sessionId}`);
+}
+
+/** Best-effort reservation release (decrement usesCount + status:'released') + clear pool pending marker. */
+async function releaseReservationBestEffort(reservationId: string, poolId: string, couponCode?: string): Promise<void> {
+    await db.runTransaction(async (txn) => {
+        // Release coupon reservation.
+        if (couponCode) {
+            const code = couponCode.toUpperCase().trim();
+            const cSnap = await txn.get(db.collection("coupons").where("code", "==", code).limit(1));
+            if (!cSnap.empty) {
+                const cRef = cSnap.docs[0].ref;
+                const cLog = (cSnap.docs[0].data() as any).usageLog as CouponUsageEntry[] | undefined;
+                const t = transitionReservation(cLog, reservationId, "released", Date.now());
+                if (t.changed) {
+                    txn.update(cRef, { usageLog: t.usageLog, usesCount: FieldValue.increment(-1) });
+                }
+            }
+        }
+        // Clear pending marker + mark session record released.
+        const poolRef = db.collection("pools").doc(poolId);
+        const poolSnap = await txn.get(poolRef);
+        const pending = (poolSnap.data() as any)?.billing?.pendingSessionId as { reservationId?: string } | undefined;
+        if (pending?.reservationId === reservationId) {
+            txn.update(poolRef, { "billing.pendingSessionId": FieldValue.delete() });
+        }
+        txn.set(db.collection("checkoutSessions").doc(reservationId), { status: "released", releasedAt: Date.now() }, { merge: true });
+    });
+}
+
 // =============================================================================
 // 2. handleStripeWebhook — HTTP Request Handler (onRequest v2)
-//    Receives and processes Stripe webhook events
 // =============================================================================
 
 export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeSecretKey, stripeWebhookSecret] }, async (req, res) => {
@@ -463,10 +713,8 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
         res.status(405).send("Method Not Allowed");
         return;
     }
-
     const stripe = getStripe();
     const sig = req.headers["stripe-signature"] as string;
-
     if (!sig) {
         console.error("[Stripe Webhook] Missing stripe-signature header");
         res.status(400).send("Missing stripe-signature header");
@@ -475,192 +723,298 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
 
     let event: any;
     try {
-        event = stripe.webhooks.constructEvent(
-            req.rawBody,
-            sig,
-            stripeWebhookSecret.value()
-        );
-    } catch (err: unknown) {
-        const error = err as Error;
-        console.error("[Stripe Webhook] Signature verification failed:", error.message);
-        res.status(400).send(`Webhook Error: ${error.message}`);
+        event = stripe.webhooks.constructEvent(req.rawBody, sig, stripeWebhookSecret.value());
+    } catch (err: any) {
+        console.error("[Stripe Webhook] Signature verification failed:", err?.message);
+        res.status(400).send(`Webhook Error: ${err?.message}`);
         return;
     }
 
-    switch (event.type) {
-        case "checkout.session.completed": {
-            // Idempotency check: atomically create a processing marker.
-            // If this fails, another instance is already processing or has processed this event.
-            const evtRef = db.collection('stripeWebhookEvents').doc(event.id);
-            let shouldProcess = false;
-
-            try {
-                await evtRef.create({ type: event.type, status: 'processing', startedAt: Date.now() });
-                shouldProcess = true;
-            } catch (err: any) {
-                if (err.code === 6) { // ALREADY_EXISTS in Firebase Admin
-                    // Check if it's a poisoned marker (stuck in 'processing' for > 5 mins)
-                    await db.runTransaction(async (t) => {
-                        const docSnap = await t.get(evtRef);
-                        const data = docSnap.data();
-                        if (data?.status === 'processing' && (Date.now() - (data.startedAt || 0) > 5 * 60 * 1000)) {
-                            t.update(evtRef, { startedAt: Date.now() });
-                            shouldProcess = true;
-                        }
-                    });
-                } else {
-                    throw err;
-                }
-            }
-
-            if (!shouldProcess) {
-                console.log(`[Stripe Webhook] Duplicate, concurrent, or already completed event ignored: ${event.id}`);
-                res.status(200).send('duplicate');
-                return;
-            }
-
-            const session = event.data.object;
-            const metadata = session.metadata || {};
-
-            const userId = metadata.userId;
-            const bundleType = metadata.bundleType;
-
-            // --- Handle Bundle Purchase ---
-            if (bundleType) {
-                console.log(`[Stripe Webhook] checkout.session.completed — Bundle: ${bundleType}, User: ${userId}`);
-                try {
-                    const userRef = db.collection("users").doc(userId);
-                    if (bundleType === "buy_3") {
-                        await userRef.update({
-                            freePoolsAvailable: FieldValue.increment(3),
-                            role: "COMMISSIONER"
-                        });
-                    } else if (bundleType === "unlimited_1yr") {
-                        await userRef.update({
-                            activeBundleType: "unlimited_1yr",
-                            bundleExpiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
-                            role: "COMMISSIONER"
-                        });
-                    } else {
-                        // Dynamic Admin Bundle webhook completion
-                        let dynamicBundle: any = null;
-                        try {
-                            const billingConfigDoc = await db.collection("settings").doc("billing_config").get();
-                            const packagesList = billingConfigDoc.data()?.packagesList || [];
-                            dynamicBundle = packagesList.find((b: any) => b.id === bundleType);
-                        } catch (err) {
-                            console.error("Failed to query dynamic bundle config inside Stripe webhook:", err);
-                        }
-
-                        if (dynamicBundle) {
-                            const creditsSpawned = [];
-                            const validityDays = Number(dynamicBundle.durationDays) || 0;
-                            const expiresAt = validityDays > 0 ? Date.now() + validityDays * 24 * 60 * 60 * 1000 : 0;
-                            
-                            for (let i = 0; i < dynamicBundle.poolsIncluded; i++) {
-                                creditsSpawned.push({
-                                    id: `credit_${bundleType}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-                                    bundleId: bundleType,
-                                    poolType: dynamicBundle.poolType,
-                                    maxPlayersPerPool: Number(dynamicBundle.maxPlayersPerPool) || 50,
-                                    expiresAt,
-                                    isUsed: false
-                                });
-                            }
-                            
-                            await userRef.update({
-                                poolCredits: FieldValue.arrayUnion(...creditsSpawned),
-                                role: "COMMISSIONER"
-                            });
-                            console.log(`[Stripe Webhook] Credited user ${userId} with ${dynamicBundle.poolsIncluded} pool credits for bundle ${bundleType}`);
-                        }
+    // Idempotency marker for all handled event types.
+    const claimEvent = async (): Promise<boolean> => {
+        const evtRef = db.collection("stripeWebhookEvents").doc(event.id);
+        try {
+            await evtRef.create({ type: event.type, status: "processing", startedAt: Date.now() });
+            return true;
+        } catch (err: any) {
+            if (err.code === 6) { // ALREADY_EXISTS
+                let take = false;
+                await db.runTransaction(async (t) => {
+                    const s = await t.get(evtRef);
+                    const d = s.data();
+                    if (d?.status === "processing" && Date.now() - (d.startedAt || 0) > 5 * 60 * 1000) {
+                        t.update(evtRef, { startedAt: Date.now() });
+                        take = true;
                     }
-                    console.log(`[Stripe Webhook] User ${userId} bundle ${bundleType} successfully activated`);
-                    await recordBillingCharge(db, {
-                        userId, kind: "bundle", amount: (session.amount_total || 0) / 100,
-                        bundleType, stripeSessionId: session.id,
-                    });
-                } catch (err) {
-                    console.error("[Stripe Webhook] Error updating user bundle:", err);
-                    await evtRef.delete();
-                    res.status(500).send("Internal error processing bundle payment");
+                });
+                return take;
+            }
+            throw err;
+        }
+    };
+    const markDone = () => db.collection("stripeWebhookEvents").doc(event.id).update({ status: "completed", processedAt: Date.now() });
+    const markFailed = () => db.collection("stripeWebhookEvents").doc(event.id).delete();
+
+    try {
+        switch (event.type) {
+            case "checkout.session.completed": {
+                if (!(await claimEvent())) {
+                    console.log(`[Stripe Webhook] Duplicate/concurrent event ignored: ${event.id}`);
+                    res.status(200).send("duplicate");
                     return;
                 }
-                await evtRef.update({ status: 'completed', processedAt: Date.now() });
+                const session = event.data.object;
+                const metadata = session.metadata || {};
+
+                // Bundle purchase.
+                if (metadata.bundleType) {
+                    try {
+                        await grantBundle(metadata.userId, metadata.bundleType, null);
+                        await recordBillingCharge(db, {
+                            userId: metadata.userId, kind: "bundle",
+                            amount: (session.amount_total || 0) / 100,
+                            bundleType: metadata.bundleType,
+                            stripeSessionId: session.id,
+                            paymentIntentId: session.payment_intent as string | undefined,
+                        });
+                    } catch (err) {
+                        console.error("[Stripe Webhook] Bundle grant failed:", err);
+                        await markFailed();
+                        res.status(500).send("Internal error processing bundle payment");
+                        return;
+                    }
+                    await markDone();
+                    break;
+                }
+
+                // Standard pool purchase.
+                if (!metadata.poolId || !metadata.userId) {
+                    console.error("[Stripe Webhook] Missing poolId/userId:", session.id);
+                    // Ack (don't retry) — nothing we can do with this session.
+                    await markDone();
+                    res.status(200).send("missing metadata");
+                    return;
+                }
+                try {
+                    await finalizePoolPayment({
+                        sessionId: session.id,
+                        paymentIntentId: session.payment_intent as string | undefined,
+                        amountTotalCents: session.amount_total || 0,
+                        metadata,
+                    });
+                } catch (err) {
+                    console.error("[Stripe Webhook] Pool finalize failed (will retry):", err);
+                    await markFailed();
+                    res.status(500).send("Internal error processing payment");
+                    return;
+                }
+                await markDone();
                 break;
             }
 
-            // --- Handle Standard Pool Purchase ---
-            const poolId = metadata.poolId;
-            const tier = metadata.tier;
-            const couponCode = metadata.couponCode;
-            const maxPlayersAllowed = Number(metadata.maxPlayersAllowed) || 10;
-
-            if (!poolId || !userId) {
-                console.error("[Stripe Webhook] Missing poolId or userId in session metadata:", session.id);
-                res.status(400).send("Missing required metadata");
-                return;
-            }
-
-            console.log(`[Stripe Webhook] checkout.session.completed — Pool: ${poolId}, User: ${userId}, Tier: ${tier}, MaxPlayers: ${maxPlayersAllowed}`);
-
-            try {
-                const poolRef = db.collection("pools").doc(poolId);
-                const poolSnap = await poolRef.get();
-                const existingPricePaid = poolSnap.data()?.billing?.pricePaid || 0;
-
-                await poolRef.update({
-                    "billing.status": "active",
-                    "billing.pricePaid": existingPricePaid + ((session.amount_total || 0) / 100),
-                    "billing.stripeSessionId": session.id,
-                    "billing.tier": tier || "standard_tier",
-                    "billing.maxPlayersAllowed": maxPlayersAllowed,
-                });
-
-                console.log(`[Stripe Webhook] Pool ${poolId} billing updated to active`);
-
-                await recordBillingCharge(db, {
-                    userId, kind: "pool", amount: (session.amount_total || 0) / 100,
-                    poolId, tier: tier || "standard_tier", couponCode,
-                    stripeSessionId: session.id,
-                });
-
-                if (couponCode) {
+            case "checkout.session.expired": {
+                if (!(await claimEvent())) {
+                    res.status(200).send("duplicate");
+                    return;
+                }
+                const session = event.data.object;
+                const metadata = session.metadata || {};
+                const reservationId = metadata.reservationId as string | undefined;
+                const poolId = metadata.poolId as string | undefined;
+                const couponCode = (metadata.couponCode as string) || undefined;
+                if (reservationId && poolId) {
                     try {
-                        const couponQuery = await db.collection("coupons")
-                            .where("code", "==", couponCode)
-                            .limit(1)
-                            .get();
-
-                        if (!couponQuery.empty) {
-                            const couponDoc = couponQuery.docs[0];
-                            const usageEntry = { userId, poolId, usedAt: Date.now() };
-
-                            await couponDoc.ref.update({
-                                usesCount: FieldValue.increment(1),
-                                usageLog: FieldValue.arrayUnion(usageEntry),
-                            });
-
-                            console.log(`[Stripe Webhook] Coupon ${couponCode} usage recorded for user ${userId}`);
-                        }
-                    } catch (couponErr) {
-                        console.error("[Stripe Webhook] Error processing coupon:", couponErr);
+                        await releaseReservationBestEffort(reservationId, poolId, couponCode);
+                        console.log(`[Stripe Webhook] Reservation ${reservationId} released on session expiry.`);
+                    } catch (err) {
+                        console.error("[Stripe Webhook] Expiry release failed (will retry):", err);
+                        await markFailed();
+                        res.status(500).send("Internal error processing expiry");
+                        return;
                     }
                 }
-            } catch (err) {
-                console.error("[Stripe Webhook] Error updating pool billing:", err);
-                await evtRef.delete();
-                res.status(500).send("Internal error processing payment");
-                return;
+                await markDone();
+                break;
             }
 
-            await evtRef.update({ status: 'completed', processedAt: Date.now() });
-            break;
-        }
+            case "charge.refunded": {
+                if (!(await claimEvent())) {
+                    res.status(200).send("duplicate");
+                    return;
+                }
+                try {
+                    await handleChargeAdjustment(event.data.object, "refund");
+                } catch (err) {
+                    console.error("[Stripe Webhook] Refund handling failed (will retry):", err);
+                    await markFailed();
+                    res.status(500).send("Internal error processing refund");
+                    return;
+                }
+                await markDone();
+                break;
+            }
 
-        default:
-            console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`);
+            case "charge.dispute.created": {
+                if (!(await claimEvent())) {
+                    res.status(200).send("duplicate");
+                    return;
+                }
+                try {
+                    // Dispute event.data.object is a Dispute; its `charge` is the charge id.
+                    await handleDispute(event.data.object);
+                } catch (err) {
+                    console.error("[Stripe Webhook] Dispute handling failed (will retry):", err);
+                    await markFailed();
+                    res.status(500).send("Internal error processing dispute");
+                    return;
+                }
+                await markDone();
+                break;
+            }
+
+            default:
+                console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`);
+        }
+    } catch (err: any) {
+        console.error("[Stripe Webhook] Unhandled processing error:", err?.message);
+        res.status(500).send("Internal error");
+        return;
     }
 
     res.status(200).json({ received: true });
 });
+
+/**
+ * Writes a linked negative-amount adjustment ledger row for a refund or dispute
+ * (keyed off charge/payment_intent, NOT session), marks the original charge row,
+ * and writes a monetization alert for admin. Does NOT auto-lock the pool.
+ */
+async function handleChargeAdjustment(charge: any, kind: "refund" | "dispute"): Promise<void> {
+    const chargeId = charge.id as string;
+    const paymentIntentId = charge.payment_intent as string | undefined;
+    // Refunded amount (partial or full) in dollars; negative for the adjustment.
+    const refundedCents = kind === "refund"
+        ? (charge.amount_refunded ?? charge.amount ?? 0)
+        : (charge.amount ?? 0);
+    const adjustment = -(refundedCents / 100);
+
+    await db.runTransaction(async (txn) => {
+        // Find the original charge row by paymentIntentId (fall back to chargeId).
+        let original: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+        if (paymentIntentId) {
+            const q = await txn.get(db.collection("billingCharges").where("paymentIntentId", "==", paymentIntentId).limit(1));
+            if (!q.empty) original = q.docs[0];
+        }
+        const relatedChargeId = original?.id || paymentIntentId || chargeId;
+        const userId = (original?.data()?.userId as string) || "unknown";
+        const poolId = (original?.data()?.poolId as string) || null;
+        const bundleType = (original?.data()?.bundleType as string) || null;
+
+        // Mark the original.
+        if (original) {
+            txn.update(original.ref, kind === "refund" ? { refunded: true, refundedAt: Date.now() } : { disputed: true, disputedAt: Date.now() });
+        }
+
+        // Negative adjustment row (idempotent doc id refund_/dispute_<chargeId>).
+        writeBillingChargeTxn(txn, db, {
+            userId, kind, amount: adjustment,
+            poolId: poolId || undefined, bundleType: bundleType || undefined,
+            chargeId, paymentIntentId, relatedChargeId,
+        });
+
+        // Admin alert (no auto-lock; admin decides).
+        txn.set(db.collection("monetization_alerts").doc(`${kind.toUpperCase()}_${chargeId}`), {
+            type: kind === "refund" ? "REFUND" : "DISPUTE",
+            chargeId,
+            paymentIntentId: paymentIntentId ?? null,
+            relatedChargeId,
+            poolId,
+            bundleType,
+            userId,
+            amount: adjustment,
+            status: "open",
+            createdAt: Date.now(),
+        }, { merge: true });
+    });
+    console.log(`[Stripe Webhook] ${kind} adjustment recorded for charge ${chargeId} (${adjustment}).`);
+}
+
+/** Dispute event carries a Dispute object; normalize to the charge shape. */
+async function handleDispute(dispute: any): Promise<void> {
+    await handleChargeAdjustment(
+        { id: dispute.charge, payment_intent: dispute.payment_intent, amount: dispute.amount },
+        "dispute"
+    );
+}
+
+// =============================================================================
+// 3. releaseStaleCouponReservations — Scheduled sweep (ADR-0002 step 4)
+//    Releases any 'pending' reservation older than 24h. Kill-switch + dry-run by
+//    default (mirrors autoClosePools): does nothing unless
+//    system/config.couponSweep.enabled === true; reports-only unless
+//    dryRun === false; config-read failure = disabled.
+// =============================================================================
+
+const STALE_RESERVATION_MS = 24 * 60 * 60 * 1000;
+
+export const releaseStaleCouponReservations = functions.scheduler.onSchedule(
+    { schedule: "every 30 minutes", timeoutSeconds: 300, memory: "512MiB" },
+    async () => {
+        let enabled = false;
+        let dryRun = true;
+        try {
+            const cfg = (await db.doc("system/config").get()).data()?.couponSweep as
+                | { enabled?: boolean; dryRun?: boolean }
+                | undefined;
+            enabled = cfg?.enabled === true;
+            dryRun = cfg?.dryRun !== false;
+        } catch (e) {
+            console.warn("[couponSweep] config read failed; staying disabled:", e);
+        }
+        if (!enabled) {
+            console.log("[couponSweep] disabled (system/config.couponSweep.enabled !== true); nothing to do.");
+            return;
+        }
+
+        const cutoff = Date.now() - STALE_RESERVATION_MS;
+        // Only coupons with at least one usage entry can have stale reservations.
+        const couponsSnap = await db.collection("coupons").get();
+        let scanned = 0;
+        let released = 0;
+
+        for (const doc of couponsSnap.docs) {
+            const log = (doc.data().usageLog as CouponUsageEntry[]) || [];
+            const staleIds = stalePendingReservationIds(log, cutoff);
+            if (staleIds.length === 0) continue;
+            scanned += staleIds.length;
+
+            if (dryRun) {
+                console.log(`[couponSweep] DRY-RUN: coupon ${doc.id} has ${staleIds.length} stale pending reservation(s): ${staleIds.join(", ")}`);
+                continue;
+            }
+
+            try {
+                await db.runTransaction(async (txn) => {
+                    const fresh = await txn.get(doc.ref);
+                    let workingLog = (fresh.data()?.usageLog as CouponUsageEntry[]) || [];
+                    let decrement = 0;
+                    for (const rid of stalePendingReservationIds(workingLog, cutoff)) {
+                        const t = transitionReservation(workingLog, rid, "released", Date.now());
+                        if (t.changed) {
+                            workingLog = t.usageLog;
+                            decrement++;
+                        }
+                    }
+                    if (decrement > 0) {
+                        txn.update(doc.ref, { usageLog: workingLog, usesCount: FieldValue.increment(-decrement) });
+                    }
+                    released += decrement;
+                });
+            } catch (e) {
+                console.error(`[couponSweep] failed to release for coupon ${doc.id}:`, e);
+            }
+        }
+
+        console.log(`[couponSweep] complete. ${dryRun ? "DRY-RUN " : ""}scanned=${scanned} released=${released}`);
+    }
+);

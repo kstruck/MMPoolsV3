@@ -18,6 +18,9 @@ _(more will be appended as later waves run)_
 
 _Filled in as waves complete. Stripe dashboard, secret rotation, Coolify deploy, migration run all land here._
 
+- **Stripe Dashboard — enable new webhook events** (Wave 2 adds handlers for them): `charge.refunded`, `charge.dispute.created`, `checkout.session.expired`. Without enabling these in the Stripe webhook endpoint config, refund/dispute accounting and reservation-release-on-expiry won't fire. (Exact steps finalized in section D once Wave 2 reports.)
+- **Stripe TEST-key rotation still pending** (pre-existing, owner-attested 2026-07-06): while STRIPE_SECRET_KEY is a placeholder, checkout silently activates purchases for free (mock path). Must be a real test key before any UAT of the money path.
+
 ---
 
 ## C. Pre-existing issues found (not caused by this work; fix later unless noted)
