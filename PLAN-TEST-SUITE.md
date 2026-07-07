@@ -118,6 +118,24 @@ Root suite 24 files / 230 tests green. In-app confirmation rides on the Phase
 7. Bracket E2E tiebreaker regression: diff behavior against the commit range
    since the backlog said it passed; fix winner/tiebreaker resolution
    (closest-absolute |148−145|=3 must beat AllChalk's distance).
+7b. _(discovered by the 2026-07-07 suite re-run)_ **Squares $0 payouts — real
+   product bug, fixed in PR #147** (`fix/test-suite-squares-bracket`,
+   commit `a091276`): `payouts` is a privileged create field (stripped since
+   dfe43ca) and the post-buyflow wizard collects none, so every new squares
+   pool had no payouts map → scoreUpdates paid $0/period. createPool now
+   seeds DEFAULT_SQUARES_PAYOUTS 25/25/25/25 (the legacy SetupWizard default).
+   Needs a functions deploy. Open follow-up: prod squares pools created via
+   the new wizard before this fix have no payouts map — backfill is a Rule-1
+   gated decision for Kevin.
+   _Suite re-run status 2026-07-07: 5/15 pass (was 1). Cleared: 5 create
+   errors, Props, Playoff Basic, E2E. Remaining: Basic Quarters + Partial Fill
+   (fixed by 7b, pending deploy) and the 6-test bracketSimulator 0-entries
+   cluster (item 17) — now the only unexplained failure. Static analysis
+   exhausted: rules allow the write, E2E writes the identical shape in the
+   same session and passes, scenarios all carry tiebreakers, createPool
+   returns {poolId}. The simulator already captures the swallowed error as an
+   'Entry Error' step — need Kevin to expand a failing bracket test's step log
+   in the Test Suite UI and report that message._
 
 ### Phase 2 — NFL wave (the deadline work)
 8. **Harness plumbing first** (explicit work items, not assumed):
