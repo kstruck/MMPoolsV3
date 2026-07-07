@@ -8,3 +8,5 @@ export { StepPayouts } from './steps/StepPayouts';
 export { StepBranding } from './steps/StepBranding';
 export { StepReminders } from './steps/StepReminders';
 export { StepReview } from './steps/StepReview';
+export { LaunchStep } from './create/LaunchStep';
+export type { LaunchStepProps } from './create/LaunchStep';

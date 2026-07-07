@@ -1,4 +1,5 @@
 import { writePaymentHandles, CLEAR } from '@shared/paymentHandles';
+import { readLaunchFields } from './launchFields';
 
 // Maps validated wizard values to the PROPS pool payload for dbService.createPool.
 // Fee is props.cost. Questions with empty text are dropped; option lists are
@@ -26,6 +27,7 @@ export function buildPropsPayload(values: Record<string, unknown>): Record<strin
     }));
 
   return dropUndefined({
+    ...readLaunchFields(values),
     type: 'PROPS',
     name: v.name,
     props: {

@@ -1,5 +1,6 @@
 import { writePaymentHandles, CLEAR } from '@shared/paymentHandles';
 import type { PoolType } from '@shared/poolTypes';
+import { readLaunchFields } from './launchFields';
 
 // Maps validated wizard values to an NFL season-pool payload (Pick'em / Survivor
 // / Margin) for dbService.createNFLPool. Settings are passed through per type;
@@ -25,6 +26,7 @@ export function buildNFLPayload(
   const isPublic = v.isPublic ?? true;
 
   return dropUndefined({
+    ...readLaunchFields(values),
     type: poolType,
     league: 'NFL',
     name: v.name,

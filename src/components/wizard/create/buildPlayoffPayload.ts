@@ -1,5 +1,6 @@
 import { writePaymentHandles, CLEAR } from '@shared/paymentHandles';
 import { PLAYOFF_PLACEHOLDER_TEAMS } from './playoffTeams';
+import { readLaunchFields } from './launchFields';
 
 // Maps validated wizard form values to the NFL_PLAYOFFS pool payload for
 // dbService.createPool (which routes to the createPool callable). The callable
@@ -22,6 +23,7 @@ export function buildPlayoffPayload(values: Record<string, unknown>): Record<str
   });
 
   return dropUndefined({
+    ...readLaunchFields(values),
     type: 'NFL_PLAYOFFS',
     league: 'NFL',
     name: v.name,

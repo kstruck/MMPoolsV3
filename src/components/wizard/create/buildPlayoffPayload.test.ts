@@ -53,4 +53,21 @@ describe('buildPlayoffPayload', () => {
     const result = playoffCreateInputSchema.safeParse(p);
     expect(result.success).toBe(true);
   });
+
+  it('carries top-level launch fields (estimatedPlayers + addons) the server reads for free/trial', () => {
+    const p = buildPlayoffPayload({
+      ...base,
+      estimatedPlayers: 30,
+      addons: { aiCommissioner: true, smsNotifications: false, whatIfSimulator: false, customBranding: false },
+    }) as Record<string, any>;
+    expect(p.estimatedPlayers).toBe(30);
+    expect(p.addons.aiCommissioner).toBe(true);
+    expect(playoffCreateInputSchema.safeParse(p).success).toBe(true);
+  });
+
+  it('omits estimatedPlayers when blank/0 and defaults all addons to false', () => {
+    const p = buildPlayoffPayload(base) as Record<string, any>;
+    expect('estimatedPlayers' in p).toBe(false);
+    expect(p.addons).toEqual({ aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: false });
+  });
 });

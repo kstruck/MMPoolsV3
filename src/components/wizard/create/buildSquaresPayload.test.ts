@@ -28,4 +28,21 @@ describe('buildSquaresPayload', () => {
     expect(p.paymentHandles.venmo).toBe('@me');
     expect(p.maxSquaresPerPlayer).toBe(5);
   });
+
+  it('carries top-level launch fields (estimatedPlayers + addons) the server reads for free/trial', () => {
+    const p = buildSquaresPayload({
+      ...base,
+      estimatedPlayers: 40,
+      addons: { aiCommissioner: false, smsNotifications: true, whatIfSimulator: false, customBranding: false },
+    }) as Record<string, any>;
+    expect(p.estimatedPlayers).toBe(40);
+    expect(p.addons.smsNotifications).toBe(true);
+    expect(squaresCreateInputSchema.safeParse(p).success).toBe(true);
+  });
+
+  it('omits estimatedPlayers when blank/0 and defaults all addons to false', () => {
+    const p = buildSquaresPayload(base) as Record<string, any>;
+    expect('estimatedPlayers' in p).toBe(false);
+    expect(p.addons).toEqual({ aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: false });
+  });
 });
