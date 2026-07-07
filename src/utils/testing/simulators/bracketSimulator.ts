@@ -180,6 +180,13 @@ export async function runScenario(
                         updatedAt: Date.now()
                     };
 
+                    // Firestore rejects the whole document on any undefined
+                    // field value — a missing optional (e.g. tiebreaker) must
+                    // drop the field, not kill the entry write.
+                    for (const key of Object.keys(entryData) as (keyof typeof entryData)[]) {
+                        if (entryData[key] === undefined) delete entryData[key];
+                    }
+
                     await addDoc(entriesCollection, entryData);
                 } catch (e: unknown) {
                     const errMsg = e instanceof Error ? e.message : String(e);

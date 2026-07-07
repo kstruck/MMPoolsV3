@@ -84,7 +84,11 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
                         testEntries: (scenario.testEntries || []).map(e => ({
                             userName: e.userName,
                             picks: e.picks || {},
-                            tiebreaker: e.tiebreaker || e.tiebreakerVal
+                            // bracketSimulator reads `tiebreakerPrediction` — the
+                            // key the bracket scenario JSONs use. Mapping it to
+                            // `tiebreaker` here fed addDoc an undefined field and
+                            // killed every entry write (the 0-entries cluster).
+                            tiebreakerPrediction: e.tiebreakerPrediction ?? e.tiebreaker ?? e.tiebreakerVal
                         })),
                         tournamentResults: scenario.tournamentResults
                     }
