@@ -24,6 +24,12 @@ const POOL_TYPE_LABELS: Record<string, string> = {
     NFL_MARGIN: 'NFL Margin',
 };
 
+// Steps a human needs to see when a test goes red: the simulator records
+// swallowed errors (e.g. a failed entry write) as failed/skipped steps, and
+// without this the root cause is invisible in the UI.
+const failedSteps = (r: SimpleTestResult) =>
+    (r.steps || []).filter((s) => s.status === 'failed' || s.status === 'skipped');
+
 export const SimpleTestingDashboard: React.FC = () => {
     const [selectedScenario, setSelectedScenario] = useState<string>('');
     const [isRunning, setIsRunning] = useState(false);
@@ -41,6 +47,7 @@ export const SimpleTestingDashboard: React.FC = () => {
 
         try {
             const testResult = await runPredefinedTest(selectedScenario);
+            logger.log(`[TestSuite] ${testResult.scenarioName} steps:`, testResult.steps);
             setResult(testResult);
         } catch (error: unknown) {
             setResult({
@@ -64,6 +71,9 @@ export const SimpleTestingDashboard: React.FC = () => {
 
         try {
             const results = await runAllTests();
+            for (const r of results.results) {
+                logger.log(`[TestSuite] ${r.scenarioName} steps:`, r.steps);
+            }
             setAllResults(results.results);
         } catch (error: unknown) {
             logger.error('Run all tests failed:', error);
@@ -204,6 +214,17 @@ export const SimpleTestingDashboard: React.FC = () => {
                         </div>
                     )}
 
+                    {failedSteps(result).length > 0 && (
+                        <div className="mt-4 space-y-1 bg-brandred-600/5 p-3 rounded border border-brandred-600/40">
+                            <p className="text-xs font-display font-bold uppercase tracking-[0.05em] text-brandred-600">Failed steps</p>
+                            {failedSteps(result).map((s, idx) => (
+                                <p key={idx} className="text-xs font-mono text-brandred-600 break-all">
+                                    {s.step}: {s.message}
+                                </p>
+                            ))}
+                        </div>
+                    )}
+
                     {result.poolId && (
                         <p className="text-faint font-body text-xs mt-4 num">Pool ID: {result.poolId}</p>
                     )}
@@ -236,6 +257,15 @@ export const SimpleTestingDashboard: React.FC = () => {
                                     )}
                                     {r.error && (
                                         <p className="text-xs font-body text-brandred-600">{r.error}</p>
+                                    )}
+                                    {r.status !== 'PASS' && failedSteps(r).length > 0 && (
+                                        <div className="mt-2 space-y-1">
+                                            {failedSteps(r).map((s, idx) => (
+                                                <p key={idx} className="text-xs font-mono text-brandred-600 break-all">
+                                                    ⚠ {s.step}: {s.message}
+                                                </p>
+                                            ))}
+                                        </div>
                                     )}
                                 </div>
                                 <span className="text-muted font-body text-sm num">{r.duration}ms</span>
