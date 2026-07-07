@@ -68,10 +68,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   checkNameAvailable,
   currentUser
 }) => {
-  /* AI Commissioner State - Commented out for now
-  const [aiIdea, setAiIdea] = useState<string>('');
-  const [isThinking, setIsThinking] = useState(false);
-  */
 
 
   // Updated Tab Order and Default
@@ -213,33 +209,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       window.location.href = `/pool/${gameState.id}`;
     }, 1500);
   };
-
-  /*
-  const askGeminiForIdeas = async () => {
-    setIsThinking(true);
-    setAiIdea('');
-    try {
-      const apiKey = import.meta.env.VITE_API_KEY;
-
-      if (!apiKey) {
-        setAiIdea("API Key missing. Please check configuration.");
-        setIsThinking(false);
-        return;
-      }
-      const ai = new GoogleGenAI({ apiKey });
-      const prompt = `Generate a fun, creative, short rule variation for a Super Bowl Squares betting pool.Examples: 'Touchdowns on the 7 get a bonus', 'Score change payouts'.Keep it under 25 words.`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      });
-      setAiIdea(response.text || "Could not generate idea.");
-    } catch (error) {
-      logger.error("Gemini Error", error);
-      setAiIdea("Failed to connect to AI Commissioner.");
-    setIsThinking(false);
-  };
-  */
 
   const handleExportUsers = () => {
     const uniqueUsers = new Map<string, { name: string; email: string; phone: string }>();
@@ -734,7 +703,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="bg-card p-6 rounded-xl border border-line shadow-card"><div className="flex justify-between items-center mb-6"><div><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)]">Game Status</h3><p className="text-sm font-body text-muted">Control the betting and number generation.</p></div>{gameState.isLocked ? <Badge status="locked" /> : <Badge status="open" />}</div><button onClick={toggleLock} className={`w-full py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center justify-center gap-2 transition-all duration-150 hover:-translate-y-px text-lg ${gameState.isLocked ? 'bg-card hover:bg-surface text-[color:var(--text)] border border-line' : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-red-cta'}`}>{gameState.isLocked ? <><Unlock size={20} /> Unlock Grid</> : <><Lock size={20} /> Lock & Start Game</>}</button></div>
             <div className="bg-card p-6 rounded-xl border border-line"><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Grid Numbers</h3><div className="flex gap-4 items-center"><div className="flex-1"><button onClick={generateNumbers} disabled={gameState.isLocked} className="bg-navy-800 hover:bg-navy-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150"><Shuffle size={16} />{gameState.axisNumbers ? 'Regenerate' : 'Generate'} Numbers</button></div>{gameState.axisNumbers && (<div className="text-gold-500 bg-gold-500/10 p-4 rounded-full border border-gold-500/20"><Sparkles size={24} /></div>)}</div></div>
-            {/* <div className="bg-gradient-to-br from-indigo-900/40 to-purple-900/40 p-6 rounded-xl border border-indigo-500/30"><div className="flex items-center gap-2 mb-4"><Sparkles className="text-indigo-400" size={20} /><h3 className="text-lg font-bold text-indigo-100">AI Commissioner</h3></div>{aiIdea && (<div className="bg-slate-950/80 p-4 rounded-lg border border-indigo-500/30 mb-4 shadow-inner"><p className="text-lg text-indigo-200 font-serif italic">"{aiIdea}"</p></div>)}<button onClick={askGeminiForIdeas} disabled={isThinking} className="bg-indigo-600/80 hover:bg-indigo-500 text-white py-2 px-4 rounded-lg text-sm font-bold uppercase tracking-wide transition-colors">{isThinking ? 'Thinking...' : 'Suggest Rule Variation'}</button></div> */}
 
             {/* RANDOMIZER SECTION */}
             {gameState.ruleVariations.unclaimedFinalPrizeStrategy === 'random' && gameState.ruleVariations.quarterlyRollover && (
