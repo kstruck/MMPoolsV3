@@ -287,7 +287,13 @@ export function LaunchStep(props: LaunchStepProps) {
       {/* Premium add-ons — priced server-side; any paid add-on starts a trial. */}
       <p className="mb-2 mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Premium add-ons (optional)</p>
       <div className="mb-2 rounded-lg border border-slate-800 bg-slate-950/50 p-4">
-        {ADDON_KEYS.map((key) => (
+        {ADDON_KEYS.filter((key) => {
+          // SMS notifications disabled for now (product decision 2026-07-07).
+          if (key === 'smsNotifications') return false;
+          // What-If Simulator is a Bracket-only add-on (matches the pricing page + checkout).
+          if (key === 'whatIfSimulator') return poolType.toUpperCase() === 'BRACKET';
+          return true;
+        }).map((key) => (
           <CheckboxField key={key} name={`addons.${key}`} label={ADDON_LABELS[key]} />
         ))}
       </div>

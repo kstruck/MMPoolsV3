@@ -100,6 +100,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
     const [calcAi, setCalcAi] = useState<boolean>(false);
     const [calcSms, setCalcSms] = useState<boolean>(false);
     const [calcSim, setCalcSim] = useState<boolean>(false);
+    const [calcBranding, setCalcBranding] = useState<boolean>(false);
 
     // Explicit visitor-state machine — all render branching below keys off this.
     const visitorState: 'anon' | 'noPools' | 'hasTrialPools' = !user
@@ -476,6 +477,34 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                 />
                                             </label>
                                         )}
+
+                                        {config.features.customBranding?.isPremium && (
+                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-surface border rounded-2xl hover:border-gold-500/30 hover:bg-card transition-all duration-300 ${
+                                                calcBranding ? 'border-gold-500 bg-gradient-to-r from-gold-500/5 to-transparent' : 'border-line'
+                                            }`}>
+                                                <div className="flex gap-3 items-center">
+                                                    <div className={`p-2.5 rounded-xl bg-navy-600/15 text-navy-700 dark:text-[#9FB0CC] border border-line`}>
+                                                        <Sparkles size={16} />
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-sm font-display font-bold uppercase text-[color:var(--text)] block flex items-center gap-1">
+                                                            Premium Custom Branding & Covers
+                                                            <UpgradeInfoPopover
+                                                                title="custom branding"
+                                                                description="Upload custom headers and cover images, set your own color scheme, and add manager logos so your pool looks unmistakably yours."
+                                                            />
+                                                        </span>
+                                                        <span className="text-xs font-body text-muted">Custom headers, colors & logos (+<span className="num">${config.features.customBranding.addonPrice}</span>)</span>
+                                                    </div>
+                                                </div>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={calcBranding}
+                                                    onChange={(e) => setCalcBranding(e.target.checked)}
+                                                    className="w-5 h-5 rounded border-line bg-surface text-gold-500 focus:ring-gold-500 cursor-pointer"
+                                                />
+                                            </label>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -558,6 +587,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                         hasAiCommissioner={calcAi}
                                         hasSmsNotifications={calcSms}
                                         hasWhatIfSimulator={calcSim}
+                                        hasCustomBranding={calcBranding}
                                     />
 
                                     <button
@@ -581,6 +611,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                     hasAiCommissioner={calcAi}
                                     hasSmsNotifications={calcSms}
                                     hasWhatIfSimulator={calcSim}
+                                    hasCustomBranding={calcBranding}
                                 />
 
                                 <button

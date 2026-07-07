@@ -9,6 +9,7 @@ interface EstimateSummaryCardProps {
     hasAiCommissioner: boolean;
     hasSmsNotifications: boolean;
     hasWhatIfSimulator: boolean;
+    hasCustomBranding: boolean;
 }
 
 /** Mirrors BillingInvoiceCard's tier lookup so the estimate matches checkout pricing. */
@@ -44,13 +45,15 @@ export const EstimateSummaryCard: React.FC<EstimateSummaryCardProps> = ({
     players,
     hasAiCommissioner,
     hasSmsNotifications,
-    hasWhatIfSimulator
+    hasWhatIfSimulator,
+    hasCustomBranding
 }) => {
     const basePrice = getBasePrice(config, poolType, players);
     const aiCost = (hasAiCommissioner && config.features.aiCommissioner?.isPremium) ? config.features.aiCommissioner.addonPrice : 0;
     const smsCost = (hasSmsNotifications && config.features.smsNotifications?.isPremium) ? config.features.smsNotifications.addonPrice : 0;
     const simCost = (hasWhatIfSimulator && config.features.whatIfSimulator?.isPremium) ? config.features.whatIfSimulator.addonPrice : 0;
-    const total = basePrice + aiCost + smsCost + simCost;
+    const brandingCost = (hasCustomBranding && config.features.customBranding?.isPremium) ? config.features.customBranding.addonPrice : 0;
+    const total = basePrice + aiCost + smsCost + simCost + brandingCost;
     const isFreeTier = (Number(players) || 0) <= config.freePlayerThreshold;
 
     return (
@@ -87,6 +90,12 @@ export const EstimateSummaryCard: React.FC<EstimateSummaryCardProps> = ({
                     <div className="flex justify-between items-center text-muted text-xs gap-3">
                         <span>Standings What-If Simulator</span>
                         <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold shrink-0">+${simCost.toFixed(2)}</span>
+                    </div>
+                )}
+                {brandingCost > 0 && (
+                    <div className="flex justify-between items-center text-muted text-xs gap-3">
+                        <span>Premium Custom Branding &amp; Covers</span>
+                        <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold shrink-0">+${brandingCost.toFixed(2)}</span>
                     </div>
                 )}
 

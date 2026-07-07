@@ -554,7 +554,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                 {[
                                     { key: 'aiCommissioner' as const, label: 'AI Commissioner', desc: 'Auto trash-talk, weekly reviews, and dispute resolution.', value: localAi },
                                     ...( poolType.toUpperCase() === 'BRACKET' ? [{ key: 'whatIfSimulator' as const, label: 'What-If Simulator', desc: 'Interactively simulate potential game results to view projected standings.', value: localSim }] : [] ),
-                                    { key: 'smsNotifications' as const, label: 'SMS Notifications', desc: 'Text-message reminders and alerts for your participants.', value: localSms },
+                                    // SMS Notifications add-on disabled for now (product decision 2026-07-07). Re-add here to bring it back.
                                     { key: 'customBranding' as const, label: 'Custom Branding', desc: 'Upload headers, customized color schemes, and manager logos.', value: localBranding }
                                 ].map(({ key, label, desc, value }) => {
                                     const feat = config.features[key];

@@ -16,7 +16,7 @@ import {
 // The migration mapper is a pure ESM export from the repo-root script (plain
 // .mjs, no types). Import it untyped, then re-type via a local signature so the
 // assertions below type-check under tsc.
-// @ts-ignore — .mjs has no declaration file; typed via MapLegacyFn below.
+// @ts-expect-error — .mjs has no declaration file; typed via MapLegacyFn below.
 import { mapLegacyUserToEntitlements as mapLegacyUserToEntitlementsRaw } from '../../../scripts/migrate-entitlements.mjs';
 
 interface MigrationCredit {
