@@ -25,7 +25,14 @@ function cap(v: unknown, max: number): string | undefined {
 }
 
 export const logClientError = onCall(
-    { cors: true, enforceAppCheck: true, consumeAppCheckToken: false },
+    // App Check is not yet operational in prod (0% verified requests, no apps
+    // registered, products still in Monitoring). Enforcing it here would reject
+    // every call and kill the client error telemetry this callable exists to
+    // preserve. Left OFF for now — the callable is still schema-whitelisted,
+    // size-capped, and server-stamped (not a free-form sink).
+    // TODO: set enforceAppCheck back to true once App Check is registered +
+    // enforcing (register web app + reCAPTCHA Enterprise, move products to Enforce).
+    { cors: true, enforceAppCheck: false, consumeAppCheckToken: false },
     async (request) => {
         try {
             const d = (request.data ?? {}) as Record<string, unknown>;
