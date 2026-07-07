@@ -28,6 +28,10 @@ export const assertPoolOwnerOrSuperAdmin = (pool: any, uid: string, userRole?: s
     }
 };
 
+// Default per-period payout split for a new SQUARES pool (percent of pot).
+// Matches the legacy SetupWizard default; must sum to 100.
+export const DEFAULT_SQUARES_PAYOUTS = { q1: 25, half: 25, q3: 25, final: 25 } as const;
+
 // Server-controlled / privileged fields a client must never set on pool creation.
 // Billing, lifecycle, membership, and scoring state are set by the server only.
 const PRIVILEGED_POOL_FIELDS = [
@@ -268,6 +272,14 @@ export const createPool = onCall(async (request) => {
                 final: null,
                 gameStatus: 'pre'
             };
+            // Quarterly payout percentages. `payouts` is a privileged field
+            // (stripped from every client payload above), and the old
+            // SetupWizard that used to seed 25/25/25/25 is gone — without this
+            // default every new squares pool paid $0 per period
+            // (scoreUpdates.ts getSafePayout returns 0 for a missing map).
+            // Commissioners still tune these post-create in the AdminPanel
+            // Payouts tab.
+            newPool.payouts = { ...DEFAULT_SQUARES_PAYOUTS };
         }
 
         // Explicitly remove undefined for safety (though JSON.parse above handles most)
