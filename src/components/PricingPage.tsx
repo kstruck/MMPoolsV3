@@ -339,6 +339,8 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                 onClick={() => {
                                                     setCalcPoolType(f.k);
                                                     if (f.k === 'SQUARES') setCalcPlayers(100);
+                                                    // What-If Simulator is a Bracket-only add-on (matches the checkout gating); clear it when switching to another format.
+                                                    if (f.k.toUpperCase() !== 'BRACKET') setCalcSim(false);
                                                 }}
                                                 className={`py-3.5 px-3 rounded-2xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all border ${
                                                     calcPoolType === f.k
@@ -447,7 +449,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                             </label>
                                         )}
 
-                                        {config.features.whatIfSimulator.isPremium && (
+                                        {config.features.whatIfSimulator.isPremium && calcPoolType.toUpperCase() === 'BRACKET' && (
                                             <label className={`flex items-center justify-between cursor-pointer p-4 bg-surface border rounded-2xl hover:border-gold-500/30 hover:bg-card transition-all duration-300 ${
                                                 calcSim ? 'border-gold-500 bg-gradient-to-r from-gold-500/5 to-transparent' : 'border-line'
                                             }`}>
