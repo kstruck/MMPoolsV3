@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { User, Pool, BillingConfig } from '../types';
+import { DEFAULT_TRIAL_DAYS, DEFAULT_FORMAT_TIER_MAP, normalizeLegacyPackage } from '@shared/schemas/billingConfig';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { db } from '../firebase';
@@ -61,6 +62,9 @@ const DEFAULT_BILLING_CONFIG: BillingConfig = {
         whatIfSimulator: { isPremium: true, addonPrice: 9 },
         customBranding: { isPremium: true, addonPrice: 29 }
     },
+    trialDays: DEFAULT_TRIAL_DAYS,
+    formatTierMap: DEFAULT_FORMAT_TIER_MAP,
+    packagesList: [],
     packages: {
         buy_3: 49.00,
         unlimited_1yr: 129.00
@@ -104,13 +108,9 @@ export const PricingPage: React.FC<PricingPageProps> = ({
             ? 'hasTrialPools'
             : 'noPools';
 
-    // Optional config-driven hero promo. The shared BillingConfig schema field is
-    // being added separately, so read it defensively via a local intersection type.
-    const heroPromo = (config as BillingConfig & {
-        heroPromo?: { code?: string; discountLabel?: string; endsAt?: number | string };
-    }).heroPromo;
-    const heroPromoEndsAtRaw = heroPromo?.endsAt;
-    const heroPromoEndsAt = heroPromoEndsAtRaw != null ? new Date(heroPromoEndsAtRaw).getTime() : Number.NaN;
+    // Optional config-driven hero promo (shared BillingConfig schema field).
+    const heroPromo = config.heroPromo;
+    const heroPromoEndsAt = heroPromo?.endsAt != null ? new Date(heroPromo.endsAt).getTime() : Number.NaN;
     const showHeroPromo = Boolean(heroPromo?.code) && Number.isFinite(heroPromoEndsAt) && heroPromoEndsAt > Date.now();
 
     // Fetch monetization configuration
@@ -588,9 +588,9 @@ export const PricingPage: React.FC<PricingPageProps> = ({
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto pt-6 justify-center">
                         {/* Dynamic Custom Bundles */}
-                        {Array.isArray(config.packagesList) && config.packagesList.filter(b => b.isActive).length > 0 ? (
-                            config.packagesList.filter(b => b.isActive).map((b) => {
-                                const isUnlimited = b.poolsIncluded >= 9999;
+                        {Array.isArray(config.packagesList) && config.packagesList.map(normalizeLegacyPackage).filter(b => b.isActive).length > 0 ? (
+                            config.packagesList.map(normalizeLegacyPackage).filter(b => b.isActive).map((b) => {
+                                const isUnlimited = b.kind === 'UNLIMITED_PASS';
 
                                 const badgeLabel = isUnlimited ? 'Unlimited Pass' : b.poolType === 'ALL' ? 'Universal Pack' : `${b.poolType} Pack`;
                                 const pricePerPoolLabel = isUnlimited
@@ -613,7 +613,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                             <div className="bg-surface p-4 rounded-2xl border border-line space-y-2 text-[10px] font-mono text-muted num">
                                                 <div className="flex justify-between">Format: <strong className="text-[color:var(--text)]">{b.poolType}</strong></div>
                                                 <div className="flex justify-between">Max size per pool: <strong className="text-[color:var(--text)]">{b.maxPlayersPerPool === 9999 ? 'Unlimited' : `${b.maxPlayersPerPool} players`}</strong></div>
-                                                <div className="flex justify-between">Validity: <strong className="text-[color:var(--text)]">{b.durationDays === 0 ? 'No expiration' : `${b.durationDays} days`}</strong></div>
+                                                <div className="flex justify-between">Validity: <strong className="text-[color:var(--text)]">{b.kind === 'UNLIMITED_PASS' ? `${b.termDays} days` : 'No expiration'}</strong></div>
                                             </div>
 
                                             <div className="pt-2 flex items-baseline gap-1.5">
