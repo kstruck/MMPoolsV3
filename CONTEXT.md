@@ -74,5 +74,20 @@ The Super-Admin Dashboard tab that is the sole home for simulation and testing t
 ### Pool Lifecycle State
 The derived status of a Pool over its life: `OPEN` (accepting entries), `LOCKED` (entries closed, awaiting/underway play), `LIVE` (games in progress), `FINAL` (scored, results settled), `CLOSED` (archived by admin/commissioner via `closePool`, removed from active operation). Computed by `getPoolLifecycleState`. Distinct from the raw `status` field; `CLOSED` is set by the `closePool` callable and must be visible in every Pool listing.
 
+### Scenario
+A JSON fixture in `src/utils/testing/scenarios/` describing one Test Suite run: the pool configuration to create, the simulated entries/picks/results, and the assertions that must hold. A Scenario is executed by exactly one Simulator, selected by the Scenario's pool type.
+
+### Simulator
+A per-pool-type driver in `src/utils/testing/simulators/` that executes a Scenario against live Firestore as the Super Admin: creates a real Pool, writes entries, advances results, triggers scoring, and reads back state for assertions. Simulators create and clean up their own Test Pools and test users.
+
+### Test Pool
+A real Pool created in production Firestore by a Simulator during a Test Suite run. Deleted by cleanup at the end of the run; never a Pool that Members interact with.
+
+### Upset Bonus
+An optional bracket scoring add-on: a correct pick where the winner's seed number is higher than the loser's earns extra points equal to (winner seed − loser seed) × a Commissioner-chosen multiplier. Composable with any Scoring System; not a Scoring System itself.
+
+### Scoring System
+The named multiplier table a bracket Pool uses to award points per round for correct picks: `CLASSIC`, `ESPN`, `FIBONACCI`, or `CUSTOM` (Commissioner-supplied per-round values). The former `UPSET` option is retired as a Scoring System and re-expressed as the Upset Bonus add-on.
+
 ### Health Snapshot
 The result of probing external integrations (ESPN API, Firestore, email delivery, Cloud Functions) via the `getAdminHealthSnapshot` callable, surfaced in the Overview tab's API Status Center. A Health Snapshot is a point-in-time reading; persisting a history of snapshots and running them on a schedule is a stated goal.
