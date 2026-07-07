@@ -4,13 +4,14 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { writeAuditEvent } from "./audit";
 import { checkBillingAccess } from "./billing";
 import { writeLedgerEvent } from "./paymentLedger";
-import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields } from "./poolOps";
+import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMode, assertPaidParticipantCeiling } from "./poolOps";
+import { loadBillingConfig } from "./billing";
 import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } from "./lib/systemGuards";
 import { isPoolType, type PoolType } from "./shared/poolTypes";
 import {
   validateCreateInput,
   assertNotBanned,
-  freeBilling,
+  billingForLaunch,
   writePoolCreationSideEffects,
 } from "./lib/poolCreation";
 import {
@@ -69,6 +70,12 @@ export const createNFLPool = onCall(async (request) => {
     const poolId = poolRef.id;
     const now = Date.now();
 
+    // Launch billing mode (NOTES-WAVE2 A1): NFL create payloads carry no per-pool
+    // player cap, so with no paid add-on this resolves to 'free' (unchanged
+    // behavior); a selected paid add-on forces 'trial'. Config read fails open.
+    const billingConfig = await loadBillingConfig(db);
+    const launchMode = computeLaunchMode(data, billingConfig.freePlayerThreshold);
+
     const newPool: any = {
       ...data,
       id: poolId,
@@ -80,7 +87,8 @@ export const createNFLPool = onCall(async (request) => {
       status: 'OPEN',
       isLocked: false,
       participantIds: [uid],
-      billing: freeBilling(), // free plan, no auto-lock (server-authoritative)
+      // free or trial per server-computed launch mode (server-authoritative)
+      billing: billingForLaunch(launchMode, billingConfig.trialDays, now),
     };
 
     const userRef = db.collection('users').doc(uid);
@@ -166,6 +174,9 @@ export const joinNFLPool = onCall(async (request) => {
     if (billingStatus === 'free' && participantIds.length >= 10) {
       throw new HttpsError('failed-precondition', 'This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.');
     }
+    // Paid-ceiling gate (NOTES-WAVE2 A2, PLAN 6b(iii)): a PAID pool cannot exceed
+    // its purchased participant ceiling. No-op for free/trial pools.
+    assertPaidParticipantCeiling(poolData.billing, participantIds.length);
 
     // 1. Add participant to pool collection
     transaction.update(poolRef, {

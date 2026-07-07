@@ -690,6 +690,15 @@ export interface PoolBilling {
         whatIfSimulator: boolean;
         customBranding: boolean;
     };
+    // Buy-flow overhaul (NOTES-WAVE2 A4). Written by the checkout/webhook path via
+    // the Admin SDK (dotted paths / `as any`), so these are documented here for
+    // legibility rather than being a compile requirement.
+    // - pendingSessionId: the live checkout reservation gating one session per pool
+    //   (createCheckoutSession idempotency, PLAN Phase 2 #6d).
+    // - paid: the paid ceiling snapshot copied from the reservation on successful
+    //   payment/redemption; enforced on edit (updatePoolSettings) and join.
+    pendingSessionId?: { reservationId: string; at: number };
+    paid?: { tier: string; maxPlayersAllowed: number; addons: string[]; at: number };
 }
 
 // Billing config: the canonical contract is the zod schema in

@@ -18,8 +18,10 @@ _(more will be appended as later waves run)_
 
 _Filled in as waves complete. Stripe dashboard, secret rotation, Coolify deploy, migration run all land here._
 
-- **Stripe Dashboard — enable new webhook events** (Wave 2 adds handlers for them): `charge.refunded`, `charge.dispute.created`, `checkout.session.expired`. Without enabling these in the Stripe webhook endpoint config, refund/dispute accounting and reservation-release-on-expiry won't fire. (Exact steps finalized in section D once Wave 2 reports.)
-- **Stripe TEST-key rotation still pending** (pre-existing, owner-attested 2026-07-06): while STRIPE_SECRET_KEY is a placeholder, checkout silently activates purchases for free (mock path). Must be a real test key before any UAT of the money path.
+- **Stripe Dashboard — enable 3 new webhook events** on the endpoint that hits `handleStripeWebhook` (Developers → Webhooks → your endpoint → "Select events"): `checkout.session.expired`, `charge.refunded`, `charge.dispute.created`. `checkout.session.completed` is already on. Until enabled: refund/dispute ledger rows and reservation-release-on-expiry do not fire.
+- **Stripe TEST-key rotation still pending** (pre-existing, owner-attested 2026-07-06): while STRIPE_SECRET_KEY is a placeholder, checkout silently activates purchases for FREE via the mock path (functions/src/stripe.ts). Rotate to a real Stripe TEST secret key (Firebase Secret Manager: `firebase functions:secrets:set STRIPE_SECRET_KEY`) before ANY money-path UAT, or every test "purchase" is fake-free.
+- **Verify redirect host**: Wave 2 changed the checkout redirect fallback origin from `https://marchmelee.com` to `https://www.marchmeleepools.com`. Confirm that is your live host. If the app is served from another origin, set Functions env `BUYFLOW_ALLOWED_ORIGINS` (comma-separated) — no secret needed.
+- **(Optional, after dry-run review) enable coupon-reservation sweep**: set `system/config.couponSweep = { enabled: true, dryRun: false }` in Firestore. Safe to leave off — reservations still release on `checkout.session.expired`; the sweep only reclaims sessions that never emit expiry. Review a few dry-run log lines first.
 
 ---
 

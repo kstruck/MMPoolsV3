@@ -6,6 +6,7 @@ import * as admin from "firebase-admin";
 import { PlayoffPool, PlayoffEntry } from "./types";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
 import { sendEmail } from "./reminders";
+import { assertPaidParticipantCeiling } from "./poolOps";
 
 
 
@@ -202,6 +203,9 @@ export const submitPlayoffPicks = onCall(async (request) => {
             if (billingStatus === 'free' && Object.keys(fresh.entries || {}).length >= 10) {
                 throw new HttpsError('failed-precondition', 'This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.');
             }
+            // Paid-ceiling gate (NOTES-WAVE2 A2, PLAN 6b(iii)): a PAID pool cannot
+            // exceed its purchased participant ceiling. No-op for free/trial pools.
+            assertPaidParticipantCeiling(fresh.billing, Object.keys(fresh.entries || {}).length);
         }
 
         t.update(poolRef, {
