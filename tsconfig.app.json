@@ -15,6 +15,9 @@
     "skipLibCheck": true,
     /* Bundler mode */
     "moduleResolution": "bundler",
+    // TS 6.0 errors on the deprecated `baseUrl` unless opted out. Kept because
+    // `paths` (@shared/*) resolves against it. Revisit before TS 7.0.
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["shared/*"]
