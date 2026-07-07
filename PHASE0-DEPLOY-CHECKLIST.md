@@ -1,63 +1,76 @@
-# Phase 0 — Deploy Checklist (action required by Kevin)
+# Phase 0–3 Deploy Runbook — current state + remaining steps
 
-Branch: `fix/superadmin-phase0-control` (13 commits, PR #139). All green locally (functions build + root build: 0 errors; 204/204 root + 96/96 functions tests). **Partial deploy in progress** — see per-step status notes. Do the rest in order.
+PR **#139** (Super-Admin control: Phase 0 + Phase 1/2/3) is **merged to `main`** (merge commit `53d9872`). Project: `gridiron-gamble-uzuqo`. This runbook reflects what's already done and exactly what's left.
 
-## 1. Review + merge the branch
-- `git checkout fix/superadmin-phase0-control` and skim the diff, or open a PR to `main`.
-- CI (ci.yml) will re-run build + tests + nginx validate.
+---
 
-## 2. Deploy Cloud Functions (needed BEFORE the rules, or client error logging breaks)
-The new `logClientError` callable must exist before `system_logs` create is locked, else front-end error telemetry silently drops. The new `scheduledHealthCheck` (hourly) + updated `getAdminHealthSnapshot` persist to `health/latest`. Phase 3.1 also changed `onUserCreated` / `syncAllUsers` (write `searchName`) and `searchUsersByEmail` (match name OR email).
+## ✅ DONE
+- [x] **#139 merged** to `main`.
+- [x] **Cloud Functions deployed — all 8 changed:** `logClientError` (NEW), `scheduledHealthCheck` (NEW), `getAdminHealthSnapshot`, `adminInitTournament`, `syncBracketTournament`, `onUserCreated`, `syncAllUsers`, `searchUsersByEmail`. (`scheduledHealthCheck` also created its Cloud Scheduler job.)
+- [x] **Firestore rules deployed:** `sim-*` pool/entry create → SUPER_ADMIN-only; `system_logs` create → functions-only; new `health/{doc}` (functions-write / SUPER_ADMIN-read).
 
-**Simplest — deploy all functions (avoids missing any):**
-```
-npm --prefix functions install     # only if deps changed
-npx firebase deploy --only functions --project gridiron-gamble-uzuqo
-```
+> ⚠️ Because functions + rules are live but the **frontend** may still be old, prod can be briefly inconsistent: the new rules block the OLD frontend's direct `system_logs` writes, so **client error telemetry is broken until the new frontend is live** (Step 1). Not user-facing; just do Step 1 promptly.
 
-**Or the exact changed set (all 8):**
-```
-npx firebase deploy --only functions:logClientError,functions:getAdminHealthSnapshot,functions:scheduledHealthCheck,functions:adminInitTournament,functions:syncBracketTournament,functions:onUserCreated,functions:syncAllUsers,functions:searchUsersByEmail --project gridiron-gamble-uzuqo
-```
+---
 
-Changed functions this PR: `logClientError` (NEW), `scheduledHealthCheck` (NEW), `getAdminHealthSnapshot`, `adminInitTournament`, `syncBracketTournament`, `onUserCreated`, `syncAllUsers`, `searchUsersByEmail`.
+## ▶️ REMAINING — do in this order
 
-Verify `logClientError` + `scheduledHealthCheck` show in the Firebase console functions list. `scheduledHealthCheck` creates a Cloud Scheduler job (approve any prompt). Note: `computeAdminHealthSnapshot` is a helper inside adminHealth — no separate deploy.
+### Step 1 — Confirm the NEW frontend is deployed (Coolify)
+Coolify auto-builds `main` on push. The earlier Coolify log built commit `8ad1da16` — that was **pre-#139** (old code, no crash fix). After the #139 merge (`53d9872`), Coolify should have triggered a fresh build.
 
-> **Status (updated during deploy):** the first 5 (`logClientError`, `getAdminHealthSnapshot`, `scheduledHealthCheck`, `adminInitTournament`, `syncBracketTournament`) are DEPLOYED. Still to deploy: **`onUserCreated`, `syncAllUsers`, `searchUsersByEmail`** (the Phase 3.1 name-search set).
+- In Coolify, confirm the latest deployment's **commit SHA is `53d9872` (or later)**, not `8ad1da16`.
+- If it did NOT auto-deploy the merge, **trigger a manual redeploy** of `main` in Coolify.
+- Wait for the container healthcheck to pass.
 
-## 3. Deploy Firestore rules (AFTER functions are live)
-```
-npx firebase deploy --only firestore:rules --project gridiron-gamble-uzuqo
-```
-Changed rules: `pools` create `sim-*` now SUPER_ADMIN-only; `pools/*/entries` write now SUPER_ADMIN-only for the sim path; `system_logs` create now functions-only; new `health/{doc}` collection (functions-write, SUPER_ADMIN-read).
+Until this frontend is live, the crash fix + `logClientError` repoint aren't on prod.
 
-## 4. Deploy the frontend (nginx/Coolify — per your normal www deploy)
-The client changes (crash fix, per-tab ErrorBoundary, formatPoolMatchup, errorHandler repoint, TournamentSimulator status fix) ship with the normal www build/deploy. firebase.json rewrites do NOT apply to www (nginx/Coolify) — deploy through your usual Coolify path.
+### Step 2 — Post-deploy smoke tests (as SUPER_ADMIN, ~3 min)
+Do these ONLY after Step 1 confirms the new frontend is serving. The earlier "Open Simulation Dashboard still crashes" test was against the OLD build — re-test now:
+- [ ] Test Suite → **Open Simulation Dashboard** — no white-screen (this was the reported crash).
+- [ ] Test Suite → **Run All (15)** — completes (confirms admin sim writes still pass the tightened `sim-*` rules).
+- [ ] Test Suite → **Open Tournament Simulator** → it creates a sim pool (confirms `sim-*` create works for admin post-rule-change).
+- [ ] Pools tab → NFL/PROPS pool rows show a real matchup label, **not "undefined @undefined"**, and show a lifecycle badge (open/locked/live/final/closed).
+- [ ] Pools tab → the **Closed** status filter chip appears.
+- [ ] Overview → API Status Center shows a "Last checked …" time (from `health/latest`; the hourly `scheduledHealthCheck` populates it — first run may take up to an hour, or click **Run Check**).
+- [ ] Trigger any client error (or watch Firestore) → a `system_logs` doc still appears **via `logClientError`** (depends on Step 4 — App Check).
 
-## 5. Post-deploy smoke tests (2 min, as SUPER_ADMIN)
-- [ ] Test Suite → **Open Simulation Dashboard** no longer white-screens the app.
-- [ ] Test Suite → **Run All (15)** still completes (confirms admin sim writes still pass the tightened rules).
-- [ ] Tournament Simulator (header button) still creates a sim pool (confirms `sim-*` create works for admin).
-- [ ] Trigger any client error (or check Firebase logs) → confirm a `system_logs` doc is still written via `logClientError` (App Check must be configured for the web app, else these drop — see item 7).
-- [ ] Pools tab rows for NFL/PROPS pools show a real matchup label, not "undefined @undefined".
+### Step 3 — Backfill `searchName` (server-side name search)
+`onUserCreated`/`syncAllUsers` now write a `searchName` field; existing users don't have it yet.
+- [ ] Dashboard → **Members → Force Sync** (runs `syncAllUsers`) once. Backfills `searchName` for all existing users.
+- After this, server-side search matches **name OR email**. (The instant client-side Members filter already worked without this.)
+- Firestore auto-creates the single-field index on `searchName` — no config needed.
 
-## 5b. Backfill `searchName` (after functions + frontend deploy)
-Phase 3.1 added a `searchName` field (lowercased name) written by `onUserCreated`
-+ `syncAllUsers`, and `searchUsersByEmail` now matches name OR email. Existing
-users don't have `searchName` until backfilled:
-- Deploy functions (`userSync`, `userManagement`) with the rest.
-- In the dashboard: Members → **Force Sync** (runs `syncAllUsers`) once to backfill
-  `searchName` for all existing users. Until then, server-side name search returns
-  nothing for un-synced users (the instant client-side Members filter still works).
-- Firestore auto-creates the single-field index on `searchName` — no index config needed.
+### Step 4 — Confirm App Check is enforced (or client error logging drops)
+`logClientError` sets `enforceAppCheck: true`. The web app initializes App Check (ReCaptcha Enterprise, `src/firebase.ts:26`).
+- [ ] In Firebase console → App Check: confirm the **web app is registered and enforcing**.
+- If App Check is NOT fully configured in prod, client errors will be **rejected** (silently lost). Fix: finish App Check config, **or** temporarily set `enforceAppCheck: false` in `functions/src/logClientError.ts` and redeploy that one function, then re-enable once App Check is set up.
 
-## 6. Rotate the plaintext Stripe test secret (I could NOT do this — your action)
-`functions/.env` lines 1-2 contain a commented-out but real-format Stripe TEST secret key + webhook secret in cleartext. Even commented + gitignored, delete them from the file and rotate in the Stripe dashboard (test mode). Prod secrets are already in Secret Manager and are fine.
+### Step 5 — Rotate the plaintext Stripe TEST secret (your action — I can't)
+`functions/.env` (lines 1–2) has a commented-but-real-format Stripe **test** secret key + webhook secret in cleartext. Even commented + gitignored:
+- [ ] Delete those two lines from `functions/.env`.
+- [ ] Rotate the key + webhook secret in the Stripe dashboard (test mode).
+- Prod secrets are already in Secret Manager — fine, no action.
 
-## 7. Confirm App Check is enforced for the web app
-`logClientError` sets `enforceAppCheck: true`. The web app already initializes App Check (ReCaptcha Enterprise, `src/firebase.ts:26`). Verify the App Check provider is registered/enforcing in the Firebase console so legit client errors aren't rejected. If App Check is NOT fully configured in prod, either finish that config or temporarily set `enforceAppCheck: false` in `functions/src/logClientError.ts` and redeploy (tracked as a follow-up).
+### Step 6 — Fix pre-existing Coolify env misconfig (not from this PR; do before adding Storage)
+The build env in Coolify has two malformed values (harmless today — no Firebase Storage in use, auth still works — but wrong):
+- [ ] `VITE_FIREBASE_STORAGE_BUCKET` is set to the literal string `"VITE_FIREBASE_MESSAGING_SENDER_ID=1042141442549"`. Set it to the real bucket, e.g. `gridiron-gamble-uzuqo.appspot.com`.
+- [ ] `VITE_FIREBASE_AUTH_DOMAIN` is doubled (`…firebaseapp.com=…firebaseapp.com`). Set it to `gridiron-gamble-uzuqo.firebaseapp.com`.
+- Fix these before you ever enable uploads/Storage.
 
-## Rollback
-- Rules/functions: redeploy previous versions (`git revert 42c7c57` then deploy), or roll back functions in the console.
-- Frontend: redeploy prior Coolify build.
+---
+
+## Dependabot PRs (separate from Phase 0 — do NOT batch, one at a time, verify build each)
+- **#138** (typescript 6.0.3) — **fixed + green + MERGEABLE** (added `ignoreDeprecations: "6.0"`; verified TS6 build clean + 207 tests). Merge at will; dev-only.
+- **#135** (@types/node 26) — safe standalone; merge next.
+- **#130** (minor-patch group of 4) — CONFLICTING; needs rebase onto new `main`, then merge.
+- **#133** (tailwindcss 4) — CONFLICTING + real v3→v4 breaking migration; **dedicated effort, later.**
+- **#8** (@eslint/js 10) — stale + conflicting; **close it** (Dependabot re-raises if still needed).
+- **#131, #134** (vite 8 / plugin-react 6) — **already closed** (paired-major deadlock; redo as one combined branch if ever wanted).
+
+---
+
+## Rollback (if a smoke test fails)
+- **Frontend:** redeploy the prior Coolify build (or revert the merge and let Coolify rebuild).
+- **Rules:** re-deploy the previous `firestore.rules` (from a pre-#139 commit) via `npx firebase deploy --only firestore:rules`.
+- **Functions:** roll back individual functions in the Firebase console, or `git revert` + redeploy.
+- **Fastest de-risk for the telemetry/rule interaction:** ensure Step 1 (new frontend) is live — that alone resolves the transient split-state.
