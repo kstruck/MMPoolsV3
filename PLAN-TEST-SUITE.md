@@ -127,15 +127,18 @@ Root suite 24 files / 230 tests green. In-app confirmation rides on the Phase
    Needs a functions deploy. Open follow-up: prod squares pools created via
    the new wizard before this fix have no payouts map — backfill is a Rule-1
    gated decision for Kevin.
-   _Suite re-run status 2026-07-07: 5/15 pass (was 1). Cleared: 5 create
-   errors, Props, Playoff Basic, E2E. Remaining: Basic Quarters + Partial Fill
-   (fixed by 7b, pending deploy) and the 6-test bracketSimulator 0-entries
-   cluster (item 17) — now the only unexplained failure. Static analysis
-   exhausted: rules allow the write, E2E writes the identical shape in the
-   same session and passes, scenarios all carry tiebreakers, createPool
-   returns {poolId}. The simulator already captures the swallowed error as an
-   'Entry Error' step — need Kevin to expand a failing bracket test's step log
-   in the Test Suite UI and report that message._
+   _Suite re-run status 2026-07-07 (post #147 merge + functions deploy +
+   Coolify deploy): **7/15 pass, 0 errors** (was 1/15 + 5 errors at plan
+   start). Squares payout fix CONFIRMED in prod (Basic Quarters 7/7, Partial
+   Fill 3/3). All 8 remaining failures are the bracketSimulator 0-entries
+   cluster (item 17): Basic, Fibonacci, Custom, Max Score, ESPN, Tiebreaker,
+   Incomplete, Zero Correct. Static analysis exhausted: rules allow the write,
+   bracketE2ESimulator writes the identical entry shape in the same session
+   and passes (54 entries), scenarios all carry tiebreakers, createPool
+   returns a valid {poolId} (poolStatus assertions pass). The simulator
+   already captures the swallowed error as a red 'Entry Error' step — BLOCKED
+   on Kevin expanding a failing bracket test's step log in the Test Suite UI
+   and reporting that message._
 
 ### Phase 2 — NFL wave (the deadline work)
 8. **Harness plumbing first** (explicit work items, not assumed):
