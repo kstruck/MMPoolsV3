@@ -17,6 +17,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { assertCallerRole } from "./adminClaims";
 import { writeAdminAudit } from "./lib/adminAudit";
 import { BillingConfigSchema } from "./shared/schemas/billingConfig";
+import { grantEntitlementTxn } from "./entitlements";
+import { MAX_CREDITS_PER_BUNDLE, type ProductSnapshot } from "./shared/schemas/bundle";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -141,7 +143,17 @@ export const adminUpdatePoolBilling = onCall(async (request) => {
   return { success: true };
 });
 
-/** Manual adjustment of a user's referral credit balances (users/{id}). */
+/**
+ * Adjust a user's credit balances (users/{id}).
+ *
+ * @deprecated for the pool-credit path — prefer `adminGrantEntitlement`
+ * (entitlements.ts) which grants an auditable, revocable bundle. This callable
+ * is kept for export/back-compat, but it NO LONGER pokes the legacy
+ * `users.freePoolsAvailable` int: a positive `freePoolsAvailable` is interpreted
+ * as "grant this many Pool Credits" and routed into an ADMIN_GRANT CREDIT_BUNDLE
+ * via the canonical model. `referralCredits` remains a raw referral-tally poke
+ * (that counter is separate from entitlements).
+ */
 export const adminAdjustUserCredits = onCall(async (request) => {
   const caller = await assertCallerRole(request, "SUPER_ADMIN");
   const { targetUid, referralCredits, freePoolsAvailable } = request.data as {
@@ -150,13 +162,45 @@ export const adminAdjustUserCredits = onCall(async (request) => {
     freePoolsAvailable?: number;
   };
   if (!targetUid) throw new HttpsError("invalid-argument", "targetUid is required.");
-  const updates: Record<string, unknown> = {};
-  if (typeof referralCredits === "number") updates.referralCredits = referralCredits;
-  if (typeof freePoolsAvailable === "number") updates.freePoolsAvailable = freePoolsAvailable;
-  if (Object.keys(updates).length === 0) {
+
+  const wantsReferral = typeof referralCredits === "number";
+  const creditsToGrant = typeof freePoolsAvailable === "number" ? Math.floor(freePoolsAvailable) : undefined;
+  if (!wantsReferral && creditsToGrant === undefined) {
     throw new HttpsError("invalid-argument", "at least one numeric credit field is required.");
   }
-  await admin.firestore().doc(`users/${targetUid}`).set(updates, { merge: true });
+  if (creditsToGrant !== undefined && creditsToGrant > MAX_CREDITS_PER_BUNDLE) {
+    throw new HttpsError(
+      "invalid-argument",
+      `freePoolsAvailable ${creditsToGrant} exceeds the ${MAX_CREDITS_PER_BUNDLE}-credit cap; split into multiple grants.`
+    );
+  }
+
+  let grantedBundleId: string | null = null;
+  await admin.firestore().runTransaction(async (txn) => {
+    const userRef = admin.firestore().doc(`users/${targetUid}`);
+    // Raw referral-tally poke stays as-is (distinct from entitlements).
+    if (wantsReferral) {
+      txn.set(userRef, { referralCredits }, { merge: true });
+    }
+    // Positive pool-credit request → ADMIN_GRANT CREDIT_BUNDLE (canonical model).
+    if (creditsToGrant !== undefined && creditsToGrant > 0) {
+      const snapshot: ProductSnapshot = {
+        name: "Admin Credit Grant",
+        price: 0,
+        poolType: "ALL",
+        maxPlayersPerPool: 9999,
+      };
+      const res = grantEntitlementTxn(txn, {
+        ownerId: targetUid,
+        productKind: "CREDIT_BUNDLE",
+        source: "ADMIN_GRANT",
+        productSnapshot: snapshot,
+        creditsTotal: creditsToGrant,
+      });
+      grantedBundleId = res.bundleId;
+      txn.set(userRef, { role: "COMMISSIONER" }, { merge: true });
+    }
+  });
 
   await writeAdminAudit({
     actorUid: caller.uid,
@@ -164,8 +208,8 @@ export const adminAdjustUserCredits = onCall(async (request) => {
     action: "USER_CREDITS_ADJUSTED",
     targetType: "user",
     targetId: targetUid,
-    metadata: { referralCredits, freePoolsAvailable },
+    metadata: { referralCredits, freePoolsAvailable, grantedBundleId },
     status: "success",
   });
-  return { success: true };
+  return { success: true, grantedBundleId };
 });

@@ -32,6 +32,8 @@ export { generateTestScenario, validateTestResults, generateTestReport } from ".
 export { setUserRole, setSuperAdminClaim, syncMyClaims, backfillUserRoles } from "./adminClaims";
 export { logAdminAction } from "./adminOps";
 export { adminSaveBillingConfig, adminManageCoupon, adminUpdatePoolBilling, adminAdjustUserCredits } from "./adminBillingOps";
+// Canonical entitlements (Bundles + Pool Credits) — PLAN Phase 4 #14-17.
+export { adminGrantEntitlement, adminRevokeEntitlement, redeemPoolCredit } from "./entitlements";
 export { initializeBigEastTournamentHttp, initializeBig12TournamentHttp } from "./conferenceTournaments";
 export { scoreBracketEntries, finalizeTournamentPayouts } from "./bracketScoring";
 
