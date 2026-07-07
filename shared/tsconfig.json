@@ -2,6 +2,9 @@
   "compilerOptions": {
     "target": "es2020",
     "module": "commonjs",
+    // TS 6.0 errors on the deprecated node10 resolution unless opted out —
+    // same escape hatch tsconfig.app.json uses. Revisit before TS 7.0.
+    "ignoreDeprecations": "6.0",
     "moduleResolution": "node",
     "strict": true,
     "esModuleInterop": true,

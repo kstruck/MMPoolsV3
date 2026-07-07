@@ -351,7 +351,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     // Handle manual form Coupon Code Verification
     const handleApplyCoupon = async (e: React.FormEvent) => {
         e.preventDefault();
-        await applyCouponCode(couponInput);
+        await applyCouponCode(couponInput.trim().toUpperCase());
     };
 
     const handleRemoveCoupon = () => {
@@ -653,7 +653,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                 <input
                                     type="text"
                                     value={couponInput}
-                                    onChange={(e) => setCouponInput(e.target.value)}
+                                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
                                     disabled={appliedCoupon !== null || isValidatingCoupon}
                                     className="w-full bg-page border-[1.5px] border-line focus:border-navy-600 rounded-xl pl-9 pr-4 py-2.5 text-[color:var(--text)] text-xs outline-none uppercase font-mono disabled:opacity-50"
                                     placeholder="e.g. MELEEFREE"

@@ -16,6 +16,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { assertCallerRole } from "./adminClaims";
 import { writeAdminAudit } from "./lib/adminAudit";
+import { BillingConfigSchema } from "./shared/schemas/billingConfig";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -30,7 +31,24 @@ export const adminSaveBillingConfig = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "config object is required.");
   }
   const docId = kind === "billing" ? "billing_config" : "referral_config";
-  await admin.firestore().doc(`settings/${docId}`).set(config);
+
+  // billing_config is fully modeled by the shared contract — gate the write and
+  // persist the PARSED doc (defaults materialized, unknown keys stripped) so
+  // client readers that cast `data() as BillingConfig` see the canonical shape.
+  // referral_config keeps the existing unvalidated passthrough.
+  let toPersist: Record<string, unknown> = config;
+  if (kind === "billing") {
+    const parsed = BillingConfigSchema.safeParse(config);
+    if (!parsed.success) {
+      const summary = parsed.error.issues
+        .slice(0, 8)
+        .map((i) => `${i.path.map(String).join(".") || "(root)"}: ${i.message}`)
+        .join("; ");
+      throw new HttpsError("invalid-argument", `billing config failed validation: ${summary}`);
+    }
+    toPersist = parsed.data;
+  }
+  await admin.firestore().doc(`settings/${docId}`).set(toPersist);
 
   await writeAdminAudit({
     actorUid: caller.uid,

@@ -2,7 +2,12 @@
 import * as functions from "firebase-functions/v2";
 import { FieldValue } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
-import { Pool, PoolBilling, Coupon, BillingConfig } from "./types";
+import { Pool, PoolBilling, Coupon } from "./types";
+import {
+    BillingConfigSchema,
+    DEFAULT_GRACE_PERIOD_DAYS,
+    DEFAULT_TRIAL_DAYS,
+} from "./shared/schemas/billingConfig";
 import { HttpsError } from "firebase-functions/v2/https";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { renderEmailHtml, escapeHtml, BASE_URL } from "./emailStyles";
@@ -36,10 +41,34 @@ export const enforceBillingStatus = functions.scheduler.onSchedule("every day 03
     const now = Date.now();
     console.log(`[BillingEnforce] Starting billing enforcement at ${new Date(now).toISOString()}`);
 
-    // --- Fetch global billing config for grace period duration ---
-    const configDoc = await db.collection("config").doc("billing_config").get();
-    const billingConfig = configDoc.data() as BillingConfig | undefined;
-    const gracePeriodDays = billingConfig?.gracePeriodDays ?? 7;
+    // --- Fetch global billing config for grace/trial durations ---
+    // settings/billing_config is the single authority (ADR-0001); this read
+    // previously targeted config/billing_config — a split-brain bug that made
+    // the scheduler ignore the admin-managed doc. Only the fields the
+    // scheduler consumes are validated (.pick keeps the parse immune to
+    // legacy-shaped fields elsewhere in the doc, e.g. old packagesList items),
+    // and validation failure fails OPEN to defaults — a malformed config must
+    // never stall billing enforcement.
+    let gracePeriodDays = DEFAULT_GRACE_PERIOD_DAYS;
+    let trialDays = DEFAULT_TRIAL_DAYS;
+    const configDoc = await db.collection("settings").doc("billing_config").get();
+    if (!configDoc.exists) {
+        console.warn(`[BillingEnforce] settings/billing_config missing; using defaults (gracePeriodDays=${gracePeriodDays}, trialDays=${trialDays})`);
+    } else {
+        const parsed = BillingConfigSchema
+            .pick({ gracePeriodDays: true, trialDays: true })
+            .safeParse(configDoc.data());
+        if (parsed.success) {
+            gracePeriodDays = parsed.data.gracePeriodDays;
+            trialDays = parsed.data.trialDays;
+        } else {
+            const summary = parsed.error.issues
+                .map((i) => `${i.path.map(String).join(".")}: ${i.message}`)
+                .join("; ");
+            console.warn(`[BillingEnforce] settings/billing_config failed schema validation; using defaults (gracePeriodDays=${gracePeriodDays}, trialDays=${trialDays}). Issues: ${summary}`);
+        }
+    }
+    console.log(`[BillingEnforce] Using gracePeriodDays=${gracePeriodDays}, trialDays=${trialDays}`);
     const gracePeriodMs = gracePeriodDays * 24 * 60 * 60 * 1000;
 
     let trialToGraceCount = 0;
