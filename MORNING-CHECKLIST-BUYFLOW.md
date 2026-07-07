@@ -44,6 +44,20 @@ _Filled in as waves complete. Stripe dashboard, secret rotation, Coolify deploy,
 
 ---
 
+## C2. Fixes made DURING live UAT (2026-07-07) — verified locally, some need a redeploy
+
+_Found by Kevin while testing the deployed sandbox. All committed on the branch._
+
+1. **Prod `settings/billing_config` predated the new schema → getPoolQuote returned $0 everywhere.** Fixed at runtime by deleting the doc and letting the Super-Admin Billing panel re-seed the canonical config (real prices). If you ever see FREE/$0 pricing again, re-save the config from Super-Admin → Billing.
+2. **`loadBillingConfig` hardening (you approved this):** `computeBasePrice` now THROWS `PRICING_NOT_CONFIGURED` when a paid-size pool hits empty pricing tiers, instead of silently pricing $0. getPoolQuote surfaces "pricing unavailable"; a broken config can no longer let a pool activate free. **Needs a functions redeploy** (`npx firebase deploy --only functions`).
+3. **Checkout crashed with "couponCode — expected string, received null."** The Firebase callable SDK encodes `undefined` → `null`, failing the server's `.optional()` string schema. Fixed in `dbService.createCheckoutSession` by stripping undefined/null keys before the call (client-side; no redeploy).
+4. **Phantom "+$29 Custom Branding" auto-added at checkout** (BillingInvoiceCard defaulted `hasCustomBranding=true`, and pricing-page add-on toggles were wizard-only). Fixed: add-ons default OFF (opt-in), and the add-on toggles now render on the pricing-page checkout too (with paid copy) so a commissioner can opt in.
+5. **Checkout used the estimator's player count (40), not the pool's.** Fixed: selecting a pool now shows an adjustable "Adjust Participant Estimate" slider defaulting to the pool's `estimatedPlayers`. NOTE: pools created BEFORE this work don't store `estimatedPlayers` (they fall back to 30); newly-created pools carry the real estimate. The estimator's editable format selector is hidden when a specific pool is selected (format is fixed to the pool).
+
+**Action:** redeploy functions once more to pick up fix #2 (`npx firebase deploy --only functions`), and note the client fixes (#3–5) only reach users after the Coolify frontend deploy.
+
+---
+
 ## D. Morning run order (do these top-to-bottom)
 
 All work is on branch `feat/buyflow-overhaul` (worktree `D:\mmp-buyflow`), committed, not pushed unless the final summary says otherwise. Firebase project: `gridiron-gamble-uzuqo`. Use `npx firebase` (no global CLI).

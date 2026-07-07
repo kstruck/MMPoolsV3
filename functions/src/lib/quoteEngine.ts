@@ -85,7 +85,16 @@ export function computeBasePrice(
     const top = [...tiers].sort((a, b) => b.min - a.min)[0];
     return { basePrice: top.price, pricingKey };
   }
-  return { basePrice: 0, pricingKey };
+  // No tiers configured for this format at a chargeable size (players are above
+  // the free threshold — the <=threshold case returned $0 earlier). This means
+  // the billing config is missing or malformed. NEVER silently price a paid-size
+  // pool at $0 (that would let it activate for free); fail loudly so getPoolQuote
+  // and createCheckoutSession surface "pricing unavailable" instead. Pool CREATION
+  // is unaffected — computeLaunchMode does not call this.
+  throw new Error(
+    `PRICING_NOT_CONFIGURED: no pricing tiers for "${pricingKey}" (format "${poolType}"). ` +
+    `settings/billing_config is missing or malformed — re-save it from the Super-Admin Billing panel.`
+  );
 }
 
 /** Priced add-on lines for the selected add-ons (only premium+priced features add a line). */

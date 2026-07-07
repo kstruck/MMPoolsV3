@@ -93,7 +93,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     estimatedPlayers,
     hasAiCommissioner = false,
     hasWhatIfSimulator = false,
-    hasCustomBranding = true, // Default to true as custom branding is standard/premium depending on config
+    hasCustomBranding = false, // Premium add-on — opt-in only, never auto-charged
     hasSmsNotifications = false,
     isWizard = false,
     pricePaid = 0, // NEW
@@ -538,14 +538,17 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         </div>
                     )}
 
-                    {/* Optional Trial Upgrades & Add-ons */}
-                    {isWizard && (
+                    {/* Optional Add-ons — available in the wizard (free during trial) AND at paid activation (opt-in, priced into the total below) */}
+                    {(
                         <div className="bg-surface border border-line rounded-xl p-4 space-y-3">
                             <h4 className="text-xs font-display font-bold uppercase tracking-[0.08em] flex items-center gap-1.5 text-gold-500">
-                                <Sparkles size={14} /> Optional Trial Upgrades & Add-ons
+                                <Sparkles size={14} /> {isWizard ? 'Optional Trial Upgrades & Add-ons' : 'Optional Premium Add-ons'}
                             </h4>
                             <p className="text-[11px] text-muted leading-normal">
-                                Toggle premium addons for your pool trial. They are <strong className="text-[#0F7B4A]">100% FREE during the 14-day trial</strong> so you can test them out! If you decide to keep them, they'll be included when you eventually upgrade.
+                                {isWizard
+                                    ? <>Toggle premium addons for your pool trial. They are <strong className="text-[#0F7B4A]">100% FREE during the 14-day trial</strong> so you can test them out! If you decide to keep them, they'll be included when you eventually upgrade.</>
+                                    : <>Add premium features to this pool — each is <strong className="text-gold-500">optional</strong> and priced into your total below. Toggle only what you want.</>
+                                }
                             </p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
                                 {[

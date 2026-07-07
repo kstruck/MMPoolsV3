@@ -1502,8 +1502,15 @@ export const dbService = {
         bundleType?: string;
     }): Promise<{ sessionUrl: string }> {
         try {
-            const fn = httpsCallable<typeof params, { sessionUrl: string }>(functions, 'createCheckoutSession');
-            const result = await fn(params);
+            const fn = httpsCallable<Record<string, unknown>, { sessionUrl: string }>(functions, 'createCheckoutSession');
+            // The Firebase callable serializer encodes `undefined` fields as `null`
+            // on the wire, which fails the server's `.optional()` string schemas
+            // (e.g. couponCode). Strip undefined/null keys so optional fields are
+            // genuinely omitted.
+            const clean = Object.fromEntries(
+                Object.entries(params).filter(([, v]) => v !== undefined && v !== null)
+            );
+            const result = await fn(clean);
             return result.data;
         } catch (error: any) {
             await errorHandler.handleError(error, {

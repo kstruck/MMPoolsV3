@@ -96,6 +96,15 @@ describe('computeBasePrice', () => {
   it('charges the top tier above the last band', () => {
     expect(computeBasePrice(CONFIG, 'SQUARES', 100000).basePrice).toBe(39);
   });
+
+  it('THROWS on empty tiers at a chargeable size (malformed config must never price $0)', () => {
+    // Simulates a missing/malformed billing config where a format resolves but
+    // has no pricing tiers. A paid-size pool must fail loudly, not activate free.
+    const emptyTiers = { ...CONFIG, pricing: { ...CONFIG.pricing, season: [] } } as BillingConfig;
+    expect(() => computeBasePrice(emptyTiers, 'NFL_PICKEM', 40)).toThrow(/PRICING_NOT_CONFIGURED/);
+    // At/under the free threshold it is still $0 (free tier), no throw.
+    expect(computeBasePrice(emptyTiers, 'NFL_PICKEM', 10).basePrice).toBe(0);
+  });
 });
 
 describe('computeAddonLines — SMS is priced (the pre-overhaul bug)', () => {

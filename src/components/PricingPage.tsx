@@ -157,7 +157,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                 setSelectedPoolData(pool);
                 // Synchronize calculator inputs to match selected pool for convenience
                 setCalcPoolType(pool.type);
-                setCalcPlayers((pool as any).settings?.maxEntriesTotal === -1 ? 40 : ((pool as any).settings?.maxEntriesTotal || 40));
+                setCalcPlayers((pool as any).estimatedPlayers || ((pool as any).settings?.maxEntriesTotal > 0 ? (pool as any).settings.maxEntriesTotal : 30));
                 setCalcAi(pool.billing?.featuresUnlocked?.aiCommissioner || false);
                 setCalcSms(pool.billing?.featuresUnlocked?.smsNotifications || false);
                 setCalcSim(pool.billing?.featuresUnlocked?.whatIfSimulator || false);
@@ -298,7 +298,8 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                             </div>
                         )}
 
-                        {/* Interactive Billing Calculator Panel */}
+                        {/* Interactive Billing Calculator Panel — hidden when a specific pool is selected (that pool's checkout on the right is authoritative; the estimator is for exploring pricing before you pick a pool) */}
+                        {!selectedPoolData && (
                         <div className={`${contentCard} p-6 md:p-8 rounded-3xl space-y-6 shadow-panel backdrop-blur-md hover:border-gold-500/40 transition-all duration-300 relative overflow-hidden`}>
                             {/* Inner background blob */}
                             <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-gold-500/5 blur-2xl pointer-events-none" />
@@ -477,6 +478,34 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                 </div>
                             </div>
                         </div>
+                        )}
+
+                        {/* When paying for a specific pool: adjust participant estimate. Format is fixed to the pool (changing it would mean re-running the wizard), but size drives price so it stays editable. */}
+                        {selectedPoolData && (
+                            <div className={`${contentCard} p-6 rounded-3xl space-y-4 shadow-panel`}>
+                                <h3 className="font-display font-bold uppercase text-lg text-[color:var(--text)] flex items-center gap-2">
+                                    <LayoutGrid size={20} className="text-gold-600 dark:text-gold-400" />
+                                    Adjust Participant Estimate
+                                </h3>
+                                <p className="text-xs font-body text-muted leading-relaxed">
+                                    Pricing scales with pool size. Estimate how many players <strong className="text-[color:var(--text)]">{selectedPoolData.name}</strong> will have — change it anytime before paying.
+                                </p>
+                                <div className="space-y-4 bg-surface p-5 rounded-2xl border border-line">
+                                    <div className="flex justify-between items-center text-xs font-display font-bold uppercase text-muted">
+                                        <span className="tracking-[0.16em] text-[10px]">Estimated Participants</span>
+                                        <span className="text-gold-600 dark:text-gold-400 text-sm font-mono font-black bg-gold-500/10 px-3 py-1 rounded-full border border-gold-500/25 num">{calcPlayers} Players</span>
+                                    </div>
+                                    <div className="flex gap-4 items-center">
+                                        <input type="range" min="1" max="150" value={calcPlayers}
+                                            onChange={(e) => setCalcPlayers(Number(e.target.value))}
+                                            className="flex-grow h-2 rounded-lg appearance-none cursor-pointer bg-line accent-gold-600 focus:outline-none" />
+                                        <input type="number" value={calcPlayers} min={1}
+                                            onChange={(e) => setCalcPlayers(Math.max(1, Number(e.target.value) || 1))}
+                                            className="w-16 bg-card border border-line rounded-xl px-2 py-2 text-center text-[color:var(--text)] font-bold outline-none font-mono num focus:border-gold-500/50 transition-colors" />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* RIGHT COLUMN: state-driven — real checkout for trial pools, estimate-only quote otherwise */}
@@ -499,9 +528,10 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                         poolName={selectedPoolData.name}
                                         poolType={calcPoolType}
                                         estimatedPlayers={calcPlayers}
-                                        hasAiCommissioner={calcAi}
-                                        hasSmsNotifications={calcSms}
-                                        hasWhatIfSimulator={calcSim}
+                                        hasAiCommissioner={false}
+                                        hasSmsNotifications={false}
+                                        hasWhatIfSimulator={false}
+                                        hasCustomBranding={false}
                                         isWizard={false} // Renders "Complete Payment & Upgrade" button
                                         pricePaid={selectedPoolData.billing?.pricePaid || 0}
                                         initialCouponCode={selectedPoolData.billing?.couponCode || ''}
