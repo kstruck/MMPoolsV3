@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { BillingGate } from '../billing';
 import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame } from 'lucide-react';
 import { dbService } from '../../services/dbService';
@@ -37,7 +38,21 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 }) => {
   const castPool = pool as any;
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'picks' | 'standings' | 'recaps' | 'rules' | 'payments' | 'manager'>('dashboard');
+
+  // Tab lives in the URL so the browser Back button steps through tabs (and refresh
+  // restores the view) instead of leaving the pool. Tab changes push a history entry.
+  const [searchParams, setSearchParams] = useSearchParams();
+  type TabType = 'dashboard' | 'picks' | 'standings' | 'recaps' | 'rules' | 'payments' | 'manager';
+  const VALID_TABS: TabType[] = ['dashboard', 'picks', 'standings', 'recaps', 'rules', 'payments', 'manager'];
+  const tabParam = searchParams.get('tab') as TabType | null;
+  const activeTab: TabType = tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'dashboard';
+  const setActiveTab = (tab: TabType) => {
+    setSearchParams(prev => {
+      const p = new URLSearchParams(prev);
+      p.set('tab', tab);
+      return p;
+    });
+  };
 
   // Estimate current NFL Week based on date (standard season calculations)
   const getEstimatedNFLWeek = (): number => {
@@ -60,7 +75,18 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   };
 
   const currentEstWeek = useMemo(() => getEstimatedNFLWeek(), [castPool.seasonType]);
-  const [selectedWeek, setSelectedWeek] = useState<number>(currentEstWeek);
+  // Selected week also rides in the URL (?week=) so refresh/Back restore the drilldown.
+  // Week changes replace (not push) so scrubbing weeks doesn't spam browser history.
+  const weekParam = searchParams.get('week');
+  const parsedWeek = weekParam ? Number(weekParam) : NaN;
+  const selectedWeek: number = Number.isFinite(parsedWeek) && parsedWeek >= 1 && parsedWeek <= 18 ? parsedWeek : currentEstWeek;
+  const setSelectedWeek = (week: number) => {
+    setSearchParams(prev => {
+      const p = new URLSearchParams(prev);
+      p.set('week', String(week));
+      return p;
+    }, { replace: true });
+  };
 
   // Subscribed States
   const [games, setGames] = useState<NFLGame[]>([]);
@@ -262,7 +288,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
             }`}
             style={activeTab === 'dashboard' ? { borderBottomColor: accentHex } : {}}
           >
-            Overview
+            Pool Home
           </button>
           <button
             onClick={() => setActiveTab('picks')}

@@ -208,6 +208,19 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       .sort((a, b) => (a.startTime < b.startTime ? -1 : 1));
   }, [_games, selectedWeek, castPool.seasonType]);
 
+  // Rebuy only exists on Survivor pools, and the cutoff is a DATE (the first kickoff of the
+  // rebuyDeadlineWeek), not a "Week 4-6" range. Null on non-survivor pools -> the node hides.
+  const rebuyInfo = useMemo(() => {
+    if (_pool.type !== 'NFL_SURVIVOR') return null;
+    const wk = castPool.settings?.rebuyDeadlineWeek;
+    if (!wk) return null;
+    const wkGames = _games.filter(g => g.week === wk && Number(g.seasonType) === Number(castPool.seasonType));
+    const label = wkGames.length
+      ? new Date(Math.min(...wkGames.map(g => g.startTime))).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      : `Week ${wk}`;
+    return { week: wk, label };
+  }, [_pool.type, castPool.settings, _games, castPool.seasonType]);
+
   const focusGame = useMemo(() => {
     if (weeklyGames.length === 0) return null;
     const live = weeklyGames.find(g => g.status === 'IN_PROGRESS');
@@ -1153,18 +1166,20 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             </span>
           </div>
 
-          {/* Spacer Line */}
-          <div className="hidden sm:block w-px h-8 bg-line"></div>
-
-          {/* Timeline Node 2 */}
-          <div className="flex flex-col items-center sm:items-start text-center sm:text-left group">
-            <span className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em] block mb-0.5 transition-colors duration-150 group-hover:text-[color:var(--text)]">
-              Mid-Season Rebuy
-            </span>
-            <span className="text-gold-600 dark:text-gold-400 font-display font-bold text-sm uppercase tracking-[0.05em] flex items-center gap-1.5 num">
-              <span className="h-2 w-2 rounded-full bg-gold-500"></span> Week 4-6 Cutoff
-            </span>
-          </div>
+          {/* Timeline Node 2 — Rebuy cutoff, Survivor pools only, shown as a real date */}
+          {rebuyInfo && (
+            <>
+              <div className="hidden sm:block w-px h-8 bg-line"></div>
+              <div className="flex flex-col items-center sm:items-start text-center sm:text-left group">
+                <span className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em] block mb-0.5 transition-colors duration-150 group-hover:text-[color:var(--text)]">
+                  Rebuy Cutoff
+                </span>
+                <span className="text-gold-600 dark:text-gold-400 font-display font-bold text-sm uppercase tracking-[0.05em] flex items-center gap-1.5 num">
+                  <span className="h-2 w-2 rounded-full bg-gold-500"></span> {rebuyInfo.label}
+                </span>
+              </div>
+            </>
+          )}
 
           {/* Spacer Line */}
           <div className="hidden sm:block w-px h-8 bg-line"></div>
