@@ -10,6 +10,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { getCreateInputSchema } from '../shared/schemas';
 import type { PoolType } from '../shared/poolTypes';
 import { isNflSeasonType } from '../shared/poolTypes';
+import { ensureMemberRecord } from './memberRecord';
 
 // Roles that must never create pools. Everyone else may (creating a first pool
 // upgrades a plain member — preserving today's behavior); we accept both legacy
@@ -121,6 +122,7 @@ export interface PoolCreationSideEffectOpts {
   poolType: PoolType;
   nowMs: number;
   currentRole: string | undefined;
+  ownerName?: string;
 }
 
 /**
@@ -155,6 +157,15 @@ export function writePoolCreationSideEffects(
       type: opts.poolType,
       role: 'MANAGER',
     });
+  }
+
+  // Owner Member Record (roster truth, ADR 0003). NFL season pools seed it in
+  // createNFLPool (which also stamps role/name); here it covers Squares/Bracket/
+  // Props/Playoff owners. Brand-new pool -> no existing record.
+  if (!isNflSeasonType(opts.poolType)) {
+    ensureMemberRecord(t, db, opts.poolId, opts.uid,
+      { userName: opts.ownerName || 'Host', role: 'MANAGER', poolType: opts.poolType, present: true },
+      null, opts.nowMs);
   }
 
   // POOL_CREATED — per-user Activity Log (new writer; CONTEXT.md)

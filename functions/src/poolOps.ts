@@ -320,6 +320,7 @@ export const createPool = onCall(async (request) => {
                 poolType,
                 nowMs: now.toMillis(),
                 currentRole,
+                ownerName: userDoc.data()?.name || request.auth?.token?.name || 'Host',
             });
 
             await writeAuditEvent({

@@ -131,6 +131,7 @@ export const createBracketPool = onCall(async (request) => {
             poolType: 'BRACKET',
             nowMs: now,
             currentRole,
+            ownerName: userDoc.data()?.name || request.auth?.token?.name || 'Host',
         });
     });
     console.log("Pool created successfully:", poolRef.id);
