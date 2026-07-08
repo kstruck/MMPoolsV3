@@ -40,7 +40,22 @@ export function scorePickemEntry(
     const awayScore = game.scores?.away ?? 0;
 
     let isCorrect = false;
-    if (homeScore > awayScore && pick === game.homeTeam.abbreviation) {
+    if (pool.settings.pickMode === 'ATS' && typeof game.spread?.value === 'number') {
+      // Against the spread. spread.value is relative to the home team
+      // (negative = home favored), so the home side covers when
+      // homeScore + spread.value beats awayScore. A push (exact spread)
+      // scores 0 for both sides — same treatment as a straight-up tie.
+      // Games missing a spread fall through to straight-up scoring below
+      // (submit-time SPREADS_NOT_LOCKED gating makes that a rare repair case).
+      const adjustedHome = homeScore + game.spread.value;
+      if (adjustedHome > awayScore) {
+        isCorrect = pick === game.homeTeam.abbreviation;
+      } else if (adjustedHome < awayScore) {
+        isCorrect = pick === game.awayTeam.abbreviation;
+      } else {
+        isCorrect = false; // push
+      }
+    } else if (homeScore > awayScore && pick === game.homeTeam.abbreviation) {
       isCorrect = true;
     } else if (awayScore > homeScore && pick === game.awayTeam.abbreviation) {
       isCorrect = true;
