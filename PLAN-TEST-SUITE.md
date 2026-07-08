@@ -139,6 +139,13 @@ Root suite 24 files / 230 tests green. In-app confirmation rides on the Phase
    itself. Phases 0-1 complete; next: Phase 2 NFL wave (items 8-16)._
 
 ### Phase 2 — NFL wave (the deadline work)
+_Status 2026-07-07: items 11-14 implemented — PR #150 (`feat/nfl-phase2-engine`,
+one commit per item: 73b8eed membership gate, bf56248 seasonType, 248f61a
+dual-MNF + idempotent survivor rescore via strikeWeeks ledger, d5771a8 ATS
+scoring with push=0). 19 new unit tests; functions suite 311 green. Needs
+functions deploy + Coolify after merge. Remaining: items 8-10 (harness
+plumbing, cleanupSimPool + guarded sim callables, data isolation, simulators),
+15 (scenario matrix), 16 (groups)._
 8. **Harness plumbing first** (explicit work items, not assumed):
    a. PoolType union += `NFL_PICKEM | NFL_SURVIVOR | NFL_MARGIN`.
    b. **NFL scenario data model**: extend `TestScenario` so NFL runs are
