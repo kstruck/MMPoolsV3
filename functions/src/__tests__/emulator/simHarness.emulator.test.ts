@@ -38,7 +38,7 @@ describe('sim harness — refusal paths', () => {
             [wrappedCleanup, { poolId: 'p', runId: RUN }],
             [wrappedSeed, { runId: RUN, games: [{ week: 1 }] }],
         ] as const) {
-            await expect((fn as any)({ data, auth: commissioner })).rejects.toThrow(/SUPER_ADMIN/);
+            await expect((fn as any)({ data, auth: commissioner } as never)).rejects.toThrow(/SUPER_ADMIN/);
         }
     });
 
@@ -47,11 +47,11 @@ describe('sim harness — refusal paths', () => {
         await expect(wrappedWrite({
             data: { poolId: 'real-pool', runId: RUN, entries: [{ ownerUid: 'sim-u1' }] },
             auth: superAdmin,
-        })).rejects.toThrow(/NOT_A_SIM_POOL/);
+        } as never)).rejects.toThrow(/NOT_A_SIM_POOL/);
         await expect(wrappedCleanup({
             data: { poolId: 'real-pool', runId: RUN },
             auth: superAdmin,
-        })).rejects.toThrow(/NOT_A_SIM_POOL/);
+        } as never)).rejects.toThrow(/NOT_A_SIM_POOL/);
     });
 
     it('refuses a sim pool from a DIFFERENT run', async () => {
@@ -59,7 +59,7 @@ describe('sim harness — refusal paths', () => {
         await expect(wrappedUpdate({
             data: { poolId: 'other-run-pool', runId: RUN, patch: { status: 'COMPLETED' } },
             auth: superAdmin,
-        })).rejects.toThrow(/NOT_A_SIM_POOL/);
+        } as never)).rejects.toThrow(/NOT_A_SIM_POOL/);
     });
 
     it('refuses fabricated entries whose ownerUid is not sim-namespaced', async () => {
@@ -67,7 +67,7 @@ describe('sim harness — refusal paths', () => {
         await expect(wrappedWrite({
             data: { poolId: 'sim-pool', runId: RUN, entries: [{ ownerUid: 'real-user-uid' }] },
             auth: superAdmin,
-        })).rejects.toThrow(/must start with "sim-"/);
+        } as never)).rejects.toThrow(/must start with "sim-"/);
     });
 
     it('refuses ownership/billing patches even on a verified sim pool', async () => {
@@ -75,7 +75,7 @@ describe('sim harness — refusal paths', () => {
         await expect(wrappedUpdate({
             data: { poolId: 'sim-pool', runId: RUN, patch: { ownerId: 'attacker' } },
             auth: superAdmin,
-        })).rejects.toThrow(/cannot be patched/);
+        } as never)).rejects.toThrow(/cannot be patched/);
     });
 });
 
@@ -86,19 +86,19 @@ describe('sim harness — happy path', () => {
         await wrappedWrite({
             data: { poolId: 'sim-pool', runId: RUN, entries: [{ ownerUid: 'sim-u-alice', picks: {} }] },
             auth: superAdmin,
-        });
+        } as never);
         const entry = await db.collection('pools').doc('sim-pool').collection('entries').doc('sim-u-alice').get();
         expect(entry.exists).toBe(true); // docId === ownerUid invariant
 
         await wrappedUpdate({
             data: { poolId: 'sim-pool', runId: RUN, patch: { status: 'COMPLETED' } },
             auth: superAdmin,
-        });
+        } as never);
 
         const seeded = await wrappedSeed({
             data: { runId: RUN, games: [{ week: 1, status: 'FINAL' }] },
             auth: superAdmin,
-        });
+        } as never);
         expect(seeded.season).toBe(`sim-${RUN}`);
         const game = await db.collection('nfl_games').doc(`sim-${RUN}-g1`).get();
         expect(game.data()?.season).toBe(`sim-${RUN}`);
@@ -106,7 +106,7 @@ describe('sim harness — happy path', () => {
         const res = await wrappedCleanup({
             data: { poolId: 'sim-pool', runId: RUN, deleteGames: true },
             auth: superAdmin,
-        });
+        } as never);
         expect(res.gamesDeleted).toBe(1);
         expect((await db.collection('pools').doc('sim-pool').get()).exists).toBe(false);
         expect((await db.collection('nfl_games').doc(`sim-${RUN}-g1`).get()).exists).toBe(false);
