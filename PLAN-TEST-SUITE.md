@@ -139,13 +139,17 @@ Root suite 24 files / 230 tests green. In-app confirmation rides on the Phase
    itself. Phases 0-1 complete; next: Phase 2 NFL wave (items 8-16)._
 
 ### Phase 2 — NFL wave (the deadline work)
-_Status 2026-07-07: items 11-14 implemented — PR #150 (`feat/nfl-phase2-engine`,
-one commit per item: 73b8eed membership gate, bf56248 seasonType, 248f61a
-dual-MNF + idempotent survivor rescore via strikeWeeks ledger, d5771a8 ATS
-scoring with push=0). 19 new unit tests; functions suite 311 green. Needs
-functions deploy + Coolify after merge. Remaining: items 8-10 (harness
-plumbing, cleanupSimPool + guarded sim callables, data isolation, simulators),
-15 (scenario matrix), 16 (groups)._
+_Status 2026-07-07: items 11-14 MERGED + DEPLOYED (PR #150); post-deploy suite
+15/15 — no regressions. Items 8-10 + 16 + first 3 of item 15 implemented — PR
+#151 (`feat/nfl-phase2-harness`): server sim callables (simWriteEntries /
+simUpdatePool / simSeedNFLGames / cleanupSimPool, simRunId trust anchor,
+admin_audit on every attempt), NFL scenario data model, ONE parameterized
+nflSeasonSimulator for all three season types (zero raw writes,
+hydrate-before-cleanup, cleanup in finally), 10 NFL assertion types, runner
+dispatch, starter scenarios (pickem/survivor/margin basic). Emulator
+refusal-path suite authored (needs Java env). Remaining: rest of item 15's
+combinatorial matrix (~34 scenarios) + legacy simulator migration onto the
+guarded callables (8f mandate) — both gated on #151 proving out in-app._
 8. **Harness plumbing first** (explicit work items, not assumed):
    a. PoolType union += `NFL_PICKEM | NFL_SURVIVOR | NFL_MARGIN`.
    b. **NFL scenario data model**: extend `TestScenario` so NFL runs are
