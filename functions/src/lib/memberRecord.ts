@@ -65,6 +65,33 @@ export function membersCol(db: Firestore, poolId: string) {
 }
 
 /**
+ * Write ONLY the Member Record (leaves participantIds to the caller's existing logic).
+ * Use in join/create/submit paths that already manage participantIds — additive, does not
+ * disturb certified membership logic. `existing` must be read before writes in the same tx.
+ * Returns true if a doc write was issued.
+ */
+export function ensureMemberRecord(
+  tx: Transaction,
+  db: Firestore,
+  poolId: string,
+  uid: string,
+  facts: MembershipFacts,
+  existing: MemberRecord | null,
+  now: number,
+): boolean {
+  const plan = planMembershipWrite(poolId, uid, facts, existing, now);
+  if (plan.participant !== 'add') return false;
+  tx.set(membersCol(db, poolId).doc(uid), plan.member.data, { merge: plan.member.merge });
+  return true;
+}
+
+/** Remove a Member Record + drop the uid from participantIds (leave/last-entry-removal). */
+export function voidMemberRecord(tx: Transaction, db: Firestore, poolId: string, uid: string): void {
+  tx.update(db.collection('pools').doc(poolId), { participantIds: FieldValue.arrayRemove(uid) });
+  tx.delete(membersCol(db, poolId).doc(uid));
+}
+
+/**
  * Apply a membership reconciliation inside the caller's transaction. `existing` must
  * be read by the caller (Firestore forbids reads after writes in a transaction).
  */

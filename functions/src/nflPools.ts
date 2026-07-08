@@ -8,6 +8,8 @@ import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMo
 import { loadBillingConfig } from "./billing";
 import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } from "./lib/systemGuards";
 import { isPoolType, type PoolType } from "./shared/poolTypes";
+import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
+import type { MemberRecord } from "./shared/memberRecord";
 import {
   validateCreateInput,
   assertNotBanned,
@@ -116,6 +118,12 @@ export const createNFLPool = onCall(async (request) => {
         nowMs: now,
         currentRole,
       });
+
+      // Seed the owner's Member Record so the commissioner is on the roster from t=0
+      // (ADR 0003). Brand-new pool -> no existing record.
+      ensureMemberRecord(transaction, db, poolId, uid,
+        { userName: userDoc.data()?.name || request.auth?.token?.name || 'Host', role: 'MANAGER', poolType, present: true },
+        null, now);
     });
 
     // Log creation to audit trail
@@ -162,15 +170,22 @@ export const joinNFLPool = onCall(async (request) => {
   }
 
   const pool = poolSnap.data() as any;
+  const joinerName = request.auth.token?.name || (await userRef.get()).data()?.name || 'Member';
 
   await db.runTransaction(async (transaction) => {
     const poolDoc = await transaction.get(poolRef);
+    // Member Record read (before any writes) so we can seed it without clobbering paid state.
+    const memberSnap = await transaction.get(membersCol(db, poolId).doc(uid));
     const poolData = poolDoc.data();
     if (!poolData) throw new HttpsError('not-found', 'Pool data not found');
 
     const participantIds = poolData.participantIds || [];
     if (participantIds.includes(uid)) {
-      return; // Already joined
+      // Already a participant — still ensure a Member Record exists (backfill-on-touch).
+      ensureMemberRecord(transaction, db, poolId, uid,
+        { userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true },
+        memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
+      return;
     }
 
     const billingStatus = poolData.billing?.status ?? 'free';
@@ -194,6 +209,11 @@ export const joinNFLPool = onCall(async (request) => {
       type: poolData.type,
       role: 'PARTICIPANT'
     });
+
+    // 3. Seed the Member Record (roster + payment truth, ADR 0003) — additive.
+    ensureMemberRecord(transaction, db, poolId, uid,
+      { userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true },
+      memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
   });
 
   await writeAuditEvent({
@@ -513,9 +533,13 @@ export const executeSurvivorRebuy = onCall(async (request) => {
   }
 
   const entryRef = poolRef.collection('entries').doc(uid);
+  const memberRef = membersCol(db, poolId).doc(uid);
+  const rebuyAmt = settings.rebuyCost ?? settings.entryFee ?? 0;
 
   await db.runTransaction(async (transaction) => {
     const entrySnap = await transaction.get(entryRef);
+    // Member Record read (before writes) so rebuy dues land on the roster (ADR 0003).
+    const memberSnap = await transaction.get(memberRef);
     if (!entrySnap.exists) {
       throw new HttpsError('not-found', 'Participant entry not found.');
     }
@@ -544,6 +568,17 @@ export const executeSurvivorRebuy = onCall(async (request) => {
       rebuysUsed: entry.rebuysUsed + 1,
       eliminatedWeek: null
     });
+
+    // 4. Add rebuy dues to the Member Record so Dues Expected reflects them.
+    if (memberSnap.exists) {
+      transaction.set(memberRef, { rebuyOwed: (memberSnap.data()?.rebuyOwed || 0) + rebuyAmt }, { merge: true });
+    } else {
+      transaction.set(memberRef, {
+        uid, poolId,
+        userName: entry.userName || request.auth?.token?.name || 'Participant',
+        role: 'PARTICIPANT', paidStatus: 'UNPAID', joinedAt: Date.now(), rebuyOwed: rebuyAmt,
+      }, { merge: false });
+    }
   });
 
   await writeAuditEvent({
