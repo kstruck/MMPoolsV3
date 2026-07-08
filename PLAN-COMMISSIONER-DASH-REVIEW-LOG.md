@@ -90,3 +90,7 @@ Accepted (final arbiter). Generalized the pool-doc trigger from inclusion-predic
 
 ## Resolution — cap reached, substantively converged
 Loop terminated at MAX_ROUNDS=5 without a formal APPROVED. This is NOT a deadlock of disagreement: every finding across all five rounds was accepted and incorporated; there is no unresolved Claude counter-position. Findings shrank monotonically (13 → 5 → 4 → 2 → 1) and never reopened the core model (the round-1 Member Record pivot held). The reviewer defaults to REVISE while any refinement remains; the round-5 fee-edit catch is folded in. Plan is considered substantively converged and ready for Kevin's sign-off. Remaining reviewer-style residue would be incremental, not structural.
+
+## Post-approval: test-work review + NFL wiring (2026-07-08)
+Reviewed paused test work at user request. Finding: NFL Test Suite Phase 2 (PR #150/#151/#152) is fully merged to main; this branch already contains it; test-suite worktrees clean; no stashes. Hot-file conflict resolved → wiring unblocked.
+Wired Member Record writes into NFL paths ADDITIVELY (commit 1bb7e89): createNFLPool owner seed, joinNFLPool joiner seed, executeSurvivorRebuy rebuy dues. Existing entry/participantIds/paidStatus logic untouched; 323 functions unit tests + typecheck green. Emulator integration test written but cannot run locally (no Java) — verify via test:emulator in CI/Kevin's env. Other pool-type wiring + direct-write removal + frontend consumers remain the reviewed follow-up (see NOTES).

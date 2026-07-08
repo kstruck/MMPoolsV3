@@ -26,14 +26,22 @@ Shipped (commits `60df0d5` backend, `0cbec75` rules):
 - `functions/src/migrations/backfillMemberRecords.ts` — super-admin, dryRun default, resumable, invariant counts, per-pool `rosterSchemaVersion` flip.
 - `firestore.rules` — `members` + `rosterSummary` (member self-write pinned to the two claim fields).
 
-## DEFERRED — the "merge after Test Suite" wiring commit (needs your go)
+## Test-work review (2026-07-08) — SAFE, wiring unblocked
 
-This is the ONLY part that touches hot files. Do it after the NFL Test Suite wave lands (or hand it to me then):
-1. Call `reconcileMembership` from every membership writer: `nflPools` join, `bracketPools`/`bracketEntries` join+delete, `submitPlayoffPicks`+playoff delete, `squares` claim/release + `reminders` auto-release, `participant` guest paths, `poolCreation` owner seed, `propBets.purchasePropCard`.
-2. `executeSurvivorRebuy` (`nflPools.ts:556`): write `rebuyOwed`/`rebuyPaid` onto the Member Record in the rebuy tx.
+Reviewed the paused test work: NFL Test Suite Phase 2 wave is **fully merged to main** (PR #150 engine, #151 harness, #152 scoreNFLWeek P0). This branch was cut from the up-to-date main, so it already contains all of it; both test-suite worktrees are clean; no stashes. The hot-file conflict that forced option B is gone.
+
+## Wiring — NFL DONE (additive), rest still deferred
+
+Done (commit `1bb7e89`, additive — existing certified logic untouched, 323 unit tests green):
+- `createNFLPool` seeds the owner Member Record; `joinNFLPool` seeds the joiner (backfill-on-touch); `executeSurvivorRebuy` writes `rebuyOwed` in-tx.
+- Emulator test `memberRecord.emulator.test.ts` — **needs Java to run (unavailable in the build sandbox)**; verify with `npm --prefix functions run test:emulator` in your env / CI.
+
+Still to wire (same additive pattern, other pool types — lower priority than NFL preseason):
+1. Bracket join (`bracketPools.ts:235`) + `createBracketEntry` (`bracketEntries.ts:102`), `submitPlayoffPicks` (`playoffPools.ts:137`), squares claim/release (`squares.ts`) + `reminders` auto-release, guest paths (`participant.ts:93,157`), non-NFL owner seed (`poolCreation.ts:134`), `propBets.purchasePropCard`.
+2. Deletes/leaves → `voidMemberRecord`.
 3. Remove the 4 direct-client paidStatus writes (`NFLManagerView.tsx:195`, `NFLManagerBentoDashboard.tsx:97`, `BracketPoolDashboard.tsx:323`, `SuperAdmin.tsx:179`) → call `setPaidStatus`.
 4. Frontend consumers: `PaymentsPanel` + `NFLManagerView` read the Roster from `members`/`rosterSummary`; Commissioner Hub "Dues Collected" reads `users/{uid}.commissionerAggregate`.
-5. Add the `reconcileMembership`-only CI guard (fail build if `participantIds` is mutated elsewhere).
+5. `reconcileMembership`-only CI guard (fail build if `participantIds` is mutated elsewhere).
 
 ## Morning deploy sequence (when you're ready)
 ```
