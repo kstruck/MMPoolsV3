@@ -30,18 +30,27 @@ Shipped (commits `60df0d5` backend, `0cbec75` rules):
 
 Reviewed the paused test work: NFL Test Suite Phase 2 wave is **fully merged to main** (PR #150 engine, #151 harness, #152 scoreNFLWeek P0). This branch was cut from the up-to-date main, so it already contains all of it; both test-suite worktrees are clean; no stashes. The hot-file conflict that forced option B is gone.
 
-## Wiring — NFL DONE (additive), rest still deferred
+## SEE IT NOW (no deploy needed)
+Run `npm run dev` → open **http://localhost:5173/dev/dashboards** (unauthenticated, mock data). Toggle: **Commissioner Hub** (grouped-by-type + filter + honest Dues cards), **Pool Homepage** (full week slate, centered Live badge, type-gated cards, Pool Standings), **Rules Tab** (commissioner edit banner + lock deadline). All screenshotted + verified in-browser. The route is unlisted; remove `src/pages/DevDashboardPreview.tsx` + its route/import in `App.tsx` before prod if you don't want it shipped (harmless if left).
 
-Done (commit `1bb7e89`, additive — existing certified logic untouched, 323 unit tests green):
-- `createNFLPool` seeds the owner Member Record; `joinNFLPool` seeds the joiner (backfill-on-touch); `executeSurvivorRebuy` writes `rebuyOwed` in-tx.
-- Emulator test `memberRecord.emulator.test.ts` — **needs Java to run (unavailable in the build sandbox)**; verify with `npm --prefix functions run test:emulator` in your env / CI.
+## Verification status (this branch)
+App `tsc` ✓ · production `vite build` ✓ · app vitest **244/244** ✓ · functions `tsc` ✓ · functions vitest **323/323** ✓. NOT verified: Firestore transaction wiring (no Java/emulator in the build sandbox) — run `npm --prefix functions run test:emulator` (includes `memberRecord.emulator.test.ts`).
 
-Still to wire (same additive pattern, other pool types — lower priority than NFL preseason):
-1. Bracket join (`bracketPools.ts:235`) + `createBracketEntry` (`bracketEntries.ts:102`), `submitPlayoffPicks` (`playoffPools.ts:137`), squares claim/release (`squares.ts`) + `reminders` auto-release, guest paths (`participant.ts:93,157`), non-NFL owner seed (`poolCreation.ts:134`), `propBets.purchasePropCard`.
+## Wiring — NFL DONE + all owner seeds (additive), rest still deferred
+
+Done (additive — existing certified logic untouched, 323 unit tests green):
+- NFL (`1bb7e89`): `createNFLPool` seeds owner Member Record; `joinNFLPool` seeds joiner (backfill-on-touch); `executeSurvivorRebuy` writes `rebuyOwed` in-tx.
+- All non-NFL owner seeds (`734057b`): `writePoolCreationSideEffects` seeds the owner Member Record for Squares/Bracket/Props/Playoff, `ownerName` threaded from the create callers. → **the commissioner is on the roster from t=0 for every pool type.**
+- Emulator test `memberRecord.emulator.test.ts` — needs Java; run in your env / CI.
+
+Frontend (visible, committed): Commissioner Hub redesign (`879f561`), Pool Homepage fixes verified in preview (`03e3ee0`), Rules-tab commissioner editing (`d84c027`), Commissioner Hub reads `users/{uid}.commissionerAggregate` with fallback.
+
+Still to wire — the reviewed step (deploy-coupled or emulator-gated; NOT done unattended):
+1. Non-owner join for other types (additive, same pattern): bracket join (`bracketPools.ts:280`) + `createBracketEntry`, `submitPlayoffPicks`, squares claim/release + `reminders` auto-release, guest paths, `propBets.purchasePropCard`. (Backfill covers EXISTING members of these; only NEW non-NFL joiners between now and this wiring would be missing — low for an NFL preseason.)
 2. Deletes/leaves → `voidMemberRecord`.
-3. Remove the 4 direct-client paidStatus writes (`NFLManagerView.tsx:195`, `NFLManagerBentoDashboard.tsx:97`, `BracketPoolDashboard.tsx:323`, `SuperAdmin.tsx:179`) → call `setPaidStatus`.
-4. Frontend consumers: `PaymentsPanel` + `NFLManagerView` read the Roster from `members`/`rosterSummary`; Commissioner Hub "Dues Collected" reads `users/{uid}.commissionerAggregate`.
-5. `reconcileMembership`-only CI guard (fail build if `participantIds` is mutated elsewhere).
+3. **Deploy-coupled — do WITH the functions deploy, not before:** remove the 4 direct-client paidStatus writes (`NFLManagerView.tsx:195`, `NFLManagerBentoDashboard.tsx:97`, `BracketPoolDashboard.tsx:323`, `SuperAdmin.tsx:179`) → call `setPaidStatus`. Switching the frontend before the callable is deployed BREAKS mark-paid, so these stay on the direct write until deploy.
+4. `PaymentsPanel` + `NFLManagerView` roster read from `members`/`rosterSummary` (shows commissioner + pick-less members). Needs a `members` subscription; lights up post-backfill.
+5. `reconcileMembership`-only CI guard.
 
 ## Morning deploy sequence (when you're ready)
 ```

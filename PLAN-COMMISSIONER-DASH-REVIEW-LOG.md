@@ -94,3 +94,11 @@ Loop terminated at MAX_ROUNDS=5 without a formal APPROVED. This is NOT a deadloc
 ## Post-approval: test-work review + NFL wiring (2026-07-08)
 Reviewed paused test work at user request. Finding: NFL Test Suite Phase 2 (PR #150/#151/#152) is fully merged to main; this branch already contains it; test-suite worktrees clean; no stashes. Hot-file conflict resolved → wiring unblocked.
 Wired Member Record writes into NFL paths ADDITIVELY (commit 1bb7e89): createNFLPool owner seed, joinNFLPool joiner seed, executeSurvivorRebuy rebuy dues. Existing entry/participantIds/paidStatus logic untouched; 323 functions unit tests + typecheck green. Emulator integration test written but cannot run locally (no Java) — verify via test:emulator in CI/Kevin's env. Other pool-type wiring + direct-write removal + frontend consumers remain the reviewed follow-up (see NOTES).
+
+## Overnight continuation (2026-07-08) — frontend redesign + all-types owner seeds
+- Commissioner Hub redesign (879f561): grouped-by-type + filter + honest Dues (collected/expected)/Payouts cards from commissionerAggregate w/ fallback; removed the nonsensical revenue chart.
+- Pool Homepage fixes verified in browser via /dev/dashboards (03e3ee0): full slate, centered Live badge, type-gated cards, Pool Standings.
+- Rules & Rulesets tab (d84c027): commissioner edit banner + Edit button routing to the manager settings editor + season-opener lock.
+- Owner Member Record seeded for ALL pool types on create (734057b) — commissioner on roster from t=0 everywhere.
+- Full verification: app tsc + vite build + 244 app tests + functions tsc + 323 functions tests all green. Firestore transaction wiring unverified locally (no Java) — emulator test written for CI.
+- Remaining: non-owner join wiring for non-NFL types, delete/void, deploy-coupled direct-write removal + members-driven roster read. All documented in NOTES.
