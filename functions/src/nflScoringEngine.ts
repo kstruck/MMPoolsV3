@@ -40,7 +40,22 @@ export function scorePickemEntry(
     const awayScore = game.scores?.away ?? 0;
 
     let isCorrect = false;
-    if (homeScore > awayScore && pick === game.homeTeam.abbreviation) {
+    if (pool.settings.pickMode === 'ATS' && typeof game.spread?.value === 'number') {
+      // Against the spread. spread.value is relative to the home team
+      // (negative = home favored), so the home side covers when
+      // homeScore + spread.value beats awayScore. A push (exact spread)
+      // scores 0 for both sides — same treatment as a straight-up tie.
+      // Games missing a spread fall through to straight-up scoring below
+      // (submit-time SPREADS_NOT_LOCKED gating makes that a rare repair case).
+      const adjustedHome = homeScore + game.spread.value;
+      if (adjustedHome > awayScore) {
+        isCorrect = pick === game.homeTeam.abbreviation;
+      } else if (adjustedHome < awayScore) {
+        isCorrect = pick === game.awayTeam.abbreviation;
+      } else {
+        isCorrect = false; // push
+      }
+    } else if (homeScore > awayScore && pick === game.homeTeam.abbreviation) {
       isCorrect = true;
     } else if (awayScore > homeScore && pick === game.awayTeam.abbreviation) {
       isCorrect = true;
@@ -299,4 +314,131 @@ export function sortMarginLeaderboard(entries: MarginEntry[]): MarginEntry[] {
     // 5. Tie-breaker fallback (deterministic UUID sorting)
     return a.ownerUid.localeCompare(b.ownerUid);
   });
+}
+
+// ============================================================================
+// Rescore-safe helpers (PLAN-TEST-SUITE Phase 2 item 13)
+// ============================================================================
+
+/**
+ * MNF tiebreaker target: the COMBINED score of ALL Monday games in the week
+ * (docs/NFL_POOLS_README.md), not just the first one found. Returns null until
+ * EVERY Monday game is FINAL — a mid-Monday SUPER_ADMIN scoring run must not
+ * freeze a partial total into the tiebreak; a rescore recomputes it.
+ */
+export function computeMNFTiebreakerTotal(games: NFLGame[]): number | null {
+  const mondayGames = games.filter(g => g.isMonday);
+  if (mondayGames.length === 0) return null;
+  if (!mondayGames.every(g => g.status === 'FINAL')) return null;
+  return mondayGames.reduce(
+    (sum, g) => sum + (g.scores?.home ?? 0) + (g.scores?.away ?? 0),
+    0,
+  );
+}
+
+/**
+ * Result of recomputing one survivor entry for one week. `update` is the exact
+ * Firestore patch; `strikeIsNew` gates the SURVIVOR_AUTO_STRIKE audit event so
+ * a rescore never duplicates it; `alive` feeds the recap attrition count.
+ */
+export interface SurvivorWeekUpdate {
+  update: {
+    status: 'ALIVE' | 'ELIMINATED';
+    strikeWeeks: number[];
+    strikesUsed: number;
+    exemptWeeks: number[];
+    eliminatedWeek: number | null;
+  };
+  strikeIsNew: boolean;
+  alive: boolean;
+  skipped: boolean;
+}
+
+/**
+ * Idempotent per-(entry, week) survivor recompute. Set semantics: this week's
+ * prior contribution (strike, exemption, this-week elimination) is stripped and
+ * recomputed from scratch, so scoring the same week twice yields identical
+ * state — the rescore path the dual-MNF gate depends on.
+ *
+ * Contract:
+ * - Entries eliminated in an EARLIER week are skipped (skipped: true).
+ * - An entry eliminated by a previous run of THIS week is re-evaluated and can
+ *   be revived by corrected game data.
+ * - Weeks at/before lastRebuyWeek are skipped: the rebuy already absorbed those
+ *   strikes; recomputing them would re-strike a player who bought back in.
+ * - strikesUsed is recomputed as strikeWeeks.length. Legacy entries with
+ *   strikesUsed but no strikeWeeks ledger lose unattributed strikes on their
+ *   first rescore — acceptable pre-first-live-season; the ledger is
+ *   authoritative from now on.
+ */
+export function computeSurvivorWeekUpdate(
+  entry: SurvivorEntry,
+  week: number,
+  games: NFLGame[],
+  pool: NFLSurvivorPool,
+): SurvivorWeekUpdate {
+  const noUpdate = {
+    status: entry.status,
+    strikeWeeks: entry.strikeWeeks ?? [],
+    strikesUsed: entry.strikesUsed,
+    exemptWeeks: entry.exemptWeeks ?? [],
+    eliminatedWeek: entry.eliminatedWeek ?? null,
+  };
+
+  if (entry.status === 'ELIMINATED' && (entry.eliminatedWeek ?? 0) < week) {
+    return { update: noUpdate, strikeIsNew: false, alive: false, skipped: true };
+  }
+  if (entry.lastRebuyWeek != null && week <= entry.lastRebuyWeek) {
+    return { update: noUpdate, strikeIsNew: false, alive: entry.status === 'ALIVE', skipped: true };
+  }
+
+  // Strip this week's prior contribution before recomputing.
+  const priorExemptWeeks = (entry.exemptWeeks ?? []).filter(w => w !== week);
+  const priorStrikeWeeks = (entry.strikeWeeks ?? []).filter(w => w !== week);
+  const strikeAlreadyRecorded = (entry.strikeWeeks ?? []).includes(week);
+
+  const cleaned: SurvivorEntry = {
+    ...entry,
+    status: 'ALIVE',
+    exemptWeeks: priorExemptWeeks,
+    strikeWeeks: priorStrikeWeeks,
+    strikesUsed: priorStrikeWeeks.length,
+  };
+
+  const autoSurviveEnabled = pool.settings.autoSurviveExemptionEnabled ?? true;
+  if (checkAutoSurviveExemption(cleaned.usedTeams, games, autoSurviveEnabled)) {
+    return {
+      update: {
+        status: 'ALIVE',
+        strikeWeeks: priorStrikeWeeks,
+        strikesUsed: priorStrikeWeeks.length,
+        exemptWeeks: [...priorExemptWeeks, week],
+        eliminatedWeek: null,
+      },
+      strikeIsNew: false,
+      alive: true,
+      skipped: false,
+    };
+  }
+
+  const { strikeLogged } = evaluateSurvivorWeek(cleaned, week, games, pool);
+  const strikeWeeks = strikeLogged ? [...priorStrikeWeeks, week] : priorStrikeWeeks;
+  const scored = updateSurvivorStatus(
+    { ...cleaned, strikeWeeks, strikesUsed: strikeWeeks.length },
+    pool,
+  );
+  const eliminated = scored.status === 'ELIMINATED';
+
+  return {
+    update: {
+      status: scored.status,
+      strikeWeeks,
+      strikesUsed: strikeWeeks.length,
+      exemptWeeks: priorExemptWeeks,
+      eliminatedWeek: eliminated ? week : null,
+    },
+    strikeIsNew: strikeLogged && !strikeAlreadyRecorded,
+    alive: !eliminated,
+    skipped: false,
+  };
 }

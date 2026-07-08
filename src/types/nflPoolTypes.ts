@@ -58,7 +58,7 @@ export interface NFLPickemPool {
     lockMode: 'PER_GAME' | 'WEEKLY'; // WEEKLY is forced if confidenceMode is true
     lockBufferMinutes: number; // grace period buffer (default: 5)
     payoutMode: 'SEASON' | 'WEEKLY' | 'HYBRID';
-    pickMode: 'STRAIGHT' | 'ATS'; // ATS (Against the Spread) reserved for V2
+    pickMode: 'STRAIGHT' | 'ATS'; // ATS scored vs game.spread (push = 0 points)
     // Custom scoring options
     pointsPerPick?: number; // base points awarded per correct pick (default: 1)
     primetimeBonus?: {

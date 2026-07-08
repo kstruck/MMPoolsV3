@@ -27,9 +27,8 @@ import {
 import {
   scorePickemEntry,
   validateConfidenceValues,
-  evaluateSurvivorWeek,
-  updateSurvivorStatus,
-  checkAutoSurviveExemption,
+  computeSurvivorWeekUpdate,
+  computeMNFTiebreakerTotal,
   scoreMarginWeek,
   sortMarginLeaderboard
 } from './nflScoringEngine';
@@ -205,6 +204,24 @@ export const joinNFLPool = onCall(async (request) => {
 });
 
 /**
+ * Membership gate for pick submission (PLAN-TEST-SUITE item 11). joinNFLPool is
+ * a separate callable, and before this check submitNFLPicks accepted picks from
+ * ANY authenticated user — writing an entry doc keyed by their uid into a pool
+ * they never joined. Pure and exported for unit tests.
+ */
+export function assertNFLPickMembership(
+  pool: { participantIds?: unknown; ownerId?: string; managerUid?: string; createdByUid?: string },
+  uid: string,
+  tokenRole?: string,
+): void {
+  const isMember = Array.isArray(pool.participantIds) && pool.participantIds.includes(uid);
+  const isOwnerOrManager = pool.ownerId === uid || pool.managerUid === uid || pool.createdByUid === uid;
+  if (!isMember && !isOwnerOrManager && tokenRole !== 'SUPER_ADMIN') {
+    throw new HttpsError('permission-denied', 'NOT_POOL_MEMBER: Join this pool before submitting picks.');
+  }
+}
+
+/**
  * Securely submits picks for an NFL Pool with strict server-side kickoff lock checks.
  */
 export const submitNFLPicks = onCall(async (request) => {
@@ -236,6 +253,8 @@ export const submitNFLPicks = onCall(async (request) => {
   if (!billingCheck.allowed) {
     throw new HttpsError("failed-precondition", billingCheck.reason || "Pool is locked due to billing.");
   }
+
+  assertNFLPickMembership(pool, uid, (request.auth.token as { role?: string })?.role);
 
   const type = pool.type;
   const now = Date.now();
@@ -507,10 +526,17 @@ export const executeSurvivorRebuy = onCall(async (request) => {
       throw new HttpsError('failed-precondition', `MAX_REBUYS_EXCEEDED: You have reached the limit of ${settings.maxRebuys} rebuys.`);
     }
 
-    // 3. Reset strikes, increment rebuysUsed, retain previously used teams
+    // 3. Reset strikes, increment rebuysUsed, retain previously used teams.
+    // strikeWeeks is the per-week strike ledger scoreNFLWeek recomputes
+    // strikesUsed from — a rebuy wipes both together.
     transaction.update(entryRef, {
       status: 'ALIVE',
       strikesUsed: 0,
+      strikeWeeks: [],
+      // Rescoring a week at/before the rebuy must not re-strike a player who
+      // bought back in — scoreNFLWeek skips strike recomputation for weeks
+      // <= lastRebuyWeek.
+      lastRebuyWeek: week,
       rebuysUsed: entry.rebuysUsed + 1,
       eliminatedWeek: null
     });
@@ -623,9 +649,10 @@ export const scoreNFLWeek = onCall(async (request) => {
   const biggestUpset: { uid: string; name: string; gameId: string; team: string } | null = null;
   let closestTie: { uid: string; name: string; diff: number } | null = null;
 
-  // Track closest MNF game score
-  const mnfGame = games.find(g => g.isMonday && g.status === 'FINAL');
-  const mnfTotalScore = mnfGame ? ((mnfGame.scores?.home ?? 0) + (mnfGame.scores?.away ?? 0)) : null;
+  // MNF tiebreaker target: combined score of ALL Monday games, resolved only
+  // once every Monday game is FINAL (dual-MNF weeks; mid-Monday admin scoring
+  // stays provisional and a rescore recomputes it).
+  const mnfTotalScore = computeMNFTiebreakerTotal(games);
 
   // Survivor tracking
   let aliveCount = 0;
@@ -661,48 +688,26 @@ export const scoreNFLWeek = onCall(async (request) => {
 
     } else if (pool.type === 'NFL_SURVIVOR') {
       const entry = doc.data() as SurvivorEntry;
-      if (entry.status === 'ELIMINATED') continue;
 
-      const autoSurviveEnabled = pool.settings.autoSurviveExemptionEnabled ?? true;
-      const isExempt = checkAutoSurviveExemption(entry.usedTeams, games, autoSurviveEnabled);
+      // Idempotent per-(entry, week) recompute — set semantics, revive-capable
+      // on rescore, rebuy-aware, strike audit deduped. See
+      // computeSurvivorWeekUpdate for the full contract.
+      const result = computeSurvivorWeekUpdate(entry, week, games, pool);
 
-      if (isExempt) {
-        // Log auto survive
-        const exemptWeeks = [...(entry.exemptWeeks || []), week];
-        await stage(entryRef, { exemptWeeks });
-        aliveCount++;
-      } else {
-        const { survived, strikeLogged } = evaluateSurvivorWeek(entry, week, games, pool);
+      if (!result.skipped) {
+        await stage(entryRef, result.update);
+      }
+      if (result.alive) aliveCount++;
 
-        const newStrikes = entry.strikesUsed + (strikeLogged ? 1 : 0);
-        let freshEntry: SurvivorEntry = {
-          ...entry,
-          strikesUsed: newStrikes
-        };
-
-        freshEntry = updateSurvivorStatus(freshEntry, pool);
-        if (freshEntry.status === 'ELIMINATED') {
-          freshEntry.eliminatedWeek = week;
-        } else {
-          aliveCount++;
-        }
-
-        await stage(entryRef, {
-          status: freshEntry.status,
-          strikesUsed: freshEntry.strikesUsed,
-          eliminatedWeek: freshEntry.eliminatedWeek ?? null
+      if (result.strikeIsNew) {
+        await writeAuditEvent({
+          poolId,
+          type: 'SURVIVOR_AUTO_STRIKE',
+          message: `Participant ${entry.userName} suffered a strike in week ${week}`,
+          severity: 'WARNING',
+          actor: { uid: 'system', role: 'SYSTEM', label: 'Scoring Engine' },
+          payload: { week }
         });
-
-        if (strikeLogged) {
-          await writeAuditEvent({
-            poolId,
-            type: 'SURVIVOR_AUTO_STRIKE',
-            message: `Participant ${entry.userName} suffered a strike in week ${week}`,
-            severity: 'WARNING',
-            actor: { uid: 'system', role: 'SYSTEM', label: 'Scoring Engine' },
-            payload: { week }
-          });
-        }
       }
 
     } else if (pool.type === 'NFL_MARGIN') {

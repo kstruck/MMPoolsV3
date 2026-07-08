@@ -185,8 +185,14 @@ export interface SurvivorEntry {
   entryName?: string;
   status: 'ALIVE' | 'ELIMINATED';
   strikesUsed: number;
+  // Per-week strike ledger: scoreNFLWeek recomputes strikesUsed =
+  // strikeWeeks.length so rescoring a week is idempotent (set semantics).
+  strikeWeeks?: number[];
   rebuysUsed: number;
   eliminatedWeek?: number;
+  // Set by executeSurvivorRebuy; rescoring weeks <= lastRebuyWeek must not
+  // re-strike a player who bought back in.
+  lastRebuyWeek?: number;
   usedTeams: string[];
   picks: Record<number, string>; // week -> pickedTeamId
   exemptWeeks: number[];

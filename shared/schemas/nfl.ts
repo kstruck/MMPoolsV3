@@ -7,6 +7,10 @@ import { contactFieldsSchema, brandingSchema, payoutsSchema } from './common';
 const nflBase = contactFieldsSchema.extend({
   name: z.string().trim().min(1, 'Pool name is required.'),
   season: z.union([z.string().trim().min(1), z.number()]),
+  // ESPN season type: 1=preseason, 2=regular, 3=postseason. Persisted on the
+  // pool; submitNFLPicks and scoreNFLWeek query nfl_games with
+  // Number(pool.seasonType || 2), so omitting it means regular season.
+  seasonType: z.coerce.number().int().min(1).max(3).optional(),
   branding: brandingSchema.optional(),
   isPublic: z.boolean().optional(),
 });

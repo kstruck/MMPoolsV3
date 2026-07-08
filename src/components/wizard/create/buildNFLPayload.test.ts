@@ -78,4 +78,21 @@ describe('buildNFLPayload', () => {
     expect('estimatedPlayers' in p).toBe(false);
     expect(p.addons).toEqual({ aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: false });
   });
+
+  it('carries seasonType as a number (select fields deliver strings) and passes the gate', () => {
+    const p = buildNFLPayload({ ...pickemBase, seasonType: '1' }, 'NFL_PICKEM') as Record<string, any>;
+    expect(p.seasonType).toBe(1);
+    expect(pickemCreateInputSchema.safeParse(p).success).toBe(true);
+  });
+
+  it('omits seasonType when unset (server defaults to regular season)', () => {
+    const p = buildNFLPayload(pickemBase, 'NFL_PICKEM') as Record<string, any>;
+    expect('seasonType' in p).toBe(false);
+    expect(pickemCreateInputSchema.safeParse(p).success).toBe(true);
+  });
+
+  it('rejects an out-of-range seasonType at the schema gate', () => {
+    const p = buildNFLPayload({ ...pickemBase, seasonType: '7' }, 'NFL_PICKEM');
+    expect(pickemCreateInputSchema.safeParse(p).success).toBe(false);
+  });
 });
