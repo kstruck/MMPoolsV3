@@ -154,7 +154,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 </NavLink>
 
                                 <button
-                                    onClick={() => navigate('/participant')}
+                                    onClick={() => navigate('/participant?tab=entries')}
                                     className={cn(chromeBtn, 'bg-navy-700 text-white hover:bg-navy-600')}
                                     title="Pools you have joined as a participant"
                                 >
@@ -163,7 +163,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
 
                                 {(isManager || canCreatePool(user)) && (
                                     <button
-                                        onClick={() => navigate('/participant')}
+                                        onClick={() => navigate('/participant?tab=commissioner')}
                                         className={cn(chromeBtn, 'border-[1.5px] border-white/25 text-white hover:border-gold-500 hover:text-gold-300')}
                                         title="Pools you created and control"
                                     >

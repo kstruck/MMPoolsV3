@@ -1,6 +1,6 @@
 import { logger } from '../utils/logger';
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import type { User, GameState, Winner, Pool, PlayoffPool, BracketPool, SystemSettings, PoolType, NFLGame } from '../types';
 import { isNFLSeasonPool, getMyNFLEntry, subscribeToSeasonGames, computePendingStatus, type PoolPendingStatus } from '../services/nflStatusService';
 import { formatDeadline } from '../utils/formatTime';
@@ -57,9 +57,18 @@ interface ParticipantDashboardProps {
 
 export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user, onLogout, onCreatePool }) => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [myPools, setMyPools] = useState<Pool[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'insights' | 'all' | 'open' | 'live' | 'completed' | 'commissioner'>('insights');
+    const [activeTab, setActiveTab] = useState<'insights' | 'all' | 'open' | 'live' | 'completed' | 'commissioner' | 'entries'>('insights');
+
+    // Sync active tab from the ?tab= query param so header nav lands on distinct destinations
+    // (My Entries -> member pools, Manage My Pools -> Commissioner Hub).
+    useEffect(() => {
+        const requested = new URLSearchParams(location.search).get('tab');
+        const valid = ['insights', 'all', 'open', 'live', 'completed', 'commissioner', 'entries'];
+        if (requested && valid.includes(requested)) setActiveTab(requested as any);
+    }, [location.search]);
     const [searchQuery, setSearchQuery] = useState('');
     const [poolWinners, setPoolWinners] = useState<Record<string, Winner[]>>({});
     const [bracketEntryCounts, setBracketEntryCounts] = useState<Record<string, number>>({});
@@ -276,6 +285,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             } else if (pool.type === 'BRACKET') {
                 const counts = bracketEntryCounts[pool.id] || 0;
                 totalSquares += counts;
+            } else if (isNFLSeasonPool(pool)) {
+                // Pick'em / Survivor / Margin: one active entry per pool the user is a member of.
+                if ((pool as any).participantIds?.includes(user.id)) totalSquares += 1;
             }
         });
 
@@ -381,6 +393,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             if (activeTab === 'open') return status === 'open';
             if (activeTab === 'live') return status === 'live';
             if (activeTab === 'completed') return status === 'completed';
+            // My Entries: pools I participate in (membership), independent of ownership.
+            if (activeTab === 'entries') return (pool as any).participantIds?.includes(user.id) ?? false;
 
             return true;
         }).sort((a, b) => {
@@ -395,8 +409,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         const open = myPools.filter(p => getPoolTabStatus(p) === 'open').length;
         const completed = myPools.filter(p => getPoolTabStatus(p) === 'completed').length;
         const live = myPools.filter(p => getPoolTabStatus(p) === 'live').length;
-        return { all: myPools.length, open, live, completed };
-    }, [myPools]);
+        const entries = myPools.filter(p => (p as any).participantIds?.includes(user.id)).length;
+        return { all: myPools.length, open, live, completed, entries };
+    }, [myPools, user.id]);
 
     const getStatusBadge = (pool: Pool) => {
         const tabStatus = getPoolTabStatus(pool);
@@ -458,7 +473,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             <Trophy size={20} />
                         </div>
                         <div>
-                            <p className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em] leading-none mb-1.5">Prize payouts</p>
+                            <p className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em] leading-none mb-1.5">Wins</p>
                             <p className="text-2xl font-display font-bold text-[color:var(--text)] num leading-none">{lifetimeStats.totalWins}</p>
                         </div>
                     </div>
@@ -478,6 +493,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 <div className="flex items-center gap-2 mb-6 border-b border-line overflow-x-auto">
                     {[
                         { id: 'insights', label: 'Empire Overview', icon: Activity },
+                        { id: 'entries', label: 'My Entries', icon: LayoutGrid, count: counts.entries },
                         ...(myPools.filter(p => p.ownerId === user.id || p.managerUid === user.id).length > 0 ? [{ id: 'commissioner', label: 'Commissioner Hub', icon: Crown }] : []),
                         { id: 'live', label: 'Live Pools', count: counts.live },
                         { id: 'open', label: 'Open', count: counts.open },
