@@ -1,0 +1,31 @@
+{
+    "id": "nfl-margin-basic",
+    "name": "Margin Basic (Season Total)",
+    "description": "Two weeks: margins accumulate; missed week costs the standard -14; leaderboard ranks by season total",
+    "poolType": "NFL_MARGIN",
+    "poolConfig": {
+        "name": "Sim Margin Basic",
+        "type": "NFL_MARGIN",
+        "settings": {
+            "entryFee": 0,
+            "payoutMode": "SEASON",
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 2, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 }
+    ],
+    "scoreWeeks": [1, 2],
+    "testEntries": [
+        { "userName": "Alice", "marginPicks": { "1": "KC", "2": "SF" } },
+        { "userName": "Bob", "marginPicks": { "1": "BUF" } }
+    ],
+    "assertions": [
+        { "type": "nflEntryCount", "expected": 2, "message": "Should have 2 margin entries" },
+        { "type": "marginSeasonTotal", "userName": "Alice", "expected": 23, "message": "Alice season total = +3 (KC) +20 (SF) = 23" },
+        { "type": "marginSeasonTotal", "userName": "Bob", "expected": -17, "message": "Bob = -3 (BUF) -14 (missed week 2) = -17" },
+        { "type": "marginRank", "userName": "Alice", "expected": 1, "message": "Alice ranks #1 on the season leaderboard" },
+        { "type": "nflWinner", "expected": "Alice", "message": "Alice should lead the pool" }
+    ]
+}

@@ -1,0 +1,35 @@
+{
+    "id": "nfl-survivor-basic",
+    "name": "Survivor Basic (Sudden Death)",
+    "description": "Two weeks, maxStrikes 0: wrong pick eliminates immediately; survivor of both weeks stays alive",
+    "poolType": "NFL_SURVIVOR",
+    "poolConfig": {
+        "name": "Sim Survivor Basic",
+        "type": "NFL_SURVIVOR",
+        "settings": {
+            "entryFee": 0,
+            "maxStrikes": 0,
+            "maxRebuys": 0,
+            "pickLosersMode": false,
+            "autoSurviveExemptionEnabled": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 2, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 }
+    ],
+    "scoreWeeks": [1, 2],
+    "testEntries": [
+        { "userName": "Alice", "survivorPicks": { "1": "KC", "2": "SF" } },
+        { "userName": "Bob", "survivorPicks": { "1": "BUF" } },
+        { "userName": "Carol", "survivorPicks": { "1": "KC", "2": "DAL" } }
+    ],
+    "assertions": [
+        { "type": "nflEntryCount", "expected": 3, "message": "Should have 3 survivor entries" },
+        { "type": "survivorStatus", "userName": "Alice", "expected": "ALIVE", "message": "Alice survives both weeks (KC, SF won)" },
+        { "type": "survivorStatus", "userName": "Bob", "expected": "ELIMINATED", "message": "Bob eliminated week 1 (BUF lost, sudden death)" },
+        { "type": "survivorStrikes", "userName": "Bob", "expected": 1, "message": "Bob has exactly 1 strike" },
+        { "type": "survivorStatus", "userName": "Carol", "expected": "ELIMINATED", "message": "Carol eliminated week 2 (DAL lost)" }
+    ]
+}

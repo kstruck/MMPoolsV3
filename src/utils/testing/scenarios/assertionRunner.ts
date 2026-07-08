@@ -59,10 +59,46 @@ type TestPool = Pool & {
         tieBreakerPrediction?: number;
         maxPossibleScore?: number;
     }[];
+    // NFL season pools — hydrated by nflSeasonSimulator BEFORE cleanup
+    _nflEntries?: {
+        userName?: string;
+        totalScore?: number;
+        weeklyPoints?: Record<string, number>;
+        status?: string;
+        strikesUsed?: number;
+        seasonTotal?: number;
+        rank?: number;
+        [key: string]: unknown;
+    }[];
+    _nflRecaps?: Record<string, Record<string, unknown>>;
     entryCount?: number;
     entries?: Record<string, { totalScore?: number; userName?: string }>;
     [key: string]: unknown; // Allow safe access to other properties
 };
+
+// ---- NFL season-pool assertion helpers (PLAN-TEST-SUITE Phase 2 item 8c) ----
+
+type NFLTestEntry = NonNullable<TestPool['_nflEntries']>[number];
+
+function assertNflField(
+    assertion: TestAssertion,
+    pool: TestPool,
+    read: (e: NFLTestEntry) => unknown,
+): AssertionResult {
+    const entry = (pool._nflEntries ?? []).find(e => e.userName === assertion.userName);
+    if (!entry) {
+        return {
+            assertion, passed: false, actual: undefined,
+            message: `${assertion.message} - No entry found for "${assertion.userName}"`,
+        };
+    }
+    const actual = read(entry);
+    const passed = actual === assertion.expected;
+    return {
+        assertion, passed, actual,
+        message: passed ? assertion.message : `${assertion.message} - Expected ${assertion.expected}, got ${actual}`,
+    };
+}
 
 function runSingleAssertion(
     assertion: TestAssertion,
@@ -102,6 +138,42 @@ function runSingleAssertion(
             return assertPlayoffEntryCount(assertion, pool);
         case 'playoffWinner':
             return assertPlayoffWinner(assertion, pool);
+        // NFL season-pool assertions
+        case 'nflEntryCount': {
+            const actual = (pool._nflEntries ?? []).length;
+            const passed = actual === assertion.expected;
+            return { assertion, passed, actual, message: passed ? assertion.message : `${assertion.message} - Expected ${assertion.expected}, got ${actual}` };
+        }
+        case 'nflTotalScore':
+            return assertNflField(assertion, pool, e => e.totalScore ?? 0);
+        case 'nflWeeklyPoints':
+            return assertNflField(assertion, pool, e => e.weeklyPoints?.[String(assertion.week)] ?? 0);
+        case 'nflWinner': {
+            const top = [...(pool._nflEntries ?? [])]
+                .sort((a, b) => ((b.totalScore ?? b.seasonTotal ?? 0) as number) - ((a.totalScore ?? a.seasonTotal ?? 0) as number))[0];
+            const actual = top?.userName ?? 'No winner';
+            const passed = actual === assertion.expected;
+            return { assertion, passed, actual, message: passed ? assertion.message : `${assertion.message} - Expected "${assertion.expected}", got "${actual}"` };
+        }
+        case 'survivorStatus':
+            return assertNflField(assertion, pool, e => e.status);
+        case 'survivorStrikes':
+            return assertNflField(assertion, pool, e => e.strikesUsed ?? 0);
+        case 'marginSeasonTotal':
+            return assertNflField(assertion, pool, e => e.seasonTotal ?? 0);
+        case 'marginRank':
+            return assertNflField(assertion, pool, e => e.rank);
+        case 'recapExists': {
+            const recap = pool._nflRecaps?.[String(assertion.week)];
+            const passed = Boolean(recap) === (assertion.expected !== false);
+            return { assertion, passed, actual: Boolean(recap), message: passed ? assertion.message : `${assertion.message} - recap for week ${assertion.week}: ${Boolean(recap)}` };
+        }
+        case 'recapClosestTiebreaker': {
+            const recap = pool._nflRecaps?.[String(assertion.week)] as { closestTiebreaker?: { userName?: string } } | undefined;
+            const actual = recap?.closestTiebreaker?.userName;
+            const passed = actual === assertion.expected;
+            return { assertion, passed, actual, message: passed ? assertion.message : `${assertion.message} - Expected "${assertion.expected}", got "${actual}"` };
+        }
         default:
             return {
                 assertion,
