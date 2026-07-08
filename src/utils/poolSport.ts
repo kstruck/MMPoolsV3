@@ -115,3 +115,20 @@ export function getPoolLifecycleState(pool: LifecycleReadable): PoolLifecycleSta
   if (status === 'LOCKED' || pool.isLocked) return 'locked';
   return 'open';
 }
+
+/**
+ * Shared inclusion predicate for commissioner rosters / stats / hub.
+ * A pool counts only if it is not finished, admin-closed, canceled, or archived,
+ * and is not a `sim-*` test pool. Use this everywhere so aggregates never count
+ * dead or fake pools (PLAN-COMMISSIONER-DASH.md step 13).
+ */
+export function isActiveManagedPool(
+  pool: LifecycleReadable & { id?: string; slug?: string },
+): boolean {
+  const state = getPoolLifecycleState(pool);
+  if (state === 'final' || state === 'closed') return false;
+  if (pool.status === 'archived') return false;
+  const key = pool.id || pool.slug || '';
+  if (typeof key === 'string' && key.startsWith('sim-')) return false;
+  return true;
+}

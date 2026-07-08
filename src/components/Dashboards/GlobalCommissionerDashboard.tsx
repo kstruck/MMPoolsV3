@@ -4,6 +4,7 @@ import { Crown, DollarSign, Users, Activity, Settings, ArrowRight } from 'lucide
 import type { User, Pool } from '../../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Button } from '../ui';
+import { isActiveManagedPool } from '../../utils/poolSport';
 
 interface GlobalCommissionerDashboardProps {
   user: User;
@@ -13,7 +14,8 @@ interface GlobalCommissionerDashboardProps {
 export const GlobalCommissionerDashboard: React.FC<GlobalCommissionerDashboardProps> = ({ managedPools }) => {
   const navigate = useNavigate();
 
-  const activePools = managedPools.filter(p => (p as any).status !== 'COMPLETED' && (p as any).status !== 'archived');
+  // Shared inclusion predicate: exclude finished/closed/canceled/archived + sim-* test pools.
+  const activePools = useMemo(() => managedPools.filter(isActiveManagedPool), [managedPools]);
 
   // Phase 1: compute honest, provable numbers client-side from the pools we already have.
   // "Guest" sentinel is excluded from participant counts. Dues Collected / Payouts require
@@ -24,16 +26,16 @@ export const GlobalCommissionerDashboard: React.FC<GlobalCommissionerDashboardPr
   const stats = useMemo(() => {
     let participants = 0;
     let duesExpected = 0;
-    for (const p of managedPools) {
+    for (const p of activePools) {
       const n = realParticipants(p).length;
       participants += n;
       duesExpected += feeOf(p) * n;
     }
-    return { poolsManaged: managedPools.length, participants, duesExpected };
-  }, [managedPools]);
+    return { poolsManaged: activePools.length, participants, duesExpected };
+  }, [activePools]);
 
   const duesByPool = useMemo(() => {
-    return managedPools
+    return activePools
       .map(p => ({
         name: p.name.substring(0, 15) + (p.name.length > 15 ? '...' : ''),
         dues: feeOf(p) * realParticipants(p).length,
@@ -41,7 +43,7 @@ export const GlobalCommissionerDashboard: React.FC<GlobalCommissionerDashboardPr
       .filter(d => d.dues > 0)
       .sort((a, b) => b.dues - a.dues)
       .slice(0, 5);
-  }, [managedPools]);
+  }, [activePools]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
