@@ -547,6 +547,15 @@ export interface User {
   poolCredits?: UserPoolCredit[];
   historicalStats?: UserHistoricalStats;
   managerStats?: ManagerHistoricalStats;
+  // Server-maintained commissioner rollup (ADR 0003). Replaces the never-written managerStats.
+  commissionerAggregate?: {
+    poolsManaged: number;
+    totalParticipants: number;
+    duesExpected: number;
+    duesCollected: number;
+    totalPayouts: number;
+    updatedAt?: number;
+  };
 }
 
 export interface Winner {

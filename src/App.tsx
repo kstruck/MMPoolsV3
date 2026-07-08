@@ -16,6 +16,7 @@ const GamedaySquaresLanding = React.lazy(() => import('./components/GamedaySquar
 const CreatePoolSelection = React.lazy(() => import('./components/CreatePoolSelection').then(m => ({ default: m.CreatePoolSelection })));
 const BrowsePools = React.lazy(() => import('./components/BrowsePools').then(m => ({ default: m.BrowsePools })));
 const ParticipantDashboard = React.lazy(() => import('./components/ParticipantDashboard').then(m => ({ default: m.ParticipantDashboard })));
+const DevDashboardPreview = React.lazy(() => import('./pages/DevDashboardPreview').then(m => ({ default: m.DevDashboardPreview })));
 const FeaturesPage = React.lazy(() => import('./components/FeaturesPage').then(m => ({ default: m.FeaturesPage })));
 const PrivacyPage = React.lazy(() => import('./components/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
 const TermsPage = React.lazy(() => import('./components/TermsPage').then(m => ({ default: m.TermsPage })));
@@ -380,6 +381,9 @@ const App: React.FC = () => {
               <Navigate to="/" replace />
             )
           } />
+
+          {/* Dev-only design preview (mock data, no auth) — see /dev/dashboards */}
+          <Route path="/dev/dashboards" element={<DevDashboardPreview />} />
 
           {/* Pool View */}
           <Route path="/pool/:id" element={
