@@ -11,6 +11,7 @@ import { runScenario as runBracketScenario } from './simulators/bracketSimulator
 import { runScenario as runPropsScenario } from './simulators/propsSimulator';
 import { runScenario as runPlayoffScenario } from './simulators/playoffSimulator';
 import { runE2EBracketSimulation } from './simulators/bracketE2ESimulator';
+import { runNFLSeasonScenario } from './simulators/nflSeasonSimulator';
 import type { TestScenario } from './scenarios';
 import type { Pool, Winner, PropCard, BracketEntry } from '../../types';
 
@@ -48,6 +49,32 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
     try {
         const poolType = scenario.poolType || 'SQUARES';
         let result: { poolId?: string; steps: { step: string; status: string; message: string; data?: unknown }[] };
+
+        if (poolType === 'NFL_PICKEM' || poolType === 'NFL_SURVIVOR' || poolType === 'NFL_MARGIN') {
+            // NFL season pools: the simulator creates via the real callable,
+            // mutates only through the guarded sim harness, scores via the real
+            // scoreNFLWeek, hydrates BEFORE guaranteed cleanup — so assertions
+            // run on the returned snapshot, never on re-read (deleted) docs.
+            const nflResult = await runNFLSeasonScenario(scenario);
+            const nflPool = {
+                ...(nflResult.poolSnapshot ?? {}),
+                _nflEntries: nflResult.entries,
+                _nflRecaps: nflResult.recaps,
+            } as unknown as Pool;
+            const validation = runAssertions(scenario, [], nflPool);
+            return {
+                scenarioId,
+                scenarioName: scenario.name,
+                status: nflResult.poolId
+                    ? (validation.passed ? 'PASS' : 'FAIL')
+                    : 'ERROR',
+                duration: Date.now() - startTime,
+                validation,
+                error: nflResult.poolId ? undefined : 'Pool was not created',
+                steps: nflResult.steps,
+                poolId: nflResult.poolId,
+            };
+        }
 
         if (poolType === 'PROPS') {
             // Route to props simulator

@@ -16,19 +16,44 @@ import bracketTiebreaker from './bracket-tiebreaker.json';
 import bracketIncomplete from './bracket-incomplete.json';
 import bracketZeroCorrect from './bracket-zero-correct.json';
 import bracketE2EFullTournament from './bracket-e2e-full-tournament.json';
+import nflPickemBasic from './nfl-pickem-basic.json';
+import nflSurvivorBasic from './nfl-survivor-basic.json';
+import nflMarginBasic from './nfl-margin-basic.json';
 
-export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS';
+export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS'
+    | 'NFL_PICKEM' | 'NFL_SURVIVOR' | 'NFL_MARGIN';
 
 export interface TestAssertion {
     type: 'winnerCount' | 'winnerCountAtLeast' | 'winnerExists' | 'totalPayout' | 'poolStatus'
     | 'propCardCount' | 'propWinner' | 'propTopScore'
     | 'bracketEntryCount' | 'bracketWinner' | 'bracketTopScore' | 'maxScoreAtLeast'
-    | 'playoffEntryCount' | 'playoffWinner';
+    | 'playoffEntryCount' | 'playoffWinner'
+    // NFL season pools (entries/recaps hydrated by nflSeasonSimulator)
+    | 'nflEntryCount' | 'nflTotalScore' | 'nflWeeklyPoints' | 'nflWinner'
+    | 'survivorStatus' | 'survivorStrikes'
+    | 'marginSeasonTotal' | 'marginRank'
+    | 'recapExists' | 'recapClosestTiebreaker';
     expected?: number | string | boolean;
     period?: string;
     digits?: [number, number];
     field?: string; // For poolStatus checks
+    userName?: string; // NFL assertions target an entry by user name
+    week?: number; // NFL weekly assertions / recap checks
     message: string;
+}
+
+// Synthetic NFL game in a scenario. Keyed by array order: game N is
+// addressable in picks as "gN" (1-based); the simulator translates those keys
+// to the run's real sim- doc IDs at seed time.
+export interface ScenarioNFLGame {
+    week: number;
+    home: string; // team abbreviation, e.g. "KC"
+    away: string;
+    homeScore?: number;
+    awayScore?: number;
+    status?: 'FINAL' | 'IN_PROGRESS' | 'SCHEDULED' | 'CANCELLED'; // default FINAL
+    isMonday?: boolean;
+    spread?: number; // relative to home (negative = home favored); locked at seed
 }
 
 export interface TestScenario {
@@ -83,11 +108,25 @@ export interface TestScenario {
         tiebreaker?: number; // Props
         tiebreakerVal?: number; // Playoff (standardize?)
         tiebreakerPrediction?: number; // Bracket
+        // NFL Pick'em: week -> gameKey ("g1"...) -> team abbreviation
+        pickemPicks?: Record<string, Record<string, string>>;
+        // NFL Pick'em confidence: week -> gameKey -> value
+        confidence?: Record<string, Record<string, number>>;
+        // NFL Pick'em: week -> MNF combined-score prediction
+        weeklyTiebreakers?: Record<string, number>;
+        // NFL Survivor / Margin: week -> team abbreviation
+        survivorPicks?: Record<string, string>;
+        marginPicks?: Record<string, string>;
+        usedTeams?: string[]; // Survivor pre-seeded history
     }>;
     grading?: Record<string, number>;
     assertions: TestAssertion[];
     tournamentResults?: unknown; // Bracket results
     roundResults?: unknown; // Playoff round results
+    // NFL season pools: synthetic games (seeded via simSeedNFLGames) + which
+    // weeks to score via the real scoreNFLWeek callable, in order.
+    nflGames?: ScenarioNFLGame[];
+    scoreWeeks?: number[];
 }
 
 export const SCENARIOS: Record<string, TestScenario> = {
@@ -106,6 +145,9 @@ export const SCENARIOS: Record<string, TestScenario> = {
     'bracket-incomplete': bracketIncomplete as unknown as TestScenario,
     'bracket-zero-correct': bracketZeroCorrect as unknown as TestScenario,
     'bracket-e2e-full-tournament': bracketE2EFullTournament as unknown as TestScenario,
+    'nfl-pickem-basic': nflPickemBasic as unknown as TestScenario,
+    'nfl-survivor-basic': nflSurvivorBasic as unknown as TestScenario,
+    'nfl-margin-basic': nflMarginBasic as unknown as TestScenario,
 };
 
 export const SCENARIO_LIST = Object.values(SCENARIOS);

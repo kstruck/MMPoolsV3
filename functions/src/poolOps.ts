@@ -39,8 +39,19 @@ const PRIVILEGED_POOL_FIELDS = [
     'participantIds', 'participantCount', 'entryCount', 'entries',
     'winners', 'winnerDetermined', 'isPaid', 'paidOut', 'payouts',
     'createdByUid', 'ownerId', 'managerUid', 'coManagers', 'role',
-    'id', 'createdAt', 'updatedAt', 'poolCredits',
+    'id', 'createdAt', 'updatedAt', 'poolCredits', 'simRunId',
 ];
+
+// Sim harness trust anchor (PLAN-TEST-SUITE 8f): simRunId is stripped from
+// every client payload above and re-stamped ONLY here — SUPER_ADMIN callers
+// creating Test Pools. The sim-write/cleanup callables (simHarness.ts)
+// authorize against this persisted field, never an ID or slug prefix.
+export function simRunIdForCreate(rawData: Record<string, any>, claimRole: string | undefined): string | undefined {
+    const raw = rawData?.simRunId;
+    if (claimRole !== 'SUPER_ADMIN') return undefined;
+    if (typeof raw !== 'string' || !/^[a-z0-9-]{4,64}$/.test(raw)) return undefined;
+    return raw;
+}
 
 // Strip privileged fields from a client-supplied payload before it is spread
 // into a pool document. Prevents clients from self-granting paid/active status.
@@ -260,6 +271,9 @@ export const createPool = onCall(async (request) => {
             // free or trial per server-computed launch mode (server-authoritative)
             billing: billingForLaunch(launchMode, billingConfig.trialDays, now.toMillis()),
         };
+
+        const simRunId = simRunIdForCreate(rawData, claimRole);
+        if (simRunId) newPool.simRunId = simRunId;
 
         // Initialize Squares-specific data
         if (isSquaresPool) {

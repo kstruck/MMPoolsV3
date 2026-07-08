@@ -4,7 +4,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { writeAuditEvent } from "./audit";
 import { checkBillingAccess } from "./billing";
 import { writeLedgerEvent } from "./paymentLedger";
-import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMode, assertPaidParticipantCeiling } from "./poolOps";
+import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMode, assertPaidParticipantCeiling, simRunIdForCreate } from "./poolOps";
 import { loadBillingConfig } from "./billing";
 import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } from "./lib/systemGuards";
 import { isPoolType, type PoolType } from "./shared/poolTypes";
@@ -89,6 +89,10 @@ export const createNFLPool = onCall(async (request) => {
       // free or trial per server-computed launch mode (server-authoritative)
       billing: billingForLaunch(launchMode, billingConfig.trialDays, now),
     };
+
+    // Sim harness trust anchor (stripped from clients; SUPER_ADMIN-only stamp).
+    const simRunId = simRunIdForCreate((request.data || {}) as Record<string, any>, claimRole);
+    if (simRunId) newPool.simRunId = simRunId;
 
     const userRef = db.collection('users').doc(uid);
 
