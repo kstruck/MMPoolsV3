@@ -30,6 +30,12 @@ Branch: `feat/pool-homepage-v2` (off `feat/commissioner-dash`, which has the sla
 - **Populates only after the CFs deploy + run** (pre-deploy = empty state, correct). **Scale note:** consensus is a bounded per-week full recompute; shard-based incrementalization is the scale-up path if pool count grows large.
 - **Composite indexes needed on deploy** (Firebase will log the exact links): `pools` (type ==, season ==); `nfl_games` (season ==, seasonType ==, week ==). Add them or the jobs error.
 
+**Phase D — real performance metrics (commit 842158e)**
+- `scoreNFLWeek` persists Pick'em `weeklyResults{correct,total,points}` + `resultsVersion` (was computing `correctCount` then discarding it). Additive; certified NFL suite green.
+- Homepage fakes all deleted → real: Pick Accuracy (real correct/incorrect; the 5/2=71% mock gone → 67% real in preview), Performance Radar (real axes Accuracy/Win Rate/Consistency/Participation/Standing vs real pool average; the `Agility=65` + `62/58/50/55/50` consts gone), Survivor Attrition (real alive/strikes from `eliminatedWeek`/`strikeWeeks`; fixed-decay gone), standings sparkline (name-hash fake removed). Honest zero state until games scored.
+- Verified in preview with seeded `weeklyResults`. app+fn tsc + 332 fn + 244 app tests green.
+- Scope: homepage metrics are per-user *within the pool* (from `myEntry`/entries). The cross-pool per-user aggregate (`users/{uid}/performance/*`, recompute-from-authoritative via `resultsVersion`) is Phase E (profiles need cross-pool).
+
 ## Deploy note (important)
 The Phase 0 entry-read rule is net-safer than today (plain members already can't collection-query entries pre-lock; this only removes the non-member post-lock hole). Safe to deploy with the functions/rules bundle. **Residual (round 5):** in PER_GAME-lock pools a participant can still read another participant's later-game picks post-week-lock via raw entry reads — fully closed only when the **server consensus/standings projection** (Phase C/D) replaces client entry reads. Track that; don't consider per-game reveal safety complete until then.
 
