@@ -555,9 +555,9 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       {/* 2. Interactive Main Bento Dashboard Area */}
       <div className="xl:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
         
-        {/* CARD A: LIVE WEEKLY PICK'EM (Top Left) */}
-        <div 
-          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
+        {/* CARD A: LIVE WEEKLY PICK'EM — full width so the week slate is readable */}
+        <div
+          className="md:col-span-2 bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
         >
           <div>
             <div className="flex justify-between items-center mb-6">
@@ -695,25 +695,32 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
                 {/* Full week slate — every game, not just the focus matchup */}
                 {weeklyGames.length > 1 && (
-                  <div className="mt-5">
-                    <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-2">
+                  <div className="mt-6">
+                    <span className="text-[11px] font-display font-bold text-muted uppercase tracking-[0.1em] block mb-3">
                       Week {selectedWeek} Slate <span className="text-faint num">({weeklyGames.length})</span>
                     </span>
-                    <div className="space-y-1 max-h-44 overflow-y-auto pr-1">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1">
                       {weeklyGames.map(g => {
                         const key = `${g.awayTeam.abbreviation}@${g.homeTeam.abbreviation}`;
                         const isFocus = focusGame && key === `${focusGame.awayTeam.abbreviation}@${focusGame.homeTeam.abbreviation}`;
+                        const live = g.status === 'IN_PROGRESS';
+                        const final = g.status === 'FINAL';
+                        const showScore = live || final;
                         return (
-                          <div key={key} className={`flex items-center justify-between px-3 py-2 rounded-lg border ${isFocus ? 'border-gold-500/40 bg-gold-400/5' : 'border-line bg-page'}`}>
-                            <span className="text-[11px] font-display font-bold uppercase text-[color:var(--text)] num tracking-[0.04em]">
-                              {g.awayTeam.abbreviation} <span className="text-faint">@</span> {g.homeTeam.abbreviation}
+                          <div key={key} className={`flex items-center justify-between px-4 py-3 rounded-lg border ${isFocus ? 'border-gold-500/40 bg-gold-400/5' : 'border-line bg-page'}`}>
+                            <span className="text-sm font-display font-bold uppercase text-[color:var(--text)] num tracking-[0.04em]">
+                              {g.awayTeam.abbreviation}{showScore && <span className="text-gold-600 dark:text-gold-400"> {g.scores?.away ?? 0}</span>}
+                              <span className="text-faint mx-1.5">@</span>
+                              {g.homeTeam.abbreviation}{showScore && <span className="text-gold-600 dark:text-gold-400"> {g.scores?.home ?? 0}</span>}
                             </span>
-                            <span className="text-[9px] font-display font-bold uppercase tracking-[0.08em] num text-muted">
-                              {g.status === 'IN_PROGRESS'
-                                ? (g.clock || `Q${g.period || 1}`)
-                                : g.status === 'FINAL'
-                                ? `${g.scores?.away ?? 0}-${g.scores?.home ?? 0} FT`
-                                : new Date(g.startTime).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
+                            <span className="text-[10px] font-display font-bold uppercase tracking-[0.08em] num flex items-center gap-1.5">
+                              {live ? (
+                                <span className="inline-flex items-center gap-1 text-brandred-600"><span className="h-1.5 w-1.5 rounded-full bg-brandred-600 animate-live-pulse"></span>{g.clock || `Q${g.period || 1}`}</span>
+                              ) : final ? (
+                                <span className="text-muted">Final</span>
+                              ) : (
+                                <span className="text-muted">{new Date(g.startTime).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}</span>
+                              )}
                             </span>
                           </div>
                         );
