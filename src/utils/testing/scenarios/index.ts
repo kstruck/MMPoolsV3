@@ -82,6 +82,7 @@ export interface TestScenario {
         picks?: Record<string, string>; // Bracket
         tiebreaker?: number; // Props
         tiebreakerVal?: number; // Playoff (standardize?)
+        tiebreakerPrediction?: number; // Bracket
     }>;
     grading?: Record<string, number>;
     assertions: TestAssertion[];
