@@ -33,6 +33,22 @@ Reviewed the paused test work: NFL Test Suite Phase 2 wave is **fully merged to 
 ## SEE IT NOW (no deploy needed)
 Run `npm run dev` → open **http://localhost:5173/dev/dashboards** (unauthenticated, mock data). Toggle: **Commissioner Hub** (grouped-by-type + filter + honest Dues cards), **Pool Homepage** (full week slate, centered Live badge, type-gated cards, Pool Standings), **Rules Tab** (commissioner edit banner + lock deadline). All screenshotted + verified in-browser. The route is unlisted; remove `src/pages/DevDashboardPreview.tsx` + its route/import in `App.tsx` before prod if you don't want it shipped (harmless if left).
 
+## Roster + Payments consumer wiring — DONE (commit 4a709c5)
+The Commissioner view roster + Payments tab now show **everyone who joined**, not just entry-holders.
+- Roster = `participantIds` ∪ Member Records ∪ entries. Commissioner + members with no entry appear ("No entry yet" tag). Member count drives platform billing.
+- Payments tab: commissioner banner + **Edit / Manage Payments** button → Commissioner view. Pot/expected count everyone who joined.
+- Mark-paid via `setPaidStatus`; per-member + bulk email reminders from the roster.
+
+**What works on the real pool right NOW (pre-deploy, pre-backfill):**
+- You (commissioner) and all `participantIds` members are **listed** immediately (names show for entry-holders + you via your profile; other pick-less members show "Member" until the backfill seeds names).
+- Pot/member count is correct from `participantIds`.
+- Mark-paid on members **with an entry**: works (direct-write fallback).
+
+**What needs deploy + backfill:**
+- Mark-paid on no-entry rows (incl. yourself): needs `setPaidStatus` deployed (graceful error until then).
+- Names for pick-less members: appear after the backfill seeds Member Records.
+- `rosterSummary` pot precision: after the aggregate function deploys.
+
 ## Verification status (this branch)
 App `tsc` ✓ · production `vite build` ✓ · app vitest **244/244** ✓ · functions `tsc` ✓ · functions vitest **323/323** ✓. NOT verified: Firestore transaction wiring (no Java/emulator in the build sandbox) — run `npm --prefix functions run test:emulator` (includes `memberRecord.emulator.test.ts`).
 
