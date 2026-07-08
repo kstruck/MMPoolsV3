@@ -201,18 +201,23 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     return rankIndex !== -1 ? `#${rankIndex + 1}` : 'N/A';
   }, [entries, user, _pool.type]);
 
+  // Full slate for the selected week (used to list every game, not just the focus game).
+  const weeklyGames = useMemo(() => {
+    return _games
+      .filter(g => g.week === selectedWeek && Number(g.seasonType) === Number(castPool.seasonType))
+      .sort((a, b) => (a.startTime < b.startTime ? -1 : 1));
+  }, [_games, selectedWeek, castPool.seasonType]);
+
   const focusGame = useMemo(() => {
-    if (_games.length === 0) return null;
-    const weekly = _games.filter(g => g.week === selectedWeek && Number(g.seasonType) === Number(castPool.seasonType));
-    if (weekly.length === 0) return null;
-    const live = weekly.find(g => g.status === 'IN_PROGRESS');
+    if (weeklyGames.length === 0) return null;
+    const live = weeklyGames.find(g => g.status === 'IN_PROGRESS');
     if (live) return live;
-    const upcoming = weekly.filter(g => g.status === 'SCHEDULED');
+    const upcoming = weeklyGames.filter(g => g.status === 'SCHEDULED');
     if (upcoming.length > 0) {
       return upcoming.reduce((prev, curr) => prev.startTime < curr.startTime ? prev : curr);
     }
-    return weekly[0];
-  }, [_games, selectedWeek, castPool.seasonType]);
+    return weeklyGames[0];
+  }, [weeklyGames]);
 
   const myPick = useMemo(() => {
     if (!myEntry || !focusGame) return null;
@@ -484,9 +489,12 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
           <div className="space-y-2">
             {[
               { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid, active: true },
-              { id: 'picks', label: 'Pick\'em', icon: Zap, tab: 'picks' as const },
-              { id: 'survivor', label: 'Survivor', icon: Shield, tab: 'picks' as const },
-              { id: 'margin', label: 'Margin', icon: Percent, tab: 'picks' as const },
+              // Only the play link for THIS pool's type — a Pick'em pool shows Pick'em, not Survivor/Margin.
+              ...(_pool.type === 'NFL_SURVIVOR'
+                ? [{ id: 'survivor', label: 'Survivor', icon: Shield, tab: 'picks' as const }]
+                : _pool.type === 'NFL_MARGIN'
+                ? [{ id: 'margin', label: 'Margin', icon: Percent, tab: 'picks' as const }]
+                : [{ id: 'picks', label: 'Pick\'em', icon: Zap, tab: 'picks' as const }]),
               { id: 'rules', label: 'Rules & Settings', icon: Settings, tab: 'rules' as const }
             ].map(item => (
               <button
@@ -557,8 +565,8 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             {focusGame ? (
               <>
                 {/* Live Match Helmets/Logos & Score Panel */}
-                <div className="bg-page border border-line p-5 rounded-lg mb-5 flex justify-between items-center relative overflow-hidden">
-                  <div className="absolute top-2 left-2 z-10">
+                <div className="bg-page border border-line p-5 pt-7 rounded-lg mb-5 flex justify-between items-center relative overflow-hidden">
+                  <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20">
                     {focusGame.status === 'IN_PROGRESS' ? (
                       <Badge status="live" />
                     ) : focusGame.status === 'FINAL' ? (
@@ -671,6 +679,35 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Full week slate — every game, not just the focus matchup */}
+                {weeklyGames.length > 1 && (
+                  <div className="mt-5">
+                    <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-2">
+                      Week {selectedWeek} Slate <span className="text-faint num">({weeklyGames.length})</span>
+                    </span>
+                    <div className="space-y-1 max-h-44 overflow-y-auto pr-1">
+                      {weeklyGames.map(g => {
+                        const key = `${g.awayTeam.abbreviation}@${g.homeTeam.abbreviation}`;
+                        const isFocus = focusGame && key === `${focusGame.awayTeam.abbreviation}@${focusGame.homeTeam.abbreviation}`;
+                        return (
+                          <div key={key} className={`flex items-center justify-between px-3 py-2 rounded-lg border ${isFocus ? 'border-gold-500/40 bg-gold-400/5' : 'border-line bg-page'}`}>
+                            <span className="text-[11px] font-display font-bold uppercase text-[color:var(--text)] num tracking-[0.04em]">
+                              {g.awayTeam.abbreviation} <span className="text-faint">@</span> {g.homeTeam.abbreviation}
+                            </span>
+                            <span className="text-[9px] font-display font-bold uppercase tracking-[0.08em] num text-muted">
+                              {g.status === 'IN_PROGRESS'
+                                ? (g.clock || `Q${g.period || 1}`)
+                                : g.status === 'FINAL'
+                                ? `${g.scores?.away ?? 0}-${g.scores?.home ?? 0} FT`
+                                : new Date(g.startTime).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </>
             ) : (
               <div className="bg-page border border-line rounded-lg p-8 text-center text-muted font-body font-bold text-xs">
@@ -690,8 +727,9 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
           </div>
         </div>
 
-        {/* CARD B: SURVIVOR LEAGUE (Top Right) */}
-        <div 
+        {/* CARD B: SURVIVOR LEAGUE (Top Right) — survivor pools only */}
+        {_pool.type === 'NFL_SURVIVOR' && (
+        <div
           className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
         >
           <div>
@@ -817,9 +855,11 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             </span>
           </div>
         </div>
+        )}
 
-        {/* CARD C: MARGIN POOL STATS (Bottom Left) */}
-        <div 
+        {/* CARD C: MARGIN POOL STATS (Bottom Left) — margin pools only */}
+        {_pool.type === 'NFL_MARGIN' && (
+        <div
           className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
         >
           <div>
@@ -903,7 +943,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                     <span className="text-muted font-body text-[10px]">active in pool</span>
                   </div>
                   <span className="text-gold-600 dark:text-gold-400 font-display font-bold uppercase tracking-[0.05em] text-[10px]">
-                    {_pool.type === 'NFL_SURVIVOR' ? 'Alive' : 'Joined'}
+                    Joined
                   </span>
                 </div>
               ) : (
@@ -916,26 +956,21 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">Performance Rating</span>
             <span className="text-gold-600 dark:text-gold-400 font-display font-bold uppercase tracking-[0.05em] num">
               {myEntry ? (
-                _pool.type === 'NFL_PICKEM' ? (
-                  `${myEntry.totalScore || 0} Points Accumulated`
-                ) : _pool.type === 'NFL_SURVIVOR' ? (
-                  `${myEntry.strikesUsed || 0} Strikes Used`
-                ) : (
-                  `${myEntry.seasonTotal || 0} Total Margin`
-                )
+                `${myEntry.seasonTotal || 0} Total Margin`
               ) : 'No Entry Found'}
             </span>
           </div>
         </div>
+        )}
 
-        {/* CARD D: GLOBAL STANDINGS (Bottom Right) */}
-        <div 
+        {/* CARD D: POOL STANDINGS (Bottom Right) — this pool's leaderboard */}
+        <div
           className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
         >
           <div>
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Global Standings</h3>
+                <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Pool Standings</h3>
                 <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em] num">Leaderboard Positions</p>
               </div>
               <button 
