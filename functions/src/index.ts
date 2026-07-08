@@ -50,6 +50,9 @@ export { scoreBracketEntries, finalizeTournamentPayouts } from "./bracketScoring
 export { syncNFLScoresJob, importNFLSchedule } from "./nflSchedule";
 export { createNFLPool, joinNFLPool, submitNFLPicks, executeSurvivorRebuy, scoreNFLWeek } from "./nflPools";
 export { sendManualReminder } from "./manualReminders";
+// Sim harness (PLAN-TEST-SUITE 8e/8f): SUPER_ADMIN-only, simRunId-scoped Test
+// Suite mutations + cleanup. See functions/src/simHarness.ts.
+export { simWriteEntries, simUpdatePool, simSeedNFLGames, cleanupSimPool } from "./simHarness";
 
 // --- BILLING & MONETIZATION ---
 export { enforceBillingStatus, validateBillingAccess, redeemCoupon, onPoolParticipantChange, getPoolQuote } from "./billing";
