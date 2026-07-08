@@ -51,7 +51,10 @@ The amount a Member pays the Commissioner to enter a Pool. Money moves outside t
 A Commissioner's identifier on a peer-to-peer payment service (Venmo, Zelle, CashApp, PayPal, Google Pay) displayed to Members so they can pay the Entry Fee. The platform never moves Entry Fee money.
 
 ### Paid Status
-Per-entry bookkeeping flag a Commissioner sets to record that a Member has paid the Entry Fee. Informational only; does not gate participation by itself.
+The authoritative per-Member flag recording that a Member has paid the Entry Fee. Set only by a Commissioner (or Super Admin), server-side; never writable by the Member. Stored on the Member Record. Some Pool types gate play on it (e.g. a Bracket may require `PAID` to submit), so it must stay commissioner-authoritative. Distinct from a Member Payment Claim.
+
+### Member Payment Claim
+A Member's honor-system self-report that they have sent the Entry Fee (`memberReportedPaid` on their own Member Record). Advisory only: it never sets Paid Status and never gates play. A Commissioner reviews claims and confirms them into Paid Status.
 
 ### Billing
 The commissioner-side subscription relationship between a Commissioner and the platform for a Pool (trial, tier, price, coupon) or a Bundle. Paid via Stripe. Entirely separate from Entry Fees, which flow between Members and Commissioners.
@@ -94,3 +97,24 @@ The derived status of a Pool over its life: `OPEN` (accepting entries), `LOCKED`
 
 ### Health Snapshot
 The result of probing external integrations (ESPN API, Firestore, email delivery, Cloud Functions) via the `getAdminHealthSnapshot` callable, surfaced in the Overview tab's API Status Center. A Health Snapshot is a point-in-time reading; persisting a history of snapshots and running them on a schedule is a stated goal.
+
+### Roster
+The canonical list of every Member of a single Pool, together with each Member's Paid Status and Entry Fee owed. Materialized as one Member Record per Member per Pool. The Roster always includes the Commissioner (seeded as a Member on Pool creation) and every Member who has joined, whether or not they have played. It is the single surface a Commissioner uses to see who is in the pool and who has paid, and the same source both the member-facing payments view and the commissioner-facing payments management view read from.
+
+### Member Record
+The one document per Member per Pool (`pools/{poolId}/members/{uid}`) that is the Roster and payment truth for every Pool type. Carries the Member's identity (`userName`), role, join time, Paid Status, any Member Payment Claim, per-square dues for Squares (`unitsOwned`/`unitsPaid`), and rebuy dues where applicable (`rebuyOwed`/`rebuyPaid`, written in the rebuy transaction). Created when a Member joins (and for the owner when the Pool is created), independent of whether they have played. Deliberately separate from the playable Entry: it exists for pick-less Members and Commissioners, and it does not vary in cardinality or shape by Pool type. Membership across `participantIds`, `participations`/`joinedPools`, and Member Records is kept consistent by a single `reconcileMembership` helper that recomputes a Member's state from authoritative Pool state inside each membership write's own transaction.
+
+### Entry
+A Member's playable participation record in one Pool — the picks, bracket, squares, or selections themselves. Its cardinality and shape are per Pool type: some types allow more than one Entry per Member (Bracket, Playoff). Distinct from the Member Record: an Entry is about play, a Member Record is about membership and money. A Member may appear on the Roster (Member Record) before any Entry exists.
+
+### Roster Summary
+A server-maintained projection per Pool (`pools/{poolId}/rosterSummary`) holding aggregate figures — member count, Dues Collected, Dues Expected, paid/unpaid counts, and a derived guest/unclaimed-squares dues bucket (so unclaimed Squares money is not lost when the `"guest"` sentinel is excluded from Member Records). Readable only by the Pool's Members, Commissioner, and admins. Updated in the same transaction as every membership/payment mutation, so it never lags the Member Records it summarizes. Exists so a Member can see the honest pot before the Pool locks, without being granted read access to other Members' raw Entries.
+
+### Pool Homepage
+The member-facing landing view for a single Pool, showing that Pool's standings, charts, deadline state, and only the cards that apply to that Pool's type (e.g. a Survivor card appears only on a Survivor Pool, a Margin card only on a Margin Pool). Every Pool has exactly one Pool Homepage regardless of type. Distinct from the Commissioner Hub, which spans many Pools.
+
+### Commissioner Hub
+The multi-Pool management surface for a Commissioner, listing every Pool they own or manage and summarizing them with Commissioner Aggregate Stats. Reached from the header's "Manage My Pools" entry. Distinct from "My Entries", which lists the Pools a User participates in as a Member. The two are separate destinations even though a Commissioner is usually both.
+
+### Commissioner Aggregate Stats
+The server-maintained rollup describing a Commissioner's footprint across all their Pools: number of Pools managed, total Members, Dues Collected, Dues Expected, and total Payouts recorded. Maintained by a Cloud Function that triggers on Member Record writes (membership/payment changes), not on Entry pick/score writes; never trusted from a client-computed blob. Dues are computed by per-Pool-type adapters — Squares dues come from per-square units, and rebuy dues (e.g. Survivor rebuys) are included from the payment ledger — so the figures are not a naive `fee × members`. Only Pools passing the shared inclusion predicate count (excluding COMPLETED, archived, CANCELED, ADMIN_CLOSE, and `sim-*` test pools). "Revenue" language is avoided on Commissioner surfaces because Entry Fees move peer-to-peer and the platform never holds the money — the honest words are Dues Collected and Dues Expected.
