@@ -36,6 +36,13 @@ Branch: `feat/pool-homepage-v2` (off `feat/commissioner-dash`, which has the sla
 - Verified in preview with seeded `weeklyResults`. app+fn tsc + 332 fn + 244 app tests green.
 - Scope: homepage metrics are per-user *within the pool* (from `myEntry`/entries). The cross-pool per-user aggregate (`users/{uid}/performance/*`, recompute-from-authoritative via `resultsVersion`) is Phase E (profiles need cross-pool).
 
+**Phase E — Player Profiles (commit b2c7d06)**
+- `functions/userProfile.ts`: `recomputeUserProfile` → sanitized `publicProfiles/{uid}` (real cross-pool overall accuracy, weekly record, points, pools/seasons; only scored/reveal-safe weeks). `onEntryChangedRecomputeProfile` trigger (bounded per user) + `recomputeMyProfile` callable. Rules: publicProfiles public read, server-write-only. dbService `subscribeToPublicProfile`.
+- `PlayerProfile` page at **`/profile/:uid`**: real header stats + performance chart (weekly accuracy) + weekly-record table. **Honest stubs** for Team-by-Team, Profit, Achievements (need per-pick results / payout ledger / the achievements feature). Verified in preview (accuracy 67%, weekly 11/16..10/16, chart).
+- **Phase E follow-ups (need more backend):** NFL finalize lifecycle distinct from admin close; `PAYOUT_PAID/UNPAID` events + Profit; per-pick result persistence (for Team-by-Team + full pick history); reveal-gated detailed pick history; Achievements feature.
+
+## Effort complete: Phases 0–E built (F deferred). New composite indexes on deploy: consensus (`pools` type+season, `nfl_games` season+seasonType+week); profiles use `users/{uid}/participations` (no composite). New scheduled jobs: `consensusRefreshJob` (*/10), `syncWinProbabilityJob` (*/5). New triggers: `onEntryChangedRecomputeProfile`. Deploy functions + rules together; add indexes when Firebase logs them.
+
 ## Deploy note (important)
 The Phase 0 entry-read rule is net-safer than today (plain members already can't collection-query entries pre-lock; this only removes the non-member post-lock hole). Safe to deploy with the functions/rules bundle. **Residual (round 5):** in PER_GAME-lock pools a participant can still read another participant's later-game picks post-week-lock via raw entry reads — fully closed only when the **server consensus/standings projection** (Phase C/D) replaces client entry reads. Track that; don't consider per-game reveal safety complete until then.
 
