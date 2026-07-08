@@ -23,6 +23,13 @@ Branch: `feat/pool-homepage-v2` (off `feat/commissioner-dash`, which has the sla
 - Verified in preview: ticker live/final/scheduled; clicking SF@GB switched the focus panel to SF 24 @ GB 20 FINAL. App tests 244 + build green.
 - **Still fake in Card A (deleted/replaced in Phase C/D):** the "Win Probability" tile + graph are the old fabricated values; per-game **Consensus** + **real win-prob** content is Phase C.
 
+**Phase C — Consensus + real Live Win Probability (commit 4bbb256)**
+- `shared/consensus.ts` pure tally (selfcheck passes). `functions/consensus.ts`: `recomputeWeekConsensus` (idempotent per-week full recompute) → Pool Consensus (`pools/{id}/consensus/{gameId}`, member read, post-lock, per-pool lock-gated) + Site-Wide (`consensus/{season_seasonType_week}/{poolType}/{gameId}`, public, published only after kickoff, aggregate-only). `consensusRefreshJob` (*/10) + `recomputeConsensus` callable.
+- `functions/winProbability.ts`: `syncWinProbabilityJob` (*/5) — ESPN's SEPARATE summary winprobability endpoint per in-progress game, isolated from scores, stored `nfl_games/{id}/winprob/current`.
+- Rules for consensus (pool member / site public) + winprob (public), server-write-only. dbService subscriptions. Bento: fake "Win Probability" tile DELETED, replaced with real Consensus (Pool + Site-Wide) + Live Win Prob + honest empty state (verified in preview). fn 332 + app 244 tests green.
+- **Populates only after the CFs deploy + run** (pre-deploy = empty state, correct). **Scale note:** consensus is a bounded per-week full recompute; shard-based incrementalization is the scale-up path if pool count grows large.
+- **Composite indexes needed on deploy** (Firebase will log the exact links): `pools` (type ==, season ==); `nfl_games` (season ==, seasonType ==, week ==). Add them or the jobs error.
+
 ## Deploy note (important)
 The Phase 0 entry-read rule is net-safer than today (plain members already can't collection-query entries pre-lock; this only removes the non-member post-lock hole). Safe to deploy with the functions/rules bundle. **Residual (round 5):** in PER_GAME-lock pools a participant can still read another participant's later-game picks post-week-lock via raw entry reads — fully closed only when the **server consensus/standings projection** (Phase C/D) replaces client entry reads. Track that; don't consider per-game reveal safety complete until then.
 
