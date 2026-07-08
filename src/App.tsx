@@ -17,6 +17,7 @@ const CreatePoolSelection = React.lazy(() => import('./components/CreatePoolSele
 const BrowsePools = React.lazy(() => import('./components/BrowsePools').then(m => ({ default: m.BrowsePools })));
 const ParticipantDashboard = React.lazy(() => import('./components/ParticipantDashboard').then(m => ({ default: m.ParticipantDashboard })));
 const DevDashboardPreview = React.lazy(() => import('./pages/DevDashboardPreview').then(m => ({ default: m.DevDashboardPreview })));
+const PlayerProfile = React.lazy(() => import('./pages/PlayerProfile').then(m => ({ default: m.PlayerProfile })));
 const FeaturesPage = React.lazy(() => import('./components/FeaturesPage').then(m => ({ default: m.FeaturesPage })));
 const PrivacyPage = React.lazy(() => import('./components/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
 const TermsPage = React.lazy(() => import('./components/TermsPage').then(m => ({ default: m.TermsPage })));
@@ -384,6 +385,9 @@ const App: React.FC = () => {
 
           {/* Dev-only design preview (mock data, no auth) — see /dev/dashboards */}
           <Route path="/dev/dashboards" element={<DevDashboardPreview />} />
+
+          {/* Player Profile (public projection) */}
+          <Route path="/profile/:uid" element={<PlayerProfile />} />
 
           {/* Pool View */}
           <Route path="/pool/:id" element={

@@ -98,3 +98,6 @@ export { backfillMemberRecords } from "./migrations/backfillMemberRecords";
 export { consensusRefreshJob, recomputeConsensus } from "./consensus";
 export { syncWinProbabilityJob } from "./winProbability";
 
+// --- PLAYER PROFILES (ADR 0004) ---
+export { onEntryChangedRecomputeProfile, recomputeMyProfile } from "./userProfile";
+

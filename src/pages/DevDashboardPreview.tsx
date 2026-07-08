@@ -8,6 +8,20 @@ import { NFLUserBentoDashboard } from '../components/NFLPoolDashboard/NFLUserBen
 import { NFLPoolRules } from '../components/NFLPoolDashboard/NFLPoolRules';
 import { NFLManagerView } from '../components/NFLPoolDashboard/NFLManagerView';
 import { PaymentsPanel } from '../components/PaymentsPanel';
+import { PlayerProfile } from './PlayerProfile';
+
+const mockProfile = {
+  uid: 'demo', userName: 'Kevin Struck',
+  overall: { accuracy: 67, correct: 96, total: 144, points: 96, poolsEntered: 3, seasonsPlayed: 1 },
+  weekly: [
+    { season: '2026', week: 1, poolName: "Kevin's Weekly Pick'em", correct: 11, total: 16, points: 11 },
+    { season: '2026', week: 2, poolName: "Kevin's Weekly Pick'em", correct: 9, total: 16, points: 9 },
+    { season: '2026', week: 3, poolName: "Kevin's Weekly Pick'em", correct: 12, total: 16, points: 12 },
+    { season: '2026', week: 4, poolName: "Kevin's Weekly Pick'em", correct: 13, total: 16, points: 13 },
+    { season: '2026', week: 5, poolName: "Kevin's Weekly Pick'em", correct: 10, total: 16, points: 10 },
+  ],
+  teamByTeam: [], profit: null,
+};
 
 const mkPool = (id: string, name: string, type: string, players: number, fee: number, status = 'OPEN'): Pool => ({
   id, name, type, status, ownerId: 'demo', managerUid: 'demo',
@@ -79,7 +93,7 @@ const rosterEntries = [
 const noop = () => {};
 
 export const DevDashboardPreview: React.FC = () => {
-  const [view, setView] = useState<'hub' | 'homepage' | 'rules' | 'roster'>('hub');
+  const [view, setView] = useState<'hub' | 'homepage' | 'rules' | 'roster' | 'profile'>('hub');
   const [week, setWeek] = useState(1);
   const seasonOpen = 1_800_000_000_000; // fixed future epoch (Jan 2027) -> "editable until" state
   return (
@@ -95,10 +109,13 @@ export const DevDashboardPreview: React.FC = () => {
             <button onClick={() => setView('homepage')} className={`px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.08em] border ${view === 'homepage' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border-gold-500/40' : 'bg-surface text-muted border-line'}`}>Pool Homepage</button>
             <button onClick={() => setView('rules')} className={`px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.08em] border ${view === 'rules' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border-gold-500/40' : 'bg-surface text-muted border-line'}`}>Rules Tab</button>
             <button onClick={() => setView('roster')} className={`px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.08em] border ${view === 'roster' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border-gold-500/40' : 'bg-surface text-muted border-line'}`}>Payments / Roster</button>
+            <button onClick={() => setView('profile')} className={`px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.08em] border ${view === 'profile' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border-gold-500/40' : 'bg-surface text-muted border-line'}`}>Player Profile</button>
           </div>
         </div>
 
-        {view === 'hub' ? (
+        {view === 'profile' ? (
+          <PlayerProfile previewData={mockProfile} />
+        ) : view === 'hub' ? (
           <GlobalCommissionerDashboard user={mockUser} managedPools={mockPools} />
         ) : view === 'rules' ? (
           <NFLPoolRules pool={homepagePool} isManager={true} onEditRules={noop} lockTime={seasonOpen} />

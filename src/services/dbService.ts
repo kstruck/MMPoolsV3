@@ -446,6 +446,12 @@ export const dbService = {
         return onSnapshot(ref, (snap) => callback(snap.exists() ? snap.data() : null), () => callback(null));
     },
 
+    // Player Profile projection (ADR 0004) — sanitized public stats.
+    subscribeToPublicProfile: (uid: string, callback: (data: any | null) => void) => {
+        const ref = doc(db, 'publicProfiles', uid);
+        return onSnapshot(ref, (snap) => callback(snap.exists() ? { uid, ...snap.data() } : null), () => callback(null));
+    },
+
     subscribeToPropCard: (poolId: string, userId: string, callback: (card: PropCard | null) => void) => {
         const docRef = doc(db, 'pools', poolId, 'propCards', userId);
         return onSnapshot(docRef, (doc) => {

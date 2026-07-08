@@ -31,6 +31,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // PLAYER PROFILES (ADR 0004) — sanitized public projection (only aggregate + scored data;
+    // never the private per-user docs). Public read; server-written only.
+    match /publicProfiles/{uid} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     function isSuperAdmin() {
       return request.auth != null && request.auth.token.get('role', '') == 'SUPER_ADMIN';
     }
