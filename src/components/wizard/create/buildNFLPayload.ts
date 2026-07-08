@@ -31,6 +31,8 @@ export function buildNFLPayload(
     league: 'NFL',
     name: v.name,
     season: v.season != null && v.season !== '' ? String(v.season) : undefined,
+    // 1=preseason, 2=regular, 3=postseason; select fields deliver strings.
+    seasonType: v.seasonType ? Number(v.seasonType) : undefined,
     managerName: v.managerName || undefined,
     contactEmail: v.contactEmail || undefined,
     ...legacyHandles,

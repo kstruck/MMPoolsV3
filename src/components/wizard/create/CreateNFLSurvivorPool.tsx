@@ -4,7 +4,7 @@ import { dbService } from '../../../services/dbService';
 import { survivorCreateInputSchema } from '@shared/schemas';
 import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
-import { TextField, NumberField, CheckboxField } from '../fields';
+import { TextField, NumberField, CheckboxField, SelectField } from '../fields';
 import type { WizardStepDef } from '../types';
 import { buildNFLPayload } from './buildNFLPayload';
 
@@ -19,6 +19,15 @@ function StepSurvivorRules() {
       <h3 className="mb-1 text-lg font-bold text-white">Survivor rules</h3>
       <p className="mb-5 text-sm text-slate-400">Season, strikes, and buy-backs.</p>
       <TextField name="season" label="Season" placeholder="2025" />
+      <SelectField
+        name="seasonType"
+        label="Season type"
+        options={[
+          { value: '1', label: 'Preseason' },
+          { value: '2', label: 'Regular season' },
+          { value: '3', label: 'Postseason' },
+        ]}
+      />
       <div className="grid grid-cols-2 gap-x-4">
         <NumberField name="settings.maxStrikes" label="Max strikes (0 = sudden death)" min={0} />
         <NumberField name="settings.maxRebuys" label="Max rebuys" min={0} />
@@ -35,6 +44,7 @@ const defaultValues: Record<string, unknown> = {
   type: 'NFL_SURVIVOR',
   name: '', managerName: '', contactEmail: '', isPublic: true,
   season: '2025',
+  seasonType: '2',
   paymentInstructions: '',
   paymentHandles: { venmo: '', zelle: '', cashapp: '', paypal: '', googlePay: '' },
   branding: { logoUrl: '', primaryColor: '', secondaryColor: '' },

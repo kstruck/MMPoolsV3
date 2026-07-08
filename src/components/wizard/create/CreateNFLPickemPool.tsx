@@ -23,6 +23,15 @@ function StepPickemRules() {
       <p className="mb-5 text-sm text-slate-400">Season and how picks lock and score.</p>
       <TextField name="season" label="Season" placeholder="2025" />
       <SelectField
+        name="seasonType"
+        label="Season type"
+        options={[
+          { value: '1', label: 'Preseason' },
+          { value: '2', label: 'Regular season' },
+          { value: '3', label: 'Postseason' },
+        ]}
+      />
+      <SelectField
         name="settings.lockMode"
         label="Lock mode"
         options={[
@@ -48,6 +57,7 @@ const defaultValues: Record<string, unknown> = {
   type: 'NFL_PICKEM',
   name: '', managerName: '', contactEmail: '', isPublic: true,
   season: '2025',
+  seasonType: '2',
   paymentInstructions: '',
   paymentHandles: { venmo: '', zelle: '', cashapp: '', paypal: '', googlePay: '' },
   branding: { logoUrl: '', primaryColor: '', secondaryColor: '' },

@@ -20,6 +20,15 @@ function StepMarginRules() {
       <p className="mb-5 text-sm text-slate-400">Season and payout cadence.</p>
       <TextField name="season" label="Season" placeholder="2025" />
       <SelectField
+        name="seasonType"
+        label="Season type"
+        options={[
+          { value: '1', label: 'Preseason' },
+          { value: '2', label: 'Regular season' },
+          { value: '3', label: 'Postseason' },
+        ]}
+      />
+      <SelectField
         name="settings.payoutMode"
         label="Payout mode"
         options={[
@@ -36,6 +45,7 @@ const defaultValues: Record<string, unknown> = {
   type: 'NFL_MARGIN',
   name: '', managerName: '', contactEmail: '', isPublic: true,
   season: '2025',
+  seasonType: '2',
   paymentInstructions: '',
   paymentHandles: { venmo: '', zelle: '', cashapp: '', paypal: '', googlePay: '' },
   branding: { logoUrl: '', primaryColor: '', secondaryColor: '' },
