@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import type { Pool, User, NFLGame, WeeklyRecap } from '../types';
 import { GlobalCommissionerDashboard } from '../components/Dashboards/GlobalCommissionerDashboard';
 import { NFLUserBentoDashboard } from '../components/NFLPoolDashboard/NFLUserBentoDashboard';
+import { NFLPoolRules } from '../components/NFLPoolDashboard/NFLPoolRules';
 
 const mkPool = (id: string, name: string, type: string, players: number, fee: number, status = 'OPEN'): Pool => ({
   id, name, type, status, ownerId: 'demo', managerUid: 'demo',
@@ -60,8 +61,9 @@ const homepagePool = mkPool('hp', "Kevin's 2026 NFL Weekly Pick'em", 'NFL_PICKEM
 const noop = () => {};
 
 export const DevDashboardPreview: React.FC = () => {
-  const [view, setView] = useState<'hub' | 'homepage'>('hub');
+  const [view, setView] = useState<'hub' | 'homepage' | 'rules'>('hub');
   const [week, setWeek] = useState(1);
+  const seasonOpen = 1_800_000_000_000; // fixed future epoch (Jan 2027) -> "editable until" state
   return (
     <div className="min-h-screen bg-page text-[color:var(--text)] p-6 md:p-10">
       <div className="max-w-7xl mx-auto">
@@ -73,11 +75,14 @@ export const DevDashboardPreview: React.FC = () => {
           <div className="flex gap-2">
             <button onClick={() => setView('hub')} className={`px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.08em] border ${view === 'hub' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border-gold-500/40' : 'bg-surface text-muted border-line'}`}>Commissioner Hub</button>
             <button onClick={() => setView('homepage')} className={`px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.08em] border ${view === 'homepage' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border-gold-500/40' : 'bg-surface text-muted border-line'}`}>Pool Homepage</button>
+            <button onClick={() => setView('rules')} className={`px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.08em] border ${view === 'rules' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border-gold-500/40' : 'bg-surface text-muted border-line'}`}>Rules Tab</button>
           </div>
         </div>
 
         {view === 'hub' ? (
           <GlobalCommissionerDashboard user={mockUser} managedPools={mockPools} />
+        ) : view === 'rules' ? (
+          <NFLPoolRules pool={homepagePool} isManager={true} onEditRules={noop} lockTime={seasonOpen} />
         ) : (
           <NFLUserBentoDashboard
             pool={homepagePool}

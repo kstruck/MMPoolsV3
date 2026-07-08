@@ -1,13 +1,17 @@
 import React from 'react';
-import { HelpCircle, Shield, Award, Calendar, DollarSign, RefreshCw, Zap, Moon, Star, Trophy } from 'lucide-react';
+import { HelpCircle, Shield, Award, Calendar, DollarSign, RefreshCw, Zap, Moon, Star, Trophy, Lock, Settings } from 'lucide-react';
 import type { Pool } from '../../types';
 import { PayoutsPanel } from '../PayoutsPanel';
 
 interface NFLPoolRulesProps {
   pool: Pool;
+  isManager?: boolean;
+  onEditRules?: () => void;
+  /** Epoch ms of the season's first kickoff. Rules edits close at this time. */
+  lockTime?: number | null;
 }
 
-export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool }) => {
+export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onEditRules, lockTime }) => {
   const castPool = pool as any;
   const type = pool.type;
   const settings = castPool.settings || {};
@@ -18,8 +22,41 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool }) => {
   const branding = castPool.branding || {};
   const primaryAccent = branding.secondaryColor || '#C9A867';
 
+  const locked = typeof lockTime === 'number' && Date.now() >= lockTime;
+  const lockLabel = typeof lockTime === 'number'
+    ? new Date(lockTime).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+    : null;
+
   return (
     <div className="max-w-4xl mx-auto space-y-8">
+      {/* Commissioner edit banner — rules are editable until the first game of the season */}
+      {isManager && (
+        <div className={`rounded-xl p-5 border flex flex-wrap items-center justify-between gap-4 ${locked ? 'bg-surface border-line' : 'bg-gold-400/5 border-gold-500/30'}`}>
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-lg border ${locked ? 'bg-card border-line text-muted' : 'bg-gold-400/10 border-gold-500/30 text-gold-700 dark:text-gold-400'}`}>
+              {locked ? <Lock size={18} /> : <Settings size={18} />}
+            </div>
+            <div>
+              <p className="font-display font-bold uppercase text-[13px] tracking-[0.04em] text-[color:var(--text)]">
+                {locked ? 'Rules are locked' : 'You are the commissioner'}
+              </p>
+              <p className="text-[12px] text-muted font-body">
+                {locked
+                  ? 'The season has started — rules can no longer be changed.'
+                  : lockLabel ? <>Editable until first kickoff · <span className="text-gold-700 dark:text-gold-400 font-bold">{lockLabel}</span></> : 'Edit your pool rules and settings.'}
+              </p>
+            </div>
+          </div>
+          {!locked && onEditRules && (
+            <button
+              onClick={onEditRules}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-navy-800 hover:bg-navy-700 text-white font-display font-bold uppercase text-[11px] tracking-[0.08em] transition-colors"
+            >
+              <Settings size={14} /> Edit Rules &amp; Settings
+            </button>
+          )}
+        </div>
+      )}
       {/* Introduction Card */}
       <div className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden">
         <div

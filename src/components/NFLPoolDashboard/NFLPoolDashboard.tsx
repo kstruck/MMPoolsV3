@@ -128,6 +128,13 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     return weeklyGames.reduce((prev, curr) => prev.startTime < curr.startTime ? prev : curr);
   }, [weeklyGames]);
 
+  // Season opener — the first kickoff of the whole season. Rules edits lock here.
+  const seasonOpenTime = useMemo(() => {
+    const seasonGames = games.filter(g => Number(g.seasonType) === Number(castPool.seasonType));
+    if (seasonGames.length === 0) return null;
+    return Math.min(...seasonGames.map(g => g.startTime));
+  }, [games, castPool.seasonType]);
+
   // Share handler
   const handleShare = () => {
     const url = `${window.location.origin}/join/${pool.id}`;
@@ -523,7 +530,12 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 
               {/* TAB 4: RULES */}
               {activeTab === 'rules' && (
-                <NFLPoolRules pool={pool} />
+                <NFLPoolRules
+                  pool={pool}
+                  isManager={isManager}
+                  onEditRules={() => setActiveTab('manager')}
+                  lockTime={seasonOpenTime}
+                />
               )}
 
               {/* TAB 5: PAYMENTS — member money view (status, pot, ledger) */}
