@@ -48,7 +48,10 @@ export interface NFLPickemPool {
   season: string;
   createdAt: number;
   isLocked: boolean;
-  status?: 'active' | 'archived';
+  // Raw stored pool status. Distinct from the DERIVED lifecycle label from
+  // getPoolLifecycleState (which adds CLOSED for admin-close). Aligned to the values
+  // actually written by the create/lifecycle paths.
+  status?: 'OPEN' | 'LOCKED' | 'LIVE' | 'FINAL' | 'CANCELED' | 'COMPLETED' | 'archived';
   isPublic?: boolean;
   entryCount?: number;
 
@@ -91,7 +94,10 @@ export interface NFLSurvivorPool {
   season: string;
   createdAt: number;
   isLocked: boolean;
-  status?: 'active' | 'archived';
+  // Raw stored pool status. Distinct from the DERIVED lifecycle label from
+  // getPoolLifecycleState (which adds CLOSED for admin-close). Aligned to the values
+  // actually written by the create/lifecycle paths.
+  status?: 'OPEN' | 'LOCKED' | 'LIVE' | 'FINAL' | 'CANCELED' | 'COMPLETED' | 'archived';
   isPublic?: boolean;
   entryCount?: number;
 
@@ -135,7 +141,10 @@ export interface NFLMarginPool {
   season: string;
   createdAt: number;
   isLocked: boolean;
-  status?: 'active' | 'archived';
+  // Raw stored pool status. Distinct from the DERIVED lifecycle label from
+  // getPoolLifecycleState (which adds CLOSED for admin-close). Aligned to the values
+  // actually written by the create/lifecycle paths.
+  status?: 'OPEN' | 'LOCKED' | 'LIVE' | 'FINAL' | 'CANCELED' | 'COMPLETED' | 'archived';
   isPublic?: boolean;
   entryCount?: number;
 

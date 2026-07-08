@@ -10,6 +10,7 @@ import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } 
 import { isPoolType, type PoolType } from "./shared/poolTypes";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
 import type { MemberRecord } from "./shared/memberRecord";
+import { effectiveWeekLockAt, isGameLocked as isGameLockedAt } from "./lib/effectiveLock";
 import {
   validateCreateInput,
   assertNotBanned,
@@ -302,25 +303,11 @@ export const submitNFLPicks = onCall(async (request) => {
     throw new HttpsError('failed-precondition', 'SPREADS_NOT_LOCKED: Picks cannot be submitted until all game spreads for the week are finalized and locked.');
   }
 
-  // 2. Determine lock context
-  const lockBufferMs = (pool.settings?.lockBufferMinutes ?? 5) * 60 * 1000;
-
-  // Commissioner deadline extension (extendWeekDeadline callable) overrides the
-  // computed week lock; per-game locks below also respect it as a floor.
-  const weekLockOverride: number | undefined = pool.settings?.weekLockOverrides?.[week];
-
-  // Check if first game of the week has kicked off
-  const earliestGameTime = Math.min(...games.map(g => g.startTime));
-  const computedWeekLock = earliestGameTime - lockBufferMs;
-  const effectiveWeekLock = weekLockOverride !== undefined ? Math.max(weekLockOverride, computedWeekLock) : computedWeekLock;
+  // 2. Determine lock context — single source of truth (effectiveLock helper, ADR 0004).
+  // Folds in lock buffer + per-game kickoff + commissioner week override; every per-game
+  // check below uses isGameLockedAt so the override is always respected.
+  const effectiveWeekLock = effectiveWeekLockAt(games.map(g => g.startTime), week, pool.settings);
   const weekLocked = now >= effectiveWeekLock;
-
-  // A game is locked at its own kickoff (minus buffer), unless the commissioner
-  // extended this week's deadline past that time
-  const gameLockTime = (game: NFLGame): number => {
-    const base = game.startTime - lockBufferMs;
-    return weekLockOverride !== undefined ? Math.max(base, weekLockOverride) : base;
-  };
 
   // Write variables inside transactions
   const entryRef = poolRef.collection('entries').doc(uid);
@@ -359,7 +346,7 @@ export const submitNFLPicks = onCall(async (request) => {
           const game = games.find(g => g.id === gameId);
           if (!game) throw new HttpsError('invalid-argument', `Game ${gameId} not found.`);
 
-          const isGameLocked = now >= (game.startTime - lockBufferMs);
+          const isGameLocked = isGameLockedAt(now, game.startTime, week, pool.settings);
           const oldPick = existingEntry?.picks?.[gameId];
 
           if (isGameLocked && oldPick !== pickedTeam) {
@@ -428,7 +415,7 @@ export const submitNFLPicks = onCall(async (request) => {
         throw new HttpsError('failed-precondition', 'WEEK_LOCKED: Survivor pools lock at the kickoff of the first game.');
       }
 
-      const isGameLocked = now >= (game.startTime - lockBufferMs);
+      const isGameLocked = isGameLockedAt(now, game.startTime, week, pool.settings);
       const oldPick = survivorEntry.picks?.[week];
       if (!isWeeklyLock && isGameLocked && oldPick !== teamPicked) {
         throw new HttpsError('failed-precondition', `GAME_LOCKED: The game for ${teamPicked} has already locked.`);
@@ -480,7 +467,7 @@ export const submitNFLPicks = onCall(async (request) => {
         throw new HttpsError('failed-precondition', 'WEEK_LOCKED: Margin pools lock at the kickoff of the first game.');
       }
 
-      const isGameLocked = now >= (game.startTime - lockBufferMs);
+      const isGameLocked = isGameLockedAt(now, game.startTime, week, pool.settings);
       const oldPick = marginEntry.picks?.[week];
       if (!isWeeklyLock && isGameLocked && oldPick !== teamPicked) {
         throw new HttpsError('failed-precondition', `GAME_LOCKED: The game for ${teamPicked} has already locked.`);

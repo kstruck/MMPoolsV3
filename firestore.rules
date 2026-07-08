@@ -187,15 +187,30 @@ service cloud.firestore {
         allow write: if false; // Only via Cloud Functions
       }
 
-      // BRACKET/PLAYOFF ENTRIES
+      // BRACKET/PLAYOFF/NFL ENTRIES
+      // A member always reads their OWN entry. Reading OTHER members' entries requires
+      // participation in the pool AND the pool being locked/final — the previous rule let
+      // ANY authenticated user read all entries once locked (a pick-visibility hole; ADR 0004
+      // finding). NOTE: an entry doc bundles all game picks, so in PER_GAME-lock pools this
+      // coarse "locked" gate can still expose a participant's later-game picks; the full
+      // per-game reveal-safe path is the server consensus/standings projection (later phase),
+      // after which non-owner raw entry reads tighten further.
       match /entries/{entryId} {
         allow read: if request.auth != null && (
           request.auth.uid == resource.data.ownerUid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
-          get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'LOCKED' ||
-          get(/databases/$(database)/documents/pools/$(poolId)).data.isLocked == true ||
-          isSuperAdmin()
+          isSuperAdmin() ||
+          (
+            request.auth.uid in get(/databases/$(database)/documents/pools/$(poolId)).data.participantIds &&
+            (
+              get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'LOCKED' ||
+              get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'LIVE' ||
+              get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'FINAL' ||
+              get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'COMPLETED' ||
+              get(/databases/$(database)/documents/pools/$(poolId)).data.isLocked == true
+            )
+          )
         );
         // Entries are written server-side (bracketEntries/poolOps callables) or by
         // SUPER_ADMIN (Test Suite). The former sim-* client-write branch let any authed

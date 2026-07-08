@@ -11,6 +11,24 @@ const safeInt = (val: any): number => {
 };
 
 /**
+ * Map an ESPN status to our NFLGame status. ESPN `type.state` is only pre/in/post,
+ * so canceled/postponed/suspended must be read from `type.name` (e.g. STATUS_CANCELED).
+ * A canceled game must NOT map to FINAL (it would score 0-0); a postponed/suspended game
+ * stays SCHEDULED (won't score) and self-heals when ESPN reschedules it. Pure + testable.
+ */
+export function mapEspnGameStatus(
+  state: string | undefined,
+  name: string | undefined,
+): 'SCHEDULED' | 'IN_PROGRESS' | 'FINAL' | 'CANCELLED' {
+  const n = (name || '').toUpperCase();
+  if (n.includes('CANCEL') || n.includes('FORFEIT')) return 'CANCELLED';
+  if (n.includes('POSTPONED') || n.includes('DELAYED') || n.includes('SUSPENDED')) return 'SCHEDULED';
+  if (state === 'post') return 'FINAL';
+  if (state === 'in') return 'IN_PROGRESS';
+  return 'SCHEDULED';
+}
+
+/**
  * Fetch a weekly NFL schedule from the official ESPN Scoreboard API.
  * seasonType: 1 = Preseason, 2 = Regular Season, 3 = Postseason
  */
@@ -79,9 +97,7 @@ export async function fetchNFLWeekSchedule(
 
       const gameId = `espn_${event.id}`;
       const startTime = new Date(competition.date || event.date).getTime();
-      const statusType = event.status?.type?.state || 'pre';
-      const status: 'SCHEDULED' | 'IN_PROGRESS' | 'FINAL' | 'CANCELLED' =
-        statusType === 'post' ? 'FINAL' : statusType === 'in' ? 'IN_PROGRESS' : 'SCHEDULED';
+      const status = mapEspnGameStatus(event.status?.type?.state, event.status?.type?.name);
 
       // Check if this is a Monday Night Football game (MNF) - usually Monday in US, which starts after UTC Monday night or Tuesday early
       const startDateObj = new Date(startTime);
@@ -222,10 +238,12 @@ export const syncNFLScoresJob = onSchedule('*/5 * * * *', async (event) => {
   const db = admin.firestore();
   const now = Date.now();
 
-  // Find games that are either in progress, final but not synced/completed in scoring,
-  // or scheduled to start soon (within next 2 hours or in the last 12 hours)
+  // Only games in the active window: started within the last 24h (still live or
+  // recently final) through the next 2h. The lower bound stops the 5-minute job from
+  // dragging the whole past season into every run (a single-field range is allowed).
   const activeGamesSnap = await db.collection('nfl_games')
-    .where('startTime', '<=', now + 2 * 60 * 60 * 1000) // starts in next 2 hours
+    .where('startTime', '>=', now - 24 * 60 * 60 * 1000)
+    .where('startTime', '<=', now + 2 * 60 * 60 * 1000)
     .get();
 
   if (activeGamesSnap.empty) {
