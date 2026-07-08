@@ -89,3 +89,8 @@ export { extendWeekDeadline, proxyPick, cancelPool, closePool } from "./poolExce
 // --- POOL INVITES (bulk email invites) ---
 export { sendPoolInvites } from "./invites";
 
+// --- MEMBER RECORD ROSTER (ADR 0003) — additive; writer wiring lands separately ---
+export { setPaidStatus } from "./setPaidStatus";
+export { onMemberRecordWrite, onWinnerWrite, onPoolRosterFieldsChange } from "./rosterAggregate";
+export { backfillMemberRecords } from "./migrations/backfillMemberRecords";
+
