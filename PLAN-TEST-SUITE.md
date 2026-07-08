@@ -139,17 +139,22 @@ Root suite 24 files / 230 tests green. In-app confirmation rides on the Phase
    itself. Phases 0-1 complete; next: Phase 2 NFL wave (items 8-16)._
 
 ### Phase 2 — NFL wave (the deadline work)
-_Status 2026-07-07: items 11-14 MERGED + DEPLOYED (PR #150); post-deploy suite
-15/15 — no regressions. Items 8-10 + 16 + first 3 of item 15 implemented — PR
-#151 (`feat/nfl-phase2-harness`): server sim callables (simWriteEntries /
-simUpdatePool / simSeedNFLGames / cleanupSimPool, simRunId trust anchor,
-admin_audit on every attempt), NFL scenario data model, ONE parameterized
-nflSeasonSimulator for all three season types (zero raw writes,
-hydrate-before-cleanup, cleanup in finally), 10 NFL assertion types, runner
-dispatch, starter scenarios (pickem/survivor/margin basic). Emulator
-refusal-path suite authored (needs Java env). Remaining: rest of item 15's
-combinatorial matrix (~34 scenarios) + legacy simulator migration onto the
-guarded callables (8f mandate) — both gated on #151 proving out in-app._
+_Status 2026-07-08: **18/18 confirmed live** (15 original + Pick'em/Survivor/
+Margin basic). Items 11-14 (PR #150), 8-10/16 + starter scenarios (PR #151),
+and a P0 fix (PR #152) all merged + deployed. Emulator refusal-path suite
+authored (needs Java env). Remaining: rest of item 15's combinatorial matrix
+(~34 more scenarios) + legacy simulator migration onto the guarded callables
+(8f mandate)._
+_**P0 found live (PR #152, `55f5340`):** the harness's first-ever real
+`scoreNFLWeek` call threw INTERNAL on every pool type. Firestore rejected the
+weekly-recap doc because `sharpOfWeek`/`closestTiebreaker`/`attritionCount`
+were set to literal `undefined` whenever nothing applied — and `sharpUser` is
+ONLY populated in the Pick'em branch, so this wasn't an edge case: Margin and
+Survivor pools could never have completed a scoring run, ever, and Pick'em
+would fail on any week with no MNF game. Pre-existing bug, invisible until
+this session's simulator was the first thing to ever call the callable in
+anger. Fixed with a pure `buildWeeklyRecap()` helper that omits undefined
+keys; 4 regression tests including an exhaustive input-combination sweep._
 8. **Harness plumbing first** (explicit work items, not assumed):
    a. PoolType union += `NFL_PICKEM | NFL_SURVIVOR | NFL_MARGIN`.
    b. **NFL scenario data model**: extend `TestScenario` so NFL runs are
