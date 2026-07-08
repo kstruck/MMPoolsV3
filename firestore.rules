@@ -12,8 +12,25 @@ service cloud.firestore {
     match /nfl_games/{gameId} {
       allow read: if true;
       allow write: if isSuperAdmin();
+
+      // Live win probability (ADR 0004) — public game info, server-written only.
+      match /winprob/{docId} {
+        allow read: if true;
+        allow write: if false;
+      }
     }
-    
+
+    // SITE-WIDE CONSENSUS (ADR 0004) — server-written post-lock aggregate (counts only, never
+    // individual picks), scoped by pool type. Public read; write server-only.
+    match /consensus/{weekKey}/{poolType}/{gameId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /consensus/{weekKey} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     function isSuperAdmin() {
       return request.auth != null && request.auth.token.get('role', '') == 'SUPER_ADMIN';
     }
@@ -241,6 +258,18 @@ service cloud.firestore {
 
       // ROSTER SUMMARY (member-readable dues projection; server-written only)
       match /rosterSummary/{docId} {
+        allow read: if request.auth != null && (
+          request.auth.uid in get(/databases/$(database)/documents/pools/$(poolId)).data.participantIds ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isSuperAdmin()
+        );
+        allow write: if false;
+      }
+
+      // POOL CONSENSUS (ADR 0004) — server-written post-lock aggregate (counts only, no
+      // individual picks). Readable by the pool's members/owner/admin; write server-only.
+      match /consensus/{gameId} {
         allow read: if request.auth != null && (
           request.auth.uid in get(/databases/$(database)/documents/pools/$(poolId)).data.participantIds ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||

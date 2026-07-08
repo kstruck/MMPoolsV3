@@ -419,6 +419,33 @@ export const dbService = {
         await fn({ poolId, memberUid, isPaid });
     },
 
+    // Pool Consensus (ADR 0004) — server aggregate, post-lock, keyed by gameId. Member-readable.
+    subscribeToPoolConsensus: (poolId: string, callback: (byGame: Record<string, any>) => void) => {
+        const q = query(collection(db, 'pools', poolId, 'consensus'));
+        return onSnapshot(q, (snap) => {
+            const map: Record<string, any> = {};
+            snap.docs.forEach(d => { map[d.id] = d.data(); });
+            callback(map);
+        }, () => callback({}));
+    },
+
+    // Site-Wide Consensus (ADR 0004) — public aggregate per pool type + week.
+    subscribeToSiteConsensus: (season: string, seasonType: number, week: number, poolType: string, callback: (byGame: Record<string, any>) => void) => {
+        const key = `${season}_${seasonType}_${week}`;
+        const q = query(collection(db, 'consensus', key, poolType));
+        return onSnapshot(q, (snap) => {
+            const map: Record<string, any> = {};
+            snap.docs.forEach(d => { map[d.id] = d.data(); });
+            callback(map);
+        }, () => callback({}));
+    },
+
+    // Live Win Probability (ADR 0004) — per-game subcollection, best-effort.
+    subscribeToWinProb: (gameId: string, callback: (data: any | null) => void) => {
+        const ref = doc(db, 'nfl_games', gameId, 'winprob', 'current');
+        return onSnapshot(ref, (snap) => callback(snap.exists() ? snap.data() : null), () => callback(null));
+    },
+
     subscribeToPropCard: (poolId: string, userId: string, callback: (card: PropCard | null) => void) => {
         const docRef = doc(db, 'pools', poolId, 'propCards', userId);
         return onSnapshot(docRef, (doc) => {

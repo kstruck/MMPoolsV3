@@ -94,3 +94,7 @@ export { setPaidStatus } from "./setPaidStatus";
 export { onMemberRecordWrite, onWinnerWrite, onPoolRosterFieldsChange } from "./rosterAggregate";
 export { backfillMemberRecords } from "./migrations/backfillMemberRecords";
 
+// --- CONSENSUS + LIVE WIN PROBABILITY (ADR 0004) ---
+export { consensusRefreshJob, recomputeConsensus } from "./consensus";
+export { syncWinProbabilityJob } from "./winProbability";
+

@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { User as UserType, Pool, NFLGame, WeeklyRecap } from '../../types';
 import { NFLGameTicker } from './NFLGameTicker';
+import { dbService } from '../../services/dbService';
 import { 
   LayoutGrid, 
   CheckCircle2, 
@@ -248,6 +249,25 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     return weeklyGames[0];
   }, [weeklyGames, selectedGameId]);
 
+  // Real Consensus + Live Win Probability (ADR 0004). Server-written; empty until the
+  // consensus/win-prob jobs have run (honest empty state — never fabricated).
+  const [poolConsensus, setPoolConsensus] = useState<Record<string, any>>({});
+  const [siteConsensus, setSiteConsensus] = useState<Record<string, any>>({});
+  const [focusWinProb, setFocusWinProb] = useState<any | null>(null);
+
+  useEffect(() => dbService.subscribeToPoolConsensus(_pool.id, setPoolConsensus), [_pool.id]);
+  useEffect(
+    () => dbService.subscribeToSiteConsensus(String(castPool.season), Number(castPool.seasonType), selectedWeek, _pool.type, setSiteConsensus),
+    [castPool.season, castPool.seasonType, selectedWeek, _pool.type],
+  );
+  useEffect(() => {
+    if (!focusGame) { setFocusWinProb(null); return; }
+    return dbService.subscribeToWinProb(focusGame.id, setFocusWinProb);
+  }, [focusGame?.id]);
+
+  const focusPoolC = focusGame ? poolConsensus[focusGame.id] : null;
+  const focusSiteC = focusGame ? siteConsensus[focusGame.id] : null;
+
   const myPick = useMemo(() => {
     if (!myEntry || !focusGame) return null;
     if (_pool.type === 'NFL_PICKEM') {
@@ -260,19 +280,6 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     return null;
   }, [myEntry, focusGame, _pool.type, selectedWeek]);
 
-  const liveWinProb = useMemo(() => {
-    if (!focusGame || focusGame.status === 'SCHEDULED') return 50;
-    if (focusGame.status === 'FINAL') {
-      const home = focusGame.scores?.home ?? 0;
-      const away = focusGame.scores?.away ?? 0;
-      return home > away ? 100 : 0;
-    }
-    const home = focusGame.scores?.home ?? 0;
-    const away = focusGame.scores?.away ?? 0;
-    const diff = home - away;
-    const prob = 50 + diff * 5;
-    return Math.min(95, Math.max(5, prob));
-  }, [focusGame]);
 
   const survivalLeagueStats = useMemo(() => {
     const total = entries.length;
@@ -333,20 +340,6 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     return history;
   }, [entries.length, selectedWeek, castPool.seasonType]);
 
-  // Data for Win Probability Timeline
-  const winProbabilityHistory = useMemo(() => {
-    const history = [];
-    const targetVal = liveWinProb;
-    const points = 7;
-    const step = (targetVal - 50) / (points - 1);
-    
-    for (let i = 0; i < points; i++) {
-      const noise = Math.sin(i * 1.5) * 6;
-      const val = Math.min(95, Math.max(5, Math.round(50 + step * i + (i > 0 && i < points - 1 ? noise : 0))));
-      history.push({ time: `T${i}`, probability: val });
-    }
-    return history;
-  }, [liveWinProb]);
 
   // Pick Accuracy Ratio Data for PieChart
   const pickAccuracyRatio = useMemo(() => {
@@ -674,27 +667,34 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
                 {/* Live Match Stats / Win Probability Graph */}
                 <div className="grid grid-cols-2 gap-4">
-                  {/* Win Probability Panel */}
+                  {/* Consensus (real pick % — pool + site-wide) + real Live Win Probability.
+                      Empty state until the aggregation jobs have run; never fabricated. */}
                   <div className="bg-page border border-line p-3.5 rounded-xl flex flex-col justify-between">
-                    <div>
-                      <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-0.5">Win Probability</span>
-                      <span className="text-sm font-display font-bold uppercase text-navy-700 dark:text-gold-400 leading-none num">
-                        {focusGame.homeTeam.abbreviation} {liveWinProb}%
-                      </span>
-                    </div>
-                    <div className="relative h-12 w-full mt-2 overflow-hidden rounded-lg bg-surface border border-line">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={winProbabilityHistory} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                          <defs>
-                            <linearGradient id="colorProb" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#C9A867" stopOpacity={0.35}/>
-                              <stop offset="95%" stopColor="#C9A867" stopOpacity={0}/>
-                            </linearGradient>
-                          </defs>
-                          <Area type="monotone" dataKey="probability" stroke="#C9A867" strokeWidth={2} fillOpacity={1} fill="url(#colorProb)" />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
+                    <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-2">Consensus</span>
+                    {(focusPoolC?.total || focusSiteC?.total || focusWinProb) ? (
+                      <div className="space-y-2 text-[11px] font-display font-bold uppercase tracking-[0.04em] num">
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted">Pool</span>
+                          <span className="text-[color:var(--text)]">
+                            {focusPoolC?.total ? `${focusPoolC.awayAbbr} ${focusPoolC.awayPct}% · ${focusPoolC.homeAbbr} ${focusPoolC.homePct}%` : '—'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted">Site-Wide</span>
+                          <span className="text-[color:var(--text)]">
+                            {focusSiteC?.total ? `${focusSiteC.awayAbbr} ${focusSiteC.awayPct}% · ${focusSiteC.homeAbbr} ${focusSiteC.homePct}%` : '—'}
+                          </span>
+                        </div>
+                        {focusWinProb && (
+                          <div className="flex justify-between items-center pt-1 border-t border-line">
+                            <span className="text-muted">Live Win Prob</span>
+                            <span className="text-navy-700 dark:text-gold-400">{focusGame.homeTeam.abbreviation} {focusWinProb.homePct}%</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-faint font-body leading-snug">Pick consensus reveals at kickoff. Live win probability appears once the game is in progress.</p>
+                    )}
                   </div>
 
                   {/* Matchup Odds listings */}
