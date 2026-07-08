@@ -442,3 +442,40 @@ export function computeSurvivorWeekUpdate(
     skipped: false,
   };
 }
+
+/**
+ * Builds a WeeklyRecap doc with only DEFINED optional fields. Firestore's
+ * default `set()` throws on any literal `undefined` field value (no
+ * ignoreUndefinedProperties on this project) — the previous inline object
+ * literal set sharpOfWeek/closestTiebreaker/attritionCount to `undefined`
+ * whenever there was no sharp user, no MNF tiebreaker, or a non-Survivor pool,
+ * which crashed EVERY scoreNFLWeek call that hit any of those (normal) cases.
+ * Found via the NFL Phase-2 simulator's first real invocation of the callable.
+ */
+export function buildWeeklyRecap(params: {
+  poolId: string;
+  week: number;
+  poolType: string;
+  sharpUser: { uid: string; name: string; val: number } | null;
+  closestTie: { uid: string; name: string; diff: number } | null;
+  aliveCount: number;
+  nowMs?: number;
+}): WeeklyRecap {
+  const { poolId, week, poolType, sharpUser, closestTie, aliveCount, nowMs = Date.now() } = params;
+  const recap: WeeklyRecap = {
+    id: `week_${week}`,
+    poolId,
+    week,
+    createdAt: nowMs,
+  };
+  if (sharpUser) {
+    recap.sharpOfWeek = { userId: sharpUser.uid, userName: sharpUser.name, score: sharpUser.val };
+  }
+  if (closestTie) {
+    recap.closestTiebreaker = { userId: closestTie.uid, userName: closestTie.name, diff: closestTie.diff };
+  }
+  if (poolType === 'NFL_SURVIVOR') {
+    recap.attritionCount = aliveCount;
+  }
+  return recap;
+}
