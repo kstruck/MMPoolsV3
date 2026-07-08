@@ -16,6 +16,13 @@ Branch: `feat/pool-homepage-v2` (off `feat/commissioner-dash`, which has the sla
 - Rebuy footer node: Survivor-only, shows a real **date** (first kickoff of `settings.rebuyDeadlineWeek`), hidden on Pick'em/Margin.
 - Live Weekly Pick'em card is full-width; slate is a larger 2-col grid with **inline live/final scores** + LIVE clock, or day/time when scheduled.
 
+**Phase B — live scores + per-game focus (commit 9692541)**
+- `NFLGameTicker`: auto-scrolling live-score ticker across the homepage top, real `nfl_games` data (item 7).
+- Every slate row + ticker game is clickable → sets the focus game (URL `?game=`); the top match panel updates to any chosen game; Back/refresh restore it (item 6 per-game detail; single-`focusGame` model replaced by selectable).
+- Full-week slate = the clickable list view with inline scores (items 2/4/6).
+- Verified in preview: ticker live/final/scheduled; clicking SF@GB switched the focus panel to SF 24 @ GB 20 FINAL. App tests 244 + build green.
+- **Still fake in Card A (deleted/replaced in Phase C/D):** the "Win Probability" tile + graph are the old fabricated values; per-game **Consensus** + **real win-prob** content is Phase C.
+
 ## Deploy note (important)
 The Phase 0 entry-read rule is net-safer than today (plain members already can't collection-query entries pre-lock; this only removes the non-member post-lock hole). Safe to deploy with the functions/rules bundle. **Residual (round 5):** in PER_GAME-lock pools a participant can still read another participant's later-game picks post-week-lock via raw entry reads — fully closed only when the **server consensus/standings projection** (Phase C/D) replaces client entry reads. Track that; don't consider per-game reveal safety complete until then.
 
