@@ -22,13 +22,13 @@ import {
   NFLPickemEntry,
   SurvivorEntry,
   MarginEntry,
-  WeeklyRecap
 } from './nflPoolTypes';
 import {
   scorePickemEntry,
   validateConfidenceValues,
   computeSurvivorWeekUpdate,
   computeMNFTiebreakerTotal,
+  buildWeeklyRecap,
   scoreMarginWeek,
   sortMarginLeaderboard
 } from './nflScoringEngine';
@@ -770,17 +770,12 @@ export const scoreNFLWeek = onCall(async (request) => {
 
   await flushBatch();
 
-  // 4. Generate automated Weekly Recap
+  // 4. Generate automated Weekly Recap. buildWeeklyRecap omits undefined
+  // optional fields — Firestore's set() throws on a literal `undefined` value
+  // (no ignoreUndefinedProperties here), which crashed every prior call that
+  // had no sharp user / no MNF tiebreaker / a non-Survivor pool.
   const recapRef = poolRef.collection('weekly_recaps').doc(`week_${week}`);
-  const recapDoc: WeeklyRecap = {
-    id: `week_${week}`,
-    poolId,
-    week,
-    sharpOfWeek: sharpUser ? { userId: sharpUser.uid, userName: sharpUser.name, score: sharpUser.val } : undefined,
-    closestTiebreaker: closestTie ? { userId: closestTie.uid, userName: closestTie.name, diff: closestTie.diff } : undefined,
-    attritionCount: pool.type === 'NFL_SURVIVOR' ? aliveCount : undefined,
-    createdAt: Date.now()
-  };
+  const recapDoc = buildWeeklyRecap({ poolId, week, poolType: pool.type, sharpUser, closestTie, aliveCount });
   await recapRef.set(recapDoc);
 
   await writeAuditEvent({
