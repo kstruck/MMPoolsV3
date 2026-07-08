@@ -205,6 +205,24 @@ export const joinNFLPool = onCall(async (request) => {
 });
 
 /**
+ * Membership gate for pick submission (PLAN-TEST-SUITE item 11). joinNFLPool is
+ * a separate callable, and before this check submitNFLPicks accepted picks from
+ * ANY authenticated user — writing an entry doc keyed by their uid into a pool
+ * they never joined. Pure and exported for unit tests.
+ */
+export function assertNFLPickMembership(
+  pool: { participantIds?: unknown; ownerId?: string; managerUid?: string; createdByUid?: string },
+  uid: string,
+  tokenRole?: string,
+): void {
+  const isMember = Array.isArray(pool.participantIds) && pool.participantIds.includes(uid);
+  const isOwnerOrManager = pool.ownerId === uid || pool.managerUid === uid || pool.createdByUid === uid;
+  if (!isMember && !isOwnerOrManager && tokenRole !== 'SUPER_ADMIN') {
+    throw new HttpsError('permission-denied', 'NOT_POOL_MEMBER: Join this pool before submitting picks.');
+  }
+}
+
+/**
  * Securely submits picks for an NFL Pool with strict server-side kickoff lock checks.
  */
 export const submitNFLPicks = onCall(async (request) => {
@@ -236,6 +254,8 @@ export const submitNFLPicks = onCall(async (request) => {
   if (!billingCheck.allowed) {
     throw new HttpsError("failed-precondition", billingCheck.reason || "Pool is locked due to billing.");
   }
+
+  assertNFLPickMembership(pool, uid, (request.auth.token as { role?: string })?.role);
 
   const type = pool.type;
   const now = Date.now();
