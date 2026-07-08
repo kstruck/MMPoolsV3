@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { User as UserType, Pool, NFLGame, WeeklyRecap } from '../../types';
+import { NFLGameTicker } from './NFLGameTicker';
 import { 
   LayoutGrid, 
   CheckCircle2, 
@@ -221,8 +223,22 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     return { week: wk, label };
   }, [_pool.type, castPool.settings, _games, castPool.seasonType]);
 
+  // Selected focus game rides in the URL (?game=) so a click updates the top panel and
+  // Back/refresh restore it. Defaults to the live game, else the next kickoff.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedGameId = searchParams.get('game');
+  const selectGame = (gameId: string) => {
+    setSearchParams(prev => {
+      const p = new URLSearchParams(prev);
+      p.set('game', gameId);
+      return p;
+    }, { replace: true });
+  };
+
   const focusGame = useMemo(() => {
     if (weeklyGames.length === 0) return null;
+    const selected = selectedGameId ? weeklyGames.find(g => g.id === selectedGameId) : null;
+    if (selected) return selected;
     const live = weeklyGames.find(g => g.status === 'IN_PROGRESS');
     if (live) return live;
     const upcoming = weeklyGames.filter(g => g.status === 'SCHEDULED');
@@ -230,7 +246,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       return upcoming.reduce((prev, curr) => prev.startTime < curr.startTime ? prev : curr);
     }
     return weeklyGames[0];
-  }, [weeklyGames]);
+  }, [weeklyGames, selectedGameId]);
 
   const myPick = useMemo(() => {
     if (!myEntry || !focusGame) return null;
@@ -475,8 +491,12 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   }, [entries, _pool.type, user]);
 
   return (
+    <>
+      {/* Live-score ticker across the top of the pool homepage (item 7) */}
+      <NFLGameTicker games={weeklyGames} onSelectGame={selectGame} />
+
     <div className="grid grid-cols-1 xl:grid-cols-5 gap-8 items-stretch">
-      
+
       {/* 1. Sleek Left Navigation Sidebar (Bento Grid Block) */}
       <div className="xl:col-span-1 flex flex-col justify-between bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150">
         <div className="space-y-8">
@@ -707,7 +727,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                         const final = g.status === 'FINAL';
                         const showScore = live || final;
                         return (
-                          <div key={key} className={`flex items-center justify-between px-4 py-3 rounded-lg border ${isFocus ? 'border-gold-500/40 bg-gold-400/5' : 'border-line bg-page'}`}>
+                          <button key={key} onClick={() => selectGame(g.id)} className={`w-full text-left flex items-center justify-between px-4 py-3 rounded-lg border transition-colors hover:border-gold-500/40 ${isFocus ? 'border-gold-500/40 bg-gold-400/5' : 'border-line bg-page'}`}>
                             <span className="text-sm font-display font-bold uppercase text-[color:var(--text)] num tracking-[0.04em]">
                               {g.awayTeam.abbreviation}{showScore && <span className="text-gold-600 dark:text-gold-400"> {g.scores?.away ?? 0}</span>}
                               <span className="text-faint mx-1.5">@</span>
@@ -722,7 +742,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                                 <span className="text-muted">{new Date(g.startTime).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}</span>
                               )}
                             </span>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
@@ -1216,5 +1236,6 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       </div>
 
     </div>
+    </>
   );
 };
