@@ -12,22 +12,47 @@ Branch: `feat/commissioner-dash` (off `main`). Nothing deployed. Test Suite work
 
 Commits: `ab21ebf` (docs) → `be1892c` (nav + stats) → `594417c` (homepage).
 
-## BLOCKER for the morning — needs your call
+## Phase 2 — Member Record backend (option B: DONE, additive only)
 
-**Phase 2 (Member Record roster + payments + aggregate stats + backfill, per ADR 0003) collides with the Test Suite NFL wave.** The membership rewrite has to modify `functions/src/nflPools.ts` join/submit/rebuy and other NFL function hot paths — the same files the NFL Test Suite work edits. You said Test Suite takes priority and must not conflict. I did **not** start the Phase 2 backend to avoid clobbering that work.
+You picked **B**. Built as **new files only** — no `nflPools.ts`/`bracketPools.ts`/`squares.ts`/`participant.ts` touched, so zero conflict with the Test Suite NFL wave. Functions typecheck clean; pure logic unit-tested (shared selfcheck + `planMembershipWrite` 4/4).
 
-Options (pick one in the AM):
-- **A** — Land the NFL Test Suite wave first, then I do Phase 2 on a fresh branch off the updated main. Safest for the Test Suite.
-- **B** — I build Phase 2 now as **additive new files only** (`memberRecord.ts` helper, `setPaidStatus` callable, `rosterAggregate.ts`, migration script), leave the wiring-into-existing-writers as a small, isolated final commit you merge after the Test Suite lands. Gets most of the work done without touching hot files yet.
-- **C** — You confirm the Test Suite wave won't touch `nflPools.ts`/`bracketPools.ts`/`squares.ts`/`participant.ts` this cycle, and I proceed with full Phase 2 wiring tonight.
+Shipped (commits `60df0d5` backend, `0cbec75` rules):
+- `shared/memberRecord.ts` — types + dues adapters (squares units, rebuy dues) + pure `computeRosterSummary`/`foldCommissionerAggregate` (+ selfcheck).
+- `functions/src/lib/memberRecord.ts` — pure `planMembershipWrite` (never clobbers `paidStatus`) + `reconcileMembership` tx applier.
+- `functions/src/lib/rosterSummary.ts` — `recomputeRosterSummary` → `pools/{id}/rosterSummary/current` (+ guest/unclaimed-squares bucket).
+- `functions/src/lib/commissionerAggregate.ts` — `recomputeCommissionerAggregate` → `users/{uid}.commissionerAggregate` (replaces dead `managerStats`); `lib/poolInclusion.ts` predicate.
+- `functions/src/setPaidStatus.ts` — commissioner-authoritative paidStatus (member+ledger one tx) + member-only `memberReportedPaid` claim.
+- `functions/src/rosterAggregate.ts` — triggers: `onMemberRecordWrite`, `onWinnerWrite`, `onPoolRosterFieldsChange` (fee+inclusion only).
+- `functions/src/migrations/backfillMemberRecords.ts` — super-admin, dryRun default, resumable, invariant counts, per-pool `rosterSchemaVersion` flip.
+- `firestore.rules` — `members` + `rosterSummary` (member self-write pinned to the two claim fields).
 
-Recommendation: **B** — maximizes overnight progress with near-zero conflict risk.
+## DEFERRED — the "merge after Test Suite" wiring commit (needs your go)
 
-## Morning list (things needing you regardless)
-- Deploy Phase 1 frontend when ready (standard `npx firebase` deploy; frontend only, no functions/migrations in Phase 1).
-- Decide A/B/C above.
-- When Phase 2 backend lands: review the backfill **dry-run + invariant report** before it runs against prod; review the Firestore **rules** change (member `memberReportedPaid` exact-diff + new `members`/`rosterSummary` reads).
-- Visual QA of Phase 1 on a real logged-in pool (I could not drive an authenticated prod pool unattended): confirm the slate list, badge position, type-gated cards, and the nav split on desktop + mobile.
+This is the ONLY part that touches hot files. Do it after the NFL Test Suite wave lands (or hand it to me then):
+1. Call `reconcileMembership` from every membership writer: `nflPools` join, `bracketPools`/`bracketEntries` join+delete, `submitPlayoffPicks`+playoff delete, `squares` claim/release + `reminders` auto-release, `participant` guest paths, `poolCreation` owner seed, `propBets.purchasePropCard`.
+2. `executeSurvivorRebuy` (`nflPools.ts:556`): write `rebuyOwed`/`rebuyPaid` onto the Member Record in the rebuy tx.
+3. Remove the 4 direct-client paidStatus writes (`NFLManagerView.tsx:195`, `NFLManagerBentoDashboard.tsx:97`, `BracketPoolDashboard.tsx:323`, `SuperAdmin.tsx:179`) → call `setPaidStatus`.
+4. Frontend consumers: `PaymentsPanel` + `NFLManagerView` read the Roster from `members`/`rosterSummary`; Commissioner Hub "Dues Collected" reads `users/{uid}.commissionerAggregate`.
+5. Add the `reconcileMembership`-only CI guard (fail build if `participantIds` is mutated elsewhere).
+
+## Morning deploy sequence (when you're ready)
+```
+cd D:\march-melee-pools
+npm --prefix functions install          # avoid stripe/fft TS2307
+npm --prefix functions run build        # copies shared + tsc
+npx firebase deploy --only firestore:rules   # review the members/rosterSummary rules first
+npx firebase deploy --only functions:setPaidStatus,functions:onMemberRecordWrite,functions:onWinnerWrite,functions:onPoolRosterFieldsChange,functions:backfillMemberRecords
+# then dry-run the migration and READ the report before a real run:
+# call backfillMemberRecords({ dryRun: true }) → paginate with nextCursor → review invariant counts
+# only then backfillMemberRecords({ dryRun: false })
+```
+Note: `commissionerAggregate` + `backfill` query `pools where ownerId ==` — if the deploy logs a missing-index error, add the composite index it names.
+
+## Morning list (needs you regardless)
+- Deploy Phase 1 frontend (frontend only; no functions in Phase 1).
+- Review + deploy the Firestore rules (compile on deploy; I could not compile them locally).
+- Dry-run the backfill and review the invariant report before any real run.
+- Visual QA of Phase 1 on a real logged-in pool (couldn't drive authenticated prod unattended): slate list, badge position, type-gated cards, nav split — desktop + mobile.
 
 ## Not yet started
-Phase 2 (all), Phase 3 redesign (Homepage + Roster Hub toward the mockup), Phase 4 polish + the full UX-review write-up. Rules & Rulesets commissioner editing (Phase 2 item 14) is frontend-light and low-conflict — a good first pickup under option B.
+Deferred wiring commit (above), Phase 3 redesign (Homepage + Roster Hub toward the mockup), Phase 4 polish + full UX-review write-up, Rules & Rulesets commissioner editing (item 14, frontend-light — good next pickup).
