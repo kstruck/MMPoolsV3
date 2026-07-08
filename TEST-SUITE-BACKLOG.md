@@ -1,47 +1,46 @@
-# Test Suite — parked bugs (from live "Run All 15", 2026-07-07)
+# Test Suite — backlog (RESOLVED 2026-07-07: suite 15/15)
 
-Context: live Test Suite run surfaced 2 pass / 8 fail / 5 error. None caused by the
-Phase-0 crash-fix deploy (proven: the "Full 2025 E2E" bracket sim passes — creates
-+ scores entries — under the same deployed rules, so entry writes work).
+Every item from the original "Run All 15" backlog is closed. History + root
+causes, for archaeology:
 
-## ✅ Fixed — PR #141 (`fix/pool-schema-drift`), needs functions deploy
-Schema drift rejecting valid create payloads:
-- `shared/schemas/squares.ts` gameId `.optional()` → `.nullish()` (rejected explicit null).
-  Fixes: Basic Quarters, Every Score Wins, Partial Fill.
-- `shared/schemas/bracket.ts` scoringSystem enum missing ESPN/FIBONACCI (engine
-  implements both, `functions/src/bracketScoring.ts:71-72`) → union of all 5.
-  Fixes: Bracket Fibonacci Scoring, Bracket ESPN Scoring.
+## ✅ Schema drift (5 create errors) — PR #141, deployed 2026-07-07
+- `shared/schemas/squares.ts` gameId → `.nullish()`; `shared/schemas/bracket.ts`
+  scoringSystem enum gained ESPN/FIBONACCI.
 
-## ⛔ Parked — pre-existing sim/scoring bugs (NOT deploy-blocking)
+## ✅ bracketSimulator "0 entries" cluster (8 tests) — PR #148 + #149
+NOT an entry-write/rules problem. `simpleTestRunner`'s bracket mapping renamed
+the scenarios' `tiebreakerPrediction` field to `tiebreaker`; bracketSimulator
+read `entry.tiebreakerPrediction` = undefined; Firestore `addDoc` rejects any
+document containing an undefined field → every entry write failed (swallowed
+into an unrendered step). PR #148 made the dashboard render failed simulator
+steps (the diagnostic); PR #149 fixed the mapping, made the simulator strip
+undefined fields, and added scenario data-contract tests.
 
-### 1. bracketSimulator writes 0 entries (biggest cluster — 6 tests)
-Fails: Bracket Basic, Custom Scoring, Max Possible Score, Tiebreaker Resolution,
-Incomplete Picks, Zero Correct Picks. Pool creates + reaches COMPLETED, but the
-sim's entry write yields 0 entries → every scoring assertion reads 0.
-- Site: `src/utils/testing/simulators/bracketSimulator.ts:166-190` (addDoc to
-  `pools/{poolId}/entries` with fake ownerUid `test-user-<name>`, wrapped in a
-  try/catch that swallows the error into an "Entry Error" step).
-- Localized to bracketSimulator specifically — `bracketE2ESimulator` uses a
-  different path and passes. So it's NOT the entries firestore rule (isSuperAdmin
-  allows it; E2E proves writes work). Investigate why the addDoc silently fails /
-  the read-back finds 0 (timing? pool slug? entry shape? the swallowed errMsg).
-- Next step: instrument the swallowed `errMsg`, or reproduce the exact addDoc live
-  and capture the error.
+## ✅ Props Basic off-by-one — PR #146
+Scenario bug: `props-basic.json` gave q4 two points while its own assertion
+message said "2+1+1+1". Engine was correct.
 
-### 2. Props Basic — off-by-one scoring (1 test)
-"Top score should be 5 (2+1+1+1), got 6". `propsSimulator` / props scoring adds an
-extra point somewhere.
+## ✅ Playoff Basic wrong winner — PR #146
+Scenario bug: Rank'Em awards `rankings[team] × round multiplier` (higher value
+= more points); Carol legitimately beat Alice. Engine and docs agreed all along.
 
-### 3. Playoff Basic — wrong winner (1 test)
-"Alice should win (ranked KC #1), got Carol". Playoff ranking/scoring tiebreak bug
-in `playoffSimulator` or the playoff scoring engine.
+## ✅ Bracket E2E flaky winner — PR #146
+The 'AllChalk' control entry duplicated PerfectBracket's picks AND its exact
+tiebreaker (128) — winner came down to unstable sort order. Controls are now
+seed-based; AllChalk tiebreaker 130; regression tests added.
 
-### 4. UPSET scoring offered but unimplemented (separate contract gap)
-`src/components/wizard/create/CreateBracketPool.tsx:32` offers "Upset bonus"
-(UPSET) but `functions/src/bracketScoring.ts` has no UPSET branch → scores as
-CLASSIC silently. Product/engine decision: implement UPSET, or drop it from the
-wizard.
+## ✅ (discovered) Squares $0 payouts — PR #147, real product bug
+`payouts` is a stripped privileged create field and the post-buyflow wizard
+collects none → every new squares pool paid $0/period. createPool now seeds
+DEFAULT_SQUARES_PAYOUTS (25/25/25/25). OPEN follow-up: pre-fix wizard-created
+squares pools in prod still lack a payouts map (Rule-1 gated backfill decision).
 
-## Also flagged (not test-suite): more scenarios needed
-No NFL Pick'em / Survivor / Margin scenarios exist yet — the segmented Test Suite
-groups render only once scenarios + simulator support are authored.
+## ⏭ UPSET scoring gap — plan item 18 (Phase 3, March runway)
+Wizard still offers UPSET as a scoringSystem with no engine branch. Decision on
+record (PLAN-TEST-SUITE.md): retire UPSET, expose Upset Bonus toggle+multiplier.
+
+## Next
+NFL scenario coverage (Pick'em / Survivor / Margin) per PLAN-TEST-SUITE.md
+Phase 2 — items 8-16, including the submitNFLPicks membership gate, seasonType
+through the create path, dual-MNF combined-score fix + scoreNFLWeek
+idempotency, and ATS scoring (decided: implement).

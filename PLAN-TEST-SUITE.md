@@ -127,18 +127,16 @@ Root suite 24 files / 230 tests green. In-app confirmation rides on the Phase
    Needs a functions deploy. Open follow-up: prod squares pools created via
    the new wizard before this fix have no payouts map — backfill is a Rule-1
    gated decision for Kevin.
-   _Suite re-run status 2026-07-07 (post #147 merge + functions deploy +
-   Coolify deploy): **7/15 pass, 0 errors** (was 1/15 + 5 errors at plan
-   start). Squares payout fix CONFIRMED in prod (Basic Quarters 7/7, Partial
-   Fill 3/3). All 8 remaining failures are the bracketSimulator 0-entries
-   cluster (item 17): Basic, Fibonacci, Custom, Max Score, ESPN, Tiebreaker,
-   Incomplete, Zero Correct. Static analysis exhausted: rules allow the write,
-   bracketE2ESimulator writes the identical entry shape in the same session
-   and passes (54 entries), scenarios all carry tiebreakers, createPool
-   returns a valid {poolId} (poolStatus assertions pass). The simulator
-   already captures the swallowed error as a red 'Entry Error' step — BLOCKED
-   on Kevin expanding a failing bracket test's step log in the Test Suite UI
-   and reporting that message._
+   _**SUITE FULLY GREEN 2026-07-07: 15/15** (was 1/15 + 5 errors at plan
+   start). Final fixes: PR #148 (dashboard renders failed simulator steps —
+   the diagnostic that cracked the cluster) and PR #149 (the 8-test bracket
+   0-entries root cause: simpleTestRunner renamed the scenarios'
+   `tiebreakerPrediction` to `tiebreaker`, bracketSimulator read undefined,
+   and Firestore addDoc rejects documents with undefined fields; runner
+   mapping fixed, simulator strips undefined before writes, scenario
+   data-contract tests added). Item 17 (bracketSimulator 0-entries) is
+   RESOLVED by #149 — it was this mapping bug, not the entry-write path
+   itself. Phases 0-1 complete; next: Phase 2 NFL wave (items 8-16)._
 
 ### Phase 2 — NFL wave (the deadline work)
 8. **Harness plumbing first** (explicit work items, not assumed):
