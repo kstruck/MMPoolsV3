@@ -15,6 +15,7 @@ import { now as serverNow } from '../../utils/serverClock';
 interface NFLManagerViewProps {
   pool: Pool;
   entries: any[];
+  members?: any[];
   games: NFLGame[];
   week: number;
   user: User | null;
@@ -24,6 +25,7 @@ interface NFLManagerViewProps {
 export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   pool,
   entries,
+  members = [],
   games,
   week,
   user,
@@ -112,27 +114,41 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // Entry doc id == owner uid for NFL pools, but prefer ownerUid when present.
   const targetUidOf = (entry: any): string => entry.ownerUid || entry.id;
 
-  // Picked-current-week: pick'em = every current-week game picked;
-  // survivor/margin = picks keyed by week number.
-  const pickedMap = useMemo(() => {
-    const map: Record<string, boolean> = {};
-    for (const entry of entries) {
-      const picks = entry.picks || {};
-      if (type === 'NFL_PICKEM') {
-        map[entry.id] = weeklyGames.length > 0 && weeklyGames.every(g => !!picks[g.id]);
-      } else {
-        map[entry.id] = !!picks[week];
-      }
+  // Roster = everyone who JOINED (participantIds) enriched with Member Records (name +
+  // authoritative paidStatus) and entries (picks/status/score). Members without an entry —
+  // including the commissioner — appear here, so they show on the list and payment ledger the
+  // moment they join, before any pick is made (ADR 0003). Falls back gracefully to entries
+  // when Member Records are absent (pre-backfill).
+  const roster = useMemo(() => {
+    const byUid = new Map<string, any>();
+    const put = (uid: string, patch: any) => {
+      if (!uid || uid === 'guest') return;
+      byUid.set(uid, { ...(byUid.get(uid) || { uid }), ...patch, uid });
+    };
+    for (const uid of ((pool as any).participantIds || [])) put(uid, {});
+    for (const m of members) put(m.uid, { userName: m.userName, memberPaid: m.paidStatus, hasMember: true, rebuyOwed: m.rebuyOwed });
+    for (const e of entries) {
+      const uid = e.ownerUid || e.id;
+      put(uid, { entry: e, hasEntry: true, entryPaid: e.paidStatus, userName: byUid.get(uid)?.userName || e.userName, status: e.status, strikesUsed: e.strikesUsed, rebuysUsed: e.rebuysUsed, seasonTotal: e.seasonTotal });
     }
-    return map;
-  }, [entries, weeklyGames, week, type]);
+    const ownerId = (pool as any).ownerId;
+    const rows = [...byUid.values()].map(r => {
+      const picks = r.entry?.picks || {};
+      const picked = !!r.hasEntry && (type === 'NFL_PICKEM'
+        ? (weeklyGames.length > 0 && weeklyGames.every(g => !!picks[g.id]))
+        : !!picks[week]);
+      const userName = r.userName || (r.uid === user?.id ? (user?.name || 'You') : 'Member');
+      const paidStatus = r.hasMember ? (r.memberPaid || 'UNPAID') : (r.entryPaid || 'UNPAID');
+      return { ...r, userName, paidStatus, picked, isOwner: r.uid === ownerId };
+    });
+    return rows.sort((a, b) => (a.isOwner ? -1 : b.isOwner ? 1 : a.userName.localeCompare(b.userName)));
+  }, [members, entries, pool, weeklyGames, week, type, user]);
 
-  const unpickedCount = useMemo(() => entries.filter(e => !pickedMap[e.id]).length, [entries, pickedMap]);
-  const unpaidCount = useMemo(() => entries.filter(e => e.paidStatus !== 'PAID').length, [entries]);
+  const unpickedCount = useMemo(() => roster.filter(r => !r.picked).length, [roster]);
+  const unpaidCount = useMemo(() => roster.filter(r => r.paidStatus !== 'PAID').length, [roster]);
 
   // --- Handlers ---
-  const handleRemindOne = async (entry: any, kind: 'PICKS' | 'PAYMENT') => {
-    const uid = targetUidOf(entry);
+  const handleRemindOne = async (uid: string, kind: 'PICKS' | 'PAYMENT') => {
     setRemindingUid(uid);
     try {
       const { sent, skipped } = await dbService.sendManualReminder(pool.id, [uid], kind);
@@ -147,9 +163,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
   const handleRemindBulk = async (kind: 'PICKS' | 'PAYMENT') => {
     const targets = (kind === 'PICKS'
-      ? entries.filter(e => !pickedMap[e.id])
-      : entries.filter(e => e.paidStatus !== 'PAID')
-    ).map(targetUidOf);
+      ? roster.filter(r => !r.picked)
+      : roster.filter(r => r.paidStatus !== 'PAID')
+    ).map(r => r.uid);
     if (targets.length === 0) {
       toast.info(kind === 'PICKS' ? 'Everyone has picked this week.' : 'Everyone has paid.');
       return;
@@ -187,15 +203,28 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     }
   };
 
-  const handleTogglePayment = async (entryId: string, currentStatus: string) => {
-    setIsSavingPayment(entryId);
+  const handleTogglePayment = async (uid: string, currentStatus: string, hasEntry: boolean) => {
+    setIsSavingPayment(uid);
     setFeedback(null);
-    const nextStatus = currentStatus === 'PAID' ? 'UNPAID' : 'PAID';
+    const nextPaid = currentStatus !== 'PAID';
     try {
-      await dbService.updateBracketEntryPayment(pool.id, entryId, nextStatus);
+      // Authoritative path: writes the Member Record + ledger, works for members with or
+      // without an entry (incl. the commissioner). Requires the setPaidStatus function deployed.
+      await dbService.setPaidStatus(pool.id, uid, nextPaid);
     } catch (err: any) {
-      logger.error(`Failed to update payment for entry ${entryId}:`, err);
-      setFeedback({ type: 'error', message: 'Permission denied or update failed.' });
+      // Pre-deploy fallback: members who already have an entry can still be marked via the
+      // existing direct entry write. Member-only rows need the function deployed.
+      if (hasEntry) {
+        try {
+          await dbService.updateBracketEntryPayment(pool.id, uid, nextPaid ? 'PAID' : 'UNPAID');
+        } catch (err2: any) {
+          logger.error(`Failed to update payment for ${uid}:`, err2);
+          setFeedback({ type: 'error', message: 'Permission denied or update failed.' });
+        }
+      } else {
+        logger.error(`Failed to set paid status for ${uid}:`, err);
+        setFeedback({ type: 'error', message: 'Mark-paid for members without an entry needs the payments update deployed. Deploy functions to enable.' });
+      }
     } finally {
       setIsSavingPayment(null);
     }
@@ -844,7 +873,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <Users size={14} className="text-navy-700 dark:text-gold-400" /> Member Roster & Payments
                 </h4>
                 <span className="num font-display font-bold uppercase text-[10px] tracking-[0.08em] text-muted bg-page px-2 py-0.5 border border-line rounded-full">
-                  {entries.length} members
+                  {roster.length} members
                 </span>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -888,72 +917,78 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {entries.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-page transition-colors">
-                      <td className="py-3.5 px-5 font-body font-bold text-[color:var(--text)]">{entry.userName}</td>
+                  {roster.map((row) => (
+                    <tr key={row.uid} className="hover:bg-page transition-colors">
+                      <td className="py-3.5 px-5 font-body font-bold text-[color:var(--text)]">
+                        <span>{row.userName}</span>
+                        {row.isOwner && <span className="ml-2 align-middle px-1.5 py-0.5 rounded-full text-[8px] font-display font-bold uppercase tracking-[0.08em] bg-gold-500/15 text-gold-700 dark:text-gold-400 border border-gold-500/30">Commissioner</span>}
+                        {!row.hasEntry && <span className="ml-2 align-middle px-1.5 py-0.5 rounded-full text-[8px] font-display font-bold uppercase tracking-[0.08em] bg-surface text-faint border border-line">No entry yet</span>}
+                      </td>
 
                       {type === 'NFL_SURVIVOR' && (
                         <>
                           <td className="py-3.5 px-5 text-center">
-                            <span className={`px-2 py-0.5 rounded-full font-display font-bold text-[9px] tracking-[0.08em] uppercase ${
-                              entry.status === 'ALIVE'
-                                ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
-                                : 'bg-brandred-600/10 border border-brandred-600/25 text-brandred-600'
-                            }`}>
-                              {entry.status ?? 'ALIVE'}
-                            </span>
+                            {row.hasEntry ? (
+                              <span className={`px-2 py-0.5 rounded-full font-display font-bold text-[9px] tracking-[0.08em] uppercase ${
+                                row.status === 'ALIVE'
+                                  ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
+                                  : 'bg-brandred-600/10 border border-brandred-600/25 text-brandred-600'
+                              }`}>
+                                {row.status ?? 'ALIVE'}
+                              </span>
+                            ) : <span className="text-faint">—</span>}
                           </td>
-                          <td className="num py-3.5 px-5 text-center font-body font-bold text-muted">{entry.strikesUsed ?? 0}</td>
-                          <td className="num py-3.5 px-5 text-center font-body font-bold text-muted">{entry.rebuysUsed ?? 0}</td>
+                          <td className="num py-3.5 px-5 text-center font-body font-bold text-muted">{row.hasEntry ? (row.strikesUsed ?? 0) : '—'}</td>
+                          <td className="num py-3.5 px-5 text-center font-body font-bold text-muted">{row.hasEntry ? (row.rebuysUsed ?? 0) : '—'}</td>
                         </>
                       )}
 
                       {type === 'NFL_MARGIN' && (
                         <td className="num py-3.5 px-5 text-right font-display font-bold text-[color:var(--text)]">
-                          {entry.seasonTotal ?? 0} pts
+                          {row.hasEntry ? `${row.seasonTotal ?? 0} pts` : '—'}
                         </td>
                       )}
 
                       <td className="py-3.5 px-5 text-center">
-                        {pickedMap[entry.id] ? (
+                        {row.picked ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-display font-bold text-[9px] tracking-[0.08em] uppercase bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]">
                             <CheckCircle size={10} /> Picked
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-display font-bold text-[9px] tracking-[0.08em] uppercase bg-brandred-600/10 border border-brandred-600/25 text-brandred-600">
-                            <XCircle size={10} /> Missing
+                            <XCircle size={10} /> {row.hasEntry ? 'Missing' : 'No picks'}
                           </span>
                         )}
                       </td>
 
                       <td className="py-3.5 px-5 text-right">
                         <button
-                          onClick={() => handleTogglePayment(entry.id, entry.paidStatus)}
-                          disabled={isSavingPayment === entry.id}
+                          onClick={() => handleTogglePayment(row.uid, row.paidStatus, row.hasEntry)}
+                          disabled={isSavingPayment === row.uid}
                           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-all duration-150 hover:-translate-y-px cursor-pointer ${
-                            entry.paidStatus === 'PAID'
+                            row.paidStatus === 'PAID'
                               ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
                               : 'bg-brandred-600/10 border border-brandred-600/25 text-brandred-600 hover:bg-brandred-600/[0.15]'
                           }`}
                         >
                           <DollarSign size={10} />
-                          {isSavingPayment === entry.id ? 'Saving...' : entry.paidStatus || 'UNPAID'}
+                          {isSavingPayment === row.uid ? 'Saving...' : row.paidStatus || 'UNPAID'}
                         </button>
                       </td>
 
                       <td className="py-3.5 px-5 text-right">
                         <button
-                          onClick={() => handleRemindOne(entry, !pickedMap[entry.id] ? 'PICKS' : 'PAYMENT')}
+                          onClick={() => handleRemindOne(row.uid, !row.picked ? 'PICKS' : 'PAYMENT')}
                           disabled={
                             remindingUid !== null ||
                             bulkReminding !== null ||
-                            (pickedMap[entry.id] && entry.paidStatus === 'PAID')
+                            (row.picked && row.paidStatus === 'PAID')
                           }
-                          title={!pickedMap[entry.id] ? 'Email a picks reminder' : entry.paidStatus !== 'PAID' ? 'Email a payment reminder' : 'Picked and paid — nothing to remind'}
+                          title={!row.picked ? 'Email a picks reminder' : row.paidStatus !== 'PAID' ? 'Email a payment reminder' : 'Picked and paid — nothing to remind'}
                           className="min-h-[44px] inline-flex items-center gap-1.5 px-3 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-navy-800 text-white hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 hover:-translate-y-px cursor-pointer"
                         >
                           <BellRing size={10} />
-                          {remindingUid === targetUidOf(entry) ? 'Sending...' : 'Remind'}
+                          {remindingUid === row.uid ? 'Sending...' : 'Remind'}
                         </button>
                       </td>
                     </tr>

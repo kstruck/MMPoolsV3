@@ -65,6 +65,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // Subscribed States
   const [games, setGames] = useState<NFLGame[]>([]);
   const [entries, setEntries] = useState<any[]>([]);
+  const [members, setMembers] = useState<any[]>([]);
   const [recaps, setRecaps] = useState<WeeklyRecap[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -82,6 +83,14 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   useEffect(() => {
     const unsub = dbService.subscribeToNFLEntries(pool.id, (data) => {
       setEntries(data);
+    });
+    return () => unsub();
+  }, [pool.id]);
+
+  // 2b. Subscribe to Member Records (roster truth — everyone who joined, ADR 0003)
+  useEffect(() => {
+    const unsub = dbService.subscribeToPoolMembers(pool.id, (data) => {
+      setMembers(data);
     });
     return () => unsub();
   }, [pool.id]);
@@ -540,7 +549,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 
               {/* TAB 5: PAYMENTS — member money view (status, pot, ledger) */}
               {activeTab === 'payments' && user && (
-                <PaymentsPanel pool={pool} user={user} entries={entries} />
+                <PaymentsPanel pool={pool} user={user} entries={entries} members={members} isManager={isManager} onManagePayments={() => setActiveTab('manager')} />
               )}
 
               {/* TAB 5: COMMISSIONER */}
@@ -548,6 +557,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                 <NFLManagerView
                   pool={pool}
                   entries={entries}
+                  members={members}
                   games={games}
                   week={selectedWeek}
                   user={user}

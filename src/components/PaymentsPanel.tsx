@@ -10,6 +10,11 @@ interface PaymentsPanelProps {
     user: User;
     /** Pool entries (already live-subscribed by the parent dashboard) */
     entries: any[];
+    /** Member Records — the full roster incl. members without an entry (ADR 0003) */
+    members?: any[];
+    isManager?: boolean;
+    /** Jump to the Commissioner view where paid status is managed */
+    onManagePayments?: () => void;
 }
 
 /** Turn bare URLs in commissioner payment instructions into tappable links */
@@ -34,7 +39,7 @@ const EVENT_LABELS: Record<PaymentLedgerEvent['type'], { label: string; tone: st
  * Member-facing money view: what do I owe, am I marked paid, what's the pot,
  * and the shared timestamped ledger of every payment-state change.
  */
-export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entries }) => {
+export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entries, members = [], isManager, onManagePayments }) => {
     const castPool = pool as any;
     const [ledger, setLedger] = useState<PaymentLedgerEvent[]>([]);
 
@@ -47,23 +52,48 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
     const paymentInstructions: string = castPool.settings?.paymentInstructions || '';
 
     const myEntry = useMemo(() => entries.find(e => e.ownerUid === user.id) ?? null, [entries, user.id]);
-    const isPaid = myEntry?.paidStatus === 'PAID';
+    const myMember = useMemo(() => members.find(m => m.uid === user.id) ?? null, [members, user.id]);
+    const isPaid = (myMember?.paidStatus ?? myEntry?.paidStatus) === 'PAID';
     const myRebuys: number = myEntry?.rebuysUsed ?? 0;
     const myTotalDue = entryFee + myRebuys * rebuyCost;
 
+    // Pot: prefer the Member Record roster (everyone who joined) so the count and expected
+    // dues are right even before members submit entries; fall back to entries pre-backfill.
     const pot = useMemo(() => {
-        const paid = entries.filter(e => e.paidStatus === 'PAID').length;
+        const realParticipants = ((castPool.participantIds || []) as string[]).filter(id => id && id !== 'guest');
+        const memberCount = Math.max(members.length, realParticipants.length, entries.length);
+        const paidSource = members.length > 0 ? members : entries;
+        const paid = paidSource.filter((m: any) => m.paidStatus === 'PAID').length;
         const totalRebuys = entries.reduce((sum, e) => sum + (e.rebuysUsed ?? 0), 0);
         return {
             paidCount: paid,
-            unpaidCount: entries.length - paid,
+            unpaidCount: Math.max(0, memberCount - paid),
             collected: paid * entryFee + totalRebuys * rebuyCost,
-            expected: entries.length * entryFee + totalRebuys * rebuyCost,
+            expected: memberCount * entryFee + totalRebuys * rebuyCost,
         };
-    }, [entries, entryFee, rebuyCost]);
+    }, [members, entries, castPool.participantIds, entryFee, rebuyCost]);
 
     return (
         <div className="space-y-6">
+            {/* Commissioner controls — manage everyone's paid status in the Commissioner view */}
+            {isManager && (
+                <div className="rounded-3xl border border-gold-500/30 bg-gold-400/5 p-5 flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-lg bg-gold-400/10 border border-gold-500/30 text-gold-700 dark:text-gold-400">
+                            <DollarSign size={18} />
+                        </div>
+                        <div>
+                            <p className="font-display font-bold uppercase text-[13px] tracking-[0.04em] text-[color:var(--text)]">You are the commissioner</p>
+                            <p className="text-[12px] text-muted font-body">Mark members paid, see everyone who joined, and send payment or picks reminders.</p>
+                        </div>
+                    </div>
+                    {onManagePayments && (
+                        <button onClick={onManagePayments} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-navy-800 hover:bg-navy-700 text-white font-display font-bold uppercase text-[11px] tracking-[0.08em] transition-colors">
+                            <Receipt size={14} /> Edit / Manage Payments
+                        </button>
+                    )}
+                </div>
+            )}
             {/* My status */}
             <div className={`rounded-3xl border p-6 ${isPaid ? 'bg-[#0F7B4A]/5 border-[#0F7B4A]/30' : 'bg-[#B4530A]/5 border-[#B4530A]/30'}`}>
                 <div className="flex items-start justify-between gap-4 flex-wrap">

@@ -6,6 +6,8 @@ import type { Pool, User, NFLGame, WeeklyRecap } from '../types';
 import { GlobalCommissionerDashboard } from '../components/Dashboards/GlobalCommissionerDashboard';
 import { NFLUserBentoDashboard } from '../components/NFLPoolDashboard/NFLUserBentoDashboard';
 import { NFLPoolRules } from '../components/NFLPoolDashboard/NFLPoolRules';
+import { NFLManagerView } from '../components/NFLPoolDashboard/NFLManagerView';
+import { PaymentsPanel } from '../components/PaymentsPanel';
 
 const mkPool = (id: string, name: string, type: string, players: number, fee: number, status = 'OPEN'): Pool => ({
   id, name, type, status, ownerId: 'demo', managerUid: 'demo',
@@ -58,10 +60,25 @@ const homepagePool = mkPool('hp', "Kevin's 2026 NFL Weekly Pick'em", 'NFL_PICKEM
 (homepagePool as any).seasonType = 1;
 (homepagePool as any).settings = { entryFee: 20, confidenceMode: false, lockMode: 'PER_GAME' };
 
+// --- Roster / Payments mock: commissioner + a joined member have NO entry yet ---
+const rosterPool = { id: 'rp', name: "Kevin's Pick'em", type: 'NFL_PICKEM', status: 'OPEN', ownerId: 'demo', managerUid: 'demo', seasonType: 1, participantIds: ['demo', 'u1', 'u2', 'u3', 'u5'], settings: { entryFee: 20 } } as unknown as Pool;
+const rosterMembers = [
+  { uid: 'demo', userName: 'Kevin Struck', paidStatus: 'UNPAID', role: 'MANAGER' },
+  { uid: 'u1', userName: 'Sarah K.', paidStatus: 'PAID' },
+  { uid: 'u2', userName: 'Mark S.', paidStatus: 'UNPAID' },
+  { uid: 'u3', userName: 'Alex R.', paidStatus: 'PAID' },
+  { uid: 'u5', userName: 'Dana P.', paidStatus: 'UNPAID' }, // joined, no entry
+];
+const rosterEntries = [
+  { id: 'u1', ownerUid: 'u1', userName: 'Sarah K.', totalScore: 41, paidStatus: 'PAID', picks: { g0: 'SEA' } },
+  { id: 'u2', ownerUid: 'u2', userName: 'Mark S.', totalScore: 38, paidStatus: 'UNPAID', picks: {} },
+  { id: 'u3', ownerUid: 'u3', userName: 'Alex R.', totalScore: 29, paidStatus: 'PAID', picks: { g0: 'NE' } },
+];
+
 const noop = () => {};
 
 export const DevDashboardPreview: React.FC = () => {
-  const [view, setView] = useState<'hub' | 'homepage' | 'rules'>('hub');
+  const [view, setView] = useState<'hub' | 'homepage' | 'rules' | 'roster'>('hub');
   const [week, setWeek] = useState(1);
   const seasonOpen = 1_800_000_000_000; // fixed future epoch (Jan 2027) -> "editable until" state
   return (
@@ -76,6 +93,7 @@ export const DevDashboardPreview: React.FC = () => {
             <button onClick={() => setView('hub')} className={`px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.08em] border ${view === 'hub' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border-gold-500/40' : 'bg-surface text-muted border-line'}`}>Commissioner Hub</button>
             <button onClick={() => setView('homepage')} className={`px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.08em] border ${view === 'homepage' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border-gold-500/40' : 'bg-surface text-muted border-line'}`}>Pool Homepage</button>
             <button onClick={() => setView('rules')} className={`px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.08em] border ${view === 'rules' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border-gold-500/40' : 'bg-surface text-muted border-line'}`}>Rules Tab</button>
+            <button onClick={() => setView('roster')} className={`px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.08em] border ${view === 'roster' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border-gold-500/40' : 'bg-surface text-muted border-line'}`}>Payments / Roster</button>
           </div>
         </div>
 
@@ -83,6 +101,17 @@ export const DevDashboardPreview: React.FC = () => {
           <GlobalCommissionerDashboard user={mockUser} managedPools={mockPools} />
         ) : view === 'rules' ? (
           <NFLPoolRules pool={homepagePool} isManager={true} onEditRules={noop} lockTime={seasonOpen} />
+        ) : view === 'roster' ? (
+          <div className="space-y-8">
+            <div>
+              <h2 className="text-sm font-display font-bold uppercase tracking-[0.12em] text-muted mb-3">Payments tab (member view + commissioner button)</h2>
+              <PaymentsPanel pool={rosterPool} user={mockUser} entries={rosterEntries} members={rosterMembers} isManager={true} onManagePayments={() => setView('roster')} />
+            </div>
+            <div>
+              <h2 className="text-sm font-display font-bold uppercase tracking-[0.12em] text-muted mb-3">Commissioner view — member roster (everyone who joined)</h2>
+              <NFLManagerView pool={rosterPool} entries={rosterEntries} members={rosterMembers} games={mockGames} week={week} user={mockUser} onSelectTab={noop} />
+            </div>
+          </div>
         ) : (
           <NFLUserBentoDashboard
             pool={homepagePool}

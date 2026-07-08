@@ -403,6 +403,22 @@ export const dbService = {
         await updateDoc(entryRef, { paidStatus, paymentMethod: paymentMethod || deleteField(), updatedAt: Date.now() });
     },
 
+    // Member Record roster (ADR 0003): every member who joined, incl. the commissioner and
+    // members who have not yet submitted an entry. Empty until the backfill runs.
+    subscribeToPoolMembers: (poolId: string, callback: (members: any[]) => void) => {
+        const q = query(collection(db, 'pools', poolId, 'members'));
+        return onSnapshot(q, (snapshot) => {
+            callback(snapshot.docs.map(d => ({ uid: d.id, ...d.data() })));
+        }, () => callback([]));
+    },
+
+    // Authoritative paid-status write via the setPaidStatus callable — works for members
+    // with OR without an entry (writes the Member Record + ledger). Commissioner/owner only.
+    setPaidStatus: async (poolId: string, memberUid: string, isPaid: boolean): Promise<void> => {
+        const fn = httpsCallable(functions, 'setPaidStatus');
+        await fn({ poolId, memberUid, isPaid });
+    },
+
     subscribeToPropCard: (poolId: string, userId: string, callback: (card: PropCard | null) => void) => {
         const docRef = doc(db, 'pools', poolId, 'propCards', userId);
         return onSnapshot(docRef, (doc) => {
