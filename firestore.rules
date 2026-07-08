@@ -204,6 +204,37 @@ service cloud.firestore {
         allow write: if isSuperAdmin();
       }
 
+      // MEMBER RECORDS (roster + payment truth, ADR 0003)
+      // Readable by any member of the pool + owner/manager/admin. Members may set ONLY
+      // their own honor-system claim (memberReportedPaid/memberReportedAt) — the diff is
+      // pinned so paidStatus and every other field stay server-only. Records are created
+      // and deleted server-side (reconcileMembership / backfill migration).
+      match /members/{memberUid} {
+        allow read: if request.auth != null && (
+          request.auth.uid == memberUid ||
+          request.auth.uid in get(/databases/$(database)/documents/pools/$(poolId)).data.participantIds ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isSuperAdmin()
+        );
+        allow update: if request.auth != null
+          && request.auth.uid == memberUid
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['memberReportedPaid', 'memberReportedAt']);
+        allow create, delete: if false;
+      }
+
+      // ROSTER SUMMARY (member-readable dues projection; server-written only)
+      match /rosterSummary/{docId} {
+        allow read: if request.auth != null && (
+          request.auth.uid in get(/databases/$(database)/documents/pools/$(poolId)).data.participantIds ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isSuperAdmin()
+        );
+        allow write: if false;
+      }
+
       // SHARE CLICK TRACKING
       // Records share link clicks for pool manager analytics.
       // Writes require auth to prevent anonymous flooding.
