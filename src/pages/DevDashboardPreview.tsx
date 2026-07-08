@@ -49,11 +49,12 @@ const mockGames: NFLGame[] = [
   g(5, ['mia', 'Dolphins', 'MIA'], ['nyj', 'Jets', 'NYJ'], 'SCHEDULED'),
 ];
 
+const wr = (a: number[][]) => Object.fromEntries(a.map(([w, c, t, p]) => [w, { correct: c, total: t, points: p }]));
 const mockEntries = [
-  { id: 'demo', ownerUid: 'demo', userName: 'Kevin Struck', totalScore: 34, paidStatus: 'PAID', picks: { g0: 'SEA' } },
-  { id: 'u1', ownerUid: 'u1', userName: 'Sarah K.', totalScore: 41, paidStatus: 'PAID' },
-  { id: 'u2', ownerUid: 'u2', userName: 'Mark S.', totalScore: 38, paidStatus: 'UNPAID' },
-  { id: 'u3', ownerUid: 'u3', userName: 'Alex R.', totalScore: 29, paidStatus: 'PAID' },
+  { id: 'demo', ownerUid: 'demo', userName: 'Kevin Struck', totalScore: 34, paidStatus: 'PAID', picks: { g0: 'SEA' }, weeklyResults: wr([[1, 11, 16, 11], [2, 9, 16, 9], [3, 12, 16, 12]]) },
+  { id: 'u1', ownerUid: 'u1', userName: 'Sarah K.', totalScore: 41, paidStatus: 'PAID', weeklyResults: wr([[1, 14, 16, 14], [2, 13, 16, 13], [3, 14, 16, 14]]) },
+  { id: 'u2', ownerUid: 'u2', userName: 'Mark S.', totalScore: 38, paidStatus: 'UNPAID', weeklyResults: wr([[1, 12, 16, 12], [2, 13, 16, 13], [3, 13, 16, 13]]) },
+  { id: 'u3', ownerUid: 'u3', userName: 'Alex R.', totalScore: 29, paidStatus: 'PAID', weeklyResults: wr([[1, 10, 16, 10], [2, 9, 16, 9], [3, 10, 16, 10]]) },
 ];
 
 const homepagePool = mkPool('hp', "Kevin's 2026 NFL Weekly Pick'em", 'NFL_PICKEM', 24, 20);

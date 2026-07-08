@@ -291,15 +291,49 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     };
   }, [entries]);
 
-  const getTrendData = (name: string) => {
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  // Real per-entry performance stats from persisted data (ADR 0004 — no fabrication).
+  const weeksElapsed = Math.max(1, selectedWeek);
+  const stdev = (xs: number[]) => {
+    if (xs.length < 2) return 0;
+    const m = xs.reduce((a, b) => a + b, 0) / xs.length;
+    return Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / xs.length);
+  };
+  const entryStats = (e: any) => {
+    if (!e) return { accuracy: 0, winRate: 0, consistency: 0, participation: 0, correct: 0, incorrect: 0 };
+    if (_pool.type === 'NFL_PICKEM') {
+      const wr = Object.values(e.weeklyResults || {}) as any[];
+      const correct = wr.reduce((s, w) => s + (w.correct || 0), 0);
+      const total = wr.reduce((s, w) => s + (w.total || 0), 0);
+      const wins = wr.filter(w => (w.total || 0) > 0 && (w.correct || 0) >= (w.total || 0) / 2).length;
+      const accs = wr.filter(w => (w.total || 0) > 0).map(w => w.correct / w.total);
+      return {
+        accuracy: total > 0 ? Math.round((correct / total) * 100) : 0,
+        winRate: wr.length ? Math.round((wins / wr.length) * 100) : 0,
+        consistency: accs.length > 1 ? Math.round(100 - stdev(accs) * 100) : (accs.length === 1 ? 100 : 0),
+        participation: Math.round(Math.min(1, Object.keys(e.weeklyResults || {}).length / weeksElapsed) * 100),
+        correct, incorrect: Math.max(0, total - correct),
+      };
+    } else if (_pool.type === 'NFL_SURVIVOR') {
+      const strikes = e.strikesUsed || 0;
+      const weeksPicked = Object.keys(e.picks || {}).length;
+      const survived = Math.max(0, weeksPicked - strikes);
+      const acc = weeksPicked > 0 ? Math.round((survived / weeksPicked) * 100) : 0;
+      return {
+        accuracy: acc, winRate: acc,
+        consistency: e.status !== 'ELIMINATED' ? 100 : Math.max(0, 100 - strikes * 40),
+        participation: Math.round(Math.min(1, weeksPicked / weeksElapsed) * 100),
+        correct: survived, incorrect: strikes,
+      };
     }
-    const trendType = Math.abs(hash) % 3;
-    if (trendType === 0) return { type: 'up', color: '#C9A867' };
-    if (trendType === 1) return { type: 'down', color: '#DA463F' };
-    return { type: 'updown', color: 'var(--faint)' };
+    // NFL_MARGIN
+    const ws = Object.values(e.weeklyScores || {}) as number[];
+    const pos = ws.filter(s => s > 0).length;
+    const acc = ws.length > 0 ? Math.round((pos / ws.length) * 100) : 0;
+    return {
+      accuracy: acc, winRate: acc, consistency: acc,
+      participation: Math.round(Math.min(1, ws.length / weeksElapsed) * 100),
+      correct: pos, incorrect: Math.max(0, ws.length - pos),
+    };
   };
 
   const weeklyHistoryData = useMemo(() => {
@@ -322,89 +356,48 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     return history.slice(0, Math.max(selectedWeek, 5));
   }, [myEntry, _pool.type, castPool.seasonType, selectedWeek]);
 
-  // Data for Attrition Line (Recharts)
+  // Real attrition: count alive + cumulative strikes per week from actual entries.
   const attritionHistoryData = useMemo(() => {
     const history = [];
-    const initialPlayers = entries.length || 15;
-    
-    for (let w = 1; w <= Math.max(selectedWeek, 5); w++) {
-      const factor = Math.max(0.1, 1 - (w * 0.05));
-      const currentAlive = Math.max(1, Math.round(initialPlayers * factor));
-      const strikes = Math.min(entries.length, Math.round(initialPlayers * (w * 0.07)));
-      history.push({ 
-        week: `Wk ${w}`, 
-        alive: currentAlive, 
-        strikes: strikes
-      });
+    for (let w = 1; w <= Math.max(selectedWeek, 1); w++) {
+      const alive = entries.filter(e => !e.eliminatedWeek || e.eliminatedWeek > w).length;
+      const strikes = entries.reduce((s, e) => s + ((e.strikeWeeks || []).filter((sw: number) => sw <= w).length), 0);
+      history.push({ week: `Wk ${w}`, alive, strikes });
     }
     return history;
-  }, [entries.length, selectedWeek, castPool.seasonType]);
+  }, [entries, selectedWeek]);
 
-
-  // Pick Accuracy Ratio Data for PieChart
+  // Real pick accuracy from persisted results (no mock). Empty (0/0) until games are scored.
   const pickAccuracyRatio = useMemo(() => {
-    let correct = 0;
-    let incorrect = 0;
-    
-    if (myEntry) {
-      if (_pool.type === 'NFL_PICKEM') {
-        correct = myEntry.totalScore || 0;
-        const totalPicks = Object.keys(myEntry.picks || {}).length;
-        incorrect = Math.max(0, totalPicks - correct);
-      } else if (_pool.type === 'NFL_SURVIVOR') {
-        correct = selectedWeek - (myEntry.strikesUsed || 0);
-        incorrect = myEntry.strikesUsed || 0;
-      } else if (_pool.type === 'NFL_MARGIN') {
-        correct = Object.values(myEntry.weeklyScores || {}).filter((s: any) => s > 0).length;
-        incorrect = Object.values(myEntry.weeklyScores || {}).filter((s: any) => s <= 0).length;
-      }
-    }
-    
-    // Default mock data if new pool
-    if (correct === 0 && incorrect === 0) {
-      correct = 5;
-      incorrect = 2;
-    }
-    
+    const s = entryStats(myEntry);
     return [
-      { name: 'Correct Picks', value: correct, color: '#C9A867' },
-      { name: 'Incorrect Picks', value: incorrect, color: '#C4342E' }
+      { name: 'Correct Picks', value: s.correct, color: '#C9A867' },
+      { name: 'Incorrect Picks', value: s.incorrect, color: '#C4342E' },
     ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myEntry, _pool.type, selectedWeek]);
 
-  // User Performance Radar Data
+  // Real performance radar: your stats vs the REAL pool average (no hardcoded constants).
   const userPerformanceData = useMemo(() => {
-    let accuracy = 70;
-    let survival = 85;
-    const speed = 65;
-    let consistency = 75;
-    let rankingPercentile = 80;
+    const me = entryStats(myEntry);
+    const rankNumeric = parseInt(userRank.replace('#', '')) || 0;
+    const totalP = entries.length || 1;
+    const myStanding = rankNumeric > 0 ? Math.round(((totalP - rankNumeric + 1) / totalP) * 100) : 0;
 
-    if (myEntry) {
-      if (_pool.type === 'NFL_PICKEM') {
-        const correct = myEntry.totalScore || 0;
-        const maxScore = entries.length > 0 ? Math.max(...entries.map(e => e.totalScore || 0), 10) : 10;
-        accuracy = Math.round((correct / maxScore) * 100);
-      } else if (_pool.type === 'NFL_SURVIVOR') {
-        survival = Math.max(10, 100 - (myEntry.strikesUsed || 0) * 40);
-      } else if (_pool.type === 'NFL_MARGIN') {
-        const totalMargin = myEntry.seasonTotal || 0;
-        consistency = Math.min(100, Math.max(10, 50 + totalMargin * 2));
-      }
-      
-      const rankNumeric = parseInt(userRank.replace('#', '')) || 1;
-      const totalP = entries.length || 1;
-      rankingPercentile = Math.round(((totalP - rankNumeric + 1) / totalP) * 100);
-    }
+    // League average = mean of each real axis across all entries.
+    const all = entries.map(entryStats);
+    const avg = (key: 'accuracy' | 'winRate' | 'consistency' | 'participation') =>
+      all.length ? Math.round(all.reduce((s, e) => s + e[key], 0) / all.length) : 0;
 
     return [
-      { subject: 'Accuracy', User: accuracy, Average: 62 },
-      { subject: 'Survival', User: survival, Average: 58 },
-      { subject: 'Agility', User: speed, Average: 50 },
-      { subject: 'Consistency', User: consistency, Average: 55 },
-      { subject: 'Standing %', User: rankingPercentile, Average: 50 },
+      { subject: 'Accuracy', User: me.accuracy, Average: avg('accuracy') },
+      { subject: 'Win Rate', User: me.winRate, Average: avg('winRate') },
+      { subject: 'Consistency', User: me.consistency, Average: avg('consistency') },
+      { subject: 'Participation', User: me.participation, Average: avg('participation') },
+      { subject: 'Standing %', User: myStanding, Average: 50 },
     ];
-  }, [myEntry, _pool.type, entries, userRank]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myEntry, _pool.type, entries, userRank, selectedWeek]);
 
   const displayedMembers = useMemo(() => {
     if (entries.length === 0) return [];
@@ -1025,10 +1018,9 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             <div className="space-y-3">
               {displayedStandings.length > 0 ? (
                 displayedStandings.map((row, i) => {
-                  const trend = getTrendData(row.name);
                   return (
-                    <div 
-                      key={i} 
+                    <div
+                      key={i}
                       className={`flex justify-between items-center p-3 rounded-lg border transition-all duration-150 ${
                         row.highlight
                           ? 'bg-brandred-600/[0.07] border-brandred-600/30 shadow-card'
@@ -1049,21 +1041,6 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                       </div>
 
                       <div className="flex items-center gap-4">
-                        {/* SVG Trend Sparkline */}
-                        <div className="w-12 h-6 overflow-hidden select-none">
-                          <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                            {trend.type === 'up' && (
-                              <path d="M 0 80 Q 40 70, 70 20 T 100 10" fill="none" stroke={trend.color} strokeWidth="3" strokeLinecap="round" />
-                            )}
-                            {trend.type === 'down' && (
-                              <path d="M 0 10 Q 30 20, 60 70 T 100 90" fill="none" stroke={trend.color} strokeWidth="3" strokeLinecap="round" />
-                            )}
-                            {trend.type === 'updown' && (
-                              <path d="M 0 50 Q 25 20, 50 80 T 100 50" fill="none" stroke={trend.color} strokeWidth="3" strokeLinecap="round" />
-                            )}
-                          </svg>
-                        </div>
-
                         <div className="text-right w-12">
                           <span className="text-[9px] font-display font-bold text-muted block uppercase tracking-[0.08em] leading-none">Score</span>
                           <span className="text-xs font-display font-bold text-[color:var(--text)] num">{row.pts}</span>

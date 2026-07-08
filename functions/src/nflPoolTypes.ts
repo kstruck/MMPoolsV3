@@ -181,6 +181,9 @@ export interface NFLPickemEntry {
   confidence?: Record<string, number>; // gameId -> confidence rank [1-16]
   weeklyTiebreakers?: Record<number, number>; // week -> predicted MNF combined score
   weeklyPoints?: Record<number, number>; // week -> points earned
+  // Real per-week W-L, persisted by scoreNFLWeek (ADR 0004). resultsVersion bumps each score.
+  weeklyResults?: Record<number, { correct: number; total: number; points: number }>;
+  resultsVersion?: number;
   totalScore: number;
   submittedAt: number;
   paidStatus: 'PAID' | 'UNPAID';

@@ -693,9 +693,17 @@ export const scoreNFLWeek = onCall(async (request) => {
       const weeklyPoints = { ...(entry.weeklyPoints || {}), [week]: points };
       const totalScore = Object.values(weeklyPoints).reduce((sum, p) => sum + p, 0);
 
+      // Persist the real per-week W-L (correct/total) that scorePickemEntry already computes
+      // and previously discarded — makes accuracy truthful (ADR 0004). resultsVersion lets the
+      // Phase E per-user aggregate recompute idempotently.
+      const picksThisWeek = games.filter(g => !!entry.picks?.[g.id]).length;
+      const weeklyResults = { ...((entry as any).weeklyResults || {}), [week]: { correct: correctCount, total: picksThisWeek, points } };
+
       await stage(entryRef, {
         weeklyPoints,
-        totalScore
+        totalScore,
+        weeklyResults,
+        resultsVersion: (((entry as any).resultsVersion) || 0) + 1,
       });
 
       // Sharp calculation
