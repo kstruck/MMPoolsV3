@@ -39,6 +39,7 @@ import {
   gradeMarginWeekGame,
   buildStandingsRows
 } from './nflScoringEngine';
+import { maybeFinalizeNFLPool } from './nflFinalize';
 import { fetchNFLWeekSchedule } from './nflSchedule';
 import { recomputeWeekConsensus } from './consensus';
 
@@ -872,7 +873,19 @@ export const scoreNFLWeek = onCall(async (request) => {
   await poolRef.update({
     lastScoredAt: admin.firestore.FieldValue.serverTimestamp(),
     scoredThroughWeek: Math.max(Number(pool.scoredThroughWeek || 0), Number(week)),
+    // Which weeks have actually been scored (out-of-order safe) — the Season
+    // Finalization completeness check reads this, not scoredThroughWeek.
+    [`scoredWeeks.${week}`]: true,
   });
+
+  // 3c. Season Finalization (ADR 0005 Phase 3): if this scoring pass completed the
+  // season, finalize automatically — stats never wait on a human. Best-effort:
+  // a finalize failure must never fail the scoring call (the sweep job catches up).
+  try {
+    await maybeFinalizeNFLPool(db, poolId);
+  } catch (e) {
+    console.warn(`[scoreNFLWeek] finalize check failed for ${poolId} (sweep will retry):`, e);
+  }
 
   // 4. Generate automated Weekly Recap. buildWeeklyRecap omits undefined
   // optional fields — Firestore's set() throws on a literal `undefined` value

@@ -102,3 +102,6 @@ export { syncExpertPicksJob, refreshExpertPicks } from "./expertPicks";
 // --- PLAYER PROFILES (ADR 0004) ---
 export { onEntryChangedRecomputeProfile, recomputeMyProfile } from "./userProfile";
 
+// --- SEASON FINALIZATION (ADR 0005 Phase 3) — kill-switched, dry-run-default sweep ---
+export { nflFinalizeSweepJob } from "./nflFinalize";
+
