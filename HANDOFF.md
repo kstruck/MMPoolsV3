@@ -4,11 +4,30 @@ Single entry point for a fresh session. Two large efforts are **built, reviewed,
 
 ---
 
-## ⚡ IMMEDIATE NEXT ACTION (do this first)
+## ⚡ MORNING LIST (2026-07-10) — do these
 
-**Nothing blocking. Everything shipped + deployed as of 2026-07-09.** Option A cleanup done: `feat/pool-homepage-v2` (contained `feat/commissioner-dash`) fast-forward merged to `main`, pushed, Coolify Source switched to `main`, redeployed (`d468ea9`, container healthy). **Prod frontend is on `main` again** — routine deploys from now on (see [[coolify-branch-state]] memory).
+Overnight effort committed to `main` (2 commits, **UNPUSHED**: `3d65ab3` expert-picks, `90de09d` grill prompts). Nothing deployed overnight — all outward-facing steps are below with your hand on them.
 
-**Ticker speed note:** the control works (verified prod value is read + applied). Direction is **higher seconds = slower**; ~100–120 for a slow crawl. A value near 30 looks identical to the old 32s baseline — that caused a "nothing changed" impression, not a bug.
+**A. Deploy Expert Picks** (functions only; commit `3d65ab3`). From `D:\march-melee-pools` (repo root, on `main`):
+1. `git push origin main`  ⚠️ Coolify is on `main` and may auto-rebuild the frontend — harmless, these commits touch no frontend code.
+2. `npm --prefix functions install`  (guards against stripe/fft TS2307)
+3. `npx firebase deploy --only functions:syncExpertPicksJob,functions:refreshExpertPicks --project gridiron-gamble-uzuqo`
+4. Verify: ingestion-only (no UI yet). Preseason has no ESPN FPI data, so `nfl_games/{id}.expertPredictions` stays empty until games are scheduled (Aug) — like consensus/win-prob. Optionally call `refreshExpertPicks` (SUPER_ADMIN) from the console to confirm it runs clean.
+
+**B. Ticker speed** — SuperAdmin → Settings → "Score Ticker Speed" → set to **~100** (higher = slower; your earlier 30 ≈ the 32s baseline, which is why it looked unchanged). Hard-refresh homepage.
+
+**C. Sim Tools decision (confirm — I did NOT edit).** The "Simulation Tools" block in SuperAdmin → System → **Settings** is REAL but a **legacy duplicate** of the full Tournament Simulator already in the **Test Suite** tab (T12 was meant to consolidate). Recommend **deleting** the Settings block. Say the word and I'll remove it — or it's folded into the sim-harness plan (D).
+
+**D. Two big lifts — grill prompts ready to paste** (planning, per your request):
+- `PROMPT-GRILL-PLAYER-PROFILES.md` — profile page for every pool member (AP Pro Picks style; no units; profit = pool winnings; hosts Achievements as a stub).
+- `PROMPT-GRILL-NFL-SIM-HARNESS.md` — simulate all NFL pool types for preseason confidence (extends existing `simHarness.ts`).
+Open each, paste its `/grill-with-docs-codex …` block to start.
+
+**E. Dependabot (low priority).** 5 open alerts, ALL dev-only `functions/` test tooling (vite/vitest/esbuild), scope=development — zero prod exposure (not in the deployed functions runtime or nginx bundle; the "critical" is vitest-UI RCE, only if you run `vitest --ui` exposed). Fix needs a reviewed major bump (vitest 2→3). Not urgent.
+
+---
+
+**Done + deployed 2026-07-09 (prior session):** Option A cleanup complete — `main` fast-forwarded + pushed, Coolify switched to `main`, redeployed (`d468ea9`, healthy). Prod on `main` again (see [[coolify-branch-state]]).
 
 **Done + deployed this session (2026-07-09):**
 - **Member Roster backfill** — function deployed, backfill run, working (roster/mark-paid confirmed).
@@ -65,11 +84,13 @@ Plan: `PLAN-POOL-HOMEPAGE.md` · ADR: `docs/adr/0004-performance-stats-and-conse
 ---
 
 ## Still TODO / deferred (by design, not forgotten)
-1. **Frontend Coolify deploy** — HELD by Kevin pending Option-A cleanup (item 4). Carries 2 committed frontend changes: consensus card copy (`af34ebd`) + ticker speed (`4f4aa14`). (Backfill + live-consensus functions already done/deployed 2026-07-09.)
-2. **Expert Picks** — DEFERRED pending Kevin's compliant data-source choice (licensed feed / official API / admin-curated; NOT scraping nflpickwatch). Profile shape is ready to host an "expert" later.
-3. **Player Profile stubs** — Team-by-Team, Profit, Achievements render honest "coming soon". Need: per-pick result persistence (Team-by-Team + full pick history), a NFL finalize lifecycle distinct from admin close + `PAYOUT_PAID/UNPAID` ledger events (Profit), and the Achievements feature.
-4. **Option A cleanup** — merge both branches → `main`, switch Coolify back to `main` (see branch state above).
-5. **Consensus scale** — currently a bounded per-week full recompute (fine at current scale); shard-based incrementalization is the documented scale-up path (ADR 0004).
+1. **Expert Picks — data layer BUILT (`3d65ab3`), needs deploy (morning A) + a display/profile layer.** Source resolved: ESPN FPI predictor + Vegas-from-spread (compliant, no scraping). `functions/src/expertPicks.ts` ingests per-game predictions to `nfl_games/{id}.expertPredictions`. STILL TODO: surface them in the UI, and the "expert as a tracked profile" (W-L record like AP Pro Picks) — that shares the Player Profile data model, so it's in the Player Profiles grill plan (`PROMPT-GRILL-PLAYER-PROFILES.md`).
+2. **Player Profiles for every member — GRILL PROMPT READY** (`PROMPT-GRILL-PLAYER-PROFILES.md`). AP Pro Picks style; no units; profit = pool winnings; hosts Achievements as a stub. Blockers to resolve in planning: per-pick result persistence (Team-by-Team + pick history), NFL finalize lifecycle + `PAYOUT_PAID/UNPAID` ledger (Profit), achievements data contract. Supersedes the old "Player Profile stubs" item.
+3. **NFL pool simulation harness — GRILL PROMPT READY** (`PROMPT-GRILL-NFL-SIM-HARNESS.md`). Preseason-confidence sim for all NFL pool types. EXTENDS existing `functions/src/simHarness.ts` (simRunId isolation + audit). Folds in: delete legacy Settings "Simulation Tools" block (morning C), fix SimulationDashboard `.squares` crash.
+4. **Consensus scale** — currently a bounded per-week full recompute (fine at current scale); shard-based incrementalization is the documented scale-up path (ADR 0004).
+5. **Dependabot** — 5 dev-only `functions/` alerts (vite/vitest/esbuild); low priority, needs a reviewed major bump (morning E).
+
+_(Done + removed from this list: Member Roster backfill, live-consensus, Option-A cleanup/Coolify-to-main, frontend card+ticker deploy — all shipped 2026-07-09.)_
 
 ---
 
