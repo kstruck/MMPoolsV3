@@ -93,6 +93,7 @@ export { sendPoolInvites } from "./invites";
 export { setPaidStatus } from "./setPaidStatus";
 export { onMemberRecordWrite, onWinnerWrite, onPoolRosterFieldsChange } from "./rosterAggregate";
 export { backfillMemberRecords } from "./migrations/backfillMemberRecords";
+export { backfillProfileData } from "./migrations/backfillProfileData";
 
 // --- CONSENSUS + LIVE WIN PROBABILITY (ADR 0004) ---
 export { consensusRefreshJob, recomputeConsensus } from "./consensus";
@@ -100,5 +101,14 @@ export { syncWinProbabilityJob } from "./winProbability";
 export { syncExpertPicksJob, refreshExpertPicks } from "./expertPicks";
 
 // --- PLAYER PROFILES (ADR 0004) ---
-export { onEntryChangedRecomputeProfile, recomputeMyProfile } from "./userProfile";
+export { onEntryChangedRecomputeProfile, recomputeMyProfile, getProfilePoolDetail } from "./userProfile";
+
+// --- SEASON FINALIZATION (ADR 0005 Phase 3) — kill-switched, dry-run-default sweep ---
+export { nflFinalizeSweepJob } from "./nflFinalize";
+
+// --- PAYOUT RECORDS (ADR 0005 Phase 4) — commissioner-recorded prize truth ---
+export { recordPoolPayouts } from "./payoutRecords";
+
+// --- EXPERT PROFILES (ADR 0005 Phase 6) — experts rendered through the same projection ---
+export { gradeExpertProfilesJob, refreshExpertProfiles } from "./expertProfiles";
 

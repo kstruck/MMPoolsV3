@@ -10,17 +10,79 @@ import { NFLManagerView } from '../components/NFLPoolDashboard/NFLManagerView';
 import { PaymentsPanel } from '../components/PaymentsPanel';
 import { PlayerProfile } from './PlayerProfile';
 
+// Full ADR 0005 shape — aggregate-only, zero pool identifiers (matches shared/profile.ts).
 const mockProfile = {
-  uid: 'demo', userName: 'Kevin Struck',
-  overall: { accuracy: 67, correct: 96, total: 144, points: 96, poolsEntered: 3, seasonsPlayed: 1 },
+  uid: 'demo', userName: 'Kevin Struck', subjectKind: 'PLAYER', schemaVersion: 1,
+  overall: { accuracy: 67, correct: 96, total: 144, points: 96, poolsEntered: 3, seasonsPlayed: 2 },
   weekly: [
-    { season: '2026', week: 1, poolName: "Kevin's Weekly Pick'em", correct: 11, total: 16, points: 11 },
-    { season: '2026', week: 2, poolName: "Kevin's Weekly Pick'em", correct: 9, total: 16, points: 9 },
-    { season: '2026', week: 3, poolName: "Kevin's Weekly Pick'em", correct: 12, total: 16, points: 12 },
-    { season: '2026', week: 4, poolName: "Kevin's Weekly Pick'em", correct: 13, total: 16, points: 13 },
-    { season: '2026', week: 5, poolName: "Kevin's Weekly Pick'em", correct: 10, total: 16, points: 10 },
+    { season: '2026', week: 1, correct: 11, total: 16, points: 11 },
+    { season: '2026', week: 2, correct: 9, total: 16, points: 9 },
+    { season: '2026', week: 3, correct: 12, total: 16, points: 12 },
+    { season: '2026', week: 4, correct: 13, total: 16, points: 13 },
+    { season: '2026', week: 5, correct: 10, total: 16, points: 10 },
   ],
-  teamByTeam: [], profit: null,
+  yearly: [
+    { season: '2026', correct: 55, total: 80, accuracy: 69, profitNet: null, bestFinish: { rank: 2, totalEntries: 24 } },
+    { season: '2025', correct: 41, total: 64, accuracy: 64, profitNet: 130, bestFinish: { rank: 1, totalEntries: 18 } },
+  ],
+  teamByTeam: [
+    {
+      poolType: 'NFL_PICKEM', pickMode: 'STRAIGHT',
+      teams: [
+        { team: 'KC', wins: 6, losses: 1, pushes: 0, accuracy: 86 },
+        { team: 'SF', wins: 4, losses: 1, pushes: 1, accuracy: 80 },
+        { team: 'DAL', wins: 2, losses: 4, pushes: 0, accuracy: 33 },
+        { team: 'NYJ', wins: 0, losses: 2, pushes: 0, accuracy: 0 },
+      ],
+    },
+    {
+      poolType: 'NFL_SURVIVOR',
+      teams: [
+        { team: 'BUF', wins: 2, losses: 0, pushes: 0, accuracy: 100 },
+        { team: 'PHI', wins: 1, losses: 1, pushes: 0, accuracy: 50 },
+      ],
+    },
+  ],
+  pickHistory: [
+    { season: '2026', week: 5, gameId: 'g50', awayAbbr: 'KC', homeAbbr: 'BUF', pick: 'KC', result: 'L', poolType: 'NFL_PICKEM', pickMode: 'STRAIGHT' },
+    { season: '2026', week: 5, gameId: 'g51', awayAbbr: 'SF', homeAbbr: 'GB', pick: 'SF', result: 'W', poolType: 'NFL_PICKEM', pickMode: 'STRAIGHT' },
+    { season: '2026', week: 5, gameId: 'g52', awayAbbr: 'DAL', homeAbbr: 'PHI', pick: 'PHI', result: 'SURVIVED', poolType: 'NFL_SURVIVOR' },
+    { season: '2026', week: 4, gameId: 'g40', awayAbbr: 'MIA', homeAbbr: 'NYJ', pick: 'MIA', result: 'W', poolType: 'NFL_PICKEM', pickMode: 'STRAIGHT' },
+    { season: '2026', week: 4, gameId: 'g41', awayAbbr: 'BAL', homeAbbr: 'CIN', pick: 'BAL', result: 'PUSH', poolType: 'NFL_PICKEM', pickMode: 'STRAIGHT' },
+    { season: '2026', week: 4, gameId: 'g42', awayAbbr: 'SEA', homeAbbr: 'LAR', pick: 'SEA', result: 'W', poolType: 'NFL_MARGIN', net: 7 },
+  ],
+  profit: { won: 250, feesOwed: 95, net: 155, poolsPendingPayouts: 1, feesEstimated: true },
+  achievements: [
+    { id: 'a1', code: 'PERFECT_WEEK', title: 'Perfect Week', description: 'Went 16-0 in a scored week', iconKey: 'trophy', tier: 'GOLD', earnedAt: 1760000000000, season: '2025', schemaVersion: 1 },
+  ],
+};
+
+const mockExpertProfile = {
+  uid: 'expert_espnFpi', userName: 'ESPN FPI', subjectKind: 'EXPERT', schemaVersion: 1,
+  overall: { accuracy: 68, correct: 54, total: 80, points: 54, poolsEntered: 1, seasonsPlayed: 1 },
+  weekly: [
+    { season: '2026', week: 1, correct: 11, total: 16, points: 11 },
+    { season: '2026', week: 2, correct: 10, total: 16, points: 10 },
+    { season: '2026', week: 3, correct: 12, total: 16, points: 12 },
+    { season: '2026', week: 4, correct: 11, total: 16, points: 11 },
+    { season: '2026', week: 5, correct: 10, total: 16, points: 10 },
+  ],
+  yearly: [{ season: '2026', correct: 54, total: 80, accuracy: 68, profitNet: null, bestFinish: null }],
+  teamByTeam: [
+    {
+      poolType: 'NFL_PICKEM', pickMode: 'STRAIGHT',
+      teams: [
+        { team: 'KC', wins: 5, losses: 0, pushes: 0, accuracy: 100 },
+        { team: 'CAR', wins: 1, losses: 3, pushes: 0, accuracy: 25 },
+      ],
+    },
+  ],
+  pickHistory: [
+    { season: '2026', week: 5, gameId: 'g50', awayAbbr: 'KC', homeAbbr: 'BUF', pick: 'BUF', result: 'W', poolType: 'NFL_PICKEM', pickMode: 'STRAIGHT' },
+    { season: '2026', week: 5, gameId: 'g51', awayAbbr: 'SF', homeAbbr: 'GB', pick: 'SF', result: 'W', poolType: 'NFL_PICKEM', pickMode: 'STRAIGHT' },
+  ],
+  profit: null,
+  achievements: [],
 };
 
 const mkPool = (id: string, name: string, type: string, players: number, fee: number, status = 'OPEN'): Pool => ({
@@ -93,7 +155,7 @@ const rosterEntries = [
 const noop = () => {};
 
 export const DevDashboardPreview: React.FC = () => {
-  const [view, setView] = useState<'hub' | 'homepage' | 'rules' | 'roster' | 'profile'>('hub');
+  const [view, setView] = useState<'hub' | 'homepage' | 'rules' | 'roster' | 'profile' | 'expert'>('hub');
   const [week, setWeek] = useState(1);
   const seasonOpen = 1_800_000_000_000; // fixed future epoch (Jan 2027) -> "editable until" state
   return (
@@ -110,11 +172,14 @@ export const DevDashboardPreview: React.FC = () => {
             <button onClick={() => setView('rules')} className={`px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.08em] border ${view === 'rules' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border-gold-500/40' : 'bg-surface text-muted border-line'}`}>Rules Tab</button>
             <button onClick={() => setView('roster')} className={`px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.08em] border ${view === 'roster' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border-gold-500/40' : 'bg-surface text-muted border-line'}`}>Payments / Roster</button>
             <button onClick={() => setView('profile')} className={`px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.08em] border ${view === 'profile' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border-gold-500/40' : 'bg-surface text-muted border-line'}`}>Player Profile</button>
+            <button onClick={() => setView('expert')} className={`px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.08em] border ${view === 'expert' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border-gold-500/40' : 'bg-surface text-muted border-line'}`}>Expert Profile</button>
           </div>
         </div>
 
         {view === 'profile' ? (
-          <PlayerProfile previewData={mockProfile} />
+          <PlayerProfile key="player" previewData={mockProfile} />
+        ) : view === 'expert' ? (
+          <PlayerProfile key="expert" previewData={mockExpertProfile} />
         ) : view === 'hub' ? (
           <GlobalCommissionerDashboard user={mockUser} managedPools={mockPools} />
         ) : view === 'rules' ? (

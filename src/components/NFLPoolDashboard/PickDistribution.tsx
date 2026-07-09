@@ -1,19 +1,22 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart2, Lock, Eye } from 'lucide-react';
 import { now as serverNow } from '../../utils/serverClock';
+import { dbService } from '../../services/dbService';
 import type { Pool, NFLGame } from '../../types';
 
 interface PickDistributionProps {
   pool: Pool;
-  entries: any[];
   games: NFLGame[];
   week: number;
   isWeekLocked: boolean;
 }
 
+// Reads the server Pool Consensus aggregate (ADR 0004/0005) instead of computing the
+// distribution client-side from raw entries — members can no longer read other members'
+// entries pre-FINAL, and never needed to for this card. Display still reveals per game
+// at lock, matching the prior behavior.
 export const PickDistribution: React.FC<PickDistributionProps> = ({
   pool,
-  entries,
   games,
   week,
   isWeekLocked
@@ -21,51 +24,29 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
   const settings = (pool as any).settings || {};
   const lockBufferMinutes = settings.lockBufferMinutes ?? 5;
 
+  const [consensus, setConsensus] = useState<Record<string, any>>({});
+  useEffect(() => {
+    return dbService.subscribeToPoolConsensus(pool.id, setConsensus);
+  }, [pool.id]);
+
   const isGameLocked = (game: NFLGame): boolean => {
     if (isWeekLocked) return true;
     const bufferMs = lockBufferMinutes * 60 * 1000;
     return serverNow() >= (game.startTime - bufferMs);
   };
 
-  // Compile pick distribution statistics
+  // Compile pick distribution statistics from the server aggregate
   const distributionData = useMemo(() => {
-    if (!entries || entries.length === 0 || games.length === 0) return [];
+    if (games.length === 0) return [];
 
     return games.map(game => {
-      let homePicksCount = 0;
-      let awayPicksCount = 0;
-      let totalPicksForGame = 0;
-
       const locked = isGameLocked(game);
-
-      // Only calculate if the selection is legally revealed (locked)
-      if (locked) {
-        entries.forEach(entry => {
-          if (pool.type === 'NFL_PICKEM') {
-            const pick = entry.picks?.[game.id];
-            if (pick === game.homeTeam.abbreviation) {
-              homePicksCount++;
-              totalPicksForGame++;
-            } else if (pick === game.awayTeam.abbreviation) {
-              awayPicksCount++;
-              totalPicksForGame++;
-            }
-          } else if (pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') {
-            // Survivor and Margin are stored as week -> pickedTeamId (abbreviation)
-            const pick = entry.picks?.[week];
-            if (pick === game.homeTeam.abbreviation) {
-              homePicksCount++;
-              totalPicksForGame++;
-            } else if (pick === game.awayTeam.abbreviation) {
-              awayPicksCount++;
-              totalPicksForGame++;
-            }
-          }
-        });
-      }
-
-      const homePct = totalPicksForGame > 0 ? Math.round((homePicksCount / totalPicksForGame) * 100) : 0;
-      const awayPct = totalPicksForGame > 0 ? Math.round((awayPicksCount / totalPicksForGame) * 100) : 0;
+      const c = consensus[game.id];
+      const homePicksCount = c?.home ?? 0;
+      const awayPicksCount = c?.away ?? 0;
+      const totalPicksForGame = c?.total ?? 0;
+      const homePct = c?.homePct ?? 0;
+      const awayPct = c?.awayPct ?? 0;
 
       return {
         game,
@@ -77,7 +58,7 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
         awayPct
       };
     });
-  }, [entries, games, week, isWeekLocked]);
+  }, [consensus, games, week, isWeekLocked]);
 
   return (
     <div className="bg-card border border-line rounded-xl p-6 shadow-card space-y-5">

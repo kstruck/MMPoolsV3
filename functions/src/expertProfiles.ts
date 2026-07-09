@@ -1,0 +1,159 @@
+// Expert profiles (ADR 0005 decision 4 / PLAN-PLAYER-PROFILES Phase 6).
+//
+// Grades the ingested per-game expert predictions (nfl_games/{id}.expertPredictions —
+// espnFpi + vegas, see expertPicks.ts) against final scores into a SERVER-ONLY store
+//   expertResults/{expertId}/seasons/{season}_{seasonType}
+// and renders each expert through the SAME projection shape as players:
+//   publicProfiles/expert_espnFpi, publicProfiles/expert_vegas (subjectKind EXPERT).
+// Experts have no pools, entries, fees, or Profit — buildPublicProfile nulls money for
+// EXPERT subjects. Straight-up grading for both experts (a favorite-vs-spread record is
+// definitionally ~50% and would be noise); EVEN / missing predictions grade VOID-or-skip.
+// Best-effort and isolated like the ingestion job: failures never block anything else.
+import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { EXPERT_SUBJECT_IDS } from "./shared/profile";
+import { buildPublicProfile, type ProfilePoolInput } from "./lib/profileBuild";
+import type { PickSide } from "./expertPicks";
+
+type Firestore = admin.firestore.Firestore;
+
+const EXPERTS: Array<{ key: 'espnFpi' | 'vegas'; subjectId: string; displayName: string }> = [
+  { key: 'espnFpi', subjectId: EXPERT_SUBJECT_IDS.espnFpi, displayName: 'ESPN FPI' },
+  { key: 'vegas', subjectId: EXPERT_SUBJECT_IDS.vegas, displayName: 'Vegas Line' },
+];
+
+export interface ExpertGameGrade {
+  pick: string;
+  result: 'W' | 'L' | 'PUSH' | 'VOID';
+  away: string;
+  home: string;
+}
+
+/** Straight-up grade of one expert prediction vs a concluded game. null = nothing to grade. */
+export function gradeExpertGame(side: PickSide | undefined, game: any): ExpertGameGrade | null {
+  if (!side) return null;
+  const away = game.awayTeam?.abbreviation || '';
+  const home = game.homeTeam?.abbreviation || '';
+  if (side === 'EVEN') return { pick: '', result: 'VOID', away, home };
+  const pick = side === 'HOME' ? home : away;
+  if (game.status === 'CANCELLED') return { pick, result: 'VOID', away, home };
+  if (game.status !== 'FINAL') return null;
+  const hs = game.scores?.home ?? 0;
+  const as = game.scores?.away ?? 0;
+  if (hs === as) return { pick, result: 'PUSH', away, home };
+  const winner = hs > as ? home : away;
+  return { pick, result: pick === winner ? 'W' : 'L', away, home };
+}
+
+/**
+ * Grade one (season, seasonType) for every expert and rebuild their public profiles
+ * from ALL stored seasons. Idempotent full overwrite of the season doc.
+ */
+export async function recomputeExpertProfiles(
+  db: Firestore,
+  season: string,
+  seasonType: number,
+): Promise<{ graded: Record<string, number> }> {
+  const gamesSnap = await db.collection('nfl_games')
+    .where('season', '==', season)
+    .where('seasonType', '==', seasonType)
+    .get();
+
+  const graded: Record<string, number> = {};
+
+  for (const expert of EXPERTS) {
+    // weeklyResults in the Pickem shape so the shared builder consumes it verbatim.
+    const weeklyResults: Record<number, any> = {};
+    let count = 0;
+    for (const doc of gamesSnap.docs) {
+      const g: any = doc.data();
+      const grade = gradeExpertGame(g.expertPredictions?.[expert.key]?.pick, g);
+      if (!grade) continue;
+      const wk = Number(g.week);
+      const week = weeklyResults[wk] || { correct: 0, total: 0, points: 0, mode: 'STRAIGHT', games: {} };
+      week.games[doc.id] = grade;
+      if (grade.result !== 'VOID') {
+        week.total++;
+        if (grade.result === 'W') { week.correct++; week.points++; }
+      }
+      weeklyResults[wk] = week;
+      count++;
+    }
+    graded[expert.key] = count;
+
+    await db.collection('expertResults').doc(expert.subjectId)
+      .collection('seasons').doc(`${season}_${seasonType}`)
+      .set({ season, seasonType, weeklyResults, updatedAt: FieldValue.serverTimestamp() });
+
+    // Rebuild the public profile from ALL stored seasons (cheap: a handful of docs).
+    const seasonsSnap = await db.collection('expertResults').doc(expert.subjectId)
+      .collection('seasons').get();
+    const inputs: ProfilePoolInput[] = seasonsSnap.docs.map(d => {
+      const data: any = d.data();
+      return {
+        poolId: `expert:${d.id}`, // internal only — builder publishes no pool identifiers
+        poolName: expert.displayName,
+        poolType: 'NFL_PICKEM',
+        pickMode: 'STRAIGHT',
+        season: String(data.season),
+        entry: { weeklyResults: data.weeklyResults || {} },
+        finalRank: null,
+        awardsWon: 0,
+        feeOwed: 0,
+        feeEstimated: false,
+        finalized: false,
+        payoutsRecorded: false,
+      };
+    });
+
+    const profile = {
+      ...buildPublicProfile(expert.subjectId, expert.displayName, 'EXPERT', inputs),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    await db.collection('publicProfiles').doc(expert.subjectId).set(profile);
+  }
+
+  return { graded };
+}
+
+/** The (season, seasonType) pairs with recent activity — what's worth (re)grading. */
+async function activeSeasonPairs(db: Firestore, now: number): Promise<Array<{ season: string; seasonType: number }>> {
+  const snap = await db.collection('nfl_games')
+    .where('startTime', '>=', now - 10 * 24 * 60 * 60 * 1000)
+    .where('startTime', '<=', now)
+    .get();
+  const pairs = new Map<string, { season: string; seasonType: number }>();
+  for (const d of snap.docs) {
+    const g: any = d.data();
+    if (!g.season) continue;
+    pairs.set(`${g.season}_${g.seasonType}`, { season: String(g.season), seasonType: Number(g.seasonType || 2) });
+  }
+  return [...pairs.values()];
+}
+
+/** Daily: grade recently active seasons + refresh expert profiles. Best-effort. */
+export const gradeExpertProfilesJob = onSchedule('0 7 * * *', async () => {
+  const db = admin.firestore();
+  try {
+    const pairs = await activeSeasonPairs(db, Date.now());
+    for (const p of pairs) {
+      const r = await recomputeExpertProfiles(db, p.season, p.seasonType);
+      console.log(`[expertProfiles] ${p.season}/${p.seasonType}:`, r.graded);
+    }
+    if (pairs.length === 0) console.log('[expertProfiles] no active season window; nothing to grade.');
+  } catch (e) {
+    console.error('[expertProfiles] failed:', e);
+  }
+});
+
+/** On-demand (SUPER_ADMIN): grade a specific season now. */
+export const refreshExpertProfiles = onCall(async (request) => {
+  if (!request.auth || request.auth.token?.role !== 'SUPER_ADMIN') {
+    throw new HttpsError('permission-denied', 'Super Admin only.');
+  }
+  const { season, seasonType } = request.data || {};
+  if (!season) throw new HttpsError('invalid-argument', 'season is required.');
+  return recomputeExpertProfiles(admin.firestore(), String(season), Number(seasonType || 2));
+});

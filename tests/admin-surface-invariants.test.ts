@@ -132,7 +132,11 @@ describe('T2 — closePool trigger guards are wired', () => {
 
 describe('step 5 — destructive admin actions write an audit trail', () => {
   const admin = read('src/components/SuperAdmin.tsx');
-  it.each(['DELETE_POOL', 'DELETE_USER_ACCOUNT', 'RESET_TOURNAMENT', 'DELETE_THEME'])(
+  // RESET_TOURNAMENT left this list when the legacy Simulation Tools block was
+  // deliberately removed from the Settings tab (2e61a9f, owner-confirmed) —
+  // tournament re-init lives in the Operations tab now, covered by the OP_
+  // audit invariant below.
+  it.each(['DELETE_POOL', 'DELETE_USER_ACCOUNT', 'DELETE_THEME'])(
     'logs %s via logAdminAction',
     (action) => {
       expect(admin).toContain(action);

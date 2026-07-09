@@ -9,6 +9,7 @@ import { getUserMessage } from '../../utils/errorMessages';
 import { logger } from '../../utils/logger';
 import type { Pool, NFLGame, User } from '../../types';
 import { NFLManagerBentoDashboard } from './NFLManagerBentoDashboard';
+import { RecordPayoutsCard } from './RecordPayoutsCard';
 import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
 
@@ -408,6 +409,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         user={user} 
         onSelectTab={onSelectTab} 
       />
+
+      {/* Record Payouts (ADR 0005 Phase 4) — renders only once the pool is finalized */}
+      <RecordPayoutsCard pool={pool} entries={entries} />
 
       {/* Feedback Alert */}
       {feedback && (

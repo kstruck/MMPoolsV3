@@ -22,6 +22,12 @@ export interface MemberRecord {
   unitsPaid?: number;            // SQUARES: squares paid for
   rebuyOwed?: number;            // dollars owed for rebuys (e.g. survivor)
   rebuyPaid?: number;            // dollars paid for rebuys
+  // ADR 0005 Phase 4 — the SINGLE base-dues source for Profit's fee side. Never
+  // inferred from entry existence. Stamped at join (participants) / first playable
+  // entry (owners — hosting is not playing, so seeded owners start at 0). entryFee
+  // edits (OPEN phase only) cascade-update fee-liable records so this never drifts.
+  feeOwed?: number;
+  feeOwedSource?: 'LIVE' | 'BACKFILL_ESTIMATE';
 }
 
 export interface RosterSummary {
@@ -59,7 +65,10 @@ export function memberDues(m: MemberRecord, inputs: DuesInputs): { expected: num
     expected += unit * (m.unitsOwned ?? 0);
     collected += unit * (m.unitsPaid ?? 0);
   } else {
-    const fee = inputs.entryFee ?? 0;
+    // Per-record feeOwed (ADR 0005) is the base-dues truth when stamped —
+    // a seeded owner who never played carries 0. Fall back to the pool fee
+    // for records that predate the stamp.
+    const fee = m.feeOwed ?? inputs.entryFee ?? 0;
     expected += fee;
     if (m.paidStatus === 'PAID') collected += fee;
   }

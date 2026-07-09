@@ -33,8 +33,13 @@ import {
   computeMNFTiebreakerTotal,
   buildWeeklyRecap,
   scoreMarginWeek,
-  sortMarginLeaderboard
+  sortMarginLeaderboard,
+  gradePickemGames,
+  gradeSurvivorWeekGame,
+  gradeMarginWeekGame,
+  buildStandingsRows
 } from './nflScoringEngine';
+import { maybeFinalizeNFLPool } from './nflFinalize';
 import { fetchNFLWeekSchedule } from './nflSchedule';
 import { recomputeWeekConsensus } from './consensus';
 
@@ -124,7 +129,11 @@ export const createNFLPool = onCall(async (request) => {
       // Seed the owner's Member Record so the commissioner is on the roster from t=0
       // (ADR 0003). Brand-new pool -> no existing record.
       ensureMemberRecord(transaction, db, poolId, uid,
-        { userName: userDoc.data()?.name || request.auth?.token?.name || 'Host', role: 'MANAGER', poolType, present: true },
+        {
+          userName: userDoc.data()?.name || request.auth?.token?.name || 'Host', role: 'MANAGER', poolType, present: true,
+          // Hosting is not playing: owner feeOwed stays 0 until they submit an entry (ADR 0005).
+          entryFee: Number(newPool.settings?.entryFee ?? 0), hasPlayableEntry: false,
+        },
         null, now);
     });
 
@@ -185,7 +194,10 @@ export const joinNFLPool = onCall(async (request) => {
     if (participantIds.includes(uid)) {
       // Already a participant — still ensure a Member Record exists (backfill-on-touch).
       ensureMemberRecord(transaction, db, poolId, uid,
-        { userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true },
+        {
+          userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true,
+          entryFee: Number(poolData.settings?.entryFee ?? 0),
+        },
         memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
       return;
     }
@@ -213,8 +225,12 @@ export const joinNFLPool = onCall(async (request) => {
     });
 
     // 3. Seed the Member Record (roster + payment truth, ADR 0003) — additive.
+    // feeOwed stamped at join: dues are owed from membership, not from playing (ADR 0005).
     ensureMemberRecord(transaction, db, poolId, uid,
-      { userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true },
+      {
+        userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true,
+        entryFee: Number(poolData.settings?.entryFee ?? 0),
+      },
       memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
   });
 
@@ -316,6 +332,9 @@ export const submitNFLPicks = onCall(async (request) => {
   await db.runTransaction(async (transaction) => {
     const entrySnap = await transaction.get(entryRef);
     const existingEntry = entrySnap.exists ? entrySnap.data() : null;
+    // Member Record read (before any writes) for the base-dues stamp below (ADR 0005).
+    const memberSnap = await transaction.get(membersCol(db, poolId).doc(uid));
+    const existingMember = memberSnap.exists ? (memberSnap.data() as MemberRecord) : null;
 
     // Idempotency: a retried submit (client resend after a lost response) whose
     // requestId already landed is a no-op success, not a duplicate write
@@ -481,6 +500,18 @@ export const submitNFLPicks = onCall(async (request) => {
 
       transaction.set(entryRef, { ...marginEntry, ...(requestId ? { lastRequestId: requestId } : {}) }, { merge: true });
     }
+
+    // Base-dues stamp (ADR 0005 Phase 4): submitting a playable entry starts fee
+    // liability — this is the moment a seeded owner's feeOwed upgrades 0 -> fee,
+    // and it heals records that predate the feeOwed field (fill-on-touch).
+    ensureMemberRecord(transaction, db, poolId, uid, {
+      userName: request.auth?.token.name || 'Participant',
+      role: existingMember?.role ?? (pool.ownerId === uid ? 'MANAGER' : 'PARTICIPANT'),
+      poolType: type,
+      present: true,
+      entryFee: Number(pool.settings?.entryFee ?? 0),
+      hasPlayableEntry: true,
+    }, existingMember, now);
   });
 
   // Fully-open live consensus (2026-07-09): refresh this pool's week immediately so the crowd
@@ -705,9 +736,19 @@ export const scoreNFLWeek = onCall(async (request) => {
 
       // Persist the real per-week W-L (correct/total) that scorePickemEntry already computes
       // and previously discarded — makes accuracy truthful (ADR 0004). resultsVersion lets the
-      // Phase E per-user aggregate recompute idempotently.
+      // Phase E per-user aggregate recompute idempotently. Per-game graded outcomes + pick
+      // mode added by ADR 0005 (written post-final only — reveal-safe; rescore overwrites).
       const picksThisWeek = games.filter(g => !!entry.picks?.[g.id]).length;
-      const weeklyResults = { ...((entry as any).weeklyResults || {}), [week]: { correct: correctCount, total: picksThisWeek, points } };
+      const weeklyResults = {
+        ...((entry as any).weeklyResults || {}),
+        [week]: {
+          correct: correctCount,
+          total: picksThisWeek,
+          points,
+          mode: pool.settings?.pickMode === 'ATS' ? 'ATS' : 'STRAIGHT',
+          games: gradePickemGames(entry, games, pool),
+        },
+      };
 
       await stage(entryRef, {
         weeklyPoints,
@@ -739,7 +780,23 @@ export const scoreNFLWeek = onCall(async (request) => {
       const result = computeSurvivorWeekUpdate(entry, week, games, pool);
 
       if (!result.skipped) {
-        await stage(entryRef, result.update);
+        // ADR 0004/0005: per-week scored outcome + per-pick game record, idempotent
+        // (rescore overwrites this week's key), versioned for the profile recompute.
+        const struckThisWeek = result.update.strikeWeeks.includes(week);
+        const game = gradeSurvivorWeekGame(entry, week, games, struckThisWeek);
+        const weeklyResults = {
+          ...((entry as any).weeklyResults || {}),
+          [week]: {
+            survived: !struckThisWeek,
+            strike: struckThisWeek,
+            ...(game ? { game } : {}),
+          },
+        };
+        await stage(entryRef, {
+          ...result.update,
+          weeklyResults,
+          resultsVersion: (((entry as any).resultsVersion) || 0) + 1,
+        });
       }
       if (result.alive) aliveCount++;
 
@@ -781,12 +838,21 @@ export const scoreNFLWeek = onCall(async (request) => {
       // Best single week
       const bestWeek = Object.values(weeklyScores).length > 0 ? Math.max(...Object.values(weeklyScores)) : 0;
 
+      // ADR 0004/0005: per-week scored outcome + per-pick game record, idempotent + versioned.
+      const game = gradeMarginWeekGame(pick, games);
+      const weeklyResults = {
+        ...((entry as any).weeklyResults || {}),
+        [week]: { net: weekScore, ...(game ? { game } : {}) },
+      };
+
       await stage(entryRef, {
         weeklyScores,
         seasonTotal,
         negativeBurden,
         positiveWeeks,
-        bestWeek
+        bestWeek,
+        weeklyResults,
+        resultsVersion: (((entry as any).resultsVersion) || 0) + 1
       });
     }
   }
@@ -809,6 +875,43 @@ export const scoreNFLWeek = onCall(async (request) => {
   }
 
   await flushBatch();
+
+  // 3b. Member-readable standings projection + pool-level scoring markers (ADR 0005
+  // Phase 2). Written AFTER all entry writes commit so rows reflect this scoring pass
+  // (including the Margin rank pass). Rows are allowlist-built — no picks, confidence,
+  // tiebreakers, or usedTeams (usedTeams updates at submit time and would leak the
+  // current week's un-scored pick). This projection is what member views read once
+  // raw entry reads tighten to own-entry-only.
+  // ponytail: single doc, fine for realistic pool sizes; shard to standings/part_N
+  // before the 1MB doc limit if a pool ever has >500 entries (ADR 0004 shard path).
+  const projectionSnap = await poolRef.collection('entries').get();
+  const standingsRows = buildStandingsRows(
+    pool.type,
+    projectionSnap.docs.map(d => ({ ...(d.data() as any), id: d.id })),
+  );
+  await poolRef.collection('standings').doc('current').set({
+    poolType: pool.type,
+    season: String(pool.season ?? ''),
+    lastScoredWeek: week,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    rows: standingsRows,
+  });
+  await poolRef.update({
+    lastScoredAt: admin.firestore.FieldValue.serverTimestamp(),
+    scoredThroughWeek: Math.max(Number(pool.scoredThroughWeek || 0), Number(week)),
+    // Which weeks have actually been scored (out-of-order safe) — the Season
+    // Finalization completeness check reads this, not scoredThroughWeek.
+    [`scoredWeeks.${week}`]: true,
+  });
+
+  // 3c. Season Finalization (ADR 0005 Phase 3): if this scoring pass completed the
+  // season, finalize automatically — stats never wait on a human. Best-effort:
+  // a finalize failure must never fail the scoring call (the sweep job catches up).
+  try {
+    await maybeFinalizeNFLPool(db, poolId);
+  } catch (e) {
+    console.warn(`[scoreNFLWeek] finalize check failed for ${poolId} (sweep will retry):`, e);
+  }
 
   // 4. Generate automated Weekly Recap. buildWeeklyRecap omits undefined
   // optional fields — Firestore's set() throws on a literal `undefined` value
