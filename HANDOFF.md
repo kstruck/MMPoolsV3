@@ -67,7 +67,7 @@ Plan: `PLAN-POOL-HOMEPAGE.md` · ADR: `docs/adr/0004-performance-stats-and-conse
 ---
 
 ## Still TODO / deferred (by design, not forgotten)
-1. **Run the backfill** (immediate action above) — blocked only on the functions redeploy.
+1. **Frontend Coolify deploy** — HELD by Kevin pending Option-A cleanup (item 4). Carries 2 committed frontend changes: consensus card copy (`af34ebd`) + ticker speed (`4f4aa14`). (Backfill + live-consensus functions already done/deployed 2026-07-09.)
 2. **Expert Picks** — DEFERRED pending Kevin's compliant data-source choice (licensed feed / official API / admin-curated; NOT scraping nflpickwatch). Profile shape is ready to host an "expert" later.
 3. **Player Profile stubs** — Team-by-Team, Profit, Achievements render honest "coming soon". Need: per-pick result persistence (Team-by-Team + full pick history), a NFL finalize lifecycle distinct from admin close + `PAYOUT_PAID/UNPAID` ledger events (Profit), and the Achievements feature.
 4. **Option A cleanup** — merge both branches → `main`, switch Coolify back to `main` (see branch state above).
