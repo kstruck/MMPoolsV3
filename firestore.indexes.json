@@ -161,6 +161,38 @@
                     "order": "ASCENDING"
                 }
             ]
+        },
+        {
+            "collectionGroup": "pools",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "type",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "season",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "nfl_games",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "season",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "seasonType",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "week",
+                    "order": "ASCENDING"
+                }
+            ]
         }
     ],
     "fieldOverrides": []
