@@ -97,6 +97,7 @@ export { backfillMemberRecords } from "./migrations/backfillMemberRecords";
 // --- CONSENSUS + LIVE WIN PROBABILITY (ADR 0004) ---
 export { consensusRefreshJob, recomputeConsensus } from "./consensus";
 export { syncWinProbabilityJob } from "./winProbability";
+export { syncExpertPicksJob, refreshExpertPicks } from "./expertPicks";
 
 // --- PLAYER PROFILES (ADR 0004) ---
 export { onEntryChangedRecomputeProfile, recomputeMyProfile } from "./userProfile";
