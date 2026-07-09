@@ -1,4 +1,6 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
+import { z } from "zod";
+import { validated } from "./lib/validated";
 import { Timestamp } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 import { GameState } from "./types";
@@ -12,20 +14,20 @@ import { sendEmail } from "./reminders";
  * Called by participants to notify the pool host that they have sent payment.
  * Sends an email to the pool owner with payment details.
  */
-export const confirmPayment = onCall(async (request) => {
+const confirmPaymentSchema = z.strictObject({
+    poolId: z.string().min(1).max(200),
+    squareIds: z.array(z.number().int()).min(1),
+});
+
+export const confirmPayment = validated(
+    { schema: confirmPaymentSchema, label: "confirmPayment", auth: "required", appCheck: "monitor" },
+    async (data, request) => {
     const db = admin.firestore();
-    const { poolId, squareIds } = request.data;
+    const { poolId, squareIds } = data;
 
-    if (!poolId || !squareIds || !Array.isArray(squareIds) || squareIds.length === 0) {
-        throw new HttpsError("invalid-argument", "Pool ID and square IDs are required.");
-    }
-
-    // Get caller identity
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in to confirm payment.");
-    }
-    const userId = request.auth.uid;
-    const userEmail = request.auth.token.email || "";
+    // auth is guaranteed by the wrapper (auth: "required")
+    const userId = request.auth!.uid;
+    const userEmail = request.auth!.token.email || "";
 
     const poolRef = db.collection("pools").doc(poolId);
 
@@ -174,4 +176,5 @@ export const confirmPayment = onCall(async (request) => {
     });
 
     return { success: true, squaresConfirmed: result.squareIds.length };
-});
+    },
+);
