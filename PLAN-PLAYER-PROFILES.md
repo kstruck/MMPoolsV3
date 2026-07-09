@@ -4,6 +4,32 @@ _Locked via grill-with-docs — by Claude + Kevin, 2026-07-10. Terms per CONTEXT
 ADR 0005 (which builds on ADR 0003 Member Record and ADR 0004 Performance Stats/Consensus).
 Revised after Codex review round 1 (see PLAN-PLAYER-PROFILES-REVIEW-LOG.md)._
 
+## Implementation status
+
+Branch `feat/player-profiles` (worktree `.claude/worktrees/player-profiles`). Kevin sign-off
+2026-07-10 ("go"). Sweep pass: `PLAN-PLAYER-PROFILES-SWEEPS.md`.
+
+| Phase | Status | Evidence |
+|---|---|---|
+| Sweeps | ✅ 2026-07-10 | PLAN-PLAYER-PROFILES-SWEEPS.md (4 sweeps) |
+| 1 — contracts + rules groundwork | ✅ 2026-07-10 | shared/profile.ts + shared/achievements.ts; achievements rule in firestore.rules; profileSubjects.test.ts 5/5; profileAchievements.rules.test.mjs ALL PASSED (emulator); squarePrivate+monetization rules tests still green; functions suite 346/346. Entries rule flip → Phase 2 per Sweep 1. |
+| 2 — per-pick persistence (+ standings projection, + entries rule flip) | PENDING | |
+| 3 — finalize | PENDING | |
+| 4 — payouts/Profit | PENDING | |
+| 5 — projection expansion | PENDING | |
+| 6 — experts | PENDING | |
+| 7 — UI | PENDING | |
+| 8 — backfill | PENDING | |
+
+**Plan correction from Sweep 1 (2026-07-10):** the entries rule flip moved from Phase 1 to
+Phase 2 — the flip depends on a member-readable standings projection
+(`pools/{id}/standings/current`, written by `scoreNFLWeek`) plus client rewiring
+(member views → projection; `PickDistribution` → server consensus docs), because every NFL
+member view consumes the raw entries collection today (`dbService.subscribeToNFLEntries`).
+Rule flip + projection + rewire land together in Phase 2 so no intermediate broken state
+exists. Phase 1 keeps: shared contracts, achievements rule, expert-id collision proof, and the
+audit (done — Sweep 1).
+
 ## Goal
 
 Every Profile Subject — every pool Member, and each Expert — has a public Player Profile at

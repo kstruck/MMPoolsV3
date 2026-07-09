@@ -31,11 +31,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // PLAYER PROFILES (ADR 0004) — sanitized public projection (only aggregate + scored data;
-    // never the private per-user docs). Public read; server-written only.
+    // PLAYER PROFILES (ADR 0004/0005) — sanitized public projection (only aggregate + scored
+    // data; ZERO pool identifiers; never the private per-user docs). Public read;
+    // server-written only.
     match /publicProfiles/{uid} {
       allow read: if true;
       allow write: if false;
+
+      // ACHIEVEMENTS (ADR 0005 decision 5) — earned-achievement docs written only by the
+      // future server-side achievements engine (Admin SDK). Same leak rule as the parent:
+      // no pool identifiers on these docs.
+      match /achievements/{achievementId} {
+        allow read: if true;
+        allow write: if false;
+      }
     }
 
     function isSuperAdmin() {
