@@ -129,7 +129,11 @@ export const createNFLPool = onCall(async (request) => {
       // Seed the owner's Member Record so the commissioner is on the roster from t=0
       // (ADR 0003). Brand-new pool -> no existing record.
       ensureMemberRecord(transaction, db, poolId, uid,
-        { userName: userDoc.data()?.name || request.auth?.token?.name || 'Host', role: 'MANAGER', poolType, present: true },
+        {
+          userName: userDoc.data()?.name || request.auth?.token?.name || 'Host', role: 'MANAGER', poolType, present: true,
+          // Hosting is not playing: owner feeOwed stays 0 until they submit an entry (ADR 0005).
+          entryFee: Number(newPool.settings?.entryFee ?? 0), hasPlayableEntry: false,
+        },
         null, now);
     });
 
@@ -190,7 +194,10 @@ export const joinNFLPool = onCall(async (request) => {
     if (participantIds.includes(uid)) {
       // Already a participant — still ensure a Member Record exists (backfill-on-touch).
       ensureMemberRecord(transaction, db, poolId, uid,
-        { userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true },
+        {
+          userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true,
+          entryFee: Number(poolData.settings?.entryFee ?? 0),
+        },
         memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
       return;
     }
@@ -218,8 +225,12 @@ export const joinNFLPool = onCall(async (request) => {
     });
 
     // 3. Seed the Member Record (roster + payment truth, ADR 0003) — additive.
+    // feeOwed stamped at join: dues are owed from membership, not from playing (ADR 0005).
     ensureMemberRecord(transaction, db, poolId, uid,
-      { userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true },
+      {
+        userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true,
+        entryFee: Number(poolData.settings?.entryFee ?? 0),
+      },
       memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
   });
 
@@ -321,6 +332,9 @@ export const submitNFLPicks = onCall(async (request) => {
   await db.runTransaction(async (transaction) => {
     const entrySnap = await transaction.get(entryRef);
     const existingEntry = entrySnap.exists ? entrySnap.data() : null;
+    // Member Record read (before any writes) for the base-dues stamp below (ADR 0005).
+    const memberSnap = await transaction.get(membersCol(db, poolId).doc(uid));
+    const existingMember = memberSnap.exists ? (memberSnap.data() as MemberRecord) : null;
 
     // Idempotency: a retried submit (client resend after a lost response) whose
     // requestId already landed is a no-op success, not a duplicate write
@@ -486,6 +500,18 @@ export const submitNFLPicks = onCall(async (request) => {
 
       transaction.set(entryRef, { ...marginEntry, ...(requestId ? { lastRequestId: requestId } : {}) }, { merge: true });
     }
+
+    // Base-dues stamp (ADR 0005 Phase 4): submitting a playable entry starts fee
+    // liability — this is the moment a seeded owner's feeOwed upgrades 0 -> fee,
+    // and it heals records that predate the feeOwed field (fill-on-touch).
+    ensureMemberRecord(transaction, db, poolId, uid, {
+      userName: request.auth?.token.name || 'Participant',
+      role: existingMember?.role ?? (pool.ownerId === uid ? 'MANAGER' : 'PARTICIPANT'),
+      poolType: type,
+      present: true,
+      entryFee: Number(pool.settings?.entryFee ?? 0),
+      hasPlayableEntry: true,
+    }, existingMember, now);
   });
 
   // Fully-open live consensus (2026-07-09): refresh this pool's week immediately so the crowd

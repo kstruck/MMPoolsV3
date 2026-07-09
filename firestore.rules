@@ -294,6 +294,31 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // PAYOUT RECORDS (ADR 0005 Phase 4) — who-won-what, the source of truth for
+      // Profit. Participant-readable (a pool's winners are inherent to pool play);
+      // written only by the recordPoolPayouts callable.
+      match /payoutRecords/{awardId} {
+        allow read: if request.auth != null && (
+          request.auth.uid in get(/databases/$(database)/documents/pools/$(poolId)).data.participantIds ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isSuperAdmin()
+        );
+        allow write: if false;
+      }
+
+      // Settlement state, notes, and actor metadata are NOT pool-public: only the
+      // commissioner/manager/admin and the affected recipient may read.
+      match /payoutRecordsPrivate/{awardId} {
+        allow read: if request.auth != null && (
+          request.auth.uid == resource.data.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isSuperAdmin()
+        );
+        allow write: if false;
+      }
+
       // ROSTER SUMMARY (member-readable dues projection; server-written only)
       match /rosterSummary/{docId} {
         allow read: if request.auth != null && (

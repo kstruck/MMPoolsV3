@@ -1505,6 +1505,24 @@ export const dbService = {
         });
     },
 
+    // Payout Records (ADR 0005 Phase 4) — who-won-what truth, participant-readable.
+    subscribeToPayoutRecords: (poolId: string, callback: (records: any[]) => void) => {
+        const q = query(collection(db, 'pools', poolId, 'payoutRecords'));
+        return onSnapshot(q, (snap) => {
+            callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (error) => {
+            logger.error("Error subscribing to payout records:", error);
+            callback([]);
+        });
+    },
+
+    // Commissioner records who won what (server validates ownership + finalized pool).
+    recordPoolPayouts: async (poolId: string, awards: Array<{ uid: string; amount: number; kind: string; place?: number; settled: boolean; note?: string; supersedes?: string }>) => {
+        const fn = httpsCallable(functions, 'recordPoolPayouts');
+        const res = await fn({ poolId, awards });
+        return res.data as { success: boolean; awardIds: string[] };
+    },
+
     // A member's own entry doc (NFL types key entries by uid). Own reads are always
     // allowed by rules; pairs with the standings projection for member views.
     subscribeToMyNFLEntry: (poolId: string, uid: string, callback: (entry: any | null) => void) => {

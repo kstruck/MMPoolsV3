@@ -105,3 +105,6 @@ export { onEntryChangedRecomputeProfile, recomputeMyProfile } from "./userProfil
 // --- SEASON FINALIZATION (ADR 0005 Phase 3) — kill-switched, dry-run-default sweep ---
 export { nflFinalizeSweepJob } from "./nflFinalize";
 
+// --- PAYOUT RECORDS (ADR 0005 Phase 4) — commissioner-recorded prize truth ---
+export { recordPoolPayouts } from "./payoutRecords";
+

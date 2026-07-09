@@ -395,13 +395,37 @@ export const updatePoolSettings = onCall(async (request) => {
 
     await poolRef.update(patch);
 
+    // ADR 0005 Phase 4: an entryFee edit (only possible pre-lock per the editability
+    // matrix) cascade-updates feeOwed on this pool's FEE-LIABLE Member Records so the
+    // base-dues truth never drifts from the pool fee. Seeded owners who haven't played
+    // (feeOwed 0, role MANAGER) stay at 0 — hosting is not playing.
+    const resolveFee = (p: Record<string, unknown> | undefined): number => {
+        const settings = (p?.settings ?? {}) as Record<string, unknown>;
+        return Number(settings.entryFee ?? (p as Record<string, unknown> | undefined)?.entryFee ?? 0);
+    };
+    const oldFee = resolveFee(pool as Record<string, unknown>);
+    const newFee = resolveFee((await poolRef.get()).data() as Record<string, unknown>);
+    if (newFee !== oldFee) {
+        const membersSnap = await poolRef.collection('members').get();
+        let batch = db.batch();
+        let ops = 0;
+        for (const m of membersSnap.docs) {
+            const rec = m.data() as { role?: string; feeOwed?: number };
+            const seededOwnerNeverPlayed = rec.role === 'MANAGER' && (rec.feeOwed ?? 0) === 0;
+            if (seededOwnerNeverPlayed) continue;
+            batch.update(m.ref, { feeOwed: newFee, feeOwedSource: 'LIVE' });
+            if (++ops >= 400) { await batch.commit(); batch = db.batch(); ops = 0; }
+        }
+        if (ops > 0) await batch.commit();
+    }
+
     await writeAuditEvent({
         poolId,
         type: 'POOL_STATUS_CHANGED',
         message: `Pool settings updated by ${uid}`,
         severity: 'INFO',
         actor: { uid, role: 'ADMIN', label: 'Host' },
-        payload: { keys: Object.keys(set) },
+        payload: { keys: Object.keys(set), ...(newFee !== oldFee ? { entryFeeCascade: { oldFee, newFee } } : {}) },
     });
 
     return { success: true };
