@@ -6,24 +6,25 @@ Single entry point for a fresh session. Two large efforts are **built, reviewed,
 
 ## ⚡ MORNING LIST (2026-07-10) — do these
 
-Overnight effort committed to `main` (2 commits, **UNPUSHED**: `3d65ab3` expert-picks, `90de09d` grill prompts). Nothing deployed overnight — all outward-facing steps are below with your hand on them.
+Overnight effort committed to `main` (5 commits, **UNPUSHED**: `3d65ab3` expert-picks, `90de09d` grill prompts, `d31a98b` handoff, `2e61a9f` sim-block removal, `a99e8fa` vitest bump). Nothing deployed overnight — all outward-facing steps are below with your hand on them.
 
 **A. Deploy Expert Picks** (functions only; commit `3d65ab3`). From `D:\march-melee-pools` (repo root, on `main`):
-1. `git push origin main`  ⚠️ Coolify is on `main` and may auto-rebuild the frontend — harmless, these commits touch no frontend code.
-2. `npm --prefix functions install`  (guards against stripe/fft TS2307)
-3. `npx firebase deploy --only functions:syncExpertPicksJob,functions:refreshExpertPicks --project gridiron-gamble-uzuqo`
-4. Verify: ingestion-only (no UI yet). Preseason has no ESPN FPI data, so `nfl_games/{id}.expertPredictions` stays empty until games are scheduled (Aug) — like consensus/win-prob. Optionally call `refreshExpertPicks` (SUPER_ADMIN) from the console to confirm it runs clean.
+1. `git status` then `git log --oneline -5` — confirm top commit is `a99e8fa`.
+2. `git push origin main`  ⚠️ Coolify is on `main` and may auto-rebuild the frontend — harmless; only `2e61a9f` (removed a legacy SuperAdmin Settings block, tsc+build verified) and `a99e8fa` (functions-only test-tooling bump) touch code, neither changes user-facing frontend behavior.
+3. `npm --prefix functions install`  (guards against stripe/fft TS2307)
+4. `npx firebase deploy --only functions:syncExpertPicksJob,functions:refreshExpertPicks --project gridiron-gamble-uzuqo`
+5. Verify: ingestion-only (no UI yet). Preseason has no ESPN FPI data, so `nfl_games/{id}.expertPredictions` stays empty until games are scheduled (Aug) — like consensus/win-prob. Optionally call `refreshExpertPicks` (SUPER_ADMIN) from the console to confirm it runs clean.
 
 **B. Ticker speed** — SuperAdmin → Settings → "Score Ticker Speed" → set to **~100** (higher = slower; your earlier 30 ≈ the 32s baseline, which is why it looked unchanged). Hard-refresh homepage.
 
-**C. Sim Tools decision (confirm — I did NOT edit).** The "Simulation Tools" block in SuperAdmin → System → **Settings** is REAL but a **legacy duplicate** of the full Tournament Simulator already in the **Test Suite** tab (T12 was meant to consolidate). Recommend **deleting** the Settings block. Say the word and I'll remove it — or it's folded into the sim-harness plan (D).
+**C. Sim Tools — DONE.** Kevin confirmed delete (`2e61a9f`). The legacy "Simulation Tools" block is gone from SuperAdmin → Settings; Test Suite tab (`/tournament-sim`) is the sole home for simulation tooling. Verify after deploy: Settings tab no longer shows it; Test Suite tab's Tournament Simulator still works.
 
 **D. Two big lifts — grill prompts ready to paste** (planning, per your request):
 - `PROMPT-GRILL-PLAYER-PROFILES.md` — profile page for every pool member (AP Pro Picks style; no units; profit = pool winnings; hosts Achievements as a stub).
 - `PROMPT-GRILL-NFL-SIM-HARNESS.md` — simulate all NFL pool types for preseason confidence (extends existing `simHarness.ts`).
 Open each, paste its `/grill-with-docs-codex …` block to start.
 
-**E. Dependabot (low priority).** 5 open alerts, ALL dev-only `functions/` test tooling (vite/vitest/esbuild), scope=development — zero prod exposure (not in the deployed functions runtime or nginx bundle; the "critical" is vitest-UI RCE, only if you run `vitest --ui` exposed). Fix needs a reviewed major bump (vitest 2→3). Not urgent.
+**E. Dependabot — DONE.** All 5 alerts closed (`a99e8fa`): `vitest` bumped 2.1.9→4.1.10 (went further than the planned 2→3; `npm install vitest@latest` resolved higher). `vite` (transitive) 5.4.21→8.1.4; `esbuild` dropped from the tree. Verified both before and after: functions tsc, 341 unit tests, 13 emulator tests, functions build, app build — all green. 2 unrelated moderate findings remain (`firebase-functions-test`, `ts-deepmerge`) — pre-existing, out of tonight's scope; low priority whenever you want them looked at.
 
 ---
 
