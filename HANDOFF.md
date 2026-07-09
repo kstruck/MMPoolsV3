@@ -6,18 +6,18 @@ Single entry point for a fresh session. Two large efforts are **built, reviewed,
 
 ## ⚡ IMMEDIATE NEXT ACTION (do this first)
 
-The Member Roster backfill was just scoped to **real pools only** (skip sim-*/COMPLETED/archived/CANCELED test pools). That change is committed + pushed but **needs a functions redeploy** before it takes effect.
+**Member Roster backfill: DONE 2026-07-09** — function deployed, backfill run, working (roster/mark-paid confirmed). No longer pending.
 
-1. **Redeploy functions** (from repo root, branch `feat/pool-homepage-v2` checked out):
+**Pending: deploy the fully-open live-consensus change (commit `af34ebd`).**
+Product decision 2026-07-09 — Consensus card now updates on every pick submit instead of gating until kickoff (anti-copy tradeoff accepted). Touches `functions/src/consensus.ts` (dropped both reveal gates), `functions/src/nflPools.ts` (submit-triggered recompute), and the Pool Homepage card copy.
+
+1. **Functions redeploy** (Firebase-only, unaffected by Coolify branch — safe):
    ```
-   npx firebase deploy --only functions:backfillMemberRecords --project gridiron-gamble-uzuqo
+   npx firebase deploy --only functions:submitNFLPicks,functions:consensusRefreshJob,functions:recomputeConsensus --project gridiron-gamble-uzuqo
    ```
    (Or `--only functions` for all.)
-2. In the app: **SuperAdmin → Operations → "Backfill Member Roster (dry run)"**. The Run Log now shows a much smaller, real count (the previous unscoped dry run reported 133 pools / 583 memberships — mostly test pools; the filter drops those). Confirm `failures: []`.
-3. If the count looks right → **"Backfill Member Roster"** (type `RUN`). Creates one `pools/{id}/members/{uid}` doc per existing membership on real pools; idempotent.
-4. Verify: open a pool → Commissioner/Payments → you + all members appear by name; mark-paid works.
-
-**Context on the count:** the number is *memberships* (Σ members-per-pool), not distinct users. A Member Record = one roster/payment row per member per pool, mirrored from existing `participantIds` — it invents no new people.
+2. **Frontend redeploy** for the card-text change (Coolify). ⚠️ This is a frontend deploy — see the Coolify branch reminder below (switch Source to `main` after merging, per Option A cleanup). If shipping fast on `feat/pool-homepage-v2`, push the branch first so Coolify pulls it.
+3. Verify post-deploy: submit a pick in a live pool → Pool Home → Consensus card shows the pool + site-wide split updating without waiting for kickoff.
 
 ---
 
