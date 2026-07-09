@@ -22,7 +22,7 @@ import { PlayoffResultsManager } from './PlayoffPool/PlayoffResultsManager';
 import { AdminStatsDashboard } from './AdminStatsDashboard';
 import { TournamentManager } from './admin/TournamentManager';
 import { SuperAdminBentoDashboard } from './SuperAdminBentoDashboard';
-import { simulatePoolGame, seedTestTournament, simulateRound, resetTournament } from '../utils/simulationUtils';
+import { simulatePoolGame } from '../utils/simulationUtils';
 import { SuperAdminBillingPanel } from './admin/SuperAdminBillingPanel';
 import { AdminAuditViewer } from './admin/AdminAuditViewer';
 import { OperationsPanel } from './admin/OperationsPanel';
@@ -3068,88 +3068,6 @@ export const SuperAdmin: React.FC = () => {
                                             </div>
                                         );
                                     })}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-card border border-line rounded-xl p-6 shadow-card">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-gold-500/15 rounded-lg text-gold-600 dark:text-gold-400"><PlayCircle size={24} /></div>
-                            <h3 className="text-xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)]">Simulation Tools</h3>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div className="p-4 bg-surface rounded-lg border border-line">
-                                <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-2">Tournament Data</h4>
-                                <div className="flex flex-col gap-2">
-                                    <button
-                                        onClick={async () => {
-                                            const ok = await toast.confirm({
-                                                title: "Overwrite 'tournaments/2025' with test data?",
-                                                message: 'This will RESET all current brackets.',
-                                                danger: true,
-                                            });
-                                            if (!ok) return;
-                                            try {
-                                                // Imported statically
-                                                await seedTestTournament(2025);
-                                                toast.success("Tournament seeded successfully.");
-                                            } catch (e: unknown) {
-                                                toast.error(getUserMessage(e, "Failed to seed tournament."));
-                                            }
-                                        }}
-                                        className="bg-surface hover:bg-card border border-line text-[color:var(--text)] px-4 py-2 rounded font-display font-bold uppercase tracking-[0.05em] text-sm transition-colors text-left"
-                                    >
-                                        1. Seed Test Tournament (Teams & R64)
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="p-4 bg-surface rounded-lg border border-line">
-                                <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-2">Advance Tournament</h4>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button
-                                        onClick={async () => {
-                                            const ok = await toast.confirm({
-                                                title: 'Simulate scores?',
-                                                message: 'Simulate scores for current round?',
-                                            });
-                                            if (!ok) return;
-                                            try {
-                                                // Imported statically
-                                                const res = await simulateRound(2025);
-                                                toast.success(res);
-                                            } catch (e: unknown) {
-                                                logger.error(e);
-                                                toast.error(getUserMessage(e, "Failed to simulate round."));
-                                            }
-                                        }}
-                                        className="bg-navy-800 hover:bg-navy-700 text-white px-4 py-2 rounded font-display font-bold uppercase tracking-[0.05em] text-sm transition-colors"
-                                    >
-                                        Simulate Round
-                                    </button>
-                                    <button
-                                        onClick={async () => {
-                                            const ok = await toast.confirm({
-                                                title: 'RESET tournament scores?',
-                                                message: 'This will reset all tournament scores.',
-                                                danger: true,
-                                            });
-                                            if (!ok) return;
-                                            try {
-                                                // Imported statically
-                                                await resetTournament(2025);
-                                                dbService.logAdminAction({ action: 'RESET_TOURNAMENT', targetType: 'tournament', targetId: '2025', status: 'success' });
-                                                toast.success("Tournament reset.");
-                                            } catch (e: unknown) {
-                                                toast.error(getUserMessage(e, "Failed to reset tournament."));
-                                            }
-                                        }}
-                                        className="bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2 rounded font-display font-bold uppercase tracking-[0.05em] text-sm transition-colors"
-                                    >
-                                        Reset Scores
-                                    </button>
                                 </div>
                             </div>
                         </div>
