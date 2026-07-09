@@ -33,7 +33,11 @@ import {
   computeMNFTiebreakerTotal,
   buildWeeklyRecap,
   scoreMarginWeek,
-  sortMarginLeaderboard
+  sortMarginLeaderboard,
+  gradePickemGames,
+  gradeSurvivorWeekGame,
+  gradeMarginWeekGame,
+  buildStandingsRows
 } from './nflScoringEngine';
 import { fetchNFLWeekSchedule } from './nflSchedule';
 import { recomputeWeekConsensus } from './consensus';
@@ -705,9 +709,19 @@ export const scoreNFLWeek = onCall(async (request) => {
 
       // Persist the real per-week W-L (correct/total) that scorePickemEntry already computes
       // and previously discarded — makes accuracy truthful (ADR 0004). resultsVersion lets the
-      // Phase E per-user aggregate recompute idempotently.
+      // Phase E per-user aggregate recompute idempotently. Per-game graded outcomes + pick
+      // mode added by ADR 0005 (written post-final only — reveal-safe; rescore overwrites).
       const picksThisWeek = games.filter(g => !!entry.picks?.[g.id]).length;
-      const weeklyResults = { ...((entry as any).weeklyResults || {}), [week]: { correct: correctCount, total: picksThisWeek, points } };
+      const weeklyResults = {
+        ...((entry as any).weeklyResults || {}),
+        [week]: {
+          correct: correctCount,
+          total: picksThisWeek,
+          points,
+          mode: pool.settings?.pickMode === 'ATS' ? 'ATS' : 'STRAIGHT',
+          games: gradePickemGames(entry, games, pool),
+        },
+      };
 
       await stage(entryRef, {
         weeklyPoints,
@@ -739,7 +753,23 @@ export const scoreNFLWeek = onCall(async (request) => {
       const result = computeSurvivorWeekUpdate(entry, week, games, pool);
 
       if (!result.skipped) {
-        await stage(entryRef, result.update);
+        // ADR 0004/0005: per-week scored outcome + per-pick game record, idempotent
+        // (rescore overwrites this week's key), versioned for the profile recompute.
+        const struckThisWeek = result.update.strikeWeeks.includes(week);
+        const game = gradeSurvivorWeekGame(entry, week, games, struckThisWeek);
+        const weeklyResults = {
+          ...((entry as any).weeklyResults || {}),
+          [week]: {
+            survived: !struckThisWeek,
+            strike: struckThisWeek,
+            ...(game ? { game } : {}),
+          },
+        };
+        await stage(entryRef, {
+          ...result.update,
+          weeklyResults,
+          resultsVersion: (((entry as any).resultsVersion) || 0) + 1,
+        });
       }
       if (result.alive) aliveCount++;
 
@@ -781,12 +811,21 @@ export const scoreNFLWeek = onCall(async (request) => {
       // Best single week
       const bestWeek = Object.values(weeklyScores).length > 0 ? Math.max(...Object.values(weeklyScores)) : 0;
 
+      // ADR 0004/0005: per-week scored outcome + per-pick game record, idempotent + versioned.
+      const game = gradeMarginWeekGame(pick, games);
+      const weeklyResults = {
+        ...((entry as any).weeklyResults || {}),
+        [week]: { net: weekScore, ...(game ? { game } : {}) },
+      };
+
       await stage(entryRef, {
         weeklyScores,
         seasonTotal,
         negativeBurden,
         positiveWeeks,
-        bestWeek
+        bestWeek,
+        weeklyResults,
+        resultsVersion: (((entry as any).resultsVersion) || 0) + 1
       });
     }
   }
@@ -809,6 +848,31 @@ export const scoreNFLWeek = onCall(async (request) => {
   }
 
   await flushBatch();
+
+  // 3b. Member-readable standings projection + pool-level scoring markers (ADR 0005
+  // Phase 2). Written AFTER all entry writes commit so rows reflect this scoring pass
+  // (including the Margin rank pass). Rows are allowlist-built — no picks, confidence,
+  // tiebreakers, or usedTeams (usedTeams updates at submit time and would leak the
+  // current week's un-scored pick). This projection is what member views read once
+  // raw entry reads tighten to own-entry-only.
+  // ponytail: single doc, fine for realistic pool sizes; shard to standings/part_N
+  // before the 1MB doc limit if a pool ever has >500 entries (ADR 0004 shard path).
+  const projectionSnap = await poolRef.collection('entries').get();
+  const standingsRows = buildStandingsRows(
+    pool.type,
+    projectionSnap.docs.map(d => ({ ...(d.data() as any), id: d.id })),
+  );
+  await poolRef.collection('standings').doc('current').set({
+    poolType: pool.type,
+    season: String(pool.season ?? ''),
+    lastScoredWeek: week,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    rows: standingsRows,
+  });
+  await poolRef.update({
+    lastScoredAt: admin.firestore.FieldValue.serverTimestamp(),
+    scoredThroughWeek: Math.max(Number(pool.scoredThroughWeek || 0), Number(week)),
+  });
 
   // 4. Generate automated Weekly Recap. buildWeeklyRecap omits undefined
   // optional fields — Firestore's set() throws on a literal `undefined` value

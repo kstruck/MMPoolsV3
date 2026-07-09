@@ -191,8 +191,16 @@ export interface NFLPickemEntry {
   confidence?: Record<string, number>; // gameId -> confidence rank [1-16]
   weeklyTiebreakers?: Record<number, number>; // week -> predicted MNF combined score
   weeklyPoints?: Record<number, number>; // week -> points earned
-  // Real per-week W-L, persisted by scoreNFLWeek (ADR 0004).
-  weeklyResults?: Record<number, { correct: number; total: number; points: number }>;
+  // Real per-week W-L, persisted by scoreNFLWeek (ADR 0004). Per-game graded outcomes +
+  // pick mode added by ADR 0005 (written post-final only; keep in sync with
+  // functions/src/nflPoolTypes.ts).
+  weeklyResults?: Record<number, {
+    correct: number;
+    total: number;
+    points: number;
+    mode?: 'STRAIGHT' | 'ATS';
+    games?: Record<string, { pick: string; result: 'W' | 'L' | 'PUSH' | 'VOID' }>;
+  }>;
   resultsVersion?: number;
   totalScore: number;
   submittedAt: number;

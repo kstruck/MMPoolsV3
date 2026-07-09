@@ -13,7 +13,7 @@ Branch `feat/player-profiles` (worktree `.claude/worktrees/player-profiles`). Ke
 |---|---|---|
 | Sweeps | ✅ 2026-07-10 | PLAN-PLAYER-PROFILES-SWEEPS.md (4 sweeps) |
 | 1 — contracts + rules groundwork | ✅ 2026-07-10 | shared/profile.ts + shared/achievements.ts; achievements rule in firestore.rules; profileSubjects.test.ts 5/5; profileAchievements.rules.test.mjs ALL PASSED (emulator); squarePrivate+monetization rules tests still green; functions suite 346/346. Entries rule flip → Phase 2 per Sweep 1. |
-| 2 — per-pick persistence (+ standings projection, + entries rule flip) | PENDING | |
+| 2 — per-pick persistence (+ standings projection, + entries rule flip) | ✅ 2026-07-10 | gradePickemGames/gradeSurvivorWeekGame/gradeMarginWeekGame; scorePickemEntry derived from grades (certified suites green); weeklyResults+resultsVersion all 3 types; pools/{id}/standings/current (allowlist rows, usedTeams excluded); pool lastScoredAt/scoredThroughWeek; NFL entries rule → own-only pre-FINAL (bracket coarse read kept); member views → standings+own entry; PickDistribution → server consensus. Evidence: functions 363/363, perPickResults.test.ts (14 tests), entriesStandings.rules.test.mjs ALL PASSED, all 4 rules tests green, tsc -b + vite build clean. Known cost: member standings empty until first scored week. |
 | 3 — finalize | PENDING | |
 | 4 — payouts/Profit | PENDING | |
 | 5 — projection expansion | PENDING | |

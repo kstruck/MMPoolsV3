@@ -1478,6 +1478,9 @@ export const dbService = {
         });
     },
 
+    // Raw entries collection — MANAGER/OWNER/ADMIN VIEWS ONLY (ADR 0005 Phase 2):
+    // rules restrict non-owner participant reads of NFL entries until the pool is FINAL,
+    // so member views must use subscribeToNFLStandings + subscribeToMyNFLEntry instead.
     subscribeToNFLEntries: (poolId: string, callback: (entries: any[]) => void) => {
         const q = collection(db, "pools", poolId, "entries");
         return onSnapshot(q, (snapshot) => {
@@ -1486,6 +1489,31 @@ export const dbService = {
         }, (error) => {
             logger.error("Error subscribing to NFL entries:", error);
             callback([]);
+        });
+    },
+
+    // Standings projection (ADR 0005 Phase 2) — reveal-safe scored rows written by
+    // scoreNFLWeek. What member views render instead of raw entries. Empty until the
+    // pool's first scored week.
+    subscribeToNFLStandings: (poolId: string, callback: (rows: any[]) => void) => {
+        const ref = doc(db, 'pools', poolId, 'standings', 'current');
+        return onSnapshot(ref, (snap) => {
+            callback(snap.exists() ? ((snap.data() as any).rows || []) : []);
+        }, (error) => {
+            logger.error("Error subscribing to NFL standings:", error);
+            callback([]);
+        });
+    },
+
+    // A member's own entry doc (NFL types key entries by uid). Own reads are always
+    // allowed by rules; pairs with the standings projection for member views.
+    subscribeToMyNFLEntry: (poolId: string, uid: string, callback: (entry: any | null) => void) => {
+        const ref = doc(db, 'pools', poolId, 'entries', uid);
+        return onSnapshot(ref, (snap) => {
+            callback(snap.exists() ? { ...snap.data(), id: snap.id } : null);
+        }, (error) => {
+            logger.error("Error subscribing to own NFL entry:", error);
+            callback(null);
         });
     },
 

@@ -221,13 +221,15 @@ service cloud.firestore {
       }
 
       // BRACKET/PLAYOFF/NFL ENTRIES
-      // A member always reads their OWN entry. Reading OTHER members' entries requires
-      // participation in the pool AND the pool being locked/final — the previous rule let
-      // ANY authenticated user read all entries once locked (a pick-visibility hole; ADR 0004
-      // finding). NOTE: an entry doc bundles all game picks, so in PER_GAME-lock pools this
-      // coarse "locked" gate can still expose a participant's later-game picks; the full
-      // per-game reveal-safe path is the server consensus/standings projection (later phase),
-      // after which non-owner raw entry reads tighten further.
+      // A member always reads their OWN entry; owner/manager/admin retain management reads.
+      // Non-owner PARTICIPANT reads split by pool type (ADR 0004 finding, closed by ADR 0005
+      // Phase 2):
+      // - NFL season types (PER_GAME/WEEKLY lock): an entry doc bundles ALL of a member's
+      //   picks, so any pre-FINAL read can expose un-locked later picks. Participants read
+      //   the server standings projection (/standings/current) and consensus instead; raw
+      //   entries open up only when the pool is FINAL/COMPLETED.
+      // - Single-lock types (bracket/playoff): post-lock full reveal is by design — the
+      //   coarse locked/live gate stays.
       match /entries/{entryId} {
         allow read: if request.auth != null && (
           request.auth.uid == resource.data.ownerUid ||
@@ -237,11 +239,18 @@ service cloud.firestore {
           (
             request.auth.uid in get(/databases/$(database)/documents/pools/$(poolId)).data.participantIds &&
             (
-              get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'LOCKED' ||
-              get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'LIVE' ||
-              get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'FINAL' ||
-              get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'COMPLETED' ||
-              get(/databases/$(database)/documents/pools/$(poolId)).data.isLocked == true
+              get(/databases/$(database)/documents/pools/$(poolId)).data.type in ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN']
+                ? (
+                    get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'FINAL' ||
+                    get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'COMPLETED'
+                  )
+                : (
+                    get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'LOCKED' ||
+                    get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'LIVE' ||
+                    get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'FINAL' ||
+                    get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'COMPLETED' ||
+                    get(/databases/$(database)/documents/pools/$(poolId)).data.isLocked == true
+                  )
             )
           )
         );
@@ -270,6 +279,19 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['memberReportedPaid', 'memberReportedAt']);
         allow create, delete: if false;
+      }
+
+      // STANDINGS PROJECTION (ADR 0005 Phase 2) — member-readable, reveal-safe scored
+      // rows written by scoreNFLWeek (allowlist-built: no picks/confidence/usedTeams).
+      // This is what member views read now that raw NFL entry reads are own-only pre-FINAL.
+      match /standings/{docId} {
+        allow read: if request.auth != null && (
+          request.auth.uid in get(/databases/$(database)/documents/pools/$(poolId)).data.participantIds ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isSuperAdmin()
+        );
+        allow write: if false;
       }
 
       // ROSTER SUMMARY (member-readable dues projection; server-written only)

@@ -105,13 +105,34 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     return () => unsub();
   }, [castPool.season]);
 
-  // 2. Subscribe to Pool Participant Entries
+  // 2. Entry data, split by role (ADR 0005 Phase 2). Rules now restrict non-owner
+  // participant reads of NFL entries until the pool is FINAL, so:
+  // - manager/owner: raw entries collection (management reads stay allowed)
+  // - member: the reveal-safe standings projection + their OWN entry doc (merged in,
+  //   so their current-week picks still render). Standings are empty until the first
+  //   scored week — members see only their own row before then.
+  const [standingsRows, setStandingsRows] = useState<any[]>([]);
+  const [ownEntry, setOwnEntry] = useState<any | null>(null);
+
   useEffect(() => {
-    const unsub = dbService.subscribeToNFLEntries(pool.id, (data) => {
-      setEntries(data);
-    });
-    return () => unsub();
-  }, [pool.id]);
+    if (isManager) {
+      const unsub = dbService.subscribeToNFLEntries(pool.id, (data) => {
+        setEntries(data);
+      });
+      return () => unsub();
+    }
+    const unsubStandings = dbService.subscribeToNFLStandings(pool.id, setStandingsRows);
+    const unsubOwn = user
+      ? dbService.subscribeToMyNFLEntry(pool.id, user.id, setOwnEntry)
+      : undefined;
+    return () => { unsubStandings(); unsubOwn?.(); };
+  }, [pool.id, isManager, user?.id]);
+
+  useEffect(() => {
+    if (isManager) return;
+    const others = standingsRows.filter(r => !ownEntry || r.ownerUid !== ownEntry.ownerUid);
+    setEntries(ownEntry ? [ownEntry, ...others] : others);
+  }, [isManager, standingsRows, ownEntry]);
 
   // 2b. Subscribe to Member Records (roster truth — everyone who joined, ADR 0003)
   useEffect(() => {
@@ -482,7 +503,6 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 
                         <PickDistribution
                           pool={pool}
-                          entries={entries}
                           games={weeklyGames}
                           week={selectedWeek}
                           isWeekLocked={isWeekLocked}
