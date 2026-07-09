@@ -7,6 +7,7 @@ import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { ROSTER_SCHEMA_VERSION } from "../shared/memberRecord";
 import { recomputeRosterSummary } from "../lib/rosterSummary";
+import { isActivePoolForStats } from "../lib/poolInclusion";
 
 type Firestore = admin.firestore.Firestore;
 
@@ -69,6 +70,9 @@ export const backfillMemberRecords = onCall(async (request) => {
     throw new HttpsError("permission-denied", "Super Admin only.");
   }
   const dryRun = request.data?.dryRun !== false; // default TRUE
+  // By default, only backfill REAL pools (skip sim-*/COMPLETED/archived/CANCELED test junk).
+  // Pass includeAll:true to process every pool.
+  const includeAll = request.data?.includeAll === true;
   const limit = Math.min(Number(request.data?.limit) || 25, 100);
   const startAfter: string | undefined = request.data?.startAfter;
 
@@ -79,7 +83,9 @@ export const backfillMemberRecords = onCall(async (request) => {
 
   const report = {
     dryRun,
+    includeAll,
     poolsScanned: 0,
+    poolsSkipped: 0,
     membersCreated: 0,
     membersAlreadyPresent: 0,
     guestSkipped: 0,
@@ -92,6 +98,12 @@ export const backfillMemberRecords = onCall(async (request) => {
   for (const doc of snap.docs) {
     const poolId = doc.id;
     const pool: any = doc.data();
+    // Skip sim-*/completed/archived/canceled test pools unless includeAll. (Cursor still
+    // advances over skipped pools — pagination stays correct.)
+    if (!includeAll && !isActivePoolForStats(pool, poolId)) {
+      report.poolsSkipped++;
+      continue;
+    }
     report.poolsScanned++;
     try {
       const { members, guestSkipped } = await collectMembers(db, poolId, pool);
