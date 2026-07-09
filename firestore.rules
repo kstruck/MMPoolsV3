@@ -51,6 +51,12 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.get('role', '') == 'SUPER_ADMIN';
     }
 
+    // EXPERT RESULTS (ADR 0005 Phase 6) — server-only grading store behind the
+    // publicProfiles/expert_* projections. Clients read only the projection.
+    match /expertResults/{expertId}/{document=**} {
+      allow read, write: if false;
+    }
+
     // POOLS:
     match /pools/{poolId} {
       // Allow GET by anyone (Guest Access via Link)

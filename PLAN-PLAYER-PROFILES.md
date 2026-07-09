@@ -17,7 +17,7 @@ Branch `feat/player-profiles` (worktree `.claude/worktrees/player-profiles`). Ke
 | 3 — finalize | ✅ 2026-07-10 | functions/src/nflFinalize.ts: maybeFinalizeNFLPool (re-runnable; entry-holders only; firstFinalizedAt audit-only) called best-effort from scoreNFLWeek; pool.scoredWeeks completeness map; nflFinalizeSweepJob daily backstop (kill-switch system/config.nflFinalize, dry-run default, MAX 200, sim- excluded). computeFinalRanks unit-tested (pickem ties, survivor alive/elim, margin cascade). Functions 369/369. |
 | 4 — payouts/Profit | ✅ 2026-07-10 | commit b79fa66: payoutRecords/payoutRecordsPrivate contracts + recordPoolPayouts callable + RecordPayoutsCard; feeOwed liability rules (owner-0, join stamp, heal-on-touch, entryFee cascade); rules emulator test passed; functions 379/379. |
 | 5 — projection expansion | ✅ 2026-07-10 | lib/profileBuild.ts pure builder (zero pool identifiers — leak-asserted in tests); recomputeUserProfile rewritten (teamByTeam buckets, scored-only pickHistory w/ matchup abbrs stamped at scoring time, yearly + Best Finish, profit w/ pending disclosure); getProfilePoolDetail(subjectId, poolId) viewer-gated callable; recordPoolPayouts refreshes recipients; backfill trigger-suppression guard. profileBuild.test.ts (10 tests); functions 389/389. |
-| 6 — experts | PENDING | |
+| 6 — experts | ✅ 2026-07-10 | expertProfiles.ts: gradeExpertGame (SU; EVEN/cancelled→VOID) into server-only expertResults/{id}/seasons/*; publicProfiles/expert_espnFpi + expert_vegas rendered via the SAME buildPublicProfile (subjectKind EXPERT, profit null); daily gradeExpertProfilesJob + admin refreshExpertProfiles; expertResults rules deny-all. expertProfiles.test.ts; functions 392/392. |
 | 7 — UI | PENDING | |
 | 8 — backfill | PENDING | |
 
