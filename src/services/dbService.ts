@@ -446,10 +446,33 @@ export const dbService = {
         return onSnapshot(ref, (snap) => callback(snap.exists() ? snap.data() : null), () => callback(null));
     },
 
-    // Player Profile projection (ADR 0004) — sanitized public stats.
+    // Player Profile projection (ADR 0004/0005) — sanitized public stats.
     subscribeToPublicProfile: (uid: string, callback: (data: any | null) => void) => {
         const ref = doc(db, 'publicProfiles', uid);
         return onSnapshot(ref, (snap) => callback(snap.exists() ? { uid, ...snap.data() } : null), () => callback(null));
+    },
+
+    // Earned achievements (ADR 0005) — world-readable subcollection; engine is future work.
+    subscribeToAchievements: (subjectId: string, callback: (rows: any[]) => void) => {
+        const q = query(collection(db, 'publicProfiles', subjectId, 'achievements'));
+        return onSnapshot(q, (snap) => {
+            callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, () => callback([]));
+    },
+
+    // Viewer-gated per-pool profile detail (ADR 0005 decision 7). Server enforces
+    // subject/co-member-of-that-pool/admin; throws permission-denied otherwise.
+    getProfilePoolDetail: async (subjectId: string, poolId: string) => {
+        const fn = httpsCallable(functions, 'getProfilePoolDetail');
+        const res = await fn({ subjectId, poolId });
+        return res.data as any;
+    },
+
+    // The signed-in viewer's own participations (own-readable). Used to discover which
+    // pools the viewer might share with a profile subject.
+    getMyParticipations: async (uid: string) => {
+        const snap = await getDocs(collection(db, 'users', uid, 'participations'));
+        return snap.docs.map(d => ({ poolId: d.id, ...d.data() })) as any[];
     },
 
     subscribeToPropCard: (poolId: string, userId: string, callback: (card: PropCard | null) => void) => {
