@@ -107,6 +107,33 @@ The one document per Member per Pool (`pools/{poolId}/members/{uid}`) that is th
 ### Entry
 A Member's playable participation record in one Pool — the picks, bracket, squares, or selections themselves. Its cardinality and shape are per Pool type: some types allow more than one Entry per Member (Bracket, Playoff). Distinct from the Member Record: an Entry is about play, a Member Record is about membership and money. A Member may appear on the Roster (Member Record) before any Entry exists.
 
+### Pool Homepage (Overview)
+The member-facing landing view for a single Pool (the "Pool Home" tab, formerly "Overview"). Shows that Pool's slate, live scores, standings, consensus, and the member's own performance — only the cards that apply to the Pool's type. The tab is reflected in the URL so the browser Back button steps through tabs rather than leaving the Pool.
+
+### Consensus
+The distribution of how players picked each game — the share who picked each team. Distinct from Live Win Probability (a game-outcome estimate). Consensus has two scopes: Pool Consensus and Site-Wide Consensus. Consensus replaces the former fabricated "win probability" pick tile.
+
+### Pool Consensus
+Consensus over the entries of one Pool: of the members who picked a given game, what percentage took each team. Produced as a Pool-scoped server aggregate and revealed per game only after that game's effective lock — never computed on the client from raw entries, so a member cannot read other members' picks before a game locks.
+
+### Site-Wide Consensus
+Consensus aggregated across every Pool on the platform for a given game/week: of all players site-wide who picked that game, the percentage on each team. Maintained by a server aggregation (no client may read every Pool's entries) built from per-Pool shards and rolled up idempotently. Scoped by Pool type (never one blended figure across types) and published only after a game's effective lock, as aggregate counts only — individual picks are never exposed. The client reads the resulting projection.
+
+### Live Win Probability
+A real, game-outcome win estimate for an in-progress or scheduled NFL game, sourced from ESPN's win-probability data and stored on the game record. Distinct from Consensus (which is about picks, not outcomes). Shown alongside the live score and Consensus on the Pool Homepage.
+
+### Performance Stats
+The persisted, real per-player performance record used by metrics and Player Profiles: per-week correct/incorrect (W-L), accuracy, rank percentile, streaks, and pool-type-specific figures (survival, margin). Derived when a week is scored and rolled into per-user aggregates. Replaces the previously fabricated radar/accuracy values. "League average" comparisons are the real Pool or Site-Wide averages of these stats, never hardcoded constants.
+
+### Player Profile
+A per-player page showing that player's Performance Stats across all Pools they have entered: performance chart, weekly record, pick history, team-by-team performance, yearly record, and Profit. Reads a sanitized public projection of the player's stats — never the player's private per-user aggregates or per-Pool history, which stay owner-readable because they span unrelated private Pools. The projection exposes aggregate and finalized/scored data only; a player's current-season pick history appears per game only after that game's effective lock (or after the Pool is final), so the profile never leaks un-revealed picks. Modeled on a public expert profile but without gambling "units." Achievements are a separate future feature. Every Pool member has one.
+
+### Profit
+The net money a player has won across all Pools they have participated in (prizes won minus entry fees owed), aggregated per player for the Player Profile. Entry Fees and prizes move peer-to-peer; Profit is a recorded figure, not money the platform holds.
+
+### Expert Picks
+A planned feature surfacing outside "expert" picks per game (and their records) to Pool members, modeled on public pick-aggregator sites. Deferred: it depends on choosing a compliant data source (licensed feed / official API / admin-curated import) before implementation — third-party scraping is out of scope pending that decision.
+
 ### Roster Summary
 A server-maintained projection per Pool (`pools/{poolId}/rosterSummary`) holding aggregate figures — member count, Dues Collected, Dues Expected, paid/unpaid counts, and a derived guest/unclaimed-squares dues bucket (so unclaimed Squares money is not lost when the `"guest"` sentinel is excluded from Member Records). Readable only by the Pool's Members, Commissioner, and admins. Updated in the same transaction as every membership/payment mutation, so it never lags the Member Records it summarizes. Exists so a Member can see the honest pot before the Pool locks, without being granted read access to other Members' raw Entries.
 
