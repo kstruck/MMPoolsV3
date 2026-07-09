@@ -6,11 +6,9 @@ Single entry point for a fresh session. Two large efforts are **built, reviewed,
 
 ## ⚡ IMMEDIATE NEXT ACTION (do this first)
 
-**One pending step: a FRONTEND (Coolify) redeploy** to ship two frontend changes already committed on `feat/pool-homepage-v2`. Backend for both is already deployed. Kevin asked to HOLD this deploy pending the Option-A merge-to-main cleanup (see branch state below) — do not push/deploy frontend until he says go.
+**Nothing blocking. Everything shipped + deployed as of 2026-07-09.** Option A cleanup done: `feat/pool-homepage-v2` (contained `feat/commissioner-dash`) fast-forward merged to `main`, pushed, Coolify Source switched to `main`, redeployed (`d468ea9`, container healthy). **Prod frontend is on `main` again** — routine deploys from now on (see [[coolify-branch-state]] memory).
 
-Frontend changes waiting on that deploy:
-1. **Live-consensus card copy** (commit `af34ebd`) — "reveals at kickoff" → "appears as players submit their picks".
-2. **Score-ticker speed control** (commit `4f4aa14`) — new SuperAdmin → Settings → "Score Ticker Speed" input; default slowed 32s→60s.
+**Ticker speed note:** the control works (verified prod value is read + applied). Direction is **higher seconds = slower**; ~100–120 for a slow crawl. A value near 30 looks identical to the old 32s baseline — that caused a "nothing changed" impression, not a bug.
 
 **Done + deployed this session (2026-07-09):**
 - **Member Roster backfill** — function deployed, backfill run, working (roster/mark-paid confirmed).
