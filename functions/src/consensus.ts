@@ -13,7 +13,6 @@ import { FieldValue } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { tallyGameConsensus, mergeTally, consensusPct, type ConsensusGame, type GameTally } from "./shared/consensus";
-import { effectiveGameLockAt } from "./lib/effectiveLock";
 import { isActivePoolForStats } from "./lib/poolInclusion";
 import { NFL_SEASON_TYPES } from "./shared/poolTypes";
 
@@ -47,7 +46,6 @@ export async function recomputeWeekConsensus(
   const games = gamesSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
   if (games.length === 0) return { games: 0, pools: 0, published: 0 };
   const cgById = new Map<string, ConsensusGame>(games.map(g => [g.id, toConsensusGame(g)]));
-  const startById = new Map<string, number>(games.map(g => [g.id, g.startTime]));
 
   // Site-wide accumulator: type -> gameId -> tally
   const site: Record<string, Map<string, GameTally>> = {};
@@ -65,8 +63,10 @@ export async function recomputeWeekConsensus(
       const entries = entriesSnap.docs.map(e => e.data());
       const batch = db.batch();
       for (const g of games) {
-        // Count this pool's picks for a game only after THIS pool's lock (respects overrides).
-        if (now < effectiveGameLockAt(g.startTime, week, pool.settings)) continue;
+        // Fully-open live consensus: pool picks are counted as they're submitted (no pre-lock
+        // gate). Product decision 2026-07-09 — reveal the crowd's split live rather than at
+        // kickoff. ponytail: full-week recompute per submit is the ceiling; shard per ADR 0004
+        // if pool count grows.
         const cg = cgById.get(g.id)!;
         const tally = tallyGameConsensus(entries, cg, type);
         // Pool consensus doc (members read; post-lock only)
@@ -77,13 +77,13 @@ export async function recomputeWeekConsensus(
     }
   }
 
-  // Publish site-wide per type, only for games that have kicked off (safe reveal).
+  // Publish site-wide per type. Fully-open live consensus (product decision 2026-07-09):
+  // publish as soon as picks are tallied, not gated on kickoff.
   const key = `${season}_${seasonType}_${week}`;
   let published = 0;
   for (const type of NFL_SEASON_TYPES) {
     const batch = db.batch();
     for (const [gameId, tally] of site[type]) {
-      if (now < (startById.get(gameId) ?? Infinity)) continue; // not kicked off -> don't publish
       const cg = cgById.get(gameId)!;
       batch.set(db.collection('consensus').doc(key).collection(type).doc(gameId), projDoc(tally, cg), { merge: true });
       published++;

@@ -36,6 +36,7 @@ import {
   sortMarginLeaderboard
 } from './nflScoringEngine';
 import { fetchNFLWeekSchedule } from './nflSchedule';
+import { recomputeWeekConsensus } from './consensus';
 
 /**
  * Creates an NFL pool (Pick'em, Survivor, or Margin).
@@ -481,6 +482,15 @@ export const submitNFLPicks = onCall(async (request) => {
       transaction.set(entryRef, { ...marginEntry, ...(requestId ? { lastRequestId: requestId } : {}) }, { merge: true });
     }
   });
+
+  // Fully-open live consensus (2026-07-09): refresh this pool's week immediately so the crowd
+  // split updates on every submit, not at kickoff. Idempotent full-week recompute; non-fatal so
+  // a consensus hiccup never fails the pick submission.
+  try {
+    await recomputeWeekConsensus(db, String(pool.season), Number(pool.seasonType || 2), Number(week), Date.now());
+  } catch (e) {
+    console.error('[submitNFLPicks] consensus recompute failed:', e);
+  }
 
   return { success: true };
 });

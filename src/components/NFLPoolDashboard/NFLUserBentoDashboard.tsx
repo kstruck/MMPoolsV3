@@ -686,7 +686,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                         )}
                       </div>
                     ) : (
-                      <p className="text-[11px] text-faint font-body leading-snug">Pick consensus reveals at kickoff. Live win probability appears once the game is in progress.</p>
+                      <p className="text-[11px] text-faint font-body leading-snug">Consensus appears as players submit their picks. Live win probability appears once the game is in progress.</p>
                     )}
                   </div>
 
