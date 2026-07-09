@@ -1,23 +1,22 @@
 # HANDOFF — Commissioner Dashboards + Pool Homepage v2 (2026-07-09)
 
-Single entry point for a fresh session. Two large efforts are **built, reviewed, and deployed to prod**; one operational step remains (a data backfill) and a few items are intentionally deferred.
+Single entry point for a fresh session. Two large efforts are **built, reviewed, and deployed to prod**. Backfill + live-consensus (functions) shipped 2026-07-09. One **frontend Coolify deploy is intentionally held** (Kevin's call, pending the Option-A merge-to-main cleanup) — it carries two committed-but-undeployed frontend changes (consensus card copy + ticker speed). A few items remain deferred by design.
 
 ---
 
 ## ⚡ IMMEDIATE NEXT ACTION (do this first)
 
-**Member Roster backfill: DONE 2026-07-09** — function deployed, backfill run, working (roster/mark-paid confirmed). No longer pending.
+**One pending step: a FRONTEND (Coolify) redeploy** to ship two frontend changes already committed on `feat/pool-homepage-v2`. Backend for both is already deployed. Kevin asked to HOLD this deploy pending the Option-A merge-to-main cleanup (see branch state below) — do not push/deploy frontend until he says go.
 
-**Pending: deploy the fully-open live-consensus change (commit `af34ebd`).**
-Product decision 2026-07-09 — Consensus card now updates on every pick submit instead of gating until kickoff (anti-copy tradeoff accepted). Touches `functions/src/consensus.ts` (dropped both reveal gates), `functions/src/nflPools.ts` (submit-triggered recompute), and the Pool Homepage card copy.
+Frontend changes waiting on that deploy:
+1. **Live-consensus card copy** (commit `af34ebd`) — "reveals at kickoff" → "appears as players submit their picks".
+2. **Score-ticker speed control** (commit `4f4aa14`) — new SuperAdmin → Settings → "Score Ticker Speed" input; default slowed 32s→60s.
 
-1. **Functions redeploy** (Firebase-only, unaffected by Coolify branch — safe):
-   ```
-   npx firebase deploy --only functions:submitNFLPicks,functions:consensusRefreshJob,functions:recomputeConsensus --project gridiron-gamble-uzuqo
-   ```
-   (Or `--only functions` for all.)
-2. **Frontend redeploy** for the card-text change (Coolify). ⚠️ This is a frontend deploy — see the Coolify branch reminder below (switch Source to `main` after merging, per Option A cleanup). If shipping fast on `feat/pool-homepage-v2`, push the branch first so Coolify pulls it.
-3. Verify post-deploy: submit a pick in a live pool → Pool Home → Consensus card shows the pool + site-wide split updating without waiting for kickoff.
+**Done + deployed this session (2026-07-09):**
+- **Member Roster backfill** — function deployed, backfill run, working (roster/mark-paid confirmed).
+- **Fully-open live consensus (functions)** — `submitNFLPicks`, `consensusRefreshJob`, `recomputeConsensus` deployed to prod (exit 0). Consensus now recomputes on every pick submit; both reveal gates dropped in `functions/src/consensus.ts`; submit-triggered recompute in `functions/src/nflPools.ts`. Aggregate-only (counts/pct) — individual picks still leak-proof (raw entries gated; docs hold only away/home/total/pct). Populates live once real picks come in.
+
+Verify after the eventual frontend deploy: submit a pick in a live pool → Pool Home → Consensus card shows pool + site-wide split updating without waiting for kickoff; SuperAdmin ticker-speed input changes scroll speed for all viewers.
 
 ---
 
@@ -52,6 +51,10 @@ Plan: `PLAN-POOL-HOMEPAGE.md` · ADR: `docs/adr/0004-performance-stats-and-conse
 - **Phase D:** `scoreNFLWeek` persists real per-week W-L (`weeklyResults`+`resultsVersion`); deleted every fabricated metric (radar/accuracy/attrition/sparkline) → real or honest empty.
 - **Phase E:** Player Profiles — `functions/userProfile.ts` recomputes `publicProfiles/{uid}` (real overall stats, weekly record, performance chart) + `/profile/:uid` page. `onEntryChangedRecomputeProfile` trigger.
 
+### Post-launch changes (2026-07-09)
+- **Fully-open live consensus** (commit `af34ebd`, functions DEPLOYED): consensus updates on every pick submit instead of at kickoff. Dropped the pre-lock pool-tally gate and the site-wide kickoff-publish gate in `consensus.ts`; `submitNFLPicks` fires an idempotent per-week recompute after the entry txn (non-fatal). Still aggregate-only — individual picks never exposed. Anti-copy tradeoff accepted by product owner. Card copy updated (frontend, pending Coolify deploy).
+- **Admin-controllable ticker speed** (commit `4f4aa14`, frontend pending Coolify): `SystemSettings.tickerDurationSec` (system/config, default 60s, was fixed 32s). `Ticker` takes a `durationSec` prop (inline `animationDuration` overrides the class); `NFLGameTicker` subscribes to settings and passes it live; SuperAdmin → Settings → "Score Ticker Speed" number input (15–180s, commits on blur).
+
 **Verification done:** app+functions typecheck, 332 functions + 244 app unit tests, shared selfchecks, emulator tests (13 passed / 0 failed — needs Java, now installed), and browser screenshots of every UI change via the `/dev/dashboards` mock harness. What could NOT be run locally: the live Firestore aggregation (consensus/win-prob/profiles) — those populate on deploy as the scheduled jobs run and games happen (empty/honest-empty in preseason).
 
 ---
@@ -81,7 +84,8 @@ Plan: `PLAN-POOL-HOMEPAGE.md` · ADR: `docs/adr/0004-performance-stats-and-conse
 ## Key files
 - Plans/ADRs/logs: `PLAN-COMMISSIONER-DASH.md`, `PLAN-POOL-HOMEPAGE.md`, `docs/adr/0003-*.md`, `docs/adr/0004-*.md`, `NOTES-COMMISSIONER-DASH.md`, `NOTES-POOL-HOMEPAGE.md`, `CONTEXT.md` (glossary).
 - Backend: `functions/src/{consensus,winProbability,userProfile,setPaidStatus,rosterAggregate}.ts`, `functions/src/lib/{effectiveLock,memberRecord,rosterSummary,commissionerAggregate,poolInclusion}.ts`, `functions/src/migrations/backfillMemberRecords.ts`.
-- Frontend: `src/components/NFLPoolDashboard/{NFLPoolDashboard,NFLUserBentoDashboard,NFLGameTicker,NFLManagerView,NFLPoolRules}.tsx`, `src/components/PaymentsPanel.tsx`, `src/components/Dashboards/GlobalCommissionerDashboard.tsx`, `src/pages/{PlayerProfile,DevDashboardPreview}.tsx`, `src/components/admin/OperationsPanel.tsx`.
+- Frontend: `src/components/NFLPoolDashboard/{NFLPoolDashboard,NFLUserBentoDashboard,NFLGameTicker,NFLManagerView,NFLPoolRules}.tsx`, `src/components/ui/Ticker.tsx`, `src/components/PaymentsPanel.tsx`, `src/components/Dashboards/GlobalCommissionerDashboard.tsx`, `src/pages/{PlayerProfile,DevDashboardPreview}.tsx`, `src/components/admin/OperationsPanel.tsx`, `src/components/SuperAdmin.tsx` (Settings tab).
+- Config/settings: `src/services/settingsService.ts` + `SystemSettings` in `src/types/index.ts` (system/config doc: maintenanceMode, poolTypeFlags, autoClose, `tickerDurationSec`).
 - Shared: `shared/{memberRecord,consensus}.ts`.
 
 ## Do NOT re-do
