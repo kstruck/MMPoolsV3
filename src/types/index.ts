@@ -930,6 +930,8 @@ export interface SystemSettings {
   poolTypeFlags?: Partial<Record<PoolType, boolean>>;
   // Auto-close sweep (T2). Kill-switch OFF by default; dryRun defaults true when enabled.
   autoClose?: { enabled?: boolean; dryRun?: boolean };
+  // Live-score ticker scroll duration in seconds (higher = slower). Default 60.
+  tickerDurationSec?: number;
 }
 
 

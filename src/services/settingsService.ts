@@ -21,6 +21,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
     ],
     // Auto-close sweep OFF by default; safe posture (the daily job no-ops).
     autoClose: { enabled: false, dryRun: true },
+    // Live-score ticker scroll duration (seconds; higher = slower).
+    tickerDurationSec: 60,
 };
 
 export const settingsService = {

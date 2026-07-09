@@ -2987,6 +2987,32 @@ export const SuperAdmin: React.FC = () => {
                                 </button>
                             </div>
 
+                            {/* Live-score ticker speed. Higher seconds = slower scroll. Written to
+                                system/config.tickerDurationSec; read live by NFLGameTicker. */}
+                            <div className="flex items-center justify-between p-4 bg-surface rounded-lg border border-line">
+                                <div>
+                                    <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)]">Score Ticker Speed</h4>
+                                    <p className="text-sm text-muted">Seconds for one full scroll of the live-score ticker. Higher = slower. Default 60.</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="number"
+                                        min={15}
+                                        max={180}
+                                        step={5}
+                                        key={settings?.tickerDurationSec ?? 60}
+                                        defaultValue={settings?.tickerDurationSec ?? 60}
+                                        onBlur={(e) => {
+                                            const v = Math.max(15, Math.min(180, Math.round(Number(e.target.value) || 60)));
+                                            if (v !== (settings?.tickerDurationSec ?? 60)) settingsService.update({ tickerDurationSec: v });
+                                        }}
+                                        className="w-20 px-2 py-1.5 text-right num font-display font-bold bg-page border border-line rounded-lg text-[color:var(--text)]"
+                                        aria-label="Ticker scroll duration in seconds"
+                                    />
+                                    <span className="text-sm text-muted">sec</span>
+                                </div>
+                            </div>
+
                             {/* Auto-Close sweep (T2). Kill-switch OFF by default; when enabled it
                                 runs daily but stays in dry-run (reports only) until Dry-Run is off. */}
                             <div className="flex items-center justify-between p-4 bg-surface rounded-lg border border-line">

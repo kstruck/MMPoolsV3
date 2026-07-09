@@ -1,17 +1,22 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import type { NFLGame } from '../../types';
 import { Ticker } from '../ui/Ticker';
+import { settingsService } from '../../services/settingsService';
 
 /**
  * Auto-scrolling live-score ticker for a week's NFL slate. Real data from `nfl_games`
  * (scores/clock/status). Clicking a game selects it as the homepage focus game.
+ * Scroll speed (`tickerDurationSec`) is admin-controlled via system settings.
  */
 export const NFLGameTicker: React.FC<{ games: NFLGame[]; onSelectGame?: (gameId: string) => void }> = ({ games, onSelectGame }) => {
+  const [durationSec, setDurationSec] = useState<number | undefined>(undefined);
+  useEffect(() => settingsService.subscribe(s => setDurationSec(s.tickerDurationSec)), []);
+
   if (!games || games.length === 0) return null;
 
   return (
     <div className="bg-card border border-line rounded-xl shadow-card py-2.5 px-3 mb-8">
-      <Ticker>
+      <Ticker durationSec={durationSec}>
         {games.map(g => {
           const live = g.status === 'IN_PROGRESS';
           const final = g.status === 'FINAL';
