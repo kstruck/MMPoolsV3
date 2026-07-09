@@ -36,8 +36,8 @@ const entry = (picks: Record<string, string>, confidence?: Record<string, number
 describe('gradePickemGames — per-pick results', () => {
   it('straight-up: winner pick W, loser pick L', () => {
     const games = [game({ spread: undefined })];
-    expect(gradePickemGames(entry({ g1: 'KC' }), games, pool('STRAIGHT')).g1).toEqual({ pick: 'KC', result: 'W' });
-    expect(gradePickemGames(entry({ g1: 'BUF' }), games, pool('STRAIGHT')).g1).toEqual({ pick: 'BUF', result: 'L' });
+    expect(gradePickemGames(entry({ g1: 'KC' }), games, pool('STRAIGHT')).g1).toEqual({ pick: 'KC', result: 'W', away: 'BUF', home: 'KC' });
+    expect(gradePickemGames(entry({ g1: 'BUF' }), games, pool('STRAIGHT')).g1).toEqual({ pick: 'BUF', result: 'L', away: 'BUF', home: 'KC' });
   });
 
   it('straight-up tie grades PUSH (earns 0, same as before)', () => {
@@ -66,7 +66,7 @@ describe('gradePickemGames — per-pick results', () => {
       game({ id: 'g3', status: 'IN_PROGRESS' as never }),
     ];
     const grades = gradePickemGames(entry({ g1: 'KC', g2: 'KC', g3: 'KC' }), games, pool('STRAIGHT'));
-    expect(grades.g2).toEqual({ pick: 'KC', result: 'VOID' });
+    expect(grades.g2).toEqual({ pick: 'KC', result: 'VOID', away: 'BUF', home: 'KC' });
     expect(grades.g3).toBeUndefined();
     const unpicked = gradePickemGames(entry({}), games, pool('STRAIGHT'));
     expect(Object.keys(unpicked)).toHaveLength(0);

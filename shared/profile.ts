@@ -56,6 +56,8 @@ export type SurvivorPickResult = 'SURVIVED' | 'STRUCK' | 'VOID';
 export interface PickemGameResult {
   pick: string; // team abbreviation the member picked
   result: PickemPickResult;
+  away?: string; // matchup abbreviations, stamped at scoring time so pick
+  home?: string; // history never has to re-fetch historical game docs
 }
 
 /** Pickem: weeklyResults[week].games */

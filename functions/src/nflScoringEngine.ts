@@ -13,7 +13,9 @@ import {
 // Pick'em Scoring Logic
 // ============================================================================
 
-export type PickemGameGrade = { pick: string; result: 'W' | 'L' | 'PUSH' | 'VOID' };
+// away/home abbreviations ride along so the profile pick history can render
+// matchups without re-fetching every historical game doc (ADR 0005 Phase 5).
+export type PickemGameGrade = { pick: string; result: 'W' | 'L' | 'PUSH' | 'VOID'; away: string; home: string };
 
 /**
  * Grades every picked, concluded game of a week: W / L / PUSH / VOID per game
@@ -41,7 +43,7 @@ export function gradePickemGames(
     if (!pick) continue; // Unpicked game
 
     if (game.status === 'CANCELLED') {
-      grades[game.id] = { pick, result: 'VOID' };
+      grades[game.id] = { pick, result: 'VOID', away: game.awayTeam.abbreviation, home: game.homeTeam.abbreviation };
       continue;
     }
 
@@ -54,20 +56,20 @@ export function gradePickemGames(
       // homeScore + spread.value beats awayScore.
       const adjustedHome = homeScore + game.spread.value;
       if (adjustedHome === awayScore) {
-        grades[game.id] = { pick, result: 'PUSH' };
+        grades[game.id] = { pick, result: 'PUSH', away: game.awayTeam.abbreviation, home: game.homeTeam.abbreviation };
       } else {
         const coveringTeam = adjustedHome > awayScore
           ? game.homeTeam.abbreviation
           : game.awayTeam.abbreviation;
-        grades[game.id] = { pick, result: pick === coveringTeam ? 'W' : 'L' };
+        grades[game.id] = { pick, result: pick === coveringTeam ? 'W' : 'L', away: game.awayTeam.abbreviation, home: game.homeTeam.abbreviation };
       }
     } else if (homeScore === awayScore) {
-      grades[game.id] = { pick, result: 'PUSH' }; // straight-up tie
+      grades[game.id] = { pick, result: 'PUSH', away: game.awayTeam.abbreviation, home: game.homeTeam.abbreviation }; // straight-up tie
     } else {
       const winner = homeScore > awayScore
         ? game.homeTeam.abbreviation
         : game.awayTeam.abbreviation;
-      grades[game.id] = { pick, result: pick === winner ? 'W' : 'L' };
+      grades[game.id] = { pick, result: pick === winner ? 'W' : 'L', away: game.awayTeam.abbreviation, home: game.homeTeam.abbreviation };
     }
   }
 

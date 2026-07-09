@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { writeLedgerEvent } from "./paymentLedger";
 import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
+import { recomputeUserProfile } from "./userProfile";
 import { PAYOUT_SCHEMA_VERSION, type PayoutKind } from "./shared/payoutRecords";
 import { writeAuditEvent } from "./audit";
 
@@ -140,6 +141,17 @@ export const recordPoolPayouts = onCall(async (request) => {
     actor: { uid: actorUid, role: 'ADMIN', label: 'Host' },
     payload: { awards: validated.length, awardIds },
   });
+
+  // Refresh each recipient's public profile so Profit updates immediately
+  // (best-effort; bounded by MAX_AWARDS_PER_CALL).
+  const recipients = [...new Set(validated.map(a => a.uid))];
+  for (const uid of recipients) {
+    try {
+      await recomputeUserProfile(db, uid);
+    } catch (e) {
+      console.warn(`[recordPoolPayouts] profile recompute failed for ${uid}:`, e);
+    }
+  }
 
   return { success: true, awardIds };
 });

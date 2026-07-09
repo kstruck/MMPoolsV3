@@ -189,7 +189,7 @@ export interface NFLPickemEntry {
     total: number;
     points: number;
     mode?: 'STRAIGHT' | 'ATS';
-    games?: Record<string, { pick: string; result: 'W' | 'L' | 'PUSH' | 'VOID' }>;
+    games?: Record<string, { pick: string; result: 'W' | 'L' | 'PUSH' | 'VOID'; away?: string; home?: string }>;
   }>;
   resultsVersion?: number;
   totalScore: number;
