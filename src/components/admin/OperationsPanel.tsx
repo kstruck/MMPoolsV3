@@ -32,6 +32,30 @@ interface OpAction {
 const call = (name: string, data: Record<string, unknown> = {}) =>
   httpsCallable(functions, name)(data).then((r) => r.data);
 
+/**
+ * Member Record roster backfill (ADR 0003). The callable pages ~100 pools per call and
+ * returns a nextCursor; this loops all pages and accumulates the invariant report so one
+ * click covers every pool. Dry run writes nothing.
+ */
+const runBackfill = async (dryRun: boolean) => {
+  let cursor: string | undefined;
+  let pages = 0;
+  const agg = { dryRun, poolsScanned: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, failures: [] as any[] };
+  do {
+    const r: any = await call('backfillMemberRecords', { dryRun, limit: 100, startAfter: cursor });
+    agg.poolsScanned += r.poolsScanned || 0;
+    agg.membersCreated += r.membersCreated || 0;
+    agg.membersAlreadyPresent += r.membersAlreadyPresent || 0;
+    agg.guestSkipped += r.guestSkipped || 0;
+    agg.participantIdsWithoutMember += r.participantIdsWithoutMember || 0;
+    agg.poolsFlipped += r.poolsFlipped || 0;
+    if (Array.isArray(r.failures)) agg.failures.push(...r.failures);
+    cursor = r.nextCursor || undefined;
+    pages++;
+  } while (cursor && pages < 100);
+  return agg;
+};
+
 const ACTIONS: OpAction[] = [
   {
     id: 'recalculateGlobalStats',
@@ -68,6 +92,24 @@ const ACTIONS: OpAction[] = [
     destructive: true,
     icon: Trophy,
     run: () => call('syncPlayoffPools'),
+  },
+  {
+    id: 'backfillMemberRecords:dry',
+    label: 'Backfill Member Roster (dry run)',
+    description: 'Report how many members (incl. commissioners / no-entry members) would be added to each pool roster. Writes nothing.',
+    blastRadius: 'Read-only — no writes. Reports invariant counts.',
+    destructive: false,
+    icon: CheckCircle2,
+    run: () => runBackfill(true),
+  },
+  {
+    id: 'backfillMemberRecords',
+    label: 'Backfill Member Roster',
+    description: 'Create Member Records for every existing member (incl. commissioners and members with no entry) across all pools. Idempotent — skips members already present.',
+    blastRadius: 'Creates pools/{id}/members docs across every pool; sets rosterSchemaVersion per pool.',
+    destructive: true,
+    icon: Users,
+    run: () => runBackfill(false),
   },
   {
     id: 'fixParticipantIds:dry',
