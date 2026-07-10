@@ -52,7 +52,7 @@ export { createNFLPool, joinNFLPool, submitNFLPicks, executeSurvivorRebuy, score
 export { sendManualReminder } from "./manualReminders";
 // Sim harness (PLAN-TEST-SUITE 8e/8f): SUPER_ADMIN-only, simRunId-scoped Test
 // Suite mutations + cleanup. See functions/src/simHarness.ts.
-export { simStartRun, simWriteEntries, simUpdatePool, simSeedNFLGames, cleanupSimPool } from "./simHarness";
+export { simStartRun, simWriteEntries, simUpdatePool, simSeedNFLGames, cleanupSimPool, simJoinMembers, simSubmitPicks, simExecuteRebuy, simFinalizePool } from "./simHarness";
 
 // --- BILLING & MONETIZATION ---
 export { enforceBillingStatus, validateBillingAccess, redeemCoupon, onPoolParticipantChange, getPoolQuote } from "./billing";

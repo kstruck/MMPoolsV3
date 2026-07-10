@@ -158,15 +158,31 @@ export const createNFLPool = onCall(async (request) => {
 /**
  * Join an NFL Pool using a shared invite link.
  */
-export const joinNFLPool = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'User must be logged in.');
-  }
-  await assertNotMaintenance();
+/**
+ * Explicit member-action subject context (ADR 0006 / PLAN-NFL-SIM-HARNESS Phase 2.17).
+ * Public callables pass actor === subject from request.auth; the sim harness passes
+ * the SUPER_ADMIN actor plus a simulated subject — with actorRole left undefined so
+ * role-based bypasses stay OFF and every gate is enforced against the subject.
+ */
+export interface MemberActionContext {
+  actorUid: string;
+  actorRole?: string;
+  subjectUid: string;
+  subjectName?: string;
+  requestId?: string;
+}
 
-  const uid = request.auth.uid;
-  const db = admin.firestore();
-  const { poolId } = request.data;
+/**
+ * Join flow, extracted verbatim from the joinNFLPool callable (auth/maintenance
+ * checks stay in the wrapper — they are auth-plane concerns). Enrolls the SUBJECT:
+ * participantIds, participation doc, Member Record, join audit event.
+ */
+export async function joinNFLPoolInternal(
+  db: admin.firestore.Firestore,
+  ctx: { subjectUid: string; subjectName?: string },
+  poolId: string,
+): Promise<{ success: true }> {
+  const uid = ctx.subjectUid;
 
   if (!poolId) {
     throw new HttpsError('invalid-argument', 'poolId is required.');
@@ -181,7 +197,7 @@ export const joinNFLPool = onCall(async (request) => {
   }
 
   const pool = poolSnap.data() as any;
-  const joinerName = request.auth.token?.name || (await userRef.get()).data()?.name || 'Member';
+  const joinerName = ctx.subjectName || (await userRef.get()).data()?.name || 'Member';
 
   await db.runTransaction(async (transaction) => {
     const poolDoc = await transaction.get(poolRef);
@@ -243,6 +259,18 @@ export const joinNFLPool = onCall(async (request) => {
   });
 
   return { success: true };
+}
+
+export const joinNFLPool = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be logged in.');
+  }
+  await assertNotMaintenance();
+  return joinNFLPoolInternal(
+    admin.firestore(),
+    { subjectUid: request.auth.uid, subjectName: (request.auth.token as { name?: string })?.name },
+    request.data?.poolId,
+  );
 });
 
 /**
@@ -264,20 +292,22 @@ export function assertNFLPickMembership(
 }
 
 /**
- * Securely submits picks for an NFL Pool with strict server-side kickoff lock checks.
+ * Pick submission, extracted verbatim from the submitNFLPicks callable (auth +
+ * ban checks stay in the wrapper). Every gate — membership, spreads, effective
+ * locks, used-teams, idempotency — is enforced against ctx.subjectUid; the
+ * SUPER_ADMIN membership bypass keys off ctx.actorRole, which the sim harness
+ * deliberately leaves undefined (ADR 0006).
  */
-export const submitNFLPicks = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'User must be logged in.');
-  }
-  await assertNotBannedLive(request.auth.uid);
-
-  const uid = request.auth.uid;
-  const db = admin.firestore();
-  
+export async function submitNFLPicksInternal(
+  db: admin.firestore.Firestore,
+  ctx: MemberActionContext,
+  payload: { poolId?: string; week?: number; picks?: any; confidence?: any; tiebreakerPrediction?: number },
+): Promise<{ success: true }> {
+  const uid = ctx.subjectUid;
   // deep clean input
-  const data = JSON.parse(JSON.stringify(request.data || {}));
-  const { poolId, week, picks, confidence, tiebreakerPrediction, requestId } = data;
+  const data = JSON.parse(JSON.stringify(payload || {}));
+  const { poolId, week, picks, confidence, tiebreakerPrediction } = data;
+  const requestId = ctx.requestId;
 
   if (!poolId || !week || !picks) {
     throw new HttpsError('invalid-argument', 'Missing poolId, week, or picks.');
@@ -296,7 +326,7 @@ export const submitNFLPicks = onCall(async (request) => {
     throw new HttpsError("failed-precondition", billingCheck.reason || "Pool is locked due to billing.");
   }
 
-  assertNFLPickMembership(pool, uid, (request.auth.token as { role?: string })?.role);
+  assertNFLPickMembership(pool, uid, ctx.actorRole);
 
   const type = pool.type;
   const now = Date.now();
@@ -375,14 +405,19 @@ export const submitNFLPicks = onCall(async (request) => {
         }
       }
 
-      // Update Pick'em Entry
+      // Update Pick'em Entry. NOTE: `confidence` must be spread conditionally —
+      // a literal `undefined` field crashes the Firestore serializer (this project
+      // deliberately does NOT set ignoreUndefinedProperties), which made EVERY
+      // submission to a non-confidence pick'em pool throw INTERNAL. Pre-existing;
+      // found by the first real-path Golden Scenario (PLAN-NFL-SIM-HARNESS Phase 2)
+      // — same bug class as the weekly-recap P0 in PR #152.
       const pickemEntry: NFLPickemEntry = {
         id: uid,
         poolId,
         ownerUid: uid,
-        userName: request.auth?.token.name || 'Participant',
+        userName: ctx.subjectName || 'Participant',
         picks: { ...(existingEntry?.picks || {}), ...picks },
-        confidence: settings.confidenceMode ? confidence : undefined,
+        ...(settings.confidenceMode && confidence ? { confidence } : {}),
         weeklyTiebreakers: {
           ...(existingEntry?.weeklyTiebreakers || {}),
           ...(tiebreakerPrediction !== undefined ? { [week]: tiebreakerPrediction } : {})
@@ -399,7 +434,7 @@ export const submitNFLPicks = onCall(async (request) => {
         id: uid,
         poolId,
         ownerUid: uid,
-        userName: request.auth?.token.name || 'Participant',
+        userName: ctx.subjectName || 'Participant',
         status: 'ALIVE',
         strikesUsed: 0,
         rebuysUsed: 0,
@@ -454,7 +489,7 @@ export const submitNFLPicks = onCall(async (request) => {
         id: uid,
         poolId,
         ownerUid: uid,
-        userName: request.auth?.token.name || 'Participant',
+        userName: ctx.subjectName || 'Participant',
         picks: {},
         usedTeams: [],
         weeklyScores: {},
@@ -505,7 +540,7 @@ export const submitNFLPicks = onCall(async (request) => {
     // liability — this is the moment a seeded owner's feeOwed upgrades 0 -> fee,
     // and it heals records that predate the feeOwed field (fill-on-touch).
     ensureMemberRecord(transaction, db, poolId, uid, {
-      userName: request.auth?.token.name || 'Participant',
+      userName: ctx.subjectName || 'Participant',
       role: existingMember?.role ?? (pool.ownerId === uid ? 'MANAGER' : 'PARTICIPANT'),
       poolType: type,
       present: true,
@@ -524,19 +559,41 @@ export const submitNFLPicks = onCall(async (request) => {
   }
 
   return { success: true };
-});
+}
 
 /**
- * Triggers a Survivor rebuy/buy-back for an eliminated participant.
+ * Securely submits picks for an NFL Pool with strict server-side kickoff lock checks.
  */
-export const executeSurvivorRebuy = onCall(async (request) => {
+export const submitNFLPicks = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'User must be logged in.');
   }
+  await assertNotBannedLive(request.auth.uid);
+  const token = request.auth.token as { name?: string; role?: string };
+  return submitNFLPicksInternal(
+    admin.firestore(),
+    {
+      actorUid: request.auth.uid,
+      actorRole: token?.role,
+      subjectUid: request.auth.uid,
+      subjectName: token?.name,
+      requestId: request.data?.requestId,
+    },
+    request.data,
+  );
+});
 
-  const uid = request.auth.uid;
-  const db = admin.firestore();
-  const { poolId, week } = request.data;
+/**
+ * Survivor rebuy, extracted verbatim from the executeSurvivorRebuy callable
+ * (auth check stays in the wrapper). Enforced against ctx.subjectUid.
+ */
+export async function executeSurvivorRebuyInternal(
+  db: admin.firestore.Firestore,
+  ctx: MemberActionContext,
+  payload: { poolId?: string; week?: number },
+): Promise<{ success: true }> {
+  const uid = ctx.subjectUid;
+  const { poolId, week } = payload || {};
 
   if (!poolId || !week) {
     throw new HttpsError('invalid-argument', 'poolId and week are required.');
@@ -603,7 +660,7 @@ export const executeSurvivorRebuy = onCall(async (request) => {
     } else {
       transaction.set(memberRef, {
         uid, poolId,
-        userName: entry.userName || request.auth?.token?.name || 'Participant',
+        userName: entry.userName || ctx.subjectName || 'Participant',
         role: 'PARTICIPANT', paidStatus: 'UNPAID', joinedAt: Date.now(), rebuyOwed: rebuyAmt,
       }, { merge: false });
     }
@@ -631,6 +688,26 @@ export const executeSurvivorRebuy = onCall(async (request) => {
   });
 
   return { success: true };
+}
+
+/**
+ * Triggers a Survivor rebuy/buy-back for an eliminated participant.
+ */
+export const executeSurvivorRebuy = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be logged in.');
+  }
+  const token = request.auth.token as { name?: string; role?: string };
+  return executeSurvivorRebuyInternal(
+    admin.firestore(),
+    {
+      actorUid: request.auth.uid,
+      actorRole: token?.role,
+      subjectUid: request.auth.uid,
+      subjectName: token?.name,
+    },
+    request.data,
+  );
 });
 
 /**

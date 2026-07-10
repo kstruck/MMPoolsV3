@@ -24,21 +24,14 @@ import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { writeAdminAudit, capMetadata } from './lib/adminAudit';
 import { recomputeCommissionerAggregate } from './lib/commissionerAggregate';
+import { joinNFLPoolInternal, submitNFLPicksInternal, executeSurvivorRebuyInternal } from './nflPools';
+import { maybeFinalizeNFLPool } from './nflFinalize';
 
-const SIM_PREFIX = 'sim-';
+import { SIM_PREFIX, simSeason, simUidPrefix } from './lib/simNamespace';
+export { simSeason, simUidPrefix };
 const MAX_DOCS_PER_CALL = 300;
 
-/** Season value for a run's synthetic NFL games. */
-export function simSeason(runId: string): string {
-    return `${SIM_PREFIX}${runId}`;
-}
 
-/** Run-scoped subject uid prefix (`sim-<runId>-`) — cross-run collisions on
- *  publicProfiles/seasonHistory/users state are impossible when every simulated
- *  subject carries the run id (PLAN-NFL-SIM-HARNESS Phase 0.6, Codex R1#6). */
-export function simUidPrefix(runId: string): string {
-    return `${SIM_PREFIX}${runId}-`;
-}
 
 /**
  * Run manifest (`simRuns/{runId}`) — the single source of truth for what a Sim Run
@@ -413,6 +406,161 @@ export const cleanupSimPool = onCall(async (request) => {
     } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         await audit(actor, 'SIM_CLEANUP_POOL', String(runId), poolId, 'error', {}, msg);
+        throw e;
+    }
+});
+
+// ---------------------------------------------------------------------------
+// Real-path member actions (ADR 0006 / PLAN-NFL-SIM-HARNESS Phases 2-3).
+// These drive the SAME internals as the public callables — locks, membership,
+// used-teams, spreads, consensus recompute all enforced — but as an explicit
+// SIM SUBJECT. actorRole is deliberately NOT forwarded to the internals, so the
+// SUPER_ADMIN membership bypass stays OFF and every gate binds to the subject.
+// ---------------------------------------------------------------------------
+
+function assertRunScopedUid(runId: string, subjectUid: unknown): string {
+    if (typeof subjectUid !== 'string' || !subjectUid.startsWith(simUidPrefix(runId))) {
+        throw new HttpsError(
+            'invalid-argument',
+            `Sim subject uid must start with "${simUidPrefix(runId)}" (got: ${String(subjectUid)}).`,
+        );
+    }
+    return subjectUid;
+}
+
+/**
+ * Enrolls simulated Members through the REAL join flow (participantIds, Member
+ * Record, participations, name stamping) — the prerequisite for every real-path
+ * action, because submit/payouts/profiles all key off real membership (Codex R1#1).
+ */
+export const simJoinMembers = onCall(async (request) => {
+    const actor = assertSuperAdmin(request);
+    const db = admin.firestore();
+    const { poolId, runId, members } = (request.data ?? {}) as {
+        poolId?: string; runId?: string; members?: Array<{ uid?: string; name?: string }>;
+    };
+
+    try {
+        if (!poolId || !validRunId(runId) || !Array.isArray(members) || members.length === 0) {
+            throw new HttpsError('invalid-argument', 'poolId, runId, and a non-empty members[] are required.');
+        }
+        if (members.length > MAX_DOCS_PER_CALL) {
+            throw new HttpsError('invalid-argument', `At most ${MAX_DOCS_PER_CALL} members per call.`);
+        }
+        await getVerifiedSimPool(db, poolId, runId);
+
+        const uids: string[] = [];
+        for (const m of members) {
+            const uid = assertRunScopedUid(runId!, m?.uid);
+            await joinNFLPoolInternal(db, { subjectUid: uid, subjectName: m?.name || uid }, poolId);
+            uids.push(uid);
+        }
+        await appendManifest(db, runId!, { poolIds: [poolId], simUids: uids });
+
+        await audit(actor, 'SIM_JOIN_MEMBERS', runId!, poolId, 'success', { count: uids.length });
+        return { success: true, joined: uids.length };
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        await audit(actor, 'SIM_JOIN_MEMBERS', String(runId), poolId, 'error', {}, msg);
+        throw e;
+    }
+});
+
+/**
+ * Submits picks through the REAL submitNFLPicks validation/write path as a sim
+ * subject. A green Golden Scenario therefore certifies locks, membership,
+ * spread gating, used-team rules, and the post-submit consensus recompute.
+ */
+export const simSubmitPicks = onCall(async (request) => {
+    const actor = assertSuperAdmin(request);
+    const db = admin.firestore();
+    const { poolId, runId, subjectUid, week, picks, confidence, tiebreakerPrediction } = (request.data ?? {}) as {
+        poolId?: string; runId?: string; subjectUid?: string; week?: number;
+        picks?: Record<string, unknown>; confidence?: Record<string, unknown>; tiebreakerPrediction?: number;
+    };
+
+    try {
+        if (!poolId || !validRunId(runId) || week === undefined) {
+            throw new HttpsError('invalid-argument', 'poolId, runId, and week are required.');
+        }
+        await getVerifiedSimPool(db, poolId, runId);
+        const uid = assertRunScopedUid(runId!, subjectUid);
+
+        await submitNFLPicksInternal(db, {
+            actorUid: actor,
+            // actorRole intentionally undefined: membership must bind to the subject.
+            subjectUid: uid,
+            subjectName: uid.slice(simUidPrefix(runId!).length) || uid,
+        }, { poolId, week, picks, confidence, tiebreakerPrediction });
+
+        // Stamp simRunId on the entry the real path just wrote (Phase 0.3 contract —
+        // belt+braces alongside the sim- uid prefix guard in the profile trigger).
+        await db.collection('pools').doc(poolId).collection('entries').doc(uid)
+            .set({ simRunId: runId }, { merge: true });
+        await appendManifest(db, runId!, { poolIds: [poolId], simUids: [uid] });
+
+        await audit(actor, 'SIM_SUBMIT_PICKS', runId!, poolId, 'success', { subjectUid: uid, week });
+        return { success: true };
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        await audit(actor, 'SIM_SUBMIT_PICKS', String(runId), poolId, 'error', { subjectUid, week }, msg);
+        throw e;
+    }
+});
+
+/** Survivor rebuy through the REAL path as a sim subject. */
+export const simExecuteRebuy = onCall(async (request) => {
+    const actor = assertSuperAdmin(request);
+    const db = admin.firestore();
+    const { poolId, runId, subjectUid, week } = (request.data ?? {}) as {
+        poolId?: string; runId?: string; subjectUid?: string; week?: number;
+    };
+
+    try {
+        if (!poolId || !validRunId(runId) || week === undefined) {
+            throw new HttpsError('invalid-argument', 'poolId, runId, and week are required.');
+        }
+        await getVerifiedSimPool(db, poolId, runId);
+        const uid = assertRunScopedUid(runId!, subjectUid);
+
+        await executeSurvivorRebuyInternal(db, {
+            actorUid: actor,
+            subjectUid: uid,
+            subjectName: uid.slice(simUidPrefix(runId!).length) || uid,
+        }, { poolId, week });
+
+        await audit(actor, 'SIM_EXECUTE_REBUY', runId!, poolId, 'success', { subjectUid: uid, week });
+        return { success: true };
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        await audit(actor, 'SIM_EXECUTE_REBUY', String(runId), poolId, 'error', { subjectUid, week }, msg);
+        throw e;
+    }
+});
+
+/**
+ * Explicit Season Finalization for a Test Pool (Phase 3.21, Codex R2#1). The ONLY
+ * caller that passes allowSim — inline scoring and the sweep never finalize a sim
+ * pool (Phase 0.2). Runs the REAL finalize path: computeFinalRanks, seasonHistory
+ * writes (to run-scoped sim uids, purged by cleanup), profile recomputes.
+ */
+export const simFinalizePool = onCall(async (request) => {
+    const actor = assertSuperAdmin(request);
+    const db = admin.firestore();
+    const { poolId, runId } = (request.data ?? {}) as { poolId?: string; runId?: string };
+
+    try {
+        if (!poolId || !validRunId(runId)) {
+            throw new HttpsError('invalid-argument', 'poolId and runId are required.');
+        }
+        await getVerifiedSimPool(db, poolId, runId);
+        const outcome = await maybeFinalizeNFLPool(db, poolId, { allowSim: true });
+
+        await audit(actor, 'SIM_FINALIZE_POOL', runId!, poolId, 'success', { ...outcome });
+        return outcome;
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        await audit(actor, 'SIM_FINALIZE_POOL', String(runId), poolId, 'error', {}, msg);
         throw e;
     }
 });

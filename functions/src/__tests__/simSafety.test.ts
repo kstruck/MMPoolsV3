@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { isSimPool } from '../nflFinalize';
 import { isActivePoolForStats } from '../lib/poolInclusion';
-import { simSeason, simUidPrefix } from '../simHarness';
+import { simSeason, simUidPrefix } from '../lib/simNamespace';
 
 // Phase 0 sim-safety guards (PLAN-NFL-SIM-HARNESS). The load-bearing fact under
 // test: callable-created Test Pools have SERVER-GENERATED doc IDs — only the
