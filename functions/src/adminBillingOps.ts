@@ -14,6 +14,8 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { validated } from "./lib/validated";
+import { adminManageCouponSchema } from "./schemas/adminManageCoupon";
 import { assertCallerRole } from "./adminClaims";
 import { writeAdminAudit } from "./lib/adminAudit";
 import { BillingConfigSchema } from "./shared/schemas/billingConfig";
@@ -64,46 +66,46 @@ export const adminSaveBillingConfig = onCall(async (request) => {
   return { success: true };
 });
 
-/** Create / delete / toggle a coupon (coupons/{id}). */
-export const adminManageCoupon = onCall(async (request) => {
-  const caller = await assertCallerRole(request, "SUPER_ADMIN");
-  const { op, couponId, data } = request.data as {
-    op: "create" | "delete" | "toggle";
-    couponId?: string;
-    data?: Record<string, unknown>;
-  };
-  const coupons = admin.firestore().collection("coupons");
+/** Create / delete / toggle a coupon (coupons/{id}). Schema: ./schemas/adminManageCoupon. */
+export const adminManageCoupon = validated(
+  { schema: adminManageCouponSchema, label: "adminManageCoupon", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async (input, request) => {
+    // auth + SUPER_ADMIN (claim AND doc) already enforced by the wrapper.
+    const caller = { uid: request.auth!.uid, email: request.auth!.token.email as string | undefined };
+    const coupons = admin.firestore().collection("coupons");
 
-  let targetId = couponId;
-  if (op === "create") {
-    if (!data || typeof data !== "object" || typeof data.code !== "string" || !data.code.trim()) {
-      throw new HttpsError("invalid-argument", "coupon data with a non-empty code is required.");
-    }
-    const ref = await coupons.add({ ...data, code: (data.code as string).trim().toUpperCase(), createdAt: FieldValue.serverTimestamp() });
-    targetId = ref.id;
-  } else if (op === "delete") {
-    if (!couponId) throw new HttpsError("invalid-argument", "couponId is required.");
-    await coupons.doc(couponId).delete();
-  } else if (op === "toggle") {
-    if (!couponId || typeof data?.isActive !== "boolean") {
-      throw new HttpsError("invalid-argument", "couponId and isActive are required.");
-    }
-    await coupons.doc(couponId).update({ isActive: data.isActive });
-  } else {
-    throw new HttpsError("invalid-argument", "op must be create | delete | toggle.");
-  }
+    let targetId: string;
+    let code: string | undefined;
 
-  await writeAdminAudit({
-    actorUid: caller.uid,
-    actorEmail: caller.email,
-    action: `COUPON_${op.toUpperCase()}`,
-    targetType: "coupon",
-    targetId,
-    metadata: { op, code: typeof data?.code === "string" ? data.code : undefined },
-    status: "success",
-  });
-  return { success: true, couponId: targetId };
-});
+    if (input.op === "create") {
+      const body = input.data;
+      const ref = await coupons.add({
+        ...body,
+        code: body.code.toUpperCase(),
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      targetId = ref.id;
+      code = body.code;
+    } else if (input.op === "delete") {
+      targetId = input.couponId;
+      await coupons.doc(targetId).delete();
+    } else {
+      targetId = input.couponId;
+      await coupons.doc(targetId).update({ isActive: input.data.isActive });
+    }
+
+    await writeAdminAudit({
+      actorUid: caller.uid,
+      actorEmail: caller.email,
+      action: `COUPON_${input.op.toUpperCase()}`,
+      targetType: "coupon",
+      targetId,
+      metadata: { op: input.op, code },
+      status: "success",
+    });
+    return { success: true, couponId: targetId };
+  },
+);
 
 /** Pool billing override / extend-trial / reset-grace (pools/{id}.billing). */
 export const adminUpdatePoolBilling = onCall(async (request) => {

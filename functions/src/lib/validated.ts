@@ -107,12 +107,6 @@ export function validated<S extends z.ZodType, R>(
     });
 }
 
-/**
- * nullish(schema) — normalizes JSON `null` to `undefined` before applying an
- * optional schema (sweep C2 / PLAN #2): Firebase's callable serializer strips
- * `undefined` client-side but some call sites still send `null`, which a strict
- * optional would reject. Use for optional fields under strictObject.
- */
-export function nullish<S extends z.ZodType>(schema: S) {
-    return z.preprocess((v) => (v === null ? undefined : v), schema.optional());
-}
+// nullish() lives in the pure ./zodHelpers module (no firebase imports) so that
+// callable schemas stay unit-testable. Re-exported here for convenience.
+export { nullish } from "./zodHelpers";
