@@ -18,13 +18,14 @@ adversarial Codex planning skill. Use `/grill-with-docs-codex`.
 **What already exists (this is EXTEND, not build-from-zero):**
 - `functions/src/simHarness.ts` (PLAN-TEST-SUITE Phase 2, items 8e/8f) — sanctioned SUPER_ADMIN-only mutation callables: `simSeason`, `simWriteEntries`, `simUpdatePool`, `simSeedNFLGames`, `cleanupSimPool`.
   - Safety architecture to PRESERVE: trust anchor is a persisted `simRunId` stamped on Test Pools by the create callables (never an ID/slug prefix). Every callable re-verifies the target against that field and refuses anything outside the sim namespace. Every attempt (success or refusal) writes an `admin_audit` entry. Synthetic NFL games live in the real `nfl_games` collection under `season = "sim-<runId>"` with doc IDs `sim-<runId>-g<n>` — values no real ESPN import produces, invisible to production season/week queries (reminders, status, scoring for real pools).
-- `src/components/SimulationDashboard.tsx` — "Pool Simulation" UI (Test Suite tab → "Open Simulation Dashboard"): drives a pool through a full lifecycle to verify counts/standings/payouts. **KNOWN BUG:** an app-wide crash tied to `.squares` (see `superadmin-walkthrough-2026-07-05`) — plan must fix or quarantine it.
+- `src/components/SimulationDashboard.tsx` — "Pool Simulation" UI (Test Suite tab → "Open Simulation Dashboard"). **Now SQUARES-only by design** (filters `p.type === 'SQUARES'`; the old `.squares` app-wide crash is FIXED — non-squares pools can no longer be selected). Drives the squares lifecycle (fill grid, simulate game, winners). Implication: the NFL harness needs its own run surface; this dashboard is not it.
 - `src/components/{SimpleTestingDashboard,TestingDashboard}.tsx`, `src/utils/simulationUtils.ts`.
 - `src/components/TournamentSimulator/` (`/tournament-sim`) — full NCAA bracket simulator, already in the Test Suite tab. Distinct from NFL pool sim.
 - NFL scoring: `functions/src/nflScoringEngine.ts`, `scoreNFLWeek`; pick submission `submitNFLPicks` in `functions/src/nflPools.ts`; Member Records (ADR 0003).
+- **Player Profiles PR #153 landed AFTER this prompt was first drafted — new assertion targets the harness should exploit:** per-pick graded outcomes persisted in `weeklyResults[week]` for all 3 NFL types (scorer derives totals FROM grades); member-readable standings projection at `pools/{id}/standings/current`; automatic Season Finalization (`functions/src/nflFinalize.ts`, `seasonHistory`, kill-switched via `system/config.nflFinalize`, currently OFF/fail-closed); `payoutRecords` + `recordPoolPayouts` callable; `backfillProfileData` migration. A green sim can now assert against graded picks, the standings projection, finalization output, and profile recomputes — far stronger than counts alone. NFL entry reads are tightened to own-only pre-FINAL, which constrains how a browser-side harness can verify entries (server/emulator asserts or the standings projection instead).
 
-**Cleanup the owner flagged (fold into the plan):**
-- SuperAdmin → System → **Settings** tab has a legacy "Simulation Tools" block (Seed Test Tournament / Simulate Round / Reset Scores against `tournaments/2025`) — it is REAL but a redundant duplicate of the full Tournament Simulator already in the Test Suite tab. T12 was supposed to consolidate all sim tools into the single Test Suite tab. Decide: delete the Settings block (recommended, since the full simulator already lives in Test Suite) or relocate. Confirm with the owner before deleting admin tooling; the plan should state the decision explicitly. Test Suite must be the single home for all simulation tooling.
+**Cleanup already done (context, not a task):**
+- The legacy "Simulation Tools" block on SuperAdmin → System → Settings was ALREADY deleted (commit `2e61a9f`, owner-confirmed, deployed). Test Suite tab is now the single home for simulation tooling. Do not re-plan this.
 
 **Design questions the grill MUST resolve:**
 1. **Config matrix:** what's the shape of "a list of pool types each with settings" (lock mode, confidence, survivor rebuy, margin rules, entry counts, week vs. full-season)? A declarative fixture the harness iterates?
@@ -43,8 +44,6 @@ adversarial Codex planning skill. Use `/grill-with-docs-codex`.
 **Deliverables from the grill:**
 - Phased plan (like `PLAN-TEST-SUITE`/`PLAN-POOL-HOMEPAGE`) with the config-matrix schema and per-pool-type assertion contracts.
 - Decision on direct-write vs. real-submit-path fidelity.
-- The Settings-tab legacy-block cleanup decision.
-- Fix plan for the SimulationDashboard `.squares` crash.
 - Acceptance criteria + verification (emulator tests that run the matrix headless).
 
 Run the full adversarial review. Hammer the prod-safety isolation, the "verifiable" claim (is it really asserting, or just running?), and whether reusing real engines is airtight. Do not write feature code — output the plan.
