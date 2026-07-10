@@ -102,6 +102,23 @@ describe('sim harness — refusal paths', () => {
             } as never)).rejects.toThrow(/cannot be patched/);
         }
     });
+
+    it('refuses DOTTED-PATH patches into forbidden roots (qodo PR #156 finding)', async () => {
+        await seedPool('sim-pool', { name: 'Sim', simRunId: RUN, season: `sim-${RUN}`, billing: { status: 'free' } });
+        for (const patch of [
+            { 'billing.status': 'paid' },
+            { 'ownerId.x': 'attacker' },
+            { 'season.0': 'x' },
+        ]) {
+            await expect(wrappedUpdate({
+                data: { poolId: 'sim-pool', runId: RUN, patch },
+                auth: superAdmin,
+            } as never)).rejects.toThrow(/cannot be patched/);
+        }
+        // billing untouched
+        const pool = (await db.collection('pools').doc('sim-pool').get()).data();
+        expect(pool?.billing?.status).toBe('free');
+    });
 });
 
 describe('sim harness — finalize guard (Phase 0.1/0.2)', () => {

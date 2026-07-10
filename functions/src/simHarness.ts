@@ -223,7 +223,11 @@ export const simUpdatePool = onCall(async (request) => {
             throw new HttpsError('invalid-argument', 'poolId, runId, and a patch object are required.');
         }
         for (const key of Object.keys(patch)) {
-            if (SIM_PATCH_FORBIDDEN.has(key)) {
+            // Firestore update() resolves dotted field paths, so 'billing.status'
+            // mutates the forbidden 'billing' root without an exact-match hit —
+            // validate the ROOT segment (qodo review of PR #156).
+            const root = key.split('.')[0];
+            if (SIM_PATCH_FORBIDDEN.has(root)) {
                 throw new HttpsError('invalid-argument', `Field "${key}" cannot be patched via the sim harness.`);
             }
         }
@@ -426,6 +430,7 @@ async function purgeRunResidue(
 }
 
 const MAX_SWEEP_RUNS = 10;
+const ACTIVE_RUN_GRACE_MS = 30 * 60 * 1000; // RUNNING + touched within 30min = live, never swept
 
 /**
  * Stranded-run sweep (Phase 6, Codex R1#7): lists simRuns manifests not yet
@@ -442,18 +447,31 @@ export const sweepSimRuns = onCall(async (request) => {
     const isDry = dryRun !== false; // dry by default — Operations guardrail convention
 
     try {
-        // Stranded manifests.
-        const manifestsSnap = await db.collection('simRuns').limit(500).get();
+        // Stranded manifests. A RUNNING manifest with RECENT activity is an ACTIVE
+        // simulation, not a stranded one — sweeping it mid-flight would destroy a
+        // live run (qodo review of PR #156). Every harness callable bumps the
+        // manifest's updatedAt, so recency is a faithful liveness signal; a run
+        // whose last touch is older than the grace window is genuinely stuck.
+        const now = Date.now();
         const stranded = new Map<string, { runId: string; scenarioId?: string; status?: string; poolIds: string[] }>();
+        const skippedActive: string[] = [];
+        const manifestsSnap = await db.collection('simRuns').limit(500).get();
         manifestsSnap.docs.forEach(d => {
             const m = d.data() as any;
             if (m.status === 'CLEANED' || m.status === 'SWEPT') return;
+            const lastTouch = m.updatedAt?.toMillis?.() ?? m.startedAt?.toMillis?.() ?? 0;
+            if (m.status === 'RUNNING' && now - lastTouch < ACTIVE_RUN_GRACE_MS) {
+                skippedActive.push(d.id);
+                return;
+            }
             stranded.set(d.id, { runId: d.id, scenarioId: m.scenarioId, status: m.status, poolIds: m.poolIds ?? [] });
         });
         // Safety net: simRunId-marked pools (pre-manifest strays or missed appends).
+        // Pools belonging to a skipped-active run stay untouched too.
         const strayPools = await db.collection('pools').where('simRunId', '>', '').limit(500).get();
         strayPools.docs.forEach(d => {
             const runId = String(d.data().simRunId);
+            if (skippedActive.includes(runId)) return;
             const entry = stranded.get(runId) ?? { runId, poolIds: [] };
             if (!entry.poolIds.includes(d.id)) entry.poolIds.push(d.id);
             stranded.set(runId, entry);
@@ -462,9 +480,10 @@ export const sweepSimRuns = onCall(async (request) => {
         const runs = [...stranded.values()];
         if (isDry) {
             await audit(actor, 'SIM_SWEEP_RUNS', 'sweep', undefined, 'success', {
-                dryRun: true, stranded: runs.length, sample: runs.slice(0, 10).map(r => r.runId),
+                dryRun: true, stranded: runs.length, skippedActive: skippedActive.length,
+                sample: runs.slice(0, 10).map(r => r.runId),
             });
-            return { dryRun: true, stranded: runs.length, runs: runs.slice(0, 50) };
+            return { dryRun: true, stranded: runs.length, skippedActive: skippedActive.length, runs: runs.slice(0, 50) };
         }
 
         const capped = runs.slice(0, MAX_SWEEP_RUNS);
@@ -483,9 +502,9 @@ export const sweepSimRuns = onCall(async (request) => {
         }
 
         await audit(actor, 'SIM_SWEEP_RUNS', 'sweep', undefined, 'success', {
-            dryRun: false, stranded: runs.length, swept,
+            dryRun: false, stranded: runs.length, swept, skippedActive: skippedActive.length,
         });
-        return { dryRun: false, stranded: runs.length, swept, remaining: runs.length - swept };
+        return { dryRun: false, stranded: runs.length, swept, skippedActive: skippedActive.length, remaining: runs.length - swept };
     } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         await audit(actor, 'SIM_SWEEP_RUNS', 'sweep', undefined, 'error', {}, msg);

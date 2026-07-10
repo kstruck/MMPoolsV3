@@ -241,6 +241,18 @@ describe('phase 6 — stranded-run sweep', () => {
         await wWrite2({ data: { poolId, runId, entries: [{ ownerUid: UID, userName: 'Ghost', picks: {}, weeklyPoints: {}, totalScore: 0, submittedAt: 0, paidStatus: 'PAID' }] }, auth: superAdmin } as never);
         await db.collection('publicProfiles').doc(UID).set({ subjectKind: 'PLAYER' });
 
+        // FRESH RUNNING manifests are ACTIVE simulations — the sweep must skip
+        // them (qodo PR #156 finding: sweeping mid-flight destroys a live run).
+        const fresh = await wSweep({ data: { dryRun: true }, auth: superAdmin } as never);
+        expect((fresh.runs ?? []).map((r: any) => r.runId)).not.toContain(runId);
+        expect(fresh.skippedActive).toBeGreaterThanOrEqual(1);
+
+        // Backdate the manifest's last touch beyond the grace window -> genuinely stranded.
+        await db.collection('simRuns').doc(runId).set(
+            { updatedAt: admin.firestore.Timestamp.fromMillis(Date.now() - 2 * 60 * 60 * 1000) },
+            { merge: true },
+        );
+
         // Dry run reports it, writes nothing.
         const dry = await wSweep({ data: { dryRun: true }, auth: superAdmin } as never);
         expect(dry.dryRun).toBe(true);
