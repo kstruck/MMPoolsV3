@@ -124,10 +124,13 @@ combinatorial matrix) and the 8f legacy-simulator migration mandate.
 16. **Sim enrollment first (Codex R1 #1):** the real path REQUIRES membership —
     `submitNFLPicks` enforces `assertNFLPickMembership`, `recordPoolPayouts` only accepts
     `participantIds`, and `recomputeUserProfile` enumerates `users/{uid}/participations`.
-    Extract the join flow into `joinNFLPoolInternal(db, uid, poolId)` and add a guarded
-    `simJoinMembers` callable (SUPER_ADMIN + `simRunId`-verified + run-scoped-uid-enforced +
-    audited) so simulated Members are enrolled exactly as real ones (participantIds, Member
-    Record, participations). Membership is then enforced against the SUBJECT sim uid — the
+    Extract the join flow into `joinNFLPoolInternal(db, { subjectUid, subjectName }, poolId)`
+    — the same explicit subject-context shape as the submit/rebuy internals, because the live
+    join derives `joinerName` from auth/user state and writes it into Member Records and
+    participation side effects (Codex R3 #1) — and add a guarded `simJoinMembers` callable
+    (SUPER_ADMIN + `simRunId`-verified + run-scoped-uid-enforced + audited) so simulated
+    Members are enrolled exactly as real ones (participantIds, Member Record, participations,
+    name stamping). Membership is then enforced against the SUBJECT sim uid — the
     internals take an explicit subject, never inherit the SUPER_ADMIN caller's identity.
 17. **Extracted-internal signature contract (Codex R2 #2):** the internals take
     `{ actorUid, actorRole, subjectUid, subjectName, requestId }` — NOT a bare uid — because
@@ -140,8 +143,9 @@ combinatorial matrix) and the 8f legacy-simulator migration mandate.
 18. New guarded callables `simSubmitPicks` / `simExecuteRebuy` in `simHarness.ts`: SUPER_ADMIN +
     `simRunId`-verified pool + run-scoped sim uid enforced + audited; delegate to the internals;
     stamp `simRunId` on the entries they create (Phase 0.3 contract).
-19. **Lock-timing assertions become real:** Scenario games carry `startTime` offsets relative to
-    run start; Golden Scenarios assert `submitRejected` for post-kickoff submissions
+19. **Lock-timing assertions become real:** Scenario games carry `startOffsetMs` (the Phase
+    1.11 fixture field; `startTime` is only the seeded Firestore doc value derived from it);
+    Golden Scenarios assert `submitRejected` for post-kickoff submissions
     (WEEK_LOCKED / GAME_LOCKED paths), pre-lock submissions succeed, and per-game vs weekly
     lock modes behave per settings. Consensus assertions (`consensusTally`) verify the
     post-submit recompute against the oracle's tally.
@@ -243,9 +247,9 @@ combinatorial matrix) and the 8f legacy-simulator migration mandate.
   oracle and engine agree on the same wrong answer. Mitigation: oracle expectations for the
   hand-authored edge scenarios are human-verified (they're small); the certified-suite unit
   tests remain the authoritative spec cross-check.
-- Emulator runner imports function internals — module-load side effects (admin.initializeApp
-  ordering) are a known repo gotcha; the existing emulator setup file pattern handles it, but
-  new imports may surface more.
+- The emulator runner imports the exported callable modules (functions index surface) to wrap
+  them — module-load side effects (admin.initializeApp ordering) are a known repo gotcha; the
+  existing emulator setup-file pattern handles it, but new imports may surface more.
 - Consensus recompute now fires on real-path sim submits (`submitNFLPicks` → per-week
   recompute); Phase 0.3's cleanup covers the residue, but throttling many golden submits in one
   run may be slow against prod — acceptable for a curated smoke set.

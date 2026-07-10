@@ -101,3 +101,27 @@ All 5 accepted:
 5. Billing scope language: Out-of-scope rewritten — never enter checkout/paid collections;
    free pinned except explicit billing-stamp scenarios.
 Rejected: none.
+
+## Round 3 — Codex
+
+The five round-2 findings are materially resolved in the revised plan: the `allowSim` override is now specified, the submit/rebuy internal contract is explicit, the timing field was added, the emulator surface was corrected to wrapped callables, and the billing-scope language no longer contradicts the trial-stamp scenarios.
+
+1. The join-path extraction is still underspecified relative to the live code: the plan keeps `joinNFLPoolInternal(db, uid, poolId)`, but the current join flow also derives `joinerName` from auth/user state and writes it into Member Records and participation side effects, so the sim-join path still lacks a concrete subject-name/input contract even after the richer actor/subject contract was added for submit/rebuy. [PLAN-NFL-SIM-HARNESS.md](</D:/march-melee-pools/PLAN-NFL-SIM-HARNESS.md:127>) [PLAN-NFL-SIM-HARNESS.md](</D:/march-melee-pools/PLAN-NFL-SIM-HARNESS.md:132>) [nflPools.ts](</D:/march-melee-pools/functions/src/nflPools.ts:184>)  
+Fix: give `joinNFLPoolInternal` the same explicit subject context shape, or at minimum `{ subjectUid, subjectName }`, so sim enrollment can reproduce the real side effects deterministically.
+
+2. The timing-field terminology is still internally inconsistent: Phase 1 defines fixture field `startOffsetMs`, but Phase 2 says scenarios carry `startTime` offsets relative to run start, which invites two competing schema names for the same concept. [PLAN-NFL-SIM-HARNESS.md](</D:/march-melee-pools/PLAN-NFL-SIM-HARNESS.md:96>) [PLAN-NFL-SIM-HARNESS.md](</D:/march-melee-pools/PLAN-NFL-SIM-HARNESS.md:143>)  
+Fix: standardize the plan on one fixture field name, preferably `startOffsetMs`, and reserve `startTime` for the seeded game doc written to Firestore.
+
+3. The emulator-runner risk note is now stale and contradicts the implementation section: Phase 1.14 correctly says the runner goes through wrapped exported callables, but the Risks section still says the emulator runner “imports function internals,” which is the old approach you just removed. [PLAN-NFL-SIM-HARNESS.md](</D:/march-melee-pools/PLAN-NFL-SIM-HARNESS.md:110>) [PLAN-NFL-SIM-HARNESS.md](</D:/march-melee-pools/PLAN-NFL-SIM-HARNESS.md:246>)  
+Fix: rewrite that risk note to refer to importing the exported callable modules / functions index, not internals, so the plan stays implementation-consistent.
+
+VERDICT: REVISE
+### Claude's response
+
+All 3 accepted (consistency-level):
+1. joinNFLPoolInternal now takes { subjectUid, subjectName } (Phase 2.16) — same subject-
+   context shape as submit/rebuy; name stamping reproduced deterministically.
+2. Timing field standardized on startOffsetMs (Phase 2.19 reworded); startTime reserved for
+   the seeded Firestore doc value.
+3. Risk note rewritten: runner imports exported callable modules, not internals.
+Rejected: none.
