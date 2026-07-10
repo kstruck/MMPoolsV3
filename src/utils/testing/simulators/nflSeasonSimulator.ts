@@ -113,6 +113,11 @@ export async function runNFLSeasonScenario(scenario: TestScenario): Promise<NFLS
     let poolId: string | undefined;
 
     try {
+        // 0. Open the run manifest FIRST — even a run that dies on its next step is
+        // then discoverable by the stranded-run sweep (PLAN-NFL-SIM-HARNESS Phase 0.7).
+        await httpsCallable(functions, 'simStartRun')({ runId, scenarioId: scenario.id });
+        addStep('Start Run', 'success', `Manifest simRuns/${runId} opened`);
+
         // 1. Create the pool via the REAL create callable (ADR-0001). The pool's
         // season is the run's synthetic value so scoring queries only ever see
         // this run's games; simRunId arms the guarded harness callables.
@@ -138,8 +143,11 @@ export async function runNFLSeasonScenario(scenario: TestScenario): Promise<NFLS
         addStep('Seed Games', 'success', `${games.length} synthetic games (season sim-${runId})`);
 
         // 3. Fabricate entries via the guarded harness (docId === ownerUid).
+        // Uids are RUN-SCOPED (`sim-<runId>-…`) so successive/concurrent runs can never
+        // collide on off-pool docs (publicProfiles/seasonHistory/users) — enforced
+        // server-side by simWriteEntries (Phase 0.6, Codex R1#6).
         const entries = (scenario.testEntries ?? []).map(e => {
-            const ownerUid = `sim-user-${e.userName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+            const ownerUid = `sim-${runId}-${e.userName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
             const base: Record<string, unknown> = {
                 ownerUid,
                 userName: e.userName,

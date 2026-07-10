@@ -130,8 +130,25 @@ function recordOfSurvivor(e: any): Record<string, number | boolean | null> {
 /**
  * Finalizes one NFL pool if its season is complete. Re-runnable; safe to call
  * after every scoring pass. Returns what happened for callers/sweep reporting.
+ *
+ * Test Pools (persisted `simRunId`, or a `sim-` season/doc-id) are refused unless
+ * `allowSim` is passed — ONLY the guarded `simFinalizePool` harness callable sets it,
+ * so a full-season Sim Run never writes seasonHistory/profile docs as a side effect
+ * of inline scoring or the sweep. (PLAN-NFL-SIM-HARNESS Phase 0.2, Codex R1#2/R2#1.)
  */
-export async function maybeFinalizeNFLPool(db: Firestore, poolId: string): Promise<FinalizeOutcome> {
+export function isSimPool(pool: any, poolId?: string): boolean {
+  return Boolean(
+    pool?.simRunId ||
+    String(pool?.season || '').startsWith('sim-') ||
+    (poolId || '').startsWith('sim-'),
+  );
+}
+
+export async function maybeFinalizeNFLPool(
+  db: Firestore,
+  poolId: string,
+  opts?: { allowSim?: boolean },
+): Promise<FinalizeOutcome> {
   const poolRef = db.collection('pools').doc(poolId);
   const poolSnap = await poolRef.get();
   if (!poolSnap.exists) return { finalized: false, reason: 'pool missing' };
@@ -139,6 +156,9 @@ export async function maybeFinalizeNFLPool(db: Firestore, poolId: string): Promi
 
   if (!NFL_SEASON_TYPES.includes(pool.type)) return { finalized: false, reason: 'not an NFL season pool' };
   if (pool.status === 'CANCELED') return { finalized: false, reason: 'canceled' };
+  if (isSimPool(pool, poolId) && !opts?.allowSim) {
+    return { finalized: false, reason: 'sim pool (finalize only via simFinalizePool)' };
+  }
 
   const completeness = await isSeasonComplete(db, pool);
   if (!completeness.complete) return { finalized: false, reason: completeness.reason };
@@ -238,8 +258,10 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
       .get();
 
     const stale = snap.docs.filter((d) => {
-      if (d.id.startsWith("sim-")) return false;
       const p = d.data() as any;
+      // Test Pools are marked by the persisted simRunId field / sim- season — their doc
+      // IDs are server-generated, so an id-prefix check alone excludes NOTHING (Codex R1#1).
+      if (isSimPool(p, d.id)) return false;
       if (p.status === 'CANCELED') return false;
       const finalizedAt = p.finalizedAt?.toMillis?.() ?? 0;
       const lastScoredAt = p.lastScoredAt?.toMillis?.() ?? 0;
