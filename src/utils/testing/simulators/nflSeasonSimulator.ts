@@ -59,12 +59,15 @@ function gameDocId(runId: string, index: number): string {
     return `sim-${runId}-g${index + 1}`;
 }
 
-function toSeedGame(g: ScenarioNFLGame, seasonType: number): Record<string, unknown> {
+function toSeedGame(g: ScenarioNFLGame, seasonType: number, runStart: number): Record<string, unknown> {
     return {
         week: g.week,
         seasonType,
-        // startTime in the past: every game already kicked off
-        startTime: Date.now() - 24 * 60 * 60 * 1000,
+        // Kickoff relative to run start; default -24h (already kicked off) so
+        // score-only fixtures behave as before. Lock-timing Golden Scenarios set
+        // future offsets so the REAL submit path can be exercised pre-lock and
+        // asserted post-lock (Codex R2#3).
+        startTime: runStart + (g.startOffsetMs ?? -24 * 60 * 60 * 1000),
         status: g.status ?? 'FINAL',
         isMonday: g.isMonday ?? false,
         homeTeam: { id: g.home, name: TEAM_NAMES[g.home] ?? g.home, abbreviation: g.home },
@@ -74,17 +77,24 @@ function toSeedGame(g: ScenarioNFLGame, seasonType: number): Record<string, unkn
     };
 }
 
-// Translates "gN" pick keys into the run's real game doc IDs.
+// Translates per-week "gN" pick keys into the run's real game doc IDs.
+// "g1" = the first game OF THE PICK'S WEEK — the old translator flattened keys
+// into one global map, so week 2's g1 overwrote week 1's g1 and every
+// multi-week fixture was structurally broken (Codex R1#5).
 function translateGameKeys(
     byWeek: Record<string, Record<string, unknown>> | undefined,
     runId: string,
+    games: ScenarioNFLGame[],
 ): Record<string, unknown> {
     const flat: Record<string, unknown> = {};
     if (!byWeek) return flat;
-    for (const weekPicks of Object.values(byWeek)) {
+    for (const [week, weekPicks] of Object.entries(byWeek)) {
+        const weekGlobalIdx: number[] = [];
+        games.forEach((g, i) => { if (g.week === Number(week)) weekGlobalIdx.push(i); });
         for (const [gameKey, value] of Object.entries(weekPicks)) {
-            const idx = parseInt(gameKey.replace(/^g/, ''), 10);
-            if (Number.isFinite(idx) && idx >= 1) flat[gameDocId(runId, idx - 1)] = value;
+            const n = parseInt(gameKey.replace(/^g/, ''), 10);
+            const globalIdx = Number.isFinite(n) && n >= 1 ? weekGlobalIdx[n - 1] : undefined;
+            if (globalIdx !== undefined) flat[gameDocId(runId, globalIdx)] = value;
         }
     }
     return flat;
@@ -110,7 +120,36 @@ export async function runNFLSeasonScenario(scenario: TestScenario): Promise<NFLS
 
     const poolType = scenario.poolType as 'NFL_PICKEM' | 'NFL_SURVIVOR' | 'NFL_MARGIN';
     const seasonType = Number((scenario.poolConfig as Record<string, unknown>).seasonType ?? 2);
+    const runStart = Date.now();
     let poolId: string | undefined;
+
+    // A Scenario with no assertions is INVALID — "it ran" is never a pass
+    // (CONTEXT.md "Scenario"; PLAN-NFL-SIM-HARNESS Phase 1.10).
+    if (!scenario.assertions || scenario.assertions.length === 0) {
+        addStep('Schema Gate', 'failed', `Scenario "${scenario.id}" has no assertions — refusing to run.`);
+        return result;
+    }
+
+    // Materialize a generated season (deterministic — same seed, same fixture,
+    // browser and emulator alike). Generated scenarios must not hand-author
+    // games/entries; the generator is their single source.
+    let scenarioGames = scenario.nflGames ?? [];
+    let scenarioEntries = scenario.testEntries ?? [];
+    if (scenario.generator) {
+        const { generateNFLSeason } = await import('@shared/simGen');
+        const season = generateNFLSeason(scenario.generator);
+        scenarioGames = season.games;
+        scenarioEntries = season.entries.map(e => ({
+            userName: e.userName,
+            pickemPicks: e.pickemPicks,
+            confidence: e.confidence,
+            weeklyTiebreakers: e.weeklyTiebreakers,
+            survivorPicks: e.survivorPicks,
+            marginPicks: e.marginPicks,
+        }));
+        addStep('Generate', 'success',
+            `Seed ${scenario.generator.seed}: ${scenarioGames.length} games / ${scenarioEntries.length} entries materialized`);
+    }
 
     try {
         // 0. Open the run manifest FIRST — even a run that dies on its next step is
@@ -134,11 +173,11 @@ export async function runNFLSeasonScenario(scenario: TestScenario): Promise<NFLS
         addStep('Create Pool', 'success', `Pool ${poolId} created (run ${runId})`);
 
         // 2. Seed synthetic games.
-        const games = scenario.nflGames ?? [];
+        const games = scenarioGames;
         if (games.length === 0) throw new Error('Scenario has no nflGames');
         await httpsCallable(functions, 'simSeedNFLGames')({
             runId,
-            games: games.map(g => toSeedGame(g, seasonType)),
+            games: games.map(g => toSeedGame(g, seasonType, runStart)),
         });
         addStep('Seed Games', 'success', `${games.length} synthetic games (season sim-${runId})`);
 
@@ -146,7 +185,7 @@ export async function runNFLSeasonScenario(scenario: TestScenario): Promise<NFLS
         // Uids are RUN-SCOPED (`sim-<runId>-…`) so successive/concurrent runs can never
         // collide on off-pool docs (publicProfiles/seasonHistory/users) — enforced
         // server-side by simWriteEntries (Phase 0.6, Codex R1#6).
-        const entries = (scenario.testEntries ?? []).map(e => {
+        const entries = scenarioEntries.map(e => {
             const ownerUid = `sim-${runId}-${e.userName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
             const base: Record<string, unknown> = {
                 ownerUid,
@@ -157,8 +196,8 @@ export async function runNFLSeasonScenario(scenario: TestScenario): Promise<NFLS
             if (poolType === 'NFL_PICKEM') {
                 return {
                     ...base,
-                    picks: translateGameKeys(e.pickemPicks, runId),
-                    confidence: translateGameKeys(e.confidence, runId),
+                    picks: translateGameKeys(e.pickemPicks, runId, games),
+                    confidence: translateGameKeys(e.confidence, runId, games),
                     weeklyTiebreakers: numKeys(e.weeklyTiebreakers),
                     weeklyPoints: {},
                     totalScore: 0,

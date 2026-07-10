@@ -32,19 +32,30 @@ export interface TestAssertion {
     | 'nflEntryCount' | 'nflTotalScore' | 'nflWeeklyPoints' | 'nflWinner'
     | 'survivorStatus' | 'survivorStrikes'
     | 'marginSeasonTotal' | 'marginRank'
-    | 'recapExists' | 'recapClosestTiebreaker';
-    expected?: number | string | boolean;
+    | 'recapExists' | 'recapClosestTiebreaker'
+    // PLAN-NFL-SIM-HARNESS Phase 1.10 — values match the PERSISTED schemas exactly
+    // (weeklyResults games record, standings projection, seasonHistory, payoutRecords):
+    | 'gradedPick'          // userName+week+gameKey -> expected W|L|PUSH|VOID (pickem) / SURVIVED|STRUCK|VOID (survivor)
+    | 'standingsRow'        // userName -> expected subset of the type-specific standings/current row
+    | 'seasonHistoryRow'    // userName -> expected subset of users/{uid}/seasonHistory/{poolId}
+    | 'payoutRecordExists'  // userName (+ expected amount) in pools/{id}/payoutRecords
+    | 'profileField'        // userName + field path -> expected value on publicProfiles/{uid}
+    | 'consensusTally'      // gameKey -> expected {away,home,total} pool-consensus tally
+    | 'submitRejected';     // userName+week -> expected error-code substring from the REAL submit path
+    expected?: number | string | boolean | Record<string, unknown>;
     period?: string;
     digits?: [number, number];
-    field?: string; // For poolStatus checks
+    field?: string; // poolStatus / profileField target
     userName?: string; // NFL assertions target an entry by user name
     week?: number; // NFL weekly assertions / recap checks
+    gameKey?: string; // per-week game key ("g1"...) for gradedPick / consensusTally
     message: string;
 }
 
-// Synthetic NFL game in a scenario. Keyed by array order: game N is
-// addressable in picks as "gN" (1-based); the simulator translates those keys
-// to the run's real sim- doc IDs at seed time.
+// Synthetic NFL game in a scenario. Games are addressable in picks by PER-WEEK
+// 1-based ordinal: "g1" = the first game OF THAT WEEK (picks are already keyed
+// by week, so keys never collide across weeks — Codex R1#5). The simulator
+// translates (week, gN) to the run's real seed-order sim- doc IDs.
 export interface ScenarioNFLGame {
     week: number;
     home: string; // team abbreviation, e.g. "KC"
@@ -54,6 +65,10 @@ export interface ScenarioNFLGame {
     status?: 'FINAL' | 'IN_PROGRESS' | 'SCHEDULED' | 'CANCELLED'; // default FINAL
     isMonday?: boolean;
     spread?: number; // relative to home (negative = home favored); locked at seed
+    // Kickoff relative to run start, ms (negative = already kicked off). Default
+    // -24h so score-only fixtures behave as before; lock-timing Golden Scenarios
+    // set future offsets to exercise pre/post-lock submission (Codex R2#3).
+    startOffsetMs?: number;
 }
 
 export interface TestScenario {
@@ -127,6 +142,17 @@ export interface TestScenario {
     // weeks to score via the real scoreNFLWeek callable, in order.
     nflGames?: ScenarioNFLGame[];
     scoreWeeks?: number[];
+    // Deterministic full-season generation (PLAN-NFL-SIM-HARNESS Phase 1.12).
+    // When present, games + testEntries are MATERIALIZED from @shared/simGen
+    // (same seed ⇒ identical fixture, browser and emulator alike); any
+    // hand-authored nflGames/testEntries must be absent.
+    generator?: {
+        seed: number;
+        weeks: number;
+        entryCount: number;
+        gamesPerWeek?: number;
+        strategies?: Array<'favorites' | 'random' | 'contrarian'>;
+    };
 }
 
 export const SCENARIOS: Record<string, TestScenario> = {
