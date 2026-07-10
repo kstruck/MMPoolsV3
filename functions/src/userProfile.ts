@@ -79,8 +79,14 @@ export async function recomputeUserProfile(db: Firestore, uid: string): Promise<
 export const onEntryChangedRecomputeProfile = onDocumentWritten('pools/{poolId}/entries/{entryId}', async (event) => {
   const after = event.data?.after?.data() as any | undefined;
   const before = event.data?.before?.data() as any | undefined;
+  // Sim Runs: every sim-created entry is stamped with simRunId, and sim subject uids are
+  // sim- prefixed. Short-circuit BEFORE any pool read — a pool-read guard is racy during
+  // cleanup's recursiveDelete (parent pool doc dies before its entries), and the delete
+  // events would otherwise recreate publicProfiles after cleanup removed them.
+  // (PLAN-NFL-SIM-HARNESS Phase 0.3, Codex R1#8.)
   const uid = after?.ownerUid || before?.ownerUid || event.params.entryId;
   if (!uid) return;
+  if (after?.simRunId || before?.simRunId || String(uid).startsWith('sim-')) return;
   // Only recompute when scored results or picks changed (skip pure payment writes).
   const changed = JSON.stringify(after?.weeklyResults) !== JSON.stringify(before?.weeklyResults)
     || JSON.stringify(after?.picks) !== JSON.stringify(before?.picks)
