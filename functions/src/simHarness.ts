@@ -199,8 +199,11 @@ export const simWriteEntries = onCall(async (request) => {
                 { merge: true },
             );
         }
-        await batch.commit();
+        // Manifest BEFORE the mutation (qodo review of PR #158): fail-fast, and
+        // over-inclusion is safe — the manifest drives cleanup, and cleaning a
+        // doc that was never written is a no-op.
         await appendManifest(db, runId!, { poolIds: [poolId], simUids: uids });
+        await batch.commit();
 
         await audit(actor, 'SIM_WRITE_ENTRIES', runId!, poolId, 'success', { count: entries.length });
         return { success: true, written: entries.length };
@@ -243,9 +246,12 @@ export const simUpdatePool = onCall(async (request) => {
             }
         }
         const { ref } = await getVerifiedSimPool(db, poolId, runId);
+        // Heartbeat BEFORE the mutation (qodo review of PR #158): fail-fast — a
+        // manifest-write failure aborts with nothing committed, so an error
+        // response/audit is always truthful; and liveness covers the action window.
+        await touchManifest(db, runId!);
         await ref.update(patch);
 
-        await touchManifest(db, runId!);
         await audit(actor, 'SIM_UPDATE_POOL', runId!, poolId, 'success', { fields: Object.keys(patch) });
         return { success: true };
     } catch (e) {
@@ -285,17 +291,18 @@ export const simSeedNFLGames = onCall(async (request) => {
                 season: simSeason(runId!), // no real import produces this value
             });
         });
-        await batch.commit();
         // Track the (seasonType, week) pairs so cleanup can address the run's
         // site-wide consensus keys directly — the consensus PARENT docs are
         // phantom (only their subcollections are written), so no collection
-        // query can ever discover them (Phase 0.7).
+        // query can ever discover them (Phase 0.7). Manifest BEFORE the commit
+        // (qodo review of PR #158): fail-fast; over-inclusion is cleanup-safe.
         const stWeeks = [...new Set(games.map(g =>
             `${Number((g as any).seasonType ?? 2)}_${Number((g as any).week ?? 1)}`))];
         await appendManifest(db, runId!, { extra: {
             gamesCount: games.length,
             stWeeks: admin.firestore.FieldValue.arrayUnion(...stWeeks),
         } });
+        await batch.commit();
 
         await audit(actor, 'SIM_SEED_NFL_GAMES', runId!, undefined, 'success', { count: games.length });
         return { success: true, season: simSeason(runId!), written: games.length };
@@ -567,14 +574,16 @@ export const simJoinMembers = onCall(async (request) => {
             throw new HttpsError('invalid-argument', `At most ${MAX_DOCS_PER_CALL} members per call.`);
         }
         await getVerifiedSimPool(db, poolId, runId);
+        const uids = members.map(m => assertRunScopedUid(runId!, m?.uid));
+        // Manifest BEFORE the joins (qodo review of PR #158): fail-fast; if a join
+        // then fails midway, the manifest already names every subject cleanup must
+        // consider (over-inclusion is cleanup-safe).
+        await appendManifest(db, runId!, { poolIds: [poolId], simUids: uids });
 
-        const uids: string[] = [];
         for (const m of members) {
             const uid = assertRunScopedUid(runId!, m?.uid);
             await joinNFLPoolInternal(db, { subjectUid: uid, subjectName: m?.name || uid }, poolId);
-            uids.push(uid);
         }
-        await appendManifest(db, runId!, { poolIds: [poolId], simUids: uids });
 
         await audit(actor, 'SIM_JOIN_MEMBERS', runId!, poolId, 'success', { count: uids.length });
         return { success: true, joined: uids.length };
@@ -604,6 +613,9 @@ export const simSubmitPicks = onCall(async (request) => {
         }
         await getVerifiedSimPool(db, poolId, runId);
         const uid = assertRunScopedUid(runId!, subjectUid);
+        // Manifest BEFORE the submit (qodo review of PR #158): fail-fast +
+        // heartbeat covers the action window; over-inclusion is cleanup-safe.
+        await appendManifest(db, runId!, { poolIds: [poolId], simUids: [uid] });
 
         await submitNFLPicksInternal(db, {
             actorUid: actor,
@@ -612,13 +624,22 @@ export const simSubmitPicks = onCall(async (request) => {
             subjectName: uid.slice(simUidPrefix(runId!).length) || uid,
         }, { poolId, week, picks, confidence, tiebreakerPrediction });
 
-        // Stamp simRunId on the entry the real path just wrote (Phase 0.3 contract —
-        // belt+braces alongside the sim- uid prefix guard in the profile trigger).
-        await db.collection('pools').doc(poolId).collection('entries').doc(uid)
-            .set({ simRunId: runId }, { merge: true });
-        await appendManifest(db, runId!, { poolIds: [poolId], simUids: [uid] });
+        // Stamp simRunId on the entry the real path just wrote (Phase 0.3 contract).
+        // Best-effort: the trigger guard also keys on the sim- uid prefix, so a
+        // failed stamp must not flip a genuinely-successful submit into an error
+        // response (the qodo #158 misleading-outcome class); surfaced via audit.
+        let stampFailed = false;
+        try {
+            await db.collection('pools').doc(poolId).collection('entries').doc(uid)
+                .set({ simRunId: runId }, { merge: true });
+        } catch (e) {
+            stampFailed = true;
+            console.warn(`[simSubmitPicks] simRunId stamp failed for ${uid} in ${poolId}:`, e);
+        }
 
-        await audit(actor, 'SIM_SUBMIT_PICKS', runId!, poolId, 'success', { subjectUid: uid, week });
+        await audit(actor, 'SIM_SUBMIT_PICKS', runId!, poolId, 'success', {
+            subjectUid: uid, week, ...(stampFailed ? { stampFailed: true } : {}),
+        });
         return { success: true };
     } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -641,6 +662,10 @@ export const simExecuteRebuy = onCall(async (request) => {
         }
         await getVerifiedSimPool(db, poolId, runId);
         const uid = assertRunScopedUid(runId!, subjectUid);
+        // Heartbeat BEFORE the rebuy (qodo review of PR #158): a heartbeat failure
+        // aborts with nothing committed instead of flipping a successful rebuy
+        // into an error response + untruthful error audit.
+        await touchManifest(db, runId!);
 
         await executeSurvivorRebuyInternal(db, {
             actorUid: actor,
@@ -648,7 +673,6 @@ export const simExecuteRebuy = onCall(async (request) => {
             subjectName: uid.slice(simUidPrefix(runId!).length) || uid,
         }, { poolId, week });
 
-        await touchManifest(db, runId!);
         await audit(actor, 'SIM_EXECUTE_REBUY', runId!, poolId, 'success', { subjectUid: uid, week });
         return { success: true };
     } catch (e) {
@@ -674,9 +698,11 @@ export const simFinalizePool = onCall(async (request) => {
             throw new HttpsError('invalid-argument', 'poolId and runId are required.');
         }
         await getVerifiedSimPool(db, poolId, runId);
+        // Heartbeat BEFORE finalization (qodo review of PR #158): fail-fast, and
+        // liveness covers the finalize's seasonHistory/profile write window.
+        await touchManifest(db, runId!);
         const outcome = await maybeFinalizeNFLPool(db, poolId, { allowSim: true });
 
-        await touchManifest(db, runId!);
         await audit(actor, 'SIM_FINALIZE_POOL', runId!, poolId, 'success', { ...outcome });
         return outcome;
     } catch (e) {
