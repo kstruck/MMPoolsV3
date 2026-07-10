@@ -62,6 +62,17 @@ async function appendManifest(
 }
 
 /**
+ * Liveness heartbeat: bumps ONLY the manifest's updatedAt. Every sim callable
+ * that represents run activity must call this (or appendManifest) so the
+ * sweep's RUNNING-grace-window signal stays truthful (qodo review of PR #157 —
+ * simUpdatePool/simExecuteRebuy/simFinalizePool previously never touched the
+ * manifest, silently aging an active run toward sweepability).
+ */
+async function touchManifest(db: admin.firestore.Firestore, runId: string): Promise<void> {
+    await appendManifest(db, runId, {});
+}
+
+/**
  * Opens a run manifest. The simulator calls this FIRST, so even a run that dies on
  * its very next step is discoverable by the stranded-run sweep.
  */
@@ -234,6 +245,7 @@ export const simUpdatePool = onCall(async (request) => {
         const { ref } = await getVerifiedSimPool(db, poolId, runId);
         await ref.update(patch);
 
+        await touchManifest(db, runId!);
         await audit(actor, 'SIM_UPDATE_POOL', runId!, poolId, 'success', { fields: Object.keys(patch) });
         return { success: true };
     } catch (e) {
@@ -449,9 +461,14 @@ export const sweepSimRuns = onCall(async (request) => {
     try {
         // Stranded manifests. A RUNNING manifest with RECENT activity is an ACTIVE
         // simulation, not a stranded one — sweeping it mid-flight would destroy a
-        // live run (qodo review of PR #156). Every harness callable bumps the
-        // manifest's updatedAt, so recency is a faithful liveness signal; a run
-        // whose last touch is older than the grace window is genuinely stuck.
+        // live run (qodo review of PR #156). Every SIM callable bumps the manifest's
+        // updatedAt (appendManifest on the mutators, touchManifest on
+        // simUpdatePool/simExecuteRebuy/simFinalizePool — qodo PR #157 finding), so
+        // recency is a faithful liveness signal for harness activity. Residual gap:
+        // scoreNFLWeek is a PUBLIC callable (no runId) and does not heartbeat — a
+        // run inside a scoring loop coasts on its last harness touch, which the
+        // 30-minute grace window comfortably covers (scoring loops run seconds to
+        // low minutes). A run whose last touch is older than the window is stuck.
         const now = Date.now();
         const stranded = new Map<string, { runId: string; scenarioId?: string; status?: string; poolIds: string[] }>();
         const skippedActive: string[] = [];
@@ -631,6 +648,7 @@ export const simExecuteRebuy = onCall(async (request) => {
             subjectName: uid.slice(simUidPrefix(runId!).length) || uid,
         }, { poolId, week });
 
+        await touchManifest(db, runId!);
         await audit(actor, 'SIM_EXECUTE_REBUY', runId!, poolId, 'success', { subjectUid: uid, week });
         return { success: true };
     } catch (e) {
@@ -658,6 +676,7 @@ export const simFinalizePool = onCall(async (request) => {
         await getVerifiedSimPool(db, poolId, runId);
         const outcome = await maybeFinalizeNFLPool(db, poolId, { allowSim: true });
 
+        await touchManifest(db, runId!);
         await audit(actor, 'SIM_FINALIZE_POOL', runId!, poolId, 'success', { ...outcome });
         return outcome;
     } catch (e) {
