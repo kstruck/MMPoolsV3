@@ -64,3 +64,40 @@ All 10 findings accepted — every one verified against the code. Plan revised:
 10. Zero-residue honesty: Phase 0.8 — admin_audit explicitly exempt (forensic trail);
     manifest survives as run record; residue test asserts exactly this contract.
 Rejected: none.
+
+## Round 2 — Codex
+
+**Findings**
+1. `simFinalizePool` is self-contradictory: Phase 0 says `maybeFinalizeNFLPool` will short-circuit on `simRunId`, but Phase 3 says `simFinalizePool` will invoke that same internal, which would make the explicit sim-finalize step a no-op. [PLAN-NFL-SIM-HARNESS.md](</D:/march-melee-pools/PLAN-NFL-SIM-HARNESS.md:37>) [PLAN-NFL-SIM-HARNESS.md](</D:/march-melee-pools/PLAN-NFL-SIM-HARNESS.md:137>) [nflFinalize.ts](</D:/march-melee-pools/functions/src/nflFinalize.ts:134>)  
+Fix: split the pure finalize write path from the sim-exclusion guard, or add an explicit `allowSim` override used only by `simFinalizePool`.
+
+2. The “real-path enrollment” finding is only partially resolved because the extracted signatures are still underspecified: the plan narrows join/submit internals to `(..., uid, ...)`, but the live code also depends on caller role and caller/name sources for membership bypass, `userName` stamping, and parity with current callable behavior. [PLAN-NFL-SIM-HARNESS.md](</D:/march-melee-pools/PLAN-NFL-SIM-HARNESS.md:116>) [PLAN-NFL-SIM-HARNESS.md](</D:/march-melee-pools/PLAN-NFL-SIM-HARNESS.md:121>) [nflPools.ts](</D:/march-melee-pools/functions/src/nflPools.ts:184>) [nflPools.ts](</D:/march-melee-pools/functions/src/nflPools.ts:299>) [nflPools.ts](</D:/march-melee-pools/functions/src/nflPools.ts:383>)  
+Fix: define the extracted internals around `{ actorUid, actorRole, subjectUid, subjectName, requestId }`, not a bare `uid`.
+
+3. The lock-timing scenarios are not fully wired in the schema: Phase 2 relies on per-game start-time offsets, but Phase 1 never adds a start-time field to `ScenarioNFLGame`, and the current simulator hardcodes every seeded game to “24h in the past,” so the proposed pre-lock/post-lock assertions still have no concrete fixture path. [PLAN-NFL-SIM-HARNESS.md](</D:/march-melee-pools/PLAN-NFL-SIM-HARNESS.md:78>) [PLAN-NFL-SIM-HARNESS.md](</D:/march-melee-pools/PLAN-NFL-SIM-HARNESS.md:127>) [scenarios/index.ts](</D:/march-melee-pools/src/utils/testing/scenarios/index.ts:48>) [nflSeasonSimulator.ts](</D:/march-melee-pools/src/utils/testing/simulators/nflSeasonSimulator.ts:62>)  
+Fix: extend `ScenarioNFLGame`/generator with `startOffsetMs` or absolute `startTime`, and make `toSeedGame()` consume it instead of forcing past kickoffs.
+
+4. The emulator-runner plan uses the wrong surface: it says to invoke function internals directly, but the repo’s existing emulator pattern wraps exported callables, and direct-internal execution would skip the new sim-callable auth/audit/namespace wrappers that this plan claims to certify. [PLAN-NFL-SIM-HARNESS.md](</D:/march-melee-pools/PLAN-NFL-SIM-HARNESS.md:102>) [simHarness.emulator.test.ts](</D:/march-melee-pools/functions/src/__tests__/emulator/simHarness.emulator.test.ts:13>) [memberRecord.emulator.test.ts](</D:/march-melee-pools/functions/src/__tests__/emulator/memberRecord.emulator.test.ts:12>)  
+Fix: run Golden-path emulator scenarios through wrapped exported callables; reserve pure internal calls for narrow unit/regression tests only.
+
+5. The billing-scope language still contradicts itself: Phase 4 adds a “trial stamp on create” scenario, while Out of scope still says sim runs have launch mode pinned `free`. The code already supports server-stamped `trial`, so the plan currently says both. [PLAN-NFL-SIM-HARNESS.md](</D:/march-melee-pools/PLAN-NFL-SIM-HARNESS.md:163>) [PLAN-NFL-SIM-HARNESS.md](</D:/march-melee-pools/PLAN-NFL-SIM-HARNESS.md:243>) [poolOps.ts](</D:/march-melee-pools/functions/src/poolOps.ts:124>)  
+Fix: change the scope language to “sim runs never enter checkout/paid collections; most scenarios pin `free` except explicit billing-stamp negatives.”
+
+The original Codex R1 findings around manifest-driven cleanup, run-scoped sim uids, entry `simRunId` stamping, assertion-schema alignment, commissioner-aggregate exclusion, and the `simUpdatePool` namespace hole are now properly accounted for in the revised plan.
+
+VERDICT: REVISE
+### Claude's response
+
+All 5 accepted:
+1. simFinalizePool no-op contradiction: Phase 0.2 now specifies maybeFinalizeNFLPool(db,
+   poolId, {allowSim=false}) — guard split from pure path; only simFinalizePool passes true.
+2. Internal signature contract: Phase 2.17 — { actorUid, actorRole, subjectUid, subjectName,
+   requestId }; public callables pass actor===subject, sim callables pass admin actor + sim
+   subject.
+3. Lock-timing fixture path: Phase 1.11 — ScenarioNFLGame.startOffsetMs + toSeedGame()
+   consumes it (default stays past-kickoff for score-only fixtures).
+4. Emulator runner surface: Phase 1.14 — goldens run through wrapped exported callables
+   (existing simHarness.emulator.test.ts pattern); internals only for narrow regressions.
+5. Billing scope language: Out-of-scope rewritten — never enter checkout/paid collections;
+   free pinned except explicit billing-stamp scenarios.
+Rejected: none.

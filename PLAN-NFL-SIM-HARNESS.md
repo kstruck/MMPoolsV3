@@ -37,8 +37,11 @@ combinatorial matrix) and the 8f legacy-simulator migration mandate.
 2. **Inline finalization fires during sim scoring (Codex R1 #2):** `scoreNFLWeek` auto-calls
    `maybeFinalizeNFLPool` after scoring, so a full-season Sim Run writes `seasonHistory` and
    triggers profile recomputes for sim subjects mid-run — before any cleanup and regardless of
-   the sweep fix. Fix: `maybeFinalizeNFLPool` short-circuits when the pool carries `simRunId`;
-   finalization in sims becomes an explicit, audited `simFinalizePool` step (Phase 3).
+   the sweep fix. Fix: split the guard from the pure finalize path —
+   `maybeFinalizeNFLPool(db, poolId, {allowSim = false})` short-circuits on `simRunId` unless
+   `allowSim: true`, which ONLY `simFinalizePool` (Phase 3) passes. Inline scoring and the
+   sweep never set it, so the explicit sim-finalize step is a real finalize, not a no-op
+   (Codex R2 #1).
 3. **Sim entries + profile trigger:** stamp `simRunId` on every sim-created entry
    (`simWriteEntries` and the Phase 2 sim callables); `onEntryChangedRecomputeProfile`
    short-circuits on `before/after.simRunId` BEFORE any pool read — a pool-read guard is racy
@@ -90,6 +93,11 @@ combinatorial matrix) and the 8f legacy-simulator migration mandate.
     `gN` keys into one global map — `week 2 / g1` overwrites `week 1 / g1`, so any multi-week
     Pick'em fixture is structurally broken. Fix: fixture keys become `w<week>-g<n>`; the
     translator, existing 3 NFL fixtures, generator, and Oracle all move together in one commit.
+    **Game timing is a fixture field (Codex R2 #3):** `ScenarioNFLGame` gains
+    `startOffsetMs` (relative to run start; may be negative = already kicked off) and
+    `toSeedGame()` consumes it instead of hardcoding every game 24h in the past — without this
+    the Phase 2 pre-lock/post-lock assertions have no fixture path. Default stays "in the
+    past" so existing score-only fixtures are untouched.
 12. **Deterministic generator:** own PRNG (mulberry32-style, seed in fixture — never
     `Math.random`), generates weeks×games with scores and per-entry picks by strategy
     (`favorites`, `random`, `contrarian`, per-type variants). Same seed ⇒ byte-identical fixture.
@@ -100,11 +108,14 @@ combinatorial matrix) and the 8f legacy-simulator migration mandate.
     games), confidence, survivor strikes/exemptions/rebuys/sudden-death, margin accumulation +
     ties, weekly/season/hybrid payout places, MNF tiebreakers (incl. dual-MNF combined rule).
 14. **Headless emulator runner:** a functions-side executor (`functions/src/__tests__/emulator/
-    scenarioRunner.emulator.test.ts` + a shared driver module) that runs any Scenario against the
-    Firestore emulator by invoking the deployed handlers' internals directly (existing emulator
-    test pattern), including REAL `scoreNFLWeek`. The browser simulator and the emulator runner
-    consume the SAME fixture format (fixtures move to a location both can import; `copy-shared`
-    pattern already exists). CI gate: the full matrix runs in `test:emulator`.
+    scenarioRunner.emulator.test.ts` + a shared driver module) that runs any Scenario against
+    the Firestore emulator **through the wrapped exported callables** (the repo's existing
+    emulator pattern — `simHarness.emulator.test.ts` wraps exports), so the sim callables'
+    auth/audit/namespace guards are part of what a green run certifies; pure internal calls
+    are reserved for narrow unit/regression tests (Codex R2 #4). Includes REAL `scoreNFLWeek`.
+    The browser simulator and the emulator runner consume the SAME fixture format (fixtures
+    move to a location both can import; `copy-shared` pattern already exists). CI gate: the
+    full matrix runs in `test:emulator`.
 15. Acceptance: the 3 existing NFL basics pass identically in browser AND emulator adapters
     (on the new `w<week>-g<n>` keys); one generated full-season fixture round-trips
     deterministically (same seed, same oracle expectations, two consecutive runs byte-identical).
@@ -118,9 +129,14 @@ combinatorial matrix) and the 8f legacy-simulator migration mandate.
     audited) so simulated Members are enrolled exactly as real ones (participantIds, Member
     Record, participations). Membership is then enforced against the SUBJECT sim uid — the
     internals take an explicit subject, never inherit the SUPER_ADMIN caller's identity.
-17. Extract `submitNFLPicksInternal(db, uid, payload)` and `executeSurvivorRebuyInternal(...)`
-    from the public callables — behavior-preserving refactor, own commit, emulator regression
-    proving the public callables' auth/validation behavior is unchanged.
+17. **Extracted-internal signature contract (Codex R2 #2):** the internals take
+    `{ actorUid, actorRole, subjectUid, subjectName, requestId }` — NOT a bare uid — because
+    the live callables also read caller role (membership bypass paths), display-name sources
+    (`userName` stamping on entries), and idempotency `requestId`. Public callables pass
+    `actor === subject` from `request.auth`; sim callables pass the SUPER_ADMIN actor + the
+    sim subject. Extract `submitNFLPicksInternal` and `executeSurvivorRebuyInternal` on that
+    contract — behavior-preserving refactor, own commit, emulator regression proving the
+    public callables' auth/validation behavior is unchanged.
 18. New guarded callables `simSubmitPicks` / `simExecuteRebuy` in `simHarness.ts`: SUPER_ADMIN +
     `simRunId`-verified pool + run-scoped sim uid enforced + audited; delegate to the internals;
     stamp `simRunId` on the entries they create (Phase 0.3 contract).
@@ -240,8 +256,10 @@ combinatorial matrix) and the 8f legacy-simulator migration mandate.
 
 - New squares/bracket/playoff/props scenario authoring (basics only, migrated in Phase 5).
 - Load/performance testing; Playwright member-flow E2E; AI testing dashboard changes.
-- Monetization paths beyond item 15's three stamp/negative assertions (sim runs never enter
-  the paid path; launch mode pinned `free`).
+- Monetization paths beyond item 15's three stamp/negative assertions. Precisely: sim runs
+  NEVER enter checkout or write paid/monetization collections; most scenarios pin launch mode
+  `free`, EXCEPT the explicit billing-stamp scenarios (trial-stamp-on-create, free-plan join
+  cap) which assert server stamping only (Codex R2 #5).
 - Arming `system/config.nflFinalize` (Kevin's live decision, after Phase 0 ships).
 - The on-hold security/observability plan's callable retrofits (separate effort; the
   `validated()` wrapper is not retrofitted onto sim callables here).
