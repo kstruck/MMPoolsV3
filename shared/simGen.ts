@@ -105,6 +105,14 @@ export function generateNFLSeason(spec: NFLGeneratorSpec): GeneratedSeason {
         weekPicks[`g${idx + 1}`] = pick;
       });
       entry.pickemPicks[String(week)] = weekPicks;
+      // Confidence: a unique 1..N assignment per week (the engine validates
+      // uniqueness). favorites/contrarian weight by |spread|; random shuffles.
+      const conf: Record<string, number> = {};
+      const order = weekGames
+        .map((g, idx) => ({ key: `g${idx + 1}`, mag: Math.abs(g.spread), r: rnd() }))
+        .sort((a, b) => strategy === 'random' ? a.r - b.r : b.mag - a.mag);
+      order.forEach((o, rank) => { conf[o.key] = weekGames.length - rank; });
+      entry.confidence = { ...(entry.confidence ?? {}), [String(week)]: conf };
       const mnf = weekGames[weekGames.length - 1];
       entry.weeklyTiebreakers[String(week)] = mnf ? 30 + Math.floor(rnd() * 25) : 40;
 
