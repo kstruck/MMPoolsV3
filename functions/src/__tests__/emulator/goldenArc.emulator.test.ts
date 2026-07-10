@@ -220,3 +220,40 @@ describe('golden arc — survivor rebuy through the real path', () => {
         await wCleanup({ data: { poolId, runId, deleteGames: true }, auth: superAdmin } as never);
     }, 60000);
 });
+
+describe('phase 6 — stranded-run sweep', () => {
+    it('finds a deliberately-stranded run (dry), then sweeps it clean including off-pool residue', async () => {
+        const { simWriteEntries: sw, sweepSimRuns } = await import('../../simHarness');
+        const wWrite2 = test.wrap(sw);
+        const wSweep = test.wrap(sweepSimRuns);
+        const runId = 'run-stranded-01';
+        const poolId = `pool-${runId}`;
+        const UID = `sim-${runId}-ghost`;
+
+        // Simulate a run killed mid-scenario: manifest RUNNING, pool + entry +
+        // off-pool residue present, cleanup never called.
+        await wStart({ data: { runId, scenarioId: 'stranded' }, auth: superAdmin } as never);
+        await seedSimPool(poolId, runId, 'NFL_PICKEM', { entryFee: 0, payouts: { places: [], bonuses: [] } });
+        await wSeed({
+            data: { runId, games: [{ week: 1, seasonType: 2, startTime: Date.now() - HOUR, status: 'FINAL', isMonday: false, homeTeam: T('KC'), awayTeam: T('BUF'), scores: { home: 20, away: 10 }, spread: { value: -3, locked: true } }] },
+            auth: superAdmin,
+        } as never);
+        await wWrite2({ data: { poolId, runId, entries: [{ ownerUid: UID, userName: 'Ghost', picks: {}, weeklyPoints: {}, totalScore: 0, submittedAt: 0, paidStatus: 'PAID' }] }, auth: superAdmin } as never);
+        await db.collection('publicProfiles').doc(UID).set({ subjectKind: 'PLAYER' });
+
+        // Dry run reports it, writes nothing.
+        const dry = await wSweep({ data: { dryRun: true }, auth: superAdmin } as never);
+        expect(dry.dryRun).toBe(true);
+        expect((dry.runs ?? []).map((r: any) => r.runId)).toContain(runId);
+        expect((await db.collection('pools').doc(poolId).get()).exists).toBe(true);
+
+        // Execute sweeps it: pool tree, entry, profile, games gone; manifest SWEPT.
+        const res = await wSweep({ data: { dryRun: false }, auth: superAdmin } as never);
+        expect(res.swept).toBeGreaterThanOrEqual(1);
+        expect((await db.collection('pools').doc(poolId).get()).exists).toBe(false);
+        expect((await db.collection('publicProfiles').doc(UID).get()).exists).toBe(false);
+        expect((await db.collection('nfl_games').doc(`sim-${runId}-g1`).get()).exists).toBe(false);
+        const manifest = (await db.collection('simRuns').doc(runId).get()).data();
+        expect(manifest?.status).toBe('SWEPT');
+    }, 90000);
+});

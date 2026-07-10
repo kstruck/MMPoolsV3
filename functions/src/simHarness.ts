@@ -346,66 +346,149 @@ export const cleanupSimPool = onCall(async (request) => {
             throw new HttpsError('invalid-argument', 'poolId and runId are required.');
         }
         const { ref, data } = await getVerifiedSimPool(db, poolId, runId);
-
-        // User-side docs first (need participantIds before the pool doc dies).
-        const participantIds: string[] = Array.isArray(data.participantIds) ? data.participantIds : [];
-        const realUids = participantIds.filter(u => typeof u === 'string' && !u.startsWith(SIM_PREFIX));
-        const ownerId = typeof data.ownerId === 'string' ? data.ownerId : undefined;
-        const uids = [...new Set([...realUids, ...(ownerId ? [ownerId] : [])])];
-
-        const batch = db.batch();
-        for (const uid of uids) {
-            const userRef = db.collection('users').doc(uid);
-            batch.delete(userRef.collection('managedPools').doc(poolId));
-            batch.delete(userRef.collection('participations').doc(poolId));
-            const activitySnap = await userRef.collection('activity').where('poolId', '==', poolId).get();
-            activitySnap.docs.forEach(d => batch.delete(d.ref));
-        }
-        await batch.commit();
-
-        // Pool tree, including all subcollections.
-        await db.recursiveDelete(ref);
-
-        // The owner's cross-pool rollup counted this Test Pool if it predates the
-        // simRunId-aware predicate; recompute unconditionally so cleanup self-heals.
-        if (ownerId) {
-            try {
-                await recomputeCommissionerAggregate(db, ownerId);
-            } catch (e) {
-                console.warn(`[cleanupSimPool] owner aggregate recompute failed for ${ownerId}:`, e);
-            }
-        }
+        const users = await cleanupPoolTree(db, ref, data, poolId);
 
         // Run-is-done: purge manifest-tracked off-pool residue.
-        let gamesDeleted = 0;
-        let subjectsPurged = 0;
-        let consensusDeleted = 0;
+        let residue = { gamesDeleted: 0, subjectsPurged: 0, consensusDeleted: 0 };
         if (deleteGames) {
-            const gamesSnap = await db.collection('nfl_games').where('season', '==', simSeason(runId!)).get();
-            const gamesBatch = db.batch();
-            gamesSnap.docs.forEach(d => gamesBatch.delete(d.ref));
-            await gamesBatch.commit();
-            gamesDeleted = gamesSnap.size;
-
-            const manifest = (await manifestRef(db, runId!).get()).data() as
-                | { simUids?: string[]; stWeeks?: string[] }
-                | undefined;
-            subjectsPurged = await purgeSimSubjects(db, runId!, manifest?.simUids ?? []);
-            consensusDeleted = await purgeSimConsensus(db, runId!, manifest?.stWeeks ?? []);
-
-            await manifestRef(db, runId!).set({
-                status: 'CLEANED',
-                cleanedAt: admin.firestore.FieldValue.serverTimestamp(),
-            }, { merge: true });
+            residue = await purgeRunResidue(db, runId!, 'CLEANED');
         }
 
-        await audit(actor, 'SIM_CLEANUP_POOL', runId!, poolId, 'success', {
-            users: uids.length, gamesDeleted, subjectsPurged, consensusDeleted,
-        });
-        return { success: true, gamesDeleted, subjectsPurged, consensusDeleted };
+        await audit(actor, 'SIM_CLEANUP_POOL', runId!, poolId, 'success', { users, ...residue });
+        return { success: true, ...residue };
     } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         await audit(actor, 'SIM_CLEANUP_POOL', String(runId), poolId, 'error', {}, msg);
+        throw e;
+    }
+});
+
+/** Per-pool cleanup core: user-side docs, pool tree, owner-aggregate self-heal. */
+async function cleanupPoolTree(
+    db: admin.firestore.Firestore,
+    ref: admin.firestore.DocumentReference,
+    data: FirebaseFirestore.DocumentData,
+    poolId: string,
+): Promise<number> {
+    // User-side docs first (need participantIds before the pool doc dies).
+    const participantIds: string[] = Array.isArray(data.participantIds) ? data.participantIds : [];
+    const realUids = participantIds.filter(u => typeof u === 'string' && !u.startsWith(SIM_PREFIX));
+    const ownerId = typeof data.ownerId === 'string' ? data.ownerId : undefined;
+    const uids = [...new Set([...realUids, ...(ownerId ? [ownerId] : [])])];
+
+    const batch = db.batch();
+    for (const uid of uids) {
+        const userRef = db.collection('users').doc(uid);
+        batch.delete(userRef.collection('managedPools').doc(poolId));
+        batch.delete(userRef.collection('participations').doc(poolId));
+        const activitySnap = await userRef.collection('activity').where('poolId', '==', poolId).get();
+        activitySnap.docs.forEach(d => batch.delete(d.ref));
+    }
+    await batch.commit();
+
+    // Pool tree, including all subcollections.
+    await db.recursiveDelete(ref);
+
+    // The owner's cross-pool rollup counted this Test Pool if it predates the
+    // simRunId-aware predicate; recompute unconditionally so cleanup self-heals.
+    if (ownerId) {
+        try {
+            await recomputeCommissionerAggregate(db, ownerId);
+        } catch (e) {
+            console.warn(`[simHarness] owner aggregate recompute failed for ${ownerId}:`, e);
+        }
+    }
+    return uids.length;
+}
+
+/** Run-level residue purge: games, sim subjects, consensus; stamps the manifest. */
+async function purgeRunResidue(
+    db: admin.firestore.Firestore,
+    runId: string,
+    finalStatus: 'CLEANED' | 'SWEPT',
+): Promise<{ gamesDeleted: number; subjectsPurged: number; consensusDeleted: number }> {
+    const gamesSnap = await db.collection('nfl_games').where('season', '==', simSeason(runId)).get();
+    const gamesBatch = db.batch();
+    gamesSnap.docs.forEach(d => gamesBatch.delete(d.ref));
+    await gamesBatch.commit();
+
+    const manifest = (await manifestRef(db, runId).get()).data() as
+        | { simUids?: string[]; stWeeks?: string[] }
+        | undefined;
+    const subjectsPurged = await purgeSimSubjects(db, runId, manifest?.simUids ?? []);
+    const consensusDeleted = await purgeSimConsensus(db, runId, manifest?.stWeeks ?? []);
+
+    await manifestRef(db, runId).set({
+        status: finalStatus,
+        cleanedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { gamesDeleted: gamesSnap.size, subjectsPurged, consensusDeleted };
+}
+
+const MAX_SWEEP_RUNS = 10;
+
+/**
+ * Stranded-run sweep (Phase 6, Codex R1#7): lists simRuns manifests not yet
+ * CLEANED/SWEPT plus a safety net for pre-manifest pools that carry a simRunId
+ * with no manifest. dryRun (default) only reports; execute cleans each stranded
+ * run FROM ITS MANIFEST — pool trees that still exist, then subjects/games/
+ * consensus — and marks it SWEPT. Manifest-driven, so orphaned off-pool docs
+ * are recoverable even after their pool doc is gone.
+ */
+export const sweepSimRuns = onCall(async (request) => {
+    const actor = assertSuperAdmin(request);
+    const db = admin.firestore();
+    const { dryRun } = (request.data ?? {}) as { dryRun?: boolean };
+    const isDry = dryRun !== false; // dry by default — Operations guardrail convention
+
+    try {
+        // Stranded manifests.
+        const manifestsSnap = await db.collection('simRuns').limit(500).get();
+        const stranded = new Map<string, { runId: string; scenarioId?: string; status?: string; poolIds: string[] }>();
+        manifestsSnap.docs.forEach(d => {
+            const m = d.data() as any;
+            if (m.status === 'CLEANED' || m.status === 'SWEPT') return;
+            stranded.set(d.id, { runId: d.id, scenarioId: m.scenarioId, status: m.status, poolIds: m.poolIds ?? [] });
+        });
+        // Safety net: simRunId-marked pools (pre-manifest strays or missed appends).
+        const strayPools = await db.collection('pools').where('simRunId', '>', '').limit(500).get();
+        strayPools.docs.forEach(d => {
+            const runId = String(d.data().simRunId);
+            const entry = stranded.get(runId) ?? { runId, poolIds: [] };
+            if (!entry.poolIds.includes(d.id)) entry.poolIds.push(d.id);
+            stranded.set(runId, entry);
+        });
+
+        const runs = [...stranded.values()];
+        if (isDry) {
+            await audit(actor, 'SIM_SWEEP_RUNS', 'sweep', undefined, 'success', {
+                dryRun: true, stranded: runs.length, sample: runs.slice(0, 10).map(r => r.runId),
+            });
+            return { dryRun: true, stranded: runs.length, runs: runs.slice(0, 50) };
+        }
+
+        const capped = runs.slice(0, MAX_SWEEP_RUNS);
+        let swept = 0;
+        for (const run of capped) {
+            for (const poolId of run.poolIds) {
+                const ref = db.collection('pools').doc(poolId);
+                const snap = await ref.get();
+                if (!snap.exists) continue; // pool already gone — residue purge below still runs
+                const data = snap.data()!;
+                if (data.simRunId !== run.runId) continue; // never touch anything outside the run
+                await cleanupPoolTree(db, ref, data, poolId);
+            }
+            await purgeRunResidue(db, run.runId, 'SWEPT');
+            swept++;
+        }
+
+        await audit(actor, 'SIM_SWEEP_RUNS', 'sweep', undefined, 'success', {
+            dryRun: false, stranded: runs.length, swept,
+        });
+        return { dryRun: false, stranded: runs.length, swept, remaining: runs.length - swept };
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        await audit(actor, 'SIM_SWEEP_RUNS', 'sweep', undefined, 'error', {}, msg);
         throw e;
     }
 });
