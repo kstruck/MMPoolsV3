@@ -125,3 +125,20 @@ All 3 accepted (consistency-level):
    the seeded Firestore doc value.
 3. Risk note rewritten: runner imports exported callable modules, not internals.
 Rejected: none.
+
+## Round 4 — Codex
+
+The three round-3 findings are resolved in the plan text.
+
+`joinNFLPoolInternal` now takes `{ subjectUid, subjectName }`, the timing field is consistently `startOffsetMs` with `startTime` reserved for the seeded Firestore doc, and the emulator-runner risk note now matches the implementation section by referring to exported callable modules rather than internals. I did not find any new internal contradictions in the revised plan.
+
+VERDICT: APPROVED
+## Resolution
+
+CONVERGED at round 4 of 5: VERDICT: APPROVED. Across 3 REVISE rounds Codex raised 18 findings
+(10 structural, 5 refinement, 3 consistency) — Claude accepted all 18, rejected none; every
+finding was repo-grounded and verified against actual code. Severity shrank monotonically.
+Plan of record: PLAN-NFL-SIM-HARNESS.md (this log is the argument transcript). ADR 0006 +
+CONTEXT.md glossary terms (Sim Run, Test Pool, Scenario, Golden Scenario, Scenario Oracle)
+accompany it. Implementation awaits Kevin's sign-off; Phase 0 must deploy before
+system/config.nflFinalize is armed.
