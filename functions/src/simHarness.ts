@@ -694,6 +694,63 @@ export const simExecuteRebuy = onCall(async (request) => {
  * pool (Phase 0.2). Runs the REAL finalize path: computeFinalRanks, seasonHistory
  * writes (to run-scoped sim uids, purged by cleanup), profile recomputes.
  */
+/**
+ * Finalizes a run manifest with the browser Test Suite's per-assertion results
+ * (Phase 4 item 26) — `simRuns/{runId}` doubles as run history. simRuns has no
+ * client rules (default deny), so this guarded callable is the only write path.
+ * Size-capped: at most 200 assertion rows, strings truncated server-side.
+ */
+export const simReportRun = onCall(async (request) => {
+    const actor = assertSuperAdmin(request);
+    const db = admin.firestore();
+    const { runId, report } = (request.data ?? {}) as {
+        runId?: string;
+        report?: {
+            scenarioId?: string; scenarioName?: string; passed?: boolean;
+            passedCount?: number; failedCount?: number; durationMs?: number;
+            cleanupStatus?: string;
+            assertions?: Array<{ type?: string; message?: string; passed?: boolean }>;
+        };
+    };
+
+    try {
+        if (!validRunId(runId) || !report || typeof report !== 'object') {
+            throw new HttpsError('invalid-argument', 'runId and a report object are required.');
+        }
+        const assertions = (Array.isArray(report.assertions) ? report.assertions : [])
+            .slice(0, 200)
+            .map(a => ({
+                type: String(a?.type ?? '').slice(0, 64),
+                message: String(a?.message ?? '').slice(0, 300),
+                passed: a?.passed === true,
+            }));
+        await appendManifest(db, runId!, {
+            extra: {
+                report: {
+                    scenarioId: String(report.scenarioId ?? '').slice(0, 128),
+                    scenarioName: String(report.scenarioName ?? '').slice(0, 128),
+                    passed: report.passed === true,
+                    passedCount: Number(report.passedCount ?? 0),
+                    failedCount: Number(report.failedCount ?? 0),
+                    durationMs: Number(report.durationMs ?? 0),
+                    cleanupStatus: String(report.cleanupStatus ?? 'unknown').slice(0, 32),
+                    assertions,
+                    reportedAt: admin.firestore.FieldValue.serverTimestamp(),
+                },
+            },
+        });
+        await audit(actor, 'SIM_REPORT_RUN', runId!, undefined, 'success', {
+            scenarioId: report.scenarioId, passed: report.passed === true,
+            passedCount: report.passedCount, failedCount: report.failedCount,
+        });
+        return { success: true };
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        await audit(actor, 'SIM_REPORT_RUN', String(runId), undefined, 'error', {}, msg);
+        throw e;
+    }
+});
+
 export const simFinalizePool = onCall(async (request) => {
     const actor = assertSuperAdmin(request);
     const db = admin.firestore();

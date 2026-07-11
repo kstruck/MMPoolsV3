@@ -14,5 +14,8 @@
     "compileOnSave": true,
     "include": [
         "src"
+    ],
+    "exclude": [
+        "src/__tests__/emulator/fixtureMatrix.emulator.test.ts"
     ]
 }

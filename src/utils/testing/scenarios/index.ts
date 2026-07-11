@@ -19,6 +19,50 @@ import bracketE2EFullTournament from './bracket-e2e-full-tournament.json';
 import nflPickemBasic from './nfl-pickem-basic.json';
 import nflSurvivorBasic from './nfl-survivor-basic.json';
 import nflMarginBasic from './nfl-margin-basic.json';
+// PLAN-NFL-SIM-HARNESS Phase 4 (item 25) — matrix combination cells
+import nflPickemStraightWeekly from './nfl-pickem-straight-weekly.json';
+import nflPickemStraightHybrid from './nfl-pickem-straight-hybrid.json';
+import nflPickemStraightConf from './nfl-pickem-straight-conf.json';
+import nflPickemConfWeekly from './nfl-pickem-conf-weekly.json';
+import nflPickemConfHybrid from './nfl-pickem-conf-hybrid.json';
+import nflPickemAts from './nfl-pickem-ats.json';
+import nflPickemAtsWeekly from './nfl-pickem-ats-weekly.json';
+import nflPickemAtsHybrid from './nfl-pickem-ats-hybrid.json';
+import nflPickemAtsConf from './nfl-pickem-ats-conf.json';
+import nflPickemAtsConfWeekly from './nfl-pickem-ats-conf-weekly.json';
+import nflPickemAtsConfHybrid from './nfl-pickem-ats-conf-hybrid.json';
+// Phase 4 — hand-authored edge scenarios (expectations human-verified)
+import nflPickemAtsPush from './nfl-pickem-ats-push.json';
+import nflPickemTiePush from './nfl-pickem-tie-push.json';
+import nflPickemMissedPicks from './nfl-pickem-missed-picks.json';
+import nflPickemTiebreakerWeek from './nfl-pickem-tiebreaker-week.json';
+import nflPickemDualMnf from './nfl-pickem-dual-mnf.json';
+import nflPickemCancelledVoid from './nfl-pickem-cancelled-void.json';
+import nflPickemPreseason from './nfl-pickem-preseason.json';
+import nflPickemLockPergame from './nfl-pickem-lock-pergame.json';
+import nflPickemLockWeekly from './nfl-pickem-lock-weekly.json';
+import nflSurvivorStrikes2 from './nfl-survivor-strikes2.json';
+import nflSurvivorPicklosers from './nfl-survivor-picklosers.json';
+import nflSurvivorPickloserStrikes2 from './nfl-survivor-picklosers-strikes2.json';
+import nflSurvivorAutosurvive from './nfl-survivor-autosurvive.json';
+import nflSurvivorAutosurviveOff from './nfl-survivor-autosurvive-off.json';
+import nflSurvivorTieStrike from './nfl-survivor-tie-strike.json';
+import nflSurvivorMissedPick from './nfl-survivor-missed-pick.json';
+import nflSurvivorAllEliminated from './nfl-survivor-all-eliminated.json';
+import nflSurvivorDuplicateTeam from './nfl-survivor-duplicate-team.json';
+import nflSurvivorRebuy from './nfl-survivor-rebuy.json';
+import nflSurvivorRebuyLimits from './nfl-survivor-rebuy-limits.json';
+import nflSurvivorLastMan from './nfl-survivor-last-man.json';
+import nflSurvivorCancelledVoid from './nfl-survivor-cancelled-void.json';
+import nflMarginWeekly from './nfl-margin-weekly.json';
+import nflMarginHybrid from './nfl-margin-hybrid.json';
+import nflMarginTieZero from './nfl-margin-tie-zero.json';
+import nflMarginMissedPick from './nfl-margin-missed-pick.json';
+import nflMarginSeasonTiebreak from './nfl-margin-season-tiebreak.json';
+// Phase 4 — buy-flow interaction (item 15: stamps only, never the paid path)
+import nflBuyflowFreeLaunch from './nfl-buyflow-free-launch.json';
+import nflBuyflowFreeCap from './nfl-buyflow-free-cap.json';
+import nflBuyflowTrialStamp from './nfl-buyflow-trial-stamp.json';
 
 export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS'
     | 'NFL_PICKEM' | 'NFL_SURVIVOR' | 'NFL_MARGIN';
@@ -45,12 +89,41 @@ export interface TestAssertion {
     expected?: number | string | boolean | Record<string, unknown>;
     period?: string;
     digits?: [number, number];
-    field?: string; // poolStatus / profileField target
+    field?: string; // poolStatus / profileField target (dotted paths supported)
     userName?: string; // NFL assertions target an entry by user name
     week?: number; // NFL weekly assertions / recap checks
     gameKey?: string; // per-week game key ("g1"...) for gradedPick / consensusTally
     message: string;
 }
+
+/**
+ * Real-path lifecycle operation (PLAN-NFL-SIM-HARNESS Phase 4, item 25).
+ * When a scenario carries `lifecycleOps`, the runner executes them IN ORDER
+ * after the direct-write entries (if any) land — driving the REAL guarded
+ * callables (simJoinMembers / simSubmitPicks / simExecuteRebuy /
+ * simFinalizePool / recordPoolPayouts / scoreNFLWeek). An op with
+ * `expectError` MUST fail with a message containing that substring; the
+ * outcome is recorded and asserted via the `submitRejected` assertion type.
+ * `scoreWeeks` is ignored when lifecycleOps are present — ops drive scoring.
+ */
+export type LifecycleOp =
+    | { op: 'join'; userNames: string[]; expectError?: string }
+    | {
+        op: 'submit'; userName: string; week: number;
+        /** Pick'em: per-week gameKey -> team. Survivor/Margin: use `team`. */
+        picks?: Record<string, string>;
+        confidence?: Record<string, number>;
+        team?: string;
+        tiebreaker?: number;
+        expectError?: string;
+    }
+    | { op: 'rebuy'; userName: string; week: number; expectError?: string }
+    | { op: 'score'; week: number }
+    /** Full replacement of the run's seeded games (same ordering contract as
+     *  nflGames — index N stays doc gN+1); used to conclude games mid-scenario. */
+    | { op: 'reseedGames'; games: ScenarioNFLGame[] }
+    | { op: 'finalize'; expectError?: string }
+    | { op: 'recordPayouts'; awards: Array<{ userName: string; amount: number; place: number }> };
 
 // Synthetic NFL game in a scenario. Games are addressable in picks by PER-WEEK
 // 1-based ordinal: "g1" = the first game OF THAT WEEK (picks are already keyed
@@ -142,6 +215,12 @@ export interface TestScenario {
     // weeks to score via the real scoreNFLWeek callable, in order.
     nflGames?: ScenarioNFLGame[];
     scoreWeeks?: number[];
+    // Real-path lifecycle ops (Phase 4 item 25) — see LifecycleOp above.
+    lifecycleOps?: LifecycleOp[];
+    // Buy-flow scenarios only: the emulator runner must create the pool via the
+    // REAL createNFLPool callable (billing launch-mode stamps live there) instead
+    // of a direct doc seed. The browser simulator always creates via callable.
+    createViaCallable?: boolean;
     // Deterministic full-season generation (PLAN-NFL-SIM-HARNESS Phase 1.12).
     // When present, games + testEntries are MATERIALIZED from @shared/simGen
     // (same seed ⇒ identical fixture, browser and emulator alike); any
@@ -174,6 +253,47 @@ export const SCENARIOS: Record<string, TestScenario> = {
     'nfl-pickem-basic': nflPickemBasic as unknown as TestScenario,
     'nfl-survivor-basic': nflSurvivorBasic as unknown as TestScenario,
     'nfl-margin-basic': nflMarginBasic as unknown as TestScenario,
+    'nfl-pickem-straight-weekly': nflPickemStraightWeekly as unknown as TestScenario,
+    'nfl-pickem-straight-hybrid': nflPickemStraightHybrid as unknown as TestScenario,
+    'nfl-pickem-straight-conf': nflPickemStraightConf as unknown as TestScenario,
+    'nfl-pickem-conf-weekly': nflPickemConfWeekly as unknown as TestScenario,
+    'nfl-pickem-conf-hybrid': nflPickemConfHybrid as unknown as TestScenario,
+    'nfl-pickem-ats': nflPickemAts as unknown as TestScenario,
+    'nfl-pickem-ats-weekly': nflPickemAtsWeekly as unknown as TestScenario,
+    'nfl-pickem-ats-hybrid': nflPickemAtsHybrid as unknown as TestScenario,
+    'nfl-pickem-ats-conf': nflPickemAtsConf as unknown as TestScenario,
+    'nfl-pickem-ats-conf-weekly': nflPickemAtsConfWeekly as unknown as TestScenario,
+    'nfl-pickem-ats-conf-hybrid': nflPickemAtsConfHybrid as unknown as TestScenario,
+    'nfl-pickem-ats-push': nflPickemAtsPush as unknown as TestScenario,
+    'nfl-pickem-tie-push': nflPickemTiePush as unknown as TestScenario,
+    'nfl-pickem-missed-picks': nflPickemMissedPicks as unknown as TestScenario,
+    'nfl-pickem-tiebreaker-week': nflPickemTiebreakerWeek as unknown as TestScenario,
+    'nfl-pickem-dual-mnf': nflPickemDualMnf as unknown as TestScenario,
+    'nfl-pickem-cancelled-void': nflPickemCancelledVoid as unknown as TestScenario,
+    'nfl-pickem-preseason': nflPickemPreseason as unknown as TestScenario,
+    'nfl-pickem-lock-pergame': nflPickemLockPergame as unknown as TestScenario,
+    'nfl-pickem-lock-weekly': nflPickemLockWeekly as unknown as TestScenario,
+    'nfl-survivor-strikes2': nflSurvivorStrikes2 as unknown as TestScenario,
+    'nfl-survivor-picklosers': nflSurvivorPicklosers as unknown as TestScenario,
+    'nfl-survivor-picklosers-strikes2': nflSurvivorPickloserStrikes2 as unknown as TestScenario,
+    'nfl-survivor-autosurvive': nflSurvivorAutosurvive as unknown as TestScenario,
+    'nfl-survivor-autosurvive-off': nflSurvivorAutosurviveOff as unknown as TestScenario,
+    'nfl-survivor-tie-strike': nflSurvivorTieStrike as unknown as TestScenario,
+    'nfl-survivor-missed-pick': nflSurvivorMissedPick as unknown as TestScenario,
+    'nfl-survivor-all-eliminated': nflSurvivorAllEliminated as unknown as TestScenario,
+    'nfl-survivor-duplicate-team': nflSurvivorDuplicateTeam as unknown as TestScenario,
+    'nfl-survivor-rebuy': nflSurvivorRebuy as unknown as TestScenario,
+    'nfl-survivor-rebuy-limits': nflSurvivorRebuyLimits as unknown as TestScenario,
+    'nfl-survivor-last-man': nflSurvivorLastMan as unknown as TestScenario,
+    'nfl-survivor-cancelled-void': nflSurvivorCancelledVoid as unknown as TestScenario,
+    'nfl-margin-weekly': nflMarginWeekly as unknown as TestScenario,
+    'nfl-margin-hybrid': nflMarginHybrid as unknown as TestScenario,
+    'nfl-margin-tie-zero': nflMarginTieZero as unknown as TestScenario,
+    'nfl-margin-missed-pick': nflMarginMissedPick as unknown as TestScenario,
+    'nfl-margin-season-tiebreak': nflMarginSeasonTiebreak as unknown as TestScenario,
+    'nfl-buyflow-free-launch': nflBuyflowFreeLaunch as unknown as TestScenario,
+    'nfl-buyflow-free-cap': nflBuyflowFreeCap as unknown as TestScenario,
+    'nfl-buyflow-trial-stamp': nflBuyflowTrialStamp as unknown as TestScenario,
 };
 
 export const SCENARIO_LIST = Object.values(SCENARIOS);

@@ -1,0 +1,34 @@
+{
+    "id": "nfl-pickem-cancelled-void",
+    "name": "Pick'em Cancelled Game VOID (edge)",
+    "description": "A CANCELLED game with a pick grades VOID: earns 0, still counted in total picked, never a loss. Expectations hand-verified.",
+    "poolType": "NFL_PICKEM",
+    "poolConfig": {
+        "name": "Sim Cancelled VOID",
+        "type": "NFL_PICKEM",
+        "settings": {
+            "entryFee": 0,
+            "lockMode": "PER_GAME",
+            "payoutMode": "SEASON",
+            "pickMode": "STRAIGHT",
+            "confidenceMode": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 0, "awayScore": 0, "status": "CANCELLED" }
+    ],
+    "scoreWeeks": [1],
+    "testEntries": [
+        { "userName": "Alice", "pickemPicks": { "1": { "g1": "KC", "g2": "SF" } } },
+        { "userName": "Bob", "pickemPicks": { "1": { "g1": "BUF", "g2": "DAL" } } }
+    ],
+    "assertions": [
+        { "type": "gradedPick", "userName": "Alice", "week": 1, "gameKey": "g2", "expected": "VOID", "message": "Alice g2 (cancelled) = VOID" },
+        { "type": "gradedPick", "userName": "Bob", "week": 1, "gameKey": "g2", "expected": "VOID", "message": "Bob g2 (cancelled) = VOID" },
+        { "type": "nflWeeklyPoints", "userName": "Alice", "week": 1, "expected": 1, "message": "Alice week 1 = 1 (KC win + VOID)" },
+        { "type": "nflWeeklyPoints", "userName": "Bob", "week": 1, "expected": 0, "message": "Bob week 1 = 0 (loss + VOID)" },
+        { "type": "standingsRow", "userName": "Alice", "expected": { "weeklyResults": { "1": { "correct": 1, "total": 2, "points": 1, "mode": "STRAIGHT" } } }, "message": "VOID counted in total picked, not in correct" }
+    ]
+}

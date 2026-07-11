@@ -1,0 +1,45 @@
+{
+    "id": "nfl-survivor-strikes2",
+    "name": "Survivor maxStrikes=2 (matrix)",
+    "description": "Two-strike pool: elimination only on the 3rd strike. Alice takes 2 strikes and lives; Bob takes 3 and is out in week 3; Carol is clean. Expectations hand-verified.",
+    "poolType": "NFL_SURVIVOR",
+    "poolConfig": {
+        "name": "Sim Survivor Strikes2",
+        "type": "NFL_SURVIVOR",
+        "settings": {
+            "entryFee": 0,
+            "maxStrikes": 2,
+            "maxRebuys": 0,
+            "rebuyDeadlineWeek": 0,
+            "rebuyCost": 0,
+            "pickLosersMode": false,
+            "autoSurviveExemptionEnabled": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 },
+        { "week": 2, "home": "BAL", "away": "CIN", "homeScore": 21, "awayScore": 28 },
+        { "week": 2, "home": "DET", "away": "GB", "homeScore": 20, "awayScore": 17 },
+        { "week": 3, "home": "PHI", "away": "MIA", "homeScore": 31, "awayScore": 14 },
+        { "week": 3, "home": "SEA", "away": "PIT", "homeScore": 24, "awayScore": 20 }
+    ],
+    "scoreWeeks": [1, 2, 3],
+    "testEntries": [
+        { "userName": "Alice", "survivorPicks": { "1": "BUF", "2": "BAL", "3": "PHI" } },
+        { "userName": "Bob", "survivorPicks": { "1": "DAL", "2": "BAL", "3": "MIA" } },
+        { "userName": "Carol", "survivorPicks": { "1": "KC", "2": "CIN", "3": "SEA" } }
+    ],
+    "assertions": [
+        { "type": "survivorStatus", "userName": "Alice", "expected": "ALIVE", "message": "Alice ALIVE on 2 strikes (limit is 2)" },
+        { "type": "survivorStrikes", "userName": "Alice", "expected": 2, "message": "Alice strikes = 2 (BUF wk1, BAL wk2)" },
+        { "type": "survivorStatus", "userName": "Bob", "expected": "ELIMINATED", "message": "Bob ELIMINATED on the 3rd strike" },
+        { "type": "survivorStrikes", "userName": "Bob", "expected": 3, "message": "Bob strikes = 3" },
+        { "type": "standingsRow", "userName": "Bob", "expected": { "status": "ELIMINATED", "eliminatedWeek": 3, "strikeWeeks": [1, 2, 3] }, "message": "Bob eliminated at week 3 with a full strike ledger" },
+        { "type": "survivorStatus", "userName": "Carol", "expected": "ALIVE", "message": "Carol ALIVE, 0 strikes" },
+        { "type": "survivorStrikes", "userName": "Carol", "expected": 0, "message": "Carol strikes = 0" },
+        { "type": "gradedPick", "userName": "Alice", "week": 1, "expected": "STRUCK", "message": "Alice wk1 (BUF lost) graded STRUCK" },
+        { "type": "gradedPick", "userName": "Carol", "week": 1, "expected": "SURVIVED", "message": "Carol wk1 (KC won) graded SURVIVED" }
+    ]
+}

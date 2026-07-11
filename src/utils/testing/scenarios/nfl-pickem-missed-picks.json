@@ -1,0 +1,49 @@
+{
+    "id": "nfl-pickem-missed-picks",
+    "name": "Pick'em Missed Picks (edge)",
+    "description": "Partial and fully-missed weeks: unpicked games are absent from grading (0 points, not counted in total picked). Carol misses the entire week. Expectations hand-verified.",
+    "poolType": "NFL_PICKEM",
+    "poolConfig": {
+        "name": "Sim Missed Picks",
+        "type": "NFL_PICKEM",
+        "settings": {
+            "entryFee": 0,
+            "lockMode": "PER_GAME",
+            "payoutMode": "SEASON",
+            "pickMode": "STRAIGHT",
+            "confidenceMode": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 },
+        { "week": 1, "home": "DET", "away": "GB", "homeScore": 20, "awayScore": 17, "isMonday": true }
+    ],
+    "scoreWeeks": [1],
+    "testEntries": [
+        {
+            "userName": "Alice",
+            "pickemPicks": { "1": { "g1": "KC", "g2": "SF", "g3": "DET" } },
+            "weeklyTiebreakers": { "1": 37 }
+        },
+        {
+            "userName": "Bob",
+            "pickemPicks": { "1": { "g1": "KC" } },
+            "weeklyTiebreakers": { "1": 20 }
+        },
+        {
+            "userName": "Carol",
+            "pickemPicks": {}
+        }
+    ],
+    "assertions": [
+        { "type": "nflEntryCount", "expected": 3, "message": "3 entries" },
+        { "type": "nflWeeklyPoints", "userName": "Alice", "week": 1, "expected": 3, "message": "Alice week 1 = 3 (full slate)" },
+        { "type": "nflWeeklyPoints", "userName": "Bob", "week": 1, "expected": 1, "message": "Bob week 1 = 1 (only picked g1)" },
+        { "type": "nflWeeklyPoints", "userName": "Carol", "week": 1, "expected": 0, "message": "Carol week 1 = 0 (no picks)" },
+        { "type": "standingsRow", "userName": "Bob", "expected": { "weeklyResults": { "1": { "correct": 1, "total": 1, "points": 1, "mode": "STRAIGHT" } } }, "message": "Bob's total-picked is 1, not 3 — missed games are not losses" },
+        { "type": "standingsRow", "userName": "Carol", "expected": { "totalScore": 0, "weeklyResults": { "1": { "correct": 0, "total": 0, "points": 0, "mode": "STRAIGHT" } } }, "message": "Carol's empty week grades 0/0" },
+        { "type": "recapClosestTiebreaker", "week": 1, "expected": "Alice", "message": "Alice (37) hits the MNF total exactly" }
+    ]
+}

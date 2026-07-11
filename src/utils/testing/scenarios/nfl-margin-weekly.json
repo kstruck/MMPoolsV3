@@ -1,0 +1,32 @@
+{
+    "id": "nfl-margin-weekly",
+    "name": "Margin × WEEKLY payouts (matrix)",
+    "description": "Matrix cell payoutMode=WEEKLY: payout mode is commissioner display copy and must not change margin scoring. Alice +3 +7 = 10; Bob -20 -7 = -27. Expectations hand-verified.",
+    "poolType": "NFL_MARGIN",
+    "poolConfig": {
+        "name": "Sim Margin Weekly",
+        "type": "NFL_MARGIN",
+        "settings": {
+            "entryFee": 0,
+            "payoutMode": "WEEKLY",
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 },
+        { "week": 2, "home": "BAL", "away": "CIN", "homeScore": 21, "awayScore": 28 }
+    ],
+    "scoreWeeks": [1, 2],
+    "testEntries": [
+        { "userName": "Alice", "marginPicks": { "1": "KC", "2": "CIN" } },
+        { "userName": "Bob", "marginPicks": { "1": "DAL", "2": "BAL" } }
+    ],
+    "assertions": [
+        { "type": "marginSeasonTotal", "userName": "Alice", "expected": 10, "message": "Alice season total = 10 (+3 KC, +7 CIN)" },
+        { "type": "marginSeasonTotal", "userName": "Bob", "expected": -27, "message": "Bob season total = -27 (-20 DAL, -7 BAL)" },
+        { "type": "marginRank", "userName": "Alice", "expected": 1, "message": "Alice ranks 1st" },
+        { "type": "marginRank", "userName": "Bob", "expected": 2, "message": "Bob ranks 2nd" },
+        { "type": "standingsRow", "userName": "Bob", "expected": { "seasonTotal": -27, "negativeBurden": 27, "positiveWeeks": 0, "bestWeek": -7 }, "message": "Bob's burden/positive-week/best-week stats" }
+    ]
+}

@@ -1,0 +1,37 @@
+{
+    "id": "nfl-survivor-picklosers",
+    "name": "Survivor Pick-Losers Mode (matrix)",
+    "description": "Inverted survival: picking a LOSER survives, picking a winner strikes (docs/NFL_POOLS_README.md §Pick-Loser Mode). Sudden death. Expectations hand-verified.",
+    "poolType": "NFL_SURVIVOR",
+    "poolConfig": {
+        "name": "Sim Survivor PickLosers",
+        "type": "NFL_SURVIVOR",
+        "settings": {
+            "entryFee": 0,
+            "maxStrikes": 0,
+            "maxRebuys": 0,
+            "rebuyDeadlineWeek": 0,
+            "rebuyCost": 0,
+            "pickLosersMode": true,
+            "autoSurviveExemptionEnabled": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 }
+    ],
+    "scoreWeeks": [1],
+    "testEntries": [
+        { "userName": "Alice", "survivorPicks": { "1": "BUF" } },
+        { "userName": "Bob", "survivorPicks": { "1": "KC" } }
+    ],
+    "assertions": [
+        { "type": "survivorStatus", "userName": "Alice", "expected": "ALIVE", "message": "Alice picked the loser (BUF) and survives" },
+        { "type": "survivorStrikes", "userName": "Alice", "expected": 0, "message": "Alice strikes = 0" },
+        { "type": "survivorStatus", "userName": "Bob", "expected": "ELIMINATED", "message": "Bob picked the winner (KC) — strike in pick-losers mode" },
+        { "type": "survivorStrikes", "userName": "Bob", "expected": 1, "message": "Bob strikes = 1" },
+        { "type": "gradedPick", "userName": "Alice", "week": 1, "expected": "SURVIVED", "message": "Alice wk1 graded SURVIVED" },
+        { "type": "gradedPick", "userName": "Bob", "week": 1, "expected": "STRUCK", "message": "Bob wk1 graded STRUCK" }
+    ]
+}

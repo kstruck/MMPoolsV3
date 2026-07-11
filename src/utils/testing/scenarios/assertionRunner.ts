@@ -71,10 +71,45 @@ type TestPool = Pool & {
         [key: string]: unknown;
     }[];
     _nflRecaps?: Record<string, Record<string, unknown>>;
+    // PLAN-NFL-SIM-HARNESS Phase 4 (item 26) — persisted-schema hydration,
+    // populated by the runner BEFORE cleanup, only when the scenario's
+    // assertions need them:
+    _standings?: Array<Record<string, unknown>>;            // standings/current rows
+    _seasonHistory?: Record<string, Record<string, unknown>>; // userName -> seasonHistory doc
+    _payoutRecords?: Array<Record<string, unknown>>;         // payoutRecords docs (+userName)
+    _profiles?: Record<string, Record<string, unknown>>;     // userName -> publicProfiles doc
+    _consensus?: Record<string, Record<string, unknown>>;    // "week:gameKey" -> tally doc
+    _rejections?: Array<{ userName: string; week?: number; op: string; code: string }>;
     entryCount?: number;
     entries?: Record<string, { totalScore?: number; userName?: string }>;
     [key: string]: unknown; // Allow safe access to other properties
 };
+
+/** Dotted-path read: readPath(obj, "billing.status"). */
+function readPath(obj: unknown, path: string): unknown {
+    return path.split('.').reduce<unknown>(
+        (acc, key) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[key] : undefined),
+        obj,
+    );
+}
+
+/** Recursive subset match: every key in `expected` must match the actual value;
+ *  plain-object expected values recurse (so nested asserts are key-order-proof),
+ *  everything else compares strictly (arrays via JSON). */
+function subsetMatches(actual: unknown, expected: Record<string, unknown>, prefix = ''): { ok: boolean; firstMiss?: string } {
+    if (!actual || typeof actual !== 'object') return { ok: false, firstMiss: `${prefix || '(row)'} missing` };
+    for (const [k, v] of Object.entries(expected)) {
+        const a = (actual as Record<string, unknown>)[k];
+        const path = prefix ? `${prefix}.${k}` : k;
+        if (v && typeof v === 'object' && !Array.isArray(v)) {
+            const sub = subsetMatches(a, v as Record<string, unknown>, path);
+            if (!sub.ok) return sub;
+        } else if (JSON.stringify(a) !== JSON.stringify(v)) {
+            return { ok: false, firstMiss: `${path}: expected ${JSON.stringify(v)}, got ${JSON.stringify(a)}` };
+        }
+    }
+    return { ok: true };
+}
 
 // ---- NFL season-pool assertion helpers (PLAN-TEST-SUITE Phase 2 item 8c) ----
 
@@ -174,6 +209,68 @@ function runSingleAssertion(
             const passed = actual === assertion.expected;
             return { assertion, passed, actual, message: passed ? assertion.message : `${assertion.message} - Expected "${assertion.expected}", got "${actual}"` };
         }
+        // ---- Persisted-schema assertions (PLAN-NFL-SIM-HARNESS Phase 1.10 / 4) ----
+        case 'gradedPick': {
+            // Pick'em: weeklyResults[week].games["<week>:<gameKey>"-mapped docId].result
+            // Survivor: weeklyResults[week].game.result (one pick per week)
+            const entry = (pool._nflEntries ?? []).find(e => e.userName === assertion.userName);
+            if (!entry) return { assertion, passed: false, message: `${assertion.message} - No entry for "${assertion.userName}"` };
+            const wr = (entry.weeklyResults as Record<string, Record<string, unknown>> | undefined)?.[String(assertion.week)];
+            let actual: unknown;
+            if (assertion.gameKey) {
+                const docId = (pool._gameKeyMap as Record<string, string> | undefined)?.[`${assertion.week}:${assertion.gameKey}`];
+                const games = wr?.games as Record<string, { result?: string }> | undefined;
+                actual = docId ? games?.[docId]?.result : undefined;
+            } else {
+                actual = (wr?.game as { result?: string } | undefined)?.result;
+            }
+            const passed = actual === assertion.expected;
+            return { assertion, passed, actual, message: passed ? assertion.message : `${assertion.message} - Expected ${assertion.expected}, got ${actual}` };
+        }
+        case 'standingsRow': {
+            const row = (pool._standings ?? []).find(r => r.userName === assertion.userName);
+            const m = subsetMatches(row, (assertion.expected ?? {}) as Record<string, unknown>);
+            return { assertion, passed: m.ok, actual: row, message: m.ok ? assertion.message : `${assertion.message} - ${m.firstMiss}` };
+        }
+        case 'seasonHistoryRow': {
+            const row = pool._seasonHistory?.[assertion.userName ?? ''];
+            const m = subsetMatches(row, (assertion.expected ?? {}) as Record<string, unknown>);
+            return { assertion, passed: m.ok, actual: row, message: m.ok ? assertion.message : `${assertion.message} - ${m.firstMiss}` };
+        }
+        case 'payoutRecordExists': {
+            const recs = (pool._payoutRecords ?? []).filter(r => r.userName === assertion.userName);
+            const wantAmount = typeof assertion.expected === 'number' ? assertion.expected : undefined;
+            const hit = wantAmount === undefined ? recs[0] : recs.find(r => r.amount === wantAmount);
+            const passed = Boolean(hit);
+            return {
+                assertion, passed, actual: recs,
+                message: passed ? assertion.message
+                    : `${assertion.message} - No payout record for "${assertion.userName}"${wantAmount !== undefined ? ` with amount ${wantAmount}` : ''} (found ${recs.length})`,
+            };
+        }
+        case 'profileField': {
+            const profile = pool._profiles?.[assertion.userName ?? ''];
+            const actual = readPath(profile, assertion.field ?? '');
+            const passed = JSON.stringify(actual) === JSON.stringify(assertion.expected);
+            return { assertion, passed, actual, message: passed ? assertion.message : `${assertion.message} - ${assertion.field}: expected ${JSON.stringify(assertion.expected)}, got ${JSON.stringify(actual)}` };
+        }
+        case 'consensusTally': {
+            const tally = pool._consensus?.[`${assertion.week}:${assertion.gameKey}`];
+            const m = subsetMatches(tally, (assertion.expected ?? {}) as Record<string, unknown>);
+            return { assertion, passed: m.ok, actual: tally, message: m.ok ? assertion.message : `${assertion.message} - ${m.firstMiss}` };
+        }
+        case 'submitRejected': {
+            const rej = (pool._rejections ?? []).find(r =>
+                r.userName === assertion.userName &&
+                (assertion.week === undefined || r.week === assertion.week));
+            const want = String(assertion.expected ?? '');
+            const passed = Boolean(rej) && rej!.code.includes(want);
+            return {
+                assertion, passed, actual: rej?.code,
+                message: passed ? assertion.message
+                    : `${assertion.message} - Expected rejection containing "${want}", got ${rej ? `"${rej.code}"` : 'no recorded rejection'}`,
+            };
+        }
         default:
             return {
                 assertion,
@@ -258,7 +355,7 @@ function assertPoolStatus(assertion: TestAssertion, pool: TestPool): AssertionRe
     let actual: unknown;
 
     if (field) {
-        actual = pool[field];
+        actual = readPath(pool, field); // dotted paths supported (e.g. "billing.status")
     } else {
         // Safe access for scores if it exists
         const p = pool as { scores?: { gameStatus?: string } };

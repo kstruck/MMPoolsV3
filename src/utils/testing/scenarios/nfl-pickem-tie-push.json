@@ -1,0 +1,35 @@
+{
+    "id": "nfl-pickem-tie-push",
+    "name": "Pick'em Straight-Up Tie (edge)",
+    "description": "A tied game (21-21) grades PUSH for both sides in straight mode — 0 points, not a loss. Expectations hand-verified.",
+    "poolType": "NFL_PICKEM",
+    "poolConfig": {
+        "name": "Sim Tie Push",
+        "type": "NFL_PICKEM",
+        "settings": {
+            "entryFee": 0,
+            "lockMode": "PER_GAME",
+            "payoutMode": "SEASON",
+            "pickMode": "STRAIGHT",
+            "confidenceMode": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 21, "awayScore": 21 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 }
+    ],
+    "scoreWeeks": [1],
+    "testEntries": [
+        { "userName": "Alice", "pickemPicks": { "1": { "g1": "KC", "g2": "SF" } } },
+        { "userName": "Bob", "pickemPicks": { "1": { "g1": "BUF", "g2": "DAL" } } }
+    ],
+    "assertions": [
+        { "type": "nflEntryCount", "expected": 2, "message": "2 entries" },
+        { "type": "gradedPick", "userName": "Alice", "week": 1, "gameKey": "g1", "expected": "PUSH", "message": "Alice g1 (tie 21-21) = PUSH" },
+        { "type": "gradedPick", "userName": "Bob", "week": 1, "gameKey": "g1", "expected": "PUSH", "message": "Bob g1 (tie 21-21) = PUSH" },
+        { "type": "nflWeeklyPoints", "userName": "Alice", "week": 1, "expected": 1, "message": "Alice week 1 = 1 (tie earns 0, SF earns 1)" },
+        { "type": "nflWeeklyPoints", "userName": "Bob", "week": 1, "expected": 0, "message": "Bob week 1 = 0" },
+        { "type": "standingsRow", "userName": "Alice", "expected": { "weeklyResults": { "1": { "correct": 1, "total": 2, "points": 1, "mode": "STRAIGHT" } } }, "message": "Tie excluded from correct count" }
+    ]
+}

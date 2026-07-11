@@ -1,0 +1,31 @@
+{
+    "id": "nfl-margin-hybrid",
+    "name": "Margin × HYBRID payouts (matrix)",
+    "description": "Matrix cell payoutMode=HYBRID: identical scoring to the WEEKLY/SEASON cells (payout mode never touches the engine). Expectations hand-verified.",
+    "poolType": "NFL_MARGIN",
+    "poolConfig": {
+        "name": "Sim Margin Hybrid",
+        "type": "NFL_MARGIN",
+        "settings": {
+            "entryFee": 0,
+            "payoutMode": "HYBRID",
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 },
+        { "week": 2, "home": "BAL", "away": "CIN", "homeScore": 21, "awayScore": 28 }
+    ],
+    "scoreWeeks": [1, 2],
+    "testEntries": [
+        { "userName": "Alice", "marginPicks": { "1": "KC", "2": "CIN" } },
+        { "userName": "Bob", "marginPicks": { "1": "DAL", "2": "BAL" } }
+    ],
+    "assertions": [
+        { "type": "marginSeasonTotal", "userName": "Alice", "expected": 10, "message": "Alice season total = 10" },
+        { "type": "marginSeasonTotal", "userName": "Bob", "expected": -27, "message": "Bob season total = -27" },
+        { "type": "marginRank", "userName": "Alice", "expected": 1, "message": "Alice ranks 1st" },
+        { "type": "nflWinner", "expected": "Alice", "message": "Alice leads on seasonTotal" }
+    ]
+}
