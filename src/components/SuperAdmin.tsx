@@ -14,7 +14,7 @@ import { getPoolSport, getPoolLifecycleState, formatPoolMatchup } from '../utils
 import { ErrorBoundary } from './ErrorBoundary';
 import { POOL_TYPES, resolvePoolTypeFlags } from '../utils/featureFlags';
 import { db } from '../firebase';
-import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 
@@ -175,11 +175,8 @@ export const SuperAdmin: React.FC = () => {
         if (!viewingPool) return;
         try {
             const newStatus = currentStatus === 'PAID' ? 'UNPAID' : 'PAID';
-            const entryRef = doc(db, 'pools', viewingPool.id, 'entries', entryId);
-            await updateDoc(entryRef, {
-                paidStatus: newStatus,
-                updatedAt: Date.now()
-            });
+            // Server-side since Phase 5 — entries deny ALL client writes.
+            await dbService.updateBracketEntryPayment(viewingPool.id, entryId, newStatus as 'PAID' | 'UNPAID');
             setViewingPoolEntries(prev => prev.map(entry => entry.id === entryId ? { ...entry, paidStatus: newStatus } : entry));
         } catch (err: unknown) {
             logger.error("Failed to toggle payment status", err);
@@ -206,8 +203,12 @@ export const SuperAdmin: React.FC = () => {
                 await delFn({ poolId: viewingPool.id, entryId });
                 setViewingPool(prev => prev ? { ...prev, entryCount: Math.max(0, ((prev as any).entryCount || 0) - 1) } as any : null);
             } else {
-                const entryRef = doc(db, 'pools', viewingPool.id, 'entries', entryId);
-                await deleteDoc(entryRef);
+                // Server-side since Phase 5 (adminDeleteEntry, SUPER_ADMIN +
+                // audited + transactional entryCount decrement) — entries deny
+                // ALL client writes now.
+                const delFn = httpsCallable(getFunctions(), 'adminDeleteEntry');
+                await delFn({ poolId: viewingPool.id, entryId });
+                setViewingPool(prev => prev ? { ...prev, entryCount: Math.max(0, ((prev as any).entryCount || 0) - 1) } as any : null);
             }
             setViewingPoolEntries(prev => prev.filter(entry => entry.id !== entryId));
             toast.success('Entry successfully deleted.');
@@ -224,11 +225,9 @@ export const SuperAdmin: React.FC = () => {
             const tiebreakerVal = Number(entryTiebreakerOverrides[entryId] || 0);
             const payoutVal = Number(entryPayoutOverrides[entryId] || 0);
 
-            const entryRef = doc(db, 'pools', viewingPool.id, 'entries', entryId);
             const updates: Record<string, any> = {
                 score: scoreVal,
                 payout: payoutVal,
-                updatedAt: Date.now()
             };
 
             if (viewingPool.type === 'BRACKET') {
@@ -238,7 +237,10 @@ export const SuperAdmin: React.FC = () => {
                 updates.tieBreakerPrediction = tiebreakerVal;
             }
 
-            await updateDoc(entryRef, updates);
+            // Server-side since Phase 5 (adminUpdateEntryOverrides, SUPER_ADMIN +
+            // allowlisted fields + audited) — entries deny ALL client writes now.
+            const overridesFn = httpsCallable(getFunctions(), 'adminUpdateEntryOverrides');
+            await overridesFn({ poolId: viewingPool.id, entryId, overrides: updates });
             setViewingPoolEntries(prev => prev.map(entry => entry.id === entryId ? { ...entry, ...updates } : entry));
             toast.success('Participant overrides successfully saved!');
         } catch (err: unknown) {

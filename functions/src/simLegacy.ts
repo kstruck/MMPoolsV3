@@ -14,7 +14,13 @@
  *    Authorization mirrors simulateGameUpdate (owner/manager/co-manager or
  *    SUPER_ADMIN) — the dashboard is used on demo pools the admin owns.
  *
- * Every call — success OR refusal — writes an admin_audit entry.
+ * Every AUTHENTICATED call — success OR refusal (wrong role, bad input,
+ * missing target) — writes an admin_audit entry. Unauthenticated requests are
+ * rejected up front WITHOUT an audit write: mirroring simHarness.ts, and
+ * deliberate — auditing anonymous probes would let an unauthenticated client
+ * flood admin_audit with docs (App Check + auth are the anti-abuse layer
+ * there). Qodo PR #162 finding 3 requested unauth auditing; rejected for that
+ * reason, comment corrected instead.
  */
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
@@ -24,7 +30,7 @@ const TOURNAMENT_ID_RE = /^[a-z0-9][a-z0-9-]{1,63}$/;
 
 function requireAuth(request: { auth?: { uid?: string; token?: Record<string, unknown> } | null }): { uid: string; role?: string } {
     const uid = request.auth?.uid;
-    if (!uid) throw new HttpsError('permission-denied', 'Authentication required.');
+    if (!uid) throw new HttpsError('unauthenticated', 'Authentication required.');
     return { uid, role: request.auth?.token?.role as string | undefined };
 }
 

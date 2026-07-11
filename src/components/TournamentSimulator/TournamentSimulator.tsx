@@ -171,11 +171,15 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
             // simRunId trust anchor (server-stamped for SUPER_ADMIN callers).
             // The old raw addDoc relied on the `sim-*` slug rules backdoor,
             // dropped in Phase 5.
+            // Single Date.now() — separate calls could tick between slug and
+            // slugLower and break the slugLower-derived-from-slug invariant
+            // (qodo review of PR #162 finding 2; bug predates this PR).
+            const slug = `sim-${Date.now()}`;
             const poolData = {
                 type: 'BRACKET',
                 name: '🏀 Tournament Simulator Pool',
-                slug: `sim-${Date.now()}`,
-                slugLower: `sim-${Date.now()}`,
+                slug,
+                slugLower: slug.toLowerCase(),
                 isListedPublic: false,
                 lockAt: Date.now() + 86400000,
                 settings: POOL_SETTINGS,
