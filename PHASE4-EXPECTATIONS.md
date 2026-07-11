@@ -32,6 +32,9 @@ Scoring rules used throughout (from docs/NFL_POOLS_README.md + engine contract):
 
 ---
 
+> **Verification status:** Kevin confirmed sections **A, B, C** on 2026-07-11 (chat).
+> Section D: signed-margin rule confirmed; arithmetic tick pending. Section E pending.
+
 ## A. Pick'em combination cells (11 generated fixtures, one shared layout)
 
 Games (same in all 11):
@@ -104,10 +107,18 @@ Standard-mode weekly results used below — wk1: KC beat BUF, SF beat DAL. wk2: 
 
 ## D. Margin
 
+**Rule confirmed by Kevin 2026-07-11: SIGNED margin stands** (docs §3: "Choose Chiefs.
+Chiefs lose 21-24. Score = -3") — a losing pick scores the NEGATIVE margin, feeding
+the Negative Burden tiebreak; winner = highest season total. His alternative reading
+(loser = 0) was raised and explicitly rejected in favor of the documented rule.
+
 1. **weekly / hybrid** (2 cells) — Alice: KC +3, CIN +7 ⇒ **10**. Bob: DAL −20, BAL −7 ⇒ **−27** (burden 27, positive 0, best −7). Alice rank 1. Identical numbers in both cells (payoutMode inert).
 2. **tie-zero** — KC 21-21 ⇒ Alice 0 (no burden, not a positive week). Bob SF +20 ⇒ rank 1.
 3. **missed-pick** — Bob: +20 then missed wk2 ⇒ 20 − 14 = **6** (burden 14, positive 1, best 20). Alice 10 ⇒ rank 1.
 4. **season-tiebreak** — Alice: SEA +10, GB −4 ⇒ 6 (burden 4). Bob: KC +3, PHI +3 ⇒ 6 (burden 0). Equal totals ⇒ cascade level 2: Bob rank 1.
+5. **duplicate-team** (REAL path, added on Kevin's 2026-07-11 review) — margin pools
+   enforce one-team-once-per-season like survivor: re-picking KC in wk2 rejected
+   `TEAM_ALREADY_USED`; fresh SF pick accepted; alice = KC +3, SF +3 ⇒ **6**, burden 0.
 
 - [ ] D verified
 

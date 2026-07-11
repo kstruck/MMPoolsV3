@@ -59,6 +59,7 @@ import nflMarginHybrid from './nfl-margin-hybrid.json';
 import nflMarginTieZero from './nfl-margin-tie-zero.json';
 import nflMarginMissedPick from './nfl-margin-missed-pick.json';
 import nflMarginSeasonTiebreak from './nfl-margin-season-tiebreak.json';
+import nflMarginDuplicateTeam from './nfl-margin-duplicate-team.json';
 // Phase 4 — buy-flow interaction (item 15: stamps only, never the paid path)
 import nflBuyflowFreeLaunch from './nfl-buyflow-free-launch.json';
 import nflBuyflowFreeCap from './nfl-buyflow-free-cap.json';
@@ -291,6 +292,7 @@ export const SCENARIOS: Record<string, TestScenario> = {
     'nfl-margin-tie-zero': nflMarginTieZero as unknown as TestScenario,
     'nfl-margin-missed-pick': nflMarginMissedPick as unknown as TestScenario,
     'nfl-margin-season-tiebreak': nflMarginSeasonTiebreak as unknown as TestScenario,
+    'nfl-margin-duplicate-team': nflMarginDuplicateTeam as unknown as TestScenario,
     'nfl-buyflow-free-launch': nflBuyflowFreeLaunch as unknown as TestScenario,
     'nfl-buyflow-free-cap': nflBuyflowFreeCap as unknown as TestScenario,
     'nfl-buyflow-trial-stamp': nflBuyflowTrialStamp as unknown as TestScenario,
