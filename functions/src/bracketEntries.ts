@@ -410,3 +410,67 @@ export const deleteBracketEntry = onCall(async (request) => {
     return { success: true, message: "Entry deleted successfully" };
 });
 
+
+// ----------------------------------------------------------------------------
+// Update Entry Payment display status (PLAN-NFL-SIM-HARNESS Phase 5)
+// ----------------------------------------------------------------------------
+// Replaces the client's raw `updateDoc(pools/{id}/entries/{eid}, {paidStatus})`
+// (dbService.updateBracketEntryPayment), which depended on the blanket
+// SUPER_ADMIN entries-write rule dropped in Phase 5 — and which ordinary
+// commissioners could never use (the rule was admin-only even though the UI
+// offered the toggle). Authorization mirrors setPaidStatus: owner/manager/
+// creator or SUPER_ADMIN. NOTE: the entry's paidStatus is display/legacy;
+// the Member Record (setPaidStatus) remains the authoritative payment truth.
+export const updateEntryPayment = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "User must be logged in.");
+    }
+    const uid = request.auth.uid;
+    const { poolId, entryId, paidStatus, paymentMethod } = (request.data ?? {}) as {
+        poolId?: string; entryId?: string; paidStatus?: string; paymentMethod?: string;
+    };
+    if (!poolId || !entryId || (paidStatus !== 'PAID' && paidStatus !== 'UNPAID')) {
+        throw new HttpsError("invalid-argument", "poolId, entryId, and paidStatus (PAID|UNPAID) are required.");
+    }
+    const ALLOWED_METHODS = ['Cash', 'Check', 'Venmo', 'Google Pay', 'Cash.me', 'Other'];
+    if (paymentMethod !== undefined && !ALLOWED_METHODS.includes(paymentMethod)) {
+        throw new HttpsError("invalid-argument", "Invalid paymentMethod.");
+    }
+
+    const db = admin.firestore();
+    const poolRef = db.collection("pools").doc(poolId);
+    const entryRef = poolRef.collection("entries").doc(entryId);
+
+    await db.runTransaction(async (transaction) => {
+        const poolDoc = await transaction.get(poolRef);
+        if (!poolDoc.exists) throw new HttpsError("not-found", "Pool not found.");
+        const pool = poolDoc.data() as Record<string, unknown>;
+
+        const isOwner = pool.ownerId === uid || pool.managerUid === uid || pool.createdByUid === uid ||
+            request.auth?.token?.role === 'SUPER_ADMIN';
+        if (!isOwner) {
+            throw new HttpsError("permission-denied", "Only the commissioner can update entry payment status.");
+        }
+
+        const entryDoc = await transaction.get(entryRef);
+        if (!entryDoc.exists) throw new HttpsError("not-found", "Entry not found.");
+
+        transaction.update(entryRef, {
+            paidStatus,
+            paymentMethod: paymentMethod ?? FieldValue.delete(),
+            updatedAt: Date.now(),
+        });
+
+        const auditRef = db.collection("audit").doc();
+        transaction.set(auditRef, {
+            poolId,
+            type: "ENTRY_PAYMENT_UPDATED",
+            message: `Entry ${entryId} marked ${paidStatus} by ${uid}`,
+            severity: "INFO",
+            actor: { uid, role: "USER" },
+            timestamp: Date.now(),
+        });
+    });
+
+    return { success: true };
+});

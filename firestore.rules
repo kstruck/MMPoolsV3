@@ -122,14 +122,11 @@ service cloud.firestore {
         || isSuperAdmin()
       );
                     
-      // NO CREATE via Client (must use createPool function). The ONLY exception is
-      // the admin Test Suite / Tournament Simulator, which seeds sim-* pools client-side.
-      // Restricted to SUPER_ADMIN: previously any authenticated user could create a
-      // pool doc directly by prefixing the slug with "sim-", bypassing createPool and
-      // setting arbitrary ownerId/managerUid/billing (privilege-escalation + billing
-      // bypass). Admins run the Test Suite, so this keeps it working while closing the
-      // hole. TODO(Phase 2): move sim writes to audited test-only callables and drop this.
-      allow create: if request.resource.data.slug.matches('^sim-.*') && isSuperAdmin();
+      // NO CREATE via Client (must use createPool function). The former sim-*
+      // slug SUPER_ADMIN exception is GONE (PLAN-NFL-SIM-HARNESS Phase 5): every
+      // simulator now creates through the real create callables with a
+      // server-stamped simRunId trust anchor — no client path may mint pool docs.
+      allow create: if false;
 
       // WINNERS (Subcollection)
       match /winners/{winnerId} {
@@ -260,11 +257,12 @@ service cloud.firestore {
             )
           )
         );
-        // Entries are written server-side (bracketEntries/poolOps callables) or by
-        // SUPER_ADMIN (Test Suite). The former sim-* client-write branch let any authed
-        // user inject entries into a sim pool; removed. Sim entries go through the
-        // isSuperAdmin() path (the Test Suite runs as an admin).
-        allow write: if isSuperAdmin();
+        // Entries are written SERVER-SIDE ONLY (bracketEntries/poolOps callables;
+        // simulators go through the runId-scoped simWriteEntries harness). The
+        // former blanket isSuperAdmin() write — the Test Suite's raw-write door,
+        // one bug away from corrupting a real pool's entries — is GONE
+        // (PLAN-NFL-SIM-HARNESS Phase 5).
+        allow write: if false;
       }
 
       // MEMBER RECORDS (roster + payment truth, ADR 0003)
