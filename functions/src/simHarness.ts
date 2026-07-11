@@ -625,22 +625,28 @@ export const simSubmitPicks = onCall(async (request) => {
         }, { poolId, week, picks, confidence, tiebreakerPrediction });
 
         // Stamp simRunId on the entry the real path just wrote (Phase 0.3 contract).
-        // Best-effort: the trigger guard also keys on the sim- uid prefix, so a
-        // failed stamp must not flip a genuinely-successful submit into an error
-        // response (the qodo #158 misleading-outcome class); surfaced via audit.
+        // Best-effort with a bounded retry: the trigger guard also keys on the
+        // sim- uid prefix, so a failed stamp must not flip a genuinely-successful
+        // submit into an error response (the qodo #158 misleading-outcome class) —
+        // but the caller gets stampFailed in the RESPONSE, not just the audit, so
+        // an orchestrator can retry or flag the run (qodo review of PR #159).
         let stampFailed = false;
-        try {
-            await db.collection('pools').doc(poolId).collection('entries').doc(uid)
-                .set({ simRunId: runId }, { merge: true });
-        } catch (e) {
-            stampFailed = true;
-            console.warn(`[simSubmitPicks] simRunId stamp failed for ${uid} in ${poolId}:`, e);
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                await db.collection('pools').doc(poolId).collection('entries').doc(uid)
+                    .set({ simRunId: runId }, { merge: true });
+                stampFailed = false;
+                break;
+            } catch (e) {
+                stampFailed = true;
+                console.warn(`[simSubmitPicks] simRunId stamp attempt ${attempt} failed for ${uid} in ${poolId}:`, e);
+            }
         }
 
         await audit(actor, 'SIM_SUBMIT_PICKS', runId!, poolId, 'success', {
             subjectUid: uid, week, ...(stampFailed ? { stampFailed: true } : {}),
         });
-        return { success: true };
+        return { success: true, ...(stampFailed ? { stampFailed: true } : {}) };
     } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         await audit(actor, 'SIM_SUBMIT_PICKS', String(runId), poolId, 'error', { subjectUid, week }, msg);
