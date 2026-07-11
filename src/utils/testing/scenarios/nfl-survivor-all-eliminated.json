@@ -1,0 +1,36 @@
+{
+    "id": "nfl-survivor-all-eliminated",
+    "name": "Survivor All-Eliminated Week (edge)",
+    "description": "Every entry strikes out in the same week — the pool ends with zero ALIVE entries and the recap still generates (attrition 0). Expectations hand-verified.",
+    "poolType": "NFL_SURVIVOR",
+    "poolConfig": {
+        "name": "Sim Survivor All Out",
+        "type": "NFL_SURVIVOR",
+        "settings": {
+            "entryFee": 0,
+            "maxStrikes": 0,
+            "maxRebuys": 0,
+            "rebuyDeadlineWeek": 0,
+            "rebuyCost": 0,
+            "pickLosersMode": false,
+            "autoSurviveExemptionEnabled": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 }
+    ],
+    "scoreWeeks": [1],
+    "testEntries": [
+        { "userName": "Alice", "survivorPicks": { "1": "BUF" } },
+        { "userName": "Bob", "survivorPicks": { "1": "DAL" } }
+    ],
+    "assertions": [
+        { "type": "survivorStatus", "userName": "Alice", "expected": "ELIMINATED", "message": "Alice out (BUF lost)" },
+        { "type": "survivorStatus", "userName": "Bob", "expected": "ELIMINATED", "message": "Bob out (DAL lost)" },
+        { "type": "standingsRow", "userName": "Alice", "expected": { "eliminatedWeek": 1 }, "message": "Alice eliminated week 1" },
+        { "type": "standingsRow", "userName": "Bob", "expected": { "eliminatedWeek": 1 }, "message": "Bob eliminated week 1" },
+        { "type": "recapExists", "week": 1, "expected": true, "message": "Recap generates even with zero survivors" }
+    ]
+}

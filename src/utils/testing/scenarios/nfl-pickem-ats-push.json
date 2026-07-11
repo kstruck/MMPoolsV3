@@ -1,0 +1,37 @@
+{
+    "id": "nfl-pickem-ats-push",
+    "name": "Pick'em ATS Push (edge)",
+    "description": "Exact-spread cover grades PUSH for BOTH sides and earns 0. KC -3 wins by exactly 3 (20-17): Alice (KC) and Bob (BUF) both PUSH on g1. Expectations hand-verified.",
+    "poolType": "NFL_PICKEM",
+    "poolConfig": {
+        "name": "Sim ATS Push",
+        "type": "NFL_PICKEM",
+        "settings": {
+            "entryFee": 0,
+            "lockMode": "PER_GAME",
+            "payoutMode": "SEASON",
+            "pickMode": "ATS",
+            "confidenceMode": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 20, "awayScore": 17, "spread": -3 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 28, "awayScore": 20, "spread": -7 }
+    ],
+    "scoreWeeks": [1],
+    "testEntries": [
+        { "userName": "Alice", "pickemPicks": { "1": { "g1": "KC", "g2": "SF" } } },
+        { "userName": "Bob", "pickemPicks": { "1": { "g1": "BUF", "g2": "DAL" } } }
+    ],
+    "assertions": [
+        { "type": "nflEntryCount", "expected": 2, "message": "2 entries" },
+        { "type": "gradedPick", "userName": "Alice", "week": 1, "gameKey": "g1", "expected": "PUSH", "message": "Alice g1 (KC -3, won by 3) = PUSH" },
+        { "type": "gradedPick", "userName": "Bob", "week": 1, "gameKey": "g1", "expected": "PUSH", "message": "Bob g1 (BUF +3, lost by 3) = PUSH — push is side-independent" },
+        { "type": "gradedPick", "userName": "Alice", "week": 1, "gameKey": "g2", "expected": "W", "message": "Alice g2 (SF -7, won by 8) covers = W" },
+        { "type": "gradedPick", "userName": "Bob", "week": 1, "gameKey": "g2", "expected": "L", "message": "Bob g2 (DAL +7, lost by 8) = L" },
+        { "type": "nflWeeklyPoints", "userName": "Alice", "week": 1, "expected": 1, "message": "Alice week 1 = 1 (push earns 0)" },
+        { "type": "nflWeeklyPoints", "userName": "Bob", "week": 1, "expected": 0, "message": "Bob week 1 = 0" },
+        { "type": "standingsRow", "userName": "Alice", "expected": { "totalScore": 1, "weeklyResults": { "1": { "correct": 1, "total": 2, "points": 1, "mode": "ATS" } } }, "message": "Standings: push excluded from correct, included in total picked" }
+    ]
+}

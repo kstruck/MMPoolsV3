@@ -12,8 +12,10 @@
 //     the spread => PUSH (0), else L. CANCELLED games grade VOID (0, excluded
 //     from totals).
 //   Survivor (sudden-death defaults): a week's pick must WIN or the entry takes
-//     a strike; strikes > maxStrikes => ELIMINATED at that week. Ties survive
-//     (no loss). pickLosersMode inverts the win condition.
+//     a strike; strikes > maxStrikes => ELIMINATED at that week. A TIE is a
+//     strike in BOTH modes (docs/NFL_POOLS_README.md: "loses/ties" strikes in
+//     standard mode, "wins or ties" strikes in pick-loser mode).
+//     pickLosersMode inverts the win condition.
 //   Margin: weekly score = picked team's signed victory margin; season total
 //     accumulates. Tie game = 0.
 // Edge semantics beyond these (auto-survive exemptions, rebuys, dual-MNF) are
@@ -104,8 +106,12 @@ export function expectSurvivor(
       const game = season.games.find(g => g.week === week && (g.home === pick || g.away === pick));
       if (!game) continue; // pick not playing — the ENGINE rejects this pre-write; oracle skips
       const w = winnerOf(game);
-      if (w === null) continue; // tie: survive
-      const survived = opts.pickLosersMode ? w !== pick : w === pick;
+      // Tie = strike in BOTH modes (product rule; the engine's
+      // evaluateSurvivorWeek has always done this). The oracle's original
+      // "ties survive" reading contradicted docs/NFL_POOLS_README.md and was
+      // caught by the Phase 4 tie-game edge fixture — fixed to the documented
+      // rule, NOT synced to the engine blindly.
+      const survived = w !== null && (opts.pickLosersMode ? w !== pick : w === pick);
       if (!survived) {
         strikes++;
         if (strikes > maxStrikes) eliminatedWeek = week;

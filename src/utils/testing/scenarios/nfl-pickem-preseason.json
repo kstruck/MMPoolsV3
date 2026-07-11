@@ -1,0 +1,34 @@
+{
+    "id": "nfl-pickem-preseason",
+    "name": "Pick'em Preseason seasonType=1 (edge)",
+    "description": "Preseason pool (seasonType 1): games seed and score through the seasonType-filtered query path end to end. Expectations hand-verified.",
+    "poolType": "NFL_PICKEM",
+    "poolConfig": {
+        "name": "Sim Preseason",
+        "type": "NFL_PICKEM",
+        "seasonType": 1,
+        "settings": {
+            "entryFee": 0,
+            "lockMode": "PER_GAME",
+            "payoutMode": "SEASON",
+            "pickMode": "STRAIGHT",
+            "confidenceMode": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 14, "awayScore": 10 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 21, "awayScore": 3 }
+    ],
+    "scoreWeeks": [1],
+    "testEntries": [
+        { "userName": "Alice", "pickemPicks": { "1": { "g1": "KC", "g2": "SF" } } },
+        { "userName": "Bob", "pickemPicks": { "1": { "g1": "BUF", "g2": "DAL" } } }
+    ],
+    "assertions": [
+        { "type": "nflEntryCount", "expected": 2, "message": "2 entries" },
+        { "type": "nflWeeklyPoints", "userName": "Alice", "week": 1, "expected": 2, "message": "Alice week 1 = 2 (preseason games scored)" },
+        { "type": "nflTotalScore", "userName": "Bob", "expected": 0, "message": "Bob total = 0" },
+        { "type": "recapExists", "week": 1, "expected": true, "message": "Preseason recap generated" }
+    ]
+}

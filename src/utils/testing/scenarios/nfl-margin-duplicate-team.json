@@ -1,0 +1,37 @@
+{
+    "id": "nfl-margin-duplicate-team",
+    "name": "Margin Duplicate Team Rejected (real path)",
+    "description": "REAL submit path: margin pools enforce one-team-once-per-season exactly like survivor — re-picking a used team is rejected TEAM_ALREADY_USED; a fresh team is accepted. alice: KC +3 wk1, SF +3 wk2 = 6. Expectations hand-verified.",
+    "poolType": "NFL_MARGIN",
+    "poolConfig": {
+        "name": "Sim Margin Dup Team",
+        "type": "NFL_MARGIN",
+        "settings": {
+            "entryFee": 0,
+            "payoutMode": "SEASON",
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 0, "awayScore": 0, "status": "SCHEDULED", "startOffsetMs": 7200000 },
+        { "week": 2, "home": "SF", "away": "KC", "homeScore": 0, "awayScore": 0, "status": "SCHEDULED", "startOffsetMs": 10800000 }
+    ],
+    "lifecycleOps": [
+        { "op": "join", "userNames": ["alice"] },
+        { "op": "submit", "userName": "alice", "week": 1, "team": "KC" },
+        { "op": "submit", "userName": "alice", "week": 2, "team": "KC", "expectError": "TEAM_ALREADY_USED" },
+        { "op": "submit", "userName": "alice", "week": 2, "team": "SF" },
+        { "op": "reseedGames", "games": [
+            { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24, "status": "FINAL", "startOffsetMs": -14400000 },
+            { "week": 2, "home": "SF", "away": "KC", "homeScore": 20, "awayScore": 17, "status": "FINAL", "startOffsetMs": -14400000 }
+        ] },
+        { "op": "score", "week": 1 },
+        { "op": "score", "week": 2 }
+    ],
+    "assertions": [
+        { "type": "nflEntryCount", "expected": 1, "message": "1 real-path entry" },
+        { "type": "submitRejected", "userName": "alice", "week": 2, "expected": "TEAM_ALREADY_USED", "message": "Re-picking KC rejected — one team once per season, margin pools included" },
+        { "type": "marginSeasonTotal", "userName": "alice", "expected": 6, "message": "alice = 6 (KC +3 wk1, SF +3 wk2; the rejected KC re-pick never landed)" },
+        { "type": "standingsRow", "userName": "alice", "expected": { "seasonTotal": 6, "positiveWeeks": 2, "negativeBurden": 0 }, "message": "Both accepted picks won; no burden" }
+    ]
+}

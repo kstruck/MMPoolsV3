@@ -1,0 +1,34 @@
+{
+    "id": "nfl-margin-season-tiebreak",
+    "name": "Margin Season Tiebreak Cascade (edge)",
+    "description": "Equal season totals (6 = 6) resolved by the 5-level cascade: Bob wins on LOWER negative burden (0 vs 4). Expectations hand-verified.",
+    "poolType": "NFL_MARGIN",
+    "poolConfig": {
+        "name": "Sim Margin Tiebreak",
+        "type": "NFL_MARGIN",
+        "settings": {
+            "entryFee": 0,
+            "payoutMode": "SEASON",
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "SEA", "away": "PIT", "homeScore": 30, "awayScore": 20 },
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 2, "home": "GB", "away": "MIN", "homeScore": 20, "awayScore": 24 },
+        { "week": 2, "home": "PHI", "away": "MIA", "homeScore": 24, "awayScore": 21 }
+    ],
+    "scoreWeeks": [1, 2],
+    "testEntries": [
+        { "userName": "Alice", "marginPicks": { "1": "SEA", "2": "GB" } },
+        { "userName": "Bob", "marginPicks": { "1": "KC", "2": "PHI" } }
+    ],
+    "assertions": [
+        { "type": "marginSeasonTotal", "userName": "Alice", "expected": 6, "message": "Alice = 6 (+10 SEA, -4 GB)" },
+        { "type": "marginSeasonTotal", "userName": "Bob", "expected": 6, "message": "Bob = 6 (+3 KC, +3 PHI)" },
+        { "type": "marginRank", "userName": "Bob", "expected": 1, "message": "Tiebreak level 2: Bob's negative burden 0 beats Alice's 4" },
+        { "type": "marginRank", "userName": "Alice", "expected": 2, "message": "Alice ranks 2nd despite the equal total" },
+        { "type": "standingsRow", "userName": "Alice", "expected": { "seasonTotal": 6, "negativeBurden": 4, "positiveWeeks": 1, "bestWeek": 10 }, "message": "Alice's cascade inputs" },
+        { "type": "standingsRow", "userName": "Bob", "expected": { "seasonTotal": 6, "negativeBurden": 0, "positiveWeeks": 2, "bestWeek": 3 }, "message": "Bob's cascade inputs" }
+    ]
+}

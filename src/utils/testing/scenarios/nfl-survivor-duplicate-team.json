@@ -1,0 +1,42 @@
+{
+    "id": "nfl-survivor-duplicate-team",
+    "name": "Survivor Duplicate Team Rejected (real path)",
+    "description": "REAL submit path: re-picking a used team is rejected TEAM_ALREADY_USED; a fresh team is accepted. KC wins wk1, SF beats KC wk2 — alice survives both. Expectations hand-verified.",
+    "poolType": "NFL_SURVIVOR",
+    "poolConfig": {
+        "name": "Sim Survivor Dup Team",
+        "type": "NFL_SURVIVOR",
+        "settings": {
+            "entryFee": 0,
+            "maxStrikes": 0,
+            "maxRebuys": 0,
+            "rebuyDeadlineWeek": 0,
+            "rebuyCost": 0,
+            "pickLosersMode": false,
+            "autoSurviveExemptionEnabled": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 0, "awayScore": 0, "status": "SCHEDULED", "startOffsetMs": 7200000 },
+        { "week": 2, "home": "SF", "away": "KC", "homeScore": 0, "awayScore": 0, "status": "SCHEDULED", "startOffsetMs": 10800000 }
+    ],
+    "lifecycleOps": [
+        { "op": "join", "userNames": ["alice"] },
+        { "op": "submit", "userName": "alice", "week": 1, "team": "KC" },
+        { "op": "submit", "userName": "alice", "week": 2, "team": "KC", "expectError": "TEAM_ALREADY_USED" },
+        { "op": "submit", "userName": "alice", "week": 2, "team": "SF" },
+        { "op": "reseedGames", "games": [
+            { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24, "status": "FINAL", "startOffsetMs": -14400000 },
+            { "week": 2, "home": "SF", "away": "KC", "homeScore": 20, "awayScore": 17, "status": "FINAL", "startOffsetMs": -14400000 }
+        ] },
+        { "op": "score", "week": 1 },
+        { "op": "score", "week": 2 }
+    ],
+    "assertions": [
+        { "type": "nflEntryCount", "expected": 1, "message": "1 real-path entry" },
+        { "type": "submitRejected", "userName": "alice", "week": 2, "expected": "TEAM_ALREADY_USED", "message": "Re-picking KC rejected TEAM_ALREADY_USED" },
+        { "type": "survivorStatus", "userName": "alice", "expected": "ALIVE", "message": "alice survives both weeks (KC wk1, SF wk2)" },
+        { "type": "survivorStrikes", "userName": "alice", "expected": 0, "message": "alice strikes = 0" }
+    ]
+}

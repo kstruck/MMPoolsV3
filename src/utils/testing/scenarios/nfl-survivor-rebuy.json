@@ -1,0 +1,38 @@
+{
+    "id": "nfl-survivor-rebuy",
+    "name": "Survivor Rebuy Flow (real path)",
+    "description": "REAL paths end to end: pre-lock submit, elimination by the real scorer, then simExecuteRebuy — strikes reset, ALIVE again, rebuysUsed=1. Week 1 is then RESCORED: the absorption rule (weeks <= lastRebuyWeek never re-strike) keeps carol ALIVE and refreshes the standings projection, which only rebuilds on scoring passes. Expectations hand-verified.",
+    "poolType": "NFL_SURVIVOR",
+    "poolConfig": {
+        "name": "Sim Survivor Rebuy",
+        "type": "NFL_SURVIVOR",
+        "settings": {
+            "entryFee": 20,
+            "maxStrikes": 0,
+            "maxRebuys": 1,
+            "rebuyDeadlineWeek": 3,
+            "rebuyCost": 20,
+            "pickLosersMode": false,
+            "autoSurviveExemptionEnabled": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 0, "awayScore": 0, "status": "SCHEDULED", "startOffsetMs": 7200000 }
+    ],
+    "lifecycleOps": [
+        { "op": "join", "userNames": ["carol"] },
+        { "op": "submit", "userName": "carol", "week": 1, "team": "BUF" },
+        { "op": "reseedGames", "games": [
+            { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 10, "status": "FINAL", "startOffsetMs": -14400000 }
+        ] },
+        { "op": "score", "week": 1 },
+        { "op": "rebuy", "userName": "carol", "week": 2 },
+        { "op": "score", "week": 1 }
+    ],
+    "assertions": [
+        { "type": "survivorStatus", "userName": "carol", "expected": "ALIVE", "message": "carol ALIVE again after the rebuy" },
+        { "type": "survivorStrikes", "userName": "carol", "expected": 0, "message": "Rebuy resets strikes to 0" },
+        { "type": "standingsRow", "userName": "carol", "expected": { "status": "ALIVE", "rebuysUsed": 1, "eliminatedWeek": null }, "message": "rebuysUsed=1, elimination cleared" }
+    ]
+}
