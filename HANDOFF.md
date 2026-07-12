@@ -34,16 +34,18 @@ SUPER_ADMIN sessions.
 
 ## Next-effort menu (pick one to start a session)
 
-1. **Security/Observability plan — Phase 1 wave 1 MERGED (PR #164, 2026-07-11 night); NOT YET DEPLOYED.**
+1. **Security/Observability plan — Phase 1 wave 1 MERGED + DEPLOYED (PR #164, 2026-07-11 night).**
    **16/41 TARGET-NOW callable retrofits merged to main** (validated() wrapper:
    auth → App Check monitor → role claim+doc → strict zod). qodo cycle complete:
    2 findings, both VALID (unbounded squareIds / picks caps), fixed in 72fb184.
    Gates at merge: tsc clean, functions unit 486, emulator 84+matrix, CI 6/6.
    Worktree + branch deleted (fresh branch per wave, like the sim-harness PRs).
-   **DEPLOY PENDING**: the 16 wrapped callables are merged but the functions
-   fleet has NOT been redeployed — behavior in prod is unchanged until
-   `npx firebase deploy --only functions --project gridiron-gamble-uzuqo`
-   (functions-first; no rules changes in this wave). Kevin supervises deploys.
+   DEPLOYED 2026-07-11 night (Kevin): functions fleet + Coolify frontend.
+   All 16 wrapped callables verified present via functions:list; post-deploy
+   log sweep clean (no invalid-argument/permission-denied rejections). App
+   Check still monitor-mode fleet-wide — flip to enforce per endpoint later
+   (PLAN #5). Watch logs for schema rejections of legit traffic over the
+   next day; the schemas pin exact dbService payloads so none are expected.
    NEXT WAVE (25 TARGET-NOW remain — see PLAN-SECURITY-OBSERVABILITY-SWEEPS.md
    Sweep 1): managePlayoffEntry, setPaidStatus, createPool/createNFLPool
    (PERMISSIVE), updatePoolSettings, submitNFLPicks/submitPlayoffPicks,
