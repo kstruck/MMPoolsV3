@@ -34,10 +34,23 @@ SUPER_ADMIN sessions.
 
 ## Next-effort menu (pick one to start a session)
 
-1. **Security/Observability plan — resume (sim work is done).**
+1. **Security/Observability plan — IN PROGRESS (resumed 2026-07-11 night).**
    Branch `feat/security-observability-phase1` (worktree `.claude/worktrees/security-observability`),
-   2/41 TARGET-NOW callable retrofits done, 39 remain. FIRST STEP ON RESUME: merge main
-   into the branch (now ~30+ behind, overlapping callable files). Plan: PLAN-SECURITY-OBSERVABILITY.md.
+   **16/41 TARGET-NOW callable retrofits done, 25 remain.** Main WAS merged in
+   (abb446e, clean; post-clobber gates all green: tsc, unit 485, emulator 84+matrix).
+   Done so far: confirmPayment, adminManageCoupon (exemplars) + adminSaveBillingConfig,
+   adminUpdatePoolBilling, adminAdjustUserCredits + setUserRole, setSuperAdminClaim
+   (assertCallerRole moved to lib/assertRole.ts, re-exported) + adminGrantEntitlement,
+   adminRevokeEntitlement + createCouponTemplate, updateCouponTemplate,
+   mintCouponFromTemplate + updateTournamentData, updateGlobalPlayoffResults (C5
+   claim+doc upgrades) + sendPoolInvites, submitBracketEntry (C7). Schemas live in
+   functions/src/schemas/* with per-schema unit tests pinning real client payloads.
+   Branch is LOCAL-ONLY (not pushed, no PR) — push + PR + qodo cycle before deploy.
+   Remaining wave-1 targets (sweep matrix): managePlayoffEntry, setPaidStatus,
+   createPool/createNFLPool (PERMISSIVE), updatePoolSettings, updateEntryPayment-family
+   siblings, sendManualReminder, submitNFLPicks/submitPlayoffPicks etc. — see
+   PLAN-SECURITY-OBSERVABILITY-SWEEPS.md Sweep 1 for the full TARGET-NOW list.
+   Plan: PLAN-SECURITY-OBSERVABILITY.md.
    Note from Phase 5: the general pools `allow update: isSuperAdmin()` rule + playoff/props
    pool-doc/propCards raw writes were deliberately left for THIS plan's write-path sweep.
 2. **Player Profiles follow-ups** — flip `profileBackfill`/`nflFinalize` dry-runs after
