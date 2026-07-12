@@ -1,28 +1,30 @@
-# HANDOFF — Session entry point (updated 2026-07-10, post sim-harness ship)
+# HANDOFF — Session entry point (updated 2026-07-11, post Phase 4+5 ship)
 
 **Start every new session with: "Review HANDOFF.md and pick up where we left off."**
 This file + auto-memory carry the full state. Older narrative lives in git history.
 
 ---
 
-## Current state: NOTHING IN FLIGHT — all efforts shipped and prod-verified
+## Current state: NOTHING IN FLIGHT — sim harness COMPLETE (all phases), deployed, prod-verified
 
-**NFL Sim Harness (PLAN-NFL-SIM-HARNESS.md) — SHIPPED 2026-07-10.**
-Phases 0/1/2/3/4-core/6 built, Codex-approved plan (4 rounds), merged via PR #156,
-hardened through a qodo.ai review cycle (PRs #157/#158/#159 — 6/6 findings valid, all
-merged + deployed). Prod-verified twice by Kevin: all 3 NFL Test Suite scenarios green,
-sweep dry-run clean (`{stranded:0, skippedActive:0}`), all `simRuns` manifests CLEANED,
-zero residue. The build's first golden run also **found + fixed a real prod bug**
-(`submitNFLPicks` wrote `confidence: undefined` — every non-confidence pick'em
-submission would have failed INTERNAL on opening day).
-
-Everything earlier (Player Profiles PR #153, Expert Picks ingestion, live consensus,
-ticker speed, Member Roster backfill, Option-A/Coolify-to-main cleanup) also shipped —
-see memory + git history.
+**NFL Sim Harness (PLAN-NFL-SIM-HARNESS.md) — ALL PHASES SHIPPED.**
+Core (0/1/2/3/4-core/6) 2026-07-10 via PR #156 + qodo PRs #157-159. **Phase 4
+(matrix, items 25-27) + Phase 5 (legacy migration + rules-backdoor removal, items
+28-30) shipped 2026-07-11 via PRs #161/#162**, expectations human-verified
+(PHASE4-EXPECTATIONS.md, signed-margin rule confirmed), qodo cycle absorbed (3
+findings: 4 surviving raw entry writes migrated onto new `updateEntryPayment`/
+`adminUpdateEntryOverrides`/`adminDeleteEntry` callables; slug fix; audit-comment
+honesty). Functions (7 new) + **firestore.rules (both backdoors DROPPED)** +
+Coolify deployed 2026-07-11 evening, functions-first. **Prod smoke: 45/45 NFL
+scenarios + squares/playoff/props/bracket-E2E + Tournament Simulator + Fill Grid
+all green through the migrated guarded-callable path.** 45-fixture matrix runs in
+emulator CI; `simRuns` manifests carry per-assertion run history (`simReportRun`).
+No client can raw-create pool docs or raw-write entries anymore — including
+SUPER_ADMIN sessions.
 
 ## ⚡ Kevin's pending 5-minute item
 
-**Arm the finalize sweep** (safe now — Phase 0 closed the sim-pool hazard):
+**Arm the finalize sweep** (safe — deployed stack has all guards):
 1. Firestore console → `system` collection → `config` doc.
 2. Add field `nflFinalize`, type **map**, containing `enabled` (boolean) = `true` and
    `dryRun` (boolean) = `true`.
@@ -32,23 +34,21 @@ see memory + git history.
 
 ## Next-effort menu (pick one to start a session)
 
-1. **Sim Harness Phase 5** — legacy simulator migration (squares SimulationDashboard +
-   tournament utils off raw client writes onto guarded callables) + drop the two
-   `firestore.rules` backdoors (`slug matches '^sim-.*'` create; `isSuperAdmin()` raw
-   entry writes). SUPERVISED session — rules changes. Plan section: PLAN-NFL-SIM-HARNESS.md
-   Phase 5 (items 28-30).
-2. **Sim Harness Phase 4 edge fixtures** — ~2 dozen hand-authored edge scenarios (tie
-   games, exact-spread ATS pushes, missed-pick weeks, dual-MNF tiebreakers,
-   pickLosers/autoSurvive, cancelled-game VOIDs, rebuy JSON flows, buy-flow stamps).
-   Claude generates each fixture + computed expectations; **Kevin sanity-checks the
-   expected values** (the plan's oracle-honesty rule). Plan items 25-27.
-3. **Security/Observability plan — ON HOLD, resume when sim work satisfies Kevin.**
+1. **Security/Observability plan — resume (sim work is done).**
    Branch `feat/security-observability-phase1` (worktree `.claude/worktrees/security-observability`),
    2/41 TARGET-NOW callable retrofits done, 39 remain. FIRST STEP ON RESUME: merge main
-   into the branch (13+ behind, overlapping callable files). Plan: PLAN-SECURITY-OBSERVABILITY.md.
-4. **Player Profiles follow-ups** — flip `profileBackfill`/`nflFinalize` dry-runs after
+   into the branch (now ~30+ behind, overlapping callable files). Plan: PLAN-SECURITY-OBSERVABILITY.md.
+   Note from Phase 5: the general pools `allow update: isSuperAdmin()` rule + playoff/props
+   pool-doc/propCards raw writes were deliberately left for THIS plan's write-path sweep.
+2. **Player Profiles follow-ups** — flip `profileBackfill`/`nflFinalize` dry-runs after
    reports look right; Achievements engine requirements (Kevin gathering); Expert Picks
    UI surface (`nfl_games/{id}.expertPredictions` is ingesting, nothing displays it yet).
+3. **Small follow-ups parked from Phase 4/5:** settingsMatrix test uses wrong key
+   `autoSurviveExemption` (engine reads `autoSurviveExemptionEnabled`; inert, 1-line);
+   `profileField` assertion implemented but unwired (needs a `simRecomputeProfile`
+   callable if a browser golden ever wants profile asserts); optional margin/survivor
+   "season teams strip" UI (all 32 teams, used ones crossed out — pick sheets already
+   gray out used teams per game).
 
 ## Key documents
 
