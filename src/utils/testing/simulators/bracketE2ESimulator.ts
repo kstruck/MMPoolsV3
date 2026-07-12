@@ -8,7 +8,12 @@
  * This is the "nuclear option" test — if it passes, the bracket pool is production-ready.
  */
 
-import { getFirestore, collection, addDoc, getDocs, setDoc, doc, updateDoc } from 'firebase/firestore';
+// PLAN-NFL-SIM-HARNESS Phase 5: ZERO raw Firestore writes — pool created via the
+// real createPool callable with a simRunId trust anchor; entries + score patches
+// via simWriteEntries; the tournament doc via simSetTournament; pool patches via
+// simUpdatePool.
+import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { dbService } from '../../../services/dbService';
 import type { BracketPool, BracketEntry } from '../../../types';
 import { calculateScore } from '../../../components/BracketPoolDashboard/bracketScoring';
@@ -89,17 +94,22 @@ export async function runE2EBracketSimulation(config: {
 
     // Use getFirestore() inline to match the working bracketSimulator pattern
     const db = getFirestore();
+    const functions = getFunctions();
+    const runId = `run-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
 
     const addStep = (label: string, status: E2EStep['status'], detail: string, round?: number, data?: Record<string, unknown>) => {
         steps.push({ label, status, detail, round, data });
     };
 
     try {
+        // Open the run manifest FIRST — a run that dies mid-flight stays
+        // discoverable by the stranded-run sweep (Phase 0.7).
+        await httpsCallable(functions, 'simStartRun')({ runId, scenarioId: 'bracket-e2e' });
         // ═══════════════════════════════════════════════════════════════
         // STEP 1: CREATE BRACKET POOL
         // ═══════════════════════════════════════════════════════════════
         const now = Date.now();
-        const poolData: Partial<BracketPool> & { type: 'BRACKET'; costPerSquare: number; maxSquaresPerPlayer: number } = {
+        const poolData: Partial<BracketPool> & { type: 'BRACKET'; costPerSquare: number; maxSquaresPerPlayer: number; simRunId: string } = {
             name: `E2E Full Tournament Test (${scoringSystem})`,
             type: 'BRACKET',
             slug: `e2e-bracket-test-${now}`,
@@ -133,6 +143,8 @@ export async function runE2EBracketSimulation(config: {
             // Required shims for createPool validation
             costPerSquare: 0,
             maxSquaresPerPlayer: 0,
+            // Sim harness trust anchor (stamped server-side, SUPER_ADMIN only).
+            simRunId: runId,
         };
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -144,9 +156,9 @@ export async function runE2EBracketSimulation(config: {
         // ═══════════════════════════════════════════════════════════════
         let tournament = generateTournament2025();
 
-        // SuperAdmin can write tournaments (Firestore rules allow this)
+        // Tournament doc = shared test infra — SUPER_ADMIN-audited callable (Phase 5).
         try {
-            await setDoc(doc(db, 'tournaments', 'mens-2025'), tournament);
+            await httpsCallable(functions, 'simSetTournament')({ tournamentId: 'mens-2025', tournament });
             addStep('Create Tournament', 'success', `Tournament created: ${TOTAL_GAMES} games across 6 rounds (all SCHEDULED)`);
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
@@ -164,15 +176,14 @@ export async function runE2EBracketSimulation(config: {
 
         addStep('Generate Entries', 'success', `Generated ${allEntries.length} entries (${entryCount} random + ${controlEntries.length} control + ${includePerfectBracket ? 1 : 0} perfect)`);
 
-        const entriesCollection = collection(db, 'pools', poolId, 'entries');
+        // Guarded harness write: run-scoped ownerUids, ONE call for all entries
+        // (simWriteEntries forces docId = ownerUid; unique names => unique uids).
         let submittedCount = 0;
-        let entryErrors = 0;
-
-        for (const entry of allEntries) {
-            try {
-                const entryData: Partial<BracketEntry> = {
+        try {
+            const entryDocs = allEntries.map(entry => {
+                const entryData: Partial<BracketEntry> & { ownerUid: string } = {
                     poolId,
-                    ownerUid: `test-user-${entry.userName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+                    ownerUid: `sim-${runId}-${entry.userName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
                     name: `${entry.userName}'s Bracket`,
                     picks: entry.picks,
                     tieBreakerPrediction: entry.tiebreakerPrediction,
@@ -182,31 +193,27 @@ export async function runE2EBracketSimulation(config: {
                     createdAt: Date.now(),
                     updatedAt: Date.now(),
                 };
-                await addDoc(entriesCollection, entryData);
-                submittedCount++;
-            } catch (e: unknown) {
-                entryErrors++;
-                const errMsg = e instanceof Error ? e.message : String(e);
-                logger.error(`[E2E] Entry creation failed for ${entry.userName}:`, errMsg);
-                // Only log first 3 errors to avoid spam
-                if (entryErrors <= 3) {
-                    addStep('Entry Error', 'failed', `Failed to create entry for ${entry.userName}: ${errMsg}`);
+                for (const key of Object.keys(entryData) as (keyof typeof entryData)[]) {
+                    if (entryData[key] === undefined) delete entryData[key];
                 }
-            }
-        }
-
-        if (entryErrors > 3) {
-            addStep('Entry Errors', 'failed', `${entryErrors} total entry creation failures (showing first 3)`);
+                return entryData;
+            });
+            await httpsCallable(functions, 'simWriteEntries')({ poolId, runId, entries: entryDocs });
+            submittedCount = entryDocs.length;
+        } catch (e: unknown) {
+            const errMsg = e instanceof Error ? e.message : String(e);
+            logger.error('[E2E] Entry creation failed:', errMsg);
+            addStep('Entry Error', 'failed', `Failed to create entries: ${errMsg}`);
         }
 
         addStep('Submit Entries', submittedCount > 0 ? 'success' : 'failed',
             `Submitted ${submittedCount}/${allEntries.length} entries to pool ${poolId}`);
 
-        // Update entry count on pool
+        // Update entry count on pool (guarded harness patch)
         try {
-            await updateDoc(doc(db, 'pools', poolId), {
-                entryCount: submittedCount,
-                participantCount: submittedCount,
+            await httpsCallable(functions, 'simUpdatePool')({
+                poolId, runId,
+                patch: { entryCount: submittedCount, participantCount: submittedCount },
             });
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
@@ -229,9 +236,9 @@ export async function runE2EBracketSimulation(config: {
             // 4a. Reveal round results
             tournament = revealRound(tournament, round);
 
-            // Update tournament in Firestore
+            // Update tournament in Firestore (guarded callable)
             try {
-                await setDoc(doc(db, 'tournaments', 'mens-2025'), tournament);
+                await httpsCallable(functions, 'simSetTournament')({ tournamentId: 'mens-2025', tournament });
             } catch (e: unknown) {
                 const errMsg = e instanceof Error ? e.message : String(e);
                 logger.error(`[E2E] Round ${round} tournament update failed:`, errMsg);
@@ -241,9 +248,11 @@ export async function runE2EBracketSimulation(config: {
 
             addStep(`Round ${round} Reveal`, 'success', `${roundLabel}: Revealed ${gamesInRound} game results`, round);
 
-            // 4b. Recalculate ALL entry scores
+            // 4b. Recalculate ALL entry scores — locally, then ONE guarded
+            // harness patch per round (simWriteEntries merges by ownerUid).
             const entriesSnap = await getDocs(collection(db, 'pools', poolId, 'entries'));
             const leaderboard: RoundCheckpoint['leaderboard'] = [];
+            const scorePatches: Array<Record<string, unknown>> = [];
 
             for (const entryDoc of entriesSnap.docs) {
                 const entry = entryDoc.data() as BracketEntry;
@@ -258,14 +267,11 @@ export async function runE2EBracketSimulation(config: {
                     logger.log(`[E2E DEBUG] PerfectBracket roundBreakdown:`, JSON.stringify(scoringResult.roundBreakdown));
                 }
 
-                try {
-                    await updateDoc(entryDoc.ref, {
-                        score: scoringResult.score,
-                        maxPossibleScore: scoringResult.maxPossibleScore,
-                    });
-                } catch {
-                    // Continue even if one update fails
-                }
+                scorePatches.push({
+                    ownerUid: entry.ownerUid,
+                    score: scoringResult.score,
+                    maxPossibleScore: scoringResult.maxPossibleScore,
+                });
 
                 leaderboard.push({
                     rank: 0, // will be set after sorting
@@ -274,6 +280,14 @@ export async function runE2EBracketSimulation(config: {
                     maxPossible: scoringResult.maxPossibleScore,
                     correctPicks: scoringResult.correctPicks,
                 });
+            }
+
+            if (scorePatches.length > 0) {
+                try {
+                    await httpsCallable(functions, 'simWriteEntries')({ poolId, runId, entries: scorePatches });
+                } catch {
+                    // Continue even if the patch fails — leaderboard uses local scores
+                }
             }
 
             // Sort and assign ranks
@@ -331,7 +345,7 @@ export async function runE2EBracketSimulation(config: {
         // STEP 5: MARK POOL COMPLETED
         // ═══════════════════════════════════════════════════════════════
         try {
-            await updateDoc(doc(db, 'pools', poolId), { status: 'COMPLETED' });
+            await httpsCallable(functions, 'simUpdatePool')({ poolId, runId, patch: { status: 'COMPLETED' } });
             addStep('Complete Pool', 'success', 'Pool status updated to COMPLETED');
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);

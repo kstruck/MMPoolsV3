@@ -21,7 +21,7 @@ export { onUserCreated as createParticipantProfile, createClaimCode, claimMySqua
 export { createPool, updatePoolSettings, recalculatePoolWinners, toggleWinnerPaid, fixParticipantIds } from "./poolOps";
 export { backfillPools } from "./backfill";
 export { createBracketPool, publishBracketPool, joinBracketPool } from "./bracketPools";
-export { createBracketEntry, updateBracketEntry, submitBracketEntry, deleteBracketEntry } from "./bracketEntries";
+export { createBracketEntry, updateBracketEntry, submitBracketEntry, deleteBracketEntry, updateEntryPayment, adminUpdateEntryOverrides, adminDeleteEntry } from "./bracketEntries";
 export { markEntryPaidStatus, updateTournamentData } from "./bracketOps";
 export { adminInitTournament, syncBracketTournament, scheduledBracketSync, importTournamentFromESPN, importConferenceTournamentFromESPN } from "./espnBracket";
 export { onGameComplete } from "./postGameEmail";
@@ -53,6 +53,9 @@ export { sendManualReminder } from "./manualReminders";
 // Sim harness (PLAN-TEST-SUITE 8e/8f): SUPER_ADMIN-only, simRunId-scoped Test
 // Suite mutations + cleanup. See functions/src/simHarness.ts.
 export { simStartRun, simWriteEntries, simUpdatePool, simSeedNFLGames, cleanupSimPool, sweepSimRuns, simJoinMembers, simSubmitPicks, simExecuteRebuy, simFinalizePool, simReportRun } from "./simHarness";
+// Legacy-simulator migration (PLAN-NFL-SIM-HARNESS Phase 5): tournament test
+// infra + squares grid fill off raw client writes. See functions/src/simLegacy.ts.
+export { simSetTournament, simDeleteTournament, simFillSquares } from "./simLegacy";
 
 // --- BILLING & MONETIZATION ---
 export { enforceBillingStatus, validateBillingAccess, redeemCoupon, onPoolParticipantChange, getPoolQuote } from "./billing";

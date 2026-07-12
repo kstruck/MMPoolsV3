@@ -1,11 +1,20 @@
 // BRACKET Pool Test Simulator
-// Creates a bracket pool, adds test entries with picks, scores them, and verifies results
+// Creates a bracket pool, adds test entries with picks, scores them, and verifies results.
+// PLAN-NFL-SIM-HARNESS Phase 5: ZERO raw Firestore writes — the pool is created via
+// the real createPool callable with a simRunId trust anchor, entries and score
+// patches go through simWriteEntries, the tournament doc through simSetTournament,
+// and pool patches through simUpdatePool.
 
-import { getFirestore, doc, collection, getDocs, updateDoc, setDoc, addDoc } from 'firebase/firestore';
+import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { dbService } from '../../../services/dbService';
 import type { BracketEntry, Tournament, Game, TournamentSlot, BracketPool } from '../../../types';
 import { calculateScore } from '../../../components/BracketPoolDashboard/bracketScoring';
 import { logger } from '../../logger';
+
+function newRunId(): string {
+    return `run-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+}
 
 export interface BracketTestResult {
     poolId: string;
@@ -62,6 +71,12 @@ export async function runScenario(
 
     try {
         const db = getFirestore();
+        const functions = getFunctions();
+        const runId = newRunId();
+
+        // === 0. OPEN THE RUN MANIFEST (Phase 0.7: even a run that dies on its
+        // next step is discoverable by the stranded-run sweep) ===
+        await httpsCallable(functions, 'simStartRun')({ runId, scenarioId: 'bracket-simulator' });
 
         // === A. CREATE BRACKET POOL via Cloud Function ===
         const poolName = settings?.name || `Bracket Test - ${new Date().toISOString().slice(11, 23)}`;
@@ -70,7 +85,7 @@ export async function runScenario(
         const now = Date.now();
         const poolSettings = scenarioData.poolConfig || {}; // Get pool settings from scenario
 
-        const poolData: Partial<BracketPool> & { type: 'BRACKET'; costPerSquare: number; maxSquaresPerPlayer: number } = {
+        const poolData: Partial<BracketPool> & { type: 'BRACKET'; costPerSquare: number; maxSquaresPerPlayer: number; simRunId: string } = {
             type: 'BRACKET',
             name: poolName,
             slug: `test-bracket-${now}`,
@@ -96,6 +111,9 @@ export async function runScenario(
             costPerSquare: 0,
             maxSquaresPerPlayer: 0,
             managerUid: 'test-admin', // Shim for Partial<BracketPool>
+            // Sim harness trust anchor — stamped server-side for SUPER_ADMIN
+            // callers only; arms simWriteEntries/simUpdatePool for this pool.
+            simRunId: runId,
         };
 
         // Use Cloud Function via dbService
@@ -143,9 +161,10 @@ export async function runScenario(
             slots: mockSlots
         };
 
-        // SuperAdmin can write tournaments (Firestore rules allow this)
+        // Tournament doc = shared test infrastructure — written via the
+        // SUPER_ADMIN-audited callable (Phase 5), never a raw client write.
         try {
-            await setDoc(doc(db, 'tournaments', tournamentId), tournamentData);
+            await httpsCallable(functions, 'simSetTournament')({ tournamentId, tournament: tournamentData });
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
             addStep('Tournament Warning', 'skipped', `Could not create tournament: ${errMsg}`);
@@ -163,13 +182,13 @@ export async function runScenario(
         if (testEntries.length > 0) {
             addStep('Add Entries', 'success', `Adding ${testEntries.length} test bracket entries...`);
 
-            const entriesCollection = collection(db, 'pools', poolId, 'entries');
-
-            for (const entry of testEntries) {
-                try {
-                    const entryData: Partial<BracketEntry> = {
+            // Guarded harness write: run-scoped ownerUids, entry docId forced to
+            // ownerUid server-side (simWriteEntries), never a raw addDoc.
+            try {
+                const entries = testEntries.map(entry => {
+                    const entryData: Partial<BracketEntry> & { ownerUid: string } = {
                         poolId: poolId,
-                        ownerUid: `test-user-${entry.userName.toLowerCase()}`,
+                        ownerUid: `sim-${runId}-${entry.userName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
                         name: `${entry.userName}'s Bracket`,
                         picks: entry.picks,
                         tieBreakerPrediction: entry.tiebreakerPrediction,
@@ -179,19 +198,18 @@ export async function runScenario(
                         createdAt: Date.now(),
                         updatedAt: Date.now()
                     };
-
                     // Firestore rejects the whole document on any undefined
                     // field value — a missing optional (e.g. tiebreaker) must
                     // drop the field, not kill the entry write.
                     for (const key of Object.keys(entryData) as (keyof typeof entryData)[]) {
                         if (entryData[key] === undefined) delete entryData[key];
                     }
-
-                    await addDoc(entriesCollection, entryData);
-                } catch (e: unknown) {
-                    const errMsg = e instanceof Error ? e.message : String(e);
-                    addStep('Entry Error', 'failed', `Failed to create entry for ${entry.userName}: ${errMsg}`);
-                }
+                    return entryData;
+                });
+                await httpsCallable(functions, 'simWriteEntries')({ poolId, runId, entries });
+            } catch (e: unknown) {
+                const errMsg = e instanceof Error ? e.message : String(e);
+                addStep('Entry Error', 'failed', `Failed to create entries: ${errMsg}`);
             }
 
             addStep('Add Entries', 'success', `Created ${testEntries.length} bracket entries`);
@@ -202,7 +220,9 @@ export async function runScenario(
 
         const entriesSnap = await getDocs(collection(db, 'pools', poolId, 'entries'));
 
-
+        // Score locally, then patch every entry in ONE guarded harness call
+        // (simWriteEntries merges by ownerUid — entry docIds ARE ownerUids now).
+        const scorePatches: Array<Record<string, unknown>> = [];
         for (const entryDoc of entriesSnap.docs) {
             const entry = entryDoc.data() as BracketEntry;
 
@@ -214,17 +234,19 @@ export async function runScenario(
 
             // Store maxPossibleScore for verification (used by maxScoreAtLeast assertion)
             (entry as BracketEntry & { maxPossibleScore?: number }).maxPossibleScore = scoringResult.maxPossibleScore;
+            entry.score = score;
 
+            scorePatches.push({
+                ownerUid: entry.ownerUid,
+                score,
+                maxPossibleScore: scoringResult.maxPossibleScore,
+            });
+        }
+        if (scorePatches.length > 0) {
             try {
-                await updateDoc(entryDoc.ref, {
-                    score,
-                    maxPossibleScore: scoringResult.maxPossibleScore
-                });
-
-                // Update local object for verification step
-                entry.score = score;
+                await httpsCallable(functions, 'simWriteEntries')({ poolId, runId, entries: scorePatches });
             } catch {
-                addStep('Score Warning', 'skipped', `Could not update score for ${entry.name}`);
+                addStep('Score Warning', 'skipped', 'Could not update entry scores');
             }
         }
 
@@ -232,11 +254,10 @@ export async function runScenario(
         addStep('Score Entries', 'success', 'Scores calculated and updated');
 
         // === E. MARK POOL COMPLETE ===
-        try {
-            await dbService.updateBracketPool(poolId, { status: 'COMPLETED' });
-        } catch {
-            await updateDoc(doc(db, 'pools', poolId), { status: 'COMPLETED' });
-        }
+        // Guarded harness patch (Phase 5): simUpdatePool verifies the pool's
+        // simRunId — the old dbService.updateBracketPool path was a raw client
+        // write and is banned from simulators.
+        await httpsCallable(functions, 'simUpdatePool')({ poolId, runId, patch: { status: 'COMPLETED' } });
         addStep('Complete Pool', 'success', 'Pool marked as COMPLETED');
 
         // === F. VERIFY RESULTS ===
