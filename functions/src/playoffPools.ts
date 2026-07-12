@@ -9,6 +9,7 @@ import { sendEmail } from "./reminders";
 import { assertPaidParticipantCeiling } from "./poolOps";
 import { validated } from "./lib/validated";
 import { updateGlobalPlayoffResultsSchema } from "./schemas/tournamentAdmin";
+import { submitPlayoffPicksSchema, managePlayoffEntrySchema } from "./schemas/playoffEntries";
 
 
 
@@ -136,11 +137,14 @@ const saveAndPropagateResults = async (results: any) => {
     return uniqueDocs.size;
 };
 
-export const submitPlayoffPicks = onCall(async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
-    const { poolId, rankings, tiebreaker, entryId, entryName } = request.data;
-    const uid = request.auth.uid;
-    const userName = request.auth.token.name || 'Anonymous';
+export const submitPlayoffPicks = validated(
+    // Gate bounds shape only; team-id membership + the 0..teamCount point
+    // bound need pool context and stay below.
+    { schema: submitPlayoffPicksSchema, label: "submitPlayoffPicks", appCheck: "monitor" },
+    async (input, request) => {
+    const { poolId, rankings, tiebreaker, entryId, entryName } = input;
+    const uid = request.auth!.uid;
+    const userName = (request.auth!.token.name as string) || 'Anonymous';
     const db = admin.firestore();
 
     const poolRef = db.collection('pools').doc(poolId);
@@ -156,9 +160,6 @@ export const submitPlayoffPicks = onCall(async (request) => {
     // score in a real-money pool, since scoring multiplies rankings[teamId] directly.
     const validTeamIds = new Set((pool.teams || []).map((t: any) => t.id));
     const teamCount = validTeamIds.size;
-    if (!rankings || typeof rankings !== 'object' || Array.isArray(rankings)) {
-        throw new HttpsError('invalid-argument', 'rankings must be an object.');
-    }
     const rankingEntries = Object.entries(rankings);
     if (rankingEntries.length > teamCount) {
         throw new HttpsError('invalid-argument', 'rankings contains more teams than exist in this pool.');
@@ -220,7 +221,7 @@ export const submitPlayoffPicks = onCall(async (request) => {
 
     // 5. Send Confirmation Email
     try {
-        const userEmail = request.auth.token.email;
+        const userEmail = request.auth!.token.email;
         if (userEmail) {
             // Construct Pick List
             const pickList = pool.teams
@@ -260,13 +261,18 @@ export const submitPlayoffPicks = onCall(async (request) => {
     }
 
     return { success: true, entryId: key };
-});
+    },
+);
 
-export const managePlayoffEntry = onCall(async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
-    const { poolId, entryId, action, value } = request.data; // action: 'togglePaid' | 'delete'
-    const uid = request.auth.uid;
-    const isAdmin = request.auth.token.role === 'SUPER_ADMIN';
+export const managePlayoffEntry = validated(
+    // Discriminated on action; togglePaid's value is now a strict boolean
+    // (was written raw into entries.{id}.paid).
+    { schema: managePlayoffEntrySchema, label: "managePlayoffEntry", appCheck: "monitor" },
+    async (input, request) => {
+    const { poolId, entryId, action } = input;
+    const value = input.action === 'togglePaid' ? input.value : undefined;
+    const uid = request.auth!.uid;
+    const isAdmin = request.auth!.token.role === 'SUPER_ADMIN';
     const db = admin.firestore();
 
     const poolRef = db.collection('pools').doc(poolId);
@@ -344,8 +350,10 @@ export const managePlayoffEntry = onCall(async (request) => {
         return { success: true, message: 'Entry deleted' };
     }
 
+    // Unreachable: the discriminated union admits only the two actions above.
     throw new HttpsError('invalid-argument', 'Invalid action');
-});
+    },
+);
 
 export const calculatePlayoffScores = onCall(async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
