@@ -26,6 +26,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import Stripe from "stripe";
 import { validated } from "./lib/validated";
 import { createCheckoutSessionSchema } from "./schemas/billingCheckout";
+import { decideEventClaim, shouldAlertOnFailure, type WebhookEventDoc } from "./lib/webhookDurability";
 import {
     writeBillingChargeTxn,
     type BillingCharge,
@@ -804,20 +805,21 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
         return;
     }
 
-    // Idempotency marker for all handled event types.
+    // Idempotency marker AND failure record for all handled event types.
+    const evtRef = db.collection("stripeWebhookEvents").doc(event.id);
     const claimEvent = async (): Promise<boolean> => {
-        const evtRef = db.collection("stripeWebhookEvents").doc(event.id);
         try {
-            await evtRef.create({ type: event.type, status: "processing", startedAt: Date.now() });
+            await evtRef.create({ type: event.type, status: "processing", startedAt: Date.now(), attemptCount: 0 });
             return true;
         } catch (err: any) {
             if (err.code === 6) { // ALREADY_EXISTS
                 let take = false;
                 await db.runTransaction(async (t) => {
                     const s = await t.get(evtRef);
-                    const d = s.data();
-                    if (d?.status === "processing" && Date.now() - (d.startedAt || 0) > 5 * 60 * 1000) {
-                        t.update(evtRef, { startedAt: Date.now() });
+                    const decision = decideEventClaim(s.data() as WebhookEventDoc | undefined, Date.now());
+                    if (decision.take) {
+                        // Re-claim: bump startedAt so a concurrent stale-takeover can't also grab it.
+                        t.update(evtRef, { status: "processing", startedAt: Date.now() });
                         take = true;
                     }
                 });
@@ -826,8 +828,38 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
             throw err;
         }
     };
-    const markDone = () => db.collection("stripeWebhookEvents").doc(event.id).update({ status: "completed", processedAt: Date.now() });
-    const markFailed = () => db.collection("stripeWebhookEvents").doc(event.id).delete();
+    const markDone = () => evtRef.update({ status: "completed", processedAt: Date.now() });
+    // Persist failure state (do NOT delete — Stripe retries the same event.id,
+    // so this de-dupes naturally). Increment attemptCount; alert ops only once
+    // failures cross the threshold, not on every retry (Codex #5).
+    const markFailed = async (err: unknown): Promise<void> => {
+        const lastError = (err instanceof Error ? err.message : String(err)).slice(0, 500);
+        let attemptCount = 0;
+        await db.runTransaction(async (t) => {
+            const s = await t.get(evtRef);
+            attemptCount = ((s.data()?.attemptCount as number) ?? 0) + 1;
+            t.set(evtRef, {
+                type: event.type,
+                status: "failed",
+                attemptCount,
+                lastError,
+                lastFailedAt: Date.now(),
+            }, { merge: true });
+            if (shouldAlertOnFailure(attemptCount)) {
+                t.set(db.collection("monetization_alerts").doc(`WEBHOOK_FAILED_${event.id}`), {
+                    type: "WEBHOOK_FAILED",
+                    eventId: event.id,
+                    eventType: event.type,
+                    attemptCount,
+                    lastError,
+                    status: "open",
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                }, { merge: true });
+            }
+        });
+        console.error(`[Stripe Webhook] Event ${event.id} (${event.type}) failed, attempt ${attemptCount}: ${lastError}`);
+    };
 
     try {
         switch (event.type) {
@@ -853,7 +885,7 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                         });
                     } catch (err) {
                         console.error("[Stripe Webhook] Bundle grant failed:", err);
-                        await markFailed();
+                        await markFailed(err);
                         res.status(500).send("Internal error processing bundle payment");
                         return;
                     }
@@ -878,7 +910,7 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                     });
                 } catch (err) {
                     console.error("[Stripe Webhook] Pool finalize failed (will retry):", err);
-                    await markFailed();
+                    await markFailed(err);
                     res.status(500).send("Internal error processing payment");
                     return;
                 }
@@ -902,7 +934,7 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                         console.log(`[Stripe Webhook] Reservation ${reservationId} released on session expiry.`);
                     } catch (err) {
                         console.error("[Stripe Webhook] Expiry release failed (will retry):", err);
-                        await markFailed();
+                        await markFailed(err);
                         res.status(500).send("Internal error processing expiry");
                         return;
                     }
@@ -920,7 +952,7 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                     await handleChargeAdjustment(event.data.object, "refund");
                 } catch (err) {
                     console.error("[Stripe Webhook] Refund handling failed (will retry):", err);
-                    await markFailed();
+                    await markFailed(err);
                     res.status(500).send("Internal error processing refund");
                     return;
                 }
@@ -938,8 +970,79 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                     await handleDispute(event.data.object);
                 } catch (err) {
                     console.error("[Stripe Webhook] Dispute handling failed (will retry):", err);
-                    await markFailed();
+                    await markFailed(err);
                     res.status(500).send("Internal error processing dispute");
+                    return;
+                }
+                await markDone();
+                break;
+            }
+
+            case "checkout.session.async_payment_failed": {
+                // A delayed payment method (e.g. ACH) failed AFTER checkout. The
+                // pool/bundle was never finalized (that only happens on
+                // completed), so release any held reservation and surface an ops
+                // alert. Member-facing "your payment failed" UX is a separate
+                // product decision (PLAN #7 open question) — not built here.
+                if (!(await claimEvent())) {
+                    res.status(200).send("duplicate");
+                    return;
+                }
+                const session = event.data.object;
+                const metadata = session.metadata || {};
+                const reservationId = metadata.reservationId as string | undefined;
+                const poolId = metadata.poolId as string | undefined;
+                const couponCode = (metadata.couponCode as string) || undefined;
+                try {
+                    if (reservationId && poolId) {
+                        await releaseReservationBestEffort(reservationId, poolId, couponCode);
+                    }
+                    await db.collection("monetization_alerts").doc(`ASYNC_PAYMENT_FAILED_${session.id}`).set({
+                        type: "ASYNC_PAYMENT_FAILED",
+                        sessionId: session.id,
+                        paymentIntentId: (session.payment_intent as string) ?? null,
+                        poolId: poolId ?? null,
+                        userId: (metadata.userId as string) ?? null,
+                        status: "open",
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                    }, { merge: true });
+                } catch (err) {
+                    console.error("[Stripe Webhook] async_payment_failed handling failed (will retry):", err);
+                    await markFailed(err);
+                    res.status(500).send("Internal error processing async payment failure");
+                    return;
+                }
+                await markDone();
+                break;
+            }
+
+            case "payment_intent.payment_failed": {
+                // A PaymentIntent failed. Record an ops alert for visibility; no
+                // reservation is keyed by PI, and member-facing UX is deferred
+                // (PLAN #7). Handling it explicitly stops it falling through to
+                // the silent default branch.
+                if (!(await claimEvent())) {
+                    res.status(200).send("duplicate");
+                    return;
+                }
+                const pi = event.data.object;
+                try {
+                    await db.collection("monetization_alerts").doc(`PAYMENT_FAILED_${pi.id}`).set({
+                        type: "PAYMENT_FAILED",
+                        paymentIntentId: pi.id,
+                        amount: (pi.amount ?? 0) / 100,
+                        lastPaymentError: (pi.last_payment_error?.message as string) ?? null,
+                        userId: (pi.metadata?.userId as string) ?? null,
+                        poolId: (pi.metadata?.poolId as string) ?? null,
+                        status: "open",
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                    }, { merge: true });
+                } catch (err) {
+                    console.error("[Stripe Webhook] payment_failed handling failed (will retry):", err);
+                    await markFailed(err);
+                    res.status(500).send("Internal error processing payment failure");
                     return;
                 }
                 await markDone();
