@@ -34,23 +34,23 @@ SUPER_ADMIN sessions.
 
 ## Next-effort menu (pick one to start a session)
 
-1. **Security/Observability plan — IN PROGRESS (resumed 2026-07-11 night).**
-   Branch `feat/security-observability-phase1` (worktree `.claude/worktrees/security-observability`),
-   **16/41 TARGET-NOW callable retrofits done, 25 remain.** Main WAS merged in
-   (abb446e, clean; post-clobber gates all green: tsc, unit 485, emulator 84+matrix).
-   Done so far: confirmPayment, adminManageCoupon (exemplars) + adminSaveBillingConfig,
-   adminUpdatePoolBilling, adminAdjustUserCredits + setUserRole, setSuperAdminClaim
-   (assertCallerRole moved to lib/assertRole.ts, re-exported) + adminGrantEntitlement,
-   adminRevokeEntitlement + createCouponTemplate, updateCouponTemplate,
-   mintCouponFromTemplate + updateTournamentData, updateGlobalPlayoffResults (C5
-   claim+doc upgrades) + sendPoolInvites, submitBracketEntry (C7). Schemas live in
-   functions/src/schemas/* with per-schema unit tests pinning real client payloads.
-   Branch is LOCAL-ONLY (not pushed, no PR) — push + PR + qodo cycle before deploy.
-   Remaining wave-1 targets (sweep matrix): managePlayoffEntry, setPaidStatus,
-   createPool/createNFLPool (PERMISSIVE), updatePoolSettings, updateEntryPayment-family
-   siblings, sendManualReminder, submitNFLPicks/submitPlayoffPicks etc. — see
-   PLAN-SECURITY-OBSERVABILITY-SWEEPS.md Sweep 1 for the full TARGET-NOW list.
-   Plan: PLAN-SECURITY-OBSERVABILITY.md.
+1. **Security/Observability plan — Phase 1 wave 1 MERGED (PR #164, 2026-07-11 night); NOT YET DEPLOYED.**
+   **16/41 TARGET-NOW callable retrofits merged to main** (validated() wrapper:
+   auth → App Check monitor → role claim+doc → strict zod). qodo cycle complete:
+   2 findings, both VALID (unbounded squareIds / picks caps), fixed in 72fb184.
+   Gates at merge: tsc clean, functions unit 486, emulator 84+matrix, CI 6/6.
+   Worktree + branch deleted (fresh branch per wave, like the sim-harness PRs).
+   **DEPLOY PENDING**: the 16 wrapped callables are merged but the functions
+   fleet has NOT been redeployed — behavior in prod is unchanged until
+   `npx firebase deploy --only functions --project gridiron-gamble-uzuqo`
+   (functions-first; no rules changes in this wave). Kevin supervises deploys.
+   NEXT WAVE (25 TARGET-NOW remain — see PLAN-SECURITY-OBSERVABILITY-SWEEPS.md
+   Sweep 1): managePlayoffEntry, setPaidStatus, createPool/createNFLPool
+   (PERMISSIVE), updatePoolSettings, submitNFLPicks/submitPlayoffPicks,
+   sendManualReminder, anon rate-limiter set (reserveSquare, purchasePropCard,
+   validateBillingAccess, resolveReferralToken). Start each wave: fresh branch
+   off main + worktree; schemas in functions/src/schemas/* with unit tests
+   pinning real client payloads (established pattern).
    Note from Phase 5: the general pools `allow update: isSuperAdmin()` rule + playoff/props
    pool-doc/propCards raw writes were deliberately left for THIS plan's write-path sweep.
 2. **Player Profiles follow-ups** — flip `profileBackfill`/`nflFinalize` dry-runs after
