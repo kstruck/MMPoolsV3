@@ -64,6 +64,15 @@ describe("submitBracketEntrySchema", () => {
         expect(okSubmit({ ...submit, entryId: " " })).toBe(false);
     });
 
+    it("caps picks at 200 keys (txn-amplification guard, qodo PR #164)", () => {
+        const big: Record<string, string> = {};
+        for (let i = 0; i < 201; i++) big[`S-${i}`] = "team";
+        expect(okSubmit({ ...submit, picks: big })).toBe(false);
+        const fine: Record<string, string> = {};
+        for (let i = 0; i < 67; i++) fine[`S-${i}`] = "team";
+        expect(okSubmit({ ...submit, picks: fine })).toBe(true);
+    });
+
     it("rejects a missing picks map and an unknown field", () => {
         expect(okSubmit({ poolId: "p1", entryId: "e1" })).toBe(false);
         expect(okSubmit({ ...submit, paidStatus: "PAID" })).toBe(false);

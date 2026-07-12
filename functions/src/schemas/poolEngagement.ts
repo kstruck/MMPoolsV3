@@ -30,7 +30,11 @@ export const sendPoolInvitesSchema = z.strictObject({
 export const submitBracketEntrySchema = z.strictObject({
     poolId,
     entryId: z.string().trim().min(1).max(200),
-    picks: z.record(z.string().min(1).max(100), z.string().min(1).max(100)),
+    // A full NCAA bracket is 63 games (+ play-ins); 200 keys is a generous
+    // ceiling that still blocks txn-amplification payloads (qodo, PR #164).
+    picks: z
+        .record(z.string().min(1).max(100), z.string().min(1).max(100))
+        .refine((o) => Object.keys(o).length <= 200, { message: "too many picks" }),
     tieBreakerPrediction: nullish(z.number().finite()),
     name: nullish(z.string().max(200)),
 });

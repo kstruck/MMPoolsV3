@@ -16,7 +16,8 @@ import { sendEmail } from "./reminders";
  */
 const confirmPaymentSchema = z.strictObject({
     poolId: z.string().min(1).max(200),
-    squareIds: z.array(z.number().int()).min(1),
+    // 10x10 grid: a payment can reference at most the full board (qodo review of PR #164)
+    squareIds: z.array(z.number().int()).min(1).max(100),
 });
 
 export const confirmPayment = validated(
