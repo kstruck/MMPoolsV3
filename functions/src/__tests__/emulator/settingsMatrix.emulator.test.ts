@@ -154,7 +154,7 @@ describe('settings matrix — engine vs oracle per combination', () => {
             await runCell({
                 cell: `sv${maxStrikes}`, type: 'NFL_SURVIVOR', season,
                 settings: {
-                    entryFee: 0, maxStrikes, pickLosersMode: false, autoSurviveExemption: false,
+                    entryFee: 0, maxStrikes, pickLosersMode: false, autoSurviveExemptionEnabled: false,
                     maxRebuys: 0, payouts: { places: [], bonuses: [] },
                 },
                 buildEntry: (e, uid) => ({
