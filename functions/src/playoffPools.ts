@@ -7,6 +7,8 @@ import { PlayoffPool, PlayoffEntry } from "./types";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
 import { sendEmail } from "./reminders";
 import { assertPaidParticipantCeiling } from "./poolOps";
+import { validated } from "./lib/validated";
+import { updateGlobalPlayoffResultsSchema } from "./schemas/tournamentAdmin";
 
 
 
@@ -359,22 +361,14 @@ export const calculatePlayoffScores = onCall(async (request) => {
     return { success: true, message: "Use Global Update instead" };
 });
 
-export const updateGlobalPlayoffResults = onCall(async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
-
-    // Check SuperAdmin
-    const db = admin.firestore();
-    const userSnap = await db.collection('users').doc(request.auth.uid).get();
-    if (!userSnap.exists || userSnap.data()?.role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'Super Admin only');
-    }
-
-    const { results } = request.data;
-    if (!results) throw new HttpsError('invalid-argument', 'Missing results');
-
-    const count = await saveAndPropagateResults(results);
-    return { success: true, poolsUpdated: count };
-});
+export const updateGlobalPlayoffResults = validated(
+    // Wrapper upgrades the old doc-only role check to claim+doc (sweep C5).
+    { schema: updateGlobalPlayoffResultsSchema, label: "updateGlobalPlayoffResults", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async (input) => {
+        const count = await saveAndPropagateResults(input.results);
+        return { success: true, poolsUpdated: count };
+    },
+);
 
 // Scheduled Function: Check ESPN Scores
 export const checkPlayoffScores = onSchedule("every 30 minutes", async (event) => {

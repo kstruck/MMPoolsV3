@@ -16,81 +16,76 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { assertCallerRole } from "./adminClaims";
+import { validated } from "./lib/validated";
+import {
+  createCouponTemplateSchema,
+  updateCouponTemplateSchema,
+  mintCouponFromTemplateSchema,
+} from "./schemas/couponTemplates";
 import { writeAdminAudit } from "./lib/adminAudit";
 import {
-  couponTemplateInputSchema,
   couponFieldsFromTemplate,
   type CouponTemplateBody,
 } from "./shared/schemas/couponTemplate";
-
-/** Parse + validate a template payload; throws HttpsError(invalid-argument) on failure. */
-function parseTemplateInput(data: unknown) {
-  const parsed = couponTemplateInputSchema.safeParse(data);
-  if (!parsed.success) {
-    const summary = parsed.error.issues
-      .slice(0, 8)
-      .map((i) => `${i.path.map(String).join(".") || "(root)"}: ${i.message}`)
-      .join("; ");
-    throw new HttpsError("invalid-argument", `coupon template failed validation: ${summary}`);
-  }
-  return parsed.data;
-}
 
 /**
  * createCouponTemplate — persist a new couponTemplates/{id}. Doubles as the
  * "Save as template" action: the client passes the extracted fields of an
  * existing coupon (name/notes added) and this stores them.
  */
-export const createCouponTemplate = onCall(async (request) => {
-  const caller = await assertCallerRole(request, "SUPER_ADMIN");
-  const input = parseTemplateInput(request.data);
+export const createCouponTemplate = validated(
+  { schema: createCouponTemplateSchema, label: "createCouponTemplate", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async (input, request) => {
+    // auth + SUPER_ADMIN already enforced by the wrapper; input is the parsed
+    // template body (unknown keys stripped by the shared schema).
+    const caller = { uid: request.auth!.uid, email: request.auth!.token.email as string | undefined };
 
-  const now = Date.now();
-  const ref = await admin.firestore().collection("couponTemplates").add({
-    ...input,
-    createdAt: now,
-    updatedAt: now,
-  });
+    const now = Date.now();
+    const ref = await admin.firestore().collection("couponTemplates").add({
+      ...input,
+      createdAt: now,
+      updatedAt: now,
+    });
 
-  await writeAdminAudit({
-    actorUid: caller.uid,
-    actorEmail: caller.email,
-    action: "COUPON_TEMPLATE_CREATE",
-    targetType: "couponTemplate",
-    targetId: ref.id,
-    metadata: { name: input.name, discountType: input.discountType },
-    status: "success",
-  });
-  return { success: true, templateId: ref.id };
-});
+    await writeAdminAudit({
+      actorUid: caller.uid,
+      actorEmail: caller.email,
+      action: "COUPON_TEMPLATE_CREATE",
+      targetType: "couponTemplate",
+      targetId: ref.id,
+      metadata: { name: input.name, discountType: input.discountType },
+      status: "success",
+    });
+    return { success: true, templateId: ref.id };
+  },
+);
 
 /** updateCouponTemplate — overwrite an existing template's body (validated). */
-export const updateCouponTemplate = onCall(async (request) => {
-  const caller = await assertCallerRole(request, "SUPER_ADMIN");
-  const { templateId } = (request.data ?? {}) as { templateId?: string };
-  if (!templateId || typeof templateId !== "string") {
-    throw new HttpsError("invalid-argument", "templateId (string) is required.");
-  }
-  const input = parseTemplateInput((request.data as { template?: unknown })?.template ?? request.data);
+export const updateCouponTemplate = validated(
+  { schema: updateCouponTemplateSchema, label: "updateCouponTemplate", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async (input, request) => {
+    const caller = { uid: request.auth!.uid, email: request.auth!.token.email as string | undefined };
+    const { templateId, template } = input;
 
-  const ref = admin.firestore().collection("couponTemplates").doc(templateId);
-  const snap = await ref.get();
-  if (!snap.exists) {
-    throw new HttpsError("not-found", "couponTemplate not found.");
-  }
-  await ref.set({ ...input, updatedAt: Date.now() }, { merge: true });
+    const ref = admin.firestore().collection("couponTemplates").doc(templateId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      throw new HttpsError("not-found", "couponTemplate not found.");
+    }
+    await ref.set({ ...template, updatedAt: Date.now() }, { merge: true });
 
-  await writeAdminAudit({
-    actorUid: caller.uid,
-    actorEmail: caller.email,
-    action: "COUPON_TEMPLATE_UPDATE",
-    targetType: "couponTemplate",
-    targetId: templateId,
-    metadata: { name: input.name },
-    status: "success",
-  });
-  return { success: true, templateId };
-});
+    await writeAdminAudit({
+      actorUid: caller.uid,
+      actorEmail: caller.email,
+      action: "COUPON_TEMPLATE_UPDATE",
+      targetType: "couponTemplate",
+      targetId: templateId,
+      metadata: { name: template.name },
+      status: "success",
+    });
+    return { success: true, templateId };
+  },
+);
 
 /** deleteCouponTemplate — remove a template. Minting real coupons is unaffected. */
 export const deleteCouponTemplate = onCall(async (request) => {
@@ -123,15 +118,11 @@ export const deleteCouponTemplate = onCall(async (request) => {
  * The `code` comes from the caller (a template has no code — the admin names the
  * new coupon at mint time). All other fields come from the template body.
  */
-export const mintCouponFromTemplate = onCall(async (request) => {
-  const caller = await assertCallerRole(request, "SUPER_ADMIN");
-  const { templateId, code } = (request.data ?? {}) as { templateId?: string; code?: string };
-  if (!templateId || typeof templateId !== "string") {
-    throw new HttpsError("invalid-argument", "templateId (string) is required.");
-  }
-  if (!code || typeof code !== "string" || !code.trim()) {
-    throw new HttpsError("invalid-argument", "a non-empty coupon code is required.");
-  }
+export const mintCouponFromTemplate = validated(
+  { schema: mintCouponFromTemplateSchema, label: "mintCouponFromTemplate", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async (input, request) => {
+  const caller = { uid: request.auth!.uid, email: request.auth!.token.email as string | undefined };
+  const { templateId, code } = input;
 
   const tplSnap = await admin.firestore().collection("couponTemplates").doc(templateId).get();
   if (!tplSnap.exists) {
@@ -162,7 +153,8 @@ export const mintCouponFromTemplate = onCall(async (request) => {
     status: "success",
   });
   return { success: true, couponId: ref.id, code: normalizedCode };
-});
+  },
+);
 
 /**
  * acknowledgeMonetizationAlert (PLAN #22) — flip a monetization_alerts doc from

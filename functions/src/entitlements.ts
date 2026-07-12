@@ -23,6 +23,8 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { randomUUID } from "crypto";
 import { assertCallerRole } from "./adminClaims";
+import { validated } from "./lib/validated";
+import { adminGrantEntitlementSchema, adminRevokeEntitlementSchema } from "./schemas/entitlements";
 import { writeAdminAudit } from "./lib/adminAudit";
 import { writeBillingChargeTxn } from "./lib/billingCharges";
 import {
@@ -162,97 +164,74 @@ export function grantEntitlementTxn(
  * ledger row (admin grants are comps, not revenue). The target is promoted to
  * COMMISSIONER so they can create pools with the entitlement.
  */
-export const adminGrantEntitlement = onCall(async (request) => {
-  const caller = await assertCallerRole(request, "SUPER_ADMIN");
-  const data = (request.data ?? {}) as {
-    targetUid?: string;
-    productKind?: ProductKind;
-    reason?: string;
-    name?: string;
-    price?: number;
-    poolType?: string;
-    maxPlayersPerPool?: number;
-    creditsTotal?: number;
-    termDays?: number;
-  };
+export const adminGrantEntitlement = validated(
+  { schema: adminGrantEntitlementSchema, label: "adminGrantEntitlement", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async (input, request) => {
+    // auth + SUPER_ADMIN (claim AND doc) already enforced by the wrapper;
+    // schema guarantees targetUid, productKind, non-empty reason, and the
+    // per-kind field (creditsTotal >= 1 | termDays >= 1).
+    const caller = { uid: request.auth!.uid, email: request.auth!.token.email as string | undefined };
+    const { targetUid, reason } = input;
 
-  const targetUid = data.targetUid;
-  if (!targetUid || typeof targetUid !== "string") {
-    throw new HttpsError("invalid-argument", "targetUid is required.");
-  }
-  if (data.productKind !== "CREDIT_BUNDLE" && data.productKind !== "UNLIMITED_PASS") {
-    throw new HttpsError("invalid-argument", "productKind must be CREDIT_BUNDLE or UNLIMITED_PASS.");
-  }
-  const reason = (data.reason ?? "").trim();
-  if (!reason) {
-    throw new HttpsError("invalid-argument", "reason is required for an admin grant.");
-  }
+    const poolType = input.poolType && input.poolType !== "ALL" && isPoolType(input.poolType)
+      ? (input.poolType as PoolType)
+      : ("ALL" as const);
+    const maxPlayersPerPool = Math.max(1, Math.round(Number(input.maxPlayersPerPool) || 9999));
+    const snapshot: ProductSnapshot = {
+      name: (input.name ?? "").trim() || (input.productKind === "UNLIMITED_PASS" ? "Admin Unlimited Pass" : "Admin Credit Grant"),
+      price: Math.max(0, Number(input.price) || 0),
+      poolType,
+      maxPlayersPerPool,
+    };
 
-  const poolType = data.poolType && data.poolType !== "ALL" && isPoolType(data.poolType)
-    ? (data.poolType as PoolType)
-    : ("ALL" as const);
-  const maxPlayersPerPool = Math.max(1, Math.round(Number(data.maxPlayersPerPool) || 9999));
-  const snapshot: ProductSnapshot = {
-    name: (data.name ?? "").trim() || (data.productKind === "UNLIMITED_PASS" ? "Admin Unlimited Pass" : "Admin Credit Grant"),
-    price: Math.max(0, Number(data.price) || 0),
-    poolType,
-    maxPlayersPerPool,
-  };
-
-  const now = Date.now();
-  let creditsTotal = 0;
-  let termEndsAt: number | undefined;
-  if (data.productKind === "CREDIT_BUNDLE") {
-    creditsTotal = Math.floor(Number(data.creditsTotal) || 0);
-    if (creditsTotal < 1) {
-      throw new HttpsError("invalid-argument", "CREDIT_BUNDLE grant requires creditsTotal >= 1.");
+    const now = Date.now();
+    let creditsTotal = 0;
+    let termEndsAt: number | undefined;
+    if (input.productKind === "CREDIT_BUNDLE") {
+      creditsTotal = Math.floor(input.creditsTotal);
+      if (creditsTotal > MAX_CREDITS_PER_BUNDLE) {
+        throw new HttpsError(
+          "invalid-argument",
+          `creditsTotal ${creditsTotal} exceeds the ${MAX_CREDITS_PER_BUNDLE}-credit cap.`
+        );
+      }
+    } else {
+      termEndsAt = now + Math.floor(input.termDays) * DAY_MS;
     }
-    if (creditsTotal > MAX_CREDITS_PER_BUNDLE) {
-      throw new HttpsError(
-        "invalid-argument",
-        `creditsTotal ${creditsTotal} exceeds the ${MAX_CREDITS_PER_BUNDLE}-credit cap.`
-      );
-    }
-  } else {
-    const termDays = Math.floor(Number(data.termDays) || 0);
-    if (termDays < 1) {
-      throw new HttpsError("invalid-argument", "UNLIMITED_PASS grant requires termDays >= 1.");
-    }
-    termEndsAt = now + termDays * DAY_MS;
-  }
 
-  let bundleId = "";
-  await db.runTransaction(async (txn) => {
-    const res = grantEntitlementTxn(txn, {
-      ownerId: targetUid,
-      productKind: data.productKind!,
-      source: "ADMIN_GRANT",
-      productSnapshot: snapshot,
-      creditsTotal,
-      creditConstraints: {
-        poolType: poolType === "ALL" ? undefined : poolType,
-        maxPlayersPerPool: maxPlayersPerPool >= 9999 ? undefined : maxPlayersPerPool,
-      },
-      termEndsAt,
-      createdAt: now,
+    let bundleId = "";
+    await db.runTransaction(async (txn) => {
+      const res = grantEntitlementTxn(txn, {
+        ownerId: targetUid,
+        productKind: input.productKind,
+        source: "ADMIN_GRANT",
+        productSnapshot: snapshot,
+        creditsTotal,
+        creditConstraints: {
+          poolType: poolType === "ALL" ? undefined : poolType,
+          maxPlayersPerPool: maxPlayersPerPool >= 9999 ? undefined : maxPlayersPerPool,
+        },
+        termEndsAt,
+        createdAt: now,
+      });
+      bundleId = res.bundleId;
+      // Promote to COMMISSIONER so the grant is usable (mirrors legacy grantBundle).
+      txn.set(db.collection("users").doc(targetUid), { role: "COMMISSIONER" }, { merge: true });
     });
-    bundleId = res.bundleId;
-    // Promote to COMMISSIONER so the grant is usable (mirrors legacy grantBundle).
-    txn.set(db.collection("users").doc(targetUid), { role: "COMMISSIONER" }, { merge: true });
-  });
 
-  await writeAdminAudit({
-    actorUid: caller.uid,
-    actorEmail: caller.email,
-    action: "ENTITLEMENT_GRANTED",
-    targetType: "user",
-    targetId: targetUid,
-    metadata: { bundleId, productKind: data.productKind, creditsTotal, termEndsAt: termEndsAt ?? null, reason },
-    status: "success",
-  });
+    await writeAdminAudit({
+      actorUid: caller.uid,
+      actorEmail: caller.email,
+      action: "ENTITLEMENT_GRANTED",
+      targetType: "user",
+      targetId: targetUid,
+      metadata: { bundleId, productKind: input.productKind, creditsTotal, termEndsAt: termEndsAt ?? null, reason },
+      status: "success",
+    });
 
-  return { success: true, bundleId };
-});
+    return { success: true, bundleId };
+  },
+);
 
 // ---------------------------------------------------------------------------
 // adminRevokeEntitlement — SUPER_ADMIN revokes bundle / single credit / pass.
@@ -320,43 +299,32 @@ export async function revokeEntitlementTxn(
  * doc carries revokedReason/revokedAt). Delegates to {@link revokeEntitlementTxn}.
  * `reason` required.
  */
-export const adminRevokeEntitlement = onCall(async (request) => {
-  const caller = await assertCallerRole(request, "SUPER_ADMIN");
-  const data = (request.data ?? {}) as {
-    bundleId?: string;
-    scope?: "bundle" | "credit" | "pass";
-    creditId?: string;
-    reason?: string;
-  };
+export const adminRevokeEntitlement = validated(
+  { schema: adminRevokeEntitlementSchema, label: "adminRevokeEntitlement", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async (input, request) => {
+    // Schema guarantees bundleId, scope, non-empty reason, and creditId when
+    // scope is 'credit' (discriminated union).
+    const caller = { uid: request.auth!.uid, email: request.auth!.token.email as string | undefined };
+    const { bundleId, scope, reason } = input;
+    const creditId = input.scope === "credit" ? input.creditId : undefined;
 
-  const bundleId = data.bundleId;
-  const scope = data.scope;
-  if (!bundleId) throw new HttpsError("invalid-argument", "bundleId is required.");
-  if (scope !== "bundle" && scope !== "credit" && scope !== "pass") {
-    throw new HttpsError("invalid-argument", "scope must be bundle | credit | pass.");
-  }
-  const reason = (data.reason ?? "").trim();
-  if (!reason) throw new HttpsError("invalid-argument", "reason is required for a revoke.");
-  if (scope === "credit" && !data.creditId) {
-    throw new HttpsError("invalid-argument", "creditId is required for scope 'credit'.");
-  }
+    const result = await db.runTransaction((txn) =>
+      revokeEntitlementTxn(txn, { bundleId, scope, creditId, reason, nowMs: Date.now() })
+    );
 
-  const result = await db.runTransaction((txn) =>
-    revokeEntitlementTxn(txn, { bundleId, scope, creditId: data.creditId, reason, nowMs: Date.now() })
-  );
+    await writeAdminAudit({
+      actorUid: caller.uid,
+      actorEmail: caller.email,
+      action: "ENTITLEMENT_REVOKED",
+      targetType: "bundle",
+      targetId: bundleId,
+      metadata: { scope, creditId: creditId ?? null, revokedCredits: result.revokedCredits, reason },
+      status: "success",
+    });
 
-  await writeAdminAudit({
-    actorUid: caller.uid,
-    actorEmail: caller.email,
-    action: "ENTITLEMENT_REVOKED",
-    targetType: "bundle",
-    targetId: bundleId,
-    metadata: { scope, creditId: data.creditId ?? null, revokedCredits: result.revokedCredits, reason },
-    status: "success",
-  });
-
-  return { success: true, revokedCredits: result.revokedCredits };
-});
+    return { success: true, revokedCredits: result.revokedCredits };
+  },
+);
 
 // ---------------------------------------------------------------------------
 // redeemPoolCredit — spend one credit to activate a pool.
