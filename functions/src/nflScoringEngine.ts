@@ -13,8 +13,73 @@ import {
 // Pick'em Scoring Logic
 // ============================================================================
 
+// away/home abbreviations ride along so the profile pick history can render
+// matchups without re-fetching every historical game doc (ADR 0005 Phase 5).
+export type PickemGameGrade = { pick: string; result: 'W' | 'L' | 'PUSH' | 'VOID'; away: string; home: string };
+
+/**
+ * Grades every picked, concluded game of a week: W / L / PUSH / VOID per game
+ * (ADR 0005 per-pick results). This is the single source of pick correctness —
+ * scorePickemEntry derives points/correctCount from these grades, so the two
+ * can never disagree. Semantics preserved from the original scorer:
+ * - CANCELLED game with a pick   -> VOID (earns 0)
+ * - ATS exact-spread cover       -> PUSH (earns 0)
+ * - straight-up tie              -> PUSH (earns 0; previously "incorrect" — same score)
+ * - ATS pool but game missing a spread -> graded straight-up (rare repair case;
+ *   submit-time SPREADS_NOT_LOCKED gating makes this unusual)
+ * - unpicked or not-yet-final games are absent from the result
+ */
+export function gradePickemGames(
+  entry: NFLPickemEntry,
+  games: NFLGame[],
+  pool: NFLPickemPool
+): Record<string, PickemGameGrade> {
+  const grades: Record<string, PickemGameGrade> = {};
+
+  for (const game of games) {
+    if (game.status !== 'FINAL' && game.status !== 'CANCELLED') continue;
+
+    const pick = entry.picks[game.id];
+    if (!pick) continue; // Unpicked game
+
+    if (game.status === 'CANCELLED') {
+      grades[game.id] = { pick, result: 'VOID', away: game.awayTeam.abbreviation, home: game.homeTeam.abbreviation };
+      continue;
+    }
+
+    const homeScore = game.scores?.home ?? 0;
+    const awayScore = game.scores?.away ?? 0;
+
+    if (pool.settings.pickMode === 'ATS' && typeof game.spread?.value === 'number') {
+      // Against the spread. spread.value is relative to the home team
+      // (negative = home favored), so the home side covers when
+      // homeScore + spread.value beats awayScore.
+      const adjustedHome = homeScore + game.spread.value;
+      if (adjustedHome === awayScore) {
+        grades[game.id] = { pick, result: 'PUSH', away: game.awayTeam.abbreviation, home: game.homeTeam.abbreviation };
+      } else {
+        const coveringTeam = adjustedHome > awayScore
+          ? game.homeTeam.abbreviation
+          : game.awayTeam.abbreviation;
+        grades[game.id] = { pick, result: pick === coveringTeam ? 'W' : 'L', away: game.awayTeam.abbreviation, home: game.homeTeam.abbreviation };
+      }
+    } else if (homeScore === awayScore) {
+      grades[game.id] = { pick, result: 'PUSH', away: game.awayTeam.abbreviation, home: game.homeTeam.abbreviation }; // straight-up tie
+    } else {
+      const winner = homeScore > awayScore
+        ? game.homeTeam.abbreviation
+        : game.awayTeam.abbreviation;
+      grades[game.id] = { pick, result: pick === winner ? 'W' : 'L', away: game.awayTeam.abbreviation, home: game.homeTeam.abbreviation };
+    }
+  }
+
+  return grades;
+}
+
 /**
  * Scores a Weekly Pick'em participant's entry for a single week or the season.
+ * Derived from gradePickemGames — only 'W' grades earn points/correct, exactly
+ * matching the original inline logic (PUSH and straight-up tie earned 0 there too).
  */
 export function scorePickemEntry(
   entry: NFLPickemEntry,
@@ -25,53 +90,15 @@ export function scorePickemEntry(
   let correctCount = 0;
 
   const confidenceMode = pool.settings.confidenceMode;
+  const grades = gradePickemGames(entry, games, pool);
 
-  for (const game of games) {
-    if (game.status !== 'FINAL' && game.status !== 'CANCELLED') continue;
-
-    const pick = entry.picks[game.id];
-    if (!pick) continue; // Unpicked game
-
-    // Voids cancelled games (earn 0)
-    if (game.status === 'CANCELLED') continue;
-
-    // Check if the picked team won
-    const homeScore = game.scores?.home ?? 0;
-    const awayScore = game.scores?.away ?? 0;
-
-    let isCorrect = false;
-    if (pool.settings.pickMode === 'ATS' && typeof game.spread?.value === 'number') {
-      // Against the spread. spread.value is relative to the home team
-      // (negative = home favored), so the home side covers when
-      // homeScore + spread.value beats awayScore. A push (exact spread)
-      // scores 0 for both sides — same treatment as a straight-up tie.
-      // Games missing a spread fall through to straight-up scoring below
-      // (submit-time SPREADS_NOT_LOCKED gating makes that a rare repair case).
-      const adjustedHome = homeScore + game.spread.value;
-      if (adjustedHome > awayScore) {
-        isCorrect = pick === game.homeTeam.abbreviation;
-      } else if (adjustedHome < awayScore) {
-        isCorrect = pick === game.awayTeam.abbreviation;
-      } else {
-        isCorrect = false; // push
-      }
-    } else if (homeScore > awayScore && pick === game.homeTeam.abbreviation) {
-      isCorrect = true;
-    } else if (awayScore > homeScore && pick === game.awayTeam.abbreviation) {
-      isCorrect = true;
-    } else if (homeScore === awayScore) {
-      // Ties usually count as 0 or ties in standard pools. We treat tie as incorrect for straight pick'em unless specified.
-      isCorrect = false;
-    }
-
-    if (isCorrect) {
-      correctCount++;
-      if (confidenceMode) {
-        const confidenceVal = entry.confidence?.[game.id] ?? 0;
-        points += confidenceVal;
-      } else {
-        points += 1; // Standard scoring
-      }
+  for (const [gameId, grade] of Object.entries(grades)) {
+    if (grade.result !== 'W') continue;
+    correctCount++;
+    if (confidenceMode) {
+      points += entry.confidence?.[gameId] ?? 0;
+    } else {
+      points += 1; // Standard scoring
     }
   }
 
@@ -441,6 +468,145 @@ export function computeSurvivorWeekUpdate(
     alive: !eliminated,
     skipped: false,
   };
+}
+
+/**
+ * Per-pick game record for a scored Survivor week (ADR 0005). Returns null when
+ * there is nothing game-shaped to record (no pick — the week-level
+ * {survived, strike} still captures the auto-strike — or the picked team has no
+ * game this week). Cancelled games grade VOID (survive, matches evaluateSurvivorWeek).
+ */
+export function gradeSurvivorWeekGame(
+  entry: SurvivorEntry,
+  week: number,
+  games: NFLGame[],
+  struckThisWeek: boolean,
+): { gameId: string; pick: string; result: 'SURVIVED' | 'STRUCK' | 'VOID' } | null {
+  const pick = entry.picks[week];
+  if (!pick) return null;
+  const game = games.find(
+    g => g.homeTeam.abbreviation === pick || g.awayTeam.abbreviation === pick
+  );
+  if (!game) return null;
+  if (game.status === 'CANCELLED') return { gameId: game.id, pick, result: 'VOID' };
+  if (game.status !== 'FINAL') return null;
+  return { gameId: game.id, pick, result: struckThisWeek ? 'STRUCK' : 'SURVIVED' };
+}
+
+/**
+ * Per-pick game record for a scored Margin week (ADR 0005). Mirrors
+ * scoreMarginWeek's game resolution: null when unpicked/not concluded;
+ * cancelled games record net 0.
+ */
+export function gradeMarginWeekGame(
+  pick: string | undefined,
+  games: NFLGame[],
+): { gameId: string; pick: string; net: number } | null {
+  if (!pick) return null;
+  const game = games.find(
+    g => g.homeTeam.abbreviation === pick || g.awayTeam.abbreviation === pick
+  );
+  if (!game || (game.status !== 'FINAL' && game.status !== 'CANCELLED')) return null;
+  const net = scoreMarginWeek(pick, games) ?? 0;
+  return { gameId: game.id, pick, net };
+}
+
+// ============================================================================
+// Standings projection (ADR 0005 / PLAN-PLAYER-PROFILES Phase 2)
+// ============================================================================
+
+/**
+ * One member-readable standings row. Built by ALLOWLIST, never by stripping —
+ * a new entry field is leak-safe by default. Deliberate exclusions:
+ * - picks / confidence / weeklyTiebreakers: raw pick data (the whole point)
+ * - usedTeams: updated at SUBMIT time, so it reveals the current week's
+ *   un-scored pick
+ * - weeklyResults per-game maps: scored (reveal-safe) but bulky; the profile
+ *   projection carries per-pick history, standings only need the summaries
+ */
+export interface StandingsRow {
+  id: string;
+  ownerUid: string;
+  userName: string;
+  entryName?: string;
+  paidStatus?: 'PAID' | 'UNPAID';
+  // Pickem
+  totalScore?: number;
+  weeklyPoints?: Record<number, number>;
+  weeklyResults?: Record<number, { correct?: number; total?: number; points?: number; mode?: string; survived?: boolean; strike?: boolean; net?: number }>;
+  // Survivor
+  status?: 'ALIVE' | 'ELIMINATED';
+  strikesUsed?: number;
+  strikeWeeks?: number[];
+  rebuysUsed?: number;
+  eliminatedWeek?: number | null;
+  exemptWeeks?: number[];
+  // Margin
+  weeklyScores?: Record<number, number>;
+  seasonTotal?: number;
+  negativeBurden?: number;
+  positiveWeeks?: number;
+  bestWeek?: number;
+  rank?: number;
+}
+
+/** Drops per-game records from a weeklyResults map, keeping the summaries. */
+function sanitizeWeeklyResults(
+  wr: Record<number, Record<string, unknown>> | undefined,
+): StandingsRow['weeklyResults'] | undefined {
+  if (!wr) return undefined;
+  const out: NonNullable<StandingsRow['weeklyResults']> = {};
+  for (const [week, val] of Object.entries(wr)) {
+    const { games: _games, game: _game, ...summary } = val as Record<string, unknown>;
+    out[Number(week)] = summary as NonNullable<StandingsRow['weeklyResults']>[number];
+  }
+  return out;
+}
+
+/** Builds the member-readable rows for pools/{id}/standings/current. Pure. */
+export function buildStandingsRows(
+  poolType: string,
+  entries: Array<NFLPickemEntry | SurvivorEntry | MarginEntry>,
+): StandingsRow[] {
+  return entries.map((e) => {
+    const row: StandingsRow = {
+      id: e.id,
+      ownerUid: e.ownerUid,
+      userName: e.userName,
+    };
+    if (e.entryName !== undefined) row.entryName = e.entryName;
+    if (e.paidStatus !== undefined) row.paidStatus = e.paidStatus;
+
+    if (poolType === 'NFL_PICKEM') {
+      const p = e as NFLPickemEntry;
+      row.totalScore = p.totalScore ?? 0;
+      if (p.weeklyPoints !== undefined) row.weeklyPoints = p.weeklyPoints;
+      const wr = sanitizeWeeklyResults(p.weeklyResults as never);
+      if (wr !== undefined) row.weeklyResults = wr;
+    } else if (poolType === 'NFL_SURVIVOR') {
+      const s = e as SurvivorEntry;
+      row.status = s.status;
+      row.strikesUsed = s.strikesUsed ?? 0;
+      if (s.strikeWeeks !== undefined) row.strikeWeeks = s.strikeWeeks;
+      if (s.rebuysUsed !== undefined) row.rebuysUsed = s.rebuysUsed;
+      row.eliminatedWeek = s.eliminatedWeek ?? null;
+      if (s.exemptWeeks !== undefined) row.exemptWeeks = s.exemptWeeks;
+      const wr = sanitizeWeeklyResults(s.weeklyResults as never);
+      if (wr !== undefined) row.weeklyResults = wr;
+    } else if (poolType === 'NFL_MARGIN') {
+      const m = e as MarginEntry;
+      if (m.weeklyScores !== undefined) row.weeklyScores = m.weeklyScores;
+      row.seasonTotal = m.seasonTotal ?? 0;
+      row.negativeBurden = m.negativeBurden ?? 0;
+      row.positiveWeeks = m.positiveWeeks ?? 0;
+      row.bestWeek = m.bestWeek ?? 0;
+      const rank = (m as unknown as { rank?: number }).rank;
+      if (rank !== undefined) row.rank = rank;
+      const wr = sanitizeWeeklyResults(m.weeklyResults as never);
+      if (wr !== undefined) row.weeklyResults = wr;
+    }
+    return row;
+  });
 }
 
 /**

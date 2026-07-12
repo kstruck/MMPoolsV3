@@ -57,7 +57,13 @@ export async function recomputeWeekConsensus(
     const poolsSnap = await db.collection('pools').where('type', '==', type).where('season', '==', season).get();
     for (const poolDoc of poolsSnap.docs) {
       const pool: any = poolDoc.data();
-      if (!isActivePoolForStats(pool, poolDoc.id)) continue;
+      // Sim seasons: the season-scoped query IS the isolation (only that run's
+      // Test Pools match, site-wide docs are keyed by the sim season, and cleanup
+      // purges them via the manifest's stWeeks) — so a Golden Scenario can certify
+      // the post-submit consensus recompute. Real seasons keep the full predicate,
+      // which since Phase 0.4 also excludes simRunId-marked pools outright.
+      const isSimSeason = String(season).startsWith('sim-');
+      if (isSimSeason ? pool.status === 'CANCELED' : !isActivePoolForStats(pool, poolDoc.id)) continue;
       poolCount++;
       const entriesSnap = await poolDoc.ref.collection('entries').get();
       const entries = entriesSnap.docs.map(e => e.data());

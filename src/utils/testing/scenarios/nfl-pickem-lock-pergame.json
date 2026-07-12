@@ -1,0 +1,38 @@
+{
+    "id": "nfl-pickem-lock-pergame",
+    "name": "Pick'em PER_GAME Lock Lifecycle (real path)",
+    "description": "REAL submit path via simSubmitPicks: a pre-kickoff pick is accepted; a NEW pick on a kicked-off game is rejected GAME_LOCKED. Games then conclude and score. Real-path entries carry the run-scoped lowercase userName. Expectations hand-verified.",
+    "poolType": "NFL_PICKEM",
+    "poolConfig": {
+        "name": "Sim Lock PER_GAME",
+        "type": "NFL_PICKEM",
+        "settings": {
+            "entryFee": 0,
+            "lockMode": "PER_GAME",
+            "payoutMode": "SEASON",
+            "pickMode": "STRAIGHT",
+            "confidenceMode": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 0, "awayScore": 0, "status": "SCHEDULED", "startOffsetMs": 7200000 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 14, "awayScore": 7, "status": "IN_PROGRESS", "startOffsetMs": -7200000 }
+    ],
+    "lifecycleOps": [
+        { "op": "join", "userNames": ["alice"] },
+        { "op": "submit", "userName": "alice", "week": 1, "picks": { "g1": "KC" }, "tiebreaker": 38 },
+        { "op": "submit", "userName": "alice", "week": 1, "picks": { "g2": "SF" }, "expectError": "GAME_LOCKED" },
+        { "op": "reseedGames", "games": [
+            { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24, "status": "FINAL", "startOffsetMs": -14400000 },
+            { "week": 1, "home": "SF", "away": "DAL", "homeScore": 21, "awayScore": 17, "status": "FINAL", "startOffsetMs": -14400000 }
+        ] },
+        { "op": "score", "week": 1 }
+    ],
+    "assertions": [
+        { "type": "nflEntryCount", "expected": 1, "message": "1 real-path entry" },
+        { "type": "submitRejected", "userName": "alice", "week": 1, "expected": "GAME_LOCKED", "message": "New pick on a kicked-off game rejected GAME_LOCKED" },
+        { "type": "nflWeeklyPoints", "userName": "alice", "week": 1, "expected": 1, "message": "alice week 1 = 1 (KC pick landed pre-lock; SF pick never landed)" },
+        { "type": "nflTotalScore", "userName": "alice", "expected": 1, "message": "alice total = 1" }
+    ]
+}

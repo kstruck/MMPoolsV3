@@ -182,7 +182,15 @@ export interface NFLPickemEntry {
   weeklyTiebreakers?: Record<number, number>; // week -> predicted MNF combined score
   weeklyPoints?: Record<number, number>; // week -> points earned
   // Real per-week W-L, persisted by scoreNFLWeek (ADR 0004). resultsVersion bumps each score.
-  weeklyResults?: Record<number, { correct: number; total: number; points: number }>;
+  // `mode` + per-game graded outcomes added by ADR 0005 (Player Profiles) — written only
+  // after games are final, so reveal-safe by construction; rescore overwrites the week.
+  weeklyResults?: Record<number, {
+    correct: number;
+    total: number;
+    points: number;
+    mode?: 'STRAIGHT' | 'ATS';
+    games?: Record<string, { pick: string; result: 'W' | 'L' | 'PUSH' | 'VOID'; away?: string; home?: string }>;
+  }>;
   resultsVersion?: number;
   totalScore: number;
   submittedAt: number;
@@ -208,6 +216,13 @@ export interface SurvivorEntry {
   usedTeams: string[];
   picks: Record<number, string>; // week -> pickedTeamId
   exemptWeeks: number[];
+  // Per-week scored outcome (ADR 0004 shape + ADR 0005 per-pick game record).
+  weeklyResults?: Record<number, {
+    survived: boolean;
+    strike: boolean;
+    game?: { gameId: string; pick: string; result: 'SURVIVED' | 'STRUCK' | 'VOID' };
+  }>;
+  resultsVersion?: number;
   submittedAt: number;
   paidStatus: 'PAID' | 'UNPAID';
 }
@@ -221,6 +236,12 @@ export interface MarginEntry {
   picks: Record<number, string>; // week -> pickedTeamId
   usedTeams: string[];
   weeklyScores: Record<number, number>; // week -> score differential
+  // Per-week scored outcome (ADR 0004 shape + ADR 0005 per-pick game record).
+  weeklyResults?: Record<number, {
+    net: number;
+    game?: { gameId: string; pick: string; net: number };
+  }>;
+  resultsVersion?: number;
   seasonTotal: number;
   negativeBurden: number;
   positiveWeeks: number;

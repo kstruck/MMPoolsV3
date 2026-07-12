@@ -1,0 +1,29 @@
+{
+    "id": "nfl-buyflow-trial-stamp",
+    "name": "Buy-flow: Trial Stamp on Create (item 15)",
+    "description": "A create payload carrying a paid add-on (aiCommissioner) forces a TRIAL launch — server-stamped billing.status='trial' with a trialEndsAt, and NO paid snapshot (the sim never enters checkout; Codex R2#5 scope).",
+    "poolType": "NFL_PICKEM",
+    "createViaCallable": true,
+    "poolConfig": {
+        "name": "Sim Buyflow Trial",
+        "type": "NFL_PICKEM",
+        "aiCommissioner": true,
+        "settings": {
+            "entryFee": 0,
+            "lockMode": "PER_GAME",
+            "payoutMode": "SEASON",
+            "pickMode": "STRAIGHT",
+            "confidenceMode": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 }
+    ],
+    "scoreWeeks": [],
+    "assertions": [
+        { "type": "poolStatus", "field": "billing.status", "expected": "trial", "message": "Paid add-on forces a TRIAL launch stamp" },
+        { "type": "poolStatus", "field": "billing.paid", "message": "No paid snapshot — trial never enters the paid path" },
+        { "type": "nflEntryCount", "expected": 0, "message": "No entries — billing stamp scenario only" }
+    ]
+}

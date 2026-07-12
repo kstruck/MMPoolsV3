@@ -31,15 +31,30 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // PLAYER PROFILES (ADR 0004) — sanitized public projection (only aggregate + scored data;
-    // never the private per-user docs). Public read; server-written only.
+    // PLAYER PROFILES (ADR 0004/0005) — sanitized public projection (only aggregate + scored
+    // data; ZERO pool identifiers; never the private per-user docs). Public read;
+    // server-written only.
     match /publicProfiles/{uid} {
       allow read: if true;
       allow write: if false;
+
+      // ACHIEVEMENTS (ADR 0005 decision 5) — earned-achievement docs written only by the
+      // future server-side achievements engine (Admin SDK). Same leak rule as the parent:
+      // no pool identifiers on these docs.
+      match /achievements/{achievementId} {
+        allow read: if true;
+        allow write: if false;
+      }
     }
 
     function isSuperAdmin() {
       return request.auth != null && request.auth.token.get('role', '') == 'SUPER_ADMIN';
+    }
+
+    // EXPERT RESULTS (ADR 0005 Phase 6) — server-only grading store behind the
+    // publicProfiles/expert_* projections. Clients read only the projection.
+    match /expertResults/{expertId}/{document=**} {
+      allow read, write: if false;
     }
 
     // POOLS:
@@ -107,14 +122,11 @@ service cloud.firestore {
         || isSuperAdmin()
       );
                     
-      // NO CREATE via Client (must use createPool function). The ONLY exception is
-      // the admin Test Suite / Tournament Simulator, which seeds sim-* pools client-side.
-      // Restricted to SUPER_ADMIN: previously any authenticated user could create a
-      // pool doc directly by prefixing the slug with "sim-", bypassing createPool and
-      // setting arbitrary ownerId/managerUid/billing (privilege-escalation + billing
-      // bypass). Admins run the Test Suite, so this keeps it working while closing the
-      // hole. TODO(Phase 2): move sim writes to audited test-only callables and drop this.
-      allow create: if request.resource.data.slug.matches('^sim-.*') && isSuperAdmin();
+      // NO CREATE via Client (must use createPool function). The former sim-*
+      // slug SUPER_ADMIN exception is GONE (PLAN-NFL-SIM-HARNESS Phase 5): every
+      // simulator now creates through the real create callables with a
+      // server-stamped simRunId trust anchor — no client path may mint pool docs.
+      allow create: if false;
 
       // WINNERS (Subcollection)
       match /winners/{winnerId} {
@@ -212,13 +224,15 @@ service cloud.firestore {
       }
 
       // BRACKET/PLAYOFF/NFL ENTRIES
-      // A member always reads their OWN entry. Reading OTHER members' entries requires
-      // participation in the pool AND the pool being locked/final — the previous rule let
-      // ANY authenticated user read all entries once locked (a pick-visibility hole; ADR 0004
-      // finding). NOTE: an entry doc bundles all game picks, so in PER_GAME-lock pools this
-      // coarse "locked" gate can still expose a participant's later-game picks; the full
-      // per-game reveal-safe path is the server consensus/standings projection (later phase),
-      // after which non-owner raw entry reads tighten further.
+      // A member always reads their OWN entry; owner/manager/admin retain management reads.
+      // Non-owner PARTICIPANT reads split by pool type (ADR 0004 finding, closed by ADR 0005
+      // Phase 2):
+      // - NFL season types (PER_GAME/WEEKLY lock): an entry doc bundles ALL of a member's
+      //   picks, so any pre-FINAL read can expose un-locked later picks. Participants read
+      //   the server standings projection (/standings/current) and consensus instead; raw
+      //   entries open up only when the pool is FINAL/COMPLETED.
+      // - Single-lock types (bracket/playoff): post-lock full reveal is by design — the
+      //   coarse locked/live gate stays.
       match /entries/{entryId} {
         allow read: if request.auth != null && (
           request.auth.uid == resource.data.ownerUid ||
@@ -228,19 +242,27 @@ service cloud.firestore {
           (
             request.auth.uid in get(/databases/$(database)/documents/pools/$(poolId)).data.participantIds &&
             (
-              get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'LOCKED' ||
-              get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'LIVE' ||
-              get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'FINAL' ||
-              get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'COMPLETED' ||
-              get(/databases/$(database)/documents/pools/$(poolId)).data.isLocked == true
+              get(/databases/$(database)/documents/pools/$(poolId)).data.type in ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN']
+                ? (
+                    get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'FINAL' ||
+                    get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'COMPLETED'
+                  )
+                : (
+                    get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'LOCKED' ||
+                    get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'LIVE' ||
+                    get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'FINAL' ||
+                    get(/databases/$(database)/documents/pools/$(poolId)).data.status == 'COMPLETED' ||
+                    get(/databases/$(database)/documents/pools/$(poolId)).data.isLocked == true
+                  )
             )
           )
         );
-        // Entries are written server-side (bracketEntries/poolOps callables) or by
-        // SUPER_ADMIN (Test Suite). The former sim-* client-write branch let any authed
-        // user inject entries into a sim pool; removed. Sim entries go through the
-        // isSuperAdmin() path (the Test Suite runs as an admin).
-        allow write: if isSuperAdmin();
+        // Entries are written SERVER-SIDE ONLY (bracketEntries/poolOps callables;
+        // simulators go through the runId-scoped simWriteEntries harness). The
+        // former blanket isSuperAdmin() write — the Test Suite's raw-write door,
+        // one bug away from corrupting a real pool's entries — is GONE
+        // (PLAN-NFL-SIM-HARNESS Phase 5).
+        allow write: if false;
       }
 
       // MEMBER RECORDS (roster + payment truth, ADR 0003)
@@ -261,6 +283,44 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['memberReportedPaid', 'memberReportedAt']);
         allow create, delete: if false;
+      }
+
+      // STANDINGS PROJECTION (ADR 0005 Phase 2) — member-readable, reveal-safe scored
+      // rows written by scoreNFLWeek (allowlist-built: no picks/confidence/usedTeams).
+      // This is what member views read now that raw NFL entry reads are own-only pre-FINAL.
+      match /standings/{docId} {
+        allow read: if request.auth != null && (
+          request.auth.uid in get(/databases/$(database)/documents/pools/$(poolId)).data.participantIds ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isSuperAdmin()
+        );
+        allow write: if false;
+      }
+
+      // PAYOUT RECORDS (ADR 0005 Phase 4) — who-won-what, the source of truth for
+      // Profit. Participant-readable (a pool's winners are inherent to pool play);
+      // written only by the recordPoolPayouts callable.
+      match /payoutRecords/{awardId} {
+        allow read: if request.auth != null && (
+          request.auth.uid in get(/databases/$(database)/documents/pools/$(poolId)).data.participantIds ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isSuperAdmin()
+        );
+        allow write: if false;
+      }
+
+      // Settlement state, notes, and actor metadata are NOT pool-public: only the
+      // commissioner/manager/admin and the affected recipient may read.
+      match /payoutRecordsPrivate/{awardId} {
+        allow read: if request.auth != null && (
+          request.auth.uid == resource.data.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isSuperAdmin()
+        );
+        allow write: if false;
       }
 
       // ROSTER SUMMARY (member-readable dues projection; server-written only)

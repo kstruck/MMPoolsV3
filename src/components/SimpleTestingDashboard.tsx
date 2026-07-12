@@ -30,13 +30,17 @@ const POOL_TYPE_LABELS: Record<string, string> = {
 const failedSteps = (r: SimpleTestResult) =>
     (r.steps || []).filter((s) => s.status === 'failed' || s.status === 'skipped');
 
+const NFL_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
+
 export const SimpleTestingDashboard: React.FC = () => {
     const [selectedScenario, setSelectedScenario] = useState<string>('');
     const [isRunning, setIsRunning] = useState(false);
     const [result, setResult] = useState<SimpleTestResult | null>(null);
     const [allResults, setAllResults] = useState<SimpleTestResult[] | null>(null);
+    const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
     const scenarios = getAvailableScenarios();
+    const nflCount = scenarios.filter(s => NFL_TYPES.includes(s.poolType)).length;
     logger.log('Available Scenarios:', scenarios); // Debug: Check if new scenarios are loaded
 
     const handleRunSingle = async () => {
@@ -64,13 +68,17 @@ export const SimpleTestingDashboard: React.FC = () => {
         }
     };
 
-    const handleRunAll = async () => {
+    const handleRunAll = async (poolTypes?: string[]) => {
         setIsRunning(true);
         setResult(null);
         setAllResults(null);
+        setProgress(null);
 
         try {
-            const results = await runAllTests();
+            const results = await runAllTests({
+                poolTypes,
+                onProgress: (done, total) => setProgress({ done, total }),
+            });
             for (const r of results.results) {
                 logger.log(`[TestSuite] ${r.scenarioName} steps:`, r.steps);
             }
@@ -79,6 +87,7 @@ export const SimpleTestingDashboard: React.FC = () => {
             logger.error('Run all tests failed:', error);
         } finally {
             setIsRunning(false);
+            setProgress(null);
         }
     };
 
@@ -144,7 +153,19 @@ export const SimpleTestingDashboard: React.FC = () => {
                     </button>
 
                     <button
-                        onClick={handleRunAll}
+                        onClick={() => handleRunAll(NFL_TYPES)}
+                        disabled={isRunning}
+                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150 ${isRunning
+                            ? 'bg-surface border border-line text-faint cursor-not-allowed'
+                            : 'bg-navy-700 hover:bg-navy-600 text-white hover:-translate-y-px'
+                            }`}
+                    >
+                        <Play className="w-4 h-4" />
+                        Run All NFL (<span className="num">{nflCount}</span>)
+                    </button>
+
+                    <button
+                        onClick={() => handleRunAll()}
                         disabled={isRunning}
                         className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150 ${isRunning
                             ? 'bg-surface border border-line text-faint cursor-not-allowed'
@@ -171,7 +192,9 @@ export const SimpleTestingDashboard: React.FC = () => {
                 {isRunning && (
                     <div className="mt-4 flex items-center gap-2 font-body text-gold-700 dark:text-gold-400">
                         <div className="animate-spin w-4 h-4 border-2 border-gold-500 border-t-transparent rounded-full"></div>
-                        Running test...
+                        {progress
+                            ? <>Running <span className="num">{progress.done}</span>/<span className="num">{progress.total}</span> scenarios… results land in each run's <span className="font-mono">simRuns</span> manifest.</>
+                            : 'Running test...'}
                     </div>
                 )}
             </div>

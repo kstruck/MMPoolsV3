@@ -21,7 +21,7 @@ export { onUserCreated as createParticipantProfile, createClaimCode, claimMySqua
 export { createPool, updatePoolSettings, recalculatePoolWinners, toggleWinnerPaid, fixParticipantIds } from "./poolOps";
 export { backfillPools } from "./backfill";
 export { createBracketPool, publishBracketPool, joinBracketPool } from "./bracketPools";
-export { createBracketEntry, updateBracketEntry, submitBracketEntry, deleteBracketEntry } from "./bracketEntries";
+export { createBracketEntry, updateBracketEntry, submitBracketEntry, deleteBracketEntry, updateEntryPayment, adminUpdateEntryOverrides, adminDeleteEntry } from "./bracketEntries";
 export { markEntryPaidStatus, updateTournamentData } from "./bracketOps";
 export { adminInitTournament, syncBracketTournament, scheduledBracketSync, importTournamentFromESPN, importConferenceTournamentFromESPN } from "./espnBracket";
 export { onGameComplete } from "./postGameEmail";
@@ -52,7 +52,10 @@ export { createNFLPool, joinNFLPool, submitNFLPicks, executeSurvivorRebuy, score
 export { sendManualReminder } from "./manualReminders";
 // Sim harness (PLAN-TEST-SUITE 8e/8f): SUPER_ADMIN-only, simRunId-scoped Test
 // Suite mutations + cleanup. See functions/src/simHarness.ts.
-export { simWriteEntries, simUpdatePool, simSeedNFLGames, cleanupSimPool } from "./simHarness";
+export { simStartRun, simWriteEntries, simUpdatePool, simSeedNFLGames, cleanupSimPool, sweepSimRuns, simJoinMembers, simSubmitPicks, simExecuteRebuy, simFinalizePool, simReportRun } from "./simHarness";
+// Legacy-simulator migration (PLAN-NFL-SIM-HARNESS Phase 5): tournament test
+// infra + squares grid fill off raw client writes. See functions/src/simLegacy.ts.
+export { simSetTournament, simDeleteTournament, simFillSquares } from "./simLegacy";
 
 // --- BILLING & MONETIZATION ---
 export { enforceBillingStatus, validateBillingAccess, redeemCoupon, onPoolParticipantChange, getPoolQuote } from "./billing";
@@ -93,6 +96,7 @@ export { sendPoolInvites } from "./invites";
 export { setPaidStatus } from "./setPaidStatus";
 export { onMemberRecordWrite, onWinnerWrite, onPoolRosterFieldsChange } from "./rosterAggregate";
 export { backfillMemberRecords } from "./migrations/backfillMemberRecords";
+export { backfillProfileData } from "./migrations/backfillProfileData";
 
 // --- CONSENSUS + LIVE WIN PROBABILITY (ADR 0004) ---
 export { consensusRefreshJob, recomputeConsensus } from "./consensus";
@@ -100,5 +104,14 @@ export { syncWinProbabilityJob } from "./winProbability";
 export { syncExpertPicksJob, refreshExpertPicks } from "./expertPicks";
 
 // --- PLAYER PROFILES (ADR 0004) ---
-export { onEntryChangedRecomputeProfile, recomputeMyProfile } from "./userProfile";
+export { onEntryChangedRecomputeProfile, recomputeMyProfile, getProfilePoolDetail } from "./userProfile";
+
+// --- SEASON FINALIZATION (ADR 0005 Phase 3) — kill-switched, dry-run-default sweep ---
+export { nflFinalizeSweepJob } from "./nflFinalize";
+
+// --- PAYOUT RECORDS (ADR 0005 Phase 4) — commissioner-recorded prize truth ---
+export { recordPoolPayouts } from "./payoutRecords";
+
+// --- EXPERT PROFILES (ADR 0005 Phase 6) — experts rendered through the same projection ---
+export { gradeExpertProfilesJob, refreshExpertProfiles } from "./expertProfiles";
 

@@ -20,6 +20,11 @@ export interface MembershipFacts {
   poolType: string;
   present: boolean;           // still a member: has >=1 entry / >=1 owned square / joined
   unitsOwned?: number;        // SQUARES only
+  // ADR 0005 Phase 4 — base-dues stamping. entryFee is the pool's fee at write
+  // time; hasPlayableEntry marks that the uid has committed an Entry (used to
+  // start owner liability — a seeded MANAGER owes 0 until they actually play).
+  entryFee?: number;
+  hasPlayableEntry?: boolean;
 }
 
 export type MembershipPlan =
@@ -50,13 +55,31 @@ export function planMembershipWrite(
   if (facts.role) data.role = facts.role;
   if (facts.poolType === 'SQUARES') data.unitsOwned = facts.unitsOwned ?? 0;
 
+  // Base-dues liability (ADR 0005 Phase 4): a seeded MANAGER owes 0 until they
+  // commit a playable entry; everyone else owes the pool fee from the moment
+  // they join. Only computed when the caller supplied entryFee.
+  const liableFee = facts.entryFee === undefined
+    ? undefined
+    : (facts.role === 'MANAGER' && !facts.hasPlayableEntry ? 0 : facts.entryFee);
+
   if (!existing) {
     // First write: seed payment defaults. Merge=false so the doc is well-formed.
     data.paidStatus = 'UNPAID';
     data.joinedAt = now;
+    if (liableFee !== undefined) {
+      data.feeOwed = liableFee;
+      data.feeOwedSource = 'LIVE';
+    }
     return { participant: 'add', member: { op: 'set', data, merge: false } };
   }
-  // Update: merge identity/units only; preserve paidStatus + claim.
+  // Update: merge identity/units only; preserve paidStatus + claim. feeOwed is
+  // filled when missing (heal-on-touch) or upgraded 0 -> fee when an owner who
+  // previously hadn't played now has a playable entry. Never lowered here —
+  // fee changes cascade through the entryFee-edit path instead.
+  if (liableFee !== undefined && (existing.feeOwed === undefined || (existing.feeOwed === 0 && liableFee > 0))) {
+    data.feeOwed = liableFee;
+    data.feeOwedSource = 'LIVE';
+  }
   return { participant: 'add', member: { op: 'set', data, merge: true } };
 }
 

@@ -1,7 +1,15 @@
 
-import { db } from '../firebase';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { db, functions } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import type { Tournament, Game } from '../types';
+
+// PLAN-NFL-SIM-HARNESS Phase 5: this module performs ZERO raw Firestore
+// writes. Tournament test docs go through the SUPER_ADMIN-audited
+// simSetTournament callable; grid fills through simFillSquares.
+async function setTournamentDoc(tournamentId: string, tournament: Tournament): Promise<void> {
+    await httpsCallable(functions, 'simSetTournament')({ tournamentId, tournament });
+}
 
 /**
  * Creates a mock tournament with 64 teams and the initial R64 schedule structure.
@@ -50,7 +58,7 @@ export async function seedTestTournament(year: number) {
         slots: {} // Empty slots for now, builder might need them but this fixes type error
     };
 
-    await setDoc(doc(db, 'tournaments', year.toString()), tournament);
+    await setTournamentDoc(year.toString(), tournament);
 }
 
 /**
@@ -63,7 +71,6 @@ export async function simulateRound(year: number) {
 
     const data = snap.data() as Tournament;
     const games = data.games;
-    const updates: Record<string, unknown> = {};
 
     // Find lowest active round
     let activeRound = 7;
@@ -74,7 +81,8 @@ export async function simulateRound(year: number) {
     if (activeRound > 6) return "Tournament Complete";
 
     let count = 0;
-    // Simulate games in this round
+    // Simulate games in this round — mutate the local doc, then replace it via
+    // the guarded callable (read-modify-write; this is a single-operator test tool).
     Object.values(games).forEach(g => {
         if (g.round === activeRound && g.status === 'SCHEDULED') {
             const isHomeWin = Math.random() > 0.5;
@@ -85,10 +93,13 @@ export async function simulateRound(year: number) {
             const finalHome = isHomeWin ? Math.max(homeScore, awayScore + 1) : Math.min(homeScore, awayScore - 1);
             const finalAway = isHomeWin ? Math.min(homeScore, awayScore - 1) : Math.max(homeScore, awayScore + 1);
 
-            updates[`games.${g.id}.status`] = 'FINAL';
-            updates[`games.${g.id}.homeScore`] = finalHome;
-            updates[`games.${g.id}.awayScore`] = finalAway;
-            updates[`games.${g.id}.winnerTeamId`] = isHomeWin ? g.homeTeamId : g.awayTeamId;
+            games[g.id] = {
+                ...g,
+                status: 'FINAL',
+                homeScore: finalHome,
+                awayScore: finalAway,
+                winnerTeamId: isHomeWin ? g.homeTeamId : g.awayTeamId,
+            };
 
             // Advance winner to next round
             // Logic to find next game slot... this is tricky without a predefined slot map.
@@ -106,16 +117,13 @@ export async function simulateRound(year: number) {
     });
 
     // IMPORTANT: In a real implementation, we must update the NEXT game's home/awayTeamId.
-    // For this MVP task, I will leave it as "Mark Final". 
+    // For this MVP task, I will leave it as "Mark Final".
     // The user asked to "Simulate outcomes".
 
-    await updateDoc(tourneyRef, updates);
+    await setTournamentDoc(year.toString(), { ...data, games });
     return `Simulated ${count} games in Round ${activeRound}`;
 }
 
-
-import { functions } from '../firebase';
-import { httpsCallable } from 'firebase/functions';
 
 export async function resetTournament(year: number) {
     await seedTestTournament(year);
@@ -132,55 +140,11 @@ export async function simulatePoolGame(poolId: string, scores: Record<string, un
 
 /**
  * Fills the grid with dummy users, leaving a specified number of blank squares.
+ * Server-side since Phase 5 (simFillSquares) — same semantics, owner/SUPER_ADMIN
+ * authorized, audited.
  */
 export async function fillGridWithBlanks(poolId: string, blanksToLeave: number) {
-    const poolRef = doc(db, 'pools', poolId);
-    const snap = await getDoc(poolRef);
-    if (!snap.exists()) throw new Error("Pool not found");
-    const pool = snap.data();
-
-    // 1. Identify empty squares
-    let squares = [...(pool.squares || [])];
-
-    // Ensure 100 squares exist
-    if (squares.length < 100) {
-        squares = Array(100).fill(null).map((_, i) => ({ id: i, owner: null }));
-    }
-
-    const currentFilled = squares.filter((s) => s.owner).length;
-    const currentEmptyIndices = squares
-        .map((s, i) => s.owner ? -1 : i)
-        .filter((i) => i !== -1);
-
-    const targetFilled = 100 - blanksToLeave;
-    const needed = targetFilled - currentFilled;
-
-    if (needed <= 0) {
-        return `Grid already has ${currentFilled} filled. Target was ${targetFilled} (leaving ${blanksToLeave} blank). No action taken.`;
-    }
-
-    // 2. Shuffle indices to fill randomly
-    const indicesToFill = [...currentEmptyIndices];
-    for (let i = indicesToFill.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [indicesToFill[i], indicesToFill[j]] = [indicesToFill[j], indicesToFill[i]];
-    }
-
-    // 3. Fill needed amount
-    const selectedIndices = indicesToFill.slice(0, needed);
-    const dummyNames = ["Abe", "Barb", "Carl", "Deb", "Ed", "Fran", "Gil", "Hal", "Ivy", "Jon", "Ken", "Liz", "Mac", "Nan", "Pat", "Ron", "Sam", "Val", "Wes", "Zoe"];
-
-    selectedIndices.forEach((idx) => {
-        const randomName = dummyNames[Math.floor(Math.random() * dummyNames.length)];
-        squares[idx] = {
-            id: idx,
-            owner: `${randomName}-${Math.floor(Math.random() * 999)}`, // Unique-ish name
-            isPaid: true,
-            timestamp: Date.now()
-        };
-    });
-
-    // 4. Update
-    await updateDoc(poolRef, { squares });
-    return `Filled ${selectedIndices.length} squares. Grid now has ${100 - blanksToLeave} filled.`;
+    const fill = httpsCallable(functions, 'simFillSquares');
+    const res = await fill({ poolId, blanksToLeave });
+    return (res.data as { message?: string })?.message ?? 'Grid fill complete.';
 }

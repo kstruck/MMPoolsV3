@@ -1,0 +1,31 @@
+{
+    "id": "nfl-margin-tie-zero",
+    "name": "Margin Tie Game = 0 (edge)",
+    "description": "A tied game scores exactly 0 margin — neither gain nor burden. Expectations hand-verified.",
+    "poolType": "NFL_MARGIN",
+    "poolConfig": {
+        "name": "Sim Margin Tie",
+        "type": "NFL_MARGIN",
+        "settings": {
+            "entryFee": 0,
+            "payoutMode": "SEASON",
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 21, "awayScore": 21 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 }
+    ],
+    "scoreWeeks": [1],
+    "testEntries": [
+        { "userName": "Alice", "marginPicks": { "1": "KC" } },
+        { "userName": "Bob", "marginPicks": { "1": "SF" } }
+    ],
+    "assertions": [
+        { "type": "marginSeasonTotal", "userName": "Alice", "expected": 0, "message": "Alice's tie scores 0" },
+        { "type": "standingsRow", "userName": "Alice", "expected": { "seasonTotal": 0, "negativeBurden": 0, "positiveWeeks": 0 }, "message": "Tie is not a negative burden and not a positive week" },
+        { "type": "marginSeasonTotal", "userName": "Bob", "expected": 20, "message": "Bob +20 (SF by 20)" },
+        { "type": "marginRank", "userName": "Bob", "expected": 1, "message": "Bob ranks 1st" },
+        { "type": "marginRank", "userName": "Alice", "expected": 2, "message": "Alice ranks 2nd" }
+    ]
+}

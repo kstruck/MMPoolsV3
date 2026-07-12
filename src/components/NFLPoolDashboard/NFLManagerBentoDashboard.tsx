@@ -1,10 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import type { User as UserType, Pool, NFLGame } from '../../types';
-import { dbService, db } from '../../services/dbService';
+import { dbService } from '../../services/dbService';
 import { getUserMessage } from '../../utils/errorMessages';
 import { useToast } from '../ui/Toast';
 import { Badge } from '../ui';
-import { doc, updateDoc } from 'firebase/firestore';
 import {
   Lock,
   Volume2,
@@ -92,15 +91,17 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   const saveDetailedPayment = async (entryId: string) => {
     setSavingLedgerId(entryId);
     try {
-      const entryRef = doc(db, 'pools', pool.id, 'entries', entryId);
+      // Server-side since Phase 5 (updateEntryPayment callable) — the raw entry
+      // write is denied by rules now, and never worked for commissioners anyway.
       const timestamp = editDate ? new Date(editDate).getTime() : Date.now();
-      await updateDoc(entryRef, {
-        paidStatus: editPaidStatus,
-        paymentMethod: editMethod,
-        paidAt: editPaidStatus === 'PAID' ? timestamp : null,
-        paymentNote: editNote || null,
-        updatedAt: Date.now()
-      });
+      await dbService.updateBracketEntryPayment(
+        pool.id, entryId, editPaidStatus,
+        editMethod as Parameters<typeof dbService.updateBracketEntryPayment>[3],
+        {
+          paidAt: editPaidStatus === 'PAID' ? timestamp : null,
+          paymentNote: editNote || null,
+        },
+      );
       setEditingEntryId(null);
     } catch (err) {
       console.error("Failed to update detailed payment:", err);

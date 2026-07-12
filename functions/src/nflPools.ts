@@ -33,8 +33,13 @@ import {
   computeMNFTiebreakerTotal,
   buildWeeklyRecap,
   scoreMarginWeek,
-  sortMarginLeaderboard
+  sortMarginLeaderboard,
+  gradePickemGames,
+  gradeSurvivorWeekGame,
+  gradeMarginWeekGame,
+  buildStandingsRows
 } from './nflScoringEngine';
+import { maybeFinalizeNFLPool } from './nflFinalize';
 import { fetchNFLWeekSchedule } from './nflSchedule';
 import { recomputeWeekConsensus } from './consensus';
 
@@ -124,7 +129,11 @@ export const createNFLPool = onCall(async (request) => {
       // Seed the owner's Member Record so the commissioner is on the roster from t=0
       // (ADR 0003). Brand-new pool -> no existing record.
       ensureMemberRecord(transaction, db, poolId, uid,
-        { userName: userDoc.data()?.name || request.auth?.token?.name || 'Host', role: 'MANAGER', poolType, present: true },
+        {
+          userName: userDoc.data()?.name || request.auth?.token?.name || 'Host', role: 'MANAGER', poolType, present: true,
+          // Hosting is not playing: owner feeOwed stays 0 until they submit an entry (ADR 0005).
+          entryFee: Number(newPool.settings?.entryFee ?? 0), hasPlayableEntry: false,
+        },
         null, now);
     });
 
@@ -149,15 +158,31 @@ export const createNFLPool = onCall(async (request) => {
 /**
  * Join an NFL Pool using a shared invite link.
  */
-export const joinNFLPool = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'User must be logged in.');
-  }
-  await assertNotMaintenance();
+/**
+ * Explicit member-action subject context (ADR 0006 / PLAN-NFL-SIM-HARNESS Phase 2.17).
+ * Public callables pass actor === subject from request.auth; the sim harness passes
+ * the SUPER_ADMIN actor plus a simulated subject — with actorRole left undefined so
+ * role-based bypasses stay OFF and every gate is enforced against the subject.
+ */
+export interface MemberActionContext {
+  actorUid: string;
+  actorRole?: string;
+  subjectUid: string;
+  subjectName?: string;
+  requestId?: string;
+}
 
-  const uid = request.auth.uid;
-  const db = admin.firestore();
-  const { poolId } = request.data;
+/**
+ * Join flow, extracted verbatim from the joinNFLPool callable (auth/maintenance
+ * checks stay in the wrapper — they are auth-plane concerns). Enrolls the SUBJECT:
+ * participantIds, participation doc, Member Record, join audit event.
+ */
+export async function joinNFLPoolInternal(
+  db: admin.firestore.Firestore,
+  ctx: { subjectUid: string; subjectName?: string },
+  poolId: string,
+): Promise<{ success: true }> {
+  const uid = ctx.subjectUid;
 
   if (!poolId) {
     throw new HttpsError('invalid-argument', 'poolId is required.');
@@ -172,7 +197,7 @@ export const joinNFLPool = onCall(async (request) => {
   }
 
   const pool = poolSnap.data() as any;
-  const joinerName = request.auth.token?.name || (await userRef.get()).data()?.name || 'Member';
+  const joinerName = ctx.subjectName || (await userRef.get()).data()?.name || 'Member';
 
   await db.runTransaction(async (transaction) => {
     const poolDoc = await transaction.get(poolRef);
@@ -185,7 +210,10 @@ export const joinNFLPool = onCall(async (request) => {
     if (participantIds.includes(uid)) {
       // Already a participant — still ensure a Member Record exists (backfill-on-touch).
       ensureMemberRecord(transaction, db, poolId, uid,
-        { userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true },
+        {
+          userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true,
+          entryFee: Number(poolData.settings?.entryFee ?? 0),
+        },
         memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
       return;
     }
@@ -213,8 +241,12 @@ export const joinNFLPool = onCall(async (request) => {
     });
 
     // 3. Seed the Member Record (roster + payment truth, ADR 0003) — additive.
+    // feeOwed stamped at join: dues are owed from membership, not from playing (ADR 0005).
     ensureMemberRecord(transaction, db, poolId, uid,
-      { userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true },
+      {
+        userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true,
+        entryFee: Number(poolData.settings?.entryFee ?? 0),
+      },
       memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
   });
 
@@ -227,6 +259,18 @@ export const joinNFLPool = onCall(async (request) => {
   });
 
   return { success: true };
+}
+
+export const joinNFLPool = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be logged in.');
+  }
+  await assertNotMaintenance();
+  return joinNFLPoolInternal(
+    admin.firestore(),
+    { subjectUid: request.auth.uid, subjectName: (request.auth.token as { name?: string })?.name },
+    request.data?.poolId,
+  );
 });
 
 /**
@@ -248,20 +292,22 @@ export function assertNFLPickMembership(
 }
 
 /**
- * Securely submits picks for an NFL Pool with strict server-side kickoff lock checks.
+ * Pick submission, extracted verbatim from the submitNFLPicks callable (auth +
+ * ban checks stay in the wrapper). Every gate — membership, spreads, effective
+ * locks, used-teams, idempotency — is enforced against ctx.subjectUid; the
+ * SUPER_ADMIN membership bypass keys off ctx.actorRole, which the sim harness
+ * deliberately leaves undefined (ADR 0006).
  */
-export const submitNFLPicks = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'User must be logged in.');
-  }
-  await assertNotBannedLive(request.auth.uid);
-
-  const uid = request.auth.uid;
-  const db = admin.firestore();
-  
+export async function submitNFLPicksInternal(
+  db: admin.firestore.Firestore,
+  ctx: MemberActionContext,
+  payload: { poolId?: string; week?: number; picks?: any; confidence?: any; tiebreakerPrediction?: number },
+): Promise<{ success: true }> {
+  const uid = ctx.subjectUid;
   // deep clean input
-  const data = JSON.parse(JSON.stringify(request.data || {}));
-  const { poolId, week, picks, confidence, tiebreakerPrediction, requestId } = data;
+  const data = JSON.parse(JSON.stringify(payload || {}));
+  const { poolId, week, picks, confidence, tiebreakerPrediction } = data;
+  const requestId = ctx.requestId;
 
   if (!poolId || !week || !picks) {
     throw new HttpsError('invalid-argument', 'Missing poolId, week, or picks.');
@@ -280,7 +326,7 @@ export const submitNFLPicks = onCall(async (request) => {
     throw new HttpsError("failed-precondition", billingCheck.reason || "Pool is locked due to billing.");
   }
 
-  assertNFLPickMembership(pool, uid, (request.auth.token as { role?: string })?.role);
+  assertNFLPickMembership(pool, uid, ctx.actorRole);
 
   const type = pool.type;
   const now = Date.now();
@@ -316,6 +362,9 @@ export const submitNFLPicks = onCall(async (request) => {
   await db.runTransaction(async (transaction) => {
     const entrySnap = await transaction.get(entryRef);
     const existingEntry = entrySnap.exists ? entrySnap.data() : null;
+    // Member Record read (before any writes) for the base-dues stamp below (ADR 0005).
+    const memberSnap = await transaction.get(membersCol(db, poolId).doc(uid));
+    const existingMember = memberSnap.exists ? (memberSnap.data() as MemberRecord) : null;
 
     // Idempotency: a retried submit (client resend after a lost response) whose
     // requestId already landed is a no-op success, not a duplicate write
@@ -356,14 +405,19 @@ export const submitNFLPicks = onCall(async (request) => {
         }
       }
 
-      // Update Pick'em Entry
+      // Update Pick'em Entry. NOTE: `confidence` must be spread conditionally —
+      // a literal `undefined` field crashes the Firestore serializer (this project
+      // deliberately does NOT set ignoreUndefinedProperties), which made EVERY
+      // submission to a non-confidence pick'em pool throw INTERNAL. Pre-existing;
+      // found by the first real-path Golden Scenario (PLAN-NFL-SIM-HARNESS Phase 2)
+      // — same bug class as the weekly-recap P0 in PR #152.
       const pickemEntry: NFLPickemEntry = {
         id: uid,
         poolId,
         ownerUid: uid,
-        userName: request.auth?.token.name || 'Participant',
+        userName: ctx.subjectName || 'Participant',
         picks: { ...(existingEntry?.picks || {}), ...picks },
-        confidence: settings.confidenceMode ? confidence : undefined,
+        ...(settings.confidenceMode && confidence ? { confidence } : {}),
         weeklyTiebreakers: {
           ...(existingEntry?.weeklyTiebreakers || {}),
           ...(tiebreakerPrediction !== undefined ? { [week]: tiebreakerPrediction } : {})
@@ -380,7 +434,7 @@ export const submitNFLPicks = onCall(async (request) => {
         id: uid,
         poolId,
         ownerUid: uid,
-        userName: request.auth?.token.name || 'Participant',
+        userName: ctx.subjectName || 'Participant',
         status: 'ALIVE',
         strikesUsed: 0,
         rebuysUsed: 0,
@@ -435,7 +489,7 @@ export const submitNFLPicks = onCall(async (request) => {
         id: uid,
         poolId,
         ownerUid: uid,
-        userName: request.auth?.token.name || 'Participant',
+        userName: ctx.subjectName || 'Participant',
         picks: {},
         usedTeams: [],
         weeklyScores: {},
@@ -481,6 +535,18 @@ export const submitNFLPicks = onCall(async (request) => {
 
       transaction.set(entryRef, { ...marginEntry, ...(requestId ? { lastRequestId: requestId } : {}) }, { merge: true });
     }
+
+    // Base-dues stamp (ADR 0005 Phase 4): submitting a playable entry starts fee
+    // liability — this is the moment a seeded owner's feeOwed upgrades 0 -> fee,
+    // and it heals records that predate the feeOwed field (fill-on-touch).
+    ensureMemberRecord(transaction, db, poolId, uid, {
+      userName: ctx.subjectName || 'Participant',
+      role: existingMember?.role ?? (pool.ownerId === uid ? 'MANAGER' : 'PARTICIPANT'),
+      poolType: type,
+      present: true,
+      entryFee: Number(pool.settings?.entryFee ?? 0),
+      hasPlayableEntry: true,
+    }, existingMember, now);
   });
 
   // Fully-open live consensus (2026-07-09): refresh this pool's week immediately so the crowd
@@ -493,19 +559,41 @@ export const submitNFLPicks = onCall(async (request) => {
   }
 
   return { success: true };
-});
+}
 
 /**
- * Triggers a Survivor rebuy/buy-back for an eliminated participant.
+ * Securely submits picks for an NFL Pool with strict server-side kickoff lock checks.
  */
-export const executeSurvivorRebuy = onCall(async (request) => {
+export const submitNFLPicks = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'User must be logged in.');
   }
+  await assertNotBannedLive(request.auth.uid);
+  const token = request.auth.token as { name?: string; role?: string };
+  return submitNFLPicksInternal(
+    admin.firestore(),
+    {
+      actorUid: request.auth.uid,
+      actorRole: token?.role,
+      subjectUid: request.auth.uid,
+      subjectName: token?.name,
+      requestId: request.data?.requestId,
+    },
+    request.data,
+  );
+});
 
-  const uid = request.auth.uid;
-  const db = admin.firestore();
-  const { poolId, week } = request.data;
+/**
+ * Survivor rebuy, extracted verbatim from the executeSurvivorRebuy callable
+ * (auth check stays in the wrapper). Enforced against ctx.subjectUid.
+ */
+export async function executeSurvivorRebuyInternal(
+  db: admin.firestore.Firestore,
+  ctx: MemberActionContext,
+  payload: { poolId?: string; week?: number },
+): Promise<{ success: true }> {
+  const uid = ctx.subjectUid;
+  const { poolId, week } = payload || {};
 
   if (!poolId || !week) {
     throw new HttpsError('invalid-argument', 'poolId and week are required.');
@@ -572,7 +660,7 @@ export const executeSurvivorRebuy = onCall(async (request) => {
     } else {
       transaction.set(memberRef, {
         uid, poolId,
-        userName: entry.userName || request.auth?.token?.name || 'Participant',
+        userName: entry.userName || ctx.subjectName || 'Participant',
         role: 'PARTICIPANT', paidStatus: 'UNPAID', joinedAt: Date.now(), rebuyOwed: rebuyAmt,
       }, { merge: false });
     }
@@ -600,6 +688,26 @@ export const executeSurvivorRebuy = onCall(async (request) => {
   });
 
   return { success: true };
+}
+
+/**
+ * Triggers a Survivor rebuy/buy-back for an eliminated participant.
+ */
+export const executeSurvivorRebuy = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be logged in.');
+  }
+  const token = request.auth.token as { name?: string; role?: string };
+  return executeSurvivorRebuyInternal(
+    admin.firestore(),
+    {
+      actorUid: request.auth.uid,
+      actorRole: token?.role,
+      subjectUid: request.auth.uid,
+      subjectName: token?.name,
+    },
+    request.data,
+  );
 });
 
 /**
@@ -705,9 +813,19 @@ export const scoreNFLWeek = onCall(async (request) => {
 
       // Persist the real per-week W-L (correct/total) that scorePickemEntry already computes
       // and previously discarded — makes accuracy truthful (ADR 0004). resultsVersion lets the
-      // Phase E per-user aggregate recompute idempotently.
+      // Phase E per-user aggregate recompute idempotently. Per-game graded outcomes + pick
+      // mode added by ADR 0005 (written post-final only — reveal-safe; rescore overwrites).
       const picksThisWeek = games.filter(g => !!entry.picks?.[g.id]).length;
-      const weeklyResults = { ...((entry as any).weeklyResults || {}), [week]: { correct: correctCount, total: picksThisWeek, points } };
+      const weeklyResults = {
+        ...((entry as any).weeklyResults || {}),
+        [week]: {
+          correct: correctCount,
+          total: picksThisWeek,
+          points,
+          mode: pool.settings?.pickMode === 'ATS' ? 'ATS' : 'STRAIGHT',
+          games: gradePickemGames(entry, games, pool),
+        },
+      };
 
       await stage(entryRef, {
         weeklyPoints,
@@ -739,7 +857,23 @@ export const scoreNFLWeek = onCall(async (request) => {
       const result = computeSurvivorWeekUpdate(entry, week, games, pool);
 
       if (!result.skipped) {
-        await stage(entryRef, result.update);
+        // ADR 0004/0005: per-week scored outcome + per-pick game record, idempotent
+        // (rescore overwrites this week's key), versioned for the profile recompute.
+        const struckThisWeek = result.update.strikeWeeks.includes(week);
+        const game = gradeSurvivorWeekGame(entry, week, games, struckThisWeek);
+        const weeklyResults = {
+          ...((entry as any).weeklyResults || {}),
+          [week]: {
+            survived: !struckThisWeek,
+            strike: struckThisWeek,
+            ...(game ? { game } : {}),
+          },
+        };
+        await stage(entryRef, {
+          ...result.update,
+          weeklyResults,
+          resultsVersion: (((entry as any).resultsVersion) || 0) + 1,
+        });
       }
       if (result.alive) aliveCount++;
 
@@ -781,12 +915,21 @@ export const scoreNFLWeek = onCall(async (request) => {
       // Best single week
       const bestWeek = Object.values(weeklyScores).length > 0 ? Math.max(...Object.values(weeklyScores)) : 0;
 
+      // ADR 0004/0005: per-week scored outcome + per-pick game record, idempotent + versioned.
+      const game = gradeMarginWeekGame(pick, games);
+      const weeklyResults = {
+        ...((entry as any).weeklyResults || {}),
+        [week]: { net: weekScore, ...(game ? { game } : {}) },
+      };
+
       await stage(entryRef, {
         weeklyScores,
         seasonTotal,
         negativeBurden,
         positiveWeeks,
-        bestWeek
+        bestWeek,
+        weeklyResults,
+        resultsVersion: (((entry as any).resultsVersion) || 0) + 1
       });
     }
   }
@@ -809,6 +952,43 @@ export const scoreNFLWeek = onCall(async (request) => {
   }
 
   await flushBatch();
+
+  // 3b. Member-readable standings projection + pool-level scoring markers (ADR 0005
+  // Phase 2). Written AFTER all entry writes commit so rows reflect this scoring pass
+  // (including the Margin rank pass). Rows are allowlist-built — no picks, confidence,
+  // tiebreakers, or usedTeams (usedTeams updates at submit time and would leak the
+  // current week's un-scored pick). This projection is what member views read once
+  // raw entry reads tighten to own-entry-only.
+  // ponytail: single doc, fine for realistic pool sizes; shard to standings/part_N
+  // before the 1MB doc limit if a pool ever has >500 entries (ADR 0004 shard path).
+  const projectionSnap = await poolRef.collection('entries').get();
+  const standingsRows = buildStandingsRows(
+    pool.type,
+    projectionSnap.docs.map(d => ({ ...(d.data() as any), id: d.id })),
+  );
+  await poolRef.collection('standings').doc('current').set({
+    poolType: pool.type,
+    season: String(pool.season ?? ''),
+    lastScoredWeek: week,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    rows: standingsRows,
+  });
+  await poolRef.update({
+    lastScoredAt: admin.firestore.FieldValue.serverTimestamp(),
+    scoredThroughWeek: Math.max(Number(pool.scoredThroughWeek || 0), Number(week)),
+    // Which weeks have actually been scored (out-of-order safe) — the Season
+    // Finalization completeness check reads this, not scoredThroughWeek.
+    [`scoredWeeks.${week}`]: true,
+  });
+
+  // 3c. Season Finalization (ADR 0005 Phase 3): if this scoring pass completed the
+  // season, finalize automatically — stats never wait on a human. Best-effort:
+  // a finalize failure must never fail the scoring call (the sweep job catches up).
+  try {
+    await maybeFinalizeNFLPool(db, poolId);
+  } catch (e) {
+    console.warn(`[scoreNFLWeek] finalize check failed for ${poolId} (sweep will retry):`, e);
+  }
 
   // 4. Generate automated Weekly Recap. buildWeeklyRecap omits undefined
   // optional fields — Firestore's set() throws on a literal `undefined` value

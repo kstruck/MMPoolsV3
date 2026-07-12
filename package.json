@@ -40,6 +40,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@playwright/test": "^1.61.1",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^26.1.0",

@@ -15,8 +15,7 @@ import {
     orderBy,
     limit,
     arrayUnion,
-    addDoc,
-    deleteField
+    addDoc
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
@@ -398,9 +397,22 @@ export const dbService = {
         await updateDoc(poolRef, { ...updates, updatedAt: Date.now() });
     },
 
-    updateBracketEntryPayment: async (poolId: string, entryId: string, paidStatus: 'PAID' | 'UNPAID', paymentMethod?: 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Cash.me' | 'Other'): Promise<void> => {
-        const entryRef = doc(db, 'pools', poolId, 'entries', entryId);
-        await updateDoc(entryRef, { paidStatus, paymentMethod: paymentMethod || deleteField(), updatedAt: Date.now() });
+    // Server-side since Phase 5 (updateEntryPayment callable): the old raw
+    // entry write depended on the dropped SUPER_ADMIN entries rule — and never
+    // worked for ordinary commissioners at all. The callable authorizes
+    // owner/manager/creator/SUPER_ADMIN and writes the audit trail.
+    updateBracketEntryPayment: async (
+        poolId: string, entryId: string, paidStatus: 'PAID' | 'UNPAID',
+        paymentMethod?: 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Cash.me' | 'Other',
+        details?: { paidAt?: number | null; paymentNote?: string | null },
+    ): Promise<void> => {
+        const fn = httpsCallable(functions, 'updateEntryPayment');
+        await fn({
+            poolId, entryId, paidStatus,
+            ...(paymentMethod ? { paymentMethod } : {}),
+            ...(details?.paidAt !== undefined ? { paidAt: details.paidAt } : {}),
+            ...(details?.paymentNote !== undefined ? { paymentNote: details.paymentNote } : {}),
+        });
     },
 
     // Member Record roster (ADR 0003): every member who joined, incl. the commissioner and
@@ -446,10 +458,33 @@ export const dbService = {
         return onSnapshot(ref, (snap) => callback(snap.exists() ? snap.data() : null), () => callback(null));
     },
 
-    // Player Profile projection (ADR 0004) — sanitized public stats.
+    // Player Profile projection (ADR 0004/0005) — sanitized public stats.
     subscribeToPublicProfile: (uid: string, callback: (data: any | null) => void) => {
         const ref = doc(db, 'publicProfiles', uid);
         return onSnapshot(ref, (snap) => callback(snap.exists() ? { uid, ...snap.data() } : null), () => callback(null));
+    },
+
+    // Earned achievements (ADR 0005) — world-readable subcollection; engine is future work.
+    subscribeToAchievements: (subjectId: string, callback: (rows: any[]) => void) => {
+        const q = query(collection(db, 'publicProfiles', subjectId, 'achievements'));
+        return onSnapshot(q, (snap) => {
+            callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, () => callback([]));
+    },
+
+    // Viewer-gated per-pool profile detail (ADR 0005 decision 7). Server enforces
+    // subject/co-member-of-that-pool/admin; throws permission-denied otherwise.
+    getProfilePoolDetail: async (subjectId: string, poolId: string) => {
+        const fn = httpsCallable(functions, 'getProfilePoolDetail');
+        const res = await fn({ subjectId, poolId });
+        return res.data as any;
+    },
+
+    // The signed-in viewer's own participations (own-readable). Used to discover which
+    // pools the viewer might share with a profile subject.
+    getMyParticipations: async (uid: string) => {
+        const snap = await getDocs(collection(db, 'users', uid, 'participations'));
+        return snap.docs.map(d => ({ poolId: d.id, ...d.data() })) as any[];
     },
 
     subscribeToPropCard: (poolId: string, userId: string, callback: (card: PropCard | null) => void) => {
@@ -1478,6 +1513,9 @@ export const dbService = {
         });
     },
 
+    // Raw entries collection — MANAGER/OWNER/ADMIN VIEWS ONLY (ADR 0005 Phase 2):
+    // rules restrict non-owner participant reads of NFL entries until the pool is FINAL,
+    // so member views must use subscribeToNFLStandings + subscribeToMyNFLEntry instead.
     subscribeToNFLEntries: (poolId: string, callback: (entries: any[]) => void) => {
         const q = collection(db, "pools", poolId, "entries");
         return onSnapshot(q, (snapshot) => {
@@ -1486,6 +1524,49 @@ export const dbService = {
         }, (error) => {
             logger.error("Error subscribing to NFL entries:", error);
             callback([]);
+        });
+    },
+
+    // Standings projection (ADR 0005 Phase 2) — reveal-safe scored rows written by
+    // scoreNFLWeek. What member views render instead of raw entries. Empty until the
+    // pool's first scored week.
+    subscribeToNFLStandings: (poolId: string, callback: (rows: any[]) => void) => {
+        const ref = doc(db, 'pools', poolId, 'standings', 'current');
+        return onSnapshot(ref, (snap) => {
+            callback(snap.exists() ? ((snap.data() as any).rows || []) : []);
+        }, (error) => {
+            logger.error("Error subscribing to NFL standings:", error);
+            callback([]);
+        });
+    },
+
+    // Payout Records (ADR 0005 Phase 4) — who-won-what truth, participant-readable.
+    subscribeToPayoutRecords: (poolId: string, callback: (records: any[]) => void) => {
+        const q = query(collection(db, 'pools', poolId, 'payoutRecords'));
+        return onSnapshot(q, (snap) => {
+            callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (error) => {
+            logger.error("Error subscribing to payout records:", error);
+            callback([]);
+        });
+    },
+
+    // Commissioner records who won what (server validates ownership + finalized pool).
+    recordPoolPayouts: async (poolId: string, awards: Array<{ uid: string; amount: number; kind: string; place?: number; settled: boolean; note?: string; supersedes?: string }>) => {
+        const fn = httpsCallable(functions, 'recordPoolPayouts');
+        const res = await fn({ poolId, awards });
+        return res.data as { success: boolean; awardIds: string[] };
+    },
+
+    // A member's own entry doc (NFL types key entries by uid). Own reads are always
+    // allowed by rules; pairs with the standings projection for member views.
+    subscribeToMyNFLEntry: (poolId: string, uid: string, callback: (entry: any | null) => void) => {
+        const ref = doc(db, 'pools', poolId, 'entries', uid);
+        return onSnapshot(ref, (snap) => {
+            callback(snap.exists() ? { ...snap.data(), id: snap.id } : null);
+        }, (error) => {
+            logger.error("Error subscribing to own NFL entry:", error);
+            callback(null);
         });
     },
 

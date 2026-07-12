@@ -1,0 +1,34 @@
+{
+    "id": "nfl-survivor-missed-pick",
+    "name": "Survivor Missed Pick Auto-Strike (edge)",
+    "description": "No submission after games conclude = auto-strike (docs/NFL_POOLS_README.md). Sudden death: Bob's missed week eliminates him. Expectations hand-verified.",
+    "poolType": "NFL_SURVIVOR",
+    "poolConfig": {
+        "name": "Sim Survivor Missed Pick",
+        "type": "NFL_SURVIVOR",
+        "settings": {
+            "entryFee": 0,
+            "maxStrikes": 0,
+            "maxRebuys": 0,
+            "rebuyDeadlineWeek": 0,
+            "rebuyCost": 0,
+            "pickLosersMode": false,
+            "autoSurviveExemptionEnabled": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 }
+    ],
+    "scoreWeeks": [1],
+    "testEntries": [
+        { "userName": "Alice", "survivorPicks": { "1": "KC" } },
+        { "userName": "Bob", "survivorPicks": {} }
+    ],
+    "assertions": [
+        { "type": "survivorStatus", "userName": "Alice", "expected": "ALIVE", "message": "Alice (KC won) survives" },
+        { "type": "survivorStatus", "userName": "Bob", "expected": "ELIMINATED", "message": "Bob's missed pick auto-strikes and eliminates" },
+        { "type": "survivorStrikes", "userName": "Bob", "expected": 1, "message": "Bob strikes = 1" },
+        { "type": "standingsRow", "userName": "Bob", "expected": { "eliminatedWeek": 1, "strikeWeeks": [1] }, "message": "Auto-strike recorded in the week-1 ledger" }
+    ]
+}

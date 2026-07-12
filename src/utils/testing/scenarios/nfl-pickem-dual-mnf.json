@@ -1,0 +1,41 @@
+{
+    "id": "nfl-pickem-dual-mnf",
+    "name": "Pick'em Dual MNF Tiebreaker (edge)",
+    "description": "Two Monday games: the tiebreaker target is the COMBINED total of BOTH (37 + 49 = 86), per docs/NFL_POOLS_README.md. Alice predicts 86 exactly; Bob's 49 (one-game total, the classic mistake) is 37 off. Expectations hand-verified.",
+    "poolType": "NFL_PICKEM",
+    "poolConfig": {
+        "name": "Sim Dual MNF",
+        "type": "NFL_PICKEM",
+        "settings": {
+            "entryFee": 0,
+            "lockMode": "PER_GAME",
+            "payoutMode": "SEASON",
+            "pickMode": "STRAIGHT",
+            "confidenceMode": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 1, "home": "DET", "away": "GB", "homeScore": 20, "awayScore": 17, "isMonday": true },
+        { "week": 1, "home": "PHI", "away": "MIA", "homeScore": 28, "awayScore": 21, "isMonday": true }
+    ],
+    "scoreWeeks": [1],
+    "testEntries": [
+        {
+            "userName": "Alice",
+            "pickemPicks": { "1": { "g1": "KC", "g2": "DET", "g3": "PHI" } },
+            "weeklyTiebreakers": { "1": 86 }
+        },
+        {
+            "userName": "Bob",
+            "pickemPicks": { "1": { "g1": "BUF", "g2": "GB", "g3": "MIA" } },
+            "weeklyTiebreakers": { "1": 49 }
+        }
+    ],
+    "assertions": [
+        { "type": "nflWeeklyPoints", "userName": "Alice", "week": 1, "expected": 3, "message": "Alice week 1 = 3" },
+        { "type": "nflWeeklyPoints", "userName": "Bob", "week": 1, "expected": 0, "message": "Bob week 1 = 0" },
+        { "type": "recapClosestTiebreaker", "week": 1, "expected": "Alice", "message": "Alice's 86 hits BOTH Monday games' combined total exactly" }
+    ]
+}

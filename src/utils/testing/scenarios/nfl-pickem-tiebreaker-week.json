@@ -1,0 +1,41 @@
+{
+    "id": "nfl-pickem-tiebreaker-week",
+    "name": "Pick'em Weekly Tiebreaker (edge)",
+    "description": "Two entries tied on points; the weekly recap's closest-to-the-pin MNF tiebreaker resolves the week. MNF total = 37; Bob (36, diff 1) beats Alice (35, diff 2). Expectations hand-verified.",
+    "poolType": "NFL_PICKEM",
+    "poolConfig": {
+        "name": "Sim Weekly Tiebreaker",
+        "type": "NFL_PICKEM",
+        "settings": {
+            "entryFee": 0,
+            "lockMode": "PER_GAME",
+            "payoutMode": "WEEKLY",
+            "pickMode": "STRAIGHT",
+            "confidenceMode": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 1, "home": "DET", "away": "GB", "homeScore": 20, "awayScore": 17, "isMonday": true }
+    ],
+    "scoreWeeks": [1],
+    "testEntries": [
+        {
+            "userName": "Alice",
+            "pickemPicks": { "1": { "g1": "KC", "g2": "DET" } },
+            "weeklyTiebreakers": { "1": 35 }
+        },
+        {
+            "userName": "Bob",
+            "pickemPicks": { "1": { "g1": "KC", "g2": "DET" } },
+            "weeklyTiebreakers": { "1": 36 }
+        }
+    ],
+    "assertions": [
+        { "type": "nflWeeklyPoints", "userName": "Alice", "week": 1, "expected": 2, "message": "Alice week 1 = 2" },
+        { "type": "nflWeeklyPoints", "userName": "Bob", "week": 1, "expected": 2, "message": "Bob week 1 = 2 (tied on points)" },
+        { "type": "recapExists", "week": 1, "expected": true, "message": "Week 1 recap generated" },
+        { "type": "recapClosestTiebreaker", "week": 1, "expected": "Bob", "message": "Bob's 36 (diff 1) beats Alice's 35 (diff 2) on the 37 MNF total" }
+    ]
+}

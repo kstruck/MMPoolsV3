@@ -123,11 +123,16 @@ export function getPoolLifecycleState(pool: LifecycleReadable): PoolLifecycleSta
  * dead or fake pools (PLAN-COMMISSIONER-DASH.md step 13).
  */
 export function isActiveManagedPool(
-  pool: LifecycleReadable & { id?: string; slug?: string },
+  pool: LifecycleReadable & { id?: string; slug?: string; simRunId?: string; season?: string },
 ): boolean {
   const state = getPoolLifecycleState(pool);
   if (state === 'final' || state === 'closed') return false;
   if (pool.status === 'archived') return false;
+  // Test Pools: the persisted simRunId field (or sim- season) is the trust anchor —
+  // callable-created sim pools have server-generated doc IDs, so the id/slug prefix
+  // check alone excludes nothing (PLAN-NFL-SIM-HARNESS Phase 0.4, mirrors
+  // functions/src/lib/poolInclusion.ts).
+  if (pool.simRunId || String(pool.season || '').startsWith('sim-')) return false;
   const key = pool.id || pool.slug || '';
   if (typeof key === 'string' && key.startsWith('sim-')) return false;
   return true;

@@ -92,6 +92,21 @@ The Super-Admin Dashboard tab that is the sole home for one-off administrative d
 ### Test Suite
 The Super-Admin Dashboard tab that is the sole home for simulation and testing tools (pool simulations, tournament simulation, AI testing). Testing capabilities exist nowhere else in the admin surface.
 
+### Sim Run
+A single execution of the simulation harness, identified by a Run ID. Every artifact a Sim Run creates carries the Run ID so it can never be confused with real play and can be completely removed afterward. A Sim Run that leaves residue after cleanup is a defect.
+
+### Test Pool
+A Pool created by a Sim Run. Permanently marked with the Run's identity and excluded from all real statistics, aggregates, member-facing surfaces, and automatic season processing.
+
+### Scenario
+A declarative fixture describing one simulated contest end to end: pool settings, a synthetic schedule with predetermined results, simulated participants and their picks (hand-authored or deterministically generated), and the assertions that define pass/fail. A Scenario with no assertions is invalid — "it ran" is never a pass.
+
+### Golden Scenario
+A Scenario that exercises the real member-facing action paths (submitting picks, rebuys, scoring, finalization, payout recording) rather than fabricating state directly, so a green result certifies the production path a real Member would travel.
+
+### Scenario Oracle
+An independent computation of a Scenario's expected outcomes derived only from the fixture itself, never from the engine under test. Any disagreement between the Scenario Oracle and the engine is a finding to investigate, not a value to sync.
+
 ### Pool Lifecycle State
 The derived status of a Pool over its life: `OPEN` (accepting entries), `LOCKED` (entries closed, awaiting/underway play), `LIVE` (games in progress), `FINAL` (scored, results settled), `CLOSED` (archived by admin/commissioner via `closePool`, removed from active operation). Computed by `getPoolLifecycleState`. Distinct from the raw `status` field; `CLOSED` is set by the `closePool` callable and must be visible in every Pool listing.
 
@@ -126,10 +141,25 @@ A real, game-outcome win estimate for an in-progress or scheduled NFL game, sour
 The persisted, real per-player performance record used by metrics and Player Profiles: per-week correct/incorrect (W-L), accuracy, rank percentile, streaks, and pool-type-specific figures (survival, margin). Derived when a week is scored and rolled into per-user aggregates. Replaces the previously fabricated radar/accuracy values. "League average" comparisons are the real Pool or Site-Wide averages of these stats, never hardcoded constants.
 
 ### Player Profile
-A per-player page showing that player's Performance Stats across all Pools they have entered: performance chart, weekly record, pick history, team-by-team performance, yearly record, and Profit. Reads a sanitized public projection of the player's stats — never the player's private per-user aggregates or per-Pool history, which stay owner-readable because they span unrelated private Pools. The projection exposes aggregate and finalized/scored data only; a player's current-season pick history appears per game only after that game's effective lock (or after the Pool is final), so the profile never leaks un-revealed picks. Modeled on a public expert profile but without gambling "units." Achievements are a separate future feature. Every Pool member has one.
+A per-player page showing that player's Performance Stats across all Pools they have entered: performance chart, weekly record, pick history, team-by-team performance, yearly record, and Profit. Reads a sanitized public projection of the player's stats — never the player's private per-user aggregates or per-Pool history, which stay owner-readable because they span unrelated private Pools. The projection exposes aggregate and finalized/scored data only, and carries no Pool identifiers — an anonymous visitor can never infer which (possibly private) Pools a player belongs to; per-Pool detail is revealed only to the player themself, co-members of that Pool, and admins. A player's pick history shows only picks that have already been scored (stricter than the per-game lock gate), so the profile never leaks un-revealed picks. Modeled on a public expert profile but without gambling "units." Achievements are hosted by the profile but awarded by a separate future feature. Every Pool member has one, and an Expert renders through the same profile.
 
 ### Profit
-The net money a player has won across all Pools they have participated in (prizes won minus entry fees owed), aggregated per player for the Player Profile. Entry Fees and prizes move peer-to-peer; Profit is a recorded figure, not money the platform holds.
+The net money a player has won across all Pools they have participated in: prizes recorded for them via Payout Records (whether or not the Commissioner has settled them yet) minus Entry Fees owed. Aggregated per player for the Player Profile. Entry Fees and prizes move peer-to-peer; Profit is a recorded figure, not money the platform holds. A Pool whose payouts have not yet been recorded still counts its Entry Fees, and the profile discloses how many Pools have payouts pending — the figure is never silently incomplete.
+
+### Payout Record
+A Commissioner's server-logged statement that a prize amount was awarded to a Member in a Pool, including whether it has been settled yet. The platform records the figure and the settlement state; the money itself moves peer-to-peer. Payout Records are the sole source of the prizes side of Profit — the platform never computes or fabricates a payout a Commissioner did not record.
+
+### Season Finalization
+The automatic settling of an NFL Pool's competitive results once its last scheduled week is scored: final ranks and season history are written for every Member who actually played, without any human action, and are re-derived (not frozen) if results are later corrected. Distinct from admin close (an administrative archival that settles nothing) and from recording payouts (a separate Commissioner action). Stats never wait on a human; money always does.
+
+### Profile Subject
+The entity a Player Profile page describes: either a Player (a User) or an Expert. Both kinds share one profile shape and one public projection; an Expert carries no money figures.
+
+### Expert
+A synthetic Profile Subject representing a non-player pick source tracked against real game results — e.g. ESPN FPI or the Vegas line. An Expert has a per-game pick record like a Player but no Pools, Entries, Entry Fees, or Profit.
+
+### Achievement
+A badge earned by a Player and displayed on their Player Profile. The awarding engine is a separate future feature; the profile hosts earned Achievements from day one and shows an honest empty state until the engine exists.
 
 ### Expert Picks
 A planned feature surfacing outside "expert" picks per game (and their records) to Pool members, modeled on public pick-aggregator sites. Deferred: it depends on choosing a compliant data source (licensed feed / official API / admin-curated import) before implementation — third-party scraping is out of scope pending that decision.

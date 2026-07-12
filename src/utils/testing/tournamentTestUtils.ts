@@ -5,10 +5,17 @@
  * Used by the Tournament Simulator and other test pages.
  */
 
-import { getFirestore, doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { generateTournament2025, revealRound } from './data/tournament2025';
 import type { Tournament } from '../../types';
 import { logger } from '../../utils/logger';
+
+// PLAN-NFL-SIM-HARNESS Phase 5: tournament test docs are written ONLY through
+// the SUPER_ADMIN-audited callables — no raw client writes.
+async function setTournamentDoc(tournamentId: string, tournament: Tournament): Promise<void> {
+    await httpsCallable(getFunctions(), 'simSetTournament')({ tournamentId, tournament });
+}
 
 /**
  * Load the 2025 NCAA tournament data to Firestore.
@@ -18,10 +25,9 @@ import { logger } from '../../utils/logger';
  * @returns The loaded tournament object
  */
 export async function loadTournament2025(tournamentId: string = 'mens-2025'): Promise<Tournament> {
-    const db = getFirestore();
     const tournament = generateTournament2025();
 
-    await setDoc(doc(db, 'tournaments', tournamentId), tournament);
+    await setTournamentDoc(tournamentId, tournament);
 
     logger.log(`[TournamentTestUtils] Loaded 2025 tournament to Firestore: ${tournamentId}`);
     return tournament;
@@ -40,7 +46,6 @@ export async function loadTournamentAtRound(round: number, tournamentId: string 
         throw new Error('Round must be between 1 and 6');
     }
 
-    const db = getFirestore();
     let tournament = generateTournament2025();
 
     // Reveal all rounds up to the specified round
@@ -48,7 +53,7 @@ export async function loadTournamentAtRound(round: number, tournamentId: string 
         tournament = revealRound(tournament, r);
     }
 
-    await setDoc(doc(db, 'tournaments', tournamentId), tournament);
+    await setTournamentDoc(tournamentId, tournament);
 
     logger.log(`[TournamentTestUtils] Loaded tournament at Round ${round} to Firestore: ${tournamentId}`);
     return tournament;
@@ -60,8 +65,7 @@ export async function loadTournamentAtRound(round: number, tournamentId: string 
  * @param tournamentId - Firestore document ID to delete (default: 'mens-2025')
  */
 export async function clearTournament(tournamentId: string = 'mens-2025'): Promise<void> {
-    const db = getFirestore();
-    await deleteDoc(doc(db, 'tournaments', tournamentId));
+    await httpsCallable(getFunctions(), 'simDeleteTournament')({ tournamentId });
 
     logger.log(`[TournamentTestUtils] Cleared tournament from Firestore: ${tournamentId}`);
 }
