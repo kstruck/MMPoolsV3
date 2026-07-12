@@ -43,4 +43,10 @@ describe("setPaidStatusSchema", () => {
         expect(setPaidStatusSchema.safeParse({ poolId: "p1", isPaid: true }).success).toBe(false);
         expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", isPaid: true, paidAt: 0 }).success).toBe(false);
     });
+
+    it("requires exactly one mode — neither or both isPaid/claim rejected (qodo PR #165)", () => {
+        // neither: used to fall into the authoritative branch as isPaid=undefined → UNPAID write
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2" }).success).toBe(false);
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", isPaid: true, claim: true }).success).toBe(false);
+    });
 });

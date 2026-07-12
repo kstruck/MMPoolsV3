@@ -24,12 +24,18 @@ export const claimByCodeSchema = z.strictObject({
  *   claim absent   → authoritative commissioner/owner/admin mark via isPaid
  * dbService today only sends { poolId, memberUid, isPaid }.
  */
-export const setPaidStatusSchema = z.strictObject({
-    poolId,
-    memberUid: z.string().trim().min(1).max(200),
-    isPaid: z.boolean().optional(),
-    claim: z.boolean().optional(),
-});
+export const setPaidStatusSchema = z
+    .strictObject({
+        poolId,
+        memberUid: z.string().trim().min(1).max(200),
+        isPaid: z.boolean().optional(),
+        claim: z.boolean().optional(),
+    })
+    // Exactly one mode: { poolId, memberUid } alone used to slip into the
+    // authoritative branch as isPaid=undefined and write UNPAID (qodo, PR #165).
+    .refine((o) => (o.isPaid !== undefined) !== (o.claim !== undefined), {
+        message: "exactly one of isPaid (authoritative) or claim (self-report) is required",
+    });
 
 export type CreateClaimCodeInput = z.infer<typeof createClaimCodeSchema>;
 export type ClaimByCodeInput = z.infer<typeof claimByCodeSchema>;
