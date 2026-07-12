@@ -7,6 +7,8 @@ import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
 import { assertNotBannedLive } from "./lib/systemGuards";
+import { validated } from "./lib/validated";
+import { submitBracketEntrySchema } from "./schemas/poolEngagement";
 
 
 
@@ -335,14 +337,16 @@ export const submitBracketEntryInternal = async (
     return { success: true };
 };
 
-export const submitBracketEntry = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-    await assertNotBannedLive(request.auth.uid);
-    const db = admin.firestore();
-    return submitBracketEntryInternal(request.auth.uid, request.data, db);
-});
+export const submitBracketEntry = validated(
+    // Sweep C7: schema applied at the wrapper — the internal helper previously
+    // received raw request.data wholesale.
+    { schema: submitBracketEntrySchema, label: "submitBracketEntry", appCheck: "monitor" },
+    async (input, request) => {
+        await assertNotBannedLive(request.auth!.uid);
+        const db = admin.firestore();
+        return submitBracketEntryInternal(request.auth!.uid, input, db);
+    },
+);
 
 // ----------------------------------------------------------------------------
 // Delete Bracket Entry
