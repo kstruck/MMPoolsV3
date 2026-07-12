@@ -4,15 +4,19 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { validated } from "./lib/validated";
+import { setPaidStatusSchema } from "./schemas/participantOps";
 import { membersCol } from "./lib/memberRecord";
 import { recomputeRosterSummary } from "./lib/rosterSummary";
 import { recomputeCommissionerAggregate, ownerOf } from "./lib/commissionerAggregate";
 
-export const setPaidStatus = onCall(async (request) => {
-  if (!request.auth) throw new HttpsError("unauthenticated", "Login required.");
-  const uid = request.auth.uid;
-  const { poolId, memberUid, isPaid, claim } = request.data || {};
-  if (!poolId || !memberUid) throw new HttpsError("invalid-argument", "Missing poolId or memberUid.");
+export const setPaidStatus = validated(
+  // Dual-mode contract preserved: claim present = member self-report; claim
+  // absent = authoritative mark (owner/commissioner/SUPER_ADMIN check below).
+  { schema: setPaidStatusSchema, label: "setPaidStatus", appCheck: "monitor" },
+  async (input, request) => {
+  const uid = request.auth!.uid;
+  const { poolId, memberUid, isPaid, claim } = input;
 
   const db = admin.firestore();
   const poolRef = db.collection('pools').doc(poolId);
@@ -31,7 +35,7 @@ export const setPaidStatus = onCall(async (request) => {
   // --- Authoritative paid mark: commissioner/owner/admin only ---
   const isOwner =
     pool.ownerId === uid || pool.managerUid === uid || pool.createdByUid === uid ||
-    request.auth.token?.role === 'SUPER_ADMIN';
+    request.auth!.token?.role === 'SUPER_ADMIN';
   if (!isOwner) throw new HttpsError("permission-denied", "Only the commissioner can set paid status.");
 
   const entryFee: number | undefined = pool.settings?.entryFee;
@@ -65,4 +69,5 @@ export const setPaidStatus = onCall(async (request) => {
   if (owner) await recomputeCommissionerAggregate(db, owner);
 
   return { success: true, mode: 'paid' as const };
-});
+  },
+);

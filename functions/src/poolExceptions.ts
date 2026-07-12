@@ -8,6 +8,13 @@ import { User } from "./types";
 import { NFLGame, SurvivorEntry, MarginEntry } from "./nflPoolTypes";
 import { ADMIN_CLOSE, isTerminalStatus, adminCloseUpdate } from "./lib/lifecycle";
 import { writeAdminAudit } from "./lib/adminAudit";
+import { validated } from "./lib/validated";
+import {
+    extendWeekDeadlineSchema,
+    proxyPickSchema,
+    cancelPoolSchema,
+    closePoolSchema,
+} from "./schemas/poolExceptions";
 
 // Commissioner exception tools (UX overhaul Phase 3.6).
 // Real seasons have exceptions — a member in the hospital, a mis-set deadline,
@@ -17,13 +24,6 @@ import { writeAdminAudit } from "./lib/adminAudit";
 // All three: onCall + auth + assertPoolOwnerOrSuperAdmin + audit event.
 
 const MAX_EXTRA_MINUTES = 24 * 60; // cap extensions at 24 hours
-
-const assertReason = (reason: unknown): string => {
-    if (typeof reason !== "string" || reason.trim().length < 3 || reason.trim().length > 200) {
-        throw new HttpsError("invalid-argument", "A reason (3-200 characters) is required.");
-    }
-    return reason.trim();
-};
 
 const loadPoolAndAssertManager = async (
     db: admin.firestore.Firestore,
@@ -101,29 +101,16 @@ const formatLockTime = (epochMs: number): string => {
 // weekLockOverrides yet. A follow-up change to nflPools.ts is required before
 // member-facing pick submission honors extensions. proxyPick below DOES honor
 // the override.
-export const extendWeekDeadline = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-    const uid = request.auth.uid;
+export const extendWeekDeadline = validated(
+    // Shape (week 1-23, extraMinutes <= 24h cap, 3-200 char reason) enforced by
+    // the wrapper; permission stays resource-scoped (loadPoolAndAssertManager).
+    { schema: extendWeekDeadlineSchema, label: "extendWeekDeadline", appCheck: "monitor" },
+    async (input, request) => {
+    const uid = request.auth!.uid;
     const db = admin.firestore();
+    const { poolId, week: weekNum, extraMinutes: extraMin, reason } = input;
 
-    const { poolId, week, extraMinutes } = (request.data || {}) as any;
-    const reason = assertReason(request.data?.reason);
-
-    const weekNum = Number(week);
-    if (!Number.isInteger(weekNum) || weekNum < 1 || weekNum > 23) {
-        throw new HttpsError("invalid-argument", "week must be an integer between 1 and 23.");
-    }
-    const extraMin = Number(extraMinutes);
-    if (!Number.isFinite(extraMin) || extraMin <= 0) {
-        throw new HttpsError("invalid-argument", "extraMinutes must be a positive number.");
-    }
-    if (extraMin > MAX_EXTRA_MINUTES) {
-        throw new HttpsError("invalid-argument", `extraMinutes cannot exceed ${MAX_EXTRA_MINUTES} (24 hours).`);
-    }
-
-    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth.token.role as string | undefined);
+    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth!.token.role as string | undefined);
 
     const games = await loadWeekGames(db, pool, weekNum);
     const lockBufferMs = (pool.settings?.lockBufferMinutes ?? 5) * 60 * 1000;
@@ -162,36 +149,25 @@ export const extendWeekDeadline = onCall(async (request) => {
     }
 
     return { success: true, newLockTime, emailed };
-});
+    },
+);
 
 // ============ 2. PROXY PICK ============
 // Commissioner enters picks on behalf of a member (e.g. member in hospital).
 // Mirrors submitNFLPicks validation minimally per pool type; respects real
 // deadlines UNLESS the week has a settings.weekLockOverrides entry.
 // Writes proxySubmittedBy + proxyReason onto the entry so standings stay honest.
-export const proxyPick = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-    const uid = request.auth.uid;
+export const proxyPick = validated(
+    // Shape enforced by the wrapper (also replaces the old JSON round-trip
+    // sanitization — zod parse returns plain data). Per-pick game/team/lock
+    // validation stays in the transaction below.
+    { schema: proxyPickSchema, label: "proxyPick", appCheck: "monitor" },
+    async (input, request) => {
+    const uid = request.auth!.uid;
     const db = admin.firestore();
+    const { poolId, week: weekNum, targetUid, picks, reason } = input;
 
-    const data = JSON.parse(JSON.stringify(request.data || {}));
-    const { poolId, week, targetUid, picks } = data;
-    const reason = assertReason(data.reason);
-
-    const weekNum = Number(week);
-    if (!Number.isInteger(weekNum) || weekNum < 1 || weekNum > 23) {
-        throw new HttpsError("invalid-argument", "week must be an integer between 1 and 23.");
-    }
-    if (!targetUid || typeof targetUid !== "string") {
-        throw new HttpsError("invalid-argument", "targetUid is required.");
-    }
-    if (!picks || typeof picks !== "object") {
-        throw new HttpsError("invalid-argument", "picks is required.");
-    }
-
-    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth.token.role as string | undefined);
+    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth!.token.role as string | undefined);
     const type = pool.type;
     if (type !== "NFL_PICKEM" && type !== "NFL_SURVIVOR" && type !== "NFL_MARGIN") {
         throw new HttpsError("failed-precondition", "Proxy picks are only supported for NFL pools.");
@@ -336,22 +312,20 @@ export const proxyPick = onCall(async (request) => {
     });
 
     return { success: true };
-});
+    },
+);
 
 // ============ 3. CANCEL POOL ============
 // Kills a dead pool cleanly: status -> CANCELED, audit trail, member email
 // including who to contact about dues already paid.
-export const cancelPool = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-    const uid = request.auth.uid;
+export const cancelPool = validated(
+    { schema: cancelPoolSchema, label: "cancelPool", appCheck: "monitor" },
+    async (input, request) => {
+    const uid = request.auth!.uid;
     const db = admin.firestore();
+    const { poolId, reason } = input;
 
-    const { poolId } = (request.data || {}) as any;
-    const reason = assertReason(request.data?.reason);
-
-    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth.token.role as string | undefined);
+    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth!.token.role as string | undefined);
 
     if (pool.status === "CANCELED") {
         throw new HttpsError("failed-precondition", "This pool has already been canceled.");
@@ -392,7 +366,8 @@ export const cancelPool = onCall(async (request) => {
     }
 
     return { success: true, emailed };
-});
+    },
+);
 
 // closePool (T2) — settles a pool into its terminal COMPLETED state. Unlike
 // cancelPool (which voids a dead pool + emails members), this is the normal
@@ -402,15 +377,14 @@ export const cancelPool = onCall(async (request) => {
 // flag that makes onPoolLocked / onGameComplete / recalculateGlobalStats skip it,
 // so an admin close produces ZERO member emails and ZERO stats deltas.
 // Principal: ownerId || managerUid || SUPER_ADMIN (loadPoolAndAssertManager).
-export const closePool = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-    const uid = request.auth.uid;
+export const closePool = validated(
+    { schema: closePoolSchema, label: "closePool", appCheck: "monitor" },
+    async (input, request) => {
+    const uid = request.auth!.uid;
     const db = admin.firestore();
-    const { poolId } = (request.data || {}) as { poolId?: string };
+    const { poolId } = input;
 
-    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth.token.role as string | undefined);
+    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth!.token.role as string | undefined);
 
     // CANCELED (and an already-COMPLETED close) are terminal — never overwrite.
     if (isTerminalStatus(pool.status as string | undefined)) {
@@ -431,7 +405,7 @@ export const closePool = onCall(async (request) => {
 
     await writeAdminAudit({
         actorUid: uid,
-        actorEmail: request.auth.token.email as string | undefined,
+        actorEmail: request.auth!.token.email as string | undefined,
         action: "POOL_CLOSED",
         targetType: "pool",
         targetId: pool.id,
@@ -440,4 +414,5 @@ export const closePool = onCall(async (request) => {
     });
 
     return { success: true };
-});
+    },
+);

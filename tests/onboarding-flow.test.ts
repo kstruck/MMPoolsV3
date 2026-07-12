@@ -51,7 +51,7 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
             } as any;
 
             await expect(redeemCoupon(req)).rejects.toThrowError(
-                'You must be signed in to redeem a coupon.'
+                'Must be logged in.'
             );
         });
 
@@ -62,7 +62,7 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
             } as any;
 
             await expect(redeemCoupon(req)).rejects.toThrowError(
-                'couponCode and poolId are required.'
+                /Invalid request: couponCode/
             );
         });
 
@@ -309,7 +309,7 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
             } as any;
 
             await expect(createCheckoutSession(req)).rejects.toThrowError(
-                'You must be signed in to create a checkout session.'
+                'Must be logged in.'
             );
         });
 
@@ -324,7 +324,7 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
             } as any;
 
             // Empty poolId fails the checkout input schema.
-            await expect(createCheckoutSession(req)).rejects.toThrowError(/Invalid checkout request: poolId/);
+            await expect(createCheckoutSession(req)).rejects.toThrowError(/Invalid request: poolId/);
         });
 
         it('should throw invalid-argument for an unknown pool format', async () => {
@@ -333,7 +333,7 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
                 data: { poolId: 'pool-123', poolName: 'March Madness', poolType: 'NOT_A_FORMAT', estimatedPlayers: 20 }
             } as any;
 
-            await expect(createCheckoutSession(req)).rejects.toThrowError(/Invalid checkout request: poolType/);
+            await expect(createCheckoutSession(req)).rejects.toThrowError(/Invalid request/);
         });
 
         it('should throw not-found if the pool document is missing', async () => {

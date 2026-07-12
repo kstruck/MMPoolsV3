@@ -25,6 +25,7 @@ import { randomUUID } from "crypto";
 import { assertCallerRole } from "./adminClaims";
 import { validated } from "./lib/validated";
 import { adminGrantEntitlementSchema, adminRevokeEntitlementSchema } from "./schemas/entitlements";
+import { redeemPoolCreditSchema } from "./schemas/billingCheckout";
 import { writeAdminAudit } from "./lib/adminAudit";
 import { writeBillingChargeTxn } from "./lib/billingCharges";
 import {
@@ -463,21 +464,16 @@ export async function redeemPoolCreditForPool(args: {
 }
 
 /** Callable wrapper: the authenticated user redeems a credit for their pool. */
-export const redeemPoolCredit = onCall(async (request) => {
-  if (!request.auth) throw new HttpsError("unauthenticated", "Must be logged in.");
-  const uid = request.auth.uid;
-  const data = (request.data ?? {}) as {
-    poolId?: string;
-    bundleId?: string;
-    creditId?: string;
-  };
-  if (!data.poolId) throw new HttpsError("invalid-argument", "poolId is required.");
-
-  const res = await redeemPoolCreditForPool({
-    ownerId: uid,
-    poolId: data.poolId,
-    preferBundleId: data.bundleId,
-    preferCreditId: data.creditId,
-  });
-  return { success: true, ...res };
-});
+export const redeemPoolCredit = validated(
+  // Ownership + credit-eligibility checks live in redeemPoolCreditForPool's txn.
+  { schema: redeemPoolCreditSchema, label: "redeemPoolCredit", appCheck: "monitor" },
+  async (input, request) => {
+    const res = await redeemPoolCreditForPool({
+      ownerId: request.auth!.uid,
+      poolId: input.poolId,
+      preferBundleId: input.bundleId,
+      preferCreditId: input.creditId,
+    });
+    return { success: true, ...res };
+  },
+);

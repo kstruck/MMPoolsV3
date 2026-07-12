@@ -1,5 +1,7 @@
 import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { validated } from "./lib/validated";
+import { sendManualReminderSchema } from "./schemas/reminderWaitlist";
 import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
@@ -42,30 +44,13 @@ async function createNotificationOnce(
     }
 }
 
-interface SendManualReminderData {
-    poolId: string;
-    targetUids?: string[];
-    kind: ReminderKind;
-}
-
-export const sendManualReminder = onCall(async (request) => {
-    // 1. Auth
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-    const uid = request.auth.uid;
-
-    // 2. Validate input
-    const { poolId, targetUids, kind } = (request.data || {}) as SendManualReminderData;
-    if (!poolId || typeof poolId !== "string") {
-        throw new HttpsError("invalid-argument", "poolId is required.");
-    }
-    if (kind !== "PICKS" && kind !== "PAYMENT") {
-        throw new HttpsError("invalid-argument", "kind must be 'PICKS' or 'PAYMENT'.");
-    }
-    if (targetUids !== undefined && (!Array.isArray(targetUids) || targetUids.some((t) => typeof t !== "string"))) {
-        throw new HttpsError("invalid-argument", "targetUids must be an array of uids.");
-    }
+export const sendManualReminder = validated(
+    // Shape enforced by the wrapper; pool owner/manager/SUPER_ADMIN permission
+    // stays resource-scoped below.
+    { schema: sendManualReminderSchema, label: "sendManualReminder", appCheck: "monitor" },
+    async (input, request) => {
+    const uid = request.auth!.uid;
+    const { poolId, targetUids, kind } = input;
 
     const db = admin.firestore();
 
@@ -76,7 +61,7 @@ export const sendManualReminder = onCall(async (request) => {
         throw new HttpsError("not-found", "Pool not found.");
     }
     const pool = { id: poolSnap.id, ...poolSnap.data() } as any;
-    assertPoolOwnerOrSuperAdmin(pool, uid, request.auth.token.role as string | undefined);
+    assertPoolOwnerOrSuperAdmin(pool, uid, request.auth!.token.role as string | undefined);
 
     // 4. Resolve target entries (entry doc id == owner uid for NFL pools)
     const entriesSnap = await poolRef.collection("entries").get();
@@ -153,4 +138,5 @@ export const sendManualReminder = onCall(async (request) => {
     }
 
     return { sent, skipped };
-});
+    },
+);
