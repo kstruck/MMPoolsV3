@@ -2,6 +2,8 @@ import * as admin from "firebase-admin";
 import { createHash } from "crypto";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
+import { validated } from "./lib/validated";
+import { sendPoolInvitesSchema } from "./schemas/poolEngagement";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { User } from "./types";
@@ -52,36 +54,12 @@ function hashEmail(email: string): string {
     return createHash("sha256").update(email).digest("hex").slice(0, 24);
 }
 
-interface SendPoolInvitesData {
-    poolId: string;
-    emails: string[];
-    personalNote?: string;
-}
-
-export const sendPoolInvites = onCall(async (request) => {
-    // 1. Auth
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-    const uid = request.auth.uid;
-
-    // 2. Validate input
-    const { poolId, emails, personalNote } = (request.data || {}) as SendPoolInvitesData;
-    if (!poolId || typeof poolId !== "string") {
-        throw new HttpsError("invalid-argument", "poolId is required.");
-    }
-    if (!Array.isArray(emails) || emails.length === 0 || emails.some((e) => typeof e !== "string")) {
-        throw new HttpsError("invalid-argument", "emails must be a non-empty array of strings.");
-    }
-    if (emails.length > MAX_EMAILS_PER_CALL) {
-        throw new HttpsError("invalid-argument", `You can invite at most ${MAX_EMAILS_PER_CALL} addresses per batch.`);
-    }
-    if (personalNote !== undefined && typeof personalNote !== "string") {
-        throw new HttpsError("invalid-argument", "personalNote must be a string.");
-    }
-    if (personalNote && personalNote.length > MAX_NOTE_LENGTH) {
-        throw new HttpsError("invalid-argument", `Personal note must be ${MAX_NOTE_LENGTH} characters or fewer.`);
-    }
+export const sendPoolInvites = validated(
+    // Auth + shape (50-address / 500-char-note caps) enforced by the wrapper.
+    { schema: sendPoolInvitesSchema, label: "sendPoolInvites", appCheck: "monitor" },
+    async (input, request) => {
+    const uid = request.auth!.uid;
+    const { poolId, emails, personalNote } = input;
 
     const db = admin.firestore();
 
@@ -92,7 +70,7 @@ export const sendPoolInvites = onCall(async (request) => {
         throw new HttpsError("not-found", "Pool not found.");
     }
     const pool = { id: poolSnap.id, ...poolSnap.data() } as any;
-    assertPoolOwnerOrSuperAdmin(pool, uid, request.auth.token.role as string | undefined);
+    assertPoolOwnerOrSuperAdmin(pool, uid, request.auth!.token.role as string | undefined);
 
     // 4. Resolve sender display name for the subject line
     const managerDoc = await db.collection("users").doc(uid).get();
@@ -156,4 +134,5 @@ export const sendPoolInvites = onCall(async (request) => {
     }
 
     return { sent, skipped, invalid };
-});
+    },
+);

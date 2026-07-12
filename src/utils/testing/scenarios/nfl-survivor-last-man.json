@@ -1,0 +1,45 @@
+{
+    "id": "nfl-survivor-last-man",
+    "name": "Survivor Last Man Standing + Finalize (real path)",
+    "description": "Full arc: two eliminations across two weeks leave Alice alone, then simFinalizePool ranks the field (alive=1st; eliminated by week desc) and recordPoolPayouts records her prize. Expectations hand-verified.",
+    "poolType": "NFL_SURVIVOR",
+    "poolConfig": {
+        "name": "Sim Survivor Last Man",
+        "type": "NFL_SURVIVOR",
+        "settings": {
+            "entryFee": 20,
+            "maxStrikes": 0,
+            "maxRebuys": 0,
+            "rebuyDeadlineWeek": 0,
+            "rebuyCost": 0,
+            "pickLosersMode": false,
+            "autoSurviveExemptionEnabled": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 },
+        { "week": 2, "home": "BAL", "away": "CIN", "homeScore": 21, "awayScore": 28 },
+        { "week": 2, "home": "DET", "away": "GB", "homeScore": 20, "awayScore": 17 }
+    ],
+    "testEntries": [
+        { "userName": "Alice", "survivorPicks": { "1": "KC", "2": "CIN" } },
+        { "userName": "Bob", "survivorPicks": { "1": "BUF" } },
+        { "userName": "Carol", "survivorPicks": { "1": "SF", "2": "GB" } }
+    ],
+    "lifecycleOps": [
+        { "op": "join", "userNames": ["Alice", "Bob", "Carol"] },
+        { "op": "score", "week": 1 },
+        { "op": "score", "week": 2 },
+        { "op": "finalize" },
+        { "op": "recordPayouts", "awards": [ { "userName": "Alice", "amount": 50, "place": 1 } ] }
+    ],
+    "assertions": [
+        { "type": "survivorStatus", "userName": "Alice", "expected": "ALIVE", "message": "Alice is the last one standing" },
+        { "type": "seasonHistoryRow", "userName": "Alice", "expected": { "finalRank": 1, "isChampion": true, "totalEntries": 3 }, "message": "Finalize crowns Alice champion of 3" },
+        { "type": "seasonHistoryRow", "userName": "Carol", "expected": { "finalRank": 2, "isChampion": false }, "message": "Carol (out week 2) ranks 2nd — lasted longer" },
+        { "type": "seasonHistoryRow", "userName": "Bob", "expected": { "finalRank": 3, "isChampion": false }, "message": "Bob (out week 1) ranks 3rd" },
+        { "type": "payoutRecordExists", "userName": "Alice", "expected": 50, "message": "Alice's $50 first-place payout recorded" }
+    ]
+}

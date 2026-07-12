@@ -4,6 +4,8 @@ import { FieldValue } from "firebase-admin/firestore";
 
 import * as v1 from "firebase-functions/v1";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { validated } from "./lib/validated";
+import { createClaimCodeSchema, claimByCodeSchema } from "./schemas/participantOps";
 import * as logger from "firebase-functions/logger";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { UserRecord } from "firebase-functions/v1/auth";
@@ -40,18 +42,12 @@ export const onUserCreated = v1.auth.user().onCreate(async (user: UserRecord) =>
 });
 
 // 2. createClaimCode: Generate a code for guest
-export const createClaimCode = onCall(async (request) => {
-    // Determine context (Guest or Auth)
-    // If auth, use uid. If not, use deviceKey passed in data? 
-    // Actually, this just generates a code LINKED to a guest key.
-    // The guest key comes from CLIENT (localStorage).
-
-    // Caller provides: poolId, guestDeviceKey
-    const { poolId, guestDeviceKey } = request.data;
-
-    if (!poolId || !guestDeviceKey) {
-        throw new HttpsError('invalid-argument', 'Missing poolId or guestDeviceKey');
-    }
+export const createClaimCode = validated(
+    // PUBLIC by design: guests (no auth) export their device identity as a
+    // short code. Strict shape is the whole gate here.
+    { schema: createClaimCodeSchema, label: "createClaimCode", auth: "public", appCheck: "monitor" },
+    async (input) => {
+    const { poolId, guestDeviceKey } = input;
 
     const db = admin.firestore();
     const claimCode = generateShortCode(); // Implement helper
@@ -87,7 +83,8 @@ export const createClaimCode = onCall(async (request) => {
     await db.collection("poolClaims").doc(claimId).set(claimDoc);
 
     return { claimCode, claimId };
-});
+    },
+);
 
 // 3. claimMySquares: Claim guest squares for logged-in user
 export const claimMySquares = onCall(async (request) => {
@@ -154,12 +151,12 @@ export const claimMySquares = onCall(async (request) => {
 });
 
 // 4. claimByCode: Merge squares from another device
-export const claimByCode = onCall(async (request) => {
-    const { claimCode } = request.data;
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Must be logged in');
-
+export const claimByCode = validated(
+    { schema: claimByCodeSchema, label: "claimByCode", appCheck: "monitor" },
+    async (input, request) => {
+    const { claimCode } = input;
     const db = admin.firestore();
-    const uid = request.auth.uid;
+    const uid = request.auth!.uid;
 
     // 1. Find claim doc
     const claimsSnap = await db.collection("poolClaims")
@@ -217,7 +214,8 @@ export const claimByCode = onCall(async (request) => {
     });
 
     return { success: true, poolId: targetPoolId };
-});
+    },
+);
 
 
 // 5. syncParticipantIndices: Trigger

@@ -1,0 +1,42 @@
+{
+    "id": "nfl-survivor-picklosers-strikes2",
+    "name": "Survivor Pick-Losers + maxStrikes=2 (matrix)",
+    "description": "Pick-losers with a two-strike cushion. Alice takes 2 strikes (picked winners) and lives; Bob takes 3 and is out week 3; Carol fades cleanly. Expectations hand-verified.",
+    "poolType": "NFL_SURVIVOR",
+    "poolConfig": {
+        "name": "Sim Survivor PL+S2",
+        "type": "NFL_SURVIVOR",
+        "settings": {
+            "entryFee": 0,
+            "maxStrikes": 2,
+            "maxRebuys": 0,
+            "rebuyDeadlineWeek": 0,
+            "rebuyCost": 0,
+            "pickLosersMode": true,
+            "autoSurviveExemptionEnabled": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 },
+        { "week": 2, "home": "BAL", "away": "CIN", "homeScore": 21, "awayScore": 28 },
+        { "week": 2, "home": "DET", "away": "GB", "homeScore": 20, "awayScore": 17 },
+        { "week": 3, "home": "PHI", "away": "MIA", "homeScore": 31, "awayScore": 14 },
+        { "week": 3, "home": "SEA", "away": "PIT", "homeScore": 24, "awayScore": 20 }
+    ],
+    "scoreWeeks": [1, 2, 3],
+    "testEntries": [
+        { "userName": "Alice", "survivorPicks": { "1": "BUF", "2": "CIN", "3": "SEA" } },
+        { "userName": "Bob", "survivorPicks": { "1": "KC", "2": "CIN", "3": "PHI" } },
+        { "userName": "Carol", "survivorPicks": { "1": "BUF", "2": "BAL", "3": "MIA" } }
+    ],
+    "assertions": [
+        { "type": "survivorStatus", "userName": "Alice", "expected": "ALIVE", "message": "Alice ALIVE on 2 strikes (CIN wk2, SEA wk3 both WON = strikes here)" },
+        { "type": "survivorStrikes", "userName": "Alice", "expected": 2, "message": "Alice strikes = 2" },
+        { "type": "survivorStatus", "userName": "Bob", "expected": "ELIMINATED", "message": "Bob ELIMINATED week 3 — three winners picked" },
+        { "type": "standingsRow", "userName": "Bob", "expected": { "eliminatedWeek": 3, "strikeWeeks": [1, 2, 3] }, "message": "Bob's strike ledger = weeks 1,2,3" },
+        { "type": "survivorStatus", "userName": "Carol", "expected": "ALIVE", "message": "Carol ALIVE — losers all the way down" },
+        { "type": "survivorStrikes", "userName": "Carol", "expected": 0, "message": "Carol strikes = 0" }
+    ]
+}

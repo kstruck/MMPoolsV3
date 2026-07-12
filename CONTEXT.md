@@ -92,6 +92,21 @@ The Super-Admin Dashboard tab that is the sole home for one-off administrative d
 ### Test Suite
 The Super-Admin Dashboard tab that is the sole home for simulation and testing tools (pool simulations, tournament simulation, AI testing). Testing capabilities exist nowhere else in the admin surface.
 
+### Sim Run
+A single execution of the simulation harness, identified by a Run ID. Every artifact a Sim Run creates carries the Run ID so it can never be confused with real play and can be completely removed afterward. A Sim Run that leaves residue after cleanup is a defect.
+
+### Test Pool
+A Pool created by a Sim Run. Permanently marked with the Run's identity and excluded from all real statistics, aggregates, member-facing surfaces, and automatic season processing.
+
+### Scenario
+A declarative fixture describing one simulated contest end to end: pool settings, a synthetic schedule with predetermined results, simulated participants and their picks (hand-authored or deterministically generated), and the assertions that define pass/fail. A Scenario with no assertions is invalid — "it ran" is never a pass.
+
+### Golden Scenario
+A Scenario that exercises the real member-facing action paths (submitting picks, rebuys, scoring, finalization, payout recording) rather than fabricating state directly, so a green result certifies the production path a real Member would travel.
+
+### Scenario Oracle
+An independent computation of a Scenario's expected outcomes derived only from the fixture itself, never from the engine under test. Any disagreement between the Scenario Oracle and the engine is a finding to investigate, not a value to sync.
+
 ### Pool Lifecycle State
 The derived status of a Pool over its life: `OPEN` (accepting entries), `LOCKED` (entries closed, awaiting/underway play), `LIVE` (games in progress), `FINAL` (scored, results settled), `CLOSED` (archived by admin/commissioner via `closePool`, removed from active operation). Computed by `getPoolLifecycleState`. Distinct from the raw `status` field; `CLOSED` is set by the `closePool` callable and must be visible in every Pool listing.
 

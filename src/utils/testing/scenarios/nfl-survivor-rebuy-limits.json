@@ -1,0 +1,53 @@
+{
+    "id": "nfl-survivor-rebuy-limits",
+    "name": "Survivor Rebuy Limits (real path)",
+    "description": "REAL rebuy gates: past-deadline rebuy rejected PAST_DEADLINE; a second rebuy rejected MAX_REBUYS_EXCEEDED. Rebuy at week 2 absorbs weeks <= 2 (rescore-safe), so the second elimination lands in week 3. Expectations hand-verified.",
+    "poolType": "NFL_SURVIVOR",
+    "poolConfig": {
+        "name": "Sim Survivor Rebuy Limits",
+        "type": "NFL_SURVIVOR",
+        "settings": {
+            "entryFee": 20,
+            "maxStrikes": 0,
+            "maxRebuys": 1,
+            "rebuyDeadlineWeek": 2,
+            "rebuyCost": 20,
+            "pickLosersMode": false,
+            "autoSurviveExemptionEnabled": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 0, "awayScore": 0, "status": "SCHEDULED", "startOffsetMs": 7200000 },
+        { "week": 2, "home": "SF", "away": "DAL", "homeScore": 0, "awayScore": 0, "status": "SCHEDULED", "startOffsetMs": 10800000 },
+        { "week": 3, "home": "PHI", "away": "MIA", "homeScore": 0, "awayScore": 0, "status": "SCHEDULED", "startOffsetMs": 14400000 }
+    ],
+    "lifecycleOps": [
+        { "op": "join", "userNames": ["dave"] },
+        { "op": "submit", "userName": "dave", "week": 1, "team": "BUF" },
+        { "op": "reseedGames", "games": [
+            { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 10, "status": "FINAL", "startOffsetMs": -14400000 },
+            { "week": 2, "home": "SF", "away": "DAL", "homeScore": 0, "awayScore": 0, "status": "SCHEDULED", "startOffsetMs": 10800000 },
+            { "week": 3, "home": "PHI", "away": "MIA", "homeScore": 0, "awayScore": 0, "status": "SCHEDULED", "startOffsetMs": 14400000 }
+        ] },
+        { "op": "score", "week": 1 },
+        { "op": "rebuy", "userName": "dave", "week": 3, "expectError": "PAST_DEADLINE" },
+        { "op": "rebuy", "userName": "dave", "week": 2 },
+        { "op": "submit", "userName": "dave", "week": 2, "team": "DAL" },
+        { "op": "submit", "userName": "dave", "week": 3, "team": "MIA" },
+        { "op": "reseedGames", "games": [
+            { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 10, "status": "FINAL", "startOffsetMs": -14400000 },
+            { "week": 2, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10, "status": "FINAL", "startOffsetMs": -14400000 },
+            { "week": 3, "home": "PHI", "away": "MIA", "homeScore": 31, "awayScore": 14, "status": "FINAL", "startOffsetMs": -14400000 }
+        ] },
+        { "op": "score", "week": 2 },
+        { "op": "score", "week": 3 },
+        { "op": "rebuy", "userName": "dave", "week": 2, "expectError": "MAX_REBUYS_EXCEEDED" }
+    ],
+    "assertions": [
+        { "type": "submitRejected", "userName": "dave", "week": 3, "expected": "PAST_DEADLINE", "message": "Week-3 rebuy rejected — deadline is week 2" },
+        { "type": "submitRejected", "userName": "dave", "week": 2, "expected": "MAX_REBUYS_EXCEEDED", "message": "Second rebuy rejected — maxRebuys 1" },
+        { "type": "survivorStatus", "userName": "dave", "expected": "ELIMINATED", "message": "dave eliminated again in week 3 (MIA lost)" },
+        { "type": "standingsRow", "userName": "dave", "expected": { "rebuysUsed": 1, "eliminatedWeek": 3 }, "message": "One rebuy consumed; week-2 strike absorbed by the rebuy, final elimination week 3" }
+    ]
+}

@@ -1,0 +1,28 @@
+{
+    "id": "nfl-buyflow-free-launch",
+    "name": "Buy-flow: Free Launch Stamp (item 15)",
+    "description": "A plain NFL create (no paid add-on, no player estimate) launches on the FREE plan — server-stamped billing.status='free', no paid snapshot, never entering the checkout path. Created via the REAL createNFLPool callable in both runners.",
+    "poolType": "NFL_PICKEM",
+    "createViaCallable": true,
+    "poolConfig": {
+        "name": "Sim Buyflow Free",
+        "type": "NFL_PICKEM",
+        "settings": {
+            "entryFee": 0,
+            "lockMode": "PER_GAME",
+            "payoutMode": "SEASON",
+            "pickMode": "STRAIGHT",
+            "confidenceMode": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 }
+    ],
+    "scoreWeeks": [],
+    "assertions": [
+        { "type": "poolStatus", "field": "billing.status", "expected": "free", "message": "Server stamped a FREE launch" },
+        { "type": "poolStatus", "field": "billing.paid", "message": "No paid snapshot exists (asserts the field is absent)" },
+        { "type": "nflEntryCount", "expected": 0, "message": "No entries — this scenario certifies the billing stamp only" }
+    ]
+}

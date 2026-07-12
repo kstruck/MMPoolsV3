@@ -4,6 +4,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { UserRecord } from "firebase-functions/v1/auth";
 import { onCall, CallableRequest } from "firebase-functions/v2/https";
+import { assertCallerRole } from "./adminClaims";
 
 
 
@@ -57,9 +58,10 @@ export const onUserCreated = functions.auth.user().onCreate(async (user: UserRec
 // Force Sync All Users (Callable)
 export const syncAllUsers = onCall(async (request: CallableRequest) => {
     const db = admin.firestore();
-    if (!request.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'Must be logged in.');
-    }
+    // SUPER_ADMIN only: this lists up to 1000 Auth users (emails/providers) and
+    // writes user docs. Previously any signed-in user could trigger it (sweep C4).
+    // assertCallerRole enforces the JWT claim AND the users/{uid}.role doc.
+    await assertCallerRole(request, "SUPER_ADMIN");
 
     try {
         // List max 1000 users (pagination needed for large apps, but fine for MVP)

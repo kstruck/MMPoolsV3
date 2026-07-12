@@ -12,6 +12,7 @@ import { runScenario as runPropsScenario } from './simulators/propsSimulator';
 import { runScenario as runPlayoffScenario } from './simulators/playoffSimulator';
 import { runE2EBracketSimulation } from './simulators/bracketE2ESimulator';
 import { runNFLSeasonScenario } from './simulators/nflSeasonSimulator';
+import { logger } from '../logger';
 import type { TestScenario } from './scenarios';
 import type { Pool, Winner, PropCard, BracketEntry } from '../../types';
 
@@ -60,15 +61,50 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
                 ...(nflResult.poolSnapshot ?? {}),
                 _nflEntries: nflResult.entries,
                 _nflRecaps: nflResult.recaps,
+                _standings: nflResult.standings,
+                _seasonHistory: nflResult.seasonHistory,
+                _payoutRecords: nflResult.payoutRecords,
+                _profiles: nflResult.profiles,
+                _consensus: nflResult.consensus,
+                _gameKeyMap: nflResult.gameKeyMap,
+                _rejections: nflResult.rejections,
             } as unknown as Pool;
             const validation = runAssertions(scenario, [], nflPool);
+            const duration = Date.now() - startTime;
+
+            // Finalize the run manifest with per-assertion results (Phase 4 item 26)
+            // — simRuns/{runId} doubles as run history. Best-effort: a report
+            // failure must never flip a completed scenario into an error.
+            try {
+                const { getFunctions, httpsCallable } = await import('firebase/functions');
+                await httpsCallable(getFunctions(), 'simReportRun')({
+                    runId: nflResult.runId,
+                    report: {
+                        scenarioId,
+                        scenarioName: scenario.name,
+                        passed: validation.passed,
+                        passedCount: validation.passedCount,
+                        failedCount: validation.failedCount,
+                        durationMs: duration,
+                        cleanupStatus: nflResult.steps.find(s => s.step.startsWith('Cleanup'))?.status ?? 'unknown',
+                        assertions: validation.results.map(r => ({
+                            type: r.assertion.type,
+                            message: r.message.slice(0, 300),
+                            passed: r.passed,
+                        })),
+                    },
+                });
+            } catch (e) {
+                logger.warn('[SimpleTestRunner] simReportRun failed (non-fatal):', e);
+            }
+
             return {
                 scenarioId,
                 scenarioName: scenario.name,
                 status: nflResult.poolId
                     ? (validation.passed ? 'PASS' : 'FAIL')
                     : 'ERROR',
-                duration: Date.now() - startTime,
+                duration,
                 validation,
                 error: nflResult.poolId ? undefined : 'Pool was not created',
                 steps: nflResult.steps,
@@ -229,17 +265,24 @@ export function getAvailableScenarios(): Array<{ id: string; name: string; descr
 /**
  * Run all pre-defined tests and return summary
  */
-export async function runAllTests(): Promise<{
+export async function runAllTests(filter?: {
+    poolTypes?: string[];
+    onProgress?: (done: number, total: number, last: SimpleTestResult) => void;
+}): Promise<{
     passed: number;
     failed: number;
     errors: number;
     results: SimpleTestResult[];
 }> {
     const results: SimpleTestResult[] = [];
+    const list = filter?.poolTypes?.length
+        ? SCENARIO_LIST.filter(s => filter.poolTypes!.includes(s.poolType ?? 'SQUARES'))
+        : SCENARIO_LIST;
 
-    for (const scenario of SCENARIO_LIST) {
+    for (const scenario of list) {
         const result = await runPredefinedTest(scenario.id);
         results.push(result);
+        filter?.onProgress?.(results.length, list.length, result);
     }
 
     return {

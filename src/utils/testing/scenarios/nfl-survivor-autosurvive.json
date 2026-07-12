@@ -1,0 +1,35 @@
+{
+    "id": "nfl-survivor-autosurvive",
+    "name": "Survivor Auto-Survive Exemption ON (edge)",
+    "description": "Alice has already used every team playing this week (usedTeams pre-seeded) — with autoSurviveExemptionEnabled she is EXEMPT: no pick, no strike, exemptWeeks records it. Expectations hand-verified.",
+    "poolType": "NFL_SURVIVOR",
+    "poolConfig": {
+        "name": "Sim Survivor AutoSurvive",
+        "type": "NFL_SURVIVOR",
+        "settings": {
+            "entryFee": 0,
+            "maxStrikes": 0,
+            "maxRebuys": 0,
+            "rebuyDeadlineWeek": 0,
+            "rebuyCost": 0,
+            "pickLosersMode": false,
+            "autoSurviveExemptionEnabled": true,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 }
+    ],
+    "scoreWeeks": [1],
+    "testEntries": [
+        { "userName": "Alice", "survivorPicks": {}, "usedTeams": ["KC", "BUF", "SF", "DAL"] },
+        { "userName": "Bob", "survivorPicks": { "1": "SF" }, "usedTeams": ["KC"] }
+    ],
+    "assertions": [
+        { "type": "survivorStatus", "userName": "Alice", "expected": "ALIVE", "message": "Alice exempt — every team this week already used" },
+        { "type": "survivorStrikes", "userName": "Alice", "expected": 0, "message": "Alice strikes = 0 (no auto-strike despite no pick)" },
+        { "type": "standingsRow", "userName": "Alice", "expected": { "status": "ALIVE", "exemptWeeks": [1] }, "message": "Week 1 recorded as an exemption" },
+        { "type": "survivorStatus", "userName": "Bob", "expected": "ALIVE", "message": "Bob (SF won) survives normally" }
+    ]
+}

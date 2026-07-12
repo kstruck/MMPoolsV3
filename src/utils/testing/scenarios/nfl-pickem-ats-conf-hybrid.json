@@ -1,0 +1,250 @@
+{
+    "id": "nfl-pickem-ats-conf-hybrid",
+    "name": "Pick'em ATS+CONF × HYBRID",
+    "description": "Matrix cell ATS+CONF × HYBRID: 2 weeks / 5 games (W1 g1 is an ATS push), shared layout; payoutMode must not change scoring. Expectations hand-verified (PHASE4-EXPECTATIONS.md).",
+    "poolType": "NFL_PICKEM",
+    "poolConfig": {
+        "name": "Sim nfl-pickem-ats-conf-hybrid",
+        "type": "NFL_PICKEM",
+        "settings": {
+            "entryFee": 0,
+            "lockMode": "PER_GAME",
+            "payoutMode": "HYBRID",
+            "pickMode": "ATS",
+            "confidenceMode": true,
+            "payouts": {
+                "places": [],
+                "bonuses": []
+            }
+        }
+    },
+    "nflGames": [
+        {
+            "week": 1,
+            "home": "KC",
+            "away": "BUF",
+            "homeScore": 27,
+            "awayScore": 24,
+            "spread": -3
+        },
+        {
+            "week": 1,
+            "home": "SF",
+            "away": "DAL",
+            "homeScore": 30,
+            "awayScore": 10,
+            "spread": -7
+        },
+        {
+            "week": 1,
+            "home": "DET",
+            "away": "GB",
+            "homeScore": 20,
+            "awayScore": 17,
+            "spread": 2,
+            "isMonday": true
+        },
+        {
+            "week": 2,
+            "home": "BAL",
+            "away": "CIN",
+            "homeScore": 21,
+            "awayScore": 28,
+            "spread": -6
+        },
+        {
+            "week": 2,
+            "home": "PHI",
+            "away": "MIA",
+            "homeScore": 31,
+            "awayScore": 14,
+            "spread": -10,
+            "isMonday": true
+        }
+    ],
+    "scoreWeeks": [
+        1,
+        2
+    ],
+    "testEntries": [
+        {
+            "userName": "Alice",
+            "pickemPicks": {
+                "1": {
+                    "g1": "KC",
+                    "g2": "SF",
+                    "g3": "DET"
+                },
+                "2": {
+                    "g1": "CIN",
+                    "g2": "PHI"
+                }
+            },
+            "confidence": {
+                "1": {
+                    "g1": 16,
+                    "g2": 15,
+                    "g3": 14
+                },
+                "2": {
+                    "g1": 16,
+                    "g2": 15
+                }
+            },
+            "weeklyTiebreakers": {
+                "1": 38,
+                "2": 45
+            }
+        },
+        {
+            "userName": "Bob",
+            "pickemPicks": {
+                "1": {
+                    "g1": "KC",
+                    "g2": "SF",
+                    "g3": "GB"
+                },
+                "2": {
+                    "g1": "BAL",
+                    "g2": "PHI"
+                }
+            },
+            "confidence": {
+                "1": {
+                    "g1": 14,
+                    "g2": 15,
+                    "g3": 16
+                },
+                "2": {
+                    "g1": 15,
+                    "g2": 16
+                }
+            },
+            "weeklyTiebreakers": {
+                "1": 30,
+                "2": 40
+            }
+        },
+        {
+            "userName": "Carol",
+            "pickemPicks": {
+                "1": {
+                    "g1": "BUF",
+                    "g2": "DAL",
+                    "g3": "GB"
+                },
+                "2": {
+                    "g1": "BAL",
+                    "g2": "MIA"
+                }
+            },
+            "confidence": {
+                "1": {
+                    "g1": 15,
+                    "g2": 16,
+                    "g3": 14
+                },
+                "2": {
+                    "g1": 16,
+                    "g2": 15
+                }
+            },
+            "weeklyTiebreakers": {
+                "1": 37,
+                "2": 20
+            }
+        }
+    ],
+    "assertions": [
+        {
+            "type": "nflEntryCount",
+            "expected": 3,
+            "message": "3 entries"
+        },
+        {
+            "type": "nflWeeklyPoints",
+            "userName": "Alice",
+            "week": 1,
+            "expected": 29,
+            "message": "Alice week 1 = 29"
+        },
+        {
+            "type": "nflWeeklyPoints",
+            "userName": "Alice",
+            "week": 2,
+            "expected": 31,
+            "message": "Alice week 2 = 31"
+        },
+        {
+            "type": "nflWeeklyPoints",
+            "userName": "Bob",
+            "week": 1,
+            "expected": 15,
+            "message": "Bob week 1 = 15"
+        },
+        {
+            "type": "nflWeeklyPoints",
+            "userName": "Bob",
+            "week": 2,
+            "expected": 16,
+            "message": "Bob week 2 = 16"
+        },
+        {
+            "type": "nflTotalScore",
+            "userName": "Alice",
+            "expected": 60,
+            "message": "Alice total = 60"
+        },
+        {
+            "type": "nflTotalScore",
+            "userName": "Bob",
+            "expected": 31,
+            "message": "Bob total = 31"
+        },
+        {
+            "type": "nflTotalScore",
+            "userName": "Carol",
+            "expected": 0,
+            "message": "Carol total = 0 (fades every pick)"
+        },
+        {
+            "type": "nflWinner",
+            "expected": "Alice",
+            "message": "Alice leads the pool"
+        },
+        {
+            "type": "gradedPick",
+            "userName": "Alice",
+            "week": 1,
+            "gameKey": "g1",
+            "expected": "PUSH",
+            "message": "W1 g1 lands exactly on the spread — PUSH, 0 points"
+        },
+        {
+            "type": "standingsRow",
+            "userName": "Alice",
+            "expected": {
+                "totalScore": 60
+            },
+            "message": "Standings projection carries Alice's total (60)"
+        },
+        {
+            "type": "recapExists",
+            "week": 1,
+            "expected": true,
+            "message": "Week 1 recap generated"
+        },
+        {
+            "type": "recapClosestTiebreaker",
+            "week": 1,
+            "expected": "Carol",
+            "message": "Carol (37) hits the W1 MNF total exactly"
+        },
+        {
+            "type": "recapClosestTiebreaker",
+            "week": 2,
+            "expected": "Alice",
+            "message": "Alice (45) hits the W2 MNF total exactly"
+        }
+    ]
+}
