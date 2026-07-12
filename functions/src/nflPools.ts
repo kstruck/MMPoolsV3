@@ -42,21 +42,23 @@ import {
 import { maybeFinalizeNFLPool } from './nflFinalize';
 import { fetchNFLWeekSchedule } from './nflSchedule';
 import { recomputeWeekConsensus } from './consensus';
+import { validated } from "./lib/validated";
+import { createPoolPermissiveSchema, submitNFLPicksSchema } from "./schemas/poolCore";
 
 /**
  * Creates an NFL pool (Pick'em, Survivor, or Margin).
  */
-export const createNFLPool = onCall(async (request) => {
+export const createNFLPool = validated(
+  // TARGET-NOW-PERMISSIVE (ADR-0001): see createPool. Field-level work stays
+  // with stripPrivilegedPoolFields + validateCreateInput below.
+  { schema: createPoolPermissiveSchema, label: "createNFLPool", appCheck: "monitor" },
+  async (input, request) => {
   try {
-    if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'User must be logged in.');
-    }
-
-    const uid = request.auth.uid;
+    const uid = request.auth!.uid;
     const db = admin.firestore();
-    
+
     // deep clean raw data + strip privileged/server-controlled fields
-    const data = stripPrivilegedPoolFields(JSON.parse(JSON.stringify(request.data || {})));
+    const data = stripPrivilegedPoolFields(JSON.parse(JSON.stringify(input)));
 
     const { type, name, season } = data;
     if (!type || !['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'].includes(type)) {
@@ -71,7 +73,7 @@ export const createNFLPool = onCall(async (request) => {
     // Shared validation gate + ban check (poolType already narrowed above).
     const poolType: PoolType = isPoolType(type) ? type : 'NFL_PICKEM';
     validateCreateInput(poolType, data);
-    const claimRole = request.auth.token.role as string | undefined;
+    const claimRole = request.auth!.token.role as string | undefined;
     assertNotBanned(claimRole, undefined);
 
     const poolRef = db.collection('pools').doc();
@@ -153,7 +155,8 @@ export const createNFLPool = onCall(async (request) => {
     if (error instanceof HttpsError) throw error;
     throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`, error);
   }
-});
+  },
+);
 
 /**
  * Join an NFL Pool using a shared invite link.
@@ -564,24 +567,26 @@ export async function submitNFLPicksInternal(
 /**
  * Securely submits picks for an NFL Pool with strict server-side kickoff lock checks.
  */
-export const submitNFLPicks = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'User must be logged in.');
-  }
-  await assertNotBannedLive(request.auth.uid);
-  const token = request.auth.token as { name?: string; role?: string };
-  return submitNFLPicksInternal(
-    admin.firestore(),
-    {
-      actorUid: request.auth.uid,
-      actorRole: token?.role,
-      subjectUid: request.auth.uid,
-      subjectName: token?.name,
-      requestId: request.data?.requestId,
-    },
-    request.data,
-  );
-});
+export const submitNFLPicks = validated(
+  // Shape enforced at the gate; membership/spread/lock/used-teams gates stay
+  // in submitNFLPicksInternal (also driven by the sim harness, ADR 0006).
+  { schema: submitNFLPicksSchema, label: "submitNFLPicks", appCheck: "monitor" },
+  async (input, request) => {
+    await assertNotBannedLive(request.auth!.uid);
+    const token = request.auth!.token as { name?: string; role?: string };
+    return submitNFLPicksInternal(
+      admin.firestore(),
+      {
+        actorUid: request.auth!.uid,
+        actorRole: token?.role,
+        subjectUid: request.auth!.uid,
+        subjectName: token?.name,
+        requestId: input.requestId,
+      },
+      input,
+    );
+  },
+);
 
 /**
  * Survivor rebuy, extracted verbatim from the executeSurvivorRebuy callable

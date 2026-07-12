@@ -3,6 +3,8 @@ import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { writeAuditEvent } from './audit';
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { validated } from "./lib/validated";
+import { createPoolPermissiveSchema, updatePoolSettingsSchema } from "./schemas/poolCore";
 import { assertPoolCreationAllowed } from './lib/systemGuards';
 import { isPoolType, type PoolType } from './shared/poolTypes';
 import {
@@ -202,18 +204,17 @@ export function assertPaidCeilingForUpdate(
 }
 
 // V2 Create Pool Function
-export const createPool = onCall(async (request) => {
+export const createPool = validated(
+    // TARGET-NOW-PERMISSIVE (ADR-0001): wrapper adds auth + App Check monitor +
+    // an object envelope; the payload stays an open record — field-level work
+    // remains with stripPrivilegedPoolFields + validateCreateInput below.
+    { schema: createPoolPermissiveSchema, label: "createPool", appCheck: "monitor" },
+    async (input, request) => {
     try {
-        // 1. Validate Auth
-        if (!request.auth) {
-            throw new HttpsError('unauthenticated', 'User must be logged in.');
-        }
-
-        const uid = request.auth.uid;
+        const uid = request.auth!.uid;
         const db = admin.firestore();
         // Sanitize data: remove undefined values by JSON cycle (simplest way for deep clean)
-        const rawData = request.data || {};
-        const data = stripPrivilegedPoolFields(JSON.parse(JSON.stringify(rawData)));
+        const data = stripPrivilegedPoolFields(JSON.parse(JSON.stringify(input)));
 
         // Validate inputs
         if (!data.name) {
@@ -238,7 +239,7 @@ export const createPool = onCall(async (request) => {
         const poolType: PoolType = rawType;
         validateCreateInput(poolType, data);
 
-        const claimRole = request.auth.token.role as string | undefined;
+        const claimRole = request.auth!.token.role as string | undefined;
         assertNotBanned(claimRole, undefined);
 
         const poolsRef = db.collection('pools');
@@ -272,7 +273,8 @@ export const createPool = onCall(async (request) => {
             billing: billingForLaunch(launchMode, billingConfig.trialDays, now.toMillis()),
         };
 
-        const simRunId = simRunIdForCreate(rawData, claimRole);
+        // input is the pre-strip payload — simRunId is privileged and only honored per claimRole.
+        const simRunId = simRunIdForCreate(input, claimRole);
         if (simRunId) newPool.simRunId = simRunId;
 
         // Initialize Squares-specific data
@@ -342,7 +344,8 @@ export const createPool = onCall(async (request) => {
         // Wrap unknown errors
         throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`, error);
     }
-});
+    },
+);
 
 // ============ UPDATE POOL SETTINGS ============
 // Validated server-side edit path for pool settings. Replaces the rules-gated
@@ -350,19 +353,13 @@ export const createPool = onCall(async (request) => {
 // mode). Enforces ownership + the per-type editability matrix by lifecycle
 // phase, and reconciles payment handles. Other direct-updatePool consumers
 // (dashboards, SuperAdmin, simulators) keep their current path for now.
-export const updatePoolSettings = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'User must be logged in.');
-    }
-
-    const uid = request.auth.uid;
-    const { poolId, updates } = request.data || {};
-    if (!poolId || typeof poolId !== 'string') {
-        throw new HttpsError('invalid-argument', 'poolId is required.');
-    }
-    if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
-        throw new HttpsError('invalid-argument', 'updates object is required.');
-    }
+export const updatePoolSettings = validated(
+    // updates stays an open record: buildPoolSettingsUpdate enforces the
+    // per-type editability matrix by lifecycle phase.
+    { schema: updatePoolSettingsSchema, label: "updatePoolSettings", appCheck: "monitor" },
+    async (input, request) => {
+    const uid = request.auth!.uid;
+    const { poolId, updates } = input;
 
     const db = admin.firestore();
     const poolRef = db.collection('pools').doc(poolId);
@@ -372,7 +369,7 @@ export const updatePoolSettings = onCall(async (request) => {
     }
 
     const pool = snap.data();
-    const claimRole = request.auth.token.role as string | undefined;
+    const claimRole = request.auth!.token.role as string | undefined;
     assertNotBanned(claimRole, undefined);
     assertPoolOwnerOrSuperAdmin(pool, uid, claimRole);
 
@@ -429,7 +426,8 @@ export const updatePoolSettings = onCall(async (request) => {
     });
 
     return { success: true };
-});
+    },
+);
 
 // ============ RECALCULATE POOL WINNERS ============
 // Used to fix pools affected by the home/away reversal bug
