@@ -18,6 +18,8 @@ import {
 import { computeQuote, discountLabel, type QuoteCoupon } from "./lib/quoteEngine";
 import { validateCouponRules } from "./lib/couponReservation";
 import { HttpsError } from "firebase-functions/v2/https";
+import { validated } from "./lib/validated";
+import { redeemCouponSchema } from "./schemas/billingCheckout";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { renderEmailHtml, escapeHtml, BASE_URL } from "./emailStyles";
 import { sendEmail } from "./reminders";
@@ -255,18 +257,12 @@ export const validateBillingAccess = functions.https.onCall(async (request) => {
 //    Atomically validates and redeems a coupon code within a Firestore transaction
 // =============================================================================
 
-export const redeemCoupon = functions.https.onCall({ cors: true }, async (request) => {
-    // --- Auth Check ---
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "You must be signed in to redeem a coupon.");
-    }
-
-    const userId = request.auth.uid;
-    const { couponCode, poolId } = request.data as { couponCode: string; poolId: string };
-
-    if (!couponCode || !poolId) {
-        throw new HttpsError("invalid-argument", "couponCode and poolId are required.");
-    }
+export const redeemCoupon = validated(
+    // Pool-owner check stays below (needs the pool doc).
+    { schema: redeemCouponSchema, label: "redeemCoupon", appCheck: "monitor", options: { cors: true } },
+    async (input, request) => {
+    const userId = request.auth!.uid;
+    const { couponCode, poolId } = input;
 
     // --- Fetch the pool to validate pool type ---
     const poolDoc = await db.collection("pools").doc(poolId).get();
@@ -343,7 +339,8 @@ export const redeemCoupon = functions.https.onCall({ cors: true }, async (reques
     });
 
     return result;
-});
+    },
+);
 
 // =============================================================================
 // 4. onPoolParticipantChange — Firestore Trigger

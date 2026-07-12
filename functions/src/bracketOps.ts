@@ -3,6 +3,8 @@ import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 
 import { Timestamp } from "firebase-admin/firestore";
+import { validated } from "./lib/validated";
+import { updateTournamentDataSchema } from "./schemas/tournamentAdmin";
 import { writeLedgerEvent } from "./paymentLedger";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
@@ -94,22 +96,14 @@ export const markEntryPaidStatus = onCall(async (request) => {
 // ----------------------------------------------------------------------------
 // Update Tournament Data (Admin / ESPN Sync)
 // ----------------------------------------------------------------------------
-export const updateTournamentData = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-
-    // Role check: Only SuperAdmin should call this
-    const db = admin.firestore();
-    const userDoc = await db.collection("users").doc(request.auth.uid).get();
-    if (userDoc.data()?.role !== 'SUPER_ADMIN') {
-        throw new HttpsError("permission-denied", "Admin only.");
-    }
-
-    const { tournamentId, tournamentData } = request.data;
-    // tournamentData should match Partial<Tournament>
-
-    await db.collection("tournaments").doc(tournamentId).set(tournamentData, { merge: true });
-
-    return { success: true };
-});
+export const updateTournamentData = validated(
+    // Wrapper upgrades the old doc-only role check to claim+doc (sweep C5).
+    { schema: updateTournamentDataSchema, label: "updateTournamentData", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async (input) => {
+        // tournamentData is a Partial<Tournament> merge by design; content-level
+        // modeling deferred (see schema note — zero client callers today).
+        const db = admin.firestore();
+        await db.collection("tournaments").doc(input.tournamentId).set(input.tournamentData, { merge: true });
+        return { success: true };
+    },
+);

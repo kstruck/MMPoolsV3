@@ -4,6 +4,13 @@ import { renderEmailHtml, escapeHtml } from "./emailStyles";
 import { courierAuthToken, sendCourierSMS } from "./notifications/smsService";
 import { sendEmail } from "./reminders";
 import { writeAdminAudit } from "./lib/adminAudit";
+import { validated } from "./lib/validated";
+import {
+    deleteUserAccountSchema,
+    sendAdminPasswordResetSchema,
+    sendSecuritySMSAlertSchema,
+    sendUserEmailSchema,
+} from "./schemas/userManagement";
 
 
 
@@ -11,24 +18,14 @@ import { writeAdminAudit } from "./lib/adminAudit";
  * Completely delete a user account (Auth + Firestore)
  * Callable by SUPER_ADMIN only.
  */
-export const deleteUserAccount = functions.https.onCall(async (request) => {
+export const deleteUserAccount = validated(
+    // Wrapper upgrades the old claim-only check to claim+doc agreement (C5).
+    { schema: deleteUserAccountSchema, label: "deleteUserAccount", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async (input, request) => {
     const db = admin.firestore();
     const auth = admin.auth();
-    // 1. Verify Authentication & Permissions
-    if (!request.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
-    }
-
-    const callerUid = request.auth.uid;
-    // Use JWT custom claim (tamper-proof) instead of reading mutable Firestore doc
-    if (request.auth.token.role !== 'SUPER_ADMIN') {
-        throw new functions.https.HttpsError("permission-denied", "Only Super Admins can delete accounts.");
-    }
-
-    const { targetUid } = request.data;
-    if (!targetUid) {
-        throw new functions.https.HttpsError("invalid-argument", "Target UID is required.");
-    }
+    const callerUid = request.auth!.uid;
+    const { targetUid } = input;
 
     try {
         console.log(`[DeleteUser] Starting deletion for ${targetUid} by ${callerUid}`);
@@ -48,7 +45,7 @@ export const deleteUserAccount = functions.https.onCall(async (request) => {
 
         await writeAdminAudit({
             actorUid: callerUid,
-            actorEmail: request.auth.token.email as string | undefined,
+            actorEmail: request.auth!.token.email as string | undefined,
             action: "USER_DELETED",
             targetType: "user",
             targetId: targetUid,
@@ -59,7 +56,7 @@ export const deleteUserAccount = functions.https.onCall(async (request) => {
         console.error(`[DeleteUser] Failed:`, error);
         await writeAdminAudit({
             actorUid: callerUid,
-            actorEmail: request.auth.token.email as string | undefined,
+            actorEmail: request.auth!.token.email as string | undefined,
             action: "USER_DELETED",
             targetType: "user",
             targetId: targetUid,
@@ -68,29 +65,20 @@ export const deleteUserAccount = functions.https.onCall(async (request) => {
         });
         throw new functions.https.HttpsError("internal", error.message);
     }
-});
+    },
+);
 
 /**
  * Generate a password reset link server-side and send it via custom email transport.
  * Callable by SUPER_ADMIN only.
  */
-export const sendAdminPasswordReset = functions.https.onCall(async (request) => {
+export const sendAdminPasswordReset = validated(
+    // Wrapper upgrades the old claim-only check to claim+doc agreement (C5).
+    { schema: sendAdminPasswordResetSchema, label: "sendAdminPasswordReset", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async (input, request) => {
     const db = admin.firestore();
     const auth = admin.auth();
-    // 1. Verify Authentication & Permissions
-    if (!request.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
-    }
-
-    // Use JWT custom claim (tamper-proof) instead of reading mutable Firestore doc
-    if (request.auth.token.role !== 'SUPER_ADMIN') {
-        throw new functions.https.HttpsError("permission-denied", "Only Super Admins can reset passwords.");
-    }
-
-    const { email } = request.data;
-    if (!email) {
-        throw new functions.https.HttpsError("invalid-argument", "Email is required.");
-    }
+    const { email } = input;
 
     try {
         console.log(`[PasswordReset] Generating link for ${email}`);
@@ -126,7 +114,7 @@ export const sendAdminPasswordReset = functions.https.onCall(async (request) => 
             await db.collection("users").doc(targetUser.uid).collection("activity").add({
                 type: "PASSWORD_RESET_SENT",
                 at: admin.firestore.FieldValue.serverTimestamp(),
-                actorUid: request.auth.uid,
+                actorUid: request.auth!.uid,
             });
         } catch (e) {
             // Non-fatal: the reset email already went out; the actor-side audit still records it.
@@ -134,8 +122,8 @@ export const sendAdminPasswordReset = functions.https.onCall(async (request) => 
         }
 
         await writeAdminAudit({
-            actorUid: request.auth.uid,
-            actorEmail: request.auth.token.email as string | undefined,
+            actorUid: request.auth!.uid,
+            actorEmail: request.auth!.token.email as string | undefined,
             action: "PASSWORD_RESET_SENT",
             targetType: "user",
             metadata: { email },
@@ -146,8 +134,8 @@ export const sendAdminPasswordReset = functions.https.onCall(async (request) => 
     } catch (error: any) {
         console.error(`[PasswordReset] Failed:`, error);
         await writeAdminAudit({
-            actorUid: request.auth.uid,
-            actorEmail: request.auth.token.email as string | undefined,
+            actorUid: request.auth!.uid,
+            actorEmail: request.auth!.token.email as string | undefined,
             action: "PASSWORD_RESET_SENT",
             targetType: "user",
             metadata: { email },
@@ -156,17 +144,21 @@ export const sendAdminPasswordReset = functions.https.onCall(async (request) => 
         });
         throw new functions.https.HttpsError("internal", error.message);
     }
-});
+    },
+);
 
 /**
  * Send a security SMS alert to the authenticated user.
  */
-export const sendSecuritySMSAlert = functions.https.onCall({ secrets: [courierAuthToken] }, async (request) => {
-    if (!request.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
-    }
-
-    const uid = request.auth.uid;
+export const sendSecuritySMSAlert = validated(
+    {
+        schema: sendSecuritySMSAlertSchema,
+        label: "sendSecuritySMSAlert",
+        appCheck: "monitor",
+        options: { secrets: [courierAuthToken] },
+    },
+    async (_input, request) => {
+    const uid = request.auth!.uid;
     const db = admin.firestore();
     const userSnap = await db.collection("users").doc(uid).get();
     const userData = userSnap.data();
@@ -183,7 +175,8 @@ export const sendSecuritySMSAlert = functions.https.onCall({ secrets: [courierAu
         console.error(`[SecuritySMS] Failed:`, error);
         throw new functions.https.HttpsError("internal", error.message);
     }
-});
+    },
+);
 
 /**
  * Test Endpoint for SMS
@@ -270,19 +263,11 @@ export const searchUsersByEmail = functions.https.onCall(async (request) => {
  * Management). Dual-writes the CONTEXT.md contract: EMAIL_SENT on the target
  * user's activity subcollection + an actor-side admin_audit entry.
  */
-export const sendUserEmail = functions.https.onCall(async (request) => {
-    if (!request.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "Must be logged in.");
-    }
-    const role = request.auth.token.role;
-    if (role !== "SUPER_ADMIN" && role !== "MODERATOR") {
-        throw new functions.https.HttpsError("permission-denied", "Only admins can email users.");
-    }
-
-    const { targetUid, subject, body } = request.data as { targetUid?: string; subject?: string; body?: string };
-    if (!targetUid || !subject?.trim() || !body?.trim()) {
-        throw new functions.https.HttpsError("invalid-argument", "targetUid, subject and body are required.");
-    }
+export const sendUserEmail = validated(
+    // Wrapper upgrades the old claim-only check to claim+doc agreement (C5).
+    { schema: sendUserEmailSchema, label: "sendUserEmail", role: ["SUPER_ADMIN", "MODERATOR"], appCheck: "monitor" },
+    async (input, request) => {
+    const { targetUid, subject, body } = input;
 
     const db = admin.firestore();
     const userSnap = await db.doc(`users/${targetUid}`).get();
@@ -299,7 +284,7 @@ export const sendUserEmail = functions.https.onCall(async (request) => {
         await db.collection("users").doc(targetUid).collection("activity").add({
             type: "EMAIL_SENT",
             at: admin.firestore.FieldValue.serverTimestamp(),
-            actorUid: request.auth.uid,
+            actorUid: request.auth!.uid,
             subject: subject.trim().slice(0, 200),
         });
     } catch (e) {
@@ -307,8 +292,8 @@ export const sendUserEmail = functions.https.onCall(async (request) => {
     }
 
     await writeAdminAudit({
-        actorUid: request.auth.uid,
-        actorEmail: request.auth.token.email as string | undefined,
+        actorUid: request.auth!.uid,
+        actorEmail: request.auth!.token.email as string | undefined,
         action: "EMAIL_SENT",
         targetType: "user",
         targetId: targetUid,
@@ -317,4 +302,5 @@ export const sendUserEmail = functions.https.onCall(async (request) => {
     });
 
     return { success: true };
-});
+    },
+);

@@ -14,7 +14,7 @@ import { getFirestore, collection, getDocs, doc, getDoc } from 'firebase/firesto
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { dbService } from '../../../services/dbService';
 import { logger } from '../../logger';
-import type { TestScenario, ScenarioNFLGame } from '../scenarios/index';
+import type { TestScenario, ScenarioNFLGame, LifecycleOp } from '../scenarios/index';
 
 export interface NFLSimStep {
     step: string;
@@ -43,6 +43,15 @@ export interface NFLSimResult {
     entries: NFLSimEntry[];
     recaps: Record<string, Record<string, unknown>>; // week -> recap doc
     poolSnapshot?: Record<string, unknown>; // pre-cleanup pool doc
+    // Persisted-schema hydration (Phase 4 item 26) — populated pre-cleanup only
+    // when the scenario's assertions need them (see hydrateExtras):
+    standings?: Array<Record<string, unknown>>;
+    seasonHistory?: Record<string, Record<string, unknown>>; // userName -> row
+    payoutRecords?: Array<Record<string, unknown>>;
+    profiles?: Record<string, Record<string, unknown>>; // userName -> profile doc
+    consensus?: Record<string, Record<string, unknown>>; // "week:gameKey" -> tally
+    gameKeyMap?: Record<string, string>; // "week:gameKey" -> game doc id
+    rejections?: Array<{ userName: string; week?: number; op: string; code: string }>;
 }
 
 const TEAM_NAMES: Record<string, string> = {
@@ -104,6 +113,115 @@ function numKeys<T>(rec: Record<string, T> | undefined): Record<number, T> {
     const out: Record<number, T> = {};
     for (const [k, v] of Object.entries(rec ?? {})) out[Number(k)] = v;
     return out;
+}
+
+// Run-scoped subject uid for a scenario userName — must match the uid used
+// when the entry was fabricated (and what simJoinMembers enrolled).
+function uidForUserName(runId: string, userName: string): string {
+    return `sim-${runId}-${userName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+}
+
+/** "week:gameKey" -> game doc id, for gradedPick/consensusTally assertions. */
+function buildGameKeyMap(runId: string, games: ScenarioNFLGame[]): Record<string, string> {
+    const map: Record<string, string> = {};
+    const perWeekCount: Record<number, number> = {};
+    games.forEach((g, i) => {
+        perWeekCount[g.week] = (perWeekCount[g.week] ?? 0) + 1;
+        map[`${g.week}:g${perWeekCount[g.week]}`] = gameDocId(runId, i);
+    });
+    return map;
+}
+
+/**
+ * Executes a scenario's real-path lifecycle ops IN ORDER (Phase 4 item 25).
+ * Ops with `expectError` record their outcome into `rejections` (asserted via
+ * the submitRejected assertion type) instead of failing the run; an op that
+ * fails WITHOUT expectError throws and fails the scenario.
+ */
+async function runLifecycleOps(ctx: {
+    functions: ReturnType<typeof getFunctions>;
+    poolId: string;
+    runId: string;
+    seasonType: number;
+    runStart: number;
+    games: ScenarioNFLGame[]; // mutated by reseedGames
+    addStep: (step: string, status: NFLSimStep['status'], message: string) => void;
+    rejections: Array<{ userName: string; week?: number; op: string; code: string }>;
+    scoredWeeks: number[];
+}, ops: LifecycleOp[]): Promise<void> {
+    const { functions, poolId, runId, addStep } = ctx;
+    const call = (name: string) => httpsCallable(functions, name);
+
+    const guarded = async (
+        op: string, userName: string, week: number | undefined,
+        expectError: string | undefined, fn: () => Promise<unknown>,
+    ) => {
+        try {
+            await fn();
+            if (expectError) {
+                ctx.rejections.push({ userName, week, op, code: 'SUCCESS' });
+                addStep(`Op ${op}`, 'failed', `${userName}: expected rejection ("${expectError}") but the call SUCCEEDED`);
+            } else {
+                addStep(`Op ${op}`, 'success', `${userName}${week !== undefined ? ` wk${week}` : ''}`);
+            }
+        } catch (e: unknown) {
+            const code = e instanceof Error ? e.message : String(e);
+            if (!expectError) throw e;
+            ctx.rejections.push({ userName, week, op, code });
+            addStep(`Op ${op}`, 'success', `${userName}: rejected as expected (${code.slice(0, 120)})`);
+        }
+    };
+
+    for (const op of ops) {
+        if (op.op === 'join') {
+            // One call per member so an expected rejection is isolated to its member.
+            for (const name of op.userNames) {
+                await guarded('join', name, undefined, op.expectError, () =>
+                    call('simJoinMembers')({ poolId, runId, members: [{ uid: uidForUserName(runId, name), name }] }));
+            }
+        } else if (op.op === 'submit') {
+            const subjectUid = uidForUserName(runId, op.userName);
+            const picks = op.team !== undefined
+                ? { [op.week]: op.team } // survivor/margin: week -> team
+                : translateGameKeys({ [String(op.week)]: op.picks ?? {} }, runId, ctx.games);
+            const confidence = op.confidence
+                ? translateGameKeys({ [String(op.week)]: op.confidence }, runId, ctx.games)
+                : undefined;
+            await guarded('submit', op.userName, op.week, op.expectError, () =>
+                call('simSubmitPicks')({
+                    poolId, runId, subjectUid, week: op.week, picks,
+                    ...(confidence ? { confidence } : {}),
+                    ...(op.tiebreaker !== undefined ? { tiebreakerPrediction: op.tiebreaker } : {}),
+                }));
+        } else if (op.op === 'rebuy') {
+            await guarded('rebuy', op.userName, op.week, op.expectError, () =>
+                call('simExecuteRebuy')({ poolId, runId, subjectUid: uidForUserName(runId, op.userName), week: op.week }));
+        } else if (op.op === 'score') {
+            await call('scoreNFLWeek')({ poolId, week: op.week });
+            if (!ctx.scoredWeeks.includes(op.week)) ctx.scoredWeeks.push(op.week);
+            addStep('Op score', 'success', `Week ${op.week} scored via scoreNFLWeek`);
+        } else if (op.op === 'reseedGames') {
+            await call('simSeedNFLGames')({
+                runId,
+                games: op.games.map(g => toSeedGame(g, ctx.seasonType, ctx.runStart)),
+            });
+            ctx.games.length = 0;
+            ctx.games.push(...op.games);
+            addStep('Op reseedGames', 'success', `${op.games.length} games re-seeded`);
+        } else if (op.op === 'finalize') {
+            await guarded('finalize', '(pool)', undefined, op.expectError, () =>
+                call('simFinalizePool')({ poolId, runId }));
+        } else if (op.op === 'recordPayouts') {
+            await call('recordPoolPayouts')({
+                poolId,
+                awards: op.awards.map(a => ({
+                    uid: uidForUserName(runId, a.userName),
+                    amount: a.amount, kind: 'PLACE', place: a.place, settled: true,
+                })),
+            });
+            addStep('Op recordPayouts', 'success', `${op.awards.length} award(s) recorded`);
+        }
+    }
 }
 
 export async function runNFLSeasonScenario(scenario: TestScenario): Promise<NFLSimResult> {
@@ -186,7 +304,7 @@ export async function runNFLSeasonScenario(scenario: TestScenario): Promise<NFLS
         // collide on off-pool docs (publicProfiles/seasonHistory/users) — enforced
         // server-side by simWriteEntries (Phase 0.6, Codex R1#6).
         const entries = scenarioEntries.map(e => {
-            const ownerUid = `sim-${runId}-${e.userName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+            const ownerUid = uidForUserName(runId, e.userName);
             const base: Record<string, unknown> = {
                 ownerUid,
                 userName: e.userName,
@@ -224,15 +342,33 @@ export async function runNFLSeasonScenario(scenario: TestScenario): Promise<NFLS
                 bestWeek: 0,
             };
         });
-        await httpsCallable(functions, 'simWriteEntries')({ poolId, runId, entries });
-        addStep('Write Entries', 'success', `${entries.length} entries fabricated`);
-
-        // 4. Score each week via the REAL callable.
-        const weeks = scenario.scoreWeeks ?? [...new Set(games.map(g => g.week))].sort((a, b) => a - b);
-        for (const week of weeks) {
-            await httpsCallable(functions, 'scoreNFLWeek')({ poolId, week });
-            addStep('Score Week', 'success', `Week ${week} scored via scoreNFLWeek`);
+        if (entries.length > 0) {
+            await httpsCallable(functions, 'simWriteEntries')({ poolId, runId, entries });
+            addStep('Write Entries', 'success', `${entries.length} entries fabricated`);
         }
+
+        // 4. Drive the season: lifecycle ops when present (real-path scenarios),
+        // otherwise score each scoreWeek via the REAL callable (direct-write matrix).
+        const rejections: NonNullable<NFLSimResult['rejections']> = [];
+        let weeks: number[];
+        if (scenario.lifecycleOps?.length) {
+            const scoredWeeks: number[] = [];
+            const mutableGames = [...games];
+            await runLifecycleOps({
+                functions, poolId, runId, seasonType, runStart,
+                games: mutableGames, addStep, rejections, scoredWeeks,
+            }, scenario.lifecycleOps);
+            weeks = scoredWeeks.sort((a, b) => a - b);
+            games.length = 0;
+            games.push(...mutableGames); // reseeds visible to hydration key maps
+        } else {
+            weeks = scenario.scoreWeeks ?? [...new Set(games.map(g => g.week))].sort((a, b) => a - b);
+            for (const week of weeks) {
+                await httpsCallable(functions, 'scoreNFLWeek')({ poolId, week });
+                addStep('Score Week', 'success', `Week ${week} scored via scoreNFLWeek`);
+            }
+        }
+        result.rejections = rejections;
 
         // 5. Hydrate BEFORE cleanup — assertions run on this snapshot.
         const entriesSnap = await getDocs(collection(db, 'pools', poolId, 'entries'));
@@ -243,6 +379,49 @@ export async function runNFLSeasonScenario(scenario: TestScenario): Promise<NFLS
         }
         const poolSnap = await getDoc(doc(db, 'pools', poolId));
         result.poolSnapshot = poolSnap.data() as Record<string, unknown>;
+
+        // 5b. Persisted-schema hydration, only what this scenario's assertions need
+        // (standings projection, seasonHistory, payoutRecords, profiles, consensus).
+        const kinds = new Set(scenario.assertions.map(a => a.type));
+        result.gameKeyMap = buildGameKeyMap(runId, games);
+        if (kinds.has('standingsRow')) {
+            const s = await getDoc(doc(db, 'pools', poolId, 'standings', 'current'));
+            result.standings = (s.data()?.rows ?? []) as Array<Record<string, unknown>>;
+        }
+        const namesFor = (type: string) => [...new Set(
+            scenario.assertions.filter(a => a.type === type && a.userName).map(a => a.userName as string))];
+        if (kinds.has('seasonHistoryRow')) {
+            result.seasonHistory = {};
+            for (const name of namesFor('seasonHistoryRow')) {
+                const h = await getDoc(doc(db, 'users', uidForUserName(runId, name), 'seasonHistory', poolId));
+                if (h.exists()) result.seasonHistory[name] = h.data() as Record<string, unknown>;
+            }
+        }
+        if (kinds.has('payoutRecordExists')) {
+            const uidToName = new Map(
+                result.entries.map(e => [String(e.ownerUid), String(e.userName)]));
+            const p = await getDocs(collection(db, 'pools', poolId, 'payoutRecords'));
+            result.payoutRecords = p.docs.map(d => {
+                const rec = d.data() as Record<string, unknown>;
+                return { ...rec, userName: rec.userName ?? uidToName.get(String(rec.uid)) };
+            });
+        }
+        if (kinds.has('profileField')) {
+            result.profiles = {};
+            for (const name of namesFor('profileField')) {
+                const pr = await getDoc(doc(db, 'publicProfiles', uidForUserName(runId, name)));
+                if (pr.exists()) result.profiles[name] = pr.data() as Record<string, unknown>;
+            }
+        }
+        if (kinds.has('consensusTally')) {
+            result.consensus = {};
+            for (const a of scenario.assertions.filter(x => x.type === 'consensusTally')) {
+                const docId = result.gameKeyMap[`${a.week}:${a.gameKey}`];
+                if (!docId) continue;
+                const c = await getDoc(doc(db, 'pools', poolId, 'consensus', docId));
+                if (c.exists()) result.consensus[`${a.week}:${a.gameKey}`] = c.data() as Record<string, unknown>;
+            }
+        }
         addStep('Hydrate', 'success', `${result.entries.length} entries, ${Object.keys(result.recaps).length} recaps read back`);
     } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);

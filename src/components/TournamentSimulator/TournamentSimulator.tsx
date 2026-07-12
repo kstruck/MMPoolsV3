@@ -13,7 +13,9 @@ import { logger } from '../../utils/logger';
  */
 
 import React, { useState, useCallback } from 'react';
-import { getFirestore, collection, addDoc, getDocs, updateDoc, setDoc, doc, getDoc, writeBatch } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { dbService } from '../../services/dbService';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { Header } from '../Header';
 import { Footer } from '../Footer';
@@ -107,6 +109,9 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
 
     // Pool / Tournament state
     const [poolId, setPoolId] = useState<string | null>(null);
+    // Sim Run trust anchor (PLAN-NFL-SIM-HARNESS Phase 5): every mutation goes
+    // through the runId-scoped guarded callables — no raw Firestore writes.
+    const [runId, setRunId] = useState<string | null>(null);
     const [tournament, setTournament] = useState<Tournament | null>(null);
     const [currentRound, setCurrentRound] = useState(0);
 
@@ -147,37 +152,55 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
         setError(null);
 
         try {
-            const db = getFirestore();
+            const functions = getFunctions();
+            const newRunId = `run-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+
+            // 0. Open the run manifest FIRST — a run that dies mid-setup stays
+            // discoverable by the stranded-run sweep (Phase 0.7).
+            await httpsCallable(functions, 'simStartRun')({ runId: newRunId, scenarioId: 'tournament-simulator' });
+            setRunId(newRunId);
 
             // 1. Generate tournament (all games SCHEDULED)
             const newTournament = generateTournament2025();
             setTournament(newTournament);
 
-            // 2. Write tournament to Firestore
-            await setDoc(doc(db, 'tournaments', 'mens-2025-sim'), newTournament);
+            // 2. Write tournament through the SUPER_ADMIN-audited callable
+            await httpsCallable(functions, 'simSetTournament')({ tournamentId: 'mens-2025-sim', tournament: newTournament });
 
-            // 3. Create pool document
+            // 3. Create the pool via the REAL createPool callable, with the
+            // simRunId trust anchor (server-stamped for SUPER_ADMIN callers).
+            // The old raw addDoc relied on the `sim-*` slug rules backdoor,
+            // dropped in Phase 5.
+            // Single Date.now() — separate calls could tick between slug and
+            // slugLower and break the slugLower-derived-from-slug invariant
+            // (qodo review of PR #162 finding 2; bug predates this PR).
+            const slug = `sim-${Date.now()}`;
             const poolData = {
                 type: 'BRACKET',
                 name: '🏀 Tournament Simulator Pool',
-                slug: `sim-${Date.now()}`,
-                slugLower: `sim-${Date.now()}`,
+                slug,
+                slugLower: slug.toLowerCase(),
                 isListedPublic: false,
-                status: 'OPEN', // was invalid 'PUBLISHED'; BRACKET status enum is DRAFT|OPEN|LOCKED|LIVE|COMPLETED
                 lockAt: Date.now() + 86400000,
                 settings: POOL_SETTINGS,
-                managerUid: user?.id || 'simulator',
                 seasonYear: 2025,
                 gender: 'mens',
                 tournamentId: 'mens-2025-sim',
-                createdAt: Date.now(),
-                participantCount: 0,
-                entryCount: 0,
+                simRunId: newRunId,
+                // Required shims for createPool validation
+                costPerSquare: 0,
+                maxSquaresPerPlayer: 0,
             };
 
-            const poolRef = await addDoc(collection(db, 'pools'), poolData);
-            const newPoolId = poolRef.id;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const newPoolId = await dbService.createPool(poolData as any);
             setPoolId(newPoolId);
+
+            // createPool launches BRACKET pools as DRAFT; the simulator needs an
+            // open pool immediately — patch via the runId-verified harness.
+            await httpsCallable(functions, 'simUpdatePool')({
+                poolId: newPoolId, runId: newRunId, patch: { status: 'OPEN' },
+            });
 
             // 4. Generate entries (50 random + 3 controls)
             const randomEntries = generateEntries(50, {
@@ -188,32 +211,26 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
             const controlEntries = generateControlEntries();
             const allEntries = [...randomEntries, ...controlEntries];
 
-            // 5. Write entries to Firestore
+            // 5. Write entries through the guarded harness (run-scoped ownerUids;
+            // simWriteEntries forces docId = ownerUid).
             // NOTE: getCorrectPicks() uses slot-prefixed keys (slot-R1-E1).
             // But BracketBuilder uses game.id keys (R1-E1).
-            // The scoring engine (calculateScore) iterates tournament.slots and 
+            // The scoring engine (calculateScore) iterates tournament.slots and
             // looks up entry.picks[slot.id], so picks MUST be keyed by slot.id.
             // The test data generator already uses slot-prefixed keys via getCorrectPicks(), so they're correct.
-            const batch = writeBatch(db);
-            const entriesCollection = collection(db, 'pools', newPoolId, 'entries');
-
-            for (const entry of allEntries) {
-                const entryData: Omit<BracketEntry, 'id'> = {
-                    poolId: newPoolId,
-                    ownerUid: `sim-${entry.userName.replace(/\s/g, '-')}`,
-                    name: `${entry.userName}'s Bracket`,
-                    picks: entry.picks, // Already keyed by slot.id from getCorrectPicks
-                    tieBreakerPrediction: entry.tiebreakerPrediction,
-                    status: 'SUBMITTED',
-                    paidStatus: 'PAID',
-                    score: 0,
-                    createdAt: Date.now(),
-                    updatedAt: Date.now(),
-                };
-                const entryRef = doc(entriesCollection);
-                batch.set(entryRef, entryData);
-            }
-            await batch.commit();
+            const entryDocs = allEntries.map(entry => ({
+                poolId: newPoolId,
+                ownerUid: `sim-${newRunId}-${entry.userName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+                name: `${entry.userName}'s Bracket`,
+                picks: entry.picks, // Already keyed by slot.id from getCorrectPicks
+                tieBreakerPrediction: entry.tiebreakerPrediction,
+                status: 'SUBMITTED',
+                paidStatus: 'PAID',
+                score: 0,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+            }));
+            await httpsCallable(functions, 'simWriteEntries')({ poolId: newPoolId, runId: newRunId, entries: entryDocs });
 
             setEntryCount(allEntries.length);
             setPhase('BRACKET');
@@ -238,7 +255,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
     const totalPicks = 63; // 32 + 16 + 8 + 4 + 2 + 1
 
     const handleSubmitBracket = useCallback(async () => {
-        if (!poolId || !tournament) return;
+        if (!poolId || !runId || !tournament) return;
 
         const tiebreaker = parseInt(tieBreakerInput, 10);
         if (isNaN(tiebreaker) || tiebreaker < 0) {
@@ -250,17 +267,17 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
         setError(null);
 
         try {
-            const db = getFirestore();
-
             // Convert game.id picks → slot.id picks for scoring compatibility
             const slotPicks: Record<string, string> = {};
             for (const [gameId, teamId] of Object.entries(userPicks)) {
                 slotPicks[`slot-${gameId}`] = teamId;
             }
 
-            const entryData: Omit<BracketEntry, 'id'> = {
+            // Guarded harness write — docId is forced to the run-scoped ownerUid.
+            const userUid = `sim-${runId}-you`;
+            const entryData = {
                 poolId,
-                ownerUid: 'simulator-user',
+                ownerUid: userUid,
                 name: "Your Bracket",
                 picks: slotPicks,
                 tieBreakerPrediction: tiebreaker,
@@ -271,8 +288,8 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
                 updatedAt: Date.now(),
             };
 
-            const entryRef = await addDoc(collection(db, 'pools', poolId, 'entries'), entryData);
-            setUserEntryId(entryRef.id);
+            await httpsCallable(getFunctions(), 'simWriteEntries')({ poolId, runId, entries: [entryData] });
+            setUserEntryId(userUid);
             setEntryCount(prev => prev + 1);
             setPhase('SIMULATION');
         } catch (e: unknown) {
@@ -282,7 +299,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
         } finally {
             setIsLoading(false);
         }
-    }, [poolId, tournament, userPicks, tieBreakerInput]);
+    }, [poolId, runId, tournament, userPicks, tieBreakerInput]);
 
     const handleRandomFill = useCallback((strategy: 'random' | 'chalk' | 'upset' = 'random') => {
         if (!tournament) return;
@@ -387,7 +404,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
     // ─── PHASE 3: SIMULATION ────────────────────────────────────
 
     const handleSimulateRound = useCallback(async () => {
-        if (!poolId || !tournament) return;
+        if (!poolId || !runId || !tournament) return;
 
         const nextRound = currentRound + 1;
         if (nextRound > 6) return;
@@ -397,32 +414,35 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
 
         try {
             const db = getFirestore();
+            const functions = getFunctions();
 
             // 1. Reveal round results
             const updatedTournament = revealRound(tournament, nextRound);
             setTournament(updatedTournament);
 
-            // 2. Update tournament in Firestore
-            await setDoc(doc(db, 'tournaments', 'mens-2025-sim'), updatedTournament);
+            // 2. Update tournament through the guarded callable
+            await httpsCallable(functions, 'simSetTournament')({ tournamentId: 'mens-2025-sim', tournament: updatedTournament });
 
             // 2b. If this is the first round, lock the pool so brackets become viewable
             if (currentRound === 0 && poolId) {
-                await updateDoc(doc(db, 'pools', poolId), { status: 'LOCKED' });
+                await httpsCallable(functions, 'simUpdatePool')({ poolId, runId, patch: { status: 'LOCKED' } });
             }
 
-            // 3. Read all entries and recalculate scores
+            // 3. Read all entries and recalculate scores (score patches collected
+            // into ONE guarded simWriteEntries call — docIds ARE ownerUids)
             const entriesSnap = await getDocs(collection(db, 'pools', poolId, 'entries'));
             const previousLeaderboard = [...leaderboard];
             const previousRankMap = new Map(previousLeaderboard.map((e, i) => [e.id, i + 1]));
 
             const newLeaderboard: LeaderboardEntry[] = [];
+            const scorePatches: Array<Record<string, unknown>> = [];
 
             for (const entryDoc of entriesSnap.docs) {
                 const entry = { id: entryDoc.id, ...entryDoc.data() } as BracketEntry;
                 const scoringResult = calculateScore(entry, updatedTournament, POOL_SETTINGS);
 
-                // Update score in Firestore
-                await updateDoc(entryDoc.ref, {
+                scorePatches.push({
+                    ownerUid: entry.ownerUid,
                     score: scoringResult.score,
                     maxPossibleScore: scoringResult.maxPossibleScore,
                 });
@@ -443,6 +463,10 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
                     isUser,
                     isControl,
                 });
+            }
+
+            if (scorePatches.length > 0) {
+                await httpsCallable(functions, 'simWriteEntries')({ poolId, runId, entries: scorePatches });
             }
 
             // Sort: score desc, then tiebreaker proximity
@@ -504,13 +528,14 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
         } finally {
             setIsLoading(false);
         }
-    }, [poolId, tournament, currentRound, leaderboard, userEntryId]);
+    }, [poolId, runId, tournament, currentRound, leaderboard, userEntryId]);
 
     // ─── RESET ──────────────────────────────────────────────────
 
     const handleReset = useCallback(() => {
         setPhase('SETUP');
         setPoolId(null);
+        setRunId(null);
         setTournament(null);
         setCurrentRound(0);
         setLeaderboard([]);

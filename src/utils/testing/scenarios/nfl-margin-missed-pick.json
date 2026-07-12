@@ -1,0 +1,31 @@
+{
+    "id": "nfl-margin-missed-pick",
+    "name": "Margin Missed Pick = -14 (edge)",
+    "description": "A missed week costs the standard -14 burden penalty. Bob: +20 then no pick = 6, burden 14. Alice: +3 +7 = 10. Expectations hand-verified.",
+    "poolType": "NFL_MARGIN",
+    "poolConfig": {
+        "name": "Sim Margin Missed",
+        "type": "NFL_MARGIN",
+        "settings": {
+            "entryFee": 0,
+            "payoutMode": "SEASON",
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 },
+        { "week": 2, "home": "BAL", "away": "CIN", "homeScore": 21, "awayScore": 28 }
+    ],
+    "scoreWeeks": [1, 2],
+    "testEntries": [
+        { "userName": "Alice", "marginPicks": { "1": "KC", "2": "CIN" } },
+        { "userName": "Bob", "marginPicks": { "1": "SF" } }
+    ],
+    "assertions": [
+        { "type": "marginSeasonTotal", "userName": "Alice", "expected": 10, "message": "Alice = 10" },
+        { "type": "marginSeasonTotal", "userName": "Bob", "expected": 6, "message": "Bob = 6 (+20 week 1, -14 missed week 2)" },
+        { "type": "standingsRow", "userName": "Bob", "expected": { "negativeBurden": 14, "positiveWeeks": 1, "bestWeek": 20 }, "message": "The -14 counts as burden; week 1 stays his best week" },
+        { "type": "marginRank", "userName": "Alice", "expected": 1, "message": "Alice ranks 1st (10 > 6)" }
+    ]
+}

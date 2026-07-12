@@ -2,25 +2,17 @@ import * as functions from "firebase-functions/v2";
 import { FieldValue } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 
-interface JoinWaitlistData {
-    poolId: string;
-    name: string;
-    email: string;
-}
-
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
+import { validated } from "./lib/validated";
+import { joinWaitlistSchema } from "./schemas/reminderWaitlist";
 
-export const joinWaitlist = functions.https.onCall(async (request) => {
+export const joinWaitlist = validated(
+    // PUBLIC (guest flow): strict { poolId, name, email } is the gate.
+    { schema: joinWaitlistSchema, label: "joinWaitlist", auth: "public", appCheck: "monitor" },
+    async (input, request) => {
     const db = admin.firestore();
-    const { poolId, name, email } = request.data as JoinWaitlistData;
-
-    if (!poolId || !name || !email) {
-        throw new functions.https.HttpsError(
-            "invalid-argument",
-            "Missing poolId, name, or email."
-        );
-    }
+    const { poolId, name, email } = input;
 
     const poolRef = db.collection("pools").doc(poolId);
     let poolName = "March Melee Pool"; // Default
@@ -79,7 +71,8 @@ export const joinWaitlist = functions.https.onCall(async (request) => {
         }
         throw new functions.https.HttpsError("internal", "Failed to join waitlist.");
     }
-});
+    },
+);
 
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { notifyWaitlist } from "./reminders";

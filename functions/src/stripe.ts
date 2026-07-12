@@ -24,6 +24,8 @@ import { defineSecret } from "firebase-functions/params";
 import { HttpsError } from "firebase-functions/v2/https";
 
 import Stripe from "stripe";
+import { validated } from "./lib/validated";
+import { createCheckoutSessionSchema } from "./schemas/billingCheckout";
 import {
     writeBillingChargeTxn,
     type BillingCharge,
@@ -152,36 +154,32 @@ const PENDING_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 // 1. createCheckoutSession — Callable Function (onCall v2)
 // =============================================================================
 
-export const createCheckoutSession = functions.https.onCall({ cors: true, secrets: [stripeSecretKey] }, async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "You must be signed in to create a checkout session.");
-    }
-    const userId = request.auth.uid;
-    const data = request.data as any;
-    const bundleType = data?.bundleType as string | undefined;
-    const isBundlePurchase = !!bundleType;
+export const createCheckoutSession = validated(
+    // Union: { bundleType } (bundle purchase) | checkoutPoolInputSchema (pool
+    // purchase) — the same two shapes the old head accepted, now parsed at the
+    // gate. Both paths remain server-priced.
+    {
+        schema: createCheckoutSessionSchema,
+        label: "createCheckoutSession",
+        appCheck: "monitor",
+        options: { cors: true, secrets: [stripeSecretKey] },
+    },
+    async (input, request) => {
+    const userId = request.auth!.uid;
 
     const origin = safeRedirectOrigin(request.rawRequest);
 
     // =====================================================================
     // BUNDLE PURCHASE PATH (no coupons/reservations; server-priced)
     // =====================================================================
-    if (isBundlePurchase) {
-        return createBundleCheckout(userId, bundleType!, origin, request.auth.token?.email);
+    if ("bundleType" in input) {
+        return createBundleCheckout(userId, input.bundleType, origin, request.auth!.token?.email);
     }
 
     // =====================================================================
     // STANDARD POOL PURCHASE PATH
     // =====================================================================
-    const parsed = checkoutPoolInputSchema.safeParse(data);
-    if (!parsed.success) {
-        const issue = parsed.error.issues[0];
-        throw new HttpsError(
-            "invalid-argument",
-            `Invalid checkout request: ${issue?.path?.join(".") || "(root)"} — ${issue?.message ?? "validation failed"}`
-        );
-    }
-    const { poolId, poolName, poolType, estimatedPlayers, addons, couponCode, usedCredit, customCreditId } = parsed.data;
+    const { poolId, poolName, poolType, estimatedPlayers, addons, couponCode, usedCredit, customCreditId } = input;
 
     // --- Verify pool exists ---
     const poolDoc = await db.collection("pools").doc(poolId).get();
@@ -461,7 +459,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true, secret
             success_url: poolSuccessUrl(origin, poolId),
             cancel_url: poolCancelUrl(origin, poolId),
             metadata,
-            customer_email: request.auth.token.email || undefined,
+            customer_email: request.auth!.token.email || undefined,
         });
         console.log(`[Stripe] Checkout session ${session.id} created for pool ${poolId} (reservation ${reservationId})`);
         return { sessionUrl: session.url };
@@ -473,7 +471,8 @@ export const createCheckoutSession = functions.https.onCall({ cors: true, secret
         );
         throw new HttpsError("internal", `Failed to create checkout session: ${err?.message}`);
     }
-});
+    },
+);
 
 /** Bundle checkout — server-priced, server-derived redirect URLs, no coupons. */
 async function createBundleCheckout(

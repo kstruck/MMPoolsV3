@@ -1,0 +1,35 @@
+{
+    "id": "nfl-survivor-cancelled-void",
+    "name": "Survivor Cancelled Game VOID (edge)",
+    "description": "A cancelled game is a survive (VOID grade) — err on the side of safety. Bob's real loss still eliminates him. Expectations hand-verified.",
+    "poolType": "NFL_SURVIVOR",
+    "poolConfig": {
+        "name": "Sim Survivor Cancelled",
+        "type": "NFL_SURVIVOR",
+        "settings": {
+            "entryFee": 0,
+            "maxStrikes": 0,
+            "maxRebuys": 0,
+            "rebuyDeadlineWeek": 0,
+            "rebuyCost": 0,
+            "pickLosersMode": false,
+            "autoSurviveExemptionEnabled": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 0, "awayScore": 0, "status": "CANCELLED" },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 }
+    ],
+    "scoreWeeks": [1],
+    "testEntries": [
+        { "userName": "Alice", "survivorPicks": { "1": "KC" } },
+        { "userName": "Bob", "survivorPicks": { "1": "DAL" } }
+    ],
+    "assertions": [
+        { "type": "survivorStatus", "userName": "Alice", "expected": "ALIVE", "message": "Cancelled game = survive" },
+        { "type": "survivorStrikes", "userName": "Alice", "expected": 0, "message": "Alice strikes = 0" },
+        { "type": "gradedPick", "userName": "Alice", "week": 1, "expected": "VOID", "message": "Alice wk1 (cancelled) graded VOID" },
+        { "type": "survivorStatus", "userName": "Bob", "expected": "ELIMINATED", "message": "Bob (DAL lost the real game) eliminated" }
+    ]
+}

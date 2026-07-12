@@ -15,8 +15,7 @@ import {
     orderBy,
     limit,
     arrayUnion,
-    addDoc,
-    deleteField
+    addDoc
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
@@ -398,9 +397,22 @@ export const dbService = {
         await updateDoc(poolRef, { ...updates, updatedAt: Date.now() });
     },
 
-    updateBracketEntryPayment: async (poolId: string, entryId: string, paidStatus: 'PAID' | 'UNPAID', paymentMethod?: 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Cash.me' | 'Other'): Promise<void> => {
-        const entryRef = doc(db, 'pools', poolId, 'entries', entryId);
-        await updateDoc(entryRef, { paidStatus, paymentMethod: paymentMethod || deleteField(), updatedAt: Date.now() });
+    // Server-side since Phase 5 (updateEntryPayment callable): the old raw
+    // entry write depended on the dropped SUPER_ADMIN entries rule — and never
+    // worked for ordinary commissioners at all. The callable authorizes
+    // owner/manager/creator/SUPER_ADMIN and writes the audit trail.
+    updateBracketEntryPayment: async (
+        poolId: string, entryId: string, paidStatus: 'PAID' | 'UNPAID',
+        paymentMethod?: 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Cash.me' | 'Other',
+        details?: { paidAt?: number | null; paymentNote?: string | null },
+    ): Promise<void> => {
+        const fn = httpsCallable(functions, 'updateEntryPayment');
+        await fn({
+            poolId, entryId, paidStatus,
+            ...(paymentMethod ? { paymentMethod } : {}),
+            ...(details?.paidAt !== undefined ? { paidAt: details.paidAt } : {}),
+            ...(details?.paymentNote !== undefined ? { paymentNote: details.paymentNote } : {}),
+        });
     },
 
     // Member Record roster (ADR 0003): every member who joined, incl. the commissioner and

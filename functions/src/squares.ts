@@ -8,16 +8,22 @@ import { renderEmailHtml } from "./emailStyles";
 import { checkBillingAccess } from "./billing";
 import { SQUARE_PRIVATE, buildSquarePrivate } from "./squarePrivate";
 import { assertNotBannedLive } from "./lib/systemGuards";
+import { validated } from "./lib/validated";
+import { reserveSquareSchema, markSquaresPaidSchema } from "./schemas/squaresProps";
 
 
-export const reserveSquare = onCall(async (request) => {
-    // 0. Ensure Admin Init (Lazy)
+export const reserveSquare = validated(
+    // PUBLIC (guest flow): strict shape is the primary gate. customerDetails
+    // is a STRIPPING object so arbitrary client keys can no longer reach the
+    // squarePrivate PII doc.
+    { schema: reserveSquareSchema, label: "reserveSquare", auth: "public", appCheck: "monitor" },
+    async (input, request) => {
     const db = admin.firestore();
 
     // Banned users can't reserve (guests/anonymous are unaffected — no account).
     if (request.auth) await assertNotBannedLive(request.auth.uid);
 
-    const { poolId, squareId, customerDetails, guestDeviceKey, pickedAsName } = request.data;
+    const { poolId, squareId, customerDetails, guestDeviceKey, pickedAsName } = input;
 
     // 1. Determine user identity - allow unauthenticated users with customerDetails
     const isAuthenticated = !!request.auth;
@@ -40,10 +46,6 @@ export const reserveSquare = onCall(async (request) => {
         }
         userName = customerDetails.name;
         userEmail = customerDetails.email || "Unknown";
-    }
-
-    if (!poolId || squareId === undefined) {
-        throw new HttpsError("invalid-argument", "Missing required fields.");
     }
 
     const poolRef = db.collection("pools").doc(poolId);
@@ -151,21 +153,16 @@ export const reserveSquare = onCall(async (request) => {
     // and respects the pool's emailConfirmation setting. Do NOT send emails here.
 
     return { success: true };
-});
+    },
+);
 
-export const markSquaresPaid = onCall(async (request) => {
+export const markSquaresPaid = validated(
+    // Owner/SUPER_ADMIN check stays in the transaction below (needs the pool).
+    { schema: markSquaresPaidSchema, label: "markSquaresPaid", appCheck: "monitor" },
+    async (input, request) => {
     const db = admin.firestore();
-    const { poolId, squareIds, isPaid } = request.data;
-
-    // Auth Check
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "Must be logged in.");
-    }
-    const userId = request.auth.uid;
-
-    if (!poolId || !squareIds || !Array.isArray(squareIds)) {
-        throw new HttpsError("invalid-argument", "Missing required fields.");
-    }
+    const { poolId, squareIds, isPaid } = input;
+    const userId = request.auth!.uid;
 
     const poolRef = db.collection("pools").doc(poolId);
 
@@ -213,7 +210,8 @@ export const markSquaresPaid = onCall(async (request) => {
     });
 
     return { success: true };
-});
+    },
+);
 
 // Shared authorization: pool owner, manager, or super admin.
 async function assertPoolManager(

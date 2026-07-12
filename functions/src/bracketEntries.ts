@@ -7,6 +7,8 @@ import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
 import { assertNotBannedLive } from "./lib/systemGuards";
+import { validated } from "./lib/validated";
+import { submitBracketEntrySchema } from "./schemas/poolEngagement";
 
 
 
@@ -335,14 +337,16 @@ export const submitBracketEntryInternal = async (
     return { success: true };
 };
 
-export const submitBracketEntry = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-    await assertNotBannedLive(request.auth.uid);
-    const db = admin.firestore();
-    return submitBracketEntryInternal(request.auth.uid, request.data, db);
-});
+export const submitBracketEntry = validated(
+    // Sweep C7: schema applied at the wrapper — the internal helper previously
+    // received raw request.data wholesale.
+    { schema: submitBracketEntrySchema, label: "submitBracketEntry", appCheck: "monitor" },
+    async (input, request) => {
+        await assertNotBannedLive(request.auth!.uid);
+        const db = admin.firestore();
+        return submitBracketEntryInternal(request.auth!.uid, input, db);
+    },
+);
 
 // ----------------------------------------------------------------------------
 // Delete Bracket Entry
@@ -410,3 +414,173 @@ export const deleteBracketEntry = onCall(async (request) => {
     return { success: true, message: "Entry deleted successfully" };
 });
 
+
+// ----------------------------------------------------------------------------
+// Update Entry Payment display status (PLAN-NFL-SIM-HARNESS Phase 5)
+// ----------------------------------------------------------------------------
+// Replaces the client's raw `updateDoc(pools/{id}/entries/{eid}, {paidStatus})`
+// (dbService.updateBracketEntryPayment), which depended on the blanket
+// SUPER_ADMIN entries-write rule dropped in Phase 5 — and which ordinary
+// commissioners could never use (the rule was admin-only even though the UI
+// offered the toggle). Authorization mirrors setPaidStatus: owner/manager/
+// creator or SUPER_ADMIN. NOTE: the entry's paidStatus is display/legacy;
+// the Member Record (setPaidStatus) remains the authoritative payment truth.
+export const updateEntryPayment = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "User must be logged in.");
+    }
+    const uid = request.auth.uid;
+    // paidAt/paymentNote support the manager ledger's detailed edit (qodo review
+    // of PR #162 finding 1 — NFLManagerBentoDashboard.saveDetailedPayment was a
+    // surviving raw entry write). Explicit null clears the field (parity with
+    // the old client write, which stored literal nulls).
+    const { poolId, entryId, paidStatus, paymentMethod, paidAt, paymentNote } = (request.data ?? {}) as {
+        poolId?: string; entryId?: string; paidStatus?: string; paymentMethod?: string;
+        paidAt?: number | null; paymentNote?: string | null;
+    };
+    if (!poolId || !entryId || (paidStatus !== 'PAID' && paidStatus !== 'UNPAID')) {
+        throw new HttpsError("invalid-argument", "poolId, entryId, and paidStatus (PAID|UNPAID) are required.");
+    }
+    const ALLOWED_METHODS = ['Cash', 'Check', 'Venmo', 'Google Pay', 'Cash.me', 'Other'];
+    if (paymentMethod !== undefined && !ALLOWED_METHODS.includes(paymentMethod)) {
+        throw new HttpsError("invalid-argument", "Invalid paymentMethod.");
+    }
+    if (paidAt !== undefined && paidAt !== null && (typeof paidAt !== 'number' || !Number.isFinite(paidAt))) {
+        throw new HttpsError("invalid-argument", "paidAt must be a timestamp or null.");
+    }
+    if (paymentNote !== undefined && paymentNote !== null && typeof paymentNote !== 'string') {
+        throw new HttpsError("invalid-argument", "paymentNote must be a string or null.");
+    }
+
+    const db = admin.firestore();
+    const poolRef = db.collection("pools").doc(poolId);
+    const entryRef = poolRef.collection("entries").doc(entryId);
+
+    await db.runTransaction(async (transaction) => {
+        const poolDoc = await transaction.get(poolRef);
+        if (!poolDoc.exists) throw new HttpsError("not-found", "Pool not found.");
+        const pool = poolDoc.data() as Record<string, unknown>;
+
+        const isOwner = pool.ownerId === uid || pool.managerUid === uid || pool.createdByUid === uid ||
+            request.auth?.token?.role === 'SUPER_ADMIN';
+        if (!isOwner) {
+            throw new HttpsError("permission-denied", "Only the commissioner can update entry payment status.");
+        }
+
+        const entryDoc = await transaction.get(entryRef);
+        if (!entryDoc.exists) throw new HttpsError("not-found", "Entry not found.");
+
+        transaction.update(entryRef, {
+            paidStatus,
+            paymentMethod: paymentMethod ?? FieldValue.delete(),
+            ...(paidAt !== undefined ? { paidAt } : {}),
+            ...(paymentNote !== undefined ? { paymentNote: paymentNote === null ? null : paymentNote.slice(0, 500) } : {}),
+            updatedAt: Date.now(),
+        });
+
+        const auditRef = db.collection("audit").doc();
+        transaction.set(auditRef, {
+            poolId,
+            type: "ENTRY_PAYMENT_UPDATED",
+            message: `Entry ${entryId} marked ${paidStatus} by ${uid}`,
+            severity: "INFO",
+            actor: { uid, role: "USER" },
+            timestamp: Date.now(),
+        });
+    });
+
+    return { success: true };
+});
+
+// ----------------------------------------------------------------------------
+// SUPER_ADMIN entry ops (qodo review of PR #162, finding 1)
+// ----------------------------------------------------------------------------
+// The Phase 5 rules drop (`entries: allow write: if false`) orphaned three
+// SuperAdmin dashboard actions that still raw-wrote entry docs: the paid
+// toggle, the score/payout/tiebreaker overrides, and the non-BRACKET entry
+// delete. The toggle now rides updateEntryPayment; these two callables carry
+// the other two — SUPER_ADMIN only, allowlisted fields, audited.
+
+const OVERRIDE_FIELDS = new Set(['score', 'payout', 'tiebreakerScore', 'tieBreakerPrediction']);
+
+export const adminUpdateEntryOverrides = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "User must be logged in.");
+    if (request.auth.token?.role !== 'SUPER_ADMIN') {
+        throw new HttpsError("permission-denied", "Entry overrides are SUPER_ADMIN only.");
+    }
+    const uid = request.auth.uid;
+    const { poolId, entryId, overrides } = (request.data ?? {}) as {
+        poolId?: string; entryId?: string; overrides?: Record<string, unknown>;
+    };
+    if (!poolId || !entryId || !overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
+        throw new HttpsError("invalid-argument", "poolId, entryId, and an overrides object are required.");
+    }
+    const patch: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(overrides)) {
+        if (!OVERRIDE_FIELDS.has(key)) {
+            throw new HttpsError("invalid-argument", `Field "${key}" is not an allowed override.`);
+        }
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+            throw new HttpsError("invalid-argument", `Override "${key}" must be a finite number.`);
+        }
+        patch[key] = value;
+    }
+    if (Object.keys(patch).length === 0) {
+        throw new HttpsError("invalid-argument", "No overrides provided.");
+    }
+
+    const db = admin.firestore();
+    const entryRef = db.collection("pools").doc(poolId).collection("entries").doc(entryId);
+    await db.runTransaction(async (transaction) => {
+        const entryDoc = await transaction.get(entryRef);
+        if (!entryDoc.exists) throw new HttpsError("not-found", "Entry not found.");
+        transaction.update(entryRef, { ...patch, updatedAt: Date.now() });
+        const auditRef = db.collection("audit").doc();
+        transaction.set(auditRef, {
+            poolId,
+            type: "ENTRY_OVERRIDES_UPDATED",
+            message: `Entry ${entryId} overrides ${Object.keys(patch).join(', ')} set by admin ${uid}`,
+            severity: "WARNING",
+            actor: { uid, role: "ADMIN" },
+            payload: patch,
+            timestamp: Date.now(),
+        });
+    });
+    return { success: true };
+});
+
+export const adminDeleteEntry = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "User must be logged in.");
+    if (request.auth.token?.role !== 'SUPER_ADMIN') {
+        throw new HttpsError("permission-denied", "Admin entry deletion is SUPER_ADMIN only.");
+    }
+    const uid = request.auth.uid;
+    const { poolId, entryId } = (request.data ?? {}) as { poolId?: string; entryId?: string };
+    if (!poolId || !entryId) {
+        throw new HttpsError("invalid-argument", "poolId and entryId are required.");
+    }
+
+    const db = admin.firestore();
+    const poolRef = db.collection("pools").doc(poolId);
+    const entryRef = poolRef.collection("entries").doc(entryId);
+    await db.runTransaction(async (transaction) => {
+        const entryDoc = await transaction.get(entryRef);
+        if (!entryDoc.exists) throw new HttpsError("not-found", "Entry not found.");
+        const entryName = (entryDoc.data() as Record<string, unknown>)?.name
+            ?? (entryDoc.data() as Record<string, unknown>)?.userName ?? 'Unknown';
+        transaction.delete(entryRef);
+        // Transactional decrement — same rationale as deleteBracketEntry: client-side
+        // count math races concurrent joins/deletes.
+        transaction.update(poolRef, { entryCount: FieldValue.increment(-1) });
+        const auditRef = db.collection("audit").doc();
+        transaction.set(auditRef, {
+            poolId,
+            type: "ENTRY_DELETED",
+            message: `Entry ${entryName} (${entryId}) deleted by admin ${uid}`,
+            severity: "WARNING",
+            actor: { uid, role: "ADMIN" },
+            timestamp: Date.now(),
+        });
+    });
+    return { success: true };
+});

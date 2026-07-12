@@ -11,137 +11,122 @@
  * writers that can't be forbidden), but the UI path is audited here.
  */
 
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { assertCallerRole } from "./adminClaims";
+import { validated } from "./lib/validated";
+import { adminManageCouponSchema } from "./schemas/adminManageCoupon";
+import {
+  adminSaveBillingConfigSchema,
+  adminUpdatePoolBillingSchema,
+  adminAdjustUserCreditsSchema,
+} from "./schemas/adminBillingOps";
 import { writeAdminAudit } from "./lib/adminAudit";
-import { BillingConfigSchema } from "./shared/schemas/billingConfig";
 import { grantEntitlementTxn } from "./entitlements";
 import { MAX_CREDITS_PER_BUNDLE, type ProductSnapshot } from "./shared/schemas/bundle";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Save the billing or referral config doc (settings/billing_config|referral_config). */
-export const adminSaveBillingConfig = onCall(async (request) => {
-  const caller = await assertCallerRole(request, "SUPER_ADMIN");
-  const { kind, config } = request.data as { kind: "billing" | "referral"; config: Record<string, unknown> };
-  if (kind !== "billing" && kind !== "referral") {
-    throw new HttpsError("invalid-argument", "kind must be 'billing' or 'referral'.");
-  }
-  if (!config || typeof config !== "object") {
-    throw new HttpsError("invalid-argument", "config object is required.");
-  }
-  const docId = kind === "billing" ? "billing_config" : "referral_config";
+export const adminSaveBillingConfig = validated(
+  { schema: adminSaveBillingConfigSchema, label: "adminSaveBillingConfig", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async (input, request) => {
+    // auth + SUPER_ADMIN (claim AND doc) already enforced by the wrapper.
+    const caller = { uid: request.auth!.uid, email: request.auth!.token.email as string | undefined };
+    const docId = input.kind === "billing" ? "billing_config" : "referral_config";
 
-  // billing_config is fully modeled by the shared contract — gate the write and
-  // persist the PARSED doc (defaults materialized, unknown keys stripped) so
-  // client readers that cast `data() as BillingConfig` see the canonical shape.
-  // referral_config keeps the existing unvalidated passthrough.
-  let toPersist: Record<string, unknown> = config;
-  if (kind === "billing") {
-    const parsed = BillingConfigSchema.safeParse(config);
-    if (!parsed.success) {
-      const summary = parsed.error.issues
-        .slice(0, 8)
-        .map((i) => `${i.path.map(String).join(".") || "(root)"}: ${i.message}`)
-        .join("; ");
-      throw new HttpsError("invalid-argument", `billing config failed validation: ${summary}`);
+    // For kind:"billing", input.config is the canonical BillingConfig already
+    // parsed by the schema (defaults materialized, unknown keys stripped) so
+    // client readers that cast `data() as BillingConfig` see the canonical shape.
+    // For kind:"referral", input.config is the unmodeled passthrough object.
+    await admin.firestore().doc(`settings/${docId}`).set(input.config);
+
+    await writeAdminAudit({
+      actorUid: caller.uid,
+      actorEmail: caller.email,
+      action: "BILLING_CONFIG_SAVED",
+      targetType: "config",
+      targetId: docId,
+      metadata: { kind: input.kind },
+      status: "success",
+    });
+    return { success: true };
+  },
+);
+
+/** Create / delete / toggle a coupon (coupons/{id}). Schema: ./schemas/adminManageCoupon. */
+export const adminManageCoupon = validated(
+  { schema: adminManageCouponSchema, label: "adminManageCoupon", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async (input, request) => {
+    // auth + SUPER_ADMIN (claim AND doc) already enforced by the wrapper.
+    const caller = { uid: request.auth!.uid, email: request.auth!.token.email as string | undefined };
+    const coupons = admin.firestore().collection("coupons");
+
+    let targetId: string;
+    let code: string | undefined;
+
+    if (input.op === "create") {
+      const body = input.data;
+      const ref = await coupons.add({
+        ...body,
+        code: body.code.toUpperCase(),
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      targetId = ref.id;
+      code = body.code;
+    } else if (input.op === "delete") {
+      targetId = input.couponId;
+      await coupons.doc(targetId).delete();
+    } else {
+      targetId = input.couponId;
+      await coupons.doc(targetId).update({ isActive: input.data.isActive });
     }
-    toPersist = parsed.data;
-  }
-  await admin.firestore().doc(`settings/${docId}`).set(toPersist);
 
-  await writeAdminAudit({
-    actorUid: caller.uid,
-    actorEmail: caller.email,
-    action: "BILLING_CONFIG_SAVED",
-    targetType: "config",
-    targetId: docId,
-    metadata: { kind },
-    status: "success",
-  });
-  return { success: true };
-});
-
-/** Create / delete / toggle a coupon (coupons/{id}). */
-export const adminManageCoupon = onCall(async (request) => {
-  const caller = await assertCallerRole(request, "SUPER_ADMIN");
-  const { op, couponId, data } = request.data as {
-    op: "create" | "delete" | "toggle";
-    couponId?: string;
-    data?: Record<string, unknown>;
-  };
-  const coupons = admin.firestore().collection("coupons");
-
-  let targetId = couponId;
-  if (op === "create") {
-    if (!data || typeof data !== "object" || typeof data.code !== "string" || !data.code.trim()) {
-      throw new HttpsError("invalid-argument", "coupon data with a non-empty code is required.");
-    }
-    const ref = await coupons.add({ ...data, code: (data.code as string).trim().toUpperCase(), createdAt: FieldValue.serverTimestamp() });
-    targetId = ref.id;
-  } else if (op === "delete") {
-    if (!couponId) throw new HttpsError("invalid-argument", "couponId is required.");
-    await coupons.doc(couponId).delete();
-  } else if (op === "toggle") {
-    if (!couponId || typeof data?.isActive !== "boolean") {
-      throw new HttpsError("invalid-argument", "couponId and isActive are required.");
-    }
-    await coupons.doc(couponId).update({ isActive: data.isActive });
-  } else {
-    throw new HttpsError("invalid-argument", "op must be create | delete | toggle.");
-  }
-
-  await writeAdminAudit({
-    actorUid: caller.uid,
-    actorEmail: caller.email,
-    action: `COUPON_${op.toUpperCase()}`,
-    targetType: "coupon",
-    targetId,
-    metadata: { op, code: typeof data?.code === "string" ? data.code : undefined },
-    status: "success",
-  });
-  return { success: true, couponId: targetId };
-});
+    await writeAdminAudit({
+      actorUid: caller.uid,
+      actorEmail: caller.email,
+      action: `COUPON_${input.op.toUpperCase()}`,
+      targetType: "coupon",
+      targetId,
+      metadata: { op: input.op, code },
+      status: "success",
+    });
+    return { success: true, couponId: targetId };
+  },
+);
 
 /** Pool billing override / extend-trial / reset-grace (pools/{id}.billing). */
-export const adminUpdatePoolBilling = onCall(async (request) => {
-  const caller = await assertCallerRole(request, "SUPER_ADMIN");
-  const { poolId, action, data } = request.data as {
-    poolId: string;
-    action: "override" | "extendTrial" | "resetGrace";
-    data?: Record<string, unknown>;
-  };
-  if (!poolId) throw new HttpsError("invalid-argument", "poolId is required.");
-  const poolRef = admin.firestore().doc(`pools/${poolId}`);
-  const now = Date.now();
+export const adminUpdatePoolBilling = validated(
+  { schema: adminUpdatePoolBillingSchema, label: "adminUpdatePoolBilling", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async (input, request) => {
+    const caller = { uid: request.auth!.uid, email: request.auth!.token.email as string | undefined };
+    const poolRef = admin.firestore().doc(`pools/${input.poolId}`);
+    const now = Date.now();
 
-  if (action === "override") {
-    if (!data || typeof data !== "object") throw new HttpsError("invalid-argument", "billing override data is required.");
-    await poolRef.set({ billing: data, updatedAt: now }, { merge: true });
-  } else if (action === "extendTrial") {
-    const snap = await poolRef.get();
-    const currentEnd = (snap.data()?.billing?.trialEndsAt as number) || now;
-    await poolRef.update({ "billing.status": "trial", "billing.trialEndsAt": currentEnd + 14 * DAY_MS, updatedAt: now });
-  } else if (action === "resetGrace") {
-    const graceDays = typeof data?.gracePeriodDays === "number" ? data.gracePeriodDays : 7;
-    await poolRef.update({ "billing.status": "grace_period", "billing.gracePeriodEndsAt": now + graceDays * DAY_MS, updatedAt: now });
-  } else {
-    throw new HttpsError("invalid-argument", "action must be override | extendTrial | resetGrace.");
-  }
+    if (input.action === "override") {
+      await poolRef.set({ billing: input.data, updatedAt: now }, { merge: true });
+    } else if (input.action === "extendTrial") {
+      const snap = await poolRef.get();
+      const currentEnd = (snap.data()?.billing?.trialEndsAt as number) || now;
+      await poolRef.update({ "billing.status": "trial", "billing.trialEndsAt": currentEnd + 14 * DAY_MS, updatedAt: now });
+    } else {
+      // resetGrace
+      const graceDays = typeof input.data?.gracePeriodDays === "number" ? input.data.gracePeriodDays : 7;
+      await poolRef.update({ "billing.status": "grace_period", "billing.gracePeriodEndsAt": now + graceDays * DAY_MS, updatedAt: now });
+    }
 
-  await writeAdminAudit({
-    actorUid: caller.uid,
-    actorEmail: caller.email,
-    action: `POOL_BILLING_${action.toUpperCase()}`,
-    targetType: "pool",
-    targetId: poolId,
-    metadata: { action },
-    status: "success",
-  });
-  return { success: true };
-});
+    await writeAdminAudit({
+      actorUid: caller.uid,
+      actorEmail: caller.email,
+      action: `POOL_BILLING_${input.action.toUpperCase()}`,
+      targetType: "pool",
+      targetId: input.poolId,
+      metadata: { action: input.action },
+      status: "success",
+    });
+    return { success: true };
+  },
+);
 
 /**
  * Adjust a user's credit balances (users/{id}).
@@ -154,62 +139,57 @@ export const adminUpdatePoolBilling = onCall(async (request) => {
  * via the canonical model. `referralCredits` remains a raw referral-tally poke
  * (that counter is separate from entitlements).
  */
-export const adminAdjustUserCredits = onCall(async (request) => {
-  const caller = await assertCallerRole(request, "SUPER_ADMIN");
-  const { targetUid, referralCredits, freePoolsAvailable } = request.data as {
-    targetUid: string;
-    referralCredits?: number;
-    freePoolsAvailable?: number;
-  };
-  if (!targetUid) throw new HttpsError("invalid-argument", "targetUid is required.");
+export const adminAdjustUserCredits = validated(
+  { schema: adminAdjustUserCreditsSchema, label: "adminAdjustUserCredits", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async (input, request) => {
+    const caller = { uid: request.auth!.uid, email: request.auth!.token.email as string | undefined };
+    const { targetUid, referralCredits, freePoolsAvailable } = input;
 
-  const wantsReferral = typeof referralCredits === "number";
-  const creditsToGrant = typeof freePoolsAvailable === "number" ? Math.floor(freePoolsAvailable) : undefined;
-  if (!wantsReferral && creditsToGrant === undefined) {
-    throw new HttpsError("invalid-argument", "at least one numeric credit field is required.");
-  }
-  if (creditsToGrant !== undefined && creditsToGrant > MAX_CREDITS_PER_BUNDLE) {
-    throw new HttpsError(
-      "invalid-argument",
-      `freePoolsAvailable ${creditsToGrant} exceeds the ${MAX_CREDITS_PER_BUNDLE}-credit cap; split into multiple grants.`
-    );
-  }
-
-  let grantedBundleId: string | null = null;
-  await admin.firestore().runTransaction(async (txn) => {
-    const userRef = admin.firestore().doc(`users/${targetUid}`);
-    // Raw referral-tally poke stays as-is (distinct from entitlements).
-    if (wantsReferral) {
-      txn.set(userRef, { referralCredits }, { merge: true });
+    const wantsReferral = typeof referralCredits === "number";
+    const creditsToGrant = typeof freePoolsAvailable === "number" ? Math.floor(freePoolsAvailable) : undefined;
+    if (creditsToGrant !== undefined && creditsToGrant > MAX_CREDITS_PER_BUNDLE) {
+      throw new HttpsError(
+        "invalid-argument",
+        `freePoolsAvailable ${creditsToGrant} exceeds the ${MAX_CREDITS_PER_BUNDLE}-credit cap; split into multiple grants.`
+      );
     }
-    // Positive pool-credit request → ADMIN_GRANT CREDIT_BUNDLE (canonical model).
-    if (creditsToGrant !== undefined && creditsToGrant > 0) {
-      const snapshot: ProductSnapshot = {
-        name: "Admin Credit Grant",
-        price: 0,
-        poolType: "ALL",
-        maxPlayersPerPool: 9999,
-      };
-      const res = grantEntitlementTxn(txn, {
-        ownerId: targetUid,
-        productKind: "CREDIT_BUNDLE",
-        source: "ADMIN_GRANT",
-        productSnapshot: snapshot,
-        creditsTotal: creditsToGrant,
-      });
-      grantedBundleId = res.bundleId;
-      txn.set(userRef, { role: "COMMISSIONER" }, { merge: true });
-    }
-  });
 
-  await writeAdminAudit({
-    actorUid: caller.uid,
-    actorEmail: caller.email,
-    action: "USER_CREDITS_ADJUSTED",
-    targetType: "user",
-    targetId: targetUid,
-    metadata: { referralCredits, freePoolsAvailable, grantedBundleId },
-    status: "success",
-  });
-  return { success: true, grantedBundleId };
-});
+    let grantedBundleId: string | null = null;
+    await admin.firestore().runTransaction(async (txn) => {
+      const userRef = admin.firestore().doc(`users/${targetUid}`);
+      // Raw referral-tally poke stays as-is (distinct from entitlements).
+      if (wantsReferral) {
+        txn.set(userRef, { referralCredits }, { merge: true });
+      }
+      // Positive pool-credit request → ADMIN_GRANT CREDIT_BUNDLE (canonical model).
+      if (creditsToGrant !== undefined && creditsToGrant > 0) {
+        const snapshot: ProductSnapshot = {
+          name: "Admin Credit Grant",
+          price: 0,
+          poolType: "ALL",
+          maxPlayersPerPool: 9999,
+        };
+        const res = grantEntitlementTxn(txn, {
+          ownerId: targetUid,
+          productKind: "CREDIT_BUNDLE",
+          source: "ADMIN_GRANT",
+          productSnapshot: snapshot,
+          creditsTotal: creditsToGrant,
+        });
+        grantedBundleId = res.bundleId;
+        txn.set(userRef, { role: "COMMISSIONER" }, { merge: true });
+      }
+    });
+
+    await writeAdminAudit({
+      actorUid: caller.uid,
+      actorEmail: caller.email,
+      action: "USER_CREDITS_ADJUSTED",
+      targetType: "user",
+      targetId: targetUid,
+      metadata: { referralCredits, freePoolsAvailable, grantedBundleId },
+      status: "success",
+    });
+    return { success: true, grantedBundleId };
+  },
+);

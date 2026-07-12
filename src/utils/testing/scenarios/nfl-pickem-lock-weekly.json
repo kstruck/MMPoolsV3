@@ -1,0 +1,41 @@
+{
+    "id": "nfl-pickem-lock-weekly",
+    "name": "Pick'em WEEKLY Lock Lifecycle (real path)",
+    "description": "REAL submit path with lockMode WEEKLY: the whole week locks at the FIRST kickoff. Both picks land while all games are future; after g1 kicks off, ANY change is rejected WEEK_LOCKED. Expectations hand-verified.",
+    "poolType": "NFL_PICKEM",
+    "poolConfig": {
+        "name": "Sim Lock WEEKLY",
+        "type": "NFL_PICKEM",
+        "settings": {
+            "entryFee": 0,
+            "lockMode": "WEEKLY",
+            "payoutMode": "SEASON",
+            "pickMode": "STRAIGHT",
+            "confidenceMode": false,
+            "payouts": { "places": [], "bonuses": [] }
+        }
+    },
+    "nflGames": [
+        { "week": 1, "home": "KC", "away": "BUF", "homeScore": 0, "awayScore": 0, "status": "SCHEDULED", "startOffsetMs": 7200000 },
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 0, "awayScore": 0, "status": "SCHEDULED", "startOffsetMs": 10800000, "isMonday": true }
+    ],
+    "lifecycleOps": [
+        { "op": "join", "userNames": ["alice"] },
+        { "op": "submit", "userName": "alice", "week": 1, "picks": { "g1": "KC", "g2": "SF" }, "tiebreaker": 40 },
+        { "op": "reseedGames", "games": [
+            { "week": 1, "home": "KC", "away": "BUF", "homeScore": 7, "awayScore": 3, "status": "IN_PROGRESS", "startOffsetMs": -3600000 },
+            { "week": 1, "home": "SF", "away": "DAL", "homeScore": 0, "awayScore": 0, "status": "SCHEDULED", "startOffsetMs": 10800000, "isMonday": true }
+        ] },
+        { "op": "submit", "userName": "alice", "week": 1, "picks": { "g2": "DAL" }, "expectError": "WEEK_LOCKED" },
+        { "op": "reseedGames", "games": [
+            { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24, "status": "FINAL", "startOffsetMs": -14400000 },
+            { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10, "status": "FINAL", "startOffsetMs": -7200000, "isMonday": true }
+        ] },
+        { "op": "score", "week": 1 }
+    ],
+    "assertions": [
+        { "type": "nflEntryCount", "expected": 1, "message": "1 real-path entry" },
+        { "type": "submitRejected", "userName": "alice", "week": 1, "expected": "WEEK_LOCKED", "message": "Post-first-kickoff change rejected WEEK_LOCKED" },
+        { "type": "nflWeeklyPoints", "userName": "alice", "week": 1, "expected": 2, "message": "alice week 1 = 2 (pre-lock picks KC + SF both won; DAL change never landed)" }
+    ]
+}

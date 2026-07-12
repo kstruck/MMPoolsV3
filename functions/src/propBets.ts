@@ -4,18 +4,22 @@ import * as admin from 'firebase-admin';
 import { PropCard, GameState } from './types';
 import { writeAuditEvent } from './audit';
 import { checkBillingAccess } from './billing';
+import { validated } from "./lib/validated";
+import { purchasePropCardSchema } from "./schemas/squaresProps";
 
 // 1. Purchase Prop Card (Supports multiple cards per user)
 // 1. Purchase Prop Card (Supports multiple cards per user)
-export const purchasePropCard = onCall(async (request) => {
-    // request.data = { poolId, answers: { qId: idx }, tiebreakerVal, userName, cardName, email }
-
+export const purchasePropCard = validated(
+    // PUBLIC (guest flow): answers is qId -> option index, shape-enforced at
+    // the gate; guest identity + card-limit logic stays below.
+    { schema: purchasePropCardSchema, label: "purchasePropCard", auth: "public", appCheck: "monitor" },
+    async (input, request) => {
     // Auth Handling
     let userId: string;
     let finalUserName: string;
     let userEmail: string | undefined;
 
-    const { poolId, answers, tiebreakerVal, userName, cardName, email } = request.data;
+    const { poolId, answers, tiebreakerVal, userName, cardName, email } = input;
 
     if (request.auth) {
         userId = request.auth.uid;
@@ -33,10 +37,6 @@ export const purchasePropCard = onCall(async (request) => {
     }
 
     const db = admin.firestore();
-
-    if (!poolId || !answers) {
-        throw new HttpsError('invalid-argument', 'Missing poolId or answers.');
-    }
 
     // Check if pool is locked
     const poolRef = db.collection('pools').doc(poolId);
@@ -109,7 +109,8 @@ export const purchasePropCard = onCall(async (request) => {
     });
 
     return { success: true, cardCount: existingCards.size + 1 };
-});
+    },
+);
 
 // 2. Grade Prop (Admin Only)
 export const gradeProp = onCall(async (request) => {
