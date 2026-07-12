@@ -34,25 +34,23 @@ SUPER_ADMIN sessions.
 
 ## Next-effort menu (pick one to start a session)
 
-1. **Security/Observability plan — Phase 1 wave 1 MERGED + DEPLOYED (PR #164, 2026-07-11 night).**
-   **16/41 TARGET-NOW callable retrofits merged to main** (validated() wrapper:
-   auth → App Check monitor → role claim+doc → strict zod). qodo cycle complete:
-   2 findings, both VALID (unbounded squareIds / picks caps), fixed in 72fb184.
-   Gates at merge: tsc clean, functions unit 486, emulator 84+matrix, CI 6/6.
-   Worktree + branch deleted (fresh branch per wave, like the sim-harness PRs).
-   DEPLOYED 2026-07-11 night (Kevin): functions fleet + Coolify frontend.
-   All 16 wrapped callables verified present via functions:list; post-deploy
-   log sweep clean (no invalid-argument/permission-denied rejections). App
-   Check still monitor-mode fleet-wide — flip to enforce per endpoint later
-   (PLAN #5). Watch logs for schema rejections of legit traffic over the
-   next day; the schemas pin exact dbService payloads so none are expected.
-   NEXT WAVE (25 TARGET-NOW remain — see PLAN-SECURITY-OBSERVABILITY-SWEEPS.md
-   Sweep 1): managePlayoffEntry, setPaidStatus, createPool/createNFLPool
-   (PERMISSIVE), updatePoolSettings, submitNFLPicks/submitPlayoffPicks,
-   sendManualReminder, anon rate-limiter set (reserveSquare, purchasePropCard,
-   validateBillingAccess, resolveReferralToken). Start each wave: fresh branch
-   off main + worktree; schemas in functions/src/schemas/* with unit tests
-   pinning real client payloads (established pattern).
+1. **Security/Observability plan — Phase 1 callable retrofit COMPLETE (41/41) and DEPLOYED.**
+   Wave 1: PR #164 (16 callables, deployed 2026-07-11 night). Wave 2: PR #165
+   (remaining 25, merged f4df975 + functions deployed by Kevin 2026-07-12 late
+   night; functions:list + post-deploy log sweep clean — zero invalid-argument
+   or Invalid-request rejections). Every TARGET-NOW callable now runs through
+   validated() (App Check monitor → auth → role claim+doc → strict zod);
+   schemas in functions/src/schemas/* with unit tests pinning real client
+   payloads. qodo lifetime on this plan: 3 findings, 3 VALID, all absorbed.
+   Baselines now: functions unit 545, root vitest 244, emulator 84+10 skipped.
+   Note: root tests mock onCall in tests/mocks/firebase-functions-v2-https.ts
+   — it now supports the two-arg onCall(options, handler) form validated()
+   uses, and onboarding-flow assertions pin the NEW gate error messages.
+   NEXT for this plan (pick one): (a) App Check monitor→enforce flips per
+   endpoint (PLAN #5) after a coverage-measurement window; (b) firestore.rules
+   write-path sweep (the pools allow-update isSuperAdmin() rule + playoff/
+   props raw writes deliberately parked for it); (c) SWEEP-LATER callable
+   fleet (63); (d) tighten the two PERMISSIVE create envelopes (ADR-0001).
    Note from Phase 5: the general pools `allow update: isSuperAdmin()` rule + playoff/props
    pool-doc/propCards raw writes were deliberately left for THIS plan's write-path sweep.
 2. **Player Profiles follow-ups** — flip `profileBackfill`/`nflFinalize` dry-runs after
