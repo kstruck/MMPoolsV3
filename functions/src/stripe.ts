@@ -819,7 +819,9 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                     const decision = decideEventClaim(s.data() as WebhookEventDoc | undefined, Date.now());
                     if (decision.take) {
                         // Re-claim: bump startedAt so a concurrent stale-takeover can't also grab it.
-                        t.update(evtRef, { status: "processing", startedAt: Date.now() });
+                        // set/merge (not update) so the "no-doc" case — the doc was deleted between
+                        // the failed create() and this read — recreates it instead of throwing.
+                        t.set(evtRef, { type: event.type, status: "processing", startedAt: Date.now() }, { merge: true });
                         take = true;
                     }
                 });

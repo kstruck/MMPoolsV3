@@ -63,10 +63,17 @@ export function decideEventClaim(
     return { take: false, reason: "concurrent" };
 }
 
-/** Thresholded alerting: fire the ops alert only once failures reach the bar. */
+/**
+ * Thresholded alerting: fire the ops alert EXACTLY ONCE, on the attempt that
+ * reaches the bar. `=== threshold` (not `>=`) so later retries don't re-write
+ * the WEBHOOK_FAILED_<id> alert doc and clobber its createdAt on every attempt;
+ * the escalating attemptCount still lives on the stripeWebhookEvents doc for
+ * anyone who looks. attemptCount increments by exactly 1 per markFailed, so the
+ * threshold is always hit precisely once.
+ */
 export function shouldAlertOnFailure(
     attemptCount: number,
     threshold: number = WEBHOOK_ALERT_ATTEMPT_THRESHOLD,
 ): boolean {
-    return attemptCount >= threshold;
+    return attemptCount === threshold;
 }

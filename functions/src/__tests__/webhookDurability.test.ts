@@ -48,13 +48,16 @@ describe("shouldAlertOnFailure", () => {
         expect(shouldAlertOnFailure(WEBHOOK_ALERT_ATTEMPT_THRESHOLD - 1)).toBe(false);
     });
 
-    it("fires at and above the threshold", () => {
+    it("fires EXACTLY on the threshold attempt — not before, not after", () => {
+        // === not >=: later retries must not re-write the alert doc (qodo PR #166).
         expect(shouldAlertOnFailure(WEBHOOK_ALERT_ATTEMPT_THRESHOLD)).toBe(true);
-        expect(shouldAlertOnFailure(WEBHOOK_ALERT_ATTEMPT_THRESHOLD + 5)).toBe(true);
+        expect(shouldAlertOnFailure(WEBHOOK_ALERT_ATTEMPT_THRESHOLD + 1)).toBe(false);
+        expect(shouldAlertOnFailure(WEBHOOK_ALERT_ATTEMPT_THRESHOLD + 5)).toBe(false);
     });
 
     it("honours a caller-supplied threshold", () => {
         expect(shouldAlertOnFailure(1, 1)).toBe(true);
+        expect(shouldAlertOnFailure(2, 1)).toBe(false);
         expect(shouldAlertOnFailure(1, 2)).toBe(false);
     });
 });
