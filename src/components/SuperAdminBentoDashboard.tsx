@@ -13,6 +13,8 @@ import {
   Mail,
   CheckCircle2,
   AlertTriangle,
+  ShieldAlert,
+  ExternalLink,
 } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { doc, getDoc } from 'firebase/firestore';
@@ -21,6 +23,7 @@ import { useToast } from './ui/Toast';
 import { getUserMessage } from '../utils/errorMessages';
 import { dbService } from '../services/dbService';
 import { Badge } from './ui';
+import { withCorrelationId } from '../utils/correlationId';
 
 interface HealthCheck {
   label: string;
@@ -40,6 +43,29 @@ const CHECK_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
   email: Mail,
 };
 
+interface OpsAlertSample {
+  id: string;
+  type: string;
+  message?: string;
+  createdAt: number | null;
+}
+interface FailedWebhookSample {
+  id: string;
+  eventType?: string;
+  attemptCount?: number;
+  lastFailedAt: number | null;
+}
+interface OpsHealthSummary {
+  at: number;
+  openAlerts: { count: number; sample: OpsAlertSample[] };
+  failedWebhooks: { count: number; sample: FailedWebhookSample[] };
+}
+
+// Optional — set VITE_SENTRY_ORG_URL (e.g. https://myorg.sentry.io/issues/) once
+// Kevin has a project slug to link to. Undefined = the deep-link is hidden
+// rather than pointing at a guessed/placeholder URL.
+const SENTRY_ORG_URL = import.meta.env.VITE_SENTRY_ORG_URL as string | undefined;
+
 interface SuperAdminBentoDashboardProps {
   stats: GlobalStats | null;
 }
@@ -50,6 +76,7 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
   const [healthError, setHealthError] = useState<string | null>(null);
   const [isProbing, setIsProbing] = useState(false);
   const [revenue, setRevenue] = useState<{ totalRevenue?: number; last30dRevenue?: number } | null>(null);
+  const [opsHealth, setOpsHealth] = useState<OpsHealthSummary | null>(null);
 
   // Platform revenue (Stripe income) — distinct from prize volume (GMV) below.
   useEffect(() => {
@@ -69,6 +96,23 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
         if (!cancelled && data?.latest) setHealth(data.latest);
       } catch {
         // Non-fatal: card falls back to "run a health check" empty state.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Ops Health (PLAN #12) — open monetization_alerts + failed stripeWebhookEvents,
+  // surfaced next to the existing health checks. Passive on-mount fetch, same
+  // fail-quiet-not-fail-loud posture as the health/latest hydration above.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const fn = httpsCallable<{ _correlationId: string }, OpsHealthSummary>(functions, 'getOpsHealthSummary');
+        const res = await fn(withCorrelationId(undefined));
+        if (!cancelled) setOpsHealth(res.data);
+      } catch {
+        // Non-fatal: section just stays hidden if this fails.
       }
     })();
     return () => { cancelled = true; };
@@ -268,6 +312,61 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Ops Health (PLAN #12) — alerts the platform already emits, not a
+              new monitoring source. Sentry's own dashboard stays the
+              real-time errors/replay/perf pane; this is a deep-link out to it. */}
+          {opsHealth && (
+            <div className="mt-6 pt-5 border-t border-line">
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="text-[10px] font-display font-bold text-muted uppercase tracking-[0.16em] flex items-center gap-1.5">
+                  <ShieldAlert size={13} /> Ops Health
+                </h4>
+                {SENTRY_ORG_URL && (
+                  <a
+                    href={SENTRY_ORG_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[9px] font-display font-bold uppercase tracking-[0.08em] text-muted hover:text-[color:var(--text)] transition-colors duration-150"
+                  >
+                    Open Sentry <ExternalLink size={11} />
+                  </a>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className={`p-3 rounded-xl border ${opsHealth.openAlerts.count > 0 ? 'border-[#F2D6B0] bg-[#FBEEDD]' : 'border-line bg-surface'}`}>
+                  <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.12em] block mb-1">Open Alerts</span>
+                  <span className={`text-xl font-display font-bold num leading-none ${opsHealth.openAlerts.count > 0 ? 'text-[#B4530A]' : 'text-[color:var(--text)]'}`}>
+                    {opsHealth.openAlerts.count}
+                  </span>
+                </div>
+                <div className={`p-3 rounded-xl border ${opsHealth.failedWebhooks.count > 0 ? 'border-[#F2D6B0] bg-[#FBEEDD]' : 'border-line bg-surface'}`}>
+                  <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.12em] block mb-1">Failed Webhooks</span>
+                  <span className={`text-xl font-display font-bold num leading-none ${opsHealth.failedWebhooks.count > 0 ? 'text-[#B4530A]' : 'text-[color:var(--text)]'}`}>
+                    {opsHealth.failedWebhooks.count}
+                  </span>
+                </div>
+              </div>
+
+              {(opsHealth.openAlerts.sample.length > 0 || opsHealth.failedWebhooks.sample.length > 0) && (
+                <div className="space-y-1.5">
+                  {opsHealth.openAlerts.sample.slice(0, 3).map((a) => (
+                    <div key={a.id} className="text-[10px] text-muted font-body flex items-center gap-1.5">
+                      <AlertTriangle size={10} className="text-[#B4530A] shrink-0" />
+                      <span className="truncate">{a.type}{a.message ? ` — ${a.message}` : ''}</span>
+                    </div>
+                  ))}
+                  {opsHealth.failedWebhooks.sample.slice(0, 3).map((w) => (
+                    <div key={w.id} className="text-[10px] text-muted font-body flex items-center gap-1.5">
+                      <AlertTriangle size={10} className="text-[#B4530A] shrink-0" />
+                      <span className="truncate">webhook {w.eventType ?? w.id} — {w.attemptCount ?? '?'} attempt(s)</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

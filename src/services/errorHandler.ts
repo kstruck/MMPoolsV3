@@ -1,6 +1,8 @@
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
 import { logger } from '../utils/logger';
+import { captureSentryException } from '../sentry';
+import { sanitizeForSentry } from '../utils/sentrySanitize';
 
 export const ErrorSeverity = {
     LOW: 'low',
@@ -86,6 +88,13 @@ class ErrorHandler {
         };
 
         logger.error(`[ErrorHandler] ${severity.toUpperCase()}:`, message, error, context);
+
+        await captureSentryException(error instanceof Error ? error : new Error(message), {
+            level: severity === ErrorSeverity.CRITICAL ? 'fatal'
+                : severity === ErrorSeverity.LOW ? 'warning'
+                : 'error',
+            extra: sanitizeForSentry(errorLog.context ?? {}),
+        });
 
         if (notify) {
             // Logic for showing a toast or notification could go here

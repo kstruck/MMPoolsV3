@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
     decideEventClaim,
     shouldAlertOnFailure,
+    isWebhookStuck,
     WEBHOOK_STALE_MS,
     WEBHOOK_ALERT_ATTEMPT_THRESHOLD,
+    WEBHOOK_STUCK_MS,
     type WebhookEventDoc,
 } from "../lib/webhookDurability";
 
@@ -59,5 +61,25 @@ describe("shouldAlertOnFailure", () => {
         expect(shouldAlertOnFailure(1, 1)).toBe(true);
         expect(shouldAlertOnFailure(2, 1)).toBe(false);
         expect(shouldAlertOnFailure(1, 2)).toBe(false);
+    });
+});
+
+describe("isWebhookStuck", () => {
+    it("is not stuck at exactly the threshold or under it", () => {
+        expect(isWebhookStuck(NOW - WEBHOOK_STUCK_MS, NOW)).toBe(false);
+        expect(isWebhookStuck(NOW - 1000, NOW)).toBe(false);
+    });
+
+    it("is stuck once strictly past the threshold", () => {
+        expect(isWebhookStuck(NOW - WEBHOOK_STUCK_MS - 1, NOW)).toBe(true);
+    });
+
+    it("treats a missing lastFailedAt as epoch 0 — always stuck", () => {
+        expect(isWebhookStuck(undefined, NOW)).toBe(true);
+    });
+
+    it("honours a caller-supplied threshold", () => {
+        expect(isWebhookStuck(NOW - 5000, NOW, 1000)).toBe(true);
+        expect(isWebhookStuck(NOW - 500, NOW, 1000)).toBe(false);
     });
 });

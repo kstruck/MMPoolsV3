@@ -1,6 +1,32 @@
 # PICKUP — Phase 2: Observability (Sentry FE spine + GCP BE + SLOs)
 
-**New-session opener:** "Read PICKUP-PHASE2-OBSERVABILITY.md and HANDOFF.md, then start Phase 2 of PLAN-SECURITY-OBSERVABILITY.md."
+## STATUS 2026-07-17: CODE-COMPLETE, PR #171 open — all 7 items (#8–14) shipped
+
+Built in one overnight autonomous session (Kevin's standing overnight-autonomy
+grant, kickoff decisions resolved in chat then executed straight through).
+8 commits on `claude/phase-2-security-observability-4697dd`, PR
+[#171](https://github.com/kstruck/MMPoolsV3/pull/171) — see its description
+for the per-item summary and Kevin's action list (also duplicated in
+HANDOFF.md's "Kevin's pending items" section). qodo's 4 findings on the
+Sentry commit (PII-to-Sentry leak, eager `@sentry/react` import, missing
+tests, unvalidated sample-rate env var) were all valid and fixed in a
+follow-up commit — validity-called before fixing, per the qodo-cycle skill.
+
+Final gates: frontend `tsc -b` clean, root vitest 257/257 (started 244),
+functions typecheck clean, functions unit 574/574 (started 554), emulator
+89/10-skip (started 84/10-skip). NOT merged, NOT deployed — see HANDOFF.md
+"Kevin's pending items — Phase 2 observability" for the exact next steps.
+
+**Read this whole doc anyway before touching Phase 2 further** — the
+sections below (open decisions, sequencing, SLO table) are still the
+source of truth for WHY each piece is shaped the way it is; only the
+top-level status changed.
+
+---
+
+**Original new-session opener (superseded by the status above — kept for
+context):** "Read PICKUP-PHASE2-OBSERVABILITY.md and HANDOFF.md, then start
+Phase 2 of PLAN-SECURITY-OBSERVABILITY.md."
 
 This is the durable kickoff for Phase 2. Plan of record: `PLAN-SECURITY-OBSERVABILITY.md` (items **#8–14** are Phase 2). Full callable inventory is in `PLAN-SECURITY-OBSERVABILITY-SWEEPS.md`. Do NOT re-derive the plan — it's locked (grill-with-docs + 5 Codex rounds).
 
@@ -42,13 +68,12 @@ Read the plan for the full locked wording. Summary + the decisions already baked
 
 ---
 
-## OPEN DECISIONS — get Kevin's answers BEFORE building these
+## OPEN DECISIONS — RESOLVED (Kevin, 2026-07-17 kickoff)
 
-The plan flags these as awaiting sign-off (alert-fatigue + cost). Ask up front in one batch:
-1. **Sentry account/DSN — RESOLVED (Kevin, 2026-07-17).** sentry.io project created (free tier), React platform. Decision: **errors + performance tracing ONLY to start; Session Replay OFF (or dev-only) until masking is proven and Kevin opts in** — because the app renders payment handles / emails / admin data and Replay is the metered/PII-sensitive feature. DSN is set locally in `D:\march-melee-pools\.env` as `VITE_SENTRY_DSN=...` (`.env` is gitignored, line 27 — do NOT commit it; read via `import.meta.env.VITE_SENTRY_DSN`). **Prod:** Vite bakes env at build time, so `VITE_SENTRY_DSN` must ALSO be added to Coolify's build env before the Sentry PR deploys, or the prod bundle won't have it. So #8's first cut = install `@sentry/react`, init in `main.tsx` with errors + tracing, Replay integration present but `replaysSessionSampleRate: 0` (or dev-gated) + full masking config in place, so turning Replay on later is a one-flag change Kevin approves.
-2. **Ops recipients (#11)** — the ops email list + on-call phone number(s) for high-priority SMS. Where to store: Secret Manager vs env vs a `system/config` doc.
-3. **High-priority SMS set (#11)** — confirm which alert types page via SMS vs email-only (SMS cost). Plan's proposed high-pri: webhook failure/dead-letter, site-down, auth/App-Check outage, checkout SLO breach.
-4. **SLO targets (#14)** — confirm/adjust the proposed defaults, especially the error-budget "freeze non-critical deploys" policy.
+1. **Sentry account/DSN — RESOLVED (Kevin, 2026-07-17).** sentry.io project created (free tier), React platform. Decision: **errors + performance tracing ONLY to start; Session Replay OFF (or dev-only) until masking is proven and Kevin opts in** — because the app renders payment handles / emails / admin data and Replay is the metered/PII-sensitive feature. DSN is set locally in `D:\march-melee-pools\.env` as `VITE_SENTRY_DSN=...` (`.env` is gitignored, line 27 — do NOT commit it; read via `import.meta.env.VITE_SENTRY_DSN`). **Prod:** Vite bakes env at build time, so `VITE_SENTRY_DSN` must ALSO be added to Coolify's build env before the Sentry PR deploys, or the prod bundle won't have it. **Shipped** (commit `96811cf`, this branch, not yet merged): `@sentry/react` installed, init in `main.tsx`, errors + tracing on, Replay integration present with `maskAllText`+`blockAllMedia` but `replaysSessionSampleRate: 0` outside DEV (flip via `VITE_SENTRY_REPLAY_SAMPLE_RATE` — one env var, no code change) — wired into the existing `errorHandler.handleError` choke point so `logClientError` and Sentry both fire.
+2. **Ops recipients (#11) — RESOLVED.** Store in Firestore `system/config` doc (new field), matching the existing kill-switch config pattern (`autoClose`, etc.) — not Secret Manager, not env.
+3. **High-priority SMS set (#11) — RESOLVED.** All four of the plan's proposed defaults page via SMS: Stripe webhook failure/dead-letter, site-down (readiness endpoint), auth/App-Check outage, checkout success-rate SLO breach. Everything else flagged is email-only.
+4. **SLO targets (#14) — RESOLVED.** Accept the plan's proposed defaults as-written (availability ≥99.5%/30d, checkout success ≥99%, webhook durability ≥99.9%, latency p95 caps as listed). Ship instrumentation against these now; retune from real data later if needed.
 
 ---
 
@@ -75,6 +100,28 @@ Independent, mergeable chunks (one PR each, smallest-first). Confirm with a plan
 6. **SLO definitions (#14)** — mostly config/docs + burn-rate alerts; gated on the targets decision.
 
 Everything above is **out of scope** for Phase 3 (backups #15–19) and the Verify-block audit (#20–21) — those come after.
+
+---
+
+## SLO definitions (#14) — targets + what's actually instrumented
+
+Kevin accepted the plan's proposed defaults as-written (kickoff 2026-07-17). Targets:
+
+| SLO | Target | Instrumentation |
+|---|---|---|
+| Availability (site + `getServerTime` canary + readiness endpoint) | ≥99.5% / 30d | **GCP-native** — Cloud Monitoring already tracks per-function invocation/error counts automatically; the readiness endpoint (#13) exists for Uptime Checks to probe. No custom code needed for the metric itself. |
+| Checkout success (`createCheckoutSession` non-error, excl. user cancel) | ≥99% | **GCP-native** — same Cloud Monitoring per-function error-rate metric, filtered to this function. |
+| Webhook durability (`handleStripeWebhook` success) | ≥99.9% | **GCP-native** for the success-rate number (Cloud Monitoring). |
+| Webhook durability — **zero stuck in failed past threshold** (hard objective, not a rate) | 0 | **Custom code, shipped tonight**: `functions/src/webhookDurabilitySweep.ts` — a daily `onSchedule` that scans `stripeWebhookEvents` where `status=="failed"` and pages ops (`dispatchOpsAlert` + `captureMonetizationAlert`) if any doc has sat there >24h. This is independent of the existing attempt-threshold alert (`shouldAlertOnFailure`, fires only while Stripe is actively retrying) — it's the backstop for an event that fails once and is never retried again. Read-only + alert-only, no kill-switch needed (nothing it does mutates data). Pure logic (`isWebhookStuck`, `WEBHOOK_STUCK_MS`) added to `functions/src/lib/webhookDurability.ts`. |
+| Latency p95 | `createCheckoutSession` <2s; pick-submit callables <1.5s; `getServerTime` <500ms | **GCP-native** — Cloud Monitoring's per-function execution-time percentile metrics cover this without custom code. |
+| Error-budget policy | Burn-rate → SMS; sustained breach → freeze non-critical deploys | **Policy, not code.** Burn-rate alerting on the availability/checkout/webhook-rate/latency SLOs above needs a GCP Cloud Monitoring **SLO object + alerting policy**, referencing the existing per-function metrics — that's console configuration (Kevin action, see below), not something this session can wire from the repo. "Freeze non-critical deploys on sustained breach" is a human process rule to follow when that alert fires, not automatable. |
+
+**Why GCP-native for 3 of 4 numeric SLOs, custom code for the 4th:** Cloud Functions gen2 already emits invocation count, error count, and execution-time percentiles per function to Cloud Monitoring with zero app-code — duplicating that in Firestore/app code would be redundant and drift-prone. The "zero stuck in failed" objective is different: it's a business invariant over Firestore *data* (a doc's age in a specific status), not a Cloud Functions runtime metric, so it has no GCP-native equivalent and needed real code.
+
+**Kevin action for the morning (or whenever there's GCP console time)** — not urgent, no deploy is blocked on this:
+1. GCP Console → Monitoring → SLOs → Create SLO, for each of: availability (readiness endpoint / uptime check), `createCheckoutSession` error rate, `handleStripeWebhook` error rate, latency (per the p95 targets above). Target values are the table above.
+2. GCP Console → Monitoring → Alerting → create a burn-rate alerting policy per SLO, notification channel = the ops email list (same list used in `system/config.opsAlerts`, so paging is consistent) + SMS for on-call.
+3. This is independent of and can be done anytime after #13's Uptime Check setup (same GCP Monitoring console area).
 
 ---
 

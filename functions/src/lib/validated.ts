@@ -24,9 +24,11 @@ import {
     type CallableOptions,
     HttpsError,
 } from "firebase-functions/v2/https";
+import * as logger from "firebase-functions/logger";
 import { z } from "zod";
 import { assertCallerRole } from "./assertRole";
 import type { CanonicalRole } from "./roles";
+import { extractCorrelationId, traceLogFields } from "./correlationId";
 
 export type AppCheckMode = "monitor" | "enforce" | "exempt";
 export type AuthMode = "required" | "public";
@@ -102,8 +104,30 @@ export function validated<S extends z.ZodType, R>(
                 `[appcheck-monitor] ${cfg.label}: call WITHOUT a valid App Check token (uid=${request.auth?.uid ?? "anon"})`,
             );
         }
-        const data = await runGate(cfg, request);
-        return handler(data, request);
+        // Correlation id (PLAN #9) lives in the data payload, not a header — strip
+        // it before schema validation so .strict() schemas never see the extra
+        // key, then echo it into structured logs for FE<->BE stitching.
+        const { correlationId, rest } = extractCorrelationId(request.data);
+        const gateRequest = rest === request.data ? request : { ...request, data: rest };
+        if (correlationId) {
+            logger.info(`[correlation] ${cfg.label} start`, traceLogFields(correlationId, cfg.label));
+        }
+        try {
+            const data = await runGate(cfg, gateRequest);
+            const result = await handler(data, request);
+            if (correlationId) {
+                logger.info(`[correlation] ${cfg.label} ok`, traceLogFields(correlationId, cfg.label));
+            }
+            return result;
+        } catch (err) {
+            if (correlationId) {
+                logger.error(`[correlation] ${cfg.label} error`, {
+                    ...traceLogFields(correlationId, cfg.label),
+                    error: err instanceof Error ? err.message : String(err),
+                });
+            }
+            throw err;
+        }
     });
 }
 
