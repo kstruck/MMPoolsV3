@@ -1,8 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { sendPoolInvitesSchema, submitBracketEntrySchema } from "../schemas/poolEngagement";
+import {
+    sendPoolInvitesSchema,
+    submitBracketEntrySchema,
+    createBracketEntrySchema,
+    updateBracketEntrySchema,
+    deleteBracketEntrySchema,
+} from "../schemas/poolEngagement";
 
 const okInvites = (d: unknown) => sendPoolInvitesSchema.safeParse(d).success;
 const okSubmit = (d: unknown) => submitBracketEntrySchema.safeParse(d).success;
+const okCreate = (d: unknown) => createBracketEntrySchema.safeParse(d).success;
+const okUpdate = (d: unknown) => updateBracketEntrySchema.safeParse(d).success;
+const okDelete = (d: unknown) => deleteBracketEntrySchema.safeParse(d).success;
 
 describe("sendPoolInvitesSchema", () => {
     it("accepts the real client payload", () => {
@@ -76,5 +85,63 @@ describe("submitBracketEntrySchema", () => {
     it("rejects a missing picks map and an unknown field", () => {
         expect(okSubmit({ poolId: "p1", entryId: "e1" })).toBe(false);
         expect(okSubmit({ ...submit, paidStatus: "PAID" })).toBe(false);
+    });
+});
+
+describe("createBracketEntrySchema", () => {
+    it("accepts the real client payload { poolId, name } and the optional tiebreakerScore", () => {
+        expect(okCreate({ poolId: "p1", name: "My Bracket" })).toBe(true);
+        // tiebreakerScore is ignored by the handler but MUST stay accepted —
+        // dbService.createBracketEntry can send it (verify-before-strict).
+        expect(okCreate({ poolId: "p1", name: "My Bracket", tiebreakerScore: 145 })).toBe(true);
+    });
+
+    it("normalizes a null tiebreakerScore to undefined (Firebase serializer, C2)", () => {
+        const r = createBracketEntrySchema.safeParse({ poolId: "p1", name: "n", tiebreakerScore: null });
+        expect(r.success).toBe(true);
+        if (r.success) expect(r.data.tiebreakerScore).toBeUndefined();
+    });
+
+    it("rejects missing name, blank name, missing poolId, and unknown fields", () => {
+        expect(okCreate({ poolId: "p1" })).toBe(false);
+        expect(okCreate({ poolId: "p1", name: "   " })).toBe(false);
+        expect(okCreate({ name: "n" })).toBe(false);
+        expect(okCreate({ poolId: "p1", name: "n", evil: true })).toBe(false);
+    });
+});
+
+describe("updateBracketEntrySchema", () => {
+    const upd = { poolId: "p1", entryId: "e1", picks: { "R1-W1": "team-3" }, tieBreakerPrediction: 12, name: "Renamed" };
+
+    it("accepts the real client payload", () => {
+        expect(okUpdate(upd)).toBe(true);
+        expect(okUpdate({ poolId: "p1", entryId: "e1", picks: {} })).toBe(true);
+    });
+
+    it("normalizes null optionals to undefined", () => {
+        const r = updateBracketEntrySchema.safeParse({ ...upd, tieBreakerPrediction: null, name: null });
+        expect(r.success).toBe(true);
+        if (r.success) {
+            expect(r.data.tieBreakerPrediction).toBeUndefined();
+            expect(r.data.name).toBeUndefined();
+        }
+    });
+
+    it("requires picks and rejects unknown fields / non-string pick values", () => {
+        expect(okUpdate({ poolId: "p1", entryId: "e1" })).toBe(false);
+        expect(okUpdate({ ...upd, picks: { "R1-W1": 3 } })).toBe(false);
+        expect(okUpdate({ ...upd, paidStatus: "PAID" })).toBe(false);
+    });
+});
+
+describe("deleteBracketEntrySchema", () => {
+    it("accepts the real client payload { poolId, entryId }", () => {
+        expect(okDelete({ poolId: "p1", entryId: "e1" })).toBe(true);
+    });
+
+    it("rejects missing ids, blank ids, and unknown fields", () => {
+        expect(okDelete({ poolId: "p1" })).toBe(false);
+        expect(okDelete({ poolId: "p1", entryId: " " })).toBe(false);
+        expect(okDelete({ poolId: "p1", entryId: "e1", force: true })).toBe(false);
     });
 });
