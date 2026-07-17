@@ -79,6 +79,7 @@ export { logClientError } from "./logClientError";
 // --- ADMIN HEALTH (real Super-Admin Overview vitals; replaces fake status card) ---
 export { getAdminHealthSnapshot, scheduledHealthCheck } from "./adminHealth";
 export { readiness } from "./readiness";
+export { getOpsHealthSummary } from "./opsHealth";
 
 // --- REVENUE AGGREGATES (platform revenue from billingCharges → admin_stats/revenue) ---
 export { aggregateRevenueDaily, recomputeRevenue } from "./revenueAggregates";
