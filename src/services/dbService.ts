@@ -22,6 +22,7 @@ import { db, functions } from "../firebase";
 import { poolRepository } from "./poolRepository";
 import { userRepository } from "./userRepository";
 import { errorHandler, ErrorSeverity } from "./errorHandler";
+import { withCorrelationId } from "../utils/correlationId";
 export { db };
 import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament, BanterMessage, NFLGame, WeeklyRecap } from "../types";
 import type { PoolQuoteInput, PoolQuote, AddonSelection } from "@shared/schemas/quote";
@@ -253,12 +254,12 @@ export const dbService = {
     // --- PROP BETS ---
     purchasePropCard: async (poolId: string, answers: Record<string, number>, tiebreakerVal: number, userName: string, cardName?: string, email?: string) => {
         const fn = httpsCallable(functions, 'purchasePropCard');
-        await fn({ poolId, answers, tiebreakerVal, userName, cardName, email });
+        await fn(withCorrelationId({ poolId, answers, tiebreakerVal, userName, cardName, email }));
     },
 
     gradeProp: async (poolId: string, questionId: string, correctOptionIndex: number) => {
         const fn = httpsCallable(functions, 'gradeProp');
-        await fn({ poolId, questionId, correctOptionIndex });
+        await fn(withCorrelationId({ poolId, questionId, correctOptionIndex }));
     },
 
     getPropCards: async (poolId: string) => {
@@ -335,7 +336,7 @@ export const dbService = {
     createBracketEntry: async (poolId: string, data: { name: string; tiebreakerScore?: number }): Promise<{ success: boolean; entryId?: string; message?: string }> => {
         try {
             const fn = httpsCallable(functions, 'createBracketEntry');
-            const result = await fn({ poolId, ...data });
+            const result = await fn(withCorrelationId({ poolId, ...data }));
             return result.data as { success: boolean; entryId?: string; message?: string };
         } catch (error: unknown) {
             await errorHandler.handleError(error, {
@@ -350,7 +351,7 @@ export const dbService = {
     updateBracketPicks: async (poolId: string, entryId: string, picks: Record<string, string>, tieBreakerPrediction?: number, name?: string): Promise<{ success: boolean; message?: string }> => {
         try {
             const fn = httpsCallable(functions, 'updateBracketEntry');
-            const result = await fn({ poolId, entryId, picks, tieBreakerPrediction, name });
+            const result = await fn(withCorrelationId({ poolId, entryId, picks, tieBreakerPrediction, name }));
             return result.data as { success: boolean; message?: string };
         } catch (error: unknown) {
             await errorHandler.handleError(error, {
@@ -365,7 +366,7 @@ export const dbService = {
     submitBracketEntry: async (poolId: string, entryId: string, picks: Record<string, string>, tieBreakerPrediction?: number, name?: string): Promise<{ success: boolean; message?: string }> => {
         try {
             const fn = httpsCallable(functions, 'submitBracketEntry');
-            const result = await fn({ poolId, entryId, picks, tieBreakerPrediction, name });
+            const result = await fn(withCorrelationId({ poolId, entryId, picks, tieBreakerPrediction, name }));
             return result.data as { success: boolean; message?: string };
         } catch (error: unknown) {
             await errorHandler.handleError(error, {
@@ -380,7 +381,7 @@ export const dbService = {
     deleteBracketEntry: async (poolId: string, entryId: string): Promise<{ success: boolean; message?: string }> => {
         try {
             const fn = httpsCallable(functions, 'deleteBracketEntry');
-            const result = await fn({ poolId, entryId });
+            const result = await fn(withCorrelationId({ poolId, entryId }));
             return result.data as { success: boolean; message?: string };
         } catch (error: unknown) {
             await errorHandler.handleError(error, {
@@ -407,12 +408,12 @@ export const dbService = {
         details?: { paidAt?: number | null; paymentNote?: string | null },
     ): Promise<void> => {
         const fn = httpsCallable(functions, 'updateEntryPayment');
-        await fn({
+        await fn(withCorrelationId({
             poolId, entryId, paidStatus,
             ...(paymentMethod ? { paymentMethod } : {}),
             ...(details?.paidAt !== undefined ? { paidAt: details.paidAt } : {}),
             ...(details?.paymentNote !== undefined ? { paymentNote: details.paymentNote } : {}),
-        });
+        }));
     },
 
     // Member Record roster (ADR 0003): every member who joined, incl. the commissioner and
@@ -428,7 +429,7 @@ export const dbService = {
     // with OR without an entry (writes the Member Record + ledger). Commissioner/owner only.
     setPaidStatus: async (poolId: string, memberUid: string, isPaid: boolean): Promise<void> => {
         const fn = httpsCallable(functions, 'setPaidStatus');
-        await fn({ poolId, memberUid, isPaid });
+        await fn(withCorrelationId({ poolId, memberUid, isPaid }));
     },
 
     // Pool Consensus (ADR 0004) — server aggregate, post-lock, keyed by gameId. Member-readable.
@@ -476,7 +477,7 @@ export const dbService = {
     // subject/co-member-of-that-pool/admin; throws permission-denied otherwise.
     getProfilePoolDetail: async (subjectId: string, poolId: string) => {
         const fn = httpsCallable(functions, 'getProfilePoolDetail');
-        const res = await fn({ subjectId, poolId });
+        const res = await fn(withCorrelationId({ subjectId, poolId }));
         return res.data as any;
     },
 
@@ -550,7 +551,7 @@ export const dbService = {
     joinWaitlist: async (poolId: string, entry: { email: string; name: string; timestamp: number }) => {
         try {
             const fn = httpsCallable(functions, 'joinWaitlist');
-            await fn({ poolId, name: entry.name, email: entry.email });
+            await fn(withCorrelationId({ poolId, name: entry.name, email: entry.email }));
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.LOW,
@@ -564,7 +565,7 @@ export const dbService = {
     toggleWinnerPaid: async (poolId: string, winnerId: string): Promise<{ success: boolean; isPaid: boolean }> => {
         try {
             const fn = httpsCallable(functions, 'toggleWinnerPaid');
-            const result = await fn({ poolId, winnerId });
+            const result = await fn(withCorrelationId({ poolId, winnerId }));
             return result.data as { success: boolean; isPaid: boolean };
         } catch (error) {
             await errorHandler.handleError(error, {
@@ -578,7 +579,7 @@ export const dbService = {
     syncAllUsers: async (): Promise<{ success: boolean; count: number }> => {
         try {
             const syncFn = httpsCallable(functions, 'syncAllUsers');
-            const result = await syncFn();
+            const result = await syncFn(withCorrelationId(undefined));
             return result.data as { success: boolean; count: number };
         } catch (error) {
             await errorHandler.handleError(error, {
@@ -592,7 +593,7 @@ export const dbService = {
     syncMyClaims: async (): Promise<{ success: boolean; role: string; message: string }> => {
         try {
             const syncClaimsFn = httpsCallable(functions, 'syncMyClaims');
-            const result = await syncClaimsFn();
+            const result = await syncClaimsFn(withCorrelationId(undefined));
             return result.data as { success: boolean; role: string; message: string };
         } catch (error) {
             console.error("Failed to sync my claims:", error);
@@ -617,7 +618,7 @@ export const dbService = {
     lockPool: async (poolId: string, forceAxis: boolean = false): Promise<void> => {
         try {
             const lockPoolFn = httpsCallable(functions, 'lockPool');
-            await lockPoolFn({ poolId, forceAxis });
+            await lockPoolFn(withCorrelationId({ poolId, forceAxis }));
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.HIGH,
@@ -644,7 +645,7 @@ export const dbService = {
     reserveSquare: async (poolId: string, squareId: number, customerDetails?: PlayerDetails, guestDeviceKey?: string, pickedAsName?: string): Promise<void> => {
         try {
             const reserveSquareFn = httpsCallable(functions, 'reserveSquare');
-            await reserveSquareFn({ poolId, squareId, customerDetails, guestDeviceKey, pickedAsName });
+            await reserveSquareFn(withCorrelationId({ poolId, squareId, customerDetails, guestDeviceKey, pickedAsName }));
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.MEDIUM,
@@ -688,7 +689,7 @@ export const dbService = {
     updatePlayer: async (poolId: string, originalName: string, details: { name: string; email: string; phone: string; notes: string }): Promise<void> => {
         try {
             const fn = httpsCallable(functions, 'updatePlayer');
-            await fn({ poolId, originalName, details });
+            await fn(withCorrelationId({ poolId, originalName, details }));
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.MEDIUM,
@@ -701,7 +702,7 @@ export const dbService = {
     releaseSquares: async (poolId: string, opts: { squareIds?: number[]; ownerName?: string }): Promise<void> => {
         try {
             const fn = httpsCallable(functions, 'releaseSquares');
-            await fn({ poolId, ...opts });
+            await fn(withCorrelationId({ poolId, ...opts }));
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.MEDIUM,
@@ -728,7 +729,7 @@ export const dbService = {
     createClaimCode: async (poolId: string, guestDeviceKey: string): Promise<{ claimCode: string; claimId: string }> => {
         try {
             const fn = httpsCallable(functions, 'createClaimCode');
-            const result = await fn({ poolId, guestDeviceKey });
+            const result = await fn(withCorrelationId({ poolId, guestDeviceKey }));
             return result.data as { claimCode: string; claimId: string };
         } catch (error) {
             await errorHandler.handleError(error, {
@@ -768,7 +769,7 @@ export const dbService = {
     claimMySquares: async (poolId: string, guestDeviceKey: string): Promise<{ success: boolean; warnings: string[] }> => {
         try {
             const fn = httpsCallable(functions, 'claimMySquares');
-            const result = await fn({ poolId, guestDeviceKey });
+            const result = await fn(withCorrelationId({ poolId, guestDeviceKey }));
             return result.data as { success: boolean; warnings: string[] };
         } catch (error) {
             await errorHandler.handleError(error, {
@@ -782,7 +783,7 @@ export const dbService = {
     claimByCode: async (claimCode: string): Promise<{ success: boolean; poolId: string }> => {
         try {
             const fn = httpsCallable(functions, 'claimByCode');
-            const result = await fn({ claimCode });
+            const result = await fn(withCorrelationId({ claimCode }));
             return result.data as { success: boolean; poolId: string };
         } catch (error) {
             await errorHandler.handleError(error, {
@@ -1066,7 +1067,7 @@ export const dbService = {
     updateWinnerPaidStatus: async (poolId: string, winnerId: string) => {
         try {
             const fn = httpsCallable(functions, 'toggleWinnerPaid');
-            await fn({ poolId, winnerId });
+            await fn(withCorrelationId({ poolId, winnerId }));
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.MEDIUM,
@@ -1313,7 +1314,7 @@ export const dbService = {
     syncPlayoffPools: async (): Promise<{ success: boolean; count: number; message: string }> => {
         try {
             const fn = httpsCallable(functions, 'syncPlayoffPools');
-            const result = await fn();
+            const result = await fn(withCorrelationId(undefined));
             return result.data as { success: boolean; count: number; message: string };
         } catch (error) {
             await errorHandler.handleError(error, {
@@ -1327,7 +1328,7 @@ export const dbService = {
     managePlayoffEntry: async (poolId: string, entryId: string, action: 'togglePaid' | 'delete', value?: unknown): Promise<{ success: boolean; message: string }> => {
         try {
             const fn = httpsCallable(functions, 'managePlayoffEntry');
-            const result = await fn({ poolId, entryId, action, value });
+            const result = await fn(withCorrelationId({ poolId, entryId, action, value }));
             return result.data as { success: boolean; message: string };
         } catch (error) {
             await errorHandler.handleError(error, {
@@ -1341,7 +1342,7 @@ export const dbService = {
     markSquarePaid: async (poolId: string, squareIds: number[], isPaid: boolean): Promise<{ success: boolean }> => {
         try {
             const fn = httpsCallable(functions, 'markSquaresPaid');
-            const result = await fn({ poolId, squareIds, isPaid });
+            const result = await fn(withCorrelationId({ poolId, squareIds, isPaid }));
             return result.data as { success: boolean };
         } catch (error) {
             await errorHandler.handleError(error, {
@@ -1384,7 +1385,7 @@ export const dbService = {
     submitNFLPicks: async (data: { poolId: string; week: number; picks: Record<string, string>; confidence?: Record<string, number>; tiebreakerPrediction?: number; requestId?: string }): Promise<void> => {
         try {
             const submitNFLPicksFn = httpsCallable(functions, 'submitNFLPicks');
-            await submitNFLPicksFn(data);
+            await submitNFLPicksFn(withCorrelationId(data));
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.HIGH,
@@ -1397,7 +1398,7 @@ export const dbService = {
     executeSurvivorRebuy: async (poolId: string, week: number): Promise<void> => {
         try {
             const executeSurvivorRebuyFn = httpsCallable(functions, 'executeSurvivorRebuy');
-            await executeSurvivorRebuyFn({ poolId, week });
+            await executeSurvivorRebuyFn(withCorrelationId({ poolId, week }));
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.MEDIUM,
@@ -1554,7 +1555,7 @@ export const dbService = {
     // Commissioner records who won what (server validates ownership + finalized pool).
     recordPoolPayouts: async (poolId: string, awards: Array<{ uid: string; amount: number; kind: string; place?: number; settled: boolean; note?: string; supersedes?: string }>) => {
         const fn = httpsCallable(functions, 'recordPoolPayouts');
-        const res = await fn({ poolId, awards });
+        const res = await fn(withCorrelationId({ poolId, awards }));
         return res.data as { success: boolean; awardIds: string[] };
     },
 
