@@ -47,12 +47,19 @@ SUPER_ADMIN sessions.
    because main never advanced. ALWAYS verify `gh pr view <N> --json state` == MERGED and
    `git log origin/main` shows the merge commit BEFORE trusting a deploy; a no-op skip on a
    change you expect to ship means the merge/pull didn't land.
-   OPEN SECURITY ITEM (low real risk): npm critical websocket-driver<=0.7.4, transitive via
-   firebase-admin→@firebase/database→faye-websocket. App is Firestore-only (zero RTDB usage),
-   so the vulnerable WS path never loads at runtime. Fix = add "websocket-driver":">=0.7.5"
-   to the EXISTING functions/package.json overrides block (already pins qs/uuid/@tootallnate).
-   NOT firebase-admin 12→14 major bump, NOT audit fix --force. 3 dependabot PRs open (cut from
-   pre-#166 main; will rebase). firebase-admin pinned ^12.7.0 (latest 14.2.0).
+   CLOSED SECURITY ITEM: npm critical websocket-driver<=0.7.4 (GHSA-mp7j-qc5w-4988 +
+   GHSA-xv26-6w52-cph6) — fixed PR #170 (merge c95edb4, 2026-07-17). Transitive via
+   firebase-admin AND the root firebase client SDK → @firebase/database → faye-websocket.
+   Added "websocket-driver":">=0.7.5" to the overrides block in BOTH package.json (root +
+   functions) — the CI security-audit runs `npm audit --audit-level=high` at ROOT, so a
+   functions-only fix left it red (qodo + CI both caught this). App is Firestore-only so the
+   WS path never loads; low real risk, but it's a critical + blocked CI. Lockfiles regen'd
+   --package-lock-only (only websocket-driver moved). NOT merged as a functions deploy — the
+   change is a lockfile-only bump of an unused transitive; rides with the next functions deploy.
+   REMAINING (low-pri backlog): 2 moderate npm advisories below the high gate —
+   @opentelemetry/core (via @google-cloud/pubsub→firebase-tools, DEV) and morgan (log-forging).
+   Neither blocks CI. firebase-admin pinned ^12.7.0 (latest 14.2.0) — a future major-bump task
+   would clear these + the whole transitive chain naturally.
 
    Prior wave (callables): 
    Wave 1: PR #164 (16 callables, deployed 2026-07-11 night). Wave 2: PR #165
