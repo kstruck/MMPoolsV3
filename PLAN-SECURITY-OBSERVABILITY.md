@@ -71,6 +71,32 @@ Tighten march-melee-pools across three fronts without adding product surface: (1
    - **Latency (p95)**: `createCheckoutSession` < 2s; pick-submit callables < 1.5s; `getServerTime` < 500ms.
    - **Error-budget policy**: burn-rate alert → SMS; sustained breach → freeze non-critical deploys.
 
+**Phase 2 (#8–14) SHIPPED 2026-07-17** — PR #171 (all 7 items) + PR #173 (readiness
+128MiB→256MiB OOM fix found via live Uptime Check test) merged, functions +
+frontend deployed, prod-verified (Sentry confirmed live via `window.__SENTRY__`
++ baked-in DSN; GCP Uptime Check green against `/readiness`; Firestore
+`system/config.opsAlerts` populated). Kevin's kickoff decisions: ops config →
+Firestore doc not Secret Manager; SMS paging → all 4 proposed high-pri types
+(webhook failure/dead-letter, site-down, auth/App-Check outage, checkout SLO
+breach); SLO targets → accepted as written above.
+
+SLO instrumentation split: availability/checkout-success/latency-p95 ride on
+Cloud Functions gen2's built-in Cloud Monitoring per-function metrics (no app
+code — just a GCP console SLO-object + alerting-policy setup, NOT yet done,
+optional/not urgent). The "zero stuck-in-failed webhooks" hard objective got
+real code: `functions/src/webhookDurabilitySweep.ts`, a daily backstop
+independent of the existing attempt-threshold alert. Correlation id (#9) is
+wired into `dbService.ts`'s 27 call sites only — ~13 other direct-`httpsCallable`
+files are SWEEP-LATER, tracked under the general callable-fleet backlog, not
+silently claimed complete.
+
+Known follow-ups (optional, not urgent): GCP SLO objects/alerting policies for
+the 3 non-webhook SLOs; `src/sentry.ts`'s dynamic `import('@sentry/react')`
+didn't actually get code-split by Vite in the prod build (merged into the main
+bundle — functionally harmless, just didn't achieve the lazy-load perf intent);
+optional `SENTRY_DSN` functions secret to activate backend Sentry events
+(Firestore alerts + ops email/SMS already work without it).
+
 ---
 
 ## Phase 3 — Backup & recovery (Firestore + Auth) — facts corrected (Codex #10/#11)
@@ -108,7 +134,7 @@ Tighten march-melee-pools across three fronts without adding product surface: (1
 ## Risks / open questions
 - App Check per-endpoint rollout + coverage-by-version tracking is real work; mis-sequencing locks out clients.
 - Sharded rate-limit bucket doc (`identity:endpoint:appId:window`) adds read+write per guarded call; ceiling named (Memorystore upgrade path). Anonymous paths key on `guestDeviceKey`/App-Check token, not `uid`.
-- SLO targets (#14) and high-priority SMS set (#11) await Kevin's confirmation (alert-fatigue + SMS cost).
+- ~~SLO targets (#14) and high-priority SMS set (#11) await Kevin's confirmation~~ — RESOLVED 2026-07-17, see Phase 2 shipped note above.
 - Adding `async_payment_failed`/`payment_failed` handlers (#7) requires deciding the Member/Commissioner UX on a failed async payment.
 
 ## Out of scope

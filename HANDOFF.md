@@ -1,13 +1,18 @@
-# HANDOFF — Session entry point (updated 2026-07-17, Phase 2 observability code-complete)
+# HANDOFF — Session entry point (updated 2026-07-17, Phase 2 observability DEPLOYED + prod-verified)
 
 **Start every new session with: "Review HANDOFF.md and pick up where we left off."**
 This file + auto-memory carry the full state. Older narrative lives in git history.
 
 ---
 
-## Current state: Phase 2 observability (#8–14) CODE-COMPLETE, PR open, awaiting Kevin merge+deploy
+## Current state: Phase 2 observability (#8–14) SHIPPED, merged, deployed, prod-verified
 
-Branch `claude/phase-2-security-observability-4697dd`, PR [#171](https://github.com/kstruck/MMPoolsV3/pull/171) — built overnight 2026-07-17 (Kevin's standing overnight-autonomy grant). All 7 plan items (Sentry FE spine, correlation id, business-failure→Sentry wiring, ops alert dispatcher, readiness endpoint, in-app Ops Health card, SLO definitions + webhook-durability backstop sweep) shipped, qodo's 4 findings on the Sentry commit fixed in a follow-up commit. Full detail, Kevin's action list, and the SLO instrumentation table: `PICKUP-PHASE2-OBSERVABILITY.md`. Gates at final HEAD: frontend `tsc -b` clean, root vitest 257/257, functions unit 574/574, emulator 89/10-skip. NOT merged, NOT deployed — deploy is Kevin's gate (Rule 2), and several steps (Firestore `opsAlerts` config, GCP Uptime Check + SLO objects, optional `SENTRY_DSN` secret) are Kevin-console-only regardless.
+PR [#171](https://github.com/kstruck/MMPoolsV3/pull/171) (all 7 plan items — Sentry FE spine, correlation id, business-failure→Sentry wiring, ops alert dispatcher, readiness endpoint, in-app Ops Health card, SLOs) merged `7b2a522`, functions + frontend deployed, qodo's 4 findings fixed pre-merge. **One post-deploy bug found+fixed**: `readiness` was configured at 128MiB and OOM'd at cold start (Admin SDK + Node 22 alone use ~131MiB) — Kevin's live GCP Uptime Check test caught it as a 503, fixed in a same-day follow-up PR #173 (bumped to 256MiB, merged, redeployed) — Uptime Check now green. Firestore `system/config.opsAlerts` populated (Kevin). Sentry confirmed live in prod (`window.__SENTRY__` present, real DSN baked into the bundle, verified via direct browser check against `marchmeleepools.com`).
+
+**Not done (optional, not urgent):**
+- GCP Cloud Monitoring SLO objects + burn-rate alerting policies (uptime check alone is done; the other 3 SLOs — checkout success, webhook error rate, latency p95 — still need console setup). Target numbers in `PLAN-SECURITY-OBSERVABILITY.md`'s Phase 2 SLO section.
+- Cosmetic: the Sentry lazy-load (dynamic `import('@sentry/react')` in `src/sentry.ts`) didn't actually get code-split into its own chunk by Vite's bundler in the prod build — it got merged into the main bundle. Functionally harmless (Sentry works), just didn't achieve the "defer off initial load" perf intent. Kevin said fix "when it makes sense" — not urgent.
+- `SENTRY_DSN` functions secret (optional — activates backend Sentry events for Stripe webhook failures; Firestore alerts + ops email/SMS already work without it).
 
 Below this: prior narrative (sim harness — still COMPLETE, deployed, prod-verified; unrelated to Phase 2).
 
@@ -36,22 +41,12 @@ SUPER_ADMIN sessions.
    SuperAdmin → Admin Audit Log for `NFL_FINALIZE_SWEEP` entries; when candidate
    lists look sane, ask Claude for the flip-to-live step.
 
-## ⚡ Kevin's pending items — Phase 2 observability (PR #171)
+## Phase 2 observability — CLOSED 2026-07-17
 
-1. **Review + merge PR #171** (or ask Claude for a walkthrough first — it's 8
-   commits, ~1500 lines, touches `stripe.ts` and `validated.ts`).
-2. **After merge:** run the deploy ritual (functions first, `npm --prefix
-   functions install` first) — full checklist in `PICKUP-PHASE2-OBSERVABILITY.md`.
-3. **Populate ops alert recipients** (5 min, Firestore console): `system/config`
-   doc → add field `opsAlerts`, type map, containing `emailRecipients` (array of
-   strings) and `smsRecipients` (array of E.164 phone strings). Empty/missing =
-   the dispatcher silently no-ops, so nothing breaks if this is skipped for now.
-4. **GCP Console** (whenever there's Monitoring-console time, not urgent):
-   Uptime Check against the deployed `/readiness` endpoint, plus SLO objects +
-   burn-rate alerting policies per the table in `PICKUP-PHASE2-OBSERVABILITY.md`.
-5. **Optional:** `firebase functions:secrets:set SENTRY_DSN` to turn on backend
-   Sentry events for Stripe webhook failures (the Firestore `monetization_alerts`
-   docs + ops email/SMS already work without this).
+PR #171 merged+deployed, PR #173 (readiness OOM fix) merged+deployed, Firestore
+`opsAlerts` populated, GCP Uptime Check green, Sentry confirmed live in prod.
+Remaining optional items (SLO objects, cosmetic chunk-splitting) listed in the
+"Current state" section above — not blocking, not time-sensitive.
 
 ## Next-effort menu (pick one to start a session)
 
@@ -94,10 +89,10 @@ SUPER_ADMIN sessions.
    Note: root tests mock onCall in tests/mocks/firebase-functions-v2-https.ts
    — it now supports the two-arg onCall(options, handler) form validated()
    uses, and onboarding-flow assertions pin the NEW gate error messages.
-   Phase 2 (observability, #8-14) is now CODE-COMPLETE — see "Current state"
-   at the top of this file + PICKUP-PHASE2-OBSERVABILITY.md, PR #171.
-   AFTER Phase 2 merges+deploys, remaining Phase-1-adjacent follow-ups (pick
-   one): (a) App Check monitor→enforce flips per endpoint (PLAN #5) after a
+   Phase 2 (observability, #8-14) is now SHIPPED+DEPLOYED — see "Current
+   state" at the top of this file, PR #171 + #173.
+   Remaining Phase-1-adjacent follow-ups (pick one): (a) App Check
+   monitor→enforce flips per endpoint (PLAN #5) after a
    coverage-measurement window; (b) firestore.rules write-path sweep (the
    pools allow-update isSuperAdmin() rule + playoff/props raw writes
    deliberately parked for it); (c) SWEEP-LATER callable fleet (63, includes
@@ -123,8 +118,7 @@ SUPER_ADMIN sessions.
 | `HANDOFF.md` | THIS FILE — session entry point |
 | `PLAN-NFL-SIM-HARNESS.md` + `-REVIEW-LOG.md` | Locked harness plan + Codex trail |
 | `TAKEOVER-NFL-SIM-HARNESS.md` | Overnight-build narrative + deploy runbook (historical) |
-| `PLAN-SECURITY-OBSERVABILITY.md` + `-SWEEPS.md` + `-REVIEW-LOG.md` | Security/observability plan — Phase 1 shipped+deployed, Phase 2 code-complete (PR #171, unmerged) |
-| `PICKUP-PHASE2-OBSERVABILITY.md` | Phase 2 live status ledger + Kevin's action list — delete once Phase 2 ships |
+| `PLAN-SECURITY-OBSERVABILITY.md` + `-SWEEPS.md` + `-REVIEW-LOG.md` | Security/observability plan — Phase 1 + Phase 2 both shipped+deployed (PR #171, #173); Phase 3 not started |
 | `PROMPT-GRILL-PLAYER-PROFILES.md` | Consumed — profiles shipped via PR #153 |
 | `CONTEXT.md` | Glossary (Sim Run, Test Pool, Scenario, Golden Scenario, Scenario Oracle, …) |
 | `docs/adr/0006-*.md` | Real-path fidelity via extracted internals |
