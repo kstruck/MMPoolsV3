@@ -1,7 +1,8 @@
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
 import { logger } from '../utils/logger';
-import { Sentry } from '../sentry';
+import { captureSentryException } from '../sentry';
+import { sanitizeForSentry } from '../utils/sentrySanitize';
 
 export const ErrorSeverity = {
     LOW: 'low',
@@ -88,11 +89,11 @@ class ErrorHandler {
 
         logger.error(`[ErrorHandler] ${severity.toUpperCase()}:`, message, error, context);
 
-        Sentry.captureException(error instanceof Error ? error : new Error(message), {
+        await captureSentryException(error instanceof Error ? error : new Error(message), {
             level: severity === ErrorSeverity.CRITICAL ? 'fatal'
                 : severity === ErrorSeverity.LOW ? 'warning'
                 : 'error',
-            extra: errorLog.context,
+            extra: sanitizeForSentry(errorLog.context ?? {}),
         });
 
         if (notify) {
