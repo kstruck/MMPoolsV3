@@ -28,6 +28,7 @@ import { validated } from "./lib/validated";
 import { createCheckoutSessionSchema } from "./schemas/billingCheckout";
 import { decideEventClaim, shouldAlertOnFailure, type WebhookEventDoc } from "./lib/webhookDurability";
 import { captureMonetizationAlert } from "./lib/sentryServer";
+import { dispatchOpsAlert } from "./lib/opsAlertDispatcher";
 import {
     writeBillingChargeTxn,
     type BillingCharge,
@@ -759,6 +760,12 @@ async function finalizePoolPayment(args: {
     });
     if (doubleCharge) {
         captureMonetizationAlert("DOUBLE_CHARGE_REVIEW", { poolId, userId, sessionId, paymentIntentId, amount });
+        await dispatchOpsAlert(db, {
+            type: "DOUBLE_CHARGE_REVIEW",
+            title: "Double-charge review needed",
+            message: `Session ${sessionId} arrived for already-active pool ${poolId}. Charge was no-op'd; review in Super-Admin → Monetization → Alerts.`,
+            context: { poolId, userId, sessionId, paymentIntentId, amount },
+        });
     } else {
         console.log(`[Stripe Webhook] Pool ${poolId} activated via session ${sessionId}`);
     }
@@ -878,6 +885,12 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
         });
         if (alerted) {
             captureMonetizationAlert("WEBHOOK_FAILED", { eventId: event.id, eventType: event.type, attemptCount, lastError });
+            await dispatchOpsAlert(db, {
+                type: "WEBHOOK_FAILED",
+                title: "Stripe webhook failing repeatedly",
+                message: `Event ${event.id} (${event.type}) has failed ${attemptCount} time(s). ${lastError}`,
+                context: { eventId: event.id, eventType: event.type, attemptCount },
+            });
         }
         console.error(`[Stripe Webhook] Event ${event.id} (${event.type}) failed, attempt ${attemptCount}: ${lastError}`);
     };
@@ -1033,6 +1046,12 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                         paymentIntentId: (session.payment_intent as string) ?? null,
                         poolId: poolId ?? null,
                     });
+                    await dispatchOpsAlert(db, {
+                        type: "ASYNC_PAYMENT_FAILED",
+                        title: "Async payment failed",
+                        message: `Checkout session ${session.id} (pool ${poolId ?? "n/a"}) async payment failed. Any held reservation was released.`,
+                        context: { sessionId: session.id, poolId: poolId ?? null },
+                    });
                 } catch (err) {
                     console.error("[Stripe Webhook] async_payment_failed handling failed (will retry):", err);
                     await markFailed(err);
@@ -1069,6 +1088,12 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                         paymentIntentId: pi.id,
                         amount: (pi.amount ?? 0) / 100,
                         poolId: (pi.metadata?.poolId as string) ?? null,
+                    });
+                    await dispatchOpsAlert(db, {
+                        type: "PAYMENT_FAILED",
+                        title: "Payment intent failed",
+                        message: `PaymentIntent ${pi.id} failed: ${(pi.last_payment_error?.message as string) ?? "(no error message)"}`,
+                        context: { paymentIntentId: pi.id, poolId: (pi.metadata?.poolId as string) ?? null },
                     });
                 } catch (err) {
                     console.error("[Stripe Webhook] payment_failed handling failed (will retry):", err);
@@ -1149,8 +1174,15 @@ async function handleChargeAdjustment(charge: any, kind: "refund" | "dispute"): 
             createdAt: Date.now(),
         }, { merge: true });
     });
-    captureMonetizationAlert(kind === "refund" ? "REFUND" : "DISPUTE", {
+    const alertType = kind === "refund" ? "REFUND" : "DISPUTE";
+    captureMonetizationAlert(alertType, {
         chargeId, paymentIntentId: paymentIntentId ?? null, amount: adjustment, ...alertContext,
+    });
+    await dispatchOpsAlert(db, {
+        type: alertType,
+        title: kind === "refund" ? "Refund recorded" : "Dispute opened",
+        message: `${kind === "refund" ? "Refund" : "Dispute"} adjustment ${adjustment} recorded for charge ${chargeId}.`,
+        context: { chargeId, paymentIntentId: paymentIntentId ?? null, amount: adjustment, ...alertContext },
     });
     console.log(`[Stripe Webhook] ${kind} adjustment recorded for charge ${chargeId} (${adjustment}).`);
 }
