@@ -42,13 +42,12 @@ Read the plan for the full locked wording. Summary + the decisions already baked
 
 ---
 
-## OPEN DECISIONS — get Kevin's answers BEFORE building these
+## OPEN DECISIONS — RESOLVED (Kevin, 2026-07-17 kickoff)
 
-The plan flags these as awaiting sign-off (alert-fatigue + cost). Ask up front in one batch:
-1. **Sentry account/DSN — RESOLVED (Kevin, 2026-07-17).** sentry.io project created (free tier), React platform. Decision: **errors + performance tracing ONLY to start; Session Replay OFF (or dev-only) until masking is proven and Kevin opts in** — because the app renders payment handles / emails / admin data and Replay is the metered/PII-sensitive feature. DSN is set locally in `D:\march-melee-pools\.env` as `VITE_SENTRY_DSN=...` (`.env` is gitignored, line 27 — do NOT commit it; read via `import.meta.env.VITE_SENTRY_DSN`). **Prod:** Vite bakes env at build time, so `VITE_SENTRY_DSN` must ALSO be added to Coolify's build env before the Sentry PR deploys, or the prod bundle won't have it. So #8's first cut = install `@sentry/react`, init in `main.tsx` with errors + tracing, Replay integration present but `replaysSessionSampleRate: 0` (or dev-gated) + full masking config in place, so turning Replay on later is a one-flag change Kevin approves.
-2. **Ops recipients (#11)** — the ops email list + on-call phone number(s) for high-priority SMS. Where to store: Secret Manager vs env vs a `system/config` doc.
-3. **High-priority SMS set (#11)** — confirm which alert types page via SMS vs email-only (SMS cost). Plan's proposed high-pri: webhook failure/dead-letter, site-down, auth/App-Check outage, checkout SLO breach.
-4. **SLO targets (#14)** — confirm/adjust the proposed defaults, especially the error-budget "freeze non-critical deploys" policy.
+1. **Sentry account/DSN — RESOLVED (Kevin, 2026-07-17).** sentry.io project created (free tier), React platform. Decision: **errors + performance tracing ONLY to start; Session Replay OFF (or dev-only) until masking is proven and Kevin opts in** — because the app renders payment handles / emails / admin data and Replay is the metered/PII-sensitive feature. DSN is set locally in `D:\march-melee-pools\.env` as `VITE_SENTRY_DSN=...` (`.env` is gitignored, line 27 — do NOT commit it; read via `import.meta.env.VITE_SENTRY_DSN`). **Prod:** Vite bakes env at build time, so `VITE_SENTRY_DSN` must ALSO be added to Coolify's build env before the Sentry PR deploys, or the prod bundle won't have it. **Shipped** (commit `96811cf`, this branch, not yet merged): `@sentry/react` installed, init in `main.tsx`, errors + tracing on, Replay integration present with `maskAllText`+`blockAllMedia` but `replaysSessionSampleRate: 0` outside DEV (flip via `VITE_SENTRY_REPLAY_SAMPLE_RATE` — one env var, no code change) — wired into the existing `errorHandler.handleError` choke point so `logClientError` and Sentry both fire.
+2. **Ops recipients (#11) — RESOLVED.** Store in Firestore `system/config` doc (new field), matching the existing kill-switch config pattern (`autoClose`, etc.) — not Secret Manager, not env.
+3. **High-priority SMS set (#11) — RESOLVED.** All four of the plan's proposed defaults page via SMS: Stripe webhook failure/dead-letter, site-down (readiness endpoint), auth/App-Check outage, checkout success-rate SLO breach. Everything else flagged is email-only.
+4. **SLO targets (#14) — RESOLVED.** Accept the plan's proposed defaults as-written (availability ≥99.5%/30d, checkout success ≥99%, webhook durability ≥99.9%, latency p95 caps as listed). Ship instrumentation against these now; retune from real data later if needed.
 
 ---
 
