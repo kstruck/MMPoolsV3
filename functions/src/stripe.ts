@@ -27,6 +27,7 @@ import Stripe from "stripe";
 import { validated } from "./lib/validated";
 import { createCheckoutSessionSchema } from "./schemas/billingCheckout";
 import { decideEventClaim, shouldAlertOnFailure, type WebhookEventDoc } from "./lib/webhookDurability";
+import { captureMonetizationAlert } from "./lib/sentryServer";
 import {
     writeBillingChargeTxn,
     type BillingCharge,
@@ -664,7 +665,13 @@ async function finalizePoolPayment(args: {
     const couponCode = metadata.couponCode || undefined;
     const amount = amountTotalCents / 100;
 
+    // Set inside the txn callback (reset each attempt so a retry that lands on
+    // the OTHER branch doesn't leave a stale true from an earlier attempt) —
+    // read after the txn commits to fire the Sentry alert exactly once,
+    // outside the transaction (PLAN #10 — never call out from inside a txn).
+    let doubleCharge = false;
     await db.runTransaction(async (txn) => {
+        doubleCharge = false;
         const poolRef = db.collection("pools").doc(poolId);
         const poolSnap = await txn.get(poolRef);
         const billing = (poolSnap.data() as any)?.billing;
@@ -683,6 +690,7 @@ async function finalizePoolPayment(args: {
 
         // --- DOUBLE-CHARGE GUARD: pool already active → no-op + alert ---
         if (billing?.status === "active") {
+            doubleCharge = true;
             const alertRef = db.collection("monetization_alerts").doc(`DOUBLE_CHARGE_${sessionId}`);
             txn.set(alertRef, {
                 type: "DOUBLE_CHARGE_REVIEW",
@@ -749,7 +757,11 @@ async function finalizePoolPayment(args: {
         };
         writeBillingChargeTxn(txn, db, charge);
     });
-    console.log(`[Stripe Webhook] Pool ${poolId} activated via session ${sessionId}`);
+    if (doubleCharge) {
+        captureMonetizationAlert("DOUBLE_CHARGE_REVIEW", { poolId, userId, sessionId, paymentIntentId, amount });
+    } else {
+        console.log(`[Stripe Webhook] Pool ${poolId} activated via session ${sessionId}`);
+    }
 }
 
 /** Best-effort reservation release (decrement usesCount + status:'released') + clear pool pending marker. */
@@ -837,7 +849,10 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
     const markFailed = async (err: unknown): Promise<void> => {
         const lastError = (err instanceof Error ? err.message : String(err)).slice(0, 500);
         let attemptCount = 0;
+        let alerted = false;
         await db.runTransaction(async (t) => {
+            attemptCount = 0;
+            alerted = false;
             const s = await t.get(evtRef);
             attemptCount = ((s.data()?.attemptCount as number) ?? 0) + 1;
             t.set(evtRef, {
@@ -848,6 +863,7 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                 lastFailedAt: Date.now(),
             }, { merge: true });
             if (shouldAlertOnFailure(attemptCount)) {
+                alerted = true;
                 t.set(db.collection("monetization_alerts").doc(`WEBHOOK_FAILED_${event.id}`), {
                     type: "WEBHOOK_FAILED",
                     eventId: event.id,
@@ -860,6 +876,9 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                 }, { merge: true });
             }
         });
+        if (alerted) {
+            captureMonetizationAlert("WEBHOOK_FAILED", { eventId: event.id, eventType: event.type, attemptCount, lastError });
+        }
         console.error(`[Stripe Webhook] Event ${event.id} (${event.type}) failed, attempt ${attemptCount}: ${lastError}`);
     };
 
@@ -1009,6 +1028,11 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                         createdAt: Date.now(),
                         updatedAt: Date.now(),
                     }, { merge: true });
+                    captureMonetizationAlert("ASYNC_PAYMENT_FAILED", {
+                        sessionId: session.id,
+                        paymentIntentId: (session.payment_intent as string) ?? null,
+                        poolId: poolId ?? null,
+                    });
                 } catch (err) {
                     console.error("[Stripe Webhook] async_payment_failed handling failed (will retry):", err);
                     await markFailed(err);
@@ -1041,6 +1065,11 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                         createdAt: Date.now(),
                         updatedAt: Date.now(),
                     }, { merge: true });
+                    captureMonetizationAlert("PAYMENT_FAILED", {
+                        paymentIntentId: pi.id,
+                        amount: (pi.amount ?? 0) / 100,
+                        poolId: (pi.metadata?.poolId as string) ?? null,
+                    });
                 } catch (err) {
                     console.error("[Stripe Webhook] payment_failed handling failed (will retry):", err);
                     await markFailed(err);
@@ -1077,7 +1106,11 @@ async function handleChargeAdjustment(charge: any, kind: "refund" | "dispute"): 
         : (charge.amount ?? 0);
     const adjustment = -(refundedCents / 100);
 
+    // Set inside the txn (reset each attempt), read after commit — same
+    // never-call-out-from-inside-a-txn pattern as finalizePoolPayment (PLAN #10).
+    let alertContext: { userId: string; poolId: string | null } = { userId: "unknown", poolId: null };
     await db.runTransaction(async (txn) => {
+        alertContext = { userId: "unknown", poolId: null };
         // Find the original charge row by paymentIntentId (fall back to chargeId).
         let original: FirebaseFirestore.QueryDocumentSnapshot | undefined;
         if (paymentIntentId) {
@@ -1088,6 +1121,7 @@ async function handleChargeAdjustment(charge: any, kind: "refund" | "dispute"): 
         const userId = (original?.data()?.userId as string) || "unknown";
         const poolId = (original?.data()?.poolId as string) || null;
         const bundleType = (original?.data()?.bundleType as string) || null;
+        alertContext = { userId, poolId };
 
         // Mark the original.
         if (original) {
@@ -1114,6 +1148,9 @@ async function handleChargeAdjustment(charge: any, kind: "refund" | "dispute"): 
             status: "open",
             createdAt: Date.now(),
         }, { merge: true });
+    });
+    captureMonetizationAlert(kind === "refund" ? "REFUND" : "DISPUTE", {
+        chargeId, paymentIntentId: paymentIntentId ?? null, amount: adjustment, ...alertContext,
     });
     console.log(`[Stripe Webhook] ${kind} adjustment recorded for charge ${chargeId} (${adjustment}).`);
 }
