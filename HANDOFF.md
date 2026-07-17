@@ -1,11 +1,15 @@
-# HANDOFF — Session entry point (updated 2026-07-11, post Phase 4+5 ship)
+# HANDOFF — Session entry point (updated 2026-07-17, Phase 2 observability code-complete)
 
 **Start every new session with: "Review HANDOFF.md and pick up where we left off."**
 This file + auto-memory carry the full state. Older narrative lives in git history.
 
 ---
 
-## Current state: NOTHING IN FLIGHT — sim harness COMPLETE (all phases), deployed, prod-verified
+## Current state: Phase 2 observability (#8–14) CODE-COMPLETE, PR open, awaiting Kevin merge+deploy
+
+Branch `claude/phase-2-security-observability-4697dd`, PR [#171](https://github.com/kstruck/MMPoolsV3/pull/171) — built overnight 2026-07-17 (Kevin's standing overnight-autonomy grant). All 7 plan items (Sentry FE spine, correlation id, business-failure→Sentry wiring, ops alert dispatcher, readiness endpoint, in-app Ops Health card, SLO definitions + webhook-durability backstop sweep) shipped, qodo's 4 findings on the Sentry commit fixed in a follow-up commit. Full detail, Kevin's action list, and the SLO instrumentation table: `PICKUP-PHASE2-OBSERVABILITY.md`. Gates at final HEAD: frontend `tsc -b` clean, root vitest 257/257, functions unit 574/574, emulator 89/10-skip. NOT merged, NOT deployed — deploy is Kevin's gate (Rule 2), and several steps (Firestore `opsAlerts` config, GCP Uptime Check + SLO objects, optional `SENTRY_DSN` secret) are Kevin-console-only regardless.
+
+Below this: prior narrative (sim harness — still COMPLETE, deployed, prod-verified; unrelated to Phase 2).
 
 **NFL Sim Harness (PLAN-NFL-SIM-HARNESS.md) — ALL PHASES SHIPPED.**
 Core (0/1/2/3/4-core/6) 2026-07-10 via PR #156 + qodo PRs #157-159. **Phase 4
@@ -31,6 +35,23 @@ SUPER_ADMIN sessions.
 3. Sweep runs daily 08:30, REPORTS ONLY while dryRun. After 1-2 days check
    SuperAdmin → Admin Audit Log for `NFL_FINALIZE_SWEEP` entries; when candidate
    lists look sane, ask Claude for the flip-to-live step.
+
+## ⚡ Kevin's pending items — Phase 2 observability (PR #171)
+
+1. **Review + merge PR #171** (or ask Claude for a walkthrough first — it's 8
+   commits, ~1500 lines, touches `stripe.ts` and `validated.ts`).
+2. **After merge:** run the deploy ritual (functions first, `npm --prefix
+   functions install` first) — full checklist in `PICKUP-PHASE2-OBSERVABILITY.md`.
+3. **Populate ops alert recipients** (5 min, Firestore console): `system/config`
+   doc → add field `opsAlerts`, type map, containing `emailRecipients` (array of
+   strings) and `smsRecipients` (array of E.164 phone strings). Empty/missing =
+   the dispatcher silently no-ops, so nothing breaks if this is skipped for now.
+4. **GCP Console** (whenever there's Monitoring-console time, not urgent):
+   Uptime Check against the deployed `/readiness` endpoint, plus SLO objects +
+   burn-rate alerting policies per the table in `PICKUP-PHASE2-OBSERVABILITY.md`.
+5. **Optional:** `firebase functions:secrets:set SENTRY_DSN` to turn on backend
+   Sentry events for Stripe webhook failures (the Firestore `monetization_alerts`
+   docs + ops email/SMS already work without this).
 
 ## Next-effort menu (pick one to start a session)
 
@@ -73,11 +94,16 @@ SUPER_ADMIN sessions.
    Note: root tests mock onCall in tests/mocks/firebase-functions-v2-https.ts
    — it now supports the two-arg onCall(options, handler) form validated()
    uses, and onboarding-flow assertions pin the NEW gate error messages.
-   NEXT for this plan (pick one): (a) App Check monitor→enforce flips per
-   endpoint (PLAN #5) after a coverage-measurement window; (b) firestore.rules
-   write-path sweep (the pools allow-update isSuperAdmin() rule + playoff/
-   props raw writes deliberately parked for it); (c) SWEEP-LATER callable
-   fleet (63); (d) tighten the two PERMISSIVE create envelopes (ADR-0001).
+   Phase 2 (observability, #8-14) is now CODE-COMPLETE — see "Current state"
+   at the top of this file + PICKUP-PHASE2-OBSERVABILITY.md, PR #171.
+   AFTER Phase 2 merges+deploys, remaining Phase-1-adjacent follow-ups (pick
+   one): (a) App Check monitor→enforce flips per endpoint (PLAN #5) after a
+   coverage-measurement window; (b) firestore.rules write-path sweep (the
+   pools allow-update isSuperAdmin() rule + playoff/props raw writes
+   deliberately parked for it); (c) SWEEP-LATER callable fleet (63, includes
+   the correlation-id sweep's ~13 remaining direct-httpsCallable files);
+   (d) tighten the two PERMISSIVE create envelopes (ADR-0001); (e) Phase 3
+   (backups #15-19).
    Note from Phase 5: the general pools `allow update: isSuperAdmin()` rule + playoff/props
    pool-doc/propCards raw writes were deliberately left for THIS plan's write-path sweep.
 2. **Player Profiles follow-ups** — flip `profileBackfill`/`nflFinalize` dry-runs after
@@ -97,14 +123,15 @@ SUPER_ADMIN sessions.
 | `HANDOFF.md` | THIS FILE — session entry point |
 | `PLAN-NFL-SIM-HARNESS.md` + `-REVIEW-LOG.md` | Locked harness plan + Codex trail |
 | `TAKEOVER-NFL-SIM-HARNESS.md` | Overnight-build narrative + deploy runbook (historical) |
-| `PLAN-SECURITY-OBSERVABILITY.md` + `-SWEEPS.md` + `-REVIEW-LOG.md` | On-hold security plan (also untracked root copies — byte-identical strays, ignore) |
+| `PLAN-SECURITY-OBSERVABILITY.md` + `-SWEEPS.md` + `-REVIEW-LOG.md` | Security/observability plan — Phase 1 shipped+deployed, Phase 2 code-complete (PR #171, unmerged) |
+| `PICKUP-PHASE2-OBSERVABILITY.md` | Phase 2 live status ledger + Kevin's action list — delete once Phase 2 ships |
 | `PROMPT-GRILL-PLAYER-PROFILES.md` | Consumed — profiles shipped via PR #153 |
 | `CONTEXT.md` | Glossary (Sim Run, Test Pool, Scenario, Golden Scenario, Scenario Oracle, …) |
 | `docs/adr/0006-*.md` | Real-path fidelity via extracted internals |
 
 ## Environment / deploy facts (unchanged)
 
-- Deploy: `npm --prefix functions install` first, then `npx firebase deploy --only functions:… --project gridiron-gamble-uzuqo`. Functions before rules. Frontend = Coolify, auto-rebuilds on push to `main`.
+- Deploy: `npm --prefix functions install` first, then `npx firebase deploy --only functions:… --project gridiron-gamble-uzuqo`. Functions before rules. Frontend = Coolify — **manual trigger only**, pushing to `main` does NOT auto-deploy it (corrects a stale claim that lived here; matches CLAUDE.md + the mmp-deploy-and-operate skill).
 - Emulator tests need Java on PATH: `JAVA_HOME=/c/Program Files/Eclipse Adoptium/jdk-21.0.11.10-hotspot`; run `npm --prefix functions run test:emulator`. Unit: `npm --prefix functions test` (410 tests; emulator suite 39).
 - qodo.ai reviews PRs (14-day trial from 2026-07-10). Its findings have been 6/6 valid but severity is converging — validate before auto-fixing.
 - Untracked strays at root: `PLAN-LOOPS.md`, `PLAN-SECURITY-OBSERVABILITY*.md` (copies of branch-committed files). Harmless; don't commit blindly.

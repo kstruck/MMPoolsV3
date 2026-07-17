@@ -1,6 +1,32 @@
 # PICKUP — Phase 2: Observability (Sentry FE spine + GCP BE + SLOs)
 
-**New-session opener:** "Read PICKUP-PHASE2-OBSERVABILITY.md and HANDOFF.md, then start Phase 2 of PLAN-SECURITY-OBSERVABILITY.md."
+## STATUS 2026-07-17: CODE-COMPLETE, PR #171 open — all 7 items (#8–14) shipped
+
+Built in one overnight autonomous session (Kevin's standing overnight-autonomy
+grant, kickoff decisions resolved in chat then executed straight through).
+8 commits on `claude/phase-2-security-observability-4697dd`, PR
+[#171](https://github.com/kstruck/MMPoolsV3/pull/171) — see its description
+for the per-item summary and Kevin's action list (also duplicated in
+HANDOFF.md's "Kevin's pending items" section). qodo's 4 findings on the
+Sentry commit (PII-to-Sentry leak, eager `@sentry/react` import, missing
+tests, unvalidated sample-rate env var) were all valid and fixed in a
+follow-up commit — validity-called before fixing, per the qodo-cycle skill.
+
+Final gates: frontend `tsc -b` clean, root vitest 257/257 (started 244),
+functions typecheck clean, functions unit 574/574 (started 554), emulator
+89/10-skip (started 84/10-skip). NOT merged, NOT deployed — see HANDOFF.md
+"Kevin's pending items — Phase 2 observability" for the exact next steps.
+
+**Read this whole doc anyway before touching Phase 2 further** — the
+sections below (open decisions, sequencing, SLO table) are still the
+source of truth for WHY each piece is shaped the way it is; only the
+top-level status changed.
+
+---
+
+**Original new-session opener (superseded by the status above — kept for
+context):** "Read PICKUP-PHASE2-OBSERVABILITY.md and HANDOFF.md, then start
+Phase 2 of PLAN-SECURITY-OBSERVABILITY.md."
 
 This is the durable kickoff for Phase 2. Plan of record: `PLAN-SECURITY-OBSERVABILITY.md` (items **#8–14** are Phase 2). Full callable inventory is in `PLAN-SECURITY-OBSERVABILITY-SWEEPS.md`. Do NOT re-derive the plan — it's locked (grill-with-docs + 5 Codex rounds).
 
