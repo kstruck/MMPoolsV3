@@ -15,7 +15,7 @@ import * as admin from "firebase-admin";
  * than hanging the check.
  */
 export const readiness = onRequest(
-    { timeoutSeconds: 10, memory: "128MiB" },
+    { timeoutSeconds: 10, memory: "256MiB" },
     async (req, res) => {
         try {
             // Firestore Admin SDK reads don't take an AbortSignal, so race a
