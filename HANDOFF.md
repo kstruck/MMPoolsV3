@@ -34,7 +34,27 @@ SUPER_ADMIN sessions.
 
 ## Next-effort menu (pick one to start a session)
 
-1. **Security/Observability plan — Phase 1 callable retrofit COMPLETE (41/41) and DEPLOYED.**
+1. **Security/Observability plan — Phase 1 COMPLETE (callables + webhook durability) and DEPLOYED.**
+   Webhook durability (PR #166, merge 6c87891, deployed 2026-07-17): handleStripeWebhook
+   no longer deletes failure state — a failed event flips to status:"failed" + attemptCount,
+   de-dupes on Stripe's retry, and alerts ops once (=== threshold) via monetization_alerts/
+   WEBHOOK_FAILED_<id>; claimEvent() re-claims failed docs (set/merge, safe on raced delete);
+   added handlers for checkout.session.async_payment_failed + payment_intent.payment_failed
+   (were falling through the silent default). Pure decideEventClaim/shouldAlertOnFailure in
+   lib/webhookDurability.ts, 9 unit tests. qodo: 3 findings (2 fixed, 1 rejected w/ evidence).
+   NOTE (deploy gotcha, 2026-07-17): a first merge attempt silently didn't take — git pull
+   said "Already up to date" and deploy skipped every function as "No changes detected"
+   because main never advanced. ALWAYS verify `gh pr view <N> --json state` == MERGED and
+   `git log origin/main` shows the merge commit BEFORE trusting a deploy; a no-op skip on a
+   change you expect to ship means the merge/pull didn't land.
+   OPEN SECURITY ITEM (low real risk): npm critical websocket-driver<=0.7.4, transitive via
+   firebase-admin→@firebase/database→faye-websocket. App is Firestore-only (zero RTDB usage),
+   so the vulnerable WS path never loads at runtime. Fix = add "websocket-driver":">=0.7.5"
+   to the EXISTING functions/package.json overrides block (already pins qs/uuid/@tootallnate).
+   NOT firebase-admin 12→14 major bump, NOT audit fix --force. 3 dependabot PRs open (cut from
+   pre-#166 main; will rebase). firebase-admin pinned ^12.7.0 (latest 14.2.0).
+
+   Prior wave (callables): 
    Wave 1: PR #164 (16 callables, deployed 2026-07-11 night). Wave 2: PR #165
    (remaining 25, merged f4df975 + functions deployed by Kevin 2026-07-12 late
    night; functions:list + post-deploy log sweep clean — zero invalid-argument

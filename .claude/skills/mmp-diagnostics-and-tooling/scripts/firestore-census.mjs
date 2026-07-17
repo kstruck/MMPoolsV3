@@ -1,0 +1,168 @@
+// firestore-census.mjs — READ-ONLY production Firestore diagnostics for March Melee Pools.
+//
+// Answers, in one pass over /pools plus two single-doc reads:
+//   1. Stuck-open pools: event is over (scores.gameStatus=='post' or isFinal==true)
+//      but the pool is not CANCELED/COMPLETED and was never admin-closed.
+//      (Mirrors isAutoCloseEligible in functions/src/lib/lifecycle.ts:71-77.)
+//   2. Pools missing the `billing` field (Firestore cannot query for a missing
+//      field, so this needs a scan — that is why this script exists).
+//   3. Test-pool census: pools created by the in-app Test Suite / simulators
+//      (name prefixes "AI Test -", "Bracket Test -", "Playoff Test -",
+//      "Props Test -", "E2E Full Tournament Test", or slug starting "sim-").
+//      There is NO isTestPool flag — naming conventions are the only marker.
+//   4. Freshness of system/scoreSync (squares score-sync heartbeat) and
+//      health/latest (hourly adminHealth snapshot).
+//
+// THIS SCRIPT NEVER WRITES. It is safe to run against prod at any time.
+//
+// Usage (from repo root D:\march-melee-pools; run `npm --prefix functions install` first —
+// firebase-admin is resolved from functions/node_modules):
+//   node .claude/skills/mmp-diagnostics-and-tooling/scripts/firestore-census.mjs
+//   node .claude/skills/mmp-diagnostics-and-tooling/scripts/firestore-census.mjs --json
+//
+// Credentials (checked in order):
+//   1. FIRESTORE_EMULATOR_HOST set        -> emulator, no key needed
+//   2. GOOGLE_APPLICATION_CREDENTIALS set -> that key file (keep it OUTSIDE the repo)
+//   3. <repoRoot>/scripts/service-account.json (legacy repo convention; NOT
+//      gitignored as of 2026-07-06 — prefer option 2)
+
+import { createRequire } from 'node:module';
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+// .claude/skills/mmp-diagnostics-and-tooling/scripts -> 4 levels up = repo root
+const REPO_ROOT = join(SCRIPT_DIR, '..', '..', '..', '..');
+const require = createRequire(join(REPO_ROOT, 'functions', 'package.json'));
+const admin = require('firebase-admin');
+
+const PROJECT_ID = process.env.GCLOUD_PROJECT || 'gridiron-gamble-uzuqo';
+const AS_JSON = process.argv.includes('--json');
+const SAMPLE_CAP = 20;
+
+const TERMINAL_STATUSES = ['CANCELED', 'COMPLETED']; // lib/lifecycle.ts:17
+const TEST_NAME_PREFIXES = [
+    'AI Test -',                 // squaresSimulator.ts:49
+    'Bracket Test -',            // bracketSimulator.ts:67
+    'Playoff Test -',            // playoffSimulator.ts:56
+    'Props Test -',              // propsSimulator.ts:56
+    'E2E Full Tournament Test',  // bracketE2ESimulator.ts:103
+];
+
+function initApp() {
+    if (process.env.FIRESTORE_EMULATOR_HOST) {
+        admin.initializeApp({ projectId: PROJECT_ID });
+        return `EMULATOR ${process.env.FIRESTORE_EMULATOR_HOST} (project ${PROJECT_ID})`;
+    }
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+        admin.initializeApp({ credential: admin.credential.applicationDefault(), projectId: PROJECT_ID });
+        return `PRODUCTION via GOOGLE_APPLICATION_CREDENTIALS (project ${PROJECT_ID})`;
+    }
+    const saPath = join(REPO_ROOT, 'scripts', 'service-account.json');
+    if (existsSync(saPath)) {
+        admin.initializeApp({ credential: admin.credential.cert(JSON.parse(readFileSync(saPath, 'utf8'))) });
+        return `PRODUCTION via ${saPath}`;
+    }
+    console.error('No credentials. Set FIRESTORE_EMULATOR_HOST, or GOOGLE_APPLICATION_CREDENTIALS,');
+    console.error(`or place a service-account key at ${saPath} (and keep it out of git).`);
+    process.exit(1);
+}
+
+function isTestPool(name, slug) {
+    if (typeof slug === 'string' && slug.startsWith('sim-')) return true;
+    if (typeof name !== 'string') return false;
+    return TEST_NAME_PREFIXES.some((p) => name.startsWith(p));
+}
+
+function ageMinutes(ms) {
+    return typeof ms === 'number' ? Math.round((Date.now() - ms) / 60000) : null;
+}
+
+async function run() {
+    const mode = initApp();
+    const db = admin.firestore();
+
+    // Single field-masked scan of /pools (read-only; ~1 read per pool doc).
+    const snap = await db
+        .collection('pools')
+        .select('name', 'slug', 'status', 'closedVia', 'isFinal', 'type', 'billing', 'scores.gameStatus')
+        .get();
+
+    const stuckOpen = [];
+    const missingBilling = [];
+    const testPools = [];
+
+    for (const doc of snap.docs) {
+        const d = doc.data();
+        const row = { id: doc.id, name: d.name ?? null, type: d.type ?? null, status: d.status ?? null };
+
+        const eventOver = d.scores?.gameStatus === 'post' || d.isFinal === true;
+        const terminal = TERMINAL_STATUSES.includes(d.status);
+        if (eventOver && !terminal && d.closedVia !== 'ADMIN_CLOSE') stuckOpen.push(row);
+
+        if (d.billing === undefined) missingBilling.push(row);
+
+        if (isTestPool(d.name, d.slug)) testPools.push({ ...row, slug: d.slug ?? null });
+    }
+
+    // Heartbeats (single-doc reads; Admin SDK bypasses rules).
+    const [scoreSync, healthLatest] = await Promise.all([
+        db.doc('system/scoreSync').get(),
+        db.doc('health/latest').get(),
+    ]);
+    const ss = scoreSync.data() ?? {};
+    const hl = healthLatest.data() ?? {};
+
+    const report = {
+        mode,
+        scannedPools: snap.size,
+        stuckOpen: { count: stuckOpen.length, sample: stuckOpen.slice(0, SAMPLE_CAP) },
+        missingBilling: { count: missingBilling.length, sample: missingBilling.slice(0, SAMPLE_CAP) },
+        testPools: { count: testPools.length, sample: testPools.slice(0, SAMPLE_CAP) },
+        heartbeats: {
+            scoreSync: {
+                exists: scoreSync.exists,
+                status: ss.status ?? null,
+                lastSyncAt: ss.lastSyncAt ?? null,
+                ageMinutes: ageMinutes(ss.lastSyncAt),
+            },
+            healthLatest: {
+                exists: healthLatest.exists,
+                updatedAt: hl.updatedAt ?? null,
+                ageMinutes: ageMinutes(hl.updatedAt),
+                failingChecks: hl.latest?.checks
+                    ? Object.entries(hl.latest.checks)
+                        .filter(([, c]) => c && c.ok === false)
+                        .map(([k, c]) => `${k}: ${c.detail}`)
+                    : [],
+            },
+        },
+    };
+
+    if (AS_JSON) {
+        console.log(JSON.stringify(report, null, 2));
+        return;
+    }
+
+    console.log(`\n=== Firestore census (READ-ONLY) — ${mode} ===`);
+    console.log(`Scanned ${report.scannedPools} pool docs.\n`);
+    for (const [label, section] of [
+        ['Stuck-open pools (event over, never closed)', report.stuckOpen],
+        ['Pools missing `billing` field', report.missingBilling],
+        ['Test/sim pools (Test Suite leftovers)', report.testPools],
+    ]) {
+        console.log(`-- ${label}: ${section.count}`);
+        for (const r of section.sample) {
+            console.log(`   ${r.id}  [${r.type ?? '?'}/${r.status ?? '?'}] ${r.name ?? '(no name)'}${r.slug ? `  slug=${r.slug}` : ''}`);
+        }
+        if (section.count > SAMPLE_CAP) console.log(`   ... and ${section.count - SAMPLE_CAP} more (use --json for full sample cap)`);
+        console.log('');
+    }
+    const hb = report.heartbeats;
+    console.log(`-- system/scoreSync: ${hb.scoreSync.exists ? `status=${hb.scoreSync.status}, ${hb.scoreSync.ageMinutes} min old` : 'MISSING'}`);
+    console.log(`-- health/latest:    ${hb.healthLatest.exists ? `${hb.healthLatest.ageMinutes} min old, failing: ${hb.healthLatest.failingChecks.length ? hb.healthLatest.failingChecks.join('; ') : 'none'}` : 'MISSING'}`);
+    console.log('\nNo writes were made.');
+}
+
+run().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
