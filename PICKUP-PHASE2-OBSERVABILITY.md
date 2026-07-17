@@ -77,4 +77,26 @@ Everything above is **out of scope** for Phase 3 (backups #15–19) and the Veri
 
 ---
 
+## SLO definitions (#14) — targets + what's actually instrumented
+
+Kevin accepted the plan's proposed defaults as-written (kickoff 2026-07-17). Targets:
+
+| SLO | Target | Instrumentation |
+|---|---|---|
+| Availability (site + `getServerTime` canary + readiness endpoint) | ≥99.5% / 30d | **GCP-native** — Cloud Monitoring already tracks per-function invocation/error counts automatically; the readiness endpoint (#13) exists for Uptime Checks to probe. No custom code needed for the metric itself. |
+| Checkout success (`createCheckoutSession` non-error, excl. user cancel) | ≥99% | **GCP-native** — same Cloud Monitoring per-function error-rate metric, filtered to this function. |
+| Webhook durability (`handleStripeWebhook` success) | ≥99.9% | **GCP-native** for the success-rate number (Cloud Monitoring). |
+| Webhook durability — **zero stuck in failed past threshold** (hard objective, not a rate) | 0 | **Custom code, shipped tonight**: `functions/src/webhookDurabilitySweep.ts` — a daily `onSchedule` that scans `stripeWebhookEvents` where `status=="failed"` and pages ops (`dispatchOpsAlert` + `captureMonetizationAlert`) if any doc has sat there >24h. This is independent of the existing attempt-threshold alert (`shouldAlertOnFailure`, fires only while Stripe is actively retrying) — it's the backstop for an event that fails once and is never retried again. Read-only + alert-only, no kill-switch needed (nothing it does mutates data). Pure logic (`isWebhookStuck`, `WEBHOOK_STUCK_MS`) added to `functions/src/lib/webhookDurability.ts`. |
+| Latency p95 | `createCheckoutSession` <2s; pick-submit callables <1.5s; `getServerTime` <500ms | **GCP-native** — Cloud Monitoring's per-function execution-time percentile metrics cover this without custom code. |
+| Error-budget policy | Burn-rate → SMS; sustained breach → freeze non-critical deploys | **Policy, not code.** Burn-rate alerting on the availability/checkout/webhook-rate/latency SLOs above needs a GCP Cloud Monitoring **SLO object + alerting policy**, referencing the existing per-function metrics — that's console configuration (Kevin action, see below), not something this session can wire from the repo. "Freeze non-critical deploys on sustained breach" is a human process rule to follow when that alert fires, not automatable. |
+
+**Why GCP-native for 3 of 4 numeric SLOs, custom code for the 4th:** Cloud Functions gen2 already emits invocation count, error count, and execution-time percentiles per function to Cloud Monitoring with zero app-code — duplicating that in Firestore/app code would be redundant and drift-prone. The "zero stuck in failed" objective is different: it's a business invariant over Firestore *data* (a doc's age in a specific status), not a Cloud Functions runtime metric, so it has no GCP-native equivalent and needed real code.
+
+**Kevin action for the morning (or whenever there's GCP console time)** — not urgent, no deploy is blocked on this:
+1. GCP Console → Monitoring → SLOs → Create SLO, for each of: availability (readiness endpoint / uptime check), `createCheckoutSession` error rate, `handleStripeWebhook` error rate, latency (per the p95 targets above). Target values are the table above.
+2. GCP Console → Monitoring → Alerting → create a burn-rate alerting policy per SLO, notification channel = the ops email list (same list used in `system/config.opsAlerts`, so paging is consistent) + SMS for on-call.
+3. This is independent of and can be done anytime after #13's Uptime Check setup (same GCP Monitoring console area).
+
+---
+
 _Delete this file once Phase 2 is complete; fold the outcome into HANDOFF.md (the durable state)._

@@ -80,6 +80,7 @@ export { logClientError } from "./logClientError";
 export { getAdminHealthSnapshot, scheduledHealthCheck } from "./adminHealth";
 export { readiness } from "./readiness";
 export { getOpsHealthSummary } from "./opsHealth";
+export { webhookDurabilitySweep } from "./webhookDurabilitySweep";
 
 // --- REVENUE AGGREGATES (platform revenue from billingCharges → admin_stats/revenue) ---
 export { aggregateRevenueDaily, recomputeRevenue } from "./revenueAggregates";

@@ -77,3 +77,21 @@ export function shouldAlertOnFailure(
 ): boolean {
     return attemptCount === threshold;
 }
+
+/**
+ * SLO objective (PLAN #14): "zero stripeWebhookEvents stuck in failed past
+ * threshold". shouldAlertOnFailure() above only fires if Stripe actually
+ * retries the SAME event.id up to the attempt threshold — a webhook that
+ * fails once or twice and is never retried again would sit in status:"failed"
+ * indefinitely without ever tripping that alert. webhookDurabilitySweep.ts's
+ * daily scan uses this as a time-based backstop, independent of attemptCount.
+ */
+export const WEBHOOK_STUCK_MS = 24 * 60 * 60 * 1000; // 24h
+
+export function isWebhookStuck(
+    lastFailedAt: number | undefined,
+    nowMs: number,
+    thresholdMs: number = WEBHOOK_STUCK_MS,
+): boolean {
+    return nowMs - (lastFailedAt ?? 0) > thresholdMs;
+}
