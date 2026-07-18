@@ -6,7 +6,7 @@ import { backfillPoolsSchema } from "./schemas/noInputAdmin";
 
 export const backfillPools = validated(
     { schema: backfillPoolsSchema, label: "backfillPools", role: "SUPER_ADMIN", appCheck: "monitor" },
-    async (_data, request) => {
+    async ({ dryRun }, request) => {
     const db = admin.firestore();
     const poolsRef = db.collection('pools');
     const usersRef = db.collection('users');
@@ -16,6 +16,20 @@ export const backfillPools = validated(
 
     let batch = db.batch();
     let batchCount = 0;
+    // Total writes the run staged. On a dry run nothing is committed, so this is
+    // "what a live run WOULD write" — the number the operator inspects before arming.
+    let plannedWrites = 0;
+
+    // Single commit seam: on a dry run we still stage into the batch (so the
+    // counting and the 400-op chunking stay identical to the live path) but drop
+    // it instead of committing. Every commit site below goes through this.
+    const flush = async () => {
+        if (batchCount === 0) return;
+        if (!dryRun) await batch.commit();
+        plannedWrites += batchCount;
+        batch = db.batch();
+        batchCount = 0;
+    };
 
     for (const poolDoc of poolsSnap.docs) {
         const pool = poolDoc.data();
@@ -74,26 +88,16 @@ export const backfillPools = validated(
                 }, { merge: true });
                 batchCount++;
 
-                if (batchCount >= 400) {
-                    await batch.commit();
-                    batch = db.batch();
-                    batchCount = 0;
-                }
+                if (batchCount >= 400) await flush();
             }
         }
 
         updatedCount++;
 
-        if (batchCount >= 400) {
-            await batch.commit();
-            batch = db.batch();
-            batchCount = 0;
-        }
+        if (batchCount >= 400) await flush();
     }
 
-    if (batchCount > 0) {
-        await batch.commit();
-    }
+    await flush();
 
     await writeAdminAudit({
         actorUid: request.auth!.uid,
@@ -101,11 +105,11 @@ export const backfillPools = validated(
         action: "BACKFILL_RUN",
         targetType: "collection",
         targetId: "pools",
-        metadata: { updatedCount },
+        metadata: { updatedCount, plannedWrites, dryRun },
         status: "success",
     });
 
-    return { success: true, updatedCount };
+    return { success: true, updatedCount, plannedWrites, dryRun };
     },
 );
 
