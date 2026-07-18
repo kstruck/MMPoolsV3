@@ -3,11 +3,15 @@ import {
     createCouponTemplateSchema,
     updateCouponTemplateSchema,
     mintCouponFromTemplateSchema,
+    deleteCouponTemplateSchema,
+    acknowledgeMonetizationAlertSchema,
 } from "../schemas/couponTemplates";
 
 const okCreate = (d: unknown) => createCouponTemplateSchema.safeParse(d).success;
 const okUpdate = (d: unknown) => updateCouponTemplateSchema.safeParse(d).success;
 const okMint = (d: unknown) => mintCouponFromTemplateSchema.safeParse(d).success;
+const okDelete = (d: unknown) => deleteCouponTemplateSchema.safeParse(d).success;
+const okAck = (d: unknown) => acknowledgeMonetizationAlertSchema.safeParse(d).success;
 
 // The exact template payload the Monetization tab sends (top-level, per dbService).
 const template = {
@@ -65,5 +69,34 @@ describe("mintCouponFromTemplateSchema", () => {
         expect(okMint({ templateId: "t1", code: "   " })).toBe(false);
         expect(okMint({ code: "X" })).toBe(false);
         expect(okMint({ templateId: "t1", code: "X", usesCount: 5 })).toBe(false);
+    });
+});
+
+describe("deleteCouponTemplateSchema", () => {
+    // The exact payload dbService.deleteCouponTemplate sends: { templateId }.
+    it("accepts a templateId", () => {
+        expect(okDelete({ templateId: "t1" })).toBe(true);
+    });
+
+    it("rejects a missing/empty templateId and an unknown field", () => {
+        expect(okDelete({})).toBe(false);
+        expect(okDelete({ templateId: "" })).toBe(false);
+        expect(okDelete({ templateId: "t1", evil: 1 })).toBe(false);
+    });
+});
+
+describe("acknowledgeMonetizationAlertSchema", () => {
+    // The exact payload dbService.acknowledgeMonetizationAlert sends: { alertId, status }.
+    it("accepts alertId with and without status", () => {
+        expect(okAck({ alertId: "a1" })).toBe(true);
+        expect(okAck({ alertId: "a1", status: "acked" })).toBe(true);
+        expect(okAck({ alertId: "a1", status: "open" })).toBe(true);
+    });
+
+    it("rejects a missing/empty alertId, a bad status, and an unknown field", () => {
+        expect(okAck({})).toBe(false);
+        expect(okAck({ alertId: "" })).toBe(false);
+        expect(okAck({ alertId: "a1", status: "closed" })).toBe(false);
+        expect(okAck({ alertId: "a1", evil: 1 })).toBe(false);
     });
 });
