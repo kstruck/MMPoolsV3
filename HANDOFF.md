@@ -22,9 +22,10 @@ engineering state.
 | **A5** (part 1) | ESPN feed snapshots + stat-correction detection | [#209](https://github.com/kstruck/MMPoolsV3/pull/209) `7d842a3` | merged |
 | **A6** | `liveSeasonTypes` scope guard so the finalize sweep can be armed **preseason-only** | [#210](https://github.com/kstruck/MMPoolsV3/pull/210) `a1f3569` | merged |
 
-**Baselines moved**: functions unit **685 → 745** (+60 tests), root vitest **257**
-(unchanged), emulator **97 pass / 10 skipped** (unchanged), both typechecks clean.
-Every PR ran all five gates before commit.
+**Baselines moved — re-measured on merged `main` @ `dd93629`, not summed from
+PRs**: functions unit **685 → 771** (+86 tests), root vitest **257** (unchanged),
+emulator **97 pass / 10 skipped** (unchanged), both typechecks clean. Every PR
+ran all five gates before commit, and all five were re-run against merged main.
 
 **qodo**: 16 findings across the run. 12 valid and absorbed, 4 rejected with
 written evidence (a `firebase-tools` dependency-placement suggestion that
