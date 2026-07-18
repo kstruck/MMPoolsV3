@@ -20,7 +20,9 @@ or click, what you should see, and what to do if you don't.
    open since 2026-07-10, quick to close out.
 3. **Deploy the sweep** (Sections 3–5) — ships 12 PRs worth of security
    hardening that's been sitting merged-but-live-unprotected. Uses a
-   **targeted function list** (not a bare `firebase deploy`), which is why
+   **targeted function list** (not a bare `npx firebase deploy` — always use
+   `npx firebase`, never a global `firebase` install, and always with
+   `--only`), which is why
    it's safe to run regardless of what the NFL session is doing in parallel
    — see the conflict note in Section 3.
 4. **Pick up the NFL session's output** (Section 6) — do this after the sweep
@@ -97,37 +99,63 @@ half-reviewed work.
    ```
    cd D:\march-melee-pools
    ```
-2. Make sure you're on `main` and it's current:
+2. Make sure you're on `main` and it's genuinely current — don't trust "it
+   said it worked," verify it (this repo has had a deploy silently skip
+   everything once already because a pull looked successful but hadn't
+   actually moved — see HANDOFF.md's deploy-gotcha note):
+   ```
+   git status --porcelain
+   ```
+   **Expect:** no output. If anything prints, you have local changes —
+   stop and figure out what they are before continuing (don't discard them
+   blindly).
    ```
    git checkout main
+   git fetch origin main
+   git rev-parse HEAD
+   git rev-parse origin/main
+   ```
+   **Expect:** the two hashes printed by those last two commands are
+   **identical**. If they differ:
+   ```
    git pull origin main
    ```
-   **Expect:** "Already up to date" or a fast-forward showing the latest
-   commits (should include `8f05f3d` docs commit or later — check with
-   `git log --oneline -1`).
-3. Install functions dependencies (always do this before deploying — avoids
+   then re-run both `git rev-parse` commands and confirm they now match.
+3. Confirm the specific merges you're about to deploy are actually present
+   — a short commit hash goes stale the moment anyone else pushes, so check
+   by **commit message**, not by hash:
+   ```
+   git log origin/main --oneline -25
+   ```
+   **Expect:** you can find, somewhere in that list, commits whose messages
+   start with `feat(sweep): batch 5` through `feat(sweep): batch 16`, plus
+   `fix(backfill): gate backfillPools behind a dry-run defaulting to true`
+   and `fix(backfill): stop backfillPools resetting COMPLETED pools to
+   DRAFT`. If any of those are missing from the log, **stop** — you are not
+   looking at the code you think you're deploying.
+4. Install functions dependencies (always do this before deploying — avoids
    the `stripe`/`fft` TS2307 build error):
    ```
    npm --prefix functions install
    ```
    **Expect:** finishes with no red `npm error` lines. Warnings about
    deprecated packages or `allow-scripts` are normal and safe to ignore.
-4. Run the deploy — copy this **exact command**, don't retype it by hand
+5. Run the deploy — copy this **exact command**, don't retype it by hand
    (one typo in the function list silently drops a function from the
    deploy):
    ```
    npx firebase deploy --only functions:recalculatePoolWinners,toggleWinnerPaid,fixParticipantIds,joinNFLPool,executeSurvivorRebuy,scoreNFLWeek,validateBillingAccess,getPoolQuote,getAdminHealthSnapshot,backfillPools,refreshExpertPicks,syncPlayoffPools,deleteCouponTemplate,acknowledgeMonetizationAlert,importTournamentFromESPN,adminInitTournament,syncBracketTournament,importConferenceTournamentFromESPN,syncPlayInPicks,scoreBracketEntries,finalizeTournamentPayouts,initializeBigEastTournamentHttp,initializeBig12TournamentHttp,updatePlayer,releaseSquares,gradeProp,updatePropCard,generateReferralToken,resolveReferralToken,lockPool,logAdminAction,recomputeConsensus,recomputeRevenue --project gridiron-gamble-uzuqo
    ```
-5. **Expect:** it prints a list of 33 functions, each moving through
+6. **Expect:** it prints a list of 33 functions, each moving through
    `updating...` → a green checkmark. Takes a few minutes. Ends with
    `✔ Deploy complete!`.
-6. **If it fails partway** (one function shows a red ✖ instead of a
+7. **If it fails partway** (one function shows a red ✖ instead of a
    checkmark): note which function name failed and the error text, then
    message me — do not re-run the whole command blindly, since some
    functions may have already updated successfully. If it's a transient
    network/quota error, re-running the same command is usually safe (it's
    idempotent — Firebase just re-deploys the same code).
-7. Once it says `✔ Deploy complete!`, go to Section 4.
+8. Once it says `✔ Deploy complete!`, go to Section 4.
 
 ## 4. Verify the deploy landed clean
 
