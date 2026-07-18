@@ -13,6 +13,8 @@ import {
     billingForLaunch,
     writePoolCreationSideEffects,
 } from "./lib/poolCreation";
+import { validated } from "./lib/validated";
+import { publishBracketPoolSchema, joinBracketPoolSchema } from "./schemas/bracketPools";
 
 
 
@@ -152,19 +154,14 @@ export const createBracketPool = onCall(async (request) => {
 // ----------------------------------------------------------------------------
 // Publish Bracket Pool (Reserve Slug & Set Password)
 // ----------------------------------------------------------------------------
-export const publishBracketPool = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
+export const publishBracketPool = validated(
+    { schema: publishBracketPoolSchema, label: "publishBracketPool", appCheck: "monitor" },
+    async (data, request) => {
+    const { poolId, slug, password, isListedPublic } = data;
+    const uid = request.auth!.uid;
 
-    const { poolId, slug, password, isListedPublic } = request.data;
-    const uid = request.auth.uid;
-
-    if (!poolId || !slug) {
-        throw new HttpsError("invalid-argument", "Missing poolId or slug.");
-    }
-
-    // Validate slug format
+    // Validate slug format (post-lowercase; the schema only length-bounds slug
+    // so mixed-case input isn't rejected before this normalization step).
     const slugLower = slug.toLowerCase();
     if (!/^[a-z0-9-]+$/.test(slugLower)) {
         throw new HttpsError("invalid-argument", "Invalid slug format.");
@@ -233,17 +230,11 @@ export const publishBracketPool = onCall(async (request) => {
 // ----------------------------------------------------------------------------
 // Join Bracket Pool
 // ----------------------------------------------------------------------------
-export const joinBracketPool = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-
-    const { poolId, password } = request.data;
-    const uid = request.auth.uid;
-
-    if (!poolId) {
-        throw new HttpsError("invalid-argument", "Missing poolId.");
-    }
+export const joinBracketPool = validated(
+    { schema: joinBracketPoolSchema, label: "joinBracketPool", appCheck: "monitor" },
+    async (data, request) => {
+    const { poolId, password } = data;
+    const uid = request.auth!.uid;
 
     const db = admin.firestore();
     const poolRef = db.collection("pools").doc(poolId);
