@@ -2,9 +2,10 @@ import * as admin from 'firebase-admin';
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { writeAuditEvent } from './audit';
 
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
 import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, updatePoolSettingsSchema } from "./schemas/poolCore";
+import { recalculatePoolWinnersSchema, toggleWinnerPaidSchema, fixParticipantIdsSchema } from "./schemas/poolOps";
 import { assertPoolCreationAllowed } from './lib/systemGuards';
 import { isPoolType, type PoolType } from './shared/poolTypes';
 import {
@@ -432,24 +433,11 @@ export const updatePoolSettings = validated(
 // ============ RECALCULATE POOL WINNERS ============
 // Used to fix pools affected by the home/away reversal bug
 // SuperAdmin only - re-fetches ESPN scores and recalculates all winners
-export const recalculatePoolWinners = onCall(async (request) => {
+export const recalculatePoolWinners = validated(
+    { schema: recalculatePoolWinnersSchema, label: "recalculatePoolWinners", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async ({ poolId }, request) => {
     const db = admin.firestore();
-
-    // Auth check
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'Must be logged in.');
-    }
-
-    const uid = request.auth.uid;
-    // Use JWT custom claim (tamper-proof) instead of Firestore document lookup
-    if (request.auth.token.role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'SuperAdmin access required.');
-    }
-
-    const { poolId } = request.data;
-    if (!poolId) {
-        throw new HttpsError('invalid-argument', 'poolId is required.');
-    }
+    const uid = request.auth!.uid;
 
     // Get pool data
     const poolRef = db.collection('pools').doc(poolId);
@@ -497,17 +485,18 @@ export const recalculatePoolWinners = onCall(async (request) => {
         message: `Cleared ${existingWinners.size} winners for pool "${pool.name}". Pool will resync on next score update.`,
         clearedWinners: existingWinners.size
     };
-});
+    },
+);
 
 // ============ TOGGLE WINNER PAID STATUS ============
-export const toggleWinnerPaid = onCall(async (request) => {
+export const toggleWinnerPaid = validated(
+    // owner/SUPER_ADMIN check happens in-handler (assertPoolOwnerOrSuperAdmin
+    // needs the pool doc's owner fields, unavailable at the role-gate stage).
+    { schema: toggleWinnerPaidSchema, label: "toggleWinnerPaid", appCheck: "monitor" },
+    async ({ poolId, winnerId }, request) => {
+    // winnerId is the doc ID (e.g. 'q1', 'final')
     const db = admin.firestore();
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Must be logged in.');
-
-    const { poolId, winnerId } = request.data; // winnerId is the doc ID (e.g. 'q1', 'final')
-    if (!poolId || !winnerId) throw new HttpsError('invalid-argument', 'Missing poolId or winnerId');
-
-    const uid = request.auth.uid;
+    const uid = request.auth!.uid;
     const poolRef = db.collection('pools').doc(poolId);
     const poolSnap = await poolRef.get();
     if (!poolSnap.exists) throw new HttpsError('not-found', 'Pool not found');
@@ -521,7 +510,7 @@ export const toggleWinnerPaid = onCall(async (request) => {
     // We can fetch user role optionally or assume owner check is enough for most.
 
     // Fetch user role if we want to support SuperAdmin override properly
-    const userRole = request.auth.token.role || 'USER';
+    const userRole = request.auth!.token.role || 'USER';
     assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
 
     const winnerRef = poolRef.collection('winners').doc(winnerId);
@@ -549,19 +538,15 @@ export const toggleWinnerPaid = onCall(async (request) => {
     });
 
     return { success: true, isPaid: isNowPaid, winnerId };
-});
+    },
+);
 
 // ============ FIX PARTICIPANT IDS (Backfill) ============
-export const fixParticipantIds = onCall(async (request) => {
+export const fixParticipantIds = validated(
+    { schema: fixParticipantIdsSchema, label: "fixParticipantIds", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async ({ dryRun: dryRunInput }) => {
     const db = admin.firestore();
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Must be logged in.');
-
-    // Super Admin Check — use JWT custom claim (tamper-proof)
-    if (request.auth.token.role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'SuperAdmin only.');
-    }
-
-    const dryRun = request.data.dryRun === true;
+    const dryRun = dryRunInput === true;
     let processed = 0;
     let updated = 0;
 
@@ -612,4 +597,5 @@ export const fixParticipantIds = onCall(async (request) => {
     }
 
     return { success: true, processed, updated, dryRun };
-});
+    },
+);
