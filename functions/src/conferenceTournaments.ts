@@ -1,7 +1,6 @@
 import * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
-import { HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
 import {
     initializeBigEastTournamentHttpSchema,
