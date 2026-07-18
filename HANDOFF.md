@@ -1,35 +1,45 @@
-# HANDOFF — Session entry point (updated 2026-07-18, Phase 2 + callable-sweep batches 1-4 ALL DEPLOYED)
+# HANDOFF — Session entry point (updated 2026-07-18, callable-sweep fleet 29/51 merged, batches 1-4 deployed / 5-10 NOT yet deployed)
 
 **Start every new session with: "Review HANDOFF.md and pick up where we left off."**
 This file + auto-memory carry the full state. Older narrative lives in git history.
 
 ---
 
-## Current state: NOTHING IN FLIGHT — SWEEP-LATER callable fleet 10/51 done + deployed
+## Current state: SWEEP-LATER callable fleet 29/51 done — batches 1-4 deployed, batches 5-10 merged to main but UNDEPLOYED
 
-The trust-boundary `validated()` sweep of the parked SWEEP-LATER callables is underway and **all shipped work is merged AND deployed to prod** (2026-07-18). Kickoff/recipe doc: `PICKUP-CALLABLE-SWEEP.md`; classification authority: `PLAN-SECURITY-OBSERVABILITY-SWEEPS.md` (51 SWEEP-LATER rows).
+The trust-boundary `validated()` sweep of the parked SWEEP-LATER callables is underway. Kickoff/recipe doc: `PICKUP-CALLABLE-SWEEP.md`; classification authority: `PLAN-SECURITY-OBSERVABILITY-SWEEPS.md` (51 SWEEP-LATER rows).
 
-**Fully swept files:** `bracketEntries.ts` (6/6), `adminClaims.ts` (4/4). `bracketPools.ts` at 2/3.
+**Fully swept files:** `bracketEntries.ts` (6/6), `adminClaims.ts` (4/4), `poolOps.ts` (3/3), `nflPools.ts` (3/3 SWEEP-LATER; `calculatePlayoffScores`-style legacy noop N/A here), `billing.ts` (2/2 SWEEP-LATER), `couponTemplates.ts` (2/2 SWEEP-LATER; 3 others already TARGET-NOW), `espnBracket.ts` (5/5), the 4 no-input SUPER_ADMIN callables (`getAdminHealthSnapshot`/`backfillPools`/`refreshExpertPicks`/`syncPlayoffPools`, one each in 4 different files). `bracketPools.ts` at 2/3 (`createBracketPool` deliberately deferred, see below).
 
-| Batch | PR | Callables |
-|---|---|---|
-| 1 | #176 | `createBracketEntry` / `updateBracketEntry` / `deleteBracketEntry` |
-| 2 | #177 | `updateEntryPayment` / `adminUpdateEntryOverrides` / `adminDeleteEntry` (admin two upgraded claim-only → C5 claim+doc) |
-| 3 | #179 | `publishBracketPool` / `joinBracketPool` |
-| 4 | #180 | `syncMyClaims` / `backfillUserRoles` (+ null-input fix) |
+| Batch | PR | Callables | Deploy state |
+|---|---|---|---|
+| 1 | #176 | `createBracketEntry` / `updateBracketEntry` / `deleteBracketEntry` | deployed |
+| 2 | #177 | `updateEntryPayment` / `adminUpdateEntryOverrides` / `adminDeleteEntry` (admin two upgraded claim-only → C5 claim+doc) | deployed |
+| 3 | #179 | `publishBracketPool` / `joinBracketPool` | deployed |
+| 4 | #180 | `syncMyClaims` / `backfillUserRoles` (+ null-input fix) | deployed |
+| 5 | #183 | `poolOps.ts`: `recalculatePoolWinners` / `toggleWinnerPaid` / `fixParticipantIds` | **merged, NOT deployed** |
+| 6 | #184 | `nflPools.ts`: `joinNFLPool` / `executeSurvivorRebuy` / `scoreNFLWeek` | **merged, NOT deployed** |
+| 7 | #185 | `billing.ts`: `validateBillingAccess` / `getPoolQuote` | **merged, NOT deployed** |
+| 8 | #186 | no-input quartet: `getAdminHealthSnapshot` / `backfillPools` / `refreshExpertPicks` / `syncPlayoffPools` | **merged, NOT deployed** |
+| 9 | #187 | `couponTemplates.ts`: `deleteCouponTemplate` / `acknowledgeMonetizationAlert` | **merged, NOT deployed** |
+| 10 | #188 | `espnBracket.ts`: `importTournamentFromESPN` / `adminInitTournament` / `syncBracketTournament` / `importConferenceTournamentFromESPN` / `syncPlayInPicks` (closes a C5 auth-fallback finding for all 5) | **merged, NOT deployed** |
 
-Deployed 2026-07-18 (`--only functions:<the 4 changed>` for batches 3+4; batches 1+2 deployed 07-17). Post-deploy log sweeps clean — zero `invalid-argument` rejections. **Caveat: offseason traffic is low, so "clean" is weak evidence — re-glance at logs after real usage picks up.**
+Batches 1-4 deployed 2026-07-17/18 (see prior narrative below). **Batches 5-10 (2026-07-18, this session) are merged to `main` but explicitly NOT deployed** — deploy is Kevin's gate per `mmp-change-control`; nothing in this session ran `firebase deploy`. Before deploying, verify all 6 PR merges landed (`git log origin/main --oneline -12`), then follow the standard functions-first ritual (`npm --prefix functions install` then `npx firebase deploy --only functions:recalculatePoolWinners,toggleWinnerPaid,fixParticipantIds,joinNFLPool,executeSurvivorRebuy,scoreNFLWeek,validateBillingAccess,getPoolQuote,getAdminHealthSnapshot,backfillPools,refreshExpertPicks,syncPlayoffPools,deleteCouponTemplate,acknowledgeMonetizationAlert,importTournamentFromESPN,adminInitTournament,syncBracketTournament,importConferenceTournamentFromESPN,syncPlayInPicks --project gridiron-gamble-uzuqo`).
 
-**Three verify-before-strict lessons banked** (all now encoded in the PICKUP recipe):
+**Verify-before-strict lessons banked** (all now encoded in the PICKUP recipe):
 1. `createBracketEntry` accepts a handler-*ignored* `tiebreakerScore` — must stay accepted or real calls break.
 2. `updateEntryPayment`'s `paidAt`/`paymentNote` use explicit `null` to CLEAR the field → schema uses `.nullable()` NOT `nullish()` (nullish maps null→undefined and silently kills the clear feature). A test pins null-preservation.
-3. **No-input callables must `z.preprocess((v) => v ?? {}, z.strictObject({}))`** — a no-arg `httpsCallable(fn)()` delivers `request.data` as `null`, which a bare strict object rejects. This shipped as a real bug in batch 4 (`syncMyClaims`, broke `useEnsureAdminClaims`'s on-load claim sync), caught in review, fixed in #180. Remaining no-input callables that will hit it: `getAdminHealthSnapshot`, `backfillPools`, `refreshExpertPicks`, `syncPlayoffPools`.
+3. **No-input callables must `z.preprocess((v) => v ?? {}, z.strictObject({}))`** — a no-arg `httpsCallable(fn)()` delivers `request.data` as `null`, which a bare strict object rejects. Shipped as a real bug in batch 4 (`syncMyClaims`), caught in review, fixed in #180. Batch 8 (#186) promoted this to a shared `noInputSchema` helper in `lib/zodHelpers.ts` (5th occurrence) and used it for all 4 remaining no-input callables — that gotcha is now fully closed across the fleet.
+4. **A prod batch-mutation callable's `dryRun` flag must fail SAFE (default true) at the SCHEMA layer, not the handler.** qodo caught this on PR #183: `fixParticipantIds`'s pre-existing handler logic (`dryRunInput === true`) silently ran LIVE when the flag was omitted — contradicted the schema's own "default true" doc comment and the repo's dry-run-by-default convention (PRs #127/#129/#180). Fixed with `z.boolean().optional().default(true)` at the schema layer instead of a handler-side truthy check. Check any other dryRun-flag callable you retrofit for the same footgun (`backfillPools` has NO dry-run at all — pre-existing, out of scope to add one on a drive-by).
+5. **Shared cross-boundary schemas (anything under `shared/schemas/`, generated into `functions/src/shared/`) are OUT OF SCOPE for `.strict()`-ifying** even when a SWEEP-LATER row uses one — `getPoolQuote`'s `poolQuoteInputSchema` was deliberately left non-strict (batch 7, PR #185): it's consumed by both the callable and the checkout flow, and the matrix documents its current shape as intentional. Move the auth+parse gate onto `validated()` using the existing schema as-is; don't tighten a shared contract on a drive-by.
+6. **The C5 finding (some admin callables read a spoofable Firestore `users/{uid}.role` as a fallback when the JWT claim is absent) resolves for free** when you retrofit with `validated()`'s `role:` option — it calls `assertCallerRole`, which requires claim AND doc to agree, not claim-OR-doc. Batch 10 (#188, `espnBracket.ts`) closed 5 C5 instances this way in one pass; `conferenceTournaments.ts`'s two callables (`initializeBigEastTournamentHttp`/`initializeBig12TournamentHttp`) and `playoffPools.ts`'s `updateGlobalPlayoffResults` (already TARGET-NOW, not in scope) have the same pattern per the C5 note in `PLAN-SECURITY-OBSERVABILITY-SWEEPS.md`.
+7. **A handler that soft-returns `{success:false, message}` instead of throwing on missing input** can still get a `.strict()`+required-field schema — just verify the FE always sends those fields (never omits them) and already wraps the call in try/catch, so a thrown `invalid-argument` surfaces the same way to the user as the old soft-return did. Two espnBracket.ts callables hit this in batch 10; both verified safe via the FE call site before tightening.
 
-**Next on the fleet (41 remaining):** pick the next file-grouped batch from the SWEEPS matrix — `poolOps.ts` (`recalculatePoolWinners`/`toggleWinnerPaid`/`fixParticipantIds`) or `nflPools.ts` (`joinNFLPool`/`executeSurvivorRebuy`/`scoreNFLWeek`) are the natural next groups. Same recipe. Runnable unattended.
+**Next on the fleet (22 remaining):** good same-file batches from the matrix: `bracketScoring.ts` (2: `scoreBracketEntries`/`finalizeTournamentPayouts`), `conferenceTournaments.ts` (2 — also closes the same C5 auth-fallback pattern as batch 10), `squares.ts` (2), `propBets.ts` (2), `referral.ts` (2). Plus standalone single-row files: `poolParams.ts` (`lockPool`), `bracketOps.ts` (`markEntryPaidStatus`), `adminOps.ts` (`logAdminAction`), `consensus.ts` (`recomputeConsensus`), `participant.ts` (`claimMySquares`), `migrations/backfillMemberRecords.ts`, `nflSchedule.ts` (`importNFLSchedule`), `statsTrigger.ts` (`recalculateGlobalStats`), `revenueAggregates.ts` (`recomputeRevenue`), `userManagement.ts` (`searchUsersByEmail`), `userProfile.ts` (`recomputeMyProfile`), `scoreUpdates.ts` (`fixPoolScores`), `userSync.ts` (`syncAllUsers`), `playoffPools.ts` (`calculatePlayoffScores` — legacy noop, separate row from the already-done `syncPlayoffPools`). Same recipe, runnable unattended.
 
 **Deliberately deferred:** `createBracketPool` (SWEEPS row 7) — rich nested `settings` with a `...settings` passthrough spread that stores arbitrary client fields; a flat `.strict()` would reject data it currently persists. Needs a passthrough envelope or client cutover, same treatment as the ADR-0001 PERMISSIVE creates. Its own careful batch, not a drive-by.
 
-Baselines now: root vitest **257**, functions unit **598**, emulator **89 pass / 10 skipped**, frontend `tsc -b` clean.
+Baselines as of batch 10, measured on merged `main` at 34761d4 (functions unit count grows with every batch — verify actual count with `npm --prefix functions test`, don't trust this number stale): root vitest **257** (unchanged all session), functions unit **642** (was 598 before this session's batches 5-10), emulator **89 pass / 10 skipped** (unchanged all session), frontend `tsc -b` clean.
 
 ---
 
