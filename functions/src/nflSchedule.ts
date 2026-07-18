@@ -324,6 +324,9 @@ export function readJobGate(
   return { enabled: cfg?.enabled === true, dryRun: cfg?.dryRun !== false };
 }
 
+/** Safety cap on writes per run, mirrors autoClosePools / nflFinalizeSweepJob. */
+const MAX_SPREAD_LOCKS_PER_RUN = 200;
+
 /** A spread is lockable when it exists, carries a value, and isn't locked yet. */
 export function shouldLockSpread(game: Pick<NFLGame, 'spread'> | undefined): boolean {
   const spread = game?.spread;
@@ -369,11 +372,18 @@ export const lockNFLSpreadsJob = onSchedule({
 
   if (upcomingSnap.empty) return;
 
-  const targets = upcomingSnap.docs.filter(doc => shouldLockSpread(doc.data() as NFLGame));
+  const eligible = upcomingSnap.docs.filter(doc => shouldLockSpread(doc.data() as NFLGame));
+  // Per-run cap, same convention as autoClosePools / nflFinalizeSweepJob. A real
+  // week is ~16 games, so this never binds in practice — it exists so a bad
+  // import can't push one batch past Firestore's 500-write limit and fail the
+  // WHOLE commit, which would leave every spread unlocked and block the week
+  // behind SPREADS_NOT_LOCKED. Overflow is logged, and the next run picks it up.
+  const targets = eligible.slice(0, MAX_SPREAD_LOCKS_PER_RUN);
+  const overflow = eligible.length - targets.length;
 
   if (gate.dryRun) {
     console.log(
-      `[lockNFLSpreadsJob] DRY-RUN: would lock ${targets.length} spread(s): ${targets.slice(0, 20).map(d => d.id).join(', ')}`,
+      `[lockNFLSpreadsJob] DRY-RUN: would lock ${targets.length} spread(s)${overflow > 0 ? ` (${overflow} deferred past the ${MAX_SPREAD_LOCKS_PER_RUN} cap)` : ''}: ${targets.slice(0, 20).map(d => d.id).join(', ')}`,
     );
     return;
   }
@@ -383,7 +393,9 @@ export const lockNFLSpreadsJob = onSchedule({
   const batch = db.batch();
   for (const doc of targets) batch.update(doc.ref, { 'spread.locked': true });
   await batch.commit();
-  console.log(`[lockNFLSpreadsJob] Locked spreads for ${targets.length} upcoming games.`);
+  console.log(
+    `[lockNFLSpreadsJob] Locked spreads for ${targets.length} upcoming games.${overflow > 0 ? ` WARNING: ${overflow} eligible game(s) exceeded the ${MAX_SPREAD_LOCKS_PER_RUN} per-run cap and were NOT locked.` : ''}`,
+  );
 });
 
 /**
