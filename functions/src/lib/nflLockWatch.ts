@@ -30,6 +30,7 @@ export interface WatchedPool {
   season: string;
   seasonType?: number | string;
   status?: string;
+  settings?: { pickMode?: string };
 }
 
 /** One (season, seasonType, week) slate — the exact scope of the submit gate. */
@@ -68,9 +69,27 @@ export function gatesSubmission(game: WatchedGame): boolean {
   return game.status !== 'CANCELLED';
 }
 
-/** Does this pool sit on the same slate the gate is evaluated against? */
+/**
+ * Does this pool sit on the same slate the gate is evaluated against?
+ *
+ * Must ALSO be a pool the gate can actually block. Since the SPREADS_NOT_LOCKED
+ * precondition was scoped to spread-consuming pools (nflPools.ts, poolUsesSpreads),
+ * a straight-up pick'em / survivor / margin pool is no longer blocked by an
+ * unlocked spread — so paging about one would be a false alarm, and a tripwire
+ * that cries wolf is worse than no tripwire.
+ */
 export function poolMatchesSlate(pool: WatchedPool, key: SlateKey): boolean {
-  return pool.season === key.season && Number(pool.seasonType ?? 2) === key.seasonType;
+  const onSlate = pool.season === key.season && Number(pool.seasonType ?? 2) === key.seasonType;
+  return onSlate && poolIsBlockable(pool);
+}
+
+/**
+ * Mirrors `poolUsesSpreads` in nflScoringEngine.ts — kept as a local predicate
+ * because this module is pure and deliberately free of scoring-engine imports.
+ * The two are pinned together by a test.
+ */
+export function poolIsBlockable(pool: WatchedPool): boolean {
+  return pool.type === 'NFL_PICKEM' && pool.settings?.pickMode === 'ATS';
 }
 
 /**

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  decideAlert, evaluateSlate, formatAlertMessage, gatesSubmission, poolMatchesSlate, slateId,
+  decideAlert, evaluateSlate, formatAlertMessage, gatesSubmission, poolIsBlockable, poolMatchesSlate, slateId,
   type SlateKey, type WatchedGame, type WatchedPool,
 } from '../lib/nflLockWatch';
 
@@ -20,8 +20,13 @@ const game = (id: string, over: Partial<WatchedGame> = {}): WatchedGame => ({
   ...over,
 });
 
+// ATS by default: since the SPREADS_NOT_LOCKED gate was scoped to
+// spread-consuming pools, an ATS pick'em pool is the only kind the tripwire can
+// legitimately page about. The straight-up / survivor / margin cases are covered
+// explicitly in the poolIsBlockable describe below.
 const pool = (id: string, over: Partial<WatchedPool> = {}): WatchedPool => ({
-  id, type: 'NFL_PICKEM', season: '2026', seasonType: 1, status: 'OPEN', ...over,
+  id, type: 'NFL_PICKEM', season: '2026', seasonType: 1, status: 'OPEN',
+  settings: { pickMode: 'ATS' }, ...over,
 });
 
 describe('gatesSubmission — scope must match the submit gate', () => {
@@ -155,6 +160,45 @@ describe('formatAlertMessage', () => {
   it('calls out no-line games, because re-running the lock job will not fix them', () => {
     const c = evaluateSlate(KEY, [game('g1', { spread: null, startTime: NOW + 2 * HOUR })], [pool('p1')]);
     expect(formatAlertMessage(c, decideAlert(c, NOW, 36))).toContain('NO spread value at all');
+  });
+});
+
+describe('poolIsBlockable — the tripwire must not cry wolf', () => {
+  // The SPREADS_NOT_LOCKED gate was scoped to pools whose scoring consumes
+  // spreads (nflScoringEngine.poolUsesSpreads). A pool the gate no longer blocks
+  // must not generate a page — a tripwire that fires on a non-problem trains the
+  // operator to ignore the one that matters.
+  it("an ATS pick'em pool IS blockable", () => {
+    expect(poolIsBlockable(pool('p'))).toBe(true);
+  });
+
+  it("a straight-up pick'em pool is NOT — its scoring never reads a spread", () => {
+    expect(poolIsBlockable(pool('p', { settings: { pickMode: 'STRAIGHT' } }))).toBe(false);
+  });
+
+  it('a pool with no pickMode is NOT — the wizard writes STRAIGHT and exposes no ATS control', () => {
+    expect(poolIsBlockable(pool('p', { settings: undefined }))).toBe(false);
+    expect(poolIsBlockable(pool('p', { settings: {} }))).toBe(false);
+  });
+
+  it('survivor and margin are NOT — neither reads a spread under any setting', () => {
+    expect(poolIsBlockable(pool('p', { type: 'NFL_SURVIVOR' }))).toBe(false);
+    expect(poolIsBlockable(pool('p', { type: 'NFL_MARGIN' }))).toBe(false);
+  });
+
+  it('poolMatchesSlate excludes a non-blockable pool even when it is on the slate', () => {
+    const straight = pool('straight', { settings: { pickMode: 'STRAIGHT' } });
+    expect(poolMatchesSlate(straight, KEY)).toBe(false);
+  });
+
+  it('an unlocked slate with ONLY straight-up pools raises no alert at all', () => {
+    const c = evaluateSlate(
+      KEY,
+      [game('g1', { spread: null, startTime: NOW + 2 * HOUR })],
+      [pool('a', { settings: { pickMode: 'STRAIGHT' } }), pool('b', { type: 'NFL_SURVIVOR' })],
+    );
+    expect(c.affectedPoolIds).toEqual([]);
+    expect(decideAlert(c, NOW, 36)).toMatchObject({ alert: false, reason: 'no live pool on this slate' });
   });
 });
 

@@ -13,6 +13,24 @@ import {
 // Pick'em Scoring Logic
 // ============================================================================
 
+/**
+ * Does this pool's SCORING actually consume `game.spread`?
+ *
+ * Only an ATS pick'em pool does — see the `pickMode === 'ATS'` branch in
+ * gradePickemGames below. Straight-up pick'em grades on the raw scores, and
+ * NFL_SURVIVOR (pick a winner) / NFL_MARGIN (margin of victory) never read a
+ * spread under any setting.
+ *
+ * This lives next to the branch it describes ON PURPOSE. `submitNFLPicks`'s
+ * SPREADS_NOT_LOCKED precondition calls it, so the gate protects exactly the
+ * pools the scorer needs spreads for. If someone later adds a spread-consuming
+ * mode and updates the scorer, the gate follows automatically instead of
+ * silently under- or over-blocking.
+ */
+export function poolUsesSpreads(pool: { type?: string; settings?: { pickMode?: string } } | null | undefined): boolean {
+  return pool?.type === 'NFL_PICKEM' && pool?.settings?.pickMode === 'ATS';
+}
+
 // away/home abbreviations ride along so the profile pick history can render
 // matchups without re-fetching every historical game doc (ADR 0005 Phase 5).
 export type PickemGameGrade = { pick: string; result: 'W' | 'L' | 'PUSH' | 'VOID'; away: string; home: string };
