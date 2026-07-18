@@ -37,7 +37,8 @@ import {
   gradePickemGames,
   gradeSurvivorWeekGame,
   gradeMarginWeekGame,
-  buildStandingsRows
+  buildStandingsRows,
+  poolUsesSpreads
 } from './nflScoringEngine';
 import { maybeFinalizeNFLPool } from './nflFinalize';
 import { fetchNFLWeekSchedule } from './nflSchedule';
@@ -347,11 +348,23 @@ export async function submitNFLPicksInternal(
     throw new HttpsError('not-found', `No NFL games found for week ${week}.`);
   }
 
-  // 1.5 Global Spread Validation
-  // Ensure that all games for the current week have their spreads locked before accepting any picks.
-  const allSpreadsLocked = games.every(g => g.spread?.locked === true);
-  if (!allSpreadsLocked) {
-    throw new HttpsError('failed-precondition', 'SPREADS_NOT_LOCKED: Picks cannot be submitted until all game spreads for the week are finalized and locked.');
+  // 1.5 Spread Validation — ONLY for pools whose scoring consumes spreads.
+  //
+  // This check used to be unconditional, which meant it blocked pick submission
+  // for pools that never read a spread: straight-up pick'em (the wizard's only
+  // mode — it hardcodes pickMode 'STRAIGHT' and exposes no ATS control),
+  // NFL_SURVIVOR, and NFL_MARGIN. A week with no betting lines therefore locked
+  // out every member of every NFL pool over data none of them used. Preseason
+  // made that visible — the 2026 preseason feed carries a line on 1 of 49 games
+  // — but the defect was not preseason-specific.
+  //
+  // poolUsesSpreads lives beside the ATS branch in the scorer, so this gate
+  // covers exactly the pools that need a spread to be graded correctly.
+  if (poolUsesSpreads(pool)) {
+    const allSpreadsLocked = games.every(g => g.spread?.locked === true);
+    if (!allSpreadsLocked) {
+      throw new HttpsError('failed-precondition', 'SPREADS_NOT_LOCKED: Picks cannot be submitted until all game spreads for the week are finalized and locked.');
+    }
   }
 
   // 2. Determine lock context — single source of truth (effectiveLock helper, ADR 0004).
