@@ -436,15 +436,18 @@ All three live in the same document.
 13. **+ Add field**. Name: `nflFeedSnapshots`. Type: **map**. Inside:
     - `enabled` — **boolean** — **true**
     - `retentionDays` — **number** — **45**
-14. **What you should see:** a new `nfl_feed_snapshots` collection appears,
+14. **Prerequisite: the composite index must be Enabled first** (step 4 item 8).
+    If it is not, every snapshot silently fails and this switch appears to do
+    nothing.
+15. **What you should see:** a new `nfl_feed_snapshots` collection appears,
     gaining a document each time the ESPN response for an active slate actually
     *changes* (identical responses are deduped by content hash, so it will not
     grow every 5 minutes). Each doc is roughly 9 KB.
-15. **Cost sanity check:** the real preseason payload measured 96,583 bytes raw
+16. **Cost sanity check:** the real preseason payload measured 96,583 bytes raw
     → **8,617 bytes gzipped**, about 0.8% of Firestore's 1 MiB per-document
     limit. With dedupe, expect single-digit MB across a whole season. If you
     ever want it cheaper, lower `retentionDays`; the job prunes automatically.
-16. **This one is worth turning on before preseason starts**, not after. Its
+17. **This one is worth turning on before preseason starts**, not after. Its
     entire purpose is to have a record of what the feed said *before* something
     goes wrong. Turned on after an incident, it is worthless for that incident.
 
@@ -488,7 +491,24 @@ undeployed callables already listed in HANDOFF.md.
    npx firebase functions:secrets:access COURIER_AUTH_TOKEN --project gridiron-gamble-uzuqo
    ```
    The secret already exists — Phase 2 uses it.
-8. **No frontend deploy needed.** Nothing tonight touched `www`. (Reminder: the
+8. **Deploy the Firestore index too — the A5 snapshot feature is dead without
+   it.** `firestore.indexes.json` gained a composite index for
+   `nfl_feed_snapshots` (`slate` ASC + `fetchedAt` DESC). Without it, every
+   snapshot write fails, and because that code deliberately swallows errors so a
+   snapshot failure cannot break score sync, **it would fail silently forever**.
+   Deploy indexes AFTER functions:
+   ```
+   npx firebase deploy --only firestore:indexes --project gridiron-gamble-uzuqo
+   ```
+   **What you should see:** `firestore: deployed indexes`. Index builds are
+   asynchronous — check
+   https://console.firebase.google.com/project/gridiron-gamble-uzuqo/firestore/indexes
+   and wait for the `nfl_feed_snapshots` entry to read **Enabled** rather than
+   *Building* before you turn on step 3c. On an empty collection this is
+   near-instant.
+   *(Note: this is `firestore:indexes`, not `firestore:rules`. No rules changed
+   tonight.)*
+9. **No frontend deploy needed.** Nothing tonight touched `www`. (Reminder: the
    Coolify frontend deploy is still a manual trigger and does not happen on push
    to `main`.)
 

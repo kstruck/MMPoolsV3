@@ -1,8 +1,8 @@
 # PLAN — NFL 2026 preseason pilot (overnight execution handoff)
 
 > ## ✅ EXECUTED 2026-07-18 overnight — all 6 engineering items shipped as PRs
-> **A2** #205 (merged) · **A4** #206 (merged) · **A3a** #207 (merged) ·
-> **A10** #208 (merged) · **A5 part 1** #209 · **A6** #210
+> **A2** #205 · **A4** #206 · **A3a** #207 · **A10** #208 · **A5 part 1** #209 ·
+> **A6** #210 — all merged to `main`.
 >
 > Nothing is deployed. Everything Kevin needs — decisions, console steps, the
 > deploy command, the A7 runbook — is in **`TOMORROW-TASKS.md`**, appended below
