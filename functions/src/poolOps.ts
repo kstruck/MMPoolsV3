@@ -544,9 +544,8 @@ export const toggleWinnerPaid = validated(
 // ============ FIX PARTICIPANT IDS (Backfill) ============
 export const fixParticipantIds = validated(
     { schema: fixParticipantIdsSchema, label: "fixParticipantIds", role: "SUPER_ADMIN", appCheck: "monitor" },
-    async ({ dryRun: dryRunInput }) => {
+    async ({ dryRun }) => {
     const db = admin.firestore();
-    const dryRun = dryRunInput === true;
     let processed = 0;
     let updated = 0;
 

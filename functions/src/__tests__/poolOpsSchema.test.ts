@@ -36,12 +36,19 @@ describe("toggleWinnerPaidSchema", () => {
 });
 
 describe("fixParticipantIdsSchema", () => {
-    // dbService.fixParticipantIds always sends { dryRun }, but the handler
-    // tolerates absent dryRun (`=== true` check) — keep it optional.
+    // dbService.fixParticipantIds always sends { dryRun }, but the schema
+    // must fail safe (dry-run) if a direct call omits it — prod
+    // batch-mutation ops default to dry-run, never live, per repo
+    // convention (PRs #127/#129/#180).
     it("accepts absent dryRun and explicit boolean dryRun", () => {
         expect(okFix({})).toBe(true);
         expect(okFix({ dryRun: true })).toBe(true);
         expect(okFix({ dryRun: false })).toBe(true);
+    });
+
+    it("defaults a missing dryRun to true (dry-run, not live)", () => {
+        expect(fixParticipantIdsSchema.parse({})).toEqual({ dryRun: true });
+        expect(fixParticipantIdsSchema.parse({ dryRun: false })).toEqual({ dryRun: false });
     });
 
     it("rejects a non-boolean dryRun and unknown fields", () => {

@@ -19,9 +19,14 @@ export const toggleWinnerPaidSchema = z.strictObject({
     winnerId,
 });
 
-/** fixParticipantIds (SUPER_ADMIN) — one optional dryRun flag (default true). */
+/**
+ * fixParticipantIds (SUPER_ADMIN) — one optional dryRun flag. Defaults to
+ * `true` (dry-run) at the schema layer — this is a prod batch-mutation
+ * backfill, and the repo convention (PRs #127/#129/#180) is that these must
+ * fail safe when the flag is omitted, not silently run live.
+ */
 export const fixParticipantIdsSchema = z.strictObject({
-    dryRun: z.boolean().optional(),
+    dryRun: z.boolean().optional().default(true),
 });
 
 export type RecalculatePoolWinnersInput = z.infer<typeof recalculatePoolWinnersSchema>;
