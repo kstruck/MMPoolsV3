@@ -32,6 +32,18 @@ describe("updatePlayerSchema", () => {
         expect(okUpdate({ poolId: "p1", originalName: "Alice", details: {} })).toBe(true);
     });
 
+    // originalName is a LOOKUP KEY compared with === against squares[].owner.
+    // reserveSquare stores pickedAsName untrimmed, so " Alice " is a reachable
+    // stored value; trimming it here would make that player un-editable.
+    it("preserves surrounding whitespace in originalName (lookup key)", () => {
+        const parsed = updatePlayerSchema.parse({
+            poolId: "p1",
+            originalName: "  Alice  ",
+            details: {},
+        });
+        expect(parsed.originalName).toBe("  Alice  ");
+    });
+
     it("rejects missing required fields and unknown keys", () => {
         expect(okUpdate({ poolId: "p1", originalName: "Alice" })).toBe(false);
         expect(okUpdate({ poolId: "p1", details: {} })).toBe(false);
@@ -61,6 +73,13 @@ describe("releaseSquaresSchema", () => {
     it("rejects a payload with neither selector", () => {
         expect(okRelease({ poolId: "p1" })).toBe(false);
         expect(okRelease({ poolId: "p1", ownerName: "" })).toBe(false);
+    });
+
+    // Same lookup-key reasoning as updatePlayer.originalName — a trimmed key
+    // here would release nothing while still reporting success.
+    it("preserves surrounding whitespace in ownerName (lookup key)", () => {
+        const parsed = releaseSquaresSchema.parse({ poolId: "p1", ownerName: "  Alice  " });
+        expect(parsed.ownerName).toBe("  Alice  ");
     });
 
     it("rejects wrong types and unknown fields", () => {
