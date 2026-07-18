@@ -1,21 +1,35 @@
-# HANDOFF — Session entry point (updated 2026-07-17, Phase 2 DEPLOYED + callable-sweep batches 1-2 DEPLOYED)
+# HANDOFF — Session entry point (updated 2026-07-18, Phase 2 + callable-sweep batches 1-4 ALL DEPLOYED)
 
 **Start every new session with: "Review HANDOFF.md and pick up where we left off."**
 This file + auto-memory carry the full state. Older narrative lives in git history.
 
 ---
 
-## Current state: SWEEP-LATER callable fleet in progress — 6/51 done + deployed
+## Current state: NOTHING IN FLIGHT — SWEEP-LATER callable fleet 10/51 done + deployed
 
-The trust-boundary `validated()` sweep of the parked SWEEP-LATER callables is underway (kickoff doc: `PICKUP-CALLABLE-SWEEP.md`; classification authority: `PLAN-SECURITY-OBSERVABILITY-SWEEPS.md`, 51 SWEEP-LATER rows). **`bracketEntries.ts` fully swept** — all 6 callables now on `validated()`:
-- **Batch 1** (PR #176, merged `ebf58bf`): `createBracketEntry`/`updateBracketEntry`/`deleteBracketEntry`.
-- **Batch 2** (PR #177, merged `98b965d`): `updateEntryPayment`/`adminUpdateEntryOverrides`/`adminDeleteEntry` (the admin two upgraded claim-only → C5 claim+doc role check).
-- **Both DEPLOYED** to prod 2026-07-17 (functions live at 256MiB; post-deploy log sweep showed zero `invalid-argument` rejections — but offseason traffic is low, so re-glance after real usage).
-- Two verify-before-strict catches banked as lessons: `createBracketEntry` accepts a handler-ignored `tiebreakerScore` (must stay accepted); `updateEntryPayment`'s `paidAt`/`paymentNote` use explicit `null` to CLEAR (schema uses `.nullable()` NOT `nullish()`, with a test asserting null-preservation).
+The trust-boundary `validated()` sweep of the parked SWEEP-LATER callables is underway and **all shipped work is merged AND deployed to prod** (2026-07-18). Kickoff/recipe doc: `PICKUP-CALLABLE-SWEEP.md`; classification authority: `PLAN-SECURITY-OBSERVABILITY-SWEEPS.md` (51 SWEEP-LATER rows).
 
-**Next on the fleet (45 remaining SWEEP-LATER callables):** pick the next file-grouped batch from the SWEEPS matrix (e.g. `bracketPools.ts` create/publish/join, or `adminClaims.ts` syncMyClaims/backfillUserRoles). Same recipe per `PICKUP-CALLABLE-SWEEP.md`. Runnable unattended.
+**Fully swept files:** `bracketEntries.ts` (6/6), `adminClaims.ts` (4/4). `bracketPools.ts` at 2/3.
 
-Baselines now: root vitest **257**, functions unit **588**, emulator **89/10-skip**, frontend `tsc -b` clean.
+| Batch | PR | Callables |
+|---|---|---|
+| 1 | #176 | `createBracketEntry` / `updateBracketEntry` / `deleteBracketEntry` |
+| 2 | #177 | `updateEntryPayment` / `adminUpdateEntryOverrides` / `adminDeleteEntry` (admin two upgraded claim-only → C5 claim+doc) |
+| 3 | #179 | `publishBracketPool` / `joinBracketPool` |
+| 4 | #180 | `syncMyClaims` / `backfillUserRoles` (+ null-input fix) |
+
+Deployed 2026-07-18 (`--only functions:<the 4 changed>` for batches 3+4; batches 1+2 deployed 07-17). Post-deploy log sweeps clean — zero `invalid-argument` rejections. **Caveat: offseason traffic is low, so "clean" is weak evidence — re-glance at logs after real usage picks up.**
+
+**Three verify-before-strict lessons banked** (all now encoded in the PICKUP recipe):
+1. `createBracketEntry` accepts a handler-*ignored* `tiebreakerScore` — must stay accepted or real calls break.
+2. `updateEntryPayment`'s `paidAt`/`paymentNote` use explicit `null` to CLEAR the field → schema uses `.nullable()` NOT `nullish()` (nullish maps null→undefined and silently kills the clear feature). A test pins null-preservation.
+3. **No-input callables must `z.preprocess((v) => v ?? {}, z.strictObject({}))`** — a no-arg `httpsCallable(fn)()` delivers `request.data` as `null`, which a bare strict object rejects. This shipped as a real bug in batch 4 (`syncMyClaims`, broke `useEnsureAdminClaims`'s on-load claim sync), caught in review, fixed in #180. Remaining no-input callables that will hit it: `getAdminHealthSnapshot`, `backfillPools`, `refreshExpertPicks`, `syncPlayoffPools`.
+
+**Next on the fleet (41 remaining):** pick the next file-grouped batch from the SWEEPS matrix — `poolOps.ts` (`recalculatePoolWinners`/`toggleWinnerPaid`/`fixParticipantIds`) or `nflPools.ts` (`joinNFLPool`/`executeSurvivorRebuy`/`scoreNFLWeek`) are the natural next groups. Same recipe. Runnable unattended.
+
+**Deliberately deferred:** `createBracketPool` (SWEEPS row 7) — rich nested `settings` with a `...settings` passthrough spread that stores arbitrary client fields; a flat `.strict()` would reject data it currently persists. Needs a passthrough envelope or client cutover, same treatment as the ADR-0001 PERMISSIVE creates. Its own careful batch, not a drive-by.
+
+Baselines now: root vitest **257**, functions unit **598**, emulator **89 pass / 10 skipped**, frontend `tsc -b` clean.
 
 ---
 
