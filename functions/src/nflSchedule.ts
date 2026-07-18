@@ -2,6 +2,9 @@ import * as admin from 'firebase-admin';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { writeAuditEvent } from './audit';
 import { NFLGame } from './types';
+import { detectStatCorrections } from './lib/feedSnapshot';
+import { captureFeedSnapshot, pruneExpiredSnapshots, readSnapshotGate, reportStatCorrections } from './feedSnapshotStore';
+import { opsCourierAuthToken } from './lib/opsAlertDispatcher';
 
 // Safe integer parsing helper
 const safeInt = (val: any): number => {
@@ -29,15 +32,16 @@ export function mapEspnGameStatus(
 }
 
 /**
- * Fetch a weekly NFL schedule from the official ESPN Scoreboard API.
- * seasonType: 1 = Preseason, 2 = Regular Season, 3 = Postseason
+ * Resolve the scoreboard URL for a week. Prefers an explicit date range taken
+ * from ESPN's own calendar, because the naive week/season/seasontype form
+ * silently falls back to the PRIOR season during the off-season. Extracted from
+ * fetchNFLWeekSchedule so both fetch variants resolve identically.
  */
-export async function fetchNFLWeekSchedule(
+async function resolveScoreboardUrl(
   week: number,
   season: string,
-  seasonType: 1 | 2 | 3
-): Promise<NFLGame[]> {
-  try {
+  seasonType: 1 | 2 | 3,
+): Promise<string> {
     let url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week=${week}&season=${season}&seasontype=${seasonType}`;
 
     try {
@@ -73,13 +77,69 @@ export async function fetchNFLWeekSchedule(
       console.warn("[nflSchedule] Failed to resolve dates via calendar, falling back to standard week scoreboard URL:", calErr);
     }
 
+    return url;
+}
+
+/**
+ * Fetch a weekly NFL schedule from the official ESPN Scoreboard API.
+ * seasonType: 1 = Preseason, 2 = Regular Season, 3 = Postseason
+ */
+export async function fetchNFLWeekSchedule(
+  week: number,
+  season: string,
+  seasonType: 1 | 2 | 3
+): Promise<NFLGame[]> {
+  try {
+    const url = await resolveScoreboardUrl(week, season, seasonType);
+
     const resp = await fetch(url);
     if (!resp.ok) {
       throw new Error(`ESPN Scoreboard API returned HTTP status ${resp.status}`);
     }
 
     const data = await resp.json();
-    if (!data.events || !Array.isArray(data.events)) {
+    return parseScoreboardResponse(data, week, season, seasonType);
+  } catch (err) {
+    console.error(`[nflSchedule] fetchNFLWeekSchedule failed for week ${week}, season ${season}:`, err);
+    return [];
+  }
+}
+
+/**
+ * Fetch a week AND hand back the raw ESPN payload alongside the mapped games,
+ * so the caller can snapshot exactly what the feed said before it overwrites
+ * nfl_games (PLAN-NFL-PRESEASON-PILOT A5). `raw` is null when the fetch failed.
+ */
+export async function fetchNFLWeekScheduleWithRaw(
+  week: number,
+  season: string,
+  seasonType: 1 | 2 | 3,
+): Promise<{ games: NFLGame[]; raw: unknown | null }> {
+  try {
+    const url = await resolveScoreboardUrl(week, season, seasonType);
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`ESPN Scoreboard API returned HTTP status ${resp.status}`);
+    const data = await resp.json();
+    return { games: parseScoreboardResponse(data, week, season, seasonType), raw: data };
+  } catch (err) {
+    console.error(`[nflSchedule] fetchNFLWeekScheduleWithRaw failed for week ${week}, season ${season}:`, err);
+    return { games: [], raw: null };
+  }
+}
+
+/**
+ * Map an ESPN scoreboard payload to NFLGame[]. Pure — extracted from
+ * fetchNFLWeekSchedule so the mapping (odds sign convention, MNF detection,
+ * status mapping) is unit-testable without a network call, and so the raw
+ * payload is reachable for snapshotting.
+ */
+export function parseScoreboardResponse(
+  data: any,
+  week: number,
+  season: string,
+  seasonType: 1 | 2 | 3,
+): NFLGame[] {
+    if (!data?.events || !Array.isArray(data.events)) {
       return [];
     }
 
@@ -162,10 +222,6 @@ export async function fetchNFLWeekSchedule(
     }
 
     return games;
-  } catch (err) {
-    console.error(`[nflSchedule] fetchNFLWeekSchedule failed for week ${week}, season ${season}:`, err);
-    return [];
-  }
 }
 
 /**
@@ -234,7 +290,9 @@ export async function importNFLSeason(
  * Scheduled sync function that fetches active NFL schedules and scores,
  * updates game statuses in Firestore, and updates kickoff times (schedule flexing).
  */
-export const syncNFLScoresJob = onSchedule('*/5 * * * *', async (event) => {
+// `secrets` is required for the ops-alert SMS path used by the stat-correction
+// page (A5) — dispatchOpsAlert reads COURIER_AUTH_TOKEN at call time.
+export const syncNFLScoresJob = onSchedule({ schedule: '*/5 * * * *', secrets: [opsCourierAuthToken] }, async (event) => {
   const db = admin.firestore();
   const now = Date.now();
 
@@ -269,9 +327,29 @@ export const syncNFLScoresJob = onSchedule('*/5 * * * *', async (event) => {
 
   console.log(`[nflSchedule] Syncing active scores for ${weeksToSync.size} week slots`);
 
+  // A5: snapshot the raw feed before it overwrites nfl_games, and notice when a
+  // game that was already FINAL changes. Gate read once per run, not per slate.
+  const snapshotGate = await readSnapshotGate(db);
+
   for (const [_, slot] of weeksToSync) {
-    const freshGames = await fetchNFLWeekSchedule(slot.week, slot.season, slot.seasonType);
+    const { games: freshGames, raw } = await fetchNFLWeekScheduleWithRaw(slot.week, slot.season, slot.seasonType);
     if (freshGames.length === 0) continue;
+
+    const slateKey = { season: slot.season, seasonType: slot.seasonType, week: slot.week };
+    // Prior state for this slate, as the finalizer would have seen it. Scoped to
+    // the active window, which is also the only window where a correction is
+    // detectable today — syncNFLScoresJob never re-reads a game >24h old.
+    const prevGames = activeGamesSnap.docs
+      .map(d => d.data() as NFLGame)
+      .filter(g => g.season === slot.season && Number(g.seasonType) === Number(slot.seasonType) && Number(g.week) === Number(slot.week));
+    const corrections = detectStatCorrections(prevGames, freshGames);
+
+    if (snapshotGate.enabled && raw !== null) {
+      await captureFeedSnapshot(db, slateKey, raw, corrections, freshGames.length);
+    }
+    // Corrections are reported whether or not snapshots are on — the page is the
+    // point; the snapshot is only the evidence attached to it.
+    await reportStatCorrections(db, slateKey, corrections);
 
     const batch = db.batch();
     for (const freshGame of freshGames) {
@@ -307,6 +385,11 @@ export const syncNFLScoresJob = onSchedule('*/5 * * * *', async (event) => {
       batch.set(gameRef, cleanedGame, { merge: true });
     }
     await batch.commit();
+  }
+
+  if (snapshotGate.enabled) {
+    const pruned = await pruneExpiredSnapshots(db, now, snapshotGate.retentionDays);
+    if (pruned > 0) console.log(`[feedSnapshot] pruned ${pruned} snapshot(s) past ${snapshotGate.retentionDays}d retention.`);
   }
 });
 

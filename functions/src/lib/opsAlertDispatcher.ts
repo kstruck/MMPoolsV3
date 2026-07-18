@@ -40,7 +40,8 @@ export type OpsAlertType =
     | "SITE_DOWN"
     | "AUTH_APPCHECK_OUTAGE"
     | "CHECKOUT_SLO_BREACH"
-    | "NFL_SPREADS_NOT_LOCKED";
+    | "NFL_SPREADS_NOT_LOCKED"
+    | "NFL_STAT_CORRECTION";
 
 const HIGH_PRIORITY_TYPES: ReadonlySet<OpsAlertType> = new Set([
     "WEBHOOK_FAILED",
