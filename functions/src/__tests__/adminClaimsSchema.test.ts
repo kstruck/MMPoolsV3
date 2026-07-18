@@ -50,9 +50,16 @@ describe("setSuperAdminClaimSchema", () => {
 });
 
 describe("syncMyClaimsSchema", () => {
-    it("accepts an empty payload (takes no input) and rejects any field", () => {
+    it("accepts an empty payload and rejects any field", () => {
         expect(okSync({})).toBe(true);
         expect(okSync({ uid: "u1" })).toBe(false);
+    });
+
+    it("normalizes a no-arg call (null/undefined) to {} — the httpsCallable(fn)() transport quirk", () => {
+        // useEnsureAdminClaims calls `httpsCallable(fn)()` with no arg → request.data
+        // is null; the preprocess must accept it or the on-load claim sync breaks.
+        expect(okSync(null)).toBe(true);
+        expect(okSync(undefined)).toBe(true);
     });
 });
 

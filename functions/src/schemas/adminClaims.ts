@@ -20,8 +20,14 @@ export const setSuperAdminClaimSchema = z.strictObject({
     isSuperAdmin: z.boolean(),
 });
 
-/** syncMyClaims — self-service claim resync, takes NO input. */
-export const syncMyClaimsSchema = z.strictObject({});
+/**
+ * syncMyClaims — self-service claim resync, takes NO input. A no-arg callable
+ * (`httpsCallable(fn)()`, e.g. useEnsureAdminClaims) arrives as `null`, so
+ * normalize null/undefined to {} before the strict gate — same transport quirk
+ * + fix as sendSecuritySMSAlertSchema. Without this, the no-arg hook path
+ * (which does NOT go through withCorrelationId) is rejected with invalid-argument.
+ */
+export const syncMyClaimsSchema = z.preprocess((v) => v ?? {}, z.strictObject({}));
 
 /** backfillUserRoles (SUPER_ADMIN) — one optional dryRun flag (default true). */
 export const backfillUserRolesSchema = z.strictObject({
