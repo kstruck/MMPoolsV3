@@ -48,7 +48,7 @@ For each: import `withCorrelationId` from `../utils/correlationId` (adjust depth
 
 ## PROGRESS LEDGER (update this as you go — a resumed session reads it first)
 
-**Sweep B: 10 of 51 SWEEP-LATER callables done, merged, and DEPLOYED (2026-07-18).**
+**Sweep B: 29 of 51 SWEEP-LATER callables done and merged to main. Batches 1-4 DEPLOYED; batches 5-10 (2026-07-18, this session) merged but NOT yet deployed — deploy is Kevin's gate.**
 
 | Batch | PR | File | Callables | State |
 |---|---|---|---|---|
@@ -56,12 +56,20 @@ For each: import `withCorrelationId` from `../utils/correlationId` (adjust depth
 | 2 | #177 | `bracketEntries.ts` | `updateEntryPayment`, `adminUpdateEntryOverrides`, `adminDeleteEntry` | deployed |
 | 3 | #179 | `bracketPools.ts` | `publishBracketPool`, `joinBracketPool` | deployed |
 | 4 | #180 | `adminClaims.ts` | `syncMyClaims`, `backfillUserRoles` | deployed |
+| 5 | #183 | `poolOps.ts` | `recalculatePoolWinners`, `toggleWinnerPaid`, `fixParticipantIds` | merged, undeployed |
+| 6 | #184 | `nflPools.ts` | `joinNFLPool`, `executeSurvivorRebuy`, `scoreNFLWeek` | merged, undeployed |
+| 7 | #185 | `billing.ts` | `validateBillingAccess`, `getPoolQuote` | merged, undeployed |
+| 8 | #186 | `adminHealth.ts`+`backfill.ts`+`expertPicks.ts`+`playoffPools.ts` | `getAdminHealthSnapshot`, `backfillPools`, `refreshExpertPicks`, `syncPlayoffPools` (no-input quartet, batched together for the shared gotcha) | merged, undeployed |
+| 9 | #187 | `couponTemplates.ts` | `deleteCouponTemplate`, `acknowledgeMonetizationAlert` | merged, undeployed |
+| 10 | #188 | `espnBracket.ts` | `importTournamentFromESPN`, `adminInitTournament`, `syncBracketTournament`, `importConferenceTournamentFromESPN`, `syncPlayInPicks` (all 5, closes C5 auth-fallback finding for this file) | merged, undeployed |
 
-Fully swept files: `bracketEntries.ts` (6/6), `adminClaims.ts` (4/4). `bracketPools.ts` 2/3.
+Fully swept files: `bracketEntries.ts` (6/6), `adminClaims.ts` (4/4), `poolOps.ts` (3/3), `nflPools.ts` (3/3 SWEEP-LATER rows), `billing.ts` (2/2 SWEEP-LATER rows), `couponTemplates.ts` (2/2 SWEEP-LATER rows), `espnBracket.ts` (5/5). `bracketPools.ts` 2/3 (row 7 deferred, see below). The no-input null→{} gotcha is now closed fleet-wide — promoted to a shared `noInputSchema` in `functions/src/lib/zodHelpers.ts` (batch 8).
 
-**Next suggested batches:** `poolOps.ts` (`recalculatePoolWinners`/`toggleWinnerPaid`/`fixParticipantIds`) or `nflPools.ts` (`joinNFLPool`/`executeSurvivorRebuy`/`scoreNFLWeek`).
+**Next suggested batches** (same-file groups, biggest first): `bracketScoring.ts` (2 — `scoreBracketEntries`/`finalizeTournamentPayouts`), `conferenceTournaments.ts` (2 — same C5 auth-fallback pattern as batch 10), `squares.ts` (2), `propBets.ts` (2), `referral.ts` (2). Remaining single-row files: `poolParams.ts` (`lockPool`), `bracketOps.ts` (`markEntryPaidStatus`), `adminOps.ts`, `consensus.ts`, `participant.ts`, `migrations/backfillMemberRecords.ts`, `nflSchedule.ts`, `statsTrigger.ts`, `revenueAggregates.ts`, `userManagement.ts`, `userProfile.ts`, `scoreUpdates.ts`, `userSync.ts`, `playoffPools.ts` (`calculatePlayoffScores`, a separate legacy-noop row from the already-done `syncPlayoffPools`). Full list of 22 remaining rows: `grep -n "SWEEP-LATER" PLAN-SECURITY-OBSERVABILITY-SWEEPS.md`.
 
 **DEFERRED — needs its own careful batch:** `createBracketPool` (row 7). Rich nested `settings` + a `...settings` passthrough spread stores arbitrary client fields; a flat `.strict()` schema would reject data it currently persists. Needs a passthrough envelope or a client cutover — same treatment as the ADR-0001 PERMISSIVE creates. Do NOT drive-by strict it.
+
+**Lessons from batches 5-10** (see HANDOFF.md's numbered list for full detail): (4) a prod batch-mutation callable's `dryRun` must default SAFE (true) at the schema layer, not a handler truthy-check — qodo caught this live on `fixParticipantIds` (PR #183), fixed with `z.boolean().optional().default(true)`; check every other dryRun-flag callable you retrofit for the same footgun. (5) shared cross-boundary schemas (`shared/schemas/*`, generated into `functions/src/shared/`) are OUT OF SCOPE for `.strict()`-ifying even on a SWEEP-LATER row — `getPoolQuote`'s `poolQuoteInputSchema` stayed non-strict on purpose (batch 7); only move the auth+parse gate onto `validated()`, don't tighten the shared contract. (6) `validated()`'s `role:` option (via `assertCallerRole`, claim AND doc must agree) automatically closes the C5 finding (claim-OR-spoofable-Firestore-doc fallback) for any callable you retrofit that had it — batch 10 closed 5 instances in `espnBracket.ts` this way; `conferenceTournaments.ts`'s 2 callables have the same pattern per the matrix's C5 note. (7) a handler that soft-returns `{success:false,message}` instead of throwing on missing input can still get a strict+required-field schema IF you verify the FE always sends those fields and already try/catches the call — two `espnBracket.ts` callables hit this in batch 10, both verified safe first.
 
 **Sweep A (correlation-id tail): NOT STARTED** — still ~13 FE files calling `httpsCallable` without `withCorrelationId`. Independent of Sweep B; still a good warm-up chunk.
 
@@ -69,8 +77,8 @@ Fully swept files: `bracketEntries.ts` (6/6), `adminClaims.ts` (4/4). `bracketPo
 
 ## Baselines (green on current `main` — verify with `git log -1` after `git pull`)
 
-- root vitest **257**, functions unit **598**, emulator **89 pass / 10 skipped**, frontend `tsc -b` clean, functions `npm run typecheck` clean.
-- Every chunk must keep these green (counts go UP as you add schema tests — never down).
+- As of batch 10, measured on merged `main` at 34761d4 (2026-07-18): root vitest **257**, functions unit **642** (was 598 before this session), emulator **89 pass / 10 skipped**, frontend `tsc -b` clean, functions `npm run typecheck` clean.
+- Every chunk must keep these green (counts go UP as you add schema tests — never down). Don't trust these numbers stale — re-verify with `npm --prefix functions test` after pulling latest main.
 
 ## Gate set before EVERY commit (no "done" without counts)
 
