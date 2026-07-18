@@ -334,7 +334,27 @@ sweep session's `1`-`10` in the top half of this file.)
 
 ---
 
-## 🔴 NFL-1. DECISION NEEDED — the spread gate blocks pools that do not use spreads
+## ✅ NFL-1. RESOLVED — the spread gate blocked pools that do not use spreads
+
+> ### ✅ DECIDED AND FIXED 2026-07-18 — PR #214, merged (`8c8e9c5`). Not deployed.
+> Kevin chose to apply the fix. The `SPREADS_NOT_LOCKED` precondition is now
+> scoped to pools whose scoring actually consumes spreads
+> (`nflScoringEngine.poolUsesSpreads` — ATS pick'em only). The A3 tripwire is
+> scoped identically so it cannot page about pools that are no longer blocked.
+> **Behavior change for existing pools: none** — no pool is ATS.
+>
+> **What this means for the pilot:** preseason pools can now accept picks with
+> no betting lines at all, so the 1-of-49 line coverage below is no longer a
+> blocker. It still means an **ATS** preseason pool would not work — do not
+> create one.
+>
+> The readiness doubt I raised is closed: submission deadlines are enforced by
+> `effectiveWeekLockAt` / `isGameLockedAt` and the `games.length === 0` throw,
+> not by the spread gate.
+>
+> **Deploy note:** this adds `submitNFLPicks` to the NFL-4 deploy list.
+>
+> Original analysis kept below for provenance.
 
 **RE-VERIFIED 2026-07-18 16:53 UTC in the browser, and the overnight write-up of
 this item was wrong in two ways. Corrected below. The problem is bigger than
@@ -536,7 +556,7 @@ All three live in the same document.
 
 ---
 
-## NFL-4. Deploy the six merged PRs (functions only — your gate)
+## NFL-4. Deploy the seven merged PRs (functions only — your gate)
 
 Nothing from tonight is deployed. This queue is now **on top of** the 33
 undeployed callables already listed in HANDOFF.md.
@@ -549,7 +569,7 @@ undeployed callables already listed in HANDOFF.md.
    git pull
    git log --oneline -8
    ```
-   **You should see** commits for #205, #206, #207, #208, #209 and #210. If
+   **You should see** commits for #205, #206, #207, #208, #209, #210 and #214. If
    `git pull` says "Already up to date" and those commits are missing, **stop** —
    the merges did not land and a deploy would silently skip everything.
 3. Install functions deps first, or the deploy fails with stripe/fft TS2307:
@@ -559,12 +579,13 @@ undeployed callables already listed in HANDOFF.md.
 4. Deploy. **Functions before rules** (no rules change tonight, so functions
    only). The new/changed functions from tonight:
    ```
-   npx firebase deploy --only functions:lockNFLSpreadsJob,nflLockWatchJob,syncNFLScoresJob,nflFinalizeSweepJob --project gridiron-gamble-uzuqo
+   npx firebase deploy --only functions:lockNFLSpreadsJob,nflLockWatchJob,syncNFLScoresJob,nflFinalizeSweepJob,submitNFLPicks --project gridiron-gamble-uzuqo
    ```
-5. **What you should see:** four functions listed as `create` or `update`, then
+5. **What you should see:** five functions listed as `create` or `update`, then
    `Deploy complete!`. `lockNFLSpreadsJob` and `nflLockWatchJob` are **new
    functions** — they have never existed in prod, so expect `create` for those
-   two and `update` for the other two.
+   two and `update` for the other three. `submitNFLPicks` carries the NFL-1
+   spread-gate fix (PR #214) — until it deploys, preseason pools stay blocked.
 6. **If you see "No changes detected"** for a function you expect to change: the
    merge or the pull did not land. Go back to step 2. Do not assume it worked.
 7. **Note on `syncNFLScoresJob`:** its signature changed to bind the

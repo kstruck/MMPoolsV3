@@ -23,6 +23,7 @@ engineering state.
 | **A10** | Finalizer/postponed-game investigation + surfaced the blocked reasons | [#208](https://github.com/kstruck/MMPoolsV3/pull/208) `87c46bd` | merged |
 | **A5** (part 1) | ESPN feed snapshots + stat-correction detection | [#209](https://github.com/kstruck/MMPoolsV3/pull/209) `7d842a3` | merged |
 | **A6** | `liveSeasonTypes` scope guard so the finalize sweep can be armed **preseason-only** | [#210](https://github.com/kstruck/MMPoolsV3/pull/210) `a1f3569` | merged |
+| **NFL-1** | scope `SPREADS_NOT_LOCKED` to spread-consuming pools (follow-up, 2026-07-18 daytime) | [#214](https://github.com/kstruck/MMPoolsV3/pull/214) `8c8e9c5` | merged |
 
 **Baselines moved — re-measured on merged `main` @ `dd93629`, not summed from
 PRs**: functions unit **685 → 771** (+86 tests), root vitest **257** (unchanged),
@@ -45,30 +46,27 @@ finalized nothing while reporting a full run), and `safeInt()` made "ESPN
 dropped the score field" indistinguishable from "the team scored 0", which
 would have paged a false `21-17 → 0-0` stat correction.
 
-### 🔴 Two things need Kevin's decision before the pilot can run
+### Decisions: one resolved, one still open
 
-1. **The spread gate blocks pools that do not use spreads.** Re-verified in the
-   browser 2026-07-18 16:53 UTC, and it is worse *and* smaller than the overnight
-   note said. Preseason is **49 games, 1 with a line**. Crucially, regular-season
-   week 1 is **53 days out with lines on all 16**, while preseason week 1 is 25
-   days out with none — so "the books just haven't posted yet" is disproved.
-   Then the bigger finding: `pickMode` is hardcoded `'STRAIGHT'` in the create
-   wizard with **no UI to pick ATS**, and straight-up scoring never reads
-   `spread` — yet the `SPREADS_NOT_LOCKED` gate (`nflPools.ts:351-355`) is
-   unconditional and fires 30 lines before the pool-type dispatch, so it blocks
-   pickem, survivor AND margin alike. **No pool in production consumes the data
-   it is gated on.** Fix is one conditional, affecting zero existing pools;
-   NOT applied — removing a guard on the pick path is Kevin's call.
-   TOMORROW-TASKS **NFL-1**.
-2. **Alarm A3(b) (synthetic pick probe) was deliberately not built.** Doing it
+1. ✅ **RESOLVED — the spread gate blocked pools that do not use spreads.**
+   `SPREADS_NOT_LOCKED` ran unconditionally, 30 lines before the pool-type
+   dispatch, so it blocked straight-up pick'em (the wizard's only mode — it
+   hardcodes `pickMode: 'STRAIGHT'` with no ATS control), plus survivor and
+   margin, none of which read a spread. Production was gating pick submission on
+   data no production pool consumed; preseason (1 betting line across 49 games)
+   merely exposed it. Fixed in **PR #214 (`8c8e9c5`, merged, NOT deployed)** by
+   scoping the gate to `nflScoringEngine.poolUsesSpreads`, with the A3 tripwire
+   scoped identically so it cannot page about pools that are no longer blocked.
+   Zero behavior change for existing pools. qodo reviewed and raised no defects.
+   2. **Alarm A3(b) (synthetic pick probe) was deliberately not built.** Doing it
    honestly needs a probe identity + probe pool in prod (Kevin's gate); doing it
    in-process would only duplicate A3(a)'s predicate. Recommendation and options
    in TOMORROW-TASKS **NFL-2**.
 
 ### Deploy state — NOTHING from tonight is deployed
 
-Four functions change/appear: `lockNFLSpreadsJob` (**new**), `nflLockWatchJob`
-(**new**), `syncNFLScoresJob`, `nflFinalizeSweepJob` — **plus a Firestore index
+Five functions change/appear: `lockNFLSpreadsJob` (**new**), `nflLockWatchJob`
+(**new**), `syncNFLScoresJob`, `nflFinalizeSweepJob`, `submitNFLPicks` — **plus a Firestore index
 deploy** (`firestore.indexes.json` gained a `nfl_feed_snapshots` composite
 index; A5's snapshot writes fail silently without it). This queue sits **on top of**
 the 33 undeployed callables below. Deploy command + verification steps are
