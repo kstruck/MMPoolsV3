@@ -29,27 +29,115 @@ interface FinalizeOutcome {
   finalized: boolean;
   reason?: string;
   members?: number;
+  /** Set when the blocker was a stalled (likely postponed) game — structured so
+   *  the sweep reports it without parsing the human-readable reason string. */
+  stalledGameIds?: string[];
 }
 
-/** Every game concluded + every game-bearing week scored. */
-async function isSeasonComplete(db: Firestore, pool: any): Promise<{ complete: boolean; reason?: string }> {
+/** The minimum of an nfl_games doc completeness reasons about. */
+export interface CompletenessGame {
+  id: string;
+  week?: number;
+  status?: string;
+  startTime?: number;
+}
+
+export interface Completeness {
+  complete: boolean;
+  reason?: string;
+  /** Games that are neither FINAL nor CANCELLED — the set blocking finalization. */
+  unfinishedGameIds: string[];
+  /** Weeks with games that the pool has never scored. */
+  unscoredWeeks: number[];
+  /**
+   * Unfinished games still SCHEDULED long after their own kickoff. This is the
+   * postponed/moved signature (mapEspnGameStatus maps POSTPONED → SCHEDULED,
+   * nflSchedule.ts:25) and it is the one blocker that does NOT resolve itself
+   * with time — see the STALLED note on isSeasonComplete.
+   */
+  stalledGameIds: string[];
+}
+
+/**
+ * How far past its own kickoff a game must sit in a non-terminal state before we
+ * call it stalled rather than merely in progress. Generous: a game plus overtime
+ * plus feed lag is well under this.
+ */
+export const STALLED_GAME_AFTER_MS = 12 * 60 * 60 * 1000;
+
+/**
+ * Every game concluded + every game-bearing week scored. Pure, so the
+ * postponed-game case is pinned by unit tests rather than discovered in August.
+ *
+ * STALLED GAMES (PLAN-NFL-PRESEASON-PILOT A10) — intended behavior, verified:
+ * a postponed game maps to SCHEDULED, which is neither FINAL nor CANCELLED, so
+ * the season never reads complete and the pool is never finalized. **Waiting is
+ * correct** — finalizing partially would settle standings and season history
+ * while a real game is still pending, and finalization is a re-runnable
+ * overwrite, so there is no benefit to settling early. What was wrong is that
+ * it waited SILENTLY and forever: the sweep discarded this reason, so a pool
+ * blocked by a game ESPN never reschedules looked identical to a pool blocked
+ * by a game kicking off tonight. `stalledGameIds` names that difference so the
+ * sweep can report it and a human can decide (reschedule lands, or the game is
+ * marked CANCELLED).
+ */
+export function assessSeasonCompleteness(
+  games: CompletenessGame[],
+  scoredWeeks: Record<string, boolean>,
+  nowMs: number,
+): Completeness {
+  if (games.length === 0) {
+    return { complete: false, reason: 'no games for season', unfinishedGameIds: [], unscoredWeeks: [], stalledGameIds: [] };
+  }
+
+  const unfinished: CompletenessGame[] = [];
+  const unscoredWeeks = new Set<number>();
+  for (const g of games) {
+    if (g.status !== 'FINAL' && g.status !== 'CANCELLED') unfinished.push(g);
+    // A doc with a missing/garbage week must not put NaN into the unscored set —
+    // it would render as "weeks not scored: NaN" and block finalization forever
+    // on a data defect nobody can act on. Skip it; the game itself still gates
+    // via the unfinished check above if it hasn't concluded.
+    const week = Number(g.week);
+    if (Number.isFinite(week) && !scoredWeeks[String(g.week)]) unscoredWeeks.add(week);
+  }
+
+  // Only SCHEDULED counts as stalled. An IN_PROGRESS game sitting for 12h is
+  // also wrong, but it is a stuck-feed problem, not a postponement — labeling it
+  // "likely postponed" would send an operator to the wrong fix.
+  const stalledGameIds = unfinished
+    .filter((g) => g.status === 'SCHEDULED' && typeof g.startTime === 'number' && nowMs - g.startTime > STALLED_GAME_AFTER_MS)
+    .map((g) => g.id);
+  const unfinishedGameIds = unfinished.map((g) => g.id);
+  const weeks = [...unscoredWeeks].sort((a, b) => a - b);
+
+  if (unfinishedGameIds.length > 0) {
+    const stalledNote = stalledGameIds.length
+      ? ` (${stalledGameIds.length} STALLED — still SCHEDULED >12h past kickoff, likely postponed: ${stalledGameIds.slice(0, 5).join(',')})`
+      : '';
+    return {
+      complete: false,
+      reason: `${unfinishedGameIds.length} games not concluded${stalledNote}`,
+      unfinishedGameIds, unscoredWeeks: weeks, stalledGameIds,
+    };
+  }
+  if (weeks.length > 0) {
+    return {
+      complete: false,
+      reason: `weeks not scored: ${weeks.join(',')}`,
+      unfinishedGameIds, unscoredWeeks: weeks, stalledGameIds,
+    };
+  }
+  return { complete: true, unfinishedGameIds: [], unscoredWeeks: [], stalledGameIds: [] };
+}
+
+async function isSeasonComplete(db: Firestore, pool: any): Promise<Completeness> {
   const gamesSnap = await db.collection('nfl_games')
     .where('season', '==', pool.season)
     .where('seasonType', '==', Number(pool.seasonType || 2))
     .get();
-  if (gamesSnap.empty) return { complete: false, reason: 'no games for season' };
-
-  const scoredWeeks: Record<string, boolean> = pool.scoredWeeks || {};
-  const unfinishedGames: string[] = [];
-  const unscoredWeeks = new Set<number>();
-  for (const doc of gamesSnap.docs) {
-    const g = doc.data() as any;
-    if (g.status !== 'FINAL' && g.status !== 'CANCELLED') unfinishedGames.push(doc.id);
-    if (!scoredWeeks[String(g.week)]) unscoredWeeks.add(Number(g.week));
-  }
-  if (unfinishedGames.length > 0) return { complete: false, reason: `${unfinishedGames.length} games not concluded` };
-  if (unscoredWeeks.size > 0) return { complete: false, reason: `weeks not scored: ${[...unscoredWeeks].sort((a, b) => a - b).join(',')}` };
-  return { complete: true };
+  const games: CompletenessGame[] = gamesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+  return assessSeasonCompleteness(games, pool.scoredWeeks || {}, Date.now());
 }
 
 /** Competition ranking (ties share a rank) over a desc-sorted score list. */
@@ -161,7 +249,9 @@ export async function maybeFinalizeNFLPool(
   }
 
   const completeness = await isSeasonComplete(db, pool);
-  if (!completeness.complete) return { finalized: false, reason: completeness.reason };
+  if (!completeness.complete) {
+    return { finalized: false, reason: completeness.reason, stalledGameIds: completeness.stalledGameIds };
+  }
 
   const entriesSnap = await poolRef.collection('entries').get();
   const entries = entriesSnap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
@@ -283,21 +373,44 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
 
     let finalized = 0;
     let skipped = 0;
+    // Why each pool was skipped. Previously discarded, which made a pool blocked
+    // forever by a postponed game (A10) indistinguishable from one blocked by a
+    // game kicking off tonight — both just incremented `skipped`.
+    const blockedReasons: Record<string, string> = {};
+    const stalled: string[] = [];
     for (const d of capped) {
       try {
         const outcome = await maybeFinalizeNFLPool(db, d.id);
-        if (outcome.finalized) finalized++; else skipped++;
+        if (outcome.finalized) {
+          finalized++;
+        } else {
+          skipped++;
+          blockedReasons[d.id] = outcome.reason ?? 'unknown';
+          if (outcome.stalledGameIds?.length) stalled.push(d.id);
+        }
       } catch (e) {
         skipped++;
+        blockedReasons[d.id] = `ERROR: ${e instanceof Error ? e.message : String(e)}`;
         console.warn(`[nflFinalizeSweep] finalize failed for ${d.id}:`, e);
       }
     }
-    console.log(`[nflFinalizeSweep] finalized ${finalized}, skipped ${skipped} of ${capped.length} candidates.`);
+    // Cap the log the same way the audit doc is capped — up to MAX_PER_RUN
+    // entries would otherwise land in a single log line every day.
+    const sampleReasons = Object.fromEntries(Object.entries(blockedReasons).slice(0, 50));
+    console.log(
+      `[nflFinalizeSweep] finalized ${finalized}, skipped ${skipped} of ${capped.length} candidates; ${stalled.length} stalled.`,
+      { blockedReasons: sampleReasons, stalled: stalled.slice(0, 50) },
+    );
     await writeAdminAudit({
       actorUid: "system",
       action: "NFL_FINALIZE_SWEEP",
       targetType: "pool",
-      metadata: { dryRun: false, finalized, skipped, candidates: stale.length },
+      metadata: {
+        dryRun: false, finalized, skipped, candidates: stale.length,
+        // Capped so one bad season can't bloat an audit doc past Firestore's 1MiB limit.
+        blockedReasons: sampleReasons,
+        stalledPools: stalled.slice(0, 50),
+      },
       status: "success",
     });
   },
