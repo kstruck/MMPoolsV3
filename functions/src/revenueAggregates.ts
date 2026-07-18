@@ -1,6 +1,7 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { FieldValue } from "firebase-admin/firestore";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { validated } from "./lib/validated";
+import { recomputeRevenueSchema } from "./schemas/adminSingles";
 import * as admin from "firebase-admin";
 import { summarizeCharges } from "./lib/billingCharges";
 
@@ -40,9 +41,9 @@ export const aggregateRevenueDaily = onSchedule(
 );
 
 /** On-demand recompute for the Monetization tab (SUPER_ADMIN). */
-export const recomputeRevenue = onCall(async (request) => {
-  if (!request.auth || request.auth.token.role !== "SUPER_ADMIN") {
-    throw new HttpsError("permission-denied", "Only Super Admin can recompute revenue.");
-  }
+export const recomputeRevenue = validated(
+  { schema: recomputeRevenueSchema, label: "recomputeRevenue", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async () => {
   return await recompute();
-});
+  },
+);

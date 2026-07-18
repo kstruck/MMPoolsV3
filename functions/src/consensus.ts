@@ -10,7 +10,8 @@
 // Scale-up path: persist per-pool shards and roll them up incrementally instead of recomputing.
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { validated } from "./lib/validated";
+import { recomputeConsensusSchema } from "./schemas/adminSingles";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { tallyGameConsensus, mergeTally, consensusPct, type ConsensusGame, type GameTally } from "./shared/consensus";
 import { isActivePoolForStats } from "./lib/poolInclusion";
@@ -128,13 +129,9 @@ export const consensusRefreshJob = onSchedule('*/10 * * * *', async () => {
 });
 
 /** On-demand recompute (SUPER_ADMIN) for testing / manual refresh. */
-export const recomputeConsensus = onCall(async (request) => {
-  if (!request.auth || request.auth.token?.role !== 'SUPER_ADMIN') {
-    throw new HttpsError('permission-denied', 'Super Admin only.');
-  }
-  const { season, seasonType, week } = request.data || {};
-  if (!season || seasonType === undefined || week === undefined) {
-    throw new HttpsError('invalid-argument', 'season, seasonType, week required.');
-  }
+export const recomputeConsensus = validated(
+  { schema: recomputeConsensusSchema, label: 'recomputeConsensus', role: 'SUPER_ADMIN', appCheck: 'monitor' },
+  async ({ season, seasonType, week }) => {
   return recomputeWeekConsensus(admin.firestore(), String(season), Number(seasonType), Number(week), Date.now());
-});
+  },
+);

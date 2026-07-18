@@ -1,4 +1,5 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { validated } from "./lib/validated";
+import { logAdminActionSchema } from "./schemas/adminSingles";
 import { writeAdminAudit } from "./lib/adminAudit";
 
 /**
@@ -11,24 +12,12 @@ import { writeAdminAudit } from "./lib/adminAudit";
  * NOT an authorization boundary — the underlying op callables enforce their
  * own SUPER_ADMIN checks.
  */
-export const logAdminAction = onCall(async (request) => {
-  if (!request.auth || request.auth.token.role !== "SUPER_ADMIN") {
-    throw new HttpsError("permission-denied", "Only Super Admin can log admin actions.");
-  }
-  const { action, targetType, targetId, metadata, status, error } = request.data as {
-    action?: string;
-    targetType?: string;
-    targetId?: string;
-    metadata?: Record<string, unknown>;
-    status?: "success" | "error";
-    error?: string;
-  };
-  if (!action || typeof action !== "string") {
-    throw new HttpsError("invalid-argument", "action is required.");
-  }
+export const logAdminAction = validated(
+  { schema: logAdminActionSchema, label: "logAdminAction", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async ({ action, targetType, targetId, metadata, status, error }, request) => {
   await writeAdminAudit({
-    actorUid: request.auth.uid,
-    actorEmail: request.auth.token.email as string | undefined,
+    actorUid: request.auth!.uid,
+    actorEmail: request.auth!.token.email as string | undefined,
     action,
     targetType,
     targetId,
@@ -37,4 +26,5 @@ export const logAdminAction = onCall(async (request) => {
     error,
   });
   return { success: true };
-});
+  },
+);
