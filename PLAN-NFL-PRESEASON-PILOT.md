@@ -155,9 +155,16 @@ Plus the two prod-gated sub-steps carved out of A6 and A7 above.
   a change would touch `firestore.rules` write/read paths; a design choice in A5 is
   genuinely ambiguous (the snapshot storage location / retention is a real decision —
   propose an option, flag it, keep going on the rest).
-- **Do NOT deploy.** Everything waits in merged PRs. There are already 35 undeployed
+- **Do NOT deploy.** Everything waits in merged PRs. There are already 33 undeployed
   callables + a frontend change from the prior session (see HANDOFF.md) — this run adds
   to that queue, it does not ship it.
+- **File-overlap check (done 2026-07-18, don't re-derive):** none of A2/A3/A4/A5/A10/A6
+  touch a file containing one of the 33 already-swept callables. A2/A6/A10 touch
+  `nflSchedule.ts` and `nflFinalize.ts` — `importNFLSchedule` (also in `nflSchedule.ts`)
+  is still unswept, so that's fine for now, but if a FUTURE session sweeps
+  `importNFLSchedule` while this plan's work is also mid-flight in that file, flag it
+  before editing. A5 touches `nflFinalize.ts` fresh (not previously touched by the
+  sweep). Safe to proceed.
 - **Gates before every commit** (from HANDOFF.md baselines @ `8f05f3d`): functions unit
   **685**, root vitest **257**, emulator **97 pass / 10 skipped**, both typechecks
   clean. Counts only go UP as you add tests. Run the emulator suite for anything
