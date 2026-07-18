@@ -45,12 +45,19 @@ would have paged a false `21-17 → 0-0` stat correction.
 
 ### 🔴 Two things need Kevin's decision before the pilot can run
 
-1. **Preseason games have almost no betting lines.** Verified live tonight:
-   the 2026 preseason feed returns 17 events and **exactly 1 has odds** (the HOF
-   game). `submitNFLPicks` blocks a week unless *every* game has a locked spread,
-   so an ATS pick'em pool would be blocked for all of preseason weeks 1-3. This
-   is a data fact, not a bug — and it is the most likely way week 1 fails.
-   Options + a recommendation are in TOMORROW-TASKS item 1.
+1. **The spread gate blocks pools that do not use spreads.** Re-verified in the
+   browser 2026-07-18 16:53 UTC, and it is worse *and* smaller than the overnight
+   note said. Preseason is **49 games, 1 with a line**. Crucially, regular-season
+   week 1 is **53 days out with lines on all 16**, while preseason week 1 is 25
+   days out with none — so "the books just haven't posted yet" is disproved.
+   Then the bigger finding: `pickMode` is hardcoded `'STRAIGHT'` in the create
+   wizard with **no UI to pick ATS**, and straight-up scoring never reads
+   `spread` — yet the `SPREADS_NOT_LOCKED` gate (`nflPools.ts:351-355`) is
+   unconditional and fires 30 lines before the pool-type dispatch, so it blocks
+   pickem, survivor AND margin alike. **No pool in production consumes the data
+   it is gated on.** Fix is one conditional, affecting zero existing pools;
+   NOT applied — removing a guard on the pick path is Kevin's call.
+   TOMORROW-TASKS item 1.
 2. **Alarm A3(b) (synthetic pick probe) was deliberately not built.** Doing it
    honestly needs a probe identity + probe pool in prod (Kevin's gate); doing it
    in-process would only duplicate A3(a)'s predicate. Recommendation and options

@@ -297,50 +297,96 @@ smaller.
 
 ---
 
-## 🔴 1. DECISION NEEDED — preseason games have no betting lines, which blocks pick'em entirely
+## 🔴 1. DECISION NEEDED — the spread gate blocks pools that do not use spreads
 
-**This is the single most likely way preseason week 1 fails, and it is not a bug
-in our code.**
+**RE-VERIFIED 2026-07-18 16:53 UTC in the browser, and the overnight write-up of
+this item was wrong in two ways. Corrected below. The problem is bigger than
+"preseason has no lines" — and the fix is smaller.**
 
-I pulled the live ESPN feed for the preseason window while building A5:
+### What the live feed actually says
 
-```
-https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260803-20260817
-→ 17 events, all season 2026 / seasonType 1  (confirms the plan's A1 gate)
-→ exactly 1 of those 17 carries an odds line: the HOF game, "CAR -1.5"
-→ the other 16 games have NO spread at all
-```
+| Slate | Games | With a betting line | Days out |
+|---|---|---|---|
+| HOF Weekend (2026-08-07) | 1 | **1** (`CAR -1.5`) | 19 |
+| Preseason Week 1 (08-13) | 16 | **0** | 25 |
+| Preseason Week 2 (08-21) | 16 | **0** | 33 |
+| Preseason Week 3 (08-27) | 16 | **0** | 39 |
+| **Preseason total** | **49** | **1** | |
+| Regular season week 1 (09-09) | 16 | **16** | 53 |
 
-Why that matters: `submitNFLPicks` refuses **every** pick for a week unless
-**every** game that week has `spread.locked === true`
-(`functions/src/nflPools.ts:351-355`, thrown as `SPREADS_NOT_LOCKED`). A game
-with no spread value can never be locked. So as things stand today, an
-**ATS/spread pick'em pool covering preseason weeks 1-3 would be blocked for
-every member, all week.**
+*Correction 1:* preseason is **49 games across 4 calendar segments**, not the 17
+games / 3 weeks the overnight note said. That 17 was an artifact of the date
+window I sampled.
 
-Re-running the lock job will not help — you cannot lock a line that does not
-exist. This is a data-availability fact about preseason, not something A2 fixed.
+*Correction 2 — this kills option (c):* regular-season week 1 is **53 days out
+and has lines on all 16 games**, while preseason week 1 is **25 days out with
+none**. So the missing lines are **not** "books have not posted yet because it is
+far off." Further-out games have lines; the nearer preseason games do not. This
+is a property of preseason, not of lead time. Waiting is not a plan.
 
-**Your options (pick one — this is a product call, not an engineering one):**
+*(The one exception, the HOF game, is the marquee standalone — so it is still
+possible that ordinary preseason lines appear a few days out. It is not
+something to bet the pilot on.)*
 
-- **(a) Run the preseason pilot on straight-up pick'em, not ATS.** Most robust —
-  no spreads needed at all. Check whether the pool settings already allow a
-  non-ATS pick'em mode before committing to this.
-- **(b) Set the preseason lines by hand.** ~16 games/week. Tedious but total
-  control, and the A3 tripwire will tell you when you have missed one.
-- **(c) Wait and see.** Books often post preseason lines only a few days out, so
-  the feed may fill in closer to 2026-08-13. Risky as the *only* plan — if they
-  do not appear you find out the week of.
-- **(d) Relax the all-or-nothing gate** so a week can open with partial spreads.
-  I did **not** do this: it changes scoring semantics for every pool type and is
-  well beyond an overnight call. Say the word and it gets its own plan.
+### The bigger finding: no pool in your product uses spreads at all
 
-**My recommendation: (a) as the primary, (c) as the thing you monitor, (b) as the
-fallback for the HOF game week.** But this is yours to decide.
+Chasing the "run straight-up instead" option turned up something that changes
+the whole item:
 
-**Check it yourself before deciding** (30 seconds, no auth needed) — paste the
-URL above into a browser and count how many events have a `competitions[0].odds`
-array. Re-check a few days before 2026-08-13; the answer may improve on its own.
+- `pickMode` already exists with two values, `'STRAIGHT'` and `'ATS'`
+  (`shared/schemas/nfl.ts:33`).
+- The create wizard **hardcodes `pickMode: 'STRAIGHT'`**
+  (`src/components/wizard/create/CreateNFLPickemPool.tsx:72`) and there is **no
+  UI control anywhere to choose ATS**. So every pool ever created through the
+  product is straight-up.
+- Straight-up scoring **never reads `spread`**
+  (`functions/src/nflScoringEngine.ts:53` — the spread branch is gated on
+  `pickMode === 'ATS'`; ATS even falls back to straight-up when a spread is
+  missing).
+- **But the gate is unconditional.** `functions/src/nflPools.ts:351-355` runs
+  `games.every(g => g.spread?.locked === true)` with no reference to `pickMode`
+  or pool type. The type dispatch does not start until line 381 — 30 lines
+  later. Verified directly.
+- Therefore `NFL_SURVIVOR` (pick a winner) and `NFL_MARGIN` (margin of victory)
+  are blocked identically, and **neither of those uses spreads under any
+  setting**.
+
+**So this is not really a preseason problem. Production blocks pick submission
+on spread data that no pool in production consumes.** Preseason is just where it
+finally becomes visible, because preseason is the first time the lines are
+absent.
+
+### Revised options
+
+- **(a) "Run straight-up instead" — DOES NOT WORK as a config choice.** Struck.
+  Everything is already straight-up and still blocked. My overnight
+  recommendation was wrong.
+- **(b) Set ~48 preseason lines by hand** — still available, but you would be
+  inventing spread numbers purely to satisfy a check that nothing then reads.
+- **(c) Wait and see** — much weaker than I wrote. See the table.
+- **(d) Scope the gate to pools that actually use spreads — NOW THE
+  RECOMMENDATION.** I described this overnight as "changes scoring semantics for
+  every pool type," which was wrong. It is **one conditional** at
+  `functions/src/nflPools.ts:352`: apply the spread check only when
+  `pool.settings?.pickMode === 'ATS'`. It changes behavior for **zero existing
+  pools**, because no existing pool is ATS. ATS pools keep the gate exactly as
+  it is.
+
+**Recommendation: (d).** Not as a preseason workaround — as a correctness fix
+that preseason exposed.
+
+**What I did not do:** I did not make the change. It removes a guard on the pick
+path, which is your call, not mine. Say the word and it is a small PR with tests
+(gate applies for ATS, does not for STRAIGHT/survivor/margin).
+
+**One thing to weigh before saying yes:** the gate may have been doing
+double duty as a crude "this week is ready for picks" signal, since
+`lockNFLSpreadsJob` flips `spread.locked` every Tuesday. Removing it for
+straight pools leans entirely on the existing kickoff/lock-deadline logic
+(`effectiveWeekLockAt` / `isGameLockedAt`, step 2 of the same function) plus the
+`games.length === 0` not-found check. I believe that is sufficient and that
+readiness was never really the spread gate's job — but it is the one thing worth
+a second look before removing it.
 
 ---
 
@@ -520,18 +566,27 @@ Needed before any preseason pool can exist. Do this **after** step 4.
 
 1. Go to the live site → **SuperAdmin** → the panel with the NFL schedule import
    (it calls the `importNFLSchedule` callable).
-2. Import **season `2026`, seasonType `1` (preseason), weeks 1-3**.
-3. **What you should see:** roughly **17 games** land in the `nfl_games`
-   collection with `season: "2026"` and `seasonType: 1`. I verified this count
-   directly against ESPN tonight — 17 events across 2026-08-03 to 2026-08-17.
+2. Import **season `2026`, seasonType `1` (preseason), weeks 1-4**.
+
+   ⚠️ **Off-by-one trap — read this.** The importer indexes ESPN's calendar
+   positionally (`segment.entries[week - 1]`, `nflSchedule.ts:54`), and ESPN's
+   preseason calendar has **four** segments where the first is *Hall of Fame
+   Weekend*. So importer week **1** = HOF Weekend, week **2** = the slate
+   labelled "Preseason Week 1", week **3** = "Preseason Week 2", week **4** =
+   "Preseason Week 3". Importing "weeks 1-3" gets you only 33 of the 49 games
+   and silently omits the last preseason week.
+3. **What you should see:** **49 games** land in the `nfl_games` collection with
+   `season: "2026"` and `seasonType: 1` — 1 + 16 + 16 + 16. Verified against
+   ESPN's calendar 2026-07-18.
 4. **If you get 2025 games instead:** the importer's calendar date-range guard
    failed and it fell back to the naive URL, which silently serves the prior
    season during the off-season. Check the function logs for
    `Failed to resolve dates via calendar`. Do not proceed with a 2025 import —
    delete and retry.
 5. **Immediately after importing, check how many games have spreads.** This is
-   item 1 above. If it is still 1-of-17, decide item 1 before recruiting
-   commissioners.
+   item 1 above. As of 2026-07-18 it is **1 of 49**. Decide item 1 before
+   recruiting commissioners — as things stand, every one of these pools is
+   blocked from accepting a single pick.
 
 ---
 
