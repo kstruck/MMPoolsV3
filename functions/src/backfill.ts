@@ -42,6 +42,16 @@ export const backfillPools = validated(
         const updates: any = {};
         if (!pool.createdByUid) {
             updates.createdByUid = ownerId;
+        }
+        // Derive a status ONLY for pools that have none, and independently of
+        // createdByUid. This used to be nested inside the !createdByUid branch
+        // AND to run unconditionally there, which meant it (a) recomputed status
+        // from isLocked/isFinal while ignoring the value already on the doc —
+        // silently resetting a COMPLETED pool to DRAFT — and (b) never reached a
+        // pool that had createdByUid but no status. isLocked/isFinal cannot
+        // express COMPLETED or ARCHIVED, so they must never overwrite an
+        // existing status.
+        if (!pool.status) {
             updates.status = pool.isLocked ? 'LOCKED' : (pool.isFinal ? 'FINAL' : 'DRAFT');
         }
         if (pool.isPublic === undefined) {
@@ -64,14 +74,33 @@ export const backfillPools = validated(
         batchCount++;
 
         // 3. Historical Data Migration (For COMPLETED pools)
+        //
+        // This leg is NOT idempotent: it folds each entry into
+        // users/{uid}.historicalStats with FieldValue.increment(), so folding
+        // the same entry twice double-counts. Until the status fix above, a
+        // second run happened to skip the leg entirely (run 1 knocked status off
+        // COMPLETED) — that accident was the only thing preventing
+        // double-counting, so the guard now has to be explicit.
+        //
+        // The marker is PER ENTRY, not per pool, and is staged in the SAME batch
+        // as the increment it guards. A Firestore batch commits atomically, so a
+        // crash can never leave an applied increment unmarked. A per-pool marker
+        // written after the loop would NOT be safe: a pool with more than ~400
+        // entries flushes mid-loop, committing increments before the marker, and
+        // a rerun after such a crash would re-fold them.
+        //
+        // LIMITATION: entries folded by a run that predates this marker carry
+        // none, so they would be folded again. The dry-run default plus the
+        // plannedWrites count is the mitigation — inspect before arming.
         if (pool.status === 'COMPLETED' || pool.status === 'ARCHIVED') {
             const entriesSnap = await poolDoc.ref.collection('entries').get();
             for (const entryDoc of entriesSnap.docs) {
                 const entry = entryDoc.data();
                 if (!entry.ownerUid) continue;
+                if (entry.historicalStatsFoldedAt) continue;
 
                 const userRef = usersRef.doc(entry.ownerUid);
-                
+
                 // Aggregate basic stats
                 const isWinner = entry.rank === 1;
                 const pointsEarned = entry.totalScore || entry.seasonTotal || entry.totalPoints || 0;
@@ -86,7 +115,10 @@ export const backfillPools = validated(
                         totalEarnings: FieldValue.increment(payoutEarned)
                     }
                 }, { merge: true });
-                batchCount++;
+                batch.update(entryDoc.ref, { historicalStatsFoldedAt: FieldValue.serverTimestamp() });
+                // Both writes counted together, and the flush check runs only
+                // after BOTH are staged, so the pair can never straddle a commit.
+                batchCount += 2;
 
                 if (batchCount >= 400) await flush();
             }
