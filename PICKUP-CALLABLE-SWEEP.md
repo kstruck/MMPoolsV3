@@ -42,13 +42,24 @@ For each: import `withCorrelationId` from `../utils/correlationId` (adjust depth
 - `TARGET-NOW-PERMISSIVE` (`createPool`, `createNFLPool`) — already wrapped, stay passthrough per ADR-0001; don't tighten.
 - Anything already classed `TARGET-NOW` — already done in Phase 1, skip.
 
+**Hard-won rules from batches 5-13 — read before writing a schema:**
+- **Never `.trim()` a string the handler uses as a LOOKUP KEY** (matched with `===` against stored data). Shipped as a regression in #194, fixed in #195: `reserveSquare` stores owner names untrimmed, so trimming `updatePlayer.originalName` made those players un-editable. `.trim()` is fine on server-generated ids (`poolId`, `tournamentId`).
+- **Check what a MISSING optional field means.** `scoreBracketEntries` omits `tournamentId` to mean "score everything" — a required schema would have broken that button.
+- **Grep EVERY call site.** Batch 12's callables are hit by two different components sending different shapes; three fields one caller sends are dead to the handler but must still be accepted.
+- **`dryRun` defaults true at the SCHEMA layer** (`z.boolean().optional().default(true)`), never a handler-side `=== true`.
+- **An idempotency marker goes in the SAME batch as the write it guards** — a marker written after a loop that flushes at 400 ops is not atomic.
+
 **Batch it:** group SWEEP-LATER callables by file (e.g. all of `bracketEntries.ts` together), one PR per logical group of ~3–8 callables. Gates green before each commit. This keeps PRs reviewable and lets qodo absorb per-batch.
 
 ---
 
 ## PROGRESS LEDGER (update this as you go — a resumed session reads it first)
 
-**Sweep B: 29 of 51 SWEEP-LATER callables done and merged to main. Batches 1-4 DEPLOYED; batches 5-10 (2026-07-18, this session) merged but NOT yet deployed — deploy is Kevin's gate.**
+**19 SWEEP-LATER callables remain unwrapped.** Everything below is merged to `main`; batches 1-4 are deployed, **batches 5-13 and the three fix PRs are NOT deployed** (Kevin's gate).
+
+> **Do not quote an "N/51" fraction.** 35 swept + 19 remaining = 54, but the SWEEPS matrix header says 51, so the header or the classifications are off by ~3. Authoritative check per callable:
+> `grep -rn "export const <name> = " functions/src --include=*.ts` → `= onCall(` unwrapped, `= validated(` done.
+> (`searchUsersByEmail` is declared `functions.https.onCall`, not the bare `onCall` import — a plain `grep onCall(` will misreport it.)
 
 | Batch | PR | File | Callables | State |
 |---|---|---|---|---|
@@ -59,25 +70,38 @@ For each: import `withCorrelationId` from `../utils/correlationId` (adjust depth
 | 5 | #183 | `poolOps.ts` | `recalculatePoolWinners`, `toggleWinnerPaid`, `fixParticipantIds` | merged, undeployed |
 | 6 | #184 | `nflPools.ts` | `joinNFLPool`, `executeSurvivorRebuy`, `scoreNFLWeek` | merged, undeployed |
 | 7 | #185 | `billing.ts` | `validateBillingAccess`, `getPoolQuote` | merged, undeployed |
-| 8 | #186 | `adminHealth.ts`+`backfill.ts`+`expertPicks.ts`+`playoffPools.ts` | `getAdminHealthSnapshot`, `backfillPools`, `refreshExpertPicks`, `syncPlayoffPools` (no-input quartet, batched together for the shared gotcha) | merged, undeployed |
+| 8 | #186 | 4 files | `getAdminHealthSnapshot`, `backfillPools`, `refreshExpertPicks`, `syncPlayoffPools` | merged, undeployed |
 | 9 | #187 | `couponTemplates.ts` | `deleteCouponTemplate`, `acknowledgeMonetizationAlert` | merged, undeployed |
-| 10 | #188 | `espnBracket.ts` | `importTournamentFromESPN`, `adminInitTournament`, `syncBracketTournament`, `importConferenceTournamentFromESPN`, `syncPlayInPicks` (all 5, closes C5 auth-fallback finding for this file) | merged, undeployed |
+| 10 | #188 | `espnBracket.ts` | all 5 (closes 5 C5 claim-OR-doc instances) | merged, undeployed |
+| 11 | #191 | `bracketScoring.ts` | `scoreBracketEntries`, `finalizeTournamentPayouts` | merged, undeployed |
+| 12 | #192 | `conferenceTournaments.ts` | `initializeBigEastTournamentHttp`, `initializeBig12TournamentHttp` (were **doc-only** auth) | merged, undeployed |
+| 13 | #194 | `squares.ts` | `updatePlayer`, `releaseSquares` | merged, undeployed |
+| fix | #190 | `backfill.ts` | `backfillPools` dry-run gate (default true) + FE dry/live buttons | merged, undeployed |
+| fix | #193 | `backfill.ts` | status-clobber fix + per-entry fold marker | merged, undeployed |
+| fix | #195 | `schemas/squares.ts` | lookup-key `.trim()` regression from #194 | merged, undeployed |
 
-Fully swept files: `bracketEntries.ts` (6/6), `adminClaims.ts` (4/4), `poolOps.ts` (3/3), `nflPools.ts` (3/3 SWEEP-LATER rows), `billing.ts` (2/2 SWEEP-LATER rows), `couponTemplates.ts` (2/2 SWEEP-LATER rows), `espnBracket.ts` (5/5). `bracketPools.ts` 2/3 (row 7 deferred, see below). The no-input null→{} gotcha is now closed fleet-wide — promoted to a shared `noInputSchema` in `functions/src/lib/zodHelpers.ts` (batch 8).
+**Fully swept files:** `bracketEntries.ts`, `adminClaims.ts`, `poolOps.ts`, `nflPools.ts`, `billing.ts`, `couponTemplates.ts`, `espnBracket.ts`, `bracketScoring.ts`, `conferenceTournaments.ts`, `squares.ts`. `bracketPools.ts` 2/3 (`createBracketPool` deferred).
 
-**Next suggested batches** (same-file groups, biggest first): `bracketScoring.ts` (2 — `scoreBracketEntries`/`finalizeTournamentPayouts`), `conferenceTournaments.ts` (2 — same C5 auth-fallback pattern as batch 10), `squares.ts` (2), `propBets.ts` (2), `referral.ts` (2). Remaining single-row files: `poolParams.ts` (`lockPool`), `bracketOps.ts` (`markEntryPaidStatus`), `adminOps.ts`, `consensus.ts`, `participant.ts`, `migrations/backfillMemberRecords.ts`, `nflSchedule.ts`, `statsTrigger.ts`, `revenueAggregates.ts`, `userManagement.ts`, `userProfile.ts`, `scoreUpdates.ts`, `userSync.ts`, `playoffPools.ts` (`calculatePlayoffScores`, a separate legacy-noop row from the already-done `syncPlayoffPools`). Full list of 22 remaining rows: `grep -n "SWEEP-LATER" PLAN-SECURITY-OBSERVABILITY-SWEEPS.md`.
+### The 19 remaining
 
-**DEFERRED — needs its own careful batch:** `createBracketPool` (row 7). Rich nested `settings` + a `...settings` passthrough spread stores arbitrary client fields; a flat `.strict()` schema would reject data it currently persists. Needs a passthrough envelope or a client cutover — same treatment as the ADR-0001 PERMISSIVE creates. Do NOT drive-by strict it.
+Pairs (best next batches):
+- `propBets.ts` — `gradeProp`, `updatePropCard`
+- `referral.ts` — `generateReferralToken`, `resolveReferralToken` (**`resolveReferralToken` is PUBLIC/ANON** → `auth:"public"`)
 
-**Lessons from batches 5-10** (see HANDOFF.md's numbered list for full detail): (4) a prod batch-mutation callable's `dryRun` must default SAFE (true) at the schema layer, not a handler truthy-check — qodo caught this live on `fixParticipantIds` (PR #183), fixed with `z.boolean().optional().default(true)`; check every other dryRun-flag callable you retrofit for the same footgun. (5) shared cross-boundary schemas (`shared/schemas/*`, generated into `functions/src/shared/`) are OUT OF SCOPE for `.strict()`-ifying even on a SWEEP-LATER row — `getPoolQuote`'s `poolQuoteInputSchema` stayed non-strict on purpose (batch 7); only move the auth+parse gate onto `validated()`, don't tighten the shared contract. (6) `validated()`'s `role:` option (via `assertCallerRole`, claim AND doc must agree) automatically closes the C5 finding (claim-OR-spoofable-Firestore-doc fallback) for any callable you retrofit that had it — batch 10 closed 5 instances in `espnBracket.ts` this way; `conferenceTournaments.ts`'s 2 callables have the same pattern per the matrix's C5 note. (7) a handler that soft-returns `{success:false,message}` instead of throwing on missing input can still get a strict+required-field schema IF you verify the FE always sends those fields and already try/catches the call — two `espnBracket.ts` callables hit this in batch 10, both verified safe first.
+Singles: `lockPool` (poolParams.ts), `markEntryPaidStatus` (bracketOps.ts), `logAdminAction` (adminOps.ts), `recomputeConsensus` (consensus.ts), `calculatePlayoffScores` (playoffPools.ts, legacy noop), `claimMySquares` (participant.ts), `backfillMemberRecords` (migrations/), `importNFLSchedule` (nflSchedule.ts), `recalculateGlobalStats` (statsTrigger.ts), `recomputeRevenue` (revenueAggregates.ts), `searchUsersByEmail` (userManagement.ts), `recomputeMyProfile` (userProfile.ts), `fixPoolScores` (scoreUpdates.ts), `syncAllUsers` (userSync.ts).
 
-**Sweep A (correlation-id tail): NOT STARTED** — still ~13 FE files calling `httpsCallable` without `withCorrelationId`. Independent of Sweep B; still a good warm-up chunk.
+**Read the matrix note before wrapping these three — they carry decisions, not just shapes:**
+- `syncAllUsers` — matrix says **NO role gate today** (any authed user). Wrapping must not silently add one; that's a behavior/security decision for Kevin.
+- `recalculateGlobalStats` — its role check **returns instead of throwing**. Preserve or change deliberately, don't flip by accident.
+- `claimMySquares` — `guestDeviceKey` is unchecked today.
 
----
+**DEFERRED — needs its own careful batch:** `createBracketPool` (row 7). Rich nested `settings` + a `...settings` passthrough spread stores arbitrary client fields; a flat `.strict()` would reject data it currently persists. Needs a passthrough envelope or a client cutover. Do NOT drive-by strict it.
+
+**Sweep A (correlation-id tail): NOT STARTED** — still ~13 FE files calling `httpsCallable` without `withCorrelationId`. Independent of Sweep B.
 
 ## Baselines (green on current `main` — verify with `git log -1` after `git pull`)
 
-- As of batch 10, measured on merged `main` at 34761d4 (2026-07-18): root vitest **257**, functions unit **642** (was 598 before this session), emulator **89 pass / 10 skipped**, frontend `tsc -b` clean, functions `npm run typecheck` clean.
+- Measured on merged `main` at 42be636 (2026-07-18): root vitest **257**, functions unit **665**, emulator **97 pass / 10 skipped**, frontend `tsc -b` clean, functions `npm run typecheck` clean. Counts rise every batch — re-measure.
 - Every chunk must keep these green (counts go UP as you add schema tests — never down). Don't trust these numbers stale — re-verify with `npm --prefix functions test` after pulling latest main.
 
 ## Gate set before EVERY commit (no "done" without counts)
