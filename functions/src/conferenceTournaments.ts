@@ -1,7 +1,12 @@
 import * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
+import { validated } from "./lib/validated";
+import {
+    initializeBigEastTournamentHttpSchema,
+    initializeBig12TournamentHttpSchema,
+} from "./schemas/conferenceTournaments";
 import type { Game, TournamentSlot } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -161,26 +166,18 @@ export const initializeBigEastTournament = async (
 // ---------------------------------------------------------------------------
 // HTTPS Callable — SuperAdmin only
 // ---------------------------------------------------------------------------
-export const initializeBigEastTournamentHttp = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'Must be logged in.');
-    }
-
-    // Verify caller is a SuperAdmin
+export const initializeBigEastTournamentHttp = validated(
+    { schema: initializeBigEastTournamentHttpSchema, label: "initializeBigEastTournamentHttp", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async (input) => {
     const db = admin.firestore();
-    const userDoc = await db.collection('users').doc(request.auth.uid).get();
-    const role = userDoc.data()?.role;
-    if (role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'Super Admin only.');
-    }
-
-    const tournamentId = request.data?.tournamentId || 'bigeast-2026';
-    const overwrite = request.data?.overwrite === true;
+    const tournamentId = input.tournamentId || 'bigeast-2026';
+    const overwrite = input.overwrite === true;
 
     await initializeBigEastTournament(db, tournamentId, overwrite);
 
     return { success: true, tournamentId };
-});
+    },
+);
 
 // ---------------------------------------------------------------------------
 // Big 12 2026 Team Data (16 teams)
@@ -349,24 +346,16 @@ export const initializeBig12Tournament = async (
 // ---------------------------------------------------------------------------
 // HTTPS Callable — SuperAdmin only
 // ---------------------------------------------------------------------------
-export const initializeBig12TournamentHttp = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'Must be logged in.');
-    }
-
-    // Verify caller is a SuperAdmin
+export const initializeBig12TournamentHttp = validated(
+    { schema: initializeBig12TournamentHttpSchema, label: "initializeBig12TournamentHttp", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async (input) => {
     const db = admin.firestore();
-    const userDoc = await db.collection('users').doc(request.auth.uid).get();
-    const role = userDoc.data()?.role;
-    if (role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'Super Admin only.');
-    }
-
-    const tournamentId = request.data?.tournamentId || 'big12-2026';
-    const overwrite = request.data?.overwrite === true;
+    const tournamentId = input.tournamentId || 'big12-2026';
+    const overwrite = input.overwrite === true;
 
     await initializeBig12Tournament(db, tournamentId, overwrite);
 
     return { success: true, tournamentId };
-});
+    },
+);
 
