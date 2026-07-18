@@ -10,6 +10,7 @@ import { assertPaidParticipantCeiling } from "./poolOps";
 import { validated } from "./lib/validated";
 import { updateGlobalPlayoffResultsSchema } from "./schemas/tournamentAdmin";
 import { submitPlayoffPicksSchema, managePlayoffEntrySchema } from "./schemas/playoffEntries";
+import { syncPlayoffPoolsSchema } from "./schemas/noInputAdmin";
 
 
 
@@ -486,12 +487,10 @@ export const onPlayoffConfigUpdate = onDocumentWritten("config/playoffs", async 
  * Callable function to manually force a sync of the global playoff config to all pools.
  * Useful if the trigger fails or for retro-fixing.
  */
-export const syncPlayoffPools = onCall(async (request) => {
+export const syncPlayoffPools = validated(
     // SUPER_ADMIN only — this fans out a write across every playoff pool.
-    if (!request.auth || request.auth.token.role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'Admins only');
-    }
-
+    { schema: syncPlayoffPoolsSchema, label: "syncPlayoffPools", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async () => {
     const db = admin.firestore();
     const configSnap = await db.doc("config/playoffs").get();
     if (!configSnap.exists) {
@@ -521,4 +520,5 @@ export const syncPlayoffPools = onCall(async (request) => {
     await batch.commit();
     logger.info(`Manual Playoff Sync: Updated ${count} pools.`);
     return { success: true, count, message: `Successfully synced ${count} pools.` };
-});
+    },
+);

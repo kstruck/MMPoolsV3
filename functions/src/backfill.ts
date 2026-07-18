@@ -1,13 +1,12 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 import { writeAdminAudit } from "./lib/adminAudit";
+import { validated } from "./lib/validated";
+import { backfillPoolsSchema } from "./schemas/noInputAdmin";
 
-export const backfillPools = onCall(async (request) => {
-    if (!request.auth || request.auth.token.role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'Only Super Admin can run migration.');
-    }
-
+export const backfillPools = validated(
+    { schema: backfillPoolsSchema, label: "backfillPools", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async (_data, request) => {
     const db = admin.firestore();
     const poolsRef = db.collection('pools');
     const usersRef = db.collection('users');
@@ -97,8 +96,8 @@ export const backfillPools = onCall(async (request) => {
     }
 
     await writeAdminAudit({
-        actorUid: request.auth.uid,
-        actorEmail: request.auth.token.email as string | undefined,
+        actorUid: request.auth!.uid,
+        actorEmail: request.auth!.token.email as string | undefined,
         action: "BACKFILL_RUN",
         targetType: "collection",
         targetId: "pools",
@@ -107,5 +106,6 @@ export const backfillPools = onCall(async (request) => {
     });
 
     return { success: true, updatedCount };
-});
+    },
+);
 

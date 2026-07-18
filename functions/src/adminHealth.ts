@@ -1,6 +1,7 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
+import { validated } from "./lib/validated";
+import { getAdminHealthSnapshotSchema } from "./schemas/noInputAdmin";
 
 /**
  * Real platform health for the Super-Admin Overview. Replaces the previously
@@ -156,17 +157,17 @@ async function persistSnapshot(
   await ref.set({ latest: snapshot, history, updatedAt: snapshot.at });
 }
 
-export const getAdminHealthSnapshot = onCall(async (request) => {
-  if (!request.auth || request.auth.token.role !== "SUPER_ADMIN") {
-    throw new HttpsError("permission-denied", "Only Super Admin may read platform health.");
-  }
+export const getAdminHealthSnapshot = validated(
+  { schema: getAdminHealthSnapshotSchema, label: "getAdminHealthSnapshot", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async () => {
   const db = admin.firestore();
   const snapshot = await computeAdminHealthSnapshot(db);
   // Manual "Run Check" writes the same store the UI history reads, so the
   // last-run timestamp is never stale after a manual probe.
   await persistSnapshot(db, snapshot);
   return snapshot;
-});
+  },
+);
 
 /**
  * Hourly automated health probe → persists to health/latest so the Overview
