@@ -1,5 +1,5 @@
 import * as admin from "firebase-admin";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { Tournament, BracketPool, BracketEntry } from "./types";
 import { checkBillingAccess } from "./billing";
 import { assertPaidParticipantCeiling } from "./poolOps";
@@ -13,6 +13,9 @@ import {
     createBracketEntrySchema,
     updateBracketEntrySchema,
     deleteBracketEntrySchema,
+    updateEntryPaymentSchema,
+    adminUpdateEntryOverridesSchema,
+    adminDeleteEntrySchema,
 } from "./schemas/poolEngagement";
 
 
@@ -412,32 +415,16 @@ export const deleteBracketEntry = validated(
 // offered the toggle). Authorization mirrors setPaidStatus: owner/manager/
 // creator or SUPER_ADMIN. NOTE: the entry's paidStatus is display/legacy;
 // the Member Record (setPaidStatus) remains the authoritative payment truth.
-export const updateEntryPayment = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-    const uid = request.auth.uid;
-    // paidAt/paymentNote support the manager ledger's detailed edit (qodo review
-    // of PR #162 finding 1 — NFLManagerBentoDashboard.saveDetailedPayment was a
-    // surviving raw entry write). Explicit null clears the field (parity with
-    // the old client write, which stored literal nulls).
-    const { poolId, entryId, paidStatus, paymentMethod, paidAt, paymentNote } = (request.data ?? {}) as {
-        poolId?: string; entryId?: string; paidStatus?: string; paymentMethod?: string;
-        paidAt?: number | null; paymentNote?: string | null;
-    };
-    if (!poolId || !entryId || (paidStatus !== 'PAID' && paidStatus !== 'UNPAID')) {
-        throw new HttpsError("invalid-argument", "poolId, entryId, and paidStatus (PAID|UNPAID) are required.");
-    }
-    const ALLOWED_METHODS = ['Cash', 'Check', 'Venmo', 'Google Pay', 'Cash.me', 'Other'];
-    if (paymentMethod !== undefined && !ALLOWED_METHODS.includes(paymentMethod)) {
-        throw new HttpsError("invalid-argument", "Invalid paymentMethod.");
-    }
-    if (paidAt !== undefined && paidAt !== null && (typeof paidAt !== 'number' || !Number.isFinite(paidAt))) {
-        throw new HttpsError("invalid-argument", "paidAt must be a timestamp or null.");
-    }
-    if (paymentNote !== undefined && paymentNote !== null && typeof paymentNote !== 'string') {
-        throw new HttpsError("invalid-argument", "paymentNote must be a string or null.");
-    }
+// paidAt/paymentNote support the manager ledger's detailed edit (qodo review of
+// PR #162 finding 1 — NFLManagerBentoDashboard.saveDetailedPayment was a
+// surviving raw entry write). Explicit null clears the field (parity with the
+// old client write, which stored literal nulls) — the schema keeps null via
+// .nullable(), NOT nullish(), so the clear reaches this handler.
+export const updateEntryPayment = validated(
+    { schema: updateEntryPaymentSchema, label: "updateEntryPayment", appCheck: "monitor" },
+    async (data, request) => {
+    const uid = request.auth!.uid;
+    const { poolId, entryId, paidStatus, paymentMethod, paidAt, paymentNote } = data;
 
     const db = admin.firestore();
     const poolRef = db.collection("pools").doc(poolId);
@@ -488,32 +475,16 @@ export const updateEntryPayment = onCall(async (request) => {
 // delete. The toggle now rides updateEntryPayment; these two callables carry
 // the other two — SUPER_ADMIN only, allowlisted fields, audited.
 
-const OVERRIDE_FIELDS = new Set(['score', 'payout', 'tiebreakerScore', 'tieBreakerPrediction']);
-
-export const adminUpdateEntryOverrides = onCall(async (request) => {
-    if (!request.auth) throw new HttpsError("unauthenticated", "User must be logged in.");
-    if (request.auth.token?.role !== 'SUPER_ADMIN') {
-        throw new HttpsError("permission-denied", "Entry overrides are SUPER_ADMIN only.");
-    }
-    const uid = request.auth.uid;
-    const { poolId, entryId, overrides } = (request.data ?? {}) as {
-        poolId?: string; entryId?: string; overrides?: Record<string, unknown>;
-    };
-    if (!poolId || !entryId || !overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
-        throw new HttpsError("invalid-argument", "poolId, entryId, and an overrides object are required.");
-    }
-    const patch: Record<string, unknown> = {};
+export const adminUpdateEntryOverrides = validated(
+    { schema: adminUpdateEntryOverridesSchema, label: "adminUpdateEntryOverrides", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async (data, request) => {
+    const uid = request.auth!.uid;
+    const { poolId, entryId, overrides } = data;
+    // Schema already allowlists the override keys (strict) + enforces finite
+    // numbers + non-empty; this loop just narrows to the write patch.
+    const patch: Record<string, number> = {};
     for (const [key, value] of Object.entries(overrides)) {
-        if (!OVERRIDE_FIELDS.has(key)) {
-            throw new HttpsError("invalid-argument", `Field "${key}" is not an allowed override.`);
-        }
-        if (typeof value !== 'number' || !Number.isFinite(value)) {
-            throw new HttpsError("invalid-argument", `Override "${key}" must be a finite number.`);
-        }
-        patch[key] = value;
-    }
-    if (Object.keys(patch).length === 0) {
-        throw new HttpsError("invalid-argument", "No overrides provided.");
+        if (typeof value === 'number') patch[key] = value;
     }
 
     const db = admin.firestore();
@@ -536,16 +507,11 @@ export const adminUpdateEntryOverrides = onCall(async (request) => {
     return { success: true };
 });
 
-export const adminDeleteEntry = onCall(async (request) => {
-    if (!request.auth) throw new HttpsError("unauthenticated", "User must be logged in.");
-    if (request.auth.token?.role !== 'SUPER_ADMIN') {
-        throw new HttpsError("permission-denied", "Admin entry deletion is SUPER_ADMIN only.");
-    }
-    const uid = request.auth.uid;
-    const { poolId, entryId } = (request.data ?? {}) as { poolId?: string; entryId?: string };
-    if (!poolId || !entryId) {
-        throw new HttpsError("invalid-argument", "poolId and entryId are required.");
-    }
+export const adminDeleteEntry = validated(
+    { schema: adminDeleteEntrySchema, label: "adminDeleteEntry", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async (data, request) => {
+    const uid = request.auth!.uid;
+    const { poolId, entryId } = data;
 
     const db = admin.firestore();
     const poolRef = db.collection("pools").doc(poolId);

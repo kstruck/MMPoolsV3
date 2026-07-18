@@ -73,8 +73,51 @@ export const deleteBracketEntrySchema = z.strictObject({
     entryId: z.string().trim().min(1).max(200),
 });
 
+const entryId = z.string().trim().min(1).max(200);
+
+/**
+ * updateEntryPayment — dbService payload
+ * { poolId, entryId, paidStatus, paymentMethod?, paidAt?, paymentNote? }.
+ * paidAt/paymentNote deliberately use `.nullable().optional()` NOT nullish():
+ * the handler stores an explicit `null` to CLEAR the field (parity with the
+ * old raw client write), so null must survive to the handler — mapping it to
+ * undefined (nullish) would silently break the clear semantics.
+ */
+export const updateEntryPaymentSchema = z.strictObject({
+    poolId,
+    entryId,
+    paidStatus: z.enum(["PAID", "UNPAID"]),
+    paymentMethod: z.enum(["Cash", "Check", "Venmo", "Google Pay", "Cash.me", "Other"]).optional(),
+    paidAt: z.number().finite().nullable().optional(),
+    paymentNote: z.string().max(500).nullable().optional(),
+});
+
+/**
+ * adminUpdateEntryOverrides (SUPER_ADMIN) — { poolId, entryId, overrides }.
+ * overrides is an allowlisted, strict, non-empty map of the 4 override fields
+ * to finite numbers (mirrors the handler's OVERRIDE_FIELDS gate).
+ */
+export const adminUpdateEntryOverridesSchema = z.strictObject({
+    poolId,
+    entryId,
+    overrides: z
+        .strictObject({
+            score: z.number().finite().optional(),
+            payout: z.number().finite().optional(),
+            tiebreakerScore: z.number().finite().optional(),
+            tieBreakerPrediction: z.number().finite().optional(),
+        })
+        .refine((o) => Object.keys(o).length > 0, { message: "No overrides provided." }),
+});
+
+/** adminDeleteEntry (SUPER_ADMIN) — { poolId, entryId }. */
+export const adminDeleteEntrySchema = z.strictObject({ poolId, entryId });
+
 export type SendPoolInvitesInput = z.infer<typeof sendPoolInvitesSchema>;
 export type SubmitBracketEntryInput = z.infer<typeof submitBracketEntrySchema>;
 export type CreateBracketEntryInput = z.infer<typeof createBracketEntrySchema>;
 export type UpdateBracketEntryInput = z.infer<typeof updateBracketEntrySchema>;
 export type DeleteBracketEntryInput = z.infer<typeof deleteBracketEntrySchema>;
+export type UpdateEntryPaymentInput = z.infer<typeof updateEntryPaymentSchema>;
+export type AdminUpdateEntryOverridesInput = z.infer<typeof adminUpdateEntryOverridesSchema>;
+export type AdminDeleteEntryInput = z.infer<typeof adminDeleteEntrySchema>;
