@@ -6,17 +6,16 @@
  * users/{uid}.role field is the mirror for display + the token-refresh fallback.
  */
 
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { normalizeRole, type CanonicalRole } from "./lib/roles";
 import { writeAdminAudit } from "./lib/adminAudit";
 import { validated } from "./lib/validated";
-import { setUserRoleSchema, setSuperAdminClaimSchema } from "./schemas/adminClaims";
+import { setUserRoleSchema, setSuperAdminClaimSchema, syncMyClaimsSchema, backfillUserRolesSchema } from "./schemas/adminClaims";
 
 // Moved to lib/assertRole.ts (so lib/validated.ts can use it without a module
 // cycle); re-exported here for the existing importers.
 export { assertCallerRole } from "./lib/assertRole";
-import { assertCallerRole } from "./lib/assertRole";
 
 /** Roles ranked low→high for detecting a downward change (token revocation). */
 const ROLE_RANK: Record<CanonicalRole, number> = {
@@ -120,11 +119,10 @@ export const setSuperAdminClaim = validated(
  *    because rules forbid a user from writing their own role field.
  *  - legacy values are normalized (PARTICIPANT→MEMBER) before minting.
  */
-export const syncMyClaims = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Must be logged in.");
-  }
-  const uid = request.auth.uid;
+export const syncMyClaims = validated(
+  { schema: syncMyClaimsSchema, label: "syncMyClaims", appCheck: "monitor" },
+  async (_data, request) => {
+  const uid = request.auth!.uid;
 
   const userDoc = await admin.firestore().doc(`users/${uid}`).get();
   if (!userDoc.exists) {
@@ -152,9 +150,12 @@ export const syncMyClaims = onCall(async (request) => {
 const LEGACY_ROLE_VALUES = ["POOL_MANAGER", "PARTICIPANT", "MANAGER", "USER"];
 const BACKFILL_MAX = 400;
 
-export const backfillUserRoles = onCall(async (request) => {
-  const caller = await assertCallerRole(request, "SUPER_ADMIN");
-  const dryRun = (request.data as { dryRun?: boolean })?.dryRun !== false; // default true
+export const backfillUserRoles = validated(
+  { schema: backfillUserRolesSchema, label: "backfillUserRoles", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async (data, request) => {
+  // Role gate (claim+doc) enforced by the wrapper; derive caller for the audit.
+  const caller = { uid: request.auth!.uid, email: request.auth!.token.email as string | undefined };
+  const dryRun = data.dryRun !== false; // default true
 
   const snap = await admin.firestore()
     .collection("users")
