@@ -47,7 +47,7 @@ export { initializeBigEastTournamentHttp, initializeBig12TournamentHttp } from "
 export { scoreBracketEntries, finalizeTournamentPayouts } from "./bracketScoring";
 
 // --- NFL POOLS FUNCTIONS ---
-export { syncNFLScoresJob, importNFLSchedule } from "./nflSchedule";
+export { syncNFLScoresJob, importNFLSchedule, lockNFLSpreadsJob } from "./nflSchedule";
 export { createNFLPool, joinNFLPool, submitNFLPicks, executeSurvivorRebuy, scoreNFLWeek } from "./nflPools";
 export { sendManualReminder } from "./manualReminders";
 // Sim harness (PLAN-TEST-SUITE 8e/8f): SUPER_ADMIN-only, simRunId-scoped Test
