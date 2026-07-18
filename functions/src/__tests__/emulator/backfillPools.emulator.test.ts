@@ -137,12 +137,29 @@ describe('backfillPools dry-run gate (emulator)', () => {
     expect(pool.status).toBe('LOCKED');
   });
 
+  it('derives a status for a pool that HAS createdByUid but no status', async () => {
+    // The status derivation used to be nested inside the !createdByUid branch,
+    // so a pool in this shape could never be migrated.
+    await db.collection('pools').doc('pool3').set({
+      ownerId: 'owner1',
+      createdByUid: 'owner1',
+      name: 'Has creator, no status',
+      type: 'SQUARES',
+      isFinal: true,
+    });
+
+    await wrapped({ data: { dryRun: false }, ...ADMIN_CTX });
+
+    const pool = (await db.collection('pools').doc('pool3').get()).data()!;
+    expect(pool.status).toBe('FINAL');
+  });
+
   it('does not double-count historical stats when run live twice', async () => {
-    // The increments are non-idempotent by construction, so leg 3 is guarded by
-    // a per-pool historicalStatsFoldedAt marker. Before the status fix this was
-    // masked by accident (run 1 knocked status off COMPLETED so run 2 skipped
-    // the leg); preserving status correctly removes that accident, which is why
-    // the guard has to be explicit.
+    // The increments are non-idempotent by construction, so each entry is
+    // stamped historicalStatsFoldedAt in the SAME batch as its increment.
+    // Before the status fix this was masked by accident (run 1 knocked status
+    // off COMPLETED so run 2 skipped the leg); preserving status correctly
+    // removes that accident, which is why the guard has to be explicit.
     await wrapped({ data: { dryRun: false }, ...ADMIN_CTX });
     await wrapped({ data: { dryRun: false }, ...ADMIN_CTX });
 
@@ -152,7 +169,30 @@ describe('backfillPools dry-run gate (emulator)', () => {
     expect(user.historicalStats.totalPoints).toBe(42);
     expect(user.historicalStats.totalEarnings).toBe(100);
 
-    const pool = (await db.collection('pools').doc('pool1').get()).data()!;
-    expect(pool.historicalStatsFoldedAt).toBeDefined();
+    const entry = (
+      await db.collection('pools').doc('pool1').collection('entries').doc('e1').get()
+    ).data()!;
+    expect(entry.historicalStatsFoldedAt).toBeDefined();
+  });
+
+  it('folds only the unfolded entries when a prior run was interrupted', async () => {
+    // Simulates a crash partway through a large pool: e1 already carries the
+    // marker, e2 does not. Only e2 may be folded. This is the case a per-POOL
+    // marker written after the entry loop could not express — a >400-entry pool
+    // flushes mid-loop, so increments can commit before any pool-level marker.
+    await db
+      .collection('pools').doc('pool1').collection('entries').doc('e1')
+      .update({ historicalStatsFoldedAt: new Date() });
+    await db
+      .collection('pools').doc('pool1').collection('entries').doc('e2')
+      .set({ ownerUid: 'owner1', rank: 4, totalScore: 7, payoutAmount: 0 });
+
+    await wrapped({ data: { dryRun: false }, ...ADMIN_CTX });
+
+    const user = (await db.collection('users').doc('owner1').get()).data()!;
+    // e2 only: 1 entry, 0 wins, 7 points — e1's 42 points are NOT re-folded.
+    expect(user.historicalStats.poolsEntered).toBe(1);
+    expect(user.historicalStats.poolsWon).toBe(0);
+    expect(user.historicalStats.totalPoints).toBe(7);
   });
 });
