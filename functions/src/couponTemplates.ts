@@ -4,23 +4,25 @@
  * tab mints real coupons from) plus a small acknowledge-alert callable (#22).
  *
  * Every mutating callable:
- *  - is SUPER_ADMIN-only via assertCallerRole (claim + user-doc must agree —
- *    the exact helper adminBillingOps uses; imported, not reinvented), and
+ *  - is SUPER_ADMIN-only via validated()'s role gate (assertCallerRole under
+ *    the hood — claim + user-doc must agree, the same helper adminBillingOps
+ *    uses), and
  *  - records an admin_audit entry via writeAdminAudit.
  *
  * couponTemplates/{id} rules (Wave 5 owns firestore.rules): SUPER_ADMIN direct
  * client READ; ALL writes functions-only. These callables ARE those writes.
  */
 
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { assertCallerRole } from "./adminClaims";
 import { validated } from "./lib/validated";
 import {
   createCouponTemplateSchema,
   updateCouponTemplateSchema,
   mintCouponFromTemplateSchema,
+  deleteCouponTemplateSchema,
+  acknowledgeMonetizationAlertSchema,
 } from "./schemas/couponTemplates";
 import { writeAdminAudit } from "./lib/adminAudit";
 import {
@@ -88,12 +90,10 @@ export const updateCouponTemplate = validated(
 );
 
 /** deleteCouponTemplate — remove a template. Minting real coupons is unaffected. */
-export const deleteCouponTemplate = onCall(async (request) => {
-  const caller = await assertCallerRole(request, "SUPER_ADMIN");
-  const { templateId } = (request.data ?? {}) as { templateId?: string };
-  if (!templateId || typeof templateId !== "string") {
-    throw new HttpsError("invalid-argument", "templateId (string) is required.");
-  }
+export const deleteCouponTemplate = validated(
+  { schema: deleteCouponTemplateSchema, label: "deleteCouponTemplate", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async ({ templateId }, request) => {
+  const caller = { uid: request.auth!.uid, email: request.auth!.token.email as string | undefined };
   await admin.firestore().collection("couponTemplates").doc(templateId).delete();
 
   await writeAdminAudit({
@@ -105,7 +105,8 @@ export const deleteCouponTemplate = onCall(async (request) => {
     status: "success",
   });
   return { success: true };
-});
+  },
+);
 
 /**
  * mintCouponFromTemplate — create a REAL coupon from a template. This replicates
@@ -162,15 +163,10 @@ export const mintCouponFromTemplate = validated(
  * coupon-abuse/housekeeping alerts this wave writes AND the Wave-2
  * refund/dispute/double-charge alerts (same collection, same status field).
  */
-export const acknowledgeMonetizationAlert = onCall(async (request) => {
-  const caller = await assertCallerRole(request, "SUPER_ADMIN");
-  const { alertId, status } = (request.data ?? {}) as {
-    alertId?: string;
-    status?: "acked" | "open";
-  };
-  if (!alertId || typeof alertId !== "string") {
-    throw new HttpsError("invalid-argument", "alertId (string) is required.");
-  }
+export const acknowledgeMonetizationAlert = validated(
+  { schema: acknowledgeMonetizationAlertSchema, label: "acknowledgeMonetizationAlert", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async ({ alertId, status }, request) => {
+  const caller = { uid: request.auth!.uid, email: request.auth!.token.email as string | undefined };
   const nextStatus = status === "open" ? "open" : "acked";
 
   const ref = admin.firestore().collection("monetization_alerts").doc(alertId);
@@ -198,4 +194,5 @@ export const acknowledgeMonetizationAlert = onCall(async (request) => {
     status: "success",
   });
   return { success: true, status: nextStatus };
-});
+  },
+);
