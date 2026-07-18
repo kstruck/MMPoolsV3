@@ -49,6 +49,9 @@ export { scoreBracketEntries, finalizeTournamentPayouts } from "./bracketScoring
 // --- NFL POOLS FUNCTIONS ---
 export { syncNFLScoresJob, importNFLSchedule, lockNFLSpreadsJob } from "./nflSchedule";
 export { createNFLPool, joinNFLPool, submitNFLPicks, executeSurvivorRebuy, scoreNFLWeek } from "./nflPools";
+// Operator loop (PLAN-NFL-PRESEASON-PILOT A3a): hourly pre-kickoff tripwire that
+// pages ops when a week's spreads aren't all locked. Kill-switch + dry-run gated.
+export { nflLockWatchJob } from "./nflLockWatch";
 export { sendManualReminder } from "./manualReminders";
 // Sim harness (PLAN-TEST-SUITE 8e/8f): SUPER_ADMIN-only, simRunId-scoped Test
 // Suite mutations + cleanup. See functions/src/simHarness.ts.

@@ -39,13 +39,17 @@ export type OpsAlertType =
     | "DISPUTE"
     | "SITE_DOWN"
     | "AUTH_APPCHECK_OUTAGE"
-    | "CHECKOUT_SLO_BREACH";
+    | "CHECKOUT_SLO_BREACH"
+    | "NFL_SPREADS_NOT_LOCKED";
 
 const HIGH_PRIORITY_TYPES: ReadonlySet<OpsAlertType> = new Set([
     "WEBHOOK_FAILED",
     "SITE_DOWN",
     "AUTH_APPCHECK_OUTAGE",
     "CHECKOUT_SLO_BREACH",
+    // Every member of every pool on the slate is blocked from submitting picks
+    // and the window closes at kickoff — email alone is too slow to act on.
+    "NFL_SPREADS_NOT_LOCKED",
 ]);
 
 interface OpsAlertsConfig {
