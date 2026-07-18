@@ -112,29 +112,47 @@ describe('backfillPools dry-run gate (emulator)', () => {
     expect(user.historicalStats.totalEarnings).toBe(100);
   });
 
-  // KNOWN DEFECT, characterized here so it cannot change silently.
-  // Leg 1 recomputes `status` from isLocked/isFinal whenever `createdByUid` is
-  // missing, without consulting the existing status — so a live run RESETS a
-  // COMPLETED pool to DRAFT. This is a data-corruption bug that predates the
-  // dry-run gate; the gate exists so an operator sees the blast radius first.
-  // When it is fixed, this test SHOULD fail — update it to assert 'COMPLETED'.
-  it('KNOWN DEFECT: a live run resets a COMPLETED pool to DRAFT', async () => {
+  it('preserves an existing status instead of recomputing it', async () => {
+    // Regression: leg 1 used to derive status from isLocked/isFinal whenever
+    // createdByUid was missing, ignoring the value on the doc — which reset a
+    // COMPLETED pool to DRAFT. isLocked/isFinal cannot express COMPLETED.
     await wrapped({ data: { dryRun: false }, ...ADMIN_CTX });
 
     const pool = (await db.collection('pools').doc('pool1').get()).data()!;
-    expect(pool.status).toBe('DRAFT');
+    expect(pool.status).toBe('COMPLETED');
+    expect(pool.createdByUid).toBe('owner1');
   });
 
-  it('a second live run is masked by that status clobber, not by idempotency', async () => {
-    // The stat increments are non-idempotent by construction, but re-running
-    // does NOT double-count in practice: run 1 knocks status off COMPLETED, so
-    // run 2 skips leg 3 entirely. Pinned so that fixing the status clobber
-    // surfaces the latent double-count instead of hiding it.
+  it('still derives a status for a legacy pool that has none', async () => {
+    await db.collection('pools').doc('pool2').set({
+      ownerId: 'owner1',
+      name: 'Statusless',
+      type: 'SQUARES',
+      isLocked: true,
+    });
+
+    await wrapped({ data: { dryRun: false }, ...ADMIN_CTX });
+
+    const pool = (await db.collection('pools').doc('pool2').get()).data()!;
+    expect(pool.status).toBe('LOCKED');
+  });
+
+  it('does not double-count historical stats when run live twice', async () => {
+    // The increments are non-idempotent by construction, so leg 3 is guarded by
+    // a per-pool historicalStatsFoldedAt marker. Before the status fix this was
+    // masked by accident (run 1 knocked status off COMPLETED so run 2 skipped
+    // the leg); preserving status correctly removes that accident, which is why
+    // the guard has to be explicit.
     await wrapped({ data: { dryRun: false }, ...ADMIN_CTX });
     await wrapped({ data: { dryRun: false }, ...ADMIN_CTX });
 
     const user = (await db.collection('users').doc('owner1').get()).data()!;
     expect(user.historicalStats.poolsEntered).toBe(1);
+    expect(user.historicalStats.poolsWon).toBe(1);
     expect(user.historicalStats.totalPoints).toBe(42);
+    expect(user.historicalStats.totalEarnings).toBe(100);
+
+    const pool = (await db.collection('pools').doc('pool1').get()).data()!;
+    expect(pool.historicalStatsFoldedAt).toBeDefined();
   });
 });

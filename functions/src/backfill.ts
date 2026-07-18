@@ -42,7 +42,15 @@ export const backfillPools = validated(
         const updates: any = {};
         if (!pool.createdByUid) {
             updates.createdByUid = ownerId;
-            updates.status = pool.isLocked ? 'LOCKED' : (pool.isFinal ? 'FINAL' : 'DRAFT');
+            // Derive a status ONLY for pools that have none. This used to run
+            // unconditionally whenever createdByUid was missing, which recomputed
+            // status from isLocked/isFinal while ignoring the value already on the
+            // doc — silently resetting a COMPLETED pool to DRAFT. isLocked/isFinal
+            // cannot express COMPLETED or ARCHIVED, so they must never overwrite a
+            // status the pool already carries.
+            if (!pool.status) {
+                updates.status = pool.isLocked ? 'LOCKED' : (pool.isFinal ? 'FINAL' : 'DRAFT');
+            }
         }
         if (pool.isPublic === undefined) {
             updates.isPublic = pool.type === 'BRACKET' ? (pool.isListedPublic ?? false) : true;
@@ -64,7 +72,20 @@ export const backfillPools = validated(
         batchCount++;
 
         // 3. Historical Data Migration (For COMPLETED pools)
-        if (pool.status === 'COMPLETED' || pool.status === 'ARCHIVED') {
+        //
+        // Guarded by a per-pool marker because this leg is NOT idempotent: it
+        // folds each entry into users/{uid}.historicalStats with
+        // FieldValue.increment(), so folding the same pool twice double-counts.
+        // Until the status-clobber fix above, a second run happened to skip this
+        // leg (run 1 knocked status off COMPLETED) — that accident was the only
+        // thing preventing double-counting. Preserving status correctly removes
+        // the accident, so the guard has to be explicit.
+        //
+        // LIMITATION: pools folded in by a run that predates this marker carry
+        // no marker, so they would be folded again. The dry-run default plus the
+        // plannedWrites count is the mitigation — inspect before arming.
+        const alreadyFolded = !!pool.historicalStatsFoldedAt;
+        if ((pool.status === 'COMPLETED' || pool.status === 'ARCHIVED') && !alreadyFolded) {
             const entriesSnap = await poolDoc.ref.collection('entries').get();
             for (const entryDoc of entriesSnap.docs) {
                 const entry = entryDoc.data();
@@ -90,6 +111,12 @@ export const backfillPools = validated(
 
                 if (batchCount >= 400) await flush();
             }
+
+            // Stamp the pool so a later run does not fold these entries again.
+            // Staged in the same batch as the increments it guards, so the
+            // marker cannot land without them (or vice versa).
+            batch.update(poolDoc.ref, { historicalStatsFoldedAt: FieldValue.serverTimestamp() });
+            batchCount++;
         }
 
         updatedCount++;
