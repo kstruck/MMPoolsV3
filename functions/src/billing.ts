@@ -20,6 +20,7 @@ import { validateCouponRules } from "./lib/couponReservation";
 import { HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
 import { redeemCouponSchema } from "./schemas/billingCheckout";
+import { validateBillingAccessSchema } from "./schemas/billing";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { renderEmailHtml, escapeHtml, BASE_URL } from "./emailStyles";
 import { sendEmail } from "./reminders";
@@ -229,13 +230,9 @@ export const enforceBillingStatus = functions.scheduler.onSchedule("every day 03
 export { checkBillingAccess, PAID_FEATURE_KEYS } from "./lib/billingAccess";
 import { checkBillingAccess } from "./lib/billingAccess";
 
-export const validateBillingAccess = functions.https.onCall(async (request) => {
-    const { poolId, feature } = request.data as { poolId: string; feature?: string };
-
-    if (!poolId) {
-        throw new HttpsError("invalid-argument", "poolId is required.");
-    }
-
+export const validateBillingAccess = validated(
+    { schema: validateBillingAccessSchema, label: "validateBillingAccess", auth: "public", appCheck: "monitor" },
+    async ({ poolId, feature }) => {
     const poolDoc = await db.collection("pools").doc(poolId).get();
     if (!poolDoc.exists) {
         throw new HttpsError("not-found", "Pool not found.");
@@ -250,7 +247,8 @@ export const validateBillingAccess = functions.https.onCall(async (request) => {
     }
 
     return { allowed: true };
-});
+    },
+);
 
 // =============================================================================
 // 3. redeemCoupon — Callable Function
@@ -506,22 +504,12 @@ export async function resolveCouponForQuote(
     };
 }
 
-export const getPoolQuote = functions.https.onCall({ cors: true }, async (request): Promise<PoolQuote> => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "You must be signed in to get a quote.");
-    }
-    const userId = request.auth.uid;
-
-    // Validate input shape (coerces estimatedPlayers, defaults addon booleans).
-    const parsed = poolQuoteInputSchema.safeParse(request.data);
-    if (!parsed.success) {
-        const issue = parsed.error.issues[0];
-        throw new HttpsError(
-            "invalid-argument",
-            `Invalid quote request: ${issue?.path?.join(".") || "(root)"} — ${issue?.message ?? "validation failed"}`
-        );
-    }
-    const { poolType, estimatedPlayers, addons, couponCode } = parsed.data;
+export const getPoolQuote = validated(
+    // poolQuoteInputSchema stays non-strict — shared cross-boundary contract
+    // (functions/src/shared/schemas/quote.ts), not a SWEEP-LATER-owned schema.
+    { schema: poolQuoteInputSchema, label: "getPoolQuote", appCheck: "monitor", options: { cors: true } },
+    async ({ poolType, estimatedPlayers, addons, couponCode }, request): Promise<PoolQuote> => {
+    const userId = request.auth!.uid;
 
     const config = await loadBillingConfig(db);
 
@@ -552,4 +540,5 @@ export const getPoolQuote = functions.https.onCall({ cors: true }, async (reques
     } catch (e: any) {
         throw new HttpsError("invalid-argument", e?.message || "Unable to price this pool format.");
     }
-});
+    },
+);
