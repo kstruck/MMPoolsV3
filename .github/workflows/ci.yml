@@ -50,6 +50,44 @@ jobs:
         run: npm test
         working-directory: functions
 
+  # REQUIRED: the emulator suite — including the 45-fixture NFL scenario matrix
+  # (fixtureMatrix.emulator.test.ts), the best eval in the repo, which until now
+  # ran only on a developer's machine. Separate job, not a step in build-and-test,
+  # because it needs a JDK for the Firestore emulator.
+  #
+  # Empty-pass protection is inside the test itself: fixtureMatrix asserts
+  # FIXTURES.length >= 40 at describe-collection time, so a broken fixture glob
+  # fails the job instead of reporting zero tests as green.
+  emulator-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # The Firestore emulator is a Java process.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # Root install provides vitest AND the firebase-tools binary that
+      # `emulators:exec` runs. npm puts every ancestor node_modules/.bin on PATH,
+      # so the functions-dir script finds it without a global install.
+      - name: Install root deps
+        run: npm ci
+
+      - name: Install functions deps
+        run: npm ci
+        working-directory: functions
+
+      - name: Emulator tests (incl. 45-fixture NFL matrix)
+        run: npm run test:emulator
+        working-directory: functions
+
   # Validate the nginx config used by the Docker/Coolify production deploy.
   # A syntax error here would fail the container start, so gate it on every PR.
   nginx-validate:
