@@ -5,15 +5,15 @@ This file + auto-memory carry the full state. Older narrative lives in git histo
 
 ---
 
-## Current state: **19 SWEEP-LATER callables remain** — batches 1-4 deployed, batches 5-13 + 3 fixes merged to main but UNDEPLOYED
+## Current state: **11 SWEEP-LATER callables remain** (10 actionable + createBracketPool deferred) — batches 1-4 deployed, batches 5-13 + 3 fixes merged to main but UNDEPLOYED
 
 The trust-boundary `validated()` sweep of the parked SWEEP-LATER callables is underway. Kickoff/recipe doc: `PICKUP-CALLABLE-SWEEP.md`; classification authority: `PLAN-SECURITY-OBSERVABILITY-SWEEPS.md`.
 
-> **Count caveat — trust the grep, not the fraction.** The SWEEPS matrix header says 51 SWEEP-LATER rows, but 35 swept + 19 still-unwrapped = 54, so the header or the row classifications are off by ~3. Don't quote an "N/51" fraction. The authoritative check is:
+> **Count caveat — trust the grep, not the fraction.** The SWEEPS matrix header says 51 SWEEP-LATER rows, but 43 swept + 11 still-unwrapped = 54, so the header or the row classifications are off by ~3. Don't quote an "N/51" fraction. The authoritative check is:
 > ```
 > grep -rn "export const <name> = " functions/src --include=*.ts
 > ```
-> — `= onCall(` means unwrapped, `= validated(` means done. The 19 remaining are listed at the bottom of this section.
+> — `= onCall(` means unwrapped, `= validated(` means done. The 11 remaining are listed at the bottom of this section.
 
 **Fully swept files:** `bracketEntries.ts` (6/6), `adminClaims.ts` (4/4), `poolOps.ts` (3/3), `nflPools.ts` (3/3 SWEEP-LATER; `calculatePlayoffScores`-style legacy noop N/A here), `billing.ts` (2/2 SWEEP-LATER), `couponTemplates.ts` (2/2 SWEEP-LATER; 3 others already TARGET-NOW), `espnBracket.ts` (5/5), the 4 no-input SUPER_ADMIN callables (`getAdminHealthSnapshot`/`backfillPools`/`refreshExpertPicks`/`syncPlayoffPools`, one each in 4 different files). `bracketPools.ts` at 2/3 (`createBracketPool` deliberately deferred, see below).
 
@@ -35,12 +35,15 @@ The trust-boundary `validated()` sweep of the parked SWEEP-LATER callables is un
 | — | #190 | `backfillPools` dry-run gate (defaults true, `plannedWrites` report, FE dry/live button pair) | **merged, NOT deployed** |
 | — | #193 | `backfillPools` status-clobber fix + per-entry fold marker | **merged, NOT deployed** |
 | — | #195 | squares lookup-key `.trim()` regression fix (follow-up to #194) | **merged, NOT deployed** |
+| 14 | #197 | `propBets.ts`: `gradeProp` / `updatePropCard` | **merged, NOT deployed** |
+| 15 | #199 | `referral.ts`: `generateReferralToken` / `resolveReferralToken` (public) | **merged, NOT deployed** |
+| 16 | #200 | admin singles: `lockPool` / `logAdminAction` / `recomputeConsensus` / `recomputeRevenue` | **merged, NOT deployed** |
 
 Batches 1-4 deployed 2026-07-17/18 (see prior narrative below). **Batches 5-13 plus the three fix PRs (2026-07-18) are merged to `main` but explicitly NOT deployed** — deploy is Kevin's gate per `mmp-change-control`; nothing has run `firebase deploy`. Before deploying, verify every merge landed (`git log origin/main --oneline -20`), then follow the functions-first ritual:
 
 ```
 npm --prefix functions install
-npx firebase deploy --only functions:recalculatePoolWinners,toggleWinnerPaid,fixParticipantIds,joinNFLPool,executeSurvivorRebuy,scoreNFLWeek,validateBillingAccess,getPoolQuote,getAdminHealthSnapshot,backfillPools,refreshExpertPicks,syncPlayoffPools,deleteCouponTemplate,acknowledgeMonetizationAlert,importTournamentFromESPN,adminInitTournament,syncBracketTournament,importConferenceTournamentFromESPN,syncPlayInPicks,scoreBracketEntries,finalizeTournamentPayouts,initializeBigEastTournamentHttp,initializeBig12TournamentHttp,updatePlayer,releaseSquares --project gridiron-gamble-uzuqo
+npx firebase deploy --only functions:recalculatePoolWinners,toggleWinnerPaid,fixParticipantIds,joinNFLPool,executeSurvivorRebuy,scoreNFLWeek,validateBillingAccess,getPoolQuote,getAdminHealthSnapshot,backfillPools,refreshExpertPicks,syncPlayoffPools,deleteCouponTemplate,acknowledgeMonetizationAlert,importTournamentFromESPN,adminInitTournament,syncBracketTournament,importConferenceTournamentFromESPN,syncPlayInPicks,scoreBracketEntries,finalizeTournamentPayouts,initializeBigEastTournamentHttp,initializeBig12TournamentHttp,updatePlayer,releaseSquares,gradeProp,updatePropCard,generateReferralToken,resolveReferralToken,lockPool,logAdminAction,recomputeConsensus,recomputeRevenue --project gridiron-gamble-uzuqo
 ```
 
 **The frontend also has undeployed changes** (`OperationsPanel.tsx` gained a "Backfill Pools (dry run)" button in #190) — that needs the manual Coolify trigger, which does NOT happen on push to `main`.
@@ -92,17 +95,48 @@ reconciler. Not urgent — flagged so it's on record.
 10. **An idempotency marker must be written in the SAME batch as the write it guards.** qodo caught this on #193: a per-pool marker written after the entry loop is not safe, because a pool with >400 entries flushes mid-loop and can commit increments before the marker exists. Marker moved per-entry, staged alongside its own increment, with the flush check after both — batch commits are atomic, so an applied increment can never be unmarked.
 7. **A handler that soft-returns `{success:false, message}` instead of throwing on missing input** can still get a `.strict()`+required-field schema — just verify the FE always sends those fields (never omits them) and already wraps the call in try/catch, so a thrown `invalid-argument` surfaces the same way to the user as the old soft-return did. Two espnBracket.ts callables hit this in batch 10; both verified safe via the FE call site before tightening.
 
-**Next on the fleet — 19 remaining, grep-verified as still `= onCall(`:**
+**Next on the fleet — 10 actionable remaining, grep-verified as still `= onCall(`:**
 
-Same-file pairs (best batches): `propBets.ts` (`gradeProp`/`updatePropCard`), `referral.ts` (`generateReferralToken`/`resolveReferralToken` — note `resolveReferralToken` is PUBLIC/ANON, use `auth:"public"`).
+`markEntryPaidStatus` (bracketOps.ts), `calculatePlayoffScores` (playoffPools.ts, legacy noop),
+`backfillMemberRecords` (migrations/), `importNFLSchedule` (nflSchedule.ts), `searchUsersByEmail`
+(userManagement.ts — declared `functions.https.onCall`, a bare `grep onCall(` misses it),
+`recomputeMyProfile` (userProfile.ts), `fixPoolScores` (scoreUpdates.ts), `syncAllUsers`
+(userSync.ts), `recalculateGlobalStats` (statsTrigger.ts), `claimMySquares` (participant.ts).
 
-Singles: `poolParams.ts` (`lockPool`), `bracketOps.ts` (`markEntryPaidStatus`), `adminOps.ts` (`logAdminAction`), `consensus.ts` (`recomputeConsensus`), `playoffPools.ts` (`calculatePlayoffScores` — legacy noop), `participant.ts` (`claimMySquares` — matrix flags `guestDeviceKey` as unchecked), `migrations/backfillMemberRecords.ts`, `nflSchedule.ts` (`importNFLSchedule`), `statsTrigger.ts` (`recalculateGlobalStats` — matrix warns its role check RETURNS instead of throwing), `revenueAggregates.ts` (`recomputeRevenue`), `userManagement.ts` (`searchUsersByEmail` — declared as `functions.https.onCall`, not the bare `onCall` import), `userProfile.ts` (`recomputeMyProfile`), `scoreUpdates.ts` (`fixPoolScores`), `userSync.ts` (`syncAllUsers` — matrix flags NO role gate today; wrapping it must not silently add one without a decision).
+Two carry a wrinkle worth knowing BEFORE you wrap them:
+
+- `recalculateGlobalStats` — its SUPER_ADMIN check **`return`s a `{success:false}` object instead of
+  throwing**, deliberately (a comment says it avoids CORS masking the message). `validated()`'s `role:`
+  gate THROWS `permission-denied`. Wrapping it therefore changes the failure contract for that endpoint;
+  check the SuperAdmin caller handles a thrown error before flipping it.
+- `syncAllUsers` — **the matrix note claiming it has no role gate is STALE.** It already calls
+  `assertCallerRole(request, "SUPER_ADMIN")` (the C4 sweep fixed it). Wrapping is a straight
+  like-for-like; the in-handler call becomes redundant and can go.
 
 Same recipe, runnable unattended.
 
+### 🔴 Security finding: `claimMySquares` treats a readable field as a bearer secret (NOT fixed)
+
+Found while triaging the remaining rows. **Not a schema problem — wrapping it in `validated()` will not
+fix it, so it was left alone.**
+
+`claimMySquares` (participant.ts) claims squares by matching a client-supplied `guestDeviceKey` against
+`squares[].guestDeviceKey`. Knowing the key IS the proof of ownership. But `reserveSquare` stores that key
+**on the square inside the pool document**, and `firestore.rules` has `allow get: if true` for
+`/pools/{poolId}` — so anyone with a pool id can read every guest square's device key.
+
+Net effect: any authenticated user who can read a pool can claim that pool's **unclaimed** guest squares
+to their own uid. Partly mitigated — the handler refuses to take a square already bound to a different
+`reservedByUid`, so registered owners can't be robbed; the exposure is guest-reserved squares that the
+guest has not claimed yet (i.e. someone who paid but hasn't made an account).
+
+Fixing it needs a data-model or rules change (move `guestDeviceKey` out of the public pool doc, or require
+a different proof), not a drive-by — and firestore.rules write/read-path changes are a separate parked
+effort per PICKUP's hard don'ts. Flagged for a decision.
+
 **Deliberately deferred:** `createBracketPool` (SWEEPS row 7) — rich nested `settings` with a `...settings` passthrough spread that stores arbitrary client fields; a flat `.strict()` would reject data it currently persists. Needs a passthrough envelope or client cutover, same treatment as the ADR-0001 PERMISSIVE creates. Its own careful batch, not a drive-by.
 
-Baselines measured on merged `main` at 42be636 (2026-07-18): root vitest **257** (unchanged all session), functions unit **665**, emulator **97 pass / 10 skipped**, frontend `tsc -b` clean. Counts rise with every batch — re-measure, don't trust a stale number.
+Baselines measured on merged `main` at 0a7b9b6 (2026-07-18): root vitest **257** (unchanged all session), functions unit **685**, emulator **97 pass / 10 skipped**, frontend `tsc -b` clean. Counts rise with every batch — re-measure, don't trust a stale number.
 
 ---
 
