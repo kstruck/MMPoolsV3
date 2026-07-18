@@ -46,16 +46,37 @@ For each: import `withCorrelationId` from `../utils/correlationId` (adjust depth
 
 ---
 
+## PROGRESS LEDGER (update this as you go — a resumed session reads it first)
+
+**Sweep B: 10 of 51 SWEEP-LATER callables done, merged, and DEPLOYED (2026-07-18).**
+
+| Batch | PR | File | Callables | State |
+|---|---|---|---|---|
+| 1 | #176 | `bracketEntries.ts` | `createBracketEntry`, `updateBracketEntry`, `deleteBracketEntry` | deployed |
+| 2 | #177 | `bracketEntries.ts` | `updateEntryPayment`, `adminUpdateEntryOverrides`, `adminDeleteEntry` | deployed |
+| 3 | #179 | `bracketPools.ts` | `publishBracketPool`, `joinBracketPool` | deployed |
+| 4 | #180 | `adminClaims.ts` | `syncMyClaims`, `backfillUserRoles` | deployed |
+
+Fully swept files: `bracketEntries.ts` (6/6), `adminClaims.ts` (4/4). `bracketPools.ts` 2/3.
+
+**Next suggested batches:** `poolOps.ts` (`recalculatePoolWinners`/`toggleWinnerPaid`/`fixParticipantIds`) or `nflPools.ts` (`joinNFLPool`/`executeSurvivorRebuy`/`scoreNFLWeek`).
+
+**DEFERRED — needs its own careful batch:** `createBracketPool` (row 7). Rich nested `settings` + a `...settings` passthrough spread stores arbitrary client fields; a flat `.strict()` schema would reject data it currently persists. Needs a passthrough envelope or a client cutover — same treatment as the ADR-0001 PERMISSIVE creates. Do NOT drive-by strict it.
+
+**Sweep A (correlation-id tail): NOT STARTED** — still ~13 FE files calling `httpsCallable` without `withCorrelationId`. Independent of Sweep B; still a good warm-up chunk.
+
+---
+
 ## Baselines (green on current `main` — verify with `git log -1` after `git pull`)
 
-- root vitest **257**, functions unit **574**, emulator **89 pass / 10 skipped**, frontend `tsc -b` clean, functions `npm run typecheck` clean.
+- root vitest **257**, functions unit **598**, emulator **89 pass / 10 skipped**, frontend `tsc -b` clean, functions `npm run typecheck` clean.
 - Every chunk must keep these green (counts go UP as you add schema tests — never down).
 
 ## Gate set before EVERY commit (no "done" without counts)
 
 - `npx tsc -b` (frontend) + `npm --prefix functions run typecheck` (functions) — both clean.
 - `npm test` (root) — was 257.
-- `npm --prefix functions test` — was 574.
+- `npm --prefix functions test` — was 598.
 - Emulator **only if you touch functions/rules** (you will): `JAVA_HOME=/c/Program Files/Eclipse Adoptium/jdk-21.0.11.10-hotspot npm --prefix functions run test:emulator` — was 89/10-skip.
 - Run the **ROOT** suite too, not just functions (a `dbService.ts` change is a root-suite concern).
 
