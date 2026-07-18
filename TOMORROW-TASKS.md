@@ -1,5 +1,28 @@
 # TOMORROW-TASKS.md — Kevin's morning checklist (2026-07-18 → 2026-07-19)
 
+> ## 📍 THIS FILE HAS TWO HALVES — read this map first
+>
+> | Half | Sections | From | Status |
+> |---|---|---|---|
+> | **Top** | `1`–`10` (below) | the callable-sweep session | sweep deploy still **TO DO**; §2 and §6 are **SUPERSEDED**, see below |
+> | **Bottom** | `NFL-1`–`NFL-8` (line ~290, after the `---` divider) | the NFL preseason-pilot session | **all current** |
+>
+> The NFL session finished. Its section is the second half of this file — if you
+> scrolled only to the divider, you have not seen it.
+>
+> **Two sections in the top half are now stale and must not be actioned as
+> written:**
+> - **§2 (nflFinalize dry-run flip) — SUPERSEDED by NFL-6.** The flip changed on
+>   2026-07-18. Setting `dryRun: false` on its own now *keeps the sweep dry*;
+>   arming also requires `liveSeasonTypes`. Following §2 as written will look
+>   like it silently did nothing. Use **NFL-6**.
+> - **§6 (pick up the NFL session's output) — DONE.** That session finished; its
+>   output is the bottom half of this file plus the HANDOFF takeover note.
+>
+> **Suggested order:** §1 (read-only audit) → **NFL-1** and **NFL-2** (two
+> decisions that block the pilot) → §3-§5 (deploy the 33 sweep callables) →
+> **NFL-3**…**NFL-8** → §7-§10 (business items, no code risk).
+
 Two things ran overnight: (1) the callable-sweep session, which merged 12 PRs
 (#190–#201) — nothing deployed; (2) an NFL 2026 preseason pilot session may
 still be running or may have finished by the time you read this, using
@@ -63,6 +86,13 @@ you the current damage, if any, before the fix ships.
 ---
 
 ## 2. Decide on the nflFinalize dry-run flip (standing item since 2026-07-10)
+
+> ### ⛔ SUPERSEDED 2026-07-18 by NFL-6 — do not follow step 5 as written.
+> PR #210 (item A6) changed how this job arms. `dryRun: false` **alone now keeps
+> the sweep dry** and logs a refusal; arming additionally requires naming
+> `liveSeasonTypes` (use `[1]` for preseason-only). The reading-the-reports part
+> of this section is still valid and the report now also carries a
+> `bySeasonType` breakdown. **Go to NFL-6 for the current steps.**
 
 **Why:** `nflFinalizeSweepJob` has been armed `dryRun:true` since 2026-07-10,
 reporting only, never writing. This is unrelated to last night's sweep work.
@@ -204,6 +234,12 @@ parameter but the UI never sends it — not broken, just half-shipped.
 
 ## 6. Pick up the NFL preseason session's output
 
+> ### ✅ DONE 2026-07-18 — nothing to do here.
+> That session finished. All six engineering items shipped (PRs #205-#210, all
+> merged, nothing deployed). Its output is **the bottom half of this file
+> (`NFL-1`-`NFL-8`)** plus the MORNING TAKEOVER section at the top of
+> `HANDOFF.md`. Kept below for provenance.
+
 By the time you read this, the NFL session (started from
 `PLAN-NFL-PRESEASON-PILOT.md`) may have finished, be still running, or not
 have started yet depending on when you're reading this.
@@ -292,12 +328,13 @@ if it's time-sensitive — check for a "---" divider and a timestamp._
 All six engineering action items from `PLAN-NFL-PRESEASON-PILOT.md` are done and
 in PRs. **Nothing is deployed.** The items below are the ones that need you.
 
-Read them in order — **item 1 is a genuine pilot blocker** and the rest are
-smaller.
+Read them in order — **NFL-1 is a genuine pilot blocker** and the rest are
+smaller. (Sections are prefixed `NFL-` so they cannot be confused with the
+sweep session's `1`-`10` in the top half of this file.)
 
 ---
 
-## 🔴 1. DECISION NEEDED — the spread gate blocks pools that do not use spreads
+## 🔴 NFL-1. DECISION NEEDED — the spread gate blocks pools that do not use spreads
 
 **RE-VERIFIED 2026-07-18 16:53 UTC in the browser, and the overnight write-up of
 this item was wrong in two ways. Corrected below. The problem is bigger than
@@ -390,7 +427,7 @@ a second look before removing it.
 
 ---
 
-## 🔴 2. DECISION NEEDED — alarm A3(b), the synthetic pick probe, was not built
+## 🔴 NFL-2. DECISION NEEDED — alarm A3(b), the synthetic pick probe, was not built
 
 The plan asked for two alarms. **A3(a) — the pre-kickoff lock tripwire — is
 built and merged (PR #207).** A3(b), the synthetic pick submission probe, is not,
@@ -428,10 +465,10 @@ it.
 
 ---
 
-## 3. Arm the three new kill-switches (Firestore console, ~5 minutes total)
+## NFL-3. Arm the three new kill-switches (Firestore console, ~5 minutes total)
 
 Everything I shipped is fail-safe **OFF**. It does nothing until you write these
-config values. **Do this only after the PRs are deployed** — see item 4.
+config values. **Do this only after the PRs are deployed** — see NFL-4.
 
 All three live in the same document.
 
@@ -482,7 +519,7 @@ All three live in the same document.
 13. **+ Add field**. Name: `nflFeedSnapshots`. Type: **map**. Inside:
     - `enabled` — **boolean** — **true**
     - `retentionDays` — **number** — **45**
-14. **Prerequisite: the composite index must be Enabled first** (step 4 item 8).
+14. **Prerequisite: the composite index must be Enabled first** (NFL-4 step 8).
     If it is not, every snapshot silently fails and this switch appears to do
     nothing.
 15. **What you should see:** a new `nfl_feed_snapshots` collection appears,
@@ -499,7 +536,7 @@ All three live in the same document.
 
 ---
 
-## 4. Deploy the six merged PRs (functions only — your gate)
+## NFL-4. Deploy the six merged PRs (functions only — your gate)
 
 Nothing from tonight is deployed. This queue is now **on top of** the 33
 undeployed callables already listed in HANDOFF.md.
@@ -560,7 +597,7 @@ undeployed callables already listed in HANDOFF.md.
 
 ---
 
-## 5. Import the preseason schedule (prod data — your gate)
+## NFL-5. Import the preseason schedule (prod data — your gate)
 
 Needed before any preseason pool can exist. Do this **after** step 4.
 
@@ -584,13 +621,13 @@ Needed before any preseason pool can exist. Do this **after** step 4.
    `Failed to resolve dates via calendar`. Do not proceed with a 2025 import —
    delete and retry.
 5. **Immediately after importing, check how many games have spreads.** This is
-   item 1 above. As of 2026-07-18 it is **1 of 49**. Decide item 1 before
+   NFL-1 above. As of 2026-07-18 it is **1 of 49**. Decide item 1 before
    recruiting commissioners — as things stand, every one of these pools is
    blocked from accepting a single pick.
 
 ---
 
-## 6. Arm the finalize sweep for preseason (prod config — your gate)
+## NFL-6. Arm the finalize sweep for preseason (prod config — your gate)
 
 This closes the standing open loop *"nflFinalize armed dryRun:true since
 2026-07-10."* **A6 changed how this works — read this even if you think you know
@@ -626,10 +663,10 @@ for real members, and the plan requires preseason-only.
 
 ---
 
-## 7. A7 — Chaos drill runbook (run this DURING a preseason week, not now)
+## NFL-7. A7 — Chaos drill runbook (run this DURING a preseason week, not now)
 
 The board's cheapest disproof experiment. **Depends on A3(a) being deployed and
-armed live (`dryRun: false`) — steps 3b and 4 above.** Do not run this until the
+armed live (`dryRun: false`) — steps NFL-3b and NFL-4 above.** Do not run this until the
 tripwire is really paging.
 
 **The experiment:** deliberately skip one spread lock and find out whether your
@@ -664,7 +701,7 @@ operator loop notices before a member does.
 
 ---
 
-## 8. Smaller flags from tonight
+## NFL-8. Smaller flags from tonight
 
 - **Make `emulator-tests` a required check.** A4 (PR #206) added the job and it
   passes, but it is not yet *required*, so a red run would not block a merge.
