@@ -355,7 +355,10 @@ export function readSweepGate(
 /** Is this pool inside the armed scope? */
 export function poolInLiveScope(pool: { seasonType?: number | string }, liveSeasonTypes: number[] | null): boolean {
   if (!liveSeasonTypes) return false;
-  return liveSeasonTypes.includes(Number(pool.seasonType ?? 2));
+  // `|| 2`, NOT `?? 2` — must match isSeasonComplete's `Number(pool.seasonType || 2)`
+  // exactly. They differ for '' and 0, and a pool scored against one slate but
+  // scoped by another is precisely the bug this guard exists to prevent.
+  return liveSeasonTypes.includes(Number(pool.seasonType || 2));
 }
 
 /**
@@ -416,14 +419,24 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
       const lastScoredAt = p.lastScoredAt?.toMillis?.() ?? 0;
       return finalizedAt === 0 || finalizedAt < lastScoredAt;
     });
-    const capped = stale.slice(0, MAX_PER_RUN);
+    // Scope BEFORE capping. Capping first would let out-of-scope pools occupy the
+    // prefix and starve the in-scope ones the operator actually armed — with a
+    // preseason-only scope and a mostly regular-season pool list, that could mean
+    // the sweep finalizes nothing at all while reporting a full run.
+    const eligible = gate.dryRun
+      ? stale
+      : stale.filter((d) => poolInLiveScope(d.data() as any, gate.liveSeasonTypes));
+    const outOfScope = stale.length - eligible.length;
+    const capped = eligible.slice(0, MAX_PER_RUN);
 
     if (dryRun) {
       // Report the seasonType spread so the operator can see exactly what a
       // given liveSeasonTypes value WOULD arm before arming it.
+      // Computed over the FULL stale set, not the capped prefix, so the number an
+      // operator reads is the number a given liveSeasonTypes value would arm.
       const bySeasonType: Record<string, number> = {};
-      for (const d of capped) {
-        const st = String(Number((d.data() as any).seasonType ?? 2));
+      for (const d of stale) {
+        const st = String(Number((d.data() as any).seasonType || 2));
         bySeasonType[st] = (bySeasonType[st] ?? 0) + 1;
       }
       console.log(`[nflFinalizeSweep] DRY-RUN: ${stale.length} candidate pool(s).`, { bySeasonType });
@@ -445,8 +458,7 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
     // A6: live runs only touch pools inside the armed scope. Everything else is
     // reported as out-of-scope, so a mis-scoped arm is visible in the very first
     // report instead of silently doing nothing (or silently doing too much).
-    const inScope = capped.filter((d) => poolInLiveScope(d.data() as any, gate.liveSeasonTypes));
-    const outOfScope = capped.length - inScope.length;
+    const deferred = eligible.length - capped.length;
 
     let finalized = 0;
     let skipped = 0;
@@ -455,7 +467,7 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
     // game kicking off tonight — both just incremented `skipped`.
     const blockedReasons: Record<string, string> = {};
     const stalled: string[] = [];
-    for (const d of inScope) {
+    for (const d of capped) {
       try {
         const outcome = await maybeFinalizeNFLPool(db, d.id);
         if (outcome.finalized) {
@@ -475,8 +487,9 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
     // entries would otherwise land in a single log line every day.
     const sampleReasons = Object.fromEntries(Object.entries(blockedReasons).slice(0, 50));
     console.log(
-      `[nflFinalizeSweep] finalized ${finalized}, skipped ${skipped} of ${inScope.length} in-scope (seasonTypes ${gate.liveSeasonTypes?.join(',')}); ` +
-      `${outOfScope} out-of-scope of ${capped.length} candidates; ${stalled.length} stalled.`,
+      `[nflFinalizeSweep] finalized ${finalized}, skipped ${skipped} of ${capped.length} processed this run ` +
+      `(scope seasonTypes ${gate.liveSeasonTypes?.join(',')}); ${stale.length} stale candidates, ` +
+      `${outOfScope} out-of-scope, ${deferred} over the ${MAX_PER_RUN} cap; ${stalled.length} stalled.`,
       { blockedReasons: sampleReasons, stalled: stalled.slice(0, 50) },
     );
     await writeAdminAudit({
@@ -484,8 +497,10 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
       action: "NFL_FINALIZE_SWEEP",
       targetType: "pool",
       metadata: {
-        dryRun: false, finalized, skipped, candidates: stale.length,
-        liveSeasonTypes: gate.liveSeasonTypes, inScope: inScope.length, outOfScope,
+        // These reconcile: candidates = processed + outOfScope + deferred.
+        dryRun: false, finalized, skipped,
+        candidates: stale.length, processed: capped.length, outOfScope, deferred,
+        liveSeasonTypes: gate.liveSeasonTypes,
         // Capped so one bad season can't bloat an audit doc past Firestore's 1MiB limit.
         blockedReasons: sampleReasons,
         stalledPools: stalled.slice(0, 50),

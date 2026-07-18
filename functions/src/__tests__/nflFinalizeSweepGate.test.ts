@@ -85,6 +85,16 @@ describe('poolInLiveScope', () => {
     expect(poolInLiveScope({ seasonType: undefined }, [2])).toBe(true);
   });
 
+  it('falls back exactly like isSeasonComplete for the falsy edge values', () => {
+    // `|| 2` vs `?? 2` diverge on '' and 0. isSeasonComplete uses `|| 2`, so
+    // these must land on 2 as well — otherwise a legacy pool gets scored against
+    // one slate and scoped by another, which is the bug this guard prevents.
+    expect(poolInLiveScope({ seasonType: '' }, [2])).toBe(true);
+    expect(poolInLiveScope({ seasonType: '' }, [1])).toBe(false);
+    expect(poolInLiveScope({ seasonType: 0 }, [2])).toBe(true);
+    expect(poolInLiveScope({ seasonType: 0 }, [1])).toBe(false);
+  });
+
   it('coerces a string seasonType', () => {
     expect(poolInLiveScope({ seasonType: '1' }, [1])).toBe(true);
   });
