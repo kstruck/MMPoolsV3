@@ -1,11 +1,25 @@
-# HANDOFF — Session entry point (updated 2026-07-17, Phase 2 observability DEPLOYED + prod-verified)
+# HANDOFF — Session entry point (updated 2026-07-17, Phase 2 DEPLOYED + callable-sweep batches 1-2 DEPLOYED)
 
 **Start every new session with: "Review HANDOFF.md and pick up where we left off."**
 This file + auto-memory carry the full state. Older narrative lives in git history.
 
 ---
 
-## Current state: Phase 2 observability (#8–14) SHIPPED, merged, deployed, prod-verified
+## Current state: SWEEP-LATER callable fleet in progress — 6/51 done + deployed
+
+The trust-boundary `validated()` sweep of the parked SWEEP-LATER callables is underway (kickoff doc: `PICKUP-CALLABLE-SWEEP.md`; classification authority: `PLAN-SECURITY-OBSERVABILITY-SWEEPS.md`, 51 SWEEP-LATER rows). **`bracketEntries.ts` fully swept** — all 6 callables now on `validated()`:
+- **Batch 1** (PR #176, merged `ebf58bf`): `createBracketEntry`/`updateBracketEntry`/`deleteBracketEntry`.
+- **Batch 2** (PR #177, merged `98b965d`): `updateEntryPayment`/`adminUpdateEntryOverrides`/`adminDeleteEntry` (the admin two upgraded claim-only → C5 claim+doc role check).
+- **Both DEPLOYED** to prod 2026-07-17 (functions live at 256MiB; post-deploy log sweep showed zero `invalid-argument` rejections — but offseason traffic is low, so re-glance after real usage).
+- Two verify-before-strict catches banked as lessons: `createBracketEntry` accepts a handler-ignored `tiebreakerScore` (must stay accepted); `updateEntryPayment`'s `paidAt`/`paymentNote` use explicit `null` to CLEAR (schema uses `.nullable()` NOT `nullish()`, with a test asserting null-preservation).
+
+**Next on the fleet (45 remaining SWEEP-LATER callables):** pick the next file-grouped batch from the SWEEPS matrix (e.g. `bracketPools.ts` create/publish/join, or `adminClaims.ts` syncMyClaims/backfillUserRoles). Same recipe per `PICKUP-CALLABLE-SWEEP.md`. Runnable unattended.
+
+Baselines now: root vitest **257**, functions unit **588**, emulator **89/10-skip**, frontend `tsc -b` clean.
+
+---
+
+## Phase 2 observability (#8–14) — SHIPPED, merged, deployed, prod-verified
 
 PR [#171](https://github.com/kstruck/MMPoolsV3/pull/171) (all 7 plan items — Sentry FE spine, correlation id, business-failure→Sentry wiring, ops alert dispatcher, readiness endpoint, in-app Ops Health card, SLOs) merged `7b2a522`, functions + frontend deployed, qodo's 4 findings fixed pre-merge. **One post-deploy bug found+fixed**: `readiness` was configured at 128MiB and OOM'd at cold start (Admin SDK + Node 22 alone use ~131MiB) — Kevin's live GCP Uptime Check test caught it as a 503, fixed in a same-day follow-up PR #173 (bumped to 256MiB, merged, redeployed) — Uptime Check now green. Firestore `system/config.opsAlerts` populated (Kevin). Sentry confirmed live in prod (`window.__SENTRY__` present, real DSN baked into the bundle, verified via direct browser check against `marchmeleepools.com`).
 
