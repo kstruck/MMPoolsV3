@@ -5,6 +5,9 @@ import {
     createBracketEntrySchema,
     updateBracketEntrySchema,
     deleteBracketEntrySchema,
+    updateEntryPaymentSchema,
+    adminUpdateEntryOverridesSchema,
+    adminDeleteEntrySchema,
 } from "../schemas/poolEngagement";
 
 const okInvites = (d: unknown) => sendPoolInvitesSchema.safeParse(d).success;
@@ -12,6 +15,9 @@ const okSubmit = (d: unknown) => submitBracketEntrySchema.safeParse(d).success;
 const okCreate = (d: unknown) => createBracketEntrySchema.safeParse(d).success;
 const okUpdate = (d: unknown) => updateBracketEntrySchema.safeParse(d).success;
 const okDelete = (d: unknown) => deleteBracketEntrySchema.safeParse(d).success;
+const okPay = (d: unknown) => updateEntryPaymentSchema.safeParse(d).success;
+const okOverrides = (d: unknown) => adminUpdateEntryOverridesSchema.safeParse(d).success;
+const okAdminDel = (d: unknown) => adminDeleteEntrySchema.safeParse(d).success;
 
 describe("sendPoolInvitesSchema", () => {
     it("accepts the real client payload", () => {
@@ -143,5 +149,58 @@ describe("deleteBracketEntrySchema", () => {
         expect(okDelete({ poolId: "p1" })).toBe(false);
         expect(okDelete({ poolId: "p1", entryId: " " })).toBe(false);
         expect(okDelete({ poolId: "p1", entryId: "e1", force: true })).toBe(false);
+    });
+});
+
+describe("updateEntryPaymentSchema", () => {
+    const base = { poolId: "p1", entryId: "e1", paidStatus: "PAID" as const };
+
+    it("accepts minimal + full real payloads", () => {
+        expect(okPay(base)).toBe(true);
+        expect(okPay({ ...base, paymentMethod: "Venmo", paidAt: 1730000000000, paymentNote: "paid in full" })).toBe(true);
+    });
+
+    it("PRESERVES explicit null for paidAt/paymentNote (clear semantics — must NOT map to undefined)", () => {
+        const r = updateEntryPaymentSchema.safeParse({ ...base, paidAt: null, paymentNote: null });
+        expect(r.success).toBe(true);
+        // The whole point of .nullable() over nullish(): null survives so the
+        // handler can clear the field. If this ever reads undefined, the
+        // field-clear feature is silently broken.
+        if (r.success) {
+            expect(r.data.paidAt).toBeNull();
+            expect(r.data.paymentNote).toBeNull();
+        }
+    });
+
+    it("rejects bad paidStatus, unknown paymentMethod, non-finite paidAt, over-long note, unknown field", () => {
+        expect(okPay({ ...base, paidStatus: "MAYBE" })).toBe(false);
+        expect(okPay({ ...base, paymentMethod: "Crypto" })).toBe(false);
+        expect(okPay({ ...base, paidAt: Infinity })).toBe(false);
+        expect(okPay({ ...base, paymentNote: "x".repeat(501) })).toBe(false);
+        expect(okPay({ ...base, evil: true })).toBe(false);
+    });
+});
+
+describe("adminUpdateEntryOverridesSchema", () => {
+    const base = { poolId: "p1", entryId: "e1" };
+
+    it("accepts an allowlisted, finite-number, non-empty overrides map", () => {
+        expect(okOverrides({ ...base, overrides: { score: 10, payout: 250 } })).toBe(true);
+        expect(okOverrides({ ...base, overrides: { tieBreakerPrediction: 3 } })).toBe(true);
+    });
+
+    it("rejects empty overrides, non-allowlisted keys, non-finite values, and non-number values", () => {
+        expect(okOverrides({ ...base, overrides: {} })).toBe(false);
+        expect(okOverrides({ ...base, overrides: { hacked: 1 } })).toBe(false);
+        expect(okOverrides({ ...base, overrides: { score: Infinity } })).toBe(false);
+        expect(okOverrides({ ...base, overrides: { score: "10" } })).toBe(false);
+    });
+});
+
+describe("adminDeleteEntrySchema", () => {
+    it("accepts { poolId, entryId }, rejects blanks/unknown", () => {
+        expect(okAdminDel({ poolId: "p1", entryId: "e1" })).toBe(true);
+        expect(okAdminDel({ poolId: "p1", entryId: "" })).toBe(false);
+        expect(okAdminDel({ poolId: "p1", entryId: "e1", cascade: true })).toBe(false);
     });
 });
