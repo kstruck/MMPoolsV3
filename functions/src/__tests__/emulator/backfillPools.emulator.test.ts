@@ -19,7 +19,9 @@ const ADMIN_CTX = {
 } as any;
 
 async function wipe() {
-  for (const col of ['pools', 'users', 'adminAudit']) {
+  // admin_audit, not adminAudit — writeAdminAudit() writes to the snake_case
+  // collection, so the camelCase name silently wiped nothing.
+  for (const col of ['pools', 'users', 'admin_audit']) {
     const snap = await db.collection(col).get();
     for (const d of snap.docs) {
       for (const sub of ['entries', 'managedPools']) {
