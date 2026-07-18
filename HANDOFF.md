@@ -143,6 +143,25 @@ PR #190 changed `backfillPools` to **default to dry-run**. The existing "Backfil
 - It used to reset **COMPLETED pools to DRAFT** (it recomputed `status` from `isLocked`/`isFinal`, ignoring the existing value). If this backfill has ever been run against prod, **finished pools may already have been un-completed** — worth an audit query before running it again.
 - The historical-stats fold (`FieldValue.increment` on `users/{uid}.historicalStats`) is now guarded per-entry so it can't double-count. **Limitation:** entries folded by a run predating that marker carry none and would fold again. Dry-run first and read `plannedWrites`.
 
+### ✅ PROD backfillPools damage audit — RAN 2026-07-18, NO DAMAGE FOUND
+
+Read-only Firestore queries against prod (Firebase console; nothing written).
+The pre-#193 bug wrote `status = isLocked ? 'LOCKED' : (isFinal ? 'FINAL' : 'DRAFT')`.
+**`backfill.ts` is the only code in the repo that can write a pool `status: 'FINAL'`**
+(every other `'FINAL'` is an nfl_games status; other pool-status writers only emit
+`'LOCKED'` and `'OPEN'`) — so that value is a unique fingerprint for the bug.
+
+`status=='FINAL'` → **0 pools**. `DRAFT`∩`isFinal:true` → **0**. `LOCKED`∩`isFinal:true` → **0**.
+Positive control `status=='OPEN'` → 15 ✓. Verdict: the clobber never hit prod; the 28
+DRAFT pools carry no finished-pool signals. PR #193 still ships as prevention, but there
+is **no remediation task and no pool IDs to repair**. Detail in TOMORROW-TASKS §1.
+
+⚠️ **Console-audit gotcha learned the hard way:** the Firestore filter panel reopens
+COLLAPSED, so edits to the value box silently don't register and the PREVIOUS query
+re-runs looking like a new one. Three readings were bogus before a positive control
+caught it. Always verify the `.where(...)` preview string before Apply, and always
+include a control query that must return rows.
+
 ### Backfill / migration audit (2026-07-18, report only — no fixes applied)
 
 Ran after the `backfillPools` defects, to check whether the same two bug classes appear in sibling

@@ -4,7 +4,7 @@
 >
 > | Half | Sections | From | Status |
 > |---|---|---|---|
-> | **Top** | `1`–`10` (below) | the callable-sweep session | sweep deploy still **TO DO**; §2 and §6 are **SUPERSEDED**, see below |
+> | **Top** | `1`–`10` (below) | the callable-sweep session | sweep deploy still **TO DO**; §1 is **DONE (no damage)**; §2 and §6 are **SUPERSEDED**, see below |
 > | **Bottom** | `NFL-1`–`NFL-8` (line ~290, after the `---` divider) | the NFL preseason-pilot session | **all current** |
 >
 > The NFL session finished. Its section is the second half of this file — if you
@@ -19,9 +19,9 @@
 > - **§6 (pick up the NFL session's output) — DONE.** That session finished; its
 >   output is the bottom half of this file plus the HANDOFF takeover note.
 >
-> **Suggested order:** §1 (read-only audit) → **NFL-1** and **NFL-2** (two
-> decisions that block the pilot) → §3-§5 (deploy the 33 sweep callables) →
-> **NFL-3**…**NFL-8** → §7-§10 (business items, no code risk).
+> **Suggested order:** ~~§1~~ (done — no damage found) → **NFL-2** (the one open
+> decision; NFL-1 is resolved and fixed) → §3-§5 (deploy the 33 sweep callables)
+> → **NFL-3**…**NFL-8** → §7-§10 (business items, no code risk).
 
 Two things ran overnight: (1) the callable-sweep session, which merged 12 PRs
 (#190–#201) — nothing deployed; (2) an NFL 2026 preseason pilot session may
@@ -56,7 +56,50 @@ or click, what you should see, and what to do if you don't.
 
 ---
 
-## 1. Audit prod for backfillPools damage (READ-ONLY — do this first)
+## 1. ✅ Audit prod for backfillPools damage — DONE 2026-07-18, NO DAMAGE FOUND
+
+> ### ✅ RAN IT. Verdict: no evidence of status-clobber damage in production.
+> Read-only queries against prod Firestore via the Firebase console, 2026-07-18.
+> Nothing was written.
+>
+> **The decisive test.** The pre-#193 bug wrote
+> `status = isLocked ? 'LOCKED' : (isFinal ? 'FINAL' : 'DRAFT')`. A grep of the
+> whole repo shows **no production code path writes a pool `status: 'FINAL'`** —
+> every other `'FINAL'` in the codebase is an *nfl_games* status, and the only
+> other pool-status writes are `'LOCKED'` (bracket dashboard) and `'OPEN'`
+> (create). So `backfill.ts` is the **only** thing that can produce a pool with
+> `status: 'FINAL'`, which makes it a unique fingerprint.
+>
+> | Query (each preview-verified before running) | Result |
+> |---|---|
+> | `status == 'FINAL'` | **0 pools** ← the backfill-only fingerprint |
+> | `status == 'DRAFT'` | 28 pools |
+> | `status == 'LOCKED'` | 1 pool |
+> | `isFinal == true` | 22 pools |
+> | `DRAFT` ∩ `isFinal:true` | **0** ← no "finished pool marked draft" |
+> | `LOCKED` ∩ `isFinal:true` | **0** ← no "finished pool marked locked" |
+> | `status == 'OPEN'` (positive control) | 15 pools ✓ |
+>
+> **Conclusion:** `backfillPools` has never clobbered a pool status in prod —
+> most likely it was never run against pools lacking `createdByUid`. The 28
+> DRAFT pools show no finished-pool signals; they look like ordinary abandoned
+> drafts.
+>
+> **This does NOT change the deploy plan.** PR #193's fix should still ship — it
+> prevents the bug, it just turns out there is no historical mess to clean up.
+> No remediation task, no pool IDs to repair.
+>
+> ⚠️ **Methodology note worth keeping.** Three intermediate readings in this
+> audit were WRONG: the console's filter panel reopens collapsed, so edits to
+> the value box silently didn't register and the *previous* query re-ran while
+> appearing to be a new one. A positive control (`status == 'OPEN'`, which the
+> create path definitely writes) caught it — it returned "no results" when it
+> must return many. **Any future console audit should verify the query preview
+> string before applying, and include a control that must return rows.**
+>
+> Original instructions kept below for provenance.
+
+### Original instructions (superseded by the result above)
 
 **Why:** `backfillPools` has had a bug since it was first deployed (unrelated
 to last night's work — this predates the sweep): it recomputes a pool's
