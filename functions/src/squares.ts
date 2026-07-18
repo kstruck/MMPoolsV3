@@ -1,4 +1,4 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 import { GameState } from "./types";
@@ -9,6 +9,7 @@ import { checkBillingAccess } from "./billing";
 import { SQUARE_PRIVATE, buildSquarePrivate } from "./squarePrivate";
 import { assertNotBannedLive } from "./lib/systemGuards";
 import { validated } from "./lib/validated";
+import { updatePlayerSchema, releaseSquaresSchema } from "./schemas/squares";
 import { reserveSquareSchema, markSquaresPaidSchema } from "./schemas/squaresProps";
 
 
@@ -232,20 +233,13 @@ async function assertPoolManager(
  * restricted squarePrivate subcollection. Renames all squares owned by
  * `originalName`.
  */
-export const updatePlayer = onCall(async (request) => {
+export const updatePlayer = validated(
+    // Manager/admin gate stays in-handler (assertPoolManager needs the pool doc
+    // inside the transaction).
+    { schema: updatePlayerSchema, label: "updatePlayer", appCheck: "monitor" },
+    async ({ poolId, originalName, details }, request) => {
     const db = admin.firestore();
-    if (!request.auth) throw new HttpsError("unauthenticated", "Must be logged in.");
-    const userId = request.auth.uid;
-
-    const { poolId, originalName, details } = request.data as {
-        poolId: string;
-        originalName: string;
-        details: { name?: string; email?: string; phone?: string; notes?: string };
-    };
-
-    if (!poolId || !originalName || !details) {
-        throw new HttpsError("invalid-argument", "Missing required fields.");
-    }
+    const userId = request.auth!.uid;
 
     const poolRef = db.collection("pools").doc(poolId);
     const newName = details.name?.trim() || originalName;
@@ -293,27 +287,21 @@ export const updatePlayer = onCall(async (request) => {
     });
 
     return { success: true };
-});
+    },
+);
 
 /**
  * releaseSquares — manager/admin releases squares (clears owner + payment) and
  * deletes the associated PII from the squarePrivate subcollection.
  * Accepts either explicit squareIds or an ownerName (releases all their squares).
  */
-export const releaseSquares = onCall(async (request) => {
+export const releaseSquares = validated(
+    // Manager/admin gate stays in-handler (assertPoolManager needs the pool doc
+    // inside the transaction).
+    { schema: releaseSquaresSchema, label: "releaseSquares", appCheck: "monitor" },
+    async ({ poolId, squareIds, ownerName }, request) => {
     const db = admin.firestore();
-    if (!request.auth) throw new HttpsError("unauthenticated", "Must be logged in.");
-    const userId = request.auth.uid;
-
-    const { poolId, squareIds, ownerName } = request.data as {
-        poolId: string;
-        squareIds?: number[];
-        ownerName?: string;
-    };
-
-    if (!poolId || (!Array.isArray(squareIds) && !ownerName)) {
-        throw new HttpsError("invalid-argument", "Provide squareIds or ownerName.");
-    }
+    const userId = request.auth!.uid;
 
     const poolRef = db.collection("pools").doc(poolId);
 
@@ -369,4 +357,5 @@ export const releaseSquares = onCall(async (request) => {
     });
 
     return { success: true, released: releasedIds };
-});
+    },
+);
