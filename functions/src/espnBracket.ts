@@ -1,11 +1,19 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Tournament, Game, TournamentSlot, BracketRegion, Team } from "./types";
 import { scoreTournamentEntries } from "./bracketScoring";
 import { BIG_12_TEAMS_2026, BIG_EAST_TEAMS_2026 } from "./conferenceTournaments";
+import { validated } from "./lib/validated";
+import {
+    importTournamentFromESPNSchema,
+    adminInitTournamentSchema,
+    syncBracketTournamentSchema,
+    importConferenceTournamentFromESPNSchema,
+    syncPlayInPicksSchema,
+} from "./schemas/espnBracket";
 
 /**
  * Recursively sanitizes an object for Firestore by replacing all `undefined`
@@ -817,30 +825,16 @@ function mapESPNGamesToSkeleton(
 /**
  * Imports tournament data from ESPN, mapping existing games and teams.
  */
-export const importTournamentFromESPN = onCall(async (request) => {
-    // 1. Auth Check - Super Admin Only
-    let role = request.auth?.token.role;
-    if (!role && request.auth?.uid) {
-        const userDoc = await admin.firestore().collection('users').doc(request.auth.uid).get();
-        role = userDoc.data()?.role;
-    }
-
-    if (role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'Super Admin only.');
-    }
-
-    const { tournamentId, seasonYear } = request.data;
+export const importTournamentFromESPN = validated(
+    { schema: importTournamentFromESPNSchema, label: "importTournamentFromESPN", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async ({ tournamentId, seasonYear }) => {
     logger.info(`Starting ESPN import for tournament: ${tournamentId}, year: ${seasonYear}`);
-
-    if (!tournamentId || !seasonYear) {
-        return { success: false, message: 'Missing tournamentId or seasonYear' };
-    }
 
     const db = admin.firestore();
     const tournamentRef = db.collection('tournaments').doc(tournamentId);
 
     try {
-        const { games, teams, count } = await fetchAndMapESPNGameData(parseInt(seasonYear));
+        const { games, teams, count } = await fetchAndMapESPNGameData(seasonYear);
 
         if (count === 0) {
             return { success: false, message: "No events found from ESPN." };
@@ -857,7 +851,7 @@ export const importTournamentFromESPN = onCall(async (request) => {
         // sanitize first: Firestore rejects `undefined`, needs `null`
         await tournamentRef.set(sanitizeForFirestore({
             id: tournamentId,
-            seasonYear: parseInt(seasonYear),
+            seasonYear,
             lastUpdated: FieldValue.serverTimestamp(),
             importedGames: games,
             importedTeams: teams,
@@ -871,7 +865,8 @@ export const importTournamentFromESPN = onCall(async (request) => {
         const msg = error instanceof Error ? error.message : "Unknown error";
         return { success: false, message: `Import failed: ${msg}` };
     }
-});
+    },
+);
 
 /**
  * Unified update function that delegates scoring based on tournamentType
@@ -976,52 +971,32 @@ export const updateTournamentScores = async (
  * Admin-only function to seed the tournament bracket structure.
  * Usage: call with { tournamentId: 'mens-2025', seasonYear: 2025, gender: 'mens', teams: [...] }
  */
-export const adminInitTournament = onCall(async (request) => {
-    // 1. Auth Check (Admin only)
-    let role = request.auth?.token.role;
-    if (!role && request.auth?.uid) {
-        const userDoc = await admin.firestore().collection('users').doc(request.auth.uid).get();
-        role = userDoc.data()?.role;
-    }
-
-    // 'ADMIN' is NOT a canonical role (roles are SUPER_ADMIN|MODERATOR|COMMISSIONER|
-    // MEMBER|BANNED). The old 'ADMIN' branch was a latent authz hole: writing "ADMIN"
-    // to any user doc would silently grant tournament-init power. SUPER_ADMIN only.
-    if (role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'Must be a super admin to initialize tournament.');
-    }
-
-    const { tournamentId, seasonYear, gender, teams } = request.data;
-    if (!tournamentId || !seasonYear || !gender) {
-        throw new HttpsError('invalid-argument', 'Missing required fields.');
-    }
-
+// 'ADMIN' is NOT a canonical role (roles are SUPER_ADMIN|MODERATOR|COMMISSIONER|
+// MEMBER|BANNED). The old 'ADMIN' branch on both callables below was a latent
+// authz hole: writing "ADMIN" to any user doc would silently grant
+// tournament-init/sync power. SUPER_ADMIN only, enforced by validated()'s role
+// gate (claim AND doc must agree — retires the old claim-OR-doc fallback, C5).
+export const adminInitTournament = validated(
+    { schema: adminInitTournamentSchema, label: "adminInitTournament", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async ({ tournamentId, seasonYear, gender, teams }) => {
     const db = admin.firestore();
     await initializeTournament(db, tournamentId, seasonYear, gender, teams);
     return { success: true, message: `Initialized ${tournamentId}` };
-});
+    },
+);
 
 /**
  * Scheduled function to sync scores every 10 minutes.
  * Also callable manually by admin.
  */
-export const syncBracketTournament = onCall(async (request) => {
-    let role = request.auth?.token.role;
-    if (!role && request.auth?.uid) {
-        const userDoc = await admin.firestore().collection('users').doc(request.auth.uid).get();
-        role = userDoc.data()?.role;
-    }
-
-    // 'ADMIN' is not a canonical role — SUPER_ADMIN only (see adminInitTournament).
-    if (role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'Super admin only.');
-    }
-
+export const syncBracketTournament = validated(
+    { schema: syncBracketTournamentSchema, label: "syncBracketTournament", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async ({ tournamentId }) => {
     const db = admin.firestore();
-    const tournamentId = request.data.tournamentId || 'mens-2025';
-    await updateTournamentScores(db, tournamentId);
+    await updateTournamentScores(db, tournamentId || 'mens-2025');
     return { success: true };
-});
+    },
+);
 
 // Scheduled task: Runs every 10 minutes during March Madness
 export const scheduledBracketSync = onSchedule("every 10 minutes", async () => {
@@ -1278,22 +1253,9 @@ function mapESPNConferenceGamesToSkeleton(
  * Imports tournament data from ESPN, mapping existing games and teams for Conference Tournaments.
  */
 
-export const importConferenceTournamentFromESPN = onCall(async (request) => {
-    let role = request.auth?.token.role;
-    if (!role && request.auth?.uid) {
-        const userDoc = await admin.firestore().collection('users').doc(request.auth.uid).get();
-        role = userDoc.data()?.role;
-    }
-
-    if (role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'Super Admin only.');
-    }
-
-    const { tournamentId, seasonYear, conferenceName } = request.data;
-    if (!tournamentId || !seasonYear || !conferenceName) {
-        return { success: false, message: 'Missing tournamentId, seasonYear, or conferenceName' };
-    }
-
+export const importConferenceTournamentFromESPN = validated(
+    { schema: importConferenceTournamentFromESPNSchema, label: "importConferenceTournamentFromESPN", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async ({ tournamentId, seasonYear, conferenceName }) => {
     let groupId = 100;
     if (conferenceName === 'Big 12') groupId = 8;
     else if (conferenceName === 'Big East') groupId = 4;
@@ -1303,7 +1265,7 @@ export const importConferenceTournamentFromESPN = onCall(async (request) => {
     const tournamentRef = db.collection('tournaments').doc(tournamentId);
 
     try {
-        const events = await fetchESPNConferenceTournamentData(parseInt(seasonYear), groupId);
+        const events = await fetchESPNConferenceTournamentData(seasonYear, groupId);
         if (events.length === 0) {
             return { success: false, message: "No events found from ESPN." };
         }
@@ -1329,7 +1291,8 @@ export const importConferenceTournamentFromESPN = onCall(async (request) => {
         const msg = error instanceof Error ? error.message : 'Unknown error';
         return { success: false, message: `Import failed: ${msg}` };
     }
-});
+    },
+);
 
 /**
  * Super Admin function to sync early bracket picks with play-in game winners.
@@ -1337,25 +1300,9 @@ export const importConferenceTournamentFromESPN = onCall(async (request) => {
  * as their Round 1 pick. Once the playoff game is finished, we need to update
  * those brackets to the actual team ID so scoring works correctly.
  */
-export const syncPlayInPicks = onCall(async (request) => {
-    // 1. Authorization
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'User must be authenticated.');
-    }
-    let userRole = request.auth.token.role as string | undefined;
-    if (!userRole && request.auth.uid) {
-        const userDoc = await admin.firestore().collection('users').doc(request.auth.uid).get();
-        userRole = userDoc.data()?.role;
-    }
-    if (userRole !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'Only super admins can sync play-in picks.');
-    }
-
-    const { tournamentId } = request.data;
-    if (!tournamentId) {
-        throw new HttpsError('invalid-argument', 'Missing tournamentId.');
-    }
-
+export const syncPlayInPicks = validated(
+    { schema: syncPlayInPicksSchema, label: "syncPlayInPicks", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async ({ tournamentId }) => {
     const db = admin.firestore();
 
     // 2. Fetch the current tournament skeleton to know the R1 teams
@@ -1463,4 +1410,5 @@ export const syncPlayInPicks = onCall(async (request) => {
         success: true,
         message: `Synced ${updatedCount} entries across ${poolsSnap.size} pool(s) with resolved play-in winners.`
     };
-});
+    },
+);
