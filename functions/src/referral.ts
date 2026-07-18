@@ -1,6 +1,8 @@
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { FieldValue } from "firebase-admin/firestore";
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { validated } from './lib/validated';
+import { generateReferralTokenSchema, resolveReferralTokenSchema } from './schemas/referral';
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 
@@ -70,11 +72,12 @@ export const creditReferralOnPayment = onDocumentUpdated('pools/{poolId}', async
   console.log(`Referral credit awarded to ${referrerId} for referred user ${ownerId}`);
 });
 
-export const generateReferralToken = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'User must be logged in.');
-    }
-    const uid = request.auth.uid;
+export const generateReferralToken = validated(
+    { schema: generateReferralTokenSchema, label: 'generateReferralToken', appCheck: 'monitor' },
+    async (_input, request) => {
+    // _input.userId is accepted for wire compatibility and deliberately unused —
+    // the token owner is the AUTHENTICATED caller, never a client-supplied id.
+    const uid = request.auth!.uid;
     const token = crypto.randomBytes(16).toString('hex');
 
     await db.collection('referralTokens').doc(token).set({
@@ -83,14 +86,13 @@ export const generateReferralToken = onCall(async (request) => {
     });
 
     return { token };
-});
+    },
+);
 
-export const resolveReferralToken = onCall(async (request) => {
-    const { token } = request.data;
-    if (!token) {
-        throw new HttpsError('invalid-argument', 'Missing token.');
-    }
-
+export const resolveReferralToken = validated(
+    // PUBLIC: a signed-out visitor resolves ?ref=... before creating an account.
+    { schema: resolveReferralTokenSchema, label: 'resolveReferralToken', auth: 'public', appCheck: 'monitor' },
+    async ({ token }, request) => {
     const tokenDoc = await db.collection('referralTokens').doc(token).get();
     if (!tokenDoc.exists) {
         throw new HttpsError('not-found', 'Invalid referral token.');
@@ -102,4 +104,5 @@ export const resolveReferralToken = onCall(async (request) => {
     }
 
     return { uid: referrerUid };
-});
+    },
+);
