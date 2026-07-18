@@ -1,6 +1,8 @@
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
+import { validated } from "./lib/validated";
+import { scoreBracketEntriesSchema, finalizeTournamentPayoutsSchema } from "./schemas/bracketScoring";
 import { Tournament, BracketPool, BracketEntry } from "./types";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, escapeHtml, BASE_URL } from "./emailStyles";
@@ -328,14 +330,10 @@ export const scoreTournamentEntries = async (db: admin.firestore.Firestore, tour
 /**
  * Cloud Function to score ALL entries for a given tournament.
  */
-export const scoreBracketEntries = onCall(async (request) => {
-    // Auth Check — must be a SUPER_ADMIN (matches all other admin functions in the codebase)
-    if (!request.auth || request.auth.token.role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'Admin only.');
-    }
-
+export const scoreBracketEntries = validated(
+    { schema: scoreBracketEntriesSchema, label: "scoreBracketEntries", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async ({ tournamentId }) => {
     const db = admin.firestore();
-    const { tournamentId } = request.data as { tournamentId?: string };
 
     try {
         let totalScored = 0;
@@ -376,19 +374,17 @@ export const scoreBracketEntries = onCall(async (request) => {
         logger.error('Error scoring bracket entries:', e);
         throw new HttpsError('internal', msg || 'An unknown error occurred during scoring.');
     }
-});
+    },
+);
 
 
 
 /**
  * Cloud Function to finalize pot distribution and payouts for a completed tournament.
  */
-export const finalizeTournamentPayouts = onCall(async (request) => {
-    // 1. Auth Check — must be SUPER_ADMIN
-    if (!request.auth || request.auth.token.role !== 'SUPER_ADMIN') throw new HttpsError('permission-denied', 'Admin only.');
-    const { tournamentId } = request.data;
-    if (!tournamentId) throw new HttpsError('invalid-argument', 'Missing tournamentId');
-
+export const finalizeTournamentPayouts = validated(
+    { schema: finalizeTournamentPayoutsSchema, label: "finalizeTournamentPayouts", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async ({ tournamentId }) => {
     const db = admin.firestore();
     const tournamentSnap = await db.collection('tournaments').doc(tournamentId).get();
     if (!tournamentSnap.exists) throw new HttpsError('not-found', 'Tournament not found');
@@ -614,4 +610,5 @@ export const finalizeTournamentPayouts = onCall(async (request) => {
 
     logger.info(`finalizeTournamentPayouts(${tournamentId}): ${payoutCount} payouts, ${historyWrites} season-history docs, ${recapEmails} recap emails.`);
     return { success: true, payoutCount, historyWrites, recapEmails };
-});
+    },
+);
