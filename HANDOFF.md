@@ -50,6 +50,35 @@ PR #190 changed `backfillPools` to **default to dry-run**. The existing "Backfil
 - It used to reset **COMPLETED pools to DRAFT** (it recomputed `status` from `isLocked`/`isFinal`, ignoring the existing value). If this backfill has ever been run against prod, **finished pools may already have been un-completed** — worth an audit query before running it again.
 - The historical-stats fold (`FieldValue.increment` on `users/{uid}.historicalStats`) is now guarded per-entry so it can't double-count. **Limitation:** entries folded by a run predating that marker carry none and would fold again. Dry-run first and read `plannedWrites`.
 
+### Backfill / migration audit (2026-07-18, report only — no fixes applied)
+
+Ran after the `backfillPools` defects, to check whether the same two bug classes appear in sibling
+batch operations. **Both classes turned out to be unique to `backfillPools`.** Nothing else needs fixing;
+recorded so this isn't re-derived.
+
+*Class A — deriving a field from inputs that cannot express all its states, ignoring the stored value.*
+`grep -rn "isLocked ?.*'LOCKED'\|isFinal ?.*'FINAL'"` over `functions/src` + `src` returns exactly one
+write site: `backfill.ts:55` (now guarded by `if (!pool.status)`). Every other hit is display-only JSX.
+
+*Class B — non-idempotent `FieldValue.increment` in a re-runnable batch op.* Ten files use `increment`.
+Classified:
+- `backfill.ts` — was the only re-runnable batch offender; now guarded per entry (#193).
+- `statsTrigger.ts` `recalculateGlobalStats` — **safe**: recomputes and writes ABSOLUTE totals (`set`, not
+  increment), so re-running is idempotent by construction. This is the pattern the other backfills should
+  copy.
+- `bracketEntries.ts` / `bracketPools.ts` / `participant.ts` / `propBets.ts` / `billing.ts` — per-user-action
+  counters (`entryCount` etc.), one increment per real event, not batch ops.
+- `stripe.ts` — webhook path, already de-duped by event id (PR #166 durability work).
+
+*One genuine pre-existing risk found, NOT fixed (needs a decision):* `statsTrigger.ts`'s
+`onDocumentUpdated` trigger increments `stats/global.totalPrizes` / `.totalDonated` on the
+`!before.isLocked && after.isLocked` edge. Cloud Functions triggers are **at-least-once**, so a duplicate
+delivery of the same event re-runs the guard with identical before/after and increments twice. Low
+probability, silent when it happens, and self-correcting only if someone runs `recalculateGlobalStats`
+(which overwrites with absolute values). Options if it ever matters: stamp the pool with a
+`statsFoldedAt` marker and check it in the trigger, or rely on periodic `recalculateGlobalStats` as the
+reconciler. Not urgent — flagged so it's on record.
+
 **Verify-before-strict lessons banked** (all now encoded in the PICKUP recipe):
 1. `createBracketEntry` accepts a handler-*ignored* `tiebreakerScore` — must stay accepted or real calls break.
 2. `updateEntryPayment`'s `paidAt`/`paymentNote` use explicit `null` to CLEAR the field → schema uses `.nullable()` NOT `nullish()` (nullish maps null→undefined and silently kills the clear feature). A test pins null-preservation.
