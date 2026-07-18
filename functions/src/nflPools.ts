@@ -1,6 +1,6 @@
 import * as admin from 'firebase-admin';
 import { FieldValue } from "firebase-admin/firestore";
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
 import { writeAuditEvent } from "./audit";
 import { checkBillingAccess } from "./billing";
 import { writeLedgerEvent } from "./paymentLedger";
@@ -44,6 +44,7 @@ import { fetchNFLWeekSchedule } from './nflSchedule';
 import { recomputeWeekConsensus } from './consensus';
 import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, submitNFLPicksSchema } from "./schemas/poolCore";
+import { joinNFLPoolSchema, executeSurvivorRebuySchema, scoreNFLWeekSchema } from "./schemas/nflPools";
 
 /**
  * Creates an NFL pool (Pick'em, Survivor, or Margin).
@@ -264,17 +265,17 @@ export async function joinNFLPoolInternal(
   return { success: true };
 }
 
-export const joinNFLPool = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'User must be logged in.');
-  }
-  await assertNotMaintenance();
-  return joinNFLPoolInternal(
-    admin.firestore(),
-    { subjectUid: request.auth.uid, subjectName: (request.auth.token as { name?: string })?.name },
-    request.data?.poolId,
-  );
-});
+export const joinNFLPool = validated(
+  { schema: joinNFLPoolSchema, label: "joinNFLPool", appCheck: "monitor" },
+  async ({ poolId }, request) => {
+    await assertNotMaintenance();
+    return joinNFLPoolInternal(
+      admin.firestore(),
+      { subjectUid: request.auth!.uid, subjectName: (request.auth!.token as { name?: string })?.name },
+      poolId,
+    );
+  },
+);
 
 /**
  * Membership gate for pick submission (PLAN-TEST-SUITE item 11). joinNFLPool is
@@ -698,40 +699,35 @@ export async function executeSurvivorRebuyInternal(
 /**
  * Triggers a Survivor rebuy/buy-back for an eliminated participant.
  */
-export const executeSurvivorRebuy = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'User must be logged in.');
-  }
-  const token = request.auth.token as { name?: string; role?: string };
-  return executeSurvivorRebuyInternal(
-    admin.firestore(),
-    {
-      actorUid: request.auth.uid,
-      actorRole: token?.role,
-      subjectUid: request.auth.uid,
-      subjectName: token?.name,
-    },
-    request.data,
-  );
-});
+export const executeSurvivorRebuy = validated(
+  { schema: executeSurvivorRebuySchema, label: "executeSurvivorRebuy", appCheck: "monitor" },
+  async (input, request) => {
+    const token = request.auth!.token as { name?: string; role?: string };
+    return executeSurvivorRebuyInternal(
+      admin.firestore(),
+      {
+        actorUid: request.auth!.uid,
+        actorRole: token?.role,
+        subjectUid: request.auth!.uid,
+        subjectName: token?.name,
+      },
+      input,
+    );
+  },
+);
 
 /**
  * Evaluates and scores an NFL week. Fetches all games, parses scores, evaluates picks,
  * updates standings, and creates automated weekly recap summaries.
  * SuperAdmin or Pool Owner only.
  */
-export const scoreNFLWeek = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Must be logged in.');
-  }
-
-  const uid = request.auth.uid;
+export const scoreNFLWeek = validated(
+  // owner/SUPER_ADMIN check happens in-handler (assertPoolOwnerOrSuperAdmin
+  // needs the pool doc's owner fields, unavailable at the role-gate stage).
+  { schema: scoreNFLWeekSchema, label: "scoreNFLWeek", appCheck: "monitor" },
+  async ({ poolId, week }, request) => {
+  const uid = request.auth!.uid;
   const db = admin.firestore();
-  
-  const { poolId, week } = request.data;
-  if (!poolId || !week) {
-    throw new HttpsError('invalid-argument', 'poolId and week are required.');
-  }
 
   const poolRef = db.collection('pools').doc(poolId);
   const poolSnap = await poolRef.get();
@@ -742,7 +738,7 @@ export const scoreNFLWeek = onCall(async (request) => {
   const pool = poolSnap.data() as any;
   
   // RBAC checks
-  const userRole = request.auth.token.role || 'USER';
+  const userRole = request.auth!.token.role || 'USER';
   try {
     assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
   } catch {
@@ -1013,4 +1009,5 @@ export const scoreNFLWeek = onCall(async (request) => {
   });
 
   return { success: true, message: `Week ${week} scored successfully.` };
-});
+  },
+);
