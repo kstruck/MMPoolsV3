@@ -17,3 +17,14 @@ import { z } from "zod";
 export function nullish<S extends z.ZodType>(schema: S) {
     return z.preprocess((v) => (v === null ? undefined : v), schema.optional());
 }
+
+/**
+ * noInputSchema — for callables that take NO client input. A no-arg
+ * `httpsCallable(fn)()` call delivers `request.data` as `null` (not
+ * `undefined`), which a bare `z.strictObject({})` rejects with
+ * invalid-argument before the handler ever runs — a real bug caught in
+ * syncMyClaims (PICKUP-CALLABLE-SWEEP.md). Normalize null/undefined to {}
+ * first, still reject any actual field. Reuse this exact instance for every
+ * true no-input callable — zod schemas are stateless and safely shared.
+ */
+export const noInputSchema = z.preprocess((v) => v ?? {}, z.strictObject({}));

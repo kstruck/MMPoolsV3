@@ -17,7 +17,8 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { validated } from "./lib/validated";
+import { refreshExpertPicksSchema } from "./schemas/noInputAdmin";
 
 export type PickSide = 'HOME' | 'AWAY' | 'EVEN';
 
@@ -128,9 +129,7 @@ export const syncExpertPicksJob = onSchedule('15 * * * *', async () => {
 });
 
 /** On-demand refresh (SUPER_ADMIN) for testing / manual trigger. */
-export const refreshExpertPicks = onCall(async (request) => {
-  if (!request.auth || request.auth.token?.role !== 'SUPER_ADMIN') {
-    throw new HttpsError('permission-denied', 'Super Admin only.');
-  }
-  return recomputeExpertPicks(admin.firestore(), Date.now());
-});
+export const refreshExpertPicks = validated(
+  { schema: refreshExpertPicksSchema, label: "refreshExpertPicks", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async () => recomputeExpertPicks(admin.firestore(), Date.now()),
+);
