@@ -306,6 +306,58 @@ export async function maybeFinalizeNFLPool(
 
 const MAX_PER_RUN = 200; // safety cap, mirrors autoClosePools
 
+export interface SweepGate {
+  enabled: boolean;
+  dryRun: boolean;
+  /** When set, only pools on these seasonTypes may be finalized LIVE. */
+  liveSeasonTypes: number[] | null;
+  /** Why the run is dry when the operator asked for live. */
+  forcedDryReason?: string;
+}
+
+/**
+ * Read the sweep's gate (PLAN-NFL-PRESEASON-PILOT A6).
+ *
+ * The pilot's plan is to arm this against PRESEASON POOLS ONLY, after a verified
+ * dry-run report. `liveSeasonTypes` is what makes "only" enforceable rather than
+ * merely intended.
+ *
+ * FAIL-SAFE, deliberately stricter than the other jobs: asking for live
+ * (`dryRun: false`) WITHOUT naming `liveSeasonTypes` keeps the run dry. Arming
+ * the finalizer is the one flip in this system that settles real seasons for
+ * real members, and "I meant preseason but forgot the scope field" is exactly
+ * the mistake that would settle every regular-season pool by accident. There is
+ * no unscoped way to go live; naming the scope is the only way to arm it.
+ */
+export function readSweepGate(
+  cfg: { enabled?: boolean; dryRun?: boolean; liveSeasonTypes?: unknown } | undefined | null,
+): SweepGate {
+  const enabled = cfg?.enabled === true;
+  const requestedLive = cfg?.dryRun === false;
+
+  const raw = Array.isArray(cfg?.liveSeasonTypes) ? cfg!.liveSeasonTypes : null;
+  const liveSeasonTypes = raw
+    ? (raw as unknown[]).map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 3)
+    : null;
+
+  if (!requestedLive) return { enabled, dryRun: true, liveSeasonTypes };
+  if (!liveSeasonTypes || liveSeasonTypes.length === 0) {
+    return {
+      enabled, dryRun: true, liveSeasonTypes: null,
+      forcedDryReason:
+        'dryRun:false was set but liveSeasonTypes is missing or empty — refusing to finalize an unscoped set of pools. ' +
+        'Set liveSeasonTypes (e.g. [1] for preseason only) in the same system/config.nflFinalize map.',
+    };
+  }
+  return { enabled, dryRun: false, liveSeasonTypes };
+}
+
+/** Is this pool inside the armed scope? */
+export function poolInLiveScope(pool: { seasonType?: number | string }, liveSeasonTypes: number[] | null): boolean {
+  if (!liveSeasonTypes) return false;
+  return liveSeasonTypes.includes(Number(pool.seasonType ?? 2));
+}
+
 /**
  * Daily backstop sweep: finalizes season-complete NFL pools that scoreNFLWeek's
  * inline check missed (out-of-order scoring, manual admin scores, transient
@@ -316,22 +368,29 @@ const MAX_PER_RUN = 200; // safety cap, mirrors autoClosePools
  * system/config.nflFinalize.enabled === true required (default OFF, fail-safe);
  * dry-run by default (nflFinalize.dryRun !== false) — reports what it WOULD
  * finalize to admin_audit, writing nothing, until explicitly flipped.
+ *
+ * A6 (preseason burn-in): going live additionally REQUIRES naming
+ * `liveSeasonTypes` (e.g. [1] for preseason only). See readSweepGate — there is
+ * no unscoped way to arm this job. Dry-run reports break candidates down by
+ * seasonType so an operator can see what a given scope would arm before arming it.
  */
 export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
   { schedule: "every day 08:30", timeoutSeconds: 540, memory: "512MiB" },
   async () => {
     const db = admin.firestore();
 
-    let enabled = false;
-    let dryRun = true;
+    let gate: SweepGate = { enabled: false, dryRun: true, liveSeasonTypes: null };
     try {
       const cfg = (await db.doc("system/config").get()).data()?.nflFinalize as
-        | { enabled?: boolean; dryRun?: boolean }
+        | { enabled?: boolean; dryRun?: boolean; liveSeasonTypes?: unknown }
         | undefined;
-      enabled = cfg?.enabled === true;
-      dryRun = cfg?.dryRun !== false;
+      gate = readSweepGate(cfg);
     } catch (e) {
       console.warn("[nflFinalizeSweep] config read failed; staying disabled:", e);
+    }
+    const { enabled, dryRun } = gate;
+    if (gate.forcedDryReason) {
+      console.error(`[nflFinalizeSweep] STAYING DRY: ${gate.forcedDryReason}`);
     }
     if (!enabled) {
       console.log("[nflFinalizeSweep] disabled (system/config.nflFinalize.enabled !== true); nothing to do.");
@@ -360,16 +419,34 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
     const capped = stale.slice(0, MAX_PER_RUN);
 
     if (dryRun) {
-      console.log(`[nflFinalizeSweep] DRY-RUN: ${stale.length} candidate pool(s).`);
+      // Report the seasonType spread so the operator can see exactly what a
+      // given liveSeasonTypes value WOULD arm before arming it.
+      const bySeasonType: Record<string, number> = {};
+      for (const d of capped) {
+        const st = String(Number((d.data() as any).seasonType ?? 2));
+        bySeasonType[st] = (bySeasonType[st] ?? 0) + 1;
+      }
+      console.log(`[nflFinalizeSweep] DRY-RUN: ${stale.length} candidate pool(s).`, { bySeasonType });
       await writeAdminAudit({
         actorUid: "system",
         action: "NFL_FINALIZE_SWEEP",
         targetType: "pool",
-        metadata: { dryRun: true, candidates: stale.length, sample: capped.slice(0, 10).map((d) => d.id) },
+        metadata: {
+          dryRun: true, candidates: stale.length,
+          sample: capped.slice(0, 10).map((d) => d.id),
+          bySeasonType,
+          ...(gate.forcedDryReason ? { forcedDryReason: gate.forcedDryReason } : {}),
+        },
         status: "success",
       });
       return;
     }
+
+    // A6: live runs only touch pools inside the armed scope. Everything else is
+    // reported as out-of-scope, so a mis-scoped arm is visible in the very first
+    // report instead of silently doing nothing (or silently doing too much).
+    const inScope = capped.filter((d) => poolInLiveScope(d.data() as any, gate.liveSeasonTypes));
+    const outOfScope = capped.length - inScope.length;
 
     let finalized = 0;
     let skipped = 0;
@@ -378,7 +455,7 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
     // game kicking off tonight — both just incremented `skipped`.
     const blockedReasons: Record<string, string> = {};
     const stalled: string[] = [];
-    for (const d of capped) {
+    for (const d of inScope) {
       try {
         const outcome = await maybeFinalizeNFLPool(db, d.id);
         if (outcome.finalized) {
@@ -398,7 +475,8 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
     // entries would otherwise land in a single log line every day.
     const sampleReasons = Object.fromEntries(Object.entries(blockedReasons).slice(0, 50));
     console.log(
-      `[nflFinalizeSweep] finalized ${finalized}, skipped ${skipped} of ${capped.length} candidates; ${stalled.length} stalled.`,
+      `[nflFinalizeSweep] finalized ${finalized}, skipped ${skipped} of ${inScope.length} in-scope (seasonTypes ${gate.liveSeasonTypes?.join(',')}); ` +
+      `${outOfScope} out-of-scope of ${capped.length} candidates; ${stalled.length} stalled.`,
       { blockedReasons: sampleReasons, stalled: stalled.slice(0, 50) },
     );
     await writeAdminAudit({
@@ -407,6 +485,7 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
       targetType: "pool",
       metadata: {
         dryRun: false, finalized, skipped, candidates: stale.length,
+        liveSeasonTypes: gate.liveSeasonTypes, inScope: inScope.length, outOfScope,
         // Capped so one bad season can't bloat an audit doc past Firestore's 1MiB limit.
         blockedReasons: sampleReasons,
         stalledPools: stalled.slice(0, 50),
