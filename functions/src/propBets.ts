@@ -1,4 +1,4 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import * as admin from 'firebase-admin';
 import { PropCard, GameState } from './types';
@@ -6,6 +6,7 @@ import { writeAuditEvent } from './audit';
 import { checkBillingAccess } from './billing';
 import { validated } from "./lib/validated";
 import { purchasePropCardSchema } from "./schemas/squaresProps";
+import { gradePropSchema, updatePropCardSchema } from "./schemas/propBets";
 
 // 1. Purchase Prop Card (Supports multiple cards per user)
 // 1. Purchase Prop Card (Supports multiple cards per user)
@@ -113,13 +114,10 @@ export const purchasePropCard = validated(
 );
 
 // 2. Grade Prop (Admin Only)
-export const gradeProp = onCall(async (request) => {
-    // request.data = { poolId, questionId, correctOptionIndex }
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'Must be logged in.');
-    }
-
-    const { poolId, questionId, correctOptionIndex } = request.data;
+export const gradeProp = validated(
+    // Owner/manager gate stays in-handler (needs the pool doc).
+    { schema: gradePropSchema, label: "gradeProp", appCheck: "monitor" },
+    async ({ poolId, questionId, correctOptionIndex }, request) => {
     const db = admin.firestore();
 
     // Validate Admin
@@ -130,8 +128,8 @@ export const gradeProp = onCall(async (request) => {
     const poolData = poolSnap.data() as GameState;
 
     // Check Owner, Manager, or SuperAdmin
-    const isOwner = poolData.ownerId === request.auth.uid;
-    const isManager = poolData.managerUid === request.auth.uid;
+    const isOwner = poolData.ownerId === request.auth!.uid;
+    const isManager = poolData.managerUid === request.auth!.uid;
     // Note: SuperAdmin check usually requires checking Custom Claims or a User doc. 
     // For now we enforce Pool Owner/Manager.
 
@@ -187,27 +185,21 @@ export const gradeProp = onCall(async (request) => {
         type: 'PROP_QUESTION_GRADED',
         message: `Question Graded: "${questions[qIndex].text}"`,
         severity: 'INFO',
-        actor: { uid: request.auth.uid, role: 'ADMIN', label: 'Admin' },
+        actor: { uid: request.auth!.uid, role: 'ADMIN', label: 'Admin' },
         payload: { questionId, correctOptionIndex }
     });
 
     return { success: true, updated: cardsSnap.size };
-});
+    },
+);
 
 // 3. Update Prop Card (Edit answers before lock)
-export const updatePropCard = onCall(async (request) => {
-    // request.data = { poolId, cardId, answers, tiebreakerVal, cardName }
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'Must be logged in.');
-    }
-
-    const { poolId, cardId, answers, tiebreakerVal, cardName } = request.data;
-    const userId = request.auth.uid;
+export const updatePropCard = validated(
+    // Card-ownership gate stays in-handler (needs the card doc).
+    { schema: updatePropCardSchema, label: "updatePropCard", appCheck: "monitor" },
+    async ({ poolId, cardId, answers, tiebreakerVal, cardName }, request) => {
+    const userId = request.auth!.uid;
     const db = admin.firestore();
-
-    if (!poolId || !cardId || !answers) {
-        throw new HttpsError('invalid-argument', 'Missing required fields.');
-    }
 
     // Check pool status
     const poolRef = db.collection('pools').doc(poolId);
@@ -256,4 +248,5 @@ export const updatePropCard = onCall(async (request) => {
     });
 
     return { success: true };
-});
+    },
+);
