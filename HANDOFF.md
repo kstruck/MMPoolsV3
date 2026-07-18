@@ -7,6 +7,8 @@ This file + auto-memory carry the full state. Older narrative lives in git histo
 
 ## 🌅 MORNING TAKEOVER — overnight NFL preseason-pilot run (2026-07-18, ~03:50–05:00)
 
+**Read `TOMORROW-TASKS.md` first — note it has TWO halves.** The sweep session's sections are numbered `1`-`10`; this session's are `NFL-1`-`NFL-8` below the divider. Its §2 and §6 are superseded/done (banners in place).
+
 **Read `TOMORROW-TASKS.md` first** — everything needing Kevin is there, appended
 below the existing divider, with full numbered steps. This section is the
 engineering state.
@@ -45,16 +47,23 @@ would have paged a false `21-17 → 0-0` stat correction.
 
 ### 🔴 Two things need Kevin's decision before the pilot can run
 
-1. **Preseason games have almost no betting lines.** Verified live tonight:
-   the 2026 preseason feed returns 17 events and **exactly 1 has odds** (the HOF
-   game). `submitNFLPicks` blocks a week unless *every* game has a locked spread,
-   so an ATS pick'em pool would be blocked for all of preseason weeks 1-3. This
-   is a data fact, not a bug — and it is the most likely way week 1 fails.
-   Options + a recommendation are in TOMORROW-TASKS item 1.
+1. **The spread gate blocks pools that do not use spreads.** Re-verified in the
+   browser 2026-07-18 16:53 UTC, and it is worse *and* smaller than the overnight
+   note said. Preseason is **49 games, 1 with a line**. Crucially, regular-season
+   week 1 is **53 days out with lines on all 16**, while preseason week 1 is 25
+   days out with none — so "the books just haven't posted yet" is disproved.
+   Then the bigger finding: `pickMode` is hardcoded `'STRAIGHT'` in the create
+   wizard with **no UI to pick ATS**, and straight-up scoring never reads
+   `spread` — yet the `SPREADS_NOT_LOCKED` gate (`nflPools.ts:351-355`) is
+   unconditional and fires 30 lines before the pool-type dispatch, so it blocks
+   pickem, survivor AND margin alike. **No pool in production consumes the data
+   it is gated on.** Fix is one conditional, affecting zero existing pools;
+   NOT applied — removing a guard on the pick path is Kevin's call.
+   TOMORROW-TASKS **NFL-1**.
 2. **Alarm A3(b) (synthetic pick probe) was deliberately not built.** Doing it
    honestly needs a probe identity + probe pool in prod (Kevin's gate); doing it
    in-process would only duplicate A3(a)'s predicate. Recommendation and options
-   in TOMORROW-TASKS item 2.
+   in TOMORROW-TASKS **NFL-2**.
 
 ### Deploy state — NOTHING from tonight is deployed
 
@@ -63,11 +72,11 @@ Four functions change/appear: `lockNFLSpreadsJob` (**new**), `nflLockWatchJob`
 deploy** (`firestore.indexes.json` gained a `nfl_feed_snapshots` composite
 index; A5's snapshot writes fail silently without it). This queue sits **on top of**
 the 33 undeployed callables below. Deploy command + verification steps are
-TOMORROW-TASKS item 4. No frontend change tonight, so no Coolify trigger needed.
+TOMORROW-TASKS **NFL-4**. No frontend change tonight, so no Coolify trigger needed.
 
 **Everything shipped is fail-safe OFF.** Three new config maps
 (`nflSpreadLock`, `nflLockWatch`, `nflFeedSnapshots`) do nothing until armed —
-console steps in TOMORROW-TASKS item 3.
+console steps in TOMORROW-TASKS **NFL-3**.
 
 ### Behavior change worth knowing before you touch `nflFinalize`
 
@@ -75,16 +84,16 @@ A6 made arming **stricter**: setting `dryRun: false` *without* also setting
 `liveSeasonTypes` now **keeps the sweep dry** and logs a refusal. There is no
 unscoped way to arm the finalizer any more. This changes the long-standing open
 loop "flip nflFinalize dryRun to false" — the flip now needs a third field.
-See TOMORROW-TASKS item 6.
+See TOMORROW-TASKS **NFL-6**.
 
-### Not built, deliberately (all recorded in TOMORROW-TASKS item 8)
+### Not built, deliberately (all recorded in TOMORROW-TASKS **NFL-8**)
 
 - **A5 part 2**, the snapshot replay callable — prod-data mutator, wants its own PR.
 - **The plan's "approve gate before payouts"** — already satisfied; finalization
   never touches money (`nflFinalize.ts:24-25`). The plan's premise was wrong here.
 - **The "recalculated" banner** — frontend, and only meaningful once replay exists.
 - **A7 chaos drill** — a runbook for Kevin to execute during a preseason week, not
-  code. Written out in TOMORROW-TASKS item 7.
+  code. Written out in TOMORROW-TASKS **NFL-7**.
 
 ---
 
