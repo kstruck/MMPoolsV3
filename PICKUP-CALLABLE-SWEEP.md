@@ -55,9 +55,9 @@ For each: import `withCorrelationId` from `../utils/correlationId` (adjust depth
 
 ## PROGRESS LEDGER (update this as you go — a resumed session reads it first)
 
-**19 SWEEP-LATER callables remain unwrapped.** Everything below is merged to `main`; batches 1-4 are deployed, **batches 5-13 and the three fix PRs are NOT deployed** (Kevin's gate).
+**11 SWEEP-LATER callables remain unwrapped** (10 actionable + `createBracketPool` deferred). Everything below is merged to `main`; batches 1-4 are deployed, **batches 5-13 and the three fix PRs are NOT deployed** (Kevin's gate).
 
-> **Do not quote an "N/51" fraction.** 35 swept + 19 remaining = 54, but the SWEEPS matrix header says 51, so the header or the classifications are off by ~3. Authoritative check per callable:
+> **Do not quote an "N/51" fraction.** 43 swept + 11 remaining = 54, but the SWEEPS matrix header says 51, so the header or the classifications are off by ~3. Authoritative check per callable:
 > `grep -rn "export const <name> = " functions/src --include=*.ts` → `= onCall(` unwrapped, `= validated(` done.
 > (`searchUsersByEmail` is declared `functions.https.onCall`, not the bare `onCall` import — a plain `grep onCall(` will misreport it.)
 
@@ -79,21 +79,28 @@ For each: import `withCorrelationId` from `../utils/correlationId` (adjust depth
 | fix | #190 | `backfill.ts` | `backfillPools` dry-run gate (default true) + FE dry/live buttons | merged, undeployed |
 | fix | #193 | `backfill.ts` | status-clobber fix + per-entry fold marker | merged, undeployed |
 | fix | #195 | `schemas/squares.ts` | lookup-key `.trim()` regression from #194 | merged, undeployed |
+| 14 | #197 | `propBets.ts` | `gradeProp`, `updatePropCard` | merged, undeployed |
+| 15 | #199 | `referral.ts` | `generateReferralToken`, `resolveReferralToken` | merged, undeployed |
+| 16 | #200 | 4 admin singles | `lockPool`, `logAdminAction`, `recomputeConsensus`, `recomputeRevenue` | merged, undeployed |
 
 **Fully swept files:** `bracketEntries.ts`, `adminClaims.ts`, `poolOps.ts`, `nflPools.ts`, `billing.ts`, `couponTemplates.ts`, `espnBracket.ts`, `bracketScoring.ts`, `conferenceTournaments.ts`, `squares.ts`. `bracketPools.ts` 2/3 (`createBracketPool` deferred).
 
-### The 19 remaining
+### The 10 actionable remaining
 
-Pairs (best next batches):
-- `propBets.ts` — `gradeProp`, `updatePropCard`
-- `referral.ts` — `generateReferralToken`, `resolveReferralToken` (**`resolveReferralToken` is PUBLIC/ANON** → `auth:"public"`)
+`markEntryPaidStatus` (bracketOps.ts), `calculatePlayoffScores` (playoffPools.ts, legacy noop),
+`backfillMemberRecords` (migrations/), `importNFLSchedule` (nflSchedule.ts), `searchUsersByEmail`
+(userManagement.ts), `recomputeMyProfile` (userProfile.ts), `fixPoolScores` (scoreUpdates.ts),
+`syncAllUsers` (userSync.ts), `recalculateGlobalStats` (statsTrigger.ts), `claimMySquares`
+(participant.ts).
 
-Singles: `lockPool` (poolParams.ts), `markEntryPaidStatus` (bracketOps.ts), `logAdminAction` (adminOps.ts), `recomputeConsensus` (consensus.ts), `calculatePlayoffScores` (playoffPools.ts, legacy noop), `claimMySquares` (participant.ts), `backfillMemberRecords` (migrations/), `importNFLSchedule` (nflSchedule.ts), `recalculateGlobalStats` (statsTrigger.ts), `recomputeRevenue` (revenueAggregates.ts), `searchUsersByEmail` (userManagement.ts), `recomputeMyProfile` (userProfile.ts), `fixPoolScores` (scoreUpdates.ts), `syncAllUsers` (userSync.ts).
-
-**Read the matrix note before wrapping these three — they carry decisions, not just shapes:**
-- `syncAllUsers` — matrix says **NO role gate today** (any authed user). Wrapping must not silently add one; that's a behavior/security decision for Kevin.
-- `recalculateGlobalStats` — its role check **returns instead of throwing**. Preserve or change deliberately, don't flip by accident.
-- `claimMySquares` — `guestDeviceKey` is unchecked today.
+**Corrections to earlier notes — verify, don't inherit:**
+- `syncAllUsers` — the matrix's "NO role gate" note is **STALE**. It already calls
+  `assertCallerRole(request, "SUPER_ADMIN")`. Wrapping is like-for-like.
+- `recalculateGlobalStats` — its role check **returns `{success:false}` rather than throwing**, on purpose
+  (comment cites CORS masking). `validated()` throws. Confirm the SuperAdmin caller tolerates a thrown
+  error before wrapping.
+- `claimMySquares` — see the security finding in HANDOFF.md. Wrapping it does NOT fix that; the
+  `guestDeviceKey` trust model needs a rules/data decision.
 
 **DEFERRED — needs its own careful batch:** `createBracketPool` (row 7). Rich nested `settings` + a `...settings` passthrough spread stores arbitrary client fields; a flat `.strict()` would reject data it currently persists. Needs a passthrough envelope or a client cutover. Do NOT drive-by strict it.
 
@@ -101,7 +108,7 @@ Singles: `lockPool` (poolParams.ts), `markEntryPaidStatus` (bracketOps.ts), `log
 
 ## Baselines (green on current `main` — verify with `git log -1` after `git pull`)
 
-- Measured on merged `main` at 42be636 (2026-07-18): root vitest **257**, functions unit **665**, emulator **97 pass / 10 skipped**, frontend `tsc -b` clean, functions `npm run typecheck` clean. Counts rise every batch — re-measure.
+- Measured on merged `main` at 0a7b9b6 (2026-07-18): root vitest **257**, functions unit **685**, emulator **97 pass / 10 skipped**, frontend `tsc -b` clean, functions `npm run typecheck` clean. Counts rise every batch — re-measure.
 - Every chunk must keep these green (counts go UP as you add schema tests — never down). Don't trust these numbers stale — re-verify with `npm --prefix functions test` after pulling latest main.
 
 ## Gate set before EVERY commit (no "done" without counts)
