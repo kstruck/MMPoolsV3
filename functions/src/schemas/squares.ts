@@ -18,7 +18,12 @@ const poolId = z.string().trim().min(1).max(200);
  */
 export const updatePlayerSchema = z.strictObject({
     poolId,
-    originalName: z.string().trim().min(1).max(200),
+    // NOT trimmed: this is a LOOKUP KEY, matched with === against the stored
+    // squares[].owner string. reserveSquare accepts pickedAsName /
+    // customerDetails.name without trimming, so an owner can legitimately be
+    // stored as " Alice ". Trimming the lookup key here would make that player
+    // permanently un-editable ("Player not found"). See releaseSquares below.
+    originalName: z.string().min(1).max(200),
     details: z.strictObject({
         name: z.string().max(200).optional(),
         email: z.string().max(320).optional(),
@@ -38,7 +43,10 @@ export const releaseSquaresSchema = z
     .strictObject({
         poolId,
         squareIds: z.array(z.number().int()).max(100).optional(),
-        ownerName: z.string().trim().min(1).max(200).optional(),
+        // NOT trimmed — same lookup-key reasoning as updatePlayer.originalName.
+        // A trimmed key here fails silently: the handler releases nothing and
+        // still returns success.
+        ownerName: z.string().min(1).max(200).optional(),
     })
     .refine((d) => Array.isArray(d.squareIds) || !!d.ownerName, {
         message: "Provide squareIds or ownerName.",
