@@ -63,9 +63,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # node 22 to match functions/package.json engines — this job is the only
+      # place the emulator (and therefore the deployed runtime's semantics) is
+      # exercised, so it runs on the declared runtime, not the repo-wide 20.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       # The Firestore emulator is a Java process.
