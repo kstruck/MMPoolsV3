@@ -313,16 +313,54 @@ export const syncNFLScoresJob = onSchedule('*/5 * * * *', async (event) => {
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 
 /**
+ * Read the {enabled, dryRun} gate for a scheduled job out of system/config.
+ * Fail-safe: a missing/garbage config means disabled, and dry-run unless the
+ * flag is explicitly `false`. Mirrors autoClosePools.ts:31-42 / nflFinalize.ts:235-243.
+ * Pure so the enabled/dryRun matrix is unit-testable.
+ */
+export function readJobGate(
+  cfg: { enabled?: boolean; dryRun?: boolean } | undefined | null,
+): { enabled: boolean; dryRun: boolean } {
+  return { enabled: cfg?.enabled === true, dryRun: cfg?.dryRun !== false };
+}
+
+/** A spread is lockable when it exists, carries a value, and isn't locked yet. */
+export function shouldLockSpread(game: Pick<NFLGame, 'spread'> | undefined): boolean {
+  const spread = game?.spread;
+  return !!spread && spread.locked !== true && spread.value !== undefined && spread.value !== null;
+}
+
+/**
  * Scheduled job to lock NFL spreads every Tuesday at 9:00 AM EST.
  * Scans upcoming games, and if spread is available, marks it as locked.
+ *
+ * SAFETY (Rule 1, mmp-change-control): kill-switch
+ * system/config.nflSpreadLock.enabled === true required (default OFF, fail-safe);
+ * dry-run by default (nflSpreadLock.dryRun !== false) — logs which games it WOULD
+ * lock, writing nothing, until explicitly flipped.
  */
 export const lockNFLSpreadsJob = onSchedule({
   schedule: '0 9 * * 2', // 9:00 AM every Tuesday
   timeZone: 'America/New_York'
 }, async () => {
   const db = admin.firestore();
+
+  let gate = { enabled: false, dryRun: true };
+  try {
+    const cfg = (await db.doc('system/config').get()).data()?.nflSpreadLock as
+      | { enabled?: boolean; dryRun?: boolean }
+      | undefined;
+    gate = readJobGate(cfg);
+  } catch (e) {
+    console.warn('[lockNFLSpreadsJob] config read failed; staying disabled:', e);
+  }
+  if (!gate.enabled) {
+    console.log('[lockNFLSpreadsJob] disabled (system/config.nflSpreadLock.enabled !== true); nothing to do.');
+    return;
+  }
+
   const now = Date.now();
-  
+
   // Find games starting in the next 7 days that are not finalized
   const upcomingSnap = await db.collection('nfl_games')
     .where('startTime', '>', now)
@@ -331,26 +369,21 @@ export const lockNFLSpreadsJob = onSchedule({
 
   if (upcomingSnap.empty) return;
 
-  const batch = db.batch();
-  let lockedCount = 0;
+  const targets = upcomingSnap.docs.filter(doc => shouldLockSpread(doc.data() as NFLGame));
 
-  upcomingSnap.forEach(doc => {
-    const data = doc.data() as NFLGame;
-    // Lock spread if it's available and not already locked
-    if (data.spread && !data.spread.locked) {
-      if (data.spread.value !== undefined) {
-        batch.update(doc.ref, {
-          'spread.locked': true
-        });
-        lockedCount++;
-      }
-    }
-  });
-
-  if (lockedCount > 0) {
-    await batch.commit();
-    console.log(`[lockNFLSpreadsJob] Locked spreads for ${lockedCount} upcoming games.`);
+  if (gate.dryRun) {
+    console.log(
+      `[lockNFLSpreadsJob] DRY-RUN: would lock ${targets.length} spread(s): ${targets.slice(0, 20).map(d => d.id).join(', ')}`,
+    );
+    return;
   }
+
+  if (targets.length === 0) return;
+
+  const batch = db.batch();
+  for (const doc of targets) batch.update(doc.ref, { 'spread.locked': true });
+  await batch.commit();
+  console.log(`[lockNFLSpreadsJob] Locked spreads for ${targets.length} upcoming games.`);
 });
 
 /**
