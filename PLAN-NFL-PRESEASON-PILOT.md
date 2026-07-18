@@ -1,5 +1,28 @@
 # PLAN — NFL 2026 preseason pilot (overnight execution handoff)
 
+> ## ✅ EXECUTED 2026-07-18 overnight — all 6 engineering items shipped as PRs
+> **A2** #205 · **A4** #206 · **A3a** #207 · **A10** #208 · **A5 part 1** #209 ·
+> **A6** #210 — all merged to `main`.
+>
+> Nothing is deployed. Everything Kevin needs — decisions, console steps, the
+> deploy command, the A7 runbook — is in **`TOMORROW-TASKS.md`**, appended below
+> its existing divider. Engineering state is in **`HANDOFF.md`** under
+> "MORNING TAKEOVER".
+>
+> **Two open decisions blocking the pilot** (details in TOMORROW-TASKS items 1-2):
+> 1. Preseason has almost no betting lines — verified 1 of 17 games has odds,
+>    which blocks ATS pick'em behind `SPREADS_NOT_LOCKED` for weeks 1-3.
+> 2. Alarm A3(b) (synthetic pick probe) not built — needs a prod probe identity.
+>
+> **Not built, deliberately:** A5 part 2 (replay callable), the "recalculated"
+> banner (frontend), and the plan's "approve gate before payouts" — that last one
+> turned out to already exist; finalization never touches money
+> (`nflFinalize.ts:24-25`), so the plan's premise there was wrong.
+>
+> Sections 2-3 below are kept for provenance. Section 4's autonomy rules and
+> section 5's wrap-up steps are spent.
+
+
 **New-session opener (paste this):**
 > "Read PLAN-NFL-PRESEASON-PILOT.md and HANDOFF.md, then execute the engineering
 > action items overnight in the sequenced order. Kevin is away — run autonomously
@@ -59,7 +82,7 @@ the exact worktree/gate ritual and baselines). **Do NOT deploy — Kevin's gate.
 
 ### First wave — small/medium, independent (do these first, in parallel-ish)
 
-**A2 — Retrofit kill-switch to `lockNFLSpreadsJob`, then export it.**
+**A2 — ✅ DONE (PR #205, merged). Retrofit kill-switch to `lockNFLSpreadsJob`, then export it.**
 Add a `system/config.nflSpreadLock {enabled, dryRun}` gate copying the
 `autoClosePools.ts:11-44` pattern verbatim (enabled=false fail-safe, dryRun !==
 false default). On dry-run it logs which games *would* lock without writing.
@@ -70,7 +93,7 @@ miss blocks every member via `SPREADS_NOT_LOCKED`. Unit-test the gate decision
 (enabled/dryRun matrix) like the other gated jobs. **This is the highest-value small
 item — the whole pilot's reliability story depends on spreads locking automatically.**
 
-**A3 — Operator-loop alarms (does not exist today; Husain's top item).**
+**A3 — ⚠️ PARTIAL: (a) ✅ DONE (PR #207, merged); (b) NOT built, needs Kevin (TOMORROW-TASKS item 2). Operator-loop alarms (does not exist today; Husain's top item).**
 Two independent alarms, both must **page Kevin**, not wait for a commissioner email:
   (a) **pre-kickoff check**: for the active week, assert `locked-game-count ==
       game-count`; alert on mismatch. This is the "did spreads actually lock" tripwire.
@@ -81,7 +104,7 @@ one — `system/config.opsAlerts`, see the security-observability plan / HANDOFF
 Reuse it; do not build a new notification path. A7 (chaos drill) depends on this
 existing and working.
 
-**A4 — Gate the emulator fixture matrix in CI.**
+**A4 — ✅ DONE (PR #206, merged). Gate the emulator fixture matrix in CI.**
 `fixtureMatrix.emulator.test.ts` is the best eval in the repo and runs nowhere in CI.
 Add a **new job** to `.github/workflows/ci.yml` (not a step in `build-and-test` — the
 emulator needs the Firebase emulator + Java). Mirror the local invocation:
@@ -91,7 +114,7 @@ it required on PRs. Verify it actually runs the 45-fixture matrix, not an empty 
 
 ### Then — the big one
 
-**A5 — Idempotent finalize from feed snapshots (highest leverage; Theo's boring version).**
+**A5 — ⚠️ PART 1 DONE (PR #209): capture + stat-correction detection. Part 2 (replay) deferred. Idempotent finalize from feed snapshots (highest leverage; Theo's boring version).**
 Snapshot the raw ESPN responses the finalizer consumes; make finalization
 **re-runnable from those snapshots** rather than from a fresh (possibly-failed) live
 fetch; add a manual approve gate before payouts; add a per-pool "recalculated" banner.
@@ -102,7 +125,7 @@ largest item; give it its own careful arc. **A10 investigates alongside it** (th
 finalizer's postponed-game behavior is exactly the kind of thing the snapshot/replay
 model has to handle).
 
-**A10 — Verify finalizer path for postponed/moved games.**
+**A10 — ✅ DONE (PR #208, merged) — verdict: it waits forever, by design; the defect was that it waited silently. Verify finalizer path for postponed/moved games.**
 `mapNFLGameStatus` returns `SCHEDULED` for postponed (`nflSchedule.ts:25`). Trace what
 the finalize sweep does with a week that never completes (a postponed game sits
 `SCHEDULED` forever). Does it wait? Finalize partial? Investigate first, then either
@@ -110,7 +133,7 @@ fix or document the intended behavior with a test. Do this next to A5.
 
 ### Preseason-window items (need importable preseason games — schedule is published, importable NOW)
 
-**A6 — Preseason burn-in of `nflFinalize`.**
+**A6 — ✅ CODE DONE (PR #210); prod arm + import are Kevin's (TOMORROW-TASKS items 5-6). Preseason burn-in of `nflFinalize`.**
 Import the preseason schedule (the importer already resolves preseason via date-range,
 A1 confirmed the feed). Then this is the step that finally **arms `dryRun:false`** —
 but ONLY against preseason pools, and ONLY after a verified sweep report. This closes
@@ -119,7 +142,7 @@ dryRun:false and importing prod schedule data both touch prod → those two sub-
 are Kevin-gated; build everything up to them and stop there** (write the exact console
 steps into TOMORROW-TASKS.md).
 
-**A7 — Chaos drill (the memo's cheapest disproof experiment). Depends on A3.**
+**A7 — 📋 RUNBOOK WRITTEN (TOMORROW-TASKS item 7), for Kevin to execute during a preseason week. Chaos drill (the memo's cheapest disproof experiment). Depends on A3.**
 During a preseason week, deliberately skip one spread lock. Either an A3 alarm fires
 before any member notices (operator loop works → safe to charge for the regular season
 with a refund policy) or nothing fires (the free period taught its lesson in August

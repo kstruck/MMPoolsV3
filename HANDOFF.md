@@ -1,7 +1,89 @@
-# HANDOFF — Session entry point (updated 2026-07-18, callable sweep: 19 callables remain; batches 1-4 deployed, everything since merged but NOT deployed)
+# HANDOFF — Session entry point (updated 2026-07-18 overnight, NFL preseason pilot: all 6 engineering items shipped as PRs; NOTHING deployed)
 
 **Start every new session with: "Review HANDOFF.md and pick up where we left off."**
 This file + auto-memory carry the full state. Older narrative lives in git history.
+
+---
+
+## 🌅 MORNING TAKEOVER — overnight NFL preseason-pilot run (2026-07-18, ~03:50–05:00)
+
+**Read `TOMORROW-TASKS.md` first** — everything needing Kevin is there, appended
+below the existing divider, with full numbered steps. This section is the
+engineering state.
+
+### What shipped — all 6 engineering items from `PLAN-NFL-PRESEASON-PILOT.md`
+
+| Item | What | PR | State |
+|---|---|---|---|
+| **A2** | Kill-switch + dry-run gate on `lockNFLSpreadsJob`, then exported it from index.ts (it had **never been deployed**) | [#205](https://github.com/kstruck/MMPoolsV3/pull/205) `d3dba97` | merged |
+| **A4** | New `emulator-tests` CI job — the 45-fixture NFL matrix now gates every PR | [#206](https://github.com/kstruck/MMPoolsV3/pull/206) `7b9e08b` | merged |
+| **A3a** | Pre-kickoff spread-lock tripwire (`nflLockWatchJob`) that pages ops via the Phase 2 dispatcher | [#207](https://github.com/kstruck/MMPoolsV3/pull/207) `869911b` | merged |
+| **A10** | Finalizer/postponed-game investigation + surfaced the blocked reasons | [#208](https://github.com/kstruck/MMPoolsV3/pull/208) `87c46bd` | merged |
+| **A5** (part 1) | ESPN feed snapshots + stat-correction detection | [#209](https://github.com/kstruck/MMPoolsV3/pull/209) `7d842a3` | merged |
+| **A6** | `liveSeasonTypes` scope guard so the finalize sweep can be armed **preseason-only** | [#210](https://github.com/kstruck/MMPoolsV3/pull/210) `a1f3569` | merged |
+
+**Baselines moved**: functions unit **685 → 745** (+60 tests), root vitest **257**
+(unchanged), emulator **97 pass / 10 skipped** (unchanged), both typechecks clean.
+Every PR ran all five gates before commit.
+
+**qodo**: 16 findings across the run. 12 valid and absorbed, 4 rejected with
+written evidence (a `firebase-tools` dependency-placement suggestion that
+contradicted the repo's existing root-install pattern, an `: any`-count rule
+aimed at pre-existing lines this PR only relocated, and snake_case naming twice —
+which does not apply to this camelCase TypeScript codebase).
+
+**Its best catch of the night, worth recording:** A5's snapshot query needed a
+Firestore composite index that did not exist, and the `catch` that keeps a
+snapshot failure from breaking score sync would have swallowed that error on
+every run — the feature would have shipped silently dead, hidden by its own
+safety net. Two other real saves: the finalize sweep applied its per-run cap
+BEFORE the season-type scope filter (so a preseason-only arm could have
+finalized nothing while reporting a full run), and `safeInt()` made "ESPN
+dropped the score field" indistinguishable from "the team scored 0", which
+would have paged a false `21-17 → 0-0` stat correction.
+
+### 🔴 Two things need Kevin's decision before the pilot can run
+
+1. **Preseason games have almost no betting lines.** Verified live tonight:
+   the 2026 preseason feed returns 17 events and **exactly 1 has odds** (the HOF
+   game). `submitNFLPicks` blocks a week unless *every* game has a locked spread,
+   so an ATS pick'em pool would be blocked for all of preseason weeks 1-3. This
+   is a data fact, not a bug — and it is the most likely way week 1 fails.
+   Options + a recommendation are in TOMORROW-TASKS item 1.
+2. **Alarm A3(b) (synthetic pick probe) was deliberately not built.** Doing it
+   honestly needs a probe identity + probe pool in prod (Kevin's gate); doing it
+   in-process would only duplicate A3(a)'s predicate. Recommendation and options
+   in TOMORROW-TASKS item 2.
+
+### Deploy state — NOTHING from tonight is deployed
+
+Four functions change/appear: `lockNFLSpreadsJob` (**new**), `nflLockWatchJob`
+(**new**), `syncNFLScoresJob`, `nflFinalizeSweepJob` — **plus a Firestore index
+deploy** (`firestore.indexes.json` gained a `nfl_feed_snapshots` composite
+index; A5's snapshot writes fail silently without it). This queue sits **on top of**
+the 33 undeployed callables below. Deploy command + verification steps are
+TOMORROW-TASKS item 4. No frontend change tonight, so no Coolify trigger needed.
+
+**Everything shipped is fail-safe OFF.** Three new config maps
+(`nflSpreadLock`, `nflLockWatch`, `nflFeedSnapshots`) do nothing until armed —
+console steps in TOMORROW-TASKS item 3.
+
+### Behavior change worth knowing before you touch `nflFinalize`
+
+A6 made arming **stricter**: setting `dryRun: false` *without* also setting
+`liveSeasonTypes` now **keeps the sweep dry** and logs a refusal. There is no
+unscoped way to arm the finalizer any more. This changes the long-standing open
+loop "flip nflFinalize dryRun to false" — the flip now needs a third field.
+See TOMORROW-TASKS item 6.
+
+### Not built, deliberately (all recorded in TOMORROW-TASKS item 8)
+
+- **A5 part 2**, the snapshot replay callable — prod-data mutator, wants its own PR.
+- **The plan's "approve gate before payouts"** — already satisfied; finalization
+  never touches money (`nflFinalize.ts:24-25`). The plan's premise was wrong here.
+- **The "recalculated" banner** — frontend, and only meaningful once replay exists.
+- **A7 chaos drill** — a runbook for Kevin to execute during a preseason week, not
+  code. Written out in TOMORROW-TASKS item 7.
 
 ---
 
