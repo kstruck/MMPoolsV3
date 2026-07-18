@@ -39,5 +39,42 @@ export const submitBracketEntrySchema = z.strictObject({
     name: nullish(z.string().max(200)),
 });
 
+/**
+ * createBracketEntry — the real dbService payload is { poolId, name,
+ * tiebreakerScore? } (createBracketEntry(poolId, data) spreads
+ * data = { name, tiebreakerScore? }). The handler only reads poolId + name,
+ * but tiebreakerScore MUST stay accepted or a strict schema would reject
+ * legitimate calls that send it (verify-before-strict, PLAN #1).
+ */
+export const createBracketEntrySchema = z.strictObject({
+    poolId,
+    name: z.string().trim().min(1).max(200),
+    tiebreakerScore: nullish(z.number().finite()),
+});
+
+/**
+ * updateBracketEntry — dbService payload
+ * { poolId, entryId, picks, tieBreakerPrediction?, name? }. picks is required
+ * (handler throws on a missing picks) and mirrors submitBracketEntry's shape.
+ */
+export const updateBracketEntrySchema = z.strictObject({
+    poolId,
+    entryId: z.string().trim().min(1).max(200),
+    picks: z
+        .record(z.string().min(1).max(100), z.string().min(1).max(100))
+        .refine((o) => Object.keys(o).length <= 200, { message: "too many picks" }),
+    tieBreakerPrediction: nullish(z.number().finite()),
+    name: nullish(z.string().max(200)),
+});
+
+/** deleteBracketEntry — dbService payload { poolId, entryId }. */
+export const deleteBracketEntrySchema = z.strictObject({
+    poolId,
+    entryId: z.string().trim().min(1).max(200),
+});
+
 export type SendPoolInvitesInput = z.infer<typeof sendPoolInvitesSchema>;
 export type SubmitBracketEntryInput = z.infer<typeof submitBracketEntrySchema>;
+export type CreateBracketEntryInput = z.infer<typeof createBracketEntrySchema>;
+export type UpdateBracketEntryInput = z.infer<typeof updateBracketEntrySchema>;
+export type DeleteBracketEntryInput = z.infer<typeof deleteBracketEntrySchema>;

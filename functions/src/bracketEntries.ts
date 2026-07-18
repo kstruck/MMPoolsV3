@@ -8,24 +8,23 @@ import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
 import { assertNotBannedLive } from "./lib/systemGuards";
 import { validated } from "./lib/validated";
-import { submitBracketEntrySchema } from "./schemas/poolEngagement";
+import {
+    submitBracketEntrySchema,
+    createBracketEntrySchema,
+    updateBracketEntrySchema,
+    deleteBracketEntrySchema,
+} from "./schemas/poolEngagement";
 
 
 
 // ----------------------------------------------------------------------------
 // Create Bracket Entry (Draft)
 // ----------------------------------------------------------------------------
-export const createBracketEntry = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-
-    const { poolId, name } = request.data;
-    const uid = request.auth.uid;
-
-    if (!poolId || !name) {
-        throw new HttpsError("invalid-argument", "Missing poolId or entry name.");
-    }
+export const createBracketEntry = validated(
+    { schema: createBracketEntrySchema, label: "createBracketEntry", appCheck: "monitor" },
+    async (data, request) => {
+    const { poolId, name } = data;
+    const uid = request.auth!.uid;
 
     const db = admin.firestore();
     const poolRef = db.collection("pools").doc(poolId);
@@ -114,17 +113,11 @@ export const createBracketEntry = onCall(async (request) => {
 // ----------------------------------------------------------------------------
 // Update Bracket Entry (Draft Picks)
 // ----------------------------------------------------------------------------
-export const updateBracketEntry = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-
-    const { poolId, entryId, picks, tieBreakerPrediction, name } = request.data;
-    const uid = request.auth.uid;
-
-    if (!poolId || !entryId || !picks) {
-        throw new HttpsError("invalid-argument", "Missing data.");
-    }
+export const updateBracketEntry = validated(
+    { schema: updateBracketEntrySchema, label: "updateBracketEntry", appCheck: "monitor" },
+    async (data, request) => {
+    const { poolId, entryId, picks, tieBreakerPrediction, name } = data;
+    const uid = request.auth!.uid;
 
     const db = admin.firestore();
     const entryRef = db.collection("pools").doc(poolId).collection("entries").doc(entryId);
@@ -351,17 +344,11 @@ export const submitBracketEntry = validated(
 // ----------------------------------------------------------------------------
 // Delete Bracket Entry
 // ----------------------------------------------------------------------------
-export const deleteBracketEntry = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-
-    const { poolId, entryId } = request.data;
-    const uid = request.auth.uid;
-
-    if (!poolId || !entryId) {
-        throw new HttpsError("invalid-argument", "Missing data.");
-    }
+export const deleteBracketEntry = validated(
+    { schema: deleteBracketEntrySchema, label: "deleteBracketEntry", appCheck: "monitor" },
+    async (data, request) => {
+    const { poolId, entryId } = data;
+    const uid = request.auth!.uid;
 
     const db = admin.firestore();
     const entryRef = db.collection("pools").doc(poolId).collection("entries").doc(entryId);
