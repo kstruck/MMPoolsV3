@@ -1,26 +1,17 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
+import { validated } from "./lib/validated";
+import { lockPoolSchema } from "./schemas/adminSingles";
 import { Timestamp } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 
 import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
 
 
-export const lockPool = onCall(async (request) => {
-    // 0. Ensure Admin Init (Lazy)
+export const lockPool = validated(
+    // Owner/SUPER_ADMIN gate stays in-handler (needs the pool doc).
+    { schema: lockPoolSchema, label: "lockPool", appCheck: "monitor" },
+    async ({ poolId, forceAxis }, request) => {
     const db = admin.firestore();
-
-    // 1. Auth Check - Must be logged in
-    if (!request.auth) {
-        throw new HttpsError(
-            "unauthenticated",
-            "User must be logged in to lock a pool."
-        );
-    }
-
-    const { poolId, forceAxis } = request.data;
-    if (!poolId) {
-        throw new HttpsError("invalid-argument", "Pool ID is required.");
-    }
 
     const poolRef = db.collection("pools").doc(poolId);
     const poolSnap = await poolRef.get();
@@ -33,7 +24,7 @@ export const lockPool = onCall(async (request) => {
 
 
     // 2. Permission Check - Owner or Super Admin
-    assertPoolOwnerOrSuperAdmin(poolData, request.auth.uid, request.auth.token.role);
+    assertPoolOwnerOrSuperAdmin(poolData, request.auth!.uid, request.auth!.token.role);
 
     // 3. Generate Digits (Random or Fixed for Testing) - ONLY FOR SQUARES
     let axisNumbers;
@@ -95,7 +86,7 @@ export const lockPool = onCall(async (request) => {
         type: 'POOL_LOCKED',
         message: 'Pool locked by owner',
         severity: 'INFO',
-        actor: { uid: request.auth.uid, role: 'ADMIN', label: request.auth.token.name || 'Owner' }
+        actor: { uid: request.auth!.uid, role: 'ADMIN', label: request.auth!.token.name || 'Owner' }
     });
 
     // 2. Log Digits Generation (Initial) - Only for Squares
@@ -117,4 +108,5 @@ export const lockPool = onCall(async (request) => {
     }
 
     return { success: true, axisNumbers };
-});
+    },
+);
