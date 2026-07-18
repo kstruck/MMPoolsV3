@@ -29,6 +29,9 @@ interface FinalizeOutcome {
   finalized: boolean;
   reason?: string;
   members?: number;
+  /** Set when the blocker was a stalled (likely postponed) game — structured so
+   *  the sweep reports it without parsing the human-readable reason string. */
+  stalledGameIds?: string[];
 }
 
 /** The minimum of an nfl_games doc completeness reasons about. */
@@ -91,11 +94,19 @@ export function assessSeasonCompleteness(
   const unscoredWeeks = new Set<number>();
   for (const g of games) {
     if (g.status !== 'FINAL' && g.status !== 'CANCELLED') unfinished.push(g);
-    if (!scoredWeeks[String(g.week)]) unscoredWeeks.add(Number(g.week));
+    // A doc with a missing/garbage week must not put NaN into the unscored set —
+    // it would render as "weeks not scored: NaN" and block finalization forever
+    // on a data defect nobody can act on. Skip it; the game itself still gates
+    // via the unfinished check above if it hasn't concluded.
+    const week = Number(g.week);
+    if (Number.isFinite(week) && !scoredWeeks[String(g.week)]) unscoredWeeks.add(week);
   }
 
+  // Only SCHEDULED counts as stalled. An IN_PROGRESS game sitting for 12h is
+  // also wrong, but it is a stuck-feed problem, not a postponement — labeling it
+  // "likely postponed" would send an operator to the wrong fix.
   const stalledGameIds = unfinished
-    .filter((g) => typeof g.startTime === 'number' && nowMs - g.startTime > STALLED_GAME_AFTER_MS)
+    .filter((g) => g.status === 'SCHEDULED' && typeof g.startTime === 'number' && nowMs - g.startTime > STALLED_GAME_AFTER_MS)
     .map((g) => g.id);
   const unfinishedGameIds = unfinished.map((g) => g.id);
   const weeks = [...unscoredWeeks].sort((a, b) => a - b);
@@ -238,7 +249,9 @@ export async function maybeFinalizeNFLPool(
   }
 
   const completeness = await isSeasonComplete(db, pool);
-  if (!completeness.complete) return { finalized: false, reason: completeness.reason };
+  if (!completeness.complete) {
+    return { finalized: false, reason: completeness.reason, stalledGameIds: completeness.stalledGameIds };
+  }
 
   const entriesSnap = await poolRef.collection('entries').get();
   const entries = entriesSnap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
@@ -364,6 +377,7 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
     // forever by a postponed game (A10) indistinguishable from one blocked by a
     // game kicking off tonight — both just incremented `skipped`.
     const blockedReasons: Record<string, string> = {};
+    const stalled: string[] = [];
     for (const d of capped) {
       try {
         const outcome = await maybeFinalizeNFLPool(db, d.id);
@@ -372,6 +386,7 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
         } else {
           skipped++;
           blockedReasons[d.id] = outcome.reason ?? 'unknown';
+          if (outcome.stalledGameIds?.length) stalled.push(d.id);
         }
       } catch (e) {
         skipped++;
@@ -379,10 +394,12 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
         console.warn(`[nflFinalizeSweep] finalize failed for ${d.id}:`, e);
       }
     }
-    const stalled = Object.entries(blockedReasons).filter(([, r]) => r.includes('STALLED')).map(([id]) => id);
+    // Cap the log the same way the audit doc is capped — up to MAX_PER_RUN
+    // entries would otherwise land in a single log line every day.
+    const sampleReasons = Object.fromEntries(Object.entries(blockedReasons).slice(0, 50));
     console.log(
-      `[nflFinalizeSweep] finalized ${finalized}, skipped ${skipped} of ${capped.length} candidates.`,
-      { blockedReasons, stalled },
+      `[nflFinalizeSweep] finalized ${finalized}, skipped ${skipped} of ${capped.length} candidates; ${stalled.length} stalled.`,
+      { blockedReasons: sampleReasons, stalled: stalled.slice(0, 50) },
     );
     await writeAdminAudit({
       actorUid: "system",
@@ -391,7 +408,7 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
       metadata: {
         dryRun: false, finalized, skipped, candidates: stale.length,
         // Capped so one bad season can't bloat an audit doc past Firestore's 1MiB limit.
-        blockedReasons: Object.fromEntries(Object.entries(blockedReasons).slice(0, 50)),
+        blockedReasons: sampleReasons,
         stalledPools: stalled.slice(0, 50),
       },
       status: "success",

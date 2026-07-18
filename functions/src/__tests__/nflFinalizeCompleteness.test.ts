@@ -112,4 +112,33 @@ describe('assessSeasonCompleteness — A10: the postponed game', () => {
     expect(r.complete).toBe(false);
     expect(r.stalledGameIds).toEqual([]);
   });
+
+  it('does NOT call a long-running IN_PROGRESS game postponed — different fix', () => {
+    // A game stuck IN_PROGRESS for 12h is a stuck feed, not a postponement.
+    // Labeling it "likely postponed" would send an operator to the wrong place.
+    const r = assessSeasonCompleteness(
+      [g('stuck', { status: 'IN_PROGRESS', startTime: NOW - 3 * 24 * HOUR })], allScored, NOW,
+    );
+    expect(r.complete).toBe(false);
+    expect(r.unfinishedGameIds).toEqual(['stuck']);
+    expect(r.stalledGameIds).toEqual([]);
+  });
+});
+
+describe('assessSeasonCompleteness — malformed docs', () => {
+  it('never emits NaN for a game with a missing week', () => {
+    // nfl_games docs are read with `as any`, so a malformed doc is reachable.
+    // Number(undefined) is NaN, which would render "weeks not scored: NaN" and
+    // block finalization forever on a defect nobody can act on.
+    const r = assessSeasonCompleteness([g('a', { week: undefined })], {}, NOW);
+    expect(r.unscoredWeeks).toEqual([]);
+    expect(r.reason ?? '').not.toContain('NaN');
+    expect(r.complete).toBe(true); // concluded game, no actionable unscored week
+  });
+
+  it('still blocks on a real unscored week alongside a malformed sibling', () => {
+    const r = assessSeasonCompleteness([g('a', { week: undefined }), g('b', { week: 2 })], { '1': true }, NOW);
+    expect(r.unscoredWeeks).toEqual([2]);
+    expect(r.reason).toBe('weeks not scored: 2');
+  });
 });
