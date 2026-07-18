@@ -14,6 +14,18 @@ const safeInt = (val: any): number => {
 };
 
 /**
+ * Did the feed actually deliver a score for this competitor?
+ *
+ * safeInt() maps a missing score to 0, which makes "ESPN dropped the field" and
+ * "the team scored zero" indistinguishable downstream. That matters for A5:
+ * detectStatCorrections must not page a false 21-17 → 0-0 "correction" when the
+ * feed simply returned a partial payload. Used only to decide whether to emit a
+ * scores object at all; the values themselves still go through safeInt.
+ */
+const hasScore = (val: any): boolean =>
+  val !== null && val !== undefined && val !== '' && !isNaN(parseInt(val));
+
+/**
  * Map an ESPN status to our NFLGame status. ESPN `type.state` is only pre/in/post,
  * so canceled/postponed/suspended must be read from `type.name` (e.g. STATUS_CANCELED).
  * A canceled game must NOT map to FINAL (it would score 0-0); a postponed/suspended game
@@ -208,7 +220,11 @@ export function parseScoreboardResponse(
           abbreviation: awayComp.team?.abbreviation || 'AWAY',
           logoUrl: awayComp.team?.logo || ''
         },
-        scores: status !== 'SCHEDULED' ? {
+        // Only emit scores when the feed actually delivered at least one. A
+        // non-SCHEDULED game with NO scores in the payload is a partial
+        // response, and reporting it as 0-0 would look like a stat correction
+        // wiping a finished game (A5).
+        scores: status !== 'SCHEDULED' && (hasScore(homeComp.score) || hasScore(awayComp.score)) ? {
           home: safeInt(homeComp.score),
           away: safeInt(awayComp.score)
         } : undefined,

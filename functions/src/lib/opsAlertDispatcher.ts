@@ -51,6 +51,10 @@ const HIGH_PRIORITY_TYPES: ReadonlySet<OpsAlertType> = new Set([
     // Every member of every pool on the slate is blocked from submitting picks
     // and the window closes at kickoff — email alone is too slow to act on.
     "NFL_SPREADS_NOT_LOCKED",
+    // A game that was already FINAL changed, so any pool scored or finalized on
+    // the old values is settled on stale data. The longer that stands, the more
+    // members have seen a standing that is about to move under them.
+    "NFL_STAT_CORRECTION",
 ]);
 
 interface OpsAlertsConfig {

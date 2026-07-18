@@ -167,6 +167,37 @@ describe('parseScoreboardResponse — real ESPN shape', () => {
     expect(games[0].scores).toBeUndefined();
   });
 
+  it('leaves scores undefined when a FINAL game arrives with NO scores at all', () => {
+    // safeInt maps a missing score to 0, so without this guard a partial feed
+    // response would produce 0-0 on a finished game — which detectStatCorrections
+    // would then page as a 21-17 → 0-0 "stat correction". The flakiness guard in
+    // detectStatCorrections only works because the parser preserves undefined here.
+    const ev = espnEvent();
+    ev.status.type = { id: '3', name: 'STATUS_FINAL', state: 'post' } as any;
+    delete (ev.competitions[0].competitors[0] as any).score;
+    delete (ev.competitions[0].competitors[1] as any).score;
+    const games = parseScoreboardResponse({ events: [ev] }, 1, '2026', 1);
+    expect(games[0].status).toBe('FINAL');
+    expect(games[0].scores).toBeUndefined();
+  });
+
+  it('still emits scores when only ONE side reported — a real 0 is preserved', () => {
+    const ev = espnEvent();
+    ev.status.type = { id: '3', name: 'STATUS_FINAL', state: 'post' } as any;
+    ev.competitions[0].competitors[0].score = '14';
+    delete (ev.competitions[0].competitors[1] as any).score;
+    const games = parseScoreboardResponse({ events: [ev] }, 1, '2026', 1);
+    expect(games[0].scores).toEqual({ home: 14, away: 0 });
+  });
+
+  it('preserves a genuine 0-0 final', () => {
+    const ev = espnEvent();
+    ev.status.type = { id: '3', name: 'STATUS_FINAL', state: 'post' } as any;
+    ev.competitions[0].competitors[0].score = '0';
+    ev.competitions[0].competitors[1].score = '0';
+    expect(parseScoreboardResponse({ events: [ev] }, 1, '2026', 1)[0].scores).toEqual({ home: 0, away: 0 });
+  });
+
   it('carries scores once a game is final', () => {
     const ev = espnEvent();
     ev.status.type = { id: '3', name: 'STATUS_FINAL', state: 'post' } as any;

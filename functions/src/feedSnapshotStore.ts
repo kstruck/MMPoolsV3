@@ -113,24 +113,27 @@ export async function reportStatCorrections(
   const detail = corrections.map((c) => `${c.gameId}: ${c.field} ${c.from} → ${c.to}`).join("; ");
   console.warn(`[feedSnapshot] STAT CORRECTION on ${snapshotSlateId(key)}: ${detail}`);
 
-  await writeAdminAudit({
-    actorUid: "system",
-    action: "NFL_STAT_CORRECTION",
-    targetType: "pool",
-    metadata: { slate: snapshotSlateId(key), corrections: corrections.slice(0, 50) },
-    status: "success",
-  });
-
-  await dispatchOpsAlert(db, {
-    type: "NFL_STAT_CORRECTION",
-    title: `NFL stat correction — week ${key.week}`,
-    message:
-      `ESPN changed ${corrections.length} game(s) that were already FINAL on slate ${snapshotSlateId(key)}.\n\n${detail}\n\n` +
-      `Any pool already scored or finalized on the old values is now settled on stale data. ` +
-      `Re-score the affected week, then let the finalize sweep re-derive (finalization is a re-runnable overwrite). ` +
-      `The raw feed payloads before and after are in the ${FEED_SNAPSHOTS} collection for this slate.`,
-    context: { slate: snapshotSlateId(key), count: corrections.length },
-  });
+  // Independent sinks — the audit trail must not wait on the pager, and neither
+  // throws, so a failure in one cannot lose the other.
+  await Promise.all([
+    writeAdminAudit({
+      actorUid: "system",
+      action: "NFL_STAT_CORRECTION",
+      targetType: "pool",
+      metadata: { slate: snapshotSlateId(key), corrections: corrections.slice(0, 50) },
+      status: "success",
+    }),
+    dispatchOpsAlert(db, {
+      type: "NFL_STAT_CORRECTION",
+      title: `NFL stat correction — week ${key.week}`,
+      message:
+        `ESPN changed ${corrections.length} game(s) that were already FINAL on slate ${snapshotSlateId(key)}.\n\n${detail}\n\n` +
+        `Any pool already scored or finalized on the old values is now settled on stale data. ` +
+        `Re-score the affected week, then let the finalize sweep re-derive (finalization is a re-runnable overwrite). ` +
+        `The raw feed payloads before and after are in the ${FEED_SNAPSHOTS} collection for this slate.`,
+      context: { slate: snapshotSlateId(key), count: corrections.length },
+    }),
+  ]);
 }
 
 /**
