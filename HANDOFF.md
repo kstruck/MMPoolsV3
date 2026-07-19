@@ -95,7 +95,25 @@ See TOMORROW-TASKS **NFL-6**.
 
 ---
 
-## Current state: **11 SWEEP-LATER callables remain** (10 actionable + createBracketPool deferred) — batches 1-4 deployed, batches 5-13 + 3 fixes merged to main but UNDEPLOYED
+## ✅ SWEEP-LATER worklist CLOSED 2026-07-19 (batch 17, PR #220) — but read the caveat
+
+The 10 callables HANDOFF listed as "actionable remaining" are wrapped. That
+closes the SWEEP-LATER worklist **as written**.
+
+⚠️ **It does NOT mean every callable is wrapped.** A grep of `main` still finds
+**25 bare `onCall(`** exports: ~16 sim-harness (own `requireAuth`/SUPER_ADMIN
+gates, never SWEEP-LATER rows), 3 aiTesting, `createBracketPool` (deliberately
+deferred — `...settings` passthrough), plus `getServerTime`, `logClientError`,
+`recordPoolPayouts`, `getProfilePoolDetail`, `refreshExpertProfiles`,
+`backfillProfileData`, `simulateGameUpdate` (mix of PUBLIC-EXEMPT and rows
+wanting re-classification). None is a regression. **Do not quote "the sweep is
+complete" without this qualifier** — PR #220's own title overclaims it.
+
+Batch 17 carries ONE deliberate behavior change: `recalculateGlobalStats` now
+THROWS permission-denied instead of soft-returning `{success:false}`. Smoke-test
+the SuperAdmin stats surface after deploying.
+
+## Prior state: **11 SWEEP-LATER callables remain** (10 actionable + createBracketPool deferred) — batches 1-4 deployed, batches 5-13 + 3 fixes merged to main but UNDEPLOYED
 
 The trust-boundary `validated()` sweep of the parked SWEEP-LATER callables is underway. Kickoff/recipe doc: `PICKUP-CALLABLE-SWEEP.md`; classification authority: `PLAN-SECURITY-OBSERVABILITY-SWEEPS.md`.
 
