@@ -173,7 +173,32 @@ reporting only, never writing. This is unrelated to last night's sweep work.
 
 ---
 
-## 3. Deploy the 33 sweep callables (functions-first ritual)
+## 3. ✅ Deploy the 33 sweep callables — DONE 2026-07-18
+
+> ### ✅ DEPLOYED. 33/33 succeeded — 1 create + 32 updates, zero failures.
+> `syncPlayInPicks` created (it had never existed in prod — PR #217); the other
+> 32 updated. Batches 5-16 plus the three fix PRs (#190/#193/#195) are now live.
+>
+> **Two things went wrong on the way, both now fixed in the command below:**
+> 1. **Discovery timeout.** The first attempt died with *"Cannot determine
+>    backend specification. Timeout after 10000"* before touching anything.
+>    The code was fine (`require('functions/lib/index.js')` loads in 992ms) —
+>    it is the CLI's 10s source-analysis window, which Windows loopback can
+>    blow through. Fix: `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"` before
+>    deploying. Value is in SECONDS.
+> 2. **The `--only` syntax was wrong and failed SILENTLY** — see the warning
+>    box below. The second attempt reported `Deploy complete!` having shipped
+>    exactly one function.
+>
+> ⚠️ **Still OPEN — is the rest of the fleet actually deployed?** Because the
+> malformed syntax silently drops everything after the first name, any earlier
+> deploy that used it may have shipped only its first function. HANDOFF claims
+> batches 1-4 and waves 1-2 (PRs #164/#165, #176-#180) are deployed; that claim
+> was produced by the same broken command shape and is **not** trustworthy.
+> Cheapest resolution is a reconciliation deploy of the whole callable fleet —
+> idempotent, so it is safe whether or not they were already live.
+
+### Original instructions (command below is CORRECTED)
 
 **⚠️ Conflict check — read before running:** this deploy uses `--only
 functions:<exact names>`, a **targeted list of 33 specific function names**.
@@ -233,8 +258,15 @@ half-reviewed work.
 5. Run the deploy — copy this **exact command**, don't retype it by hand
    (one typo in the function list silently drops a function from the
    deploy):
+   > ⚠️ **`functions:` MUST be repeated before EVERY name.** `--only functions:a,b,c`
+   > deploys **only `a`** — firebase-tools splits on `,` and silently discards any
+   > segment that does not start with `functions:` (`functionsDeployHelper.js`,
+   > `getEndpointFilters`). It then prints `✔ Deploy complete!`, so the failure is
+   > invisible. This bit us for real on 2026-07-18: a 33-name deploy shipped 1
+   > function and reported success.
+
    ```
-   npx firebase deploy --only functions:recalculatePoolWinners,toggleWinnerPaid,fixParticipantIds,joinNFLPool,executeSurvivorRebuy,scoreNFLWeek,validateBillingAccess,getPoolQuote,getAdminHealthSnapshot,backfillPools,refreshExpertPicks,syncPlayoffPools,deleteCouponTemplate,acknowledgeMonetizationAlert,importTournamentFromESPN,adminInitTournament,syncBracketTournament,importConferenceTournamentFromESPN,syncPlayInPicks,scoreBracketEntries,finalizeTournamentPayouts,initializeBigEastTournamentHttp,initializeBig12TournamentHttp,updatePlayer,releaseSquares,gradeProp,updatePropCard,generateReferralToken,resolveReferralToken,lockPool,logAdminAction,recomputeConsensus,recomputeRevenue --project gridiron-gamble-uzuqo
+   npx firebase deploy --only functions:recalculatePoolWinners,functions:toggleWinnerPaid,functions:fixParticipantIds,functions:joinNFLPool,functions:executeSurvivorRebuy,functions:scoreNFLWeek,functions:validateBillingAccess,functions:getPoolQuote,functions:getAdminHealthSnapshot,functions:backfillPools,functions:refreshExpertPicks,functions:syncPlayoffPools,functions:deleteCouponTemplate,functions:acknowledgeMonetizationAlert,functions:importTournamentFromESPN,functions:adminInitTournament,functions:syncBracketTournament,functions:importConferenceTournamentFromESPN,functions:syncPlayInPicks,functions:scoreBracketEntries,functions:finalizeTournamentPayouts,functions:initializeBigEastTournamentHttp,functions:initializeBig12TournamentHttp,functions:updatePlayer,functions:releaseSquares,functions:gradeProp,functions:updatePropCard,functions:generateReferralToken,functions:resolveReferralToken,functions:lockPool,functions:logAdminAction,functions:recomputeConsensus,functions:recomputeRevenue --project gridiron-gamble-uzuqo
    ```
 6. **Expect:** it prints a list of 33 functions, each moving through
    `updating...` → a green checkmark. Takes a few minutes. Ends with
@@ -270,7 +302,12 @@ half-reviewed work.
    bug in (the dry-run default) — so a clean log here confirms that fix is
    working, not just that it compiles.
 
-## 5. Deploy the frontend (Coolify — manual trigger, does NOT auto-deploy)
+## 5. ✅ Deploy the frontend (Coolify) — DONE 2026-07-19
+
+> ### ✅ DEPLOYED. Build succeeded, site verified loading in an incognito tab.
+> PR #190's "Backfill Pools (dry run)" button is now live in OperationsPanel.
+
+### Original instructions
 
 **Why:** PR #190 added a new "Backfill Pools (dry run)" button to
 OperationsPanel. Without this step, the backend accepts the new `dryRun`
@@ -545,7 +582,36 @@ it.
 
 ---
 
-## NFL-3. Arm the three new kill-switches (Firestore console, ~5 minutes total)
+## ✅ NFL-3. Arm the three new kill-switches — ALL 3 DONE 2026-07-19
+
+> ### ✅ ALL THREE ARMED 2026-07-19, all in dry-run.
+> Verified in `system/config` with correct types: `nflSpreadLock` and
+> `nflLockWatch` each `enabled: true` (boolean) + `dryRun: true` (boolean);
+> `nflFeedSnapshots` `enabled: true` (boolean) + `retentionDays: 45` (int64).
+>
+> **Console note:** the numeric type in the Firestore console is labelled
+> **`int64`**, not "number". And `retentionDays` is OPTIONAL — the code defaults
+> to 45 when absent or non-finite, so omitting it is equivalent.
+> Verified directly in `system/config`: `nflSpreadLock` and `nflLockWatch` each
+> carry `enabled: true` AND `dryRun: true`, both as **booleans** (a string
+> `"true"` would silently fail the `=== true` check — worth checking if a switch
+> ever appears armed but does nothing).
+>
+> **3c (`nflFeedSnapshots`) — the Firestore index it needs is now `Enabled`**
+> (verified 2026-07-19 06:02 UTC; it was `Building` for ~10 min after the
+> `firestore:indexes` deploy). Safe to arm.
+>
+> **What to expect while dry-run is on:** `nflLockWatchJob` runs hourly and
+> writes an `NFL_LOCK_WATCH` audit entry every run — that entry is how you know
+> the alarm is ALIVE rather than merely quiet. It will not page.
+> `lockNFLSpreadsJob` waits for Tuesday 09:00 ET; force it early from Cloud
+> Scheduler if you want its dry-run output sooner.
+>
+> In the off-season `nfl_feed_snapshots` may stay empty until the preseason
+> schedule is imported (NFL-5) — `syncNFLScoresJob` only fetches slates with
+> games in its active window. Empty is expected, not a failure.
+
+### Original instructions
 
 Everything I shipped is fail-safe **OFF**. It does nothing until you write these
 config values. **Do this only after the PRs are deployed** — see NFL-4.
@@ -616,7 +682,34 @@ All three live in the same document.
 
 ---
 
-## NFL-4. Deploy the seven merged PRs (functions only — your gate)
+## ✅ NFL-4. DONE 2026-07-18 — deployed via a full-fleet reconciliation
+
+> ### ✅ DEPLOYED. All 164 functions now run `main`'s code.
+> Rather than the 5-function targeted deploy below, this was done as a bare
+> `npx firebase deploy --only functions` (no `:name`, so the broken-filter trap
+> could not apply). Result: **2 creates** (`lockNFLSpreadsJob`,
+> `nflLockWatchJob`), **33 skipped** as unchanged, remainder updated, **0
+> deletions**, zero failures.
+>
+> Pre-flight diff predicted exactly those 2 creates and 0 deletions, and the
+> deploy matched — that check is worth repeating before any future bare deploy:
+> compare `firebase functions:list` against the names exported from `index.ts`.
+>
+> **`submitNFLPicks` is live**, so the NFL-1 spread-gate fix is in effect and
+> preseason pools can accept picks without betting lines.
+>
+> **Why a full-fleet deploy:** the malformed `--only` syntax meant we could not
+> trust HANDOFF's claim that batches 1-4 / waves 1-2 were ever fully deployed.
+> A bare deploy settles it by construction instead of forensics. Note it does
+> NOT prove they were previously stale — functions deployed by older CLI
+> versions lack the hash label and update regardless. It proves only that
+> everything is current NOW, which is what matters.
+>
+> ⚠️ **Still required: the Firestore index** (`firestore:indexes` — see below).
+> A bare functions deploy does not include it, and A5's snapshot writes fail
+> silently without it.
+
+### Original 5-function instructions (superseded by the above)
 
 Nothing from tonight is deployed. This queue is now **on top of** the 33
 undeployed callables already listed in HANDOFF.md.
@@ -638,8 +731,15 @@ undeployed callables already listed in HANDOFF.md.
    ```
 4. Deploy. **Functions before rules** (no rules change tonight, so functions
    only). The new/changed functions from tonight:
+   > ⚠️ **`functions:` MUST be repeated before EVERY name.** `--only functions:a,b,c`
+   > deploys **only `a`** — firebase-tools splits on `,` and silently discards any
+   > segment that does not start with `functions:` (`functionsDeployHelper.js`,
+   > `getEndpointFilters`). It then prints `✔ Deploy complete!`, so the failure is
+   > invisible. This bit us for real on 2026-07-18: a 33-name deploy shipped 1
+   > function and reported success.
+
    ```
-   npx firebase deploy --only functions:lockNFLSpreadsJob,nflLockWatchJob,syncNFLScoresJob,nflFinalizeSweepJob,submitNFLPicks --project gridiron-gamble-uzuqo
+   npx firebase deploy --only functions:lockNFLSpreadsJob,functions:nflLockWatchJob,functions:syncNFLScoresJob,functions:nflFinalizeSweepJob,functions:submitNFLPicks --project gridiron-gamble-uzuqo
    ```
 5. **What you should see:** five functions listed as `create` or `update`, then
    `Deploy complete!`. `lockNFLSpreadsJob` and `nflLockWatchJob` are **new
@@ -678,7 +778,45 @@ undeployed callables already listed in HANDOFF.md.
 
 ---
 
-## NFL-5. Import the preseason schedule (prod data — your gate)
+## ✅ NFL-5. Import the preseason schedule — DONE 2026-07-19 (one cleanup outstanding)
+
+> ### ✅ IMPORTED. 62 writes → 50 unique docs. One is mislabeled; delete it.
+>
+> **Use "All 18 Weeks (Regular)" — the UI has no 1-4 range, and you MUST NOT run
+> "Specific Week Only" four times.** `importNFLSeason` deletes every existing
+> game for that season+seasonType at the START of each run, so four single-week
+> runs would leave only week 4's games. All weeks must land in one invocation.
+> Verified safe: preseason weeks 5-18 return 0 games from ESPN, so the loop
+> simply skips them — no bogus fallback data.
+>
+> **"62 games" is the WRITE count, not the doc count.** ESPN's preseason
+> calendar segments overlap at their boundaries (wk1 ends 08-13, wk2 starts
+> 08-13), so per-week fetches return 7/18/20/17 = 62. They dedupe to **50**
+> unique docs because games share a doc id. Not a bug.
+>
+> ### 🔴 One game is mislabeled — delete `espn_401872656`
+> ESPN's "Preseason Week 3" segment runs to **2026-09-09**, catching the
+> regular-season opener. `parseScoreboardResponse` stamps season/seasonType/week
+> from its ARGUMENTS rather than from each event, so it lands as preseason:
+>
+> `espn_401872656` — NE @ SEA — 2026-09-10 — stored as `seasonType: 1, week: 4`
+> (it even carries a `-3.5` spread, which preseason games do not).
+>
+> **Why it matters:** `isSeasonComplete` would hold every preseason pool open
+> until that game is FINAL on 09-10 — silently defeating NFL-6, whose whole
+> purpose is to exercise finalization during the pilot.
+>
+> Firestore → `nfl_games` → `espn_401872656` → ⋮ → **Delete document**. Safe:
+> the doc id derives from the ESPN event id, so importing the regular season
+> later recreates it correctly with `seasonType: 2`. Expect **49** preseason
+> games after the delete.
+>
+> **Underlying bug (fix deferred until after NFL-6):**
+> `parseScoreboardResponse` should filter events to those whose own
+> `season.type` matches the requested seasonType. Until fixed this recurs every
+> preseason, because that calendar segment always spans the boundary.
+
+### Original instructions
 
 Needed before any preseason pool can exist. Do this **after** step 4.
 
