@@ -173,7 +173,32 @@ reporting only, never writing. This is unrelated to last night's sweep work.
 
 ---
 
-## 3. Deploy the 33 sweep callables (functions-first ritual)
+## 3. ✅ Deploy the 33 sweep callables — DONE 2026-07-18
+
+> ### ✅ DEPLOYED. 33/33 succeeded — 1 create + 32 updates, zero failures.
+> `syncPlayInPicks` created (it had never existed in prod — PR #217); the other
+> 32 updated. Batches 5-16 plus the three fix PRs (#190/#193/#195) are now live.
+>
+> **Two things went wrong on the way, both now fixed in the command below:**
+> 1. **Discovery timeout.** The first attempt died with *"Cannot determine
+>    backend specification. Timeout after 10000"* before touching anything.
+>    The code was fine (`require('functions/lib/index.js')` loads in 992ms) —
+>    it is the CLI's 10s source-analysis window, which Windows loopback can
+>    blow through. Fix: `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"` before
+>    deploying. Value is in SECONDS.
+> 2. **The `--only` syntax was wrong and failed SILENTLY** — see the warning
+>    box below. The second attempt reported `Deploy complete!` having shipped
+>    exactly one function.
+>
+> ⚠️ **Still OPEN — is the rest of the fleet actually deployed?** Because the
+> malformed syntax silently drops everything after the first name, any earlier
+> deploy that used it may have shipped only its first function. HANDOFF claims
+> batches 1-4 and waves 1-2 (PRs #164/#165, #176-#180) are deployed; that claim
+> was produced by the same broken command shape and is **not** trustworthy.
+> Cheapest resolution is a reconciliation deploy of the whole callable fleet —
+> idempotent, so it is safe whether or not they were already live.
+
+### Original instructions (command below is CORRECTED)
 
 **⚠️ Conflict check — read before running:** this deploy uses `--only
 functions:<exact names>`, a **targeted list of 33 specific function names**.
@@ -233,8 +258,15 @@ half-reviewed work.
 5. Run the deploy — copy this **exact command**, don't retype it by hand
    (one typo in the function list silently drops a function from the
    deploy):
+   > ⚠️ **`functions:` MUST be repeated before EVERY name.** `--only functions:a,b,c`
+   > deploys **only `a`** — firebase-tools splits on `,` and silently discards any
+   > segment that does not start with `functions:` (`functionsDeployHelper.js`,
+   > `getEndpointFilters`). It then prints `✔ Deploy complete!`, so the failure is
+   > invisible. This bit us for real on 2026-07-18: a 33-name deploy shipped 1
+   > function and reported success.
+
    ```
-   npx firebase deploy --only functions:recalculatePoolWinners,toggleWinnerPaid,fixParticipantIds,joinNFLPool,executeSurvivorRebuy,scoreNFLWeek,validateBillingAccess,getPoolQuote,getAdminHealthSnapshot,backfillPools,refreshExpertPicks,syncPlayoffPools,deleteCouponTemplate,acknowledgeMonetizationAlert,importTournamentFromESPN,adminInitTournament,syncBracketTournament,importConferenceTournamentFromESPN,syncPlayInPicks,scoreBracketEntries,finalizeTournamentPayouts,initializeBigEastTournamentHttp,initializeBig12TournamentHttp,updatePlayer,releaseSquares,gradeProp,updatePropCard,generateReferralToken,resolveReferralToken,lockPool,logAdminAction,recomputeConsensus,recomputeRevenue --project gridiron-gamble-uzuqo
+   npx firebase deploy --only functions:recalculatePoolWinners,functions:toggleWinnerPaid,functions:fixParticipantIds,functions:joinNFLPool,functions:executeSurvivorRebuy,functions:scoreNFLWeek,functions:validateBillingAccess,functions:getPoolQuote,functions:getAdminHealthSnapshot,functions:backfillPools,functions:refreshExpertPicks,functions:syncPlayoffPools,functions:deleteCouponTemplate,functions:acknowledgeMonetizationAlert,functions:importTournamentFromESPN,functions:adminInitTournament,functions:syncBracketTournament,functions:importConferenceTournamentFromESPN,functions:syncPlayInPicks,functions:scoreBracketEntries,functions:finalizeTournamentPayouts,functions:initializeBigEastTournamentHttp,functions:initializeBig12TournamentHttp,functions:updatePlayer,functions:releaseSquares,functions:gradeProp,functions:updatePropCard,functions:generateReferralToken,functions:resolveReferralToken,functions:lockPool,functions:logAdminAction,functions:recomputeConsensus,functions:recomputeRevenue --project gridiron-gamble-uzuqo
    ```
 6. **Expect:** it prints a list of 33 functions, each moving through
    `updating...` → a green checkmark. Takes a few minutes. Ends with
@@ -638,8 +670,15 @@ undeployed callables already listed in HANDOFF.md.
    ```
 4. Deploy. **Functions before rules** (no rules change tonight, so functions
    only). The new/changed functions from tonight:
+   > ⚠️ **`functions:` MUST be repeated before EVERY name.** `--only functions:a,b,c`
+   > deploys **only `a`** — firebase-tools splits on `,` and silently discards any
+   > segment that does not start with `functions:` (`functionsDeployHelper.js`,
+   > `getEndpointFilters`). It then prints `✔ Deploy complete!`, so the failure is
+   > invisible. This bit us for real on 2026-07-18: a 33-name deploy shipped 1
+   > function and reported success.
+
    ```
-   npx firebase deploy --only functions:lockNFLSpreadsJob,nflLockWatchJob,syncNFLScoresJob,nflFinalizeSweepJob,submitNFLPicks --project gridiron-gamble-uzuqo
+   npx firebase deploy --only functions:lockNFLSpreadsJob,functions:nflLockWatchJob,functions:syncNFLScoresJob,functions:nflFinalizeSweepJob,functions:submitNFLPicks --project gridiron-gamble-uzuqo
    ```
 5. **What you should see:** five functions listed as `create` or `update`, then
    `Deploy complete!`. `lockNFLSpreadsJob` and `nflLockWatchJob` are **new
