@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Target, Trophy, Calendar, TrendingUp, Users, Award, DollarSign, BarChart3, ListChecks, Shield } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -100,6 +100,26 @@ export const PlayerProfile: React.FC<{ previewData?: any }> = ({ previewData }) 
     return onAuthStateChanged(auth, setViewer);
   }, [previewData]);
 
+  // Self-heal: a member visiting their OWN profile before any scoring has ever
+  // written it materializes the doc on the spot (recomputeMyProfile is self-auth'd
+  // server-side). One attempt per visit.
+  const healedRef = useRef(false);
+  useEffect(() => {
+    if (previewData || !uid || !loaded || profile || healedRef.current) return;
+    if (!viewer || viewer.uid !== uid) return;
+    healedRef.current = true;
+    dbService.recomputeMyProfile().catch(() => { /* empty state stays; next scoring writes it */ });
+  }, [previewData, uid, loaded, profile, viewer]);
+
+  // League-average line (real site-wide aggregate; absent until the daily job runs).
+  const [siteAverages, setSiteAverages] = useState<any | null>(previewData?.siteAverages ?? null);
+  useEffect(() => {
+    if (previewData) return;
+    let cancelled = false;
+    dbService.getSiteAverages().then(d => { if (!cancelled) setSiteAverages(d); });
+    return () => { cancelled = true; };
+  }, [previewData]);
+
   // "Pools you share with X": probe the viewer's own NFL pools through the gated
   // callable (server rejects non-shared pools). Capped; loaded once per subject.
   useEffect(() => {
@@ -122,13 +142,18 @@ export const PlayerProfile: React.FC<{ previewData?: any }> = ({ previewData }) 
 
   const chartData = useMemo(() => {
     const weekly: any[] = profile?.weekly || [];
+    const avgByKey = new Map<string, number>(
+      (siteAverages?.weekly || []).map((a: any) => [`${a.season}|${a.week}`, a.avgAccuracy]),
+    );
     return weekly.map((w, i) => ({
       label: `${w.season?.slice(-2) || ''}W${w.week}`,
       accuracy: w.total > 0 ? Math.round((w.correct / w.total) * 100) : 0,
+      leagueAvg: avgByKey.get(`${w.season}|${w.week}`) ?? null,
       points: w.points || 0,
       i,
     }));
-  }, [profile]);
+  }, [profile, siteAverages]);
+  const hasLeagueAvg = chartData.some(d => d.leagueAvg !== null);
 
   const o = profile?.overall || { accuracy: 0, correct: 0, total: 0, points: 0, poolsEntered: 0, seasonsPlayed: 0 };
   const isExpert = profile?.subjectKind === 'EXPERT';
@@ -193,8 +218,11 @@ export const PlayerProfile: React.FC<{ previewData?: any }> = ({ previewData }) 
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(124,134,152,0.15)" />
                       <XAxis dataKey="label" tick={{ fill: '#7C8698', fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
                       <YAxis domain={[0, 100]} tick={{ fill: '#7C8698', fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold' }} itemStyle={{ color: '#D9BC80' }} formatter={(v: any) => [`${v}%`, 'Accuracy']} />
+                      <Tooltip contentStyle={{ backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold' }} itemStyle={{ color: '#D9BC80' }} formatter={(v: any, name: any) => [`${v}%`, name === 'leagueAvg' ? 'League Avg' : 'Accuracy']} />
                       <Line type="monotone" dataKey="accuracy" stroke="#C9A867" strokeWidth={2.5} dot={{ r: 3, fill: '#C9A867' }} />
+                      {hasLeagueAvg && (
+                        <Line type="monotone" dataKey="leagueAvg" stroke="#7C8698" strokeWidth={1.5} strokeDasharray="6 4" dot={false} connectNulls />
+                      )}
                     </LineChart>
                   </ResponsiveContainer>
                 </div>

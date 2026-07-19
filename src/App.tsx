@@ -17,6 +17,7 @@ const CreatePoolSelection = React.lazy(() => import('./components/CreatePoolSele
 const BrowsePools = React.lazy(() => import('./components/BrowsePools').then(m => ({ default: m.BrowsePools })));
 const ParticipantDashboard = React.lazy(() => import('./components/ParticipantDashboard').then(m => ({ default: m.ParticipantDashboard })));
 const DevDashboardPreview = React.lazy(() => import('./pages/DevDashboardPreview').then(m => ({ default: m.DevDashboardPreview })));
+const DevProfileDemo = React.lazy(() => import('./pages/DevProfileDemo').then(m => ({ default: m.DevProfileDemo })));
 const PlayerProfile = React.lazy(() => import('./pages/PlayerProfile').then(m => ({ default: m.PlayerProfile })));
 const FeaturesPage = React.lazy(() => import('./components/FeaturesPage').then(m => ({ default: m.FeaturesPage })));
 const PrivacyPage = React.lazy(() => import('./components/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
@@ -385,6 +386,8 @@ const App: React.FC = () => {
 
           {/* Dev-only design preview (mock data, no auth) — see /dev/dashboards */}
           <Route path="/dev/dashboards" element={<DevDashboardPreview />} />
+          {/* TEMPORARY marketing demo profile (dummy data) — delete with DevProfileDemo.tsx */}
+          <Route path="/dev/profile-demo" element={<DevProfileDemo />} />
 
           {/* Player Profile (public projection) */}
           <Route path="/profile/:uid" element={<PlayerProfile />} />
