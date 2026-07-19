@@ -808,3 +808,67 @@ operator loop notices before a member does.
   the job never fetches. Not fixed tonight — widening that window has cost and
   correctness implications worth thinking about separately. Flagging it because
   it bounds how much A5 can actually protect you.
+
+---
+
+# ☀️ MORNING 2026-07-19 — read this first
+
+Overnight session ran after you went to bed. **Nothing was deployed and no prod
+data was touched.** Everything below is either a reminder you asked for, or a
+merged PR waiting on your review.
+
+## ⏰ 1. The two reminders you asked for
+
+### 1a. NFL-6 — arm the finalize sweep, but ONLY after reading a report
+
+`nflFinalizeSweepJob` runs daily at **08:30**. A report should now exist.
+
+1. Live site → **SuperAdmin → Admin Audit Log**.
+2. Filter/search for **`NFL_FINALIZE_SWEEP`**.
+3. Find the newest entry and read its **`bySeasonType`** field.
+4. **You want candidates under `"1"` and ZERO under `"2"`.**
+   - If `"2"` is non-zero, **stop** — you have real regular-season pools that a
+     live sweep would finalize. Tell me before arming.
+5. Only if that looks right: Firestore → `system` → `config` → the existing
+   **`nflFinalize`** map → set/confirm all three:
+   - `enabled` — boolean — **true** (already set)
+   - `dryRun` — boolean — **false** ← the change
+   - `liveSeasonTypes` — **array** containing the single **number 1**
+6. **`dryRun: false` on its own does NOTHING** — it keeps the sweep dry and logs
+   a refusal. The `liveSeasonTypes` field is what actually arms it. That guard is
+   deliberate (PR #210).
+7. Confirm on the next 08:30 run: the audit entry should show `dryRun: false`,
+   `liveSeasonTypes: [1]`, and an `outOfScope` count.
+
+*(Console note: the numeric type is labelled `int64`, not "number".)*
+
+### 1b. Check the lock tripwire is alive — and DON'T flip it live yet
+
+`nflLockWatchJob` runs hourly and writes an **`NFL_LOCK_WATCH`** audit entry
+every run, whether or not anything is wrong. That entry is how you know the
+alarm is alive rather than merely silent.
+
+1. SuperAdmin → Admin Audit Log → look for `NFL_LOCK_WATCH`.
+2. **Expect several entries by morning** (hourly since ~06:15 UTC 2026-07-19).
+3. **If there are NONE**, the job isn't running — tell me, that's a real problem.
+
+🔴 **Do NOT set `nflLockWatch.dryRun` to `false` yet.** You now have 49 preseason
+games loaded and **only 1 of them has a betting line**. The moment it goes live
+it will page you — correctly, but for a condition you already know about. Leave
+it dry until you've decided the NFL-1 preseason-lines question (run straight-up,
+set lines by hand, or wait for books to post).
+
+## 2. Open decision I could not resolve without you
+
+**The "new player profile cards".** You pointed me at `PLAN-PLAYER-PROFILES.md`,
+ADR 0005, CONTEXT.md and the review log. I read Phase 7 (UI) and checked the
+code: `src/pages/PlayerProfile.tsx` already implements all four tabs
+(Stats / Weekly Records / Pick History / Achievements), tab-in-URL, team-by-team
+and a live achievements subscription — no stubs or TODOs. That phase looks
+**done**, consistent with HANDOFF's "shipped end-to-end via PR #153".
+
+So I could not tell what the *new* cards are, and I deliberately did not guess
+and build something wrong overnight. **One or two sentences from you and I'll
+build it:** what should the cards show, and where do they live (pool dashboard?
+profile page? leaderboard?).
+
