@@ -145,6 +145,27 @@ export async function fetchNFLWeekScheduleWithRaw(
  * status mapping) is unit-testable without a network call, and so the raw
  * payload is reachable for snapshotting.
  */
+/**
+ * Does this ESPN event actually belong to the season+type we asked for?
+ *
+ * FAIL-OPEN on a MISSING field, fail-closed on a MISMATCH. If ESPN stops
+ * sending `season` we degrade to the old (permissive) behavior rather than
+ * silently importing zero games and looking like an outage; but when the field
+ * IS present and disagrees, we trust it over our own arguments.
+ */
+export function eventMatchesSeason(
+  event: { season?: { year?: number | string; type?: number | string } } | undefined | null,
+  season: string,
+  seasonType: 1 | 2 | 3,
+): boolean {
+  const s = event?.season;
+  if (!s) return true; // shape changed — don't drop the whole slate
+
+  if (s.type !== undefined && s.type !== null && Number(s.type) !== Number(seasonType)) return false;
+  if (s.year !== undefined && s.year !== null && String(s.year) !== String(season)) return false;
+  return true;
+}
+
 export function parseScoreboardResponse(
   data: any,
   week: number,
@@ -158,6 +179,23 @@ export function parseScoreboardResponse(
     const games: NFLGame[] = [];
 
     for (const event of data.events) {
+      // Only keep events that actually BELONG to the requested season+type.
+      //
+      // Everything below stamps season/seasonType/week from this function's
+      // ARGUMENTS, so anything the response happens to include gets relabelled.
+      // Two ways that bites:
+      //  1. ESPN's calendar segments span season boundaries — "Preseason Week 3"
+      //     runs to 2026-09-09, so a date-range fetch for it also returns the
+      //     REGULAR-SEASON opener. It was then stored as seasonType 1 week 4,
+      //     which holds every preseason pool open in isSeasonComplete until that
+      //     September game goes FINAL. Hit for real on 2026-07-19
+      //     (espn_401872656, NE @ SEA).
+      //  2. The naive week/season URL silently falls back to the PRIOR season
+      //     during the off-season — the calendar guard in resolveScoreboardUrl
+      //     is best-effort and swallows its own failures.
+      // Checking the event's own season is the backstop for both.
+      if (!eventMatchesSeason(event, season, seasonType)) continue;
+
       const competition = event.competitions?.[0];
       if (!competition) continue;
 
