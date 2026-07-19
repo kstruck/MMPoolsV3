@@ -946,3 +946,107 @@ operator loop notices before a member does.
   the job never fetches. Not fixed tonight — widening that window has cost and
   correctness implications worth thinking about separately. Flagging it because
   it bounds how much A5 can actually protect you.
+
+---
+
+## 3. What actually got built overnight (2026-07-19, after you went to bed)
+
+**All merged to `main`. Nothing deployed. No prod data touched.**
+Merged `main` re-verified green after the merges: functions unit **828**,
+emulator **97 pass / 10 skipped**, root vitest **257**, both typechecks clean.
+
+| PR | What | State |
+|---|---|---|
+| [#217](https://github.com/kstruck/MMPoolsV3/pull/217) | export `syncPlayInPicks` — defined but never deployed, breaking a SuperAdmin button | merged `a58fa3f` |
+| [#218](https://github.com/kstruck/MMPoolsV3/pull/218) | fix the silently-broken `--only` deploy syntax in the docs | merged `08803c3` |
+| [#219](https://github.com/kstruck/MMPoolsV3/pull/219) | importer only accepts events from the requested season+type | merged `7e7e8c7` |
+| [#220](https://github.com/kstruck/MMPoolsV3/pull/220) | sweep batch 17 — the last 10 actionable SWEEP-LATER callables | merged `4290c8c` |
+
+### ⚠️ A correction to my own PR title
+
+**PR #220 says "fleet complete". That is an overclaim and I want to flag it
+before it becomes folklore.**
+
+What is true: the **10 callables HANDOFF listed as "actionable remaining"** are
+now wrapped, and that closes the SWEEP-LATER worklist as it was written.
+
+What is NOT true: that no unwrapped callables remain. A grep of merged `main`
+finds **25 still using bare `onCall(`**:
+
+- **~16 sim-harness callables** (`simStartRun`, `simWriteEntries`, `simFillSquares`,
+  `cleanupSimPool`, `sweepSimRuns`, …) — these carry their own `requireAuth` /
+  SUPER_ADMIN gates and were never SWEEP-LATER rows.
+- **3 aiTesting callables** (`generateTestScenario`, `validateTestResults`,
+  `generateTestReport`) — SUPER_ADMIN claim checks in-handler.
+- **`createBracketPool`** — deliberately deferred (rich nested `settings` with a
+  `...settings` passthrough; a flat `.strict()` would reject data it currently
+  persists).
+- **The rest** (`getServerTime`, `logClientError`, `recordPoolPayouts`,
+  `getProfilePoolDetail`, `refreshExpertProfiles`, `backfillProfileData`,
+  `simulateGameUpdate`) — a mix of PUBLIC-EXEMPT and rows that want
+  re-classification.
+
+**None of these is a regression** — they are where they were before tonight. But
+"the sweep is done" should mean "the classified worklist is done", not "every
+callable is wrapped". Worth a re-classification pass before anyone declares
+victory.
+
+### 🔴 Smoke-test needed after the next deploy
+
+Batch 17 contains **one deliberate behaviour change you signed off on**:
+
+`recalculateGlobalStats`'s SUPER_ADMIN check used to `return {success:false}`
+rather than throw (a comment said this avoided CORS masking the message).
+`validated()`'s role gate **throws** `permission-denied` instead, so a non-admin
+caller now gets a rejected promise where it previously got a resolved
+`{success:false}`.
+
+Its explicit `cors` allowlist and `timeoutSeconds`/`memory` options are preserved
+verbatim. All three callers already wrap the call in try/catch
+(`AdminStatsDashboard.tsx:39`, `SuperAdmin.tsx:1642`, `OperationsPanel.tsx:61`),
+so I expect an error toast rather than a break — **but I have not exercised it
+live.** After you next deploy, click "Recalculate Global Stats" in SuperAdmin and
+confirm it still works for you (as an admin it should behave identically).
+
+### Other things worth knowing from batch 17
+
+- **Three of the ten have ZERO frontend callers**: `markEntryPaidStatus`,
+  `calculatePlayoffScores`, `recomputeMyProfile`. `calculatePlayoffScores` is an
+  explicit legacy no-op returning *"Use Global Update instead"*. Candidates for
+  deletion rather than maintenance — your call.
+- **`importNFLSchedule.seasonType` is now range-checked to 1|2|3.** That handler
+  batch-DELETES every `nfl_games` doc matching season+seasonType before
+  importing, and previously accepted any integer from a bare `parseInt`. Given
+  you ran that importer by hand last night, this one matters.
+- **The known `claimMySquares` security finding is NOT fixed** — `guestDeviceKey`
+  is readable from the public pool doc, so knowing it is not really proof of
+  ownership. Wrapping it in `validated()` does not address that; it needs a
+  data-model or rules change. Still open.
+
+## 4. What I did NOT get to
+
+Being explicit rather than letting these quietly vanish:
+
+- **A5 part 2 — the snapshot replay callable.** Not built. Snapshots are armed
+  and collecting now, so this is genuinely useful whenever you want it.
+- **Phase 3 — the backups plan.** Not written. Still the biggest unaddressed
+  risk in the architecture notes: there is no Firestore backup story at all.
+- **NFL-2 / A3(b) design.** You chose "design it now, decide later" and I did not
+  get to the writeup. The decision inputs are unchanged and already captured in
+  NFL-2 above: an honest probe needs a dedicated prod probe user + a permanent
+  probe pool, both your gate; an in-process version would only duplicate
+  A3(a)'s predicate. My recommendation is still to skip it for the pilot and
+  revisit before charging money in September.
+- **The player profile cards.** Blocked on your description — see item 2.
+
+## 5. Suggested order when you sit down
+
+1. **NFL-6** (item 1a) — read the 08:30 sweep report, then arm with
+   `liveSeasonTypes: [1]`. This is the time-sensitive one.
+2. **Check the lock tripwire is alive** (item 1b) — and leave it in dry-run.
+3. **Deploy** the four merged PRs when you're ready. Use the corrected syntax —
+   `functions:` repeated before EVERY name, or a bare `--only functions` for the
+   whole codebase (that is what worked last night). Then smoke-test
+   Recalculate Global Stats.
+4. **Answer the profile-cards question** so I can build it.
+5. Business items (§7 A8 price+date has the real deadline: **2026-08-13**).
