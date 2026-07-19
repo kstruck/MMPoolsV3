@@ -42,3 +42,25 @@ export const updateGlobalPlayoffResultsSchema = z.strictObject({
 
 export type UpdateTournamentDataInput = z.infer<typeof updateTournamentDataSchema>;
 export type UpdateGlobalPlayoffResultsInput = z.infer<typeof updateGlobalPlayoffResultsSchema>;
+
+/**
+ * markEntryPaidStatus (bracketOps) — commissioner toggles an entry's paid flag.
+ *
+ * SWEEP-LATER batch 17. Like updateTournamentData above, this callable has ZERO
+ * client callers today (grep of `src/` returns nothing), so the strict envelope
+ * cannot break a live payload. The handler's own owner/manager check stays in
+ * place — validated()'s `auth: "required"` only establishes that SOMEONE is
+ * signed in; the pool-scoped authorisation is not a role and has no wrapper
+ * equivalent.
+ *
+ * poolId/entryId are server-generated document ids, so trimming them is safe
+ * (contrast the squares lookup-key regression, #194/#195 — never trim a
+ * user-supplied string matched against stored data).
+ */
+export const markEntryPaidStatusSchema = z.strictObject({
+    poolId: z.string().trim().min(1).max(200),
+    entryId: z.string().trim().min(1).max(200),
+    // The handler does `isPaid ? 'PAID' : 'UNPAID'`, so a missing value would
+    // silently mean UNPAID. Required, so the caller must state its intent.
+    isPaid: z.boolean(),
+});

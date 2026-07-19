@@ -11,6 +11,7 @@ import { validated } from "./lib/validated";
 import { updateGlobalPlayoffResultsSchema } from "./schemas/tournamentAdmin";
 import { submitPlayoffPicksSchema, managePlayoffEntrySchema } from "./schemas/playoffEntries";
 import { syncPlayoffPoolsSchema } from "./schemas/noInputAdmin";
+import { calculatePlayoffScoresSchema } from "./schemas/playoffEntries";
 
 
 
@@ -356,9 +357,10 @@ export const managePlayoffEntry = validated(
     },
 );
 
-export const calculatePlayoffScores = onCall(async (request) => {
+export const calculatePlayoffScores = validated(
+    { schema: calculatePlayoffScoresSchema, label: "calculatePlayoffScores", auth: "required", appCheck: "monitor" },
+    async ({ poolId }, request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
-    const { poolId } = request.data;
     const db = admin.firestore();
 
     const poolRef = db.collection('pools').doc(poolId);

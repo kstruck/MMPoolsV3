@@ -9,6 +9,7 @@ import { createClaimCodeSchema, claimByCodeSchema } from "./schemas/participantO
 import * as logger from "firebase-functions/logger";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { UserRecord } from "firebase-functions/v1/auth";
+import { claimMySquaresSchema } from "./schemas/participantOps";
 
 // Types derived from frontend (simplified for backend)
 interface ClaimCode {
@@ -87,8 +88,9 @@ export const createClaimCode = validated(
 );
 
 // 3. claimMySquares: Claim guest squares for logged-in user
-export const claimMySquares = onCall(async (request) => {
-    const { poolId, guestDeviceKey } = request.data;
+export const claimMySquares = validated(
+    { schema: claimMySquaresSchema, label: "claimMySquares", auth: "required", appCheck: "monitor" },
+    async ({ poolId, guestDeviceKey }, request) => {
     // claimIds removed for now until implemented
 
     if (!request.auth) {

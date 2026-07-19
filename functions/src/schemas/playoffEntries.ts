@@ -37,3 +37,17 @@ export const managePlayoffEntrySchema = z.discriminatedUnion("action", [
 
 export type SubmitPlayoffPicksInput = z.infer<typeof submitPlayoffPicksSchema>;
 export type ManagePlayoffEntryInput = z.infer<typeof managePlayoffEntrySchema>;
+
+/**
+ * calculatePlayoffScores - SWEEP-LATER batch 17.
+ *
+ * LEGACY NO-OP: the handler returns {success:true, message:"Use Global Update
+ * instead"} and mutates nothing; an in-file comment says it is "kept to avoid
+ * breaking legacy frontend calls if any exist". There are no callers in src/
+ * today. Strict envelope only - the point is to stop an unvalidated,
+ * any-authed-user endpoint sitting outside the trust boundary, not to change
+ * its behavior.
+ */
+export const calculatePlayoffScoresSchema = z.strictObject({
+    poolId: z.string().trim().min(1).max(200),
+});

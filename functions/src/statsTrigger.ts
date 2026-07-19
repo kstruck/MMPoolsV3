@@ -7,6 +7,8 @@ import { sendEmail } from "./reminders";
 import { renderEmailHtml } from "./emailStyles";
 import { getSquareEmails } from "./squarePrivate";
 import { isAdminCloseTransition, ADMIN_CLOSE } from "./lib/lifecycle";
+import { validated } from "./lib/validated";
+import { recalculateGlobalStatsSchema } from "./schemas/noInputAdmin";
 
 // Helper to calculate total pot and charity for a pool
 const calculatePoolPot = async (db: admin.firestore.Firestore, poolId: string, pool: any): Promise<{ prizePot: number; charityAmount: number }> => {
@@ -110,16 +112,32 @@ export const onPoolLocked = onDocumentUpdated("pools/{poolId}", async (event) =>
 });
 
 // Callable: Manually recalculate global stats from ALL existing locked/finished pools
-export const recalculateGlobalStats = onCall({
-    timeoutSeconds: 300,
-    memory: "512MiB",
-    cors: ["https://www.marchmeleepools.com", "https://gridiron-gamble-uzuqo.firebaseapp.com", "https://gridiron-gamble-uzuqo.web.app"]
-}, async (request) => {
+export const recalculateGlobalStats = validated(
+    {
+        schema: recalculateGlobalStatsSchema,
+        label: "recalculateGlobalStats",
+        role: "SUPER_ADMIN",
+        appCheck: "monitor",
+        // Preserved verbatim, INCLUDING the explicit cors allowlist — that list
+        // is why this callable could report permission failures as a soft return
+        // instead of a throw (see below), so dropping it would change behavior
+        // twice over.
+        options: {
+            timeoutSeconds: 300,
+            memory: "512MiB",
+            cors: ["https://www.marchmeleepools.com", "https://gridiron-gamble-uzuqo.firebaseapp.com", "https://gridiron-gamble-uzuqo.web.app"],
+        },
+    },
+    // BEHAVIOR CHANGE, deliberate and signed off: the SUPER_ADMIN check used to
+    // `return { success: false, message: ... }` rather than throw, with a comment
+    // that this avoided CORS masking the message. validated()'s role gate THROWS
+    // permission-denied instead, so a non-admin caller now gets a rejected promise
+    // where it previously got a resolved `{success:false}`. The FE reads
+    // `result.data.success`; callers already wrap these in try/catch (see
+    // AdminStatsDashboard.tsx:39, SuperAdmin.tsx:1642, OperationsPanel.tsx:61).
+    // Kevin to smoke-test the SuperAdmin surface after deploy.
+    async (_input, request) => {
     try {
-        // Only allow super admin
-        if (!request.auth || request.auth.token.role !== 'SUPER_ADMIN') {
-            return { success: false, message: 'Permission Denied: Only super admin can run this' };
-        }
 
         const db = admin.firestore();
 

@@ -5,6 +5,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { UserRecord } from "firebase-functions/v1/auth";
 import { onCall, CallableRequest } from "firebase-functions/v2/https";
 import { assertCallerRole } from "./adminClaims";
+import { validated } from "./lib/validated";
+import { syncAllUsersSchema } from "./schemas/noInputAdmin";
 
 
 
@@ -56,7 +58,9 @@ export const onUserCreated = functions.auth.user().onCreate(async (user: UserRec
 });
 
 // Force Sync All Users (Callable)
-export const syncAllUsers = onCall(async (request: CallableRequest) => {
+export const syncAllUsers = validated(
+    { schema: syncAllUsersSchema, label: "syncAllUsers", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async (_input, request) => {
     const db = admin.firestore();
     // SUPER_ADMIN only: this lists up to 1000 Auth users (emails/providers) and
     // writes user docs. Previously any signed-in user could trigger it (sweep C4).

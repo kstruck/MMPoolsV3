@@ -36,3 +36,18 @@ export const backfillPoolsSchema = z.preprocess(
         dryRun: z.boolean().optional().default(true),
     }),
 );
+
+/**
+ * syncAllUsers + recalculateGlobalStats - SWEEP-LATER batch 17. Both read
+ * NOTHING from request.data.
+ *
+ * Both MUST tolerate null as well as {}. They are reached by two different
+ * transports: dbService calls recalcFn() with no argument at all (which arrives
+ * as request.data === null) and via withCorrelationId(undefined), while
+ * OperationsPanel calls httpsCallable(fn)({}). A bare z.strictObject({})
+ * rejects null with invalid-argument and the callable never runs - shipped as a
+ * real bug in batch 4 (#180). noInputSchema already encodes the null->{}
+ * preprocess.
+ */
+export const syncAllUsersSchema = noInputSchema;
+export const recalculateGlobalStatsSchema = noInputSchema;

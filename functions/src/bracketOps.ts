@@ -4,7 +4,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 
 import { Timestamp } from "firebase-admin/firestore";
 import { validated } from "./lib/validated";
-import { updateTournamentDataSchema } from "./schemas/tournamentAdmin";
+import { markEntryPaidStatusSchema, updateTournamentDataSchema } from "./schemas/tournamentAdmin";
 import { writeLedgerEvent } from "./paymentLedger";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
@@ -14,17 +14,10 @@ import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 // ----------------------------------------------------------------------------
 // Mark Entry Paid Status
 // ----------------------------------------------------------------------------
-export const markEntryPaidStatus = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-
-    const { poolId, entryId, isPaid } = request.data;
-    const uid = request.auth.uid;
-
-    if (!poolId || !entryId) {
-        throw new HttpsError("invalid-argument", "Missing poolId or entryId.");
-    }
+export const markEntryPaidStatus = validated(
+    { schema: markEntryPaidStatusSchema, label: "markEntryPaidStatus", auth: "required", appCheck: "monitor" },
+    async ({ poolId, entryId, isPaid }, request) => {
+    const uid = request.auth!.uid;
 
     const db = admin.firestore();
     const poolRef = db.collection("pools").doc(poolId);
