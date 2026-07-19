@@ -40,3 +40,26 @@ export const setPaidStatusSchema = z
 export type CreateClaimCodeInput = z.infer<typeof createClaimCodeSchema>;
 export type ClaimByCodeInput = z.infer<typeof claimByCodeSchema>;
 export type SetPaidStatusInput = z.infer<typeof setPaidStatusSchema>;
+
+/**
+ * claimMySquares - SWEEP-LATER batch 17. Any authenticated user (self-service).
+ *
+ * guestDeviceKey IS A LOOKUP KEY - compared by strict equality against the
+ * stored squares[].guestDeviceKey. It MUST NOT be trimmed or normalised here:
+ * reserveSquare stores whatever the guest supplied, so normalising at the
+ * boundary would silently stop matching squares whose stored key carries
+ * whitespace. This is exactly the regression shipped in #194 and fixed in #195.
+ *
+ * Optional because omission is currently a no-op, not an error: with no key,
+ * zero squares match and the call returns {success:true, warnings:[]}. Keeping
+ * it optional preserves that contract.
+ *
+ * NOTE: a separate, KNOWN and UNFIXED security finding applies to this callable
+ * - guestDeviceKey is readable from the public pool doc, so knowing it is not
+ * really proof of ownership. Wrapping in validated() does NOT address that; it
+ * needs a data-model or rules change. See HANDOFF.
+ */
+export const claimMySquaresSchema = z.strictObject({
+    poolId: z.string().trim().min(1).max(200),
+    guestDeviceKey: z.string().min(1).max(500).optional(),
+});

@@ -12,6 +12,8 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { NFL_SEASON_TYPES } from "./shared/poolTypes";
 import { reduceAwards, type PayoutRecord } from "./shared/payoutRecords";
 import { buildPublicProfile, type ProfilePoolInput, type ProfileNFLPoolType } from "./lib/profileBuild";
+import { validated } from "./lib/validated";
+import { recomputeMyProfileSchema } from "./schemas/userProfile";
 
 type Firestore = admin.firestore.Firestore;
 
@@ -103,9 +105,11 @@ export const onEntryChangedRecomputeProfile = onDocumentWritten('pools/{poolId}/
 });
 
 /** On-demand recompute (self or SUPER_ADMIN). */
-export const recomputeMyProfile = onCall(async (request) => {
+export const recomputeMyProfile = validated(
+  { schema: recomputeMyProfileSchema, label: "recomputeMyProfile", auth: "required", appCheck: "monitor" },
+  async (input, request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Login required.');
-  const target = request.data?.uid || request.auth.uid;
+  const target = input.uid || request.auth.uid;
   if (target !== request.auth.uid && request.auth.token?.role !== 'SUPER_ADMIN') {
     throw new HttpsError('permission-denied', 'Can only recompute your own profile.');
   }

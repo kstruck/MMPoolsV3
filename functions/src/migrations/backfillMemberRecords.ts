@@ -8,6 +8,8 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { ROSTER_SCHEMA_VERSION } from "../shared/memberRecord";
 import { recomputeRosterSummary } from "../lib/rosterSummary";
 import { isActivePoolForStats } from "../lib/poolInclusion";
+import { validated } from "../lib/validated";
+import { backfillMemberRecordsSchema } from "../schemas/migrations";
 
 type Firestore = admin.firestore.Firestore;
 
@@ -65,16 +67,18 @@ async function collectMembers(db: Firestore, poolId: string, pool: any): Promise
   return { members, guestSkipped };
 }
 
-export const backfillMemberRecords = onCall(async (request) => {
+export const backfillMemberRecords = validated(
+    { schema: backfillMemberRecordsSchema, label: "backfillMemberRecords", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async (input, request) => {
   if (!request.auth || request.auth.token?.role !== 'SUPER_ADMIN') {
     throw new HttpsError("permission-denied", "Super Admin only.");
   }
-  const dryRun = request.data?.dryRun !== false; // default TRUE
+  const dryRun = input.dryRun; // default TRUE
   // By default, only backfill REAL pools (skip sim-*/COMPLETED/archived/CANCELED test junk).
   // Pass includeAll:true to process every pool.
-  const includeAll = request.data?.includeAll === true;
-  const limit = Math.min(Number(request.data?.limit) || 25, 100);
-  const startAfter: string | undefined = request.data?.startAfter;
+  const includeAll = input.includeAll === true;
+  const limit = Math.min(input.limit ?? 25, 100);
+  const startAfter: string | undefined = input.startAfter;
 
   const db = admin.firestore();
   let q = db.collection('pools').orderBy(admin.firestore.FieldPath.documentId()).limit(limit);

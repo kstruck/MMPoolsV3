@@ -5,6 +5,8 @@ import { NFLGame } from './types';
 import { detectStatCorrections } from './lib/feedSnapshot';
 import { captureFeedSnapshot, pruneExpiredSnapshots, readSnapshotGate, reportStatCorrections } from './feedSnapshotStore';
 import { opsCourierAuthToken } from './lib/opsAlertDispatcher';
+import { validated } from "./lib/validated";
+import { importNFLScheduleSchema } from "./schemas/nflSchedule";
 
 // Safe integer parsing helper
 const safeInt = (val: any): number => {
@@ -500,7 +502,9 @@ export const lockNFLSpreadsJob = onSchedule({
 /**
  * SuperAdmin-only HTTPS callable to trigger manual NFL schedule imports.
  */
-export const importNFLSchedule = onCall(async (request) => {
+export const importNFLSchedule = validated(
+  { schema: importNFLScheduleSchema, label: "importNFLSchedule", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async (input, request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'User must be logged in.');
   }
@@ -510,7 +514,7 @@ export const importNFLSchedule = onCall(async (request) => {
     throw new HttpsError('permission-denied', 'Only super admins can trigger NFL schedule imports.');
   }
 
-  const data = request.data || {};
+  const data = input;
   const season = data.season ? String(data.season) : '2026';
   const seasonType = data.seasonType !== undefined ? parseInt(String(data.seasonType)) as 1 | 2 | 3 : 2;
   const weeks = data.weeks ? (Array.isArray(data.weeks) ? data.weeks.map(Number) : [Number(data.weeks)]) : Array.from({ length: 18 }, (_, i) => i + 1);

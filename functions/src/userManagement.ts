@@ -11,6 +11,7 @@ import {
     sendSecuritySMSAlertSchema,
     sendUserEmailSchema,
 } from "./schemas/userManagement";
+import { searchUsersByEmailSchema } from "./schemas/userManagement";
 
 
 
@@ -224,16 +225,11 @@ export const testSmsHttp = functions.https.onRequest({ secrets: [courierAuthToke
  * Uses the searchEmail (lowercased) field + Firestore's default single-field
  * index, so it stays cheap as the userbase grows.
  */
-export const searchUsersByEmail = functions.https.onCall(async (request) => {
-    if (!request.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "Must be logged in.");
-    }
-    const role = request.auth.token.role;
-    if (role !== "SUPER_ADMIN" && role !== "MODERATOR") {
-        throw new functions.https.HttpsError("permission-denied", "Admins only.");
-    }
-
-    const { prefix, limit } = request.data as { prefix?: string; limit?: number };
+export const searchUsersByEmail = validated(
+    // Role array form: assertCallerRole accepts either, and upgrades this from a
+    // claim-only read to claim AND users/{uid}.role agreement (C5).
+    { schema: searchUsersByEmailSchema, label: "searchUsersByEmail", role: ["SUPER_ADMIN", "MODERATOR"], appCheck: "monitor" },
+    async ({ prefix, limit }, request) => {
     const p = (prefix || "").trim().toLowerCase();
     if (!p) {
         throw new functions.https.HttpsError("invalid-argument", "A non-empty search prefix is required.");

@@ -4,6 +4,8 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { GameState, AxisNumbers, Winner } from "./types";
 import { writeAuditEvent, computeDigitsHash } from "./audit";
+import { validated } from "./lib/validated";
+import { fixPoolScoresSchema } from "./schemas/scoreUpdates";
 
 // Helper to generate random digits
 const generateDigits = (): number[] => {
@@ -1339,17 +1341,20 @@ export const simulateGameUpdate = onCall({
 });
 
 // One-time callable function to fix corrupted pool scores AND run winner logic
-export const fixPoolScores = onCall({
-    timeoutSeconds: 300,
-    memory: "512MiB"
-}, async (request) => {
-    // Check Authentication (Admin Only)
-    if (!request.auth || request.auth.token.role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'Must be Super Admin');
-    }
+export const fixPoolScores = validated(
+    {
+        schema: fixPoolScoresSchema,
+        label: "fixPoolScores",
+        role: "SUPER_ADMIN",
+        appCheck: "monitor",
+        // Preserved verbatim from the original onCall — this sweep is a
+        // trust-boundary retrofit, not a resourcing change.
+        options: { timeoutSeconds: 300, memory: "512MiB" },
+    },
+    async (input, request) => {
 
     const db = admin.firestore();
-    const targetPoolId = request.data?.poolId;
+    const targetPoolId = input.poolId;
     let poolsSnap;
 
     if (targetPoolId) {
