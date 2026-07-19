@@ -46,7 +46,11 @@ export function computeSiteAverages(
 }
 
 export async function recomputeSiteAverages(db: admin.firestore.Firestore): Promise<{ rows: number; profiles: number }> {
-  const snap = await db.collection('publicProfiles').get();
+  // Field projection: profiles carry sizable arrays (pickHistory, teamByTeam) the
+  // average never reads — fetch only the two fields the fold consumes. If the user
+  // base ever makes even this heavy, page with orderBy(documentId()).startAfter()
+  // and fold incrementally (computeSiteAverages is a pure fold either way).
+  const snap = await db.collection('publicProfiles').select('weekly', 'subjectKind').get();
   const profiles = snap.docs
     .filter(d => !isReservedSubjectId(d.id) && d.id !== '_siteAverages')
     .map(d => d.data() as any);

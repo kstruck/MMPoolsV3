@@ -1,8 +1,11 @@
 // Marketing demo of the Player Profile with a season-and-a-half of dummy data
 // (route: /dev/profile-demo). Unauthenticated, mock-only, not linked in nav —
 // exists so a realistic screenshot can be taken before real season data accrues.
-// DELETE this file + its App.tsx route when it has served its purpose.
+// TODO(kevin): DELETE this file + its App.tsx route once marketing screenshots are
+// taken — target removal 2026-08-01. Until then: noindex + visible demo banner
+// (banner sits above the profile so the screenshot crop excludes it).
 import React from 'react';
+import { Helmet } from 'react-helmet-async';
 import { PlayerProfile } from './PlayerProfile';
 
 // Deterministic pseudo-random (fixed seed) so the screenshot is reproducible.
@@ -104,6 +107,17 @@ const demoProfile = {
   siteAverages: { kind: 'SITE_AVERAGES', weekly: siteWeekly, profilesCounted: 87 },
 };
 
-export const DevProfileDemo: React.FC = () => <PlayerProfile previewData={demoProfile} />;
+export const DevProfileDemo: React.FC = () => (
+  <>
+    <Helmet>
+      <meta name="robots" content="noindex, nofollow" />
+      <title>Demo Profile (fictional data)</title>
+    </Helmet>
+    <div className="bg-gold-600 text-navy-950 text-center text-xs font-display font-bold uppercase tracking-[0.08em] py-1.5">
+      Demo profile — fictional player and data, for illustration only
+    </div>
+    <PlayerProfile previewData={demoProfile} />
+  </>
+);
 
 export default DevProfileDemo;
