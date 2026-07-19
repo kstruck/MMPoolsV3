@@ -147,9 +147,12 @@ PR #190 changed `backfillPools` to **default to dry-run**. The existing "Backfil
 
 Read-only Firestore queries against prod (Firebase console; nothing written).
 The pre-#193 bug wrote `status = isLocked ? 'LOCKED' : (isFinal ? 'FINAL' : 'DRAFT')`.
-**`backfill.ts` is the only code in the repo that can write a pool `status: 'FINAL'`**
-(every other `'FINAL'` is an nfl_games status; other pool-status writers only emit
-`'LOCKED'` and `'OPEN'`) — so that value is a unique fingerprint for the bug.
+The load-bearing claim is narrow and was re-verified after review: **`backfill.ts:55` is
+the only production path that WRITES a pool `status: 'FINAL'`** — so that stored value is
+a fingerprint for the bug. (It is NOT true that every other `'FINAL'` is an nfl_games
+status: `'FINAL'` is in the pool status type unions and is read at `payoutRecords.ts:60`.
+Nor are `'LOCKED'`/`'OPEN'` the only other writes — the create paths write `'DRAFT'`,
+which is why the 28 DRAFT pools need no special explanation.)
 
 `status=='FINAL'` → **0 pools**. `DRAFT`∩`isFinal:true` → **0**. `LOCKED`∩`isFinal:true` → **0**.
 Positive control `status=='OPEN'` → 15 ✓. Verdict: the clobber never hit prod; the 28

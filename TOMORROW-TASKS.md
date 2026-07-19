@@ -63,12 +63,29 @@ or click, what you should see, and what to do if you don't.
 > Nothing was written.
 >
 > **The decisive test.** The pre-#193 bug wrote
-> `status = isLocked ? 'LOCKED' : (isFinal ? 'FINAL' : 'DRAFT')`. A grep of the
-> whole repo shows **no production code path writes a pool `status: 'FINAL'`** —
-> every other `'FINAL'` in the codebase is an *nfl_games* status, and the only
-> other pool-status writes are `'LOCKED'` (bracket dashboard) and `'OPEN'`
-> (create). So `backfill.ts` is the **only** thing that can produce a pool with
-> `status: 'FINAL'`, which makes it a unique fingerprint.
+> `status = isLocked ? 'LOCKED' : (isFinal ? 'FINAL' : 'DRAFT')`. The
+> load-bearing claim is narrow: **`backfill.ts:55` is the only production code
+> path that WRITES a pool `status: 'FINAL'`**, which makes that stored value a
+> fingerprint for the bug.
+>
+> Verified inventory of every prod pool-status *write* (excluding tests/sim):
+>
+> | Writer | Value(s) |
+> |---|---|
+> | `backfill.ts:55` | `LOCKED` / **`FINAL`** / `DRAFT` ← only `FINAL` writer |
+> | `poolOps.ts:270`, `bracketPools.ts:83` | `DRAFT` (pool create) |
+> | `nflPools.ts:99`, `bracketPools.ts:221` | `OPEN` |
+> | `autoLock.ts:154`, `poolParams.ts:74`, BracketPoolDashboard | `LOCKED` |
+> | `lifecycle.ts:55`, `aiCommissioner.ts:344` | `COMPLETED` |
+> | `poolExceptions.ts:336` | `CANCELED` |
+>
+> Two caveats, so this is not overstated. `'FINAL'` **is** a legitimate pool
+> status elsewhere in the codebase — it appears in the pool status type unions
+> (`nflPoolTypes.ts:54/100/147`, `types.ts:193`) and is *read* in production at
+> `payoutRecords.ts:60` (`pool.status === 'FINAL'` counts a pool as settled). So
+> a stored `FINAL` would not be nonsensical, merely unwritable by current code.
+> And `DRAFT` is written by the normal create paths — which is exactly why the
+> 28 DRAFT pools need no special explanation.
 >
 > | Query (each preview-verified before running) | Result |
 > |---|---|
@@ -82,8 +99,8 @@ or click, what you should see, and what to do if you don't.
 >
 > **Conclusion:** `backfillPools` has never clobbered a pool status in prod —
 > most likely it was never run against pools lacking `createdByUid`. The 28
-> DRAFT pools show no finished-pool signals; they look like ordinary abandoned
-> drafts.
+> DRAFT pools show no finished-pool signals, and `DRAFT` is what both pool-create
+> paths write, so they are fully explained as ordinary abandoned drafts.
 >
 > **This does NOT change the deploy plan.** PR #193's fix should still ship — it
 > prevents the bug, it just turns out there is no historical mess to clean up.
