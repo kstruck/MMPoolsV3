@@ -7,11 +7,11 @@ This file + auto-memory carry the full state. Older narrative lives in git histo
 
 ## 🌅 MORNING TAKEOVER — overnight NFL preseason-pilot run (2026-07-18, ~03:50–05:00)
 
-**Read `TOMORROW-TASKS.md` first — note it has TWO halves.** The sweep session's sections are numbered `1`-`10`; this session's are `NFL-1`-`NFL-8` below the divider. Its §2 and §6 are superseded/done (banners in place).
-
-**Read `TOMORROW-TASKS.md` first** — everything needing Kevin is there, appended
-below the existing divider, with full numbered steps. This section is the
-engineering state.
+**Read `TOMORROW-TASKS.md` first — it has TWO halves.** The sweep session's
+sections are numbered `1`-`10`; this session's are `NFL-1`-`NFL-8`, below the
+divider. In the top half, §1 is done (prod audit, no damage) and §2/§6 are
+superseded/done — banners are in place. Everything needing Kevin lives there
+with full numbered steps; this section is the engineering state.
 
 ### What shipped — all 6 engineering items from `PLAN-NFL-PRESEASON-PILOT.md`
 
@@ -58,10 +58,10 @@ would have paged a false `21-17 → 0-0` stat correction.
    scoping the gate to `nflScoringEngine.poolUsesSpreads`, with the A3 tripwire
    scoped identically so it cannot page about pools that are no longer blocked.
    Zero behavior change for existing pools. qodo reviewed and raised no defects.
-   2. **Alarm A3(b) (synthetic pick probe) was deliberately not built.** Doing it
-   honestly needs a probe identity + probe pool in prod (Kevin's gate); doing it
-   in-process would only duplicate A3(a)'s predicate. Recommendation and options
-   in TOMORROW-TASKS **NFL-2**.
+2. ⏳ **OPEN — alarm A3(b) (synthetic pick probe) was deliberately not built.**
+   Doing it honestly needs a probe identity + probe pool in prod (Kevin's gate);
+   doing it in-process would only duplicate A3(a)'s predicate. Recommendation
+   and options in TOMORROW-TASKS **NFL-2**.
 
 ### Deploy state — NOTHING from tonight is deployed
 
