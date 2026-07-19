@@ -582,9 +582,16 @@ it.
 
 ---
 
-## NFL-3. Arm the three new kill-switches — 2 of 3 DONE
+## ✅ NFL-3. Arm the three new kill-switches — ALL 3 DONE 2026-07-19
 
-> ### ✅ 3a + 3b ARMED 2026-07-19, both in dry-run. 3c now unblocked.
+> ### ✅ ALL THREE ARMED 2026-07-19, all in dry-run.
+> Verified in `system/config` with correct types: `nflSpreadLock` and
+> `nflLockWatch` each `enabled: true` (boolean) + `dryRun: true` (boolean);
+> `nflFeedSnapshots` `enabled: true` (boolean) + `retentionDays: 45` (int64).
+>
+> **Console note:** the numeric type in the Firestore console is labelled
+> **`int64`**, not "number". And `retentionDays` is OPTIONAL — the code defaults
+> to 45 when absent or non-finite, so omitting it is equivalent.
 > Verified directly in `system/config`: `nflSpreadLock` and `nflLockWatch` each
 > carry `enabled: true` AND `dryRun: true`, both as **booleans** (a string
 > `"true"` would silently fail the `=== true` check — worth checking if a switch
@@ -771,7 +778,45 @@ undeployed callables already listed in HANDOFF.md.
 
 ---
 
-## NFL-5. Import the preseason schedule (prod data — your gate)
+## ✅ NFL-5. Import the preseason schedule — DONE 2026-07-19 (one cleanup outstanding)
+
+> ### ✅ IMPORTED. 62 writes → 50 unique docs. One is mislabeled; delete it.
+>
+> **Use "All 18 Weeks (Regular)" — the UI has no 1-4 range, and you MUST NOT run
+> "Specific Week Only" four times.** `importNFLSeason` deletes every existing
+> game for that season+seasonType at the START of each run, so four single-week
+> runs would leave only week 4's games. All weeks must land in one invocation.
+> Verified safe: preseason weeks 5-18 return 0 games from ESPN, so the loop
+> simply skips them — no bogus fallback data.
+>
+> **"62 games" is the WRITE count, not the doc count.** ESPN's preseason
+> calendar segments overlap at their boundaries (wk1 ends 08-13, wk2 starts
+> 08-13), so per-week fetches return 7/18/20/17 = 62. They dedupe to **50**
+> unique docs because games share a doc id. Not a bug.
+>
+> ### 🔴 One game is mislabeled — delete `espn_401872656`
+> ESPN's "Preseason Week 3" segment runs to **2026-09-09**, catching the
+> regular-season opener. `parseScoreboardResponse` stamps season/seasonType/week
+> from its ARGUMENTS rather than from each event, so it lands as preseason:
+>
+> `espn_401872656` — NE @ SEA — 2026-09-10 — stored as `seasonType: 1, week: 4`
+> (it even carries a `-3.5` spread, which preseason games do not).
+>
+> **Why it matters:** `isSeasonComplete` would hold every preseason pool open
+> until that game is FINAL on 09-10 — silently defeating NFL-6, whose whole
+> purpose is to exercise finalization during the pilot.
+>
+> Firestore → `nfl_games` → `espn_401872656` → ⋮ → **Delete document**. Safe:
+> the doc id derives from the ESPN event id, so importing the regular season
+> later recreates it correctly with `seasonType: 2`. Expect **49** preseason
+> games after the delete.
+>
+> **Underlying bug (fix deferred until after NFL-6):**
+> `parseScoreboardResponse` should filter events to those whose own
+> `season.type` matches the requested seasonType. Until fixed this recurs every
+> preseason, because that calendar segment always spans the boundary.
+
+### Original instructions
 
 Needed before any preseason pool can exist. Do this **after** step 4.
 
