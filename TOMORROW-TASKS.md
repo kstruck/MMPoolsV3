@@ -302,7 +302,12 @@ half-reviewed work.
    bug in (the dry-run default) — so a clean log here confirms that fix is
    working, not just that it compiles.
 
-## 5. Deploy the frontend (Coolify — manual trigger, does NOT auto-deploy)
+## 5. ✅ Deploy the frontend (Coolify) — DONE 2026-07-19
+
+> ### ✅ DEPLOYED. Build succeeded, site verified loading in an incognito tab.
+> PR #190's "Backfill Pools (dry run)" button is now live in OperationsPanel.
+
+### Original instructions
 
 **Why:** PR #190 added a new "Backfill Pools (dry run)" button to
 OperationsPanel. Without this step, the backend accepts the new `dryRun`
@@ -577,7 +582,29 @@ it.
 
 ---
 
-## NFL-3. Arm the three new kill-switches (Firestore console, ~5 minutes total)
+## NFL-3. Arm the three new kill-switches — 2 of 3 DONE
+
+> ### ✅ 3a + 3b ARMED 2026-07-19, both in dry-run. 3c now unblocked.
+> Verified directly in `system/config`: `nflSpreadLock` and `nflLockWatch` each
+> carry `enabled: true` AND `dryRun: true`, both as **booleans** (a string
+> `"true"` would silently fail the `=== true` check — worth checking if a switch
+> ever appears armed but does nothing).
+>
+> **3c (`nflFeedSnapshots`) — the Firestore index it needs is now `Enabled`**
+> (verified 2026-07-19 06:02 UTC; it was `Building` for ~10 min after the
+> `firestore:indexes` deploy). Safe to arm.
+>
+> **What to expect while dry-run is on:** `nflLockWatchJob` runs hourly and
+> writes an `NFL_LOCK_WATCH` audit entry every run — that entry is how you know
+> the alarm is ALIVE rather than merely quiet. It will not page.
+> `lockNFLSpreadsJob` waits for Tuesday 09:00 ET; force it early from Cloud
+> Scheduler if you want its dry-run output sooner.
+>
+> In the off-season `nfl_feed_snapshots` may stay empty until the preseason
+> schedule is imported (NFL-5) — `syncNFLScoresJob` only fetches slates with
+> games in its active window. Empty is expected, not a failure.
+
+### Original instructions
 
 Everything I shipped is fail-safe **OFF**. It does nothing until you write these
 config values. **Do this only after the PRs are deployed** — see NFL-4.
