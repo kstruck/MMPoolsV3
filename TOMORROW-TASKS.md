@@ -648,7 +648,34 @@ All three live in the same document.
 
 ---
 
-## NFL-4. Deploy the seven merged PRs (functions only — your gate)
+## ✅ NFL-4. DONE 2026-07-18 — deployed via a full-fleet reconciliation
+
+> ### ✅ DEPLOYED. All 164 functions now run `main`'s code.
+> Rather than the 5-function targeted deploy below, this was done as a bare
+> `npx firebase deploy --only functions` (no `:name`, so the broken-filter trap
+> could not apply). Result: **2 creates** (`lockNFLSpreadsJob`,
+> `nflLockWatchJob`), **33 skipped** as unchanged, remainder updated, **0
+> deletions**, zero failures.
+>
+> Pre-flight diff predicted exactly those 2 creates and 0 deletions, and the
+> deploy matched — that check is worth repeating before any future bare deploy:
+> compare `firebase functions:list` against the names exported from `index.ts`.
+>
+> **`submitNFLPicks` is live**, so the NFL-1 spread-gate fix is in effect and
+> preseason pools can accept picks without betting lines.
+>
+> **Why a full-fleet deploy:** the malformed `--only` syntax meant we could not
+> trust HANDOFF's claim that batches 1-4 / waves 1-2 were ever fully deployed.
+> A bare deploy settles it by construction instead of forensics. Note it does
+> NOT prove they were previously stale — functions deployed by older CLI
+> versions lack the hash label and update regardless. It proves only that
+> everything is current NOW, which is what matters.
+>
+> ⚠️ **Still required: the Firestore index** (`firestore:indexes` — see below).
+> A bare functions deploy does not include it, and A5's snapshot writes fail
+> silently without it.
+
+### Original 5-function instructions (superseded by the above)
 
 Nothing from tonight is deployed. This queue is now **on top of** the 33
 undeployed callables already listed in HANDOFF.md.
