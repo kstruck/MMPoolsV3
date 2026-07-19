@@ -7,11 +7,11 @@ This file + auto-memory carry the full state. Older narrative lives in git histo
 
 ## 🌅 MORNING TAKEOVER — overnight NFL preseason-pilot run (2026-07-18, ~03:50–05:00)
 
-**Read `TOMORROW-TASKS.md` first — note it has TWO halves.** The sweep session's sections are numbered `1`-`10`; this session's are `NFL-1`-`NFL-8` below the divider. Its §2 and §6 are superseded/done (banners in place).
-
-**Read `TOMORROW-TASKS.md` first** — everything needing Kevin is there, appended
-below the existing divider, with full numbered steps. This section is the
-engineering state.
+**Read `TOMORROW-TASKS.md` first — it has TWO halves.** The sweep session's
+sections are numbered `1`-`10`; this session's are `NFL-1`-`NFL-8`, below the
+divider. In the top half, §1 is done (prod audit, no damage) and §2/§6 are
+superseded/done — banners are in place. Everything needing Kevin lives there
+with full numbered steps; this section is the engineering state.
 
 ### What shipped — all 6 engineering items from `PLAN-NFL-PRESEASON-PILOT.md`
 
@@ -58,10 +58,10 @@ would have paged a false `21-17 → 0-0` stat correction.
    scoping the gate to `nflScoringEngine.poolUsesSpreads`, with the A3 tripwire
    scoped identically so it cannot page about pools that are no longer blocked.
    Zero behavior change for existing pools. qodo reviewed and raised no defects.
-   2. **Alarm A3(b) (synthetic pick probe) was deliberately not built.** Doing it
-   honestly needs a probe identity + probe pool in prod (Kevin's gate); doing it
-   in-process would only duplicate A3(a)'s predicate. Recommendation and options
-   in TOMORROW-TASKS **NFL-2**.
+2. ⏳ **OPEN — alarm A3(b) (synthetic pick probe) was deliberately not built.**
+   Doing it honestly needs a probe identity + probe pool in prod (Kevin's gate);
+   doing it in-process would only duplicate A3(a)'s predicate. Recommendation
+   and options in TOMORROW-TASKS **NFL-2**.
 
 ### Deploy state — NOTHING from tonight is deployed
 
@@ -142,6 +142,28 @@ npx firebase deploy --only functions:recalculatePoolWinners,toggleWinnerPaid,fix
 PR #190 changed `backfillPools` to **default to dry-run**. The existing "Backfill Pools" button now sends `dryRun: false` explicitly, so it still writes — but any *other* caller that omits the flag now reports instead of writing. PR #193 then fixed two real defects in it:
 - It used to reset **COMPLETED pools to DRAFT** (it recomputed `status` from `isLocked`/`isFinal`, ignoring the existing value). If this backfill has ever been run against prod, **finished pools may already have been un-completed** — worth an audit query before running it again.
 - The historical-stats fold (`FieldValue.increment` on `users/{uid}.historicalStats`) is now guarded per-entry so it can't double-count. **Limitation:** entries folded by a run predating that marker carry none and would fold again. Dry-run first and read `plannedWrites`.
+
+### ✅ PROD backfillPools damage audit — RAN 2026-07-18, NO DAMAGE FOUND
+
+Read-only Firestore queries against prod (Firebase console; nothing written).
+The pre-#193 bug wrote `status = isLocked ? 'LOCKED' : (isFinal ? 'FINAL' : 'DRAFT')`.
+The load-bearing claim is narrow and was re-verified after review: **`backfill.ts:55` is
+the only production path that WRITES a pool `status: 'FINAL'`** — so that stored value is
+a fingerprint for the bug. (It is NOT true that every other `'FINAL'` is an nfl_games
+status: `'FINAL'` is in the pool status type unions and is read at `payoutRecords.ts:60`.
+Nor are `'LOCKED'`/`'OPEN'` the only other writes — the create paths write `'DRAFT'`,
+which is why the 28 DRAFT pools need no special explanation.)
+
+`status=='FINAL'` → **0 pools**. `DRAFT`∩`isFinal:true` → **0**. `LOCKED`∩`isFinal:true` → **0**.
+Positive control `status=='OPEN'` → 15 ✓. Verdict: the clobber never hit prod; the 28
+DRAFT pools carry no finished-pool signals. PR #193 still ships as prevention, but there
+is **no remediation task and no pool IDs to repair**. Detail in TOMORROW-TASKS §1.
+
+⚠️ **Console-audit gotcha learned the hard way:** the Firestore filter panel reopens
+COLLAPSED, so edits to the value box silently don't register and the PREVIOUS query
+re-runs looking like a new one. Three readings were bogus before a positive control
+caught it. Always verify the `.where(...)` preview string before Apply, and always
+include a control query that must return rows.
 
 ### Backfill / migration audit (2026-07-18, report only — no fixes applied)
 
