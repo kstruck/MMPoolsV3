@@ -3,7 +3,7 @@ import {
   decodeSnapshot, detectStatCorrections, encodeSnapshot, isExpired,
   MAX_SNAPSHOT_GZIP_BYTES, snapshotSlateId, SnapshotTooLargeError,
 } from '../lib/feedSnapshot';
-import { parseScoreboardResponse } from '../nflSchedule';
+import { eventMatchesSeason, parseScoreboardResponse } from '../nflSchedule';
 import type { NFLGame } from '../types';
 
 // PLAN-NFL-PRESEASON-PILOT A5 — feed snapshots + stat-correction detection.
@@ -219,5 +219,75 @@ describe('parseScoreboardResponse — real ESPN shape', () => {
   it('returns empty for a payload with no events array', () => {
     expect(parseScoreboardResponse({}, 1, '2026', 1)).toEqual([]);
     expect(parseScoreboardResponse(null, 1, '2026', 1)).toEqual([]);
+  });
+});
+
+describe('eventMatchesSeason — the cross-boundary import guard', () => {
+  // Root cause of the 2026-07-19 mislabel: parseScoreboardResponse stamps
+  // season/seasonType/week from its ARGUMENTS, so any event the response happens
+  // to include gets relabelled. ESPN's "Preseason Week 3" calendar segment runs
+  // to 2026-09-09 and therefore returns the REGULAR-SEASON opener.
+  const ev = (year: any, type: any) => ({ season: { year, type } }) as any;
+
+  it('keeps an event from the requested season+type', () => {
+    expect(eventMatchesSeason(ev(2026, 1), '2026', 1)).toBe(true);
+  });
+
+  it('REJECTS the regular-season opener caught by the preseason week-3 range', () => {
+    // espn_401872656, NE @ SEA, 2026-09-10 — season 2026 / type 2.
+    expect(eventMatchesSeason(ev(2026, 2), '2026', 1)).toBe(false);
+  });
+
+  it('REJECTS a prior-season game — the naive-URL off-season fallback', () => {
+    // resolveScoreboardUrl's calendar guard is best-effort and swallows failures,
+    // so the week/season URL can silently serve 2025 during the off-season.
+    expect(eventMatchesSeason(ev(2025, 1), '2026', 1)).toBe(false);
+  });
+
+  it('coerces string vs number on both fields', () => {
+    expect(eventMatchesSeason(ev('2026', '1'), '2026', 1)).toBe(true);
+    expect(eventMatchesSeason(ev('2026', '2'), '2026', 1)).toBe(false);
+  });
+
+  it('FAILS OPEN when season is absent — degrade, do not import zero games', () => {
+    // If ESPN changes shape, importing nothing looks like an outage and is worse
+    // than the permissive behavior this replaced.
+    expect(eventMatchesSeason({} as any, '2026', 1)).toBe(true);
+    expect(eventMatchesSeason(undefined, '2026', 1)).toBe(true);
+    expect(eventMatchesSeason({ season: {} } as any, '2026', 1)).toBe(true);
+  });
+
+  it('checks each field independently when only one is present', () => {
+    expect(eventMatchesSeason({ season: { type: 2 } } as any, '2026', 1)).toBe(false);
+    expect(eventMatchesSeason({ season: { year: 2025 } } as any, '2026', 1)).toBe(false);
+    expect(eventMatchesSeason({ season: { type: 1 } } as any, '2026', 1)).toBe(true);
+  });
+});
+
+describe('parseScoreboardResponse — filters cross-boundary events end to end', () => {
+  const mk = (id: string, year: number, type: number) => ({
+    id,
+    season: { year, type },
+    status: { type: { id: '1', name: 'STATUS_SCHEDULED', state: 'pre' } },
+    competitions: [{
+      date: '2026-08-14T00:00Z',
+      competitors: [
+        { homeAway: 'home', score: '0', team: { id: '1', name: 'H', abbreviation: 'HOM', logo: '' } },
+        { homeAway: 'away', score: '0', team: { id: '2', name: 'A', abbreviation: 'AWY', logo: '' } },
+      ],
+    }],
+  });
+
+  it('drops the regular-season game and keeps the preseason ones', () => {
+    const games = parseScoreboardResponse(
+      { events: [mk('pre1', 2026, 1), mk('reg1', 2026, 2), mk('pre2', 2026, 1)] },
+      4, '2026', 1,
+    );
+    expect(games.map(g => g.id)).toEqual(['espn_pre1', 'espn_pre2']);
+  });
+
+  it('drops prior-season games entirely', () => {
+    const games = parseScoreboardResponse({ events: [mk('old', 2025, 1)] }, 1, '2026', 1);
+    expect(games).toEqual([]);
   });
 });
