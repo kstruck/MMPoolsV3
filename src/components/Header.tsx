@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Logo } from './Logo';
 import type { User } from '../types';
-import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy, RefreshCw, CheckCircle, AlertCircle, BarChart3 } from 'lucide-react';
 import { authService } from '../services/authService';
 import { isSuperAdmin, canCreatePool, canAccessPoolCreation } from '../utils/auth';
 import { logger } from '../utils/logger';
@@ -195,6 +195,14 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 )}
 
                                 <ThemeToggle />
+
+                                <button
+                                    onClick={() => navigate(`/profile/${user.id}`)}
+                                    title="My public player profile"
+                                    className={cn(chromeBtn, 'border border-white/20 text-white/80 hover:text-white hover:border-white/40')}
+                                >
+                                    <BarChart3 size={13} /> My Stats
+                                </button>
 
                                 <button
                                     onClick={() => navigate('/profile')}

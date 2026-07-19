@@ -488,6 +488,25 @@ export const dbService = {
         return snap.docs.map(d => ({ poolId: d.id, ...d.data() })) as any[];
     },
 
+    // Self-heal: materialize the caller's own publicProfiles doc on demand (used when
+    // a member visits their profile before any scoring has ever written it).
+    recomputeMyProfile: async () => {
+        const fn = httpsCallable(functions, 'recomputeMyProfile');
+        const res = await fn(withCorrelationId({}));
+        return res.data as any;
+    },
+
+    // Site-wide weekly averages (publicProfiles/_siteAverages, daily job) — the real
+    // "league average" line on the profile Performance Chart. Null until first computed.
+    getSiteAverages: async (): Promise<any | null> => {
+        try {
+            const snap = await getDoc(doc(db, 'publicProfiles', '_siteAverages'));
+            return snap.exists() ? snap.data() : null;
+        } catch {
+            return null;
+        }
+    },
+
     subscribeToPropCard: (poolId: string, userId: string, callback: (card: PropCard | null) => void) => {
         const docRef = doc(db, 'pools', poolId, 'propCards', userId);
         return onSnapshot(docRef, (doc) => {

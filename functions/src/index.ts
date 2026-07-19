@@ -118,6 +118,9 @@ export { nflFinalizeSweepJob } from "./nflFinalize";
 // --- PAYOUT RECORDS (ADR 0005 Phase 4) — commissioner-recorded prize truth ---
 export { recordPoolPayouts } from "./payoutRecords";
 
+// --- SITE AVERAGES — real league-average line for the profile Performance Chart ---
+export { siteAveragesJob, refreshSiteAverages } from "./siteAverages";
+
 // --- EXPERT PROFILES (ADR 0005 Phase 6) — experts rendered through the same projection ---
 export { gradeExpertProfilesJob, refreshExpertProfiles } from "./expertProfiles";
 

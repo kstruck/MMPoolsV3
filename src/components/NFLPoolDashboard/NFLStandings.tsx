@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Trophy, Heart, ShieldAlert } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
 import { RankChip } from '../ui';
@@ -15,6 +16,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
   entries,
   week
 }) => {
+  const navigate = useNavigate();
   const type = pool.type;
 
   // Rank and sort entries based on pool type rulesets
@@ -177,7 +179,14 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
 
                     {/* Username */}
                     <td className="sticky left-16 z-10 bg-card py-4 px-6 font-display font-bold text-[color:var(--text)] text-sm">
-                      {entry.userName}
+                      {/* Player Profile entry point (ADR 0005): every member name links to their public profile */}
+                      <button
+                        onClick={() => entry.ownerUid && navigate(`/profile/${entry.ownerUid}`)}
+                        className="hover:text-gold-700 dark:hover:text-gold-400 hover:underline underline-offset-2 transition-colors text-left"
+                        title="View player profile"
+                      >
+                        {entry.userName}
+                      </button>
                       {isMyEntry && (
                         <span className="ml-1.5 inline-flex items-center rounded-full bg-brandred-600 px-2 py-0.5 leading-none font-display font-bold uppercase text-[11px] tracking-[0.08em] text-white">
                           Me
