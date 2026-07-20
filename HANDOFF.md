@@ -1,4 +1,45 @@
-# HANDOFF — Session entry point (updated 2026-07-18 overnight, NFL preseason pilot: all 6 engineering items shipped as PRs; NOTHING deployed)
+# HANDOFF — Session entry point (updated 2026-07-20: NFL preseason pilot shipped AND DEPLOYED; two dead features found and fixed)
+
+> ## DEPLOY STATE 2026-07-20 — prod matches `main`
+> The long-standing "merged but NOT deployed" backlog is **CLEARED**. A
+> full-fleet `--only functions` deploy plus `--only firestore:indexes` landed
+> everything: the 33 callable-sweep batches, sweep batch 17, the NFL pilot work
+> (A2/A3a/A4/A5p1/A6/A10), the spread-gate fix, the importer season filter, and
+> both missing composite indexes. A subsequent bare deploy reported *every*
+> function "Skipped (No changes detected)" — that is the confirmation.
+>
+> **Armed in prod, all dry-run:** `nflSpreadLock`, `nflLockWatch`,
+> `nflFeedSnapshots` (+ `retentionDays: 45`). `nflFinalize` is
+> `enabled:true, dryRun:true` and still needs `liveSeasonTypes` — see NFL-6.
+>
+> **Prod data:** 49 preseason games (2026 / seasonType 1) imported.
+>
+> **Smoke test PASSED:** `recalculateGlobalStats` (batch 17 changed it from a
+> soft-return to a thrown permission-denied) returns an identical result pre-
+> and post-deploy — 35 pools, totalPrizes 5535, 0 errors.
+>
+> ### THE LESSON FROM 2026-07-19/20 — read before trusting any "armed" claim
+> **Two features were armed, deployed, and completely dead, both from missing
+> Firestore composite indexes, both silent:**
+> 1. **A5 feed snapshots** — `nfl_feed_snapshots(slate, fetchedAt)` was missing;
+>    the `catch` that stops a snapshot failure breaking score sync swallowed it
+>    on every run.
+> 2. **`nflFinalizeSweepJob`** — `pools(type, scoredThroughWeek)` was missing, so
+>    its `in`+inequality candidate query threw FAILED_PRECONDITION **every day
+>    from 2026-07-10 to 2026-07-20** and produced ZERO audit entries.
+>
+> Neither was findable by reading code. Both surfaced from asking *"has this
+> actually produced anything?"* **Treat "armed" and "working" as separate
+> claims.** Any scheduled job should write something on EVERY run so
+> "never fired" and "never ran" cannot be confused — `nflLockWatchJob` does this
+> by design, and #223 retrofitted it onto the finalize sweep. The other
+> schedulers still lack it.
+>
+> **Deploy hygiene (three silent-success incidents in two days):**
+> `--only functions:a,b,c` deploys ONLY `a` — repeat `functions:` per name, or
+> use a bare `--only functions`. And ALWAYS `git log --oneline -1` plus confirm
+> the change is in the file on disk before deploying; a stale checkout will
+> deploy old config and still print "Deploy complete!".
 
 **Start every new session with: "Review HANDOFF.md and pick up where we left off."**
 This file + auto-memory carry the full state. Older narrative lives in git history.
