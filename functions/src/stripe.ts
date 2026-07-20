@@ -25,6 +25,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 
 import Stripe from "stripe";
 import { validated } from "./lib/validated";
+import { withHeartbeat } from "./lib/heartbeat";
 import { createCheckoutSessionSchema } from "./schemas/billingCheckout";
 import { decideEventClaim, shouldAlertOnFailure, type WebhookEventDoc } from "./lib/webhookDurability";
 import { captureMonetizationAlert } from "./lib/sentryServer";
@@ -1207,7 +1208,7 @@ const STALE_RESERVATION_MS = 24 * 60 * 60 * 1000;
 
 export const releaseStaleCouponReservations = functions.scheduler.onSchedule(
     { schedule: "every 30 minutes", timeoutSeconds: 300, memory: "512MiB" },
-    async () => {
+    withHeartbeat('releaseStaleCouponReservations', async () => {
         let enabled = false;
         let dryRun = true;
         try {
@@ -1264,5 +1265,5 @@ export const releaseStaleCouponReservations = functions.scheduler.onSchedule(
         }
 
         console.log(`[couponSweep] complete. ${dryRun ? "DRY-RUN " : ""}scanned=${scanned} released=${released}`);
-    }
+    })
 );

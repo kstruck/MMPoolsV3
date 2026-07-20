@@ -16,6 +16,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { EXPERT_SUBJECT_IDS } from "./shared/profile";
 import { buildPublicProfile, type ProfilePoolInput } from "./lib/profileBuild";
 import type { PickSide } from "./expertPicks";
+import { withHeartbeat } from "./lib/heartbeat";
 
 type Firestore = admin.firestore.Firestore;
 
@@ -134,7 +135,7 @@ async function activeSeasonPairs(db: Firestore, now: number): Promise<Array<{ se
 }
 
 /** Daily: grade recently active seasons + refresh expert profiles. Best-effort. */
-export const gradeExpertProfilesJob = onSchedule('0 7 * * *', async () => {
+export const gradeExpertProfilesJob = onSchedule('0 7 * * *', withHeartbeat('gradeExpertProfilesJob', async () => {
   const db = admin.firestore();
   try {
     const pairs = await activeSeasonPairs(db, Date.now());
@@ -146,7 +147,7 @@ export const gradeExpertProfilesJob = onSchedule('0 7 * * *', async () => {
   } catch (e) {
     console.error('[expertProfiles] failed:', e);
   }
-});
+}));
 
 /** On-demand (SUPER_ADMIN): grade a specific season now. */
 export const refreshExpertProfiles = onCall(async (request) => {

@@ -7,6 +7,7 @@ import { Tournament, Game, TournamentSlot, BracketRegion, Team } from "./types";
 import { scoreTournamentEntries } from "./bracketScoring";
 import { BIG_12_TEAMS_2026, BIG_EAST_TEAMS_2026 } from "./conferenceTournaments";
 import { validated } from "./lib/validated";
+import { withHeartbeat } from "./lib/heartbeat";
 import {
     importTournamentFromESPNSchema,
     adminInitTournamentSchema,
@@ -999,7 +1000,7 @@ export const syncBracketTournament = validated(
 );
 
 // Scheduled task: Runs every 10 minutes during March Madness
-export const scheduledBracketSync = onSchedule("every 10 minutes", async () => {
+export const scheduledBracketSync = onSchedule("every 10 minutes", withHeartbeat('scheduledBracketSync', async () => {
     const db = admin.firestore();
     // Query all active (non-finalized) tournaments
     const activeTournaments = await db.collection('tournaments')
@@ -1016,7 +1017,7 @@ export const scheduledBracketSync = onSchedule("every 10 minutes", async () => {
         await updateTournamentScores(db, doc.id);
     }
     logger.info(`Scheduled sync complete for ${activeTournaments.size} tournament(s).`);
-});
+}));
 
 // --- ESPN Import Types ---
 

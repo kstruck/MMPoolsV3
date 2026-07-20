@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import { validated } from "./lib/validated";
 import { getOpsHealthSummarySchema } from "./schemas/opsHealth";
+import { findStaleJobs, HEARTBEAT_DOC, SCHEDULED_JOB_EXPECTATIONS, type JobHeartbeat, type StaleJob } from "./lib/heartbeat";
 
 /**
  * In-app Ops Health surface (PLAN-SECURITY-OBSERVABILITY.md #12) — a SUPER_ADMIN
@@ -37,6 +38,13 @@ export interface OpsHealthSummary {
         count: number;
         sample: Array<{ id: string; eventType?: string; attemptCount?: number; lastFailedAt: number | null }>;
     };
+    /**
+     * Scheduled jobs that look dead. Added after two features shipped armed and
+     * silently non-functional (A5 snapshots, nflFinalizeSweepJob — the latter
+     * for ten days). An empty array here is a POSITIVE signal; previously there
+     * was no signal at all.
+     */
+    staleJobs: StaleJob[];
 }
 
 export async function computeOpsHealthSummary(
@@ -52,6 +60,15 @@ export async function computeOpsHealthSummary(
             failedWebhooksQuery.count().get(),
             failedWebhooksQuery.limit(5).get(),
         ]);
+
+    // Heartbeats live in one doc, so this is a single extra read.
+    let heartbeats: Record<string, JobHeartbeat | undefined> = {};
+    try {
+        heartbeats = ((await db.doc(HEARTBEAT_DOC).get()).data() ?? {}) as Record<string, JobHeartbeat | undefined>;
+    } catch (e) {
+        // Fail loud in logs but do not break the whole health card.
+        console.error("[opsHealth] heartbeat read failed; job liveness unknown:", e);
+    }
 
     return {
         at: Date.now(),
@@ -79,6 +96,7 @@ export async function computeOpsHealthSummary(
                 };
             }),
         },
+        staleJobs: findStaleJobs(heartbeats, SCHEDULED_JOB_EXPECTATIONS, Date.now()),
     };
 }
 
