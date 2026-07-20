@@ -207,6 +207,20 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "pools",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "type",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "scoredThroughWeek",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

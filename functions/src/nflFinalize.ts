@@ -403,11 +403,42 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
     // Candidates: NFL pools that have been scored at least once. Staleness and
     // completeness are checked per pool (cheap doc reads; games query only for
     // pools that pass the staleness filter).
-    const snap = await db.collection("pools")
-      .where("type", "in", [...NFL_SEASON_TYPES])
-      .where("scoredThroughWeek", ">=", 1)
-      .limit(500)
-      .get();
+    //
+    // REQUIRES the composite index pools(type ASC, scoredThroughWeek ASC) — an
+    // `in` filter combined with an inequality on a different field cannot use a
+    // single-field index. That index was MISSING from firestore.indexes.json
+    // until 2026-07-20, so this query threw FAILED_PRECONDITION on every run
+    // since the job was first armed on 2026-07-10, and the sweep produced ZERO
+    // audit entries in that whole period. Nobody noticed because a scheduled
+    // job's throw goes nowhere a human looks.
+    //
+    // Hence the try/catch below: an infrastructure failure now writes an audit
+    // entry of its own. A sweep that CANNOT RUN must not be indistinguishable
+    // from a sweep that ran and found nothing.
+    let snap;
+    try {
+      snap = await db.collection("pools")
+        .where("type", "in", [...NFL_SEASON_TYPES])
+        .where("scoredThroughWeek", ">=", 1)
+        .limit(500)
+        .get();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error("[nflFinalizeSweep] CANDIDATE QUERY FAILED — sweep cannot run:", message);
+      await writeAdminAudit({
+        actorUid: "system",
+        action: "NFL_FINALIZE_SWEEP",
+        targetType: "pool",
+        metadata: {
+          dryRun,
+          failed: true,
+          reason: "candidate query failed — check the pools(type, scoredThroughWeek) composite index",
+          error: message.slice(0, 500),
+        },
+        status: "error",
+      });
+      return;
+    }
 
     const stale = snap.docs.filter((d) => {
       const p = d.data() as any;
