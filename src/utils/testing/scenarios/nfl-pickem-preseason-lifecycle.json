@@ -1,0 +1,98 @@
+{
+  "id": "nfl-pickem-preseason-lifecycle",
+  "name": "Pick'em PRESEASON end-to-end through the real callables (no betting lines)",
+  "description": "The pilot configuration exercised through the REAL join + submit callables: seasonType 1, straight-up pick em, and NO game carrying a betting line - mirroring the live 2026 preseason feed where only 1 of 49 games has odds. THE POINT: before PR #214 the unconditional SPREADS_NOT_LOCKED gate rejected every submit on a slate like this, which would have blocked the entire pilot. No existing fixture could catch that, because the harness hardcoded every seeded spread to locked. Scoring assertions are deliberately NOT included here - see the scoring-arc fixtures for that; this one exists to pin that submission SUCCEEDS without lines.",
+  "poolType": "NFL_PICKEM",
+  "createViaCallable": true,
+  "poolConfig": {
+    "name": "Sim Preseason Lifecycle",
+    "type": "NFL_PICKEM",
+    "seasonType": 1,
+    "settings": {
+      "entryFee": 0,
+      "lockMode": "PER_GAME",
+      "payoutMode": "SEASON",
+      "pickMode": "STRAIGHT",
+      "confidenceMode": false,
+      "payouts": {
+        "places": [],
+        "bonuses": []
+      }
+    }
+  },
+  "nflGames": [
+    {
+      "week": 1,
+      "home": "CIN",
+      "away": "DET",
+      "homeScore": 0,
+      "awayScore": 0,
+      "status": "SCHEDULED",
+      "startOffsetMs": 7200000,
+      "noSpread": true
+    },
+    {
+      "week": 1,
+      "home": "PIT",
+      "away": "GB",
+      "homeScore": 0,
+      "awayScore": 0,
+      "status": "SCHEDULED",
+      "startOffsetMs": 7200000,
+      "noSpread": true
+    },
+    {
+      "week": 1,
+      "home": "ARI",
+      "away": "CAR",
+      "homeScore": 0,
+      "awayScore": 0,
+      "status": "SCHEDULED",
+      "startOffsetMs": 7200000,
+      "spread": 1.5,
+      "spreadLocked": false
+    }
+  ],
+  "lifecycleOps": [
+    {
+      "op": "join",
+      "userNames": [
+        "alice",
+        "bob"
+      ]
+    },
+    {
+      "op": "submit",
+      "userName": "alice",
+      "week": 1,
+      "picks": {
+        "1:g1": "CIN",
+        "1:g2": "GB",
+        "1:g3": "CAR"
+      }
+    },
+    {
+      "op": "submit",
+      "userName": "bob",
+      "week": 1,
+      "picks": {
+        "1:g1": "DET",
+        "1:g2": "GB",
+        "1:g3": "ARI"
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "type": "nflEntryCount",
+      "expected": 2,
+      "message": "Both members submitted through the REAL callable on a spread-less preseason slate - this is the assertion that would have failed before PR #214"
+    },
+    {
+      "type": "poolStatus",
+      "field": "seasonType",
+      "expected": 1,
+      "message": "Pool really is preseason (seasonType 1), not the regular-season default"
+    }
+  ]
+}
