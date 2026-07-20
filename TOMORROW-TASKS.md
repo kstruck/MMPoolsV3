@@ -1050,3 +1050,112 @@ Being explicit rather than letting these quietly vanish:
    Recalculate Global Stats.
 4. **Answer the profile-cards question** so I can build it.
 5. Business items (§7 A8 price+date has the real deadline: **2026-08-13**).
+
+---
+
+# ☀️ MORNING 2026-07-20 (second overnight) — read this first
+
+Preseason is **18 days out** (HOF game 2026-08-07; preseason week 1 2026-08-13).
+This session was aimed squarely at *is the preseason path actually ready*.
+
+**Nothing deployed tonight. No prod data touched.**
+
+## ⏰ 1. The one time-sensitive thing: NFL-6
+
+`nflFinalizeSweepJob` could not run at all until yesterday — a missing composite
+index made it throw every day from 2026-07-10. The index is now live and
+**Enabled**, so **this morning is the first time a report can exist.**
+
+1. Live site → **SuperAdmin → Admin Audit Log**.
+2. Filter/search for **`NFL_FINALIZE_SWEEP`**.
+3. Three possible outcomes:
+   - **An entry with a `bySeasonType` breakdown** → the fix worked. Read it:
+     you want candidates under `"1"` and **ZERO** under `"2"`. If `"2"` is
+     non-zero, STOP and tell me — that means live regular-season pools would be
+     in scope.
+   - **An entry with `failed: true`** → the guard added in PR #223 is telling you
+     the query is still broken. Send me the `error` text.
+   - **No entry at all** → the job is not firing. That is a different problem;
+     tell me.
+4. Only if outcome 1 looks right: Firestore → `system` → `config` →
+   **`nflFinalize`** map → set all three:
+   - `enabled` — boolean — **true** (already set)
+   - `dryRun` — boolean — **false** ← the change
+   - `liveSeasonTypes` — **array** containing the single **number 1**
+     (the console labels the numeric type **`int64`**, not "number")
+5. **`dryRun: false` alone does NOTHING** — it keeps the sweep dry and logs a
+   refusal. `liveSeasonTypes` is what actually arms it. That guard is deliberate.
+
+## 2. Leave the lock tripwire in dry-run
+
+`nflLockWatch.dryRun` should stay **true** for now. You have 49 preseason games
+loaded and only 1 carries a betting line. The tripwire is working correctly, but
+with `dryRun: false` it will page you — correctly — about a condition you
+already know about. Leave it dry until the preseason-lines question is settled.
+
+Worth a look though: SuperAdmin → Admin Audit Log → **`NFL_LOCK_WATCH`**. There
+should be an entry roughly every hour. That entry existing IS the proof the
+alarm is alive. If there are none, tell me — that is a real problem.
+
+## 3. What shipped overnight
+
+| PR | What |
+|---|---|
+| #225 | Preseason end-to-end fixture + closed an eval blind spot (below) |
+
+### The finding worth your attention
+
+**The 45-fixture matrix — the strongest eval in this repo — could not have caught
+the bug that would have blocked the entire pilot.**
+
+`seedGamePayload` hardcoded `spread: { locked: true }` on every seeded game, so
+`submitNFLPicks`'s `SPREADS_NOT_LOCKED` precondition was **structurally
+unreachable** in all 45 fixtures. The gate could have rejected every member of
+every preseason pool in prod while the matrix stayed green.
+
+Fixed: fixtures can now express `noSpread: true` (the real preseason case — 48 of
+49 live games carry no line) and `spreadLocked: false`. Defaults are unchanged,
+so all 45 existing fixtures behave exactly as before.
+
+And the preseason path had **never** been exercised through the member-facing
+callables: the one pre-existing preseason fixture has `lifecycleOps: false` and
+`createViaCallable: false`, i.e. direct writes only. The new fixture drives the
+real `createNFLPool` → `joinNFLPool` → `submitNFLPicks` arc on a spread-less
+preseason slate.
+
+**Verified as a real test rather than decoration:** temporarily reverting the
+PR #214 gate makes this fixture — and only this one, of 46 — fail with
+`SPREADS_NOT_LOCKED`.
+
+## 4. 🔴 The reliability gap I did NOT finish — worth knowing before the pilot
+
+While auditing, I checked which scheduled jobs write anything on every run.
+**Eight write nothing at all:**
+
+`consensusRefreshJob`, `syncWinProbabilityJob`, `syncExpertPicksJob`,
+`gradeExpertProfilesJob`, `aggregateRevenueDaily`, `scheduledHealthCheck`,
+`releaseStaleCouponReservations`, `scheduledBracketSync`
+
+For every one of these, **"ran fine" and "never ran" are indistinguishable** —
+exactly the condition that hid the dead finalize sweep for ten days and the dead
+A5 snapshots. Two of three NFL jobs now have a per-run trace
+(`nflLockWatchJob` by design, `nflFinalizeSweepJob` retrofitted in #223); these
+eight do not.
+
+None is known to be broken. But given the same failure mode has now bitten twice
+in a week, a heartbeat pass over these is the highest-value reliability work left
+before the pilot. I ran out of session before starting it — **it is the first
+thing I would pick up next.**
+
+## 5. Still open, unchanged
+
+- **NFL-2** — build or skip alarm A3(b), the synthetic pick probe. Needs a prod
+  probe identity + probe pool (your gate). My recommendation is unchanged: skip
+  for the pilot, revisit before charging money in September.
+- **NFL-7** — the chaos drill, during a preseason week. Runbook is written.
+- **A5 part 2** — the snapshot replay callable. Snapshots are armed and
+  collecting now, so this is genuinely useful whenever you want it.
+- **Phase 3 backups** — still no Firestore backup story at all. Biggest
+  unaddressed risk in the architecture notes.
+- **§7 A8** — publish the 2026 price + free-period end date. **Real deadline:
+  2026-08-13.** This is the only calendar-bound item on the whole list.
