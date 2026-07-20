@@ -1,0 +1,88 @@
+import { describe, it, expect } from "vitest";
+import { buildReplayPlan } from "../lib/feedReplayDiff";
+import type { NFLGame } from "../types";
+
+const game = (over: Partial<NFLGame> & { id: string }): NFLGame => ({
+    season: "2026",
+    seasonType: 1,
+    week: 1,
+    homeTeam: "KC",
+    awayTeam: "DET",
+    startTime: 1_755_000_000_000,
+    status: "SCHEDULED",
+    ...over,
+} as NFLGame);
+
+describe("buildReplayPlan", () => {
+    it("writes every snapshot game and reports a status regression", () => {
+        // The recovery case: the live feed wrongly flipped a FINAL game back to
+        // IN_PROGRESS and zeroed the score. Replaying the good snapshot restores it.
+        const snapshot = [game({ id: "g1", status: "FINAL", scores: { home: 24, away: 17 } })];
+        const current = new Map([["g1", game({ id: "g1", status: "IN_PROGRESS", scores: { home: 0, away: 0 } })]]);
+
+        const plan = buildReplayPlan(snapshot, current);
+
+        expect(plan.writes).toHaveLength(1);
+        expect(plan.writes[0].status).toBe("FINAL");
+        expect(plan.changes).toEqual(expect.arrayContaining([
+            { gameId: "g1", field: "status", from: "IN_PROGRESS", to: "FINAL" },
+            { gameId: "g1", field: "score", from: "0-0", to: "17-24" },
+        ]));
+        expect(plan.orphanGameIds).toEqual([]);
+    });
+
+    it("never unlocks a locked spread, and keeps the locked VALUE", () => {
+        // Members already picked against -3.5. A snapshot taken before the lock
+        // must not reopen that line.
+        const snapshot = [game({ id: "g1", spread: { value: -7, locked: false } })];
+        const current = new Map([["g1", game({ id: "g1", spread: { value: -3.5, locked: true } })]]);
+
+        const plan = buildReplayPlan(snapshot, current);
+
+        expect(plan.writes[0].spread).toEqual({ value: -3.5, locked: true });
+    });
+
+    it("takes the snapshot spread when the current one is unlocked", () => {
+        const snapshot = [game({ id: "g1", spread: { value: -7, locked: false } })];
+        const current = new Map([["g1", game({ id: "g1", spread: { value: -3.5, locked: false } })]]);
+
+        expect(buildReplayPlan(snapshot, current).writes[0].spread).toEqual({ value: -7, locked: false });
+    });
+
+    it("reports orphans without scheduling any delete", () => {
+        // g2 exists live but not in the snapshot — could be a genuinely new
+        // fixture added after the snapshot. Report, never destroy.
+        const snapshot = [game({ id: "g1" })];
+        const current = new Map([["g1", game({ id: "g1" })], ["g2", game({ id: "g2" })]]);
+
+        const plan = buildReplayPlan(snapshot, current);
+
+        expect(plan.orphanGameIds).toEqual(["g2"]);
+        expect(plan.writes.map((g) => g.id)).toEqual(["g1"]);
+    });
+
+    it("flags a game absent from the current slate as new", () => {
+        const plan = buildReplayPlan([game({ id: "g9", status: "SCHEDULED" })], new Map());
+
+        expect(plan.changes).toEqual([{ gameId: "g9", field: "new", from: "(absent)", to: "SCHEDULED" }]);
+        expect(plan.writes).toHaveLength(1);
+    });
+
+    it("reports no changes when the snapshot already matches live state", () => {
+        const g = game({ id: "g1", status: "FINAL", scores: { home: 24, away: 17 } });
+        const plan = buildReplayPlan([g], new Map([["g1", { ...g }]]));
+
+        expect(plan.changes).toEqual([]);
+        // Writes are still produced — a no-op replay is idempotent, not empty.
+        expect(plan.writes).toHaveLength(1);
+    });
+
+    it("detects a rescheduled kickoff", () => {
+        const snapshot = [game({ id: "g1", startTime: 1_755_000_000_000 })];
+        const current = new Map([["g1", game({ id: "g1", startTime: 1_755_010_000_000 })]]);
+
+        const change = buildReplayPlan(snapshot, current).changes.find((c) => c.field === "startTime");
+        expect(change).toBeDefined();
+        expect(change!.to).toBe(new Date(1_755_000_000_000).toISOString());
+    });
+});
