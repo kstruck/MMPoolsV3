@@ -5,6 +5,7 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { withHeartbeat } from "./lib/heartbeat";
 
 const MAX_HISTORY = 30;
 
@@ -27,7 +28,7 @@ async function fetchHomeWinPct(eventId: string): Promise<number | null> {
   }
 }
 
-export const syncWinProbabilityJob = onSchedule('*/5 * * * *', async () => {
+export const syncWinProbabilityJob = onSchedule('*/5 * * * *', withHeartbeat('syncWinProbabilityJob', async () => {
   const db = admin.firestore();
   const liveSnap = await db.collection('nfl_games').where('status', '==', 'IN_PROGRESS').get();
   if (liveSnap.empty) return;
@@ -49,4 +50,4 @@ export const syncWinProbabilityJob = onSchedule('*/5 * * * *', async () => {
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
   }
-});
+}));

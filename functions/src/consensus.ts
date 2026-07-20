@@ -16,6 +16,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { tallyGameConsensus, mergeTally, consensusPct, type ConsensusGame, type GameTally } from "./shared/consensus";
 import { isActivePoolForStats } from "./lib/poolInclusion";
 import { NFL_SEASON_TYPES } from "./shared/poolTypes";
+import { withHeartbeat } from "./lib/heartbeat";
 
 type Firestore = admin.firestore.Firestore;
 
@@ -115,7 +116,7 @@ async function activeWeeks(db: Firestore, now: number): Promise<{ season: string
 }
 
 /** Scheduled: refresh consensus for weeks in the active window every 10 minutes. */
-export const consensusRefreshJob = onSchedule('*/10 * * * *', async () => {
+export const consensusRefreshJob = onSchedule('*/10 * * * *', withHeartbeat('consensusRefreshJob', async () => {
   const db = admin.firestore();
   const now = Date.now();
   for (const w of await activeWeeks(db, now)) {
@@ -126,7 +127,7 @@ export const consensusRefreshJob = onSchedule('*/10 * * * *', async () => {
       console.error(`[consensus] failed for ${w.season}/${w.seasonType}/wk${w.week}:`, e);
     }
   }
-});
+}));
 
 /** On-demand recompute (SUPER_ADMIN) for testing / manual refresh. */
 export const recomputeConsensus = validated(
