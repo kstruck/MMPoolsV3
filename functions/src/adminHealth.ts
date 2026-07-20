@@ -2,6 +2,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import { validated } from "./lib/validated";
 import { getAdminHealthSnapshotSchema } from "./schemas/noInputAdmin";
+import { withHeartbeat } from "./lib/heartbeat";
 
 /**
  * Real platform health for the Super-Admin Overview. Replaces the previously
@@ -174,8 +175,8 @@ export const getAdminHealthSnapshot = validated(
  * API Status Center shows real, recent status without a manual click, and keeps
  * a short rolling history.
  */
-export const scheduledHealthCheck = onSchedule("every 60 minutes", async () => {
+export const scheduledHealthCheck = onSchedule("every 60 minutes", withHeartbeat('scheduledHealthCheck', async () => {
   const db = admin.firestore();
   const snapshot = await computeAdminHealthSnapshot(db);
   await persistSnapshot(db, snapshot);
-});
+}));

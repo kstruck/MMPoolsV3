@@ -19,6 +19,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { validated } from "./lib/validated";
 import { refreshExpertPicksSchema } from "./schemas/noInputAdmin";
+import { withHeartbeat } from "./lib/heartbeat";
 
 export type PickSide = 'HOME' | 'AWAY' | 'EVEN';
 
@@ -118,7 +119,7 @@ export async function recomputeExpertPicks(db: admin.firestore.Firestore, now: n
 }
 
 /** Scheduled: refresh expert predictions hourly (FPI moves slowly; cheap — active window only). */
-export const syncExpertPicksJob = onSchedule('15 * * * *', async () => {
+export const syncExpertPicksJob = onSchedule('15 * * * *', withHeartbeat('syncExpertPicksJob', async () => {
   const db = admin.firestore();
   try {
     const r = await recomputeExpertPicks(db, Date.now());
@@ -126,7 +127,7 @@ export const syncExpertPicksJob = onSchedule('15 * * * *', async () => {
   } catch (e) {
     console.error('[expertPicks] failed:', e);
   }
-});
+}));
 
 /** On-demand refresh (SUPER_ADMIN) for testing / manual trigger. */
 export const refreshExpertPicks = validated(

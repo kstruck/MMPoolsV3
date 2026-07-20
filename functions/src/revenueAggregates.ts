@@ -4,6 +4,7 @@ import { validated } from "./lib/validated";
 import { recomputeRevenueSchema } from "./schemas/adminSingles";
 import * as admin from "firebase-admin";
 import { summarizeCharges } from "./lib/billingCharges";
+import { withHeartbeat } from "./lib/heartbeat";
 
 /**
  * Rolls the billingCharges ledger up into admin_stats/revenue (T14).
@@ -34,10 +35,10 @@ async function recompute(): Promise<{ totalRevenue: number; chargeCount: number 
 /** Daily rollup. */
 export const aggregateRevenueDaily = onSchedule(
   { schedule: "every 24 hours", timeoutSeconds: 120, memory: "256MiB" },
-  async () => {
+  withHeartbeat('aggregateRevenueDaily', async () => {
     const r = await recompute();
     console.log(`[revenue] daily rollup: $${r.totalRevenue} from ${r.chargeCount} charges`);
-  }
+  })
 );
 
 /** On-demand recompute for the Monetization tab (SUPER_ADMIN). */
