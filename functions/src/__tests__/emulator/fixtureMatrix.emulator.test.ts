@@ -58,7 +58,18 @@ function seedGamePayload(g: any, seasonType: number, runStart: number) {
         status: g.status ?? 'FINAL', isMonday: g.isMonday ?? false,
         homeTeam: T(g.home), awayTeam: T(g.away),
         scores: { home: g.homeScore ?? 0, away: g.awayScore ?? 0 },
-        spread: { value: g.spread ?? 0, locked: true },
+        // Spread shape is fixture-controlled. It used to be hardcoded to
+        // `{ value: g.spread ?? 0, locked: true }`, which meant EVERY game in
+        // EVERY fixture carried a locked spread — so submitNFLPicks's
+        // SPREADS_NOT_LOCKED precondition was structurally unreachable in the
+        // whole 45-fixture matrix. That blind spot is why the eval never caught
+        // the gate blocking straight-up pools (fixed 2026-07-19, PR #214).
+        //   noSpread: true      -> no spread field at all (the real preseason
+        //                          case: 48 of 49 games carry no betting line)
+        //   spreadLocked: false -> a line exists but has not been locked yet
+        ...(g.noSpread
+            ? {}
+            : { spread: { value: g.spread ?? 0, locked: g.spreadLocked !== false } }),
     };
 }
 
