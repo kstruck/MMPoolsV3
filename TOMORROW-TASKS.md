@@ -1159,3 +1159,102 @@ thing I would pick up next.**
   unaddressed risk in the architecture notes.
 - **§7 A8** — publish the 2026 price + free-period end date. **Real deadline:
   2026-08-13.** This is the only calendar-bound item on the whole list.
+
+---
+
+## 6. UPDATE — the silent-scheduler gap is CLOSED (PR #227, merged `cc3b492`)
+
+Section 4 above flagged eight scheduled jobs that wrote nothing on any run. **All
+eight now have heartbeats**, and stale jobs surface in the Ops Health card.
+
+`consensusRefreshJob` · `syncWinProbabilityJob` · `syncExpertPicksJob` ·
+`gradeExpertProfilesJob` · `aggregateRevenueDaily` · `scheduledHealthCheck` ·
+`releaseStaleCouponReservations` · `scheduledBracketSync`
+
+**How it works.** Each job now stamps `system/heartbeats` on completion — one doc
+keyed by job name, not an audit row per run (some run every minute; per-run rows
+would be noise and cost). `getOpsHealthSummary` returns a `staleJobs[]` array
+alongside open alerts and failed webhooks. **An empty array is a positive
+signal** — previously there was no signal at all.
+
+Three states, because they need three different fixes:
+- **`never-ran`** — no heartbeat ever. This is the `nflFinalizeSweepJob` case.
+- **`stale`** — last completed run is older than 3× its own interval.
+- **`failing`** — ran recently but threw; the error text is included.
+
+The 3× tolerance is deliberate: Cloud Scheduler is not punctual and cold starts
+push runs late. Flagging at exactly 1× would cry wolf constantly, and an alarm
+that cries wolf is how the real outage gets ignored.
+
+### What you should see once this deploys
+
+Nothing immediately — `system/heartbeats` does not exist yet. Within an hour of
+deploying, it should gain an entry per job. Until a job has run once it reports
+`never-ran`, which is correct rather than alarming.
+
+**After ~24h, check the Ops Health card.** Any job still showing `never-ran` at
+that point is genuinely dead and worth telling me about — `gradeExpertProfilesJob`
+and `aggregateRevenueDaily` are daily, so give those a full day.
+
+## 7. Also shipped tonight
+
+| PR | What | Merged |
+|---|---|---|
+| #225 | Preseason end-to-end fixture + closed the eval blind spot | `51d46f8` |
+| #226 | Morning brief | `81a5853` |
+| #227 | Scheduler heartbeats (all 8) + Ops Health surfacing | `cc3b492` |
+
+Merged `main` re-verified: functions unit **845**, emulator 98 pass / 10 skipped,
+root vitest 257, both typechecks clean, all 8 wrappers present.
+
+## 8. Deploy when you are ready
+
+Everything above is merged and **undeployed**. One pass covers it:
+
+```
+cd D:\march-melee-pools
+git checkout main
+git pull origin main
+git log --oneline -1
+```
+Expect **`cc3b492`** or later. Then confirm the change is really in the file you
+are about to ship — this is the habit that would have caught the stale index
+deploy:
+```
+node -e "const fs=require('fs');console.log(fs.readFileSync('functions/src/consensus.ts','utf8').includes('withHeartbeat')?'heartbeat present':'MISSING - do not deploy')"
+```
+Then:
+```
+$env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"
+npx firebase deploy --only functions --project gridiron-gamble-uzuqo
+```
+Bare `--only functions` — it sidesteps the filter trap. **Expect 0 creates**
+(nothing new is exported); the 8 wrapped jobs plus `getOpsHealthSummary` should
+show as `update`, everything else `Skipped (No changes detected)`.
+
+No index deploy needed this time — no new queries were added.
+
+## 9. Honest status on "100% ready for preseason"
+
+**What is now verified rather than assumed:**
+- The preseason submit path works end to end through the real callables on a
+  slate with no betting lines (#225), and that fixture provably fails if the
+  spread-gate fix is reverted.
+- Both missing composite indexes are found, fixed, and Enabled.
+- All 8 previously-silent scheduled jobs report liveness.
+- 49 preseason games are loaded and correct.
+
+**What is still NOT verified — be clear-eyed about this:**
+- **Scoring and finalize have not been exercised on a preseason slate.** #225
+  deliberately stops at submit; the score-arc assertions need the fixture's
+  pick-key mapping worked out. The regular-season fixtures cover scoring, and
+  nothing about `seasonType` should change it — but "should" is not "tested".
+- **`nflFinalizeSweepJob` has still never successfully completed a run.** The
+  index only went Enabled yesterday. NFL-6 (item 1a) is the first real proof.
+- **No end-to-end test has run against production**, only the emulator.
+- **NFL-7, the chaos drill, has not been run.** That is the actual test of the
+  operator loop, and it needs a live preseason week.
+
+I would not call the site "100% ready" yet. The submit path — the thing that
+would have hard-blocked every member — is now proven. Finalize is the remaining
+unproven link, and NFL-6 this morning is what starts proving it.
