@@ -1,7 +1,7 @@
 {
   "id": "nfl-pickem-preseason-lifecycle",
   "name": "Pick'em PRESEASON end-to-end through the real callables (no betting lines)",
-  "description": "The pilot configuration exercised through the REAL join + submit callables: seasonType 1, straight-up pick em, and NO game carrying a betting line - mirroring the live 2026 preseason feed where only 1 of 49 games has odds. THE POINT: before PR #214 the unconditional SPREADS_NOT_LOCKED gate rejected every submit on a slate like this, which would have blocked the entire pilot. No existing fixture could catch that, because the harness hardcoded every seeded spread to locked. Scoring assertions are deliberately NOT included here - see the scoring-arc fixtures for that; this one exists to pin that submission SUCCEEDS without lines.",
+  "description": "The pilot configuration exercised END TO END through the REAL callables: seasonType 1, straight-up pick em, and NO game carrying a betting line - mirroring the live 2026 preseason feed where only 1 of 49 games has odds. Covers create -> join -> submit -> score -> FINALIZE. THE POINT: before PR #214 the unconditional SPREADS_NOT_LOCKED gate rejected every submit on a slate like this, which would have blocked the entire pilot; no existing fixture could catch that because the harness hardcoded every seeded spread to locked.",
   "poolType": "NFL_PICKEM",
   "createViaCallable": true,
   "poolConfig": {
@@ -66,9 +66,9 @@
       "userName": "alice",
       "week": 1,
       "picks": {
-        "1:g1": "CIN",
-        "1:g2": "GB",
-        "1:g3": "CAR"
+        "g1": "CIN",
+        "g2": "GB",
+        "g3": "CAR"
       }
     },
     {
@@ -76,23 +76,98 @@
       "userName": "bob",
       "week": 1,
       "picks": {
-        "1:g1": "DET",
-        "1:g2": "GB",
-        "1:g3": "ARI"
+        "g1": "DET",
+        "g2": "GB",
+        "g3": "ARI"
       }
+    },
+    {
+      "op": "reseedGames",
+      "games": [
+        {
+          "week": 1,
+          "home": "CIN",
+          "away": "DET",
+          "homeScore": 24,
+          "awayScore": 17,
+          "status": "FINAL",
+          "startOffsetMs": -14400000,
+          "noSpread": true
+        },
+        {
+          "week": 1,
+          "home": "PIT",
+          "away": "GB",
+          "homeScore": 10,
+          "awayScore": 21,
+          "status": "FINAL",
+          "startOffsetMs": -14400000,
+          "noSpread": true
+        },
+        {
+          "week": 1,
+          "home": "ARI",
+          "away": "CAR",
+          "homeScore": 13,
+          "awayScore": 20,
+          "status": "FINAL",
+          "startOffsetMs": -14400000,
+          "spread": 1.5,
+          "spreadLocked": false
+        }
+      ]
+    },
+    {
+      "op": "score",
+      "week": 1
+    },
+    {
+      "op": "finalize"
     }
   ],
   "assertions": [
     {
       "type": "nflEntryCount",
       "expected": 2,
-      "message": "Both members submitted through the REAL callable on a spread-less preseason slate - this is the assertion that would have failed before PR #214"
+      "message": "Both members submitted through the REAL callable on a spread-less preseason slate - the assertion that would fail before PR #214"
+    },
+    {
+      "type": "nflTotalScore",
+      "userName": "alice",
+      "expected": 3,
+      "message": "alice picked all three winners - straight-up grading ignores the spread entirely"
+    },
+    {
+      "type": "nflTotalScore",
+      "userName": "bob",
+      "expected": 1,
+      "message": "bob got only the GB game - proves scoring is real, not a pass-through"
     },
     {
       "type": "poolStatus",
       "field": "seasonType",
       "expected": 1,
       "message": "Pool really is preseason (seasonType 1), not the regular-season default"
+    },
+    {
+      "type": "seasonHistoryRow",
+      "userName": "alice",
+      "expected": {
+        "finalRank": 1,
+        "points": 3,
+        "totalEntries": 2
+      },
+      "message": "FINALIZE ran on a PRESEASON season: alice is rank 1 with 3 points in seasonHistory"
+    },
+    {
+      "type": "seasonHistoryRow",
+      "userName": "bob",
+      "expected": {
+        "finalRank": 2,
+        "points": 1,
+        "totalEntries": 2
+      },
+      "message": "bob is rank 2 - finalize derived real competition ranks for a seasonType 1 pool"
     }
   ]
 }
