@@ -5,6 +5,8 @@ import { NFLGame } from './types';
 import { detectStatCorrections } from './lib/feedSnapshot';
 import { captureFeedSnapshot, pruneExpiredSnapshots, readSnapshotGate, reportStatCorrections } from './feedSnapshotStore';
 import { opsCourierAuthToken } from './lib/opsAlertDispatcher';
+import { withHeartbeat } from './lib/heartbeat';
+import type { Firestore } from 'firebase-admin/firestore';
 import { validated } from "./lib/validated";
 import { importNFLScheduleSchema } from "./schemas/nflSchedule";
 
@@ -351,25 +353,65 @@ export async function importNFLSeason(
 export const syncNFLScoresJob = onSchedule({ schedule: '*/5 * * * *', secrets: [opsCourierAuthToken] }, async (event) => {
   const db = admin.firestore();
   const now = Date.now();
+  await syncScoresWindow(db, now, HOT_WINDOW_LOOKBACK_MS, { prune: true });
+});
 
-  // Only games in the active window: started within the last 24h (still live or
-  // recently final) through the next 2h. The lower bound stops the 5-minute job from
+/** The 5-minute job's lower bound: games that started within the last 24h. */
+export const HOT_WINDOW_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+
+/** Default lower bound for the deep sweep — a full week back. */
+export const DEFAULT_DEEP_SWEEP_DAYS = 7;
+
+export interface ScoreSyncResult {
+  /** Distinct season/seasonType/week slates fetched from ESPN. */
+  slates: number;
+  /** Games written back to nfl_games (0 when dryRun). */
+  gamesWritten: number;
+  /** Stat corrections detected across all slates. */
+  corrections: number;
+}
+
+/**
+ * Fetch ESPN and reconcile every nfl_games doc whose kickoff falls in
+ * `[now - lookbackMs, now + 2h]`.
+ *
+ * The window is a parameter rather than a constant because a stat correction can
+ * land days after kickoff — the NFL routinely restates a stat on the Tuesday or
+ * Wednesday following a Sunday game. The 5-minute job deliberately looks back
+ * only 24h, since widening it would multiply ESPN fetches by the number of extra
+ * slates on EVERY run; the deep sweep pays that cost once a day instead.
+ *
+ * `dryRun` suppresses only the nfl_games write. Correction detection and
+ * reporting still run, because the alarm is the point of the sweep and running
+ * it before arming the writes is how the sweep gets validated.
+ */
+export async function syncScoresWindow(
+  db: Firestore,
+  now: number,
+  lookbackMs: number,
+  opts: { dryRun?: boolean; prune?: boolean } = {},
+): Promise<ScoreSyncResult> {
+  const dryRun = opts.dryRun === true;
+  const empty: ScoreSyncResult = { slates: 0, gamesWritten: 0, corrections: 0 };
+
+  // Only games in the active window: started within the last `lookbackMs` (still live
+  // or recently final) through the next 2h. The lower bound stops the job from
   // dragging the whole past season into every run (a single-field range is allowed).
   const activeGamesSnap = await db.collection('nfl_games')
-    .where('startTime', '>=', now - 24 * 60 * 60 * 1000)
+    .where('startTime', '>=', now - lookbackMs)
     .where('startTime', '<=', now + 2 * 60 * 60 * 1000)
     .get();
 
   if (activeGamesSnap.empty) {
-    return;
+    return empty;
   }
 
   // Group active games by season and week to batch API requests
   const weeksToSync = new Map<string, { week: number; season: string; seasonType: 1 | 2 | 3 }>();
   activeGamesSnap.forEach(doc => {
     const data = doc.data() as NFLGame;
-    // Only fetch if game status is not FINAL, or if it was recently finalised
-    if (data.status !== 'FINAL' || (data.status === 'FINAL' && data.startTime > now - 24 * 60 * 60 * 1000)) {
+    // Only fetch if game status is not FINAL, or if it was finalised inside the window
+    if (data.status !== 'FINAL' || (data.status === 'FINAL' && data.startTime > now - lookbackMs)) {
       const key = `${data.season}_${data.seasonType}_${data.week}`;
       if (!weeksToSync.has(key)) {
         weeksToSync.set(key, { week: data.week, season: data.season, seasonType: data.seasonType });
@@ -378,14 +420,16 @@ export const syncNFLScoresJob = onSchedule({ schedule: '*/5 * * * *', secrets: [
   });
 
   if (weeksToSync.size === 0) {
-    return;
+    return empty;
   }
 
-  console.log(`[nflSchedule] Syncing active scores for ${weeksToSync.size} week slots`);
+  console.log(`[nflSchedule] Syncing scores for ${weeksToSync.size} week slots (lookback ${Math.round(lookbackMs / 3_600_000)}h${dryRun ? ', DRY RUN' : ''})`);
 
   // A5: snapshot the raw feed before it overwrites nfl_games, and notice when a
   // game that was already FINAL changes. Gate read once per run, not per slate.
   const snapshotGate = await readSnapshotGate(db);
+  let gamesWritten = 0;
+  let correctionCount = 0;
 
   for (const [_, slot] of weeksToSync) {
     const { games: freshGames, raw } = await fetchNFLWeekScheduleWithRaw(slot.week, slot.season, slot.seasonType);
@@ -393,8 +437,8 @@ export const syncNFLScoresJob = onSchedule({ schedule: '*/5 * * * *', secrets: [
 
     const slateKey = { season: slot.season, seasonType: slot.seasonType, week: slot.week };
     // Prior state for this slate, as the finalizer would have seen it. Scoped to
-    // the active window, which is also the only window where a correction is
-    // detectable today — syncNFLScoresJob never re-reads a game >24h old.
+    // the window we queried — which is why the deep sweep's wider lookback is what
+    // makes a late correction detectable at all.
     const prevGames = activeGamesSnap.docs
       .map(d => d.data() as NFLGame)
       .filter(g => g.season === slot.season && Number(g.seasonType) === Number(slot.seasonType) && Number(g.week) === Number(slot.week));
@@ -406,6 +450,12 @@ export const syncNFLScoresJob = onSchedule({ schedule: '*/5 * * * *', secrets: [
     // Corrections are reported whether or not snapshots are on — the page is the
     // point; the snapshot is only the evidence attached to it.
     await reportStatCorrections(db, slateKey, corrections);
+    correctionCount += corrections.length;
+
+    if (dryRun) {
+      console.log(`[nflSchedule] DRY RUN — would write ${freshGames.length} game(s) for ${slateKey.season}/${slateKey.seasonType}/wk${slateKey.week}; ${corrections.length} correction(s) detected.`);
+      continue;
+    }
 
     const batch = db.batch();
     for (const freshGame of freshGames) {
@@ -441,13 +491,75 @@ export const syncNFLScoresJob = onSchedule({ schedule: '*/5 * * * *', secrets: [
       batch.set(gameRef, cleanedGame, { merge: true });
     }
     await batch.commit();
+    gamesWritten += freshGames.length;
   }
 
-  if (snapshotGate.enabled) {
+  // Pruning belongs to the 5-minute job only: it is retention maintenance, not
+  // part of a window sync, and running it from both jobs would double the work.
+  if (opts.prune && snapshotGate.enabled) {
     const pruned = await pruneExpiredSnapshots(db, now, snapshotGate.retentionDays);
     if (pruned > 0) console.log(`[feedSnapshot] pruned ${pruned} snapshot(s) past ${snapshotGate.retentionDays}d retention.`);
   }
-});
+
+  return { slates: weeksToSync.size, gamesWritten, corrections: correctionCount };
+}
+
+/**
+ * Deep score sweep — catch stat corrections that land after the 5-minute job has
+ * stopped looking.
+ *
+ * `syncNFLScoresJob` only re-reads games that kicked off in the last 24h, so a
+ * restated stat arriving on the Tuesday after a Sunday game is invisible to it,
+ * and A5's correction detection never fires. This job re-reads a wider window
+ * once a day. Cost is one ESPN fetch per slate per day, versus multiplying every
+ * 5-minute run.
+ *
+ * SAFETY (Rule 1, mmp-change-control): kill-switch
+ * system/config.nflDeepSweep.enabled === true required (default OFF, fail-safe);
+ * dry-run by default (nflDeepSweep.dryRun !== false). Note that dry-run still
+ * DETECTS and REPORTS corrections — it only suppresses the nfl_games write — so
+ * the alarm can be observed for a week before the writes are armed.
+ */
+export const nflDeepScoreSweepJob = onSchedule(
+  { schedule: '30 11 * * *', timeZone: 'America/New_York', secrets: [opsCourierAuthToken] },
+  withHeartbeat('nflDeepScoreSweepJob', async () => {
+    const db = admin.firestore();
+
+    let gate = { enabled: false, dryRun: true };
+    let lookbackDays = DEFAULT_DEEP_SWEEP_DAYS;
+    try {
+      const cfg = (await db.doc('system/config').get()).data()?.nflDeepSweep as
+        | { enabled?: boolean; dryRun?: boolean; lookbackDays?: number }
+        | undefined;
+      gate = readJobGate(cfg);
+      lookbackDays = clampLookbackDays(cfg?.lookbackDays);
+    } catch (e) {
+      console.warn('[nflDeepScoreSweepJob] config read failed; staying disabled:', e);
+    }
+    if (!gate.enabled) {
+      console.log('[nflDeepScoreSweepJob] disabled (system/config.nflDeepSweep.enabled !== true); nothing to do.');
+      return;
+    }
+
+    const result = await syncScoresWindow(
+      db,
+      Date.now(),
+      lookbackDays * 24 * 60 * 60 * 1000,
+      { dryRun: gate.dryRun },
+    );
+    console.log(`[nflDeepScoreSweepJob] ${lookbackDays}d sweep: ${result.slates} slate(s), ${result.corrections} correction(s), ${result.gamesWritten} game(s) written.`);
+  }),
+);
+
+/**
+ * Keep the configured lookback inside [1, 30] days. An unbounded value read from
+ * config would let one bad edit re-fetch the entire season every night; a value
+ * below a day would be narrower than the job it exists to widen.
+ */
+export function clampLookbackDays(raw: unknown): number {
+  const n = typeof raw === 'number' && Number.isFinite(raw) ? Math.floor(raw) : DEFAULT_DEEP_SWEEP_DAYS;
+  return Math.min(30, Math.max(1, n));
+}
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 
