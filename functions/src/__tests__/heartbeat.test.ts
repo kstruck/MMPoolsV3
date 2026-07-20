@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { findStaleJobs, type JobHeartbeat } from '../lib/heartbeat';
+import * as fs from 'fs';
+import * as path from 'path';
+import { findStaleJobs, SCHEDULED_JOB_EXPECTATIONS, type JobHeartbeat } from '../lib/heartbeat';
 
 // Scheduled-job liveness. These pin the thresholds that decide whether a job is
 // reported dead — the signal that was MISSING when nflFinalizeSweepJob threw
@@ -88,5 +90,45 @@ describe('findStaleJobs — multi-job', () => {
   it('returns empty when everything is healthy', () => {
     expect(findStaleJobs({ a: beat(1), b: beat(2) },
       { a: { everyMinutes: 10 }, b: { everyMinutes: 10 } }, NOW)).toEqual([]);
+  });
+});
+
+describe('SCHEDULED_JOB_EXPECTATIONS must not drift from the wrapped jobs', () => {
+  // A job wrapped in withHeartbeat() but MISSING from the expectations table is
+  // never evaluated by findStaleJobs — so it silently drops out of monitoring
+  // and we recreate the exact blind spot this module exists to close. The
+  // reverse (an expectation for a job nobody wraps) reports a permanent
+  // false "never-ran". Both are caught here.
+  const SRC = path.resolve(__dirname, '..');
+
+  function walk(dir: string, acc: string[] = []): string[] {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === '__tests__' || e.name === 'shared' || e.name === 'node_modules') continue;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full, acc);
+      else if (e.name.endsWith('.ts')) acc.push(full);
+    }
+    return acc;
+  }
+
+  const wrapped = new Set<string>();
+  for (const file of walk(SRC)) {
+    for (const m of fs.readFileSync(file, 'utf8').matchAll(/withHeartbeat\(\s*['"]([A-Za-z0-9_]+)['"]/g)) {
+      wrapped.add(m[1]);
+    }
+  }
+
+  it('found the wrapped jobs (guards against the regex silently matching nothing)', () => {
+    expect(wrapped.size).toBeGreaterThanOrEqual(8);
+  });
+
+  it('every wrapped job has an expectation', () => {
+    const missing = [...wrapped].filter(j => !(j in SCHEDULED_JOB_EXPECTATIONS)).sort();
+    expect(missing, 'wrapped in withHeartbeat() but absent from SCHEDULED_JOB_EXPECTATIONS — it would never be checked').toEqual([]);
+  });
+
+  it('every expectation names a job that is actually wrapped', () => {
+    const orphan = Object.keys(SCHEDULED_JOB_EXPECTATIONS).filter(j => !wrapped.has(j)).sort();
+    expect(orphan, 'has an expectation but nothing wraps it — would report a permanent false never-ran').toEqual([]);
   });
 });

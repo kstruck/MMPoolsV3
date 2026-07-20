@@ -138,3 +138,19 @@ export function findStaleJobs(
     }
     return stale;
 }
+
+/**
+ * What each wrapped job's schedule actually is, so staleness is measured against
+ * reality rather than a guess. Keep in step with the `onSchedule(...)` cron in
+ * each job — a wrong number here makes the check either useless or noisy.
+ */
+export const SCHEDULED_JOB_EXPECTATIONS: Record<string, JobExpectation> = {
+    consensusRefreshJob: { everyMinutes: 10 },            // '*/10 * * * *'
+    syncWinProbabilityJob: { everyMinutes: 5 },           // '*/5 * * * *'
+    syncExpertPicksJob: { everyMinutes: 60 },             // '15 * * * *'
+    gradeExpertProfilesJob: { everyMinutes: 24 * 60 },    // '0 7 * * *'
+    aggregateRevenueDaily: { everyMinutes: 24 * 60 },     // every 24 hours
+    scheduledHealthCheck: { everyMinutes: 60 },           // every 60 minutes
+    releaseStaleCouponReservations: { everyMinutes: 30 }, // every 30 minutes
+    scheduledBracketSync: { everyMinutes: 10 },           // every 10 minutes
+};
