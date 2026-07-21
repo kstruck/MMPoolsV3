@@ -158,6 +158,10 @@ describe('SCHEDULED_JOB_EXPECTATIONS must not drift from the wrapped jobs', () =
 // be added without a heartbeat, which is how this hole got dug in the first
 // place. Delete entries as they are wrapped; when the list is empty, delete
 // the list. Do not add to it.
+// SRC-relative paths, NOT basenames. Basenames are not unique here — billing.ts
+// and scoreUpdates.ts each exist at both src/ and src/schemas/ — so a basename
+// allowlist silently exempts the wrong file and quietly weakens the ratchet this
+// test exists to be.
 const KNOWN_UNWRAPPED_FILES = new Set([
   'autoClosePools.ts',
   'autoLock.ts',
@@ -169,6 +173,11 @@ const KNOWN_UNWRAPPED_FILES = new Set([
   'siteAverages.ts',
   'webhookDurabilitySweep.ts',
 ]);
+
+/** SRC-relative, forward-slashed, so the same key works on Windows and CI. */
+function relKey(srcRoot: string, file: string): string {
+  return path.relative(srcRoot, file).split(path.sep).join('/');
+}
 
 describe('every scheduled job is wrapped in withHeartbeat', () => {
   const SRC2 = path.resolve(__dirname, '..');
@@ -200,9 +209,10 @@ describe('every scheduled job is wrapped in withHeartbeat', () => {
     for (const m of src.matchAll(/onSchedule\(/g)) {
       scheduledCount++;
       const window = src.slice(m.index!, m.index! + LOOKAHEAD);
-      if (!window.includes('withHeartbeat(') && !KNOWN_UNWRAPPED_FILES.has(path.basename(file))) {
+      const rel = relKey(SRC2, file);
+      if (!window.includes('withHeartbeat(') && !KNOWN_UNWRAPPED_FILES.has(rel)) {
         const line = src.slice(0, m.index!).split(String.fromCharCode(10)).length;
-        unwrapped.push(path.basename(file) + '@' + line);
+        unwrapped.push(rel + '@' + line);
       }
     }
   }
@@ -253,7 +263,7 @@ describe('the known-unwrapped burn-down list stays honest', () => {
         if (!e.name.endsWith('.ts')) continue;
         const src = fs.readFileSync(full, 'utf8');
         for (const m of src.matchAll(/onSchedule\(/g)) {
-          if (!src.slice(m.index!, m.index! + 600).includes('withHeartbeat(')) stillUnwrapped.add(e.name);
+          if (!src.slice(m.index!, m.index! + 600).includes('withHeartbeat(')) stillUnwrapped.add(relKey(SRC3, full));
         }
       }
     }
