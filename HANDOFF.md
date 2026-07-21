@@ -1,63 +1,205 @@
-# HANDOFF — Session entry point (updated 2026-07-21: everything merged AND deployed; queue empty)
+# HANDOFF — Session entry point (updated 2026-07-22: five PRs merged overnight, THREE NEED DEPLOYING)
 
-> ## STOP POINT 2026-07-21 (~04:40Z)
+> ## ☀️ STOP POINT 2026-07-22 (~05:45Z) — MORNING TODO LIST
 >
-> **All work is merged and deployed. <!-- deploy-state:current --> `main` @ `84e080c` = prod. Nothing is
-> waiting on a merge or a deploy.** PRs #231-#236 all landed.
+> **Prod is UNCHANGED at <!-- deploy-state:current --> `main` @ `84e080c`. `main` has moved to
+> `17fa291`. Three of the five PRs merged overnight change deployed function
+> code, so THERE IS NOW A DEPLOY QUEUE.** Nothing was deployed — that is your
+> gate, always.
 >
-> | PR | What | State |
+> ### 1. What merged overnight, and what it means for you
+>
+> | PR | What | Needs deploy? |
 > |---|---|---|
-> | #231 | `replayFeedSnapshot` — A5 part 2, snapshot replay callable | merged + deployed |
-> | #232 | `PLAN-BACKUPS-PHASE3.md` — zero-backup gap runbook | merged |
-> | #233 | `SECURITY-CLAIM-SQUARES.md` — open `guestDeviceKey` finding | merged |
-> | #234 | `PICKUP` refresh + doc-precedence fix | merged |
-> | #235 | `nflDeepScoreSweepJob` + **spread-unlock bugfix** | merged + deployed |
-> | #236 | `brace-expansion` pin — unblocked CI | merged |
+> | [#245](https://github.com/kstruck/MMPoolsV3/pull/245) | Heartbeats for the NFL job fleet + an invariant that finds unwrapped jobs | **YES** — 4 job bodies |
+> | [#247](https://github.com/kstruck/MMPoolsV3/pull/247) | `lockNFLSpreadsJob` write-path coverage; extracted `lockSpreadsOnce` | **YES** — 1 job body |
+> | [#248](https://github.com/kstruck/MMPoolsV3/pull/248) | Docs-state invariant (mechanises the deploy-SHA contradiction) + `CLAUDE.md` §2c/§2d | no — tests + docs |
+> | [#249](https://github.com/kstruck/MMPoolsV3/pull/249) | CI security audit now covers `functions/`, not just the root | no — CI only |
+> | [#250](https://github.com/kstruck/MMPoolsV3/pull/250) | Heartbeats for the last **nine** scheduled jobs, and making them tell the truth | **YES** — 9 job bodies |
 >
-> ### What needs Kevin now — all decisions or console work, no code
-> 1. **Enable PITR** — `PLAN-BACKUPS-PHASE3.md` steps 0-2. One command, buys a
->    7-day recovery floor. **NO INSTALL NEEDED** — PITR is a checkbox in the
->    Cloud console (Firestore → `(default)` → Disaster Recovery → Edit), and
->    `gcloud` is only required for the later steps, which Cloud Shell provides
->    in-browser. An earlier note here claiming "install gcloud first" was wrong.
+> **Still open, deliberately not merged:** [#246](https://github.com/kstruck/MMPoolsV3/pull/246).
+> It rewrote HANDOFF/PICKUP from the state *before* tonight, so merging it would
+> describe #245-#250 as still open AND would revert #248's deploy-state tags.
+> This PR replaces it — **close #246 when you read this.** The one thing worth
+> keeping from it (the "do not block on qodo" note) is carried over into
+> `CLAUDE.md` here.
 >
->    **Scope correction:** the VPS *is* backed up (daily Coolify/Ubuntu
->    snapshots on separate infrastructure) — but that is the *reproducible* half,
->    since the frontend rebuilds from git. **Firestore and Firebase Auth have no
->    backup at all**, and that is the half that cannot be recreated. Still the
->    biggest exposure on the list. No region is pinned in the repo, so the
->    database location must be READ, not assumed.
-> 2. **A8 pricing — due 2026-08-13.** The only calendar-bound item.
-> 3. **Arm `nflDeepSweep`** (optional, safe): `system/config.nflDeepSweep` →
->    `{ enabled: true, dryRun: true }`. In dry-run it still detects and reports
->    stat corrections and only suppresses the `nfl_games` write.
-> 4. **NFL-6** — arm the finalize sweep via `nflFinalize.liveSeasonTypes: [1]`.
->    `dryRun:false` alone does nothing; that guard is deliberate.
-> 5. **`claimMySquares` timing call.** ⚠️ **This repo is PUBLIC** and the hole is
->    unfixed and now documented in `SECURITY-CLAIM-SQUARES.md`. The exploit
->    detail was reduced, but the source was always public. Recommendation on
->    file: accept through the pilot, fix before the regular season — but the
+> Dependabot PRs #242, #243, #160, #133 were not touched.
+>
+> ### 2. THE DEPLOY — do this first, it is the only thing gating everything else
+>
+> **Fourteen** scheduled job bodies changed — the four NFL jobs #245 wrapped,
+> `nflDeepScoreSweepJob` (#245 also changed its body: config-read reporting and
+> `scoreSyncHeartbeat`), and #250's nine. Nothing is armed or disarmed by this
+> deploy; the behaviour change is that a job which fails now REPORTS it instead
+> of stamping a healthy heartbeat.
+>
+> ```powershell
+> cd D:\march-melee-pools
+> git checkout main
+> git pull origin main
+> git log --oneline -1
+> ```
+>
+> **You should see `17fa291` (or later).** If you see `e84dfa3` or `84e080c`,
+> the pull did not take — do not deploy; run `git status` and resolve first.
+>
+> Now the pre-deploy byte-check. **Do not skip it**: a stale checkout deploys
+> old code and still prints `Deploy complete!`, which has bitten this repo three
+> times.
+>
+> ```powershell
+> Select-String -Path functions\src\lib\heartbeat.ts -Pattern "mergeFields"
+> Select-String -Path functions\src\billing.ts -Pattern "failedTransitions"
+> ```
+>
+> **Both must print a match.** `mergeFields` proves #245's heartbeat rewrite is
+> on disk; `failedTransitions` proves #250's billing verdict is. If either
+> prints nothing, you are on the wrong commit — stop and re-pull.
+>
+> ```powershell
+> npm --prefix functions install
+> $env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"
+> npx firebase deploy --only functions --project gridiron-gamble-uzuqo
+> ```
+>
+> **Bare `--only functions`. Never a comma list** — `--only functions:a,b,c`
+> deploys only `a`, silently, and still reports success.
+>
+> **What success looks like:** a long list ending in `✔ Deploy complete!`, with
+> `Successful update operation` against `syncNFLScoresJob`,
+> `nflFinalizeSweepJob`, `nflLockWatchJob`, `lockNFLSpreadsJob`,
+> `nflDeepScoreSweepJob`, `autoLockPools`, `autoClosePools`,
+> `enforceBillingStatus`, `monetizationAlerts`, `checkPlayoffScores`,
+> `runReminders`, `syncGameStatus`, `siteAveragesJob` and
+> `webhookDurabilitySweep` — fourteen names.
+>
+> **If it fails:** the usual cause is a functions build error — run
+> `npm --prefix functions run build` and read the first error, not the last. If
+> it reports "Skipped (No changes detected)" for everything, the merge did not
+> land locally; re-check `git log --oneline -1`.
+>
+> **No frontend change merged overnight, so no Coolify trigger is needed.**
+>
+> ### 3. Verification — after the deploy, with the exact command and expected result
+>
+> **3a. Firestore reads should have fallen off a cliff.** Console → Firestore →
+> Usage, 7-day view. Before #239 this ran at ~1.4M reads/day.
+>
+> - **Expected:** a step change downward, with the last full day well under that.
+> - **If it has NOT fallen: that is a regression, not a wait-and-see.** #239 is
+>   not working, and it is the single largest cost item on the project. Say so
+>   and it gets looked at that day.
+>
+> **3b. `system/heartbeats` should now carry the NFL jobs.** Firestore console →
+> `system` → `heartbeats`.
+>
+> - **Expected within ~10 minutes of the deploy:** keys `syncNFLScoresJob` (runs
+>   every 5 min) and `autoLockPools`, `syncGameStatus` (every 1 min), each with a
+>   recent `at` and `ok: true`.
+> - `nflFinalizeSweepJob` appears after 08:30 ET, `nflLockWatchJob` within the
+>   hour, `lockNFLSpreadsJob` **not until Tuesday 09:00 ET** — a weekly job.
+> - **Known cosmetic artifact:** SuperAdmin → Ops Health will show
+>   `lockNFLSpreadsJob` as `never-ran` until that first Tuesday run. That is
+>   expected and is documented in `functions/src/lib/heartbeat.ts`; it is not an
+>   outage.
+> - **If `syncNFLScoresJob` has no entry an hour after the deploy**, the wrapper
+>   is not running — check the Functions log for `syncNFLScoresJob`.
+>
+> **3c. `nflDeepScoreSweepJob` first fires 11:30 ET and stamps even while
+> disabled.** Same `system/heartbeats` doc.
+>
+> - **Expected after 11:30 ET:** `nflDeepScoreSweepJob.at` is fresh (today), with
+>   `ok: true` and `detail.enabled: false` — it is disabled, and the stamp on the
+>   disabled early-return is the whole point.
+> - **If there is no fresh stamp, the schedule never fired.** That is the exact
+>   distinction that took ten days to spot on the finalize sweep — a job that is
+>   "armed" and a job that is *running* are separate claims.
+>
+> ### 4. Kevin-only items, in priority order
+>
+> 1. **A8 — publish the 2026 price and free-period end date. DUE 2026-08-13.**
+>    The only calendar-bound item on the whole list. Preseason week 1 is
+>    2026-08-13; the HOF game is 2026-08-07.
+> 2. **NFL-6 — arm the finalize sweep.** Firestore console → `system` → `config`
+>    → `nflFinalize` map. First read a `NFL_FINALIZE_SWEEP` entry in SuperAdmin →
+>    Admin Audit Log: you want candidates under `"1"` and **zero** under `"2"` in
+>    `bySeasonType`. Then add field `liveSeasonTypes`, type **array**, containing
+>    the number `1`. **`dryRun:false` on its own does nothing** — that guard is
+>    deliberate and there is no unscoped way to arm this. Full steps:
+>    `TOMORROW-TASKS.md` → NFL-6.
+> 3. **Arm `nflDeepSweep`** (safe, optional): `system/config.nflDeepSweep` →
+>    `{ enabled: true, dryRun: true }`. In dry-run it still DETECTS and REPORTS
+>    stat corrections and only suppresses the `nfl_games` write, so it can be
+>    watched for a week before the writes are armed.
+> 4. **Backups — still the biggest exposure, and I could not verify any of it.**
+>    `PLAN-BACKUPS-PHASE3.md` still states, as of this commit, "No PITR, no
+>    scheduled backups, no exports, no Auth export." I have **no way to check
+>    the console**, so treat that document as current until you confirm
+>    otherwise.
+>    - **Enable PITR first** — `PLAN-BACKUPS-PHASE3.md` steps 0-2. One checkbox
+>      in the Cloud console (Firestore → `(default)` → Disaster Recovery → Edit),
+>      no `gcloud` install needed, and it buys a 7-day recovery floor.
+>    - **Then the Firebase Auth export** (step 6). Firestore and Auth are the
+>      half that cannot be recreated; the VPS is snapshotted daily and the
+>      frontend rebuilds from git anyway.
+>    - If you already did the PITR step and the plan doc is simply stale, update
+>      `PLAN-BACKUPS-PHASE3.md` so the next session does not re-raise it.
+> 5. **`claimMySquares` timing decision.** ⚠️ **This repo is PUBLIC** and the
+>    hole is unfixed, documented in `SECURITY-CLAIM-SQUARES.md`. Recommendation
+>    on file: accept through the pilot, fix before the regular season — but the
 >    public-repo fact is a reason to revisit that timing.
-> 6. **Leave `nflLockWatch.dryRun: true`** — only 1 of 49 preseason games has a
->    betting line, so arming it pages nightly about a known condition.
+> 6. **Retire the 3 stale tournaments** (optional). #239 already skips them, so
+>    this is tidiness, not cost.
 >
-> ### Top open engineering item (no Kevin needed)
-> **Heartbeat coverage is incomplete.** `SCHEDULED_JOB_EXPECTATIONS` covers 9
-> jobs but **none of the NFL ones** — `syncNFLScoresJob`, `nflFinalizeSweepJob`,
-> `nflLockWatchJob`, `lockNFLSpreadsJob` are neither wrapped in `withHeartbeat`
-> nor listed. Those are exactly the jobs that went silently dead twice.
-> `nflDeepScoreSweepJob` is wrapped; the rest of the NFL fleet is not.
+> Also standing: **leave `nflLockWatch.dryRun: true`** until the preseason-lines
+> question is settled — only 1 of 49 games has a betting line, so arming it
+> pages nightly about a known condition.
 >
-> ### Verify tomorrow, do not assume
-> `nflDeepScoreSweepJob` first fires 11:30 ET. `withHeartbeat` stamps even on
-> the disabled early-return, so `system/heartbeats.nflDeepScoreSweepJob` should
-> have a fresh `at` after that. **If it does not, the schedule never fired** —
-> the exact distinction that took ten days to spot on the finalize sweep.
+> ### 5. What is still NOT proven
+>
+> Honest list. Do not read the green CI as more than it is.
+>
+> - **Nothing merged overnight has run in production.** All of it is proven in
+>   the emulator and in CI only.
+> - **The per-job heartbeat verdicts are not individually tested.** The guard
+>   that exists is a source-level check that a job *can* report failure; it
+>   cannot prove each path is wired. I verified this rather than assuming:
+>   deleting `autoLock`'s failure count, or reverting the `playoffPools`
+>   `resp.ok` verdict, produces **no build error and no test failure**.
+>   Extracting each verdict into a pure helper is the named follow-up.
+> - **`runReminders` still cannot see failures its nested helpers swallow** —
+>   `sendEmail` catches queue failures, `sendCourierSMS` returns a boolean nobody
+>   reads. A run where every reminder email failed to queue still reports zero
+>   failed pools. Deliberately not fixed overnight: it changes the shared
+>   delivery path that mails members.
+> - **Eight files still wrap a job that cannot report failure at all** —
+>   `adminHealth`, `consensus`, `espnBracket`, `expertPicks`, `expertProfiles`,
+>   `revenueAggregates`, `stripe`, `winProbability`. They are on a shrink-only
+>   list. `adminHealth` is the pointed one: a health check that cannot report its
+>   own ill health.
+> - **`nflFinalizeSweepJob` has still never completed a run in production**, and
+>   its scheduled sweep path still has no emulator coverage. The finalize *path*
+>   is covered; the *sweep* is not.
+> - **`replayFeedSnapshot` has still never been invoked against production**, and
+>   its callable path still has no emulator coverage.
+> - **`spread.locked` has still never been exercised end-to-end in prod**,
+>   because `lockNFLSpreadsJob` has always been dry-run.
+> - **The chaos drill (NFL-7) has not been run.** It needs a live preseason week.
 
-> ## DEPLOY STATE 2026-07-21 — prod matches `main` @ `84e080c`
+> ## ⚠️ DEPLOY STATE 2026-07-22 — prod is BEHIND `main`
 >
-> **Deployed 2026-07-21 ~04:30Z**, full-fleet `--only functions`. Deploy queue is
-> EMPTY. Verified from the deploy output, not assumed:
+> **Prod = `84e080c`. `main` = `17fa291`. The deploy queue is NOT empty** — see
+> the STOP POINT box above for what is in it and the exact runbook. The box
+> below describes the *previous* deploy and is kept for the verification pattern
+> it records, not as a statement of current state.
+>
+> ---
+>
+> ### Historical: DEPLOY STATE 2026-07-21 <!-- deploy-state:ignore --> `main` @ `84e080c`
+>
+> **Deployed 2026-07-21 ~04:30Z**, full-fleet `--only functions`. The queue was
+> empty as of that date. Verified from the deploy output, not assumed:
 >
 > - `nflDeepScoreSweepJob` — **Successful create**
 > - `replayFeedSnapshot` — **Successful create**

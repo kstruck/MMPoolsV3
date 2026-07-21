@@ -39,14 +39,22 @@ state. Concretely:
 
 ---
 
-## 2. Live state (verified 2026-07-21)
+## 2. Live state (verified 2026-07-22)
 
-> **Deploy state: HANDOFF.md's banner is authoritative and CURRENT.**
-> Both files now agree — prod matches `main` @ `84e080c`, deployed
-> 2026-07-21 ~04:30Z. The deploy queue is EMPTY. If these two ever disagree
-> again, the later date wins; check both before deploying.
+> **Deploy state: HANDOFF.md's STOP POINT box is authoritative and CURRENT.**
+> Both files agree — prod is `84e080c`, `main` has moved to `17fa291`, and
+> **there IS a deploy queue.**
+>
+> `tests/docs-state-invariants.test.ts` (PR #248) enforces **only** that the
+> tagged deployed-SHA claims agree and name a real commit on `origin/main`. It
+> does **not** compare deploy-QUEUE prose and does not know what `main` currently
+> is — so "the queue is empty" is still a human claim that a test cannot catch
+> going stale. That limit is stated in the test file itself; do not read a green
+> suite as agreement about the queue.
 
-**Prod matches <!-- deploy-state:current --> `main` @ `84e080c` (2026-07-21).** Nothing is awaiting deploy.
+**Prod matches <!-- deploy-state:current --> `main` @ `84e080c`, but `main` is
+now `17fa291` — three merged PRs are AWAITING DEPLOY.** Runbook in HANDOFF's
+STOP POINT box.
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is
@@ -85,9 +93,22 @@ create → join → submit → score → **finalize**, on a `seasonType 1` slate
 PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 **NOT proven:**
+- **Nothing merged on 2026-07-22 has run in production** — #245, #247 and #250
+  are emulator- and CI-proven only, and not yet deployed.
+- **The per-job heartbeat verdicts added in #250 are not individually tested.**
+  The guard is a source-level check that a job *can* report failure; it cannot
+  prove each path is wired. Verified rather than assumed: deleting `autoLock`'s
+  failure count, or reverting the `playoffPools` `resp.ok` verdict, produces no
+  build error and no test failure.
+- **`runReminders` cannot see failures its nested helpers swallow** — `sendEmail`
+  catches queue failures, `sendCourierSMS` returns a boolean nobody reads. A run
+  where every reminder email failed to queue still reports zero failed pools.
+- **Eight files wrap a job that cannot report failure at all** (`adminHealth`,
+  `consensus`, `espnBracket`, `expertPicks`, `expertProfiles`,
+  `revenueAggregates`, `stripe`, `winProbability`), on a shrink-only list.
 - **`nflFinalizeSweepJob` has never completed a run in production.** Its index
   only went Enabled 2026-07-20. The finalize *path* is covered by CI; the
-  *scheduled sweep* is not.
+  *scheduled sweep* is still not.
 - Nothing has been exercised against production, only the emulator.
 - The **chaos drill (NFL-7)** has not been run — it needs a live preseason week.
 - **`nflDeepScoreSweepJob` has never run in production.** Deployed 2026-07-21,
@@ -101,16 +122,17 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — EMPTY
+## 4. Deploy queue — NOT EMPTY (3 PRs, 13 job bodies)
 
-**Everything is merged and deployed.** PRs #231-#236 all landed on `main`
-@ `84e080c` and were deployed 2026-07-21 ~04:30Z. Nothing is waiting.
+**#245, #247 and #250 change deployed function code and are merged but NOT
+deployed.** #248 (tests + CLAUDE.md) and #249 (CI) need no deploy.
 
-Confirmed from the deploy output rather than assumed: `nflDeepScoreSweepJob`
-and `replayFeedSnapshot` both reported **Successful create**, and
-`syncNFLScoresJob` reported **Successful update** (the spread-unlock fix).
+Thirteen scheduled job bodies changed. Nothing is armed or disarmed; the
+behaviour change is that a job which fails now REPORTS it instead of stamping a
+healthy heartbeat. Full runbook with the pre-deploy byte-check is in HANDOFF's
+STOP POINT box — use that, not this summary.
 
-Kept because it is the command that works, for the next time:
+The command, which is the one that has worked every time:
 
 ```
 cd D:\march-melee-pools
@@ -167,16 +189,25 @@ Roughly in value order:
    **DONE — PR #235**, `nflDeepScoreSweepJob`. Deployed, not yet armed.
    Deliberately a second daily job rather than a wider window on the 5-minute
    one, which would have multiplied ESPN fetches across 288 runs a day.
-5. **Heartbeat coverage is incomplete — the top open engineering item.**
-   `SCHEDULED_JOB_EXPECTATIONS` covers 9 jobs, but **none of the NFL ones**:
-   `syncNFLScoresJob`, `nflFinalizeSweepJob`, `nflLockWatchJob` and
-   `lockNFLSpreadsJob` are neither wrapped in `withHeartbeat` nor listed. Those
-   are exactly the jobs that went silently dead twice. `nflDeepScoreSweepJob`
-   is wrapped; the rest of the NFL fleet is not. Touches four job bodies, so it
-   wants its own PR.
-6. **25 callables still use bare `onCall(`** — mostly sim-harness and aiTesting
-   with their own role gates, plus the deliberately-deferred `createBracketPool`.
-   None is a regression. Wants a re-classification pass, not a sweep.
+5. ~~**Heartbeat coverage is incomplete.**~~ **DONE — PRs #245 and #250.**
+   Every `onSchedule()` in the codebase is now wrapped, with no exemptions, and
+   an invariant fails if a new one is added unwrapped. The follow-up that came
+   out of it is sharper and is now the top open item: **wrapping a job does not
+   make its heartbeat honest.** Extract each job's verdict into a pure helper
+   (as `sweepRunVerdict` and `lockWatchVerdict` already are) so the failure
+   paths are individually tested, and plumb an outcome through `sendEmail` /
+   `sendCourierSMS` so `runReminders` can see delivery failures.
+6. **26 callables still use bare `onCall(`** — NOT 25; the count in the older
+   docs was wrong, and `searchUsersByEmail` has already been migrated to
+   `validated()`, so the warning about it needing a special grep is stale.
+   Classification: 13 genuinely fine, 12 want `validated()`, 1 deferred by
+   design (`createBracketPool`). Highest risk, in order: `simulateGameUpdate`
+   (`scoreUpdates.ts`) — auth is "is anyone logged in", the role check is
+   claim-only and buried inside a transaction, and an arbitrary `scores` object
+   gets one truthiness check before deciding winners; `backfillProfileData`
+   (`migrations/`) — a 540s mass mutation behind a claim-only gate;
+   `recordPoolPayouts` (`payoutRecords.ts`) — the money ledger, claim-only role
+   half. Still a re-classification pass, not a sweep.
 
 ---
 
@@ -190,10 +221,10 @@ npx tsc -b
 npm test
 ```
 
-Baselines on <!-- deploy-state:ignore --> `main` @ `16746b8`: functions unit **845**, emulator **98 pass /
-10 skipped**, root vitest **257**, both typechecks clean. **Counts only go up —
-re-measure, do not trust a stale number** (I reported 828 once from a mid-merge
-measurement; it was 831).
+Baselines on <!-- deploy-state:ignore --> `main` @ `17fa291`: functions unit
+**913**, emulator **105 pass / 10 skipped**, root vitest **273**, both
+typechecks clean. **Counts only go up — re-measure, do not trust a stale
+number** (I reported 828 once from a mid-merge measurement; it was 831).
 
 `functions/node_modules` and root `node_modules` may be missing in a fresh
 worktree — run `npm --prefix functions install` and `npm install` first or the
