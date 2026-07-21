@@ -2,7 +2,7 @@
 
 > ## STOP POINT 2026-07-21 (~04:40Z)
 >
-> **All work is merged and deployed. `main` @ `84e080c` = prod. Nothing is
+> **All work is merged and deployed. <!-- deploy-state:current --> `main` @ `84e080c` = prod. Nothing is
 > waiting on a merge or a deploy.** PRs #231-#236 all landed.
 >
 > | PR | What | State |
@@ -152,7 +152,7 @@ with full numbered steps; this section is the engineering state.
 | **A6** | `liveSeasonTypes` scope guard so the finalize sweep can be armed **preseason-only** | [#210](https://github.com/kstruck/MMPoolsV3/pull/210) `a1f3569` | merged |
 | **NFL-1** | scope `SPREADS_NOT_LOCKED` to spread-consuming pools (follow-up, 2026-07-18 daytime) | [#214](https://github.com/kstruck/MMPoolsV3/pull/214) `8c8e9c5` | merged |
 
-**Baselines moved — re-measured on merged `main` @ `dd93629`, not summed from
+**Baselines moved — re-measured on merged <!-- deploy-state:ignore --> `main` @ `dd93629`, not summed from
 PRs**: functions unit **685 → 771** (+86 tests), root vitest **257** (unchanged),
 emulator **97 pass / 10 skipped** (unchanged), both typechecks clean. Every PR
 ran all five gates before commit, and all five were re-run against merged main.

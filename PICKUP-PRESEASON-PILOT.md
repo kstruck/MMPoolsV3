@@ -46,7 +46,7 @@ state. Concretely:
 > 2026-07-21 ~04:30Z. The deploy queue is EMPTY. If these two ever disagree
 > again, the later date wins; check both before deploying.
 
-**Prod matches `main` @ `84e080c` (2026-07-21).** Nothing is awaiting deploy.
+**Prod matches <!-- deploy-state:current --> `main` @ `84e080c` (2026-07-21).** Nothing is awaiting deploy.
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is
@@ -190,7 +190,7 @@ npx tsc -b
 npm test
 ```
 
-Baselines on `main` @ `16746b8`: functions unit **845**, emulator **98 pass /
+Baselines on <!-- deploy-state:ignore --> `main` @ `16746b8`: functions unit **845**, emulator **98 pass /
 10 skipped**, root vitest **257**, both typechecks clean. **Counts only go up —
 re-measure, do not trust a stale number** (I reported 828 once from a mid-merge
 measurement; it was 831).
