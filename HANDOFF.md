@@ -91,7 +91,23 @@
 > it reports "Skipped (No changes detected)" for everything, the merge did not
 > land locally; re-check `git log --oneline -1`.
 >
-> **No frontend change merged overnight, so no Coolify trigger is needed.**
+> ### 2b. YES, you also need a Coolify trigger — I had this wrong at first
+>
+> Nothing *last night* touched the frontend, but **#237 (undeployed since before
+> this run) bumps root production dependencies** — verified in the diff:
+> `@sentry/react`, `firebase`, `react-hook-form`, `recharts` and more. The
+> Dockerfile installs those root packages when it builds the static site, and
+> **Coolify never auto-deploys on push to `main`.**
+>
+> So after the functions deploy: **trigger a redeploy in the Coolify dashboard.**
+> Otherwise that merged frontend artifact stays unbuilt indefinitely.
+>
+> - **What success looks like:** the Coolify build log completes and the site
+>   loads normally at `marchmeleepools.com`.
+> - **If you would rather not ship a 14-package dependency bump on a preseason
+>   morning, that is a legitimate call** — but then record #237 as deliberately
+>   deferred rather than leaving it silently unbuilt, which is how it got missed
+>   in the first place.
 >
 > ### 3. Verification — after the deploy, with the exact command and expected result
 >

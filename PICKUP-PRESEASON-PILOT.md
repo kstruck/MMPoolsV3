@@ -124,13 +124,23 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ## 4. Deploy queue — NOT EMPTY (3 PRs, 13 job bodies)
 
-**#245, #247 and #250 change deployed function code and are merged but NOT
-deployed.** #248 (tests + CLAUDE.md) and #249 (CI) need no deploy.
+**Prod is `84e080c`; `main` is `17fa291`. The queue is everything in between —
+which is MORE than last night's work.**
 
-Thirteen scheduled job bodies changed. Nothing is armed or disarmed; the
-behaviour change is that a job which fails now REPORTS it instead of stamping a
-healthy heartbeat. Full runbook with the pre-deploy byte-check is in HANDOFF's
-STOP POINT box — use that, not this summary.
+From this run: #245, #247 and #250 change deployed function code. #248 (tests +
+CLAUDE.md) and #249 (CI) need no deploy.
+
+Already pending from BEFORE this run: **#239** (`scheduledBracketSync` — this is
+the Firestore-reads fix, and it is not live yet), **#240** (`brace-expansion`
+pin inside `functions/`), and **#237** (14-package dependency bump that touches
+**frontend production deps**, so it also needs a manual Coolify trigger).
+
+**Fifteen** scheduled job bodies change in total — #245's four NFL jobs PLUS
+`nflDeepScoreSweepJob` (whose body #245 also changed), #250's nine, and
+`scheduledBracketSync` from #239. Nothing is armed or disarmed; the behaviour
+change is that a job which fails now REPORTS it instead of stamping a healthy
+heartbeat. **Full runbook with the pre-deploy byte-check is in HANDOFF's STOP
+POINT box — use that, not this summary.**
 
 The command, which is the one that has worked every time:
 
