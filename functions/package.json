@@ -4,12 +4,12 @@
         "build": "node scripts/copy-shared.mjs && tsc",
         "typecheck": "node scripts/copy-shared.mjs && tsc --noEmit",
         "test": "node scripts/copy-shared.mjs && vitest run",
-        "test:emulator": "node scripts/copy-shared.mjs && firebase emulators:exec --only firestore --project demo-mmp \"vitest run --config vitest.emulator.config.ts\"",
-        "serve": "npm run build && firebase emulators:start --only functions",
-        "shell": "npm run build && firebase functions:shell",
+        "test:emulator": "node scripts/copy-shared.mjs && npx firebase emulators:exec --only firestore --project demo-mmp \"vitest run --config vitest.emulator.config.ts\"",
+        "serve": "npm run build && npx firebase emulators:start --only functions",
+        "shell": "npm run build && npx firebase functions:shell",
         "start": "npm run shell",
-        "deploy": "firebase deploy --only functions",
-        "logs": "firebase functions:log"
+        "deploy": "npx firebase deploy --only functions",
+        "logs": "npx firebase functions:log"
     },
     "engines": {
         "node": "22"
@@ -35,7 +35,10 @@
         "@tootallnate/once": ">=3.0.1",
         "uuid": ">=11.1.1",
         "qs": ">=6.13.0",
-        "websocket-driver": ">=0.7.5"
+        "websocket-driver": ">=0.7.5",
+        "brace-expansion@<=1.1.15": "1.1.16",
+        "brace-expansion@2.0.0 - 2.1.1": "2.1.2",
+        "brace-expansion@5.0.0 - 5.0.6": "5.0.7"
     },
     "private": true
 }
