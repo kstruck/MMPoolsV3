@@ -153,4 +153,5 @@ export const SCHEDULED_JOB_EXPECTATIONS: Record<string, JobExpectation> = {
     scheduledHealthCheck: { everyMinutes: 60 },           // every 60 minutes
     releaseStaleCouponReservations: { everyMinutes: 30 }, // every 30 minutes
     scheduledBracketSync: { everyMinutes: 10 },           // every 10 minutes
+    nflDeepScoreSweepJob: { everyMinutes: 24 * 60 },      // '30 11 * * *'
 };

@@ -47,7 +47,7 @@ export { initializeBigEastTournamentHttp, initializeBig12TournamentHttp } from "
 export { scoreBracketEntries, finalizeTournamentPayouts } from "./bracketScoring";
 
 // --- NFL POOLS FUNCTIONS ---
-export { syncNFLScoresJob, importNFLSchedule, lockNFLSpreadsJob } from "./nflSchedule";
+export { syncNFLScoresJob, importNFLSchedule, lockNFLSpreadsJob, nflDeepScoreSweepJob } from "./nflSchedule";
 export { createNFLPool, joinNFLPool, submitNFLPicks, executeSurvivorRebuy, scoreNFLWeek } from "./nflPools";
 // Operator loop (PLAN-NFL-PRESEASON-PILOT A3a): hourly pre-kickoff tripwire that
 // pages ops when a week's spreads aren't all locked. Kill-switch + dry-run gated.
