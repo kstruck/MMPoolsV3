@@ -39,42 +39,34 @@ state. Concretely:
 
 ---
 
-## 2. Live state (verified 2026-07-21)
+## 2. Live state (verified 2026-07-21, ~06:30Z)
 
-> **Deploy state: HANDOFF.md's banner is authoritative and CURRENT.**
-> Both files now agree — prod matches `main` @ `84e080c`, deployed
-> 2026-07-21 ~04:30Z. The deploy queue is EMPTY. If these two ever disagree
-> again, the later date wins; check both before deploying.
-
-**Prod matches `main` @ `84e080c` (2026-07-21).** Nothing is awaiting deploy.
+**Prod matches `main` @ `e84dfa3`** for functions; frontend deployed via Coolify
+after #237. Deploy queue is EMPTY except anything merged after this was written —
+always re-check `git log origin/main` against the last deploy.
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is
 `enabled:true, dryRun:true` and still needs `liveSeasonTypes` to actually arm.
 
+**PITR is ON** (7-day window, 1-minute granularity) and a **daily backup
+schedule already existed**. That closes the single biggest exposure. Firebase
+**Auth** still has no export — that is the remaining backup gap
+(`PLAN-BACKUPS-PHASE3.md` step 6).
+
 **Deployed but NOT armed** (both default OFF, fail-safe):
 - `nflDeepScoreSweepJob` — needs `system/config.nflDeepSweep.enabled = true`.
-  Runs 11:30 ET daily. In `dryRun` it still DETECTS and REPORTS stat
-  corrections and only suppresses the `nfl_games` write, so it can be watched
-  for a week before the writes are armed. `lookbackDays` optional, default 7,
-  clamped to [1, 30].
-- `replayFeedSnapshot` — SUPER_ADMIN callable, `dryRun` defaults true at the
-  schema layer. Nothing runs it on a schedule; it is a break-glass tool.
+  In `dryRun` it still DETECTS and REPORTS stat corrections and only suppresses
+  the `nfl_games` write, so it can be watched for a week before arming writes.
+- `replayFeedSnapshot` — SUPER_ADMIN callable, dry-run default, break-glass only.
 
-**Free liveness check available tomorrow:** `nflDeepScoreSweepJob` is wrapped in
-`withHeartbeat`, and the wrapper stamps on every completed run *including* the
-early return when the job is disabled. So after 11:30 ET tomorrow,
-`system/heartbeats.nflDeepScoreSweepJob` should exist with a fresh `at`. If it
-does not, the schedule itself never fired — which is precisely the distinction
-that took ten days to notice on the finalize sweep.
-
-Prod data: **49 preseason games** (`season 2026`, `seasonType 1`). One
-mislabeled regular-season game was deleted by hand; PR #219 stops it recurring.
-
-Both previously-missing composite indexes are deployed and **Enabled**:
-`nfl_feed_snapshots(slate, fetchedAt)` and `pools(type, scoredThroughWeek)`.
-
----
+**Read burn fixed.** `scheduledBracketSync` was re-syncing three dead 2025
+March Madness brackets every 10 minutes year-round, pinning Firestore at
+~1.4M reads/day since early July. Root cause: `isFinalized` is write-only-false
+— every creator sets it `false`, nothing ever sets it `true` except a human via
+`updateTournamentData`. Guard shipped in #239 and deployed. **Verify the drop on
+the Firestore usage graph** — if reads are still ~1.4M/day, the guard is not
+working and that is a real regression.
 
 ## 3. What is PROVEN vs what is NOT
 
@@ -84,20 +76,21 @@ create → join → submit → score → **finalize**, on a `seasonType 1` slate
 1 pt / finalRank 2 in `seasonHistory`). Verified non-vacuous: reverting the
 PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
-**NOT proven:**
-- **`nflFinalizeSweepJob` has never completed a run in production.** Its index
-  only went Enabled 2026-07-20. The finalize *path* is covered by CI; the
-  *scheduled sweep* is not.
+**NOT proven — this list IS the preseason risk register:**
+- **`nflFinalizeSweepJob` has never completed a run in production.** The finalize
+  *path* is covered by CI; the *scheduled sweep* is not.
+- **`lockNFLSpreadsJob` has no emulator coverage at all.** Only its pure helpers
+  (`shouldLockSpread`, `readJobGate`) are unit-tested. Fixtures seed spreads as
+  already `locked: true`, so the unlocked→locked transition — the query, the
+  200-per-run cap, the batch write, the audit entry — has never been executed by
+  a test. **Kevin is about to arm this for preseason**, and #235 already found
+  one spread bug that no test caught. Highest-value remaining test work.
 - Nothing has been exercised against production, only the emulator.
 - The **chaos drill (NFL-7)** has not been run — it needs a live preseason week.
-- **`nflDeepScoreSweepJob` has never run in production.** Deployed 2026-07-21,
-  disabled. First scheduled fire is 11:30 ET; check `system/heartbeats` after
-  that before believing anything about it.
-- **`replayFeedSnapshot` has never been invoked against production.** Its diff
-  logic is unit-tested; the full callable path is not.
+- **`nflDeepScoreSweepJob` has never run in production.** First fire 11:30 ET.
+- **`replayFeedSnapshot` has never been invoked against production.**
 - **`spread.locked` has never been exercised end-to-end in prod**, because
-  `lockNFLSpreadsJob` has always been dry-run. The PR #235 fix is therefore
-  *preventive* — verified by reasoning and tests, never by production behavior.
+  `lockNFLSpreadsJob` has always been dry-run. The #235 fix is *preventive*.
 
 ---
 
@@ -132,51 +125,60 @@ Always confirm the change is in the file on disk before deploying — not that
 
 ## 5. What Kevin must do (nobody else can)
 
-1. **NFL-6 — arm the finalize sweep.** Read a `NFL_FINALIZE_SWEEP` entry in
+1. **A8 — publish the 2026 price + free-period end date. DEADLINE 2026-08-13.**
+   The only calendar-bound item. Preseason week 1 is 2026-08-13; the HOF game is
+   2026-08-07. Everything else on this list can slip; this cannot.
+2. **NFL-6 — arm the finalize sweep.** Read a `NFL_FINALIZE_SWEEP` entry in
    SuperAdmin → Admin Audit Log first. Want candidates under `"1"` and **zero**
    under `"2"` in `bySeasonType`. Then set `nflFinalize.liveSeasonTypes` to an
    array containing the number **1** — `dryRun:false` **alone does nothing**,
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
-2. ~~**Deploy**~~ — **DONE 2026-07-21 ~04:30Z**, queue empty (§4).
-3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
-   Needs a prod probe identity + probe pool. Recommendation on file: skip for
-   the pilot, revisit before charging money in September.
-4. **A8 — publish the 2026 price + free-period end date. Deadline 2026-08-13.**
-   The only calendar-bound item on the list.
-5. **Leave `nflLockWatch.dryRun: true`** until the preseason-lines question is
-   settled — only 1 of 49 games has a betting line, so going live pages nightly
-   about a known condition.
+3. **Arm `nflDeepSweep`** — `{ enabled: true, dryRun: true }`. Safe: dry-run
+   still detects and reports corrections, it only suppresses the write.
+4. **Retire the 3 stale tournaments** (optional cleanup). The #239 guard already
+   skips them; setting `isFinalized:true` via `updateTournamentData` drops them
+   from the query entirely.
+5. **Firebase Auth export** — the one remaining backup gap.
+   `PLAN-BACKUPS-PHASE3.md` step 6, ~1 minute in Cloud Shell.
+6. **`claimMySquares` timing decision.** ⚠️ The repo is PUBLIC and the hole is
+   unfixed. Exploit detail was reduced in #233 but the source was always public.
+   On file: accept through the pilot, fix before the regular season — the
+   public-repo fact is a reason to revisit that.
+7. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
+   Recommendation: skip for the pilot.
+8. **Leave `nflLockWatch.dryRun: true`** — only 1 of 49 preseason games has a
+   betting line, so arming it pages nightly about a known condition.
 
 ---
 
 ## 6. Next engineering work (no Kevin needed)
 
-Roughly in value order:
+**Ranked by preseason value.**
 
-1. ~~**A5 part 2 — the snapshot replay callable.**~~ **DONE — PR #231.**
-2. ~~**Phase 3 — backups.**~~ **Written up — PR #232.** The plan exists; the
-   *work* is now yours, and step 0 is installing `gcloud` (it is not on this
-   machine, and the Firebase CLI cannot configure PITR or backup schedules).
-   **`--enable-pitr` is one command and buys a 7-day recovery floor. If you do
-   one thing from that document, do that one.**
-3. ~~**`claimMySquares` security finding.**~~ **Written up — PR #233.** Verified
-   real against `firestore.rules`, and confirmed **not preseason-blocking**
-   (Squares is not part of the NFL pilot). Recommendation on file: accept
-   through the pilot, fix before the regular season. Needs your decision.
-4. ~~**`syncNFLScoresJob` only re-reads games from the last 24h.**~~
-   **DONE — PR #235**, `nflDeepScoreSweepJob`. Deployed, not yet armed.
-   Deliberately a second daily job rather than a wider window on the 5-minute
-   one, which would have multiplied ESPN fetches across 288 runs a day.
-5. **Heartbeat coverage is incomplete — the top open engineering item.**
-   `SCHEDULED_JOB_EXPECTATIONS` covers 9 jobs, but **none of the NFL ones**:
-   `syncNFLScoresJob`, `nflFinalizeSweepJob`, `nflLockWatchJob` and
-   `lockNFLSpreadsJob` are neither wrapped in `withHeartbeat` nor listed. Those
-   are exactly the jobs that went silently dead twice. `nflDeepScoreSweepJob`
-   is wrapped; the rest of the NFL fleet is not. Touches four job bodies, so it
-   wants its own PR.
-6. **25 callables still use bare `onCall(`** — mostly sim-harness and aiTesting
-   with their own role gates, plus the deliberately-deferred `createBracketPool`.
-   None is a regression. Wants a re-classification pass, not a sweep.
+1. **`lockNFLSpreadsJob` emulator coverage — DO THIS FIRST.** See §3. The job
+   Kevin is about to arm has never had its body executed by a test. Needs a
+   fixture that seeds unlocked spreads, runs the job, and asserts the
+   transition, the per-run cap, and that dry-run writes nothing.
+2. **Burn down `KNOWN_UNWRAPPED` in `heartbeat.test.ts`.** Nine scheduled jobs
+   still have no heartbeat: autoClosePools, autoLock, billing,
+   monetizationAlerts, playoffPools, reminders, scoreUpdates, siteAverages,
+   webhookDurabilitySweep. Mechanical, but several are money-adjacent — do it
+   in daylight, and delete each entry from the list as you go.
+3. **CI audit step for `functions/`.** The `security-audit` job runs `npm ci` +
+   `npm audit` at the ROOT only, which is exactly why a vulnerable
+   `brace-expansion` sat in the deployed `functions/` tree through #236 and
+   needed #240 to fix. qodo suggested this; it is a few lines of workflow YAML.
+4. **25 callables still use bare `onCall(`** — mostly sim-harness and aiTesting
+   with their own role gates. None is a regression. Wants re-classification.
+5. **Stale worktree cleanup.** `.claude/worktrees/nfl-preseason-pilot-overnight-08b7b3`
+   sits on a merged+deleted branch with a stale HANDOFF copy. Harmless but
+   confusing; `git worktree remove` it.
+6. **Untracked strays in the main checkout** — `HARNESS-MODEL-AUDIT-2026-07-16.md`,
+   `PLAN-LOOPS.md`, `before-deploy.txt`, `design-showcase/`, and five
+   `src/pages/DesignAlternatives*` files. The DesignAlternatives ones sit inside
+   app source where a future session could import one thinking it is real —
+   gitignore or move them. The two docs look like real work products that were
+   never committed; check before losing them. **Kevin's call, not a drive-by.**
 
 ---
 
@@ -190,8 +192,9 @@ npx tsc -b
 npm test
 ```
 
-Baselines on `main` @ `16746b8`: functions unit **845**, emulator **98 pass /
-10 skipped**, root vitest **257**, both typechecks clean. **Counts only go up —
+Baselines on `main` @ `e84dfa3`: functions unit **868**, emulator **98 pass /
+10 skipped**, root vitest **257**, both typechecks clean. With PR #245 merged the
+functions unit count becomes **872**. **Counts only go up —
 re-measure, do not trust a stale number** (I reported 828 once from a mid-merge
 measurement; it was 831).
 
@@ -220,7 +223,10 @@ floating promise from another test file can trip. Re-run before investigating.
 - **Every scheduled job should write something on every run** so "never fired"
   and "never ran" are distinguishable — `withHeartbeat()` in
   `functions/src/lib/heartbeat.ts` does this; use it for any new job.
-- qodo reviews PRs. Its **defect** findings have been consistently good (12/12
-  valid). Its **style/compliance** findings are miscalibrated to this repo
+- **WAIT FOR QODO on every PR before calling it done** — now a top-level rule in
+  `CLAUDE.md` §2b, promoted there on 2026-07-21 after being dropped. Check ALL
+  THREE surfaces (`--json comments`, `pulls/<n>/comments`, `pulls/<n>/reviews`);
+  a report is not absent until all three are. Its **defect** findings have been
+  consistently good (19/19 valid). Its **style/compliance** findings are miscalibrated to this repo
   (5/5 rejected: snake_case ×2, import order, `:any` counts, dependency
   placement). Judge on evidence, reply either way.

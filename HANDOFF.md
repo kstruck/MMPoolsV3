@@ -1,62 +1,52 @@
-# HANDOFF — Session entry point (updated 2026-07-21: everything merged AND deployed; queue empty)
+# HANDOFF — Session entry point (updated 2026-07-21 ~06:30Z; preseason wk1 is 2026-08-13)
 
-> ## STOP POINT 2026-07-21 (~04:40Z)
+> ## STOP POINT 2026-07-21 (~06:30Z) — Kevin went to bed; overnight work in flight
 >
-> **All work is merged and deployed. `main` @ `84e080c` = prod. Nothing is
-> waiting on a merge or a deploy.** PRs #231-#236 all landed.
+> **Read `PICKUP-PRESEASON-PILOT.md` next.** It is the working entry point; this
+> file is the live-state carrier. Preseason week 1 is **2026-08-13**, HOF game
+> **2026-08-07**. That is the clock.
 >
-> | PR | What | State |
-> |---|---|---|
-> | #231 | `replayFeedSnapshot` — A5 part 2, snapshot replay callable | merged + deployed |
-> | #232 | `PLAN-BACKUPS-PHASE3.md` — zero-backup gap runbook | merged |
-> | #233 | `SECURITY-CLAIM-SQUARES.md` — open `guestDeviceKey` finding | merged |
-> | #234 | `PICKUP` refresh + doc-precedence fix | merged |
-> | #235 | `nflDeepScoreSweepJob` + **spread-unlock bugfix** | merged + deployed |
-> | #236 | `brace-expansion` pin — unblocked CI | merged |
+> ### Shipped and DEPLOYED this session
+> PRs #231-#241 and #244 all merged; functions deployed twice; Coolify frontend
+> deployed after #237. Prod = `main` @ `e84dfa3`.
 >
-> ### What needs Kevin now — all decisions or console work, no code
-> 1. **Enable PITR** — `PLAN-BACKUPS-PHASE3.md` steps 0-2. One command, buys a
->    7-day recovery floor. **NO INSTALL NEEDED** — PITR is a checkbox in the
->    Cloud console (Firestore → `(default)` → Disaster Recovery → Edit), and
->    `gcloud` is only required for the later steps, which Cloud Shell provides
->    in-browser. An earlier note here claiming "install gcloud first" was wrong.
+> | What | Why it mattered |
+> |---|---|
+> | #239 bracket-sync guard | Firestore was pinned at **~1.4M reads/day** re-syncing three dead 2025 brackets every 10 min. Root cause: `isFinalized` is write-only-false. |
+> | #235 spread-unlock fix | Score sync silently **unlocked and re-priced** spreads for games later in the week. Live bug, found by qodo, no data damage only because spread locking was still dry-run. |
+> | #240 `functions/` security pin | A vulnerable `brace-expansion` was in the **deployed** tree; the root-only pin missed it and CI's root-scoped audit could never catch it. |
+> | PITR + backups | **PITR is ON** (7 days, 1-min granularity) and a daily backup schedule already existed. Biggest exposure closed. |
 >
->    **Scope correction:** the VPS *is* backed up (daily Coolify/Ubuntu
->    snapshots on separate infrastructure) — but that is the *reproducible* half,
->    since the frontend rebuilds from git. **Firestore and Firebase Auth have no
->    backup at all**, and that is the half that cannot be recreated. Still the
->    biggest exposure on the list. No region is pinned in the repo, so the
->    database location must be READ, not assumed.
-> 2. **A8 pricing — due 2026-08-13.** The only calendar-bound item.
-> 3. **Arm `nflDeepSweep`** (optional, safe): `system/config.nflDeepSweep` →
->    `{ enabled: true, dryRun: true }`. In dry-run it still detects and reports
->    stat corrections and only suppresses the `nfl_games` write.
-> 4. **NFL-6** — arm the finalize sweep via `nflFinalize.liveSeasonTypes: [1]`.
->    `dryRun:false` alone does nothing; that guard is deliberate.
-> 5. **`claimMySquares` timing call.** ⚠️ **This repo is PUBLIC** and the hole is
->    unfixed and now documented in `SECURITY-CLAIM-SQUARES.md`. The exploit
->    detail was reduced, but the source was always public. Recommendation on
->    file: accept through the pilot, fix before the regular season — but the
->    public-repo fact is a reason to revisit that timing.
-> 6. **Leave `nflLockWatch.dryRun: true`** — only 1 of 49 preseason games has a
->    betting line, so arming it pages nightly about a known condition.
+> ### In flight right now
+> **PR #245** — heartbeats for the four NFL jobs, plus an invariant that every
+> `onSchedule()` must be wrapped. That invariant immediately found **nine more**
+> unwrapped jobs; they are on a documented `KNOWN_UNWRAPPED` burn-down list
+> rather than batch-edited unsupervised at 1am. Check its qodo review before
+> merging.
 >
-> ### Top open engineering item (no Kevin needed)
-> **Heartbeat coverage is incomplete.** `SCHEDULED_JOB_EXPECTATIONS` covers 9
-> jobs but **none of the NFL ones** — `syncNFLScoresJob`, `nflFinalizeSweepJob`,
-> `nflLockWatchJob`, `lockNFLSpreadsJob` are neither wrapped in `withHeartbeat`
-> nor listed. Those are exactly the jobs that went silently dead twice.
-> `nflDeepScoreSweepJob` is wrapped; the rest of the NFL fleet is not.
+> ### The single most important open item
+> **`lockNFLSpreadsJob` has never had its body executed by any test** — only its
+> pure helpers. Fixtures seed spreads as already `locked: true`, so the
+> unlocked→locked transition, the 200-per-run cap, and the dry-run-writes-nothing
+> guarantee are all unverified. **Kevin is about to arm this for preseason**, and
+> #235 already found one spread bug no test caught. See `PICKUP` §6 item 1.
 >
-> ### Verify tomorrow, do not assume
-> `nflDeepScoreSweepJob` first fires 11:30 ET. `withHeartbeat` stamps even on
-> the disabled early-return, so `system/heartbeats.nflDeepScoreSweepJob` should
-> have a fresh `at` after that. **If it does not, the schedule never fired** —
-> the exact distinction that took ten days to spot on the finalize sweep.
+> ### Verify before believing anything (the recurring lesson)
+> - **Firestore reads should have dropped off a cliff.** If still ~1.4M/day, #239
+>   is not working — that is a regression, not a wait-and-see.
+> - `system/heartbeats` should carry the NFL jobs once #245 deploys.
+> - `nflDeepScoreSweepJob` first fires 11:30 ET and stamps a heartbeat even while
+>   disabled. No stamp = the schedule never fired.
+>
+> ### Standing rule added this session
+> **Wait for qodo on every PR before calling it done** — `CLAUDE.md` §2b. It was
+> already a skill and a memory and got dropped anyway; promoted after #236 merged
+> with an unread finding that turned out to be a real vulnerability. Check all
+> three surfaces; a report is not absent until all three are empty.
 
-> ## DEPLOY STATE 2026-07-21 — prod matches `main` @ `84e080c`
+> ## DEPLOY STATE 2026-07-21 — prod matches `main` @ `e84dfa3`
 >
-> **Deployed 2026-07-21 ~04:30Z**, full-fleet `--only functions`. Deploy queue is
+> **Deployed 2026-07-21 ~04:30Z and again ~06:00Z** (the second deploy carried #239/#240; Coolify frontend deployed after #237)., full-fleet `--only functions`. Deploy queue is
 > EMPTY. Verified from the deploy output, not assumed:
 >
 > - `nflDeepScoreSweepJob` — **Successful create**
