@@ -66,6 +66,44 @@ qodo, on the PR that introduced this very section.)
 Re-check after pushing fixes: qodo marks absorbed findings `✓ Resolved`,
 and that is the confirmation — not your own belief that you addressed them.
 
+## 2c. Cross-model review is REQUIRED before opening a PR
+
+`codex` (OpenAI) is installed and on PATH — verified `codex-cli 0.144.5`.
+**Run it on your own diff before opening any PR:**
+
+```
+codex exec review --uncommitted        # or: --base main / --commit <sha>
+```
+
+**Why this is a hard rule and not a nicety.** On 2026-07-21 a single session
+produced 12 self-inflicted defects. Seven were facts asserted from memory that
+one command would have checked. Four were the same class of bug the session had
+just spent hours fixing in someone else's code — including reintroducing a
+deploy-state SHA contradiction 30 minutes after fixing one. **Every single one
+was caught by an external reviewer, none by self-review.**
+
+The lesson is not "be careful". It is that a second model does not share the
+first one's blind spots, and self-review reliably fails to catch the thing you
+just did. When the qodo plan ran out, this replaced it.
+
+Proof it works: the FIRST codex review run under this rule was on the docs-state
+invariant in `tests/docs-state-invariants.test.ts`, and it found that the guard
+matched only one of the three phrasings the docs actually use — i.e. a guard
+that looked like it guarded and did not, which is precisely the class the guard
+existed to stop. Written, reviewed, and holed in the same hour.
+
+**Absorb or reject each finding with written evidence, same as the qodo rule in
+§2b.** Codex is not automatically right — verify its claims against the code
+before acting, as with any reviewer.
+
+## 2d. Cadence near a deadline
+
+Preseason week 1 is **2026-08-13**. From 2026-07-21, at Kevin's direction:
+**one PR at a time** — build it, run all five gates, run `codex exec review`,
+absorb findings, report to Kevin, and only then start the next. Batching ~10 PRs
+in a night is what produced the defect count above; throughput was never the
+constraint, correctness is.
+
 ## 3. Deploy facts (do not re-derive)
 
 - Functions + rules: `npx firebase deploy`, project `gridiron-gamble-uzuqo`.

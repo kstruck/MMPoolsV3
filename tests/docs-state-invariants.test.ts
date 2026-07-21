@@ -1,0 +1,258 @@
+import { describe, it, expect } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
+
+/**
+ * Docs state invariants — mechanical guards for the failure mode that keeps
+ * recurring in this repo's operator docs.
+ *
+ * WHY THIS EXISTS. "Which SHA is actually deployed" has been wrong three times:
+ *   1. HANDOFF said "prod matches main / backlog CLEARED" while PICKUP listed a
+ *      non-empty deploy queue. An operator following PICKUP's own instruction to
+ *      go read HANDOFF gets false confidence and SKIPS THE DEPLOY.
+ *   2. The fix for (1) itself shipped with two different prod SHAs in PICKUP —
+ *      one in §2, a stale one in §4.
+ *   3. The Coolify deploy-model contradiction (auto-deploy vs manual trigger) is
+ *      still open in two files.
+ *
+ * Prose rules did not stop any of these; the second was introduced by the same
+ * session that fixed the first. A test does, which is the whole point: a rule
+ * that only lives in a paragraph does not gate anything.
+ *
+ * DESIGN NOTE — why this matches broadly and exempts explicitly.
+ *
+ * The first version of this file matched only the exact phrase
+ * "prod matches `main` @ `<sha>`". A cross-model review pointed out that the
+ * docs ALREADY state current deploy state in other wordings — "`main` @ `<sha>`
+ * = prod", "`main` @ `<sha>`, deployed" — so the guard would have passed while
+ * those drifted. A guard that looks like it guards but does not is the exact
+ * class of bug this file exists to stop, so it is now the other way round:
+ *
+ *   EVERY "`main` @ `<sha>`" is treated as a claim about what is deployed,
+ *   and anything that is NOT such a claim must say so explicitly.
+ *
+ * Fail-safe by default. Adding a new SHA mention cannot silently escape the
+ * check; it fails until the author either fixes it or annotates it.
+ */
+
+const REPO_ROOT = path.resolve(__dirname, '..');
+
+/**
+ * The operator entry points. Each MUST state a deploy SHA, so neither can quietly
+ * drop out of the agreement check by rewording its way out.
+ */
+const AUTHORITATIVE_DOCS = ['HANDOFF.md', 'PICKUP-PRESEASON-PILOT.md'];
+
+/**
+ * KNOWN LIMIT, stated rather than papered over.
+ *
+ * This file compares SHAs. It does NOT compare deploy-QUEUE prose — two docs can
+ * agree on the SHA while one says "queue EMPTY" and the other lists work
+ * awaiting deploy, which is the original incident. That was considered and
+ * deliberately not automated: queue state is free text with no canonical form,
+ * and a fuzzy matcher would produce false failures. An invariant that cries wolf
+ * gets ignored, and then the real one is missed — the same reasoning as the
+ * heartbeat tolerance multiplier.
+ *
+ * The SHA check is the mechanical half. The queue half stays a human review
+ * item; keeping both docs' queue statements in one place is the mitigation.
+ */
+
+/**
+ * Any "`main` @ `<sha>`" construction, whatever prose surrounds it.
+ *
+ * Whitespace-tolerant, not a literal space — the docs already wrap this across
+ * a line break ("...landed on `main`" / newline / "@ `84e080c`"), and a
+ * line-based scan silently missed it. Scanned over the whole file, with the
+ * line number derived from the match offset.
+ */
+const MAIN_SHA = /`main`\s*@\s*`([^`]+)`/gi;
+
+/** What a usable abbreviated commit id looks like. */
+const VALID_SHA = /^[0-9a-f]{7,40}$/i;
+
+/**
+ * A line is exempt only if it says so. Two forms:
+ *  - it is about TEST BASELINES, not deployment ("Baselines on `main` @ ...")
+ *  - it carries an explicit <!-- historical --> annotation
+ * Anything else counts as a live deploy-state claim.
+ */
+const EXEMPT_LINE = /baseline|<!--\s*historical\s*-->/i;
+
+/** Root docs plus nested runbooks — a stale SHA is no less wrong under docs/. */
+function operatorMarkdownFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string, depth: number) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        if (depth > 0) walk(full, depth - 1);
+      } else if (e.name.endsWith('.md')) {
+        out.push(full);
+      }
+    }
+  };
+  // Root .md files, plus docs/ one level deep (docs/adr/*.md included).
+  for (const e of fs.readdirSync(REPO_ROOT, { withFileTypes: true })) {
+    if (e.isFile() && e.name.endsWith('.md')) out.push(path.join(REPO_ROOT, e.name));
+  }
+  const docsDir = path.join(REPO_ROOT, 'docs');
+  if (fs.existsSync(docsDir)) walk(docsDir, 2);
+  return out;
+}
+
+interface Claim {
+  file: string;
+  sha: string;
+  line: number;
+  /** Did the matched text span a line break? Pins newline tolerance honestly. */
+  wrapped: boolean;
+  /** False when the token is not a usable commit id (e.g. a non-hex typo). */
+  valid: boolean;
+}
+
+function collectDeployShaClaims(): Claim[] {
+  const claims: Claim[] = [];
+  const NL = String.fromCharCode(10);
+  for (const file of operatorMarkdownFiles()) {
+    const src = fs.readFileSync(file, 'utf8');
+    for (const m of src.matchAll(MAIN_SHA)) {
+      const before = src.slice(0, m.index!);
+      const line = before.split(NL).length;
+      // Exemption is judged on the WHOLE match plus the line it starts on, so a
+      // wrapped claim cannot dodge the check by putting the keyword elsewhere.
+      const lineText = src.split(NL)[line - 1] ?? '';
+      if (EXEMPT_LINE.test(lineText) || EXEMPT_LINE.test(m[0])) continue;
+      const token = m[1].trim();
+      claims.push({
+        file: path.relative(REPO_ROOT, file).split(path.sep).join('/'),
+        sha: token.toLowerCase(),
+        line,
+        wrapped: m[0].includes(NL),
+        valid: VALID_SHA.test(token),
+      });
+    }
+  }
+  return claims;
+}
+
+/**
+ * NO PREFIX MATCHING. An earlier draft treated any lexical prefix as the same
+ * commit, which silently accepted a typo after the seventh character —
+ * `84e080cf` would have merged with `84e080c`. Cross-model review caught it,
+ * AND caught that the fixture "proving" it worked used a SHA I had invented
+ * (`84e080c436d...`); the real object is `84e080cec109...`. A guard whose proof
+ * is fabricated is worse than no guard.
+ *
+ * So: exact string equality. If one doc abbreviates and another does not, that
+ * is reported as an inconsistency to fix rather than quietly merged — which is
+ * the correct outcome, since a single canonical abbreviation is what makes the
+ * docs greppable in the first place.
+ */
+
+describe('operator docs agree on what is deployed', () => {
+  const claims = collectDeployShaClaims();
+
+  // Guards the regex itself. If the wording is changed everywhere, this test
+  // would otherwise pass vacuously forever while protecting nothing.
+  it('finds at least one deploy-state SHA claim', () => {
+    expect(
+      claims.length,
+      'no operator doc states "`main` @ `<sha>`" — either the deploy-state marker ' +
+        'was removed, or the wording drifted and this guard is now inert',
+    ).toBeGreaterThan(0);
+  });
+
+  // Per-file, not just globally. A global count stays positive when ONE doc
+  // drops its marker, so that file silently leaves the comparison and can then
+  // say anything at all — which is the original failure: two entry-point docs
+  // disagreeing. Both must keep participating.
+  it('requires every authoritative doc to state its deploy SHA', () => {
+    const silent = AUTHORITATIVE_DOCS.filter(
+      (doc) => !claims.some((c) => c.file === doc),
+    );
+    expect(
+      silent,
+      'these docs are the operator entry points but no longer state ' +
+        '"`main` @ `<sha>`", so they have dropped out of the agreement check ' +
+        'and can drift unnoticed',
+    ).toEqual([]);
+  });
+
+  // A non-hex typo (`84e080g`) used to produce NO match at all, so the doc's
+  // deploy state simply vanished from the check while the other docs still
+  // agreed and the suite stayed green — the guard silently accepting exactly
+  // the mistake it exists to catch. Malformed tokens now fail loudly.
+  it('rejects a malformed commit id instead of ignoring it', () => {
+    const bad = claims.filter((c) => !c.valid);
+    expect(
+      bad.map((c) => `${c.file}:${c.line} -> ${c.sha}`),
+      'a "`main` @ `...`" claim is not a usable commit id (7-40 hex chars)',
+    ).toEqual([]);
+  });
+
+  it('never states two different deployed SHAs', () => {
+    const distinct = [...new Set(claims.map((c) => c.sha))];
+    const where = claims.map((c) => `${c.file}:${c.line} -> ${c.sha}`).sort();
+
+    expect(
+      distinct.length,
+      'operator docs disagree about what is deployed. An operator reading the ' +
+        'wrong one skips or repeats a deploy.\n' +
+        'Fix the SHA, or — if a mention is historical or a test baseline — mark ' +
+        'the line with <!-- historical --> so it is excluded deliberately ' +
+        'rather than by accident.\n  ' +
+        where.join('\n  '),
+    ).toBe(1);
+  });
+});
+
+describe('the scanner sees what the docs actually contain', () => {
+  it('finds the claim that wraps across a line break', () => {
+    // PICKUP wraps a live claim across a line break. A line-based scan missed
+    // it entirely, so changing that SHA left the guard green while the docs
+    // disagreed. Caught by cross-model review, not by me.
+    // Asserts a claim whose MATCHED TEXT actually spans a newline. Counting
+    // claims-per-file was the wrong assertion and was itself vacuous: PICKUP
+    // already has two non-wrapped claims, so the count stayed above 1 even if
+    // newline matching regressed. Caught by cross-model review.
+    const claims = collectDeployShaClaims();
+    expect(
+      claims.filter((c) => c.wrapped).map((c) => `${c.file}:${c.line}`),
+      'no deploy claim matched across a line break — the scanner has lost its ' +
+        'newline tolerance and wrapped claims are now invisible',
+    ).not.toEqual([]);
+  });
+
+  it('excludes test-baseline lines, which are not deploy claims', () => {
+    // A baseline line records where TEST COUNTS were measured, not what is in
+    // production, and must not trip the guard.
+    //
+    // Asserting "SHA 16746b8 is absent" would go vacuous the moment that
+    // baseline moves. So this first proves such a line still EXISTS, extracts
+    // its SHA, and only then asserts the exemption actually suppressed it.
+    const src = fs.readFileSync(
+      path.join(REPO_ROOT, 'PICKUP-PRESEASON-PILOT.md'),
+      'utf8',
+    );
+    const baselineLine = src
+      .split(String.fromCharCode(10))
+      .find((l) => /baseline/i.test(l) && MAIN_SHA.test(l));
+    MAIN_SHA.lastIndex = 0; // `g` flag is stateful across .test() calls
+
+    expect(
+      baselineLine,
+      'no "Baselines on `main` @ `<sha>`" line found — this exemption test can ' +
+        'no longer prove anything; re-point it at a real baseline line',
+    ).toBeDefined();
+
+    const baselineSha = /`main`\s*@\s*`([^`]+)`/i.exec(baselineLine!)![1].toLowerCase();
+    const claims = collectDeployShaClaims();
+    expect(
+      claims.some((c) => c.sha === baselineSha),
+      `baseline SHA ${baselineSha} leaked into the deploy-state claims — the ` +
+        'EXEMPT_LINE rule is no longer suppressing baseline mentions',
+    ).toBe(false);
+  });
+});
