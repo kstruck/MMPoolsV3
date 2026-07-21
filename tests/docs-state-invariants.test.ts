@@ -112,27 +112,58 @@ interface Claim {
   valid: boolean;
 }
 
-function collectDeployShaClaims(): Claim[] {
+/**
+ * Collect claims from one document's text. Exported shape so the scanner can be
+ * exercised against FIXTURES rather than only against the live docs — a guard
+ * whose only test subject is the very file it guards can only be proven by
+ * editing that file, which is how the previous version ended up asserting
+ * against a SHA that did not exist.
+ */
+export function collectClaimsFromText(text: string, fileLabel: string): Claim[] {
   const claims: Claim[] = [];
   const NL = String.fromCharCode(10);
+  const lines = text.split(NL);
+  /** End offset of the previous match, so an exemption cannot reach past it. */
+  let prevEnd = 0;
+  for (const m of text.matchAll(MAIN_SHA)) {
+    const start = m.index!;
+    const before = text.slice(0, start);
+    const line = before.split(NL).length;
+
+    // PER-MATCH, not per-line. Judging the whole line meant one exempt mention
+    // exempted every other claim sharing that line — so a live SHA sitting
+    // beside a baseline mention on a comparison line was silently skipped, and
+    // the doc could contradict production while this stayed green.
+    //
+    // The window is: from the start of this match's line (or the end of the
+    // previous match, whichever is later) through the end of the match. That
+    // associates a keyword with the claim it introduces and nothing further.
+    const lineStart = before.lastIndexOf(NL) + 1;
+    const windowStart = Math.max(lineStart, prevEnd);
+    const scope = text.slice(windowStart, start + m[0].length);
+    prevEnd = start + m[0].length;
+
+    if (EXEMPT_LINE.test(scope)) continue;
+    const token = m[1].trim();
+    claims.push({
+      file: fileLabel,
+      sha: token.toLowerCase(),
+      line,
+      wrapped: m[0].includes(NL),
+      valid: VALID_SHA.test(token),
+    });
+  }
+  void lines;
+  return claims;
+}
+
+function collectDeployShaClaims(): Claim[] {
+  const claims: Claim[] = [];
   for (const file of operatorMarkdownFiles()) {
-    const src = fs.readFileSync(file, 'utf8');
-    for (const m of src.matchAll(MAIN_SHA)) {
-      const before = src.slice(0, m.index!);
-      const line = before.split(NL).length;
-      // Exemption is judged on the WHOLE match plus the line it starts on, so a
-      // wrapped claim cannot dodge the check by putting the keyword elsewhere.
-      const lineText = src.split(NL)[line - 1] ?? '';
-      if (EXEMPT_LINE.test(lineText) || EXEMPT_LINE.test(m[0])) continue;
-      const token = m[1].trim();
-      claims.push({
-        file: path.relative(REPO_ROOT, file).split(path.sep).join('/'),
-        sha: token.toLowerCase(),
-        line,
-        wrapped: m[0].includes(NL),
-        valid: VALID_SHA.test(token),
-      });
-    }
+    claims.push(...collectClaimsFromText(
+      fs.readFileSync(file, 'utf8'),
+      path.relative(REPO_ROOT, file).split(path.sep).join('/'),
+    ));
   }
   return claims;
 }
@@ -229,30 +260,74 @@ describe('the scanner sees what the docs actually contain', () => {
     // A baseline line records where TEST COUNTS were measured, not what is in
     // production, and must not trip the guard.
     //
-    // Asserting "SHA 16746b8 is absent" would go vacuous the moment that
-    // baseline moves. So this first proves such a line still EXISTS, extracts
-    // its SHA, and only then asserts the exemption actually suppressed it.
+    // Checked BY LOCATION, not by SHA value. An earlier version asserted that
+    // the baseline's SHA was absent from the claim list — which fails on
+    // perfectly correct docs the moment the baseline happens to be measured on
+    // the commit that is also deployed, since the legitimate deploy claim
+    // carries the same value. Same class as the prefix-matching bug below:
+    // treating a SHA VALUE as an identity for a specific mention.
     const src = fs.readFileSync(
       path.join(REPO_ROOT, 'PICKUP-PRESEASON-PILOT.md'),
       'utf8',
     );
-    const baselineLine = src
-      .split(String.fromCharCode(10))
-      .find((l) => /baseline/i.test(l) && MAIN_SHA.test(l));
-    MAIN_SHA.lastIndex = 0; // `g` flag is stateful across .test() calls
+    const NL = String.fromCharCode(10);
+    const baselineLineNo = src
+      .split(NL)
+      .findIndex((l) => /baseline/i.test(l) && /`main`\s*@\s*`[^`]+`/i.test(l)) + 1;
 
     expect(
-      baselineLine,
+      baselineLineNo,
       'no "Baselines on `main` @ `<sha>`" line found — this exemption test can ' +
         'no longer prove anything; re-point it at a real baseline line',
-    ).toBeDefined();
+    ).toBeGreaterThan(0);
 
-    const baselineSha = /`main`\s*@\s*`([^`]+)`/i.exec(baselineLine!)![1].toLowerCase();
     const claims = collectDeployShaClaims();
     expect(
-      claims.some((c) => c.sha === baselineSha),
-      `baseline SHA ${baselineSha} leaked into the deploy-state claims — the ` +
-        'EXEMPT_LINE rule is no longer suppressing baseline mentions',
+      claims.some((c) => c.file === 'PICKUP-PRESEASON-PILOT.md' && c.line === baselineLineNo),
+      `the baseline line (PICKUP-PRESEASON-PILOT.md:${baselineLineNo}) produced a ` +
+        'deploy-state claim — the EXEMPT_LINE rule is no longer suppressing baseline mentions',
     ).toBe(false);
+  });
+
+  // The scanner run against FIXTURES rather than the live docs. These pin the
+  // two behaviours that cannot be demonstrated against the real files without
+  // editing them — which is exactly how an earlier version of this guard ended
+  // up "proven" by a SHA that did not exist.
+  describe('scanner behaviour, on fixtures', () => {
+    it('exempts ONLY the baseline mention when a line carries both', () => {
+      // The bug: a whole-line exemption let a live claim ride along beside a
+      // baseline mention, so the doc could contradict production silently.
+      const line = 'Baselines on `main` @ `aaaaaaa`; prod is `main` @ `bbbbbbb`.';
+      const claims = collectClaimsFromText(line, 'fixture.md');
+      expect(claims.map((c) => c.sha)).toEqual(['bbbbbbb']);
+    });
+
+    it('still exempts a plain baseline line', () => {
+      expect(collectClaimsFromText('Baselines on `main` @ `aaaaaaa`.', 'f.md')).toEqual([]);
+    });
+
+    it('still exempts an explicitly historical line', () => {
+      expect(
+        collectClaimsFromText('<!-- historical --> prod was `main` @ `aaaaaaa`.', 'f.md'),
+      ).toEqual([]);
+    });
+
+    it('collects an ordinary deploy claim', () => {
+      const claims = collectClaimsFromText('prod = `main` @ `abc1234`', 'f.md');
+      expect(claims).toHaveLength(1);
+      expect(claims[0]).toMatchObject({ sha: 'abc1234', valid: true, line: 1 });
+    });
+
+    it('does not let an exemption leak from one LINE into the next', () => {
+      const NL = String.fromCharCode(10);
+      const text = `Baselines on \`main\` @ \`aaaaaaa\`.${NL}Prod is \`main\` @ \`bbbbbbb\`.`;
+      const claims = collectClaimsFromText(text, 'f.md');
+      expect(claims.map((c) => c.sha)).toEqual(['bbbbbbb']);
+      expect(claims[0].line).toBe(2);
+    });
+
+    it('flags a non-hex token as an invalid SHA rather than silently accepting it', () => {
+      expect(collectClaimsFromText('prod = `main` @ `not-a-sha`', 'f.md')[0].valid).toBe(false);
+    });
   });
 });
