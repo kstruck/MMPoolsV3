@@ -482,14 +482,69 @@ export const HOF_GAME_ET = '2026-08-06';
  * So the live claim is named rather than inferred, exactly as CURRENT_MARKER
  * does for the SHA. Markdown emphasis and backticks may sit between the tag and
  * the date; prose may not.
+ *
+ * EVERY live deadline statement carries the tag — not just one per doc. codex,
+ * round 4: PICKUP's copy-paste prompt and HANDOFF's `DUE` line are both live
+ * instructions to an operator, and with only the prose sentence tagged, either
+ * could have drifted back to the old target while every test stayed green.
+ * That is the original incident verbatim — two docs, one operator, two
+ * different answers.
+ *
+ * The trailing boundary is codex's too: without it a tagged typo `2026-08-060`
+ * captured as `2026-08-06` and passed.
  */
 export const PILOT_TARGET_TAG = '<!-- pilot-target:current -->';
-const PILOT_TARGET_CLAIM = /<!--\s*pilot-target:current\s*-->[\s*`]*(\d{4}-\d{2}-\d{2})/gi;
+const PILOT_TARGET_CLAIM =
+  /<!--\s*pilot-target:current\s*-->[\s*`]*(\d{4}-\d{2}-\d{2})(?![\d-])/gi;
 
 /** Every tagged target date in one document, in order. */
 export function taggedTargetDates(text: string): string[] {
   return [...text.matchAll(PILOT_TARGET_CLAIM)].map((m) => m[1]);
 }
+
+/**
+ * The target this PR superseded. An UNTAGGED mention of it in an entry point is
+ * a stale deadline — the realistic regression, since 2026-08-13 is what every
+ * one of these docs said until 2026-07-21 and what a half-finished revert would
+ * restore.
+ *
+ * Legitimate mentions exist and are of two kinds: 2026-08-13 is still the first
+ * 16-game preseason slate, and the prose explaining the retarget necessarily
+ * names the old date. Both tag themselves `<!-- pilot-target:ignore -->`
+ * — same `:ignore` convention as `deploy-state:ignore` and `hof-date:ignore`
+ * above — so "the deadline" and "a date on the calendar" are distinguished by
+ * something written down rather than inferred.
+ *
+ * WHEN THE TARGET MOVES AGAIN: update both constants together, or delete this
+ * check. A superseded-value ban is only meaningful while the value it names is
+ * the thing people would revert to.
+ *
+ * KNOWN LIMIT, stated rather than implied: this catches a *reverted* deadline,
+ * not an arbitrary new wrong one. A doc that invents 2026-08-20 untagged passes.
+ * Closing that would mean treating every date in these files as a deadline
+ * claim, which is a much larger contract than the problem justifies — the same
+ * call the queue-prose limit above makes.
+ */
+const SUPERSEDED_TARGET = '2026-08-13';
+export const PILOT_TARGET_IGNORE_TAG = '<!-- pilot-target:ignore -->';
+const PILOT_TARGET_IGNORE = /<!--\s*pilot-target:ignore\s*-->[\s*`]*$/i;
+
+/** Lines in one document where the superseded target appears untagged. */
+export function untaggedSupersededTarget(text: string): number[] {
+  const NL = String.fromCharCode(10);
+  const lines: number[] = [];
+  for (const m of text.matchAll(new RegExp(`${SUPERSEDED_TARGET}(?![\\d-])`, 'g'))) {
+    const start = m.index!;
+    const lineStart = text.slice(0, start).lastIndexOf(NL) + 1;
+    const before = text.slice(lineStart, start);
+    if (PILOT_TARGET_IGNORE.test(before) || PILOT_TARGET_TAG_AT_END.test(before)) continue;
+    lines.push(text.slice(0, start).split(NL).length);
+  }
+  return lines;
+}
+
+/** The current-target tag, matched where it sits immediately before a date. */
+const PILOT_TARGET_TAG_AT_END = /<!--\s*pilot-target:current\s*-->[\s*`]*$/i;
 
 /**
  * `2026-08-07` in any form EXCEPT the feed's midnight-UTC kickoff instant.
@@ -562,27 +617,43 @@ describe('operator docs agree on the pilot target date', () => {
     ).toEqual([]);
   });
 
-  it('each entry-point doc tags exactly one target date', () => {
+  it('each entry-point doc tags its live target date at least once', () => {
     for (const doc of AUTHORITATIVE_DOCS) {
       const dates = taggedTargetDates(fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8'));
       expect(
         dates.length,
-        `${doc} must carry exactly one "${PILOT_TARGET_TAG}" tag immediately ` +
-          `before the pilot target date. Found ${dates.length}: ${dates.join(', ') || 'none'}.`,
-      ).toBe(1);
+        `${doc} must carry at least one "${PILOT_TARGET_TAG}" tag immediately ` +
+          'before a pilot target date. Found none.',
+      ).toBeGreaterThan(0);
     }
   });
 
-  it('the two entry points name the same target date, and it is the HOF game', () => {
-    const named = AUTHORITATIVE_DOCS.map((doc) => ({
-      doc,
-      date: taggedTargetDates(fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8'))[0],
-    }));
+  it('every tagged target date in both entry points is the HOF game', () => {
+    const wrong: string[] = [];
+    for (const doc of AUTHORITATIVE_DOCS) {
+      for (const date of taggedTargetDates(fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8'))) {
+        if (date !== HOF_GAME_ET) wrong.push(`${doc}=${date}`);
+      }
+    }
     expect(
-      named.map((n) => n.date),
-      'The entry points disagree on the pilot target date: ' +
-        named.map((n) => `${n.doc}=${n.date}`).join(' vs '),
-    ).toEqual(named.map(() => HOF_GAME_ET));
+      wrong,
+      `Every tagged deadline must be the pilot target, ${HOF_GAME_ET}. ` +
+        'Two entry points naming two dates is the incident this file exists for.',
+    ).toEqual([]);
+  });
+
+  it('no entry point states the superseded target untagged', () => {
+    const offenders: string[] = [];
+    for (const doc of AUTHORITATIVE_DOCS) {
+      const text = fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8');
+      for (const line of untaggedSupersededTarget(text)) offenders.push(`${doc}:${line}`);
+    }
+    expect(
+      offenders,
+      `${SUPERSEDED_TARGET} was the target until 2026-07-21 and is now only the ` +
+        `first 16-game preseason slate. Tag a legitimate mention ${PILOT_TARGET_IGNORE_TAG}; ` +
+        'an untagged one reads as a live deadline.',
+    ).toEqual([]);
   });
 
   describe('the date scanner sees what it claims to', () => {
@@ -673,6 +744,44 @@ describe('operator docs agree on the pilot target date', () => {
 
     it('does not bind across prose', () => {
       expect(taggedTargetDates(`${PILOT_TARGET_TAG} the game is on 2026-08-06`)).toEqual([]);
+    });
+
+    it('requires a complete date token', () => {
+      // codex, round 4: without the trailing boundary this captured
+      // '2026-08-06' out of a typo and both assertions passed on it.
+      expect(taggedTargetDates(`${PILOT_TARGET_TAG} 2026-08-060`)).toEqual([]);
+      expect(taggedTargetDates(`${PILOT_TARGET_TAG} 2026-08-06-ish`)).toEqual([]);
+    });
+  });
+
+  describe('the superseded-target scanner sees what it claims to', () => {
+    it('flags an untagged live-looking mention', () => {
+      expect(untaggedSupersededTarget('A8 is DUE 2026-08-13.')).toEqual([1]);
+    });
+
+    it('exempts a tagged one', () => {
+      expect(untaggedSupersededTarget(`slate ${PILOT_TARGET_IGNORE_TAG} 2026-08-13`)).toEqual([]);
+    });
+
+    it('exempts one that is itself the tagged current target', () => {
+      // If the target ever moves BACK, the tagged claim is the honest place to
+      // say so — and the agreement test above is what would then fail, with a
+      // message about the target rather than about a stale string.
+      expect(untaggedSupersededTarget(`${PILOT_TARGET_TAG} 2026-08-13`)).toEqual([]);
+    });
+
+    it('does not let the ignore tag leak past its own mention', () => {
+      expect(untaggedSupersededTarget(
+        `${PILOT_TARGET_IGNORE_TAG} 2026-08-13 but DUE 2026-08-13`,
+      )).toEqual([1]);
+    });
+
+    it('requires a complete date token', () => {
+      expect(untaggedSupersededTarget('build 2026-08-130')).toEqual([]);
+    });
+
+    it('does not flag the current target', () => {
+      expect(untaggedSupersededTarget(`DUE ${HOF_GAME_ET}`)).toEqual([]);
     });
   });
 });
