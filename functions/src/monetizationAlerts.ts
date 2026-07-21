@@ -11,6 +11,7 @@ import {
   type AlertCoupon,
   type MonetizationAlertType,
 } from "./lib/monetizationAlertLogic";
+import { withHeartbeat, configReadFailedVerdict } from "./lib/heartbeat";
 
 /**
  * monetizationAlerts (PLAN-BUYFLOW-OVERHAUL Phase 6 #22) — a ~6-hourly sweep
@@ -44,6 +45,8 @@ interface AlertsConfig {
   dryRun: boolean;
   velocityThreshold: number;
   notifyEmail?: string;
+  /** Set when the config could not be READ, as distinct from being disabled. */
+  readFailed?: unknown;
 }
 
 /** Read the kill-switch/dry-run/threshold config. Any error => disabled. */
@@ -68,6 +71,7 @@ async function readAlertsConfig(db: admin.firestore.Firestore): Promise<AlertsCo
     }
   } catch (e) {
     console.warn("[monetizationAlerts] config read failed; staying disabled:", e);
+    cfg.readFailed = e ?? new Error("unknown config read error");
   }
   return cfg;
 }
@@ -214,11 +218,14 @@ function escapeHtmlLite(s: string): string {
 
 export const monetizationAlerts = functions.scheduler.onSchedule(
   { schedule: "every 6 hours", timeoutSeconds: 300, memory: "512MiB" },
-  async () => {
+  withHeartbeat('monetizationAlerts', async () => {
     const db = admin.firestore();
     const nowMs = Date.now();
 
     const cfg = await readAlertsConfig(db);
+    // See autoClosePools: disabled-by-choice and config-unreachable must not
+    // stamp the same healthy beat.
+    if (cfg.readFailed) return configReadFailedVerdict("monetizationAlerts", cfg.readFailed);
     if (!cfg.enabled) {
       console.log(
         "[monetizationAlerts] disabled (system/config.monetizationAlerts.enabled !== true); nothing to do."
@@ -241,7 +248,9 @@ export const monetizationAlerts = functions.scheduler.onSchedule(
         status: "error",
         error: String(e),
       });
-      return;
+      // The run ABORTED — no detector saw anything. An audit row alone leaves
+      // the heartbeat claiming a healthy run that did no work.
+      return { ok: false, error: `coupon read failed: ${e instanceof Error ? e.message : String(e)}` };
     }
 
     const accountCreatedAtByUid = await loadAccountCreatedAt(db, coupons);
@@ -267,7 +276,7 @@ export const monetizationAlerts = functions.scheduler.onSchedule(
         `[monetizationAlerts] DRY-RUN: would write ${allCandidates.length} alert(s):`,
         byType
       );
-      await writeAdminAudit({
+      const dryAudited = await writeAdminAudit({
         actorUid: "system",
         action: "MONETIZATION_ALERTS_SWEEP",
         targetType: "coupon",
@@ -281,13 +290,19 @@ export const monetizationAlerts = functions.scheduler.onSchedule(
         },
         status: "success",
       });
-      return;
+      // That audit entry is the dry run's ONLY output.
+      return dryAudited
+        ? { detail: { dryRun: true, wouldWrite: allCandidates.length } }
+        : { ok: false, error: "dry-run report not written", detail: { dryRun: true, wouldWrite: allCandidates.length } };
     }
 
     // Live run: upsert every candidate (deduped), then email the abuse ones.
     let created = 0;
     let refreshed = 0;
     let reopened = 0;
+    // Per-candidate catches keep one bad alert from losing the rest — which
+    // meant a run where EVERY alert failed to persist reported healthy.
+    let failedUpserts = 0;
     for (const c of allCandidates) {
       try {
         const res = await upsertAlert(db, c, nowMs);
@@ -295,6 +310,7 @@ export const monetizationAlerts = functions.scheduler.onSchedule(
         else if (res === "reopened") reopened += 1;
         else refreshed += 1;
       } catch (e) {
+        failedUpserts += 1;
         console.error(`[monetizationAlerts] upsert failed for ${c.type}:${c.couponCode}:`, e);
       }
     }
@@ -321,12 +337,13 @@ export const monetizationAlerts = functions.scheduler.onSchedule(
     console.log(
       `[monetizationAlerts] wrote alerts (created ${created}, refreshed ${refreshed}, reopened ${reopened}); emailed ${emailedTo} recipient(s).`
     );
-    await writeAdminAudit({
+    const audited = await writeAdminAudit({
       actorUid: "system",
       action: "MONETIZATION_ALERTS_SWEEP",
       targetType: "coupon",
       metadata: {
         dryRun: false,
+        failedUpserts,
         couponsScanned: coupons.length,
         created,
         refreshed,
@@ -337,5 +354,12 @@ export const monetizationAlerts = functions.scheduler.onSchedule(
       },
       status: "success",
     });
+
+    const problems: string[] = [];
+    if (failedUpserts > 0) problems.push(`${failedUpserts} alert upsert(s) failed`);
+    if (!audited) problems.push("run summary not written");
+    return problems.length > 0
+      ? { ok: false, error: problems.join("; "), detail: { created, refreshed, reopened, failedUpserts } }
+      : { detail: { created, refreshed, reopened } };
   }
-);
+));

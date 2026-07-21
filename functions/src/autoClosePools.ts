@@ -2,6 +2,7 @@ import * as functions from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import { adminCloseUpdate, isAutoCloseEligible } from "./lib/lifecycle";
 import { writeAdminAudit } from "./lib/adminAudit";
+import { withHeartbeat, configReadFailedVerdict } from "./lib/heartbeat";
 
 /**
  * autoClosePools (T2) — a daily sweep that closes pools whose event is over but
@@ -25,12 +26,13 @@ const MAX_PER_RUN = 200; // safety cap; logs if exceeded
 
 export const autoClosePools = functions.scheduler.onSchedule(
   { schedule: "every day 08:00", timeoutSeconds: 300, memory: "512MiB" },
-  async () => {
+  withHeartbeat('autoClosePools', async () => {
     const db = admin.firestore();
 
     // Kill-switch + dry-run flag (fail-safe: any read error → disabled).
     let enabled = false;
     let dryRun = true;
+    let configError: unknown = null;
     try {
       const cfg = (await db.doc("system/config").get()).data()?.autoClose as
         | { enabled?: boolean; dryRun?: boolean }
@@ -38,12 +40,16 @@ export const autoClosePools = functions.scheduler.onSchedule(
       enabled = cfg?.enabled === true;
       dryRun = cfg?.dryRun !== false; // default true unless explicitly false
     } catch (e) {
-      console.warn("[autoClosePools] config read failed; staying disabled:", e);
+      configError = e ?? new Error("unknown config read error");
     }
+    // Falling back to disabled is the right FAIL-SAFE, but it makes an
+    // unreachable config indistinguishable from a switch someone turned off.
+    // The fallback stays; only the reporting changes.
+    if (configError) return configReadFailedVerdict("autoClosePools", configError);
 
     if (!enabled) {
       console.log("[autoClosePools] disabled (system/config.autoClose.enabled !== true); nothing to do.");
-      return;
+      return { detail: { enabled: false } };
     }
 
     // Candidate set: pools whose event is over (two indexed queries, merged).
@@ -58,24 +64,33 @@ export const autoClosePools = functions.scheduler.onSchedule(
 
     if (dryRun) {
       console.log(`[autoClosePools] DRY-RUN: would close ${eligible.length} pool(s)${overflow > 0 ? ` (capped at ${MAX_PER_RUN})` : ""}.`);
-      await writeAdminAudit({
+      const dryAudited = await writeAdminAudit({
         actorUid: "system",
         action: "AUTO_CLOSE_SWEEP",
         targetType: "pool",
         metadata: { dryRun: true, wouldClose: eligible.length, sample: capped.slice(0, 10).map((d) => d.id) },
         status: "success",
       });
-      return;
+      // That audit entry IS the dry run's only output; losing it means the run
+      // produced nothing readable while claiming success.
+      return dryAudited
+        ? { detail: { dryRun: true, wouldClose: eligible.length } }
+        : { ok: false, error: 'dry-run report not written', detail: { dryRun: true, wouldClose: eligible.length } };
     }
 
     // Live run: close each via the shared admin-close write.
     const now = Date.now();
     let closed = 0;
+    // Counted, not just logged. The per-pool catch keeps one bad pool from
+    // stopping the sweep — which meant a run where EVERY close failed still
+    // reported a healthy beat.
+    let failed = 0;
     for (const d of capped) {
       try {
         await d.ref.update(adminCloseUpdate(now));
         closed++;
       } catch (e) {
+        failed++;
         console.error(`[autoClosePools] failed to close ${d.id}:`, e);
       }
     }
@@ -85,8 +100,12 @@ export const autoClosePools = functions.scheduler.onSchedule(
       actorUid: "system",
       action: "AUTO_CLOSE_SWEEP",
       targetType: "pool",
-      metadata: { dryRun: false, closed, eligible: eligible.length, overflow, sample: capped.slice(0, 10).map((d) => d.id) },
+      metadata: { dryRun: false, closed, failed, eligible: eligible.length, overflow, sample: capped.slice(0, 10).map((d) => d.id) },
       status: "success",
     });
+
+    return failed > 0
+      ? { ok: false, error: `${failed} pool(s) failed to close`, detail: { closed, failed, overflow } }
+      : { detail: { closed, overflow } };
   }
-);
+));

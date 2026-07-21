@@ -9,6 +9,7 @@ import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { isOptedOut, buildUnsubUrl, getPrefs, EmailCategory } from "./emailPrefs";
 import { sendCourierSMS } from "./notifications/smsService";
 import { getSquarePrivateMap, getSquareEmails } from "./squarePrivate";
+import { withHeartbeat } from "./lib/heartbeat";
 
 
 
@@ -110,9 +111,10 @@ async function logAudit(db: admin.firestore.Firestore, poolId: string, message: 
 
 // --- SCHEDULED REMINDER LOGIC ---
 
-export const runReminders = functions.scheduler.onSchedule("every 5 minutes", async () => {
+export const runReminders = functions.scheduler.onSchedule("every 5 minutes", withHeartbeat('runReminders', async () => {
     const db = admin.firestore();
     const now = Date.now();
+    let failedPools = 0;
     console.log(`[runReminders] Starting reminder check at ${new Date(now).toISOString()}`);
     const poolsSnapshot = await db.collection("pools").get();
     console.log(`[runReminders] Found ${poolsSnapshot.size} pools to check`);
@@ -145,11 +147,28 @@ export const runReminders = functions.scheduler.onSchedule("every 5 minutes", as
             }
 
         } catch (poolError: unknown) {
+            failedPools++;
             console.error(`[runReminders] Error processing pool ${doc.id}:`, poolError);
         }
     }
     console.log(`[runReminders] Completed reminder check`);
-});
+
+    // Per-pool catches stop one bad pool from silencing reminders for all the
+    // others — which meant a run where every pool threw still reported healthy.
+    // Reminders are the last thing standing between a member and a missed lock.
+    //
+    // KNOWN GAP, stated rather than implied: this counts pools whose handler
+    // THREW. It does NOT see failures the nested helpers swallow on their own —
+    // checkNFLNonPickerReminders catches its own query errors, sendEmail catches
+    // queue failures, and sendCourierSMS returns a boolean nobody reads. A run
+    // where every email failed to queue still reports zero failed pools. Closing
+    // that means plumbing an outcome back through each helper, which is a real
+    // change to the delivery path and wants its own PR rather than a 4am edit
+    // to the job that pages members. Raised by codex review on this PR.
+    return failedPools > 0
+        ? { ok: false, error: `${failedPools} pool(s) failed during the reminder pass`, detail: { failedPools } }
+        : { detail: { failedPools: 0 } };
+}));
 
 // --- PLAYOFF REMINDER LOGIC ---
 async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: PlayoffPool, now: number) {

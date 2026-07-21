@@ -4,6 +4,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 import { GameState } from "./types";
 import { writeAuditEvent, computeDigitsHash } from "./audit";
+import { withHeartbeat } from "./lib/heartbeat";
 
 const db = admin.firestore();
 
@@ -31,17 +32,25 @@ function toMillis(raw: any): number {
 // serializing — otherwise stragglers lock AFTER kickoff, which is unacceptable
 // for a real-money grid. Each executeAutoLock is an independent per-pool
 // transaction, so running them in parallel is safe.
-async function lockAllWithConcurrency(pools: GameState[], limit = 15): Promise<void> {
+/** Returns how many pools FAILED to lock — see the heartbeat verdict below. */
+async function lockAllWithConcurrency(pools: GameState[], limit = 15): Promise<number> {
+    let failed = 0;
     for (let i = 0; i < pools.length; i += limit) {
-        await Promise.all(pools.slice(i, i + limit).map(p => executeAutoLock(p)));
+        const results = await Promise.all(pools.slice(i, i + limit).map(p => executeAutoLock(p)));
+        failed += results.filter((ok) => !ok).length;
     }
+    return failed;
 }
 
 // --- DEDICATED AUTO-LOCK SCHEDULER (Runs Every 1 Minute) ---
 export const autoLockPools = functions.scheduler.onSchedule(
     { schedule: "every 1 minutes", timeoutSeconds: 300, memory: "512MiB" },
-    async (_event) => {
+    withHeartbeat('autoLockPools', async () => {
     const now = Date.now();
+    // A pool SELECTED for auto-lock whose deadline is unparseable can never
+    // lock — it is skipped silently, every minute, forever. Counted so the
+    // heartbeat says so instead of reporting a clean run.
+    let invalidDeadlines = 0;
     console.log(`[AutoLock] Starting auto-lock check at ${new Date(now).toISOString()}`);
 
     try {
@@ -71,6 +80,7 @@ export const autoLockPools = functions.scheduler.onSchedule(
             if (!raw) continue;
             const lockAtNum = toMillis(raw);
             if (isNaN(lockAtNum)) {
+                invalidDeadlines++;
                 console.warn(`[AutoLock] Invalid lockAt for pool ${pool.id}:`, raw);
                 continue;
             }
@@ -83,6 +93,7 @@ export const autoLockPools = functions.scheduler.onSchedule(
             if (!raw) continue;
             const lockAtNum = toMillis(raw);
             if (isNaN(lockAtNum)) {
+                invalidDeadlines++;
                 console.warn(`[AutoLock] Invalid lockAt for BRACKET pool ${pool.id}:`, raw);
                 continue;
             }
@@ -90,17 +101,31 @@ export const autoLockPools = functions.scheduler.onSchedule(
         }
 
         console.log(`[AutoLock] Locking ${duePools.length} due pool(s) with bounded concurrency`);
-        await lockAllWithConcurrency(duePools);
+        const failed = await lockAllWithConcurrency(duePools);
 
         console.log(`[AutoLock] Completed auto-lock check`);
+        // A pool that failed to lock leaves picks OPEN past its deadline. The
+        // per-pool catch stops one failure taking the batch down, which meant a
+        // run where none of the due pools locked still reported healthy.
+        const problems: string[] = [];
+        if (failed > 0) problems.push(`${failed} of ${duePools.length} due pool(s) failed to lock`);
+        if (invalidDeadlines > 0) problems.push(`${invalidDeadlines} pool(s) have an unparseable lockAt and can never auto-lock`);
+        return problems.length > 0
+            ? { ok: false, error: problems.join('; '), detail: { duePools: duePools.length, failed, invalidDeadlines } }
+            : { detail: { duePools: duePools.length } };
     } catch (error) {
+        // Caught so a scheduled run cannot become an unhandled rejection — but
+        // NO pool was locked, and this job runs every minute on the path that
+        // closes pick submission. A healthy heartbeat here would be a lie.
         console.error(`[AutoLock] Critical error:`, error);
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
-});
+}));
 
 
 // --- EXECUTE AUTO LOCK ---
-async function executeAutoLock(pool: GameState) {
+/** True when the pool was locked; false when the transaction failed. */
+async function executeAutoLock(pool: GameState): Promise<boolean> {
     const poolRef = db.collection('pools').doc(pool.id);
 
     try {
@@ -170,7 +195,9 @@ async function executeAutoLock(pool: GameState) {
         });
 
         console.log(`[AutoLock] SUCCESSFULLY LOCKED: ${pool.id}`);
+        return true;
     } catch (e) {
         console.error(`[AutoLock] Failed to lock pool ${pool.id}:`, e);
+        return false;
     }
 }

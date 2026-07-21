@@ -10,6 +10,7 @@ import { assertPaidParticipantCeiling } from "./poolOps";
 import { validated } from "./lib/validated";
 import { updateGlobalPlayoffResultsSchema } from "./schemas/tournamentAdmin";
 import { submitPlayoffPicksSchema, managePlayoffEntrySchema } from "./schemas/playoffEntries";
+import { withHeartbeat } from "./lib/heartbeat";
 import { syncPlayoffPoolsSchema } from "./schemas/noInputAdmin";
 import { calculatePlayoffScoresSchema } from "./schemas/playoffEntries";
 
@@ -382,12 +383,15 @@ export const updateGlobalPlayoffResults = validated(
 );
 
 // Scheduled Function: Check ESPN Scores
-export const checkPlayoffScores = onSchedule("every 30 minutes", async (event) => {
+export const checkPlayoffScores = onSchedule("every 30 minutes", withHeartbeat('checkPlayoffScores', async () => {
     logger.info("Checking ESPN Playoff Scores...");
 
     try {
         const resp = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard');
-        if (!resp.ok) return;
+        // A 429 or 5xx used to return undefined, which the wrapper reads as
+        // success — so a sustained ESPN outage would keep stamping fresh healthy
+        // beats while playoff results were never propagated.
+        if (!resp.ok) return { ok: false, error: `ESPN scoreboard returned HTTP ${resp.status}` };
         const data = await resp.json();
 
         // 1. Get Current Global Results
@@ -444,11 +448,15 @@ export const checkPlayoffScores = onSchedule("every 30 minutes", async (event) =
         } else {
             logger.info("No new playoff results found.");
         }
+        return { detail: { hasUpdates } };
 
     } catch (error) {
+        // Caught so a scheduled run does not become an unhandled rejection —
+        // but nothing was checked, and a healthy heartbeat would say otherwise.
         logger.error("Error checking playoff scores:", error);
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
-});
+}));
 
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 

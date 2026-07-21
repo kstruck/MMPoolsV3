@@ -4,6 +4,7 @@ import { writeAdminAudit } from "./lib/adminAudit";
 import { dispatchOpsAlert } from "./lib/opsAlertDispatcher";
 import { captureMonetizationAlert } from "./lib/sentryServer";
 import { isWebhookStuck, WEBHOOK_STUCK_MS } from "./lib/webhookDurability";
+import { withHeartbeat } from "./lib/heartbeat";
 
 /**
  * Daily backstop for the webhook-durability SLO (PLAN-SECURITY-OBSERVABILITY.md
@@ -51,31 +52,42 @@ export async function findStuckWebhookEvents(
     return stuck;
 }
 
-export const webhookDurabilitySweep = onSchedule("every 24 hours", async () => {
+export const webhookDurabilitySweep = onSchedule("every 24 hours", withHeartbeat('webhookDurabilitySweep', async () => {
     const db = admin.firestore();
     const nowMs = Date.now();
     const stuck = await findStuckWebhookEvents(db, nowMs);
 
     if (stuck.length === 0) {
         console.log("[webhookDurabilitySweep] no webhook events stuck past threshold.");
-        return;
+        return { detail: { stuckCount: 0 } };
     }
 
     console.warn(`[webhookDurabilitySweep] ${stuck.length} webhook event(s) stuck in failed past ${WEBHOOK_STUCK_MS / 3600000}h`);
     const sample = stuck.slice(0, 5).map((s) => `${s.id} (${s.attemptCount ?? "?"} attempts)`).join(", ");
 
     captureMonetizationAlert("WEBHOOK_FAILED", { stuckCount: stuck.length, sample });
-    await dispatchOpsAlert(db, {
+    const delivery = await dispatchOpsAlert(db, {
         type: "WEBHOOK_FAILED",
         title: `${stuck.length} Stripe webhook event(s) stuck in failed`,
         message: `${stuck.length} webhook event(s) have been status:"failed" for over 24h (SLO objective: zero). Review Super-Admin → Overview → Ops Health.`,
         context: { count: stuck.length, sample },
     });
-    await writeAdminAudit({
+    const audited = await writeAdminAudit({
         actorUid: "system",
         action: "WEBHOOK_DURABILITY_SWEEP",
         targetType: "stripeWebhookEvents",
         metadata: { stuckCount: stuck.length, sample },
         status: "success",
     });
-});
+
+    // This sweep exists to SHOUT about stuck Stripe webhooks — money that a
+    // customer paid and the system never applied. Both of its outputs swallow
+    // their own failures, so a run that found stuck events and then reached
+    // nobody is the worst possible silent success.
+    const lost: string[] = [];
+    if (delivery === "failed") lost.push("ops page undelivered");
+    if (!audited) lost.push("audit entry not written");
+    return lost.length > 0
+        ? { ok: false, error: `${stuck.length} stuck event(s) found but ${lost.join(" and ")}`, detail: { stuckCount: stuck.length } }
+        : { detail: { stuckCount: stuck.length } };
+}));

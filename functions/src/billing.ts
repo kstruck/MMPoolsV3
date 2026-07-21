@@ -21,6 +21,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
 import { redeemCouponSchema } from "./schemas/billingCheckout";
 import { validateBillingAccessSchema } from "./schemas/billing";
+import { withHeartbeat } from "./lib/heartbeat";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { renderEmailHtml, escapeHtml, BASE_URL } from "./emailStyles";
 import { sendEmail } from "./reminders";
@@ -76,8 +77,9 @@ async function resolveCommissionerEmail(poolData: FirebaseFirestore.DocumentData
 //    Transitions expired trials → grace_period, expired grace → locked
 // =============================================================================
 
-export const enforceBillingStatus = functions.scheduler.onSchedule("every day 03:00", async () => {
+export const enforceBillingStatus = functions.scheduler.onSchedule("every day 03:00", withHeartbeat('enforceBillingStatus', async () => {
     const now = Date.now();
+    let failedTransitions = 0;
     console.log(`[BillingEnforce] Starting billing enforcement at ${new Date(now).toISOString()}`);
 
     // --- Fetch global billing config for grace/trial durations ---
@@ -162,6 +164,7 @@ export const enforceBillingStatus = functions.scheduler.onSchedule("every day 03
                 console.error(`[BillingEnforce] Failed to send grace-period email for pool ${doc.id}:`, emailErr);
             }
         } catch (err) {
+            failedTransitions++;
             console.error(`[BillingEnforce] Error transitioning pool ${doc.id} to grace_period:`, err);
         }
     }
@@ -213,12 +216,25 @@ export const enforceBillingStatus = functions.scheduler.onSchedule("every day 03
                 console.error(`[BillingEnforce] Failed to send locked email for pool ${doc.id}:`, emailErr);
             }
         } catch (err) {
+            failedTransitions++;
             console.error(`[BillingEnforce] Error transitioning pool ${doc.id} to locked:`, err);
         }
     }
 
     console.log(`[BillingEnforce] Complete. Transitions: ${trialToGraceCount} trial→grace, ${graceToLockedCount} grace→locked`);
-});
+
+    // Per-pool catches keep one bad pool from stopping enforcement, which meant
+    // a run where every transition failed still stamped a healthy beat. This is
+    // a MONEY path — a pool that should have locked and silently did not is
+    // free access nobody is told about.
+    return failedTransitions > 0
+        ? {
+            ok: false,
+            error: `${failedTransitions} billing transition(s) failed`,
+            detail: { trialToGrace: trialToGraceCount, graceToLocked: graceToLockedCount, failedTransitions },
+        }
+        : { detail: { trialToGrace: trialToGraceCount, graceToLocked: graceToLockedCount } };
+}));
 
 // =============================================================================
 // 2. validateBillingAccess — Callable Function
