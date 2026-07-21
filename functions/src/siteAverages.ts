@@ -3,6 +3,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { isReservedSubjectId } from "./shared/profile";
+import { withHeartbeat } from "./lib/heartbeat";
 
 /**
  * Site-wide weekly averages for the Performance Chart's "league average" line
@@ -65,14 +66,19 @@ export async function recomputeSiteAverages(db: admin.firestore.Firestore): Prom
 }
 
 /** Daily refresh (cheap: one collection scan, bounded by user count). Best-effort. */
-export const siteAveragesJob = onSchedule('30 7 * * *', async () => {
+export const siteAveragesJob = onSchedule('30 7 * * *', withHeartbeat('siteAveragesJob', async () => {
   try {
     const r = await recomputeSiteAverages(admin.firestore());
     console.log(`[siteAverages] ${r.rows} week-rows from ${r.profiles} profiles`);
+    return { detail: { rows: r.rows, profiles: r.profiles } };
   } catch (e) {
+    // The catch keeps a scheduled failure from becoming an unhandled rejection,
+    // but the run did NOTHING. Without this the heartbeat would call that
+    // healthy — the failure mode the wrapper exists to end.
     console.error('[siteAverages] failed:', e);
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
-});
+}));
 
 /** On-demand refresh (SUPER_ADMIN). */
 export const refreshSiteAverages = onCall(async (request) => {

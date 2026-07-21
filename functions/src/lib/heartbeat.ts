@@ -248,4 +248,19 @@ export const SCHEDULED_JOB_EXPECTATIONS: Record<string, JobExpectation> = {
     // stale, which is deliberate — a weekly job that ran late is not an outage,
     // and preseason is the only window where a missed run would matter.
     lockNFLSpreadsJob: { everyMinutes: 7 * 24 * 60 },     // '0 9 * * 2'
+
+    // The legacy fleet, wrapped last. Several of these sit on money-adjacent
+    // paths — billing enforcement, the Stripe webhook durability sweep, the
+    // score updates that decide squares winners — and every one of them could
+    // have been dead for weeks with nothing to say so. Intervals are copied
+    // from each job's own onSchedule() and must be kept in step with it.
+    autoClosePools: { everyMinutes: 24 * 60 },            // 'every day 08:00'
+    autoLockPools: { everyMinutes: 1 },                   // 'every 1 minutes'
+    enforceBillingStatus: { everyMinutes: 24 * 60 },      // 'every day 03:00'
+    monetizationAlerts: { everyMinutes: 6 * 60 },         // 'every 6 hours'
+    checkPlayoffScores: { everyMinutes: 30 },             // 'every 30 minutes'
+    runReminders: { everyMinutes: 5 },                    // 'every 5 minutes'
+    syncGameStatus: { everyMinutes: 1 },                  // 'every 1 minutes'
+    siteAveragesJob: { everyMinutes: 24 * 60 },           // '30 7 * * *'
+    webhookDurabilitySweep: { everyMinutes: 24 * 60 },    // 'every 24 hours'
 };

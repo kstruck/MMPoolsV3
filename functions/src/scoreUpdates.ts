@@ -6,6 +6,7 @@ import { GameState, AxisNumbers, Winner } from "./types";
 import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { validated } from "./lib/validated";
 import { fixPoolScoresSchema } from "./schemas/scoreUpdates";
+import { withHeartbeat } from "./lib/heartbeat";
 
 // Helper to generate random digits
 const generateDigits = (): number[] => {
@@ -1084,7 +1085,7 @@ export const syncGameStatus = onSchedule({
     schedule: "every 1 minutes",
     timeoutSeconds: 120,
     memory: "256MiB"
-}, async (event) => {
+}, withHeartbeat('syncGameStatus', async () => {
     const db = admin.firestore();
     const startTime = Date.now();
     let processedCount = 0;
@@ -1246,6 +1247,17 @@ export const syncGameStatus = onSchedule({
             errorCount > 0 ? `${errorCount} of ${allPools.length} pool(s) failed to sync (ESPN fetch or processing error)` : undefined
         );
 
+        // The same verdict the sync-status doc already records, carried into the
+        // heartbeat. Per-pool errors are caught so one bad pool cannot stop the
+        // cycle, which meant a run where every pool failed still looked healthy.
+        return errorCount > 0
+            ? {
+                ok: false,
+                error: `${errorCount} of ${allPools.length} pool(s) failed to sync`,
+                detail: { poolsProcessed: processedCount, errors: errorCount, totalPools: allPools.length },
+            }
+            : { detail: { poolsProcessed: processedCount, totalPools: allPools.length } };
+
     } catch (globalError: any) {
         console.error("Critical Sync Failure:", globalError);
         await db.collection('system_logs').add({
@@ -1256,8 +1268,9 @@ export const syncGameStatus = onSchedule({
             durationMs: Date.now() - startTime
         });
         await writeSyncStatus(db, 'error', `Sync cycle failed: ${globalError.message || 'unknown error'}`);
+        return { ok: false, error: globalError?.message || 'unknown error', detail: { phase: 'sync-cycle' } };
     }
-});
+}));
 
 // Callable to simulate a game update for testing
 export const simulateGameUpdate = onCall({

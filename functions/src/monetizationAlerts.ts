@@ -11,6 +11,7 @@ import {
   type AlertCoupon,
   type MonetizationAlertType,
 } from "./lib/monetizationAlertLogic";
+import { withHeartbeat, configReadFailedVerdict } from "./lib/heartbeat";
 
 /**
  * monetizationAlerts (PLAN-BUYFLOW-OVERHAUL Phase 6 #22) — a ~6-hourly sweep
@@ -44,6 +45,8 @@ interface AlertsConfig {
   dryRun: boolean;
   velocityThreshold: number;
   notifyEmail?: string;
+  /** Set when the config could not be READ, as distinct from being disabled. */
+  readFailed?: unknown;
 }
 
 /** Read the kill-switch/dry-run/threshold config. Any error => disabled. */
@@ -68,6 +71,7 @@ async function readAlertsConfig(db: admin.firestore.Firestore): Promise<AlertsCo
     }
   } catch (e) {
     console.warn("[monetizationAlerts] config read failed; staying disabled:", e);
+    cfg.readFailed = e ?? new Error("unknown config read error");
   }
   return cfg;
 }
@@ -214,11 +218,14 @@ function escapeHtmlLite(s: string): string {
 
 export const monetizationAlerts = functions.scheduler.onSchedule(
   { schedule: "every 6 hours", timeoutSeconds: 300, memory: "512MiB" },
-  async () => {
+  withHeartbeat('monetizationAlerts', async () => {
     const db = admin.firestore();
     const nowMs = Date.now();
 
     const cfg = await readAlertsConfig(db);
+    // See autoClosePools: disabled-by-choice and config-unreachable must not
+    // stamp the same healthy beat.
+    if (cfg.readFailed) return configReadFailedVerdict("monetizationAlerts", cfg.readFailed);
     if (!cfg.enabled) {
       console.log(
         "[monetizationAlerts] disabled (system/config.monetizationAlerts.enabled !== true); nothing to do."
@@ -241,7 +248,9 @@ export const monetizationAlerts = functions.scheduler.onSchedule(
         status: "error",
         error: String(e),
       });
-      return;
+      // The run ABORTED — no detector saw anything. An audit row alone leaves
+      // the heartbeat claiming a healthy run that did no work.
+      return { ok: false, error: `coupon read failed: ${e instanceof Error ? e.message : String(e)}` };
     }
 
     const accountCreatedAtByUid = await loadAccountCreatedAt(db, coupons);
@@ -338,4 +347,4 @@ export const monetizationAlerts = functions.scheduler.onSchedule(
       status: "success",
     });
   }
-);
+));

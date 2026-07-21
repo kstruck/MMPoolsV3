@@ -145,43 +145,22 @@ describe('SCHEDULED_JOB_EXPECTATIONS must not drift from the wrapped jobs', () =
 //
 // This closes the loop from the other end: every onSchedule() in the codebase
 // must be wrapped, so a NEW scheduled job cannot be born unmonitored.
-// KNOWN GAP — a burn-down list, NOT a permanent exemption.
+// NO EXEMPTIONS. There is no allowlist here any more, and adding one back
+// would be a regression rather than a convenience.
 //
-// 13 of the ~17 scheduled jobs had no heartbeat when this invariant was
-// written. The NFL fleet was wrapped immediately because preseason depends on
-// it. These nine are legacy jobs, several on money-adjacent paths (billing,
-// monetization, webhook durability, score updates), and wrapping them is
-// mechanical but wants daylight and its own PR rather than an unsupervised
-// batch edit.
+// This started as a burn-down list of nine legacy jobs — 13 of the ~17
+// scheduled jobs had no heartbeat when the invariant was written. The list was
+// keyed `file.ts#exportedJobName` rather than by file or by count, because both
+// weaker forms TRANSFER: a file-level pass lets a new unmonitored job into an
+// exempt file for free, and a per-file count still transfers if someone wraps
+// the legacy job while adding a different unwrapped one. An exemption that can
+// move to code it was never granted for is how a ratchet becomes a rubber
+// stamp.
 //
-// The invariant is still worth having NOW: it means a NEW onSchedule() cannot
-// be added without a heartbeat, which is how this hole got dug in the first
-// place. Delete entries as they are wrapped; when the list is empty, delete
-// the list. Do not add to it.
-//
-// SRC-relative paths, NOT basenames. Basenames are not unique here — billing.ts
-// and scoreUpdates.ts each exist at both src/ and src/schemas/ — so a basename
-// allowlist silently exempts the wrong file and quietly weakens the ratchet this
-// test exists to be.
-//
-// Keyed `file.ts#exportedJobName` — the EXACT legacy job, never the file and
-// never a count. Both weaker forms transfer: a file-level pass lets a new
-// unmonitored job into any of these nine files for free, and a per-file COUNT
-// still transfers if someone wraps the legacy job while adding a different
-// unwrapped one (the count stays at one and both checks pass). An exemption
-// that can move to code it was never granted for is how a ratchet quietly
-// becomes a rubber stamp.
-const KNOWN_UNWRAPPED_JOBS = new Set([
-  'autoClosePools.ts#autoClosePools',
-  'autoLock.ts#autoLockPools',
-  'billing.ts#enforceBillingStatus',
-  'monetizationAlerts.ts#monetizationAlerts',
-  'playoffPools.ts#checkPlayoffScores',
-  'reminders.ts#runReminders',
-  'scoreUpdates.ts#syncGameStatus',
-  'siteAverages.ts#siteAveragesJob',
-  'webhookDurabilitySweep.ts#webhookDurabilitySweep',
-]);
+// All nine are wrapped now, so the list is gone and the rule is absolute:
+// EVERY onSchedule() in this codebase is wrapped in withHeartbeat(). If you are
+// adding a scheduled job and this test is failing, the fix is to wrap it, not
+// to reintroduce a list.
 
 /**
  * The exported job name that owns this `onSchedule(` call.
@@ -271,17 +250,15 @@ describe('every scheduled job is wrapped in withHeartbeat', () => {
     });
   }
 
-  const unwrapped = unwrappedJobs
-    .filter((u) => !KNOWN_UNWRAPPED_JOBS.has(u.key))
-    .map((u) => `${u.key} (${u.where})`);
+  const unwrapped = unwrappedJobs.map((u) => `${u.key} (${u.where})`);
 
   it('found the scheduled jobs (guards against the regex matching nothing)', () => {
     expect(scheduledCount).toBeGreaterThanOrEqual(12);
   });
 
   it('leaves no onSchedule() unwrapped', () => {
-    // A NEW job in an allowlisted file fails here: the exemption is keyed to the
-    // legacy job's own name, so it cannot transfer to a different one.
+    // Absolute — there is no allowlist to fall back on. Every scheduled job in
+    // the codebase is wrapped, so any new one must be too.
     expect(
       unwrapped.sort(),
       'onSchedule() without withHeartbeat() — this job can die silently and nothing will say so',
@@ -310,34 +287,92 @@ describe('findStaleJobs on the real outage shape', () => {
 // The allowlist must shrink, never quietly outlive the problem. If a file on it
 // gets wrapped, this fails and tells you to delete the entry — otherwise the
 // list becomes a permanent blind spot of exactly the kind it documents.
-describe('the known-unwrapped burn-down list stays honest', () => {
-  it('names only jobs that still have an unwrapped onSchedule()', () => {
-    const SRC3 = path.resolve(__dirname, '..');
-    const stillUnwrapped = new Set<string>();
+// The burn-down honesty test lived here. It existed only to force the
+// allowlist to shrink and to fail once an entry outlived its problem. With the
+// list deleted there is nothing left for it to police — "every onSchedule() is
+// wrapped" is now checked directly, with no exceptions to keep honest.
 
-    function walk3(dir: string): void {
-      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (e.name === '__tests__' || e.name === 'shared' || e.name === 'node_modules') continue;
-        const full = path.join(dir, e.name);
-        if (e.isDirectory()) { walk3(full); continue; }
-        if (!e.name.endsWith('.ts')) continue;
-        if (full.endsWith(path.join('lib', 'heartbeat.ts'))) continue;
-        const scanned = blankComments(fs.readFileSync(full, 'utf8'));
-        const starts = [...scanned.matchAll(/onSchedule\(/g)].map((m) => m.index!);
-        starts.forEach((start, i) => {
-          const window = scanned.slice(start, Math.min(start + 600, starts[i + 1] ?? scanned.length));
-          if (!window.includes('withHeartbeat(')) {
-            stillUnwrapped.add(`${relKey(SRC3, full)}#${owningJobName(scanned, start) ?? '<anonymous>'}`);
-          }
-        });
-      }
+// A job can be WRAPPED and still lie. Every one of these has a catch that
+// swallows so a scheduled run cannot become an unhandled rejection — and until
+// this PR, that catch returned undefined, which the wrapper records as ok:true.
+// Wrapping made the job stamp; it did not make the stamp truthful.
+//
+// This is a source-level ratchet, not a behavioural test: it cannot prove a
+// verdict is CORRECT, only that a job with a swallowing catch still has some
+// path that reports failure. The per-job verdict logic is inline in the job
+// bodies and is not unit-tested; extracting it (as nflFinalize's
+// sweepRunVerdict and nflLockWatch's lockWatchVerdict already are) is the
+// follow-up. Stated plainly rather than implied, because "wrapped" and
+// "actually reporting" are separate claims — the same distinction as "armed"
+// and "working".
+// The seven files below were wrapped in an EARLIER pass and were never given a
+// failure path. They are named individually, and this list must only ever
+// shrink — the same discipline as the unwrapped burn-down that this PR just
+// finished closing out, applied to the invariant one level up. Note the shape
+// of the problem repeating: closing "is it wrapped?" immediately exposed "does
+// the wrapper get told the truth?", which is a strictly harder question and one
+// that wrapping alone quietly appeared to answer.
+const KNOWN_SILENT_ON_FAILURE = new Set([
+  'consensus.ts',
+  'espnBracket.ts',
+  'expertPicks.ts',
+  'expertProfiles.ts',
+  'revenueAggregates.ts',
+  'stripe.ts',
+  'winProbability.ts',
+]);
+
+describe('a wrapped job that swallows errors still reports failure', () => {
+  const SRC4 = path.resolve(__dirname, '..');
+
+  function walk4(dir: string, acc: string[] = []): string[] {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === '__tests__' || e.name === 'shared' || e.name === 'node_modules') continue;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk4(full, acc);
+      else if (e.name.endsWith('.ts')) acc.push(full);
     }
-    walk3(SRC3);
+    return acc;
+  }
 
-    // An entry with nothing behind it is the rot this guards against: the job
-    // was wrapped and its exemption outlived the problem, silently staying
-    // available for the next job that lands in the same file.
-    const stale = [...KNOWN_UNWRAPPED_JOBS].filter((k) => !stillUnwrapped.has(k)).sort();
-    expect(stale, 'these are now wrapped — delete their KNOWN_UNWRAPPED_JOBS entry').toEqual([]);
+  const offenders: string[] = [];
+  let inspected = 0;
+  for (const file of walk4(SRC4)) {
+    if (file.endsWith(path.join('lib', 'heartbeat.ts'))) continue;
+    const src = fs.readFileSync(file, 'utf8');
+    if (!src.includes('withHeartbeat(')) continue;
+    inspected++;
+    // `ok: false` anywhere in the file, or a shared verdict helper that returns
+    // one. A file with neither cannot report a degraded run at all.
+    const reportsFailure = /ok:\s*false/.test(src)
+      || /configReadFailedVerdict|sweepRunVerdict|dryRunVerdict|lockWatchVerdict|scoreSyncHeartbeat/.test(src);
+    const rel = relKey(SRC4, file);
+    if (!reportsFailure && !KNOWN_SILENT_ON_FAILURE.has(rel)) offenders.push(rel);
+  }
+
+  it('inspected the wrapped files (guards against matching nothing)', () => {
+    expect(inspected).toBeGreaterThanOrEqual(9);
+  });
+
+  it('the silent-on-failure list only names files that are still silent', () => {
+    // Shrink-only. An entry that outlives its problem is a standing exemption
+    // for whatever lands in that file next.
+    const nowReporting = [...KNOWN_SILENT_ON_FAILURE].filter((f) => {
+      const full = path.join(SRC4, f);
+      if (!fs.existsSync(full)) return false;
+      const src = fs.readFileSync(full, 'utf8');
+      return /ok:\s*false/.test(src)
+        || /configReadFailedVerdict|sweepRunVerdict|dryRunVerdict|lockWatchVerdict|scoreSyncHeartbeat/.test(src);
+    }).sort();
+    expect(nowReporting, 'these now report failure — remove them from KNOWN_SILENT_ON_FAILURE').toEqual([]);
+  });
+
+  it('every file defining a wrapped job can report a degraded run', () => {
+    expect(
+      offenders.sort(),
+      'this file wraps a scheduled job but has no way to report ok:false — a ' +
+        'swallowed error there stamps a HEALTHY heartbeat, which is worse than ' +
+        'no heartbeat because it looks like proof of life',
+    ).toEqual([]);
   });
 });
