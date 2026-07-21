@@ -26,6 +26,28 @@
 >
 > Dependabot PRs #242, #243, #160, #133 were not touched.
 >
+> ### 1b. READ ONE THING BEFORE YOU DEPLOY — it is destroyed by deploying
+>
+> `nflDeepScoreSweepJob` has been live since 2026-07-21 ~04:30Z on an 11:30
+> `America/New_York` schedule, so **its first run was already due yesterday** —
+> and `withHeartbeat` stamps even on its disabled early-return. That makes the
+> currently-deployed version's heartbeat the answer to "did the schedule ever
+> fire at all", which is the question that took ten days to spot on the finalize
+> sweep.
+>
+> **Deploying overwrites that evidence** — the new version will stamp on its own
+> next run regardless. So look first:
+>
+> Firestore console → `system` → `heartbeats` → is there an
+> `nflDeepScoreSweepJob` key, and what is its `at`?
+>
+> - **A stamp dated 2026-07-21 after 11:30 ET** — the schedule fires. Good.
+> - **NO key at all, or an `at` older than that** — the schedule has never
+>   fired, which is a real finding about Cloud Scheduler and not about last
+>   night's code. Write down what you saw before deploying.
+>
+> Takes ten seconds and cannot be recovered afterwards.
+>
 > ### 2. THE DEPLOY — do this first, it is the only thing gating everything else
 >
 > ⚠️ **This deploy ships MORE than last night's work.** Prod is `84e080c`, but
@@ -440,7 +462,11 @@ See TOMORROW-TASKS **NFL-6**.
 The 10 callables HANDOFF listed as "actionable remaining" are wrapped. That
 closes the SWEEP-LATER worklist **as written**.
 
-⚠️ **It does NOT mean every callable is wrapped.** A grep of `main` still finds
+⚠️ **It does NOT mean every callable is wrapped.** ⚠️ **The count below is
+STALE — it is 26, not 25, and `searchUsersByEmail` has since been migrated to
+`validated()`. See `SECURITY-BARE-ONCALL-CLASSIFICATION.md` (2026-07-22) for the
+verified per-callable breakdown; this paragraph is kept for history.** A grep of
+`main` was said at the time to find
 **25 bare `onCall(`** exports: ~16 sim-harness (own `requireAuth`/SUPER_ADMIN
 gates, never SWEEP-LATER rows), 3 aiTesting, `createBracketPool` (deliberately
 deferred — `...settings` passthrough), plus `getServerTime`, `logClientError`,
