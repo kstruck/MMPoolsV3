@@ -50,11 +50,27 @@ Requiring auth would break its purpose. *(It does ship with
 `enforceAppCheck: false` and a documented TODO — an unauthenticated write path
 into `system_logs` whose only defence is those caps. Worth knowing.)*
 
-The 11 `simHarness.ts` callables are the caller's explicit carve-out and hold
-up on inspection: `assertSuperAdmin` plus, more importantly, `getVerifiedSimPool`'s
-persisted `simRunId` match, which refuses any non-sim pool **regardless of
-role**. That anchor — not the role check — is what makes them safe, and it is
-why `simLegacy.ts` lands in the next bucket instead.
+The 11 `simHarness.ts` callables are the caller's explicit carve-out. **Seven of
+them** — `simWriteEntries`, `simUpdatePool`, `cleanupSimPool`, `simJoinMembers`,
+`simSubmitPicks`, `simExecuteRebuy`, `simFinalizePool` — hold up on the strength
+of `getVerifiedSimPool`'s persisted `simRunId` match, which refuses any non-sim
+pool **regardless of role**. That anchor, not the claim-only `assertSuperAdmin`,
+is what makes them safe, and it is why `simLegacy.ts` lands in the next bucket.
+
+⚠️ **Four do NOT call `getVerifiedSimPool`**, so do not extend that reasoning to
+them without looking:
+
+| Callable | What actually guards it |
+|---|---|
+| `simStartRun` | `assertSuperAdmin` (claim-only) + a `validRunId()` regex; writes only a run manifest |
+| `simSeedNFLGames` | claim-only + doc IDs **server-forced** into `sim-<runId>-g<n>` and a 300-doc cap, so client content cannot escape the sim namespace |
+| `sweepSimRuns` | claim-only + a single `dryRun` boolean, dry by default, with a RUNNING-grace-window guard |
+| `simReportRun` | claim-only + `validRunId()` and hard caps on the report payload |
+
+Each has a real namespace or shape constraint rather than the pool anchor, which
+is why they stay in this bucket — but the verdict rests on those constraints,
+not on an anchor they never call. If any of them ever gains a path that writes
+outside the `sim-` namespace, it moves buckets.
 
 ### WANTS `validated()` (12)
 
@@ -95,6 +111,16 @@ recorded as deferred in `HANDOFF.md` and the SWEEPS matrix.
    normal commissioner payout recording. Use `validated()` for the auth +
    schema boundary only, and separately harden the SUPER_ADMIN *bypass* to check
    the user document as well as the claim.
+
+   ⚠️ **That is still not enough on its own.** The ownership checks authorize
+   from persisted pool fields and never consult `users/{uid}.role`, so a
+   **BANNED** owner or co-manager is still admitted — `validated()`'s auth+schema
+   layer does not look either. `CONTEXT.md` requires bans to be enforced
+   server-side, so the remediation for `recordPoolPayouts`, `simulateGameUpdate`
+   and `simFillSquares` must also call `assertNotBannedLive`
+   (`functions/src/lib/systemGuards.ts:63`) on the ownership path. Hardening only
+   the SUPER_ADMIN bypass leaves a banned commissioner able to move the payout
+   ledger and decide winners.
 4. `simLegacy.ts` ×3 — no `simRunId` anchor, unlike their `simHarness` siblings.
 5. The rest as convenient. `aiTesting` ×3 are cheap and spend real money on
    failure.

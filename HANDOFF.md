@@ -83,6 +83,16 @@
 >
 > ```powershell
 > npm --prefix functions install
+> git status --porcelain
+> ```
+>
+> **`git status --porcelain` must print NOTHING.** A dirty working tree is the
+> one case the byte-check above cannot catch: `git log` still shows exactly
+> `17fa291`, both markers still match, and `firebase deploy` packages and ships
+> your uncommitted edits anyway. If anything prints, stash or commit it before
+> continuing — do not deploy bytes that were never reviewed.
+>
+> ```powershell
 > $env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"
 > npx firebase deploy --only functions --project gridiron-gamble-uzuqo
 > ```
