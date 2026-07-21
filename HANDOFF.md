@@ -227,8 +227,12 @@
 >
 > Honest list. Do not read the green CI as more than it is.
 >
-> - **Nothing merged overnight has run in production.** All of it is proven in
->   the emulator and in CI only.
+> - **Nothing merged overnight has run in production.** And "CI is green" is a
+>   weaker claim than it sounds here: #247 added real emulator tests for the
+>   spread-lock write path, but **#250's nine rewritten job handlers have no
+>   emulator coverage at all** — its only test addition is the source-level
+>   invariant below. The five gates passed; the changed verdict paths inside
+>   those handlers were never executed by a test.
 > - **The per-job heartbeat verdicts are not individually tested.** The guard
 >   that exists is a source-level check that a job *can* report failure; it
 >   cannot prove each path is wired. I verified this rather than assuming:

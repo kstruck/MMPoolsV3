@@ -137,10 +137,19 @@ weakness on a false premise:
 > exercises. The repo's Golden Scenario treats payout recording as a real
 > production path, not a hypothetical.
 >
-> The exposure is narrow: the role half of `assertPoolOwnerOrSuperAdmin` is
-> claim-only, so a **demoted-but-unrefreshed SUPER_ADMIN token** could still
-> record payouts. Ordinary owners are authorized by persisted pool ownership
-> and are unaffected. It is a stale-token window on the money ledger, not an
-> open door — but it should be decided on rather than swept into September.
+> **Two distinct paths, not one:**
+>
+> 1. **Stale SUPER_ADMIN token.** The role half of `assertPoolOwnerOrSuperAdmin`
+>    is claim-only, so a demoted-but-unrefreshed admin token still records
+>    payouts. Narrow — a stale-token window.
+> 2. **BANNED commissioner.** The ownership path never consults
+>    `users/{uid}.role` at all, so an owner or co-manager who has been banned but
+>    is still named in the pool's persisted ownership fields **keeps full access
+>    to the money ledger**. This is not a timing window; it persists until the
+>    ownership fields change. `CONTEXT.md` requires bans to be enforced
+>    server-side, so this one is a straightforward gap, and it needs
+>    `assertNotBannedLive` — see the ordering note above.
+>
+> Ordinary, non-banned owners are correctly authorized and unaffected by either.
 
 Everything else on this list is a September job, not a pre-2026-08-13 one.
