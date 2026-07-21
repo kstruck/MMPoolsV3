@@ -350,11 +350,14 @@ export async function importNFLSeason(
  */
 // `secrets` is required for the ops-alert SMS path used by the stat-correction
 // page (A5) — dispatchOpsAlert reads COURIER_AUTH_TOKEN at call time.
-export const syncNFLScoresJob = onSchedule({ schedule: '*/5 * * * *', secrets: [opsCourierAuthToken] }, async (event) => {
-  const db = admin.firestore();
-  const now = Date.now();
-  await syncScoresWindow(db, now, HOT_WINDOW_LOOKBACK_MS, { prune: true });
-});
+export const syncNFLScoresJob = onSchedule(
+  { schedule: '*/5 * * * *', secrets: [opsCourierAuthToken] },
+  withHeartbeat('syncNFLScoresJob', async () => {
+    const db = admin.firestore();
+    const now = Date.now();
+    await syncScoresWindow(db, now, HOT_WINDOW_LOOKBACK_MS, { prune: true });
+  }),
+);
 
 /** The 5-minute job's lower bound: games that started within the last 24h. */
 export const HOT_WINDOW_LOOKBACK_MS = 24 * 60 * 60 * 1000;
@@ -619,7 +622,7 @@ export function shouldLockSpread(game: Pick<NFLGame, 'spread'> | undefined): boo
 export const lockNFLSpreadsJob = onSchedule({
   schedule: '0 9 * * 2', // 9:00 AM every Tuesday
   timeZone: 'America/New_York'
-}, async () => {
+}, withHeartbeat('lockNFLSpreadsJob', async () => {
   const db = admin.firestore();
 
   let gate = { enabled: false, dryRun: true };
@@ -670,7 +673,7 @@ export const lockNFLSpreadsJob = onSchedule({
   console.log(
     `[lockNFLSpreadsJob] Locked spreads for ${targets.length} upcoming games.${overflow > 0 ? ` WARNING: ${overflow} eligible game(s) exceeded the ${MAX_SPREAD_LOCKS_PER_RUN} per-run cap and were NOT locked.` : ''}`,
   );
-});
+}));
 
 /**
  * SuperAdmin-only HTTPS callable to trigger manual NFL schedule imports.

@@ -9,6 +9,7 @@ import {
   decideAlert, evaluateSlate, formatAlertMessage, slateId,
   type SlateKey, type WatchedGame, type WatchedPool,
 } from "./lib/nflLockWatch";
+import { withHeartbeat } from "./lib/heartbeat";
 
 /**
  * nflLockWatchJob (PLAN-NFL-PRESEASON-PILOT A3a) — the pre-kickoff tripwire.
@@ -41,7 +42,7 @@ export const nflLockWatchJob = functions.scheduler.onSchedule(
     memory: "512MiB",
     secrets: [opsCourierAuthToken],
   },
-  async () => {
+  withHeartbeat("nflLockWatchJob", async () => {
     const db = admin.firestore();
 
     let enabled = false;
@@ -147,5 +148,5 @@ export const nflLockWatchJob = functions.scheduler.onSchedule(
       metadata: { dryRun, slatesChecked: slates.size, firing, detail: checked },
       status: "success",
     });
-  },
+  }),
 );

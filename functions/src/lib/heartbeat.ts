@@ -154,4 +154,17 @@ export const SCHEDULED_JOB_EXPECTATIONS: Record<string, JobExpectation> = {
     releaseStaleCouponReservations: { everyMinutes: 30 }, // every 30 minutes
     scheduledBracketSync: { everyMinutes: 10 },           // every 10 minutes
     nflDeepScoreSweepJob: { everyMinutes: 24 * 60 },      // '30 11 * * *'
+
+    // The NFL fleet. These were the LAST jobs to get heartbeats and the FIRST
+    // that should have had them: nflFinalizeSweepJob threw FAILED_PRECONDITION
+    // every day for ten days without anyone noticing, and A5's snapshot writes
+    // died silently inside syncNFLScoresJob. Both were invisible precisely
+    // because a job with nothing to do and a job that is broken look identical.
+    syncNFLScoresJob: { everyMinutes: 5 },                // '*/5 * * * *'
+    nflFinalizeSweepJob: { everyMinutes: 24 * 60 },       // 'every day 08:30'
+    nflLockWatchJob: { everyMinutes: 60 },                // 'every 60 minutes'
+    // Weekly. The tolerance multiplier makes this ~3 weeks before it is called
+    // stale, which is deliberate — a weekly job that ran late is not an outage,
+    // and preseason is the only window where a missed run would matter.
+    lockNFLSpreadsJob: { everyMinutes: 7 * 24 * 60 },     // '0 9 * * 2'
 };

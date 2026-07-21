@@ -6,6 +6,7 @@ import { sortMarginLeaderboard } from "./nflScoringEngine";
 import { recomputeUserProfile } from "./userProfile";
 import { writeAdminAudit } from "./lib/adminAudit";
 import type { NFLPickemEntry, SurvivorEntry, MarginEntry } from "./nflPoolTypes";
+import { withHeartbeat } from "./lib/heartbeat";
 
 /**
  * Season Finalization (ADR 0005 decision 2 / PLAN-PLAYER-PROFILES Phase 3).
@@ -379,7 +380,7 @@ export function poolInLiveScope(pool: { seasonType?: number | string }, liveSeas
  */
 export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
   { schedule: "every day 08:30", timeoutSeconds: 540, memory: "512MiB" },
-  async () => {
+  withHeartbeat("nflFinalizeSweepJob", async () => {
     const db = admin.firestore();
 
     let gate: SweepGate = { enabled: false, dryRun: true, liveSeasonTypes: null };
@@ -538,5 +539,5 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
       },
       status: "success",
     });
-  },
+  }),
 );
