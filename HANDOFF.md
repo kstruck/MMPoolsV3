@@ -16,12 +16,17 @@
 >
 > ### What needs Kevin now — all decisions or console work, no code
 > 1. **Enable PITR** — `PLAN-BACKUPS-PHASE3.md` steps 0-2. One command, buys a
->    7-day recovery floor. **This app still has NO BACKUP OF ANY KIND**, which is
->    a bigger exposure than anything on the preseason list, because every other
->    risk there is recoverable and this one is not. Step 0 is installing
->    `gcloud` — it is not on this machine, and the Firebase CLI cannot configure
->    PITR or schedules. No region is pinned in the repo, so the database location
->    must be READ, not assumed.
+>    7-day recovery floor. **NO INSTALL NEEDED** — PITR is a checkbox in the
+>    Cloud console (Firestore → `(default)` → Disaster Recovery → Edit), and
+>    `gcloud` is only required for the later steps, which Cloud Shell provides
+>    in-browser. An earlier note here claiming "install gcloud first" was wrong.
+>
+>    **Scope correction:** the VPS *is* backed up (daily Coolify/Ubuntu
+>    snapshots on separate infrastructure) — but that is the *reproducible* half,
+>    since the frontend rebuilds from git. **Firestore and Firebase Auth have no
+>    backup at all**, and that is the half that cannot be recreated. Still the
+>    biggest exposure on the list. No region is pinned in the repo, so the
+>    database location must be READ, not assumed.
 > 2. **A8 pricing — due 2026-08-13.** The only calendar-bound item.
 > 3. **Arm `nflDeepSweep`** (optional, safe): `system/config.nflDeepSweep` →
 >    `{ enabled: true, dryRun: true }`. In dry-run it still detects and reports

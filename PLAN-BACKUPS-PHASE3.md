@@ -1,13 +1,34 @@
 # PLAN — Phase 3: Backup & recovery (Firestore + Auth)
 
-Status: **not started.** There is currently **no backup of any kind** for this
-application — no PITR, no scheduled backups, no exports, no Auth export. If the
-Firestore database were deleted or corrupted today, every pool, entry, pick,
-member record and billing charge would be gone permanently.
+Status: **not started** for the data that matters.
 
-This is the largest unaddressed risk in the system, and it is larger than any
-bug in the preseason list, because every other risk is recoverable and this one
-is not.
+> **Correction 2026-07-21.** An earlier version of this document said the
+> application had "no backup of any kind". That was too broad. The **VPS is
+> backed up** — daily automatic snapshots of the Ubuntu/Coolify host, stored on
+> separate infrastructure, currently four restore points going back ~10 days.
+> The claim below is narrowed to what those snapshots genuinely do not cover.
+
+**What IS protected:** the Coolify/nginx VPS — server config, environment, and
+the built `www` assets. Note this is also the **reproducible** half: the
+frontend is rebuilt from `main` by Coolify, and Cloud Functions,
+`firestore.rules` and `firestore.indexes.json` all live in git. Losing the VPS
+costs time, not data.
+
+**What is NOT protected — the unreproducible half:**
+
+| Asset | Backed up? | Consequence if lost |
+|---|---|---|
+| **Firestore** — pools, entries, picks, member records, billing charges, payout records | ❌ none | Permanent. Nothing anywhere else holds this. |
+| **Firebase Auth** — user accounts, emails, password hashes | ❌ none | Every member loses access, even with a perfect Firestore restore. |
+
+No PITR, no scheduled backups, no exports, no Auth export. If the Firestore
+database were deleted or corrupted today, every pool, entry, pick, member record
+and billing charge would be gone permanently — and the VPS snapshots would not
+help, because none of that data has ever lived on the VPS.
+
+That remains the largest unaddressed risk in the system, and it is larger than
+any bug in the preseason list, because every other risk is recoverable and this
+one is not.
 
 Scope and corrected facts come from `PLAN-SECURITY-OBSERVABILITY.md` Phase 3
 (items 15–19, already corrected by Codex review #10/#11). This document is the
@@ -29,12 +50,46 @@ command and immediately buys a 7-day floor.
 
 ---
 
-## Step 0 — Install the gcloud CLI (blocking prerequisite)
+## Step 0 — how to run these commands (gcloud is NOT actually required for PITR)
 
-`gcloud` is **not installed** on this machine (verified 2026-07-21:
-`gcloud --version` → `command not found`). The Firebase CLI cannot configure
-PITR, backup schedules, or exports — only gcloud can. Nothing below runs until
-this is done.
+**CORRECTION 2026-07-21.** An earlier version of this document called installing
+gcloud a blocking prerequisite. That is wrong for the single highest-value item.
+
+**PITR can be enabled entirely from the Google Cloud console — no install, no
+CLI, about two minutes.** See Step 2. Do that FIRST; it is the 7-day recovery
+floor and it is the reason this document exists.
+
+`gcloud` is still needed for the *other* pieces — backup schedules, manual
+exports, bucket creation — because the Firebase CLI cannot configure them. But
+you have three ways to get it, and installing locally is the least convenient:
+
+| Option | Install needed | Use when |
+|---|---|---|
+| **Google Cloud console** | none | Enabling PITR (Step 2). Enough on its own for the recovery floor. |
+| **Cloud Shell** (recommended for the rest) | none | Everything else here. Browser-based shell with gcloud preinstalled and already authenticated. |
+| Local gcloud install | yes | Only if you want this scriptable/repeatable later. |
+
+### Cloud Shell — the no-install path for every gcloud command below
+
+1. Go to `https://console.cloud.google.com/?project=gridiron-gamble-uzuqo`
+2. Click the **Activate Cloud Shell** icon (a `>_` terminal symbol) in the top
+   right toolbar. A terminal opens at the bottom of the browser.
+3. Wait for the prompt. **Expect:** something like
+   `kstruck@cloudshell:~ (gridiron-gamble-uzuqo)$` — the project name in
+   parentheses confirms it is already pointed at the right project.
+4. Verify:
+   ```
+   gcloud config get-value project
+   ```
+   **Expect:** `gridiron-gamble-uzuqo`. **If it prints something else**, run
+   `gcloud config set project gridiron-gamble-uzuqo`.
+5. Every `gcloud` command in this document works in that shell as-written.
+
+⚠️ Cloud Shell home storage is ephemeral (deleted after ~120 days idle) and it
+is NOT where the Auth export should live — Step 6 uploads to GCS and deletes the
+local copy either way, which is the correct behavior in Cloud Shell too.
+
+### Local install (optional — only if you want it scriptable)
 
 1. Open a browser and go to:
    `https://cloud.google.com/sdk/docs/install#windows`
@@ -108,35 +163,73 @@ with all steps regardless.
 
 ## Step 2 — Enable Point-in-Time Recovery (item 15)
 
-PITR keeps a rolling **7-day** window you can read the database as-of any
-microsecond within. This is the single highest-value command in this document:
-it is the thing that turns "we wrote garbage over the whole slate an hour ago"
-from unrecoverable into a 10-minute fix.
+**Do this first. It needs no install and takes about two minutes.**
 
-It is a **hard 7-day ceiling**, not an archive. It does not replace steps 3–5.
+PITR keeps a rolling **7-day** window. Firestore retains **one version per
+minute** inside that window, and you read the database as-of a whole-minute
+timestamp. This is the thing that turns "we wrote garbage over the whole slate
+an hour ago" from unrecoverable into a short fix.
+
+It is a **hard 7-day ceiling**, not an archive. It does not replace steps 3-5.
+
+> **Correction 2026-07-21:** an earlier draft of this document said "any
+> microsecond". That was wrong — the documented granularity is one version per
+> minute. It also said the cost scales with write volume rather than database
+> size; see the cost note below for the corrected model.
+
+### Option A — Google Cloud console (no install, recommended)
+
+1. Go to `https://console.cloud.google.com/firestore/databases?project=gridiron-gamble-uzuqo`
+2. Click the **`(default)`** database in the list.
+3. In the left navigation, click **Disaster Recovery**.
+4. Click **Edit**.
+5. Tick **Enable point-in-time recovery**.
+6. Click **Save**.
+7. **Expect:** the Disaster Recovery page now shows point-in-time recovery as
+   enabled. **If the checkbox is greyed out**, billing is not enabled on the
+   project — PITR requires a billing-enabled project and has no free tier.
+
+### Option B — gcloud (Cloud Shell or local; see Step 0)
 
 ```
 gcloud firestore databases update "(default)" --enable-pitr --project gridiron-gamble-uzuqo
 ```
 
-**Expect:** an operation to run for a few seconds, then output containing
+**Expect:** an operation runs for a few seconds, then output containing
 `pointInTimeRecoveryEnablement: POINT_IN_TIME_RECOVERY_ENABLED`.
 
-**Verify it independently** (do not trust the command's own success message —
-this repo's recurring lesson is that "armed" and "working" are separate claims):
+### Verify independently — whichever option you used
+
+Do not trust the console's own success state or the command's exit code. This
+repo's recurring lesson is that "armed" and "working" are separate claims. From
+Cloud Shell:
 
 ```
 gcloud firestore databases describe --database="(default)" --project gridiron-gamble-uzuqo --format="value(pointInTimeRecoveryEnablement)"
 ```
 
 **Expect exactly:** `POINT_IN_TIME_RECOVERY_ENABLED`.
-**If instead** it still says `DISABLED`, the update did not take — re-run the
-update command and read its full error output rather than retrying blindly.
+**If instead** it says `DISABLED`, the change did not take — redo Option A and
+read any error shown rather than retrying blindly.
 
-**Cost:** PITR bills for the extra stored versions. At this database's size
-(~35 pools, tens of thousands of documents) the monthly cost is small, but it
-is not zero. It scales with **write volume**, not database size, so it will grow
-during a live season.
+### Cost — corrected
+
+PITR data is billed at **$0.00020 per GiB-hour** in `us-central1`, which is
+about **$0.146 per GiB-month**. It is billed separately from database storage
+and does not change your database storage cost. Google's own guidance is that
+PITR storage typically ends up **similar in cost to the database storage
+itself**.
+
+There is **no free tier for PITR**, and you can be charged up to one day of PITR
+storage even if you disable it within a day of enabling it.
+
+Reads against the PITR window — stale reads or exports — bill as normal document
+reads.
+
+Practical read for this project: at 35 pools the database is very likely well
+under 1 GiB, which puts PITR in the range of cents per month. **Check the actual
+number before committing** — Firestore console → **Usage** tab shows current
+stored data size.
 
 ---
 
