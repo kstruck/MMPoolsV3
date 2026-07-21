@@ -251,7 +251,7 @@ half-reviewed work.
 4. Install functions dependencies (always do this before deploying — avoids
    the `stripe`/`fft` TS2307 build error):
    ```
-   npm --prefix functions install
+   npm --prefix functions ci        # ci, NOT install (install rewrites the lockfile)
    ```
    **Expect:** finishes with no red `npm error` lines. Warnings about
    deprecated packages or `allow-scripts` are normal and safe to ignore.
@@ -727,7 +727,7 @@ undeployed callables already listed in HANDOFF.md.
    the merges did not land and a deploy would silently skip everything.
 3. Install functions deps first, or the deploy fails with stripe/fft TS2307:
    ```
-   npm --prefix functions install
+   npm --prefix functions ci        # ci, NOT install (install rewrites the lockfile)
    ```
 4. Deploy. **Functions before rules** (no rules change tonight, so functions
    only). The new/changed functions from tonight:

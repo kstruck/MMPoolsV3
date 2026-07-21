@@ -1,4 +1,4 @@
-# Bare `onCall(` callables — classification (2026-07-22)
+# Bare `onCall(` callables — classification (2026-07-21)
 
 A classification pass, **not** a sweep. Nothing in this document was changed;
 it exists so the next person deciding what to harden starts from evidence

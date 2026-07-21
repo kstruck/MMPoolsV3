@@ -341,7 +341,7 @@ For a `system/config` runtime flag:
    a callable that writes `admin_audit` like `adminSaveBillingConfig`.
 6. Document the flag in this skill's tables (env var → §1, secret → §2,
    `system/config` field → §3/§4) and date-stamp it.
-7. Deploy per ritual (mmp-deploy-and-operate): `npm --prefix functions install`,
+7. Deploy per ritual (mmp-deploy-and-operate): `npm --prefix functions ci`,
    `npx firebase deploy --only functions ... --project gridiron-gamble-uzuqo`,
    functions BEFORE rules; frontend changes additionally need the manual
    Coolify deploy.

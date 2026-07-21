@@ -21,7 +21,7 @@ Jargon used once, defined once:
 This is non-negotiable discipline rule (b) — canonical incident history lives in **mmp-change-control**. The short form:
 
 1. Always `npx firebase` (firebase-tools is a devDependency; there is no global CLI on the machines this runs on).
-2. Always `npm --prefix functions install` FIRST — skipping it causes `TS2307: Cannot find module 'stripe'` (and firebase-functions-test) errors during the predeploy build.
+2. Always `npm --prefix functions ci` FIRST — skipping it causes `TS2307: Cannot find module 'stripe'` (and firebase-functions-test) errors during the predeploy build. **`ci`, not `install`**: `install` rewrites `functions/package-lock.json`, which dirties the tree `firebase deploy` packages and defeats any clean-worktree check (2026-07-21).
 3. Deploy **functions BEFORE firestore rules** when both changed — the rules assume the new functions exist (e.g. tightened `system_logs` rules made client writes illegal because `logClientError` was supposed to take over; deploying rules first silently drops telemetry).
 4. Always pass `--project gridiron-gamble-uzuqo` explicitly.
 
@@ -29,7 +29,11 @@ This is non-negotiable discipline rule (b) — canonical incident history lives 
 
 ```powershell
 # 1. Install functions deps (avoids TS2307 stripe / firebase-functions-test)
-npm --prefix functions install
+#    ci, NOT install — install rewrites the lockfile and dirties the deploy tree
+npm --prefix functions ci
+
+# 1b. The tree that gets packaged must be clean
+if (git status --porcelain) { throw "Working tree dirty - deploy packages the WORKING TREE, not the commit. Stash or commit first." }
 
 # 2. Optional fail-fast build (the deploy predeploy hook runs this anyway)
 npm --prefix functions run build
@@ -48,7 +52,7 @@ npx firebase deploy --only firestore:indexes --project gridiron-gamble-uzuqo
 
 | Piece | What it does | Source |
 |---|---|---|
-| `npm --prefix functions install` | Installs `functions/node_modules` (separate package.json, Node 22 engine) | `functions/package.json` |
+| `npm --prefix functions ci` | Installs `functions/node_modules` (separate package.json, Node 22 engine) strictly from the committed lockfile. **`ci`, not `install`** — `install` rewrites `functions/package-lock.json` and dirties the tree `firebase deploy` packages | `functions/package.json` |
 | predeploy hook | `npm --prefix functions run build` = `node scripts/copy-shared.mjs && tsc` — mirrors repo-root `shared/` into `functions/src/shared/` (gitignored) then compiles to `functions/lib/` | `firebase.json:12-14`, `functions/package.json` |
 | `--only functions` | Deploys every export of `functions/src/index.ts` — ONLY exports there deploy; anything defined but not exported is dead code in prod | `functions/src/index.ts` |
 | `--only functions:name1,functions:name2` | **Partial deploy** — deploys just the named functions. Preferred for one-function fixes (faster, smaller blast radius). Example: `npx firebase deploy --only functions:logClientError --project gridiron-gamble-uzuqo` | Firebase CLI standard |

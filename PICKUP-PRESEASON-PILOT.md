@@ -39,24 +39,22 @@ state. Concretely:
 
 ---
 
-## 2. Live state (verified 2026-07-22)
+## 2. Live state (verified 2026-07-21)
 
 > **Deploy state: HANDOFF.md's STOP POINT box is authoritative and CURRENT.**
-> Both files agree — prod is `84e080c`, `main` has moved to `17fa291`, and
-> **there IS a deploy queue.**
+> Both files agree — prod matches `main`, and the deploy queue is EMPTY.
 >
 > `tests/docs-state-invariants.test.ts` (PR #248) enforces **only** that the
 > tagged deployed-SHA claims agree and name a real commit on `origin/main`. It
-> does **not** compare deploy-QUEUE prose and does not know what `main` currently
-> is — so "the queue is empty" is still a human claim that a test cannot catch
-> going stale. That limit is stated in the test file itself; do not read a green
-> suite as agreement about the queue.
+> does **not** compare deploy-QUEUE prose and does not know what `main`
+> currently is — so "the queue is empty" is still a human claim that a test
+> cannot catch going stale. That limit is stated in the test file itself; do
+> not read a green suite as agreement about the queue.
 
-**Prod matches <!-- deploy-state:current --> `main` @ `84e080c`, but `main` is
-now `17fa291` — SIX merged PRs are AWAITING DEPLOY:** #245, #247 and #250 from
-the overnight run, plus #239, #240 and #237 which were already pending before
-it. Fifteen scheduled job bodies, and #237 also needs a manual Coolify trigger.
-Runbook in HANDOFF's STOP POINT box; inventory in §4.
+**Prod is deployed from <!-- deploy-state:current --> `main` @ `6ca9e7f`.** Functions
+deployed 2026-07-21 ~16:40Z, Coolify frontend ~16:54Z on the same commit.
+Twelve PRs shipped in that deploy — the six from the overnight run and the six
+that had been pending before it, including **#239, the Firestore-reads fix**.
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is
@@ -71,12 +69,22 @@ Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 - `replayFeedSnapshot` — SUPER_ADMIN callable, `dryRun` defaults true at the
   schema layer. Nothing runs it on a schedule; it is a break-glass tool.
 
-**Free liveness check available tomorrow:** `nflDeepScoreSweepJob` is wrapped in
-`withHeartbeat`, and the wrapper stamps on every completed run *including* the
-early return when the job is disabled. So after 11:30 ET tomorrow,
-`system/heartbeats.nflDeepScoreSweepJob` should exist with a fresh `at`. If it
-does not, the schedule itself never fired — which is precisely the distinction
-that took ten days to notice on the finalize sweep.
+**Liveness question: ANSWERED 2026-07-21, do not reopen it.**
+`nflDeepScoreSweepJob` stamped `system/heartbeats` at **11:30:08 ET**, and the
+stamp carried no `detail` field — proving it came from the pre-#245 build, i.e.
+the schedule fired on its own before any of this deployed. **Cloud Scheduler is
+not the problem it was on the finalize sweep.**
+
+What to check from now on: after 11:30 ET each day the stamp should be fresh AND
+carry `detail: { enabled: false }` while the job stays disabled.
+
+A missing stamp still has **three** possible causes, and the 2026-07-21 evidence
+only rules out "the schedule was never wired at all" — it does not rule out a
+scheduler failure on some later day, especially right after a deploy replaces
+the function. Check in this order: (1) the handler threw before stamping,
+(2) the heartbeat write failed, (3) Cloud Scheduler did not invoke it. The
+Functions log distinguishes them — an invocation with no stamp is (1) or (2);
+no invocation at all is (3).
 
 Prod data: **49 preseason games** (`season 2026`, `seasonType 1`). One
 mislabeled regular-season game was deleted by hand; PR #219 stops it recurring.
@@ -94,55 +102,69 @@ create → join → submit → score → **finalize**, on a `seasonType 1` slate
 1 pt / finalRank 2 in `seasonHistory`). Verified non-vacuous: reverting the
 PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
-**NOT proven:**
-- **Nothing merged on 2026-07-22 has run in production** — #245, #247 and #250
-  are emulator- and CI-proven only, and not yet deployed.
-- **The per-job heartbeat verdicts added in #250 are not individually tested.**
-  The guard is a source-level check that a job *can* report failure; it cannot
-  prove each path is wired. Verified rather than assumed: deleting `autoLock`'s
-  failure count, or reverting the `playoffPools` `resp.ok` verdict, produces no
-  build error and no test failure.
+**NOW PROVEN IN PRODUCTION (2026-07-21, after the deploy):**
+- **The deep-sweep schedule fires.** `nflDeepScoreSweepJob` stamped
+  `system/heartbeats` at **11:30:08 ET**, ~70 min before the deploy, and that
+  stamp carried **no `detail` field** — the post-#245 code always writes
+  `detail: { enabled: false }` on the disabled path, so it came from the
+  pre-deploy build. Cloud Scheduler is not the problem it was on the finalize
+  sweep.
+- **Two of #250's nine rewritten handlers produced correct heartbeats** —
+  `autoLockPools` (`detail.duePools: 0`) and `runReminders`
+  (`detail.failedPools: 0`) — plus `syncNFLScoresJob` (all six counters, zero,
+  `ok: true`), which is **#245's**, not #250's: it lives in `nflSchedule.ts`.
+  Note
+  `syncNFLScoresJob` reported `slates: 0` — a genuinely quiet July window — as
+  **healthy, not degraded**. The cry-wolf case behaves.
+
+**STILL NOT proven:**
+- **The per-job heartbeat verdicts are not individually tested.** The guard is a
+  source-level check that a job *can* report failure; it cannot prove each path
+  is wired. Verified rather than assumed: deleting `autoLock`'s failure count, or
+  reverting the `playoffPools` `resp.ok` verdict, produces no build error and no
+  test failure. The production evidence above covers three of nine handlers, on
+  their HEALTHY path only — no failure path has ever executed in prod.
 - **`runReminders` cannot see failures its nested helpers swallow** — `sendEmail`
   catches queue failures, `sendCourierSMS` returns a boolean nobody reads. A run
   where every reminder email failed to queue still reports zero failed pools.
 - **Eight files wrap a job that cannot report failure at all** (`adminHealth`,
   `consensus`, `espnBracket`, `expertPicks`, `expertProfiles`,
   `revenueAggregates`, `stripe`, `winProbability`), on a shrink-only list.
-- **`nflFinalizeSweepJob` has never completed a run in production.** Its index
-  only went Enabled 2026-07-20. The finalize *path* is covered by CI; the
-  *scheduled sweep* is still not.
-- Nothing has been exercised against production, only the emulator.
-- The **chaos drill (NFL-7)** has not been run — it needs a live preseason week.
-- **`nflDeepScoreSweepJob` has never run in production.** Deployed 2026-07-21,
-  disabled. First scheduled fire is 11:30 ET; check `system/heartbeats` after
-  that before believing anything about it.
+- **`nflFinalizeSweepJob` has never completed a run in production.** The
+  finalize *path* is covered by CI; the *scheduled sweep* is still not, and it
+  has no emulator coverage either. Runs 08:30 **UTC** (04:30 ET) — see HANDOFF
+  §4 for why that matters.
 - **`replayFeedSnapshot` has never been invoked against production.** Its diff
   logic is unit-tested; the full callable path is not.
 - **`spread.locked` has never been exercised end-to-end in prod**, because
   `lockNFLSpreadsJob` has always been dry-run. The PR #235 fix is therefore
   *preventive* — verified by reasoning and tests, never by production behavior.
+  Its first heartbeat is **2026-07-28**: 07-21 was a Tuesday and its 09:00 ET
+  run predated the wrapping.
+- The **chaos drill (NFL-7)** has not been run — it needs a live preseason week.
 
 ---
 
-## 4. Deploy queue — NOT EMPTY (6 PRs, 15 job bodies, + Coolify)
+## 4. Deploy queue — EMPTY
 
-**Prod is `84e080c`; `main` is `17fa291`. The queue is everything in between —
-which is MORE than last night's work.**
+**Everything is merged and deployed.** The deployed source SHA is `6ca9e7f`.
+`main` advances past it with every docs-only commit — that is drift in the
+marker, not a deploy queue. A queue exists only when something under
+`functions/` or the frontend changes.
 
-From this run: #245, #247 and #250 change deployed function code. #248 (tests +
-CLAUDE.md) and #249 (CI) need no deploy.
-
-Already pending from BEFORE this run: **#239** (`scheduledBracketSync` — this is
-the Firestore-reads fix, and it is not live yet), **#240** (`brace-expansion`
-pin inside `functions/`), and **#237** (14-package dependency bump that touches
-**frontend production deps**, so it also needs a manual Coolify trigger).
-
-**Fifteen** scheduled job bodies change in total — #245's four NFL jobs PLUS
-`nflDeepScoreSweepJob` (whose body #245 also changed), #250's nine, and
-`scheduledBracketSync` from #239. Nothing is armed or disarmed; the behaviour
+Fifteen scheduled job bodies changed in that deploy and every one reported
+`Successful update operation`. Nothing was armed or disarmed; the behaviour
 change is that a job which fails now REPORTS it instead of stamping a healthy
-heartbeat. **Full runbook with the pre-deploy byte-check is in HANDOFF's STOP
-POINT box — use that, not this summary.**
+heartbeat — and **two of #250's nine** have since produced correct heartbeats
+in production (HANDOFF §3), plus one of #245's.
+
+Two operational notes worth keeping, both learned on this deploy:
+
+- **`npm --prefix functions install` dirties `functions/package-lock.json`**,
+  so a clean-worktree check placed after it can never pass.
+- **HTTP 429 `Per project mutation requests per minute` is normal** on a
+  full-fleet deploy; firebase-tools retries and they land. `Deploy complete!`
+  is the signal that matters.
 
 The command, which is the one that has worked every time:
 
@@ -150,10 +172,23 @@ The command, which is the one that has worked every time:
 cd D:\march-melee-pools
 git checkout main && git pull origin main
 git log --oneline -1
-npm --prefix functions install
+npm --prefix functions ci     # ci, NOT install — see below
+if (git status --porcelain) { throw "Working tree dirty - deploy packages the WORKING TREE, not the commit. Stash or commit first." }
 $env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"
 npx firebase deploy --only functions --project gridiron-gamble-uzuqo
 ```
+
+⚠️ **`npm ci`, not `npm install`, and the clean-tree check goes AFTER it.**
+`firebase deploy` packages the working tree, not the commit — uncommitted edits
+ship while `git log` still shows the right SHA and any byte-check still passes.
+Nothing else in this recipe catches that.
+
+`npm install` **rewrites `functions/package-lock.json`**, so it dirties the very
+tree about to be packaged. Checking before it leaves that rewrite unexamined;
+checking after it can never pass. `npm ci` resolves both: it installs strictly
+from the committed lockfile and mutates nothing — verified 2026-07-21, exit 0
+with the tree still clean. It also fails loudly if `package.json` and the
+lockfile have drifted, which is the right outcome before a deploy.
 
 ⚠️ **`functions:` must be repeated before EVERY name** if using a filtered
 deploy. A bare `--only functions` avoids the trap entirely and is what has
@@ -171,12 +206,9 @@ Always confirm the change is in the file on disk before deploying — not that
    under `"2"` in `bySeasonType`. Then set `nflFinalize.liveSeasonTypes` to an
    array containing the number **1** — `dryRun:false` **alone does nothing**,
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
-2. **DEPLOY — the queue is NOT empty again.** Prod is `84e080c`, `main` is
-   `17fa291`, and six PRs sit between them (three from the 2026-07-22 run plus
-   #239/#240/#237 from before it). Fifteen scheduled job bodies, plus a manual
-   Coolify trigger for #237's frontend dependency bump. **Full runbook with the
-   pre-deploy byte-check: HANDOFF.md's STOP POINT box.** The 2026-07-21 deploy
-   that emptied the previous queue is done and is not what this refers to.
+2. ~~**Deploy**~~ — **DONE 2026-07-21**: functions ~16:40Z, Coolify ~16:54Z,
+   both on `6ca9e7f`. Queue empty. What remains is verification, not deployment
+   — see HANDOFF's STOP POINT §5.
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.

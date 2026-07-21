@@ -34,9 +34,15 @@ prose if they disagree; skills are point-in-time snapshots.
 >
 > Stated precisely, because the distinction matters: qodo was still posting
 > reviews when this note was written, so do not assume silence means it is dead,
-> and do not assume a review will come. **Check once, cheaply, and move on** — if
-> a report is there, absorb it; if not, proceed. `gh pr checks <n>` is still
-> required and still gates.
+> and do not assume a review will come. `gh pr checks <n>` is still required and
+> still gates.
+>
+> **THE PROCEDURE, single-valued (Kevin, 2026-07-21).** Before you push a
+> follow-up commit, poll the three surfaces below for up to **3 minutes**.
+> If a report lands in that window, absorb or reject every finding with written
+> evidence before pushing. If nothing has appeared after 3 minutes, assume qodo
+> is not going to respond on this PR and proceed — do not wait longer, and do not
+> report the PR as blocked. A silent reviewer must never become a stalled PR.
 >
 > **This note OVERRIDES the "wait for the qodo review" instruction below for as
 > long as it stands.** Read the rest of §2b as: *when a qodo report EXISTS, read
@@ -52,7 +58,7 @@ prose if they disagree; skills are point-in-time snapshots.
 exists, read every finding and absorb or reject each with written evidence
 before reporting the PR as done.** Kevin should never have to ask whether qodo
 was checked. (Per the box above, the *waiting* part is currently suspended:
-check once, cheaply, and proceed if nothing is there.)
+poll for up to 3 minutes, then proceed if nothing is there.)
 
 This lived in `mmp-qodo-cycle` and in auto-memory and was still dropped
 under load on 2026-07-21 (checked on two PRs only when asked, skipped on
@@ -102,7 +108,7 @@ codex exec review --uncommitted                   # work not yet committed
 shares one `main` ref, and it is only advanced by whoever runs `git pull` in the
 main checkout — so in a worktree it is routinely stale. Reviewing against it
 pulls unrelated already-merged upstream commits into the diff and reports on
-code the PR never touched. Measured on 2026-07-22 mid-session: local `main` was
+code the PR never touched. Measured on 2026-07-21 mid-session: local `main` was
 `e84dfa3` while `origin/main` was two merges ahead at `a28030d`. Fetch, then
 name `origin/main` explicitly.
 
@@ -132,7 +138,7 @@ existed to stop. Written, reviewed, and holed in the same hour.
 before acting, as with any reviewer.
 
 **Expect several rounds, and keep going until one comes back clean.** Measured
-over the 2026-07-22 run: #245 took 4 rounds / 11 findings, #248 took 9 rounds,
+over the 2026-07-21 run: #245 took 4 rounds / 11 findings, #248 took 9 rounds,
 #250 took 4 rounds / 15 findings. The pattern is consistent and worth knowing in
 advance — **round 1 finds defects in the code, and rounds 2+ find defects in the
 fixes**, including in the guards written to prove the fixes. Three separate
@@ -155,7 +161,9 @@ constraint, correctness is.
 ## 3. Deploy facts (do not re-derive)
 
 - Functions + rules: `npx firebase deploy`, project `gridiron-gamble-uzuqo`.
-  Run `npm --prefix functions install` first. Deploy functions BEFORE rules.
+  Run `npm --prefix functions ci` first — **`ci`, not `install`**, which
+  rewrites the lockfile and dirties the tree `firebase deploy` packages.
+  Deploy functions BEFORE rules.
 - Frontend (`www`): manual trigger in the Coolify dashboard — pushing to
   `main` does **not** auto-deploy the frontend.
 - This is a Firestore + Firebase Functions app (no Supabase, no Postgres, no
@@ -175,6 +183,16 @@ constraint, correctness is.
    conventions (see `mmp-validation-and-qa` — extend existing vitest
    suites, do not claim a coverage percentage) or its plan-before-multi-file-
    change convention (PLAN-*.md, not a fresh planning template).
+
+   ⚠️ **OPEN CONTRADICTION, Kevin's call — do not resolve it by yourself.**
+   `mmp-change-control` (canonical) classifies **any 2+ file change** as needing
+   the full `PLAN-*.md` + review-log + sweep gate, and `mmp-docs-and-writing`
+   repeats it. In practice **none of the twelve PRs merged 2026-07-21 carried a
+   PLAN**, including 14-file and 11-file feature work — so the rule as written is
+   systematically not followed, and a compliance checker flagged a docs-only PR
+   for it. Either the rule is too broad or the practice is wrong; relaxing it in
+   this file alone would just add a third conflicting source. Until Kevin
+   decides, treat the skill as authoritative and say so when you skip it.
 
 ## 5. Global CLAUDE.md overrides for this repo
 
