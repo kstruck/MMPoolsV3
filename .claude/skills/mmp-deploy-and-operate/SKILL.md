@@ -33,7 +33,7 @@ This is non-negotiable discipline rule (b) — canonical incident history lives 
 npm --prefix functions ci
 
 # 1b. The tree that gets packaged must be clean
-if (git status --porcelain) { throw "Working tree dirty - deploy packages the WORKING TREE, not the commit. Stash or commit first." }
+if (git status --porcelain -- functions shared) { throw "functions/ or shared/ is dirty - deploy packages the WORKING TREE, not the commit. Stash or commit first." }
 
 # 2. Optional fail-fast build (the deploy predeploy hook runs this anyway)
 npm --prefix functions run build

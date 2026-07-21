@@ -193,10 +193,19 @@ cd D:\march-melee-pools
 git checkout main && git pull origin main
 git log --oneline -1
 npm --prefix functions ci     # ci, NOT install — see below
-if (git status --porcelain) { throw "Working tree dirty - deploy packages the WORKING TREE, not the commit. Stash or commit first." }
+if (git status --porcelain -- functions shared) { throw "functions/ or shared/ is dirty - deploy packages the WORKING TREE, not the commit. Stash or commit first." }
 $env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"
 npx firebase deploy --only functions --project gridiron-gamble-uzuqo
 ```
+
+⚠️ **The gate is SCOPED to `functions` and `shared` on purpose.** An unscoped
+`git status --porcelain` reports the known untracked strays at repo root
+(`PLAN-LOOPS.md`, `before-deploy.txt`, `design-showcase/`, the
+`DesignAlternatives*` files) that HANDOFF documents as harmless — so it would
+throw on every single deploy and get stepped over, which is exactly the
+behaviour it exists to prevent. `--only functions` packages `functions/`, and
+the predeploy hook copies `shared/` into it; nothing else at root is uploaded.
+Scoping keeps the gate true, and a gate that is true is a gate people obey.
 
 ⚠️ **`npm ci`, not `npm install`, and the clean-tree check goes AFTER it.**
 `firebase deploy` packages the working tree, not the commit — uncommitted edits
