@@ -145,7 +145,15 @@ export function collectClaimsFromText(text: string, fileLabel: string): Claim[] 
     // `<!-- historical -->` still annotates the claim before it. Splitting too
     // FINELY can only detach a marker from its claim, which fails loudly rather
     // than passing silently — the safe direction for a guard to be wrong in.
-    if (EXEMPT_LINE.test(clauseAround(text, start, end))) continue;
+    const clause = clauseAround(text, start, end);
+    // An exemption covers ONE mention. A clause carrying an exempt marker AND
+    // more than one SHA cannot say which mention the marker annotates —
+    // "prod was `main` @ `a` <!-- historical -->, but now `main` @ `b`" would
+    // otherwise exempt BOTH, hiding the live claim inside the annotation for
+    // the dead one. Ambiguity resolves to COLLECTING, so the disagreement check
+    // fails loudly and the author splits the sentence, rather than the guard
+    // quietly skipping the claim it exists to compare.
+    if (EXEMPT_LINE.test(clause) && countMatches(clause, MAIN_SHA) === 1) continue;
 
     const token = m[1].trim();
     claims.push({
@@ -158,6 +166,12 @@ export function collectClaimsFromText(text: string, fileLabel: string): Claim[] 
     });
   }
   return claims;
+}
+
+/** How many times `re` matches — `re` carries /g, so it is reset before use. */
+function countMatches(text: string, re: RegExp): number {
+  re.lastIndex = 0;
+  return [...text.matchAll(re)].length;
 }
 
 /** The clause containing [start, end): bounded by `.`, `;`, or a line break. */
@@ -360,6 +374,17 @@ describe('the scanner sees what the docs actually contain', () => {
       expect(
         collectClaimsFromText('prod was `main` @ `aaaaaaa` <!-- historical -->', 'f.md'),
       ).toEqual([]);
+    });
+
+    it('REFUSES to exempt an ambiguous clause carrying two SHA mentions', () => {
+      // The marker cannot say which mention it annotates, so neither is
+      // exempted and the disagreement check gets to see both. Failing loudly
+      // beats silently skipping the live claim hidden behind the dead one's
+      // annotation.
+      const claims = collectClaimsFromText(
+        'prod was `main` @ `aaaaaaa` <!-- historical -->, but now `main` @ `bbbbbbb`', 'f.md',
+      );
+      expect(claims.map((c) => c.sha)).toEqual(['aaaaaaa', 'bbbbbbb']);
     });
 
     it('flags a non-hex token as an invalid SHA rather than silently accepting it', () => {

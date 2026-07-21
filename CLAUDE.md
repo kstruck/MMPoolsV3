@@ -72,8 +72,22 @@ and that is the confirmation — not your own belief that you addressed them.
 **Run it on your own diff before opening any PR:**
 
 ```
-codex exec review --uncommitted        # or: --base main / --commit <sha>
+git fetch origin                                  # ALWAYS first — see below
+codex exec review --base origin/main              # the whole PR diff
+codex exec review --uncommitted                   # work not yet committed
 ```
+
+⚠️ **`--base main`, not `origin/main`, is a trap in this repo.** Every worktree
+shares one `main` ref, and it is only advanced by whoever runs `git pull` in the
+main checkout — so in a worktree it is routinely stale. Reviewing against it
+pulls unrelated already-merged upstream commits into the diff and reports on
+code the PR never touched. Measured on 2026-07-22 mid-session: local `main` was
+`e84dfa3` while `origin/main` was two merges ahead at `a28030d`. Fetch, then
+name `origin/main` explicitly.
+
+`--uncommitted` reviews only the working tree, so on its own it reports NOTHING
+once the work is committed. Use it before a commit; use `--base origin/main`
+for the PR. Found by codex reviewing this very section.
 
 **Why this is a hard rule and not a nicety.** On 2026-07-21 a single session
 produced 12 self-inflicted defects. Seven were facts asserted from memory that
