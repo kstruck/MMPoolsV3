@@ -75,6 +75,6 @@
     "websocket-driver": ">=0.7.5",
     "brace-expansion@<=1.1.15": "1.1.16",
     "brace-expansion@2.0.0 - 2.1.1": "2.1.2",
-    "brace-expansion@3.0.0 - 5.0.6": "5.0.7"
+    "brace-expansion@5.0.0 - 5.0.6": "5.0.7"
   }
 }
