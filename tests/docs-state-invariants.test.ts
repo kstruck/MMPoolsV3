@@ -233,7 +233,7 @@ describe('operator docs agree on what is deployed', () => {
   // A hex-shaped typo copied into BOTH docs passes every check above: the format
   // test calls it valid and the agreement test sees one distinct value. The docs
   // would then agree on a commit that does not exist. Only git can tell.
-  it('every claimed SHA resolves to a real commit', () => {
+  it('every claimed SHA is a real commit ON origin/main', () => {
     const shallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
       cwd: REPO_ROOT, encoding: 'utf8',
     }).trim();
@@ -241,9 +241,18 @@ describe('operator docs agree on what is deployed', () => {
     // job precisely so this runs there; if that regresses, this says so.
     expect(shallow, 'shallow clone — this check cannot run; set fetch-depth: 0').toBe('false');
 
+    // ANCESTOR OF origin/main, not merely "an object that exists". A SHA taken
+    // from an unmerged branch resolves fine — the checkout holds those objects
+    // — so existence alone would let both docs agree on a commit that is not on
+    // main at all, while the claim says it is.
+    const git = (args: string[]) => execFileSync('git', args, { cwd: REPO_ROOT, stdio: 'ignore' });
+    let hasOriginMain = true;
+    try { git(['rev-parse', '--verify', 'origin/main']); } catch { hasOriginMain = false; }
+    expect(hasOriginMain, 'origin/main is not available — this check cannot run').toBe(true);
+
     const unresolved = claims.filter((c) => {
       try {
-        execFileSync('git', ['cat-file', '-e', `${c.sha}^{commit}`], { cwd: REPO_ROOT, stdio: 'ignore' });
+        git(['merge-base', '--is-ancestor', `${c.sha}^{commit}`, 'origin/main']);
         return false;
       } catch {
         return true;
@@ -251,8 +260,9 @@ describe('operator docs agree on what is deployed', () => {
     });
     expect(
       unresolved.map((c) => `${c.file}:${c.line} -> ${c.sha}`),
-      'a deploy-state SHA does not name a commit in this repository — a typo ' +
-        'that is still valid hex passes every other check here',
+      'a deploy-state SHA is not a commit on origin/main — either a typo that ' +
+        'is still valid hex, or a SHA taken from an unmerged branch. Both make ' +
+        'the docs agree on something that was never deployed',
     ).toEqual([]);
   });
 
