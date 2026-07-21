@@ -52,13 +52,21 @@ rejected (snake_case ×3, import order, `:any` counts, dependency placement).
 Judge on evidence and **reply either way** — a rejection needs written
 reasoning on the PR, not silence.
 
-Mechanics, because the summary comment alone is not enough:
+Mechanics. qodo spreads a single report across **three** surfaces and any
+one of them can be empty on a given PR, so check all three — a report is
+not absent until all three are:
 
 ```
 gh pr checks <n>                                        # CI
 gh pr view <n> --json comments                          # numbered findings
 gh api repos/kstruck/MMPoolsV3/pulls/<n>/comments       # inline detail
+gh api repos/kstruck/MMPoolsV3/pulls/<n>/reviews        # review-surface report
 ```
+
+The `reviews` line is not optional padding: qodo can post as a review plus
+inline comments while the issue-comment list is empty, so a procedure
+without it can conclude "no findings" on a PR that has them. (Caught by
+qodo, on the PR that introduced this very section.)
 
 Re-check after pushing fixes: qodo marks absorbed findings `✓ Resolved`,
 and that is the confirmation — not your own belief that you addressed them.
