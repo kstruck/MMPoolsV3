@@ -181,24 +181,43 @@ Pick a region **different from** the `locationId` you recorded in Step 1. If
 `locationId` was `nam5` or any `us-*` region, use `us-east1`; if it was already
 `us-east1`, use `us-west1`. Substitute your choice for `<REGION>` below.
 
+0. **Set the bucket name once**, in the PowerShell window you will use for the
+   rest of this section. Every command below reads `$BACKUP_BUCKET`, so if the
+   name has to change in step 1 you change it here and nowhere else:
+
+   ```
+   $BACKUP_BUCKET = "mmpools-firestore-backups"
+   ```
+
+   ⚠️ This variable lives only in the current terminal. **If you close it or
+   open a new one, re-run this line first** — otherwise the commands below will
+   expand to `gs://` and fail with an unhelpful error.
+
 1. Create the bucket:
 
    ```
-   gcloud storage buckets create gs://mmpools-firestore-backups --project gridiron-gamble-uzuqo --location <REGION> --uniform-bucket-level-access
+   gcloud storage buckets create gs://$BACKUP_BUCKET --project gridiron-gamble-uzuqo --location <REGION> --uniform-bucket-level-access
    ```
 
-   **Expect:** `Creating gs://mmpools-firestore-backups/...` and no error.
+   **Expect:** `Creating gs://<your bucket>/...` and no error.
    **If instead** you get `HTTPError 409: ... already own it`, the bucket
    exists — fine, continue.
    **If** you get `409 ... bucket names must be globally unique` and you do
-   *not* own it, the name is taken by someone else; append a suffix (e.g.
-   `mmpools-firestore-backups-gg`) and use that name consistently from here on.
+   *not* own it, the name is taken by someone else. Pick a suffixed name and
+   **re-run the step 0 assignment with it**, e.g.:
+
+   ```
+   $BACKUP_BUCKET = "mmpools-firestore-backups-gg"
+   ```
+
+   Then re-run this step. Because every later command reads the variable,
+   nothing else needs editing.
 
 2. Turn on object versioning, so an overwrite or delete does not destroy the
    only copy:
 
    ```
-   gcloud storage buckets update gs://mmpools-firestore-backups --versioning
+   gcloud storage buckets update gs://$BACKUP_BUCKET --versioning
    ```
 
 3. Set a lifecycle rule so old exports are cleaned up automatically. Create the
@@ -206,18 +225,18 @@ Pick a region **different from** the `locationId` you recorded in Step 1. If
 
    ```
    Set-Content -Path lifecycle.json -Value '{"lifecycle":{"rule":[{"action":{"type":"Delete"},"condition":{"age":180}}]}}'
-   gcloud storage buckets update gs://mmpools-firestore-backups --lifecycle-file=lifecycle.json
+   gcloud storage buckets update gs://$BACKUP_BUCKET --lifecycle-file=lifecycle.json
    Remove-Item lifecycle.json
    ```
 
-   **Expect:** `Updating gs://mmpools-firestore-backups/...` with no error.
+   **Expect:** `Updating gs://<your bucket>/...` with no error.
    180 days is a deliberate choice: long enough to recover from a problem
    noticed a season later, short enough that storage cost stays trivial.
 
 4. Run the first export manually, so the path is proven before it is automated:
 
    ```
-   gcloud firestore export gs://mmpools-firestore-backups/manual-first --project gridiron-gamble-uzuqo
+   gcloud firestore export gs://$BACKUP_BUCKET/manual-first --project gridiron-gamble-uzuqo
    ```
 
    **Expect:** output with `name: projects/gridiron-gamble-uzuqo/databases/(default)/operations/...`
@@ -227,7 +246,7 @@ Pick a region **different from** the `locationId` you recorded in Step 1. If
    distinguishes "ran" from "worked"**:
 
    ```
-   gcloud storage ls --recursive gs://mmpools-firestore-backups/manual-first
+   gcloud storage ls --recursive gs://$BACKUP_BUCKET/manual-first
    ```
 
    **Expect:** a listing including a `.overall_export_metadata` file and one
@@ -289,7 +308,7 @@ missing-index outages, and it should be treated as an incident, not a wait.
 
 ## Step 6 — Firebase Auth export (item 18) — DEFERRED, and why
 
-`firebase auth:export` writes a **local file**; it has no direct-to-GCS mode.
+`npx firebase auth:export` writes a **local file**; it has no direct-to-GCS mode.
 Firestore backups do **not** contain Auth users, so losing Auth means every
 member loses access to their pools even with a perfect Firestore restore.
 
@@ -303,30 +322,47 @@ now would produce exactly the artifact this repo keeps getting burned by: a job
 that is deployed, appears armed, and silently fails every night.
 
 **Interim manual export** — worth running once before the pilot, and it takes
-one minute. From `D:\march-melee-pools`:
+one minute.
+
+⚠️ **The export file contains every user's email and their password hashes.**
+Write it **outside the repository**, so it cannot be caught by a stray
+`git add .`. These commands put it in your temp directory and never in
+`D:\march-melee-pools`. Run them from `D:\march-melee-pools` anyway, so `npx`
+resolves the pinned CLI:
 
 ```
-npx firebase auth:export auth-backup.json --format=json --project gridiron-gamble-uzuqo
+$AUTH_EXPORT = Join-Path $env:TEMP "auth-backup.json"
+npx firebase auth:export $AUTH_EXPORT --format=json --project gridiron-gamble-uzuqo
 ```
 
-**Expect:** `Exporting accounts to auth-backup.json` and a count of users.
+**Expect:** `Exporting accounts to ...auth-backup.json` and a count of users.
 Then confirm it is not an empty shell:
 
 ```
-(Get-Content auth-backup.json -Raw | ConvertFrom-Json).users.Count
+(Get-Content $AUTH_EXPORT -Raw | ConvertFrom-Json).users.Count
 ```
 
 **Expect:** a number matching roughly the user count in the Firebase console
 Authentication tab. **If it prints 0 or errors**, the export produced nothing
 usable — stop and investigate rather than filing it as a backup.
 
-Then upload it and delete the local copy — it contains password hashes and
-every user's email, and must not sit on a laptop:
+Then upload it and delete the local copy. Use a timestamped object name so a
+second run never silently overwrites the first:
 
 ```
-gcloud storage cp auth-backup.json gs://mmpools-firestore-backups/auth/auth-backup-2026-07-21.json
-Remove-Item auth-backup.json
+gcloud storage cp $AUTH_EXPORT "gs://$BACKUP_BUCKET/auth/auth-backup-$(Get-Date -Format yyyyMMdd-HHmmss).json"
+Remove-Item $AUTH_EXPORT
 ```
+
+**Expect:** a `Copying file://...` line, then no output from `Remove-Item`.
+**Verify the local copy is really gone** — this is the step that matters:
+
+```
+Test-Path $AUTH_EXPORT
+```
+
+**Expect:** `False`. **If it prints `True`**, the delete did not happen; re-run
+`Remove-Item $AUTH_EXPORT` and check again before moving on.
 
 Once step 4's bucket exists, the scheduled version of this becomes a small,
 testable piece of work.
@@ -347,7 +383,7 @@ must **not** target the production database.
 2. Import the manual export from step 4 into it:
 
    ```
-   gcloud firestore import gs://mmpools-firestore-backups/manual-first --database=restore-drill --project gridiron-gamble-uzuqo
+   gcloud firestore import gs://$BACKUP_BUCKET/manual-first --database=restore-drill --project gridiron-gamble-uzuqo
    ```
 
 3. Confirm real data landed — check that the `pools` collection is populated:
