@@ -23,34 +23,37 @@ So the key is simultaneously:
 - **secret-shaped** — possessing it is treated as proof you are that guest, and
 - **published** — anyone who can open the pool page can read it.
 
-`functions/src/participant.ts:114`:
+The ownership check in `claimMySquares` is a single equality comparison between
+the key supplied by the caller and the key stored on the square — nothing else.
+See [`participant.ts` L110-L120][pin-claim].
 
-```ts
-const isGuestKeyMatch = guestDeviceKey && s.guestDeviceKey === guestDeviceKey;
-```
+## Why it is exploitable
 
-That is the entire ownership check in `claimMySquares`.
+> **Note on detail level.** This repository is **public**, and this issue is
+> **unfixed**. What follows states the broken security property, which is what a
+> fix has to close and what a reviewer needs to verify. It deliberately stops
+> short of a step-by-step procedure. Anyone doing the remediation has the source
+> and does not need one.
 
-## The attack
+The broken property is straightforward: **the value that proves ownership is
+published in the same document that anyone with the share link can read.** A
+secret that is printed next to the lock is not a secret, and every guest-reserved
+square in every pool carries one.
 
-1. Open any pool's share link. No account needed to read the pool document.
-2. Read `squares[].guestDeviceKey` for squares reserved by guests.
-3. Sign in as any account (registration is open).
-4. Call `claimMySquares({ poolId, guestDeviceKey })` with the harvested key.
+Consequence: possession of a published value is sufficient to have an unclaimed
+guest square reassigned to a different account. No account relationship to the
+original guest is required, and account registration is open.
 
-Every unclaimed guest square bearing that key is now transferred to the
-attacker's `uid`.
+**What limits it:** the loop skips squares whose `reservedByUid` is already set
+to another user ([`participant.ts` L110-L120][pin-claim]), so squares belonging
+to registered users are not reachable. Only **guest** squares are — and those are
+precisely the ones with no account behind them to notice or dispute. In a paid
+pool, a square is a claim on the pot.
 
-**What limits it:** the loop skips squares where `reservedByUid` is already set
-to someone else (`participant.ts:118`), so it cannot steal squares from
-registered users. It takes only **guest** squares — but those are precisely the
-ones with no account behind them to notice or dispute, and in a paid pool a
-square is a claim on the pot.
-
-`claimByCode` (`participant.ts:194`) has the same comparison but is **not**
-vulnerable: it reaches the key via a random `claimCode` in `poolClaims`, which
-is not publicly readable. The claim-code flow is fine. The bug is specific to
-`claimMySquares` accepting a raw key that is published.
+`claimByCode` ([`participant.ts` L190-L200][pin-code]) performs the same
+comparison but is **not** vulnerable: it reaches the key via a random `claimCode`
+in `poolClaims`, which is not publicly readable. The claim-code flow is fine. The
+bug is specific to `claimMySquares` accepting a raw key that is published.
 
 ---
 
@@ -119,8 +122,22 @@ with the backfill run as its own step.
 
 ## Noted while reading, not acted on
 
-`participant.ts:45–88` (`createClaimCode`) contains unresolved design questions
-left in as comments — `"Or generate a new stable ID?"`, `"Wait, the prompt
-says…"`. The code works, but it reads as unfinished, and this is the file that
-holds the ownership check. Worth a cleanup pass alongside the fix so the next
-reader can tell intent from indecision.
+`createClaimCode` ([`participant.ts` L45-L88][pin-createcode]) contains
+unresolved design questions left in as comments — `"Or generate a new stable
+ID?"`, `"Wait, the prompt says…"`. The code works, but it reads as unfinished,
+and this is the file that holds the ownership check. Worth a cleanup pass
+alongside the fix so the next reader can tell intent from indecision.
+
+---
+
+<!--
+  Line references are pinned to commit 4290c8c — the last commit to touch
+  participant.ts as of this writing. Bare `file.ts:114` references rot silently
+  as the file shifts; a pinned permalink still resolves to the code this
+  document actually describes. If you update this doc after changing
+  participant.ts, re-pin these to the new SHA rather than editing line numbers.
+-->
+
+[pin-claim]: https://github.com/kstruck/MMPoolsV3/blob/4290c8c3c0b4cdafe74d2b1278dddcf2ce919faf/functions/src/participant.ts#L110-L120
+[pin-code]: https://github.com/kstruck/MMPoolsV3/blob/4290c8c3c0b4cdafe74d2b1278dddcf2ce919faf/functions/src/participant.ts#L190-L200
+[pin-createcode]: https://github.com/kstruck/MMPoolsV3/blob/4290c8c3c0b4cdafe74d2b1278dddcf2ce919faf/functions/src/participant.ts#L45-L88
