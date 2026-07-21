@@ -55,8 +55,19 @@
 > has a betting line, so arming it pages nightly about a known condition.
 
 
-> ## DEPLOY STATE 2026-07-20 — prod matches `main`
-> The long-standing "merged but NOT deployed" backlog is **CLEARED**. A
+> ## DEPLOY STATE 2026-07-20 — ⚠️ SUPERSEDED, prod no longer matches `main`
+>
+> **Do not act on this box for deploy decisions.** It was accurate on
+> **2026-07-20 at `5e481c0`**. PRs merged after that date are undeployed, so
+> "prod matches `main`" is **no longer true**. The current queue and the deploy
+> command live in **`PICKUP-PRESEASON-PILOT.md` §4**; that file wins on deploy
+> state whenever it disagrees with this box.
+>
+> The rest of this box is kept because the *lessons* below it are still valid —
+> only the "backlog is cleared" claim has expired.
+>
+> The long-standing "merged but NOT deployed" backlog was **CLEARED as of
+> `5e481c0`**. A
 > full-fleet `--only functions` deploy plus `--only firestore:indexes` landed
 > everything: the 33 callable-sweep batches, sweep batch 17, the NFL pilot work
 > (A2/A3a/A4/A5p1/A6/A10), the spread-gate fix, the importer season filter, and

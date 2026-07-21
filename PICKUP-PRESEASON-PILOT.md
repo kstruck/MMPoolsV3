@@ -41,8 +41,15 @@ state. Concretely:
 
 ## 2. Live state (verified 2026-07-21)
 
-**Prod matched `main` as of `5e481c0`.** Everything merged since then is
-**NOT deployed** — see §4.
+> ⚠️ **Deploy state: this section supersedes HANDOFF.md's banner.**
+> HANDOFF's `DEPLOY STATE 2026-07-20` box says "prod matches `main`" and that
+> the merged-not-deployed backlog is CLEARED. That was true **on 2026-07-20 at
+> `5e481c0`** and is **stale now** — PRs merged after it are undeployed. When
+> the two disagree about what is live, the one with the later date wins, and
+> that is this one. HANDOFF carries a pointer back here saying the same thing.
+
+**Prod matched `main` as of `5e481c0` (2026-07-20).** Everything merged since
+then is **NOT deployed** — see §4.
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is
@@ -90,7 +97,18 @@ Merge #232 and #233 without ceremony — they are documents, they change no code
 #231 adds one SUPER_ADMIN callable; all five gates green (852 unit, up from
 845).
 
-Only #227 changes runtime behavior (8 jobs + `getOpsHealthSummary`). Deploy:
+**Runtime impact, scoped — read both lines, they answer different questions:**
+
+- Of the **already-merged, awaiting-deploy** queue above, only `#227` changes
+  runtime behavior (8 jobs + `getOpsHealthSummary`). That is what the deploy
+  command below ships if you run it *before* merging anything else.
+- **After you merge `#231`**, the next deploy additionally creates one new
+  SUPER_ADMIN callable, `replayFeedSnapshot`. It is invoked by hand and runs
+  nothing on a schedule, so it changes no behavior until someone calls it — but
+  it *is* a new function in the deploy output, and you should expect to see it
+  listed as created rather than treat it as a surprise.
+
+Deploy:
 
 ```
 cd D:\march-melee-pools
