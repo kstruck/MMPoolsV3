@@ -83,3 +83,103 @@ describe('syncScoresWindow — the lookback is what it queries', () => {
     ]);
   });
 });
+
+/**
+ * Firestore stand-in with real documents, so the WRITE path can be exercised.
+ * `stored` is the nfl_games collection keyed by id; the time-window query returns
+ * only the docs that fall inside it, exactly as Firestore would, while getAll()
+ * resolves any id directly. That asymmetry is the whole point of the test below.
+ */
+function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: number) {
+  const writes: Array<{ id: string; data: any }> = [];
+  const docOf = (id: string) => ({
+    id,
+    exists: stored[id] !== undefined,
+    data: () => stored[id],
+  });
+  const inWindow = Object.keys(stored).filter(
+    (id) => stored[id].startTime >= now - lookbackMs && stored[id].startTime <= now + 2 * 60 * 60 * 1000,
+  );
+  const query: any = {
+    where: () => query,
+    async get() {
+      const docs = inWindow.map(docOf);
+      return { empty: docs.length === 0, docs, forEach: (f: any) => docs.forEach(f) };
+    },
+  };
+  const db = {
+    collection: () => ({ ...query, doc: (id: string) => ({ id, _id: id }) }),
+    async getAll(...refs: any[]) {
+      return refs.map((r) => docOf(r._id));
+    },
+    batch: () => ({
+      set: (ref: any, data: any) => writes.push({ id: ref._id, data }),
+      async commit() { /* no-op */ },
+    }),
+    doc: () => ({ async get() { return { data: () => undefined }; } }),
+  } as unknown as Firestore;
+  return { db, writes };
+}
+
+const espnGame = (over: Record<string, any>) => ({
+  season: '2026', seasonType: 1, week: 1,
+  homeTeam: { abbreviation: 'KC' }, awayTeam: { abbreviation: 'DET' },
+  status: 'SCHEDULED', ...over,
+});
+
+describe('syncScoresWindow — a locked spread survives the write', () => {
+  const NOW = 1_760_000_000_000;
+  const HOUR = 60 * 60 * 1000;
+
+  // qodo (PR #235): ESPN returns the WHOLE week, and every returned game is
+  // written. Lock preservation used to consult only the time-windowed docs, so a
+  // game later in the same week — outside [now-24h, now+2h] but inside the ESPN
+  // slate — was written with the parser's `locked: false`, silently unlocking a
+  // line members had already picked against.
+  it('preserves spread.locked on a game OUTSIDE the time window', async () => {
+    const stored = {
+      // Thursday game, already played — this is what pulls week 1 into the sweep.
+      espn_thu: { id: 'espn_thu', season: '2026', seasonType: 1, week: 1, startTime: NOW - 20 * HOUR, status: 'FINAL' },
+      // Sunday game, three days out: NOT in the window, but locked by lockNFLSpreadsJob.
+      espn_sun: { id: 'espn_sun', season: '2026', seasonType: 1, week: 1, startTime: NOW + 72 * HOUR, status: 'SCHEDULED', spread: { value: -3.5, locked: true } },
+    };
+    const { db, writes } = fakeDbWithDocs(stored, NOW, HOT_WINDOW_LOOKBACK_MS);
+
+    await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        games: [
+          espnGame({ id: 'espn_thu', startTime: NOW - 20 * HOUR, status: 'FINAL' }),
+          // ESPN re-offers a fresh, DIFFERENT line with locked:false, as the parser emits.
+          espnGame({ id: 'espn_sun', startTime: NOW + 72 * HOUR, spread: { value: -7, locked: false } }),
+        ] as any,
+        raw: null,
+      }),
+    });
+
+    const sunday = writes.find((w) => w.id === 'espn_sun');
+    expect(sunday).toBeDefined();
+    // Both the flag AND the frozen value must survive — an unlocked-but-correct
+    // value would still have moved the line members picked against.
+    expect(sunday!.data.spread).toEqual({ value: -3.5, locked: true });
+  });
+
+  it('still takes ESPN\'s line when the stored spread is NOT locked', async () => {
+    const stored = {
+      espn_thu: { id: 'espn_thu', season: '2026', seasonType: 1, week: 1, startTime: NOW - 20 * HOUR, status: 'FINAL' },
+      espn_sun: { id: 'espn_sun', season: '2026', seasonType: 1, week: 1, startTime: NOW + 72 * HOUR, status: 'SCHEDULED', spread: { value: -3.5, locked: false } },
+    };
+    const { db, writes } = fakeDbWithDocs(stored, NOW, HOT_WINDOW_LOOKBACK_MS);
+
+    await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        games: [
+          espnGame({ id: 'espn_thu', startTime: NOW - 20 * HOUR, status: 'FINAL' }),
+          espnGame({ id: 'espn_sun', startTime: NOW + 72 * HOUR, spread: { value: -7, locked: false } }),
+        ] as any,
+        raw: null,
+      }),
+    });
+
+    expect(writes.find((w) => w.id === 'espn_sun')!.data.spread).toEqual({ value: -7, locked: false });
+  });
+});

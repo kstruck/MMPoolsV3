@@ -384,14 +384,23 @@ export interface ScoreSyncResult {
  * `dryRun` suppresses only the nfl_games write. Correction detection and
  * reporting still run, because the alarm is the point of the sweep and running
  * it before arming the writes is how the sweep gets validated.
+ *
+ * `fetchSlate` is injectable ONLY so the write path — in particular the
+ * locked-spread preservation below — can be tested without a network call.
+ * Production always uses the default.
  */
 export async function syncScoresWindow(
   db: Firestore,
   now: number,
   lookbackMs: number,
-  opts: { dryRun?: boolean; prune?: boolean } = {},
+  opts: {
+    dryRun?: boolean;
+    prune?: boolean;
+    fetchSlate?: typeof fetchNFLWeekScheduleWithRaw;
+  } = {},
 ): Promise<ScoreSyncResult> {
   const dryRun = opts.dryRun === true;
+  const fetchSlate = opts.fetchSlate ?? fetchNFLWeekScheduleWithRaw;
   const empty: ScoreSyncResult = { slates: 0, gamesWritten: 0, corrections: 0 };
 
   // Only games in the active window: started within the last `lookbackMs` (still live
@@ -432,7 +441,7 @@ export async function syncScoresWindow(
   let correctionCount = 0;
 
   for (const [_, slot] of weeksToSync) {
-    const { games: freshGames, raw } = await fetchNFLWeekScheduleWithRaw(slot.week, slot.season, slot.seasonType);
+    const { games: freshGames, raw } = await fetchSlate(slot.week, slot.season, slot.seasonType);
     if (freshGames.length === 0) continue;
 
     const slateKey = { season: slot.season, seasonType: slot.seasonType, week: slot.week };
@@ -457,14 +466,28 @@ export async function syncScoresWindow(
       continue;
     }
 
+    // Existing docs for the WHOLE slate, not just the ones inside the time
+    // window. ESPN returns the entire week, and every one of those games gets
+    // written below — but a game later in the week can already carry a spread
+    // locked by lockNFLSpreadsJob, and the parser emits `locked: false`. Looking
+    // up only the in-window docs meant those locks were silently reset on every
+    // run, re-opening a line members had already picked against.
+    //
+    // Fetched by document ID via getAll() rather than a (season, seasonType,
+    // week) query: a direct ID lookup needs no composite index and therefore has
+    // no way to die silently, which is the failure mode that took out A5 and the
+    // finalize sweep.
+    const existingById = new Map<string, NFLGame>();
+    for (const doc of await db.getAll(...freshGames.map(g => db.collection('nfl_games').doc(g.id)))) {
+      if (doc.exists) existingById.set(doc.id, doc.data() as NFLGame);
+    }
+
     const batch = db.batch();
     for (const freshGame of freshGames) {
       const gameRef = db.collection('nfl_games').doc(freshGame.id);
-      const existingDoc = activeGamesSnap.docs.find(d => d.id === freshGame.id);
+      const existingData = existingById.get(freshGame.id);
 
-      if (existingDoc) {
-        const existingData = existingDoc.data() as NFLGame;
-
+      if (existingData) {
         // Check for schedule flexing (startTime changed)
         if (existingData.startTime !== freshGame.startTime) {
           console.log(`[nflSchedule] Flex scheduling detected for game ${freshGame.id}: ${new Date(existingData.startTime).toLocaleTimeString()} -> ${new Date(freshGame.startTime).toLocaleTimeString()}`);
