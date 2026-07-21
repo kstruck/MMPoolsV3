@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  decideAlert, evaluateSlate, formatAlertMessage, gatesSubmission, poolIsBlockable, poolMatchesSlate, slateId,
+  decideAlert, evaluateSlate, formatAlertMessage, gatesSubmission, lockWatchVerdict, poolIsBlockable, poolMatchesSlate, slateId,
   type SlateKey, type WatchedGame, type WatchedPool,
 } from '../lib/nflLockWatch';
 
@@ -205,5 +205,41 @@ describe('poolIsBlockable — the tripwire must not cry wolf', () => {
 describe('slateId', () => {
   it('keys a slate by the same triple the submit gate queries on', () => {
     expect(slateId(KEY)).toBe('2026/1/1');
+  });
+});
+
+// Codex review of PR #245, round 3. Both of this job's outputs swallow their own
+// failures — the page and the every-run audit trace — so a run that reached
+// nobody still reported ok:true. A tripwire that fires into the void has not fired.
+describe('lockWatchVerdict — a page nobody received is not a healthy run', () => {
+  const base = { pagesUndelivered: 0, audited: true, slatesChecked: 2, firing: 0, dryRun: true };
+
+  it('is healthy on a normal quiet run', () => {
+    const v = lockWatchVerdict(base);
+    expect(v.ok).toBeUndefined();
+    expect(v.detail).toMatchObject({ slatesChecked: 2, firing: 0 });
+  });
+
+  it('is UNHEALTHY when a page could not be delivered', () => {
+    const v = lockWatchVerdict({ ...base, firing: 1, pagesUndelivered: 1 });
+    expect(v.ok).toBe(false);
+    expect(v.error).toContain('1 page(s) undelivered');
+  });
+
+  it('is UNHEALTHY when the audit trace was lost', () => {
+    // The audit row is what makes "never fired" distinguishable from "never ran".
+    const v = lockWatchVerdict({ ...base, audited: false });
+    expect(v.ok).toBe(false);
+    expect(v.error).toContain('audit trace not written');
+  });
+
+  it('names both when the run produced nothing at all', () => {
+    const v = lockWatchVerdict({ ...base, firing: 1, pagesUndelivered: 1, audited: false });
+    expect(v.error).toBe('1 page(s) undelivered; audit trace not written');
+  });
+
+  it('carries the undelivered count as detail', () => {
+    expect(lockWatchVerdict({ ...base, pagesUndelivered: 3 }).detail)
+      .toMatchObject({ pagesUndelivered: 3 });
   });
 });

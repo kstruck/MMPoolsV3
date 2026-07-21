@@ -158,25 +158,66 @@ describe('SCHEDULED_JOB_EXPECTATIONS must not drift from the wrapped jobs', () =
 // be added without a heartbeat, which is how this hole got dug in the first
 // place. Delete entries as they are wrapped; when the list is empty, delete
 // the list. Do not add to it.
+//
 // SRC-relative paths, NOT basenames. Basenames are not unique here — billing.ts
 // and scoreUpdates.ts each exist at both src/ and src/schemas/ — so a basename
 // allowlist silently exempts the wrong file and quietly weakens the ratchet this
 // test exists to be.
-const KNOWN_UNWRAPPED_FILES = new Set([
-  'autoClosePools.ts',
-  'autoLock.ts',
-  'billing.ts',
-  'monetizationAlerts.ts',
-  'playoffPools.ts',
-  'reminders.ts',
-  'scoreUpdates.ts',
-  'siteAverages.ts',
-  'webhookDurabilitySweep.ts',
+//
+// Keyed `file.ts#exportedJobName` — the EXACT legacy job, never the file and
+// never a count. Both weaker forms transfer: a file-level pass lets a new
+// unmonitored job into any of these nine files for free, and a per-file COUNT
+// still transfers if someone wraps the legacy job while adding a different
+// unwrapped one (the count stays at one and both checks pass). An exemption
+// that can move to code it was never granted for is how a ratchet quietly
+// becomes a rubber stamp.
+const KNOWN_UNWRAPPED_JOBS = new Set([
+  'autoClosePools.ts#autoClosePools',
+  'autoLock.ts#autoLockPools',
+  'billing.ts#enforceBillingStatus',
+  'monetizationAlerts.ts#monetizationAlerts',
+  'playoffPools.ts#checkPlayoffScores',
+  'reminders.ts#runReminders',
+  'scoreUpdates.ts#syncGameStatus',
+  'siteAverages.ts#siteAveragesJob',
+  'webhookDurabilitySweep.ts#webhookDurabilitySweep',
 ]);
+
+/**
+ * The exported job name that owns this `onSchedule(` call.
+ *
+ * Every scheduled job in this repo is written as `export const <name> = ...
+ * onSchedule(`, so the nearest preceding `export const <name> =` identifies it.
+ * Returns null when the shape does not match, which fails CLOSED — an
+ * unrecognised job cannot match an exemption key and is reported as unwrapped.
+ */
+function owningJobName(src: string, callIndex: number): string | null {
+  const before = src.slice(0, callIndex);
+  const m = [...before.matchAll(/export\s+const\s+([A-Za-z0-9_]+)\s*=/g)].pop();
+  return m ? m[1] : null;
+}
 
 /** SRC-relative, forward-slashed, so the same key works on Windows and CI. */
 function relKey(srcRoot: string, file: string): string {
   return path.relative(srcRoot, file).split(path.sep).join('/');
+}
+
+/**
+ * Blank out comments so a `withHeartbeat(` mentioned in PROSE cannot vouch for
+ * an unwrapped job. This file is heavily commented and several of those comments
+ * name the wrapper; without this, the guard could be satisfied by its own
+ * documentation. Replaced with spaces rather than removed so byte offsets — and
+ * therefore reported line numbers — stay exact.
+ *
+ * The `(?<!:)` keeps `https://` from being read as a line comment. A URL inside
+ * the scanned window would otherwise blank the rest of the line, which could
+ * hide a real `withHeartbeat(` and fail the test on correct code — noisy, but
+ * loud, which is the safe direction for a guard to be wrong in.
+ */
+function blankComments(s: string): string {
+  return s
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => ' '.repeat(m.length))
+    .replace(/(?<!:)\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
 }
 
 describe('every scheduled job is wrapped in withHeartbeat', () => {
@@ -196,32 +237,51 @@ describe('every scheduled job is wrapped in withHeartbeat', () => {
   // can be several lines, so a fixed look-ahead window is used rather than
   // trying to parse the call. 600 chars comfortably spans every form in this
   // repo (inline cron string, options object, and multi-line options).
+  //
+  // The window is ALSO cut at the next onSchedule( in the file. Without that,
+  // job N could be vouched for by job N+1's wrapper whenever the two sit within
+  // 600 characters — a guard satisfied by a call other than the one it is
+  // checking, which is the same "looks like it guards, doesn't" shape this
+  // whole file exists to stop.
   const LOOKAHEAD = 600;
 
-
-  const unwrapped: string[] = [];
+  /** Every unwrapped onSchedule() call, as `file.ts#jobName` plus its line. */
+  const unwrappedJobs: Array<{ key: string; where: string }> = [];
   let scheduledCount = 0;
 
   for (const file of walk2(SRC2)) {
     // lib/heartbeat.ts documents onSchedule in prose; it defines no jobs.
     if (file.endsWith(path.join('lib', 'heartbeat.ts'))) continue;
     const src = fs.readFileSync(file, 'utf8');
-    for (const m of src.matchAll(/onSchedule\(/g)) {
+    const scanned = blankComments(src);
+    const starts = [...scanned.matchAll(/onSchedule\(/g)].map((m) => m.index!);
+    const rel = relKey(SRC2, file);
+    starts.forEach((start, i) => {
       scheduledCount++;
-      const window = src.slice(m.index!, m.index! + LOOKAHEAD);
-      const rel = relKey(SRC2, file);
-      if (!window.includes('withHeartbeat(') && !KNOWN_UNWRAPPED_FILES.has(rel)) {
-        const line = src.slice(0, m.index!).split(String.fromCharCode(10)).length;
-        unwrapped.push(rel + '@' + line);
+      const nextCall = starts[i + 1] ?? scanned.length;
+      const window = scanned.slice(start, Math.min(start + LOOKAHEAD, nextCall));
+      if (!window.includes('withHeartbeat(')) {
+        const line = src.slice(0, start).split(String.fromCharCode(10)).length;
+        const job = owningJobName(scanned, start);
+        unwrappedJobs.push({
+          key: `${rel}#${job ?? `<anonymous@${line}>`}`,
+          where: `${rel}@${line}`,
+        });
       }
-    }
+    });
   }
+
+  const unwrapped = unwrappedJobs
+    .filter((u) => !KNOWN_UNWRAPPED_JOBS.has(u.key))
+    .map((u) => `${u.key} (${u.where})`);
 
   it('found the scheduled jobs (guards against the regex matching nothing)', () => {
     expect(scheduledCount).toBeGreaterThanOrEqual(12);
   });
 
   it('leaves no onSchedule() unwrapped', () => {
+    // A NEW job in an allowlisted file fails here: the exemption is keyed to the
+    // legacy job's own name, so it cannot transfer to a different one.
     expect(
       unwrapped.sort(),
       'onSchedule() without withHeartbeat() — this job can die silently and nothing will say so',
@@ -251,7 +311,7 @@ describe('findStaleJobs on the real outage shape', () => {
 // gets wrapped, this fails and tells you to delete the entry — otherwise the
 // list becomes a permanent blind spot of exactly the kind it documents.
 describe('the known-unwrapped burn-down list stays honest', () => {
-  it('contains only files that still have an unwrapped onSchedule()', () => {
+  it('names only jobs that still have an unwrapped onSchedule()', () => {
     const SRC3 = path.resolve(__dirname, '..');
     const stillUnwrapped = new Set<string>();
 
@@ -261,15 +321,23 @@ describe('the known-unwrapped burn-down list stays honest', () => {
         const full = path.join(dir, e.name);
         if (e.isDirectory()) { walk3(full); continue; }
         if (!e.name.endsWith('.ts')) continue;
-        const src = fs.readFileSync(full, 'utf8');
-        for (const m of src.matchAll(/onSchedule\(/g)) {
-          if (!src.slice(m.index!, m.index! + 600).includes('withHeartbeat(')) stillUnwrapped.add(relKey(SRC3, full));
-        }
+        if (full.endsWith(path.join('lib', 'heartbeat.ts'))) continue;
+        const scanned = blankComments(fs.readFileSync(full, 'utf8'));
+        const starts = [...scanned.matchAll(/onSchedule\(/g)].map((m) => m.index!);
+        starts.forEach((start, i) => {
+          const window = scanned.slice(start, Math.min(start + 600, starts[i + 1] ?? scanned.length));
+          if (!window.includes('withHeartbeat(')) {
+            stillUnwrapped.add(`${relKey(SRC3, full)}#${owningJobName(scanned, start) ?? '<anonymous>'}`);
+          }
+        });
       }
     }
     walk3(SRC3);
 
-    const stale = [...KNOWN_UNWRAPPED_FILES].filter(f => !stillUnwrapped.has(f)).sort();
-    expect(stale, 'these are now wrapped — remove them from KNOWN_UNWRAPPED').toEqual([]);
+    // An entry with nothing behind it is the rot this guards against: the job
+    // was wrapped and its exemption outlived the problem, silently staying
+    // available for the next job that lands in the same file.
+    const stale = [...KNOWN_UNWRAPPED_JOBS].filter((k) => !stillUnwrapped.has(k)).sort();
+    expect(stale, 'these are now wrapped — delete their KNOWN_UNWRAPPED_JOBS entry').toEqual([]);
   });
 });

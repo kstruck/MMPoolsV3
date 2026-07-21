@@ -57,8 +57,13 @@ export function capMetadata(
  * Append one admin-audit entry. Never throws into the caller's happy path —
  * an audit-write failure is logged but must not fail the underlying action
  * (the action itself already succeeded/failed on its own terms).
+ *
+ * RETURNS whether the entry was actually written. Swallowing the failure is
+ * still right, but a caller whose whole job is to leave a record — a scheduled
+ * sweep, an alert path — needs to know the record was lost, or "audited" and
+ * "silently didn't" stay indistinguishable. Callers that don't care may ignore it.
  */
-export async function writeAdminAudit(entry: AdminAuditEntry): Promise<void> {
+export async function writeAdminAudit(entry: AdminAuditEntry): Promise<boolean> {
   try {
     const db = admin.firestore();
     await db.collection("admin_audit").add({
@@ -72,7 +77,9 @@ export async function writeAdminAudit(entry: AdminAuditEntry): Promise<void> {
       error: entry.error ? String(entry.error).slice(0, 300) : null,
       at: Timestamp.now(),
     });
+    return true;
   } catch (e) {
     console.error("[adminAudit] write failed (non-fatal):", e);
+    return false;
   }
 }

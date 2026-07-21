@@ -108,14 +108,17 @@ export async function reportStatCorrections(
   db: Firestore,
   key: SnapshotKey,
   corrections: GameStateChange[],
-): Promise<void> {
-  if (corrections.length === 0) return;
+): Promise<boolean> {
+  if (corrections.length === 0) return true;
   const detail = corrections.map((c) => `${c.gameId}: ${c.field} ${c.from} → ${c.to}`).join("; ");
   console.warn(`[feedSnapshot] STAT CORRECTION on ${snapshotSlateId(key)}: ${detail}`);
 
   // Independent sinks — the audit trail must not wait on the pager, and neither
-  // throws, so a failure in one cannot lose the other.
-  await Promise.all([
+  // throws, so a failure in one cannot lose the other. But BOTH failing means
+  // the correction was detected and then dropped on the floor: pools already
+  // finalized on the stale scores stay that way and nobody is told. Reported
+  // back so the job's heartbeat can say so.
+  const [audited, paged] = await Promise.all([
     writeAdminAudit({
       actorUid: "system",
       action: "NFL_STAT_CORRECTION",
@@ -134,6 +137,10 @@ export async function reportStatCorrections(
       context: { slate: snapshotSlateId(key), count: corrections.length },
     }),
   ]);
+  // "no-recipients" counts as delivered: an unconfigured pager is a setup gap
+  // that would otherwise mark every correction run unhealthy forever, and the
+  // audit entry still carries the record.
+  return audited && paged !== "failed";
 }
 
 /**
