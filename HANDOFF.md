@@ -1,71 +1,86 @@
-# HANDOFF — Session entry point (updated 2026-07-21: overnight work is in FOUR UNMERGED PRs — read the stop-point box first)
+# HANDOFF — Session entry point (updated 2026-07-21: everything merged AND deployed; queue empty)
 
-> ## STOP POINT 2026-07-21 (overnight session ended here)
+> ## STOP POINT 2026-07-21 (~04:40Z)
 >
-> **Everything produced overnight is in OPEN, UNMERGED PRs. `main` does not
-> contain it.** If you are a new session reading this file on `main`, the
-> sections below are accurate but INCOMPLETE — four PRs are outstanding:
+> **All work is merged and deployed. `main` @ `84e080c` = prod. Nothing is
+> waiting on a merge or a deploy.** PRs #231-#236 all landed.
 >
-> | PR | What | Kind |
+> | PR | What | State |
 > |---|---|---|
-> | #231 | `replayFeedSnapshot` — A5 part 2, snapshot replay callable | **code** |
-> | #232 | `PLAN-BACKUPS-PHASE3.md` — the zero-backup gap, full runbook | docs |
-> | #233 | `SECURITY-CLAIM-SQUARES.md` — open `guestDeviceKey` finding | docs |
-> | #234 | `PICKUP-PRESEASON-PILOT.md` refresh + morning order of operations | docs |
+> | #231 | `replayFeedSnapshot` — A5 part 2, snapshot replay callable | merged + deployed |
+> | #232 | `PLAN-BACKUPS-PHASE3.md` — zero-backup gap runbook | merged |
+> | #233 | `SECURITY-CLAIM-SQUARES.md` — open `guestDeviceKey` finding | merged |
+> | #234 | `PICKUP` refresh + doc-precedence fix | merged |
+> | #235 | `nflDeepScoreSweepJob` + **spread-unlock bugfix** | merged + deployed |
+> | #236 | `brace-expansion` pin — unblocked CI | merged |
 >
-> **Merge all four before doing anything else**, or you will re-derive work that
-> is already done. #232/#233/#234 are documents and change no code.
+> ### What needs Kevin now — all decisions or console work, no code
+> 1. **Enable PITR** — `PLAN-BACKUPS-PHASE3.md` steps 0-2. One command, buys a
+>    7-day recovery floor. **This app still has NO BACKUP OF ANY KIND**, which is
+>    a bigger exposure than anything on the preseason list, because every other
+>    risk there is recoverable and this one is not. Step 0 is installing
+>    `gcloud` — it is not on this machine, and the Firebase CLI cannot configure
+>    PITR or schedules. No region is pinned in the repo, so the database location
+>    must be READ, not assumed.
+> 2. **A8 pricing — due 2026-08-13.** The only calendar-bound item.
+> 3. **Arm `nflDeepSweep`** (optional, safe): `system/config.nflDeepSweep` →
+>    `{ enabled: true, dryRun: true }`. In dry-run it still detects and reports
+>    stat corrections and only suppresses the `nfl_games` write.
+> 4. **NFL-6** — arm the finalize sweep via `nflFinalize.liveSeasonTypes: [1]`.
+>    `dryRun:false` alone does nothing; that guard is deliberate.
+> 5. **`claimMySquares` timing call.** ⚠️ **This repo is PUBLIC** and the hole is
+>    unfixed and now documented in `SECURITY-CLAIM-SQUARES.md`. The exploit
+>    detail was reduced, but the source was always public. Recommendation on
+>    file: accept through the pilot, fix before the regular season — but the
+>    public-repo fact is a reason to revisit that timing.
+> 6. **Leave `nflLockWatch.dryRun: true`** — only 1 of 49 preseason games has a
+>    betting line, so arming it pages nightly about a known condition.
 >
-> ### Where work stopped, and why
-> It stopped at a real gate, not mid-task. Every remaining item needs Kevin:
-> deploy, a GCP console/CLI action, or a decision. Nothing is half-finished and
-> no branch is left dirty.
+> ### Top open engineering item (no Kevin needed)
+> **Heartbeat coverage is incomplete.** `SCHEDULED_JOB_EXPECTATIONS` covers 9
+> jobs but **none of the NFL ones** — `syncNFLScoresJob`, `nflFinalizeSweepJob`,
+> `nflLockWatchJob`, `lockNFLSpreadsJob` are neither wrapped in `withHeartbeat`
+> nor listed. Those are exactly the jobs that went silently dead twice.
+> `nflDeepScoreSweepJob` is wrapped; the rest of the NFL fleet is not.
 >
-> - **#231 is complete and gated on review only.** All five gates green:
->   functions unit **852** (was 845), emulator **98 pass / 10 skipped**,
->   functions build clean, `npx tsc -b` clean, root vitest **257**.
-> - **A5 is now finished end to end.** Part 1 stored raw ESPN payloads; nothing
->   could read them back. Part 2 replays a chosen snapshot into `nfl_games`.
-> - **Backups: this application has NO BACKUP OF ANY KIND.** No PITR, no
->   scheduled backups, no exports, no Auth export. This is a bigger exposure
->   than anything on the preseason list, because every other risk on that list
->   is recoverable and this one is not. `--enable-pitr` is ONE command and buys
->   a 7-day floor. Two facts discovered while writing #232: **`gcloud` is not
->   installed** on this machine (and the Firebase CLI cannot configure PITR or
->   schedules), and **no region is pinned anywhere in the repo**, so the
->   database location must be READ, not assumed.
-> - **`claimMySquares` hole is real** — verified against `firestore.rules`
->   (`pools/{poolId}` is `allow get: if true`; `poolClaims` is `if false`, which
->   is why `claimByCode` is NOT vulnerable). Confirmed **not preseason-blocking**
->   — Squares is not part of the NFL pilot. Deliberately not fixed: the repair
->   spans the reserve path, both claim callables, and a backfill over live pool
->   documents. Recommendation on file: accept through the pilot, fix before the
->   regular season as a supervised single-purpose PR.
->
-> ### Kevin's order of operations
-> 1. Merge #232, #233, #234. Review and merge #231.
-> 2. Deploy the merged queue (#225-#231) — see the deploy section below.
-> 3. **Enable PITR** — `PLAN-BACKUPS-PHASE3.md` steps 0-2.
-> 4. **A8 pricing — due 2026-08-13.** The only calendar-bound item.
->
-> Still open and needing a decision, not code: the `syncNFLScoresJob` 24h
-> re-read window (now the top undecided engineering item), NFL-2 (synthetic pick
-> probe — recommendation is skip for the pilot), and the `claimMySquares` timing
-> call above. Leave `nflLockWatch.dryRun: true` — only 1 of 49 preseason games
-> has a betting line, so arming it pages nightly about a known condition.
+> ### Verify tomorrow, do not assume
+> `nflDeepScoreSweepJob` first fires 11:30 ET. `withHeartbeat` stamps even on
+> the disabled early-return, so `system/heartbeats.nflDeepScoreSweepJob` should
+> have a fresh `at` after that. **If it does not, the schedule never fired** —
+> the exact distinction that took ten days to spot on the finalize sweep.
 
-
-> ## DEPLOY STATE 2026-07-20 — ⚠️ SUPERSEDED, prod no longer matches `main`
+> ## DEPLOY STATE 2026-07-21 — prod matches `main` @ `84e080c`
 >
-> **Do not act on this box for deploy decisions.** It was accurate on
-> **2026-07-20 at `5e481c0`**. PRs merged after that date are undeployed, so
-> "prod matches `main`" is **no longer true**. The current queue and the deploy
-> command live in **`PICKUP-PRESEASON-PILOT.md` §4**; that file wins on deploy
-> state whenever it disagrees with this box.
+> **Deployed 2026-07-21 ~04:30Z**, full-fleet `--only functions`. Deploy queue is
+> EMPTY. Verified from the deploy output, not assumed:
 >
-> The rest of this box is kept because the *lessons* below it are still valid —
-> only the "backlog is cleared" claim has expired.
+> - `nflDeepScoreSweepJob` — **Successful create**
+> - `replayFeedSnapshot` — **Successful create**
+> - `syncNFLScoresJob` — **Successful update** (this is the spread-unlock fix)
 >
+> Everything from PRs #231-#236 is live: the deep score sweep, the snapshot
+> replay callable, the backups runbook, the security writeup, the doc-precedence
+> fix, and the `brace-expansion` CI pin.
+>
+> **Both new functions are INERT until armed** — see "What is armed" below.
+>
+> ### ⚠️ The bug that shipped fixed, and why it did no damage
+> `syncNFLScoresJob` was silently unlocking and re-pricing spreads for games
+> later in the week: the ESPN fetch returns the whole week and every game is
+> written back, but lock preservation only consulted the docs inside the
+> `[now-24h, now+2h]` query window. The parser emits `spread.locked: false`, so
+> any game outside that window had its lock reset AND its frozen line replaced.
+>
+> **No production data was harmed**, because the only writer of
+> `spread.locked: true` is `lockNFLSpreadsJob`, which has been `dryRun: true`
+> throughout and returns before its batch (`nflSchedule.ts`, the `if (gate.dryRun)`
+> early return). No locks existed to destroy. The fix landed *before* spread
+> locking is armed for preseason — which is exactly when it would have begun
+> quietly eating locked lines. Found by qodo on PR #235, not by reading the code.
+>
+> ---
+>
+> ### Historical: DEPLOY STATE 2026-07-20 (superseded by the box above)
 > The long-standing "merged but NOT deployed" backlog was **CLEARED as of
 > `5e481c0`**. A
 > full-fleet `--only functions` deploy plus `--only firestore:indexes` landed
@@ -231,6 +246,13 @@ The trust-boundary `validated()` sweep of the parked SWEEP-LATER callables is un
 > — `= onCall(` means unwrapped, `= validated(` means done. The 11 remaining are listed at the bottom of this section.
 
 **Fully swept files:** `bracketEntries.ts` (6/6), `adminClaims.ts` (4/4), `poolOps.ts` (3/3), `nflPools.ts` (3/3 SWEEP-LATER; `calculatePlayoffScores`-style legacy noop N/A here), `billing.ts` (2/2 SWEEP-LATER), `couponTemplates.ts` (2/2 SWEEP-LATER; 3 others already TARGET-NOW), `espnBracket.ts` (5/5), the 4 no-input SUPER_ADMIN callables (`getAdminHealthSnapshot`/`backfillPools`/`refreshExpertPicks`/`syncPlayoffPools`, one each in 4 different files). `bracketPools.ts` at 2/3 (`createBracketPool` deliberately deferred, see below).
+
+> ⚠️ **The "Deploy state" column below is HISTORICAL and no longer accurate.**
+> Every batch in this table was deployed by the 2026-07-20 full-fleet deploy and
+> again on 2026-07-21. Rows reading "merged, NOT deployed" reflect the state at
+> the time each row was written, not today. **Prod matches `main` @ `84e080c`;
+> the deploy queue is EMPTY** — see the DEPLOY STATE box at the top of this file.
+> The table is kept for the PR/batch mapping, which is still useful.
 
 | Batch | PR | Callables | Deploy state |
 |---|---|---|---|

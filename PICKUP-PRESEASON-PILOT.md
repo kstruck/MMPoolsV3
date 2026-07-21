@@ -41,19 +41,32 @@ state. Concretely:
 
 ## 2. Live state (verified 2026-07-21)
 
-> ⚠️ **Deploy state: this section supersedes HANDOFF.md's banner.**
-> HANDOFF's `DEPLOY STATE 2026-07-20` box says "prod matches `main`" and that
-> the merged-not-deployed backlog is CLEARED. That was true **on 2026-07-20 at
-> `5e481c0`** and is **stale now** — PRs merged after it are undeployed. When
-> the two disagree about what is live, the one with the later date wins, and
-> that is this one. HANDOFF carries a pointer back here saying the same thing.
+> **Deploy state: HANDOFF.md's banner is authoritative and CURRENT.**
+> Both files now agree — prod matches `main` @ `84e080c`, deployed
+> 2026-07-21 ~04:30Z. The deploy queue is EMPTY. If these two ever disagree
+> again, the later date wins; check both before deploying.
 
-**Prod matched `main` as of `5e481c0` (2026-07-20).** Everything merged since
-then is **NOT deployed** — see §4.
+**Prod matches `main` @ `84e080c` (2026-07-21).** Nothing is awaiting deploy.
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is
 `enabled:true, dryRun:true` and still needs `liveSeasonTypes` to actually arm.
+
+**Deployed but NOT armed** (both default OFF, fail-safe):
+- `nflDeepScoreSweepJob` — needs `system/config.nflDeepSweep.enabled = true`.
+  Runs 11:30 ET daily. In `dryRun` it still DETECTS and REPORTS stat
+  corrections and only suppresses the `nfl_games` write, so it can be watched
+  for a week before the writes are armed. `lookbackDays` optional, default 7,
+  clamped to [1, 30].
+- `replayFeedSnapshot` — SUPER_ADMIN callable, `dryRun` defaults true at the
+  schema layer. Nothing runs it on a schedule; it is a break-glass tool.
+
+**Free liveness check available tomorrow:** `nflDeepScoreSweepJob` is wrapped in
+`withHeartbeat`, and the wrapper stamps on every completed run *including* the
+early return when the job is disabled. So after 11:30 ET tomorrow,
+`system/heartbeats.nflDeepScoreSweepJob` should exist with a fresh `at`. If it
+does not, the schedule itself never fired — which is precisely the distinction
+that took ten days to notice on the finalize sweep.
 
 Prod data: **49 preseason games** (`season 2026`, `seasonType 1`). One
 mislabeled regular-season game was deleted by hand; PR #219 stops it recurring.
@@ -77,65 +90,45 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
   *scheduled sweep* is not.
 - Nothing has been exercised against production, only the emulator.
 - The **chaos drill (NFL-7)** has not been run — it needs a live preseason week.
-- Heartbeats (PR #227) are merged but **undeployed**, so `system/heartbeats`
-  does not exist yet.
+- **`nflDeepScoreSweepJob` has never run in production.** Deployed 2026-07-21,
+  disabled. First scheduled fire is 11:30 ET; check `system/heartbeats` after
+  that before believing anything about it.
+- **`replayFeedSnapshot` has never been invoked against production.** Its diff
+  logic is unit-tested; the full callable path is not.
+- **`spread.locked` has never been exercised end-to-end in prod**, because
+  `lockNFLSpreadsJob` has always been dry-run. The PR #235 fix is therefore
+  *preventive* — verified by reasoning and tests, never by production behavior.
 
 ---
 
-## 4. Merged but NOT deployed — Kevin's gate
+## 4. Deploy queue — EMPTY
 
-**Merged, awaiting deploy:** `#225` preseason fixture · `#226` morning brief ·
-`#227` scheduler heartbeats · `#228` docs · `#229` full preseason arc ·
-`#230` this doc
+**Everything is merged and deployed.** PRs #231-#236 all landed on `main`
+@ `84e080c` and were deployed 2026-07-21 ~04:30Z. Nothing is waiting.
 
-**Open, awaiting your review/merge (opened overnight 2026-07-21):**
-`#231` `replayFeedSnapshot` — A5 part 2, the snapshot replay callable (code) ·
-`#232` `PLAN-BACKUPS-PHASE3.md` — the zero-backup gap, runbook (docs) ·
-`#233` `SECURITY-CLAIM-SQUARES.md` — open `guestDeviceKey` finding (docs)
+Confirmed from the deploy output rather than assumed: `nflDeepScoreSweepJob`
+and `replayFeedSnapshot` both reported **Successful create**, and
+`syncNFLScoresJob` reported **Successful update** (the spread-unlock fix).
 
-Merge #232 and #233 without ceremony — they are documents, they change no code.
-#231 adds one SUPER_ADMIN callable; all five gates green (852 unit, up from
-845).
-
-**Runtime impact, scoped — read both lines, they answer different questions:**
-
-- Of the **already-merged, awaiting-deploy** queue above, only `#227` changes
-  runtime behavior (8 jobs + `getOpsHealthSummary`). That is what the deploy
-  command below ships if you run it *before* merging anything else.
-- **After you merge `#231`**, the next deploy additionally creates one new
-  SUPER_ADMIN callable, `replayFeedSnapshot`. It is invoked by hand and runs
-  nothing on a schedule, so it changes no behavior until someone calls it — but
-  it *is* a new function in the deploy output, and you should expect to see it
-  listed as created rather than treat it as a surprise.
-
-Deploy:
+Kept because it is the command that works, for the next time:
 
 ```
 cd D:\march-melee-pools
 git checkout main && git pull origin main
 git log --oneline -1
-node -e "const fs=require('fs');console.log(fs.readFileSync('functions/src/consensus.ts','utf8').includes('withHeartbeat')?'present':'MISSING - do not deploy')"
+npm --prefix functions install
 $env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"
 npx firebase deploy --only functions --project gridiron-gamble-uzuqo
 ```
 
 ⚠️ **`functions:` must be repeated before EVERY name** if using a filtered
 deploy. A bare `--only functions` avoids the trap entirely and is what has
-worked. `FUNCTIONS_DISCOVERY_TIMEOUT` is in **seconds** and works around a 10s
-source-analysis timeout on Windows.
+worked every time. `FUNCTIONS_DISCOVERY_TIMEOUT` is in **seconds** and works
+around a 10s source-analysis timeout on Windows.
 
-No index or rules deploy needed for the current queue.
-
----
-
-## 4b. Morning order of operations (2026-07-22)
-
-1. Merge #232 and #233 (docs, zero risk). Review and merge #231.
-2. Deploy the queue — §4 commands. Nothing above is live until you do.
-3. **Enable PITR** — `PLAN-BACKUPS-PHASE3.md` steps 0–2. Right now this
-   application has **no backup of any kind**; that is a larger exposure than
-   anything on the preseason list, because every other risk is recoverable.
-4. Then the calendar-bound item: **A8 pricing, due 2026-08-13.**
+Always confirm the change is in the file on disk before deploying — not that
+"the PR merged". A stale checkout deploys old code and still prints
+`Deploy complete!`.
 
 ## 5. What Kevin must do (nobody else can)
 
@@ -144,7 +137,7 @@ No index or rules deploy needed for the current queue.
    under `"2"` in `bySeasonType`. Then set `nflFinalize.liveSeasonTypes` to an
    array containing the number **1** — `dryRun:false` **alone does nothing**,
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
-2. **Deploy** (§4).
+2. ~~**Deploy**~~ — **DONE 2026-07-21 ~04:30Z**, queue empty (§4).
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.
@@ -170,11 +163,18 @@ Roughly in value order:
    real against `firestore.rules`, and confirmed **not preseason-blocking**
    (Squares is not part of the NFL pilot). Recommendation on file: accept
    through the pilot, fix before the regular season. Needs your decision.
-4. **`syncNFLScoresJob` only re-reads games from the last 24h**
-   (`nflSchedule.ts`). A stat correction arriving later is never picked up,
-   which bounds what A5 can protect. Widening it has cost implications — this
-   is now the top *undecided* engineering item.
-5. **25 callables still use bare `onCall(`** — mostly sim-harness and aiTesting
+4. ~~**`syncNFLScoresJob` only re-reads games from the last 24h.**~~
+   **DONE — PR #235**, `nflDeepScoreSweepJob`. Deployed, not yet armed.
+   Deliberately a second daily job rather than a wider window on the 5-minute
+   one, which would have multiplied ESPN fetches across 288 runs a day.
+5. **Heartbeat coverage is incomplete — the top open engineering item.**
+   `SCHEDULED_JOB_EXPECTATIONS` covers 9 jobs, but **none of the NFL ones**:
+   `syncNFLScoresJob`, `nflFinalizeSweepJob`, `nflLockWatchJob` and
+   `lockNFLSpreadsJob` are neither wrapped in `withHeartbeat` nor listed. Those
+   are exactly the jobs that went silently dead twice. `nflDeepScoreSweepJob`
+   is wrapped; the rest of the NFL fleet is not. Touches four job bodies, so it
+   wants its own PR.
+6. **25 callables still use bare `onCall(`** — mostly sim-harness and aiTesting
    with their own role gates, plus the deliberately-deferred `createBracketPool`.
    None is a regression. Wants a re-classification pass, not a sweep.
 
