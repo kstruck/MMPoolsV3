@@ -28,10 +28,31 @@ prose if they disagree; skills are point-in-time snapshots.
 
 ## 2b. Opening a PR is not the end of the task — wait for qodo
 
-**After opening ANY pull request, wait for the qodo review, read every
-finding, and absorb or reject each one with written evidence before
-reporting the PR as done.** Kevin should never have to ask whether qodo
-was checked.
+> ⚠️ **DO NOT BLOCK ON QODO — 2026-07-21.** Kevin reported the qodo plan is out
+> of tokens, so reviews may be intermittent or stop entirely. **Never wait on a
+> review before reporting a PR, and never call a PR blocked on one.**
+>
+> Stated precisely, because the distinction matters: qodo was still posting
+> reviews when this note was written, so do not assume silence means it is dead,
+> and do not assume a review will come. **Check once, cheaply, and move on** — if
+> a report is there, absorb it; if not, proceed. `gh pr checks <n>` is still
+> required and still gates.
+>
+> **This note OVERRIDES the "wait for the qodo review" instruction below for as
+> long as it stands.** Read the rest of §2b as: *when a qodo report EXISTS, read
+> every finding and absorb or reject each one with written evidence.* The
+> waiting half is suspended — an unconditional "wait before reporting" can block
+> a PR indefinitely against a reviewer that may never answer, which is the
+> opposite of what the rule is for. Kevin will say when it resumes.
+>
+> Meanwhile the review burden falls back on the author, and §2c is now the
+> primary cross-model gate rather than a supplement to qodo.
+
+**After opening ANY pull request, check for a qodo review — and when one
+exists, read every finding and absorb or reject each with written evidence
+before reporting the PR as done.** Kevin should never have to ask whether qodo
+was checked. (Per the box above, the *waiting* part is currently suspended:
+check once, cheaply, and proceed if nothing is there.)
 
 This lived in `mmp-qodo-cycle` and in auto-memory and was still dropped
 under load on 2026-07-21 (checked on two PRs only when asked, skipped on
@@ -109,6 +130,19 @@ existed to stop. Written, reviewed, and holed in the same hour.
 **Absorb or reject each finding with written evidence, same as the qodo rule in
 §2b.** Codex is not automatically right — verify its claims against the code
 before acting, as with any reviewer.
+
+**Expect several rounds, and keep going until one comes back clean.** Measured
+over the 2026-07-22 run: #245 took 4 rounds / 11 findings, #248 took 9 rounds,
+#250 took 4 rounds / 15 findings. The pattern is consistent and worth knowing in
+advance — **round 1 finds defects in the code, and rounds 2+ find defects in the
+fixes**, including in the guards written to prove the fixes. Three separate
+times it holed a test that looked like it guarded and did not. Budget for that
+rather than treating round 1 as the review.
+
+A rejection is a legitimate outcome and must be written down with reasoning. Of
+those 30 findings, 3 were rejected: two would have made a monitor cry wolf
+(marking a job unhealthy forever over a config choice), and one asked for an
+incident-latching mechanism that does not exist. Judge on evidence.
 
 ## 2d. Cadence near a deadline
 
