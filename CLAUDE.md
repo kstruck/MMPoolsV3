@@ -31,6 +31,46 @@ Each skill carries a "When NOT to use this skill" routing table to its
 siblings and provenance/re-verify commands — trust the commands over the
 prose if they disagree; skills are point-in-time snapshots.
 
+## 2b. Opening a PR is not the end of the task — wait for qodo
+
+**After opening ANY pull request, wait for the qodo review, read every
+finding, and absorb or reject each one with written evidence before
+reporting the PR as done.** Kevin should never have to ask whether qodo
+was checked.
+
+This lived in `mmp-qodo-cycle` and in auto-memory and was still dropped
+under load on 2026-07-21 (checked on two PRs only when asked, skipped on
+three others), so it is promoted here where a fresh session cannot miss it.
+
+Why it earns a top-level rule: qodo's **defect** findings on this repo are
+17/17 valid and have caught things code-reading did not — a live production
+spread-unlock bug (#235), a `RangeError` on corrupt feed data (#231), and a
+vulnerable `brace-expansion` in `functions/` that a root-only fix missed and
+that CI's root-scoped audit could never catch (#240). Its **style/compliance**
+findings are miscalibrated to this camelCase TypeScript repo and are 7/7
+rejected (snake_case ×3, import order, `:any` counts, dependency placement).
+Judge on evidence and **reply either way** — a rejection needs written
+reasoning on the PR, not silence.
+
+Mechanics. qodo spreads a single report across **three** surfaces and any
+one of them can be empty on a given PR, so check all three — a report is
+not absent until all three are:
+
+```
+gh pr checks <n>                                        # CI
+gh pr view <n> --json comments                          # numbered findings
+gh api repos/kstruck/MMPoolsV3/pulls/<n>/comments       # inline detail
+gh api repos/kstruck/MMPoolsV3/pulls/<n>/reviews        # review-surface report
+```
+
+The `reviews` line is not optional padding: qodo can post as a review plus
+inline comments while the issue-comment list is empty, so a procedure
+without it can conclude "no findings" on a PR that has them. (Caught by
+qodo, on the PR that introduced this very section.)
+
+Re-check after pushing fixes: qodo marks absorbed findings `✓ Resolved`,
+and that is the confirmation — not your own belief that you addressed them.
+
 ## 3. Deploy facts (do not re-derive)
 
 - Functions + rules: `npx firebase deploy`, project `gridiron-gamble-uzuqo`.
