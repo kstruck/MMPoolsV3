@@ -53,8 +53,10 @@ state. Concretely:
 > suite as agreement about the queue.
 
 **Prod matches <!-- deploy-state:current --> `main` @ `84e080c`, but `main` is
-now `17fa291` — three merged PRs are AWAITING DEPLOY.** Runbook in HANDOFF's
-STOP POINT box.
+now `17fa291` — SIX merged PRs are AWAITING DEPLOY:** #245, #247 and #250 from
+the overnight run, plus #239, #240 and #237 which were already pending before
+it. Fifteen scheduled job bodies, and #237 also needs a manual Coolify trigger.
+Runbook in HANDOFF's STOP POINT box; inventory in §4.
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is
