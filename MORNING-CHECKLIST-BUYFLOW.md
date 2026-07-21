@@ -72,7 +72,7 @@ All work is on branch `feat/buyflow-overhaul` (worktree `D:\mmp-buyflow`), commi
 ```
 cd D:\mmp-buyflow
 npm install
-npm --prefix functions install
+npm --prefix functions ci        # ci, NOT install (install rewrites the lockfile)
 npm --prefix functions run build      # expect exit 0
 npm --prefix functions run test       # expect 288 passing
 npx tsc --noEmit -p tsconfig.app.json # expect 0 errors
@@ -87,7 +87,9 @@ npx firebase emulators:exec --only firestore "node functions/scripts/monetizatio
 3. Merge `feat/buyflow-overhaul` → `main` (via the PR, or `git checkout main && git merge feat/buyflow-overhaul`).
 
 ### Step 4 — Deploy (functions BEFORE rules — repo ritual)
-4. `npm --prefix functions install` (avoids the stripe/fft TS2307 on deploy).
+4. `npm --prefix functions ci` (avoids the stripe/fft TS2307 on deploy). **`ci`,
+   not `install`** — `install` rewrites `functions/package-lock.json` and dirties
+   the tree `firebase deploy` packages.
 5. `npx firebase deploy --only functions` — this creates two NEW scheduled jobs (`releaseStaleCouponReservations`, `monetizationAlerts`), both OFF/dry-run by default, and the new callables (`getPoolQuote`, `adminGrantEntitlement`, `adminRevokeEntitlement`, `redeemPoolCredit`, coupon-template + alert callables). Confirm Cloud Scheduler is enabled for the project if prompted.
 6. `npx firebase deploy --only firestore:rules,firestore:indexes` — **this is where the new rules get compiled + validated.** A syntax error blocks the deploy (it will NOT corrupt prod); if it complains, tell me and I'll fix. The `bundles` composite index may take a few minutes to build.
 7. Trigger the **www frontend deploy in Coolify** (pushing to main does NOT deploy the frontend — nginx serves it). This ships the pricing-page + wizard + admin dashboard changes.

@@ -115,7 +115,7 @@ This is what one live NFL week costs today (Option B in the menu — the fallbac
 
 ## 3. NUMBERED PHASES WITH DECISION GATES
 
-Run in order. Each phase ends with a gate: EXPECTED observation, and a branch if you see something else. All multi-file code changes inside any phase go through `mmp-change-control` (plan → adversarial review log → sweep; deploy functions BEFORE rules; `npm --prefix functions install` first; always `npx firebase`, project `gridiron-gamble-uzuqo`).
+Run in order. Each phase ends with a gate: EXPECTED observation, and a branch if you see something else. All multi-file code changes inside any phase go through `mmp-change-control` (plan → adversarial review log → sweep; deploy functions BEFORE rules; `npm --prefix functions ci` first; always `npx firebase`, project `gridiron-gamble-uzuqo`).
 
 ### Phase 0 — Preseason validation window (seasonType=1, ~August 2026)
 
@@ -248,7 +248,7 @@ Ship Option A's two jobs, but: (1) both behind `system/config` flags (`nflSpread
 ## 5. WRONG PATHS — fenced off
 
 1. **Per-minute schedulers for anything NFL.** Cost landmine: this project already runs two 1-minute jobs + `runReminders` doing an unfiltered full `pools` collection read every 5 min (reminders.ts:117, flagged in AUDIT-REPORT). NFL state changes on a ~weekly cadence; nothing NFL needs sub-5-minute polling. `syncNFLScoresJob`'s own query has no lower time bound (reads every past game doc each run, nflSchedule.ts:227-229) — don't add siblings with the same shape.
-2. **Deploying rules before functions.** House incident: locking a collection to functions-only before the callable exists silently drops writes. Ritual is always: `npm --prefix functions install` → `npx firebase deploy --only functions --project gridiron-gamble-uzuqo` → then rules. See `mmp-change-control`.
+2. **Deploying rules before functions.** House incident: locking a collection to functions-only before the callable exists silently drops writes. Ritual is always: `npm --prefix functions ci` → `npx firebase deploy --only functions --project gridiron-gamble-uzuqo` → then rules. See `mmp-change-control`.
 3. **Scoring before the last game of the week is FINAL (SUPER_ADMIN bypass).** The ACTIVE_GAMES guard blocks owners but not SUPER_ADMIN (nflPools.ts:580). Scoring mid-week: strikes survivors for non-submission while PER_GAME-lock players could still legally pick a later game; breaks the rebuy window the README promises; margin entries with pending games score `null→0` for that week. If you must re-run after an early mistake, remember §4.1: survivor re-runs double-strike.
 4. **Re-running `scoreNFLWeek` on a survivor pool "just to refresh".** See §4.1. Pick'em/margin refresh fine; survivor does not.
 5. **Re-importing the schedule mid-season.** `importNFLSeason` DELETES all existing `nfl_games` for that season+type, then re-imports fresh (nflSchedule.ts:168-186) — fresh games carry `locked:false` (or no spread at all), so every locked spread and manual override for the season is destroyed; picks survive (game IDs are stable `espn_{eventId}`) but the submission gate re-closes for all future weeks until re-locked. Single-week re-import has the same blast radius (season+type-wide delete). Mid-season game-data repair belongs in the Spread Manager or a reviewed one-off, never the importer.

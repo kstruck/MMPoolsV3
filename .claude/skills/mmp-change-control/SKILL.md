@@ -116,7 +116,7 @@ mutation code must prove itself in report-only mode against real data first.
 2. Install functions deps FIRST or the predeploy build fails with TS2307
    (cannot find module 'stripe' / 'firebase-functions-test'):
    ```powershell
-   npm --prefix functions install
+   npm --prefix functions ci        # ci, NOT install (rewrites the lockfile)
    ```
 3. Deploy functions BEFORE firestore rules. Rationale on record: "The new
    logClientError callable must exist before system_logs create is locked,

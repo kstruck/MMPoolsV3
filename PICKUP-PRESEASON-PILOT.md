@@ -2,14 +2,96 @@
 
 **Paste this to start a new session:**
 
-> Read `PICKUP-PRESEASON-PILOT.md`, then `HANDOFF.md` and the `NFL-*` sections
-> of `TOMORROW-TASKS.md`. Continue the preseason-readiness work. Kevin may be
-> away — run autonomously per the overnight-autonomy protocol: code + tests +
-> PRs are yours, deploy and prod-data mutations are his. Leave a morning
-> takeover note.
+> Read `PICKUP-PRESEASON-PILOT.md` §0 first, then `HANDOFF.md`'s STOP POINT box.
+> Preseason week 1 is 2026-08-13. Deploy and prod-data mutations are Kevin's;
+> code, tests and PRs are yours. Follow CLAUDE.md §2b (qodo: poll 3 min before
+> pushing a follow-up) and §2c (`codex exec review --base origin/main`, expect
+> several rounds). Tell me what you plan to do before you do it.
 
 Written 2026-07-21. Preseason week 1 is **2026-08-13**; the HOF game is
 **2026-08-07**. That is the clock.
+
+---
+
+## 0. State as of 2026-07-21 ~18:00Z — read this before anything else
+
+**Functions and the frontend were both deployed on 2026-07-21** (~16:40Z and
+~16:54Z, same commit). Twelve PRs shipped in that deploy; everything below is
+*after* it.
+
+⚠️ **The deployed SHA lives in exactly TWO places, both tagged
+`<!-- deploy-state:current -->`** — HANDOFF's STOP POINT box and §2 of this
+file. `tests/docs-state-invariants.test.ts` requires exactly one tagged claim
+per doc and checks they agree, so **update both or CI fails.** Any UNTAGGED copy
+of the SHA is invisible to that guard and will rot silently; do not add one.
+
+### Check what is open before you start
+
+```
+gh pr list
+```
+
+A command, not a claim — anything written here about which PRs are open is stale
+the moment one merges. If a docs PR touching HANDOFF/PICKUP is open, read it
+before editing those files or you will redo its work.
+
+### What is genuinely proven now
+
+- **Cloud Scheduler fires `nflDeepScoreSweepJob`.** It stamped 11:30:08 ET on
+  07-21 with no `detail` field, i.e. from the pre-#245 build. The ten-day blind
+  spot that killed the finalize sweep is not present here.
+- **Two of #250's nine rewritten handlers work in prod** (`autoLockPools`,
+  `runReminders`), plus `syncNFLScoresJob` from #245 — which reported a quiet
+  July window (`slates: 0`) as *healthy, not degraded*. Healthy paths only.
+
+### The biggest open risks, in order
+
+1. **Backups.** `PLAN-BACKUPS-PHASE3.md` still says no PITR, no scheduled
+   backups, no Auth export. DB is `nam5`, which supports PITR — no blocker.
+   **Kevin-only:** PITR, backup schedules, the GCS bucket and IAM. **Engineering
+   work, once those exist:** the scheduled Auth export is deferred CODE
+   (`PLAN-BACKUPS-PHASE3.md` step 6), not a console click — keep it on the
+   engineering queue rather than filing the whole gap under Kevin.
+2. **A8 pricing — DUE 2026-08-13.** The only calendar-bound item.
+3. **A banned commissioner can still move the money ledger.**
+   `recordPoolPayouts` authorizes from persisted pool ownership and never
+   consults `users/{uid}.role`; it IS on the pilot path
+   (`RecordPayoutsCard.tsx`). Needs `assertNotBannedLive`, NOT a `role:` gate —
+   see `SECURITY-BARE-ONCALL-CLASSIFICATION.md`.
+4. **`nflFinalizeSweepJob` has never completed a production run** and its sweep
+   path has no emulator coverage. Runs 08:30 **UTC** (04:30 ET).
+
+### Best next engineering work (no Kevin needed)
+
+1. **Extract the per-job heartbeat verdicts into pure helpers** (as
+   `sweepRunVerdict` / `lockWatchVerdict` already are) so their failure paths are
+   testable. Today the only guard is a source-level check that a job *can* report
+   failure — deleting `autoLock`'s failure count produces no build error and no
+   test failure. Verified, not assumed.
+2. **Emulator coverage for `nflFinalizeSweepJob`'s sweep path** and for the
+   `replayFeedSnapshot` callable. Both were on the overnight queue and ran out of
+   night.
+3. **Plumb an outcome through `sendEmail` / `sendCourierSMS`** so `runReminders`
+   can see delivery failures its helpers swallow.
+
+### Two contradictions Kevin must rule on
+
+- **PLAN-*.md scope.** `mmp-change-control` says any 2+ file change needs the
+  full PLAN + review-log + sweep gate. **None of the twelve PRs merged 07-21
+  carried one.** CLAUDE.md §4.3 flags this; the skill is authoritative until he
+  decides.
+- **Scheduled-job timezones are inconsistent.** Counted 2026-07-21: only
+  `nflDeepScoreSweepJob` and `lockNFLSpreadsJob` pin `America/New_York`. **Seven
+  daily-or-slower jobs run unpinned in UTC** — `autoClosePools`,
+  `enforceBillingStatus`, `nflFinalizeSweepJob`, `siteAveragesJob`,
+  `gradeExpertProfilesJob`, `aggregateRevenueDaily`, `webhookDurabilitySweep`.
+  Not a bug, but it has already produced one wrong verification instruction, and
+  a ruling based on a smaller count would leave most of it untouched.
+
+### Known cosmetic artifact, not an outage
+
+Ops Health shows `lockNFLSpreadsJob` as `never-ran` until **2026-07-28**. 07-21
+was a Tuesday and its 09:00 ET run predated the wrapping.
 
 ---
 
@@ -39,24 +121,24 @@ state. Concretely:
 
 ---
 
-## 2. Live state (verified 2026-07-22)
+## 2. Live state (verified 2026-07-21)
 
 > **Deploy state: HANDOFF.md's STOP POINT box is authoritative and CURRENT.**
-> Both files agree — prod is `84e080c`, `main` has moved to `17fa291`, and
-> **there IS a deploy queue.**
+> Both files agree on the DEPLOYED SOURCE SHA, and the deploy queue is EMPTY.
+> They do not claim prod equals `main`: docs-only commits advance `main`
+> without a deploy, so that equality is false almost immediately.
 >
 > `tests/docs-state-invariants.test.ts` (PR #248) enforces **only** that the
 > tagged deployed-SHA claims agree and name a real commit on `origin/main`. It
-> does **not** compare deploy-QUEUE prose and does not know what `main` currently
-> is — so "the queue is empty" is still a human claim that a test cannot catch
-> going stale. That limit is stated in the test file itself; do not read a green
-> suite as agreement about the queue.
+> does **not** compare deploy-QUEUE prose and does not know what `main`
+> currently is — so "the queue is empty" is still a human claim that a test
+> cannot catch going stale. That limit is stated in the test file itself; do
+> not read a green suite as agreement about the queue.
 
-**Prod matches <!-- deploy-state:current --> `main` @ `84e080c`, but `main` is
-now `17fa291` — SIX merged PRs are AWAITING DEPLOY:** #245, #247 and #250 from
-the overnight run, plus #239, #240 and #237 which were already pending before
-it. Fifteen scheduled job bodies, and #237 also needs a manual Coolify trigger.
-Runbook in HANDOFF's STOP POINT box; inventory in §4.
+**Prod is deployed from <!-- deploy-state:current --> `main` @ `6ca9e7f`.** Functions
+deployed 2026-07-21 ~16:40Z, Coolify frontend ~16:54Z on the same commit.
+Twelve PRs shipped in that deploy — the six from the overnight run and the six
+that had been pending before it, including **#239, the Firestore-reads fix**.
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is
@@ -71,12 +153,29 @@ Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 - `replayFeedSnapshot` — SUPER_ADMIN callable, `dryRun` defaults true at the
   schema layer. Nothing runs it on a schedule; it is a break-glass tool.
 
-**Free liveness check available tomorrow:** `nflDeepScoreSweepJob` is wrapped in
-`withHeartbeat`, and the wrapper stamps on every completed run *including* the
-early return when the job is disabled. So after 11:30 ET tomorrow,
-`system/heartbeats.nflDeepScoreSweepJob` should exist with a fresh `at`. If it
-does not, the schedule itself never fired — which is precisely the distinction
-that took ten days to notice on the finalize sweep.
+**Liveness question: ANSWERED 2026-07-21, do not reopen it.**
+`nflDeepScoreSweepJob` stamped `system/heartbeats` at **11:30:08 ET**, and the
+stamp carried no `detail` field — proving it came from the pre-#245 build, i.e.
+the schedule fired on its own before any of this deployed. **Cloud Scheduler is
+not the problem it was on the finalize sweep.**
+
+What to check from now on: after 11:30 ET each day the stamp should be fresh AND
+carry `detail: { enabled: false }` while the job stays disabled.
+
+**A handler that THROWS still leaves a stamp.** `withHeartbeat` catches, records
+`ok: false` with the message, and only then rethrows
+(`functions/src/lib/heartbeat.ts`). So the differential is:
+
+| Symptom | Means |
+|---|---|
+| Stamp present, `ok: false` | the handler threw or reported degraded — read `error` |
+| Stamp present, `ok: true`, stale `at` | it ran, then stopped being invoked |
+| **No stamp at all**, but the Functions log shows an invocation | the heartbeat WRITE failed, or the process died before the wrapper could record (timeout, OOM) |
+| **No stamp and no invocation** in the log | Cloud Scheduler did not fire it |
+
+The 2026-07-21 evidence rules out "this schedule was never wired at all". It does
+**not** rule out a scheduler failure on some later day — especially right after a
+deploy replaces the function — so keep the last row in the differential.
 
 Prod data: **49 preseason games** (`season 2026`, `seasonType 1`). One
 mislabeled regular-season game was deleted by hand; PR #219 stops it recurring.
@@ -94,55 +193,81 @@ create → join → submit → score → **finalize**, on a `seasonType 1` slate
 1 pt / finalRank 2 in `seasonHistory`). Verified non-vacuous: reverting the
 PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
-**NOT proven:**
-- **Nothing merged on 2026-07-22 has run in production** — #245, #247 and #250
-  are emulator- and CI-proven only, and not yet deployed.
-- **The per-job heartbeat verdicts added in #250 are not individually tested.**
-  The guard is a source-level check that a job *can* report failure; it cannot
-  prove each path is wired. Verified rather than assumed: deleting `autoLock`'s
-  failure count, or reverting the `playoffPools` `resp.ok` verdict, produces no
-  build error and no test failure.
+**NOW PROVEN IN PRODUCTION (2026-07-21, after the deploy):**
+- **The deep-sweep schedule fires.** `nflDeepScoreSweepJob` stamped
+  `system/heartbeats` at **11:30:08 ET**, ~70 min before the deploy, and that
+  stamp carried **no `detail` field** — the post-#245 code always writes
+  `detail: { enabled: false }` on the disabled path, so it came from the
+  pre-deploy build. Cloud Scheduler is not the problem it was on the finalize
+  sweep.
+- **Two of #250's nine rewritten handlers produced correct heartbeats** —
+  `autoLockPools` (`detail.duePools: 0`) and `runReminders`
+  (`detail.failedPools: 0`) — plus `syncNFLScoresJob` (all six counters, zero,
+  `ok: true`), which is **#245's**, not #250's: it lives in `nflSchedule.ts`.
+  Note
+  `syncNFLScoresJob` reported `slates: 0` — a genuinely quiet July window — as
+  **healthy, not degraded**. The cry-wolf case behaves.
+
+**STILL NOT proven:**
+- **The per-job heartbeat verdicts are not individually tested.** The guard is a
+  source-level check that a job *can* report failure; it cannot prove each path
+  is wired. Verified rather than assumed: deleting `autoLock`'s failure count, or
+  reverting the `playoffPools` `resp.ok` verdict, produces no build error and no
+  test failure. The production evidence above covers three of nine handlers, on
+  their HEALTHY path only — no failure path has ever executed in prod.
 - **`runReminders` cannot see failures its nested helpers swallow** — `sendEmail`
   catches queue failures, `sendCourierSMS` returns a boolean nobody reads. A run
   where every reminder email failed to queue still reports zero failed pools.
 - **Eight files wrap a job that cannot report failure at all** (`adminHealth`,
   `consensus`, `espnBracket`, `expertPicks`, `expertProfiles`,
   `revenueAggregates`, `stripe`, `winProbability`), on a shrink-only list.
-- **`nflFinalizeSweepJob` has never completed a run in production.** Its index
-  only went Enabled 2026-07-20. The finalize *path* is covered by CI; the
-  *scheduled sweep* is still not.
-- Nothing has been exercised against production, only the emulator.
-- The **chaos drill (NFL-7)** has not been run — it needs a live preseason week.
-- **`nflDeepScoreSweepJob` has never run in production.** Deployed 2026-07-21,
-  disabled. First scheduled fire is 11:30 ET; check `system/heartbeats` after
-  that before believing anything about it.
+- **`nflFinalizeSweepJob` has never completed a run in production.** The
+  finalize *path* is covered by CI; the *scheduled sweep* is still not, and it
+  has no emulator coverage either. Runs 08:30 **UTC** (04:30 ET) — see HANDOFF
+  §4 for why that matters.
 - **`replayFeedSnapshot` has never been invoked against production.** Its diff
   logic is unit-tested; the full callable path is not.
 - **`spread.locked` has never been exercised end-to-end in prod**, because
   `lockNFLSpreadsJob` has always been dry-run. The PR #235 fix is therefore
   *preventive* — verified by reasoning and tests, never by production behavior.
+  Its first heartbeat is **2026-07-28**: 07-21 was a Tuesday and its 09:00 ET
+  run predated the wrapping.
+- The **chaos drill (NFL-7)** has not been run — it needs a live preseason week.
 
 ---
 
-## 4. Deploy queue — NOT EMPTY (6 PRs, 15 job bodies, + Coolify)
+## 4. Deploy queue — EMPTY
 
-**Prod is `84e080c`; `main` is `17fa291`. The queue is everything in between —
-which is MORE than last night's work.**
+**Everything is merged and deployed.** The deployed source SHA is the tagged
+claim in §2 — not repeated here, so it cannot drift out of sync with it.
+`main` advances past it with every docs-only commit — that is drift in the
+marker, not a deploy queue.
 
-From this run: #245, #247 and #250 change deployed function code. #248 (tests +
-CLAUDE.md) and #249 (CI) need no deploy.
+**A deploy queue exists when ANY of these changed since the deployed SHA:**
 
-Already pending from BEFORE this run: **#239** (`scheduledBracketSync` — this is
-the Firestore-reads fix, and it is not live yet), **#240** (`brace-expansion`
-pin inside `functions/`), and **#237** (14-package dependency bump that touches
-**frontend production deps**, so it also needs a manual Coolify trigger).
+| Changed | Needs |
+|---|---|
+| `functions/**` | `npx firebase deploy --only functions` |
+| `shared/**` | same — the predeploy hook copies `shared/` into `functions/src/shared/`, so a shared-only change alters the deployed functions |
+| `firestore.rules` | `--only firestore:rules` (**after** functions) |
+| `firestore.indexes.json` | `--only firestore:indexes` |
+| `src/**`, `package.json`, `Dockerfile`, `nginx.conf` | manual Coolify trigger |
 
-**Fifteen** scheduled job bodies change in total — #245's four NFL jobs PLUS
-`nflDeepScoreSweepJob` (whose body #245 also changed), #250's nine, and
-`scheduledBracketSync` from #239. Nothing is armed or disarmed; the behaviour
+Docs, tests, `.github/**` and `.claude/**` need nothing.
+
+Fifteen scheduled job bodies changed in that deploy and every one reported
+`Successful update operation`. Nothing was armed or disarmed; the behaviour
 change is that a job which fails now REPORTS it instead of stamping a healthy
-heartbeat. **Full runbook with the pre-deploy byte-check is in HANDOFF's STOP
-POINT box — use that, not this summary.**
+heartbeat — and **two of #250's nine** have since produced correct heartbeats
+in production (HANDOFF §3), plus one of #245's.
+
+Two operational notes worth keeping, both learned on this deploy:
+
+- **`npm --prefix functions install` dirties `functions/package-lock.json`**,
+  so a clean-worktree check placed after it can never pass.
+- **HTTP 429 `Per project mutation requests per minute` is normal** on a
+  full-fleet deploy; firebase-tools retries and they land. `Deploy complete!`
+  is the signal that matters.
 
 The command, which is the one that has worked every time:
 
@@ -150,10 +275,32 @@ The command, which is the one that has worked every time:
 cd D:\march-melee-pools
 git checkout main && git pull origin main
 git log --oneline -1
-npm --prefix functions install
+npm --prefix functions ci     # ci, NOT install — see below
+if (git status --porcelain -- functions shared) { throw "functions/ or shared/ is dirty - deploy packages the WORKING TREE, not the commit. Stash or commit first." }
 $env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"
 npx firebase deploy --only functions --project gridiron-gamble-uzuqo
 ```
+
+⚠️ **The gate is SCOPED to `functions` and `shared` on purpose.** An unscoped
+`git status --porcelain` reports the known untracked strays at repo root
+(`PLAN-LOOPS.md`, `before-deploy.txt`, `design-showcase/`, the
+`DesignAlternatives*` files) that HANDOFF documents as harmless — so it would
+throw on every single deploy and get stepped over, which is exactly the
+behaviour it exists to prevent. `--only functions` packages `functions/`, and
+the predeploy hook copies `shared/` into it; nothing else at root is uploaded.
+Scoping keeps the gate true, and a gate that is true is a gate people obey.
+
+⚠️ **`npm ci`, not `npm install`, and the clean-tree check goes AFTER it.**
+`firebase deploy` packages the working tree, not the commit — uncommitted edits
+ship while `git log` still shows the right SHA and any byte-check still passes.
+Nothing else in this recipe catches that.
+
+`npm install` **rewrites `functions/package-lock.json`**, so it dirties the very
+tree about to be packaged. Checking before it leaves that rewrite unexamined;
+checking after it can never pass. `npm ci` resolves both: it installs strictly
+from the committed lockfile and mutates nothing — verified 2026-07-21, exit 0
+with the tree still clean. It also fails loudly if `package.json` and the
+lockfile have drifted, which is the right outcome before a deploy.
 
 ⚠️ **`functions:` must be repeated before EVERY name** if using a filtered
 deploy. A bare `--only functions` avoids the trap entirely and is what has
@@ -171,12 +318,9 @@ Always confirm the change is in the file on disk before deploying — not that
    under `"2"` in `bySeasonType`. Then set `nflFinalize.liveSeasonTypes` to an
    array containing the number **1** — `dryRun:false` **alone does nothing**,
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
-2. **DEPLOY — the queue is NOT empty again.** Prod is `84e080c`, `main` is
-   `17fa291`, and six PRs sit between them (three from the 2026-07-22 run plus
-   #239/#240/#237 from before it). Fifteen scheduled job bodies, plus a manual
-   Coolify trigger for #237's frontend dependency bump. **Full runbook with the
-   pre-deploy byte-check: HANDOFF.md's STOP POINT box.** The 2026-07-21 deploy
-   that emptied the previous queue is done and is not what this refers to.
+2. ~~**Deploy**~~ — **DONE 2026-07-21**: functions ~16:40Z, Coolify ~16:54Z, both
+   on the SHA tagged in §2. Queue empty. What remains is verification, not
+   deployment — see HANDOFF's STOP POINT §5.
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.

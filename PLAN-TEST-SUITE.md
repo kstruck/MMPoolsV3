@@ -86,7 +86,7 @@ re-runs the in-app suite to confirm the 5 errors are gone (expected: ~6 pass)._
    new `tests/pool-schema-drift.test.ts`), including the exact failing payloads
    (gameId:null squares; FIBONACCI/ESPN brackets). Deploy is the release step,
    not the diagnosis step.
-0.4. Deploy ritual: `npm --prefix functions install`, then
+0.4. Deploy ritual: `npm --prefix functions ci` (NOT `install`), then
    `npx firebase deploy --only functions --project gridiron-gamble-uzuqo`.
    **A functions deploy now ships the buy-flow functions too** — coordinate
    with MORNING-CHECKLIST-BUYFLOW.md (its deploy order includes
