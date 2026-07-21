@@ -144,7 +144,7 @@
 >   because `lockNFLSpreadsJob` has always been dry-run.
 > - **The chaos drill (NFL-7) has not been run.** Needs a live preseason week.
 
-> ## ✅ DEPLOY STATE 2026-07-21 — prod deployed from `6ca9e7f`
+> ## ✅ DEPLOY STATE 2026-07-21 — prod matches the SHA tagged in the STOP POINT box
 >
 > **Deployed 2026-07-21 ~16:40Z** (functions, bare `--only functions`) and
 > **~16:54Z** (Coolify frontend, same commit, healthcheck passed). The queue is

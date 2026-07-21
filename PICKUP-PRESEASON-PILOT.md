@@ -2,14 +2,96 @@
 
 **Paste this to start a new session:**
 
-> Read `PICKUP-PRESEASON-PILOT.md`, then `HANDOFF.md` and the `NFL-*` sections
-> of `TOMORROW-TASKS.md`. Continue the preseason-readiness work. Kevin may be
-> away — run autonomously per the overnight-autonomy protocol: code + tests +
-> PRs are yours, deploy and prod-data mutations are his. Leave a morning
-> takeover note.
+> Read `PICKUP-PRESEASON-PILOT.md` §0 first, then `HANDOFF.md`'s STOP POINT box.
+> Preseason week 1 is 2026-08-13. Deploy and prod-data mutations are Kevin's;
+> code, tests and PRs are yours. Follow CLAUDE.md §2b (qodo: poll 3 min before
+> pushing a follow-up) and §2c (`codex exec review --base origin/main`, expect
+> several rounds). Tell me what you plan to do before you do it.
 
 Written 2026-07-21. Preseason week 1 is **2026-08-13**; the HOF game is
 **2026-08-07**. That is the clock.
+
+---
+
+## 0. State as of 2026-07-21 ~18:00Z — read this before anything else
+
+**Functions and the frontend were both deployed on 2026-07-21** (~16:40Z and
+~16:54Z, same commit). Twelve PRs shipped in that deploy; everything below is
+*after* it.
+
+⚠️ **The deployed SHA lives in exactly TWO places, both tagged
+`<!-- deploy-state:current -->`** — HANDOFF's STOP POINT box and §2 of this
+file. `tests/docs-state-invariants.test.ts` requires exactly one tagged claim
+per doc and checks they agree, so **update both or CI fails.** Any UNTAGGED copy
+of the SHA is invisible to that guard and will rot silently; do not add one.
+
+### Check what is open before you start
+
+```
+gh pr list
+```
+
+A command, not a claim — anything written here about which PRs are open is stale
+the moment one merges. If a docs PR touching HANDOFF/PICKUP is open, read it
+before editing those files or you will redo its work.
+
+### What is genuinely proven now
+
+- **Cloud Scheduler fires `nflDeepScoreSweepJob`.** It stamped 11:30:08 ET on
+  07-21 with no `detail` field, i.e. from the pre-#245 build. The ten-day blind
+  spot that killed the finalize sweep is not present here.
+- **Two of #250's nine rewritten handlers work in prod** (`autoLockPools`,
+  `runReminders`), plus `syncNFLScoresJob` from #245 — which reported a quiet
+  July window (`slates: 0`) as *healthy, not degraded*. Healthy paths only.
+
+### The biggest open risks, in order
+
+1. **Backups.** `PLAN-BACKUPS-PHASE3.md` still says no PITR, no scheduled
+   backups, no Auth export. DB is `nam5`, which supports PITR — no blocker.
+   **Kevin-only:** PITR, backup schedules, the GCS bucket and IAM. **Engineering
+   work, once those exist:** the scheduled Auth export is deferred CODE
+   (`PLAN-BACKUPS-PHASE3.md` step 6), not a console click — keep it on the
+   engineering queue rather than filing the whole gap under Kevin.
+2. **A8 pricing — DUE 2026-08-13.** The only calendar-bound item.
+3. **A banned commissioner can still move the money ledger.**
+   `recordPoolPayouts` authorizes from persisted pool ownership and never
+   consults `users/{uid}.role`; it IS on the pilot path
+   (`RecordPayoutsCard.tsx`). Needs `assertNotBannedLive`, NOT a `role:` gate —
+   see `SECURITY-BARE-ONCALL-CLASSIFICATION.md`.
+4. **`nflFinalizeSweepJob` has never completed a production run** and its sweep
+   path has no emulator coverage. Runs 08:30 **UTC** (04:30 ET).
+
+### Best next engineering work (no Kevin needed)
+
+1. **Extract the per-job heartbeat verdicts into pure helpers** (as
+   `sweepRunVerdict` / `lockWatchVerdict` already are) so their failure paths are
+   testable. Today the only guard is a source-level check that a job *can* report
+   failure — deleting `autoLock`'s failure count produces no build error and no
+   test failure. Verified, not assumed.
+2. **Emulator coverage for `nflFinalizeSweepJob`'s sweep path** and for the
+   `replayFeedSnapshot` callable. Both were on the overnight queue and ran out of
+   night.
+3. **Plumb an outcome through `sendEmail` / `sendCourierSMS`** so `runReminders`
+   can see delivery failures its helpers swallow.
+
+### Two contradictions Kevin must rule on
+
+- **PLAN-*.md scope.** `mmp-change-control` says any 2+ file change needs the
+  full PLAN + review-log + sweep gate. **None of the twelve PRs merged 07-21
+  carried one.** CLAUDE.md §4.3 flags this; the skill is authoritative until he
+  decides.
+- **Scheduled-job timezones are inconsistent.** Counted 2026-07-21: only
+  `nflDeepScoreSweepJob` and `lockNFLSpreadsJob` pin `America/New_York`. **Seven
+  daily-or-slower jobs run unpinned in UTC** — `autoClosePools`,
+  `enforceBillingStatus`, `nflFinalizeSweepJob`, `siteAveragesJob`,
+  `gradeExpertProfilesJob`, `aggregateRevenueDaily`, `webhookDurabilitySweep`.
+  Not a bug, but it has already produced one wrong verification instruction, and
+  a ruling based on a smaller count would leave most of it untouched.
+
+### Known cosmetic artifact, not an outage
+
+Ops Health shows `lockNFLSpreadsJob` as `never-ran` until **2026-07-28**. 07-21
+was a Tuesday and its 09:00 ET run predated the wrapping.
 
 ---
 
@@ -156,7 +238,8 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ## 4. Deploy queue — EMPTY
 
-**Everything is merged and deployed.** The deployed source SHA is `6ca9e7f`.
+**Everything is merged and deployed.** The deployed source SHA is the tagged
+claim in §2 — not repeated here, so it cannot drift out of sync with it.
 `main` advances past it with every docs-only commit — that is drift in the
 marker, not a deploy queue.
 
@@ -235,9 +318,9 @@ Always confirm the change is in the file on disk before deploying — not that
    under `"2"` in `bySeasonType`. Then set `nflFinalize.liveSeasonTypes` to an
    array containing the number **1** — `dryRun:false` **alone does nothing**,
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
-2. ~~**Deploy**~~ — **DONE 2026-07-21**: functions ~16:40Z, Coolify ~16:54Z,
-   both on `6ca9e7f`. Queue empty. What remains is verification, not deployment
-   — see HANDOFF's STOP POINT §5.
+2. ~~**Deploy**~~ — **DONE 2026-07-21**: functions ~16:40Z, Coolify ~16:54Z, both
+   on the SHA tagged in §2. Queue empty. What remains is verification, not
+   deployment — see HANDOFF's STOP POINT §5.
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.
