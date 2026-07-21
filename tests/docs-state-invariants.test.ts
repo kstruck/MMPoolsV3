@@ -106,6 +106,8 @@ interface Claim {
   file: string;
   sha: string;
   line: number;
+  /** Byte offset of the match — the only per-mention identity that is exact. */
+  start: number;
   /** Did the matched text span a line break? Pins newline tolerance honestly. */
   wrapped: boolean;
   /** False when the token is not a usable commit id (e.g. a non-hex typo). */
@@ -122,39 +124,50 @@ interface Claim {
 export function collectClaimsFromText(text: string, fileLabel: string): Claim[] {
   const claims: Claim[] = [];
   const NL = String.fromCharCode(10);
-  const lines = text.split(NL);
-  /** End offset of the previous match, so an exemption cannot reach past it. */
-  let prevEnd = 0;
   for (const m of text.matchAll(MAIN_SHA)) {
     const start = m.index!;
-    const before = text.slice(0, start);
-    const line = before.split(NL).length;
+    const end = start + m[0].length;
+    const line = text.slice(0, start).split(NL).length;
 
-    // PER-MATCH, not per-line. Judging the whole line meant one exempt mention
-    // exempted every other claim sharing that line — so a live SHA sitting
-    // beside a baseline mention on a comparison line was silently skipped, and
-    // the doc could contradict production while this stayed green.
+    // AN EXEMPTION APPLIES TO ITS OWN CLAUSE, and nothing else.
     //
-    // The window is: from the start of this match's line (or the end of the
-    // previous match, whichever is later) through the end of the match. That
-    // associates a keyword with the claim it introduces and nothing further.
-    const lineStart = before.lastIndexOf(NL) + 1;
-    const windowStart = Math.max(lineStart, prevEnd);
-    const scope = text.slice(windowStart, start + m[0].length);
-    prevEnd = start + m[0].length;
+    // Two weaker rules were tried and both were holed by review. Exempting the
+    // whole LINE let one baseline mention exempt a live claim sharing that
+    // line. Exempting a proximity WINDOW (line start, or the previous match,
+    // through this match) was still a guess in both directions: a marker
+    // attached to earlier prose that is not itself a claim leaked forward onto
+    // the live one, and a marker written AFTER the claim it annotates was
+    // invisible because the window stopped at the match.
+    //
+    // A clause is unambiguous, needs no proximity guess, and reads the way the
+    // prose is actually written: "Baselines on `main` @ `x`; prod is `main` @
+    // `y`" exempts the first and collects the second, and a trailing
+    // `<!-- historical -->` still annotates the claim before it. Splitting too
+    // FINELY can only detach a marker from its claim, which fails loudly rather
+    // than passing silently — the safe direction for a guard to be wrong in.
+    if (EXEMPT_LINE.test(clauseAround(text, start, end))) continue;
 
-    if (EXEMPT_LINE.test(scope)) continue;
     const token = m[1].trim();
     claims.push({
       file: fileLabel,
       sha: token.toLowerCase(),
       line,
+      start,
       wrapped: m[0].includes(NL),
       valid: VALID_SHA.test(token),
     });
   }
-  void lines;
   return claims;
+}
+
+/** The clause containing [start, end): bounded by `.`, `;`, or a line break. */
+function clauseAround(text: string, start: number, end: number): string {
+  const BOUNDARY = /[.;\n]/;
+  let from = start;
+  while (from > 0 && !BOUNDARY.test(text[from - 1])) from--;
+  let to = end;
+  while (to < text.length && !BOUNDARY.test(text[to])) to++;
+  return text.slice(from, to);
 }
 
 function collectDeployShaClaims(): Claim[] {
@@ -270,22 +283,29 @@ describe('the scanner sees what the docs actually contain', () => {
       path.join(REPO_ROOT, 'PICKUP-PRESEASON-PILOT.md'),
       'utf8',
     );
-    const NL = String.fromCharCode(10);
-    const baselineLineNo = src
-      .split(NL)
-      .findIndex((l) => /baseline/i.test(l) && /`main`\s*@\s*`[^`]+`/i.test(l)) + 1;
+    // Identified by the MATCH OFFSET of the baseline mention itself. Neither a
+    // SHA value nor a line number is a per-mention identity: the value collides
+    // whenever a baseline is measured on the deployed commit, and the line
+    // collides whenever a baseline and a live claim legitimately share one.
+    const baselineMention = new RegExp(
+      'Baselines[^.;' + String.fromCharCode(10) + ']*?`main`\\s*@\\s*`[^`]+`', 'i',
+    ).exec(src);
 
     expect(
-      baselineLineNo,
-      'no "Baselines on `main` @ `<sha>`" line found — this exemption test can ' +
-        'no longer prove anything; re-point it at a real baseline line',
-    ).toBeGreaterThan(0);
+      baselineMention,
+      'no "Baselines on `main` @ `<sha>`" mention found — this exemption test ' +
+        'can no longer prove anything; re-point it at a real baseline line',
+    ).not.toBeNull();
+
+    // Where the `main` @ `sha` construction starts inside that mention.
+    const shaOffset = baselineMention!.index +
+      baselineMention![0].search(/`main`\s*@/i);
 
     const claims = collectDeployShaClaims();
     expect(
-      claims.some((c) => c.file === 'PICKUP-PRESEASON-PILOT.md' && c.line === baselineLineNo),
-      `the baseline line (PICKUP-PRESEASON-PILOT.md:${baselineLineNo}) produced a ` +
-        'deploy-state claim — the EXEMPT_LINE rule is no longer suppressing baseline mentions',
+      claims.some((c) => c.file === 'PICKUP-PRESEASON-PILOT.md' && c.start === shaOffset),
+      `the baseline mention at PICKUP-PRESEASON-PILOT.md offset ${shaOffset} produced a ` +
+        'deploy-state claim — the exemption rule is no longer suppressing baseline mentions',
     ).toBe(false);
   });
 
@@ -324,6 +344,22 @@ describe('the scanner sees what the docs actually contain', () => {
       const claims = collectClaimsFromText(text, 'f.md');
       expect(claims.map((c) => c.sha)).toEqual(['bbbbbbb']);
       expect(claims[0].line).toBe(2);
+    });
+
+    it('does NOT let a marker on unrelated earlier prose exempt a live claim', () => {
+      // The marker annotates "Old build abc", which is not a claim at all. A
+      // proximity window would have handed its exemption to the live claim.
+      const claims = collectClaimsFromText(
+        'Old build abc <!-- historical -->; prod is `main` @ `bbbbbbb`.', 'f.md',
+      );
+      expect(claims.map((c) => c.sha)).toEqual(['bbbbbbb']);
+    });
+
+    it('honours a marker written AFTER the claim it annotates', () => {
+      // A window ending at the match could not see a trailing annotation.
+      expect(
+        collectClaimsFromText('prod was `main` @ `aaaaaaa` <!-- historical -->', 'f.md'),
+      ).toEqual([]);
     });
 
     it('flags a non-hex token as an invalid SHA rather than silently accepting it', () => {
