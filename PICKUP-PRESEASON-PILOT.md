@@ -96,12 +96,24 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ## 4. Deploy queue — EMPTY
 
-**Everything is merged and deployed.** PRs #231-#236 all landed on `main`
-@ `84e080c` and were deployed 2026-07-21 ~04:30Z. Nothing is waiting.
+**§2 is the authoritative current state. This section records HOW the deploys
+went, not what is live** — if the two ever disagree about a SHA, §2 wins and
+this block is stale.
 
-Confirmed from the deploy output rather than assumed: `nflDeepScoreSweepJob`
-and `replayFeedSnapshot` both reported **Successful create**, and
-`syncNFLScoresJob` reported **Successful update** (the spread-unlock fix).
+**Everything through `e84dfa3` is merged and deployed.** Two deploys:
+
+| When | Carried | Confirmed from deploy output |
+|---|---|---|
+| 2026-07-21 ~04:30Z, `main` @ `84e080c` | #231-#236 | `nflDeepScoreSweepJob` + `replayFeedSnapshot` **Successful create**; `syncNFLScoresJob` **Successful update** (the spread-unlock fix) |
+| 2026-07-21 ~06:00Z, `main` @ `e84dfa3` | #237-#241, #244 | `scheduledBracketSync` **Successful update** (the read-burn guard) |
+
+Frontend deployed via Coolify after #237 (client SDK bumped, so it needed one).
+
+⚠️ The second deploy hit repeated **HTTP 429 "Per project mutation requests"**
+errors — a per-minute rate limit from pushing ~170 functions at once. All twelve
+affected functions retried and reported success. **Check that individually next
+time**: a 429 that does NOT recover looks identical in the tail of the log and
+still prints `Deploy complete!`.
 
 Kept because it is the command that works, for the next time:
 

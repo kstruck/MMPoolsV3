@@ -28,6 +28,25 @@ prose if they disagree; skills are point-in-time snapshots.
 
 ## 2b. Opening a PR is not the end of the task — wait for qodo
 
+> ⚠️ **DO NOT BLOCK ON QODO — 2026-07-21.** Kevin reported the qodo plan is out
+> of tokens, so reviews may be intermittent or stop entirely. **Never wait on a
+> review before reporting a PR, and never call a PR blocked on one.**
+>
+> Stated precisely, because the distinction matters: qodo was still posting
+> reviews at the time this note was written (it reviewed #246 minutes after the
+> plan was reported empty). So do not assume silence means it is dead, and do not
+> assume a review will come. **Check once, cheaply, and move on** — if a report is
+> there, absorb it; if not, proceed. `gh pr checks <n>` (CI) is still required and
+> still gates.
+>
+> **Everything below stays valid**; Kevin will say when it resumes normally. The
+> rule is not wrong, its timing assumption is.
+>
+> Meanwhile the review burden falls back on the author: the adversarial pass qodo
+> was doing is now yours to do explicitly BEFORE opening the PR — not something to
+> skip because the reviewer might be gone.
+
+
 **After opening ANY pull request, wait for the qodo review, read every
 finding, and absorb or reject each one with written evidence before
 reporting the PR as done.** Kevin should never have to ask whether qodo

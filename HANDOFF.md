@@ -21,8 +21,7 @@
 > **PR #245** — heartbeats for the four NFL jobs, plus an invariant that every
 > `onSchedule()` must be wrapped. That invariant immediately found **nine more**
 > unwrapped jobs; they are on a documented `KNOWN_UNWRAPPED` burn-down list
-> rather than batch-edited unsupervised at 1am. Check its qodo review before
-> merging.
+> rather than batch-edited unsupervised at 1am. CI is green.
 >
 > ### The single most important open item
 > **`lockNFLSpreadsJob` has never had its body executed by any test** — only its
@@ -39,10 +38,11 @@
 >   disabled. No stamp = the schedule never fired.
 >
 > ### Standing rule added this session
-> **Wait for qodo on every PR before calling it done** — `CLAUDE.md` §2b. It was
-> already a skill and a memory and got dropped anyway; promoted after #236 merged
-> with an unread finding that turned out to be a real vulnerability. Check all
-> three surfaces; a report is not absent until all three are empty.
+> **Wait for qodo on every PR before calling it done** — `CLAUDE.md` §2b.
+> ⚠️ **Currently DO-NOT-BLOCK**: Kevin reported the qodo plan out of tokens on
+> 2026-07-21, so check once and move on rather than waiting. The rule itself is
+> sound — it was promoted after #236 merged with an unread finding that turned
+> out to be a real vulnerability — and resumes when Kevin says so.
 
 > ## DEPLOY STATE 2026-07-21 — prod matches `main` @ `e84dfa3`
 >
