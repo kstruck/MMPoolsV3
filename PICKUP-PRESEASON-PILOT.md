@@ -41,8 +41,15 @@ state. Concretely:
 
 ## 2. Live state (verified 2026-07-21)
 
-**Prod matched `main` as of `5e481c0`.** Everything merged since then is
-**NOT deployed** — see §4.
+> ⚠️ **Deploy state: this section supersedes HANDOFF.md's banner.**
+> HANDOFF's `DEPLOY STATE 2026-07-20` box says "prod matches `main`" and that
+> the merged-not-deployed backlog is CLEARED. That was true **on 2026-07-20 at
+> `5e481c0`** and is **stale now** — PRs merged after it are undeployed. When
+> the two disagree about what is live, the one with the later date wins, and
+> that is this one. HANDOFF carries a pointer back here saying the same thing.
+
+**Prod matched `main` as of `5e481c0` (2026-07-20).** Everything merged since
+then is **NOT deployed** — see §4.
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is
@@ -77,10 +84,31 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ## 4. Merged but NOT deployed — Kevin's gate
 
-`#225` preseason fixture · `#226` morning brief · `#227` scheduler heartbeats ·
-`#228` docs · `#229` full preseason arc
+**Merged, awaiting deploy:** `#225` preseason fixture · `#226` morning brief ·
+`#227` scheduler heartbeats · `#228` docs · `#229` full preseason arc ·
+`#230` this doc
 
-Only #227 changes runtime behavior (8 jobs + `getOpsHealthSummary`). Deploy:
+**Open, awaiting your review/merge (opened overnight 2026-07-21):**
+`#231` `replayFeedSnapshot` — A5 part 2, the snapshot replay callable (code) ·
+`#232` `PLAN-BACKUPS-PHASE3.md` — the zero-backup gap, runbook (docs) ·
+`#233` `SECURITY-CLAIM-SQUARES.md` — open `guestDeviceKey` finding (docs)
+
+Merge #232 and #233 without ceremony — they are documents, they change no code.
+#231 adds one SUPER_ADMIN callable; all five gates green (852 unit, up from
+845).
+
+**Runtime impact, scoped — read both lines, they answer different questions:**
+
+- Of the **already-merged, awaiting-deploy** queue above, only `#227` changes
+  runtime behavior (8 jobs + `getOpsHealthSummary`). That is what the deploy
+  command below ships if you run it *before* merging anything else.
+- **After you merge `#231`**, the next deploy additionally creates one new
+  SUPER_ADMIN callable, `replayFeedSnapshot`. It is invoked by hand and runs
+  nothing on a schedule, so it changes no behavior until someone calls it — but
+  it *is* a new function in the deploy output, and you should expect to see it
+  listed as created rather than treat it as a surprise.
+
+Deploy:
 
 ```
 cd D:\march-melee-pools
@@ -99,6 +127,15 @@ source-analysis timeout on Windows.
 No index or rules deploy needed for the current queue.
 
 ---
+
+## 4b. Morning order of operations (2026-07-22)
+
+1. Merge #232 and #233 (docs, zero risk). Review and merge #231.
+2. Deploy the queue — §4 commands. Nothing above is live until you do.
+3. **Enable PITR** — `PLAN-BACKUPS-PHASE3.md` steps 0–2. Right now this
+   application has **no backup of any kind**; that is a larger exposure than
+   anything on the preseason list, because every other risk is recoverable.
+4. Then the calendar-bound item: **A8 pricing, due 2026-08-13.**
 
 ## 5. What Kevin must do (nobody else can)
 
@@ -123,20 +160,20 @@ No index or rules deploy needed for the current queue.
 
 Roughly in value order:
 
-1. **A5 part 2 — the snapshot replay callable.** SUPER_ADMIN, dry-run default,
-   re-applies a chosen `nfl_feed_snapshots` entry into `nfl_games` so a week can
-   be rebuilt from known-good feed state. Snapshots are armed and collecting.
-2. **Phase 3 — backups.** There is **no Firestore backup story at all**. Biggest
-   unaddressed risk in the architecture notes. Most of it is GCP-console work
-   that only Kevin can run, so produce a PLAN doc plus a guided command list.
-3. **`claimMySquares` security finding (open, unfixed).** `guestDeviceKey` is
-   readable from the public pool doc but treated as proof of ownership, so any
-   authenticated user can claim a pool's *unclaimed guest* squares. Needs a
-   data-model or rules change — `firestore.rules` write-path changes are a
-   parked effort, so this needs a decision, not a drive-by.
+1. ~~**A5 part 2 — the snapshot replay callable.**~~ **DONE — PR #231.**
+2. ~~**Phase 3 — backups.**~~ **Written up — PR #232.** The plan exists; the
+   *work* is now yours, and step 0 is installing `gcloud` (it is not on this
+   machine, and the Firebase CLI cannot configure PITR or backup schedules).
+   **`--enable-pitr` is one command and buys a 7-day recovery floor. If you do
+   one thing from that document, do that one.**
+3. ~~**`claimMySquares` security finding.**~~ **Written up — PR #233.** Verified
+   real against `firestore.rules`, and confirmed **not preseason-blocking**
+   (Squares is not part of the NFL pilot). Recommendation on file: accept
+   through the pilot, fix before the regular season. Needs your decision.
 4. **`syncNFLScoresJob` only re-reads games from the last 24h**
    (`nflSchedule.ts`). A stat correction arriving later is never picked up,
-   which bounds what A5 can protect. Widening it has cost implications.
+   which bounds what A5 can protect. Widening it has cost implications — this
+   is now the top *undecided* engineering item.
 5. **25 callables still use bare `onCall(`** — mostly sim-harness and aiTesting
    with their own role gates, plus the deliberately-deferred `createBracketPool`.
    None is a regression. Wants a re-classification pass, not a sweep.

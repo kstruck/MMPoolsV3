@@ -1,7 +1,73 @@
-# HANDOFF — Session entry point (updated 2026-07-20: NFL preseason pilot shipped AND DEPLOYED; two dead features found and fixed)
+# HANDOFF — Session entry point (updated 2026-07-21: overnight work is in FOUR UNMERGED PRs — read the stop-point box first)
 
-> ## DEPLOY STATE 2026-07-20 — prod matches `main`
-> The long-standing "merged but NOT deployed" backlog is **CLEARED**. A
+> ## STOP POINT 2026-07-21 (overnight session ended here)
+>
+> **Everything produced overnight is in OPEN, UNMERGED PRs. `main` does not
+> contain it.** If you are a new session reading this file on `main`, the
+> sections below are accurate but INCOMPLETE — four PRs are outstanding:
+>
+> | PR | What | Kind |
+> |---|---|---|
+> | #231 | `replayFeedSnapshot` — A5 part 2, snapshot replay callable | **code** |
+> | #232 | `PLAN-BACKUPS-PHASE3.md` — the zero-backup gap, full runbook | docs |
+> | #233 | `SECURITY-CLAIM-SQUARES.md` — open `guestDeviceKey` finding | docs |
+> | #234 | `PICKUP-PRESEASON-PILOT.md` refresh + morning order of operations | docs |
+>
+> **Merge all four before doing anything else**, or you will re-derive work that
+> is already done. #232/#233/#234 are documents and change no code.
+>
+> ### Where work stopped, and why
+> It stopped at a real gate, not mid-task. Every remaining item needs Kevin:
+> deploy, a GCP console/CLI action, or a decision. Nothing is half-finished and
+> no branch is left dirty.
+>
+> - **#231 is complete and gated on review only.** All five gates green:
+>   functions unit **852** (was 845), emulator **98 pass / 10 skipped**,
+>   functions build clean, `npx tsc -b` clean, root vitest **257**.
+> - **A5 is now finished end to end.** Part 1 stored raw ESPN payloads; nothing
+>   could read them back. Part 2 replays a chosen snapshot into `nfl_games`.
+> - **Backups: this application has NO BACKUP OF ANY KIND.** No PITR, no
+>   scheduled backups, no exports, no Auth export. This is a bigger exposure
+>   than anything on the preseason list, because every other risk on that list
+>   is recoverable and this one is not. `--enable-pitr` is ONE command and buys
+>   a 7-day floor. Two facts discovered while writing #232: **`gcloud` is not
+>   installed** on this machine (and the Firebase CLI cannot configure PITR or
+>   schedules), and **no region is pinned anywhere in the repo**, so the
+>   database location must be READ, not assumed.
+> - **`claimMySquares` hole is real** — verified against `firestore.rules`
+>   (`pools/{poolId}` is `allow get: if true`; `poolClaims` is `if false`, which
+>   is why `claimByCode` is NOT vulnerable). Confirmed **not preseason-blocking**
+>   — Squares is not part of the NFL pilot. Deliberately not fixed: the repair
+>   spans the reserve path, both claim callables, and a backfill over live pool
+>   documents. Recommendation on file: accept through the pilot, fix before the
+>   regular season as a supervised single-purpose PR.
+>
+> ### Kevin's order of operations
+> 1. Merge #232, #233, #234. Review and merge #231.
+> 2. Deploy the merged queue (#225-#231) — see the deploy section below.
+> 3. **Enable PITR** — `PLAN-BACKUPS-PHASE3.md` steps 0-2.
+> 4. **A8 pricing — due 2026-08-13.** The only calendar-bound item.
+>
+> Still open and needing a decision, not code: the `syncNFLScoresJob` 24h
+> re-read window (now the top undecided engineering item), NFL-2 (synthetic pick
+> probe — recommendation is skip for the pilot), and the `claimMySquares` timing
+> call above. Leave `nflLockWatch.dryRun: true` — only 1 of 49 preseason games
+> has a betting line, so arming it pages nightly about a known condition.
+
+
+> ## DEPLOY STATE 2026-07-20 — ⚠️ SUPERSEDED, prod no longer matches `main`
+>
+> **Do not act on this box for deploy decisions.** It was accurate on
+> **2026-07-20 at `5e481c0`**. PRs merged after that date are undeployed, so
+> "prod matches `main`" is **no longer true**. The current queue and the deploy
+> command live in **`PICKUP-PRESEASON-PILOT.md` §4**; that file wins on deploy
+> state whenever it disagrees with this box.
+>
+> The rest of this box is kept because the *lessons* below it are still valid —
+> only the "backlog is cleared" claim has expired.
+>
+> The long-standing "merged but NOT deployed" backlog was **CLEARED as of
+> `5e481c0`**. A
 > full-fleet `--only functions` deploy plus `--only firestore:indexes` landed
 > everything: the 33 callable-sweep batches, sweep batch 17, the NFL pilot work
 > (A2/A3a/A4/A5p1/A6/A10), the spread-gate fix, the importer season filter, and
