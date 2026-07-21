@@ -466,14 +466,22 @@ describe('the scanner sees what the docs actually contain', () => {
 export const HOF_GAME_ET = '2026-08-06';
 
 /**
- * A bare `2026-08-07` — i.e. NOT followed by a time, which is the only form
- * that can be a legitimate reference to the feed's UTC kickoff instant.
+ * `2026-08-07` in any form EXCEPT the feed's midnight-UTC kickoff instant.
  *
- * The lookahead is the whole guard. Matching `2026-08-07` unconditionally would
- * ban the correct `2026-08-07T00:00Z` and force authors to stop explaining the
- * bug, which is how a guard trains people to work around it instead of with it.
+ * The lookahead is the whole guard, and its width is the whole argument.
+ * Matching `2026-08-07` unconditionally would ban the correct
+ * `2026-08-07T00:00Z` and force authors to stop explaining the bug, which is
+ * how a guard trains people to work around it instead of with it.
+ *
+ * But exempting "followed by a time" was too wide, and codex caught it: an
+ * operator writing `2026-08-07T20:00:00-04:00` states the WRONG ET date in
+ * timestamp clothing and would have sailed through. So the exemption is the
+ * midnight-UTC instant specifically — `T00:00Z`, with the seconds optional
+ * because `T00:00:00Z` denotes the same instant and flagging it would be the
+ * cry-wolf failure this file elsewhere argues against. Any other offset or
+ * time-of-day is not the feed value and is flagged.
  */
-const BARE_WRONG_HOF_DATE = /2026-08-07(?!T)/g;
+const BARE_WRONG_HOF_DATE = /2026-08-07(?!T00:00(:00)?Z)/g;
 
 export function wrongHofDateMentions(text: string): number[] {
   const NL = String.fromCharCode(10);
@@ -518,6 +526,20 @@ describe('operator docs agree on the pilot target date', () => {
 
     it('does NOT flag the feed\'s UTC kickoff instant', () => {
       expect(wrongHofDateMentions('ESPN says `2026-08-07T00:00Z`.')).toEqual([]);
+    });
+
+    it('does NOT flag the same instant written with seconds', () => {
+      expect(wrongHofDateMentions('`2026-08-07T00:00:00Z`')).toEqual([]);
+    });
+
+    it('DOES flag the wrong ET date dressed as a timestamp', () => {
+      // codex, round 1: `(?!T)` exempted anything followed by a time, so an
+      // 8:00pm-ET-on-the-7th timestamp — the original bug, restated — passed.
+      expect(wrongHofDateMentions('kickoff 2026-08-07T20:00:00-04:00')).toEqual([1]);
+    });
+
+    it('DOES flag a midnight time in a non-UTC zone', () => {
+      expect(wrongHofDateMentions('2026-08-07T00:00-04:00')).toEqual([1]);
     });
 
     it('reports the line of every offender, not just the first', () => {
