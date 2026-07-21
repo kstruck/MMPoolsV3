@@ -352,8 +352,9 @@ Always confirm the change is in the file on disk before deploying — not that
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.
-4. **A8 — publish the 2026 price + free-period end date. Deadline 2026-08-06.**
-   The only calendar-bound item on the list.
+4. **A8 — publish the 2026 price + free-period end date.
+   Deadline <!-- pilot-target:current --> 2026-08-06.** The only
+   calendar-bound item on the list.
 5. **Leave `nflLockWatch.dryRun: true`** until the preseason-lines question is
    settled — only 1 of 49 games has a betting line, so going live pages nightly
    about a known condition.

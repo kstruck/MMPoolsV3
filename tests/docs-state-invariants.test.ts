@@ -492,10 +492,17 @@ export const HOF_GAME_ET = '2026-08-06';
  *
  * The trailing boundary is codex's too: without it a tagged typo `2026-08-060`
  * captured as `2026-08-06` and passed.
+ *
+ * The separator is HORIZONTAL whitespace only. codex, round 5: `\s` let a tag
+ * bind across blank lines to a date further down the file, which contradicted
+ * the same-line rule this very comment states — and the sibling scanner already
+ * had a test pinning that rule. A guard whose documentation and behaviour
+ * disagree is worse than one that is merely narrow.
  */
 export const PILOT_TARGET_TAG = '<!-- pilot-target:current -->';
+const SEP = '[^\\S\\n]*[*`]*[^\\S\\n]*';
 const PILOT_TARGET_CLAIM =
-  /<!--\s*pilot-target:current\s*-->[\s*`]*(\d{4}-\d{2}-\d{2})(?![\d-])/gi;
+  new RegExp(`<!--[^\\S\\n]*pilot-target:current[^\\S\\n]*-->${SEP}(\\d{4}-\\d{2}-\\d{2})(?![\\d-])`, 'gi');
 
 /** Every tagged target date in one document, in order. */
 export function taggedTargetDates(text: string): string[] {
@@ -519,21 +526,29 @@ export function taggedTargetDates(text: string): string[] {
  * check. A superseded-value ban is only meaningful while the value it names is
  * the thing people would revert to.
  *
- * KNOWN LIMIT, stated rather than implied: this catches a *reverted* deadline,
- * not an arbitrary new wrong one. A doc that invents 2026-08-20 untagged passes.
- * Closing that would mean treating every date in these files as a deadline
- * claim, which is a much larger contract than the problem justifies — the same
- * call the queue-prose limit above makes.
+ * The SAME rule applies to the current target, and that is what makes "every
+ * live deadline is tagged" true rather than aspirational. codex, round 5,
+ * found PICKUP §7 stating the deadline untagged: it would have drifted to an
+ * invented date with every check still green, because the other tagged
+ * mentions kept them satisfied. Requiring every mention of the target date to
+ * be tagged closes that by construction — an untagged copy cannot exist, so
+ * there is nothing left to drift silently.
+ *
+ * KNOWN LIMIT, stated rather than implied: a doc that invents a date this file
+ * has never heard of — 2026-08-20, untagged, in a sentence with no other
+ * marker — still passes. Closing that would mean treating every date in these
+ * files as a deadline claim, which is a much larger contract than the problem
+ * justifies; the same call the queue-prose limit above makes.
  */
 const SUPERSEDED_TARGET = '2026-08-13';
 export const PILOT_TARGET_IGNORE_TAG = '<!-- pilot-target:ignore -->';
-const PILOT_TARGET_IGNORE = /<!--\s*pilot-target:ignore\s*-->[\s*`]*$/i;
+const PILOT_TARGET_IGNORE = new RegExp(`<!--[^\\S\\n]*pilot-target:ignore[^\\S\\n]*-->${SEP}$`, 'i');
 
-/** Lines in one document where the superseded target appears untagged. */
-export function untaggedSupersededTarget(text: string): number[] {
+/** Lines in one document where `date` appears with neither pilot-target tag. */
+export function untaggedDateMentions(text: string, date: string): number[] {
   const NL = String.fromCharCode(10);
   const lines: number[] = [];
-  for (const m of text.matchAll(new RegExp(`${SUPERSEDED_TARGET}(?![\\d-])`, 'g'))) {
+  for (const m of text.matchAll(new RegExp(`${date}(?![\\d-])`, 'g'))) {
     const start = m.index!;
     const lineStart = text.slice(0, start).lastIndexOf(NL) + 1;
     const before = text.slice(lineStart, start);
@@ -544,7 +559,8 @@ export function untaggedSupersededTarget(text: string): number[] {
 }
 
 /** The current-target tag, matched where it sits immediately before a date. */
-const PILOT_TARGET_TAG_AT_END = /<!--\s*pilot-target:current\s*-->[\s*`]*$/i;
+const PILOT_TARGET_TAG_AT_END =
+  new RegExp(`<!--[^\\S\\n]*pilot-target:current[^\\S\\n]*-->${SEP}$`, 'i');
 
 /**
  * `2026-08-07` in any form EXCEPT the feed's midnight-UTC kickoff instant.
@@ -646,13 +662,35 @@ describe('operator docs agree on the pilot target date', () => {
     const offenders: string[] = [];
     for (const doc of AUTHORITATIVE_DOCS) {
       const text = fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8');
-      for (const line of untaggedSupersededTarget(text)) offenders.push(`${doc}:${line}`);
+      for (const line of untaggedDateMentions(text, SUPERSEDED_TARGET)) {
+        offenders.push(`${doc}:${line}`);
+      }
     }
     expect(
       offenders,
       `${SUPERSEDED_TARGET} was the target until 2026-07-21 and is now only the ` +
         `first 16-game preseason slate. Tag a legitimate mention ${PILOT_TARGET_IGNORE_TAG}; ` +
         'an untagged one reads as a live deadline.',
+    ).toEqual([]);
+  });
+
+  it('no entry point states the CURRENT target untagged either', () => {
+    // The other half of "every live deadline is tagged". An untagged copy of
+    // the target is the thing that later drifts to an invented date with every
+    // other check still green — codex round 5, on PICKUP §7.
+    const offenders: string[] = [];
+    for (const doc of AUTHORITATIVE_DOCS) {
+      const text = fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8');
+      for (const line of untaggedDateMentions(text, HOF_GAME_ET)) {
+        offenders.push(`${doc}:${line}`);
+      }
+    }
+    expect(
+      offenders,
+      `Every mention of the target date ${HOF_GAME_ET} in an entry point must ` +
+        `carry ${PILOT_TARGET_TAG} (it is a live deadline) or ` +
+        `${PILOT_TARGET_IGNORE_TAG} (it is not). Untagged, it can drift later ` +
+        'without failing anything.',
     ).toEqual([]);
   });
 
@@ -752,36 +790,53 @@ describe('operator docs agree on the pilot target date', () => {
       expect(taggedTargetDates(`${PILOT_TARGET_TAG} 2026-08-060`)).toEqual([]);
       expect(taggedTargetDates(`${PILOT_TARGET_TAG} 2026-08-06-ish`)).toEqual([]);
     });
+
+    it('does not bind across a line break', () => {
+      // codex, round 5: `\s` in the separator let a dangling tag vouch for a
+      // date further down the file, contradicting the same-line rule this
+      // scanner's own documentation states.
+      const NL = String.fromCharCode(10);
+      expect(taggedTargetDates(`${PILOT_TARGET_TAG}${NL}2026-08-06`)).toEqual([]);
+      expect(taggedTargetDates(`${PILOT_TARGET_TAG}${NL}${NL}2026-08-06`)).toEqual([]);
+    });
   });
 
-  describe('the superseded-target scanner sees what it claims to', () => {
+  describe('the untagged-date scanner sees what it claims to', () => {
+    const OLD = '2026-08-13';
+
     it('flags an untagged live-looking mention', () => {
-      expect(untaggedSupersededTarget('A8 is DUE 2026-08-13.')).toEqual([1]);
+      expect(untaggedDateMentions('A8 is DUE 2026-08-13.', OLD)).toEqual([1]);
     });
 
     it('exempts a tagged one', () => {
-      expect(untaggedSupersededTarget(`slate ${PILOT_TARGET_IGNORE_TAG} 2026-08-13`)).toEqual([]);
+      expect(untaggedDateMentions(`slate ${PILOT_TARGET_IGNORE_TAG} 2026-08-13`, OLD)).toEqual([]);
     });
 
     it('exempts one that is itself the tagged current target', () => {
       // If the target ever moves BACK, the tagged claim is the honest place to
       // say so — and the agreement test above is what would then fail, with a
       // message about the target rather than about a stale string.
-      expect(untaggedSupersededTarget(`${PILOT_TARGET_TAG} 2026-08-13`)).toEqual([]);
+      expect(untaggedDateMentions(`${PILOT_TARGET_TAG} 2026-08-13`, OLD)).toEqual([]);
     });
 
     it('does not let the ignore tag leak past its own mention', () => {
-      expect(untaggedSupersededTarget(
-        `${PILOT_TARGET_IGNORE_TAG} 2026-08-13 but DUE 2026-08-13`,
+      expect(untaggedDateMentions(
+        `${PILOT_TARGET_IGNORE_TAG} 2026-08-13 but DUE 2026-08-13`, OLD,
       )).toEqual([1]);
     });
 
-    it('requires a complete date token', () => {
-      expect(untaggedSupersededTarget('build 2026-08-130')).toEqual([]);
+    it('does not let a tag leak across a line break', () => {
+      const NL = String.fromCharCode(10);
+      expect(untaggedDateMentions(`${PILOT_TARGET_IGNORE_TAG}${NL}2026-08-13`, OLD)).toEqual([2]);
     });
 
-    it('does not flag the current target', () => {
-      expect(untaggedSupersededTarget(`DUE ${HOF_GAME_ET}`)).toEqual([]);
+    it('requires a complete date token', () => {
+      expect(untaggedDateMentions('build 2026-08-130', OLD)).toEqual([]);
+    });
+
+    it('scans whichever date it is given', () => {
+      expect(untaggedDateMentions(`DUE ${HOF_GAME_ET}`, OLD)).toEqual([]);
+      expect(untaggedDateMentions(`DUE ${HOF_GAME_ET}`, HOF_GAME_ET)).toEqual([1]);
     });
   });
 });
