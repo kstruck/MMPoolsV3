@@ -9,9 +9,14 @@
 > --base origin/main`, expect several rounds). Tell me what you plan to do
 > before you do it.
 
-Written 2026-07-21. **The target is the Hall of Fame game, 2026-08-06** (Thu,
-8:00pm ET, CAR at ARI) — that is the clock, set by Kevin on 2026-07-21. The
-first 16-game preseason slate follows on 2026-08-13.
+Written 2026-07-21. **The target is the Hall of Fame game,
+<!-- pilot-target:current --> 2026-08-06** (Thu, 8:00pm ET, CAR at ARI) — that
+is the clock, set by Kevin on 2026-07-21. The first 16-game preseason slate
+follows on 2026-08-13.
+
+The `<!-- pilot-target:current -->` tag is load-bearing: exactly one per entry
+point, and `tests/docs-state-invariants.test.ts` compares the two. Move the
+target by moving the tagged date, not by editing prose around it.
 
 ⚠️ **These docs dated the HOF game one day late until 2026-07-21.** ESPN reports
 its kickoff as `2026-08-07T00:00Z`, because 8:00pm ET is midnight UTC the next

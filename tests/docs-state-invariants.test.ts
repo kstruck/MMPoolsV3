@@ -466,6 +466,32 @@ describe('the scanner sees what the docs actually contain', () => {
 export const HOF_GAME_ET = '2026-08-06';
 
 /**
+ * The live target claim in each entry point carries this tag, immediately
+ * before the date:
+ *
+ *     The target is the Hall of Fame game, <!-- pilot-target:current --> **2026-08-06**
+ *
+ * codex, round 3, and it is the same hole the deploy-SHA guard already had:
+ * the first version asserted `text.includes('2026-08-06')`, which THIS COMMIT'S
+ * OWN historical-correction prose satisfies. Retarget the deadline back to
+ * 2026-08-13 and the guard would still pass, because the wrong date it scans
+ * for is 2026-08-07 and the right date is still sitting in a paragraph
+ * explaining what went wrong. A guard satisfied by an explanation of the bug is
+ * not guarding the bug.
+ *
+ * So the live claim is named rather than inferred, exactly as CURRENT_MARKER
+ * does for the SHA. Markdown emphasis and backticks may sit between the tag and
+ * the date; prose may not.
+ */
+export const PILOT_TARGET_TAG = '<!-- pilot-target:current -->';
+const PILOT_TARGET_CLAIM = /<!--\s*pilot-target:current\s*-->[\s*`]*(\d{4}-\d{2}-\d{2})/gi;
+
+/** Every tagged target date in one document, in order. */
+export function taggedTargetDates(text: string): string[] {
+  return [...text.matchAll(PILOT_TARGET_CLAIM)].map((m) => m[1]);
+}
+
+/**
  * `2026-08-07` in any form EXCEPT the feed's midnight-UTC kickoff instant.
  *
  * The lookahead is the whole guard, and its width is the whole argument.
@@ -479,9 +505,12 @@ export const HOF_GAME_ET = '2026-08-06';
  * midnight-UTC instant specifically — `T00:00Z`, with the seconds optional
  * because `T00:00:00Z` denotes the same instant and flagging it would be the
  * cry-wolf failure this file elsewhere argues against. Any other offset or
- * time-of-day is not the feed value and is flagged.
+ * time-of-day is not the feed value and is flagged. Fractional seconds are
+ * allowed too (codex, round 3) — `Date.toISOString()` produces
+ * `2026-08-07T00:00:00.000Z` for the same instant, and a doc pasting that is
+ * right, not wrong.
  */
-const BARE_WRONG_HOF_DATE = /2026-08-07(?!T00:00(:00)?Z)/g;
+const BARE_WRONG_HOF_DATE = /2026-08-07(?!T00:00(:00(\.\d+)?)?Z)/g;
 
 /**
  * Escape hatch for an honest, unrelated 2026-08-07.
@@ -533,14 +562,27 @@ describe('operator docs agree on the pilot target date', () => {
     ).toEqual([]);
   });
 
-  it('both entry-point docs still state the target date', () => {
-    // The negative check above passes trivially if someone deletes the date
-    // outright. This is the other half: it must be PRESENT, in both.
+  it('each entry-point doc tags exactly one target date', () => {
     for (const doc of AUTHORITATIVE_DOCS) {
-      const text = fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8');
-      expect(text, `${doc} must state the pilot target date ${HOF_GAME_ET}`)
-        .toContain(HOF_GAME_ET);
+      const dates = taggedTargetDates(fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8'));
+      expect(
+        dates.length,
+        `${doc} must carry exactly one "${PILOT_TARGET_TAG}" tag immediately ` +
+          `before the pilot target date. Found ${dates.length}: ${dates.join(', ') || 'none'}.`,
+      ).toBe(1);
     }
+  });
+
+  it('the two entry points name the same target date, and it is the HOF game', () => {
+    const named = AUTHORITATIVE_DOCS.map((doc) => ({
+      doc,
+      date: taggedTargetDates(fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8'))[0],
+    }));
+    expect(
+      named.map((n) => n.date),
+      'The entry points disagree on the pilot target date: ' +
+        named.map((n) => `${n.doc}=${n.date}`).join(' vs '),
+    ).toEqual(named.map(() => HOF_GAME_ET));
   });
 
   describe('the date scanner sees what it claims to', () => {
@@ -597,6 +639,40 @@ describe('operator docs agree on the pilot target date', () => {
       // silently vouch for a wrong one written after it.
       expect(wrongHofDateMentions(`${HOF_TAG} 2026-08-07 and HOF is 2026-08-07`))
         .toEqual([1]);
+    });
+  });
+
+  describe('the target-claim scanner sees what it claims to', () => {
+    it('reads the date the tag points at', () => {
+      expect(taggedTargetDates(`target ${PILOT_TARGET_TAG} 2026-08-06.`))
+        .toEqual(['2026-08-06']);
+    });
+
+    it('sees through markdown emphasis and backticks', () => {
+      expect(taggedTargetDates(`${PILOT_TARGET_TAG} **2026-08-06**`)).toEqual(['2026-08-06']);
+      expect(taggedTargetDates(`${PILOT_TARGET_TAG} \`2026-08-06\``)).toEqual(['2026-08-06']);
+    });
+
+    it('reads a WRONG tagged date rather than passing it', () => {
+      // The point of the tag: retargeting the deadline changes what this
+      // returns, so the comparison against HOF_GAME_ET can fail. `.toContain`
+      // could not do this — historical prose kept it green.
+      expect(taggedTargetDates(`${PILOT_TARGET_TAG} 2026-08-13`)).toEqual(['2026-08-13']);
+    });
+
+    it('ignores an untagged date, including one explaining the old target', () => {
+      expect(taggedTargetDates('Retargeted from 2026-08-13 on 2026-07-21.')).toEqual([]);
+    });
+
+    it('returns every tagged date so a second one can be rejected', () => {
+      const NL = String.fromCharCode(10);
+      expect(taggedTargetDates(
+        `${PILOT_TARGET_TAG} 2026-08-06${NL}and ${PILOT_TARGET_TAG} 2026-08-13`,
+      )).toEqual(['2026-08-06', '2026-08-13']);
+    });
+
+    it('does not bind across prose', () => {
+      expect(taggedTargetDates(`${PILOT_TARGET_TAG} the game is on 2026-08-06`)).toEqual([]);
     });
   });
 });
