@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildReplayPlan } from "../lib/feedReplayDiff";
+import { buildReplayPlan, isoOrMarker } from "../lib/feedReplayDiff";
 import type { NFLGame } from "../types";
 
 const game = (over: Partial<NFLGame> & { id: string }): NFLGame => ({
@@ -84,5 +84,44 @@ describe("buildReplayPlan", () => {
         const change = buildReplayPlan(snapshot, current).changes.find((c) => c.field === "startTime");
         expect(change).toBeDefined();
         expect(change!.to).toBe(new Date(1_755_000_000_000).toISOString());
+    });
+
+    // qodo #2: parseScoreboardResponse derives startTime as `new Date(x).getTime()`,
+    // which is NaN when ESPN omits or mangles the date. `new Date(NaN).toISOString()`
+    // throws RangeError, which would abort the whole replay — in the one situation
+    // (a corrupt feed) this tool exists to recover from.
+    it("does not throw when a kickoff timestamp is NaN, and marks it in the report", () => {
+        const snapshot = [game({ id: "g1", startTime: NaN })];
+        const current = new Map([["g1", game({ id: "g1", startTime: 1_755_000_000_000 })]]);
+
+        const plan = buildReplayPlan(snapshot, current);
+
+        const change = plan.changes.find((c) => c.field === "startTime");
+        expect(change).toBeDefined();
+        expect(change!.to).toBe("(invalid)");
+        expect(change!.from).toBe(new Date(1_755_000_000_000).toISOString());
+        // The game is still written — recovery continues past a bad timestamp.
+        expect(plan.writes).toHaveLength(1);
+    });
+
+    it("marks an invalid CURRENT kickoff too, so a corrupt live row can still be replayed over", () => {
+        const snapshot = [game({ id: "g1", startTime: 1_755_000_000_000 })];
+        const current = new Map([["g1", game({ id: "g1", startTime: NaN })]]);
+
+        const change = buildReplayPlan(snapshot, current).changes.find((c) => c.field === "startTime");
+        expect(change!.from).toBe("(invalid)");
+        expect(change!.to).toBe(new Date(1_755_000_000_000).toISOString());
+    });
+});
+
+describe("isoOrMarker", () => {
+    it("formats a finite epoch and refuses everything else", () => {
+        expect(isoOrMarker(1_755_000_000_000)).toBe(new Date(1_755_000_000_000).toISOString());
+        expect(isoOrMarker(0)).toBe(new Date(0).toISOString());
+        expect(isoOrMarker(NaN)).toBe("(invalid)");
+        expect(isoOrMarker(Infinity)).toBe("(invalid)");
+        expect(isoOrMarker(undefined)).toBe("(invalid)");
+        expect(isoOrMarker(null)).toBe("(invalid)");
+        expect(isoOrMarker("1755000000000")).toBe("(invalid)");
     });
 });

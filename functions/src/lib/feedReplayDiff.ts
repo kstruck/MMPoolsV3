@@ -26,6 +26,19 @@ const scoreOf = (g: { scores?: { home?: number; away?: number } } | undefined) =
     g?.scores === undefined ? "none" : `${g.scores.away ?? "?"}-${g.scores.home ?? "?"}`;
 
 /**
+ * Format a kickoff for the change report WITHOUT throwing.
+ *
+ * `parseScoreboardResponse` derives startTime as `new Date(x).getTime()`, which
+ * is NaN when ESPN omits or mangles the date — and `new Date(NaN).toISOString()`
+ * throws RangeError. This function exists precisely for corrupted-feed
+ * situations, so a bad timestamp must degrade to a readable marker in the
+ * report rather than abort the whole replay. Reported, not swallowed: an
+ * operator reading "(invalid)" knows the payload is suspect.
+ */
+export const isoOrMarker = (ms: unknown): string =>
+    typeof ms === "number" && Number.isFinite(ms) ? new Date(ms).toISOString() : "(invalid)";
+
+/**
  * Build the replay plan.
  *
  * TWO THINGS ARE DELIBERATELY PRESERVED FROM THE CURRENT DOC, not taken from the
@@ -73,8 +86,8 @@ export function buildReplayPlan(
         if (current.startTime !== incoming.startTime) {
             changes.push({
                 gameId: incoming.id, field: "startTime",
-                from: new Date(current.startTime).toISOString(),
-                to: new Date(incoming.startTime).toISOString(),
+                from: isoOrMarker(current.startTime),
+                to: isoOrMarker(incoming.startTime),
             });
         }
     }
