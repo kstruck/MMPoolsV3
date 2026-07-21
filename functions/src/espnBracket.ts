@@ -8,6 +8,7 @@ import { scoreTournamentEntries } from "./bracketScoring";
 import { BIG_12_TEAMS_2026, BIG_EAST_TEAMS_2026 } from "./conferenceTournaments";
 import { validated } from "./lib/validated";
 import { withHeartbeat } from "./lib/heartbeat";
+import { isTournamentStale } from "./lib/tournamentStaleness";
 import {
     importTournamentFromESPNSchema,
     adminInitTournamentSchema,
@@ -1012,11 +1013,49 @@ export const scheduledBracketSync = onSchedule("every 10 minutes", withHeartbeat
         return;
     }
 
-    for (const doc of activeTournaments.docs) {
+    // `isFinalized` is write-only-false: every creator sets it false and nothing
+    // ever sets it true except a human via updateTournamentData. Without this
+    // guard, every tournament ever created — including sim ones — is re-synced
+    // every 10 minutes forever. See lib/tournamentStaleness.ts for the full
+    // story; it cost ~1.4M reads/day for three dead 2025 brackets.
+    const now = Date.now();
+    const stale: string[] = [];
+    const toSync = activeTournaments.docs.filter((doc) => {
+        const seasonYear = (doc.data() as { seasonYear?: unknown }).seasonYear;
+        if (isTournamentStale(seasonYear, now)) {
+            stale.push(`${doc.id}(seasonYear=${String(seasonYear)})`);
+            return false;
+        }
+        return true;
+    });
+
+    // ONE warning per run, not one per stale doc per run. A lingering stale
+    // tournament stays in this query until someone sets isFinalized:true by
+    // hand, so a per-doc warn would emit forever at 144 runs/day and bury real
+    // bracketSync warnings — an alarm that cries wolf gets ignored, which is how
+    // the real outage gets missed. The id list is capped for the same reason.
+    if (stale.length > 0) {
+        const shown = stale.slice(0, 10).join(", ");
+        const more = stale.length > 10 ? ` (+${stale.length - 10} more)` : "";
+        logger.warn(
+            `[bracketSync] Skipped ${stale.length} stale tournament(s): ${shown}${more}. ` +
+            `Their seasons ended but isFinalized is still false. Set isFinalized:true via ` +
+            `updateTournamentData to drop them from this query entirely.`,
+        );
+    }
+
+    if (toSync.length === 0) {
+        logger.info(
+            `No active tournaments to sync (${activeTournaments.size} skipped as stale).`,
+        );
+        return;
+    }
+
+    for (const doc of toSync) {
         logger.info(`Syncing tournament: ${doc.id}`);
         await updateTournamentScores(db, doc.id);
     }
-    logger.info(`Scheduled sync complete for ${activeTournaments.size} tournament(s).`);
+    logger.info(`Scheduled sync complete for ${toSync.length} tournament(s).`);
 }));
 
 // --- ESPN Import Types ---
