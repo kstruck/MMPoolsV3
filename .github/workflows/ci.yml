@@ -15,7 +15,13 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 — tests/docs-state-invariants.test.ts resolves every
+      # deploy-state SHA the operator docs claim against real commit objects.
+      # A shallow clone has none of them, and that check fails loudly rather
+      # than skipping, so this is load-bearing rather than incidental.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:

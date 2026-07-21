@@ -190,7 +190,7 @@ npx tsc -b
 npm test
 ```
 
-Baselines on `main` @ `16746b8`: functions unit **845**, emulator **98 pass /
+Baselines on <!-- deploy-state:ignore --> `main` @ `16746b8`: functions unit **845**, emulator **98 pass /
 10 skipped**, root vitest **257**, both typechecks clean. **Counts only go up —
 re-measure, do not trust a stale number** (I reported 828 once from a mid-merge
 measurement; it was 831).

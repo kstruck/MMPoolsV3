@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execFileSync } from 'child_process';
 
 /**
  * Docs state invariants — mechanical guards for the failure mode that keeps
@@ -72,12 +73,27 @@ const MAIN_SHA = /`main`\s*@\s*`([^`]+)`/gi;
 const VALID_SHA = /^[0-9a-f]{7,40}$/i;
 
 /**
- * A line is exempt only if it says so. Two forms:
- *  - it is about TEST BASELINES, not deployment ("Baselines on `main` @ ...")
- *  - it carries an explicit <!-- historical --> annotation
- * Anything else counts as a live deploy-state claim.
+ * A mention is exempt ONLY when this marker sits IMMEDIATELY before it, with
+ * nothing but whitespace in between:
+ *
+ *     <!-- deploy-state:ignore --> Baselines on `main` @ `16746b8`
+ *
+ * EXACT ADJACENCY, DELIBERATELY. Four softer rules were tried and review holed
+ * every one, because they all guessed at which mention a nearby keyword meant:
+ * whole-line (one baseline mention exempted a live claim sharing its line), a
+ * proximity window (a marker on unrelated earlier prose leaked forward; a
+ * marker written after the claim was invisible), clause-scoped (same leak
+ * inside one sentence), and clause-scoped-plus-single-mention (still exempted
+ * a live claim sitting in a clause whose marker annotated other prose).
+ *
+ * There is no proximity rule that resolves "which mention does this word mean"
+ * from prose, so the contract changed instead: an exempt mention is TAGGED, and
+ * the tag can only bind to the thing it touches. Costs one visible marker per
+ * exempt line; buys a rule with no interpretation left in it. The old magic
+ * word "baseline" is gone too — it silently exempted any sentence that happened
+ * to contain it.
  */
-const EXEMPT_LINE = /baseline|<!--\s*historical\s*-->/i;
+const EXEMPT_MARKER = /<!--\s*deploy-state:ignore\s*-->\s*$/i;
 
 /** Root docs plus nested runbooks — a stale SHA is no less wrong under docs/. */
 function operatorMarkdownFiles(): string[] {
@@ -126,34 +142,14 @@ export function collectClaimsFromText(text: string, fileLabel: string): Claim[] 
   const NL = String.fromCharCode(10);
   for (const m of text.matchAll(MAIN_SHA)) {
     const start = m.index!;
-    const end = start + m[0].length;
     const line = text.slice(0, start).split(NL).length;
 
-    // AN EXEMPTION APPLIES TO ITS OWN CLAUSE, and nothing else.
-    //
-    // Two weaker rules were tried and both were holed by review. Exempting the
-    // whole LINE let one baseline mention exempt a live claim sharing that
-    // line. Exempting a proximity WINDOW (line start, or the previous match,
-    // through this match) was still a guess in both directions: a marker
-    // attached to earlier prose that is not itself a claim leaked forward onto
-    // the live one, and a marker written AFTER the claim it annotates was
-    // invisible because the window stopped at the match.
-    //
-    // A clause is unambiguous, needs no proximity guess, and reads the way the
-    // prose is actually written: "Baselines on `main` @ `x`; prod is `main` @
-    // `y`" exempts the first and collects the second, and a trailing
-    // `<!-- historical -->` still annotates the claim before it. Splitting too
-    // FINELY can only detach a marker from its claim, which fails loudly rather
-    // than passing silently — the safe direction for a guard to be wrong in.
-    const clause = clauseAround(text, start, end);
-    // An exemption covers ONE mention. A clause carrying an exempt marker AND
-    // more than one SHA cannot say which mention the marker annotates —
-    // "prod was `main` @ `a` <!-- historical -->, but now `main` @ `b`" would
-    // otherwise exempt BOTH, hiding the live claim inside the annotation for
-    // the dead one. Ambiguity resolves to COLLECTING, so the disagreement check
-    // fails loudly and the author splits the sentence, rather than the guard
-    // quietly skipping the claim it exists to compare.
-    if (EXEMPT_LINE.test(clause) && countMatches(clause, MAIN_SHA) === 1) continue;
+    // The marker must TOUCH this mention: everything before it on this line,
+    // ending in the tag and optional whitespace. No proximity, no guessing.
+    // Prose between the tag and the claim breaks the binding, which is the
+    // point — a tag can then only ever exempt the mention it was written for.
+    const lineStart = text.slice(0, start).lastIndexOf(NL) + 1;
+    if (EXEMPT_MARKER.test(text.slice(lineStart, start))) continue;
 
     const token = m[1].trim();
     claims.push({
@@ -166,22 +162,6 @@ export function collectClaimsFromText(text: string, fileLabel: string): Claim[] 
     });
   }
   return claims;
-}
-
-/** How many times `re` matches — `re` carries /g, so it is reset before use. */
-function countMatches(text: string, re: RegExp): number {
-  re.lastIndex = 0;
-  return [...text.matchAll(re)].length;
-}
-
-/** The clause containing [start, end): bounded by `.`, `;`, or a line break. */
-function clauseAround(text: string, start: number, end: number): string {
-  const BOUNDARY = /[.;\n]/;
-  let from = start;
-  while (from > 0 && !BOUNDARY.test(text[from - 1])) from--;
-  let to = end;
-  while (to < text.length && !BOUNDARY.test(text[to])) to++;
-  return text.slice(from, to);
 }
 
 function collectDeployShaClaims(): Claim[] {
@@ -247,6 +227,32 @@ describe('operator docs agree on what is deployed', () => {
     expect(
       bad.map((c) => `${c.file}:${c.line} -> ${c.sha}`),
       'a "`main` @ `...`" claim is not a usable commit id (7-40 hex chars)',
+    ).toEqual([]);
+  });
+
+  // A hex-shaped typo copied into BOTH docs passes every check above: the format
+  // test calls it valid and the agreement test sees one distinct value. The docs
+  // would then agree on a commit that does not exist. Only git can tell.
+  it('every claimed SHA resolves to a real commit', () => {
+    const shallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
+      cwd: REPO_ROOT, encoding: 'utf8',
+    }).trim();
+    // Stated, not skipped silently. CI checks out with fetch-depth: 0 for this
+    // job precisely so this runs there; if that regresses, this says so.
+    expect(shallow, 'shallow clone — this check cannot run; set fetch-depth: 0').toBe('false');
+
+    const unresolved = claims.filter((c) => {
+      try {
+        execFileSync('git', ['cat-file', '-e', `${c.sha}^{commit}`], { cwd: REPO_ROOT, stdio: 'ignore' });
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    expect(
+      unresolved.map((c) => `${c.file}:${c.line} -> ${c.sha}`),
+      'a deploy-state SHA does not name a commit in this repository — a typo ' +
+        'that is still valid hex passes every other check here',
     ).toEqual([]);
   });
 
@@ -328,63 +334,58 @@ describe('the scanner sees what the docs actually contain', () => {
   // editing them — which is exactly how an earlier version of this guard ended
   // up "proven" by a SHA that did not exist.
   describe('scanner behaviour, on fixtures', () => {
-    it('exempts ONLY the baseline mention when a line carries both', () => {
-      // The bug: a whole-line exemption let a live claim ride along beside a
-      // baseline mention, so the doc could contradict production silently.
-      const line = 'Baselines on `main` @ `aaaaaaa`; prod is `main` @ `bbbbbbb`.';
-      const claims = collectClaimsFromText(line, 'fixture.md');
+    const TAG = '<!-- deploy-state:ignore -->';
+
+    it('exempts ONLY the tagged mention when a line carries two', () => {
+      const claims = collectClaimsFromText(
+        `Baselines on ${TAG} \`main\` @ \`aaaaaaa\`; prod is \`main\` @ \`bbbbbbb\`.`,
+        'f.md',
+      );
       expect(claims.map((c) => c.sha)).toEqual(['bbbbbbb']);
     });
 
-    it('still exempts a plain baseline line', () => {
-      expect(collectClaimsFromText('Baselines on `main` @ `aaaaaaa`.', 'f.md')).toEqual([]);
+    it('exempts a tagged mention', () => {
+      expect(collectClaimsFromText(`Baselines on ${TAG} \`main\` @ \`aaaaaaa\`.`, 'f.md')).toEqual([]);
     });
 
-    it('still exempts an explicitly historical line', () => {
+    it('does NOT exempt an UNTAGGED baseline line — "baseline" is no longer magic', () => {
+      // The old rule exempted any sentence containing the word. A guard that
+      // keys on prose exempts prose it was never meant to.
+      expect(collectClaimsFromText('Baselines on `main` @ `aaaaaaa`.', 'f.md'))
+        .toHaveLength(1);
+    });
+
+    it('does NOT let a tag on unrelated prose exempt a live claim', () => {
+      // The exact hole every proximity rule had: the tag annotates other text,
+      // and prose between it and the claim breaks the binding.
+      const claims = collectClaimsFromText(
+        `Old build abc ${TAG}, while prod is \`main\` @ \`bbbbbbb\`.`, 'f.md',
+      );
+      expect(claims.map((c) => c.sha)).toEqual(['bbbbbbb']);
+    });
+
+    it('does NOT exempt when a tag trails the claim — a tag binds forward only', () => {
+      // One direction, not two. "Immediately before" is checkable with no
+      // interpretation; "somewhere after" reopens the guessing.
       expect(
-        collectClaimsFromText('<!-- historical --> prod was `main` @ `aaaaaaa`.', 'f.md'),
-      ).toEqual([]);
+        collectClaimsFromText(`prod was \`main\` @ \`aaaaaaa\` ${TAG}`, 'f.md'),
+      ).toHaveLength(1);
+    });
+
+    it('does not let a tag leak across a line break', () => {
+      const NL = String.fromCharCode(10);
+      const claims = collectClaimsFromText(
+        `Baselines on ${TAG} \`main\` @ \`aaaaaaa\`.${NL}Prod is \`main\` @ \`bbbbbbb\`.`,
+        'f.md',
+      );
+      expect(claims.map((c) => c.sha)).toEqual(['bbbbbbb']);
+      expect(claims[0].line).toBe(2);
     });
 
     it('collects an ordinary deploy claim', () => {
       const claims = collectClaimsFromText('prod = `main` @ `abc1234`', 'f.md');
       expect(claims).toHaveLength(1);
       expect(claims[0]).toMatchObject({ sha: 'abc1234', valid: true, line: 1 });
-    });
-
-    it('does not let an exemption leak from one LINE into the next', () => {
-      const NL = String.fromCharCode(10);
-      const text = `Baselines on \`main\` @ \`aaaaaaa\`.${NL}Prod is \`main\` @ \`bbbbbbb\`.`;
-      const claims = collectClaimsFromText(text, 'f.md');
-      expect(claims.map((c) => c.sha)).toEqual(['bbbbbbb']);
-      expect(claims[0].line).toBe(2);
-    });
-
-    it('does NOT let a marker on unrelated earlier prose exempt a live claim', () => {
-      // The marker annotates "Old build abc", which is not a claim at all. A
-      // proximity window would have handed its exemption to the live claim.
-      const claims = collectClaimsFromText(
-        'Old build abc <!-- historical -->; prod is `main` @ `bbbbbbb`.', 'f.md',
-      );
-      expect(claims.map((c) => c.sha)).toEqual(['bbbbbbb']);
-    });
-
-    it('honours a marker written AFTER the claim it annotates', () => {
-      // A window ending at the match could not see a trailing annotation.
-      expect(
-        collectClaimsFromText('prod was `main` @ `aaaaaaa` <!-- historical -->', 'f.md'),
-      ).toEqual([]);
-    });
-
-    it('REFUSES to exempt an ambiguous clause carrying two SHA mentions', () => {
-      // The marker cannot say which mention it annotates, so neither is
-      // exempted and the disagreement check gets to see both. Failing loudly
-      // beats silently skipping the live claim hidden behind the dead one's
-      // annotation.
-      const claims = collectClaimsFromText(
-        'prod was `main` @ `aaaaaaa` <!-- historical -->, but now `main` @ `bbbbbbb`', 'f.md',
-      );
-      expect(claims.map((c) => c.sha)).toEqual(['aaaaaaa', 'bbbbbbb']);
     });
 
     it('flags a non-hex token as an invalid SHA rather than silently accepting it', () => {
