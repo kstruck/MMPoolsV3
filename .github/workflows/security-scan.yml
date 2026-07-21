@@ -26,6 +26,19 @@ jobs:
       - name: Run NPM Audit
         run: npm audit --audit-level=high
 
+      # functions/ IS THE DEPLOYED TREE and has its own lockfile, so a
+      # root-only audit says nothing about it. That is not hypothetical: a
+      # vulnerable brace-expansion sat in functions/ through #236 while this job
+      # ran green, because #236 pinned it at the root only. #240 fixed the
+      # dependency; this closes the hole that let it hide.
+      - name: Install Dependencies (functions)
+        working-directory: functions
+        run: npm ci
+
+      - name: Run NPM Audit (functions)
+        working-directory: functions
+        run: npm audit --audit-level=high
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
