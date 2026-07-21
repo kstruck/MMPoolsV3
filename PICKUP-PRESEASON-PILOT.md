@@ -42,7 +42,9 @@ state. Concretely:
 ## 2. Live state (verified 2026-07-21)
 
 > **Deploy state: HANDOFF.md's STOP POINT box is authoritative and CURRENT.**
-> Both files agree — prod matches `main`, and the deploy queue is EMPTY.
+> Both files agree on the DEPLOYED SOURCE SHA, and the deploy queue is EMPTY.
+> They do not claim prod equals `main`: docs-only commits advance `main`
+> without a deploy, so that equality is false almost immediately.
 >
 > `tests/docs-state-invariants.test.ts` (PR #248) enforces **only** that the
 > tagged deployed-SHA claims agree and name a real commit on `origin/main`. It
@@ -78,13 +80,20 @@ not the problem it was on the finalize sweep.**
 What to check from now on: after 11:30 ET each day the stamp should be fresh AND
 carry `detail: { enabled: false }` while the job stays disabled.
 
-A missing stamp still has **three** possible causes, and the 2026-07-21 evidence
-only rules out "the schedule was never wired at all" — it does not rule out a
-scheduler failure on some later day, especially right after a deploy replaces
-the function. Check in this order: (1) the handler threw before stamping,
-(2) the heartbeat write failed, (3) Cloud Scheduler did not invoke it. The
-Functions log distinguishes them — an invocation with no stamp is (1) or (2);
-no invocation at all is (3).
+**A handler that THROWS still leaves a stamp.** `withHeartbeat` catches, records
+`ok: false` with the message, and only then rethrows
+(`functions/src/lib/heartbeat.ts`). So the differential is:
+
+| Symptom | Means |
+|---|---|
+| Stamp present, `ok: false` | the handler threw or reported degraded — read `error` |
+| Stamp present, `ok: true`, stale `at` | it ran, then stopped being invoked |
+| **No stamp at all**, but the Functions log shows an invocation | the heartbeat WRITE failed, or the process died before the wrapper could record (timeout, OOM) |
+| **No stamp and no invocation** in the log | Cloud Scheduler did not fire it |
+
+The 2026-07-21 evidence rules out "this schedule was never wired at all". It does
+**not** rule out a scheduler failure on some later day — especially right after a
+deploy replaces the function — so keep the last row in the differential.
 
 Prod data: **49 preseason games** (`season 2026`, `seasonType 1`). One
 mislabeled regular-season game was deleted by hand; PR #219 stops it recurring.
@@ -149,8 +158,19 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 **Everything is merged and deployed.** The deployed source SHA is `6ca9e7f`.
 `main` advances past it with every docs-only commit — that is drift in the
-marker, not a deploy queue. A queue exists only when something under
-`functions/` or the frontend changes.
+marker, not a deploy queue.
+
+**A deploy queue exists when ANY of these changed since the deployed SHA:**
+
+| Changed | Needs |
+|---|---|
+| `functions/**` | `npx firebase deploy --only functions` |
+| `shared/**` | same — the predeploy hook copies `shared/` into `functions/src/shared/`, so a shared-only change alters the deployed functions |
+| `firestore.rules` | `--only firestore:rules` (**after** functions) |
+| `firestore.indexes.json` | `--only firestore:indexes` |
+| `src/**`, `package.json`, `Dockerfile`, `nginx.conf` | manual Coolify trigger |
+
+Docs, tests, `.github/**` and `.claude/**` need nothing.
 
 Fifteen scheduled job bodies changed in that deploy and every one reported
 `Successful update operation`. Nothing was armed or disarmed; the behaviour

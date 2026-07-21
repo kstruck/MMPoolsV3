@@ -230,7 +230,7 @@ From `docs/UI-REVAMP-GUIDE.md` (verified): **"No emoji anywhere — replace with
 
 Canonical home: sibling skill **mmp-change-control**. Restated here because docs enforce them (as of 2026-07-06, owner-confirmed):
 1. No prod-data mutation without kill-switch + dry-run-default first — the `autoClosePools` pattern (`functions/src/autoClosePools.ts:11-15`: does nothing unless `system/config.autoClose.enabled === true`, dry-run unless `dryRun:false`); verify dry-run output before enabling. As of 2026-07-06 autoClosePools is LIVE past dry-run.
-2. Deploy ritual: always `npx firebase` (never global CLI); `npm --prefix functions install` first (avoids stripe/fft TS2307); deploy functions BEFORE rules; project `gridiron-gamble-uzuqo`. Details: **mmp-deploy-and-operate**.
+2. Deploy ritual: always `npx firebase` (never global CLI); `npm --prefix functions ci` first (avoids stripe/fft TS2307); deploy functions BEFORE rules; project `gridiron-gamble-uzuqo`. Details: **mmp-deploy-and-operate**.
 3. Plan→review-log→sweep gate: no multi-file change without a `PLAN-*.md`, an adversarial review log, and a sweep pass. This skill supplies the templates.
 4. Worktree isolation: new parallel work in its own git worktree; never batch onto a branch another session may touch.
 
