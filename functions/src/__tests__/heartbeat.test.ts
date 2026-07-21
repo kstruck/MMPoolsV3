@@ -313,6 +313,12 @@ describe('findStaleJobs on the real outage shape', () => {
 // the wrapper get told the truth?", which is a strictly harder question and one
 // that wrapping alone quietly appeared to answer.
 const KNOWN_SILENT_ON_FAILURE = new Set([
+  // adminHealth.ts was PASSING the loose whole-file version of this check
+  // because its timed() helper returns { ok: false } for an individual probe,
+  // while scheduledHealthCheck itself never returns a verdict. Tightening the
+  // scan to each callback exposed it — a health check that cannot report its
+  // own ill health, which is a particularly poor joke.
+  'adminHealth.ts',
   'consensus.ts',
   'espnBracket.ts',
   'expertPicks.ts',
@@ -335,6 +341,28 @@ describe('a wrapped job that swallows errors still reports failure', () => {
     return acc;
   }
 
+  /** The text of a withHeartbeat(...) call, comments blanked, by paren match. */
+  function wrappedCallBodies(src: string): string[] {
+    const scanned = blankComments(src);
+    const bodies: string[] = [];
+    for (const m of scanned.matchAll(/withHeartbeat\(/g)) {
+      let depth = 0;
+      let i = m.index! + 'withHeartbeat'.length;
+      for (; i < scanned.length; i++) {
+        if (scanned[i] === '(') depth++;
+        else if (scanned[i] === ')') { depth--; if (depth === 0) break; }
+      }
+      bodies.push(scanned.slice(m.index!, i + 1));
+    }
+    return bodies;
+  }
+
+  /** Does this wrapped handler have ANY path that reports a degraded run? */
+  function reportsFailure(body: string): boolean {
+    return /ok:\s*false/.test(body)
+      || /configReadFailedVerdict|sweepRunVerdict|dryRunVerdict|lockWatchVerdict|scoreSyncHeartbeat/.test(body);
+  }
+
   const offenders: string[] = [];
   let inspected = 0;
   for (const file of walk4(SRC4)) {
@@ -342,12 +370,15 @@ describe('a wrapped job that swallows errors still reports failure', () => {
     const src = fs.readFileSync(file, 'utf8');
     if (!src.includes('withHeartbeat(')) continue;
     inspected++;
-    // `ok: false` anywhere in the file, or a shared verdict helper that returns
-    // one. A file with neither cannot report a degraded run at all.
-    const reportsFailure = /ok:\s*false/.test(src)
-      || /configReadFailedVerdict|sweepRunVerdict|dryRunVerdict|lockWatchVerdict|scoreSyncHeartbeat/.test(src);
+    // PER CALLBACK, comments blanked — not the whole file. Scanning the file
+    // let an unrelated `ok: false` vouch for a handler that has none:
+    // adminHealth.ts's timed() returns `{ ok: false }` for an individual probe
+    // while scheduledHealthCheck itself never returns a verdict, and the file
+    // scan passed it. A guard satisfied by code it is not checking is the same
+    // shape as the heartbeats this whole file exists to make honest.
     const rel = relKey(SRC4, file);
-    if (!reportsFailure && !KNOWN_SILENT_ON_FAILURE.has(rel)) offenders.push(rel);
+    if (KNOWN_SILENT_ON_FAILURE.has(rel)) continue;
+    if (!wrappedCallBodies(src).every(reportsFailure)) offenders.push(rel);
   }
 
   it('inspected the wrapped files (guards against matching nothing)', () => {
@@ -360,9 +391,8 @@ describe('a wrapped job that swallows errors still reports failure', () => {
     const nowReporting = [...KNOWN_SILENT_ON_FAILURE].filter((f) => {
       const full = path.join(SRC4, f);
       if (!fs.existsSync(full)) return false;
-      const src = fs.readFileSync(full, 'utf8');
-      return /ok:\s*false/.test(src)
-        || /configReadFailedVerdict|sweepRunVerdict|dryRunVerdict|lockWatchVerdict|scoreSyncHeartbeat/.test(src);
+      const bodies = wrappedCallBodies(fs.readFileSync(full, 'utf8'));
+      return bodies.length > 0 && bodies.every(reportsFailure);
     }).sort();
     expect(nowReporting, 'these now report failure — remove them from KNOWN_SILENT_ON_FAILURE').toEqual([]);
   });

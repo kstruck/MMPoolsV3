@@ -276,7 +276,7 @@ export const monetizationAlerts = functions.scheduler.onSchedule(
         `[monetizationAlerts] DRY-RUN: would write ${allCandidates.length} alert(s):`,
         byType
       );
-      await writeAdminAudit({
+      const dryAudited = await writeAdminAudit({
         actorUid: "system",
         action: "MONETIZATION_ALERTS_SWEEP",
         targetType: "coupon",
@@ -290,13 +290,19 @@ export const monetizationAlerts = functions.scheduler.onSchedule(
         },
         status: "success",
       });
-      return;
+      // That audit entry is the dry run's ONLY output.
+      return dryAudited
+        ? { detail: { dryRun: true, wouldWrite: allCandidates.length } }
+        : { ok: false, error: "dry-run report not written", detail: { dryRun: true, wouldWrite: allCandidates.length } };
     }
 
     // Live run: upsert every candidate (deduped), then email the abuse ones.
     let created = 0;
     let refreshed = 0;
     let reopened = 0;
+    // Per-candidate catches keep one bad alert from losing the rest — which
+    // meant a run where EVERY alert failed to persist reported healthy.
+    let failedUpserts = 0;
     for (const c of allCandidates) {
       try {
         const res = await upsertAlert(db, c, nowMs);
@@ -304,6 +310,7 @@ export const monetizationAlerts = functions.scheduler.onSchedule(
         else if (res === "reopened") reopened += 1;
         else refreshed += 1;
       } catch (e) {
+        failedUpserts += 1;
         console.error(`[monetizationAlerts] upsert failed for ${c.type}:${c.couponCode}:`, e);
       }
     }
@@ -330,12 +337,13 @@ export const monetizationAlerts = functions.scheduler.onSchedule(
     console.log(
       `[monetizationAlerts] wrote alerts (created ${created}, refreshed ${refreshed}, reopened ${reopened}); emailed ${emailedTo} recipient(s).`
     );
-    await writeAdminAudit({
+    const audited = await writeAdminAudit({
       actorUid: "system",
       action: "MONETIZATION_ALERTS_SWEEP",
       targetType: "coupon",
       metadata: {
         dryRun: false,
+        failedUpserts,
         couponsScanned: coupons.length,
         created,
         refreshed,
@@ -346,5 +354,12 @@ export const monetizationAlerts = functions.scheduler.onSchedule(
       },
       status: "success",
     });
+
+    const problems: string[] = [];
+    if (failedUpserts > 0) problems.push(`${failedUpserts} alert upsert(s) failed`);
+    if (!audited) problems.push("run summary not written");
+    return problems.length > 0
+      ? { ok: false, error: problems.join("; "), detail: { created, refreshed, reopened, failedUpserts } }
+      : { detail: { created, refreshed, reopened } };
   }
 ));
