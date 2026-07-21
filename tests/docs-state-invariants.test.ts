@@ -98,6 +98,22 @@ const VALID_SHA = /^[0-9a-f]{7,40}$/i;
  */
 const EXEMPT_MARKER = /<!--\s*deploy-state:ignore\s*-->\s*$/i;
 
+/**
+ * The LIVE claim in each authoritative doc must carry this tag, in the same
+ * immediately-before position:
+ *
+ *     prod matches <!-- deploy-state:current --> `main` @ `a28030d`
+ *
+ * Without it, "this doc still states a deploy SHA" was satisfied by ANY mention
+ * anywhere in the file — including a dated or historical one. Rewording the
+ * live banner ("Production commit: ...") would then drop the real claim out of
+ * the comparison while old mentions kept the check green, and the two entry
+ * points could name different commits with nothing failing. That is the exact
+ * contradiction this file exists to catch, so the live claim is now named
+ * rather than inferred from position or phrasing.
+ */
+const CURRENT_MARKER = /<!--\s*deploy-state:current\s*-->\s*$/i;
+
 /** Root docs plus nested runbooks — a stale SHA is no less wrong under docs/. */
 function operatorMarkdownFiles(): string[] {
   const out: string[] = [];
@@ -127,6 +143,8 @@ interface Claim {
   line: number;
   /** Byte offset of the match — the only per-mention identity that is exact. */
   start: number;
+  /** Tagged <!-- deploy-state:current -->, i.e. THE live claim for its file. */
+  current: boolean;
   /** Did the matched text span a line break? Pins newline tolerance honestly. */
   wrapped: boolean;
   /** False when the token is not a usable commit id (e.g. a non-hex typo). */
@@ -160,6 +178,7 @@ export function collectClaimsFromText(text: string, fileLabel: string): Claim[] 
       sha: token.toLowerCase(),
       line,
       start,
+      current: CURRENT_MARKER.test(text.slice(lineStart, start)),
       wrapped: m[0].includes(NL),
       valid: VALID_SHA.test(token),
     });
@@ -209,16 +228,33 @@ describe('operator docs agree on what is deployed', () => {
   // drops its marker, so that file silently leaves the comparison and can then
   // say anything at all — which is the original failure: two entry-point docs
   // disagreeing. Both must keep participating.
-  it('requires every authoritative doc to state its deploy SHA', () => {
-    const silent = AUTHORITATIVE_DOCS.filter(
-      (doc) => !claims.some((c) => c.file === doc),
-    );
+  it('requires every authoritative doc to TAG exactly one live deploy SHA', () => {
+    // Counted on TAGGED claims only. Accepting any mention anywhere let a
+    // historical or dated one stand in for the live banner, so rewording the
+    // banner out of the pattern would drop the real claim from the comparison
+    // while the check stayed green.
+    const wrong = AUTHORITATIVE_DOCS
+      .map((doc) => [doc, claims.filter((c) => c.file === doc && c.current).length] as const)
+      .filter(([, n]) => n !== 1)
+      .map(([doc, n]) => `${doc}: ${n} tagged live claim(s), expected exactly 1`);
     expect(
-      silent,
-      'these docs are the operator entry points but no longer state ' +
-        '"`main` @ `<sha>`", so they have dropped out of the agreement check ' +
-        'and can drift unnoticed',
+      wrong,
+      'each operator entry point must mark its CURRENT deploy claim with ' +
+        '<!-- deploy-state:current --> immediately before the `main` @ `sha` ' +
+        'construction. Without it the doc can drift out of the agreement check ' +
+        'while stale mentions keep this green',
     ).toEqual([]);
+  });
+
+  it('the tagged live claims agree with each other', () => {
+    // The narrowest statement of the original incident: the two entry points
+    // naming different deployed commits.
+    const live = claims.filter((c) => c.current);
+    expect(
+      [...new Set(live.map((c) => c.sha))].length,
+      'the operator entry points TAG different deploy SHAs: ' +
+        live.map((c) => `${c.file}:${c.line} -> ${c.sha}`).join(', '),
+    ).toBe(1);
   });
 
   // A non-hex typo (`84e080g`) used to produce NO match at all, so the doc's

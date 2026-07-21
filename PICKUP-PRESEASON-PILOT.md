@@ -46,7 +46,7 @@ state. Concretely:
 > 2026-07-21 ~04:30Z. The deploy queue is EMPTY. If these two ever disagree
 > again, the later date wins; check both before deploying.
 
-**Prod matches `main` @ `84e080c` (2026-07-21).** Nothing is awaiting deploy.
+**Prod matches <!-- deploy-state:current --> `main` @ `84e080c` (2026-07-21).** Nothing is awaiting deploy.
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is

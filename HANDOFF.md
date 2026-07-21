@@ -2,7 +2,7 @@
 
 > ## STOP POINT 2026-07-21 (~04:40Z)
 >
-> **All work is merged and deployed. `main` @ `84e080c` = prod. Nothing is
+> **All work is merged and deployed. <!-- deploy-state:current --> `main` @ `84e080c` = prod. Nothing is
 > waiting on a merge or a deploy.** PRs #231-#236 all landed.
 >
 > | PR | What | State |
