@@ -70,3 +70,9 @@ skills_backup/
 # UI-revamp session artifacts (not for VCS)
 design/
 output/
+
+# Firebase Auth exports — every user's email plus password-hash material.
+# PLAN-BACKUPS-PHASE3.md deliberately writes these to $env:TEMP, never here;
+# this is the belt-and-braces catch if one ever lands in the repo anyway.
+auth-backup*.json
+*-auth-export.json
