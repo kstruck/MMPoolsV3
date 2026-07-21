@@ -274,9 +274,10 @@ describe('operator docs agree on what is deployed', () => {
       distinct.length,
       'operator docs disagree about what is deployed. An operator reading the ' +
         'wrong one skips or repeats a deploy.\n' +
-        'Fix the SHA, or — if a mention is historical or a test baseline — mark ' +
-        'the line with <!-- historical --> so it is excluded deliberately ' +
-        'rather than by accident.\n  ' +
+        'Fix the SHA, or — if a mention is historical or a test baseline — put ' +
+        '<!-- deploy-state:ignore --> IMMEDIATELY before its `main` @ `sha` ' +
+        'construction (prose in between breaks the binding, deliberately), so ' +
+        'it is excluded on purpose rather than by accident.\n  ' +
         where.join('\n  '),
     ).toBe(1);
   });
