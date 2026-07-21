@@ -695,6 +695,70 @@ export function shouldLockSpread(game: Pick<NFLGame, 'spread'> | undefined): boo
  * dry-run by default (nflSpreadLock.dryRun !== false) — logs which games it WOULD
  * lock, writing nothing, until explicitly flipped.
  */
+export interface SpreadLockResult {
+  /** Games whose spread was actually written to locked:true (0 when dryRun). */
+  locked: number;
+  /** Games that WOULD be locked — equals `locked` on a live run. */
+  wouldLock: number;
+  /** Eligible games left for the next run because of the per-run cap. */
+  overflow: number;
+}
+
+/**
+ * Lock every lockable spread in the next 7 days. Extracted from the scheduled
+ * job so the WRITE PATH is testable without a scheduler.
+ *
+ * Worth stating why this extraction happened: before it, only the pure helpers
+ * (`shouldLockSpread`, `readJobGate`) had tests, and every emulator fixture
+ * seeded spreads as ALREADY `locked: true`. The unlocked→locked transition, the
+ * per-run cap, and the dry-run-writes-nothing guarantee had never been executed
+ * by any test — on a job about to be armed for preseason, on the same field
+ * whose preservation bug shipped undetected until PR #235.
+ *
+ * The caller owns the gate; this function assumes it has been checked.
+ */
+export async function lockSpreadsOnce(
+  db: Firestore,
+  now: number,
+  opts: { dryRun: boolean },
+): Promise<SpreadLockResult> {
+  const empty: SpreadLockResult = { locked: 0, wouldLock: 0, overflow: 0 };
+
+  // Games starting in the next 7 days that are not finalized.
+  const upcomingSnap = await db.collection('nfl_games')
+    .where('startTime', '>', now)
+    .where('startTime', '<=', now + 7 * 24 * 60 * 60 * 1000)
+    .get();
+
+  if (upcomingSnap.empty) return empty;
+
+  const eligible = upcomingSnap.docs.filter(doc => shouldLockSpread(doc.data() as NFLGame));
+  // Per-run cap, same convention as autoClosePools / nflFinalizeSweepJob. A real
+  // week is ~16 games, so this never binds in practice — it exists so a bad
+  // import can't push one batch past Firestore's 500-write limit and fail the
+  // WHOLE commit, which would leave every spread unlocked and block the week
+  // behind SPREADS_NOT_LOCKED. Overflow is logged, and the next run picks it up.
+  const targets = eligible.slice(0, MAX_SPREAD_LOCKS_PER_RUN);
+  const overflow = eligible.length - targets.length;
+
+  if (opts.dryRun) {
+    console.log(
+      `[lockNFLSpreadsJob] DRY-RUN: would lock ${targets.length} spread(s)${overflow > 0 ? ` (${overflow} deferred past the ${MAX_SPREAD_LOCKS_PER_RUN} cap)` : ''}: ${targets.slice(0, 20).map(d => d.id).join(', ')}`,
+    );
+    return { locked: 0, wouldLock: targets.length, overflow };
+  }
+
+  if (targets.length === 0) return empty;
+
+  const batch = db.batch();
+  for (const doc of targets) batch.update(doc.ref, { 'spread.locked': true });
+  await batch.commit();
+  console.log(
+    `[lockNFLSpreadsJob] Locked spreads for ${targets.length} upcoming games.${overflow > 0 ? ` WARNING: ${overflow} eligible game(s) exceeded the ${MAX_SPREAD_LOCKS_PER_RUN} per-run cap and were NOT locked.` : ''}`,
+  );
+  return { locked: targets.length, wouldLock: targets.length, overflow };
+}
+
 export const lockNFLSpreadsJob = onSchedule({
   schedule: '0 9 * * 2', // 9:00 AM every Tuesday
   timeZone: 'America/New_York'
@@ -717,40 +781,7 @@ export const lockNFLSpreadsJob = onSchedule({
     return { detail: { enabled: false } };
   }
 
-  const now = Date.now();
-
-  // Find games starting in the next 7 days that are not finalized
-  const upcomingSnap = await db.collection('nfl_games')
-    .where('startTime', '>', now)
-    .where('startTime', '<=', now + 7 * 24 * 60 * 60 * 1000)
-    .get();
-
-  if (upcomingSnap.empty) return;
-
-  const eligible = upcomingSnap.docs.filter(doc => shouldLockSpread(doc.data() as NFLGame));
-  // Per-run cap, same convention as autoClosePools / nflFinalizeSweepJob. A real
-  // week is ~16 games, so this never binds in practice — it exists so a bad
-  // import can't push one batch past Firestore's 500-write limit and fail the
-  // WHOLE commit, which would leave every spread unlocked and block the week
-  // behind SPREADS_NOT_LOCKED. Overflow is logged, and the next run picks it up.
-  const targets = eligible.slice(0, MAX_SPREAD_LOCKS_PER_RUN);
-  const overflow = eligible.length - targets.length;
-
-  if (gate.dryRun) {
-    console.log(
-      `[lockNFLSpreadsJob] DRY-RUN: would lock ${targets.length} spread(s)${overflow > 0 ? ` (${overflow} deferred past the ${MAX_SPREAD_LOCKS_PER_RUN} cap)` : ''}: ${targets.slice(0, 20).map(d => d.id).join(', ')}`,
-    );
-    return;
-  }
-
-  if (targets.length === 0) return;
-
-  const batch = db.batch();
-  for (const doc of targets) batch.update(doc.ref, { 'spread.locked': true });
-  await batch.commit();
-  console.log(
-    `[lockNFLSpreadsJob] Locked spreads for ${targets.length} upcoming games.${overflow > 0 ? ` WARNING: ${overflow} eligible game(s) exceeded the ${MAX_SPREAD_LOCKS_PER_RUN} per-run cap and were NOT locked.` : ''}`,
-  );
+  await lockSpreadsOnce(db, Date.now(), { dryRun: gate.dryRun });
 }));
 
 /**
