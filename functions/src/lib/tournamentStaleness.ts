@@ -21,15 +21,21 @@
  */
 
 /**
+ * A tournament is stale once its season year's June has fully ended — i.e. from
+ * July 1 00:00 UTC onwards.
+ *
  * Every NCAA and conference tournament for a given `seasonYear` has concluded
  * well before July: conference tournaments end mid-March, the NCAA final is the
- * first week of April. June 30 is therefore a deliberately generous cutoff —
- * roughly a three-month margin past the last possible game.
+ * first week of April. That makes this a deliberately generous cutoff — roughly
+ * a three-month margin past the last possible game.
  *
- * Month index 5 = June; day 30 = the last day of June, in UTC.
+ * Month index 6 = July, day 1. Expressed as the START of July rather than the
+ * start of June 30, so that "the whole of June is still fresh" is literally what
+ * the code says; the previous form made June 30 stale from midnight, which
+ * contradicted the "end of June" wording.
  */
 export function staleAfterMs(seasonYear: number): number {
-    return Date.UTC(seasonYear, 5, 30);
+    return Date.UTC(seasonYear, 6, 1);
 }
 
 /**
@@ -43,5 +49,6 @@ export function staleAfterMs(seasonYear: number): number {
 export function isTournamentStale(seasonYear: unknown, nowMs: number): boolean {
     const year = typeof seasonYear === "number" ? seasonYear : Number(seasonYear);
     if (!Number.isFinite(year) || year < 2000 || year > 3000) return false;
-    return nowMs > staleAfterMs(year);
+    // `>=` so the boundary itself (July 1 00:00 UTC) counts as stale.
+    return nowMs >= staleAfterMs(year);
 }

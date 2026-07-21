@@ -1019,18 +1019,30 @@ export const scheduledBracketSync = onSchedule("every 10 minutes", withHeartbeat
     // every 10 minutes forever. See lib/tournamentStaleness.ts for the full
     // story; it cost ~1.4M reads/day for three dead 2025 brackets.
     const now = Date.now();
+    const stale: string[] = [];
     const toSync = activeTournaments.docs.filter((doc) => {
         const seasonYear = (doc.data() as { seasonYear?: unknown }).seasonYear;
         if (isTournamentStale(seasonYear, now)) {
-            logger.warn(
-                `[bracketSync] SKIPPING stale tournament ${doc.id} (seasonYear=${String(seasonYear)}). ` +
-                `Its season ended long ago but isFinalized is still false. Set isFinalized:true on it ` +
-                `via updateTournamentData to remove it from this query entirely.`,
-            );
+            stale.push(`${doc.id}(seasonYear=${String(seasonYear)})`);
             return false;
         }
         return true;
     });
+
+    // ONE warning per run, not one per stale doc per run. A lingering stale
+    // tournament stays in this query until someone sets isFinalized:true by
+    // hand, so a per-doc warn would emit forever at 144 runs/day and bury real
+    // bracketSync warnings — an alarm that cries wolf gets ignored, which is how
+    // the real outage gets missed. The id list is capped for the same reason.
+    if (stale.length > 0) {
+        const shown = stale.slice(0, 10).join(", ");
+        const more = stale.length > 10 ? ` (+${stale.length - 10} more)` : "";
+        logger.warn(
+            `[bracketSync] Skipped ${stale.length} stale tournament(s): ${shown}${more}. ` +
+            `Their seasons ended but isFinalized is still false. Set isFinalized:true via ` +
+            `updateTournamentData to drop them from this query entirely.`,
+        );
+    }
 
     if (toSync.length === 0) {
         logger.info(

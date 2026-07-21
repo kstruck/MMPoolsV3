@@ -20,10 +20,14 @@ describe("isTournamentStale", () => {
         expect(isTournamentStale(2026, MARCH_2026)).toBe(false);
     });
 
-    it("does not skip a current-season tournament before the cutoff", () => {
-        expect(isTournamentStale(2026, Date.UTC(2026, 5, 29))).toBe(false);
-        // ...and does once the cutoff passes.
+    it("treats the WHOLE of June as still fresh, and July 1 as stale", () => {
+        // qodo (#239): the first version made June 30 stale from midnight, which
+        // contradicted the "end of June" contract in the docstring. The boundary
+        // is now July 1 00:00 UTC inclusive.
+        expect(isTournamentStale(2026, Date.UTC(2026, 5, 30, 12, 0, 0))).toBe(false);
+        expect(isTournamentStale(2026, Date.UTC(2026, 5, 30, 23, 59, 59))).toBe(false);
         expect(isTournamentStale(2026, Date.UTC(2026, 6, 1))).toBe(true);
+        expect(isTournamentStale(2026, Date.UTC(2026, 6, 1, 0, 0, 1))).toBe(true);
     });
 
     it("fails OPEN on a missing or unparseable seasonYear", () => {
@@ -40,7 +44,7 @@ describe("isTournamentStale", () => {
         expect(isTournamentStale("2025", JULY_2026)).toBe(true);
     });
 
-    it("cuts off at end of June, ~3 months after the last possible game", () => {
-        expect(staleAfterMs(2025)).toBe(Date.UTC(2025, 5, 30));
+    it("cuts off at July 1, ~3 months after the last possible game", () => {
+        expect(staleAfterMs(2025)).toBe(Date.UTC(2025, 6, 1));
     });
 });
