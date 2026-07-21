@@ -53,8 +53,20 @@
 > git log --oneline -1
 > ```
 >
-> **You should see `17fa291` (or later).** If you see `e84dfa3` or `84e080c`,
-> the pull did not take — do not deploy; run `git status` and resolve first.
+> **You should see exactly `17fa291`.** If you see `e84dfa3` or `84e080c`, the
+> pull did not take — do not deploy; run `git status` and resolve first.
+>
+> **If you see something LATER than `17fa291`, stop and look at what it is:**
+>
+> ```powershell
+> git log --oneline 17fa291..HEAD
+> ```
+>
+> A bare `--only functions` ships everything on the branch, so anything in that
+> range is going to production too — and it is not covered by the inventory,
+> the byte-check or the verification steps below, which were written against
+> `17fa291`. Read those commits and decide deliberately; do not assume "later is
+> fine".
 >
 > Now the pre-deploy byte-check. **Do not skip it**: a stale checkout deploys
 > old code and still prints `Deploy complete!`, which has bitten this repo three
@@ -442,9 +454,11 @@ The trust-boundary `validated()` sweep of the parked SWEEP-LATER callables is un
 > ⚠️ **The "Deploy state" column below is HISTORICAL and no longer accurate.**
 > Every batch in this table was deployed by the 2026-07-20 full-fleet deploy and
 > again on 2026-07-21. Rows reading "merged, NOT deployed" reflect the state at
-> the time each row was written, not today. **Prod matches `main` @ `84e080c`;
-> the deploy queue is EMPTY** — see the DEPLOY STATE box at the top of this file.
-> The table is kept for the PR/batch mapping, which is still useful.
+> the time each row was written, not today. Prod still matches
+> <!-- deploy-state:ignore --> `main` @ `84e080c` **but the deploy queue is NO
+> LONGER EMPTY** — that sentence was true on 2026-07-21 and is not true now.
+> See the STOP POINT box at the top of this file. The table is kept for the
+> PR/batch mapping, which is still useful.
 
 | Batch | PR | Callables | Deploy state |
 |---|---|---|---|

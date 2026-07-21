@@ -122,7 +122,7 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — NOT EMPTY (3 PRs, 13 job bodies)
+## 4. Deploy queue — NOT EMPTY (6 PRs, 15 job bodies, + Coolify)
 
 **Prod is `84e080c`; `main` is `17fa291`. The queue is everything in between —
 which is MORE than last night's work.**
@@ -169,7 +169,12 @@ Always confirm the change is in the file on disk before deploying — not that
    under `"2"` in `bySeasonType`. Then set `nflFinalize.liveSeasonTypes` to an
    array containing the number **1** — `dryRun:false` **alone does nothing**,
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
-2. ~~**Deploy**~~ — **DONE 2026-07-21 ~04:30Z**, queue empty (§4).
+2. **DEPLOY — the queue is NOT empty again.** Prod is `84e080c`, `main` is
+   `17fa291`, and six PRs sit between them (three from the 2026-07-22 run plus
+   #239/#240/#237 from before it). Fifteen scheduled job bodies, plus a manual
+   Coolify trigger for #237's frontend dependency bump. **Full runbook with the
+   pre-deploy byte-check: HANDOFF.md's STOP POINT box.** The 2026-07-21 deploy
+   that emptied the previous queue is done and is not what this refers to.
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.
