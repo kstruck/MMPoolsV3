@@ -29,7 +29,7 @@
 > ### 2. THE DEPLOY — do this first, it is the only thing gating everything else
 >
 > ⚠️ **This deploy ships MORE than last night's work.** Prod is `84e080c`, but
-> `main` was already at `e84dfa3` before this run started, so five earlier PRs
+> `main` was already at `e84dfa3` before this run started, so six earlier PRs
 > have also been sitting undeployed:
 >
 > | PR | What | Why it matters here |
