@@ -202,12 +202,20 @@ Roughly in value order:
    `validated()`, so the warning about it needing a special grep is stale.
    Classification: 13 genuinely fine, 12 want `validated()`, 1 deferred by
    design (`createBracketPool`). Highest risk, in order: `simulateGameUpdate`
-   (`scoreUpdates.ts`) — auth is "is anyone logged in", the role check is
-   claim-only and buried inside a transaction, and an arbitrary `scores` object
-   gets one truthiness check before deciding winners; `backfillProfileData`
-   (`migrations/`) — a 540s mass mutation behind a claim-only gate;
-   `recordPoolPayouts` (`payoutRecords.ts`) — the money ledger, claim-only role
-   half. Still a re-classification pass, not a sweep.
+   (`scoreUpdates.ts`) — auth at the entry point is only "is anyone logged in",
+   and an arbitrary `scores` object gets one truthiness check before deciding
+   winners; `backfillProfileData` (`migrations/`) — a 540s mass mutation behind
+   a claim-only gate; `recordPoolPayouts` (`payoutRecords.ts`) — the money
+   ledger, and **the one item on this list that IS on the pilot path** (wired
+   into `RecordPayoutsCard.tsx`).
+
+   ⚠️ **Do NOT "fix" these by adding `validated({ role: ... })`.**
+   `simulateGameUpdate`, `simFillSquares` and `recordPoolPayouts` all authorize
+   ordinary owners/managers/co-managers through persisted pool ownership; only
+   their SUPER_ADMIN bypass is claim-only. A `role:` gate runs before the pool
+   is loaded and would reject legitimate commissioners. Use `validated()` for
+   the auth+schema boundary and harden the admin bypass separately. Full detail
+   and ordering: `SECURITY-BARE-ONCALL-CLASSIFICATION.md`.
 
 ---
 

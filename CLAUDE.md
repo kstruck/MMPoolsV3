@@ -38,16 +38,21 @@ prose if they disagree; skills are point-in-time snapshots.
 > a report is there, absorb it; if not, proceed. `gh pr checks <n>` is still
 > required and still gates.
 >
-> **Everything below stays valid**; Kevin will say when it resumes normally. The
-> rule is not wrong, its timing assumption is.
+> **This note OVERRIDES the "wait for the qodo review" instruction below for as
+> long as it stands.** Read the rest of §2b as: *when a qodo report EXISTS, read
+> every finding and absorb or reject each one with written evidence.* The
+> waiting half is suspended — an unconditional "wait before reporting" can block
+> a PR indefinitely against a reviewer that may never answer, which is the
+> opposite of what the rule is for. Kevin will say when it resumes.
 >
 > Meanwhile the review burden falls back on the author, and §2c is now the
 > primary cross-model gate rather than a supplement to qodo.
 
-**After opening ANY pull request, wait for the qodo review, read every
-finding, and absorb or reject each one with written evidence before
-reporting the PR as done.** Kevin should never have to ask whether qodo
-was checked.
+**After opening ANY pull request, check for a qodo review — and when one
+exists, read every finding and absorb or reject each with written evidence
+before reporting the PR as done.** Kevin should never have to ask whether qodo
+was checked. (Per the box above, the *waiting* part is currently suspended:
+check once, cheaply, and proceed if nothing is there.)
 
 This lived in `mmp-qodo-cycle` and in auto-memory and was still dropped
 under load on 2026-07-21 (checked on two PRs only when asked, skipped on

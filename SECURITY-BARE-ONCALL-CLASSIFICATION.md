@@ -99,5 +99,22 @@ recorded as deferred in `HANDOFF.md` and the SWEEPS matrix.
 5. The rest as convenient. `aiTesting` ×3 are cheap and spend real money on
    failure.
 
-**Not urgent for preseason.** None of these is a regression, and none is on the
-NFL pilot path. This is a list to work from in September, not before 2026-08-13.
+**Mostly not urgent for preseason — with one carve-out.**
+
+None of these is a *regression*. But the blanket claim that none is on the NFL
+pilot path was wrong, and it would have justified deferring a money-ledger
+weakness on a false premise:
+
+> ⚠️ **`recordPoolPayouts` IS on the pilot path.** It is wired into the NFL
+> dashboard (`src/components/NFLPoolDashboard/RecordPayoutsCard.tsx`) and is
+> reachable after finalization — which is exactly what the preseason pilot
+> exercises. The repo's Golden Scenario treats payout recording as a real
+> production path, not a hypothetical.
+>
+> The exposure is narrow: the role half of `assertPoolOwnerOrSuperAdmin` is
+> claim-only, so a **demoted-but-unrefreshed SUPER_ADMIN token** could still
+> record payouts. Ordinary owners are authorized by persisted pool ownership
+> and are unaffected. It is a stale-token window on the money ledger, not an
+> open door — but it should be decided on rather than swept into September.
+
+Everything else on this list is a September job, not a pre-2026-08-13 one.
