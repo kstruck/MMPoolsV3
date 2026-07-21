@@ -18,14 +18,9 @@ for this repo. Use this file instead.
 
 Before debugging, deploying, or planning, load the matching skill from
 `.claude/skills/` (now tracked in git — available in every worktree and
-subagent, not just the main checkout):
-
-architecture-contract, build-and-env, change-control, config-and-flags,
-debugging-playbook, deploy-and-operate, diagnostics-and-tooling,
-docs-and-writing, failure-archaeology, loop-audit-sweep, loop-babysit-deps,
-loop-e2e-nightly, loop-next-ticket, loop-pr-pruner, nfl-season-campaign,
-pools-domain-reference, product-frontier, qodo-cycle, superadmin-surface,
-validation-and-qa (prefix each with `mmp-`), plus `pr-ci-check`.
+subagent, not just the main checkout). **`ls .claude/skills/` is the only
+list** — most are prefixed `mmp-`, but do not treat that as exhaustive;
+run the command rather than trusting any roster written down here.
 
 Each skill carries a "When NOT to use this skill" routing table to its
 siblings and provenance/re-verify commands — trust the commands over the
