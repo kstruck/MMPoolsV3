@@ -174,3 +174,32 @@ export function formatAlertMessage(coverage: SlateCoverage, decision: AlertDecis
   lines.push('', `Pools: ${coverage.affectedPoolIds.slice(0, 20).join(', ')}`);
   return lines.join('\n');
 }
+
+/**
+ * Was a lock-watch run healthy?
+ *
+ * Both of this job's outputs are best-effort sinks that swallow their own
+ * failures: the page (dispatchOpsAlert) and the every-run audit trace
+ * (writeAdminAudit). If both are lost the tripwire produced NOTHING, which is
+ * exactly the state it exists to make impossible — and the run would otherwise
+ * still stamp ok:true. Pure and exported so the distinction is tested rather
+ * than trusted. Found by codex review on PR #245.
+ */
+export function lockWatchVerdict(run: {
+  pagesUndelivered: number;
+  audited: boolean;
+  slatesChecked: number;
+  firing: number;
+  dryRun: boolean;
+}): { ok?: boolean; error?: string; detail: Record<string, unknown> } {
+  const detail = {
+    slatesChecked: run.slatesChecked, firing: run.firing, dryRun: run.dryRun,
+    pagesUndelivered: run.pagesUndelivered,
+  };
+  const problems: string[] = [];
+  if (run.pagesUndelivered > 0) problems.push(`${run.pagesUndelivered} page(s) undelivered`);
+  if (!run.audited) problems.push("audit trace not written");
+  return problems.length > 0
+    ? { ok: false, error: problems.join("; "), detail }
+    : { detail };
+}

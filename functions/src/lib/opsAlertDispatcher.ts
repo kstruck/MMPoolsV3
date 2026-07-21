@@ -60,6 +60,13 @@ const HIGH_PRIORITY_TYPES: ReadonlySet<OpsAlertType> = new Set([
 interface OpsAlertsConfig {
     emailRecipients: string[];
     smsRecipients: string[];
+    /**
+     * True when the config could not be READ. Without it, an unreachable
+     * system/config is indistinguishable from a deliberately empty recipient
+     * list — both produce zero recipients — so the pager could be broken and
+     * report the same thing as a pager nobody has configured yet.
+     */
+    readFailed?: boolean;
 }
 
 async function readOpsAlertsConfig(db: admin.firestore.Firestore): Promise<OpsAlertsConfig> {
@@ -76,7 +83,7 @@ async function readOpsAlertsConfig(db: admin.firestore.Firestore): Promise<OpsAl
         return { emailRecipients, smsRecipients };
     } catch (e) {
         logger.warn("[opsAlertDispatcher] config read failed; staying silent (fail-safe)", e);
-        return { emailRecipients: [], smsRecipients: [] };
+        return { emailRecipients: [], smsRecipients: [], readFailed: true };
     }
 }
 
@@ -84,7 +91,7 @@ async function readOpsAlertsConfig(db: admin.firestore.Firestore): Promise<OpsAl
  *  every other sender in this app uses) — deliberately skips reminders.ts's
  *  sendEmail() so ops paging never gets suppressed by a pool member's
  *  unsubscribe/opt-out preference matching an ops recipient's address. */
-async function sendOpsEmail(db: admin.firestore.Firestore, to: string, subject: string, text: string): Promise<void> {
+async function sendOpsEmail(db: admin.firestore.Firestore, to: string, subject: string, text: string): Promise<boolean> {
     try {
         await db.collection("mail").add({
             to,
@@ -92,8 +99,10 @@ async function sendOpsEmail(db: admin.firestore.Firestore, to: string, subject: 
             source: "opsAlertDispatcher",
             createdAt: FieldValue.serverTimestamp(),
         });
+        return true;
     } catch (e) {
         logger.warn(`[opsAlertDispatcher] failed to queue ops email to ${to}`, e);
+        return false;
     }
 }
 
@@ -107,11 +116,11 @@ function normalizePhone(phone: string): string {
 /** Distinct code path from sendCourierSMS (PLAN #11 — do not reuse the end-user
  *  SMS path). Shares the same Courier account/secret (no new vendor account
  *  needed tonight); framing and recipient source are ops-specific. */
-async function sendOpsSMS(phone: string, message: string): Promise<void> {
+async function sendOpsSMS(phone: string, message: string): Promise<boolean> {
     const token = opsCourierAuthToken.value();
     if (!token) {
         logger.warn("[opsAlertDispatcher] COURIER_AUTH_TOKEN not configured; ops SMS not sent.");
-        return;
+        return false;
     }
     try {
         const response = await fetch("https://api.courier.com/send", {
@@ -127,11 +136,25 @@ async function sendOpsSMS(phone: string, message: string): Promise<void> {
         });
         if (!response.ok) {
             logger.error(`[opsAlertDispatcher] Courier ops SMS failed (${response.status})`, await response.text());
+            return false;
         }
+        return true;
     } catch (e) {
         logger.warn(`[opsAlertDispatcher] ops SMS to ${phone} failed (non-fatal)`, e);
+        return false;
     }
 }
+
+/**
+ * What actually happened to a page.
+ *
+ * This function swallows every delivery failure on purpose — an alert must
+ * never break the job raising it — which meant a caller could not tell a
+ * delivered page from a lost one. `"no-recipients"` is kept distinct from
+ * `"failed"` because an unconfigured pager is a setup gap, not an outage, and
+ * conflating them would make the first alert after setup look like a fault.
+ */
+export type OpsAlertOutcome = "sent" | "no-recipients" | "failed";
 
 export interface OpsAlertInput {
     type: OpsAlertType;
@@ -142,10 +165,15 @@ export interface OpsAlertInput {
 
 /** Best-effort — never throws. A paging failure must never break the handler
  *  that detected the underlying failure (same principle as sentryServer.ts). */
-export async function dispatchOpsAlert(db: admin.firestore.Firestore, input: OpsAlertInput): Promise<void> {
+export async function dispatchOpsAlert(
+    db: admin.firestore.Firestore,
+    input: OpsAlertInput,
+): Promise<OpsAlertOutcome> {
     try {
         const cfg = await readOpsAlertsConfig(db);
-        if (cfg.emailRecipients.length === 0 && cfg.smsRecipients.length === 0) return;
+        // A config we could not READ is a broken pager, not an unconfigured one.
+        if (cfg.readFailed) return "failed";
+        if (cfg.emailRecipients.length === 0 && cfg.smsRecipients.length === 0) return "no-recipients";
 
         const detailLines = input.context
             ? Object.entries(input.context).map(([k, v]) => `${k}: ${String(v)}`).join("\n")
@@ -153,12 +181,40 @@ export async function dispatchOpsAlert(db: admin.firestore.Firestore, input: Ops
         const body = detailLines ? `${input.message}\n\n${detailLines}` : input.message;
         const subject = `[MMP OPS] ${input.title}`;
 
-        await Promise.all(cfg.emailRecipients.map((to) => sendOpsEmail(db, to, subject, body)));
+        // Every send reports; the sends themselves swallow their own errors so one
+        // bad recipient cannot lose the rest. Reaching one of three recipients on
+        // a channel is delivery; reaching none of them is not.
+        const emailResults = await Promise.all(
+            cfg.emailRecipients.map((to) => sendOpsEmail(db, to, subject, body)),
+        );
+        const emailOk = cfg.emailRecipients.length === 0 || emailResults.some((ok) => ok);
 
-        if (HIGH_PRIORITY_TYPES.has(input.type)) {
-            await Promise.all(cfg.smsRecipients.map((phone) => sendOpsSMS(phone, `${subject}: ${input.message}`)));
+        // SMS is judged SEPARATELY, not folded in with email. A type is
+        // high-priority precisely because email alone is too slow — a
+        // NFL_SPREADS_NOT_LOCKED page that only made it to email did not do its
+        // job, and a combined "did anything land" check would call that a success
+        // while the urgent channel was dead.
+        //
+        // But a high-priority alert with NO SMS RECIPIENTS CONFIGURED is treated
+        // as delivered, not failed. That is a deliberate split from the sentence
+        // above: an empty SMS list is an operator's standing choice, and calling
+        // it a failure would mark nflLockWatchJob unhealthy on every single run
+        // until someone added a phone number — a permanent red light that says
+        // nothing about whether anything is wrong. This repo has already made
+        // that call once, leaving nflLockWatch in dry-run rather than paging
+        // nightly about the known 1-of-49-games-has-a-line condition. Raised by
+        // codex review on PR #245 and rejected on those grounds; a MISSING
+        // channel is a config gap to fix in config, not an outage to page about.
+        let smsOk = true;
+        if (HIGH_PRIORITY_TYPES.has(input.type) && cfg.smsRecipients.length > 0) {
+            const smsResults = await Promise.all(
+                cfg.smsRecipients.map((phone) => sendOpsSMS(phone, `${subject}: ${input.message}`)),
+            );
+            smsOk = smsResults.some((ok) => ok);
         }
+        return emailOk && smsOk ? "sent" : "failed";
     } catch (e) {
         logger.warn(`[opsAlertDispatcher] dispatchOpsAlert(${input.type}) failed (non-fatal)`, e);
+        return "failed";
     }
 }

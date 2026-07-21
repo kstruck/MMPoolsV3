@@ -6,6 +6,7 @@ import { sortMarginLeaderboard } from "./nflScoringEngine";
 import { recomputeUserProfile } from "./userProfile";
 import { writeAdminAudit } from "./lib/adminAudit";
 import type { NFLPickemEntry, SurvivorEntry, MarginEntry } from "./nflPoolTypes";
+import { withHeartbeat, configReadFailedVerdict } from "./lib/heartbeat";
 
 /**
  * Season Finalization (ADR 0005 decision 2 / PLAN-PLAYER-PROFILES Phase 3).
@@ -379,25 +380,36 @@ export function poolInLiveScope(pool: { seasonType?: number | string }, liveSeas
  */
 export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
   { schedule: "every day 08:30", timeoutSeconds: 540, memory: "512MiB" },
-  async () => {
+  withHeartbeat("nflFinalizeSweepJob", async () => {
     const db = admin.firestore();
 
     let gate: SweepGate = { enabled: false, dryRun: true, liveSeasonTypes: null };
+    let configError: unknown = null;
     try {
       const cfg = (await db.doc("system/config").get()).data()?.nflFinalize as
         | { enabled?: boolean; dryRun?: boolean; liveSeasonTypes?: unknown }
         | undefined;
       gate = readSweepGate(cfg);
     } catch (e) {
-      console.warn("[nflFinalizeSweep] config read failed; staying disabled:", e);
+      configError = e ?? new Error("unknown config read error");
     }
+    if (configError) return configReadFailedVerdict("nflFinalizeSweepJob", configError);
     const { enabled, dryRun } = gate;
     if (gate.forcedDryReason) {
       console.error(`[nflFinalizeSweep] STAYING DRY: ${gate.forcedDryReason}`);
     }
     if (!enabled) {
       console.log("[nflFinalizeSweep] disabled (system/config.nflFinalize.enabled !== true); nothing to do.");
-      return;
+      // Deliberately ok. A disabled job that still stamps is the whole point of
+      // the wrapper: it proves the SCHEDULE fired even when the job did nothing.
+      return { detail: { enabled: false } };
+    }
+    if (gate.forcedDryReason) {
+      // The operator set dryRun:false and the sweep refused, because
+      // liveSeasonTypes was missing. They believe it is armed and it is not —
+      // a mismatch that should surface as unhealthy rather than sit in a log.
+      // Reported here rather than at the top so the dry-run report below still runs.
+      console.error("[nflFinalizeSweep] arm request refused; continuing dry.");
     }
 
     // Candidates: NFL pools that have been scored at least once. Staleness and
@@ -437,7 +449,17 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
         },
         status: "error",
       });
-      return;
+      // The heartbeat must say so too. This catch exists BECAUSE the missing
+      // composite index made this query throw every day for ten days; an audit
+      // row alone was already proved insufficient — nobody reads audit rows
+      // looking for absence. Returning ok:false is what puts it in front of the
+      // staleness check. Not rethrown: the audit row is the durable record, and
+      // a Cloud Functions retry cannot conjure a missing index.
+      return {
+        ok: false,
+        error: `candidate query failed: ${message.slice(0, 300)}`,
+        detail: { dryRun, phase: "candidate-query" },
+      };
     }
 
     const stale = snap.docs.filter((d) => {
@@ -471,7 +493,7 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
         bySeasonType[st] = (bySeasonType[st] ?? 0) + 1;
       }
       console.log(`[nflFinalizeSweep] DRY-RUN: ${stale.length} candidate pool(s).`, { bySeasonType });
-      await writeAdminAudit({
+      const dryAudited = await writeAdminAudit({
         actorUid: "system",
         action: "NFL_FINALIZE_SWEEP",
         targetType: "pool",
@@ -483,7 +505,12 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
         },
         status: "success",
       });
-      return;
+      // A dry run's ONLY output is that audit entry — losing it means the run
+      // produced nothing an operator can read, which is the state this whole
+      // job was rebuilt to stop being invisible. A refused arm request is
+      // likewise unhealthy: the operator asked for live and got dry, and a
+      // config mistake nobody sees is how a sweep stays silently inert.
+      return dryRunVerdict(dryAudited, gate.forcedDryReason, stale.length);
     }
 
     // A6: live runs only touch pools inside the armed scope. Everything else is
@@ -523,7 +550,7 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
       `${outOfScope} out-of-scope, ${deferred} over the ${MAX_PER_RUN} cap; ${stalled.length} stalled.`,
       { blockedReasons: sampleReasons, stalled: stalled.slice(0, 50) },
     );
-    await writeAdminAudit({
+    const audited = await writeAdminAudit({
       actorUid: "system",
       action: "NFL_FINALIZE_SWEEP",
       targetType: "pool",
@@ -538,5 +565,59 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
       },
       status: "success",
     });
-  },
+
+    return sweepRunVerdict(blockedReasons, { finalized, skipped, candidates: stale.length }, audited);
+  }),
 );
+
+/**
+ * Was a DRY run healthy?
+ *
+ * A dry run's only output is its audit entry, so losing that entry means the
+ * run produced nothing an operator can read — the precise state this job was
+ * rebuilt to stop being invisible. A refused arm request is unhealthy for a
+ * different reason: the operator asked for live and got dry, and a config
+ * mistake nobody sees is how a sweep stays silently inert.
+ */
+export function dryRunVerdict(
+  audited: boolean,
+  forcedDryReason: string | undefined,
+  candidates: number,
+): { ok?: boolean; error?: string; detail: Record<string, unknown> } {
+  const detail = { dryRun: true, candidates };
+  const problems: string[] = [];
+  if (!audited) problems.push('dry-run report not written');
+  if (forcedDryReason) problems.push(forcedDryReason.slice(0, 300));
+  return problems.length > 0 ? { ok: false, error: problems.join('; '), detail } : { detail };
+}
+
+/** The `blockedReasons` prefix that marks a pool whose finalization THREW. */
+export const SWEEP_ERROR_PREFIX = 'ERROR: ';
+
+/**
+ * Was a live sweep run healthy?
+ *
+ * A pool that threw is caught per-pool so one bad pool cannot stop the sweep —
+ * but "kept going" is not "fine", and without this the job reports ok:true
+ * while the same pool fails to finalize every single day. A pool merely BLOCKED
+ * (a game still in progress, a postponed game per A10) is normal operation and
+ * must NOT be counted, or the signal cries wolf all season.
+ *
+ * Pure and exported so the distinction is unit-tested rather than discovered
+ * during a preseason week. Found by codex review on PR #245.
+ */
+export function sweepRunVerdict(
+  blockedReasons: Record<string, string>,
+  detail: Record<string, unknown>,
+  audited = true,
+): { ok?: boolean; error?: string; detail: Record<string, unknown> } {
+  const errored = Object.values(blockedReasons).filter((r) => r.startsWith(SWEEP_ERROR_PREFIX)).length;
+  const problems: string[] = [];
+  if (errored > 0) problems.push(`${errored} pool(s) threw during finalization`);
+  // writeAdminAudit swallows its own failures, so a lost summary would otherwise
+  // leave a live run with no record of what it just did to real pools.
+  if (!audited) problems.push('run summary not written');
+  return problems.length > 0
+    ? { ok: false, error: problems.join('; '), detail: { ...detail, errored } }
+    : { detail };
+}

@@ -6,9 +6,10 @@ import { dispatchOpsAlert, opsCourierAuthToken } from "./lib/opsAlertDispatcher"
 import { writeAdminAudit } from "./lib/adminAudit";
 import { isSimPool } from "./nflFinalize";
 import {
-  decideAlert, evaluateSlate, formatAlertMessage, slateId,
+  decideAlert, evaluateSlate, formatAlertMessage, lockWatchVerdict, slateId,
   type SlateKey, type WatchedGame, type WatchedPool,
 } from "./lib/nflLockWatch";
+import { withHeartbeat, configReadFailedVerdict } from "./lib/heartbeat";
 
 /**
  * nflLockWatchJob (PLAN-NFL-PRESEASON-PILOT A3a) — the pre-kickoff tripwire.
@@ -41,11 +42,12 @@ export const nflLockWatchJob = functions.scheduler.onSchedule(
     memory: "512MiB",
     secrets: [opsCourierAuthToken],
   },
-  async () => {
+  withHeartbeat("nflLockWatchJob", async () => {
     const db = admin.firestore();
 
     let enabled = false;
     let dryRun = true;
+    let configError: unknown = null;
     try {
       const cfg = (await db.doc("system/config").get()).data()?.nflLockWatch as
         | { enabled?: boolean; dryRun?: boolean }
@@ -53,11 +55,12 @@ export const nflLockWatchJob = functions.scheduler.onSchedule(
       enabled = cfg?.enabled === true;
       dryRun = cfg?.dryRun !== false;
     } catch (e) {
-      console.warn("[nflLockWatch] config read failed; staying disabled:", e);
+      configError = e ?? new Error("unknown config read error");
     }
+    if (configError) return configReadFailedVerdict("nflLockWatchJob", configError);
     if (!enabled) {
       console.log("[nflLockWatch] disabled (system/config.nflLockWatch.enabled !== true); nothing to do.");
-      return;
+      return { detail: { enabled: false } };
     }
 
     const now = Date.now();
@@ -98,6 +101,10 @@ export const nflLockWatchJob = functions.scheduler.onSchedule(
 
     const firing: string[] = [];
     const checked: Record<string, string> = {};
+    // A tripwire that fires and fails to reach anyone has not fired. dispatchOpsAlert
+    // swallows config, email and SMS failures by design, so without this the job
+    // reports a clean run on the night it mattered most.
+    let pagesUndelivered = 0;
 
     for (const key of slates.values()) {
       // 3. Re-read the FULL slate — the submit gate evaluates the whole week, so
@@ -121,7 +128,7 @@ export const nflLockWatchJob = functions.scheduler.onSchedule(
         console.log(`[nflLockWatch] DRY-RUN: would page for ${slateId(key)}:\n${message}`);
         continue;
       }
-      await dispatchOpsAlert(db, {
+      const delivery = await dispatchOpsAlert(db, {
         type: "NFL_SPREADS_NOT_LOCKED",
         title: `NFL spreads not locked — week ${coverage.week}`,
         message,
@@ -134,18 +141,24 @@ export const nflLockWatchJob = functions.scheduler.onSchedule(
           hoursToKickoff: decision.hoursToKickoff.toFixed(1),
         },
       });
+      // "no-recipients" is a setup gap, not a delivery failure — see OpsAlertOutcome.
+      if (delivery === "failed") pagesUndelivered++;
     }
 
     console.log(`[nflLockWatch] checked ${slates.size} slate(s); ${firing.length} firing.`, checked);
 
     // Every run leaves a trace, so "the alarm never fired" is distinguishable
     // from "the alarm never ran" — the failure mode a tripwire cannot afford.
-    await writeAdminAudit({
+    const audited = await writeAdminAudit({
       actorUid: "system",
       action: "NFL_LOCK_WATCH",
       targetType: "pool",
       metadata: { dryRun, slatesChecked: slates.size, firing, detail: checked },
       status: "success",
     });
-  },
+
+    return lockWatchVerdict({
+      pagesUndelivered, audited, slatesChecked: slates.size, firing: firing.length, dryRun,
+    });
+  }),
 );

@@ -5,7 +5,7 @@ import { NFLGame } from './types';
 import { detectStatCorrections } from './lib/feedSnapshot';
 import { captureFeedSnapshot, pruneExpiredSnapshots, readSnapshotGate, reportStatCorrections } from './feedSnapshotStore';
 import { opsCourierAuthToken } from './lib/opsAlertDispatcher';
-import { withHeartbeat } from './lib/heartbeat';
+import { withHeartbeat, configReadFailedVerdict } from './lib/heartbeat';
 import type { Firestore } from 'firebase-admin/firestore';
 import { validated } from "./lib/validated";
 import { importNFLScheduleSchema } from "./schemas/nflSchedule";
@@ -350,11 +350,14 @@ export async function importNFLSeason(
  */
 // `secrets` is required for the ops-alert SMS path used by the stat-correction
 // page (A5) — dispatchOpsAlert reads COURIER_AUTH_TOKEN at call time.
-export const syncNFLScoresJob = onSchedule({ schedule: '*/5 * * * *', secrets: [opsCourierAuthToken] }, async (event) => {
-  const db = admin.firestore();
-  const now = Date.now();
-  await syncScoresWindow(db, now, HOT_WINDOW_LOOKBACK_MS, { prune: true });
-});
+export const syncNFLScoresJob = onSchedule(
+  { schedule: '*/5 * * * *', secrets: [opsCourierAuthToken] },
+  withHeartbeat('syncNFLScoresJob', async () => {
+    const db = admin.firestore();
+    const now = Date.now();
+    return scoreSyncHeartbeat(await syncScoresWindow(db, now, HOT_WINDOW_LOOKBACK_MS, { prune: true }));
+  }),
+);
 
 /** The 5-minute job's lower bound: games that started within the last 24h. */
 export const HOT_WINDOW_LOOKBACK_MS = 24 * 60 * 60 * 1000;
@@ -369,6 +372,36 @@ export interface ScoreSyncResult {
   gamesWritten: number;
   /** Stat corrections detected across all slates. */
   corrections: number;
+  /**
+   * Slates that produced NO games and were therefore not reconciled at all.
+   *
+   * A slate only exists here because `nfl_games` already holds games in it, so
+   * ESPN returning none for it is always an anomaly, and there are two ways to
+   * get one — neither of which throws:
+   *   - the fetch failed: `fetchNFLWeekScheduleWithRaw` catches its own errors
+   *     and returns `{ games: [], raw: null }`, so a total ESPN outage resolves
+   *     normally;
+   *   - the fetch SUCCEEDED but every event was filtered out by the PR #219
+   *     season guard — the shape you get when the calendar lookup falls back to
+   *     an endpoint serving a different season.
+   * Counted together because the consequence is identical (the slate was
+   * skipped) and neither is distinguishable from a quiet night otherwise.
+   */
+  slatesNotReconciled: number;
+  /**
+   * Slates whose snapshot could not be stored. `captureFeedSnapshot` never
+   * throws by design (a lost snapshot must not break score sync) — which is
+   * EXACTLY how the A5 missing-index failure hid for days. Counted so the run
+   * that swallowed it is still reported as degraded.
+   */
+  snapshotFailures: number;
+  /**
+   * Slates where a detected stat correction could not be REPORTED. Both sinks
+   * behind reportStatCorrections swallow their own failures, so a correction
+   * could be found and then dropped — leaving pools finalized on stale scores
+   * with nobody told. That is the most expensive silent failure in this file.
+   */
+  correctionReportFailures: number;
 }
 
 /**
@@ -401,7 +434,10 @@ export async function syncScoresWindow(
 ): Promise<ScoreSyncResult> {
   const dryRun = opts.dryRun === true;
   const fetchSlate = opts.fetchSlate ?? fetchNFLWeekScheduleWithRaw;
-  const empty: ScoreSyncResult = { slates: 0, gamesWritten: 0, corrections: 0 };
+  const empty: ScoreSyncResult = {
+    slates: 0, gamesWritten: 0, corrections: 0, slatesNotReconciled: 0, snapshotFailures: 0,
+    correctionReportFailures: 0,
+  };
 
   // Only games in the active window: started within the last `lookbackMs` (still live
   // or recently final) through the next 2h. The lower bound stops the job from
@@ -439,10 +475,18 @@ export async function syncScoresWindow(
   const snapshotGate = await readSnapshotGate(db);
   let gamesWritten = 0;
   let correctionCount = 0;
+  let slatesNotReconciled = 0;
+  let snapshotFailures = 0;
+  let correctionReportFailures = 0;
 
   for (const [_, slot] of weeksToSync) {
     const { games: freshGames, raw } = await fetchSlate(slot.week, slot.season, slot.seasonType);
-    if (freshGames.length === 0) continue;
+    // Zero games for a slate we KNOW has games is the whole signal — see
+    // slatesNotReconciled. Deliberately does not care WHY (fetch threw and was
+    // caught, or the season guard filtered everything): the run skipped work it
+    // was supposed to do, and before this counter existed that looked identical
+    // to a clean run.
+    if (freshGames.length === 0) { slatesNotReconciled++; continue; }
 
     const slateKey = { season: slot.season, seasonType: slot.seasonType, week: slot.week };
     // Prior state for this slate, as the finalizer would have seen it. Scoped to
@@ -454,11 +498,12 @@ export async function syncScoresWindow(
     const corrections = detectStatCorrections(prevGames, freshGames);
 
     if (snapshotGate.enabled && raw !== null) {
-      await captureFeedSnapshot(db, slateKey, raw, corrections, freshGames.length);
+      const outcome = await captureFeedSnapshot(db, slateKey, raw, corrections, freshGames.length);
+      if (outcome === "skipped") snapshotFailures++;
     }
     // Corrections are reported whether or not snapshots are on — the page is the
     // point; the snapshot is only the evidence attached to it.
-    await reportStatCorrections(db, slateKey, corrections);
+    if (!(await reportStatCorrections(db, slateKey, corrections))) correctionReportFailures++;
     correctionCount += corrections.length;
 
     if (dryRun) {
@@ -524,7 +569,38 @@ export async function syncScoresWindow(
     if (pruned > 0) console.log(`[feedSnapshot] pruned ${pruned} snapshot(s) past ${snapshotGate.retentionDays}d retention.`);
   }
 
-  return { slates: weeksToSync.size, gamesWritten, corrections: correctionCount };
+  return {
+    slates: weeksToSync.size, gamesWritten, corrections: correctionCount,
+    slatesNotReconciled, snapshotFailures, correctionReportFailures,
+  };
+}
+
+/**
+ * Turn a sync result into a heartbeat verdict.
+ *
+ * WHY THIS IS NOT "did syncScoresWindow throw". Both of its dependencies
+ * deliberately swallow their own failures — the ESPN fetcher returns an empty
+ * slate, the snapshot writer returns "skipped" — so the job resolves cleanly
+ * through the exact outages the heartbeat exists to surface. Deriving health
+ * from the throw alone would have recorded `ok: true` all the way through the
+ * A5 snapshot failure. Pure, so the mapping is unit-tested rather than
+ * discovered during the next outage.
+ */
+export function scoreSyncHeartbeat(r: ScoreSyncResult): {
+  ok: boolean; error?: string; detail: Record<string, unknown>;
+} {
+  const detail = {
+    slates: r.slates, gamesWritten: r.gamesWritten, corrections: r.corrections,
+    slatesNotReconciled: r.slatesNotReconciled, snapshotFailures: r.snapshotFailures,
+    correctionReportFailures: r.correctionReportFailures,
+  };
+  const degraded: string[] = [];
+  if (r.slatesNotReconciled > 0) degraded.push(`${r.slatesNotReconciled} slate(s) returned no games`);
+  if (r.snapshotFailures > 0) degraded.push(`${r.snapshotFailures} snapshot write(s) failed`);
+  if (r.correctionReportFailures > 0) degraded.push(`${r.correctionReportFailures} stat-correction report(s) undelivered`);
+  return degraded.length > 0
+    ? { ok: false, error: degraded.join('; '), detail }
+    : { ok: true, detail };
 }
 
 /**
@@ -550,6 +626,7 @@ export const nflDeepScoreSweepJob = onSchedule(
 
     let gate = { enabled: false, dryRun: true };
     let lookbackDays = DEFAULT_DEEP_SWEEP_DAYS;
+    let configError: unknown = null;
     try {
       const cfg = (await db.doc('system/config').get()).data()?.nflDeepSweep as
         | { enabled?: boolean; dryRun?: boolean; lookbackDays?: number }
@@ -557,11 +634,12 @@ export const nflDeepScoreSweepJob = onSchedule(
       gate = readJobGate(cfg);
       lookbackDays = clampLookbackDays(cfg?.lookbackDays);
     } catch (e) {
-      console.warn('[nflDeepScoreSweepJob] config read failed; staying disabled:', e);
+      configError = e ?? new Error('unknown config read error');
     }
+    if (configError) return configReadFailedVerdict('nflDeepScoreSweepJob', configError);
     if (!gate.enabled) {
       console.log('[nflDeepScoreSweepJob] disabled (system/config.nflDeepSweep.enabled !== true); nothing to do.');
-      return;
+      return { detail: { enabled: false } };
     }
 
     const result = await syncScoresWindow(
@@ -571,6 +649,7 @@ export const nflDeepScoreSweepJob = onSchedule(
       { dryRun: gate.dryRun },
     );
     console.log(`[nflDeepScoreSweepJob] ${lookbackDays}d sweep: ${result.slates} slate(s), ${result.corrections} correction(s), ${result.gamesWritten} game(s) written.`);
+    return scoreSyncHeartbeat(result);
   }),
 );
 
@@ -619,21 +698,23 @@ export function shouldLockSpread(game: Pick<NFLGame, 'spread'> | undefined): boo
 export const lockNFLSpreadsJob = onSchedule({
   schedule: '0 9 * * 2', // 9:00 AM every Tuesday
   timeZone: 'America/New_York'
-}, async () => {
+}, withHeartbeat('lockNFLSpreadsJob', async () => {
   const db = admin.firestore();
 
   let gate = { enabled: false, dryRun: true };
+  let configError: unknown = null;
   try {
     const cfg = (await db.doc('system/config').get()).data()?.nflSpreadLock as
       | { enabled?: boolean; dryRun?: boolean }
       | undefined;
     gate = readJobGate(cfg);
   } catch (e) {
-    console.warn('[lockNFLSpreadsJob] config read failed; staying disabled:', e);
+    configError = e ?? new Error('unknown config read error');
   }
+  if (configError) return configReadFailedVerdict('lockNFLSpreadsJob', configError);
   if (!gate.enabled) {
     console.log('[lockNFLSpreadsJob] disabled (system/config.nflSpreadLock.enabled !== true); nothing to do.');
-    return;
+    return { detail: { enabled: false } };
   }
 
   const now = Date.now();
@@ -670,7 +751,7 @@ export const lockNFLSpreadsJob = onSchedule({
   console.log(
     `[lockNFLSpreadsJob] Locked spreads for ${targets.length} upcoming games.${overflow > 0 ? ` WARNING: ${overflow} eligible game(s) exceeded the ${MAX_SPREAD_LOCKS_PER_RUN} per-run cap and were NOT locked.` : ''}`,
   );
-});
+}));
 
 /**
  * SuperAdmin-only HTTPS callable to trigger manual NFL schedule imports.
