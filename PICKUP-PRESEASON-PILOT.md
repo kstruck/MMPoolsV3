@@ -3,13 +3,27 @@
 **Paste this to start a new session:**
 
 > Read `PICKUP-PRESEASON-PILOT.md` §0 first, then `HANDOFF.md`'s STOP POINT box.
-> Preseason week 1 is 2026-08-13. Deploy and prod-data mutations are Kevin's;
-> code, tests and PRs are yours. Follow CLAUDE.md §2b (qodo: poll 3 min before
-> pushing a follow-up) and §2c (`codex exec review --base origin/main`, expect
-> several rounds). Tell me what you plan to do before you do it.
+> The target is the Hall of Fame game, 2026-08-06. Deploy and prod-data
+> mutations are Kevin's; code, tests and PRs are yours. Follow CLAUDE.md §2b
+> (qodo: poll 3 min before pushing a follow-up) and §2c (`codex exec review
+> --base origin/main`, expect several rounds). Tell me what you plan to do
+> before you do it.
 
-Written 2026-07-21. Preseason week 1 is **2026-08-13**; the HOF game is
-**2026-08-07**. That is the clock.
+Written 2026-07-21. **The target is the Hall of Fame game, 2026-08-06** (Thu,
+8:00pm ET, CAR at ARI) — that is the clock, set by Kevin on 2026-07-21. The
+first 16-game preseason slate follows on 2026-08-13.
+
+⚠️ **These docs dated the HOF game one day late until 2026-07-21.** ESPN reports
+its kickoff as `2026-08-07T00:00Z`, because 8:00pm ET is midnight UTC the next
+day; earlier notes copied that UTC date down as if it were the calendar date.
+The `2026-08-07T00:00Z` in `functions/src/__tests__/feedSnapshot.test.ts` is the
+real captured feed value and is correct as written — do not "fix" it.
+`tests/docs-state-invariants.test.ts` now fails on that date written bare (i.e.
+without the `T00:00Z`) in any operator doc.
+
+Note also that the importer's preseason **week 1 is HOF Weekend**, and the
+08-13 slate is importer week **2** (`TOMORROW-TASKS.md` §"four segments"). Say
+which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 ---
 
@@ -52,7 +66,8 @@ before editing those files or you will redo its work.
    work, once those exist:** the scheduled Auth export is deferred CODE
    (`PLAN-BACKUPS-PHASE3.md` step 6), not a console click — keep it on the
    engineering queue rather than filing the whole gap under Kevin.
-2. **A8 pricing — DUE 2026-08-13.** The only calendar-bound item.
+2. **A8 pricing — DUE 2026-08-06.** The only calendar-bound item. Retargeted
+   from 2026-08-13 on 2026-07-21 when Kevin named the HOF game as the target.
 3. **A banned commissioner can still move the money ledger.**
    `recordPoolPayouts` authorizes from persisted pool ownership and never
    consults `users/{uid}.role`; it IS on the pilot path
@@ -324,7 +339,7 @@ Always confirm the change is in the file on disk before deploying — not that
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.
-4. **A8 — publish the 2026 price + free-period end date. Deadline 2026-08-13.**
+4. **A8 — publish the 2026 price + free-period end date. Deadline 2026-08-06.**
    The only calendar-bound item on the list.
 5. **Leave `nflLockWatch.dryRun: true`** until the preseason-lines question is
    settled — only 1 of 49 games has a betting line, so going live pages nightly

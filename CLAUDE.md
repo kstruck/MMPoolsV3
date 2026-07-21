@@ -152,7 +152,8 @@ incident-latching mechanism that does not exist. Judge on evidence.
 
 ## 2d. Cadence near a deadline
 
-Preseason week 1 is **2026-08-13**. From 2026-07-21, at Kevin's direction:
+The target is the Hall of Fame game, **2026-08-06** (Thu, 8:00pm ET; the first
+16-game preseason slate follows 2026-08-13). From 2026-07-21, at Kevin's direction:
 **one PR at a time** — build it, run all five gates, run `codex exec review`,
 absorb findings, report to Kevin, and only then start the next. Batching ~10 PRs
 in a night is what produced the defect count above; throughput was never the

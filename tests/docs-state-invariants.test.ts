@@ -445,3 +445,89 @@ describe('the scanner sees what the docs actually contain', () => {
     });
   });
 });
+
+/**
+ * The pilot's target date — the second thing these docs got wrong, and the one
+ * with a deadline attached.
+ *
+ * WHY THIS EXISTS. Every operator doc dated the Hall of Fame game 2026-08-07.
+ * It is 2026-08-06. ESPN reports its kickoff as `2026-08-07T00:00Z` because
+ * 8:00pm ET is midnight UTC the following day, and that UTC date was copied
+ * down as if it were the calendar date — into HANDOFF, PICKUP, the pilot plan
+ * and two morning notes. Kevin caught it on 2026-07-21 and named 2026-08-06 as
+ * the target, one week earlier than the 2026-08-13 the docs had been planning
+ * against.
+ *
+ * A prose correction alone would rot exactly the way the deploy SHA did: the
+ * wrong date is *derivable* from a correct feed value, so the next person to
+ * read `2026-08-07T00:00Z` in a fixture can re-introduce it in good faith.
+ * Hence a guard, and hence the narrow exemption below rather than a blanket one.
+ */
+export const HOF_GAME_ET = '2026-08-06';
+
+/**
+ * A bare `2026-08-07` — i.e. NOT followed by a time, which is the only form
+ * that can be a legitimate reference to the feed's UTC kickoff instant.
+ *
+ * The lookahead is the whole guard. Matching `2026-08-07` unconditionally would
+ * ban the correct `2026-08-07T00:00Z` and force authors to stop explaining the
+ * bug, which is how a guard trains people to work around it instead of with it.
+ */
+const BARE_WRONG_HOF_DATE = /2026-08-07(?!T)/g;
+
+export function wrongHofDateMentions(text: string): number[] {
+  const NL = String.fromCharCode(10);
+  const lines: number[] = [];
+  for (const m of text.matchAll(BARE_WRONG_HOF_DATE)) {
+    lines.push(text.slice(0, m.index!).split(NL).length);
+  }
+  return lines;
+}
+
+describe('operator docs agree on the pilot target date', () => {
+  it('no operator doc dates the HOF game 2026-08-07', () => {
+    const offenders: string[] = [];
+    for (const file of operatorMarkdownFiles()) {
+      const rel = path.relative(REPO_ROOT, file).split(path.sep).join('/');
+      for (const line of wrongHofDateMentions(fs.readFileSync(file, 'utf8'))) {
+        offenders.push(`${rel}:${line}`);
+      }
+    }
+    expect(
+      offenders,
+      `The Hall of Fame game is ${HOF_GAME_ET} (Thu, 8:00pm ET). A bare ` +
+        '2026-08-07 is ESPN\'s UTC kickoff date mistaken for the calendar date. ' +
+        'Write 2026-08-06, or 2026-08-07T00:00Z if you mean the feed value.',
+    ).toEqual([]);
+  });
+
+  it('both entry-point docs still state the target date', () => {
+    // The negative check above passes trivially if someone deletes the date
+    // outright. This is the other half: it must be PRESENT, in both.
+    for (const doc of AUTHORITATIVE_DOCS) {
+      const text = fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8');
+      expect(text, `${doc} must state the pilot target date ${HOF_GAME_ET}`)
+        .toContain(HOF_GAME_ET);
+    }
+  });
+
+  describe('the date scanner sees what it claims to', () => {
+    it('flags a bare wrong date', () => {
+      expect(wrongHofDateMentions('HOF game 2026-08-07.')).toEqual([1]);
+    });
+
+    it('does NOT flag the feed\'s UTC kickoff instant', () => {
+      expect(wrongHofDateMentions('ESPN says `2026-08-07T00:00Z`.')).toEqual([]);
+    });
+
+    it('reports the line of every offender, not just the first', () => {
+      const NL = String.fromCharCode(10);
+      expect(wrongHofDateMentions(`a${NL}2026-08-07${NL}b${NL}c 2026-08-07`))
+        .toEqual([2, 4]);
+    });
+
+    it('does not flag the correct date', () => {
+      expect(wrongHofDateMentions(`HOF game ${HOF_GAME_ET}.`)).toEqual([]);
+    });
+  });
+});
