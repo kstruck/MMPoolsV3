@@ -60,12 +60,12 @@ why `simLegacy.ts` lands in the next bucket instead.
 
 | Callable | File | Why |
 |---|---|---|
-| `simulateGameUpdate` | `scoreUpdates.ts:1263` | **Highest risk.** Entry gate is only "is anyone logged in"; the real authorization happens inside a Firestore transaction off a claim-only role read; `scores` gets **one truthiness check** before `processGameUpdate` computes winners and can auto-generate axis numbers. The comment still says "Relaxed Auth for Dev/Test" while the code below acknowledges it decides winners on real pools. |
+| `simulateGameUpdate` | `scoreUpdates.ts:1263` | **Highest risk.** Entry gate is only "is anyone logged in"; authorization happens inside a Firestore transaction; `scores` gets **one truthiness check** before `processGameUpdate` computes winners and can auto-generate axis numbers. The comment still says "Relaxed Auth for Dev/Test" while the code below acknowledges it decides winners on real pools. ⚠️ **Ownership-based** — owners/managers/co-managers authorize through persisted pool fields and only the SUPER_ADMIN bypass is claim-only, so this needs the schema-only treatment described for `recordPoolPayouts`, NOT a `role:` gate. |
 | `backfillProfileData` | `migrations/backfillProfileData.ts:42` | A 540s / 1GiB mass mutation over every non-sim NFL pool that also toggles `system/config.profileBackfill.suppressTriggers`, behind a single claim read, with `afterPoolId` taken off `request.data` untyped. The dry-run default is the only thing between a stale admin token and a repo-wide rewrite. |
 | `recordPoolPayouts` | `payoutRecords.ts:36` | Writes the **money ledger** — `payoutRecords`, `payoutRecordsPrivate`, ledger events, profile recomputes. Its hand validation is the best in this set and I would not rush to replace it; the *role* half of `assertPoolOwnerOrSuperAdmin` is claim-only, which is exactly the case `assertCallerRole` exists to close. |
 | `simSetTournament` | `simLegacy.ts:61` | Writes an **arbitrary client object** over `tournaments/{id}` behind a claim-only role check. No `simRunId` anchor — the file's own header admits the tournament doc is shared test infrastructure, not a Test Pool. |
 | `simDeleteTournament` | `simLegacy.ts:94` | Destructive delete, claim-only. |
-| `simFillSquares` | `simLegacy.ts:123` | Overwrites an entire squares grid, claim-only. |
+| `simFillSquares` | `simLegacy.ts:123` | Overwrites an entire squares grid. ⚠️ **Ownership-based too** — it accepts `createdByUid`/`ownerId`/`managerUid`/`coManagers`, so only its SUPER_ADMIN path is claim-only. Same treatment as `recordPoolPayouts`. |
 | `generateTestScenario` | `aiTesting.ts:95` | Claim-only gate, **zero** input validation, spends real Gemini budget (300s / 1GiB). |
 | `validateTestResults` | `aiTesting.ts:147` | Same, and dereferences `scenario.poolType` unguarded. |
 | `generateTestReport` | `aiTesting.ts:199` | Same pattern, third copy. |
@@ -84,7 +84,8 @@ recorded as deferred in `HANDOFF.md` and the SWEEPS matrix.
 ## Recommended order, if this becomes work
 
 1. `simulateGameUpdate` — the only one where an unvalidated client object
-   reaches winner determination on real pools.
+   reaches winner determination on real pools. Schema-only wrapper; do **not**
+   add a `role:` gate (see the ⚠️ above).
 2. `backfillProfileData` — blast radius.
 3. `recordPoolPayouts` — money, but **NOT a one-line `role:` gate.**
    `validated()`'s `role:` runs `assertCallerRole` BEFORE the pool is loaded,

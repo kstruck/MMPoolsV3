@@ -28,11 +28,23 @@
 >
 > ### 2. THE DEPLOY — do this first, it is the only thing gating everything else
 >
-> **Fourteen** scheduled job bodies changed — the four NFL jobs #245 wrapped,
-> `nflDeepScoreSweepJob` (#245 also changed its body: config-read reporting and
-> `scoreSyncHeartbeat`), and #250's nine. Nothing is armed or disarmed by this
-> deploy; the behaviour change is that a job which fails now REPORTS it instead
-> of stamping a healthy heartbeat.
+> ⚠️ **This deploy ships MORE than last night's work.** Prod is `84e080c`, but
+> `main` was already at `e84dfa3` before this run started, so five earlier PRs
+> have also been sitting undeployed:
+>
+> | PR | What | Why it matters here |
+> |---|---|---|
+> | **#239** | stop syncing dead tournaments every 10 minutes forever | **This is the Firestore-reads fix. It is NOT live yet** — see §3a |
+> | #240 | `brace-expansion` pin inside `functions/` | security |
+> | #237 | dependency bump (14 packages) | — |
+> | #238, #241, #244 | docs only | — |
+>
+> **Fifteen** scheduled job bodies change in total: the four NFL jobs #245
+> wrapped, `nflDeepScoreSweepJob` (#245 changed its body too — config-read
+> reporting and `scoreSyncHeartbeat`), #250's nine, and `scheduledBracketSync`
+> from #239. Nothing is armed or disarmed by this deploy; the behaviour change
+> is that a job which fails now REPORTS it instead of stamping a healthy
+> heartbeat.
 >
 > ```powershell
 > cd D:\march-melee-pools
@@ -71,8 +83,8 @@
 > `nflFinalizeSweepJob`, `nflLockWatchJob`, `lockNFLSpreadsJob`,
 > `nflDeepScoreSweepJob`, `autoLockPools`, `autoClosePools`,
 > `enforceBillingStatus`, `monetizationAlerts`, `checkPlayoffScores`,
-> `runReminders`, `syncGameStatus`, `siteAveragesJob` and
-> `webhookDurabilitySweep` — fourteen names.
+> `runReminders`, `syncGameStatus`, `siteAveragesJob`, `webhookDurabilitySweep`
+> and `scheduledBracketSync` — fifteen names.
 >
 > **If it fails:** the usual cause is a functions build error — run
 > `npm --prefix functions run build` and read the first error, not the last. If
@@ -83,13 +95,24 @@
 >
 > ### 3. Verification — after the deploy, with the exact command and expected result
 >
-> **3a. Firestore reads should have fallen off a cliff.** Console → Firestore →
-> Usage, 7-day view. Before #239 this ran at ~1.4M reads/day.
+> **3a. Firestore reads — CORRECTION TO THE BRIEF, read this before checking.**
 >
-> - **Expected:** a step change downward, with the last full day well under that.
-> - **If it has NOT fallen: that is a regression, not a wait-and-see.** #239 is
->   not working, and it is the single largest cost item on the project. Say so
->   and it gets looked at that day.
+> The instruction I was given was "reads should have fallen off a cliff from
+> ~1.4M/day; if not, #239 is a regression". **That premise does not hold, and I
+> checked rather than assumed:** `git log 84e080c..e84dfa3` shows #239
+> (`d1c4c09`) is merged but has **never been deployed**. The reads fix goes live
+> *with this morning's deploy*, not before it.
+>
+> So:
+> - **Do NOT read today's graph as a verdict on #239.** It cannot have fallen
+>   yet, and calling that a regression would raise a false incident.
+> - **Same day, immediately after deploying:** open the Functions log for
+>   `scheduledBracketSync` and confirm it now logs skipping the stale
+>   tournaments. That is the direct evidence, available in minutes.
+> - **Then check Console → Firestore → Usage after one full day post-deploy**
+>   (allow for metric ingestion lag). *Then* a missing step change down from
+>   ~1.4M/day is a real regression worth chasing that day — it is the single
+>   largest cost item on the project.
 >
 > **3b. `system/heartbeats` should now carry the NFL jobs.** Firestore console →
 > `system` → `heartbeats`.
@@ -97,8 +120,14 @@
 > - **Expected within ~10 minutes of the deploy:** keys `syncNFLScoresJob` (runs
 >   every 5 min) and `autoLockPools`, `syncGameStatus` (every 1 min), each with a
 >   recent `at` and `ok: true`.
-> - `nflFinalizeSweepJob` appears after 08:30 ET, `nflLockWatchJob` within the
->   hour, `lockNFLSpreadsJob` **not until Tuesday 09:00 ET** — a weekly job.
+> - `nflFinalizeSweepJob` appears after **08:30 UTC — that is 04:30 ET in July,
+>   not 08:30 ET.** Its `onSchedule` declares no `timeZone`, so Cloud Scheduler
+>   runs it in UTC. If you deploy after 04:30 ET, its first stamp is the NEXT
+>   morning. (`nflDeepScoreSweepJob` and `lockNFLSpreadsJob` DO pin
+>   `America/New_York`, so their times really are ET — the fleet is
+>   inconsistent, which is worth fixing but is not a bug today.)
+> - `nflLockWatchJob` within the hour; `lockNFLSpreadsJob` **not until Tuesday
+>   09:00 ET** — a weekly job.
 > - **Known cosmetic artifact:** SuperAdmin → Ops Health will show
 >   `lockNFLSpreadsJob` as `never-ran` until that first Tuesday run. That is
 >   expected and is documented in `functions/src/lib/heartbeat.ts`; it is not an
