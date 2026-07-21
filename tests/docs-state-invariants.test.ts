@@ -483,11 +483,33 @@ export const HOF_GAME_ET = '2026-08-06';
  */
 const BARE_WRONG_HOF_DATE = /2026-08-07(?!T00:00(:00)?Z)/g;
 
+/**
+ * Escape hatch for an honest, unrelated 2026-08-07.
+ *
+ * codex, round 2: the date is a real calendar day and these docs are full of
+ * dated notes. A "MORNING 2026-08-07" written the day after the game is
+ * correct, and failing CI on it would tell the author to change a right date to
+ * a wrong one — the cry-wolf failure that gets an invariant ignored, and then
+ * the real one is missed.
+ *
+ * Scoping to "near the words Hall of Fame" was the alternative and is rejected
+ * for the reason the deploy-SHA guard already documents above: there is no
+ * proximity rule that resolves which mention a phrase refers to. So this reuses
+ * that guard's contract instead — an exempt mention is TAGGED, and the tag
+ * binds only to what it touches, on the same line, immediately before.
+ *
+ *     Deployed <!-- hof-date:ignore --> 2026-08-07, the morning after.
+ */
+const HOF_DATE_EXEMPT = /<!--\s*hof-date:ignore\s*-->\s*$/i;
+
 export function wrongHofDateMentions(text: string): number[] {
   const NL = String.fromCharCode(10);
   const lines: number[] = [];
   for (const m of text.matchAll(BARE_WRONG_HOF_DATE)) {
-    lines.push(text.slice(0, m.index!).split(NL).length);
+    const start = m.index!;
+    const lineStart = text.slice(0, start).lastIndexOf(NL) + 1;
+    if (HOF_DATE_EXEMPT.test(text.slice(lineStart, start))) continue;
+    lines.push(text.slice(0, start).split(NL).length);
   }
   return lines;
 }
@@ -505,7 +527,9 @@ describe('operator docs agree on the pilot target date', () => {
       offenders,
       `The Hall of Fame game is ${HOF_GAME_ET} (Thu, 8:00pm ET). A bare ` +
         '2026-08-07 is ESPN\'s UTC kickoff date mistaken for the calendar date. ' +
-        'Write 2026-08-06, or 2026-08-07T00:00Z if you mean the feed value.',
+        'Write 2026-08-06; or 2026-08-07T00:00Z if you mean the feed value; or ' +
+        'tag the line <!-- hof-date:ignore --> if you genuinely mean that ' +
+        'calendar day and it is not about the game.',
     ).toEqual([]);
   });
 
@@ -550,6 +574,29 @@ describe('operator docs agree on the pilot target date', () => {
 
     it('does not flag the correct date', () => {
       expect(wrongHofDateMentions(`HOF game ${HOF_GAME_ET}.`)).toEqual([]);
+    });
+
+    const HOF_TAG = '<!-- hof-date:ignore -->';
+
+    it('exempts a tagged unrelated mention', () => {
+      expect(wrongHofDateMentions(`Deployed ${HOF_TAG} 2026-08-07.`)).toEqual([]);
+    });
+
+    it('does NOT exempt when the tag trails the mention — it binds forward only', () => {
+      expect(wrongHofDateMentions(`2026-08-07 ${HOF_TAG}`)).toEqual([1]);
+    });
+
+    it('does not let the tag leak across a line break', () => {
+      const NL = String.fromCharCode(10);
+      expect(wrongHofDateMentions(`${HOF_TAG} 2026-08-07${NL}HOF game 2026-08-07`))
+        .toEqual([2]);
+    });
+
+    it('does not let the tag leak to a second mention on the same line', () => {
+      // One tag, one exemption. Otherwise annotating a legitimate date would
+      // silently vouch for a wrong one written after it.
+      expect(wrongHofDateMentions(`${HOF_TAG} 2026-08-07 and HOF is 2026-08-07`))
+        .toEqual([1]);
     });
   });
 });
