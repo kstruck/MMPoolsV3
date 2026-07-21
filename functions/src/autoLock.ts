@@ -47,6 +47,10 @@ export const autoLockPools = functions.scheduler.onSchedule(
     { schedule: "every 1 minutes", timeoutSeconds: 300, memory: "512MiB" },
     withHeartbeat('autoLockPools', async () => {
     const now = Date.now();
+    // A pool SELECTED for auto-lock whose deadline is unparseable can never
+    // lock — it is skipped silently, every minute, forever. Counted so the
+    // heartbeat says so instead of reporting a clean run.
+    let invalidDeadlines = 0;
     console.log(`[AutoLock] Starting auto-lock check at ${new Date(now).toISOString()}`);
 
     try {
@@ -76,6 +80,7 @@ export const autoLockPools = functions.scheduler.onSchedule(
             if (!raw) continue;
             const lockAtNum = toMillis(raw);
             if (isNaN(lockAtNum)) {
+                invalidDeadlines++;
                 console.warn(`[AutoLock] Invalid lockAt for pool ${pool.id}:`, raw);
                 continue;
             }
@@ -88,6 +93,7 @@ export const autoLockPools = functions.scheduler.onSchedule(
             if (!raw) continue;
             const lockAtNum = toMillis(raw);
             if (isNaN(lockAtNum)) {
+                invalidDeadlines++;
                 console.warn(`[AutoLock] Invalid lockAt for BRACKET pool ${pool.id}:`, raw);
                 continue;
             }
@@ -101,8 +107,11 @@ export const autoLockPools = functions.scheduler.onSchedule(
         // A pool that failed to lock leaves picks OPEN past its deadline. The
         // per-pool catch stops one failure taking the batch down, which meant a
         // run where none of the due pools locked still reported healthy.
-        return failed > 0
-            ? { ok: false, error: `${failed} of ${duePools.length} due pool(s) failed to lock`, detail: { duePools: duePools.length, failed } }
+        const problems: string[] = [];
+        if (failed > 0) problems.push(`${failed} of ${duePools.length} due pool(s) failed to lock`);
+        if (invalidDeadlines > 0) problems.push(`${invalidDeadlines} pool(s) have an unparseable lockAt and can never auto-lock`);
+        return problems.length > 0
+            ? { ok: false, error: problems.join('; '), detail: { duePools: duePools.length, failed, invalidDeadlines } }
             : { detail: { duePools: duePools.length } };
     } catch (error) {
         // Caught so a scheduled run cannot become an unhandled rejection — but

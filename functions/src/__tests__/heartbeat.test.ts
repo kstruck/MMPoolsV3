@@ -313,19 +313,24 @@ describe('findStaleJobs on the real outage shape', () => {
 // the wrapper get told the truth?", which is a strictly harder question and one
 // that wrapping alone quietly appeared to answer.
 const KNOWN_SILENT_ON_FAILURE = new Set([
+  // Keyed `file.ts#jobName`, not by file — for the same reason the wrapping
+  // ratchet is: a file-level pass transfers to any NEW callback added to that
+  // file, so an exemption granted for a 2026 job would silently cover whatever
+  // lands beside it later. Codex caught the inconsistency between the two lists.
+  //
   // adminHealth.ts was PASSING the loose whole-file version of this check
   // because its timed() helper returns { ok: false } for an individual probe,
   // while scheduledHealthCheck itself never returns a verdict. Tightening the
   // scan to each callback exposed it — a health check that cannot report its
   // own ill health, which is a particularly poor joke.
-  'adminHealth.ts',
-  'consensus.ts',
-  'espnBracket.ts',
-  'expertPicks.ts',
-  'expertProfiles.ts',
-  'revenueAggregates.ts',
-  'stripe.ts',
-  'winProbability.ts',
+  'adminHealth.ts#scheduledHealthCheck',
+  'consensus.ts#consensusRefreshJob',
+  'espnBracket.ts#scheduledBracketSync',
+  'expertPicks.ts#syncExpertPicksJob',
+  'expertProfiles.ts#gradeExpertProfilesJob',
+  'revenueAggregates.ts#aggregateRevenueDaily',
+  'stripe.ts#releaseStaleCouponReservations',
+  'winProbability.ts#syncWinProbabilityJob',
 ]);
 
 describe('a wrapped job that swallows errors still reports failure', () => {
@@ -357,6 +362,11 @@ describe('a wrapped job that swallows errors still reports failure', () => {
     return bodies;
   }
 
+  /** The job name a withHeartbeat(...) call was given. */
+  function jobNameOf(body: string): string {
+    return /withHeartbeat\(\s*['"]([A-Za-z0-9_]+)['"]/.exec(body)?.[1] ?? '<unknown>';
+  }
+
   /** Does this wrapped handler have ANY path that reports a degraded run? */
   function reportsFailure(body: string): boolean {
     return /ok:\s*false/.test(body)
@@ -377,8 +387,11 @@ describe('a wrapped job that swallows errors still reports failure', () => {
     // scan passed it. A guard satisfied by code it is not checking is the same
     // shape as the heartbeats this whole file exists to make honest.
     const rel = relKey(SRC4, file);
-    if (KNOWN_SILENT_ON_FAILURE.has(rel)) continue;
-    if (!wrappedCallBodies(src).every(reportsFailure)) offenders.push(rel);
+    for (const body of wrappedCallBodies(src)) {
+      const key = `${rel}#${jobNameOf(body)}`;
+      if (KNOWN_SILENT_ON_FAILURE.has(key)) continue;
+      if (!reportsFailure(body)) offenders.push(key);
+    }
   }
 
   it('inspected the wrapped files (guards against matching nothing)', () => {
@@ -388,11 +401,13 @@ describe('a wrapped job that swallows errors still reports failure', () => {
   it('the silent-on-failure list only names files that are still silent', () => {
     // Shrink-only. An entry that outlives its problem is a standing exemption
     // for whatever lands in that file next.
-    const nowReporting = [...KNOWN_SILENT_ON_FAILURE].filter((f) => {
-      const full = path.join(SRC4, f);
+    const nowReporting = [...KNOWN_SILENT_ON_FAILURE].filter((key) => {
+      const [file, job] = key.split('#');
+      const full = path.join(SRC4, file);
       if (!fs.existsSync(full)) return false;
-      const bodies = wrappedCallBodies(fs.readFileSync(full, 'utf8'));
-      return bodies.length > 0 && bodies.every(reportsFailure);
+      const body = wrappedCallBodies(fs.readFileSync(full, 'utf8'))
+        .find((b) => jobNameOf(b) === job);
+      return body !== undefined && reportsFailure(body);
     }).sort();
     expect(nowReporting, 'these now report failure — remove them from KNOWN_SILENT_ON_FAILURE').toEqual([]);
   });
