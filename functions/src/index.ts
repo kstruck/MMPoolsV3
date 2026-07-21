@@ -115,6 +115,9 @@ export { onEntryChangedRecomputeProfile, recomputeMyProfile, getProfilePoolDetai
 // --- SEASON FINALIZATION (ADR 0005 Phase 3) — kill-switched, dry-run-default sweep ---
 export { nflFinalizeSweepJob } from "./nflFinalize";
 
+// --- FEED REPLAY (A5 part 2) — rebuild a week from a stored ESPN snapshot ---
+export { replayFeedSnapshot } from "./feedReplay";
+
 // --- PAYOUT RECORDS (ADR 0005 Phase 4) — commissioner-recorded prize truth ---
 export { recordPoolPayouts } from "./payoutRecords";
 
