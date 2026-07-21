@@ -781,7 +781,19 @@ export const lockNFLSpreadsJob = onSchedule({
     return { detail: { enabled: false } };
   }
 
-  await lockSpreadsOnce(db, Date.now(), { dryRun: gate.dryRun });
+  const result = await lockSpreadsOnce(db, Date.now(), { dryRun: gate.dryRun });
+  // Overflow means eligible games were NOT locked this run. The job runs WEEKLY,
+  // so "the next run picks it up" is up to seven days later — past kickoff for
+  // everything it left behind, which blocks pick submission behind
+  // SPREADS_NOT_LOCKED for every pool on that slate. A run that silently did
+  // part of its job is exactly what a heartbeat is for.
+  return result.overflow > 0
+    ? {
+        ok: false,
+        error: `${result.overflow} eligible game(s) exceeded the ${MAX_SPREAD_LOCKS_PER_RUN} per-run cap and were NOT locked`,
+        detail: { ...result, dryRun: gate.dryRun },
+      }
+    : { detail: { ...result, dryRun: gate.dryRun } };
 }));
 
 /**
