@@ -76,7 +76,10 @@ const VALID_SHA = /^[0-9a-f]{7,40}$/i;
  * A mention is exempt ONLY when this marker sits IMMEDIATELY before it, with
  * nothing but whitespace in between:
  *
- *     <!-- deploy-state:ignore --> Baselines on `main` @ `16746b8`
+ *     Baselines on <!-- deploy-state:ignore --> `main` @ `16746b8`
+ *
+ * Note the position: the marker goes between the prose and the construction,
+ * NOT at the start of the sentence. Prose in between breaks the binding.
  *
  * EXACT ADJACENCY, DELIBERATELY. Four softer rules were tried and review holed
  * every one, because they all guessed at which mention a nearby keyword meant:
@@ -285,19 +288,21 @@ describe('operator docs agree on what is deployed', () => {
 
 describe('the scanner sees what the docs actually contain', () => {
   it('finds the claim that wraps across a line break', () => {
-    // PICKUP wraps a live claim across a line break. A line-based scan missed
-    // it entirely, so changing that SHA left the guard green while the docs
-    // disagreed. Caught by cross-model review, not by me.
-    // Asserts a claim whose MATCHED TEXT actually spans a newline. Counting
-    // claims-per-file was the wrong assertion and was itself vacuous: PICKUP
-    // already has two non-wrapped claims, so the count stayed above 1 even if
-    // newline matching regressed. Caught by cross-model review.
-    const claims = collectDeployShaClaims();
+    // Exercised on a FIXTURE, not on the live docs. PICKUP happens to wrap a
+    // claim across a line break today, but reflowing that paragraph onto one
+    // line is a semantics-preserving edit that would fail this test while
+    // nothing was actually broken — a guard that fires on correct changes gets
+    // deleted, and then the real regression ships. What must be pinned is the
+    // SCANNER's newline tolerance, which a fixture pins exactly.
+    const NL = String.fromCharCode(10);
+    const wrapped = collectClaimsFromText(
+      `...landed on \`main\`${NL}@ \`abc1234\`.`, 'fixture.md',
+    );
     expect(
-      claims.filter((c) => c.wrapped).map((c) => `${c.file}:${c.line}`),
-      'no deploy claim matched across a line break — the scanner has lost its ' +
-        'newline tolerance and wrapped claims are now invisible',
-    ).not.toEqual([]);
+      wrapped.map((c) => c.wrapped),
+      'a deploy claim split across a line break was not matched — the scanner ' +
+        'has lost its newline tolerance, and PICKUP already writes one this way',
+    ).toEqual([true]);
   });
 
   it('excludes test-baseline lines, which are not deploy claims', () => {
