@@ -20,7 +20,8 @@
 > record payouts and decide winners until it ships. Merging is not enough;
 > `functions` must be deployed. Full recipe in MORNING-2026-07-22.md §2.
 >
-> Test counts after all three: functions vitest 913 → 940, emulator 105 → 123.
+> Test counts after all three: functions vitest 913 → 940, emulator 105 → **132**
+> (#255 adds 9, #257 adds 18 — each PR's own branch showed only its own delta).
 >
 > **qodo is billing-blocked** as of 2026-07-21 and produced zero findings on all
 > four overnight PRs. codex (CLAUDE.md §2c) is the only working reviewer.

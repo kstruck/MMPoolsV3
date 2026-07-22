@@ -73,8 +73,9 @@ prose if they disagree; skills are point-in-time snapshots.
 **After opening ANY pull request, check for a qodo review — and when one
 exists, read every finding and absorb or reject each with written evidence
 before reporting the PR as done.** Kevin should never have to ask whether qodo
-was checked. (Per the box above, the *waiting* part is currently suspended:
-poll for up to 3 minutes, then proceed if nothing is there.)
+was checked. (Per the box above, the *waiting* part is currently suspended
+entirely: check the three surfaces ONCE, in a single pass, and proceed. No
+3-minute window, no watcher — qodo is billing-blocked and is not answering.)
 
 This lived in `mmp-qodo-cycle` and in auto-memory and was still dropped
 under load on 2026-07-21 (checked on two PRs only when asked, skipped on
