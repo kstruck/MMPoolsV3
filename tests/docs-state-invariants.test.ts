@@ -445,3 +445,161 @@ describe('the scanner sees what the docs actually contain', () => {
     });
   });
 });
+
+/**
+ * The Hall of Fame game is 2026-08-06, and every operator doc said 2026-08-07.
+ *
+ * WHY. ESPN reports its kickoff as `2026-08-07T00:00Z` — 8:00pm ET is midnight
+ * UTC the following day — and that UTC date was copied down as if it were the
+ * calendar date, into HANDOFF, PICKUP, the pilot plan and two morning notes.
+ * Kevin caught it on 2026-07-21.
+ *
+ * A prose fix alone would rot, because the wrong date is *derivable* from a
+ * correct feed value: the next person to read `2026-08-07T00:00Z` in the
+ * fixture can reintroduce it in good faith. Hence one check.
+ *
+ * DELIBERATELY ONLY ONE. An earlier version of this PR also tagged every live
+ * deadline and compared them across documents. It was three tag types and three
+ * scanners guarding a five-line prose fix, and successive review rounds kept
+ * finding holes in that machinery rather than in the thing it protected. The
+ * guard should not be larger than the bug.
+ *
+ * KNOWN LIMIT, chosen rather than overlooked: this catches the WRONG DATE. It
+ * does not verify the two entry points still agree on the deadline, so moving
+ * the target in one file and not the other fails nothing here. That was the
+ * apparatus just deleted; if that failure ever actually happens, this is the
+ * note that says it was a known trade.
+ */
+export const HOF_GAME_ET = '2026-08-06';
+
+/**
+ * `2026-08-07` in any form EXCEPT the feed's midnight-UTC kickoff instant.
+ *
+ * The lookahead is the whole guard, and its width is the whole argument.
+ * Matching unconditionally would ban the correct `2026-08-07T00:00Z` and force
+ * authors to stop explaining the bug, which trains people to work around a
+ * guard instead of with it. But exempting "followed by a time" was too wide:
+ * `2026-08-07T20:00:00-04:00` states the WRONG ET date in timestamp clothing.
+ *
+ * So the exemption is the midnight-UTC instant specifically. Seconds and
+ * fractional seconds are allowed because `T00:00:00Z` and `T00:00:00.000Z`
+ * denote the same instant and flagging them would cry wolf. Any other offset or
+ * time-of-day is not the feed value and is flagged.
+ */
+const BARE_WRONG_HOF_DATE = /2026-08-07(?!T00:00(:00(\.\d+)?)?Z)/g;
+
+/**
+ * Escape hatch for an honest, unrelated 2026-08-07.
+ *
+ * The date is a real calendar day and these docs are full of dated notes. A
+ * "MORNING 2026-08-07" written the day after the game is correct, and failing
+ * CI on it would tell the author to change a right date to a wrong one — the
+ * cry-wolf failure that gets an invariant ignored, and then the real one is
+ * missed.
+ *
+ * Scoping to "near the words Hall of Fame" was the alternative and is rejected
+ * for the reason the deploy-SHA guard above already documents: no proximity
+ * rule resolves which mention a phrase refers to. So this reuses that guard's
+ * contract — an exempt mention is TAGGED, and the tag binds only to what it
+ * touches, same line, immediately before:
+ *
+ *     Deployed <!-- hof-date:ignore --> 2026-08-07, the morning after.
+ *
+ * Markdown emphasis (`*` or `_`) and backticks may sit between the tag and the
+ * date; prose may not. Underscores are there because the comment used to
+ * promise "Markdown emphasis" while the class held only `*`, so reformatting a
+ * tagged date to `__2026-08-07__` made the tag stop binding — a cosmetic edit
+ * turning CI red and pointing the author at the wrong problem. Horizontal
+ * whitespace only, so a dangling tag cannot vouch for a date further down.
+ */
+const HOF_DATE_EXEMPT =
+  /<!--[^\S\n]*hof-date:ignore[^\S\n]*-->[^\S\n]*[*_`]*[^\S\n]*$/i;
+
+/** Lines in one document where the wrong HOF date appears untagged. */
+export function wrongHofDateMentions(text: string): number[] {
+  const NL = String.fromCharCode(10);
+  const lines: number[] = [];
+  for (const m of text.matchAll(BARE_WRONG_HOF_DATE)) {
+    const start = m.index!;
+    const lineStart = text.slice(0, start).lastIndexOf(NL) + 1;
+    if (HOF_DATE_EXEMPT.test(text.slice(lineStart, start))) continue;
+    lines.push(text.slice(0, start).split(NL).length);
+  }
+  return lines;
+}
+
+describe('operator docs state the right Hall of Fame date', () => {
+  it('no operator doc dates the HOF game 2026-08-07', () => {
+    const offenders: string[] = [];
+    for (const file of operatorMarkdownFiles()) {
+      const rel = path.relative(REPO_ROOT, file).split(path.sep).join('/');
+      for (const line of wrongHofDateMentions(fs.readFileSync(file, 'utf8'))) {
+        offenders.push(`${rel}:${line}`);
+      }
+    }
+    expect(
+      offenders,
+      `The Hall of Fame game is ${HOF_GAME_ET} (Thu, 8:00pm ET). A bare ` +
+        "2026-08-07 is ESPN's UTC kickoff date mistaken for the calendar date. " +
+        'Write 2026-08-06; or 2026-08-07T00:00Z if you mean the feed value; or ' +
+        'tag the line <!-- hof-date:ignore --> if you genuinely mean that ' +
+        'calendar day and it is not about the game.',
+    ).toEqual([]);
+  });
+
+  describe('the date scanner sees what it claims to', () => {
+    const HOF_TAG = '<!-- hof-date:ignore -->';
+
+    it('flags a bare wrong date', () => {
+      expect(wrongHofDateMentions('HOF game 2026-08-07.')).toEqual([1]);
+    });
+
+    it('does not flag the correct date', () => {
+      expect(wrongHofDateMentions(`HOF game ${HOF_GAME_ET}.`)).toEqual([]);
+    });
+
+    it("does NOT flag the feed's UTC kickoff instant, in any precision", () => {
+      expect(wrongHofDateMentions('ESPN says `2026-08-07T00:00Z`.')).toEqual([]);
+      expect(wrongHofDateMentions('`2026-08-07T00:00:00Z`')).toEqual([]);
+      expect(wrongHofDateMentions('`2026-08-07T00:00:00.000Z`')).toEqual([]);
+    });
+
+    it('DOES flag the wrong ET date dressed as a timestamp', () => {
+      expect(wrongHofDateMentions('kickoff 2026-08-07T20:00:00-04:00')).toEqual([1]);
+      expect(wrongHofDateMentions('2026-08-07T00:00-04:00')).toEqual([1]);
+    });
+
+    it('exempts a tagged unrelated mention', () => {
+      expect(wrongHofDateMentions(`Deployed ${HOF_TAG} 2026-08-07.`)).toEqual([]);
+    });
+
+    it('exempts a tagged mention through emphasis of either flavour', () => {
+      expect(wrongHofDateMentions(`${HOF_TAG} **2026-08-07**`)).toEqual([]);
+      expect(wrongHofDateMentions(`${HOF_TAG} __2026-08-07__`)).toEqual([]);
+      expect(wrongHofDateMentions(`${HOF_TAG} \`2026-08-07\``)).toEqual([]);
+    });
+
+    it('does NOT exempt when the tag trails the mention — it binds forward only', () => {
+      expect(wrongHofDateMentions(`2026-08-07 ${HOF_TAG}`)).toEqual([1]);
+    });
+
+    it('does not let the tag leak across a line break', () => {
+      const NL = String.fromCharCode(10);
+      expect(wrongHofDateMentions(`${HOF_TAG} 2026-08-07${NL}HOF game 2026-08-07`))
+        .toEqual([2]);
+    });
+
+    it('does not let the tag leak to a second mention on the same line', () => {
+      // One tag, one exemption. Otherwise annotating a legitimate date would
+      // silently vouch for a wrong one written after it.
+      expect(wrongHofDateMentions(`${HOF_TAG} 2026-08-07 and HOF is 2026-08-07`))
+        .toEqual([1]);
+    });
+
+    it('reports the line of every offender, not just the first', () => {
+      const NL = String.fromCharCode(10);
+      expect(wrongHofDateMentions(`a${NL}2026-08-07${NL}b${NL}c 2026-08-07`))
+        .toEqual([2, 4]);
+    });
+  });
+});

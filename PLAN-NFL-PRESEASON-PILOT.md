@@ -62,15 +62,20 @@ week containing a postponed game is unverified. Tracked as **A10**.
 
 | Milestone | Date | Distance from 2026-07-18 |
 |---|---|---|
-| Hall of Fame game (CAR vs ARI) | 2026-08-07 | ~3 weeks |
-| Preseason week 1 | 2026-08-13 | ~3.5 weeks |
+| Hall of Fame game (CAR vs ARI) — **the target** | 2026-08-06 | ~2.7 weeks |
+| First 16-game preseason slate | 2026-08-13 | ~3.5 weeks |
 | Regular season week 1 | 2026-09-09 | ~7.5 weeks |
 
 The memo said "kickoff ~4 weeks out" — that was wrong; regular-season kickoff is
 **7.5** weeks out, preseason ~3. There is real runway. The binding deadline is
-**preseason week 1 (2026-08-13)** for anything that has to be exercised in the
-dress rehearsal (A2, A3, A6), and **2026-09-09** for anything that gates charging
-real money (A5, A7).
+**the Hall of Fame game (2026-08-06)** for anything that has to be exercised in
+the dress rehearsal (A2, A3, A6), and **2026-09-09** for anything that gates
+charging real money (A5, A7).
+
+*(Retargeted 2026-07-21: Kevin named the HOF game as the target, one week
+earlier than the 2026-08-13 this plan originally used. The HOF date itself was
+also wrong here — dated a day late, from ESPN's `2026-08-07T00:00Z` UTC
+kickoff, which is 8:00pm ET on 2026-08-06.)*
 
 ---
 

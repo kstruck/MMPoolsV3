@@ -152,4 +152,4 @@ weakness on a false premise:
 >
 > Ordinary, non-banned owners are correctly authorized and unaffected by either.
 
-Everything else on this list is a September job, not a pre-2026-08-13 one.
+Everything else on this list is a September job, not a pre-2026-08-06 one.

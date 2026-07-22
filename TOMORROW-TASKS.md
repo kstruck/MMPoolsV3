@@ -52,7 +52,7 @@ or click, what you should see, and what to do if you don't.
    deploy, not before, so you're reviewing NFL work against a codebase that
    already has last night's security fixes live.
 5. **Business decisions** (Sections 7–10) — no code risk, can happen anytime
-   this week, but A8 has a real deadline (before preseason week 1, 2026-08-13).
+   this week, but A8 has a real deadline (before the HOF game, 2026-08-06).
 
 ---
 
@@ -385,7 +385,7 @@ zero.
    requirement).
 3. Update wherever pricing is displayed/communicated (site copy, any
    commissioner-facing messaging) to state both explicitly.
-4. **Deadline:** before preseason week 1 begins, **2026-08-13**. Doesn't need
+4. **Deadline:** before the Hall of Fame game, **2026-08-06**. Doesn't need
    to happen tonight or even this week — just needs to land before that date.
 
 ## 8. A9 — Recruit ~10 commissioners for the preseason pilot
@@ -394,7 +394,7 @@ zero.
    was explicitly "not a hundred strangers." Quality of relationship over
    volume, since this is a dress rehearsal you want honest feedback from.
 2. No specific deadline noted beyond "before the pilot" — earlier is better
-   so they have pools set up before preseason week 1 (2026-08-13).
+   so they have pools set up before the HOF game (2026-08-06).
 
 ## 9. A11 — Fix the "test every pool type" messaging claim
 
@@ -461,7 +461,7 @@ this item was wrong in two ways. Corrected below. The problem is bigger than
 
 | Slate | Games | With a betting line | Days out |
 |---|---|---|---|
-| HOF Weekend (2026-08-07) | 1 | **1** (`CAR -1.5`) | 19 |
+| HOF Weekend (2026-08-06 ET) | 1 | **1** (`CAR -1.5`) | 19 |
 | Preseason Week 1 (08-13) | 16 | **0** | 25 |
 | Preseason Week 2 (08-21) | 16 | **0** | 33 |
 | Preseason Week 3 (08-27) | 16 | **0** | 39 |
@@ -1049,13 +1049,15 @@ Being explicit rather than letting these quietly vanish:
    whole codebase (that is what worked last night). Then smoke-test
    Recalculate Global Stats.
 4. **Answer the profile-cards question** so I can build it.
-5. Business items (§7 A8 price+date has the real deadline: **2026-08-13**).
+5. Business items (§7 A8 price+date has the real deadline: **2026-08-06**).
 
 ---
 
 # ☀️ MORNING 2026-07-20 (second overnight) — read this first
 
-Preseason is **18 days out** (HOF game 2026-08-07; preseason week 1 2026-08-13).
+Preseason is **17 days out** (HOF game 2026-08-06 ET; first 16-game slate
+2026-08-13). *(Corrected 2026-07-21: this dated the game a day late at 18 days
+out, taking ESPN's `2026-08-07T00:00Z` UTC kickoff for the calendar date.)*
 This session was aimed squarely at *is the preseason path actually ready*.
 
 **Nothing deployed tonight. No prod data touched.**
@@ -1158,7 +1160,7 @@ thing I would pick up next.**
 - **Phase 3 backups** — still no Firestore backup story at all. Biggest
   unaddressed risk in the architecture notes.
 - **§7 A8** — publish the 2026 price + free-period end date. **Real deadline:
-  2026-08-13.** This is the only calendar-bound item on the whole list.
+  2026-08-06.** This is the only calendar-bound item on the whole list.
 
 ---
 

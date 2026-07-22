@@ -118,6 +118,11 @@ describe('parseScoreboardResponse — real ESPN shape', () => {
     id: '401873271',
     status: { type: { id: '1', name: 'STATUS_SCHEDULED', state: 'pre' }, displayClock: '0:00', period: 0 },
     competitions: [{
+      // 2026-08-07T00:00Z is CORRECT and is the captured feed value — do NOT
+      // "fix" it to 08-06. The Hall of Fame game kicks off 8:00pm ET on
+      // 2026-08-06, which is midnight UTC the next day. The operator docs got
+      // this backwards until 2026-07-21 and dated the game 08-07; the guard
+      // against that regressing lives in tests/docs-state-invariants.test.ts.
       date: '2026-08-07T00:00Z',
       competitors: [
         { homeAway: 'home', score: '0', team: { id: '22', name: 'Cardinals', abbreviation: 'ARI', logo: 'h.png' } },
