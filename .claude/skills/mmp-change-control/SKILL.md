@@ -48,15 +48,43 @@ Classify FIRST. The gate is determined by blast radius, not effort.
 | Class | Definition | Gate required |
 |---|---|---|
 | **Trivial fix** | 1 file (or 1 file + its test), no behavior change to money/roles/rules/scoring, no new dependency | Own branch off `main`, green local tests, PR through CI. No plan doc needed. |
-| **Multi-file change** | Touches 2+ files, or any single file in the danger list below | Rule 3: `PLAN-*.md` + adversarial review log + sweep pass, THEN implement. Own worktree if another session may be active (Rule 4). |
-| **Prod-data mutation** | Any code or action that writes/migrates/backfills/deletes production Firestore data outside a user's own normal flow (backfills, sweeps, role migrations, `fix*`/`recalculate*` ops) | Rule 1: kill-switch + dry-run-default, review dry-run output before enabling. Plus the multi-file gate if it's new code. |
+| **Ordinary change** | Any size, as long as it touches none of the Rule-3 triggers below | Own branch off `origin/main`, all five gates green, `codex exec review --base origin/main` until clean, PR through CI. **No plan doc.** Own worktree if another session may be active (Rule 4). |
+| **Plan-gated change** | Touches **money, authorization, or production data** — see the trigger list below | Rule 3: `PLAN-*.md` + adversarial review log + sweep pass, THEN implement. |
+| **Prod-data mutation** | Any code or action that writes/migrates/backfills/deletes production Firestore data outside a user's own normal flow (backfills, sweeps, role migrations, `fix*`/`recalculate*` ops) | Rule 1: kill-switch + dry-run-default, review dry-run output before enabling. Prod data is itself a Rule-3 trigger, so new code here takes the plan gate too. |
 | **Deploy** | Anything reaching prod: functions, firestore rules/indexes, www frontend | Rule 2 deploy ritual. Frontend additionally requires Kevin (Section 6). |
 
-Danger list (any touch here = multi-file gate even if it's one file):
-`firestore.rules`, `functions/src/index.ts` (exports), `functions/src/stripe.ts`
-or anything billing, `functions/src/adminClaims.ts` / anything role-related,
-scoring engines, `src/components/SuperAdmin.tsx` (4,300-line god file — 10 of
-the last 14 commits before 2026-07-06 touched it; collision risk is maximal).
+### Rule-3 triggers — money, authorization, or production data
+
+**Kevin's ruling, 2026-07-22.** The gate used to be "touches 2+ files", and it
+was not followed: none of the twelve PRs merged 2026-07-21 carried a PLAN, and
+none of the four opened overnight 07-21/22 did either. A rule that is
+systematically skipped is not a gate, it is a lie that makes every skip look
+routine. It is now scoped to blast radius instead of file count.
+
+**A change is plan-gated when it touches any of:**
+
+| Trigger | Examples |
+|---|---|
+| **Money** | `functions/src/stripe.ts`, billing config, `payoutRecords.ts`, the payment ledger, quote/coupon engines, anything that decides what a user is charged or paid |
+| **Authorization** | `firestore.rules`, `functions/src/index.ts` exports, `lib/systemGuards.ts`, `lib/assertRole.ts`, `adminClaims.ts`, anything deciding who may do what |
+| **Production data** | backfills, migrations, sweeps, `fix*` / `recalculate*` ops — anything writing prod Firestore outside a user's own normal flow |
+| **Scoring** | the scoring engines and finalization paths, because they decide winners and therefore money |
+
+Everything else is an **ordinary change**, whatever its file count. A 14-file
+refactor with no money/authz/prod-data surface takes the ordinary gate; a
+one-line edit to `firestore.rules` takes the full plan gate.
+
+**Calibration, so this is not just an assertion.** Against the sixteen PRs
+merged or opened 2026-07-21/22, this rule fires on exactly one — #255, the
+BANNED-owner authorization fix — and exempts the rest, including the 14-file and
+11-file feature work. That is the outcome that made the old rule unworkable and
+the new one worth having: it selects the change where a plan would actually have
+helped.
+
+`src/components/SuperAdmin.tsx` is NOT a trigger. It is a 4,300-line god file
+with a real collision risk, but that is a **worktree-isolation** problem (Rule
+4), not a reason to write a plan-of-record. Conflating the two is part of why
+the old rule felt arbitrary.
 
 Money invariant (never route around it): Stripe is for commissioner hosting
 fees ONLY. The platform never touches participant entry fees — those are P2P
@@ -165,9 +193,10 @@ after Phase 1 shipped 41/41 (audit finding, 2026-07-12) — the failure mode is
 structural, not a one-off mistake, so treat this as part of the ritual, not
 an afterthought.
 
-### Rule 3 — Plan -> review-log -> sweep gate for multi-file changes
+### Rule 3 — Plan -> review-log -> sweep gate for money / authz / prod-data changes
 
-**The rule.** No multi-file change is implemented without, in order:
+**The rule.** No change touching money, authorization, production data, or
+scoring is implemented without, in order:
 1. A `PLAN-*.md` at repo root (goal, phased approach, key decisions +
    tradeoffs, risks/open questions, out-of-scope).
 2. An adversarial review loop logged verbatim in `PLAN-*-REVIEW-LOG.md`
