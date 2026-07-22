@@ -38,8 +38,18 @@ tradeoffs), REJECT with reasons and end the cycle — do not chase the tail.
   separate PR-summary comment, then the FINDINGS as INLINE review comments
   (`/pulls/<N>/comments`), often with an empty top-level review body.
 - It did NOT re-review after a fix push on the same PR (observed once; the
-  #157-159 "rounds" were separate PRs). After pushing fixes + green CI, give
-  it one ~10-min window, then close the cycle — don't wait indefinitely.
+  #157-159 "rounds" were separate PRs).
+
+> 🛑 **QODO IS BILLING-BLOCKED — 2026-07-22. DO NOT WAIT AT ALL.**
+>
+> qodo posted "Qodo reviews are paused because your trial has ended" on #253 and
+> returned ZERO findings on all four PRs opened overnight 07-21/22, across all
+> three surfaces. **The ~10-minute window and the background watcher below are
+> SUSPENDED.** Check the three surfaces ONCE, in a single pass, and move on.
+>
+> This matches CLAUDE.md §2b, which is authoritative. Everything below describes
+> how to absorb a report IF one appears; none of it justifies waiting for one.
+> Kevin will say when billing is restored.
 
 ### 1. Watch for the report
 
@@ -52,8 +62,9 @@ gh pr view <N> --json comments,reviews -q '(.comments | length) + (.reviews | le
 gh api repos/kstruck/MMPoolsV3/pulls/<N>/comments -q 'length'   # inline findings
 ```
 
-Background watcher (Bash run_in_background; harness re-invokes on exit; note
-tool timeout caps ~10 min — re-arm on wake if still empty):
+Background watcher — **SUSPENDED while qodo is billing-blocked; kept for when
+it is restored.** (Bash run_in_background; harness re-invokes on exit; note tool
+timeout caps ~10 min — re-arm on wake if still empty):
 
 ```bash
 for i in $(seq 1 12); do
