@@ -135,7 +135,11 @@ async function activeSeasonPairs(db: Firestore, now: number): Promise<Array<{ se
 }
 
 /** Daily: grade recently active seasons + refresh expert profiles. Best-effort. */
-export const gradeExpertProfilesJob = onSchedule('0 7 * * *', withHeartbeat('gradeExpertProfilesJob', async () => {
+export const gradeExpertProfilesJob = onSchedule(
+  // 03:00 ET. Was '0 7 * * *' unpinned, i.e. 07:00 UTC == 03:00 ET — same run
+  // time, now declared in the zone the docs and the operator think in.
+  { schedule: '0 3 * * *', timeZone: 'America/New_York' },
+  withHeartbeat('gradeExpertProfilesJob', async () => {
   const db = admin.firestore();
   try {
     const pairs = await activeSeasonPairs(db, Date.now());

@@ -229,12 +229,12 @@ export const SCHEDULED_JOB_EXPECTATIONS: Record<string, JobExpectation> = {
     consensusRefreshJob: { everyMinutes: 10 },            // '*/10 * * * *'
     syncWinProbabilityJob: { everyMinutes: 5 },           // '*/5 * * * *'
     syncExpertPicksJob: { everyMinutes: 60 },             // '15 * * * *'
-    gradeExpertProfilesJob: { everyMinutes: 24 * 60 },    // '0 7 * * *'
-    aggregateRevenueDaily: { everyMinutes: 24 * 60 },     // every 24 hours
+    gradeExpertProfilesJob: { everyMinutes: 24 * 60 },    // '0 3 * * *' ET
+    aggregateRevenueDaily: { everyMinutes: 24 * 60 },     // '0 2 * * *' ET
     scheduledHealthCheck: { everyMinutes: 60 },           // every 60 minutes
     releaseStaleCouponReservations: { everyMinutes: 30 }, // every 30 minutes
     scheduledBracketSync: { everyMinutes: 10 },           // every 10 minutes
-    nflDeepScoreSweepJob: { everyMinutes: 24 * 60 },      // '30 11 * * *'
+    nflDeepScoreSweepJob: { everyMinutes: 24 * 60 },      // '30 11 * * *' ET
 
     // The NFL fleet. These were the LAST jobs to get heartbeats and the FIRST
     // that should have had them: nflFinalizeSweepJob threw FAILED_PRECONDITION
@@ -242,25 +242,25 @@ export const SCHEDULED_JOB_EXPECTATIONS: Record<string, JobExpectation> = {
     // died silently inside syncNFLScoresJob. Both were invisible precisely
     // because a job with nothing to do and a job that is broken look identical.
     syncNFLScoresJob: { everyMinutes: 5 },                // '*/5 * * * *'
-    nflFinalizeSweepJob: { everyMinutes: 24 * 60 },       // 'every day 08:30'
+    nflFinalizeSweepJob: { everyMinutes: 24 * 60 },       // '30 4 * * *' ET
     nflLockWatchJob: { everyMinutes: 60 },                // 'every 60 minutes'
     // Weekly. The tolerance multiplier makes this ~3 weeks before it is called
     // stale, which is deliberate — a weekly job that ran late is not an outage,
     // and preseason is the only window where a missed run would matter.
-    lockNFLSpreadsJob: { everyMinutes: 7 * 24 * 60 },     // '0 9 * * 2'
+    lockNFLSpreadsJob: { everyMinutes: 7 * 24 * 60 },     // '0 9 * * 2' ET
 
     // The legacy fleet, wrapped last. Several of these sit on money-adjacent
     // paths — billing enforcement, the Stripe webhook durability sweep, the
     // score updates that decide squares winners — and every one of them could
     // have been dead for weeks with nothing to say so. Intervals are copied
     // from each job's own onSchedule() and must be kept in step with it.
-    autoClosePools: { everyMinutes: 24 * 60 },            // 'every day 08:00'
+    autoClosePools: { everyMinutes: 24 * 60 },            // '0 4 * * *' ET
     autoLockPools: { everyMinutes: 1 },                   // 'every 1 minutes'
-    enforceBillingStatus: { everyMinutes: 24 * 60 },      // 'every day 03:00'
+    enforceBillingStatus: { everyMinutes: 24 * 60 },      // '0 23 * * *' ET
     monetizationAlerts: { everyMinutes: 6 * 60 },         // 'every 6 hours'
     checkPlayoffScores: { everyMinutes: 30 },             // 'every 30 minutes'
     runReminders: { everyMinutes: 5 },                    // 'every 5 minutes'
     syncGameStatus: { everyMinutes: 1 },                  // 'every 1 minutes'
-    siteAveragesJob: { everyMinutes: 24 * 60 },           // '30 7 * * *'
-    webhookDurabilitySweep: { everyMinutes: 24 * 60 },    // 'every 24 hours'
+    siteAveragesJob: { everyMinutes: 24 * 60 },           // '30 3 * * *' ET
+    webhookDurabilitySweep: { everyMinutes: 24 * 60 },    // '15 5 * * *' ET
 };

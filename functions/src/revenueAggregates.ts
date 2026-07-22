@@ -34,7 +34,12 @@ async function recompute(): Promise<{ totalRevenue: number; chargeCount: number 
 
 /** Daily rollup. */
 export const aggregateRevenueDaily = onSchedule(
-  { schedule: "every 24 hours", timeoutSeconds: 120, memory: "256MiB" },
+  // 02:00 ET. BEHAVIOUR CHANGE, deliberate: "every 24 hours" is anchored to the
+  // last run rather than a wall clock, so it drifts with every deploy and a
+  // timeZone means nothing on it. An explicit nightly time is what makes it
+  // pinnable — and makes "did last night's aggregate run?" a question with an
+  // answer.
+  { schedule: "0 2 * * *", timeZone: "America/New_York", timeoutSeconds: 120, memory: "256MiB" },
   withHeartbeat('aggregateRevenueDaily', async () => {
     const r = await recompute();
     console.log(`[revenue] daily rollup: $${r.totalRevenue} from ${r.chargeCount} charges`);

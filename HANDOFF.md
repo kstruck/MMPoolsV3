@@ -46,21 +46,33 @@
 > correct for July — and it reported that as **healthy, not degraded**. The
 > cry-wolf case behaves.
 >
-> ### 4. Heartbeat timing — mostly UTC, which is not obvious
+> ### 4. Heartbeat timing — every wall-clock job is pinned to ET
 >
-> **Four daily jobs declare no `timeZone`, so Cloud Scheduler runs them in UTC**
-> and they land in the small hours ET. Only `nflDeepScoreSweepJob` and
-> `lockNFLSpreadsJob` pin `America/New_York`. The fleet is inconsistent — worth
-> unifying some day, not a bug.
+> **Kevin's ruling 2026-07-22: pin them all to `America/New_York`.** Previously
+> seven daily-or-slower jobs declared no `timeZone`, so Cloud Scheduler ran them
+> in UTC and they landed in the small hours ET — which is how this box came to
+> document `nflFinalizeSweepJob` as an 08:30 job when it ran at 04:30 ET.
 >
-> | Job | Schedule | Lands (ET, July) |
+> **The five clock-scheduled jobs run at the SAME real time as before**; only
+> the declaration changed, from a UTC hour to the equivalent ET hour. The two
+> that used `every 24 hours` did change: an interval anchored to the last run
+> cannot carry a timeZone, so they became explicit nightly crons.
+>
+> | Job | Schedule (all ET) | Changed? |
 > |---|---|---|
-> | `enforceBillingStatus` | every day 03:00 **UTC** | 23:00 prev day |
-> | `siteAveragesJob` | `30 7 * * *` **UTC** | 03:30 |
-> | `autoClosePools` | every day 08:00 **UTC** | 04:00 |
-> | `nflFinalizeSweepJob` | every day 08:30 **UTC** | 04:30 |
-> | `nflDeepScoreSweepJob` | `30 11 * * *` ET | 11:30 |
-> | `lockNFLSpreadsJob` | `0 9 * * 2` ET | Tue 09:00 |
+> | `aggregateRevenueDaily` | `0 2 * * *` | was `every 24 hours` — now a fixed time |
+> | `gradeExpertProfilesJob` | `0 3 * * *` | same time, was `0 7 * * *` UTC |
+> | `siteAveragesJob` | `30 3 * * *` | same time, was `30 7 * * *` UTC |
+> | `autoClosePools` | `0 4 * * *` | same time, was `every day 08:00` UTC |
+> | `nflFinalizeSweepJob` | `30 4 * * *` | same time, was `every day 08:30` UTC |
+> | `webhookDurabilitySweep` | `15 5 * * *` | was `every 24 hours` — now a fixed time |
+> | `lockNFLSpreadsJob` | `0 9 * * 2` | already pinned |
+> | `nflDeepScoreSweepJob` | `30 11 * * *` | already pinned |
+> | `enforceBillingStatus` | `0 23 * * *` | same time, was `every day 03:00` UTC |
+>
+> `functions/src/__tests__/scheduleTimezones.test.ts` now fails if any
+> wall-clock schedule omits `timeZone` or pins a zone other than ET. Interval
+> schedules are deliberately out of scope — a timeZone means nothing on them.
 >
 > ⚠️ **`lockNFLSpreadsJob` will read `never-ran` for a FULL WEEK.** 2026-07-21
 > was a Tuesday and its 09:00 ET run happened *before* the wrapping deployed, so

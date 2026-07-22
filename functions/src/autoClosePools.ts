@@ -26,7 +26,9 @@ import { autoCloseVerdict, autoCloseDryRunVerdict } from "./lib/heartbeatVerdict
 const MAX_PER_RUN = 200; // safety cap; logs if exceeded
 
 export const autoClosePools = functions.scheduler.onSchedule(
-  { schedule: "every day 08:00", timeoutSeconds: 300, memory: "512MiB" },
+  // 04:00 ET. Was "every day 08:00" with no timeZone, i.e. 08:00 UTC == 04:00
+  // ET — unchanged in real time, correctly declared now.
+  { schedule: "0 4 * * *", timeZone: "America/New_York", timeoutSeconds: 300, memory: "512MiB" },
   withHeartbeat('autoClosePools', async () => {
     const db = admin.firestore();
 

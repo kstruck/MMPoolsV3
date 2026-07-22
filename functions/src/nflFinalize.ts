@@ -379,7 +379,10 @@ export function poolInLiveScope(pool: { seasonType?: number | string }, liveSeas
  * seasonType so an operator can see what a given scope would arm before arming it.
  */
 export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
-  { schedule: "every day 08:30", timeoutSeconds: 540, memory: "512MiB" },
+  // 04:30 ET. Was "every day 08:30" with no timeZone, i.e. 08:30 UTC == 04:30
+  // ET. This is the job whose documented run time was wrong for exactly this
+  // reason — HANDOFF described it as 08:30 ET when it ran at 04:30 ET.
+  { schedule: "30 4 * * *", timeZone: "America/New_York", timeoutSeconds: 540, memory: "512MiB" },
   withHeartbeat("nflFinalizeSweepJob", async () => {
     const db = admin.firestore();
 

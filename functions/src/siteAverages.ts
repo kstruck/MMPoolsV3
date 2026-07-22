@@ -66,7 +66,10 @@ export async function recomputeSiteAverages(db: admin.firestore.Firestore): Prom
 }
 
 /** Daily refresh (cheap: one collection scan, bounded by user count). Best-effort. */
-export const siteAveragesJob = onSchedule('30 7 * * *', withHeartbeat('siteAveragesJob', async () => {
+export const siteAveragesJob = onSchedule(
+  // 03:30 ET. Was '30 7 * * *' unpinned == 07:30 UTC == 03:30 ET.
+  { schedule: '30 3 * * *', timeZone: 'America/New_York' },
+  withHeartbeat('siteAveragesJob', async () => {
   try {
     const r = await recomputeSiteAverages(admin.firestore());
     console.log(`[siteAverages] ${r.rows} week-rows from ${r.profiles} profiles`);
