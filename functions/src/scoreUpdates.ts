@@ -7,6 +7,7 @@ import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { validated } from "./lib/validated";
 import { fixPoolScoresSchema } from "./schemas/scoreUpdates";
 import { withHeartbeat } from "./lib/heartbeat";
+import { assertNotBannedLive } from "./lib/systemGuards";
 
 // Helper to generate random digits
 const generateDigits = (): number[] => {
@@ -1288,6 +1289,18 @@ export const simulateGameUpdate = onCall({
     }
 
     const uid = request.auth.uid;
+
+    // The ownership check below authorizes from PERSISTED POOL FIELDS and never
+    // consults `users/{uid}.role`, so a BANNED owner or co-manager could still
+    // set arbitrary scores — and therefore decide winners — on a real pool.
+    // CONTEXT.md requires bans to be enforced server-side; see
+    // SECURITY-BARE-ONCALL-CLASSIFICATION.md.
+    //
+    // OUTSIDE the transaction on purpose. This reads users/{uid} with a plain
+    // get(), and a non-transactional read inside runTransaction() is re-executed
+    // on every retry without the transaction's consistency guarantees. Hoisting
+    // it also means a banned caller never opens a transaction at all.
+    await assertNotBannedLive(uid);
 
     const db = admin.firestore();
     const poolRef = db.collection('pools').doc(poolId);

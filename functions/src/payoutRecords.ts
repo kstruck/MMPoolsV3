@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { writeLedgerEvent } from "./paymentLedger";
 import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
+import { assertNotBannedLive } from "./lib/systemGuards";
 import { recomputeUserProfile } from "./userProfile";
 import { PAYOUT_SCHEMA_VERSION, type PayoutKind } from "./shared/payoutRecords";
 import { writeAuditEvent } from "./audit";
@@ -54,6 +55,21 @@ export const recordPoolPayouts = onCall(async (request) => {
   } catch {
     throw new HttpsError('permission-denied', 'Only the pool commissioner or a super admin can record payouts.');
   }
+
+  // A BANNED commissioner could still move the money ledger. The check above
+  // authorizes from PERSISTED POOL OWNERSHIP and never consults
+  // `users/{uid}.role`, so an owner or co-manager who has been banned keeps full
+  // access until someone edits the pool's ownership fields — not a token-refresh
+  // window, a permanent hole. CONTEXT.md requires bans to be enforced
+  // server-side. See SECURITY-BARE-ONCALL-CLASSIFICATION.md; this is the
+  // ownership-path half, and it is deliberately NOT a `role:` gate, which would
+  // reject the ordinary pool owners this callable exists to serve.
+  //
+  // Placed AFTER the ownership check on purpose: a banned NON-owner is already
+  // rejected above, so the only caller this can newly reject is a banned owner.
+  // Running it first would add a users/ read to every unauthorized call, which
+  // is a read-amplification vector on a callable anyone authenticated can hit.
+  await assertNotBannedLive(actorUid);
 
   // Payouts are recorded once competition is settled — after Season Finalization
   // (NFL) or a FINAL/COMPLETED status. Corrections remain possible afterwards.
