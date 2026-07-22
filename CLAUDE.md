@@ -192,7 +192,8 @@ constraint, correctness is.
    **money, authorization, production data, or scoring**, and not otherwise.
    `mmp-change-control` §1 carries the trigger list and is authoritative.
 
-   So: a 14-file refactor with no money/authz surface needs no plan; a one-line
+   So: a 14-file refactor touching none of the four triggers — no money, no
+   authorization, no production data, no scoring — needs no plan; a one-line
    `firestore.rules` edit does. Against the sixteen PRs from 07-21/22 the new
    rule fires on exactly one — #255, the BANNED-owner authorization fix — which
    is the change where a plan would actually have helped.

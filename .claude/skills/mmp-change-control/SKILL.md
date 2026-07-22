@@ -77,8 +77,11 @@ routine. It is now scoped to blast radius instead of file count.
 | **Scoring** | the scoring engines and finalization paths, because they decide winners and therefore money |
 
 Everything else is an **ordinary change**, whatever its file count. A 14-file
-refactor with no money/authz/prod-data surface takes the ordinary gate; a
-one-line edit to `firestore.rules` takes the full plan gate.
+refactor touching none of the four triggers — no money, no authorization, no
+production data, no scoring — takes the ordinary gate; a one-line edit to
+`firestore.rules` takes the full plan gate. Name all four when you classify:
+dropping one from the list is how a scoring refactor talks itself into the
+ordinary lane.
 
 **Calibration, so this is not just an assertion.** Against the sixteen PRs
 merged or opened 2026-07-21/22, this rule fires on exactly one — #255, the
@@ -199,7 +202,7 @@ after Phase 1 shipped 41/41 (audit finding, 2026-07-12) — the failure mode is
 structural, not a one-off mistake, so treat this as part of the ritual, not
 an afterthought.
 
-### Rule 3 — Plan -> review-log -> sweep gate for money / authz / prod-data changes
+### Rule 3 — Plan -> review-log -> sweep gate for money / authz / prod-data / scoring changes
 
 **The rule.** No change touching money, authorization, production data, or
 scoring is implemented without, in order:

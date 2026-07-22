@@ -89,12 +89,13 @@ before editing those files or you will redo its work.
 3. **Plumb an outcome through `sendEmail` / `sendCourierSMS`** so `runReminders`
    can see delivery failures its helpers swallow.
 
-### Two contradictions Kevin must rule on
+### Contradictions Kevin ruled on — 2026-07-22
 
-- **PLAN-*.md scope.** `mmp-change-control` says any 2+ file change needs the
-  full PLAN + review-log + sweep gate. **None of the twelve PRs merged 07-21
-  carried one.** CLAUDE.md §4.3 flags this; the skill is authoritative until he
-  decides.
+- **PLAN-*.md scope — RESOLVED.** It was "any 2+ file change" and was
+  systematically not followed. Now scoped to **blast radius, not file count**: a
+  plan is required when a change touches **money, authorization, production
+  data, or scoring**. `mmp-change-control` §1 carries the trigger list and is
+  authoritative. Stop flagging the skip on ordinary changes.
 - **Scheduled-job timezones are inconsistent.** Counted 2026-07-21: only
   `nflDeepScoreSweepJob` and `lockNFLSpreadsJob` pin `America/New_York`. **Seven
   daily-or-slower jobs run unpinned in UTC** — `autoClosePools`,
