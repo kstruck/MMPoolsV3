@@ -77,11 +77,31 @@ routine. It is now scoped to blast radius instead of file count.
 | **Scoring** | the scoring engines and finalization paths, because they decide winners and therefore money |
 
 Everything else is an **ordinary change**, whatever its file count. A 14-file
-refactor touching none of the four triggers — no money, no authorization, no
-production data, no scoring — takes the ordinary gate; a one-line edit to
-`firestore.rules` takes the full plan gate. Name all four when you classify:
-dropping one from the list is how a scoring refactor talks itself into the
-ordinary lane.
+refactor touching none of the four triggers takes the ordinary gate; a one-line
+edit to `firestore.rules` takes the full plan gate. Name all four when you
+classify: dropping one from the list is how a scoring refactor talks itself into
+the ordinary lane.
+
+#### "Touches" means BEHAVIOUR, not the file
+
+The trigger is a change to what the system DOES in one of those concerns — what
+a user is charged or paid, who is allowed to do what, what gets written to
+production, or how a winner is decided. Editing a file that happens to live on
+such a path is not automatically a trigger.
+
+This distinction is load-bearing and codex caught it missing: **PR #256**
+refactored verdict logic out of `autoClosePools.ts` — the canonical prod-data
+sweep — while changing no behaviour at all. Under a literal file reading it
+would be plan-gated; under the behaviour reading it is ordinary, which is how it
+was actually treated.
+
+**The burden is on the author, and it is discharged with evidence, not
+assertion.** A refactor inside one of these paths is ordinary only if you can
+point at tests pinning the behaviour as unchanged — #256 extracted each verdict
+and unit-tested it producing identical output, and separately verified the
+guard fails when the logic is gutted. If you cannot demonstrate that, you do not
+get the ordinary lane; classify it as plan-gated and move on. "I am fairly sure
+this is just a refactor" is the sentence this rule exists to stop.
 
 **Calibration, so this is not just an assertion.** Against the sixteen PRs
 merged or opened 2026-07-21/22, this rule fires on exactly one — #255, the

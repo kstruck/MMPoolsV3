@@ -261,7 +261,7 @@ Ship Option A's two jobs, but: (1) both behind `system/config` flags (`nflSpread
 
 ## 6. VALIDATION + PROMOTION
 
-All promotions route through `mmp-change-control`: code changes need plan → adversarial review log → sweep; prod-data mutations and job enablement need kill-switch + dry-run with reviewed dry-run output; new work in its own worktree.
+All promotions route through `mmp-change-control`: code changes touching money, authorization, prod data or scoring need plan → adversarial review log → sweep (§1 triggers — file count is not the test, ruling 2026-07-22); everything else takes the ordinary gate. Prod-data mutations and job enablement need kill-switch + dry-run with reviewed dry-run output regardless; new work in its own worktree.
 
 Per-phase success criteria (numbers, not vibes):
 
