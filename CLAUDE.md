@@ -158,19 +158,31 @@ hypothesis, not a finding.** Confirm which commits touched the file
 (`git log origin/main..HEAD -- <path>`) before acting on it, and certainly
 before writing it into a rule.
 
-Branching cleanly is still worth doing - `git checkout -B <branch> origin/main`
-after a fetch keeps a PR's history to its own commits - but it is hygiene, not a
-correctness fix, so it is not something to reach for on a hunch.
+Branching cleanly is still worth doing - starting a PR from `origin/main` keeps
+its history to its own commits - but it is hygiene, not a correctness fix, so it
+is not something to reach for on a hunch.
 
-Note what `checkout -B` does to uncommitted work, because it is neither "safe"
-nor "destructive": compatible changes are CARRIED ALONG onto the new branch, and
-conflicting tracked changes make the checkout abort. Neither is what you want
-silently - carried-along edits are how unrelated work ends up in a PR. Check
-first:
+⚠️ **Use `-b`, not `-B`, and never on a branch that already has commits.**
 
 ```
-git status --short          # expect empty before re-basing a branch
+git fetch origin
+git status --short                              # expect empty first
+git checkout -b <NEW-branch-name> origin/main   # -b: fails if the branch exists
 ```
+
+`-B` force-RESETS an existing branch's ref to `origin/main`, silently discarding
+every commit on it. A clean `git status` does not protect you: it reports
+uncommitted changes, and this destroys COMMITTED ones. Recovery is `git reflog`,
+if you notice.
+
+`-b` fails loudly when the branch already exists, which is the behaviour you
+want. To move an existing branch onto a newer `origin/main`, rebase it
+(`git rebase origin/main`) rather than resetting it.
+
+One more thing `-b`/`-B` do NOT do: discard uncommitted work. Compatible changes
+are CARRIED ALONG onto the new branch, and conflicting tracked changes abort the
+checkout. The carried-along case is the quiet one - it is how unrelated edits
+end up in a PR - which is why the `git status --short` check above comes first.
 
 **Why this is a hard rule and not a nicety.** On 2026-07-21 a single session
 produced 12 self-inflicted defects. Seven were facts asserted from memory that
