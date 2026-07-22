@@ -28,6 +28,15 @@ prose if they disagree; skills are point-in-time snapshots.
 
 ## 2b. Opening a PR is not the end of the task — wait for qodo
 
+> 🛑 **QODO IS BILLING-BLOCKED — 2026-07-22.** It posted "Qodo reviews are
+> paused because your trial has ended" on #253 and returned **zero findings on
+> all four PRs opened overnight 07-21/22**, across all three surfaces. Treat a
+> qodo review as NOT COMING until Kevin says billing is restored. Still poll
+> once (it is cheap and the surfaces are the proof), but do not wait, and never
+> call a PR blocked on it. **§2c (codex) is now the only working reviewer** —
+> which means it is also the only second opinion, so weigh its findings on
+> evidence rather than deferring to them.
+>
 > ⚠️ **DO NOT BLOCK ON QODO — 2026-07-21.** Kevin reported the qodo plan is out
 > of tokens, so reviews may be intermittent or stop entirely. **Never wait on a
 > review before reporting a PR, and never call a PR blocked on one.**
@@ -115,6 +124,24 @@ name `origin/main` explicitly.
 `--uncommitted` reviews only the working tree, so on its own it reports NOTHING
 once the work is committed. Use it before a commit; use `--base origin/main`
 for the PR. Found by codex reviewing this very section.
+
+⚠️ **BRANCH FROM `origin/main`, AND READ THE MERGE-BASE CODEX PRINTS.** On
+2026-07-22 a security PR was built on a branch cut from a stale base. Its diff
+against `origin/main` carried a **125-line `package-lock.json` reversal that
+would have reverted the `fast-uri` security fix from #254** — a PR that looked
+like it only added a guard, silently undoing a different security fix.
+
+Nothing in the five gates catches this: every test passes, because the reverted
+lockfile is internally consistent. What exposed it was codex echoing its
+merge-base as `abda2f5` when `origin/main` was `305b36b`. So:
+
+```
+git fetch origin && git checkout -B <branch> origin/main    # not `git checkout -b` from wherever HEAD is
+git diff --stat origin/main..HEAD                           # confirm ONLY your files
+```
+
+Read the merge-base codex prints and compare it to `git rev-parse origin/main`.
+If they differ, your branch is not based where you think it is.
 
 **Why this is a hard rule and not a nicety.** On 2026-07-21 a single session
 produced 12 self-inflicted defects. Seven were facts asserted from memory that

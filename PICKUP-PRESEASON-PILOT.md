@@ -27,7 +27,24 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 ---
 
-## 0. State as of 2026-07-21 ~18:00Z — read this before anything else
+## 0. State as of 2026-07-22 ~05:00Z — read this before anything else
+
+**Start with [MORNING-2026-07-22.md](MORNING-2026-07-22.md)** — Kevin's
+step-by-step list. Then this file.
+
+**Three PRs are OPEN and a functions deploy is owed:**
+[#255](https://github.com/kstruck/MMPoolsV3/pull/255) (BANNED owner rejected on
+the three ownership-path callables — a live authz gap on the pilot path),
+[#256](https://github.com/kstruck/MMPoolsV3/pull/256) (heartbeat verdicts made
+pure and testable), [#257](https://github.com/kstruck/MMPoolsV3/pull/257)
+(emulator coverage for the finalize sweep and `replayFeedSnapshot`). All seven
+CI checks green on each; codex clean; **qodo is billing-blocked and reviewed
+none of them.**
+
+Nothing was deployed overnight and no production data was touched, so the
+deploy-state SHA below is unchanged.
+
+### The earlier 2026-07-21 deploy, still true
 
 **Functions and the frontend were both deployed on 2026-07-21** (~16:40Z and
 ~16:54Z, same commit). Twelve PRs shipped in that deploy; everything below is
@@ -68,33 +85,39 @@ before editing those files or you will redo its work.
    engineering queue rather than filing the whole gap under Kevin.
 2. **A8 pricing — DUE 2026-08-06.** The only calendar-bound item. Retargeted
    from 2026-08-13 on 2026-07-21 when Kevin named the HOF game as the target.
-3. **A banned commissioner can still move the money ledger.**
-   `recordPoolPayouts` authorizes from persisted pool ownership and never
-   consults `users/{uid}.role`; it IS on the pilot path
-   (`RecordPayoutsCard.tsx`). Needs `assertNotBannedLive`, NOT a `role:` gate —
-   see `SECURITY-BARE-ONCALL-CLASSIFICATION.md`.
-4. **`nflFinalizeSweepJob` has never completed a production run** and its sweep
-   path has no emulator coverage. Runs 08:30 **UTC** (04:30 ET).
+3. **A banned commissioner can still move the money ledger — FIXED IN
+   [#255](https://github.com/kstruck/MMPoolsV3/pull/255), NOT YET DEPLOYED.**
+   `recordPoolPayouts`, `simulateGameUpdate` and `simFillSquares` authorize from
+   persisted pool ownership and never consult `users/{uid}.role`; the first is on
+   the pilot path (`RecordPayoutsCard.tsx`). All three now call
+   `assertNotBannedLive` — but the gap is live in prod until functions deploy.
+4. **`nflFinalizeSweepJob` has never completed a production run.** Runs 08:30
+   **UTC** (04:30 ET). Its sweep path now has emulator coverage
+   ([#257](https://github.com/kstruck/MMPoolsV3/pull/257)) — which is not the
+   same claim as "it ran in prod". Arming it is NFL-6 in `TOMORROW-TASKS.md`.
 
 ### Best next engineering work (no Kevin needed)
 
-1. **Extract the per-job heartbeat verdicts into pure helpers** (as
-   `sweepRunVerdict` / `lockWatchVerdict` already are) so their failure paths are
-   testable. Today the only guard is a source-level check that a job *can* report
-   failure — deleting `autoLock`'s failure count produces no build error and no
-   test failure. Verified, not assumed.
-2. **Emulator coverage for `nflFinalizeSweepJob`'s sweep path** and for the
-   `replayFeedSnapshot` callable. Both were on the overnight queue and ran out of
-   night.
-3. **Plumb an outcome through `sendEmail` / `sendCourierSMS`** so `runReminders`
-   can see delivery failures its helpers swallow.
+Items 1 and 2 of the previous list are DONE and open as
+[#256](https://github.com/kstruck/MMPoolsV3/pull/256) and
+[#257](https://github.com/kstruck/MMPoolsV3/pull/257). What is left:
+
+1. **Plumb an outcome through `sendEmail` / `sendCourierSMS`** so `runReminders`
+   can see delivery failures its helpers swallow. A run where every email failed
+   to queue still reports zero failed pools. This changes the delivery path that
+   pages members, so it wants its own careful PR.
+2. **The scheduled Auth export** (`PLAN-BACKUPS-PHASE3.md` step 6) — deferred
+   CODE, not a console click. Blocked on Kevin creating the GCS bucket + IAM.
+3. **Unify scheduled-job timezones**, if Kevin rules that way (see below).
 
 ### Two contradictions Kevin must rule on
 
 - **PLAN-*.md scope.** `mmp-change-control` says any 2+ file change needs the
   full PLAN + review-log + sweep gate. **None of the twelve PRs merged 07-21
-  carried one.** CLAUDE.md §4.3 flags this; the skill is authoritative until he
-  decides.
+  carried one, and none of the four opened overnight 07-21/22 does either.**
+  CLAUDE.md §4.3 flags this; the skill is authoritative until he decides. A
+  proposal is on the table in `MORNING-2026-07-22.md` §6.1: narrow it to changes
+  touching money, auth, or prod data.
 - **Scheduled-job timezones are inconsistent.** Counted 2026-07-21: only
   `nflDeepScoreSweepJob` and `lockNFLSpreadsJob` pin `America/New_York`. **Seven
   daily-or-slower jobs run unpinned in UTC** — `autoClosePools`,
