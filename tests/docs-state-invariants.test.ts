@@ -447,176 +447,75 @@ describe('the scanner sees what the docs actually contain', () => {
 });
 
 /**
- * The pilot's target date — the second thing these docs got wrong, and the one
- * with a deadline attached.
+ * The Hall of Fame game is 2026-08-06, and every operator doc said 2026-08-07.
  *
- * WHY THIS EXISTS. Every operator doc dated the Hall of Fame game 2026-08-07.
- * It is 2026-08-06. ESPN reports its kickoff as `2026-08-07T00:00Z` because
- * 8:00pm ET is midnight UTC the following day, and that UTC date was copied
- * down as if it were the calendar date — into HANDOFF, PICKUP, the pilot plan
- * and two morning notes. Kevin caught it on 2026-07-21 and named 2026-08-06 as
- * the target, one week earlier than the 2026-08-13 the docs had been planning
- * against.
+ * WHY. ESPN reports its kickoff as `2026-08-07T00:00Z` — 8:00pm ET is midnight
+ * UTC the following day — and that UTC date was copied down as if it were the
+ * calendar date, into HANDOFF, PICKUP, the pilot plan and two morning notes.
+ * Kevin caught it on 2026-07-21.
  *
- * A prose correction alone would rot exactly the way the deploy SHA did: the
- * wrong date is *derivable* from a correct feed value, so the next person to
- * read `2026-08-07T00:00Z` in a fixture can re-introduce it in good faith.
- * Hence a guard, and hence the narrow exemption below rather than a blanket one.
+ * A prose fix alone would rot, because the wrong date is *derivable* from a
+ * correct feed value: the next person to read `2026-08-07T00:00Z` in the
+ * fixture can reintroduce it in good faith. Hence one check.
+ *
+ * DELIBERATELY ONLY ONE. An earlier version of this PR also tagged every live
+ * deadline and compared them across documents. It was three tag types and three
+ * scanners guarding a five-line prose fix, and successive review rounds kept
+ * finding holes in that machinery rather than in the thing it protected. The
+ * guard should not be larger than the bug.
+ *
+ * KNOWN LIMIT, chosen rather than overlooked: this catches the WRONG DATE. It
+ * does not verify the two entry points still agree on the deadline, so moving
+ * the target in one file and not the other fails nothing here. That was the
+ * apparatus just deleted; if that failure ever actually happens, this is the
+ * note that says it was a known trade.
  */
 export const HOF_GAME_ET = '2026-08-06';
-
-/**
- * The live target claim in each entry point carries this tag, immediately
- * before the date:
- *
- *     The target is the Hall of Fame game, <!-- pilot-target:current --> **2026-08-06**
- *
- * codex, round 3, and it is the same hole the deploy-SHA guard already had:
- * the first version asserted `text.includes('2026-08-06')`, which THIS COMMIT'S
- * OWN historical-correction prose satisfies. Retarget the deadline back to
- * 2026-08-13 and the guard would still pass, because the wrong date it scans
- * for is 2026-08-07 and the right date is still sitting in a paragraph
- * explaining what went wrong. A guard satisfied by an explanation of the bug is
- * not guarding the bug.
- *
- * So the live claim is named rather than inferred, exactly as CURRENT_MARKER
- * does for the SHA. Markdown emphasis (`*` or `_`) and backticks may sit
- * between the tag and the date; prose may not.
- *
- * EVERY live deadline statement carries the tag — not just one per doc. codex,
- * round 4: PICKUP's copy-paste prompt and HANDOFF's `DUE` line are both live
- * instructions to an operator, and with only the prose sentence tagged, either
- * could have drifted back to the old target while every test stayed green.
- * That is the original incident verbatim — two docs, one operator, two
- * different answers.
- *
- * The trailing boundary is codex's too: without it a tagged typo `2026-08-060`
- * captured as `2026-08-06` and passed.
- *
- * The separator is HORIZONTAL whitespace only. codex, round 5: `\s` let a tag
- * bind across blank lines to a date further down the file, which contradicted
- * the same-line rule this very comment states — and the sibling scanner already
- * had a test pinning that rule. A guard whose documentation and behaviour
- * disagree is worse than one that is merely narrow.
- *
- * That same disagreement bit again on review: the comment said "Markdown
- * emphasis" while the class held only `*`, so reformatting a tagged deadline to
- * `__2026-08-06__` made the scanner miss it AND made the untagged-date check
- * fail the line — CI rejecting a correctly-tagged deadline over a cosmetic
- * edit. `_` is allowed now and the comment names both characters instead of
- * gesturing at a category. Strikethrough is deliberately not included: nobody
- * strikes through a live deadline, and every character added here is one more
- * thing that can sit between a tag and the date it is supposed to touch.
- */
-export const PILOT_TARGET_TAG = '<!-- pilot-target:current -->';
-const SEP = '[^\\S\\n]*[*_`]*[^\\S\\n]*';
-const PILOT_TARGET_CLAIM =
-  new RegExp(`<!--[^\\S\\n]*pilot-target:current[^\\S\\n]*-->${SEP}(\\d{4}-\\d{2}-\\d{2})(?![\\d-])`, 'gi');
-
-/** Every tagged target date in one document, in order. */
-export function taggedTargetDates(text: string): string[] {
-  return [...text.matchAll(PILOT_TARGET_CLAIM)].map((m) => m[1]);
-}
-
-/**
- * The target this PR superseded. An UNTAGGED mention of it in an entry point is
- * a stale deadline — the realistic regression, since 2026-08-13 is what every
- * one of these docs said until 2026-07-21 and what a half-finished revert would
- * restore.
- *
- * Legitimate mentions exist and are of two kinds: 2026-08-13 is still the first
- * 16-game preseason slate, and the prose explaining the retarget necessarily
- * names the old date. Both tag themselves `<!-- pilot-target:ignore -->`
- * — same `:ignore` convention as `deploy-state:ignore` and `hof-date:ignore`
- * above — so "the deadline" and "a date on the calendar" are distinguished by
- * something written down rather than inferred.
- *
- * WHEN THE TARGET MOVES AGAIN: update both constants together, or delete this
- * check. A superseded-value ban is only meaningful while the value it names is
- * the thing people would revert to.
- *
- * The SAME rule applies to the current target, and that is what makes "every
- * live deadline is tagged" true rather than aspirational. codex, round 5,
- * found PICKUP §7 stating the deadline untagged: it would have drifted to an
- * invented date with every check still green, because the other tagged
- * mentions kept them satisfied. Requiring every mention of the target date to
- * be tagged closes that by construction — an untagged copy cannot exist, so
- * there is nothing left to drift silently.
- *
- * KNOWN LIMIT, stated rather than implied: a doc that invents a date this file
- * has never heard of — 2026-08-20, untagged, in a sentence with no other
- * marker — still passes. Closing that would mean treating every date in these
- * files as a deadline claim, which is a much larger contract than the problem
- * justifies; the same call the queue-prose limit above makes.
- */
-const SUPERSEDED_TARGET = '2026-08-13';
-export const PILOT_TARGET_IGNORE_TAG = '<!-- pilot-target:ignore -->';
-const PILOT_TARGET_IGNORE = new RegExp(`<!--[^\\S\\n]*pilot-target:ignore[^\\S\\n]*-->${SEP}$`, 'i');
-
-/** Lines in one document where `date` appears with neither pilot-target tag. */
-export function untaggedDateMentions(text: string, date: string): number[] {
-  const NL = String.fromCharCode(10);
-  const lines: number[] = [];
-  for (const m of text.matchAll(new RegExp(`${date}(?![\\d-])`, 'g'))) {
-    const start = m.index!;
-    const lineStart = text.slice(0, start).lastIndexOf(NL) + 1;
-    const before = text.slice(lineStart, start);
-    if (PILOT_TARGET_IGNORE.test(before) || PILOT_TARGET_TAG_AT_END.test(before)) continue;
-    lines.push(text.slice(0, start).split(NL).length);
-  }
-  return lines;
-}
-
-/** The current-target tag, matched where it sits immediately before a date. */
-const PILOT_TARGET_TAG_AT_END =
-  new RegExp(`<!--[^\\S\\n]*pilot-target:current[^\\S\\n]*-->${SEP}$`, 'i');
 
 /**
  * `2026-08-07` in any form EXCEPT the feed's midnight-UTC kickoff instant.
  *
  * The lookahead is the whole guard, and its width is the whole argument.
- * Matching `2026-08-07` unconditionally would ban the correct
- * `2026-08-07T00:00Z` and force authors to stop explaining the bug, which is
- * how a guard trains people to work around it instead of with it.
+ * Matching unconditionally would ban the correct `2026-08-07T00:00Z` and force
+ * authors to stop explaining the bug, which trains people to work around a
+ * guard instead of with it. But exempting "followed by a time" was too wide:
+ * `2026-08-07T20:00:00-04:00` states the WRONG ET date in timestamp clothing.
  *
- * But exempting "followed by a time" was too wide, and codex caught it: an
- * operator writing `2026-08-07T20:00:00-04:00` states the WRONG ET date in
- * timestamp clothing and would have sailed through. So the exemption is the
- * midnight-UTC instant specifically — `T00:00Z`, with the seconds optional
- * because `T00:00:00Z` denotes the same instant and flagging it would be the
- * cry-wolf failure this file elsewhere argues against. Any other offset or
- * time-of-day is not the feed value and is flagged. Fractional seconds are
- * allowed too (codex, round 3) — `Date.toISOString()` produces
- * `2026-08-07T00:00:00.000Z` for the same instant, and a doc pasting that is
- * right, not wrong.
+ * So the exemption is the midnight-UTC instant specifically. Seconds and
+ * fractional seconds are allowed because `T00:00:00Z` and `T00:00:00.000Z`
+ * denote the same instant and flagging them would cry wolf. Any other offset or
+ * time-of-day is not the feed value and is flagged.
  */
 const BARE_WRONG_HOF_DATE = /2026-08-07(?!T00:00(:00(\.\d+)?)?Z)/g;
 
 /**
  * Escape hatch for an honest, unrelated 2026-08-07.
  *
- * codex, round 2: the date is a real calendar day and these docs are full of
- * dated notes. A "MORNING 2026-08-07" written the day after the game is
- * correct, and failing CI on it would tell the author to change a right date to
- * a wrong one — the cry-wolf failure that gets an invariant ignored, and then
- * the real one is missed.
+ * The date is a real calendar day and these docs are full of dated notes. A
+ * "MORNING 2026-08-07" written the day after the game is correct, and failing
+ * CI on it would tell the author to change a right date to a wrong one — the
+ * cry-wolf failure that gets an invariant ignored, and then the real one is
+ * missed.
  *
  * Scoping to "near the words Hall of Fame" was the alternative and is rejected
- * for the reason the deploy-SHA guard already documents above: there is no
- * proximity rule that resolves which mention a phrase refers to. So this reuses
- * that guard's contract instead — an exempt mention is TAGGED, and the tag
- * binds only to what it touches, on the same line, immediately before.
+ * for the reason the deploy-SHA guard above already documents: no proximity
+ * rule resolves which mention a phrase refers to. So this reuses that guard's
+ * contract — an exempt mention is TAGGED, and the tag binds only to what it
+ * touches, same line, immediately before:
  *
  *     Deployed <!-- hof-date:ignore --> 2026-08-07, the morning after.
  *
- * Shares SEP with the pilot-target tags rather than keeping its own separator.
- * It had `\s*`, which allowed no emphasis at all — so tagging a bolded date
- * would have failed the same way the underscore case did on the sibling
- * scanner. Two tags with the same documented contract and two different
- * separators is how one of them silently stops matching what its comment says.
+ * Markdown emphasis (`*` or `_`) and backticks may sit between the tag and the
+ * date; prose may not. Underscores are there because the comment used to
+ * promise "Markdown emphasis" while the class held only `*`, so reformatting a
+ * tagged date to `__2026-08-07__` made the tag stop binding — a cosmetic edit
+ * turning CI red and pointing the author at the wrong problem. Horizontal
+ * whitespace only, so a dangling tag cannot vouch for a date further down.
  */
-const HOF_DATE_EXEMPT = new RegExp(`<!--[^\\S\\n]*hof-date:ignore[^\\S\\n]*-->${SEP}$`, 'i');
+const HOF_DATE_EXEMPT =
+  /<!--[^\S\n]*hof-date:ignore[^\S\n]*-->[^\S\n]*[*_`]*[^\S\n]*$/i;
 
+/** Lines in one document where the wrong HOF date appears untagged. */
 export function wrongHofDateMentions(text: string): number[] {
   const NL = String.fromCharCode(10);
   const lines: number[] = [];
@@ -629,7 +528,7 @@ export function wrongHofDateMentions(text: string): number[] {
   return lines;
 }
 
-describe('operator docs agree on the pilot target date', () => {
+describe('operator docs state the right Hall of Fame date', () => {
   it('no operator doc dates the HOF game 2026-08-07', () => {
     const offenders: string[] = [];
     for (const file of operatorMarkdownFiles()) {
@@ -641,116 +540,43 @@ describe('operator docs agree on the pilot target date', () => {
     expect(
       offenders,
       `The Hall of Fame game is ${HOF_GAME_ET} (Thu, 8:00pm ET). A bare ` +
-        '2026-08-07 is ESPN\'s UTC kickoff date mistaken for the calendar date. ' +
+        "2026-08-07 is ESPN's UTC kickoff date mistaken for the calendar date. " +
         'Write 2026-08-06; or 2026-08-07T00:00Z if you mean the feed value; or ' +
         'tag the line <!-- hof-date:ignore --> if you genuinely mean that ' +
         'calendar day and it is not about the game.',
     ).toEqual([]);
   });
 
-  it('each entry-point doc tags its live target date at least once', () => {
-    for (const doc of AUTHORITATIVE_DOCS) {
-      const dates = taggedTargetDates(fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8'));
-      expect(
-        dates.length,
-        `${doc} must carry at least one "${PILOT_TARGET_TAG}" tag immediately ` +
-          'before a pilot target date. Found none.',
-      ).toBeGreaterThan(0);
-    }
-  });
-
-  it('every tagged target date in both entry points is the HOF game', () => {
-    const wrong: string[] = [];
-    for (const doc of AUTHORITATIVE_DOCS) {
-      for (const date of taggedTargetDates(fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8'))) {
-        if (date !== HOF_GAME_ET) wrong.push(`${doc}=${date}`);
-      }
-    }
-    expect(
-      wrong,
-      `Every tagged deadline must be the pilot target, ${HOF_GAME_ET}. ` +
-        'Two entry points naming two dates is the incident this file exists for.',
-    ).toEqual([]);
-  });
-
-  it('no entry point states the superseded target untagged', () => {
-    const offenders: string[] = [];
-    for (const doc of AUTHORITATIVE_DOCS) {
-      const text = fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8');
-      for (const line of untaggedDateMentions(text, SUPERSEDED_TARGET)) {
-        offenders.push(`${doc}:${line}`);
-      }
-    }
-    expect(
-      offenders,
-      `${SUPERSEDED_TARGET} was the target until 2026-07-21 and is now only the ` +
-        `first 16-game preseason slate. Tag a legitimate mention ${PILOT_TARGET_IGNORE_TAG}; ` +
-        'an untagged one reads as a live deadline.',
-    ).toEqual([]);
-  });
-
-  it('no entry point states the CURRENT target untagged either', () => {
-    // The other half of "every live deadline is tagged". An untagged copy of
-    // the target is the thing that later drifts to an invented date with every
-    // other check still green — codex round 5, on PICKUP §7.
-    const offenders: string[] = [];
-    for (const doc of AUTHORITATIVE_DOCS) {
-      const text = fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8');
-      for (const line of untaggedDateMentions(text, HOF_GAME_ET)) {
-        offenders.push(`${doc}:${line}`);
-      }
-    }
-    expect(
-      offenders,
-      `Every mention of the target date ${HOF_GAME_ET} in an entry point must ` +
-        `carry ${PILOT_TARGET_TAG} (it is a live deadline) or ` +
-        `${PILOT_TARGET_IGNORE_TAG} (it is not). Untagged, it can drift later ` +
-        'without failing anything.',
-    ).toEqual([]);
-  });
-
   describe('the date scanner sees what it claims to', () => {
+    const HOF_TAG = '<!-- hof-date:ignore -->';
+
     it('flags a bare wrong date', () => {
       expect(wrongHofDateMentions('HOF game 2026-08-07.')).toEqual([1]);
-    });
-
-    it('does NOT flag the feed\'s UTC kickoff instant', () => {
-      expect(wrongHofDateMentions('ESPN says `2026-08-07T00:00Z`.')).toEqual([]);
-    });
-
-    it('does NOT flag the same instant written with seconds', () => {
-      expect(wrongHofDateMentions('`2026-08-07T00:00:00Z`')).toEqual([]);
-    });
-
-    it('DOES flag the wrong ET date dressed as a timestamp', () => {
-      // codex, round 1: `(?!T)` exempted anything followed by a time, so an
-      // 8:00pm-ET-on-the-7th timestamp — the original bug, restated — passed.
-      expect(wrongHofDateMentions('kickoff 2026-08-07T20:00:00-04:00')).toEqual([1]);
-    });
-
-    it('DOES flag a midnight time in a non-UTC zone', () => {
-      expect(wrongHofDateMentions('2026-08-07T00:00-04:00')).toEqual([1]);
-    });
-
-    it('reports the line of every offender, not just the first', () => {
-      const NL = String.fromCharCode(10);
-      expect(wrongHofDateMentions(`a${NL}2026-08-07${NL}b${NL}c 2026-08-07`))
-        .toEqual([2, 4]);
     });
 
     it('does not flag the correct date', () => {
       expect(wrongHofDateMentions(`HOF game ${HOF_GAME_ET}.`)).toEqual([]);
     });
 
-    const HOF_TAG = '<!-- hof-date:ignore -->';
+    it("does NOT flag the feed's UTC kickoff instant, in any precision", () => {
+      expect(wrongHofDateMentions('ESPN says `2026-08-07T00:00Z`.')).toEqual([]);
+      expect(wrongHofDateMentions('`2026-08-07T00:00:00Z`')).toEqual([]);
+      expect(wrongHofDateMentions('`2026-08-07T00:00:00.000Z`')).toEqual([]);
+    });
+
+    it('DOES flag the wrong ET date dressed as a timestamp', () => {
+      expect(wrongHofDateMentions('kickoff 2026-08-07T20:00:00-04:00')).toEqual([1]);
+      expect(wrongHofDateMentions('2026-08-07T00:00-04:00')).toEqual([1]);
+    });
 
     it('exempts a tagged unrelated mention', () => {
       expect(wrongHofDateMentions(`Deployed ${HOF_TAG} 2026-08-07.`)).toEqual([]);
     });
 
-    it('exempts a tagged mention through emphasis, like its sibling tags', () => {
+    it('exempts a tagged mention through emphasis of either flavour', () => {
       expect(wrongHofDateMentions(`${HOF_TAG} **2026-08-07**`)).toEqual([]);
       expect(wrongHofDateMentions(`${HOF_TAG} __2026-08-07__`)).toEqual([]);
+      expect(wrongHofDateMentions(`${HOF_TAG} \`2026-08-07\``)).toEqual([]);
     });
 
     it('does NOT exempt when the tag trails the mention — it binds forward only', () => {
@@ -769,106 +595,11 @@ describe('operator docs agree on the pilot target date', () => {
       expect(wrongHofDateMentions(`${HOF_TAG} 2026-08-07 and HOF is 2026-08-07`))
         .toEqual([1]);
     });
-  });
 
-  describe('the target-claim scanner sees what it claims to', () => {
-    it('reads the date the tag points at', () => {
-      expect(taggedTargetDates(`target ${PILOT_TARGET_TAG} 2026-08-06.`))
-        .toEqual(['2026-08-06']);
-    });
-
-    it('sees through markdown emphasis and backticks', () => {
-      expect(taggedTargetDates(`${PILOT_TARGET_TAG} **2026-08-06**`)).toEqual(['2026-08-06']);
-      expect(taggedTargetDates(`${PILOT_TARGET_TAG} \`2026-08-06\``)).toEqual(['2026-08-06']);
-      // Underscore emphasis is the same markdown, and reformatting a deadline
-      // to it used to make the scanner miss the tag entirely — which then made
-      // the untagged-date check fail a line that WAS tagged. Cosmetic edit,
-      // red CI, wrong diagnosis.
-      expect(taggedTargetDates(`${PILOT_TARGET_TAG} __2026-08-06__`)).toEqual(['2026-08-06']);
-      expect(taggedTargetDates(`${PILOT_TARGET_TAG} _2026-08-06_`)).toEqual(['2026-08-06']);
-    });
-
-    it('reads a WRONG tagged date rather than passing it', () => {
-      // The point of the tag: retargeting the deadline changes what this
-      // returns, so the comparison against HOF_GAME_ET can fail. `.toContain`
-      // could not do this — historical prose kept it green.
-      expect(taggedTargetDates(`${PILOT_TARGET_TAG} 2026-08-13`)).toEqual(['2026-08-13']);
-    });
-
-    it('ignores an untagged date, including one explaining the old target', () => {
-      expect(taggedTargetDates('Retargeted from 2026-08-13 on 2026-07-21.')).toEqual([]);
-    });
-
-    it('returns every tagged date so a second one can be rejected', () => {
+    it('reports the line of every offender, not just the first', () => {
       const NL = String.fromCharCode(10);
-      expect(taggedTargetDates(
-        `${PILOT_TARGET_TAG} 2026-08-06${NL}and ${PILOT_TARGET_TAG} 2026-08-13`,
-      )).toEqual(['2026-08-06', '2026-08-13']);
-    });
-
-    it('does not bind across prose', () => {
-      expect(taggedTargetDates(`${PILOT_TARGET_TAG} the game is on 2026-08-06`)).toEqual([]);
-    });
-
-    it('requires a complete date token', () => {
-      // codex, round 4: without the trailing boundary this captured
-      // '2026-08-06' out of a typo and both assertions passed on it.
-      expect(taggedTargetDates(`${PILOT_TARGET_TAG} 2026-08-060`)).toEqual([]);
-      expect(taggedTargetDates(`${PILOT_TARGET_TAG} 2026-08-06-ish`)).toEqual([]);
-    });
-
-    it('does not bind across a line break', () => {
-      // codex, round 5: `\s` in the separator let a dangling tag vouch for a
-      // date further down the file, contradicting the same-line rule this
-      // scanner's own documentation states.
-      const NL = String.fromCharCode(10);
-      expect(taggedTargetDates(`${PILOT_TARGET_TAG}${NL}2026-08-06`)).toEqual([]);
-      expect(taggedTargetDates(`${PILOT_TARGET_TAG}${NL}${NL}2026-08-06`)).toEqual([]);
-    });
-  });
-
-  describe('the untagged-date scanner sees what it claims to', () => {
-    const OLD = '2026-08-13';
-
-    it('flags an untagged live-looking mention', () => {
-      expect(untaggedDateMentions('A8 is DUE 2026-08-13.', OLD)).toEqual([1]);
-    });
-
-    it('exempts a tagged one', () => {
-      expect(untaggedDateMentions(`slate ${PILOT_TARGET_IGNORE_TAG} 2026-08-13`, OLD)).toEqual([]);
-    });
-
-    it('exempts a tagged one through emphasis of either flavour', () => {
-      expect(untaggedDateMentions(`${PILOT_TARGET_IGNORE_TAG} **2026-08-13**`, OLD)).toEqual([]);
-      expect(untaggedDateMentions(`${PILOT_TARGET_IGNORE_TAG} __2026-08-13__`, OLD)).toEqual([]);
-      expect(untaggedDateMentions(`${PILOT_TARGET_TAG} __2026-08-13__`, OLD)).toEqual([]);
-    });
-
-    it('exempts one that is itself the tagged current target', () => {
-      // If the target ever moves BACK, the tagged claim is the honest place to
-      // say so — and the agreement test above is what would then fail, with a
-      // message about the target rather than about a stale string.
-      expect(untaggedDateMentions(`${PILOT_TARGET_TAG} 2026-08-13`, OLD)).toEqual([]);
-    });
-
-    it('does not let the ignore tag leak past its own mention', () => {
-      expect(untaggedDateMentions(
-        `${PILOT_TARGET_IGNORE_TAG} 2026-08-13 but DUE 2026-08-13`, OLD,
-      )).toEqual([1]);
-    });
-
-    it('does not let a tag leak across a line break', () => {
-      const NL = String.fromCharCode(10);
-      expect(untaggedDateMentions(`${PILOT_TARGET_IGNORE_TAG}${NL}2026-08-13`, OLD)).toEqual([2]);
-    });
-
-    it('requires a complete date token', () => {
-      expect(untaggedDateMentions('build 2026-08-130', OLD)).toEqual([]);
-    });
-
-    it('scans whichever date it is given', () => {
-      expect(untaggedDateMentions(`DUE ${HOF_GAME_ET}`, OLD)).toEqual([]);
-      expect(untaggedDateMentions(`DUE ${HOF_GAME_ET}`, HOF_GAME_ET)).toEqual([1]);
+      expect(wrongHofDateMentions(`a${NL}2026-08-07${NL}b${NL}c 2026-08-07`))
+        .toEqual([2, 4]);
     });
   });
 });

@@ -85,14 +85,11 @@
 >
 > ### 6. Kevin-only, in priority order
 >
-> 1. **A8 — publish the 2026 price and free-period end date.
->    DUE <!-- pilot-target:current --> 2026-08-06.**
+> 1. **A8 — publish the 2026 price and free-period end date. DUE 2026-08-06.**
 >    The only calendar-bound item. **The target is the Hall of Fame game,
->    <!-- pilot-target:current --> 2026-08-06** (Thu, 8:00pm ET) — set by Kevin
->    on 2026-07-21, one week earlier than the
->    <!-- pilot-target:ignore --> 2026-08-13 these docs previously carried.
->    The first 16-game preseason slate is
->    <!-- pilot-target:ignore --> 2026-08-13.
+>    2026-08-06** (Thu, 8:00pm ET) — set by Kevin on 2026-07-21, one week
+>    earlier than the 2026-08-13 these docs previously carried. The first
+>    16-game preseason slate is 2026-08-13.
 >
 >    The HOF date was wrong here until 2026-07-21: ESPN reports kickoff as
 >    `2026-08-07T00:00Z` (8:00pm ET = midnight UTC next day) and the UTC date

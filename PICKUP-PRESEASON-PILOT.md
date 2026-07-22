@@ -3,26 +3,15 @@
 **Paste this to start a new session:**
 
 > Read `PICKUP-PRESEASON-PILOT.md` §0 first, then `HANDOFF.md`'s STOP POINT box.
-> The target is the Hall of Fame game,
-> <!-- pilot-target:current --> 2026-08-06. Deploy and prod-data
+> The target is the Hall of Fame game, 2026-08-06. Deploy and prod-data
 > mutations are Kevin's; code, tests and PRs are yours. Follow CLAUDE.md §2b
 > (qodo: poll 3 min before pushing a follow-up) and §2c (`codex exec review
 > --base origin/main`, expect several rounds). Tell me what you plan to do
 > before you do it.
 
-Written 2026-07-21. **The target is the Hall of Fame game,
-<!-- pilot-target:current --> 2026-08-06** (Thu, 8:00pm ET, CAR at ARI) — that
-is the clock, set by Kevin on 2026-07-21. The first 16-game preseason slate
-follows on <!-- pilot-target:ignore --> 2026-08-13.
-
-Both tags are load-bearing, and `tests/docs-state-invariants.test.ts` enforces
-them. **Every live deadline** in this file and in HANDOFF is tagged
-`<!-- pilot-target:current -->` immediately before the date, and all of them
-must name the same day. A mention of the *superseded* target that is not a
-deadline — the slate date, or prose about the retarget — is tagged
-`<!-- pilot-target:ignore -->` instead; untagged, it fails CI as a stale
-deadline. Both tags bind to the date
-that follows them **on the same line**, so keep them together when reflowing.
+Written 2026-07-21. **The target is the Hall of Fame game, 2026-08-06** (Thu,
+8:00pm ET, CAR at ARI) — that is the clock, set by Kevin on 2026-07-21. The
+first 16-game preseason slate follows on 2026-08-13.
 
 ⚠️ **These docs dated the HOF game one day late until 2026-07-21.** ESPN reports
 its kickoff as `2026-08-07T00:00Z`, because 8:00pm ET is midnight UTC the next
@@ -77,10 +66,8 @@ before editing those files or you will redo its work.
    work, once those exist:** the scheduled Auth export is deferred CODE
    (`PLAN-BACKUPS-PHASE3.md` step 6), not a console click — keep it on the
    engineering queue rather than filing the whole gap under Kevin.
-2. **A8 pricing — DUE <!-- pilot-target:current --> 2026-08-06.** The only
-   calendar-bound item. Retargeted from
-   <!-- pilot-target:ignore --> 2026-08-13 on 2026-07-21 when Kevin named the
-   HOF game as the target.
+2. **A8 pricing — DUE 2026-08-06.** The only calendar-bound item. Retargeted
+   from 2026-08-13 on 2026-07-21 when Kevin named the HOF game as the target.
 3. **A banned commissioner can still move the money ledger.**
    `recordPoolPayouts` authorizes from persisted pool ownership and never
    consults `users/{uid}.role`; it IS on the pilot path
@@ -353,8 +340,7 @@ Always confirm the change is in the file on disk before deploying — not that
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.
 4. **A8 — publish the 2026 price + free-period end date.
-   Deadline <!-- pilot-target:current --> 2026-08-06.** The only
-   calendar-bound item on the list.
+   Deadline 2026-08-06.** The only calendar-bound item on the list.
 5. **Leave `nflLockWatch.dryRun: true`** until the preseason-lines question is
    settled — only 1 of 49 games has a betting line, so going live pages nightly
    about a known condition.
