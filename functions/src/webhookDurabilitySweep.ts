@@ -5,6 +5,7 @@ import { dispatchOpsAlert } from "./lib/opsAlertDispatcher";
 import { captureMonetizationAlert } from "./lib/sentryServer";
 import { isWebhookStuck, WEBHOOK_STUCK_MS } from "./lib/webhookDurability";
 import { withHeartbeat } from "./lib/heartbeat";
+import { webhookSweepVerdict } from "./lib/heartbeatVerdicts";
 
 /**
  * Daily backstop for the webhook-durability SLO (PLAN-SECURITY-OBSERVABILITY.md
@@ -84,10 +85,5 @@ export const webhookDurabilitySweep = onSchedule("every 24 hours", withHeartbeat
     // customer paid and the system never applied. Both of its outputs swallow
     // their own failures, so a run that found stuck events and then reached
     // nobody is the worst possible silent success.
-    const lost: string[] = [];
-    if (delivery === "failed") lost.push("ops page undelivered");
-    if (!audited) lost.push("audit entry not written");
-    return lost.length > 0
-        ? { ok: false, error: `${stuck.length} stuck event(s) found but ${lost.join(" and ")}`, detail: { stuckCount: stuck.length } }
-        : { detail: { stuckCount: stuck.length } };
+    return webhookSweepVerdict({ stuckCount: stuck.length, delivery, audited });
 }));

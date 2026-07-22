@@ -22,6 +22,7 @@ import { validated } from "./lib/validated";
 import { redeemCouponSchema } from "./schemas/billingCheckout";
 import { validateBillingAccessSchema } from "./schemas/billing";
 import { withHeartbeat } from "./lib/heartbeat";
+import { billingEnforceVerdict } from "./lib/heartbeatVerdicts";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { renderEmailHtml, escapeHtml, BASE_URL } from "./emailStyles";
 import { sendEmail } from "./reminders";
@@ -227,13 +228,11 @@ export const enforceBillingStatus = functions.scheduler.onSchedule("every day 03
     // a run where every transition failed still stamped a healthy beat. This is
     // a MONEY path — a pool that should have locked and silently did not is
     // free access nobody is told about.
-    return failedTransitions > 0
-        ? {
-            ok: false,
-            error: `${failedTransitions} billing transition(s) failed`,
-            detail: { trialToGrace: trialToGraceCount, graceToLocked: graceToLockedCount, failedTransitions },
-        }
-        : { detail: { trialToGrace: trialToGraceCount, graceToLocked: graceToLockedCount } };
+    return billingEnforceVerdict({
+        trialToGrace: trialToGraceCount,
+        graceToLocked: graceToLockedCount,
+        failedTransitions,
+    });
 }));
 
 // =============================================================================

@@ -10,6 +10,7 @@ import { isOptedOut, buildUnsubUrl, getPrefs, EmailCategory } from "./emailPrefs
 import { sendCourierSMS } from "./notifications/smsService";
 import { getSquarePrivateMap, getSquareEmails } from "./squarePrivate";
 import { withHeartbeat } from "./lib/heartbeat";
+import { reminderPassVerdict } from "./lib/heartbeatVerdicts";
 
 
 
@@ -165,9 +166,7 @@ export const runReminders = functions.scheduler.onSchedule("every 5 minutes", wi
     // that means plumbing an outcome back through each helper, which is a real
     // change to the delivery path and wants its own PR rather than a 4am edit
     // to the job that pages members. Raised by codex review on this PR.
-    return failedPools > 0
-        ? { ok: false, error: `${failedPools} pool(s) failed during the reminder pass`, detail: { failedPools } }
-        : { detail: { failedPools: 0 } };
+    return reminderPassVerdict({ failedPools });
 }));
 
 // --- PLAYOFF REMINDER LOGIC ---
