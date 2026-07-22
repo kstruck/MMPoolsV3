@@ -2,7 +2,7 @@
 name: mmp-change-control
 description: >
   Use when making ANY change to the march-melee-pools repo and you need to know
-  what gate it requires: classifying a change (trivial fix vs multi-file feature
+  what gate it requires: classifying a change (ordinary vs plan-gated feature
   vs prod-data mutation vs deploy), starting a PLAN-*.md, running an adversarial
   review log, doing a sweep pass, deploying functions/rules, mutating production
   Firestore data, enabling a scheduled job past dry-run, creating a branch or
@@ -32,7 +32,7 @@ Jargon used below, defined once:
 | SUPER_ADMIN | The platform-owner role (custom auth claim); Kevin. |
 | callable | A Firebase `onCall` Cloud Function invoked from the client. |
 | Coolify | Self-hosted deploy dashboard that builds/serves the prod www frontend (nginx container). NOT Firebase Hosting. |
-| PLAN-*.md | A repo-root plan-of-record document for a multi-file change. |
+| PLAN-*.md | A repo-root plan-of-record document for a plan-gated change (money / authz / prod data / scoring). |
 | review log | `PLAN-*-REVIEW-LOG.md` — verbatim findings from adversarial review rounds + accept/reject responses. |
 | sweep | `PLAN-*-SWEEPS.md` — deterministic grep-built COMPLETE instance lists for a plan item. |
 | clobber | A merge that silently reverts previously-merged work without CI noticing. |
@@ -47,13 +47,19 @@ Classify FIRST. The gate is determined by blast radius, not effort.
 
 | Class | Definition | Gate required |
 |---|---|---|
-| **Trivial fix** | 1 file (or 1 file + its test), no behavior change to money/roles/rules/scoring, no new dependency | Own branch off `main`, green local tests, PR through CI. No plan doc needed. |
-| **Ordinary change** | Any size, as long as it touches none of the Rule-3 triggers below | Own branch off `origin/main`, all five gates green, `codex exec review --base origin/main` until clean, PR through CI. **No plan doc.** Own worktree if another session may be active (Rule 4). |
-| **Plan-gated change** | Touches **money, authorization, or production data** — see the trigger list below | Rule 3: `PLAN-*.md` + adversarial review log + sweep pass, THEN implement. |
+| **Ordinary change** | Anything that touches none of the Rule-3 triggers below — **any file count**, from a one-line typo to a 14-file refactor | Own branch off `origin/main`, all five gates green, `codex exec review --base origin/main` until clean, PR through CI. **No plan doc.** Own worktree if another session may be active (Rule 4). |
+| **Plan-gated change** | Touches **money, authorization, production data, or scoring** — see the trigger list below | Rule 3: `PLAN-*.md` + adversarial review log + sweep pass, THEN implement. |
+
+There is deliberately **no third, lighter class for one-file fixes.** An earlier
+version had a "Trivial fix" row that permitted branching from local `main` with
+only local tests — which overlapped this row while prescribing a weaker gate, so
+the same one-line change could be classified either way and the looser reading
+would win. The five gates and a codex pass are cheap; a second classification
+anyone can argue into is not.
 | **Prod-data mutation** | Any code or action that writes/migrates/backfills/deletes production Firestore data outside a user's own normal flow (backfills, sweeps, role migrations, `fix*`/`recalculate*` ops) | Rule 1: kill-switch + dry-run-default, review dry-run output before enabling. Prod data is itself a Rule-3 trigger, so new code here takes the plan gate too. |
 | **Deploy** | Anything reaching prod: functions, firestore rules/indexes, www frontend | Rule 2 deploy ritual. Frontend additionally requires Kevin (Section 6). |
 
-### Rule-3 triggers — money, authorization, or production data
+### Rule-3 triggers — money, authorization, production data, or scoring
 
 **Kevin's ruling, 2026-07-22.** The gate used to be "touches 2+ files", and it
 was not followed: none of the twelve PRs merged 2026-07-21 carried a PLAN, and

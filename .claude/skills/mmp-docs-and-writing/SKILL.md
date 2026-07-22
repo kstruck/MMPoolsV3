@@ -57,7 +57,7 @@ Repo: `D:\march-melee-pools` (March Melee Pools / Gridiron Gamble). This skill t
 
 | You are writing... | Put it at | Named |
 |---|---|---|
-| A multi-file change plan | repo root | `PLAN-<SCOPE>.md` |
+| A plan-gated change (money / authz / prod data / scoring) | repo root | `PLAN-<SCOPE>.md` |
 | Its adversarial review record | repo root | `PLAN-<SCOPE>-REVIEW-LOG.md` |
 | Grep enumeration feeding that plan | repo root | `PLAN-<SCOPE>-SWEEPS.md` |
 | Audit/walkthrough findings | repo root | `<SCOPE>-AUDIT-REPORT.md` or `AUDIT-REPORT-<QUALIFIER>.md` |
@@ -231,7 +231,7 @@ From `docs/UI-REVAMP-GUIDE.md` (verified): **"No emoji anywhere — replace with
 Canonical home: sibling skill **mmp-change-control**. Restated here because docs enforce them (as of 2026-07-06, owner-confirmed):
 1. No prod-data mutation without kill-switch + dry-run-default first — the `autoClosePools` pattern (`functions/src/autoClosePools.ts:11-15`: does nothing unless `system/config.autoClose.enabled === true`, dry-run unless `dryRun:false`); verify dry-run output before enabling. As of 2026-07-06 autoClosePools is LIVE past dry-run.
 2. Deploy ritual: always `npx firebase` (never global CLI); `npm --prefix functions ci` first (avoids stripe/fft TS2307); deploy functions BEFORE rules; project `gridiron-gamble-uzuqo`. Details: **mmp-deploy-and-operate**.
-3. Plan→review-log→sweep gate: no multi-file change without a `PLAN-*.md`, an adversarial review log, and a sweep pass. This skill supplies the templates.
+3. Plan→review-log→sweep gate: no change touching **money, authorization, production data, or scoring** without a `PLAN-*.md`, an adversarial review log, and a sweep pass. NOT triggered by file count (ruling 2026-07-22 — see `mmp-change-control` §1). This skill supplies the templates.
 4. Worktree isolation: new parallel work in its own git worktree; never batch onto a branch another session may touch.
 
 ## 4. Update discipline — which doc MUST change when

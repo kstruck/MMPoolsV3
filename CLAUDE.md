@@ -182,8 +182,8 @@ constraint, correctness is.
 3. Outside of (1) and (2), personas govern prose style and code-size
    defaults as configured; they do not override this repo's test
    conventions (see `mmp-validation-and-qa` — extend existing vitest
-   suites, do not claim a coverage percentage) or its plan-before-multi-file-
-   change convention (PLAN-*.md, not a fresh planning template).
+   suites, do not claim a coverage percentage) or its plan-gate convention
+   (PLAN-*.md, not a fresh planning template).
 
    **RESOLVED 2026-07-22 (Kevin).** The `PLAN-*.md` gate was "any 2+ file
    change", and it was systematically not followed — none of the twelve PRs

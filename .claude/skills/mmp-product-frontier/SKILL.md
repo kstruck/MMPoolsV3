@@ -43,7 +43,7 @@ Corollary that has bitten this repo twice: **check the premise before building o
 
 ## A2. The idea lifecycle
 
-Every multi-file change follows this pipeline. Skipping stages is how the clobber incident happened (merged work silently reverted by two follow-on PRs, invisible to CI twice — see `mmp-failure-archaeology`).
+Every **plan-gated** change follows this pipeline — money, authorization, production data or scoring (`mmp-change-control` §1; file count alone does not trigger it, ruling 2026-07-22). Skipping stages is how the clobber incident happened (merged work silently reverted by two follow-on PRs, invisible to CI twice — see `mmp-failure-archaeology`).
 
 | Stage | What you do | Artifact |
 |---|---|---|
@@ -123,7 +123,7 @@ Dependencies worth respecting when sequencing:
 - **B-5 gets MORE urgent as B-1 goes live**: automated jobs mutating prod weekly with no backup is a worse position than manual ops with no backup.
 - **B-1 outranks everything on the calendar**: it is the only item with an external deadline (2026 NFL season kickoff).
 
-How to pick, given a free session: (1) anything Kevin explicitly asked for wins; (2) otherwise the cheapest step of the highest-ranked unblocked item — e.g. B-3 step 1 or B-5 step 1 are single-session, low-risk, high-information moves; (3) never start a multi-file frontier item without the A2 lifecycle (plan + review log + sign-off). When in doubt, run a fresh audit (A3) instead of guessing — audits are how every prior cycle found its real work.
+How to pick, given a free session: (1) anything Kevin explicitly asked for wins; (2) otherwise the cheapest step of the highest-ranked unblocked item — e.g. B-3 step 1 or B-5 step 1 are single-session, low-risk, high-information moves; (3) never start a frontier item that touches money, authorization, prod data or scoring without the A2 lifecycle (plan + review log + sign-off). When in doubt, run a fresh audit (A3) instead of guessing — audits are how every prior cycle found its real work.
 
 ## B-1. NFL season automation — CANDIDATE, rank 1
 
