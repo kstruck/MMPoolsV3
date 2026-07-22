@@ -125,23 +125,36 @@ name `origin/main` explicitly.
 once the work is committed. Use it before a commit; use `--base origin/main`
 for the PR. Found by codex reviewing this very section.
 
-⚠️ **BRANCH FROM `origin/main`, AND READ THE MERGE-BASE CODEX PRINTS.** On
-2026-07-22 a security PR was built on a branch cut from a stale base. Its diff
-against `origin/main` carried a **125-line `package-lock.json` reversal that
-would have reverted the `fast-uri` security fix from #254** — a PR that looked
-like it only added a guard, silently undoing a different security fix.
-
-Nothing in the five gates catches this: every test passes, because the reverted
-lockfile is internally consistent. What exposed it was codex echoing its
-merge-base as `abda2f5` when `origin/main` was `305b36b`. So:
+⚠️ **USE A THREE-DOT DIFF TO CHECK PR SCOPE. `..` LIES.**
 
 ```
-git fetch origin && git checkout -B <branch> origin/main    # not `git checkout -b` from wherever HEAD is
-git diff --stat origin/main..HEAD                           # confirm ONLY your files
+git fetch origin
+git diff --stat origin/main...HEAD    # THREE dots - what YOUR branch introduces
 ```
 
-Read the merge-base codex prints and compare it to `git rev-parse origin/main`.
-If they differ, your branch is not based where you think it is.
+Two-dot `origin/main..HEAD` compares the two TIPS, so every commit `origin/main`
+has gained since you branched shows up as a **reverse** change in your diff.
+Three-dot diffs against the merge base and shows only what your branch actually
+did.
+
+This is written down because it produced a false alarm worth more than the true
+positive would have been. On 2026-07-22 a two-dot diff on a security PR showed a
+125-line `package-lock.json` "reversal", and the session concluded the PR would
+revert the `fast-uri` fix from #254 and rebuilt the branch. Codex reviewed the
+resulting write-up and disproved it. Verified after: no commit on that branch
+ever touched `package-lock.json`, and `git diff origin/main...HEAD --
+package-lock.json` was **empty**. Git's three-way merge would have preserved
+`origin/main`'s lockfile. The PR was fine; the diff command was wrong.
+
+The real lesson is the general one: **a scary reading of a command's output is a
+hypothesis, not a finding.** Confirm which commits touched the file
+(`git log origin/main..HEAD -- <path>`) before acting on it, and certainly
+before writing it into a rule.
+
+Branching cleanly is still worth doing - `git checkout -B <branch> origin/main`
+after a fetch keeps a PR's history to its own commits - but it is hygiene, not a
+correctness fix, and `git checkout -B` discards uncommitted work, so it is not
+something to reach for on a hunch.
 
 **Why this is a hard rule and not a nicety.** On 2026-07-21 a single session
 produced 12 self-inflicted defects. Seven were facts asserted from memory that
