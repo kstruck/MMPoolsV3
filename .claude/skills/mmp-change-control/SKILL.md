@@ -78,9 +78,14 @@ routine. It is now scoped to blast radius instead of file count.
 
 Everything else is an **ordinary change**, whatever its file count. A 14-file
 refactor touching none of the four triggers takes the ordinary gate; a one-line
-edit to `firestore.rules` takes the full plan gate. Name all four when you
-classify: dropping one from the list is how a scoring refactor talks itself into
-the ordinary lane.
+edit to `firestore.rules` that CHANGES WHO CAN READ OR WRITE SOMETHING takes the
+full plan gate. Name all four when you classify: dropping one from the list is
+how a scoring refactor talks itself into the ordinary lane.
+
+Note the qualifier on that second example — it is doing work. A comment-only or
+provably behaviour-preserving edit to `firestore.rules` is ordinary, by the same
+rule that makes #256 ordinary. Classifying by filename is what the next section
+exists to stop, so the examples must not do it either.
 
 #### "Touches" means BEHAVIOUR, not the file
 
