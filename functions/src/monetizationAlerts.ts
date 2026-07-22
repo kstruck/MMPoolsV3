@@ -12,6 +12,7 @@ import {
   type MonetizationAlertType,
 } from "./lib/monetizationAlertLogic";
 import { withHeartbeat, configReadFailedVerdict } from "./lib/heartbeat";
+import { monetizationVerdict, monetizationDryRunVerdict } from "./lib/heartbeatVerdicts";
 
 /**
  * monetizationAlerts (PLAN-BUYFLOW-OVERHAUL Phase 6 #22) — a ~6-hourly sweep
@@ -291,9 +292,7 @@ export const monetizationAlerts = functions.scheduler.onSchedule(
         status: "success",
       });
       // That audit entry is the dry run's ONLY output.
-      return dryAudited
-        ? { detail: { dryRun: true, wouldWrite: allCandidates.length } }
-        : { ok: false, error: "dry-run report not written", detail: { dryRun: true, wouldWrite: allCandidates.length } };
+      return monetizationDryRunVerdict(allCandidates.length, dryAudited);
     }
 
     // Live run: upsert every candidate (deduped), then email the abuse ones.
@@ -355,11 +354,6 @@ export const monetizationAlerts = functions.scheduler.onSchedule(
       status: "success",
     });
 
-    const problems: string[] = [];
-    if (failedUpserts > 0) problems.push(`${failedUpserts} alert upsert(s) failed`);
-    if (!audited) problems.push("run summary not written");
-    return problems.length > 0
-      ? { ok: false, error: problems.join("; "), detail: { created, refreshed, reopened, failedUpserts } }
-      : { detail: { created, refreshed, reopened } };
+    return monetizationVerdict({ created, refreshed, reopened, failedUpserts, audited });
   }
 ));

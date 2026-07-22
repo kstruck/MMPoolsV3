@@ -367,10 +367,25 @@ describe('a wrapped job that swallows errors still reports failure', () => {
     return /withHeartbeat\(\s*['"]([A-Za-z0-9_]+)['"]/.exec(body)?.[1] ?? '<unknown>';
   }
 
-  /** Does this wrapped handler have ANY path that reports a degraded run? */
+  /**
+   * Does this wrapped handler have ANY path that reports a degraded run?
+   *
+   * Two accepted forms: an inline `ok: false`, or a call to a `*Verdict(...)`
+   * helper. The helper list used to be hardcoded, which meant every extraction
+   * silently broke this ratchet until someone remembered to add the new name —
+   * a guard that fails for a reason unrelated to the thing it guards. The
+   * pattern is now the convention itself.
+   *
+   * The trade, stated plainly: this cannot tell a real verdict helper from a
+   * function merely NAMED `somethingVerdict` that always reports healthy. That
+   * is deliberate. This ratchet only answers "is a failure path wired up at
+   * all"; whether each verdict is CORRECT is answered by the per-helper unit
+   * tests, which is where that question belongs and where it is now covered.
+   */
   function reportsFailure(body: string): boolean {
     return /ok:\s*false/.test(body)
-      || /configReadFailedVerdict|sweepRunVerdict|dryRunVerdict|lockWatchVerdict|scoreSyncHeartbeat/.test(body);
+      || /\b\w+Verdict\s*\(/.test(body)
+      || /scoreSyncHeartbeat/.test(body);
   }
 
   const offenders: string[] = [];

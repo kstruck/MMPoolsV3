@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { adminCloseUpdate, isAutoCloseEligible } from "./lib/lifecycle";
 import { writeAdminAudit } from "./lib/adminAudit";
 import { withHeartbeat, configReadFailedVerdict } from "./lib/heartbeat";
+import { autoCloseVerdict, autoCloseDryRunVerdict } from "./lib/heartbeatVerdicts";
 
 /**
  * autoClosePools (T2) — a daily sweep that closes pools whose event is over but
@@ -73,9 +74,7 @@ export const autoClosePools = functions.scheduler.onSchedule(
       });
       // That audit entry IS the dry run's only output; losing it means the run
       // produced nothing readable while claiming success.
-      return dryAudited
-        ? { detail: { dryRun: true, wouldClose: eligible.length } }
-        : { ok: false, error: 'dry-run report not written', detail: { dryRun: true, wouldClose: eligible.length } };
+      return autoCloseDryRunVerdict(eligible.length, dryAudited);
     }
 
     // Live run: close each via the shared admin-close write.
@@ -104,8 +103,6 @@ export const autoClosePools = functions.scheduler.onSchedule(
       status: "success",
     });
 
-    return failed > 0
-      ? { ok: false, error: `${failed} pool(s) failed to close`, detail: { closed, failed, overflow } }
-      : { detail: { closed, overflow } };
+    return autoCloseVerdict({ closed, failed, overflow });
   }
 ));

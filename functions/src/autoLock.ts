@@ -5,6 +5,7 @@ import * as admin from "firebase-admin";
 import { GameState } from "./types";
 import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { withHeartbeat } from "./lib/heartbeat";
+import { autoLockVerdict } from "./lib/heartbeatVerdicts";
 
 const db = admin.firestore();
 
@@ -107,12 +108,7 @@ export const autoLockPools = functions.scheduler.onSchedule(
         // A pool that failed to lock leaves picks OPEN past its deadline. The
         // per-pool catch stops one failure taking the batch down, which meant a
         // run where none of the due pools locked still reported healthy.
-        const problems: string[] = [];
-        if (failed > 0) problems.push(`${failed} of ${duePools.length} due pool(s) failed to lock`);
-        if (invalidDeadlines > 0) problems.push(`${invalidDeadlines} pool(s) have an unparseable lockAt and can never auto-lock`);
-        return problems.length > 0
-            ? { ok: false, error: problems.join('; '), detail: { duePools: duePools.length, failed, invalidDeadlines } }
-            : { detail: { duePools: duePools.length } };
+        return autoLockVerdict({ duePools: duePools.length, failed, invalidDeadlines });
     } catch (error) {
         // Caught so a scheduled run cannot become an unhandled rejection — but
         // NO pool was locked, and this job runs every minute on the path that
