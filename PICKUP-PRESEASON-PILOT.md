@@ -378,9 +378,10 @@ Always confirm the change is in the file on disk before deploying — not that
    under `"2"` in `bySeasonType`. Then set `nflFinalize.liveSeasonTypes` to an
    array containing the number **1** — `dryRun:false` **alone does nothing**,
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
-2. ~~**Deploy**~~ — **DONE 2026-07-21**: functions ~16:40Z, Coolify ~16:54Z, both
-   on the SHA tagged in §2. Queue empty. What remains is verification, not
-   deployment — see HANDOFF's STOP POINT §5.
+2. **Deploy — OWED as of 2026-07-22.** #255 and #256 change `functions/` and are
+   not live until deployed; #255 closes a banned-owner authorization gap on the
+   pilot path. Full recipe: `MORNING-2026-07-22.md` §2. (The 2026-07-21 deploy —
+   functions ~16:40Z, Coolify ~16:54Z — is what the §2 SHA still refers to.)
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.
