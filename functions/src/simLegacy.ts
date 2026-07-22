@@ -25,6 +25,7 @@
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { writeAdminAudit, capMetadata } from './lib/adminAudit';
+import { assertNotBannedLive } from './lib/systemGuards';
 
 const TOURNAMENT_ID_RE = /^[a-z0-9][a-z0-9-]{1,63}$/;
 
@@ -144,6 +145,13 @@ export const simFillSquares = onCall(async (request) => {
         if (!isSuper && !owns && !isCoManager) {
             throw new HttpsError('permission-denied', 'You do not have permission to fill this pool\'s grid.');
         }
+
+        // The check above authorizes from PERSISTED POOL FIELDS and never reads
+        // `users/{uid}.role`, so a BANNED owner or co-manager keeps the ability
+        // to fill a real pool's grid. CONTEXT.md requires bans server-side; see
+        // SECURITY-BARE-ONCALL-CLASSIFICATION.md. After the ownership check, so
+        // a banned non-owner costs no extra read.
+        await assertNotBannedLive(uid);
 
         let squares: Array<Record<string, unknown>> = [...(pool.squares || [])];
         if (squares.length < 100) {
