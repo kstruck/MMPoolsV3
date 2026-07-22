@@ -271,12 +271,17 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 - **Eight files wrap a job that cannot report failure at all** (`adminHealth`,
   `consensus`, `espnBracket`, `expertPicks`, `expertProfiles`,
   `revenueAggregates`, `stripe`, `winProbability`), on a shrink-only list.
-- **`nflFinalizeSweepJob` has never completed a run in production.** The
-  finalize *path* is covered by CI; the *scheduled sweep* is still not, and it
-  has no emulator coverage either. Runs 08:30 **UTC** (04:30 ET) — see HANDOFF
-  §4 for why that matters.
-- **`replayFeedSnapshot` has never been invoked against production.** Its diff
-  logic is unit-tested; the full callable path is not.
+- **`nflFinalizeSweepJob` has never completed a run in production.** ~~It has no
+  emulator coverage either.~~ **[#257](https://github.com/kstruck/MMPoolsV3/pull/257)
+  covers the scheduled sweep in the emulator** — the gate, candidate selection,
+  live scoping, and a thrown pool making the run unhealthy. **Still true in
+  prod:** it has never completed a run there. Runs 08:30 **UTC** (04:30 ET) —
+  see HANDOFF §4 for why that matters.
+- **`replayFeedSnapshot` has never been invoked against production.** ~~The full
+  callable path is not covered.~~ **#257 exercises it end-to-end against the
+  emulator** with a real `encodeSnapshot` payload: dry-run default, live rebuild,
+  the error-audit path, and both refusal paths. **Still true in prod:** never
+  invoked there.
 - **`spread.locked` has never been exercised end-to-end in prod**, because
   `lockNFLSpreadsJob` has always been dry-run. The PR #235 fix is therefore
   *preventive* — verified by reasoning and tests, never by production behavior.

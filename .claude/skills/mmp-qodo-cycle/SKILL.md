@@ -118,6 +118,10 @@ go green (`gh pr checks <N>`).
 
 ### 5. Repeat until dry
 
+**While qodo is billing-blocked (2026-07-22) there is no round 2** — it is not
+reviewing at all, so do NOT re-arm the watcher; the cycle ends after the single
+check in step 1. The rest of this step applies only once billing is restored.
+
 qodo re-reviews on push (incremental). Re-arm the watcher. Cycle ends when:
 a round produces zero findings, OR every remaining finding is INVALID /
 below the severity stop rule, OR 5 rounds (MAX_ROUNDS convention) — whichever
