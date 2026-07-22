@@ -160,8 +160,17 @@ before writing it into a rule.
 
 Branching cleanly is still worth doing - `git checkout -B <branch> origin/main`
 after a fetch keeps a PR's history to its own commits - but it is hygiene, not a
-correctness fix, and `git checkout -B` discards uncommitted work, so it is not
-something to reach for on a hunch.
+correctness fix, so it is not something to reach for on a hunch.
+
+Note what `checkout -B` does to uncommitted work, because it is neither "safe"
+nor "destructive": compatible changes are CARRIED ALONG onto the new branch, and
+conflicting tracked changes make the checkout abort. Neither is what you want
+silently - carried-along edits are how unrelated work ends up in a PR. Check
+first:
+
+```
+git status --short          # expect empty before re-basing a branch
+```
 
 **Why this is a hard rule and not a nicety.** On 2026-07-21 a single session
 produced 12 self-inflicted defects. Seven were facts asserted from memory that

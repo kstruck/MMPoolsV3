@@ -254,12 +254,17 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
   **healthy, not degraded**. The cry-wolf case behaves.
 
 **STILL NOT proven:**
-- **The per-job heartbeat verdicts are not individually tested.** The guard is a
-  source-level check that a job *can* report failure; it cannot prove each path
-  is wired. Verified rather than assumed: deleting `autoLock`'s failure count, or
-  reverting the `playoffPools` `resp.ok` verdict, produces no build error and no
-  test failure. The production evidence above covers three of nine handlers, on
-  their HEALTHY path only — no failure path has ever executed in prod.
+
+> ⚠️ **Two of these change once #256 and #257 merge — but only in CI, not in
+> prod.** Keep the distinction: a test proving a verdict is correct is not the
+> same claim as that verdict having fired in production. Updated 2026-07-22.
+
+- **The per-job heartbeat verdicts had no individual tests.** ~~The guard is a
+  source-level check that a job *can* report failure.~~ **[#256](https://github.com/kstruck/MMPoolsV3/pull/256)
+  adds unit tests for six of them** in `lib/heartbeatVerdicts.ts`, verified to
+  fail when `autoLock`'s failure count is deleted. **Still true in prod:** the
+  production evidence above covers three of nine handlers, on their HEALTHY path
+  only — no failure path has ever executed in prod.
 - **`runReminders` cannot see failures its nested helpers swallow** — `sendEmail`
   catches queue failures, `sendCourierSMS` returns a boolean nobody reads. A run
   where every reminder email failed to queue still reports zero failed pools.
