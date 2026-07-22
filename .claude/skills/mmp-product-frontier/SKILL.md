@@ -10,7 +10,7 @@ Repo: `D:\march-melee-pools` (March Melee Pools / Gridiron Gamble — React 19 +
 Two halves:
 
 - **Part A — Methodology.** The discipline that has actually worked in this repo. Follow it or your change will be rejected, reverted, or (worse) silently clobbered.
-- **Part B — Ranked frontier.** Open problems worth working on. Every entry is labeled **CANDIDATE** — none is committed roadmap. Do not start any of them without Kevin's explicit go-ahead and a `PLAN-*.md`.
+- **Part B — Ranked frontier.** Open problems worth working on. Every entry is labeled **CANDIDATE** — none is committed roadmap. **Do not start any of them without Kevin's explicit go-ahead.** A `PLAN-*.md` is additionally required when the item touches money, authorization, production data or scoring (`mmp-change-control` §1) — which is most of Part B, but not all of it, and file count is not the test (ruling 2026-07-22).
 
 ## When NOT to use this skill
 
@@ -57,7 +57,7 @@ Every **plan-gated** change follows this pipeline — money, authorization, prod
 | 8. Verify + promote | State the evidence (command + output) per phase. Deploy checklist with expected outcomes. Flip the kill-switch only after dry-run output matches predictions | updated checklist, "DONE + verified" entries |
 | 9. Or: documented retirement | If the idea dies or parks, write down WHY, with the discriminating evidence and the next experiment — so no future session re-derives it | e.g. `TEST-SUITE-BACKLOG.md` ("parked bugs" with sites + next steps), rejected-approaches entries in review logs |
 
-The four non-negotiable discipline rules (kill-switch+dry-run, deploy ritual, plan→review-log→sweep gate, worktree isolation) are canonically documented in `mmp-change-control`. They apply to every frontier item below.
+The four non-negotiable discipline rules (kill-switch+dry-run, deploy ritual, plan→review-log→sweep gate, worktree isolation) are canonically documented in `mmp-change-control`. Rules 1, 2 and 4 apply to every frontier item below; Rule 3 (the plan gate) applies to those touching money, authorization, production data or scoring — see `mmp-change-control` §1 for the triggers.
 
 ### Worked example: the full lifecycle, end to end (autoClosePools, T2)
 
@@ -161,7 +161,7 @@ Why it's rank 1 here: NFL pools have **never operated a live season** — the 20
 **The specific asset:** the whole Stripe machinery is built and hardened — server-authoritative pricing, webhook idempotency (`stripeWebhookEvents` markers), `billingCharges` platform-revenue ledger split from prize GMV, and the grace→lock funnel code. Turn-on is a config/unification problem, not a build problem.
 
 **First 3 steps in this repo:**
-1. Unify the config authority: `git grep -n "billing_config" functions/src` → migrate `billing.ts:40` to `settings/billing_config` (the direction ADR-0001 already chose), with a one-time read-both fallback. Independent of Kevin's policy decision (no policy change) — but it IS a prod-behavior change to a money job in a billing file, which is on mmp-change-control's danger list even as a one-file change: classify and gate it there before landing, and verify with a before/after read of the doc each side sees (mmp-config-and-flags §7).
+1. Unify the config authority: `git grep -n "billing_config" functions/src` → migrate `billing.ts:40` to `settings/billing_config` (the direction ADR-0001 already chose), with a one-time read-both fallback. Independent of Kevin's policy decision (no policy change) — but it IS a prod-behavior change to a money job in a billing file, which is a Rule-3 trigger (money) even as a one-file change — see `mmp-change-control` §1: classify and gate it there before landing, and verify with a before/after read of the doc each side sees (mmp-config-and-flags §7).
 2. Write the flip-day inventory: which code paths key off `billing.status` — `git grep -n "billing.status\|billing?.status\|checkBillingAccess" functions/src src` — and document what each does for `free|trial|grace_period|locked|active` in a `PLAN-BILLING-TURNON.md` (do not implement past step 1 without the policy decision).
 3. Define grandfathering in that plan: what happens to every existing free pool (and the 10-cap) on flip day; predict the pool counts per status BEFORE flipping (evidence bar A1.2).
 
@@ -234,7 +234,7 @@ Why it's rank 1 here: NFL pools have **never operated a live season** — the 20
 | Question a session arrives with | Answer / where |
 |---|---|
 | "What's the single most important thing to work on?" | B-1 (NFL automation) — the only deadline-bearing item. Load `mmp-nfl-season-campaign`. |
-| "Can we start charging users?" | Not participants, ever (P2P rule). Commissioners: only when Kevin flips the 2026-07-03 free-by-default decision — B-3. The config split-brain fix is decision-independent but must go through the mmp-change-control gate (billing file, danger list). |
+| "Can we start charging users?" | Not participants, ever (P2P rule). Commissioners: only when Kevin flips the 2026-07-03 free-by-default decision — B-3. The config split-brain fix is decision-independent but must go through the mmp-change-control plan gate (billing file — a money trigger, §1). |
 | "Should we finish the wizard/createPool consolidation?" | Yes when capacity allows — B-2. The remaining pieces (thin delegates, envelope, publishPool) were never written; build fresh from main. |
 | "Is the SuperAdmin dashboard done?" | Overview theater is gone (2 real cards); the monolith + residual mocks + zero component tests remain — B-4. |
 | "What happens if Firestore data gets corrupted?" | Nothing recovers it. There is no backup, no export job, no restore runbook — B-5. |

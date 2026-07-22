@@ -50,14 +50,15 @@ Classify FIRST. The gate is determined by blast radius, not effort.
 | **Ordinary change** | Anything that touches none of the Rule-3 triggers below — **any file count**, from a one-line typo to a 14-file refactor | Own branch off `origin/main`, all five gates green, `codex exec review --base origin/main` until clean, PR through CI. **No plan doc.** Own worktree if another session may be active (Rule 4). |
 | **Plan-gated change** | Touches **money, authorization, production data, or scoring** — see the trigger list below | Rule 3: `PLAN-*.md` + adversarial review log + sweep pass, THEN implement. |
 
-There is deliberately **no third, lighter class for one-file fixes.** An earlier
-version had a "Trivial fix" row that permitted branching from local `main` with
-only local tests — which overlapped this row while prescribing a weaker gate, so
-the same one-line change could be classified either way and the looser reading
-would win. The five gates and a codex pass are cheap; a second classification
-anyone can argue into is not.
 | **Prod-data mutation** | Any code or action that writes/migrates/backfills/deletes production Firestore data outside a user's own normal flow (backfills, sweeps, role migrations, `fix*`/`recalculate*` ops) | Rule 1: kill-switch + dry-run-default, review dry-run output before enabling. Prod data is itself a Rule-3 trigger, so new code here takes the plan gate too. |
 | **Deploy** | Anything reaching prod: functions, firestore rules/indexes, www frontend | Rule 2 deploy ritual. Frontend additionally requires Kevin (Section 6). |
+
+There is deliberately **no third, lighter class for one-file fixes.** An earlier
+version had a "Trivial fix" row permitting a branch off local `main` with only
+local tests — it overlapped **Ordinary change** while prescribing a weaker gate,
+so the same one-line change could be classified either way and the looser
+reading wins every argument. The five gates and a codex pass are cheap; a second
+classification anyone can talk themselves into is not.
 
 ### Rule-3 triggers — money, authorization, production data, or scoring
 
