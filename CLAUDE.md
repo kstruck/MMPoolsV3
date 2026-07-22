@@ -31,11 +31,18 @@ prose if they disagree; skills are point-in-time snapshots.
 > 🛑 **QODO IS BILLING-BLOCKED — 2026-07-22.** It posted "Qodo reviews are
 > paused because your trial has ended" on #253 and returned **zero findings on
 > all four PRs opened overnight 07-21/22**, across all three surfaces. Treat a
-> qodo review as NOT COMING until Kevin says billing is restored. Still poll
-> once (it is cheap and the surfaces are the proof), but do not wait, and never
-> call a PR blocked on it. **§2c (codex) is now the only working reviewer** —
-> which means it is also the only second opinion, so weigh its findings on
-> evidence rather than deferring to them.
+> qodo review as NOT COMING until Kevin says billing is restored.
+>
+> **THIS REPLACES THE 3-MINUTE POLL BELOW.** Check the three surfaces ONCE, in
+> one pass, and move on — no waiting window at all. The 2026-07-21 box and its
+> "poll for up to 3 minutes" procedure are superseded for as long as billing is
+> blocked; they describe a reviewer that was still answering intermittently, and
+> this one is not answering. If a report ever does appear, the absorb-or-reject
+> rule still applies in full.
+>
+> **§2c (codex) is now the only working reviewer** — which means it is also the
+> only second opinion, so weigh its findings on evidence rather than deferring
+> to them.
 >
 > ⚠️ **DO NOT BLOCK ON QODO — 2026-07-21.** Kevin reported the qodo plan is out
 > of tokens, so reviews may be intermittent or stop entirely. **Never wait on a

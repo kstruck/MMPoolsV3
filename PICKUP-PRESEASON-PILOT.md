@@ -5,9 +5,9 @@
 > Read `PICKUP-PRESEASON-PILOT.md` §0 first, then `HANDOFF.md`'s STOP POINT box.
 > The target is the Hall of Fame game, 2026-08-06. Deploy and prod-data
 > mutations are Kevin's; code, tests and PRs are yours. Follow CLAUDE.md §2b
-> (qodo: poll 3 min before pushing a follow-up) and §2c (`codex exec review
-> --base origin/main`, expect several rounds). Tell me what you plan to do
-> before you do it.
+> (qodo is billing-blocked — check the three surfaces once, do not wait) and
+> §2c (`codex exec review --base origin/main`, expect several rounds). Tell me
+> what you plan to do before you do it.
 
 Written 2026-07-21. **The target is the Hall of Fame game, 2026-08-06** (Thu,
 8:00pm ET, CAR at ARI) — that is the clock, set by Kevin on 2026-07-21. The
@@ -173,6 +173,13 @@ state. Concretely:
 > cannot catch going stale. That limit is stated in the test file itself; do
 > not read a green suite as agreement about the queue.
 
+> ⚠️ **THE QUEUE IS NO LONGER EMPTY — 2026-07-22.** #255, #256 and #257 are
+> open, and #255/#256 need a functions deploy. The SHA below is still what is
+> RUNNING in prod, which is exactly the point: it is behind `main` once those
+> merge. See §0 and `MORNING-2026-07-22.md`. The docs-state test compares SHAs
+> and deliberately does NOT compare queue prose, so this paragraph is a human
+> claim — it went stale the moment those PRs opened, and this box is the fix.
+
 **Prod is deployed from <!-- deploy-state:current --> `main` @ `6ca9e7f`.** Functions
 deployed 2026-07-21 ~16:40Z, Coolify frontend ~16:54Z on the same commit.
 Twelve PRs shipped in that deploy — the six from the overnight run and the six
@@ -274,7 +281,15 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — EMPTY
+## 4. Deploy queue — ⚠️ NOT EMPTY as of 2026-07-22
+
+> **A functions deploy is OWED.** [#255](https://github.com/kstruck/MMPoolsV3/pull/255)
+> (BANNED-owner authz fix, on the pilot path) and
+> [#256](https://github.com/kstruck/MMPoolsV3/pull/256) both change
+> `functions/` and take effect only when deployed.
+> [#257](https://github.com/kstruck/MMPoolsV3/pull/257) is tests only.
+> Full recipe: `MORNING-2026-07-22.md` §2. Everything below this box describes
+> the state BEFORE those PRs and is kept for the recipe it records.
 
 **Everything is merged and deployed.** The deployed source SHA is the tagged
 claim in §2 — not repeated here, so it cannot drift out of sync with it.
