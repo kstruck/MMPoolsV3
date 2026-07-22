@@ -480,8 +480,8 @@ export const HOF_GAME_ET = '2026-08-06';
  * not guarding the bug.
  *
  * So the live claim is named rather than inferred, exactly as CURRENT_MARKER
- * does for the SHA. Markdown emphasis and backticks may sit between the tag and
- * the date; prose may not.
+ * does for the SHA. Markdown emphasis (`*` or `_`) and backticks may sit
+ * between the tag and the date; prose may not.
  *
  * EVERY live deadline statement carries the tag — not just one per doc. codex,
  * round 4: PICKUP's copy-paste prompt and HANDOFF's `DUE` line are both live
@@ -498,9 +498,18 @@ export const HOF_GAME_ET = '2026-08-06';
  * the same-line rule this very comment states — and the sibling scanner already
  * had a test pinning that rule. A guard whose documentation and behaviour
  * disagree is worse than one that is merely narrow.
+ *
+ * That same disagreement bit again on review: the comment said "Markdown
+ * emphasis" while the class held only `*`, so reformatting a tagged deadline to
+ * `__2026-08-06__` made the scanner miss it AND made the untagged-date check
+ * fail the line — CI rejecting a correctly-tagged deadline over a cosmetic
+ * edit. `_` is allowed now and the comment names both characters instead of
+ * gesturing at a category. Strikethrough is deliberately not included: nobody
+ * strikes through a live deadline, and every character added here is one more
+ * thing that can sit between a tag and the date it is supposed to touch.
  */
 export const PILOT_TARGET_TAG = '<!-- pilot-target:current -->';
-const SEP = '[^\\S\\n]*[*`]*[^\\S\\n]*';
+const SEP = '[^\\S\\n]*[*_`]*[^\\S\\n]*';
 const PILOT_TARGET_CLAIM =
   new RegExp(`<!--[^\\S\\n]*pilot-target:current[^\\S\\n]*-->${SEP}(\\d{4}-\\d{2}-\\d{2})(?![\\d-])`, 'gi');
 
@@ -599,8 +608,14 @@ const BARE_WRONG_HOF_DATE = /2026-08-07(?!T00:00(:00(\.\d+)?)?Z)/g;
  * binds only to what it touches, on the same line, immediately before.
  *
  *     Deployed <!-- hof-date:ignore --> 2026-08-07, the morning after.
+ *
+ * Shares SEP with the pilot-target tags rather than keeping its own separator.
+ * It had `\s*`, which allowed no emphasis at all — so tagging a bolded date
+ * would have failed the same way the underscore case did on the sibling
+ * scanner. Two tags with the same documented contract and two different
+ * separators is how one of them silently stops matching what its comment says.
  */
-const HOF_DATE_EXEMPT = /<!--\s*hof-date:ignore\s*-->\s*$/i;
+const HOF_DATE_EXEMPT = new RegExp(`<!--[^\\S\\n]*hof-date:ignore[^\\S\\n]*-->${SEP}$`, 'i');
 
 export function wrongHofDateMentions(text: string): number[] {
   const NL = String.fromCharCode(10);
@@ -733,6 +748,11 @@ describe('operator docs agree on the pilot target date', () => {
       expect(wrongHofDateMentions(`Deployed ${HOF_TAG} 2026-08-07.`)).toEqual([]);
     });
 
+    it('exempts a tagged mention through emphasis, like its sibling tags', () => {
+      expect(wrongHofDateMentions(`${HOF_TAG} **2026-08-07**`)).toEqual([]);
+      expect(wrongHofDateMentions(`${HOF_TAG} __2026-08-07__`)).toEqual([]);
+    });
+
     it('does NOT exempt when the tag trails the mention — it binds forward only', () => {
       expect(wrongHofDateMentions(`2026-08-07 ${HOF_TAG}`)).toEqual([1]);
     });
@@ -760,6 +780,12 @@ describe('operator docs agree on the pilot target date', () => {
     it('sees through markdown emphasis and backticks', () => {
       expect(taggedTargetDates(`${PILOT_TARGET_TAG} **2026-08-06**`)).toEqual(['2026-08-06']);
       expect(taggedTargetDates(`${PILOT_TARGET_TAG} \`2026-08-06\``)).toEqual(['2026-08-06']);
+      // Underscore emphasis is the same markdown, and reformatting a deadline
+      // to it used to make the scanner miss the tag entirely — which then made
+      // the untagged-date check fail a line that WAS tagged. Cosmetic edit,
+      // red CI, wrong diagnosis.
+      expect(taggedTargetDates(`${PILOT_TARGET_TAG} __2026-08-06__`)).toEqual(['2026-08-06']);
+      expect(taggedTargetDates(`${PILOT_TARGET_TAG} _2026-08-06_`)).toEqual(['2026-08-06']);
     });
 
     it('reads a WRONG tagged date rather than passing it', () => {
@@ -810,6 +836,12 @@ describe('operator docs agree on the pilot target date', () => {
 
     it('exempts a tagged one', () => {
       expect(untaggedDateMentions(`slate ${PILOT_TARGET_IGNORE_TAG} 2026-08-13`, OLD)).toEqual([]);
+    });
+
+    it('exempts a tagged one through emphasis of either flavour', () => {
+      expect(untaggedDateMentions(`${PILOT_TARGET_IGNORE_TAG} **2026-08-13**`, OLD)).toEqual([]);
+      expect(untaggedDateMentions(`${PILOT_TARGET_IGNORE_TAG} __2026-08-13__`, OLD)).toEqual([]);
+      expect(untaggedDateMentions(`${PILOT_TARGET_TAG} __2026-08-13__`, OLD)).toEqual([]);
     });
 
     it('exempts one that is itself the tagged current target', () => {
