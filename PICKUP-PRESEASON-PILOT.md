@@ -161,24 +161,21 @@ state. Concretely:
 
 ## 2. Live state (verified 2026-07-21)
 
-> **Deploy state: HANDOFF.md's STOP POINT box is authoritative and CURRENT.**
-> Both files agree on the DEPLOYED SOURCE SHA, and the deploy queue is EMPTY.
-> They do not claim prod equals `main`: docs-only commits advance `main`
-> without a deploy, so that equality is false almost immediately.
+> ⚠️ **DEPLOY QUEUE: NOT EMPTY as of 2026-07-22.** #255, #256 and #257 are open;
+> #255 (BANNED-owner authz, on the pilot path) and #256 both change `functions/`
+> and need a deploy. See §0 and `MORNING-2026-07-22.md` §2 for the recipe.
+>
+> **HANDOFF.md's STOP POINT box is authoritative for deploy state.** Both files
+> agree on the DEPLOYED SOURCE SHA below — which is what is RUNNING, not what
+> `main` is. They deliberately do not claim prod equals `main`: docs-only commits
+> advance `main` without a deploy, so that equality is false almost immediately.
 >
 > `tests/docs-state-invariants.test.ts` (PR #248) enforces **only** that the
 > tagged deployed-SHA claims agree and name a real commit on `origin/main`. It
-> does **not** compare deploy-QUEUE prose and does not know what `main`
-> currently is — so "the queue is empty" is still a human claim that a test
-> cannot catch going stale. That limit is stated in the test file itself; do
-> not read a green suite as agreement about the queue.
-
-> ⚠️ **THE QUEUE IS NO LONGER EMPTY — 2026-07-22.** #255, #256 and #257 are
-> open, and #255/#256 need a functions deploy. The SHA below is still what is
-> RUNNING in prod, which is exactly the point: it is behind `main` once those
-> merge. See §0 and `MORNING-2026-07-22.md`. The docs-state test compares SHAs
-> and deliberately does NOT compare queue prose, so this paragraph is a human
-> claim — it went stale the moment those PRs opened, and this box is the fix.
+> does **not** compare deploy-QUEUE prose and does not know what `main` currently
+> is. That is why the queue line above is dated and why it went stale the moment
+> those PRs opened — a green suite is not agreement about the queue. The limit is
+> stated in the test file itself.
 
 **Prod is deployed from <!-- deploy-state:current --> `main` @ `6ca9e7f`.** Functions
 deployed 2026-07-21 ~16:40Z, Coolify frontend ~16:54Z on the same commit.
@@ -298,13 +295,13 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 > [#256](https://github.com/kstruck/MMPoolsV3/pull/256) both change
 > `functions/` and take effect only when deployed.
 > [#257](https://github.com/kstruck/MMPoolsV3/pull/257) is tests only.
-> Full recipe: `MORNING-2026-07-22.md` §2. Everything below this box describes
-> the state BEFORE those PRs and is kept for the recipe it records.
+> Full recipe: `MORNING-2026-07-22.md` §2.
 
-**Everything is merged and deployed.** The deployed source SHA is the tagged
-claim in §2 — not repeated here, so it cannot drift out of sync with it.
-`main` advances past it with every docs-only commit — that is drift in the
-marker, not a deploy queue.
+**As of 2026-07-22 three PRs are open and a functions deploy is owed** (see the
+box above). The deployed source SHA is the tagged claim in §2 — not repeated
+here, so it cannot drift out of sync with it. `main` advances past it with every
+docs-only commit — that is drift in the marker, not a deploy queue; the queue is
+the table below.
 
 **A deploy queue exists when ANY of these changed since the deployed SHA:**
 
