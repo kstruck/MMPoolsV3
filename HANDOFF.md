@@ -53,14 +53,23 @@
 > in UTC and they landed in the small hours ET — which is how this box came to
 > document `nflFinalizeSweepJob` as an 08:30 job when it ran at 04:30 ET.
 >
-> **The five clock-scheduled jobs run at the SAME real time as before**; only
-> the declaration changed, from a UTC hour to the equivalent ET hour. The two
-> that used `every 24 hours` did change: an interval anchored to the last run
-> cannot carry a timeZone, so they became explicit nightly crons.
+> **The five clock-scheduled jobs keep their current (EDT) run time** — the
+> declaration moved from a UTC hour to the equivalent ET hour. Be precise about
+> what that trades, though: an unpinned job is fixed in UTC and its ET hour
+> moves across DST; a pinned job is fixed in ET and its **UTC** hour moves. So
+> in winter these fire an hour later in UTC than they used to. That is the point
+> of the ruling — stability in the zone everyone actually reads — not a
+> side-effect.
+>
+> The two that used `every 24 hours` changed more: an interval anchored to the
+> last run cannot carry a timeZone, so they became explicit nightly crons.
+>
+> No schedule sits in 02:00-02:59 ET (does not exist on spring-forward) or
+> 01:00-01:59 ET (happens twice on fall-back).
 >
 > | Job | Schedule (all ET) | Changed? |
 > |---|---|---|
-> | `aggregateRevenueDaily` | `0 2 * * *` | was `every 24 hours` — now a fixed time |
+> | `aggregateRevenueDaily` | `30 0 * * *` | was `every 24 hours` — now a fixed time |
 > | `gradeExpertProfilesJob` | `0 3 * * *` | same time, was `0 7 * * *` UTC |
 > | `siteAveragesJob` | `30 3 * * *` | same time, was `30 7 * * *` UTC |
 > | `autoClosePools` | `0 4 * * *` | same time, was `every day 08:00` UTC |

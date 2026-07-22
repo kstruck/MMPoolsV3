@@ -32,14 +32,27 @@ async function recompute(): Promise<{ totalRevenue: number; chargeCount: number 
   return { totalRevenue: summary.totalRevenue, chargeCount: summary.chargeCount };
 }
 
-/** Daily rollup. */
+/**
+ * Daily rollup, 00:30 ET.
+ *
+ * BEHAVIOUR CHANGE 2026-07-22, deliberate: this was `every 24 hours`, which is
+ * anchored to the last run rather than a wall clock — it drifts with every
+ * deploy and a timeZone means nothing on it. An explicit nightly time is what
+ * makes it pinnable, and makes "did last night's aggregate run?" answerable.
+ *
+ * NOT 02:00. On spring-forward the ET clock jumps 01:59 to 03:00, so a 02:00
+ * wall-clock run does not exist that day and Cloud Scheduler can skip it —
+ * leaving admin_stats/revenue stale for ~48h once a year, under a staleness
+ * tolerance too loose to flag it. 00:30 exists every day and, unlike the 01:00
+ * hour, is not repeated on fall-back either.
+ *
+ * Kept ABOVE the onSchedule() call, not inside its arguments: the wrapping
+ * ratchet in __tests__/heartbeat.test.ts scans a fixed character window from
+ * `onSchedule(` for `withHeartbeat(`, and blanked comments still occupy their
+ * length — a long comment between the two reads as an unwrapped job.
+ */
 export const aggregateRevenueDaily = onSchedule(
-  // 02:00 ET. BEHAVIOUR CHANGE, deliberate: "every 24 hours" is anchored to the
-  // last run rather than a wall clock, so it drifts with every deploy and a
-  // timeZone means nothing on it. An explicit nightly time is what makes it
-  // pinnable — and makes "did last night's aggregate run?" a question with an
-  // answer.
-  { schedule: "0 2 * * *", timeZone: "America/New_York", timeoutSeconds: 120, memory: "256MiB" },
+  { schedule: "30 0 * * *", timeZone: "America/New_York", timeoutSeconds: 120, memory: "256MiB" },
   withHeartbeat('aggregateRevenueDaily', async () => {
     const r = await recompute();
     console.log(`[revenue] daily rollup: $${r.totalRevenue} from ${r.chargeCount} charges`);

@@ -230,7 +230,7 @@ export const SCHEDULED_JOB_EXPECTATIONS: Record<string, JobExpectation> = {
     syncWinProbabilityJob: { everyMinutes: 5 },           // '*/5 * * * *'
     syncExpertPicksJob: { everyMinutes: 60 },             // '15 * * * *'
     gradeExpertProfilesJob: { everyMinutes: 24 * 60 },    // '0 3 * * *' ET
-    aggregateRevenueDaily: { everyMinutes: 24 * 60 },     // '0 2 * * *' ET
+    aggregateRevenueDaily: { everyMinutes: 24 * 60 },     // '30 0 * * *' ET
     scheduledHealthCheck: { everyMinutes: 60 },           // every 60 minutes
     releaseStaleCouponReservations: { everyMinutes: 30 }, // every 30 minutes
     scheduledBracketSync: { everyMinutes: 10 },           // every 10 minutes

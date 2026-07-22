@@ -67,7 +67,8 @@ export async function recomputeSiteAverages(db: admin.firestore.Firestore): Prom
 
 /** Daily refresh (cheap: one collection scan, bounded by user count). Best-effort. */
 export const siteAveragesJob = onSchedule(
-  // 03:30 ET. Was '30 7 * * *' unpinned == 07:30 UTC == 03:30 ET.
+  // 03:30 ET. Was '30 7 * * *' unpinned == 07:30 UTC == 03:30 ET during EDT;
+  // now fixed at 03:30 ET year-round. See __tests__/scheduleTimezones.test.ts.
   { schedule: '30 3 * * *', timeZone: 'America/New_York' },
   withHeartbeat('siteAveragesJob', async () => {
   try {

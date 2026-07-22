@@ -25,6 +25,26 @@ import * as path from 'path';
  * (Cron examples are spelled out in words here on purpose: a literal
  * step-syntax cron inside a block comment closes the comment early. Learned
  * the hard way while writing this file.)
+ *
+ * WHAT PINNING TO ET ACTUALLY TRADES, stated because the first version of this
+ * change described it wrongly and codex caught it.
+ *
+ * An unpinned job is fixed in UTC, so its ET hour MOVES by one across daylight
+ * saving. A pinned job is fixed in ET, so its UTC hour moves instead. The
+ * conversions here preserve the current EDT run time, which means that in
+ * winter these jobs fire one hour later in UTC than they used to. That is not
+ * an accident and it is not "declaration-only": it is what the ruling chose.
+ * Stability is now in the zone the operator, the docs and the runbooks all
+ * think in, and the price is a moving UTC hour nobody reads.
+ *
+ * Two DST hazards this file's schedules deliberately avoid:
+ *
+ *   - 02:00-02:59 ET does not exist on spring-forward day, so a wall-clock run
+ *     in that window can be skipped entirely for the year.
+ *   - 01:00-01:59 ET happens twice on fall-back day, so a run there can fire
+ *     twice.
+ *
+ * Every schedule below sits outside both windows.
  */
 
 const SRC = path.resolve(__dirname, '..');
@@ -106,16 +126,37 @@ describe('every wall-clock schedule pins a timeZone', () => {
   const files = walk(SRC).filter((f) => fs.readFileSync(f, 'utf8').includes('onSchedule('));
   const clockJobs: { key: string; schedule: string; pinned: boolean; tz: string | null }[] = [];
 
+  const unparseable: string[] = [];
+
   for (const file of files) {
     const rel = path.relative(SRC, file).split(path.sep).join('/');
     for (const body of scheduleCalls(fs.readFileSync(file, 'utf8'))) {
       const m = SCHEDULE_LITERAL.exec(body);
       const schedule = m?.[1] ?? m?.[2];
-      if (!schedule || !hasWallClock(schedule)) continue;
+      if (!schedule) {
+        // FAIL CLOSED. A schedule written as a template literal, or hoisted into
+        // a constant, produces no match — and silently skipping it would let an
+        // unpinned job pass every assertion below while the count guard stayed
+        // green on the existing nine. An unreadable declaration is a failure,
+        // not an exemption.
+        unparseable.push(`${rel}#${jobName(body)}`);
+        continue;
+      }
+      if (!hasWallClock(schedule)) continue;
       const tz = /timeZone:\s*['"]([^'"]+)['"]/.exec(body)?.[1] ?? null;
       clockJobs.push({ key: `${rel}#${jobName(body)}`, schedule, pinned: tz !== null, tz });
     }
   }
+
+  it('could read every schedule it found', () => {
+    expect(
+      unparseable,
+      'This scanner only understands a quoted string literal for `schedule:`. ' +
+        'Anything else — a template literal, a hoisted constant — cannot be ' +
+        'checked, so it fails here rather than passing unexamined. Inline the ' +
+        'schedule as a plain quoted string, or teach this scanner the new form.',
+    ).toEqual([]);
+  });
 
   it('found the wall-clock jobs (guards against matching nothing)', () => {
     // Nine as of 2026-07-22. A lower number means the scanner broke, not that

@@ -136,8 +136,9 @@ async function activeSeasonPairs(db: Firestore, now: number): Promise<Array<{ se
 
 /** Daily: grade recently active seasons + refresh expert profiles. Best-effort. */
 export const gradeExpertProfilesJob = onSchedule(
-  // 03:00 ET. Was '0 7 * * *' unpinned, i.e. 07:00 UTC == 03:00 ET — same run
-  // time, now declared in the zone the docs and the operator think in.
+  // 03:00 ET. Was '0 7 * * *' unpinned == 07:00 UTC == 03:00 ET during EDT;
+  // now fixed at 03:00 ET year-round. See the DST note in
+  // __tests__/scheduleTimezones.test.ts.
   { schedule: '0 3 * * *', timeZone: 'America/New_York' },
   withHeartbeat('gradeExpertProfilesJob', async () => {
   const db = admin.firestore();
