@@ -110,21 +110,26 @@ Items 1 and 2 of the previous list are DONE and open as
    CODE, not a console click. Blocked on Kevin creating the GCS bucket + IAM.
 3. **Unify scheduled-job timezones**, if Kevin rules that way (see below).
 
-### Two contradictions Kevin must rule on
+### Contradictions Kevin ruled on — 2026-07-22
 
-- **PLAN-*.md scope.** `mmp-change-control` says any 2+ file change needs the
-  full PLAN + review-log + sweep gate. **None of the twelve PRs merged 07-21
-  carried one, and none of the four opened overnight 07-21/22 does either.**
-  CLAUDE.md §4.3 flags this; the skill is authoritative until he decides. A
-  proposal is on the table in `MORNING-2026-07-22.md` §6.1: narrow it to changes
-  touching money, auth, or prod data.
-- **Scheduled-job timezones are inconsistent.** Counted 2026-07-21: only
-  `nflDeepScoreSweepJob` and `lockNFLSpreadsJob` pin `America/New_York`. **Seven
-  daily-or-slower jobs run unpinned in UTC** — `autoClosePools`,
-  `enforceBillingStatus`, `nflFinalizeSweepJob`, `siteAveragesJob`,
-  `gradeExpertProfilesJob`, `aggregateRevenueDaily`, `webhookDurabilitySweep`.
-  Not a bug, but it has already produced one wrong verification instruction, and
-  a ruling based on a smaller count would leave most of it untouched.
+- **PLAN-*.md scope — RESOLVED.** It was "any 2+ file change" and was
+  systematically not followed. Now scoped to **blast radius, not file count**: a
+  plan is required when a change touches **money, authorization, production
+  data, or scoring**. `mmp-change-control` §1 carries the trigger list and is
+  authoritative. Stop flagging the skip on ordinary changes.
+- **Scheduled-job timezones — Kevin RULED (pin all to ET); the change is OPEN,
+  not landed.** Seven daily-or-slower jobs run unpinned in UTC
+  (`autoClosePools`, `enforceBillingStatus`, `nflFinalizeSweepJob`,
+  `siteAveragesJob`, `gradeExpertProfilesJob`, `aggregateRevenueDaily`,
+  `webhookDurabilitySweep`), which is how `nflFinalizeSweepJob` came to be
+  documented as an 08:30 job that actually runs at 04:30 ET.
+
+  [#259](https://github.com/kstruck/MMPoolsV3/pull/259) implements it and
+  carries its own HANDOFF §4 rewrite plus a ratchet that fails if a wall-clock
+  schedule omits `timeZone` or pins a non-ET zone. **Until #259 merges AND a
+  functions deploy runs, the jobs are still on UTC** and HANDOFF §4 still
+  describes them that way — which is correct, not stale. Do not read this bullet
+  as "done".
 
 ### Known cosmetic artifact, not an outage
 

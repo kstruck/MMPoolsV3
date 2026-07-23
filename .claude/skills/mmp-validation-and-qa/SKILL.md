@@ -249,7 +249,7 @@ Ties directly to the gates in `mmp-change-control`. All applicable rows must hol
 | 8 | Touched a create-flow/wizard? | Playwright specs run, or explicit statement they were not |
 | 9 | Prod-data mutation path? | **Dry-run output pasted** before any enable — kill-switch + dry-run-default first (autoClosePools pattern; canonical in `mmp-change-control`) |
 | 10 | UI change? | Screenshot or preview snapshot of the changed state — a green build is not render evidence |
-| 11 | Multi-file change? | PLAN-*.md + adversarial review log + sweep pass exist (`mmp-change-control`) |
+| 11 | Touches money / authz / prod data / scoring? | PLAN-*.md + adversarial review log + sweep pass exist (`mmp-change-control` §1 — NOT triggered by file count; ruling 2026-07-22) |
 
 Deploy evidence is a separate gate (`mmp-deploy-and-operate`): always `npx firebase`, `npm --prefix functions ci` first, functions before rules, project `gridiron-gamble-uzuqo`; and note the prod www frontend deploys only via a MANUAL Coolify trigger — pushing to main does NOT deploy it (as of 2026-07-06).
 

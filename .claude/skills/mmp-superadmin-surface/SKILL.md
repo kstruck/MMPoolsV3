@@ -176,7 +176,7 @@ What it is: a test affordance in production Firestore rules letting the client c
 4. Any prod-data mutation op ships kill-switched + dry-run-default (autoClosePools pattern); verify dry-run output before enabling. See mmp-change-control for the full gate.
 5. Deploy order: functions BEFORE rules (else e.g. client error telemetry breaks). Always `npx firebase`, project `gridiron-gamble-uzuqo`, `npm --prefix functions ci` first.
 6. Data unavailable → the card shows "unavailable", never a plausible-looking substitute. Delete fake cards rather than build fake equivalents.
-7. Multi-file admin changes require PLAN-*.md + adversarial review log + sweep (mmp-change-control), in an isolated worktree.
+7. Admin changes touching **authorization, money, prod data or scoring** require PLAN-*.md + adversarial review log + sweep (`mmp-change-control` §1). File count alone does NOT trigger it (ruling 2026-07-22) — but an isolated worktree is still wanted for anything in `SuperAdmin.tsx`, which is a collision problem, not a plan problem.
 
 ## When NOT to use this skill
 

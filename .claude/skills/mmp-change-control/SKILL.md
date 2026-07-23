@@ -2,7 +2,7 @@
 name: mmp-change-control
 description: >
   Use when making ANY change to the march-melee-pools repo and you need to know
-  what gate it requires: classifying a change (trivial fix vs multi-file feature
+  what gate it requires: classifying a change (ordinary vs plan-gated feature
   vs prod-data mutation vs deploy), starting a PLAN-*.md, running an adversarial
   review log, doing a sweep pass, deploying functions/rules, mutating production
   Firestore data, enabling a scheduled job past dry-run, creating a branch or
@@ -32,7 +32,7 @@ Jargon used below, defined once:
 | SUPER_ADMIN | The platform-owner role (custom auth claim); Kevin. |
 | callable | A Firebase `onCall` Cloud Function invoked from the client. |
 | Coolify | Self-hosted deploy dashboard that builds/serves the prod www frontend (nginx container). NOT Firebase Hosting. |
-| PLAN-*.md | A repo-root plan-of-record document for a multi-file change. |
+| PLAN-*.md | A repo-root plan-of-record document for a plan-gated change (money / authz / prod data / scoring). |
 | review log | `PLAN-*-REVIEW-LOG.md` — verbatim findings from adversarial review rounds + accept/reject responses. |
 | sweep | `PLAN-*-SWEEPS.md` — deterministic grep-built COMPLETE instance lists for a plan item. |
 | clobber | A merge that silently reverts previously-merged work without CI noticing. |
@@ -47,16 +47,78 @@ Classify FIRST. The gate is determined by blast radius, not effort.
 
 | Class | Definition | Gate required |
 |---|---|---|
-| **Trivial fix** | 1 file (or 1 file + its test), no behavior change to money/roles/rules/scoring, no new dependency | Own branch off `main`, green local tests, PR through CI. No plan doc needed. |
-| **Multi-file change** | Touches 2+ files, or any single file in the danger list below | Rule 3: `PLAN-*.md` + adversarial review log + sweep pass, THEN implement. Own worktree if another session may be active (Rule 4). |
-| **Prod-data mutation** | Any code or action that writes/migrates/backfills/deletes production Firestore data outside a user's own normal flow (backfills, sweeps, role migrations, `fix*`/`recalculate*` ops) | Rule 1: kill-switch + dry-run-default, review dry-run output before enabling. Plus the multi-file gate if it's new code. |
+| **Ordinary change** | Anything that touches none of the Rule-3 triggers below — **any file count**, from a one-line typo to a 14-file refactor | Own branch off `origin/main`, all five gates green, `codex exec review --base origin/main` until clean, PR through CI. **No plan doc.** Own worktree if another session may be active (Rule 4). |
+| **Plan-gated change** | Touches **money, authorization, production data, or scoring** — see the trigger list below | Rule 3: `PLAN-*.md` + adversarial review log + sweep pass, THEN implement. |
+| **Prod-data mutation** | Any code or action that writes/migrates/backfills/deletes production Firestore data outside a user's own normal flow (backfills, sweeps, role migrations, `fix*`/`recalculate*` ops) | Rule 1: kill-switch + dry-run-default, review dry-run output before enabling. Prod data is itself a Rule-3 trigger, so new code here takes the plan gate too. |
 | **Deploy** | Anything reaching prod: functions, firestore rules/indexes, www frontend | Rule 2 deploy ritual. Frontend additionally requires Kevin (Section 6). |
 
-Danger list (any touch here = multi-file gate even if it's one file):
-`firestore.rules`, `functions/src/index.ts` (exports), `functions/src/stripe.ts`
-or anything billing, `functions/src/adminClaims.ts` / anything role-related,
-scoring engines, `src/components/SuperAdmin.tsx` (4,300-line god file — 10 of
-the last 14 commits before 2026-07-06 touched it; collision risk is maximal).
+There is deliberately **no third, lighter class for one-file fixes.** An earlier
+version had a "Trivial fix" row permitting a branch off local `main` with only
+local tests — it overlapped **Ordinary change** while prescribing a weaker gate,
+so the same one-line change could be classified either way and the looser
+reading wins every argument. The five gates and a codex pass are cheap; a second
+classification anyone can talk themselves into is not.
+
+### Rule-3 triggers — money, authorization, production data, or scoring
+
+**Kevin's ruling, 2026-07-22.** The gate used to be "touches 2+ files", and it
+was not followed: none of the twelve PRs merged 2026-07-21 carried a PLAN, and
+none of the four opened overnight 07-21/22 did either. A rule that is
+systematically skipped is not a gate, it is a lie that makes every skip look
+routine. It is now scoped to blast radius instead of file count.
+
+**A change is plan-gated when it touches any of:**
+
+| Trigger | Examples |
+|---|---|
+| **Money** | `functions/src/stripe.ts`, billing config, `payoutRecords.ts`, the payment ledger, quote/coupon engines, anything that decides what a user is charged or paid |
+| **Authorization** | `firestore.rules`, `functions/src/index.ts` exports, `lib/systemGuards.ts`, `lib/assertRole.ts`, `adminClaims.ts`, anything deciding who may do what |
+| **Production data** | backfills, migrations, sweeps, `fix*` / `recalculate*` ops — anything writing prod Firestore outside a user's own normal flow |
+| **Scoring** | the scoring engines and finalization paths, because they decide winners and therefore money |
+
+Everything else is an **ordinary change**, whatever its file count. A 14-file
+refactor touching none of the four triggers takes the ordinary gate; a one-line
+edit to `firestore.rules` that CHANGES WHO CAN READ OR WRITE SOMETHING takes the
+full plan gate. Name all four when you classify: dropping one from the list is
+how a scoring refactor talks itself into the ordinary lane.
+
+Note the qualifier on that second example — it is doing work. A comment-only or
+provably behaviour-preserving edit to `firestore.rules` is ordinary, by the same
+rule that makes #256 ordinary. Classifying by filename is what the next section
+exists to stop, so the examples must not do it either.
+
+#### "Touches" means BEHAVIOUR, not the file
+
+The trigger is a change to what the system DOES in one of those concerns — what
+a user is charged or paid, who is allowed to do what, what gets written to
+production, or how a winner is decided. Editing a file that happens to live on
+such a path is not automatically a trigger.
+
+This distinction is load-bearing and codex caught it missing: **PR #256**
+refactored verdict logic out of `autoClosePools.ts` — the canonical prod-data
+sweep — while changing no behaviour at all. Under a literal file reading it
+would be plan-gated; under the behaviour reading it is ordinary, which is how it
+was actually treated.
+
+**The burden is on the author, and it is discharged with evidence, not
+assertion.** A refactor inside one of these paths is ordinary only if you can
+point at tests pinning the behaviour as unchanged — #256 extracted each verdict
+and unit-tested it producing identical output, and separately verified the
+guard fails when the logic is gutted. If you cannot demonstrate that, you do not
+get the ordinary lane; classify it as plan-gated and move on. "I am fairly sure
+this is just a refactor" is the sentence this rule exists to stop.
+
+**Calibration, so this is not just an assertion.** Against the sixteen PRs
+merged or opened 2026-07-21/22, this rule fires on exactly one — #255, the
+BANNED-owner authorization fix — and exempts the rest, including the 14-file and
+11-file feature work. That is the outcome that made the old rule unworkable and
+the new one worth having: it selects the change where a plan would actually have
+helped.
+
+`src/components/SuperAdmin.tsx` is NOT a trigger. It is a 4,300-line god file
+with a real collision risk, but that is a **worktree-isolation** problem (Rule
+4), not a reason to write a plan-of-record. Conflating the two is part of why
+the old rule felt arbitrary.
 
 Money invariant (never route around it): Stripe is for commissioner hosting
 fees ONLY. The platform never touches participant entry fees — those are P2P
@@ -165,9 +227,10 @@ after Phase 1 shipped 41/41 (audit finding, 2026-07-12) — the failure mode is
 structural, not a one-off mistake, so treat this as part of the ritual, not
 an afterthought.
 
-### Rule 3 — Plan -> review-log -> sweep gate for multi-file changes
+### Rule 3 — Plan -> review-log -> sweep gate for money / authz / prod-data / scoring changes
 
-**The rule.** No multi-file change is implemented without, in order:
+**The rule.** No change touching money, authorization, production data, or
+scoring is implemented without, in order:
 1. A `PLAN-*.md` at repo root (goal, phased approach, key decisions +
    tradeoffs, risks/open questions, out-of-scope).
 2. An adversarial review loop logged verbatim in `PLAN-*-REVIEW-LOG.md`

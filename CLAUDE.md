@@ -251,18 +251,25 @@ constraint, correctness is.
 3. Outside of (1) and (2), personas govern prose style and code-size
    defaults as configured; they do not override this repo's test
    conventions (see `mmp-validation-and-qa` — extend existing vitest
-   suites, do not claim a coverage percentage) or its plan-before-multi-file-
-   change convention (PLAN-*.md, not a fresh planning template).
+   suites, do not claim a coverage percentage) or its plan-gate convention
+   (PLAN-*.md, not a fresh planning template).
 
-   ⚠️ **OPEN CONTRADICTION, Kevin's call — do not resolve it by yourself.**
-   `mmp-change-control` (canonical) classifies **any 2+ file change** as needing
-   the full `PLAN-*.md` + review-log + sweep gate, and `mmp-docs-and-writing`
-   repeats it. In practice **none of the twelve PRs merged 2026-07-21 carried a
-   PLAN**, including 14-file and 11-file feature work — so the rule as written is
-   systematically not followed, and a compliance checker flagged a docs-only PR
-   for it. Either the rule is too broad or the practice is wrong; relaxing it in
-   this file alone would just add a third conflicting source. Until Kevin
-   decides, treat the skill as authoritative and say so when you skip it.
+   **RESOLVED 2026-07-22 (Kevin).** The `PLAN-*.md` gate was "any 2+ file
+   change", and it was systematically not followed — none of the twelve PRs
+   merged 07-21 carried one, nor did the four opened overnight. It is now scoped
+   to **blast radius, not file count**: a plan is required when a change touches
+   **money, authorization, production data, or scoring**, and not otherwise.
+   `mmp-change-control` §1 carries the trigger list and is authoritative.
+
+   So: a 14-file refactor touching none of the four triggers — no money, no
+   authorization, no production data, no scoring — needs no plan; a one-line
+   `firestore.rules` edit does. Against the sixteen PRs from 07-21/22 the new
+   rule fires on exactly one — #255, the BANNED-owner authorization fix — which
+   is the change where a plan would actually have helped.
+
+   Stop flagging the skip on ordinary changes; it was a workaround for a rule
+   nobody could follow. Do state the classification when a change is close to a
+   trigger, and take the gate when in doubt.
 
 ## 5. Global CLAUDE.md overrides for this repo
 

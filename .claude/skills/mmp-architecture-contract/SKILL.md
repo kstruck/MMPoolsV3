@@ -11,7 +11,7 @@ description: >
   derived (OPEN→LOCKED→LIVE→FINAL→CLOSED) vs the raw status field, and where the
   bodies are buried (billing config split-brain, no scheduled NFL scorer, sim-
   backdoor, mock admin UI, no backup story). Load this BEFORE designing any
-  multi-file change, touching firestore.rules, adding a create/score/lock path,
+  plan-gated change, touching firestore.rules, adding a create/score/lock path,
   or reasoning about "who is allowed to write X". Symptoms that should trigger it:
   "permission-denied", "why are there two billing configs", "can the client set
   isLocked", "is ADR-0001 live", "where does @shared resolve", "why is the pool

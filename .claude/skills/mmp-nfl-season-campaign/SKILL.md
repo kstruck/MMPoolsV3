@@ -115,7 +115,7 @@ This is what one live NFL week costs today (Option B in the menu — the fallbac
 
 ## 3. NUMBERED PHASES WITH DECISION GATES
 
-Run in order. Each phase ends with a gate: EXPECTED observation, and a branch if you see something else. All multi-file code changes inside any phase go through `mmp-change-control` (plan → adversarial review log → sweep; deploy functions BEFORE rules; `npm --prefix functions ci` first; always `npx firebase`, project `gridiron-gamble-uzuqo`).
+Run in order. Each phase ends with a gate: EXPECTED observation, and a branch if you see something else. Code changes inside any phase go through `mmp-change-control`; the plan → review-log → sweep gate applies to those touching money, authorization, prod data or scoring (§1, ruling 2026-07-22 — not file count). Deploy rules always apply: functions BEFORE rules; `npm --prefix functions ci` first; always `npx firebase`, project `gridiron-gamble-uzuqo`.
 
 ### Phase 0 — Preseason validation window (seasonType=1, ~August 2026)
 
@@ -230,7 +230,7 @@ Other theory obligations shared by all options:
 
 - Spread half: add `export { lockNFLSpreadsJob } from "./nflSchedule";` to index.ts — BUT wrap it in the kill-switch + dry-run pattern first (the current code has neither: it writes unconditionally, nflSchedule.ts:316-335). Deploying it as-is violates discipline rule (a). Dry-run form: log/audit which games it WOULD lock.
 - Scoring half: new `scoreNFLWeekScheduled` (e.g. Tuesday 08:00 ET) that finds the just-completed week, verifies all-FINAL, iterates NFL pools, and calls the same scoring internals — with the survivor idempotency fix (§4.1) as a hard precondition, a per-pool try/catch (scheduler-swallows-errors convention), and the kill-switch + dry-run shape.
-- Cost: a real multi-file change → full `mmp-change-control` gate (PLAN, review log, sweep). Highest up-front effort, lowest weekly toil.
+- Cost: touches scoring, so it is plan-gated → full `mmp-change-control` gate (PLAN, review log, sweep). Highest up-front effort, lowest weekly toil.
 - Residual manual work even here: odds-missing games (§1.4) and spread value overrides — the Spread Manager stays in the loop.
 
 ### Option B — Fully manual weekly runbook (zero code change)
@@ -261,7 +261,7 @@ Ship Option A's two jobs, but: (1) both behind `system/config` flags (`nflSpread
 
 ## 6. VALIDATION + PROMOTION
 
-All promotions route through `mmp-change-control`: code changes need plan → adversarial review log → sweep; prod-data mutations and job enablement need kill-switch + dry-run with reviewed dry-run output; new work in its own worktree.
+All promotions route through `mmp-change-control`: code changes touching money, authorization, prod data or scoring need plan → adversarial review log → sweep (§1 triggers — file count is not the test, ruling 2026-07-22); everything else takes the ordinary gate. Prod-data mutations and job enablement need kill-switch + dry-run with reviewed dry-run output regardless; new work in its own worktree.
 
 Per-phase success criteria (numbers, not vibes):
 
