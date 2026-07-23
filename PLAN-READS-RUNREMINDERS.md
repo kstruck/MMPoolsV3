@@ -105,8 +105,17 @@ answer. Roughly 11 identical 305-document scans per run, 288 times a day.
 - 11 executions/run → 1 (all live pools currently share one season/seasonType).
 - **~966K → ~88K reads/day on the dominant query**, ~91%.
 
-Projected total after this PR: ~133K/day (88K futureSnap + ~5K weekSnap + 40K
-`/pools`), down from ~1.4M. **Roughly 10×.**
+Projected: this removes **~920K reads/day** (futureSnap 966K→88K, weekSnap
+50K→5K), landing the total around **475–575K/day**, down from ~1.4–1.5M.
+
+⚠️ **An earlier draft of this section said "~133K/day". That was wrong.** It
+summed only the contributors listed in §3, but Query Insights shows the **top 10
+of 15** queries — so roughly **340–440K/day of the baseline is unattributed**,
+and memoization does not touch it. Caught by codex review.
+
+**The success signal is the size of the DROP (~920K), not an absolute total.**
+Stating a 133K target would have made a completely successful deploy read as a
+failure. The clean per-query signal is in §5 step 5.
 
 ### Deliberately NOT in this PR
 
