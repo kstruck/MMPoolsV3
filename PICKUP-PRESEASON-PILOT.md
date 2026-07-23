@@ -165,8 +165,11 @@ state. Concretely:
 
 ## 2. Live state (verified 2026-07-22 evening)
 
-> ✅ **DEPLOY QUEUE EMPTY as of 2026-07-22 evening.** Everything through #260 is
-> merged and deployed; functions and frontend are both on the SHA tagged below.
+> ⚠️ **FUNCTIONS queue empty; FRONTEND rebuild OWED as of 2026-07-22 evening.**
+> Everything through #260 is merged and deployed, and at that point functions and
+> frontend were both on the SHA tagged below. The public-profile header/footer
+> fix landed AFTER it and changes `src/App.tsx`, so the frontend is one commit
+> behind until someone triggers a Coolify rebuild.
 >
 > **HANDOFF.md's STOP POINT box is authoritative for deploy state.** Both files
 > agree on the DEPLOYED SOURCE SHA below — which is what is RUNNING, not what
@@ -292,7 +295,7 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — ✅ EMPTY as of 2026-07-22 evening
+## 4. Deploy queue — ⚠️ FRONTEND REBUILD OWED (functions empty)
 
 > **Functions: nothing owed.** #255, #256, #257, #243, #259 and #260 are all
 > merged and deployed at the SHA tagged in §2.
@@ -303,7 +306,8 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 > because it is the one that has worked every time — see also
 > `MORNING-2026-07-22.md` §2, which is PowerShell-correct.
 
-**As of 2026-07-22 evening the queue is empty** (see the box above). The
+**As of 2026-07-22 evening the FUNCTIONS queue is empty and a FRONTEND rebuild
+is owed** for the public-profile header/footer fix (see the box above). The
 deployed source SHA is the tagged claim in §2 — not repeated here, so it cannot
 drift out of sync with it. `main` advances past it with every
 docs-only commit — that is drift in the marker, not a deploy queue; the queue is

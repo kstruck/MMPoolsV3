@@ -36,7 +36,8 @@
 > Kevin's two rulings (2026-07-22): **pin all wall-clock jobs to ET** (#259), and
 > **scope the PLAN gate to blast radius, not file count** (#260). Both live.
 >
-> Test counts now: functions vitest **947**, emulator **132**, root vitest 284.
+> Test counts now: functions vitest **947**, emulator **132**, root vitest **291**
+> (+7 from the route-chrome invariants added with the profile fix).
 >
 > **qodo is billing-blocked** as of 2026-07-21 and reviewed none of these six.
 > codex (CLAUDE.md §2c) is the only working reviewer. See CLAUDE.md §2b.
