@@ -1,11 +1,19 @@
-# HANDOFF — Session entry point (updated 2026-07-22 evening: all deployed at 00153e5, queue empty)
+# HANDOFF — Session entry point (updated 2026-07-22 evening: all deployed, queue empty)
 
-> ## ✅ STOP POINT 2026-07-22 (~evening) — DEPLOYED at 00153e5, queue empty
+> ## ✅ STOP POINT 2026-07-22 (~evening) — DEPLOYED, queue empty
 >
 > **Prod is deployed from <!-- deploy-state:current --> `main` @ `00153e5`.**
 > Functions deployed 2026-07-22 evening (bare `--only functions`); Coolify
 > rebuilt the frontend on the same commit and passed healthcheck. Both surfaces
-> are on `00153e5`. Nothing is waiting on a merge or a deploy.
+> are on that same commit. Nothing is waiting on a merge or a deploy.
+>
+> ⚠️ The SHA appears **once** in this file, in the tagged claim above. Every
+> other mention says "the tagged SHA" on purpose: `docs-state-invariants` only
+> guards the tagged deploy-state construction, so a bare copy of the hash is
+> invisible to it and rots on the next deploy while the suite stays green.
+> (This note deliberately does not reproduce that construction — doing so makes
+> the scanner read the example as a third claim, which failed the suite once
+> already while writing this very paragraph.)
 >
 > ### What shipped since the morning
 >

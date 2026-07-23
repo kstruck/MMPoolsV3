@@ -29,8 +29,9 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 ## 0. State as of 2026-07-22 evening — read this before anything else
 
-**Everything through #260 is merged AND deployed. Prod is on `00153e5`, both
-functions and frontend.** The morning's three PRs (#255/#256/#257) plus #243,
+**Everything through #260 is merged AND deployed, functions and frontend on the
+same commit** (the SHA is the tagged claim in §2 — not repeated here, so it
+cannot rot). The morning's three PRs (#255/#256/#257) plus #243,
 #259 and #260 all shipped; #255 closed the banned-commissioner authz gap in
 prod. Kevin's two rulings landed: **timezones pinned to ET** (#259) and the
 **PLAN gate scoped to blast radius** (#260). Queue is empty. See HANDOFF's STOP
@@ -100,9 +101,9 @@ before editing those files or you will redo its work.
 
 ### Best next engineering work (no Kevin needed)
 
-Items 1 and 2 of the previous list are DONE and open as
-[#256](https://github.com/kstruck/MMPoolsV3/pull/256) and
-[#257](https://github.com/kstruck/MMPoolsV3/pull/257). What is left:
+Items 1 and 2 of the previous list are DONE — [#256](https://github.com/kstruck/MMPoolsV3/pull/256)
+and [#257](https://github.com/kstruck/MMPoolsV3/pull/257) are merged and
+deployed. What is left:
 
 1. **Plumb an outcome through `sendEmail` / `sendCourierSMS`** so `runReminders`
    can see delivery failures its helpers swallow. A run where every email failed
@@ -163,7 +164,7 @@ state. Concretely:
 ## 2. Live state (verified 2026-07-22 evening)
 
 > ✅ **DEPLOY QUEUE EMPTY as of 2026-07-22 evening.** Everything through #260 is
-> merged and deployed; both functions and frontend are on `00153e5`.
+> merged and deployed; functions and frontend are both on the SHA tagged below.
 >
 > **HANDOFF.md's STOP POINT box is authoritative for deploy state.** Both files
 > agree on the DEPLOYED SOURCE SHA below — which is what is RUNNING, not what
@@ -252,9 +253,10 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 **STILL NOT proven:**
 
-> ⚠️ **Two of these change once #256 and #257 merge — but only in CI, not in
-> prod.** Keep the distinction: a test proving a verdict is correct is not the
-> same claim as that verdict having fired in production. Updated 2026-07-22.
+> ⚠️ **#256 and #257 are merged and deployed, so two of these are now covered in
+> CI — but only in CI, not in prod.** Keep the distinction: a test proving a
+> verdict is correct is not the same claim as that verdict having fired in
+> production. Updated 2026-07-22 evening.
 
 - **The per-job heartbeat verdicts had no individual tests.** ~~The guard is a
   source-level check that a job *can* report failure.~~ **[#256](https://github.com/kstruck/MMPoolsV3/pull/256)
@@ -291,7 +293,7 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 ## 4. Deploy queue — ✅ EMPTY as of 2026-07-22 evening
 
 > **Nothing is owed.** #255, #256, #257, #243, #259 and #260 are all merged, and
-> functions + frontend are both deployed at `00153e5`. The recipe below is kept
+> functions + frontend are both deployed at the SHA tagged in §2. The recipe below is kept
 > because it is the one that has worked every time — see also
 > `MORNING-2026-07-22.md` §2, which is PowerShell-correct.
 
@@ -377,7 +379,8 @@ Always confirm the change is in the file on disk before deploying — not that
    array containing the number **1** — `dryRun:false` **alone does nothing**,
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
 2. ~~**Deploy**~~ — **DONE 2026-07-22 evening.** Functions and the Coolify
-   frontend are both on `00153e5`; #255's authz fix is live. Nothing is owed.
+   frontend are both on the SHA tagged in §2; #255's authz fix is live. Nothing
+   is owed.
    Recipe for next time: `MORNING-2026-07-22.md` §2.
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
