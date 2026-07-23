@@ -257,7 +257,139 @@ progress.
 
 ---
 
+## 4b. ANSWERED 2026-07-23 — the plan above is superseded, and much smaller
+
+Kevin answered Q1, Q5 and Q6. Two of the three answers delete work rather than
+add it. **§4 is kept for the record; this section is what to build.**
+
+| Q | Answer | Effect |
+|---|---|---|
+| Q1 — real Stripe checkout against a test pool? | **No** | Step 5 is deleted. Platform Revenue is uncontaminated. |
+| Q5 — which NFL pools are real volume? | **`scoredThroughWeek >= 1`** | Step 2's selection rule is now decided, not open. |
+| Q6 — how far back to remediate? | **Count only pools created on/after Week 1, Wed 2026-09-09** | **Step 0b is deleted. Step 0a SURVIVES — see below.** |
+
+### Why Q6 collapses the hard half of this plan
+
+The whole marker-scheme-plus-remediation branch (§2.6, steps 0a/0b) existed for
+one reason: legacy Squares/Props/Playoff test pools carry no durable marker, so
+no filter could find them.
+
+**A creation-date cutoff does not need to find them.** Every one of them was
+created before 2026-09-09, so the date predicate excludes them without a marker,
+without a backfill, and without touching a single production document.
+
+That removes the only genuine prod-data mutation in the plan — **step 0b**.
+
+### ⚠️ Step 0a SURVIVES. A first draft of this section deleted it, wrongly.
+
+Caught by codex review. The cutoff handles **history**; it does nothing about
+**the future**. Once the calendar passes 2026-09-09, a fresh run of
+`squaresSimulator.ts`, `propsSimulator.ts` or `playoffSimulator.ts` creates a
+normal auto-ID pool with no `simRunId` — which satisfies `createdAt >= cutoff`
+AND passes `isSimPool`, and lands straight in the public totals.
+
+Kevin tests continuously. Deleting 0a would have re-opened the exact hole this
+plan exists to close, on a delay, in the middle of the season.
+
+**So: 0a (durable marker on every simulator path) stays and is still a
+prerequisite. 0b (historical remediation of untagged pools) is deleted.**
+
+Kevin also confirmed the intent behind the date: **preseason pools are his own
+testing and must not count toward participant stats.** The 2026-09-09 cutoff
+excludes the Hall of Fame game and the whole preseason by design — that is the
+point of it, not a side effect.
+
+Kevin confirmed 2026-09-09 (a Wednesday) is correct: it is the 2026 season
+opener, per the ESPN schedule. It is not the Thursday-after-Labor-Day pattern
+that earlier seasons used, and the date is **not** to be "corrected".
+
+### The cutoff is config, not a constant
+
+`system/config.stats.countFromDate`, defaulting to `2026-09-09T00:00:00-04:00`
+(ET, per #259). Kevin can move the line without a deploy, and a wrong date
+becomes an edit rather than a release. A pool counts when
+`createdAt >= countFromDate` **and** it passes its type's volume rule.
+
+⚠️ **Editing the config does not move `stats/global` on its own.** The writers
+react to lifecycle transitions; they do not retroactively subtract pools that
+fell out of range or add pools that fell into it. **Every change to
+`countFromDate` must be followed by SuperAdmin → Operations → Recalculate
+Global Stats**, or the public document silently keeps the numbers from the old
+cutoff. Documented here because "it's just a config edit" is exactly how that
+gets skipped. (codex)
+
+### Revised step list
+
+**Step 0a — durable marker on every simulator path (PR, functions).** Retained;
+see the box above.
+
+**Step 1 — fix the Overview cards (PR, FRONTEND). Still the reported bug.**
+Unchanged from §4, except the predicate is now *"created on/after the cutoff"*
+rather than *"is not a sim pool"*. Keep `isSimPool` in the predicate as well —
+belt and braces, and it still matters for pools created after the cutoff.
+Q4 (`totalUsers` / `totalPools`) is still unanswered; both become
+cutoff-scoped, which is the conservative reading and matches "start keeping
+track for the NFL season". **Needs a Coolify rebuild.**
+
+⚠️ **Filtering is not sufficient for the Overview.** Verified at
+`SuperAdmin.tsx:348-353`: it computes `entryFee × (entryCount ||
+participantCount || participantIds.length)` — a **head count, not a paid
+count**. An NFL pool with unpaid members stays inflated no matter which pools
+are filtered out. Step 2's Member-Records fix only corrects `stats/global`,
+which **this dashboard does not read** (§2.4). So step 1 must either duplicate
+the paid-member math or — better — start consuming a corrected backend
+aggregate, so client and server cannot drift again. (codex)
+
+**Step 2 — teach `calculatePoolPot` about NFL season pools (PR, functions).**
+As §4, with Q5 resolved: the recompute selects NFL season pools on
+**`scoredThroughWeek >= 1`**, not `isLocked == true` (§2.7). Paid state still
+comes from Member Records, not entry docs (§2.8).
+
+⚠️ **PROPS pools have the same zero bug and must be fixed in the same step.**
+`calculatePoolPot` routes every non-BRACKET / non-NFL_PLAYOFFS type through the
+squares branch, but a PROPS pool stores its price in `props.cost` with cards in
+`propCards` — so it evaluates to **0**, exactly like the NFL types in §2.5. The
+client already knows this (`SuperAdmin.tsx:355-358` uses `props.cost`), which is
+the drift in §2.4 showing up a second time. Any real Props pool created after
+the cutoff would otherwise contribute nothing to prize or charity volume.
+(codex)
+
+**Step 3 — apply the cutoff + sim predicate in both `stats/global` writers.**
+As §4 step 3, plus the date predicate.
+
+⚠️ **NFL pools have no incremental writer at all.** `onPoolLocked` is the only
+event-driven writer, and it fires on unlocked→locked — which NFL season pools
+**never do** (`isLocked: false`, §2.7). Changing the recompute's query to
+`scoredThroughWeek >= 1` fixes only the *manual* path, so any NFL pool that
+first scores after step 4 stays invisible in `stats/global` until somebody
+remembers to press Recalculate again. Step 3 therefore needs **either** a
+writer on the `scoredThroughWeek` 0→≥1 transition **or** a scheduled recompute.
+Without one, the public numbers are correct exactly once and then rot. (codex)
+
+**Step 5 — NOT deleted after all; narrowed and still open.** Q1 = "no" proves
+test pools never contaminated Platform Revenue, which was the contamination
+question. But `revenueAggregates.ts` sums **every** `billingCharges` row with no
+date bound, so if **Q2** comes back "season-scoped" then genuine pre-2026-09-09
+charges still sit on the card and the cutoff has to reach `admin_stats/revenue`
+too. Blocked on Q2, not on Q1. (codex)
+
+**Step 6 — the Stats tab filters.** Unchanged, still last.
+
+### Still open
+
+- **Q2** (all-time vs season-scoped totals) — arguably now settled *in effect*
+  by the cutoff, since a 2026-09-09 line makes the totals season-scoped in
+  practice. Worth confirming rather than assuming.
+- **Q3** (should `stats/global` stay world-readable) — still open.
+- **Q4** (`totalUsers` / `totalPools` exclusions) — still open; assumption above.
+
+---
+
 ## 5. Questions only Kevin can answer
+
+> **ANSWERED 2026-07-23 — see §4b.** Q1 = no. Q5 = `scoredThroughWeek >= 1`.
+> Q6 = count only pools created on/after 2026-09-09. **Q2, Q3 and Q4 are still
+> open.** The questions are kept below as originally written, for the record.
 
 1. **Has any real Stripe checkout ever run against a test pool?** Decides
    whether platform revenue needs remediation at all. Check
@@ -301,6 +433,8 @@ progress.
 | Round | Reviewer | Findings |
 |---|---|---|
 | 1 | codex | **3 findings, all valid, all accepted.** (a) The Overview cards read `liveStats` client-side, not `stats/global` — the original plan would not have fixed the reported symptom at all. (b) `calculatePoolPot` computes zero for NFL season pools, so the recalculate would have written zeros over live public figures. (c) Operator docs still claimed an empty deploy queue. Plan restructured from 4 steps to 6 and re-ordered so the recalculate runs last. |
+
+| 3 | codex | **6 findings on the §4b revision, all valid, all accepted.** (g) Deleting step 0a would let any simulator run after 2026-09-09 re-contaminate the totals — the cutoff fixes history, not the future; 0a restored. (h) NFL pools have no incremental writer at all, so a recompute-only fix is correct exactly once and then rots. (i) The Overview computes `entryFee × head count`, so filtering alone leaves it inflated — verified at `SuperAdmin.tsx:348-353`. (j) PROPS pools compute zero in `calculatePoolPot` for the same reason the NFL types do. (k) Step 5 cannot be deleted on Q1 alone — `revenueAggregates.ts` has no date bound, so it reopens if Q2 is season-scoped. (l) A `countFromDate` edit does not move `stats/global` without a recompute. |
 
 | 2 | codex | **3 further findings, all valid, all accepted.** (d) Legacy Squares/Props/Playoff test pools carry NO marker, so no filter can exclude them — verified against `simLegacy.ts:11`. (e) `recalculateGlobalStats` selects `isLocked == true`, but NFL pools are created `isLocked: false` — verified at `nflPools.ts:100` — so the recompute never visits them. (f) NFL paid state lives in Member Records, not entry docs, so `entryFee × paid entries` yields zero for paid pools. Added steps 0a/0b as prerequisites and questions Q5/Q6. |
 
