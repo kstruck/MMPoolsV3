@@ -120,6 +120,10 @@ export const runReminders = functions.scheduler.onSchedule("every 5 minutes", wi
     const poolsSnapshot = await db.collection("pools").get();
     console.log(`[runReminders] Found ${poolsSnapshot.size} pools to check`);
 
+    // ONE week lookup per (season, seasonType) for the whole run, instead of one
+    // per NFL pool. Scoped to this run on purpose — see WeekContextCache.
+    const weekCache = newWeekContextCache();
+
     for (const doc of poolsSnapshot.docs) {
         try {
             const poolData = doc.data();
@@ -144,7 +148,7 @@ export const runReminders = functions.scheduler.onSchedule("every 5 minutes", wi
 
             // --- TYPE: NFL SEASON POOLS (Pick'em / Survivor / Margin) ---
             else if (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') {
-                await checkNFLNonPickerReminders(db, pool as NFLSeasonPool, now);
+                await checkNFLNonPickerReminders(db, pool as NFLSeasonPool, now, weekCache);
             }
 
         } catch (poolError: unknown) {
@@ -700,6 +704,91 @@ async function checkBracketReminders(db: admin.firestore.Firestore, pool: Bracke
 
 type NFLSeasonPool = NFLPickemPool | NFLSurvivorPool | NFLMarginPool;
 
+/** The upcoming week and its full slate, or null when there is no next week. */
+export type WeekContext = { week: number; weekGames: NFLGame[] } | null;
+
+/**
+ * Per-RUN memo for {@link getWeekContext}, keyed by `season|seasonType`.
+ *
+ * MUST NOT be module-level. `now` advances between runs, and a stale entry
+ * would remind members about the wrong slate — the one failure this job exists
+ * to prevent.
+ */
+export type WeekContextCache = Map<string, Promise<WeekContext>>;
+
+export function newWeekContextCache(): WeekContextCache {
+    return new Map();
+}
+
+/**
+ * Resolve the upcoming week for a season, at most once per (season, seasonType)
+ * per run.
+ *
+ * WHY THIS IS MEMOIZED. The answer depends only on (season, seasonType) and the
+ * run's `now` — never on the pool. Every NFL pool in a run was recomputing an
+ * identical result, and the first query scans the WHOLE remaining season (305
+ * documents in 2026) to learn one integer. Measured 2026-07-23 via Firestore
+ * Query Insights: 780 executions per 6h at 305 docs each, ~966K reads/day, the
+ * single largest source of Firestore reads in the application. The comment this
+ * replaced called it "the cheap bail-out path".
+ *
+ * See PLAN-READS-RUNREMINDERS.md for the measurement and for the bounded-query
+ * follow-up that is deliberately NOT in this change.
+ */
+export function getWeekContext(
+    db: admin.firestore.Firestore,
+    season: string,
+    seasonType: number,
+    now: number,
+    cache: WeekContextCache,
+): Promise<WeekContext> {
+    const key = `${season}|${seasonType}`;
+    let inflight = cache.get(key);
+    if (!inflight) {
+        // Cache the PROMISE, not the resolved value, so concurrent callers
+        // share one query rather than racing to issue duplicates.
+        inflight = loadWeekContext(db, season, seasonType, now);
+        cache.set(key, inflight);
+    }
+    return inflight;
+}
+
+async function loadWeekContext(
+    db: admin.firestore.Firestore,
+    season: string,
+    seasonType: number,
+    now: number,
+): Promise<WeekContext> {
+    // One query on the existing (season, startTime) composite index.
+    // seasonType is filtered in memory: an equality filter on it would
+    // require a (season, seasonType, startTime) index that doesn't exist.
+    const futureSnap = await db.collection('nfl_games')
+        .where('season', '==', season)
+        .where('startTime', '>', now)
+        .get();
+
+    const futureGames = futureSnap.docs
+        .map(d => d.data() as NFLGame)
+        .filter(g => Number(g.seasonType) === seasonType);
+    if (futureGames.length === 0) return null; // Season over (or not ingested yet)
+
+    const week = Math.min(...futureGames.map(g => g.week));
+
+    // Fetch the FULL week (equality-only query, mirrors nflPools.ts — no
+    // composite index needed) so the lock reflects the week's true earliest
+    // kickoff even after the first game has started, and so pick'em
+    // completeness covers every game of the week.
+    const weekSnap = await db.collection('nfl_games')
+        .where('season', '==', season)
+        .where('seasonType', '==', seasonType)
+        .where('week', '==', week)
+        .get();
+    const weekGames = weekSnap.docs.map(d => d.data() as NFLGame);
+    if (weekGames.length === 0) return null;
+
+    return { week, weekGames };
+}
+
 /**
  * Targeted reminders for members who haven't completed their picks for the
  * upcoming NFL week. Two tiers: T-36h (30h-36h before the week lock) and
@@ -709,7 +798,15 @@ type NFLSeasonPool = NFLPickemPool | NFLSurvivorPool | NFLMarginPool;
  * Default ON: pools without a reminders config still get these; commissioners
  * opt out via pool.reminders.lock.enabled === false.
  */
-export async function checkNFLNonPickerReminders(db: admin.firestore.Firestore, pool: NFLSeasonPool, now: number) {
+export async function checkNFLNonPickerReminders(
+    db: admin.firestore.Firestore,
+    pool: NFLSeasonPool,
+    now: number,
+    // Defaulted so every existing caller keeps its current behaviour: a private
+    // cache is a no-op memo for a single pool. runReminders passes ONE cache for
+    // the whole run, which is where the saving comes from.
+    weekCache: WeekContextCache = newWeekContextCache(),
+) {
     try {
         // Off switch (default ON when the reminders config is absent — NFL pools
         // predate per-pool reminder settings).
@@ -717,34 +814,12 @@ export async function checkNFLNonPickerReminders(db: admin.firestore.Firestore, 
         if (reminders?.lock?.enabled === false) return;
         if (!pool.season || pool.status === 'archived') return;
 
-        // --- 1. Determine the current week (cheap bail-out path) ---
-        // One query on the existing (season, startTime) composite index.
-        // seasonType is filtered in memory: an equality filter on it would
-        // require a (season, seasonType, startTime) index that doesn't exist.
+        // --- 1. Determine the current week ---
+        // Shared across every pool in this run — see getWeekContext.
         const seasonType = Number((pool as unknown as { seasonType?: string | number }).seasonType || 2);
-        const futureSnap = await db.collection('nfl_games')
-            .where('season', '==', pool.season)
-            .where('startTime', '>', now)
-            .get();
-
-        const futureGames = futureSnap.docs
-            .map(d => d.data() as NFLGame)
-            .filter(g => Number(g.seasonType) === seasonType);
-        if (futureGames.length === 0) return; // Season over (or not ingested yet)
-
-        const week = Math.min(...futureGames.map(g => g.week));
-
-        // Fetch the FULL week (equality-only query, mirrors nflPools.ts — no
-        // composite index needed) so the lock reflects the week's true earliest
-        // kickoff even after the first game has started, and so pick'em
-        // completeness covers every game of the week.
-        const weekSnap = await db.collection('nfl_games')
-            .where('season', '==', pool.season)
-            .where('seasonType', '==', seasonType)
-            .where('week', '==', week)
-            .get();
-        const weekGames = weekSnap.docs.map(d => d.data() as NFLGame);
-        if (weekGames.length === 0) return;
+        const weekContext = await getWeekContext(db, pool.season, seasonType, now, weekCache);
+        if (!weekContext) return;
+        const { week, weekGames } = weekContext;
 
         // --- 2. Effective week lock (mirrors nflPools.ts submitNFLPicks) ---
         const settings = (pool.settings ?? {}) as { lockBufferMinutes?: number; weekLockOverrides?: Record<number, number> };
