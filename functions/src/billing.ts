@@ -78,7 +78,13 @@ async function resolveCommissionerEmail(poolData: FirebaseFirestore.DocumentData
 //    Transitions expired trials → grace_period, expired grace → locked
 // =============================================================================
 
-export const enforceBillingStatus = functions.scheduler.onSchedule("every day 03:00", withHeartbeat('enforceBillingStatus', async () => {
+export const enforceBillingStatus = functions.scheduler.onSchedule(
+    // 23:00 ET nightly. Was "every day 03:00" with NO timeZone, i.e. 03:00 UTC
+    // == 23:00 ET during EDT. See the DST note in
+    // __tests__/scheduleTimezones.test.ts: pinning holds the ET hour steady and
+    // lets the UTC hour move, which is the opposite of the old behaviour.
+    { schedule: '0 23 * * *', timeZone: 'America/New_York' },
+    withHeartbeat('enforceBillingStatus', async () => {
     const now = Date.now();
     let failedTransitions = 0;
     console.log(`[BillingEnforce] Starting billing enforcement at ${new Date(now).toISOString()}`);

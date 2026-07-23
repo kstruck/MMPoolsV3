@@ -53,7 +53,18 @@ export async function findStuckWebhookEvents(
     return stuck;
 }
 
-export const webhookDurabilitySweep = onSchedule("every 24 hours", withHeartbeat('webhookDurabilitySweep', async () => {
+/**
+ * 05:15 ET nightly.
+ *
+ * Same deliberate change as aggregateRevenueDaily (2026-07-22): `every 24
+ * hours` drifts with each deploy and cannot carry a timeZone. Offset from the
+ * other nightly jobs so a mutation-quota spike in one cannot starve this one —
+ * it is the sweep that shouts about stuck Stripe webhooks, i.e. money a
+ * customer paid that the system never applied.
+ */
+export const webhookDurabilitySweep = onSchedule(
+    { schedule: '15 5 * * *', timeZone: 'America/New_York' },
+    withHeartbeat('webhookDurabilitySweep', async () => {
     const db = admin.firestore();
     const nowMs = Date.now();
     const stuck = await findStuckWebhookEvents(db, nowMs);
