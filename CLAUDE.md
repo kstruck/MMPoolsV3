@@ -28,6 +28,22 @@ prose if they disagree; skills are point-in-time snapshots.
 
 ## 2b. Opening a PR is not the end of the task — wait for qodo
 
+> 🛑 **QODO IS BILLING-BLOCKED — 2026-07-22.** It posted "Qodo reviews are
+> paused because your trial has ended" on #253 and returned **zero findings on
+> all four PRs opened overnight 07-21/22**, across all three surfaces. Treat a
+> qodo review as NOT COMING until Kevin says billing is restored.
+>
+> **THIS REPLACES THE 3-MINUTE POLL BELOW.** Check the three surfaces ONCE, in
+> one pass, and move on — no waiting window at all. The 2026-07-21 box and its
+> "poll for up to 3 minutes" procedure are superseded for as long as billing is
+> blocked; they describe a reviewer that was still answering intermittently, and
+> this one is not answering. If a report ever does appear, the absorb-or-reject
+> rule still applies in full.
+>
+> **§2c (codex) is now the only working reviewer** — which means it is also the
+> only second opinion, so weigh its findings on evidence rather than deferring
+> to them.
+>
 > ⚠️ **DO NOT BLOCK ON QODO — 2026-07-21.** Kevin reported the qodo plan is out
 > of tokens, so reviews may be intermittent or stop entirely. **Never wait on a
 > review before reporting a PR, and never call a PR blocked on one.**
@@ -57,8 +73,9 @@ prose if they disagree; skills are point-in-time snapshots.
 **After opening ANY pull request, check for a qodo review — and when one
 exists, read every finding and absorb or reject each with written evidence
 before reporting the PR as done.** Kevin should never have to ask whether qodo
-was checked. (Per the box above, the *waiting* part is currently suspended:
-poll for up to 3 minutes, then proceed if nothing is there.)
+was checked. (Per the box above, the *waiting* part is currently suspended
+entirely: check the three surfaces ONCE, in a single pass, and proceed. No
+3-minute window, no watcher — qodo is billing-blocked and is not answering.)
 
 This lived in `mmp-qodo-cycle` and in auto-memory and was still dropped
 under load on 2026-07-21 (checked on two PRs only when asked, skipped on
@@ -115,6 +132,58 @@ name `origin/main` explicitly.
 `--uncommitted` reviews only the working tree, so on its own it reports NOTHING
 once the work is committed. Use it before a commit; use `--base origin/main`
 for the PR. Found by codex reviewing this very section.
+
+⚠️ **USE A THREE-DOT DIFF TO CHECK PR SCOPE. `..` LIES.**
+
+```
+git fetch origin
+git diff --stat origin/main...HEAD    # THREE dots - what YOUR branch introduces
+```
+
+Two-dot `origin/main..HEAD` compares the two TIPS, so every commit `origin/main`
+has gained since you branched shows up as a **reverse** change in your diff.
+Three-dot diffs against the merge base and shows only what your branch actually
+did.
+
+This is written down because it produced a false alarm worth more than the true
+positive would have been. On 2026-07-22 a two-dot diff on a security PR showed a
+125-line `package-lock.json` "reversal", and the session concluded the PR would
+revert the `fast-uri` fix from #254 and rebuilt the branch. Codex reviewed the
+resulting write-up and disproved it. Verified after: no commit on that branch
+ever touched `package-lock.json`, and `git diff origin/main...HEAD --
+package-lock.json` was **empty**. Git's three-way merge would have preserved
+`origin/main`'s lockfile. The PR was fine; the diff command was wrong.
+
+The real lesson is the general one: **a scary reading of a command's output is a
+hypothesis, not a finding.** Confirm which commits touched the file
+(`git log origin/main..HEAD -- <path>`) before acting on it, and certainly
+before writing it into a rule.
+
+Branching cleanly is still worth doing - starting a PR from `origin/main` keeps
+its history to its own commits - but it is hygiene, not a correctness fix, so it
+is not something to reach for on a hunch.
+
+⚠️ **Use `-b`, not `-B`, and never on a branch that already has commits.**
+
+```
+git fetch origin
+git status --short                              # expect empty first
+git checkout -b <NEW-branch-name> origin/main   # -b: fails if the branch exists
+```
+
+`-B` force-RESETS an existing branch's ref to `origin/main`, silently discarding
+every commit on it. A clean `git status` does not protect you: it reports
+uncommitted changes, and this destroys COMMITTED ones. Recovery is `git reflog`,
+if you notice.
+
+`-b` fails loudly when the branch already exists, which is the behaviour you
+want. To move an existing branch onto a newer `origin/main`, rebase it
+(`git rebase origin/main`) rather than resetting it.
+
+One more thing `-b`/`-B` do NOT do: discard uncommitted work. Compatible changes
+are CARRIED ALONG onto the new branch, and conflicting tracked changes abort the
+checkout. The carried-along case is the quiet one - it is how unrelated edits
+end up in a PR - which is why the `git status --short` check above comes first.
 
 **Why this is a hard rule and not a nicety.** On 2026-07-21 a single session
 produced 12 self-inflicted defects. Seven were facts asserted from memory that

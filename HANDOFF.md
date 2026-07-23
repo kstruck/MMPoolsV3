@@ -1,5 +1,33 @@
-# HANDOFF — Session entry point (updated 2026-07-21: six PRs merged AND deployed; queue empty)
+# HANDOFF — Session entry point (updated 2026-07-22: three PRs OPEN, deploy needed)
 
+> ## ⚠️ STOP POINT 2026-07-22 (~05:00Z / 01:00 ET) — THREE PRs OPEN, A DEPLOY IS OWED
+>
+> **Read [MORNING-2026-07-22.md](MORNING-2026-07-22.md) first — it is Kevin's
+> step-by-step task list for this morning.**
+>
+> **Prod is still deployed from the SHA tagged in the box below.** Nothing was
+> deployed overnight and no production data was touched.
+>
+> Open and green on all seven CI checks, codex-reviewed clean:
+>
+> | PR | What | Deploy needed |
+> |---|---|---|
+> | [#255](https://github.com/kstruck/MMPoolsV3/pull/255) | BANNED owner rejected on `recordPoolPayouts`, `simulateGameUpdate`, `simFillSquares` | **YES — security** |
+> | [#256](https://github.com/kstruck/MMPoolsV3/pull/256) | Heartbeat verdicts extracted to `lib/heartbeatVerdicts.ts` + unit tests | Yes |
+> | [#257](https://github.com/kstruck/MMPoolsV3/pull/257) | Emulator coverage: finalize sweep + `replayFeedSnapshot` | No (tests only) |
+>
+> **#255 is a live authz gap on the pilot path** — a banned commissioner can
+> record payouts and decide winners until it ships. Merging is not enough;
+> `functions` must be deployed. Full recipe in MORNING-2026-07-22.md §2.
+>
+> Test counts after all three: functions vitest 913 → 940, emulator 105 → **132**
+> (#255 adds 9, #257 adds 18 — each PR's own branch showed only its own delta).
+>
+> **qodo is billing-blocked** as of 2026-07-21 and produced zero findings on all
+> four overnight PRs. codex (CLAUDE.md §2c) is the only working reviewer.
+>
+> ---
+>
 > ## ✅ STOP POINT 2026-07-21 (~17:00Z / 13:00 ET) — DEPLOYED, queue empty
 >
 > **Prod is deployed from <!-- deploy-state:current --> `main` @ `6ca9e7f`.** Functions

@@ -5,9 +5,9 @@
 > Read `PICKUP-PRESEASON-PILOT.md` §0 first, then `HANDOFF.md`'s STOP POINT box.
 > The target is the Hall of Fame game, 2026-08-06. Deploy and prod-data
 > mutations are Kevin's; code, tests and PRs are yours. Follow CLAUDE.md §2b
-> (qodo: poll 3 min before pushing a follow-up) and §2c (`codex exec review
-> --base origin/main`, expect several rounds). Tell me what you plan to do
-> before you do it.
+> (qodo is billing-blocked — check the three surfaces once, do not wait) and
+> §2c (`codex exec review --base origin/main`, expect several rounds). Tell me
+> what you plan to do before you do it.
 
 Written 2026-07-21. **The target is the Hall of Fame game, 2026-08-06** (Thu,
 8:00pm ET, CAR at ARI) — that is the clock, set by Kevin on 2026-07-21. The
@@ -27,7 +27,24 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 ---
 
-## 0. State as of 2026-07-21 ~18:00Z — read this before anything else
+## 0. State as of 2026-07-22 ~05:00Z — read this before anything else
+
+**Start with [MORNING-2026-07-22.md](MORNING-2026-07-22.md)** — Kevin's
+step-by-step list. Then this file.
+
+**Three PRs are OPEN and a functions deploy is owed:**
+[#255](https://github.com/kstruck/MMPoolsV3/pull/255) (BANNED owner rejected on
+the three ownership-path callables — a live authz gap on the pilot path),
+[#256](https://github.com/kstruck/MMPoolsV3/pull/256) (heartbeat verdicts made
+pure and testable), [#257](https://github.com/kstruck/MMPoolsV3/pull/257)
+(emulator coverage for the finalize sweep and `replayFeedSnapshot`). All seven
+CI checks green on each; codex clean; **qodo is billing-blocked and reviewed
+none of them.**
+
+Nothing was deployed overnight and no production data was touched, so the
+deploy-state SHA below is unchanged.
+
+### The earlier 2026-07-21 deploy, still true
 
 **Functions and the frontend were both deployed on 2026-07-21** (~16:40Z and
 ~16:54Z, same commit). Twelve PRs shipped in that deploy; everything below is
@@ -68,33 +85,39 @@ before editing those files or you will redo its work.
    engineering queue rather than filing the whole gap under Kevin.
 2. **A8 pricing — DUE 2026-08-06.** The only calendar-bound item. Retargeted
    from 2026-08-13 on 2026-07-21 when Kevin named the HOF game as the target.
-3. **A banned commissioner can still move the money ledger.**
-   `recordPoolPayouts` authorizes from persisted pool ownership and never
-   consults `users/{uid}.role`; it IS on the pilot path
-   (`RecordPayoutsCard.tsx`). Needs `assertNotBannedLive`, NOT a `role:` gate —
-   see `SECURITY-BARE-ONCALL-CLASSIFICATION.md`.
-4. **`nflFinalizeSweepJob` has never completed a production run** and its sweep
-   path has no emulator coverage. Runs 08:30 **UTC** (04:30 ET).
+3. **A banned commissioner can still move the money ledger — FIXED IN
+   [#255](https://github.com/kstruck/MMPoolsV3/pull/255), NOT YET DEPLOYED.**
+   `recordPoolPayouts`, `simulateGameUpdate` and `simFillSquares` authorize from
+   persisted pool ownership and never consult `users/{uid}.role`; the first is on
+   the pilot path (`RecordPayoutsCard.tsx`). All three now call
+   `assertNotBannedLive` — but the gap is live in prod until functions deploy.
+4. **`nflFinalizeSweepJob` has never completed a production run.** Runs 08:30
+   **UTC** (04:30 ET). Its sweep path now has emulator coverage
+   ([#257](https://github.com/kstruck/MMPoolsV3/pull/257)) — which is not the
+   same claim as "it ran in prod". Arming it is NFL-6 in `TOMORROW-TASKS.md`.
 
 ### Best next engineering work (no Kevin needed)
 
-1. **Extract the per-job heartbeat verdicts into pure helpers** (as
-   `sweepRunVerdict` / `lockWatchVerdict` already are) so their failure paths are
-   testable. Today the only guard is a source-level check that a job *can* report
-   failure — deleting `autoLock`'s failure count produces no build error and no
-   test failure. Verified, not assumed.
-2. **Emulator coverage for `nflFinalizeSweepJob`'s sweep path** and for the
-   `replayFeedSnapshot` callable. Both were on the overnight queue and ran out of
-   night.
-3. **Plumb an outcome through `sendEmail` / `sendCourierSMS`** so `runReminders`
-   can see delivery failures its helpers swallow.
+Items 1 and 2 of the previous list are DONE and open as
+[#256](https://github.com/kstruck/MMPoolsV3/pull/256) and
+[#257](https://github.com/kstruck/MMPoolsV3/pull/257). What is left:
+
+1. **Plumb an outcome through `sendEmail` / `sendCourierSMS`** so `runReminders`
+   can see delivery failures its helpers swallow. A run where every email failed
+   to queue still reports zero failed pools. This changes the delivery path that
+   pages members, so it wants its own careful PR.
+2. **The scheduled Auth export** (`PLAN-BACKUPS-PHASE3.md` step 6) — deferred
+   CODE, not a console click. Blocked on Kevin creating the GCS bucket + IAM.
+3. **Unify scheduled-job timezones**, if Kevin rules that way (see below).
 
 ### Two contradictions Kevin must rule on
 
 - **PLAN-*.md scope.** `mmp-change-control` says any 2+ file change needs the
   full PLAN + review-log + sweep gate. **None of the twelve PRs merged 07-21
-  carried one.** CLAUDE.md §4.3 flags this; the skill is authoritative until he
-  decides.
+  carried one, and none of the four opened overnight 07-21/22 does either.**
+  CLAUDE.md §4.3 flags this; the skill is authoritative until he decides. A
+  proposal is on the table in `MORNING-2026-07-22.md` §6.1: narrow it to changes
+  touching money, auth, or prod data.
 - **Scheduled-job timezones are inconsistent.** Counted 2026-07-21: only
   `nflDeepScoreSweepJob` and `lockNFLSpreadsJob` pin `America/New_York`. **Seven
   daily-or-slower jobs run unpinned in UTC** — `autoClosePools`,
@@ -138,17 +161,21 @@ state. Concretely:
 
 ## 2. Live state (verified 2026-07-21)
 
-> **Deploy state: HANDOFF.md's STOP POINT box is authoritative and CURRENT.**
-> Both files agree on the DEPLOYED SOURCE SHA, and the deploy queue is EMPTY.
-> They do not claim prod equals `main`: docs-only commits advance `main`
-> without a deploy, so that equality is false almost immediately.
+> ⚠️ **DEPLOY QUEUE: NOT EMPTY as of 2026-07-22.** #255, #256 and #257 are open;
+> #255 (BANNED-owner authz, on the pilot path) and #256 both change `functions/`
+> and need a deploy. See §0 and `MORNING-2026-07-22.md` §2 for the recipe.
+>
+> **HANDOFF.md's STOP POINT box is authoritative for deploy state.** Both files
+> agree on the DEPLOYED SOURCE SHA below — which is what is RUNNING, not what
+> `main` is. They deliberately do not claim prod equals `main`: docs-only commits
+> advance `main` without a deploy, so that equality is false almost immediately.
 >
 > `tests/docs-state-invariants.test.ts` (PR #248) enforces **only** that the
 > tagged deployed-SHA claims agree and name a real commit on `origin/main`. It
-> does **not** compare deploy-QUEUE prose and does not know what `main`
-> currently is — so "the queue is empty" is still a human claim that a test
-> cannot catch going stale. That limit is stated in the test file itself; do
-> not read a green suite as agreement about the queue.
+> does **not** compare deploy-QUEUE prose and does not know what `main` currently
+> is. That is why the queue line above is dated and why it went stale the moment
+> those PRs opened — a green suite is not agreement about the queue. The limit is
+> stated in the test file itself.
 
 **Prod is deployed from <!-- deploy-state:current --> `main` @ `6ca9e7f`.** Functions
 deployed 2026-07-21 ~16:40Z, Coolify frontend ~16:54Z on the same commit.
@@ -224,24 +251,34 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
   **healthy, not degraded**. The cry-wolf case behaves.
 
 **STILL NOT proven:**
-- **The per-job heartbeat verdicts are not individually tested.** The guard is a
-  source-level check that a job *can* report failure; it cannot prove each path
-  is wired. Verified rather than assumed: deleting `autoLock`'s failure count, or
-  reverting the `playoffPools` `resp.ok` verdict, produces no build error and no
-  test failure. The production evidence above covers three of nine handlers, on
-  their HEALTHY path only — no failure path has ever executed in prod.
+
+> ⚠️ **Two of these change once #256 and #257 merge — but only in CI, not in
+> prod.** Keep the distinction: a test proving a verdict is correct is not the
+> same claim as that verdict having fired in production. Updated 2026-07-22.
+
+- **The per-job heartbeat verdicts had no individual tests.** ~~The guard is a
+  source-level check that a job *can* report failure.~~ **[#256](https://github.com/kstruck/MMPoolsV3/pull/256)
+  adds unit tests for six of them** in `lib/heartbeatVerdicts.ts`, verified to
+  fail when `autoLock`'s failure count is deleted. **Still true in prod:** the
+  production evidence above covers three of nine handlers, on their HEALTHY path
+  only — no failure path has ever executed in prod.
 - **`runReminders` cannot see failures its nested helpers swallow** — `sendEmail`
   catches queue failures, `sendCourierSMS` returns a boolean nobody reads. A run
   where every reminder email failed to queue still reports zero failed pools.
 - **Eight files wrap a job that cannot report failure at all** (`adminHealth`,
   `consensus`, `espnBracket`, `expertPicks`, `expertProfiles`,
   `revenueAggregates`, `stripe`, `winProbability`), on a shrink-only list.
-- **`nflFinalizeSweepJob` has never completed a run in production.** The
-  finalize *path* is covered by CI; the *scheduled sweep* is still not, and it
-  has no emulator coverage either. Runs 08:30 **UTC** (04:30 ET) — see HANDOFF
-  §4 for why that matters.
-- **`replayFeedSnapshot` has never been invoked against production.** Its diff
-  logic is unit-tested; the full callable path is not.
+- **`nflFinalizeSweepJob` has never completed a run in production.** ~~It has no
+  emulator coverage either.~~ **[#257](https://github.com/kstruck/MMPoolsV3/pull/257)
+  covers the scheduled sweep in the emulator** — the gate, candidate selection,
+  live scoping, and a thrown pool making the run unhealthy. **Still true in
+  prod:** it has never completed a run there. Runs 08:30 **UTC** (04:30 ET) —
+  see HANDOFF §4 for why that matters.
+- **`replayFeedSnapshot` has never been invoked against production.** ~~The full
+  callable path is not covered.~~ **#257 exercises it end-to-end against the
+  emulator** with a real `encodeSnapshot` payload: dry-run default, live rebuild,
+  the error-audit path, and both refusal paths. **Still true in prod:** never
+  invoked there.
 - **`spread.locked` has never been exercised end-to-end in prod**, because
   `lockNFLSpreadsJob` has always been dry-run. The PR #235 fix is therefore
   *preventive* — verified by reasoning and tests, never by production behavior.
@@ -251,12 +288,20 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — EMPTY
+## 4. Deploy queue — ⚠️ NOT EMPTY as of 2026-07-22
 
-**Everything is merged and deployed.** The deployed source SHA is the tagged
-claim in §2 — not repeated here, so it cannot drift out of sync with it.
-`main` advances past it with every docs-only commit — that is drift in the
-marker, not a deploy queue.
+> **A functions deploy is OWED.** [#255](https://github.com/kstruck/MMPoolsV3/pull/255)
+> (BANNED-owner authz fix, on the pilot path) and
+> [#256](https://github.com/kstruck/MMPoolsV3/pull/256) both change
+> `functions/` and take effect only when deployed.
+> [#257](https://github.com/kstruck/MMPoolsV3/pull/257) is tests only.
+> Full recipe: `MORNING-2026-07-22.md` §2.
+
+**As of 2026-07-22 three PRs are open and a functions deploy is owed** (see the
+box above). The deployed source SHA is the tagged claim in §2 — not repeated
+here, so it cannot drift out of sync with it. `main` advances past it with every
+docs-only commit — that is drift in the marker, not a deploy queue; the queue is
+the table below.
 
 **A deploy queue exists when ANY of these changed since the deployed SHA:**
 
@@ -333,9 +378,10 @@ Always confirm the change is in the file on disk before deploying — not that
    under `"2"` in `bySeasonType`. Then set `nflFinalize.liveSeasonTypes` to an
    array containing the number **1** — `dryRun:false` **alone does nothing**,
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
-2. ~~**Deploy**~~ — **DONE 2026-07-21**: functions ~16:40Z, Coolify ~16:54Z, both
-   on the SHA tagged in §2. Queue empty. What remains is verification, not
-   deployment — see HANDOFF's STOP POINT §5.
+2. **Deploy — OWED as of 2026-07-22.** #255 and #256 change `functions/` and are
+   not live until deployed; #255 closes a banned-owner authorization gap on the
+   pilot path. Full recipe: `MORNING-2026-07-22.md` §2. (The 2026-07-21 deploy —
+   functions ~16:40Z, Coolify ~16:54Z — is what the §2 SHA still refers to.)
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.
