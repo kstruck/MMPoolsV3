@@ -27,28 +27,28 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 ---
 
-## 0. State as of 2026-07-22 ~05:00Z — read this before anything else
+## 0. State as of 2026-07-22 evening — read this before anything else
 
-**Start with [MORNING-2026-07-22.md](MORNING-2026-07-22.md)** — Kevin's
-step-by-step list. Then this file.
+**Everything through #260 is merged AND deployed. Prod is on `00153e5`, both
+functions and frontend.** The morning's three PRs (#255/#256/#257) plus #243,
+#259 and #260 all shipped; #255 closed the banned-commissioner authz gap in
+prod. Kevin's two rulings landed: **timezones pinned to ET** (#259) and the
+**PLAN gate scoped to blast radius** (#260). Queue is empty. See HANDOFF's STOP
+POINT box.
 
-**Three PRs are OPEN and a functions deploy is owed:**
-[#255](https://github.com/kstruck/MMPoolsV3/pull/255) (BANNED owner rejected on
-the three ownership-path callables — a live authz gap on the pilot path),
-[#256](https://github.com/kstruck/MMPoolsV3/pull/256) (heartbeat verdicts made
-pure and testable), [#257](https://github.com/kstruck/MMPoolsV3/pull/257)
-(emulator coverage for the finalize sweep and `replayFeedSnapshot`). All seven
-CI checks green on each; codex clean; **qodo is billing-blocked and reviewed
-none of them.**
+**qodo is billing-blocked** and reviewed none of the six; codex is the only
+active reviewer (CLAUDE.md §2b).
 
-Nothing was deployed overnight and no production data was touched, so the
-deploy-state SHA below is unchanged.
+The overnight-of-2026-07-22 effort took on four product items Kevin queued —
+profile header/footer, SuperAdmin Overview stats, a filterable Stats tab, and a
+Sentry triage. If **MORNING-2026-07-23.md** exists, read it for what got built
+and what needs Kevin.
 
-### The earlier 2026-07-21 deploy, still true
+### The 2026-07-21 deploy, for context
 
 **Functions and the frontend were both deployed on 2026-07-21** (~16:40Z and
-~16:54Z, same commit). Twelve PRs shipped in that deploy; everything below is
-*after* it.
+~16:54Z, same commit). Twelve PRs shipped in that deploy; the state above is
+*after* it, and after the 07-22 morning and evening deploys.
 
 ⚠️ **The deployed SHA lives in exactly TWO places, both tagged
 `<!-- deploy-state:current -->`** — HANDOFF's STOP POINT box and §2 of this
@@ -164,11 +164,10 @@ state. Concretely:
 
 ---
 
-## 2. Live state (verified 2026-07-21)
+## 2. Live state (verified 2026-07-22 evening)
 
-> ⚠️ **DEPLOY QUEUE: NOT EMPTY as of 2026-07-22.** #255, #256 and #257 are open;
-> #255 (BANNED-owner authz, on the pilot path) and #256 both change `functions/`
-> and need a deploy. See §0 and `MORNING-2026-07-22.md` §2 for the recipe.
+> ✅ **DEPLOY QUEUE EMPTY as of 2026-07-22 evening.** Everything through #260 is
+> merged and deployed; both functions and frontend are on `00153e5`.
 >
 > **HANDOFF.md's STOP POINT box is authoritative for deploy state.** Both files
 > agree on the DEPLOYED SOURCE SHA below — which is what is RUNNING, not what
@@ -178,14 +177,14 @@ state. Concretely:
 > `tests/docs-state-invariants.test.ts` (PR #248) enforces **only** that the
 > tagged deployed-SHA claims agree and name a real commit on `origin/main`. It
 > does **not** compare deploy-QUEUE prose and does not know what `main` currently
-> is. That is why the queue line above is dated and why it went stale the moment
-> those PRs opened — a green suite is not agreement about the queue. The limit is
-> stated in the test file itself.
+> is — a green suite is not agreement about the queue. The limit is stated in the
+> test file itself.
 
-**Prod is deployed from <!-- deploy-state:current --> `main` @ `6ca9e7f`.** Functions
-deployed 2026-07-21 ~16:40Z, Coolify frontend ~16:54Z on the same commit.
-Twelve PRs shipped in that deploy — the six from the overnight run and the six
-that had been pending before it, including **#239, the Firestore-reads fix**.
+**Prod is deployed from <!-- deploy-state:current --> `main` @ `00153e5`.**
+Functions deployed 2026-07-22 evening (bare `--only functions`); Coolify rebuilt
+the frontend on the same commit and passed healthcheck. This carries the six
+PRs listed in HANDOFF's STOP POINT box, on top of the 2026-07-21 baseline
+(which itself carried **#239, the Firestore-reads fix**).
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is
