@@ -264,7 +264,51 @@ so — you may want the raw registered-user figure regardless of date.
 
 ---
 
-## 8. Reminder — yours, calendar-bound
+## 8. ⚠️ BOTH REVIEWERS ARE NOW DOWN — this needs a decision
+
+This changed **during** today's session and it affects everything after it.
+
+| Reviewer | State | Since |
+|---|---|---|
+| **qodo** | Billing-blocked. Posts `Qodo reviews are paused because your trial has ended`. Zero findings. | 2026-07-21 |
+| **codex** | **Hit its usage limit mid-session.** `You've hit your usage limit… try again at Jul 28th, 2026 11:06 AM` | 2026-07-23, today |
+
+**What that means concretely:**
+
+- #262 got the full treatment — codex round 1 found 2 real regressions, round 2
+  came back **clean**. That PR is properly reviewed.
+- #263 got **round 1 only** (6 findings, all absorbed). **Round 2 could not
+  run.** CLAUDE.md §2c says iterate until a round comes back clean; that did not
+  happen. It is docs-only, but you should know it is one round short.
+- **Until Jul 28, any further PR has NO cross-model review at all.** CLAUDE.md
+  §2c exists because a single 2026-07-21 session produced 12 self-inflicted
+  defects and **every one was caught by an external reviewer, none by
+  self-review.** That safety net is currently gone.
+
+**Today's session is itself the argument.** codex caught, in my own work: two
+regressions I introduced in #262, a deploy command that could have hit the wrong
+Firebase project, a deleted plan step that would have re-opened the stats hole
+mid-season, and a forecast error that would have made a successful deploy look
+like a failure. Self-review caught none of those.
+
+**Your options, and I'd take the first:**
+
+1. **Add codex credits** (https://chatgpt.com/codex/settings/usage). Cheapest fix,
+   restores the gate that is demonstrably working. 14 days to the HOF game.
+2. **Restore qodo billing.** Its *defect* findings on this repo are 17/17 valid;
+   its style findings are 7/7 noise you can ignore.
+3. **Accept unreviewed PRs until Jul 28** — viable only for docs and low-blast-
+   radius work. **I would not ship the stats work under this**, since it writes
+   money figures to a world-readable document and has already needed three review
+   rounds to stop being wrong.
+
+Tell me which, and I'll pace the queue accordingly. Absent an answer I will keep
+building but will hold anything touching money, authz, prod data or scoring
+until a reviewer is back.
+
+---
+
+## 9. Reminder — yours, calendar-bound
 
 **A8 pricing is due 2026-08-06.** 14 days. It is the only calendar-bound item
 on the board and it is not something I can do for you.
