@@ -148,6 +148,49 @@ describe('runReminders week-lookup memoization', () => {
         expect(counts.future).toBe(2);
     });
 
+    it('does not let a numeric season poison a string season (Firestore equality is typed)', async () => {
+        const counts: Counts = { future: 0, week: 0 };
+        const db = makeDb(GAMES, counts);
+        const cache = newWeekContextCache();
+
+        // Games are stored with string seasons. A pool persisted with numeric
+        // 2026 matches nothing and resolves null — its own pre-existing problem.
+        // It must not take the string-season pools down with it.
+        await checkNFLNonPickerReminders(db, nflPool('numeric', 2026 as any, 2), NOW, cache);
+        const ctx = await getWeekContext(db, '2026', 2, NOW, cache);
+
+        expect(ctx?.week).toBe(5);
+        expect(counts.future).toBe(2);
+    });
+
+    it('evicts a FAILED lookup so the next pool retries, instead of caching the rejection', async () => {
+        const counts: Counts = { future: 0, week: 0 };
+        const good = makeDb(GAMES, counts);
+        let failNext = true;
+        const flaky = {
+            collection: (name: string) => {
+                if (name === 'nfl_games' && failNext) {
+                    failNext = false;
+                    const boom = {
+                        where: () => boom,
+                        limit: () => boom,
+                        get: async () => { throw new Error('transient Firestore error'); },
+                    };
+                    return boom;
+                }
+                return good.collection(name);
+            },
+        } as any;
+        const cache = newWeekContextCache();
+
+        // First pool hits the transient failure; its own try/catch swallows it.
+        await checkNFLNonPickerReminders(flaky, nflPool('a', '2026', 2), NOW, cache);
+        // Second pool must get a real answer, not the cached rejection.
+        const ctx = await getWeekContext(flaky, '2026', 2, NOW, cache);
+
+        expect(ctx?.week).toBe(5);
+    });
+
     it('does NOT cache across runs — a module-level memo would send stale-week reminders', async () => {
         const counts: Counts = { future: 0, week: 0 };
         const db = makeDb(GAMES, counts);

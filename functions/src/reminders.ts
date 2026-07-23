@@ -737,17 +737,36 @@ export function newWeekContextCache(): WeekContextCache {
  */
 export function getWeekContext(
     db: admin.firestore.Firestore,
-    season: string,
+    // NOT narrowed to string. Firestore returns whatever was persisted, and the
+    // create path stores `season` untransformed, so a numeric 2026 is reachable
+    // at runtime however the Pool type is declared.
+    season: string | number,
     seasonType: number,
     now: number,
     cache: WeekContextCache,
 ): Promise<WeekContext> {
-    const key = `${season}|${seasonType}`;
+    // The TYPE is part of the key. Firestore equality is type-sensitive, so a
+    // numeric 2026 and a string '2026' are different queries with different
+    // results — but `${season}` renders both as "2026". Keying on the rendered
+    // value alone would let a numeric-season pool (which matches no
+    // string-season game and resolves null) poison every string-season pool
+    // behind it and silently suppress their reminders. Found by codex review.
+    const key = `${typeof season}:${season}|${seasonType}`;
     let inflight = cache.get(key);
     if (!inflight) {
         // Cache the PROMISE, not the resolved value, so concurrent callers
         // share one query rather than racing to issue duplicates.
-        inflight = loadWeekContext(db, season, seasonType, now);
+        //
+        // Evict on rejection. A cached REJECTED promise would make one
+        // transient read failure suppress reminders for every remaining pool in
+        // that season for the rest of the run — the per-pool try/catch in
+        // runReminders exists precisely so one failure cannot do that, and
+        // caching the rejection would defeat it. Successful results stay.
+        // Found by codex review.
+        inflight = loadWeekContext(db, season, seasonType, now).catch((err) => {
+            cache.delete(key);
+            throw err;
+        });
         cache.set(key, inflight);
     }
     return inflight;
@@ -755,7 +774,7 @@ export function getWeekContext(
 
 async function loadWeekContext(
     db: admin.firestore.Firestore,
-    season: string,
+    season: string | number,
     seasonType: number,
     now: number,
 ): Promise<WeekContext> {
