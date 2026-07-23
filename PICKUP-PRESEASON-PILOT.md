@@ -27,28 +27,32 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 ---
 
-## 0. State as of 2026-07-22 ~05:00Z — read this before anything else
+## 0. State as of 2026-07-22 evening — read this before anything else
 
-**Start with [MORNING-2026-07-22.md](MORNING-2026-07-22.md)** — Kevin's
-step-by-step list. Then this file.
+**Everything through #260 is merged AND deployed, functions and frontend on the
+same commit** (the SHA is the tagged claim in §2 — not repeated here, so it
+cannot rot). **One exception:** the public-profile header/footer fix in this
+branch touches `src/App.tsx` and needs a **Coolify rebuild** after it merges —
+see §4. The morning's three PRs (#255/#256/#257) plus #243,
+#259 and #260 all shipped; #255 closed the banned-commissioner authz gap in
+prod. Kevin's two rulings landed: **timezones pinned to ET** (#259) and the
+**PLAN gate scoped to blast radius** (#260). **Functions queue is empty; a
+Coolify FRONTEND rebuild is owed** for the public-profile header/footer fix. See
+HANDOFF's STOP POINT box.
 
-**Three PRs are OPEN and a functions deploy is owed:**
-[#255](https://github.com/kstruck/MMPoolsV3/pull/255) (BANNED owner rejected on
-the three ownership-path callables — a live authz gap on the pilot path),
-[#256](https://github.com/kstruck/MMPoolsV3/pull/256) (heartbeat verdicts made
-pure and testable), [#257](https://github.com/kstruck/MMPoolsV3/pull/257)
-(emulator coverage for the finalize sweep and `replayFeedSnapshot`). All seven
-CI checks green on each; codex clean; **qodo is billing-blocked and reviewed
-none of them.**
+**qodo is billing-blocked** and reviewed none of the six; codex is the only
+active reviewer (CLAUDE.md §2b).
 
-Nothing was deployed overnight and no production data was touched, so the
-deploy-state SHA below is unchanged.
+The overnight-of-2026-07-22 effort took on four product items Kevin queued —
+profile header/footer, SuperAdmin Overview stats, a filterable Stats tab, and a
+Sentry triage. If **MORNING-2026-07-23.md** exists, read it for what got built
+and what needs Kevin.
 
-### The earlier 2026-07-21 deploy, still true
+### The 2026-07-21 deploy, for context
 
 **Functions and the frontend were both deployed on 2026-07-21** (~16:40Z and
-~16:54Z, same commit). Twelve PRs shipped in that deploy; everything below is
-*after* it.
+~16:54Z, same commit). Twelve PRs shipped in that deploy; the state above is
+*after* it, and after the 07-22 morning and evening deploys.
 
 ⚠️ **The deployed SHA lives in exactly TWO places, both tagged
 `<!-- deploy-state:current -->`** — HANDOFF's STOP POINT box and §2 of this
@@ -85,22 +89,24 @@ before editing those files or you will redo its work.
    engineering queue rather than filing the whole gap under Kevin.
 2. **A8 pricing — DUE 2026-08-06.** The only calendar-bound item. Retargeted
    from 2026-08-13 on 2026-07-21 when Kevin named the HOF game as the target.
-3. **A banned commissioner can still move the money ledger — FIXED IN
-   [#255](https://github.com/kstruck/MMPoolsV3/pull/255), NOT YET DEPLOYED.**
-   `recordPoolPayouts`, `simulateGameUpdate` and `simFillSquares` authorize from
-   persisted pool ownership and never consult `users/{uid}.role`; the first is on
-   the pilot path (`RecordPayoutsCard.tsx`). All three now call
-   `assertNotBannedLive` — but the gap is live in prod until functions deploy.
-4. **`nflFinalizeSweepJob` has never completed a production run.** Runs 08:30
-   **UTC** (04:30 ET). Its sweep path now has emulator coverage
-   ([#257](https://github.com/kstruck/MMPoolsV3/pull/257)) — which is not the
-   same claim as "it ran in prod". Arming it is NFL-6 in `TOMORROW-TASKS.md`.
+3. ~~**A banned commissioner can still move the money ledger.**~~ **CLOSED IN
+   PROD 2026-07-22** — [#255](https://github.com/kstruck/MMPoolsV3/pull/255)
+   merged and deployed. `recordPoolPayouts`, `simulateGameUpdate` and
+   `simFillSquares` authorized from persisted pool ownership and never consulted
+   `users/{uid}.role`; all three now call `assertNotBannedLive`, and the deploy
+   output confirmed each with "Successful update operation".
+4. **`nflFinalizeSweepJob` has never completed a production run.** Runs
+   **04:30 ET** (`30 4 * * *`, pinned since #259 — it was 08:30 UTC, same wall
+   time, wrongly documented as 08:30 ET). Its sweep path now has emulator
+   coverage ([#257](https://github.com/kstruck/MMPoolsV3/pull/257)) — which is
+   not the same claim as "it ran in prod". Arming it is NFL-6 in
+   `TOMORROW-TASKS.md`.
 
 ### Best next engineering work (no Kevin needed)
 
-Items 1 and 2 of the previous list are DONE and open as
-[#256](https://github.com/kstruck/MMPoolsV3/pull/256) and
-[#257](https://github.com/kstruck/MMPoolsV3/pull/257). What is left:
+Items 1 and 2 of the previous list are DONE — [#256](https://github.com/kstruck/MMPoolsV3/pull/256)
+and [#257](https://github.com/kstruck/MMPoolsV3/pull/257) are merged and
+deployed. What is left:
 
 1. **Plumb an outcome through `sendEmail` / `sendCourierSMS`** so `runReminders`
    can see delivery failures its helpers swallow. A run where every email failed
@@ -108,7 +114,7 @@ Items 1 and 2 of the previous list are DONE and open as
    pages members, so it wants its own careful PR.
 2. **The scheduled Auth export** (`PLAN-BACKUPS-PHASE3.md` step 6) — deferred
    CODE, not a console click. Blocked on Kevin creating the GCS bucket + IAM.
-3. **Unify scheduled-job timezones**, if Kevin rules that way (see below).
+3. ~~**Unify scheduled-job timezones.**~~ **DONE** — #259, deployed 2026-07-22.
 
 ### Contradictions Kevin ruled on — 2026-07-22
 
@@ -117,19 +123,13 @@ Items 1 and 2 of the previous list are DONE and open as
   plan is required when a change touches **money, authorization, production
   data, or scoring**. `mmp-change-control` §1 carries the trigger list and is
   authoritative. Stop flagging the skip on ordinary changes.
-- **Scheduled-job timezones — Kevin RULED (pin all to ET); the change is OPEN,
-  not landed.** Seven daily-or-slower jobs run unpinned in UTC
-  (`autoClosePools`, `enforceBillingStatus`, `nflFinalizeSweepJob`,
-  `siteAveragesJob`, `gradeExpertProfilesJob`, `aggregateRevenueDaily`,
-  `webhookDurabilitySweep`), which is how `nflFinalizeSweepJob` came to be
-  documented as an 08:30 job that actually runs at 04:30 ET.
-
-  [#259](https://github.com/kstruck/MMPoolsV3/pull/259) implements it and
-  carries its own HANDOFF §4 rewrite plus a ratchet that fails if a wall-clock
-  schedule omits `timeZone` or pins a non-ET zone. **Until #259 merges AND a
-  functions deploy runs, the jobs are still on UTC** and HANDOFF §4 still
-  describes them that way — which is correct, not stale. Do not read this bullet
-  as "done".
+- **Scheduled-job timezones — RESOLVED and DEPLOYED.** Kevin ruled "pin all to
+  ET"; [#259](https://github.com/kstruck/MMPoolsV3/pull/259) merged and deployed
+  2026-07-22. Seven daily-or-slower jobs had run unpinned in UTC, which is how
+  `nflFinalizeSweepJob` came to be documented as an 08:30 job that actually ran
+  at 04:30 ET. **HANDOFF §4 carries the resulting schedule** — read it there, not
+  here. A ratchet (`functions/src/__tests__/scheduleTimezones.test.ts`) now fails
+  if a wall-clock schedule omits `timeZone` or pins a non-ET zone.
 
 ### Known cosmetic artifact, not an outage
 
@@ -164,11 +164,13 @@ state. Concretely:
 
 ---
 
-## 2. Live state (verified 2026-07-21)
+## 2. Live state (verified 2026-07-22 evening)
 
-> ⚠️ **DEPLOY QUEUE: NOT EMPTY as of 2026-07-22.** #255, #256 and #257 are open;
-> #255 (BANNED-owner authz, on the pilot path) and #256 both change `functions/`
-> and need a deploy. See §0 and `MORNING-2026-07-22.md` §2 for the recipe.
+> ⚠️ **FUNCTIONS queue empty; FRONTEND rebuild OWED as of 2026-07-22 evening.**
+> Everything through #260 is merged and deployed, and at that point functions and
+> frontend were both on the SHA tagged below. The public-profile header/footer
+> fix landed AFTER it and changes `src/App.tsx`, so the frontend is one commit
+> behind until someone triggers a Coolify rebuild.
 >
 > **HANDOFF.md's STOP POINT box is authoritative for deploy state.** Both files
 > agree on the DEPLOYED SOURCE SHA below — which is what is RUNNING, not what
@@ -178,14 +180,14 @@ state. Concretely:
 > `tests/docs-state-invariants.test.ts` (PR #248) enforces **only** that the
 > tagged deployed-SHA claims agree and name a real commit on `origin/main`. It
 > does **not** compare deploy-QUEUE prose and does not know what `main` currently
-> is. That is why the queue line above is dated and why it went stale the moment
-> those PRs opened — a green suite is not agreement about the queue. The limit is
-> stated in the test file itself.
+> is — a green suite is not agreement about the queue. The limit is stated in the
+> test file itself.
 
-**Prod is deployed from <!-- deploy-state:current --> `main` @ `6ca9e7f`.** Functions
-deployed 2026-07-21 ~16:40Z, Coolify frontend ~16:54Z on the same commit.
-Twelve PRs shipped in that deploy — the six from the overnight run and the six
-that had been pending before it, including **#239, the Firestore-reads fix**.
+**Prod is deployed from <!-- deploy-state:current --> `main` @ `00153e5`.**
+Functions deployed 2026-07-22 evening (bare `--only functions`); Coolify rebuilt
+the frontend on the same commit and passed healthcheck. This carries the six
+PRs listed in HANDOFF's STOP POINT box, on top of the 2026-07-21 baseline
+(which itself carried **#239, the Firestore-reads fix**).
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is
@@ -257,9 +259,10 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 **STILL NOT proven:**
 
-> ⚠️ **Two of these change once #256 and #257 merge — but only in CI, not in
-> prod.** Keep the distinction: a test proving a verdict is correct is not the
-> same claim as that verdict having fired in production. Updated 2026-07-22.
+> ⚠️ **#256 and #257 are merged and deployed, so two of these are now covered in
+> CI — but only in CI, not in prod.** Keep the distinction: a test proving a
+> verdict is correct is not the same claim as that verdict having fired in
+> production. Updated 2026-07-22 evening.
 
 - **The per-job heartbeat verdicts had no individual tests.** ~~The guard is a
   source-level check that a job *can* report failure.~~ **[#256](https://github.com/kstruck/MMPoolsV3/pull/256)
@@ -277,8 +280,8 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
   emulator coverage either.~~ **[#257](https://github.com/kstruck/MMPoolsV3/pull/257)
   covers the scheduled sweep in the emulator** — the gate, candidate selection,
   live scoping, and a thrown pool making the run unhealthy. **Still true in
-  prod:** it has never completed a run there. Runs 08:30 **UTC** (04:30 ET) —
-  see HANDOFF §4 for why that matters.
+  prod:** it has never completed a run there. Runs **04:30 ET** (pinned since
+  #259) — see HANDOFF §4 for the full schedule.
 - **`replayFeedSnapshot` has never been invoked against production.** ~~The full
   callable path is not covered.~~ **#257 exercises it end-to-end against the
   emulator** with a real `encodeSnapshot` payload: dry-run default, live rebuild,
@@ -293,18 +296,21 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — ⚠️ NOT EMPTY as of 2026-07-22
+## 4. Deploy queue — ⚠️ FRONTEND REBUILD OWED (functions empty)
 
-> **A functions deploy is OWED.** [#255](https://github.com/kstruck/MMPoolsV3/pull/255)
-> (BANNED-owner authz fix, on the pilot path) and
-> [#256](https://github.com/kstruck/MMPoolsV3/pull/256) both change
-> `functions/` and take effect only when deployed.
-> [#257](https://github.com/kstruck/MMPoolsV3/pull/257) is tests only.
-> Full recipe: `MORNING-2026-07-22.md` §2.
+> **Functions: nothing owed.** #255, #256, #257, #243, #259 and #260 are all
+> merged and deployed at the SHA tagged in §2.
+>
+> ⚠️ **Frontend: a Coolify rebuild IS owed** once the public-profile
+> header/footer fix merges — it changes `src/App.tsx`, and per the table below
+> `src/**` requires a manual Coolify trigger. The recipe below is kept
+> because it is the one that has worked every time — see also
+> `MORNING-2026-07-22.md` §2, which is PowerShell-correct.
 
-**As of 2026-07-22 three PRs are open and a functions deploy is owed** (see the
-box above). The deployed source SHA is the tagged claim in §2 — not repeated
-here, so it cannot drift out of sync with it. `main` advances past it with every
+**As of 2026-07-22 evening the FUNCTIONS queue is empty and a FRONTEND rebuild
+is owed** for the public-profile header/footer fix (see the box above). The
+deployed source SHA is the tagged claim in §2 — not repeated here, so it cannot
+drift out of sync with it. `main` advances past it with every
 docs-only commit — that is drift in the marker, not a deploy queue; the queue is
 the table below.
 
@@ -383,10 +389,11 @@ Always confirm the change is in the file on disk before deploying — not that
    under `"2"` in `bySeasonType`. Then set `nflFinalize.liveSeasonTypes` to an
    array containing the number **1** — `dryRun:false` **alone does nothing**,
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
-2. **Deploy — OWED as of 2026-07-22.** #255 and #256 change `functions/` and are
-   not live until deployed; #255 closes a banned-owner authorization gap on the
-   pilot path. Full recipe: `MORNING-2026-07-22.md` §2. (The 2026-07-21 deploy —
-   functions ~16:40Z, Coolify ~16:54Z — is what the §2 SHA still refers to.)
+2. **Deploy — functions DONE, FRONTEND REBUILD OWED.** Functions shipped
+   2026-07-22 evening and #255's authz fix is live. The public-profile
+   header/footer fix lands after that commit and changes `src/App.tsx`, so it
+   needs a manual **Coolify rebuild** — pushing to `main` does not trigger one.
+   Recipe: `MORNING-2026-07-22.md` §2.
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.

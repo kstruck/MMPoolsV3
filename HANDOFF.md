@@ -1,39 +1,63 @@
-# HANDOFF — Session entry point (updated 2026-07-22: three PRs OPEN, deploy needed)
+# HANDOFF — Session entry point (updated 2026-07-22 evening: functions deployed; FRONTEND REBUILD OWED)
 
-> ## ⚠️ STOP POINT 2026-07-22 (~05:00Z / 01:00 ET) — THREE PRs OPEN, A DEPLOY IS OWED
+> ## ⚠️ STOP POINT 2026-07-22 (~evening) — functions deployed, FRONTEND REBUILD OWED
 >
-> **Read [MORNING-2026-07-22.md](MORNING-2026-07-22.md) first — it is Kevin's
-> step-by-step task list for this morning.**
+> **Prod is deployed from <!-- deploy-state:current --> `main` @ `00153e5`.**
+> Functions deployed 2026-07-22 evening (bare `--only functions`); Coolify
+> rebuilt the frontend on the same commit and passed healthcheck. Both surfaces
+> are on that same commit.
 >
-> **Prod is still deployed from the SHA tagged in the box below.** Nothing was
-> deployed overnight and no production data was touched.
+> ⚠️ **A COOLIFY REBUILD IS OWED once this branch merges.** It carries a
+> `src/App.tsx` fix (public profile header/footer), and per PICKUP §4 any
+> `src/**` change needs a manual Coolify trigger — pushing to `main` does not
+> rebuild the frontend. The FUNCTIONS queue is empty; the frontend is not.
 >
-> Open and green on all seven CI checks, codex-reviewed clean:
+> ⚠️ The SHA appears **once** in this file, in the tagged claim above. Every
+> other mention says "the tagged SHA" on purpose: `docs-state-invariants` only
+> guards the tagged deploy-state construction, so a bare copy of the hash is
+> invisible to it and rots on the next deploy while the suite stays green.
+> (This note deliberately does not reproduce that construction — doing so makes
+> the scanner read the example as a third claim, which failed the suite once
+> already while writing this very paragraph.)
 >
-> | PR | What | Deploy needed |
-> |---|---|---|
-> | [#255](https://github.com/kstruck/MMPoolsV3/pull/255) | BANNED owner rejected on `recordPoolPayouts`, `simulateGameUpdate`, `simFillSquares` | **YES — security** |
-> | [#256](https://github.com/kstruck/MMPoolsV3/pull/256) | Heartbeat verdicts extracted to `lib/heartbeatVerdicts.ts` + unit tests | Yes |
-> | [#257](https://github.com/kstruck/MMPoolsV3/pull/257) | Emulator coverage: finalize sweep + `replayFeedSnapshot` | No (tests only) |
+> ### What shipped since the morning
 >
-> **#255 is a live authz gap on the pilot path** — a banned commissioner can
-> record payouts and decide winners until it ships. Merging is not enough;
-> `functions` must be deployed. Full recipe in MORNING-2026-07-22.md §2.
+> The three morning PRs plus three more, all merged and now deployed:
 >
-> Test counts after all three: functions vitest 913 → 940, emulator 105 → **132**
-> (#255 adds 9, #257 adds 18 — each PR's own branch showed only its own delta).
+> | PR | What |
+> |---|---|
+> | [#255](https://github.com/kstruck/MMPoolsV3/pull/255) | BANNED owner rejected on `recordPoolPayouts` / `simulateGameUpdate` / `simFillSquares` — the live authz gap, now CLOSED in prod |
+> | [#256](https://github.com/kstruck/MMPoolsV3/pull/256) | Heartbeat verdicts extracted to `lib/heartbeatVerdicts.ts` + unit tests |
+> | [#257](https://github.com/kstruck/MMPoolsV3/pull/257) | Emulator coverage: finalize sweep + `replayFeedSnapshot` |
+> | [#243](https://github.com/kstruck/MMPoolsV3/pull/243) | `functions/` body-parser 1.20.5 → 1.20.6 |
+> | [#259](https://github.com/kstruck/MMPoolsV3/pull/259) | Every wall-clock job pinned to `America/New_York` — see §4 for the schedule |
+> | [#260](https://github.com/kstruck/MMPoolsV3/pull/260) | PLAN gate scoped to money/authz/prod-data/scoring (docs) — did NOT need a deploy |
 >
-> **qodo is billing-blocked** as of 2026-07-21 and produced zero findings on all
-> four overnight PRs. codex (CLAUDE.md §2c) is the only working reviewer.
+> Kevin's two rulings (2026-07-22): **pin all wall-clock jobs to ET** (#259), and
+> **scope the PLAN gate to blast radius, not file count** (#260). Both live.
+>
+> Test counts now: functions vitest **947**, emulator **132**, root vitest **291**
+> (+7 from the route-chrome invariants added with the profile fix).
+>
+> **qodo is billing-blocked** as of 2026-07-21 and reviewed none of these six.
+> codex (CLAUDE.md §2c) is the only working reviewer. See CLAUDE.md §2b.
+>
+> ### The evening's second effort (overnight of 2026-07-22)
+>
+> Kevin queued four product items — profile-page header/footer, SuperAdmin
+> Overview stats (reset + exclude test pools), a filterable Stats tab, and a
+> Sentry error triage. See **MORNING-2026-07-23.md** (if present) for what got
+> built and what needs Kevin.
 >
 > ---
 >
-> ## ✅ STOP POINT 2026-07-21 (~17:00Z / 13:00 ET) — DEPLOYED, queue empty
+> ## ✅ STOP POINT 2026-07-21 (~17:00Z / 13:00 ET) — historical
 >
-> **Prod is deployed from <!-- deploy-state:current --> `main` @ `6ca9e7f`.** Functions
+> **Deployed <!-- deploy-state:ignore --> `main` @ `6ca9e7f`.** Functions
 > deployed 2026-07-21 ~16:40Z (12:40 ET); Coolify rebuilt the frontend on the
-> same commit and its container passed healthcheck at 16:54Z (12:54 ET). Nothing is waiting on a merge or
-> a deploy.
+> same commit and its container passed healthcheck at 16:54Z (12:54 ET). This
+> box is kept for the verification pattern it records; the deploy state above
+> supersedes it.
 >
 > ### 1. What shipped
 >

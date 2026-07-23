@@ -389,8 +389,19 @@ const App: React.FC = () => {
           {/* TEMPORARY marketing demo profile (dummy data) — delete with DevProfileDemo.tsx */}
           <Route path="/dev/profile-demo" element={<DevProfileDemo />} />
 
-          {/* Player Profile (public projection) */}
-          <Route path="/profile/:uid" element={<PlayerProfile />} />
+          {/* Player Profile (public projection).
+              Header/Footer are supplied HERE, as they are for every other page —
+              PlayerProfile renders no chrome of its own, so without this wrapper
+              the public profile was the only route on the site with no nav and
+              no footer. Header takes `user: User | null`, so this works for the
+              logged-out viewer a shared profile link is aimed at. */}
+          <Route path="/profile/:uid" element={
+            <>
+              <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+              <PlayerProfile />
+              <Footer />
+            </>
+          } />
 
           {/* Pool View */}
           <Route path="/pool/:id" element={
