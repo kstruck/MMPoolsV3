@@ -5,7 +5,12 @@
 > **Prod is deployed from <!-- deploy-state:current --> `main` @ `00153e5`.**
 > Functions deployed 2026-07-22 evening (bare `--only functions`); Coolify
 > rebuilt the frontend on the same commit and passed healthcheck. Both surfaces
-> are on that same commit. Nothing is waiting on a merge or a deploy.
+> are on that same commit.
+>
+> ⚠️ **A COOLIFY REBUILD IS OWED once this branch merges.** It carries a
+> `src/App.tsx` fix (public profile header/footer), and per PICKUP §4 any
+> `src/**` change needs a manual Coolify trigger — pushing to `main` does not
+> rebuild the frontend. The FUNCTIONS queue is empty; the frontend is not.
 >
 > ⚠️ The SHA appears **once** in this file, in the tagged claim above. Every
 > other mention says "the tagged SHA" on purpose: `docs-state-invariants` only

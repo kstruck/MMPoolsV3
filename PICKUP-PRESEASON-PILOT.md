@@ -31,7 +31,9 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 **Everything through #260 is merged AND deployed, functions and frontend on the
 same commit** (the SHA is the tagged claim in §2 — not repeated here, so it
-cannot rot). The morning's three PRs (#255/#256/#257) plus #243,
+cannot rot). **One exception:** the public-profile header/footer fix in this
+branch touches `src/App.tsx` and needs a **Coolify rebuild** after it merges —
+see §4. The morning's three PRs (#255/#256/#257) plus #243,
 #259 and #260 all shipped; #255 closed the banned-commissioner authz gap in
 prod. Kevin's two rulings landed: **timezones pinned to ET** (#259) and the
 **PLAN gate scoped to blast radius** (#260). Queue is empty. See HANDOFF's STOP
@@ -292,8 +294,12 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ## 4. Deploy queue — ✅ EMPTY as of 2026-07-22 evening
 
-> **Nothing is owed.** #255, #256, #257, #243, #259 and #260 are all merged, and
-> functions + frontend are both deployed at the SHA tagged in §2. The recipe below is kept
+> **Functions: nothing owed.** #255, #256, #257, #243, #259 and #260 are all
+> merged and deployed at the SHA tagged in §2.
+>
+> ⚠️ **Frontend: a Coolify rebuild IS owed** once the public-profile
+> header/footer fix merges — it changes `src/App.tsx`, and per the table below
+> `src/**` requires a manual Coolify trigger. The recipe below is kept
 > because it is the one that has worked every time — see also
 > `MORNING-2026-07-22.md` §2, which is PowerShell-correct.
 
