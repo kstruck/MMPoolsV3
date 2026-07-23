@@ -85,16 +85,18 @@ before editing those files or you will redo its work.
    engineering queue rather than filing the whole gap under Kevin.
 2. **A8 pricing — DUE 2026-08-06.** The only calendar-bound item. Retargeted
    from 2026-08-13 on 2026-07-21 when Kevin named the HOF game as the target.
-3. **A banned commissioner can still move the money ledger — FIXED IN
-   [#255](https://github.com/kstruck/MMPoolsV3/pull/255), NOT YET DEPLOYED.**
-   `recordPoolPayouts`, `simulateGameUpdate` and `simFillSquares` authorize from
-   persisted pool ownership and never consult `users/{uid}.role`; the first is on
-   the pilot path (`RecordPayoutsCard.tsx`). All three now call
-   `assertNotBannedLive` — but the gap is live in prod until functions deploy.
-4. **`nflFinalizeSweepJob` has never completed a production run.** Runs 08:30
-   **UTC** (04:30 ET). Its sweep path now has emulator coverage
-   ([#257](https://github.com/kstruck/MMPoolsV3/pull/257)) — which is not the
-   same claim as "it ran in prod". Arming it is NFL-6 in `TOMORROW-TASKS.md`.
+3. ~~**A banned commissioner can still move the money ledger.**~~ **CLOSED IN
+   PROD 2026-07-22** — [#255](https://github.com/kstruck/MMPoolsV3/pull/255)
+   merged and deployed. `recordPoolPayouts`, `simulateGameUpdate` and
+   `simFillSquares` authorized from persisted pool ownership and never consulted
+   `users/{uid}.role`; all three now call `assertNotBannedLive`, and the deploy
+   output confirmed each with "Successful update operation".
+4. **`nflFinalizeSweepJob` has never completed a production run.** Runs
+   **04:30 ET** (`30 4 * * *`, pinned since #259 — it was 08:30 UTC, same wall
+   time, wrongly documented as 08:30 ET). Its sweep path now has emulator
+   coverage ([#257](https://github.com/kstruck/MMPoolsV3/pull/257)) — which is
+   not the same claim as "it ran in prod". Arming it is NFL-6 in
+   `TOMORROW-TASKS.md`.
 
 ### Best next engineering work (no Kevin needed)
 
@@ -108,7 +110,7 @@ Items 1 and 2 of the previous list are DONE and open as
    pages members, so it wants its own careful PR.
 2. **The scheduled Auth export** (`PLAN-BACKUPS-PHASE3.md` step 6) — deferred
    CODE, not a console click. Blocked on Kevin creating the GCS bucket + IAM.
-3. **Unify scheduled-job timezones**, if Kevin rules that way (see below).
+3. ~~**Unify scheduled-job timezones.**~~ **DONE** — #259, deployed 2026-07-22.
 
 ### Contradictions Kevin ruled on — 2026-07-22
 
@@ -117,19 +119,13 @@ Items 1 and 2 of the previous list are DONE and open as
   plan is required when a change touches **money, authorization, production
   data, or scoring**. `mmp-change-control` §1 carries the trigger list and is
   authoritative. Stop flagging the skip on ordinary changes.
-- **Scheduled-job timezones — Kevin RULED (pin all to ET); the change is OPEN,
-  not landed.** Seven daily-or-slower jobs run unpinned in UTC
-  (`autoClosePools`, `enforceBillingStatus`, `nflFinalizeSweepJob`,
-  `siteAveragesJob`, `gradeExpertProfilesJob`, `aggregateRevenueDaily`,
-  `webhookDurabilitySweep`), which is how `nflFinalizeSweepJob` came to be
-  documented as an 08:30 job that actually runs at 04:30 ET.
-
-  [#259](https://github.com/kstruck/MMPoolsV3/pull/259) implements it and
-  carries its own HANDOFF §4 rewrite plus a ratchet that fails if a wall-clock
-  schedule omits `timeZone` or pins a non-ET zone. **Until #259 merges AND a
-  functions deploy runs, the jobs are still on UTC** and HANDOFF §4 still
-  describes them that way — which is correct, not stale. Do not read this bullet
-  as "done".
+- **Scheduled-job timezones — RESOLVED and DEPLOYED.** Kevin ruled "pin all to
+  ET"; [#259](https://github.com/kstruck/MMPoolsV3/pull/259) merged and deployed
+  2026-07-22. Seven daily-or-slower jobs had run unpinned in UTC, which is how
+  `nflFinalizeSweepJob` came to be documented as an 08:30 job that actually ran
+  at 04:30 ET. **HANDOFF §4 carries the resulting schedule** — read it there, not
+  here. A ratchet (`functions/src/__tests__/scheduleTimezones.test.ts`) now fails
+  if a wall-clock schedule omits `timeZone` or pins a non-ET zone.
 
 ### Known cosmetic artifact, not an outage
 
@@ -276,8 +272,8 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
   emulator coverage either.~~ **[#257](https://github.com/kstruck/MMPoolsV3/pull/257)
   covers the scheduled sweep in the emulator** — the gate, candidate selection,
   live scoping, and a thrown pool making the run unhealthy. **Still true in
-  prod:** it has never completed a run there. Runs 08:30 **UTC** (04:30 ET) —
-  see HANDOFF §4 for why that matters.
+  prod:** it has never completed a run there. Runs **04:30 ET** (pinned since
+  #259) — see HANDOFF §4 for the full schedule.
 - **`replayFeedSnapshot` has never been invoked against production.** ~~The full
   callable path is not covered.~~ **#257 exercises it end-to-end against the
   emulator** with a real `encodeSnapshot` payload: dry-run default, live rebuild,
@@ -292,18 +288,16 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — ⚠️ NOT EMPTY as of 2026-07-22
+## 4. Deploy queue — ✅ EMPTY as of 2026-07-22 evening
 
-> **A functions deploy is OWED.** [#255](https://github.com/kstruck/MMPoolsV3/pull/255)
-> (BANNED-owner authz fix, on the pilot path) and
-> [#256](https://github.com/kstruck/MMPoolsV3/pull/256) both change
-> `functions/` and take effect only when deployed.
-> [#257](https://github.com/kstruck/MMPoolsV3/pull/257) is tests only.
-> Full recipe: `MORNING-2026-07-22.md` §2.
+> **Nothing is owed.** #255, #256, #257, #243, #259 and #260 are all merged, and
+> functions + frontend are both deployed at `00153e5`. The recipe below is kept
+> because it is the one that has worked every time — see also
+> `MORNING-2026-07-22.md` §2, which is PowerShell-correct.
 
-**As of 2026-07-22 three PRs are open and a functions deploy is owed** (see the
-box above). The deployed source SHA is the tagged claim in §2 — not repeated
-here, so it cannot drift out of sync with it. `main` advances past it with every
+**As of 2026-07-22 evening the queue is empty** (see the box above). The
+deployed source SHA is the tagged claim in §2 — not repeated here, so it cannot
+drift out of sync with it. `main` advances past it with every
 docs-only commit — that is drift in the marker, not a deploy queue; the queue is
 the table below.
 
@@ -382,10 +376,9 @@ Always confirm the change is in the file on disk before deploying — not that
    under `"2"` in `bySeasonType`. Then set `nflFinalize.liveSeasonTypes` to an
    array containing the number **1** — `dryRun:false` **alone does nothing**,
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
-2. **Deploy — OWED as of 2026-07-22.** #255 and #256 change `functions/` and are
-   not live until deployed; #255 closes a banned-owner authorization gap on the
-   pilot path. Full recipe: `MORNING-2026-07-22.md` §2. (The 2026-07-21 deploy —
-   functions ~16:40Z, Coolify ~16:54Z — is what the §2 SHA still refers to.)
+2. ~~**Deploy**~~ — **DONE 2026-07-22 evening.** Functions and the Coolify
+   frontend are both on `00153e5`; #255's authz fix is live. Nothing is owed.
+   Recipe for next time: `MORNING-2026-07-22.md` §2.
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.
