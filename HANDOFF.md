@@ -1,6 +1,6 @@
-# HANDOFF — Session entry point (updated 2026-07-22 evening: all deployed, queue empty)
+# HANDOFF — Session entry point (updated 2026-07-22 evening: functions deployed; FRONTEND REBUILD OWED)
 
-> ## ✅ STOP POINT 2026-07-22 (~evening) — DEPLOYED, queue empty
+> ## ⚠️ STOP POINT 2026-07-22 (~evening) — functions deployed, FRONTEND REBUILD OWED
 >
 > **Prod is deployed from <!-- deploy-state:current --> `main` @ `00153e5`.**
 > Functions deployed 2026-07-22 evening (bare `--only functions`); Coolify

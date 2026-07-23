@@ -36,8 +36,9 @@ branch touches `src/App.tsx` and needs a **Coolify rebuild** after it merges —
 see §4. The morning's three PRs (#255/#256/#257) plus #243,
 #259 and #260 all shipped; #255 closed the banned-commissioner authz gap in
 prod. Kevin's two rulings landed: **timezones pinned to ET** (#259) and the
-**PLAN gate scoped to blast radius** (#260). Queue is empty. See HANDOFF's STOP
-POINT box.
+**PLAN gate scoped to blast radius** (#260). **Functions queue is empty; a
+Coolify FRONTEND rebuild is owed** for the public-profile header/footer fix. See
+HANDOFF's STOP POINT box.
 
 **qodo is billing-blocked** and reviewed none of the six; codex is the only
 active reviewer (CLAUDE.md §2b).
@@ -388,10 +389,11 @@ Always confirm the change is in the file on disk before deploying — not that
    under `"2"` in `bySeasonType`. Then set `nflFinalize.liveSeasonTypes` to an
    array containing the number **1** — `dryRun:false` **alone does nothing**,
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
-2. ~~**Deploy**~~ — **DONE 2026-07-22 evening.** Functions and the Coolify
-   frontend are both on the SHA tagged in §2; #255's authz fix is live. Nothing
-   is owed.
-   Recipe for next time: `MORNING-2026-07-22.md` §2.
+2. **Deploy — functions DONE, FRONTEND REBUILD OWED.** Functions shipped
+   2026-07-22 evening and #255's authz fix is live. The public-profile
+   header/footer fix lands after that commit and changes `src/App.tsx`, so it
+   needs a manual **Coolify rebuild** — pushing to `main` does not trigger one.
+   Recipe: `MORNING-2026-07-22.md` §2.
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.

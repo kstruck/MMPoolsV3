@@ -78,13 +78,42 @@ Kevin in §5, not something I will guess at.
 Note `admin_stats/**` is SUPER_ADMIN-only in the rules — unlike `stats/**`, this
 one is not public.
 
-### 2.4 Metrics I could NOT trace
+### 2.4 THE OVERVIEW CARDS DO NOT READ `stats/global` AT ALL
 
-`totalUsers`, `totalSquaresSold` and "active pools" are rendered by
-`SuperAdminBentoDashboard.tsx` but I did not find their producers in
-`functions/src`. They may be computed client-side or come from another doc.
-**Stated as unknown rather than guessed** — §4 step 0 closes this before any
-code is written.
+This is the finding that reshaped the plan, and the first draft had it wrong.
+Found by codex reviewing this document; verified in the source before accepting.
+
+`SuperAdmin.tsx:1242` renders `<SuperAdminBentoDashboard stats={liveStats} />`.
+`liveStats` (`SuperAdmin.tsx:335-370`) is a `useMemo` that aggregates **every
+loaded pool, client-side, with no sim filter**:
+
+- `totalPools: pools.length` — every pool, test pools included
+- `totalUsers: users.length`
+- `totalSquaresSold`, `totalRevenue`, `totalDonated` — summed per pool type
+
+**So the numbers Kevin is looking at are computed in the browser, and fixing the
+Cloud Functions writers would not have changed them by a single dollar.** The
+first draft would have shipped a correct backend fix, had Kevin run the
+recalculate, and left the Overview cards exactly as wrong as before.
+
+`stats/global` is a *separate* surface — world-readable, also unfiltered, also
+worth fixing — but it is not the symptom that was reported.
+
+### 2.5 `calculatePoolPot` computes ZERO for NFL season pools
+
+Also from codex, also verified. `statsTrigger.ts:17-33`:
+
+- `BRACKET` and `NFL_PLAYOFFS` use `settings.entryFee` × paid entries
+- **everything else** falls to the squares branch, `squaresSold × costPerSquare`
+
+`NFL_PICKEM`, `NFL_SURVIVOR` and `NFL_MARGIN` have no `squares` array and no
+`costPerSquare`; they carry dues in `settings.entryFee` with `entries`. They
+therefore hit the squares branch and evaluate to **grossPot = 0**.
+
+The server-side stats would record **nothing** for exactly the NFL pools this
+season is about. The first draft said "`calculatePoolPot` is untouched; this
+plan only changes which pools are counted" — wrong, and it would have produced a
+confidently-reported zero.
 
 ---
 
@@ -103,31 +132,46 @@ themselves, so genuine locked pools keep contributing.
 
 ## 4. Proposed work, in order
 
-**Step 0 — close the unknown (no code).** Find the producers of `totalUsers`,
-`totalSquaresSold` and "active pools". If any also sweep pools without a sim
-filter, they join step 1. *Nothing else starts until this is answered.*
+**Step 1 — fix the Overview cards (PR, FRONTEND). This is the reported bug.**
+Filter test pools out of `liveStats` in `SuperAdmin.tsx`. A shared predicate
+rather than an inline check, because the same rule lands in three places —
+`shared/` exists for exactly this, and `isSimPool`'s logic (`simRunId`, `sim-`
+season, `sim-` id) should move there so client and server cannot drift.
 
-**Step 1 — exclude test pools (PR, functions).**
-Apply `isSimPool()` in both writers. Also skip `status === 'CANCELED'` in
-`onPoolLocked` for symmetry with the sweep, **if** step 0 shows the recompute
-already does so — otherwise leave it and say why.
+`totalPools` and `totalUsers` need a decision, not just a filter: pool count
+should clearly exclude test pools; user count probably should exclude sim-run
+uids. See §5 Q4.
 
-Tests: extend the existing functions suite. A sim pool locking must NOT
-increment; a real pool must. The recompute must exclude sim pools from its
-total. Verified by reverting the exclusion and watching those tests fail.
+**Needs a Coolify rebuild to reach Kevin** — frontend changes do not deploy on
+push.
 
-**Step 2 — Kevin runs Recalculate Global Stats** (SuperAdmin → Operations)
-after the deploy. Prod-data action, his. Expected: prize volume and charity drop
-to the real figures.
+**Step 2 — teach `calculatePoolPot` about NFL season pools (PR, functions).**
+Route `NFL_PICKEM` / `NFL_SURVIVOR` / `NFL_MARGIN` to the entry-fee branch
+instead of the squares fallback. Without this the server-side NFL numbers are
+zero, so this MUST land before any recalculate — otherwise the recalculate
+writes a confident zero over the live public document.
 
-**Step 3 — platform revenue**, only if §5 Q1 says it is contaminated.
+Tests: one per pool type asserting a non-zero pot from `settings.entryFee` ×
+paid entries, plus a squares pool still using the squares path. Verified by
+reverting the branch and watching them fail.
 
-**Step 4 — the Stats tab filters (item 3).** Deliberately last: filtering by
-sport and pool type requires the stats model to *carry* those dimensions, and
-today `stats/global` is a single flat document with four numbers. This is a
-schema and aggregation change, not a UI change, and it should not start until
-steps 1–2 have made the underlying numbers trustworthy. Filtering wrong numbers
-faster is not progress.
+**Step 3 — exclude test pools server-side (PR, functions).**
+Apply the shared predicate in BOTH `stats/global` writers — `onPoolLocked`'s
+increment and `recalculateGlobalStats`'s recompute. Tests: a sim pool locking
+must not increment; a real pool must; the recompute must exclude sim pools.
+
+**Step 4 — Kevin runs Recalculate Global Stats** (SuperAdmin → Operations),
+after steps 2 and 3 are deployed. Prod-data action, his. **Order matters** —
+running it before step 2 overwrites the public doc with NFL volume of zero.
+
+**Step 5 — platform revenue**, only if §5 Q1 says it is contaminated.
+
+**Step 6 — the Stats tab filters (item 3).** Deliberately last: filtering by
+sport and pool type requires the model to *carry* those dimensions, and today
+`stats/global` is one flat document of four numbers while `liveStats` is a
+single reduce over all pools. It should not start until steps 1-4 have made the
+underlying numbers trustworthy — filtering wrong numbers faster is not
+progress.
 
 ---
 
@@ -144,14 +188,19 @@ faster is not progress.
 3. **Should `stats/global` stay world-readable?** It currently is. If these
    figures are meant to be marketing numbers that is fine; if not, the rule
    should tighten. Out of scope here, but worth a decision.
+4. **Should `totalUsers` and `totalPools` exclude test data too?** Pool count
+   almost certainly yes. User count is less obvious — sim runs create run-scoped
+   uids (`sim-<runId>-alice`) so they are identifiable, but you may want the raw
+   registered-user figure. Tell me which.
 
 ---
 
 ## 6. Explicitly out of scope
 
 - Season-scoped stat buckets (option C) — pending Q2.
-- Any change to how pots are calculated. `calculatePoolPot` is untouched; this
-  plan only changes **which pools are counted**.
+- ~~Any change to how pots are calculated.~~ **Reversed after review** — see
+  §2.5. `calculatePoolPot` MUST learn NFL season pools (step 2), or the
+  recalculate writes zero for them. The first draft had this exactly backwards.
 - The Stats tab UI beyond step 4's data model.
 
 ---
@@ -160,4 +209,12 @@ faster is not progress.
 
 | Round | Reviewer | Findings |
 |---|---|---|
-| 1 | codex | *(pending — this plan is reviewed before implementation, per Rule 3)* |
+| 1 | codex | **3 findings, all valid, all accepted.** (a) The Overview cards read `liveStats` client-side, not `stats/global` — the original plan would not have fixed the reported symptom at all. (b) `calculatePoolPot` computes zero for NFL season pools, so the recalculate would have written zeros over live public figures. (c) Operator docs still claimed an empty deploy queue. Plan restructured from 4 steps to 6 and re-ordered so the recalculate runs last. |
+
+**This is the plan gate earning its keep.** Two of those findings would
+otherwise have shipped as working, tested, reviewed code that did not fix the
+problem — one of them writing zeros over live public money figures. They were
+caught by reviewing a document, before a line was written. The first draft was
+confident and wrong in exactly the way §2.4 of the previous draft admitted it
+might be ("metrics I could NOT trace"), which is the part I should have closed
+before proposing steps rather than after.
