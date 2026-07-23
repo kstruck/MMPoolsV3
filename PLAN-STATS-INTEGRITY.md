@@ -1,7 +1,27 @@
 # PLAN — Stats integrity: exclude test pools, reset for the NFL season, add filters
 
-**Status: DRAFT, awaiting Kevin's sign-off. No code written yet.**
+**Status: DRAFT, awaiting Kevin's sign-off. NO CODE WRITTEN — deliberately.**
 Written 2026-07-22 evening. Covers Kevin's queued items **2** and **3**.
+
+> ## ⛔ Read this first: it is not a filter, and I did not build it
+>
+> This looked like "add `isSimPool` and recalculate". Two rounds of adversarial
+> review found **five** independent reasons that would have produced wrong
+> numbers — including writing zeros over a world-readable money document. Any
+> ONE of them defeats the naive fix:
+>
+> 1. The Overview cards Kevin is looking at don't read the document I was
+>    planning to fix (§2.4).
+> 2. `calculatePoolPot` returns **zero** for NFL season pools (§2.5).
+> 3. **Legacy test pools carry no marker at all**, so no filter can find them
+>    (§2.6).
+> 4. The recompute's selection rule never visits NFL season pools (§2.7).
+> 5. NFL "paid" state lives somewhere other than where the pot maths reads it
+>    (§2.8).
+>
+> **I stopped here on purpose.** Shipping any part of this overnight would have
+> produced confident, tested, reviewed code that made the public numbers worse.
+> §4 is a proposal that needs your decisions in §5 before it becomes work.
 
 ## Why this has a plan and the profile fix did not
 
@@ -115,6 +135,49 @@ season is about. The first draft said "`calculatePoolPot` is untouched; this
 plan only changes which pools are counted" — wrong, and it would have produced a
 confidently-reported zero.
 
+### 2.6 Legacy test pools have NO durable marker — a filter cannot find them
+
+The most damaging finding, because it defeats the entire premise.
+
+`isSimPool` recognises `simRunId`, a `sim-` season, or a `sim-` doc id. The NFL
+sim harness sets those. **The older Squares, Props and Playoff test runners do
+not** — they create pools through the normal creation path, so the server
+assigns a random document id and no `simRunId` is written. `simLegacy.ts:11`
+says as much about the tournament docs: "TEST INFRASTRUCTURE, not a Test Pool
+(no simRunId anchor)".
+
+The squares runner then **locks** its pool, which is exactly what puts it into
+both `liveStats` and the `isLocked == true` recompute.
+
+So: adding the filter would exclude the NFL sim pools and leave the legacy ones
+counted. The inflation Kevin reported would partly remain, and it would look
+fixed. **This needs a durable marker written by every simulator path, plus a
+one-off remediation pass over existing untagged test pools** — and that
+remediation is a production-data mutation, i.e. Kevin's, and needs its own
+dry-run.
+
+### 2.7 The recompute's selection rule never visits NFL season pools
+
+`recalculateGlobalStats` queries `isLocked == true`. Verified:
+`functions/src/nflPools.ts:100` creates NFL season pools with
+**`isLocked: false`** — they use per-week kickoff locks, and finalization stamps
+`finalizedAt` rather than flipping the pool-level flag.
+
+So even with §2.5 fixed, the recompute would still never see an NFL pool. The
+selection rule has to change too, and "which NFL pools count as having real
+volume" is a lifecycle question, not a one-line predicate.
+
+### 2.8 NFL payment truth is in member records, not entry docs
+
+`setPaidStatus` updates `pools/{poolId}/members/{uid}.paidStatus`. NFL entry
+documents keep the `UNPAID` value seeded at first pick submission and are never
+updated by that path.
+
+So reusing the existing entry-fee branch — `entryFee × paid entries` — computes
+**zero for legitimately paid NFL pools**. The calculation has to read Member
+Records, and account for fee and rebuy fields, or it produces a plausible,
+confidently-wrong number.
+
 ---
 
 ## 3. Options considered for the "reset"
@@ -132,6 +195,20 @@ themselves, so genuine locked pools keep contributing.
 
 ## 4. Proposed work, in order
 
+> **Steps 0a and 0b are new after review round 2 and are PREREQUISITES.**
+> Without them the later steps produce wrong numbers confidently.
+
+**Step 0a — give every simulator path a durable marker (PR, functions).**
+Write `simRunId` (or an equivalent explicit flag) from the Squares, Props and
+Playoff test runners, so a test pool is identifiable by data rather than by id
+convention. Without this, no filter anywhere can find them (§2.6).
+
+**Step 0b — remediate existing untagged test pools (KEVIN, prod data).**
+A dry-run listing candidate pools, reviewed by Kevin, then a tagging pass.
+Kill-switch + dry-run-default per Rule 1. This is the only genuine data
+mutation in the plan, and it exists solely because §2.6 means history cannot be
+reconstructed from the pools themselves.
+
 **Step 1 — fix the Overview cards (PR, FRONTEND). This is the reported bug.**
 Filter test pools out of `liveStats` in `SuperAdmin.tsx`. A shared predicate
 rather than an inline check, because the same rule lands in three places —
@@ -146,14 +223,19 @@ uids. See §5 Q4.
 push.
 
 **Step 2 — teach `calculatePoolPot` about NFL season pools (PR, functions).**
-Route `NFL_PICKEM` / `NFL_SURVIVOR` / `NFL_MARGIN` to the entry-fee branch
-instead of the squares fallback. Without this the server-side NFL numbers are
-zero, so this MUST land before any recalculate — otherwise the recalculate
-writes a confident zero over the live public document.
+Route `NFL_PICKEM` / `NFL_SURVIVOR` / `NFL_MARGIN` to an entry-fee calculation —
+but read paid state from **Member Records**
+(`pools/{poolId}/members/{uid}.paidStatus`), NOT from entry documents, which
+keep `UNPAID` forever (§2.8). Include the rebuy fields for Survivor.
 
-Tests: one per pool type asserting a non-zero pot from `settings.entryFee` ×
-paid entries, plus a squares pool still using the squares path. Verified by
-reverting the branch and watching them fail.
+**And change the recompute's selection rule** so NFL season pools are visited at
+all: they are created `isLocked: false` and finalize by stamping `finalizedAt`
+(§2.7). "Which NFL pools have real volume" is a lifecycle decision — see §5 Q5.
+
+Tests: one per pool type asserting a non-zero pot from member-record paid state,
+a squares pool still using the squares path, and an NFL pool that is unlocked
+but finalized still being counted. Verified by reverting each and watching them
+fail.
 
 **Step 3 — exclude test pools server-side (PR, functions).**
 Apply the shared predicate in BOTH `stats/global` writers — `onPoolLocked`'s
@@ -192,6 +274,15 @@ progress.
    almost certainly yes. User count is less obvious — sim runs create run-scoped
    uids (`sim-<runId>-alice`) so they are identifiable, but you may want the raw
    registered-user figure. Tell me which.
+5. **Which NFL season pools count as real volume?** They never set
+   `isLocked: true` at the pool level (§2.7), so the recompute needs a different
+   rule — candidates: `finalizedAt` present, or `scoredThroughWeek >= 1`, or any
+   member marked paid. This decides what "prize volume" means for the season and
+   I do not want to pick it for you.
+6. **How far back should the test-pool remediation go?** Step 0b tags existing
+   untagged test pools. If you would rather draw a line and only count pools
+   created from a given date forward, that is simpler and I can propose it
+   instead — it also happens to match "start keeping track for the NFL season".
 
 ---
 
@@ -211,10 +302,15 @@ progress.
 |---|---|---|
 | 1 | codex | **3 findings, all valid, all accepted.** (a) The Overview cards read `liveStats` client-side, not `stats/global` — the original plan would not have fixed the reported symptom at all. (b) `calculatePoolPot` computes zero for NFL season pools, so the recalculate would have written zeros over live public figures. (c) Operator docs still claimed an empty deploy queue. Plan restructured from 4 steps to 6 and re-ordered so the recalculate runs last. |
 
-**This is the plan gate earning its keep.** Two of those findings would
-otherwise have shipped as working, tested, reviewed code that did not fix the
-problem — one of them writing zeros over live public money figures. They were
-caught by reviewing a document, before a line was written. The first draft was
-confident and wrong in exactly the way §2.4 of the previous draft admitted it
-might be ("metrics I could NOT trace"), which is the part I should have closed
-before proposing steps rather than after.
+| 2 | codex | **3 further findings, all valid, all accepted.** (d) Legacy Squares/Props/Playoff test pools carry NO marker, so no filter can exclude them — verified against `simLegacy.ts:11`. (e) `recalculateGlobalStats` selects `isLocked == true`, but NFL pools are created `isLocked: false` — verified at `nflPools.ts:100` — so the recompute never visits them. (f) NFL paid state lives in Member Records, not entry docs, so `entryFee × paid entries` yields zero for paid pools. Added steps 0a/0b as prerequisites and questions Q5/Q6. |
+
+**This is the plan gate earning its keep, twice over.** Across two rounds,
+review found five independent reasons the "obvious" fix would have produced
+wrong numbers — two of them writing zeros or near-zeros over a world-readable
+money document. Every one was caught by reviewing a DOCUMENT, before a line of
+code existed.
+
+The honest summary: what looked like a one-line filter is a marker scheme, a
+production remediation, a pot-calculation change, a selection-rule change and a
+frontend fix — with three decisions that are Kevin's to make. That is why
+nothing was built overnight.
