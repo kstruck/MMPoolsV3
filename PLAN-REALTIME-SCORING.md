@@ -97,9 +97,14 @@ while the marker is unset, after which the scorer batch-writes the stale grade �
 exposing a result while picks are newly open. Close it with optimistic
 concurrency: `extendWeekDeadline` bumps a monotonic `pool.settings.lockRevision`
 when it writes an override; the scorer captures `lockRevision` at grade time and
-**commits its publish (standings + `publishedWeeks`) in a transaction that
-re-reads and asserts `lockRevision` is unchanged**, retrying with freshly
-recomputed effective locks on mismatch. Same PR-B′ as the guard.
+**validates it is unchanged before *any* write of the pass — the entry batches and
+`SURVIVOR_AUTO_STRIKE` audits included, not only the standings publish** (codex
+r8). The entry/audit writes precede the standings write, so guarding only the
+publish would let an extension land after a false strike audit was already written
+(which a retry cannot un-write) and leave an entry transiently eliminated while its
+newly-extended window is open. Reserve/validate the revision up front and abort the
+whole pass on mismatch, retrying with freshly recomputed effective locks. Same
+PR-B′ as the guard.
 
 ### 3b. Never apply a missing-pick penalty while any pick is still open
 
@@ -154,7 +159,15 @@ export async function scoreNFLWeekInternal(
      untouched (no strike), Margin no-pick entries unscored (no `-14`). Pick'em
      needs nothing (unmade pick = 0). (§3b)
   2. **Reveal gate** — only games that are terminal AND `gameLockClosed(g)` are
-     graded into standings. (§3a)
+     graded into standings (§3a). **Also recompute every per-week SUMMARY over
+     that lock-closed set only** (codex r8): the inline scorer sets
+     `weeklyResults[week].total` from *all* picked games in the slate
+     (nflPools.ts:832), and `buildStandingsRows` copies it into member-readable
+     `standings/current` — so a raw `total` would leak **how many still-open picks
+     each other entry has already submitted**, a reveal hole even though the
+     grades themselves are lock-safe. On a provisional pass, `total` (and any
+     pick-count summary) must count only lock-closed terminal games, or the week
+     summary is omitted until complete.
   3. **No finalization-sensitive markers** — it does **not** write
      `scoredWeeks.{week}` / `scoredThroughWeek` and does **not** call
      `maybeFinalizeNFLPool` (codex r4). Otherwise a provisional pass on a
@@ -207,6 +220,11 @@ onSchedule({ schedule: '*/10 * * * *', timeZone: 'America/New_York' }, withHeart
 
 Run body:
 
+0. **Register the heartbeat expectation** (codex r8): add
+   `nflAutoScoreJob: { everyMinutes: 10 }` to `SCHEDULED_JOB_EXPECTATIONS`
+   (heartbeat.ts:228). The heartbeat contract test scans every `withHeartbeat()`
+   call and **fails if the job is absent from that map** — so the gates cannot go
+   green without it, and skipping it would leave the scorer unmonitored.
 1. Read + gate via `readJobGate` / `configReadFailedVerdict` (copy deep-sweep).
 2. **Active-window query + control flow (codex r6)**: query `nfl_games` in the
    active window using the existing **`HOT_WINDOW_LOOKBACK_MS` (24h)**
@@ -257,12 +275,13 @@ Run body:
      casing across these write paths is inconsistent. Scoring a voided/archived
      pool would otherwise write entry scores, standings, recaps and audit for a
      pool the manager has retired.
-   - It must **not** filter on `scoredWeeks.{week}`: the scorer writes that marker
-     on *every* pass including the first partial-game pass, so filtering on it
-     would drop the pool after one game and block all later games. The
-     **fingerprint (step 5) is the sole decider** of whether a still-active pool
-     needs another pass. (A finalized pool with a late correction re-enters only
-     via the reconciliation queue, §5b.)
+   - It must **not** filter on `scoredWeeks.{week}` (codex r8): provisional passes
+     deliberately do **not** write that marker (§4 point 3) and the complete pass
+     that does is already excluded by the terminal predicate above, so filtering
+     on it adds nothing and risks dropping an active pool. The **fingerprint
+     (step 5) is the sole decider** of whether a still-active pool needs another
+     pass. (A finalized pool with a late correction re-enters only via the
+     reconciliation queue, §5b, which bypasses the terminal exclusion.)
    **Any NEW composite index must be deployed AND built BEFORE this code ships**
    (the #219/#223 silent `FAILED_PRECONDITION` lesson). The scored `week` is the
    live slot's week, passed to `scoreNFLWeekInternal` — not read from the pool.
@@ -322,6 +341,23 @@ never be scored. Each `nflAutoScoreJob` run drains the queue as a second candida
 source alongside the active window; a slate whose fingerprint is genuinely
 unchanged still costs only the skip check. This keeps the live path cheap and makes
 both late corrections and late finals self-healing.
+
+Two more cases the queue must cover (codex r8):
+
+- **Override-pending slates near the 24h edge.** A commissioner can extend a lock
+  up to ~24h; a terminal game whose override expires at ~kickoff+23h55m can be seen
+  `gameLockClosed=false` on one run and then fall outside the 24h live window
+  before the next — and nothing terminal happens *at expiry* to re-enqueue it, so
+  the eligibility bit is never re-evaluated and the complete pass never runs. When
+  a pass defers a terminal game solely because its lock has not closed, it must
+  **enqueue that slate for re-examination at/after the override's expiry** (store
+  the expiry with the queue entry).
+- **Finalized pools with a late correction.** The LIVE-tier terminal predicate
+  excludes `finalizedAt` pools, but a correction after finalization must still
+  rescore them. **Queued slates use a reconciliation path that bypasses the
+  finalized/terminal exclusion** and re-finalizes afterward — otherwise the queued
+  finalized pool is filtered out before `scoreNFLWeekInternal` runs and its
+  standings/season-history stay stale.
 
 **Correcting week N requires a Survivor state RESET, not sequential rescores
 (codex r5/r6).** Simply calling the scorer for weeks N..latest does **not**
