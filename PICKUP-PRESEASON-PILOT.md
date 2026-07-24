@@ -187,15 +187,15 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `a497e18`.**
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `49c12a9`.**
 Deployed 2026-07-23 (bare `--only functions --project gridiron-gamble-uzuqo`,
-`✔ Deploy complete!`). Carries #261 and #262 on top of the six PRs in HANDOFF's
-STOP POINT box and the 2026-07-21 baseline (which carried **#239, the
-Firestore-reads fix**).
+`✔ Deploy complete!`). Carries #261, #262 and #265 (15-min reminder cadence) on
+top of the six PRs in HANDOFF's STOP POINT box and the 2026-07-21 baseline
+(which carried **#239, the Firestore-reads fix**).
 
 **The FRONTEND is BEHIND, at <!-- deploy-state:ignore --> `main` @ `00153e5`** —
 Coolify last built it there; the #261 profile fix needs a manual rebuild to
-reach `a497e18` (KEVIN-TASKS-2026-07-23.md §1).
+reach `49c12a9` (KEVIN-TASKS-2026-07-23.md §1).
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is

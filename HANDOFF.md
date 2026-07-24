@@ -2,11 +2,14 @@
 
 > ## ⚠️ STOP POINT 2026-07-23 — #262 functions deployed, FRONTEND REBUILD STILL OWED
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `a497e18`.**
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `49c12a9`.**
 > Deployed 2026-07-23 (bare `--only functions --project gridiron-gamble-uzuqo`,
-> confirmed `✔ Deploy complete!`). This carries #261 and #262 — the public-profile
-> header/footer fix and the `runReminders` read-amplification fix (~966K
-> Firestore reads/day removed; verify the drop via Query Insights).
+> confirmed `✔ Deploy complete!`). Carries #261, #262 and #265 — the
+> public-profile header/footer fix, the `runReminders` read-amplification fix
+> (~966K Firestore reads/day removed; verify the drop via Query Insights), and
+> the 15-minute reminder cadence. `createCheckoutSession` / `handleStripeWebhook`
+> each needed an isolated redeploy to clear a secret/plain env-var overlap after
+> a stray `functions/.env` (now comment-only) — both landed clean.
 >
 > ⚠️ **The FRONTEND is BEHIND, at <!-- deploy-state:ignore --> `main` @ `00153e5`.**
 > Coolify last built it there. The #261 `src/App.tsx` fix (public profile
