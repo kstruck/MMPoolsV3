@@ -259,7 +259,7 @@ export const SCHEDULED_JOB_EXPECTATIONS: Record<string, JobExpectation> = {
     enforceBillingStatus: { everyMinutes: 24 * 60 },      // '0 23 * * *' ET
     monetizationAlerts: { everyMinutes: 6 * 60 },         // 'every 6 hours'
     checkPlayoffScores: { everyMinutes: 30 },             // 'every 30 minutes'
-    runReminders: { everyMinutes: 5 },                    // 'every 5 minutes'
+    runReminders: { everyMinutes: 15 },                   // 'every 15 minutes' (#265)
     syncGameStatus: { everyMinutes: 1 },                  // 'every 1 minutes'
     siteAveragesJob: { everyMinutes: 24 * 60 },           // '30 3 * * *' ET
     webhookDurabilitySweep: { everyMinutes: 24 * 60 },    // '15 5 * * *' ET
