@@ -6,6 +6,7 @@ import {
   usesWeeklyHardLock,
   normalizeLockBufferMinutes,
   effectiveLockSettings,
+  weekLockDecision,
   LOCK_BUFFER_PRESETS,
 } from '../lib/effectiveLock';
 
@@ -100,6 +101,40 @@ describe('effectiveLockSettings', () => {
     const margin = effectiveLockSettings({ lockBufferMinutes: 0 }, 'NFL_MARGIN');
     expect(margin.lockBufferMinutes).toBe(5);
     expect(effectiveWeekLockAt([kickoff], 1, margin)).toBe(kickoff - 5 * MIN);
+  });
+
+  it('a hard deadline can only ever move EARLIER, never later', () => {
+    // The reopen exploit: commissioner runs a 60-min deadline, lets it pass, then
+    // switches to 5 min — the recomputed lock lands 55 minutes later and the week
+    // is live again. The freeze is what stops it.
+    const games = [kickoff];
+    const at60 = weekLockDecision({ type: 'NFL_SURVIVOR', settings: { lockBufferMinutes: 60 } }, 1, games);
+    expect(at60.lockAt).toBe(kickoff - 60 * MIN);
+    expect(at60.freezeTo).toBe(kickoff - 60 * MIN);
+
+    // ...now widened to 5 minutes, with the 60-minute deadline already frozen:
+    const widened = weekLockDecision(
+      { type: 'NFL_SURVIVOR', settings: { lockBufferMinutes: 5 }, hardLockByWeek: { 1: kickoff - 60 * MIN } },
+      1,
+      games,
+    );
+    expect(widened.lockAt).toBe(kickoff - 60 * MIN); // still the earlier one
+    expect(widened.freezeTo).toBeUndefined();        // nothing new to persist
+
+    // Tightening still applies immediately — that only closes picks sooner.
+    const tightened = weekLockDecision(
+      { type: 'NFL_SURVIVOR', settings: { lockBufferMinutes: 60 }, hardLockByWeek: { 1: kickoff - 5 * MIN } },
+      1,
+      games,
+    );
+    expect(tightened.lockAt).toBe(kickoff - 60 * MIN);
+    expect(tightened.freezeTo).toBe(kickoff - 60 * MIN);
+  });
+
+  it('does not freeze Pick\'em (its per-game picks are already immutable once locked)', () => {
+    const d = weekLockDecision({ type: 'NFL_PICKEM', settings: { lockBufferMinutes: 5 } }, 1, [kickoff]);
+    expect(d.lockAt).toBe(kickoff - 5 * MIN);
+    expect(d.freezeTo).toBeUndefined();
   });
 
   it('the hard deadline is ALWAYS before the first kickoff, for every input', () => {

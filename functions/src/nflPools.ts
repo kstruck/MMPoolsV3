@@ -10,7 +10,7 @@ import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } 
 import { isPoolType, type PoolType } from "./shared/poolTypes";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
 import type { MemberRecord } from "./shared/memberRecord";
-import { effectiveWeekLockAt, isGameLocked as isGameLockedAt, effectiveLockSettings, usesWeeklyHardLock } from "./lib/effectiveLock";
+import { effectiveWeekLockAt, isGameLocked as isGameLockedAt, effectiveLockSettings, usesWeeklyHardLock, weekLockDecision } from "./lib/effectiveLock";
 import {
   validateCreateInput,
   assertNotBanned,
@@ -376,7 +376,15 @@ export async function submitNFLPicksInternal(
   // no settings write can move their deadline to or past the first kickoff. Pick'em
   // settings pass through untouched.
   const lockSettings = effectiveLockSettings(pool.settings, type);
-  const effectiveWeekLock = effectiveWeekLockAt(games.map(g => g.startTime), week, lockSettings);
+  // weekLockDecision also folds in the earliest-ever freeze for hard-lock pools, so
+  // a commissioner cannot reopen an already-closed week by widening the buffer
+  // (60 -> 5 would otherwise move the deadline 55 minutes LATER). `freezeTo` is the
+  // value to persist; it is written below alongside the entry.
+  const { lockAt: effectiveWeekLock, freezeTo } = weekLockDecision(
+    pool as { type?: string; settings?: typeof pool.settings; hardLockByWeek?: Record<string, unknown> },
+    week,
+    games.map(g => g.startTime),
+  );
   const weekLocked = now >= effectiveWeekLock;
 
   // Write variables inside transactions
@@ -560,6 +568,12 @@ export async function submitNFLPicksInternal(
       marginEntry.submittedAt = now;
 
       transaction.set(entryRef, { ...marginEntry, ...(requestId ? { lastRequestId: requestId } : {}) }, { merge: true });
+    }
+
+    // Freeze this week's hard deadline at the earliest value ever computed, so a
+    // later settings change cannot move it back out and reopen the week.
+    if (freezeTo !== undefined) {
+      transaction.update(poolRef, { [`hardLockByWeek.${week}`]: freezeTo });
     }
 
     // Base-dues stamp (ADR 0005 Phase 4): submitting a playable entry starts fee

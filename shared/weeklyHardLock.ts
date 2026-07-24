@@ -39,3 +39,23 @@ export function normalizeLockBufferMinutes(raw: unknown): number {
     ? (raw as number)
     : DEFAULT_LOCK_BUFFER_MINUTES;
 }
+
+/**
+ * A week's deadline may only ever move EARLIER.
+ *
+ * Without this, a commissioner could reopen a week they had already closed: set
+ * the pool to a 60-minute buffer, let that deadline pass, then switch to 5
+ * minutes — the recomputed lock lands 55 minutes later and picks are live again
+ * on a week that was locked. (Settings are written straight to Firestore by the
+ * manager UI, so this cannot be caught by validating the write.)
+ *
+ * So the server remembers the earliest deadline it has ever computed for the
+ * week (`pool.hardLockByWeek.{week}`) and resolves against it. Tightening the
+ * buffer still takes effect immediately — that only ever closes picks sooner,
+ * which is safe.
+ */
+export function resolveHardWeekLock(frozenMs: number | undefined, computedMs: number): number {
+  return typeof frozenMs === 'number' && Number.isFinite(frozenMs)
+    ? Math.min(frozenMs, computedMs)
+    : computedMs;
+}

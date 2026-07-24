@@ -11,7 +11,7 @@ import { sendCourierSMS } from "./notifications/smsService";
 import { getSquarePrivateMap, getSquareEmails } from "./squarePrivate";
 import { withHeartbeat } from "./lib/heartbeat";
 import { reminderPassVerdict } from "./lib/heartbeatVerdicts";
-import { effectiveLockSettings } from "./lib/effectiveLock";
+import { effectiveLockSettings, usesWeeklyHardLock, resolveHardWeekLock, frozenHardLockFor } from "./lib/effectiveLock";
 
 
 
@@ -883,7 +883,27 @@ export async function checkNFLNonPickerReminders(
         const weekLockOverride: number | undefined = settings.weekLockOverrides?.[week];
         const computedLock = Math.min(...weekGames.map(g => g.startTime)) - lockBufferMs;
         // Commissioner deadline extensions act as a floor on the computed lock
-        const effectiveLock = weekLockOverride !== undefined ? Math.max(weekLockOverride, computedLock) : computedLock;
+        const rawLock = weekLockOverride !== undefined ? Math.max(weekLockOverride, computedLock) : computedLock;
+
+        // Hard-lock pools: fold in (and establish) the earliest-ever freeze. This
+        // pass runs every 15 minutes and sees the week ~36h out, so it normally
+        // freezes the deadline long before it arrives — which is what stops a late
+        // buffer widening from reopening a week that has already closed.
+        const poolType = (pool as unknown as { type?: string }).type;
+        const hardLock = usesWeeklyHardLock(poolType);
+        const frozen = hardLock
+          ? frozenHardLockFor(pool as { hardLockByWeek?: Record<string, unknown> }, week)
+          : undefined;
+        const effectiveLock = hardLock ? resolveHardWeekLock(frozen, rawLock) : rawLock;
+        if (hardLock && effectiveLock !== frozen) {
+          try {
+            await db.collection('pools').doc(pool.id).update({ [`hardLockByWeek.${week}`]: effectiveLock });
+          } catch (e) {
+            // Best-effort: a failed freeze must not stop reminders going out. The
+            // submit path freezes too, so this is belt-and-braces.
+            console.warn(`[runReminders] hard-lock freeze failed for pool ${pool.id} week ${week}:`, e);
+          }
+        }
 
         // --- 3. Send windows: bail fast before touching entries ---
         const hoursUntilLock = (effectiveLock - now) / (1000 * 60 * 60);

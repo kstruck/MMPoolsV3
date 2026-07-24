@@ -172,7 +172,17 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 
   // Check if the current selected week is locked (earliest game kicked off).
   // Server-corrected clock — device time can drift and lie about the deadline.
+  // Ticks so the lock state re-evaluates while a pick page is left open through the
+  // deadline — otherwise the memo below keeps a stale `false`, the form stays live,
+  // and the member's submit is rejected by the server with no warning.
+  const [lockTick, setLockTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setLockTick(t => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   const isWeekLocked = useMemo(() => {
+    void lockTick;
     if (weeklyGames.length === 0) return false;
     // Survivor/Margin run a hard weekly deadline and the server snaps their buffer
     // to an allowed preset — normalize here too, or the UI would disagree with the
@@ -184,7 +194,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     const bufferMs = bufferMinutes * 60 * 1000;
     const earliestKickoff = Math.min(...weeklyGames.map(g => g.startTime));
     return serverNow() >= (earliestKickoff - bufferMs);
-  }, [weeklyGames, castPool.settings?.lockBufferMinutes, castPool.type]);
+  }, [weeklyGames, castPool.settings?.lockBufferMinutes, castPool.type, lockTick]);
 
   // Time remaining to earliest game this week
   const earliestGame = useMemo(() => {

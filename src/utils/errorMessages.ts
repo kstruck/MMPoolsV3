@@ -17,7 +17,7 @@ const DOMAIN_PREFIX_MESSAGES: Record<string, string> = {
     SPREADS_NOT_LOCKED: "This week's spreads aren't finalized yet. Picks open once all lines are set — check back soon.",
     ELIMINATED: "You've been eliminated from this pool, so new picks can't be submitted.",
     NOT_ELIMINATED: 'A rebuy is only available after elimination.',
-    HARD_WEEKLY_LOCK: 'Survivor and Margin pools use a fixed weekly deadline before the first kickoff, so it cannot be extended. Change the pool\'s Pick Deadline setting instead — it applies from the next unlocked week.',
+    HARD_WEEKLY_LOCK: 'Survivor and Margin pools use a fixed weekly deadline before the first kickoff, so a week cannot be reopened once it locks. The Pick Deadline setting controls how early picks close for weeks that have not locked yet.',
 };
 
 const AUTH_MESSAGES: Record<string, string> = {

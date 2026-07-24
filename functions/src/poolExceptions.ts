@@ -122,7 +122,7 @@ export const extendWeekDeadline = validated(
     if (usesWeeklyHardLock(pool.type)) {
         throw new HttpsError(
             "failed-precondition",
-            "HARD_WEEKLY_LOCK: Survivor and Margin pools use a fixed weekly deadline before the first kickoff and cannot be extended. Change the pool's pick deadline setting instead (it applies from the next unlocked week).",
+            "HARD_WEEKLY_LOCK: Survivor and Margin pools use a fixed weekly deadline before the first kickoff, so a week cannot be reopened once it locks. The Pick Deadline setting controls how early picks close for weeks that have not locked yet.",
         );
     }
 

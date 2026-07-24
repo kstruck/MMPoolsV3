@@ -1072,10 +1072,10 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Week Deadline</p>
                 </div>
                 <p className="font-body text-[11px] text-faint leading-relaxed">
-                  This pool uses a <strong>fixed weekly deadline</strong> before the first kickoff, so picks
-                  can't be reopened once the week locks — that's what keeps scores honest while games are
-                  being played. To change how early picks close, use <strong>Pick Deadline</strong> in
-                  Settings; it applies from the next unlocked week.
+                  This pool uses a <strong>fixed weekly deadline</strong> before the first kickoff, so a week
+                  can't be reopened once it locks — that's what keeps scores honest while games are being
+                  played. <strong>Pick Deadline</strong> in Settings controls how early picks close for weeks
+                  that haven't locked yet.
                 </p>
               </div>
             ) : (

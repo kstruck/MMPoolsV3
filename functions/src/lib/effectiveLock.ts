@@ -21,14 +21,44 @@ export function lockBufferMs(settings: LockSettings | undefined): number {
 // gates its pick UI on the same deadline the server enforces — see
 // shared/weeklyHardLock.ts for why these pools need it at all. Re-exported here
 // so lock callers have a single import site.
-import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '../shared/weeklyHardLock';
+import { usesWeeklyHardLock, normalizeLockBufferMinutes, resolveHardWeekLock } from '../shared/weeklyHardLock';
 
 export {
   LOCK_BUFFER_PRESETS,
   DEFAULT_LOCK_BUFFER_MINUTES,
   usesWeeklyHardLock,
   normalizeLockBufferMinutes,
+  resolveHardWeekLock,
 } from '../shared/weeklyHardLock';
+
+/** Where the frozen per-week deadline lives on the pool doc. */
+export function frozenHardLockFor(
+  pool: { hardLockByWeek?: Record<string | number, unknown> } | undefined,
+  week: number,
+): number | undefined {
+  const raw = pool?.hardLockByWeek?.[week] ?? pool?.hardLockByWeek?.[String(week)];
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined;
+}
+
+/**
+ * The authoritative week deadline for a pool, folding in the hard-lock rules and
+ * the earliest-ever freeze. Returns the lock instant plus whether the freeze
+ * needs persisting (callers in a write path should store it; read-only callers
+ * can ignore it and still get the correct instant).
+ */
+export function weekLockDecision(
+  pool: { type?: string; settings?: LockSettings; hardLockByWeek?: Record<string | number, unknown> } | undefined,
+  week: number,
+  gameStartTimes: number[],
+): { lockAt: number; freezeTo?: number } {
+  const settings = effectiveLockSettings(pool?.settings, pool?.type);
+  const computed = effectiveWeekLockAt(gameStartTimes, week, settings);
+  if (!usesWeeklyHardLock(pool?.type)) return { lockAt: computed };
+
+  const frozen = frozenHardLockFor(pool, week);
+  const lockAt = resolveHardWeekLock(frozen, computed);
+  return { lockAt, freezeTo: lockAt !== frozen ? lockAt : undefined };
+}
 
 /**
  * Normalizes the settings every lock calculation reads, so callers keep their
