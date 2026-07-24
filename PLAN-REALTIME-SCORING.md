@@ -289,7 +289,9 @@ mutability. So `provisional` no longer gates penalties; it gates only
 **finalization completeness**: a provisional pass suppresses the finalization
 markers, `maybeFinalizeNFLPool`, and the weekly recap until every game in the week
 is terminal (a week isn't *done* until its last game ends). Grading and penalties
-run live. Formally `provisional = the week still has a non-terminal game`, computed
+run live. Formally `provisional = NOT (every game terminal AND every terminal game
+`gameLockClosed`)` — the `gameLockClosed` term still matters for Pick'em, where a
+`weekLockOverride` can keep a `FINAL` game hidden (§3a/§4/§5, codex r27); computed
 from the full `(season, seasonType, week)` slate (nflPools.ts:762-766), not the
 `now+2h` window (codex r2).
 
@@ -552,6 +554,13 @@ Run body:
      memory for the report only — writing it on a dry run both breaks the
      dry-run-writes-nothing contract and, worse, would leave the fingerprint
      "already current" so the first live run *skips the pool and never scores it*.
+   - **A complete pass whose finalization FAILED must not be skipped (codex r27):**
+     `maybeFinalizeNFLPool` is best-effort and does not fail the pass, but the
+     fingerprint is written regardless — so if finalize threw, every later poll
+     takes the unchanged-fingerprint skip and the pool stays unfinalized forever
+     (the sweep is disabled by default). Fold **finalization completion into the
+     skip state**: a complete-but-not-yet-`finalizedAt` pool is never skipped — the
+     idempotent finalize is retried each pass until it succeeds.
 6. `provisional` is computed from the **full `(season, seasonType, week)` slate**
    the scorer reads, per §3b/§4: `provisional = NOT (every game terminal AND every
    terminal game `gameLockClosed`)`. Grading runs every pass; Survivor/Margin
@@ -587,7 +596,12 @@ scan): the sync paths **enqueue `(season, seasonType, week)`** into a small
 nonterminal → terminal transition (`FINAL` *or* `CANCELLED`)** beyond the hot
 window would otherwise never be scored — a game postponed and later `CANCELLED`
 past 24h must enqueue too (codex r10), or its void, its deferred penalties, and the
-week's completion never run. Each `nflAutoScoreJob` run drains the queue as a second candidate
+week's completion never run. A **third trigger**: a **manual locked-spread edit**
+(`SuperAdminNFLSpreads` writes `nfl_games.spread` directly, and `detectStatCorrections`
+does **not** compare `spread`) — an ATS spread corrected after the 24h window changes
+a fingerprint input (`spread.value`, §5) but would never become a candidate, leaving
+finalized ATS standings stale (codex r27). That write path must enqueue the affected
+`(season, seasonType, week)` too. Each `nflAutoScoreJob` run drains the queue as a second candidate
 source alongside the active window; a slate whose fingerprint is genuinely
 unchanged still costs only the skip check. This keeps the live path cheap and makes
 both late corrections and late finals self-healing.
