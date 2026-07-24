@@ -44,35 +44,44 @@ member sees no movement until a human clicks "Score Week N" — the gap G1 close
 
 ## 3. Two invariants that must not break
 
-### 3a. Reveal-safety
+**The lock authority is `effectiveLock.ts`, not terminal status.** Locks are
+per-game or per-week (`settings.lockMode: 'PER_GAME' | 'WEEKLY'`), and a
+commissioner `weekLockOverride` can push a game's `effectiveGameLockAt` **later
+than its kickoff** (`Math.max(base, override)`, effectiveLock.ts:20 — proxy picks
+honor the extension). So a game being `FINAL` does **not** by itself prove its
+pick window is closed (codex r2). Both gates below key off `effectiveGameLockAt`,
+never off kickoff or terminal status alone.
 
-`standings/current` is already reveal-safe: `buildStandingsRows` is allowlist-built
-and drops picks / confidence / tiebreakers / usedTeams. A game the engine grades
-is `FINAL`, which cannot happen before its kickoff — and a game locks at its
-kickoff (`effectiveGameLockAt`) — so any graded result is for a pick whose window
-has already closed. Writing `standings/current` from finalized games is therefore
-reveal-safe **regardless of pool-wide lock state**. There is no `standings/current`
-leak to guard against here. (The provisional-projection doc in §6 — which grades
-*in-progress* games — is the one that needs an explicit post-lock gate.)
+Helper the live scorer computes per game from the full-week slate:
+`gameLockClosed(g) := now >= effectiveGameLockAt(g.startTime, week, pool.settings)`.
 
-### 3b. Never apply a missing-pick penalty while a pick is still open
+### 3a. Reveal-safety — grade a game only once its own lock has closed
 
-**This is the correctness core (codex P1c).** Locks are **per-game or per-week**
-(`settings.lockMode: 'PER_GAME' | 'WEEKLY'`, `effectiveLock.ts`). In `PER_GAME`
-mode a member may legitimately submit a later game's pick *after* an earlier game
-in the same week is already `FINAL`. The existing full-week engine penalizes an
-absent pick immediately — `evaluateSurvivorWeek` strikes on `!pick`
-(engine:195-198), Margin books `-14` for a missing pick (nflPools.ts:914). If the
-auto-scorer runs the engine as-is the moment the first game finalizes, it would
-**strike / penalize members whose pick window is still open**, and can eliminate a
-Survivor entry before their valid submission arrives.
+`standings/current` is already reveal-safe in shape (`buildStandingsRows` is
+allowlist-built, drops picks/confidence/tiebreakers/usedTeams). The added rule:
+the live scorer contributes a game's result to standings **only when the game is
+terminal AND `gameLockClosed(g)`** — so an override that extends a finalized
+game's pick window cannot surface that game's outcome before the deadline.
 
-**Rule:** the auto-scorer must **defer all missing-pick penalties until every game
-in the week is terminal** (`FINAL`/`CANCELLED`). This is a sufficient and simple
-boundary: a game cannot be `FINAL` before kickoff, and picks lock at kickoff, so
-"all games terminal" ⟹ "all pick windows closed" ⟹ a still-absent pick is a
-genuine miss. Pick'em needs no deferral (an unmade pick scores 0, no penalty).
-Only Survivor's no-pick strike and Margin's `-14` are gated.
+### 3b. Never apply a missing-pick penalty while any pick is still open
+
+**Correctness core (codex P1c/r2).** In `PER_GAME` mode a member may legitimately
+submit a later game's pick *after* an earlier game is `FINAL`. The existing
+full-week engine penalizes an absent pick immediately — `evaluateSurvivorWeek`
+strikes on `!pick` (engine:195-198), Margin books `-14` (nflPools.ts:914). Running
+it the moment the first game finalizes would **strike/penalize members whose pick
+window is still open**, and can eliminate a Survivor entry before their valid
+submission arrives.
+
+**Rule:** apply missing-pick penalties (Survivor no-pick strike, Margin `-14`)
+only when **every game in the week is terminal AND `now >= max(effectiveGameLockAt)`
+over all week games** — i.e. the last possible pick window has closed and there is
+nothing left to grade. Pick'em needs no deferral (an unmade pick scores 0, no
+penalty); only Survivor and Margin are gated. Terminality and the max-lock **must
+be computed from the full `(season, seasonType, week)` slate** the scorer reads
+(nflPools.ts:762-766), **not** from the `now + 2h` active-window query — a Friday
+final can be the only game in that window while Sunday games sit outside it
+(codex r2).
 
 ## 4. PR-A — Extract `scoreNFLWeekInternal` (behavior-preserving refactor)
 
@@ -147,17 +156,24 @@ Run body:
 5. **Change-detection skip (cost guard, codex P2)**: a bare `FINAL` **count** is
    unchanged when ESPN restates a final score and does not grow when a game flips
    to `CANCELLED` — both change grades, so a count would skip the pool forever
-   and leave standings stale. Instead store and compare a **terminal-game
-   fingerprint**: a hash of the week's `FINAL`/`CANCELLED` games as sorted
-   `(gameId, status, home, away)` tuples (`pool.autoScore.fingerprintByWeek[week]`).
+   and leave standings stale. Instead store and compare a **grading-input
+   fingerprint** over the week's terminal games: a hash of sorted
+   `(gameId, status, home, away, spread.value)` tuples
+   (`pool.autoScore.fingerprintByWeek[week]`). `spread.value` is included because
+   ATS Pick'em grades on it (engine:71-75) and a SuperAdmin correction to a
+   locked spread can change winners without touching the score (codex r2).
    **Fingerprint unchanged → skip the pool, no writes.** Changed → call
-   `scoreNFLWeekInternal(db, poolId, week, { dryRun: gate.dryRun,
-   deferMissingPenalties: weekHasNonTerminalGames })` and update the fingerprint.
-   This stops `resultsVersion` / entry writes climbing every 10 min for no reason
-   **and** catches corrections/cancellations.
-6. `deferMissingPenalties = the slot's week still has a non-terminal game`
-   (§3b). Once the run sees every week game terminal, it scores the full week
-   with penalties applied — the same pass that fires `maybeFinalizeNFLPool`.
+   `scoreNFLWeekInternal(...)`.
+   - **Dry-run persists nothing (codex r2):** the fingerprint is written
+     **only after a successful LIVE scoring pass**. A dry run computes it in
+     memory for the report only — writing it on a dry run both breaks the
+     dry-run-writes-nothing contract and, worse, would leave the fingerprint
+     "already current" so the first live run *skips the pool and never scores it*.
+6. `deferMissingPenalties` and the reveal gate are computed from the **full
+   `(season, seasonType, week)` slate** the scorer reads, per §3a/§3b:
+   `deferMissingPenalties = NOT (every week game terminal AND now >= max
+   effectiveGameLockAt)`. Once that condition clears, the run scores the full
+   week with penalties applied — the same pass that fires `maybeFinalizeNFLPool`.
 7. Per-run safety cap (mirror `MAX_*_PER_RUN`) so one run can't fan out
    unbounded; overflow rolls to the next run and is reported.
 8. Return a `scoreSyncHeartbeat`-style verdict: `{ ok, detail: { activeSlates,
@@ -183,10 +199,15 @@ each guard fails when removed — PICKUP §1):
   terminal;
 - a second run with an unchanged terminal fingerprint writes nothing;
 - an ESPN score **correction** (same FINAL count, changed score) re-scores;
+- an ATS locked-**spread** correction after a final re-scores (fingerprint
+  includes `spread.value`);
 - a game flipping to **CANCELLED** re-scores;
+- a `FINAL` game whose `weekLockOverride` still extends its lock is **not**
+  graded/revealed until the override passes;
 - a regular-season pool is **not** scored during a preseason slot of the same
   week number;
-- dry-run writes nothing.
+- dry-run writes nothing **and leaves the fingerprint unset**, so the first live
+  run scores the pool (dry-run must not poison the live flip).
 
 ## 6. PR-C — Live in-progress projection (OPTIONAL, fast-follow if time allows)
 
