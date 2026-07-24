@@ -76,10 +76,13 @@ pass (nflPools.ts:986), so a late Week-1 correction resets it to `1` and a
 `lastScoredWeek >= week` check would then wrongly permit a Week-2 extension even
 though Week 2 was already revealed. This is a small guard on a *different*
 function; it ships as its own PR alongside PR-B (it touches authorization-adjacent
-lifecycle, so classify it against the plan gate). Note poolExceptions.ts:101
-already records that honoring the override in `nflPools.ts` is an unfinished
-follow-up — so the override path is not yet load-bearing, which is the safe moment
-to add this guard.
+lifecycle, so classify it against the plan gate). **This is a CURRENT correctness
+concern, not a future one (codex r29):** `submitNFLPicksInternal` already computes
+`effectiveWeekLockAt` from `pool.settings` and `effectiveLock.ts` reads
+`weekLockOverrides`, so a normal member submission honors an extension **today** —
+an override can already reopen picks after a manual SuperAdmin mid-week score.
+(Weekly-locked Survivor/Margin are immune because PR-0 rejects their overrides; this
+guard is for Pick'em's per-game override path.)
 
 **The check must be transactional, not read-only (codex r6).** A plain read of
 `publishedWeeks` races the scorer: `extendWeekDeadline` could read the marker
@@ -173,10 +176,15 @@ prose here:
    durable path must therefore **re-fetch ESPN for stale not-yet-terminal slates**
    (a query on `nfl_games` where `status ∉ {FINAL,CANCELLED}` and `startTime` is
    past finds *which* slates to re-fetch; the fetch is what surfaces the finalize),
-   then enqueue. This is exactly what `nflDeepScoreSweepJob` already does — so the
-   concrete pilot answer is **arm the deep sweep** (Kevin, K2) or give this job a
-   narrow stale-slate re-fetch. Rare for a preseason pilot, but real for postponed
-   games; state it in the arming notes.
+   then enqueue. `nflDeepScoreSweepJob` does this — but only within **its own bounded lookback**
+   (`lookbackDays`, default 7, max 30), so a game that first goes terminal beyond
+   that window is still never fetched (codex r29). So the deep sweep is sufficient
+   **only** when its lookback covers the delay; the general answer is the **mandatory
+   stale non-terminal re-fetch** (query `nfl_games` for past-start non-terminal games
+   with no age cap, re-fetch ESPN, enqueue). For the preseason pilot a 7–30d lookback
+   covers any realistic postponement, so arming the deep sweep with writes is the
+   concrete near-term answer — state the bound in the arming notes, and build the
+   uncapped re-fetch before the regular season.
 
 **Every lock-affecting settings writer must go through the guard, not just
 `extendWeekDeadline` (codex r12).** `weekLockOverrides` is also reachable through
@@ -775,6 +783,11 @@ day to spare; defer C2 unless Kevin asks for live cross-member movement.
      deadline once established** — snapshot `effectiveWeekLockAt` to a per-week field
      the first time the week's deadline is computed, and read the frozen value
      thereafter so a later settings edit cannot shift a live week's lock.
+   - **Validate the buffer to the {60, 30, 5} set server-side (codex r29)** — not
+     just protect the field. `updatePoolSettings` takes `settings` as an opaque map,
+     so once direct writes are blocked a manager could still call the callable with
+     `0`/`15`/arbitrary. The server path validates and normalizes `lockBufferMinutes`
+     to the allowed presets (and normalizes any migrated legacy value into the set).
    - **Disallow `weekLockOverride` for weekly-locked S/M entirely (codex r20).** The
      deadline is set once via the buffer preset and is *hard*; there is no per-week
      extension. This sidesteps the fact that `extendWeekDeadline` only accepts
