@@ -112,7 +112,13 @@ async function logAudit(db: admin.firestore.Firestore, poolId: string, message: 
 
 // --- SCHEDULED REMINDER LOGIC ---
 
-export const runReminders = functions.scheduler.onSchedule("every 5 minutes", withHeartbeat('runReminders', async () => {
+// Cadence: every 15 minutes. The reminder tiers are hour-granularity windows
+// (T-36h..T-30h and T-4h..T-0h), so 5-minute polling bought no earlier delivery
+// — it just ran the whole-collection pool scan 3x as often. Kevin's call,
+// 2026-07-23, after #262 memoized the per-pool NFL week lookup. A 15-minute
+// cadence still lands every reminder inside its multi-hour window; see
+// PLAN-READS-RUNREMINDERS.md §4.
+export const runReminders = functions.scheduler.onSchedule("every 15 minutes", withHeartbeat('runReminders', async () => {
     const db = admin.firestore();
     const now = Date.now();
     let failedPools = 0;
