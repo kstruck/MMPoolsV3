@@ -108,11 +108,20 @@ newly-extended window is open.
 extension can commit *after* the check but *before* the first chunked entry batch
 (the scorer commits in ≤400-op batches, nflPools.ts:787-803). Serialize the
 **whole pass**, not an instant: the scorer takes a short **durable lease**
-(`pool.autoScore.scoringLeaseUntil`, a few minutes) before it begins writing, and
-`extendWeekDeadline` **refuses (or waits) while a live lease is held** and bumps
-`lockRevision` when it does write; the scorer still re-validates the revision at
-its final publish and discards the pass on mismatch. The lease bounds the window
-and the revision check is the backstop. This interleaving must be tested.
+(`pool.autoScore.scoringLease = { owner, until }`, a few minutes) before it begins
+writing, and `extendWeekDeadline` **refuses (or waits) while a live lease is held**
+and bumps `lockRevision` when it does write; the scorer still re-validates the
+revision at its final publish and discards the pass on mismatch. The lease bounds
+the window and the revision check is the backstop. This interleaving must be tested.
+
+**The lease needs a fencing token, not just an expiry (codex r14).** A purely
+time-bounded lease is not a mutex: if the original invocation is delayed past
+`until`, a retry can acquire the lease and score, then the original resumes and
+overwrites entry maps / the fingerprint — and both passes can carry the *same*
+`lockRevision`, so the final revision check does not catch it. So the lease carries
+an **owner/fencing token** that the worker **re-verifies before every batch and the
+final publish**, aborting the moment it finds the lease is no longer its own. Expiry
+bounds a dead worker; the token stops a resurrected one from writing.
 
 **Every lock-affecting settings writer must go through the guard, not just
 `extendWeekDeadline` (codex r12).** `weekLockOverrides` is also reachable through
@@ -138,6 +147,14 @@ for these pools** and route permitted settings edits through a **server callable
 and is the only path that can touch `weekLockOverrides`/`lockRevision` — under the
 lease + revision guard. This rules + settings-validation change rides in PR-B′;
 it is the reason this work is plan-gated on both authorization and scoring.
+
+**`updatePoolSettings` must MERGE, not replace (codex r14).** The manager UI sends
+a *complete* `settings` object, and a normal save after an extension omits
+`weekLockOverrides`/`lockRevision`; a wholesale replace would silently **delete**
+them, reverting the accepted deadline and breaking the revision protocol. So the
+server callable merges only the **whitelisted client fields** into the stored
+`settings` inside the guarded transaction and **carries every server-owned field
+through untouched.**
 
 **The lease is also the mutex between scorers (codex r10).** It is not only an
 `extendWeekDeadline` blocker: **every** scoring path — a second `nflAutoScoreJob`
@@ -385,6 +402,15 @@ Run body:
    setting — since the engine's output changes when these change even with
    identical game data; without them a mid-week STRAIGHT→ATS or `maxStrikes` edit
    would leave the tuple unchanged and skip the pool forever.
+   The fingerprint must **also react to late-committing entry/pick changes (codex
+   r14)**: `submitNFLPicks` captures `now` before its transaction, so a valid
+   submission that starts just before its lock can commit **after** the scorer has
+   read entries — with games/settings unchanged, a game-only fingerprint would then
+   skip forever and that entry keeps an omitted Pick'em grade (or an unfair
+   missing-pick penalty). Fold a **per-week submission watermark** into the skip
+   decision — `submitNFLPicks` bumps `pool.autoScore.submitSeq.{week}` (or the max
+   entry `updatedAt`) on every pick write, and the scorer includes it in the
+   fingerprint — so a post-read submission forces exactly one more pass.
    **Fingerprint unchanged → skip the pool, no writes.** Changed → call
    `scoreNFLWeekInternal(...)`.
    - **Dry-run persists nothing (codex r2):** the fingerprint is written
@@ -551,7 +577,14 @@ day to spare; defer C2 unless Kevin asks for live cross-member movement.
    `actor` options) — behavior-preserving, isolated.
 2. **PR-B** `nflAutoScoreJob` — scheduled, gated, deployed OFF (LIVE tier; the
    reconciliation tier §5b may be a distinct follow-up sub-PR).
-3. **PR-B′** `extendWeekDeadline` publish guard (§3a) — small, ships alongside B.
+3. **PR-B′** the concurrency + authorization hardening PR (§3a) — **not small**:
+   the publish/extend `lockRevision` guard, the fenced scoring lease as the mutex
+   across all scorers, making every scorer-owned field server-only, denying
+   client-direct `settings` writes and routing edits through a merge-preserving
+   `updatePoolSettings`, and the submission watermark. It is plan-gated on
+   authorization + scoring and needs its own full codex cycle. Sequence it so its
+   guards exist **before** `nflAutoScoreJob` is armed live (dry-run in the interim
+   is safe — it writes nothing).
 4. **(PR-C1 / PR-C2)** optional live in-progress projection, only if time remains.
 
 One PR at a time. Each: all five gates green → `codex exec review --base
