@@ -123,14 +123,38 @@ record `pool.autoScore.scoringLease = { owner, until }` (this exact path, one
 record everywhere the plan refers to a lease — codex r16) carries a unique
 **owner/fencing token**.
 
-**Fence EVERY side-effect of the pass, not just entry batches + publish (codex
-r16).** A slow worker that has lost its lease to a newer pass must not run *any*
-mutation with stale data — not the entry batches, not `standings/current`, and not
-the post-publish writes either (`maybeFinalizeNFLPool`, the weekly recap,
-`SCORE_FINALIZED`, the `SURVIVOR_AUTO_STRIKE` audit). So the worker **re-verifies
-its `owner` token before every one of those writes** (or makes each conditional on
-the current fence) and aborts the instant the lease is no longer its own. Expiry
-bounds a dead worker; the token stops a resurrected one from writing anything.
+**Fence EVERY side-effect of the pass — and validate the token IN the committing
+transaction (codex r16/r17).** A slow worker that lost its lease must not run *any*
+mutation with stale data (entry batches, `standings/current`, `maybeFinalizeNFLPool`,
+weekly recap, `SCORE_FINALIZED`, `SURVIVOR_AUTO_STRIKE`). A *separate* token recheck
+is still a TOCTOU race — a newer worker can acquire the lease between the recheck
+and the write. So each protected write must **read and assert `scoringLease.owner`
+inside the same transaction that commits it**, which means the chunked entry writes
+become lease-conditioned transactions (or carry a transactional precondition) rather
+than plain `batch.commit()`s. The token validated at commit time is what makes the
+mutex real; expiry only bounds a dead worker.
+
+**PR-B′ concurrency acceptance criteria (the residual hard part — consolidated).**
+Codex rounds 12–17 converged on one mechanism; these are its acceptance criteria,
+to be finalized against real code in PR-B′'s own review, not specified further in
+prose here:
+1. One fenced lease record `pool.autoScore.scoringLease = { owner, until }`; every
+   scoring side-effect validates `owner` in its committing transaction.
+2. `lockRevision` (bumped by every lock-affecting write) is the backstop the final
+   publish re-asserts.
+3. Every scorer (auto-score, reconciliation drain, manual button) acquires the
+   lease atomically and skips/waits while it is held.
+4. Lock-affecting settings + all scorer-owned fields are server-only; edits route
+   through a **merge-preserving** `updatePoolSettings`; rules deny client-direct
+   `settings` writes for these pools.
+5. Entry mutators (`submitNFLPicks`/`proxyPick`/`executeSurvivorRebuy`) advance a
+   **per-entry** revision inside their own write — **not** a pool-wide
+   `submitSeq.{week}` field, which is a single-document hotspot that would abort
+   concurrent pre-kickoff submissions and could drop valid picks (codex r17). The
+   scorer aggregates per-entry revisions (max, or an "any entry changed since last
+   scored" query) into its skip decision. Lease contention for a submission only
+   arises for a boundary pick committing right at lock — normal pre-lock traffic
+   never touches the lease.
 
 **Every lock-affecting settings writer must go through the guard, not just
 `extendWeekDeadline` (codex r12).** `weekLockOverrides` is also reachable through
@@ -339,9 +363,9 @@ export async function scoreNFLWeekInternal(
   extraction would lose the `request.uid` the inline scorer uses.
 - **Persisted-state contract (codex r11).** The feature adds exactly these new
   fields, and every reference above must use these paths: `pool.autoScore`
-  (fingerprint-by-week, per-week submit/entry-revision watermark, and the single
-  fenced lease record **`scoringLease: { owner, until }`** — expiry **and** owner
-  token together, codex r16),
+  (fingerprint-by-week and the single fenced lease record
+  **`scoringLease: { owner, until }`** — expiry **and** owner token together, codex
+  r16; entry-revision watermarks live on the entry docs, not here),
   **`pool.publishedWeeks.{week}`** (immutable per-week publication marker, §3a/§4),
   and **`pool.settings.lockRevision`** (monotonic, bumped by `extendWeekDeadline`,
   §3a). PR-A itself writes none of these — they arrive with PR-B / PR-B′ — but the
@@ -456,10 +480,12 @@ Run body:
    submission that starts just before its lock can commit **after** the scorer has
    read entries — with games/settings unchanged, a game-only fingerprint would then
    skip forever and that entry keeps an omitted Pick'em grade (or an unfair
-   missing-pick penalty). Fold a **per-week submission watermark** into the skip
-   decision — `submitNFLPicks` bumps `pool.autoScore.submitSeq.{week}` (or the max
-   entry `updatedAt`) on every pick write, and the scorer includes it in the
-   fingerprint — so a post-read submission forces exactly one more pass.
+   missing-pick penalty). Fold a **per-entry revision watermark** into the skip
+   decision — each entry mutator bumps its **own entry doc's** revision (never a
+   pool-wide `submitSeq` field — that is a single-document write hotspot at peak
+   submission, §3a criterion 5, codex r17), and the scorer aggregates them (max, or
+   an "any entry changed since last scored" query) into the fingerprint — so a
+   post-read submission forces exactly one more pass.
    **Fingerprint unchanged → skip the pool, no writes.** Changed → call
    `scoreNFLWeekInternal(...)`.
    - **Dry-run persists nothing (codex r2):** the fingerprint is written
@@ -551,9 +577,11 @@ The manual-fallback caveat is **type-specific** (codex r12): a manual `scoreNFLW
 additively — idempotent), but **NOT for Survivor** — re-scoring week N leaves later
 `strikeWeeks` in place and skips later-week recomputation once eliminated, so it
 cannot repair downstream elimination ordering. Therefore, until the reset-and-replay
-support ships: **exclude Survivor pools from the reconciliation queue** (Pick'em and
-Margin late corrections self-heal or manual-heal safely), and state in the arming
-notes that a late Survivor correction has **no safe manual repair** and must wait
+support ships: the queue defers **only Survivor `correction`-reason entries** (never
+first-terminal ones — see the reason field above; a delayed Survivor final still
+scores). Pick'em and Margin late corrections self-heal or manual-heal safely. State
+in the arming notes that a late Survivor **correction** has **no safe manual repair**
+and must wait
 for the reset-replay sub-PR — do not tell Kevin to manually re-score a Survivor
 week.
 
