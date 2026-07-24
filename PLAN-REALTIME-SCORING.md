@@ -91,6 +91,16 @@ and (b) `extendWeekDeadline` performs its marker check **and** override write
 inside a Firestore transaction that reads `publishedWeeks.{week}`, so the two
 serialize and one always loses cleanly.
 
+Serializing only the marker is still not enough (codex r7): the scorer could read
+old settings, compute a grade, and *then* `extendWeekDeadline` commits an override
+while the marker is unset, after which the scorer batch-writes the stale grade —
+exposing a result while picks are newly open. Close it with optimistic
+concurrency: `extendWeekDeadline` bumps a monotonic `pool.settings.lockRevision`
+when it writes an override; the scorer captures `lockRevision` at grade time and
+**commits its publish (standings + `publishedWeeks`) in a transaction that
+re-reads and asserts `lockRevision` is unchanged**, retrying with freshly
+recomputed effective locks on mismatch. Same PR-B′ as the guard.
+
 ### 3b. Never apply a missing-pick penalty while any pick is still open
 
 **Correctness core (codex P1c/r2).** In `PER_GAME` mode a member may legitimately
@@ -160,10 +170,16 @@ export async function scoreNFLWeekInternal(
      doc, the create trigger would never refire on complete data. A provisional
      pass must skip recap creation and the "scoring concluded" audit; the
      complete pass creates the recap once, from final standings.
-  5. **Stamp the per-week publication marker** — set-once
-     `pool.publishedWeeks.{week} = true` the first time this pass reveals any
-     lock-closed result for the week (never cleared). This is the durable
-     evidence the `extendWeekDeadline` guard reads (§3a).
+  Note the publication marker below is **not** provisional-only.
+
+- **Publication marker on every result-publishing pass (provisional AND
+  complete).** Set-once `pool.publishedWeeks.{week} = true` the first time *any*
+  live pass reveals a lock-closed result for the week (never cleared) — the
+  durable evidence the `extendWeekDeadline` guard reads (§3a). It must **not** live
+  inside the `provisional` branch (codex r7): a one-game slate like the HOF game
+  finishes in a single **complete** pass (all terminal, lock passed), which would
+  otherwise publish `standings/current` without ever stamping the marker and leave
+  the week reopenable after its result was exposed.
   The live scorer (§5) sets `provisional = NOT (every week game terminal AND
   now >= max effectiveGameLockAt over the full slate)`. When it clears, the run
   is the authoritative complete pass (penalties applied, markers written,
@@ -234,9 +250,13 @@ Run body:
      `cancelPool` persists `status: "CANCELED"` (poolExceptions.ts:336) and
      admin-close persists `COMPLETED`; finalized pools carry `isFinal`/`finalizedAt`.
      Exclude when `isFinal === true` **or** `finalizedAt` set **or**
-     `status ∈ {CANCELED, COMPLETED}` — the same terminal set `nflFinalize.ts`
-     uses (`status === 'CANCELED'` at :247/:474). Scoring a voided pool would
-     otherwise write entry scores, standings, recaps and audit for it.
+     `status` (compared **case-insensitively**) ∈ `{CANCELED, COMPLETED,
+     ARCHIVED}`. `nflFinalize.ts` uses `status === 'CANCELED'` (:247/:474);
+     `ARCHIVED` is added because `dbService.archivePool` persists `status:
+     'archived'` while leaving `isFinal`/`finalizedAt` unset (codex r7), and the
+     casing across these write paths is inconsistent. Scoring a voided/archived
+     pool would otherwise write entry scores, standings, recaps and audit for a
+     pool the manager has retired.
    - It must **not** filter on `scoredWeeks.{week}`: the scorer writes that marker
      on *every* pass including the first partial-game pass, so filtering on it
      would drop the pool after one game and block all later games. The
@@ -291,12 +311,17 @@ go stale. The auto-scorer must therefore also rescore **recently-corrected
 terminal slates**, not only the kickoff window.
 
 Durable handoff (reuse what already detects corrections, don't widen the frequent
-scan): when `syncScoresWindow` reports `corrections > 0` for a slate, **enqueue
-that `(season, seasonType, week)`** (a small `nfl_rescore_queue` marker doc, or a
-`system` field). Each `nflAutoScoreJob` run drains the queue as a second candidate
+scan): the sync paths **enqueue `(season, seasonType, week)`** into a small
+`nfl_rescore_queue` on **two** triggers (codex r7): (1) `syncScoresWindow` reports
+`corrections > 0` (a late restatement of an already-`FINAL` game), and (2) a game
+**first transitions to `FINAL`** — because a suspended/postponed game can finalize
+**more than 24h after kickoff**, dropping out of the live window, and
+`detectStatCorrections` only fires on games that were *already* `FINAL`, so a plain
+`SCHEDULED/IN_PROGRESS → FINAL` transition beyond the hot window would otherwise
+never be scored. Each `nflAutoScoreJob` run drains the queue as a second candidate
 source alongside the active window; a slate whose fingerprint is genuinely
-unchanged still costs only the skip check. This keeps the live path cheap and
-makes a late correction self-healing.
+unchanged still costs only the skip check. This keeps the live path cheap and makes
+both late corrections and late finals self-healing.
 
 **Correcting week N requires a Survivor state RESET, not sequential rescores
 (codex r5/r6).** Simply calling the scorer for weeks N..latest does **not**
