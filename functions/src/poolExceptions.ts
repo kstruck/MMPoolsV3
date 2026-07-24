@@ -15,7 +15,7 @@ import {
     cancelPoolSchema,
     closePoolSchema,
 } from "./schemas/poolExceptions";
-import { usesWeeklyHardLock, normalizeLockBufferMinutes } from "./lib/effectiveLock";
+import { usesWeeklyHardLock, normalizeLockBufferMinutes, resolveHardWeekLock, frozenHardLockFor } from "./lib/effectiveLock";
 
 // Commissioner exception tools (UX overhaul Phase 3.6).
 // Real seasons have exceptions — a member in the hospital, a mis-set deadline,
@@ -213,7 +213,12 @@ export const proxyPick = validated(
         ?? pool.settings?.weekLockOverrides?.[String(weekNum)]);
     const override = typeof rawOverride === "number" ? rawOverride : undefined;
 
-    const weekLockAt = override ?? (earliestGameTime - lockBufferMs);
+    // Hard-lock pools also honor the frozen (earliest-ever) deadline, or a proxy
+    // pick would slip through the same reopen that regular submissions now refuse.
+    const computedWeekLock = override ?? (earliestGameTime - lockBufferMs);
+    const weekLockAt = hardLock
+        ? resolveHardWeekLock(frozenHardLockFor(pool as { hardLockByWeek?: Record<string, unknown> }, weekNum), computedWeekLock)
+        : computedWeekLock;
     const weekLocked = now >= weekLockAt;
     const gameLockAt = (g: NFLGame) => override ?? (g.startTime - lockBufferMs);
 

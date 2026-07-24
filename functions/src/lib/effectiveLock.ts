@@ -21,7 +21,7 @@ export function lockBufferMs(settings: LockSettings | undefined): number {
 // gates its pick UI on the same deadline the server enforces — see
 // shared/weeklyHardLock.ts for why these pools need it at all. Re-exported here
 // so lock callers have a single import site.
-import { usesWeeklyHardLock, normalizeLockBufferMinutes, resolveHardWeekLock } from '../shared/weeklyHardLock';
+import { usesWeeklyHardLock, normalizeLockBufferMinutes, resolveHardWeekLock, frozenHardLockFor } from '../shared/weeklyHardLock';
 
 export {
   LOCK_BUFFER_PRESETS,
@@ -29,16 +29,8 @@ export {
   usesWeeklyHardLock,
   normalizeLockBufferMinutes,
   resolveHardWeekLock,
+  frozenHardLockFor,
 } from '../shared/weeklyHardLock';
-
-/** Where the frozen per-week deadline lives on the pool doc. */
-export function frozenHardLockFor(
-  pool: { hardLockByWeek?: Record<string | number, unknown> } | undefined,
-  week: number,
-): number | undefined {
-  const raw = pool?.hardLockByWeek?.[week] ?? pool?.hardLockByWeek?.[String(week)];
-  return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined;
-}
 
 /**
  * The authoritative week deadline for a pool, folding in the hard-lock rules and
@@ -58,6 +50,44 @@ export function weekLockDecision(
   const frozen = frozenHardLockFor(pool, week);
   const lockAt = resolveHardWeekLock(frozen, computed);
   return { lockAt, freezeTo: lockAt !== frozen ? lockAt : undefined };
+}
+
+/**
+ * Persist the week's hard deadline, monotonically (it may only move EARLIER), and
+ * return the value now in force.
+ *
+ * Runs its own transaction — a blind write cannot be used here because callers
+ * work from a snapshot that may already be stale, and a stale later value
+ * overwriting an earlier one is exactly the reopen this freeze exists to prevent.
+ *
+ * Call this BEFORE enforcing the lock. If the freeze were only written after the
+ * lock checks passed, the first submission *after* a deadline would throw before
+ * recording anything, leaving no freeze to defend against a later buffer change.
+ */
+export async function ensureHardLockFreeze(
+  poolRef: {
+    get: () => Promise<{ data: () => Record<string, unknown> | undefined }>;
+    update: (data: Record<string, unknown>) => Promise<unknown>;
+  },
+  runTransaction: <T>(fn: (tx: {
+    get: (ref: unknown) => Promise<{ data: () => Record<string, unknown> | undefined }>;
+    update: (ref: unknown, data: Record<string, unknown>) => unknown;
+  }) => Promise<T>) => Promise<T>,
+  week: number,
+  computedLockAt: number,
+): Promise<number> {
+  return runTransaction(async (tx) => {
+    const snap = await tx.get(poolRef);
+    const frozen = frozenHardLockFor(
+      snap.data() as { hardLockByWeek?: Record<string | number, unknown> } | undefined,
+      week,
+    );
+    const resolved = resolveHardWeekLock(frozen, computedLockAt);
+    if (resolved !== frozen) {
+      tx.update(poolRef, { [`hardLockByWeek.${week}`]: resolved });
+    }
+    return resolved;
+  });
 }
 
 /**

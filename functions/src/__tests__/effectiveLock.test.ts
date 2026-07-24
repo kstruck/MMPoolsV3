@@ -9,6 +9,7 @@ import {
   weekLockDecision,
   LOCK_BUFFER_PRESETS,
 } from '../lib/effectiveLock';
+import { effectiveBufferMinutesForWeek } from '../shared/weeklyHardLock';
 
 const MIN = 60_000;
 const kickoff = 1_800_000_000_000;
@@ -135,6 +136,22 @@ describe('effectiveLockSettings', () => {
     const d = weekLockDecision({ type: 'NFL_PICKEM', settings: { lockBufferMinutes: 5 } }, 1, [kickoff]);
     expect(d.lockAt).toBe(kickoff - 5 * MIN);
     expect(d.freezeTo).toBeUndefined();
+  });
+
+  it('effectiveBufferMinutesForWeek reproduces the enforced deadline for client surfaces', () => {
+    const games = [kickoff, kickoff + 3600_000];
+    // No freeze yet: the normalized buffer.
+    expect(effectiveBufferMinutesForWeek({ type: 'NFL_SURVIVOR', settings: { lockBufferMinutes: 30 } }, 1, games)).toBe(30);
+    // Legacy value snaps, so the checklist agrees with enforcement.
+    expect(effectiveBufferMinutesForWeek({ type: 'NFL_SURVIVOR', settings: { lockBufferMinutes: 0 } }, 1, games)).toBe(5);
+    // A frozen 60-min deadline outranks a widened 5-min setting.
+    expect(effectiveBufferMinutesForWeek(
+      { type: 'NFL_SURVIVOR', settings: { lockBufferMinutes: 5 }, hardLockByWeek: { 1: kickoff - 60 * MIN } },
+      1,
+      games,
+    )).toBe(60);
+    // Pick'em keeps its raw buffer (extensions still apply there).
+    expect(effectiveBufferMinutesForWeek({ type: 'NFL_PICKEM', settings: { lockBufferMinutes: 10 } }, 1, games)).toBe(10);
   });
 
   it('the hard deadline is ALWAYS before the first kickoff, for every input', () => {

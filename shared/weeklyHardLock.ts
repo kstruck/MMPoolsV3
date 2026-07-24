@@ -59,3 +59,45 @@ export function resolveHardWeekLock(frozenMs: number | undefined, computedMs: nu
     ? Math.min(frozenMs, computedMs)
     : computedMs;
 }
+
+/**
+ * Reads the frozen deadline off a pool doc. Shared so the client gates its pick
+ * UI on the same instant the server enforces — otherwise a widened buffer shows
+ * members an editable form for a week the server has already locked.
+ *
+ * Firestore map keys arrive as strings; week numbers are used as numbers
+ * throughout the app, so both spellings are accepted.
+ */
+export function frozenHardLockFor(
+  pool: { hardLockByWeek?: Record<string | number, unknown> } | undefined | null,
+  week: number,
+): number | undefined {
+  const raw = pool?.hardLockByWeek?.[week] ?? pool?.hardLockByWeek?.[String(week)];
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined;
+}
+
+/**
+ * The buffer (in minutes) that reproduces this week's ACTUAL deadline, including
+ * the freeze.
+ *
+ * Several client surfaces — the week checklist, the "picks due" CTA — are built
+ * around a buffer rather than an absolute instant. Rather than re-plumb them,
+ * this converts the effective deadline back into the equivalent buffer, so they
+ * agree with enforcement without changing their signatures.
+ */
+export function effectiveBufferMinutesForWeek(
+  pool: { type?: string; settings?: { lockBufferMinutes?: number }; hardLockByWeek?: Record<string | number, unknown> } | undefined | null,
+  week: number,
+  gameStartTimes: number[],
+): number {
+  const raw = pool?.settings?.lockBufferMinutes;
+  if (!usesWeeklyHardLock(pool?.type)) return raw ?? DEFAULT_LOCK_BUFFER_MINUTES;
+
+  const normalized = normalizeLockBufferMinutes(raw);
+  if (gameStartTimes.length === 0) return normalized;
+
+  const earliest = Math.min(...gameStartTimes);
+  const computed = earliest - normalized * 60_000;
+  const effective = resolveHardWeekLock(frozenHardLockFor(pool, week), computed);
+  return (earliest - effective) / 60_000;
+}

@@ -18,7 +18,7 @@ import { AICommissioner } from '../AICommissioner';
 import { useToast } from '../ui/Toast';
 import { Button } from '../ui';
 import { now as serverNow } from '../../utils/serverClock';
-import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
+import { usesWeeklyHardLock, normalizeLockBufferMinutes, resolveHardWeekLock, frozenHardLockFor } from '@shared/weeklyHardLock';
 import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
 
@@ -193,8 +193,14 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
       : (castPool.settings?.lockBufferMinutes ?? 5);
     const bufferMs = bufferMinutes * 60 * 1000;
     const earliestKickoff = Math.min(...weeklyGames.map(g => g.startTime));
-    return serverNow() >= (earliestKickoff - bufferMs);
-  }, [weeklyGames, castPool.settings?.lockBufferMinutes, castPool.type, lockTick]);
+    const computed = earliestKickoff - bufferMs;
+    // The server enforces the earliest deadline it ever froze for this week, so a
+    // widened buffer must not make the UI show the week open for the gap.
+    const deadline = usesWeeklyHardLock(castPool.type)
+      ? resolveHardWeekLock(frozenHardLockFor(castPool, selectedWeek), computed)
+      : computed;
+    return serverNow() >= deadline;
+  }, [weeklyGames, castPool.settings?.lockBufferMinutes, castPool.type, castPool.hardLockByWeek, selectedWeek, lockTick]);
 
   // Time remaining to earliest game this week
   const earliestGame = useMemo(() => {

@@ -11,7 +11,7 @@ import { sendCourierSMS } from "./notifications/smsService";
 import { getSquarePrivateMap, getSquareEmails } from "./squarePrivate";
 import { withHeartbeat } from "./lib/heartbeat";
 import { reminderPassVerdict } from "./lib/heartbeatVerdicts";
-import { effectiveLockSettings, usesWeeklyHardLock, resolveHardWeekLock, frozenHardLockFor } from "./lib/effectiveLock";
+import { effectiveLockSettings, usesWeeklyHardLock, resolveHardWeekLock, frozenHardLockFor, ensureHardLockFreeze } from "./lib/effectiveLock";
 
 
 
@@ -891,13 +891,21 @@ export async function checkNFLNonPickerReminders(
         // buffer widening from reopening a week that has already closed.
         const poolType = (pool as unknown as { type?: string }).type;
         const hardLock = usesWeeklyHardLock(poolType);
-        const frozen = hardLock
-          ? frozenHardLockFor(pool as { hardLockByWeek?: Record<string, unknown> }, week)
-          : undefined;
-        const effectiveLock = hardLock ? resolveHardWeekLock(frozen, rawLock) : rawLock;
-        if (hardLock && effectiveLock !== frozen) {
+        let effectiveLock = rawLock;
+        if (hardLock) {
+          const frozen = frozenHardLockFor(pool as { hardLockByWeek?: Record<string, unknown> }, week);
+          effectiveLock = resolveHardWeekLock(frozen, rawLock);
           try {
-            await db.collection('pools').doc(pool.id).update({ [`hardLockByWeek.${week}`]: effectiveLock });
+            // Via a transaction, never a blind write: this pass works from a
+            // run-wide snapshot, so a stale later value could otherwise overwrite an
+            // earlier freeze a concurrent submission had just stored — reopening the
+            // week the freeze exists to close.
+            effectiveLock = await ensureHardLockFreeze(
+              db.collection('pools').doc(pool.id) as never,
+              db.runTransaction.bind(db) as never,
+              week,
+              rawLock,
+            );
           } catch (e) {
             // Best-effort: a failed freeze must not stop reminders going out. The
             // submit path freezes too, so this is belt-and-braces.
