@@ -380,6 +380,12 @@ export async function scoreNFLWeekInternal(
   finishes in a single **complete** pass (all terminal, lock passed), which would
   otherwise publish `standings/current` without ever stamping the marker and leave
   the week reopenable after its result was exposed.
+  **Cold-start backfill (codex r23):** a week manually scored *before* this rollout
+  has no `publishedWeeks` marker, so the new Pick'em `extendWeekDeadline` guard
+  would accept an override on an already-revealed week. Before enabling the guard,
+  backfill the marker from prior scored/published state (`scoredWeeks` /
+  `standings.current.lastScoredWeek`), or conservatively treat any
+  already-scored legacy week as published.
   The live scorer (§5) sets `provisional = NOT (every game in the week is terminal
   AND every terminal game is reveal-eligible, i.e. `gameLockClosed`)` — the
   `gameLockClosed` term still matters for Pick'em, where a game can be `FINAL`
@@ -526,6 +532,14 @@ Run body:
    `max` stalls when a lower entry moves 2→3; a count stalls once an entry already
    above the threshold re-increments — only a sum/checksum moves every time) — so a
    post-read submission forces exactly one more pass.
+   The fingerprint **also includes a "weekly lock has passed" bit**
+   (`now >= effectiveWeekLockAt`) for Survivor/Margin (codex r23): a pass that runs
+   in the `now+2h` window *before* the weekly lock persists a fingerprint with the
+   no-pick penalty gated off, and at the lock the game tuples / settings / entry
+   revisions can all still be unchanged — so the skip rule would hold off the
+   penalty until a game finalizes instead of applying it *at* the lock. The lock bit
+   flips the fingerprint the moment the deadline passes, forcing the at-lock pass
+   (equivalently, force a pass when `now` crosses `effectiveWeekLockAt`).
    **Fingerprint unchanged → skip the pool, no writes.** Changed → call
    `scoreNFLWeekInternal(...)`.
    - **Dry-run persists nothing (codex r2):** the fingerprint is written
@@ -719,6 +733,11 @@ day to spare; defer C2 unless Kevin asks for live cross-member movement.
      earlier overrides) — a "move-earlier-only" override would need a whole separate
      early-lock field wired through every lock path, which the hard-deadline design
      doesn't need. Reject overrides on Survivor/Margin.
+   - **The migration must CLEAR existing `settings.weekLockOverrides` on S/M pools,
+     not just reject new ones (codex r23).** A pilot pool that already has a stored
+     override still computes `weekLocked` from it (normal *and* proxy paths), so it
+     would keep accepting picks past the hard deadline — live scoring back on mutable
+     picks. PR-0's backfill deletes/ignores legacy overrides for these types.
    Mostly config over existing infrastructure (WEEKLY lock + `lockBufferMinutes`
    already work). Plan-gated (it changes lock = scoring/authorization behavior).
    **This lands first — it is what makes S/M live-scorable**, and it's independently
