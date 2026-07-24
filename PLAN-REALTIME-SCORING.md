@@ -139,7 +139,11 @@ Codex rounds 12–17 converged on one mechanism; these are its acceptance criter
 to be finalized against real code in PR-B′'s own review, not specified further in
 prose here:
 1. One fenced lease record `pool.autoScore.scoringLease = { owner, until }`; every
-   scoring side-effect validates `owner` in its committing transaction.
+   scoring side-effect validates, **in its committing transaction**, that the lease
+   is **still owned by this worker AND unexpired (`until > now`) AND the captured
+   `lockRevision` is unchanged** (codex r18) — an owner-only check lets a stalled
+   worker whose lease expired still write after `extendWeekDeadline` legally
+   committed an override into the now-free lease.
 2. `lockRevision` (bumped by every lock-affecting write) is the backstop the final
    publish re-asserts.
 3. Every scorer (auto-score, reconciliation drain, manual button) acquires the
@@ -151,10 +155,21 @@ prose here:
    **per-entry** revision inside their own write — **not** a pool-wide
    `submitSeq.{week}` field, which is a single-document hotspot that would abort
    concurrent pre-kickoff submissions and could drop valid picks (codex r17). The
-   scorer aggregates per-entry revisions (max, or an "any entry changed since last
-   scored" query) into its skip decision. Lease contention for a submission only
-   arises for a boundary pick committing right at lock — normal pre-lock traffic
-   never touches the lease.
+   scorer's skip decision must use an aggregate that **changes on every entry
+   mutation** — **not `max`** (codex r18): independent per-entry bumps mean a lower
+   entry moving 2→3 leaves `max` unchanged and skips forever. Use a monotone sum of
+   revisions, or a **"count of entries with revision > lastScoredRevision"** query,
+   or an `updatedAt`-since query. Lease contention for a submission only arises for
+   a boundary pick committing right at lock — normal pre-lock traffic never touches
+   the lease.
+6. **Observing a >24h finalize (codex r18).** The terminal-transition enqueue only
+   fires if the sync path *sees* the transition, but `syncScoresWindow` uses a 24h
+   lookback — a suspended game finalizing after 24h is never re-fetched, so nothing
+   enqueues it and it stays unscored (the daily deep sweep is normally disabled).
+   Drive the enqueue from a **durable source of not-yet-terminal games regardless of
+   age** — a cheap periodic query on `nfl_games` where `status ∉ {FINAL,CANCELLED}`
+   and `startTime` is in the past — so a late finalize is always observed. (Rare for
+   a preseason pilot, but real for postponed games.)
 
 **Every lock-affecting settings writer must go through the guard, not just
 `extendWeekDeadline` (codex r12).** `weekLockOverrides` is also reachable through
@@ -389,11 +404,16 @@ onSchedule({ schedule: '*/10 * * * *', timeZone: 'America/New_York' }, withHeart
 
 Run body:
 
-0. **Register the heartbeat expectation** (codex r8): add
-   `nflAutoScoreJob: { everyMinutes: 10 }` to `SCHEDULED_JOB_EXPECTATIONS`
-   (heartbeat.ts:228). The heartbeat contract test scans every `withHeartbeat()`
-   call and **fails if the job is absent from that map** — so the gates cannot go
-   green without it, and skipping it would leave the scorer unmonitored.
+0. **Wire it up** (both required or the job is silently dead):
+   - **Export `nflAutoScoreJob` from `functions/src/index.ts`** (codex r18) —
+     Firebase only deploys functions exported from the entry point; defining +
+     heartbeat-wrapping it in `nflSchedule.ts` alone leaves it undiscoverable and
+     nothing ever runs. This is the exact `syncPlayInPicks` trap from PICKUP §1.
+   - **Register the heartbeat expectation** (codex r8): add
+     `nflAutoScoreJob: { everyMinutes: 10 }` to `SCHEDULED_JOB_EXPECTATIONS`
+     (heartbeat.ts:228). The heartbeat contract test scans every `withHeartbeat()`
+     call and **fails if the job is absent from that map** — so the gates cannot go
+     green without it, and skipping it would leave the scorer unmonitored.
 1. Read + gate via `readJobGate` / `configReadFailedVerdict` (copy deep-sweep).
 2. **Active-window query + control flow (codex r6)**: query `nfl_games` in the
    active window using the existing **`HOT_WINDOW_LOOKBACK_MS` (24h)**
