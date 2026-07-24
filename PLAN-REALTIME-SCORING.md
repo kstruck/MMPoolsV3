@@ -229,6 +229,11 @@ synchronization.** Concretely (codex r14/r15):
   or the selection-time terminal check races a live pass and the scorer writes into
   a just-cancelled pool (`maybeFinalizeNFLPool` checks cancellation only *after* the
   writes and cannot undo them).
+- **The finalizer sweep** — `nflFinalizeSweepJob` independently calls
+  `maybeFinalizeNFLPool` (codex r24). If it overlaps a queued correction rescore of
+  an already-finalized pool it can snapshot a partially-updated entry set and write
+  stale season history outside the fence. Its finalization path must acquire/conflict
+  with the same lease, or otherwise serialize with scoring.
 - **Entry mutators** — `submitNFLPicks`, `proxyPick`, `executeSurvivorRebuy` — must
   do **both** (codex r15/r16): (i) **read/conflict with the pool lease** in their
   own transaction and wait/retry while it is held — a watermark alone only
@@ -718,14 +723,18 @@ day to spare; defer C2 unless Kevin asks for live cross-member movement.
    `lockMode: 'WEEKLY'` for `NFL_SURVIVOR` + `NFL_MARGIN` (create paths + a
    migration/backfill for any existing pilot pools), replace the free-number buffer
    with the **60/30/5 preset** picker.
-   - **Server-enforce the lock, don't trust the client (codex r20).** An ordinary
-     `NFLManagerView` save replaces the whole `settings` map and its Survivor/Margin
-     branches **omit** `lockMode`/`lockBufferMinutes` — and submission treats a
-     missing `lockMode` as `PER_GAME`. So a normal save would silently revert S/M to
-     mutable picks and break live-scoring safety. PR-0 must **force `lockMode:
-     'WEEKLY'` for these types server-side on every settings write** (and default the
-     buffer), independent of the client payload — not merely send the fields from
-     the UI.
+   - **Server-enforce the lock, don't trust the client — and do it IN PR-0, not
+     PR-B′ (codex r20/r24).** An ordinary `NFLManagerView` save replaces the whole
+     `settings` map and its Survivor/Margin branches **omit** `lockMode`/
+     `lockBufferMinutes` — and submission treats a missing `lockMode` as `PER_GAME`.
+     So a normal save (or any direct client write, which the rules still allow until
+     PR-B′) would silently revert S/M to mutable picks. **PR-0 cannot defer the
+     write-path lockdown to PR-B′** — during the PR-0→PR-B′ interval a manager save
+     would undo the migration. So PR-0 itself must: **deny client-direct writes to
+     `lockMode`/`weekLockOverrides` for `NFL_SURVIVOR`/`NFL_MARGIN`** (rules) and
+     route their settings edits through a server path that **forces `lockMode:
+     'WEEKLY'`** and preserves it, independent of the client payload. (This is the
+     lock-field slice of PR-B′'s broader server-only-fields work, pulled forward.)
    - **Disallow `weekLockOverride` for weekly-locked S/M entirely (codex r20).** The
      deadline is set once via the buffer preset and is *hard*; there is no per-week
      extension. This sidesteps the fact that `extendWeekDeadline` only accepts
@@ -780,11 +789,11 @@ unscored; note it in the arming checklist, don't leave it implicit.
   own); the >24h stale-slate observation (§3a crit. 6) reuses the deep sweep.
 - No prod-data mutation and no deploy by Claude (Kevin's gates).
 
-## 9. Codex review status — 21 rounds, converged on the plan's altitude
+## 9. Codex review status — 24 rounds, converged on the plan's altitude
 
-This plan was adversarially reviewed by `codex exec review` across **21 rounds** (77
+This plan was adversarially reviewed by `codex exec review` across **24 rounds** (85
 findings, 0 rejected); every finding was absorbed with written evidence in the git
-history (`docs(plan): absorb codex r1..r21`). **Kevin's 2026-07-25 weekly-hard-lock
+history (`docs(plan): absorb codex r1..r24`). **Kevin's 2026-07-25 weekly-hard-lock
 ruling** (§3b) landed between r19 and r20 and *simplified* the design — all three
 pool types live-scorable, PR-0 added, the provisional flag reduced to finalization
 completeness, and PR-B′'s reveal-race machinery narrowed to Pick'em only. The

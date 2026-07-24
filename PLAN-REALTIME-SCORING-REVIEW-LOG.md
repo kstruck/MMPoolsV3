@@ -10,7 +10,7 @@ log is the index; §9 of the plan carries the stop rationale.
 `codex exec review --base origin/main` (OpenAI, gpt-5.6-terra), the required
 cross-model gate (CLAUDE.md §2c). qodo is billing-blocked (§2b) and did not run.
 
-## Rounds (19)
+## Rounds (24)
 
 | Round | Findings | Theme (all absorbed with written evidence) |
 |---|---|---|
@@ -36,14 +36,19 @@ cross-model gate (CLAUDE.md §2c). qodo is billing-blocked (§2b) and did not ru
 | — | — | **Kevin ruling 2026-07-25: Survivor + Margin weekly hard lock (60/30/5). Design simplified — all 3 types live-scorable; PR-0 added; provisional reduced to finalization-completeness; PR-B′ reveal race narrowed to Pick'em.** |
 | r20 | 3 | PR-0 must server-enforce `WEEKLY` (a manager save omits `lockMode` → reverts to per-game); disallow overrides on S/M (Math.max/positive-only makes "move-earlier" unworkable); arm deep-sweep-with-writes as prerequisite for >24h finalize |
 | r21 | 3 | doc consistency — update morning takeover to the ruling; unconditional S/M override rejection; record r20 in this log |
+| r22 | 4 | gate S/M no-pick penalty on `effectiveWeekLockAt` (active window precedes the lock); keep `gameLockClosed` in provisional completion (Pick'em overrides); sum-only watermark (count also stalls); unconditional override reject |
+| r23 | 3 | include a weekly-lock-passed bit in the fingerprint (else at-lock penalty waits for a game to finalize); migration must CLEAR existing overrides on S/M; backfill `publishedWeeks` for pre-rollout scored weeks |
+| r24 | 3 | move S/M lock-field write-lockdown into PR-0 (a client save reverts it before PR-B′); fence `nflFinalizeSweepJob` with the scoring lease; update this log through r24 |
 
 ## Verdict
 
-**21 rounds, 77 findings, 0 rejected** — all valid against source (each
+**24 rounds, 85 findings, 0 rejected** — all valid against source (each
 load-bearing claim verified against the cited files before absorbing, per
 CLAUDE.md). Rounds 1–11 found genuine defects in the core scoring/reveal/lifecycle
 design; 12–19 refined the flagged PR-B′ concurrency/authorization protocol and the
 >24h observation edge; then **Kevin's 2026-07-25 weekly-hard-lock ruling simplified
-the design** (all three pool types live-scorable, PR-0 added), and r20–21 hardened
-and reconciled that ruling across the docs. PR-B′'s concurrency contract carries
-into its own code review, where codex runs on a diff and can converge to clean.
+the design** (all three pool types live-scorable, PR-0 added), and r20–24 hardened
+and reconciled that ruling across the docs (penalty-at-lock timing, migration of
+existing pools, cold-start markers, and pulling the S/M write-lockdown forward into
+PR-0). PR-B′'s concurrency contract carries into its own code review, where codex
+runs on a diff and can converge to clean.
