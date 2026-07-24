@@ -112,8 +112,17 @@ extension can commit *after* the check but *before* the first chunked entry batc
 `extendWeekDeadline` **refuses (or waits) while a live lease is held** and bumps
 `lockRevision` when it does write; the scorer still re-validates the revision at
 its final publish and discards the pass on mismatch. The lease bounds the window
-and the revision check is the backstop. This interleaving must be tested. Same
-PR-B′ as the guard.
+and the revision check is the backstop. This interleaving must be tested.
+
+**The lease is also the mutex between scorers (codex r10).** It is not only an
+`extendWeekDeadline` blocker: **every** scoring path — a second `nflAutoScoreJob`
+invocation (a capped run that overruns the 10-min cadence, or a Scheduler retry),
+the reconciliation drain, and the manual `scoreNFLWeek` button — must **acquire the
+lease atomically and skip/wait while it is held**. Without that, two passes read
+the same stale fingerprint and write from independent entry snapshots; because the
+scorer **replaces whole `weeklyPoints`/`weeklyScores` maps**, the later commit
+silently loses the other's updates. The lease duration (with renewal if a pass can
+exceed it) must cover a full pass. Same PR-B′ as the guard.
 
 ### 3b. Never apply a missing-pick penalty while any pick is still open
 
@@ -175,6 +184,14 @@ export async function scoreNFLWeekInternal(
      missing-pick strike, no `-14`, **and** no survived/zero write for a
      still-pending selected game. Pick'em is naturally per-game (grades only
      eligible games, unmade pick = 0).
+     **Survivor auto-survive exemption must be evaluated on the FULL slate, not
+     the lock-closed subset** (codex r10): `computeSurvivorWeekUpdate` runs
+     `checkAutoSurviveExemption` before grading, and a subset in which the entry
+     has used every team would grant a false exemption (keeping a losing pick
+     ALIVE) when an unused team still plays a later, unclosed game. So the
+     provisional survivor path cannot simply hand the filtered game list to the
+     existing helper — compute the exemption from the whole week (or defer
+     exemptions to the complete pass).
   2. **Reveal gate** — only games that are terminal AND `gameLockClosed(g)` are
      graded into standings (§3a). **Also recompute every per-week SUMMARY over
      that lock-closed set only** (codex r8): the inline scorer sets
@@ -358,9 +375,11 @@ scan): the sync paths **enqueue `(season, seasonType, week)`** into a small
 `corrections > 0` (a late restatement of an already-`FINAL` game), and (2) a game
 **first transitions to `FINAL`** — because a suspended/postponed game can finalize
 **more than 24h after kickoff**, dropping out of the live window, and
-`detectStatCorrections` only fires on games that were *already* `FINAL`, so a plain
-`SCHEDULED/IN_PROGRESS → FINAL` transition beyond the hot window would otherwise
-never be scored. Each `nflAutoScoreJob` run drains the queue as a second candidate
+`detectStatCorrections` only fires on games that were *already* `FINAL`, so **any
+nonterminal → terminal transition (`FINAL` *or* `CANCELLED`)** beyond the hot
+window would otherwise never be scored — a game postponed and later `CANCELLED`
+past 24h must enqueue too (codex r10), or its void, its deferred penalties, and the
+week's completion never run. Each `nflAutoScoreJob` run drains the queue as a second candidate
 source alongside the active window; a slate whose fingerprint is genuinely
 unchanged still costs only the skip check. This keeps the live path cheap and makes
 both late corrections and late finals self-healing.
