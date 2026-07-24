@@ -590,6 +590,14 @@ source alongside the active window; a slate whose fingerprint is genuinely
 unchanged still costs only the skip check. This keeps the live path cheap and makes
 both late corrections and late finals self-healing.
 
+**The drain must be lossless (codex r25).** A naive "read slate → process → delete
+marker" loses an event enqueued *between* the read and the delete — and outside the
+hot window nothing else would repair the stale standings. So the queue is either
+**append-only events** (each correction/transition is a distinct doc, acknowledged
+individually) or a **versioned queue document whose ack is conditional on the
+version read** (compare-and-clear in a transaction; a bump since the read aborts the
+clear). Test the enqueue-during-drain interleaving explicitly.
+
 Two more cases the queue must cover (codex r8):
 
 - **Override-pending slates near the 24h edge.** A commissioner can extend a lock
@@ -735,6 +743,14 @@ day to spare; defer C2 unless Kevin asks for live cross-member movement.
      route their settings edits through a server path that **forces `lockMode:
      'WEEKLY'`** and preserves it, independent of the client payload. (This is the
      lock-field slice of PR-B′'s broader server-only-fields work, pulled forward.)
+     The lockdown covers **`lockBufferMinutes` too, not just `lockMode` (codex
+     r25)**: a save that omits the buffer would revert it to the default 5 min (or a
+     direct write could set 5), recomputing `effectiveWeekLockAt` *later* and
+     reopening picks. And to stop even a legitimate mid-week buffer change from
+     moving an already-announced deadline, PR-0 **freezes each week's effective
+     deadline once established** — snapshot `effectiveWeekLockAt` to a per-week field
+     the first time the week's deadline is computed, and read the frozen value
+     thereafter so a later settings edit cannot shift a live week's lock.
    - **Disallow `weekLockOverride` for weekly-locked S/M entirely (codex r20).** The
      deadline is set once via the buffer preset and is *hard*; there is no per-week
      extension. This sidesteps the fact that `extendWeekDeadline` only accepts
