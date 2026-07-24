@@ -127,25 +127,31 @@ rebuild is a separate, older debt.)
 
 1. Open a terminal in the **main checkout**: `D:\march-melee-pools`
    (not a worktree).
-2. Pull:
-   ```bash
-   git checkout main && git pull
+   ⚠️ **Your terminal is Windows PowerShell 5.x — `&&` is a syntax error there**
+   (`The token '&&' is not a valid statement separator`). Every command below is
+   ONE line, run separately; do not chain them.
+2. Pull — two commands, run in order:
+   ```powershell
+   git checkout main
+   ```
+   ```powershell
+   git pull
    ```
    Confirm the top commit is the #262 squash-merge.
 3. Install functions deps — **`ci`, not `install`** (`install` rewrites the
    lockfile and dirties the tree that `firebase deploy` packages):
-   ```bash
+   ```powershell
    npm --prefix functions ci
    ```
 4. Confirm the tree is clean — expect **no output**:
-   ```bash
+   ```powershell
    git status --short
    ```
    If anything appears, stop and tell me.
 5. Deploy — **bare `--only functions`**, never a comma-separated list.
    `--only functions:a,b,c` deploys only `a` and silently drops the rest, then
    prints `✔ Deploy complete!` (PICKUP §1):
-   ```bash
+   ```powershell
    npx firebase deploy --only functions --project gridiron-gamble-uzuqo
    ```
    **The `--project` flag is not optional.** `.firebaserc` is not tracked in
