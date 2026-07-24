@@ -69,8 +69,12 @@ game's pick window cannot surface that game's outcome before the deadline.
 `standings/current`, a later extension cannot retract what members already saw —
 the reveal guarantee would fail retroactively. So `extendWeekDeadline` **must
 reject an extension for a week whose results the auto-scorer has already
-published** (e.g. `standings.current.lastScoredWeek >= week`, or a per-week
-`publishedAt` marker the scorer stamps). This is a small guard on a *different*
+published**, read from the **immutable per-week marker `pool.publishedWeeks.{week}`**
+(§4, stamped set-once on first reveal). It must **not** use
+`standings.current.lastScoredWeek` (codex r5): that field is overwritten every
+pass (nflPools.ts:986), so a late Week-1 correction resets it to `1` and a
+`lastScoredWeek >= week` check would then wrongly permit a Week-2 extension even
+though Week 2 was already revealed. This is a small guard on a *different*
 function; it ships as its own PR alongside PR-B (it touches authorization-adjacent
 lifecycle, so classify it against the plan gate). Note poolExceptions.ts:101
 already records that honoring the override in `nflPools.ts` is an unfinished
@@ -139,6 +143,17 @@ export async function scoreNFLWeekInternal(
      `scoredWeeks` + terminal status, **not** effective locks. It still writes
      the reveal-safe `standings/current` (that is the whole point — live
      standings).
+  4. **No weekly-recap creation, no `SCORE_FINALIZED` audit** (codex r5). The
+     inline scorer unconditionally creates `weekly_recaps/week_{week}`, which
+     fires `onWeeklyRecapCreated` → AI trash-talk generated from *incomplete*
+     standings; and because the authoritative pass only *updates* that existing
+     doc, the create trigger would never refire on complete data. A provisional
+     pass must skip recap creation and the "scoring concluded" audit; the
+     complete pass creates the recap once, from final standings.
+  5. **Stamp the per-week publication marker** — set-once
+     `pool.publishedWeeks.{week} = true` the first time this pass reveals any
+     lock-closed result for the week (never cleared). This is the durable
+     evidence the `extendWeekDeadline` guard reads (§3a).
   The live scorer (§5) sets `provisional = NOT (every week game terminal AND
   now >= max effectiveGameLockAt over the full slate)`. When it clears, the run
   is the authoritative complete pass (penalties applied, markers written,
@@ -190,13 +205,20 @@ Run body:
      missing-field docs** — so that query would exclude every brand-new pool and
      its first game would never score. Query on `(type, season, seasonType)`
      equality only.
-   - The in-memory post-filter excludes **only fully-finalized pools
-     (`isFinal === true`)** (codex r4). It must **not** filter on
-     `scoredWeeks.{week}`: the scorer writes that marker on *every* pass including
-     the first partial-game pass, so filtering on it would drop the pool after one
-     game and block all later games. The **fingerprint (step 5) is the sole
-     decider** of whether an unfinalized pool needs another pass. (A finalized
-     pool with a late correction re-enters only via the reconciliation queue, §5b.)
+   - The in-memory post-filter excludes pools in any **terminal lifecycle state**,
+     derived canonically — not from a single field (codex r4/r5). `isFinal` alone
+     is insufficient: `cancelPool` sets `status: "CANCELED"` **without** `isFinal`
+     (poolExceptions.ts), and admin-close sets `CLOSED`; scoring a voided pool
+     would write entry scores, standings, recaps and audit events for it. Exclude
+     `FINAL` / `CANCELED` / `CLOSED` (use the shared lifecycle derivation the rest
+     of the app uses, `shared/editability.ts` `normalizePhase`, rather than
+     re-implementing the status vocab).
+   - It must **not** filter on `scoredWeeks.{week}`: the scorer writes that marker
+     on *every* pass including the first partial-game pass, so filtering on it
+     would drop the pool after one game and block all later games. The
+     **fingerprint (step 5) is the sole decider** of whether a still-active pool
+     needs another pass. (A finalized pool with a late correction re-enters only
+     via the reconciliation queue, §5b.)
    **Any NEW composite index must be deployed AND built BEFORE this code ships**
    (the #219/#223 silent `FAILED_PRECONDITION` lesson). The scored `week` is the
    live slot's week, passed to `scoreNFLWeekInternal` — not read from the pool.
@@ -250,10 +272,23 @@ that `(season, seasonType, week)`** (a small `nfl_rescore_queue` marker doc, or 
 `system` field). Each `nflAutoScoreJob` run drains the queue as a second candidate
 source alongside the active window; a slate whose fingerprint is genuinely
 unchanged still costs only the skip check. This keeps the live path cheap and
-makes a late correction self-healing. **For the pilot** this tier may ship as a
-distinct follow-up sub-PR (the LIVE tier is the real-time requirement); until it
-exists, a late correction is reconciled by Kevin re-scoring manually — state that
-in the arming notes rather than leaving it silent.
+makes a late correction self-healing.
+
+**Correcting week N must re-derive weeks N..latest (codex r5).** A Survivor
+correction cannot rescore only week N: `computeSurvivorWeekUpdate` retains later
+strike weeks but re-stamps `eliminatedWeek` to the corrected week whenever the
+entry is still eliminated — so a harmless Week-1 restatement for an entry actually
+eliminated in Week 3 would relabel its final rank as a Week-1 elimination. The
+reconciliation rescore must therefore replay **every scored week from the
+corrected week through the latest scored week** (`scoredWeeks` gives the set), in
+order, so downstream elimination ordering is re-derived rather than corrupted.
+(Pick'em and Margin are per-week additive and do not need the forward replay, but
+replaying them is harmless and keeps one code path.)
+
+**For the pilot** this tier may ship as a distinct follow-up sub-PR (the LIVE tier
+is the real-time requirement); until it exists, a late correction is reconciled by
+Kevin re-scoring manually — state that in the arming notes rather than leaving it
+silent.
 
 **Idempotent + kill-switched + dry-run-first**, exactly like the deep sweep:
 Kevin arms `{ enabled: true, dryRun: true }`, watches the audit/heartbeat detail
