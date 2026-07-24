@@ -448,3 +448,174 @@ The honest summary: what looked like a one-line filter is a marker scheme, a
 production remediation, a pot-calculation change, a selection-rule change and a
 frontend fix — with three decisions that are Kevin's to make. That is why
 nothing was built overnight.
+
+---
+
+## 8. APPROVAL-READY PLAN (2026-07-24) — supersedes §4 and §4b
+
+Kevin answered Q2/Q3/Q4 on 2026-07-23 night. Those answers **revise yesterday's
+Q6 date-cutoff decision**, so this section replaces the §4b plan. Read this one.
+
+### 8.0 The reconciliation that changes the approach — READ FIRST
+
+Yesterday (Q6) we chose a **creation-date cutoff of 2026-09-09**: count only
+pools created on/after NFL Week 1, on the theory that everything earlier was
+Kevin's preseason testing.
+
+**Q4 breaks that.** Kevin: *"Total users/total pools should remain as is. Not
+gated by date. We have users and pools from the NFL playoffs and March Madness
+that should be included."* Those real pools were created **January and March
+2026** — *before* the 2026-09-09 cutoff. A date cutoff would wrongly delete them.
+
+**So the date cutoff is the wrong tool.** What Kevin wants is consistent across
+all three answers: **exclude TEST pools, include ALL real pools, all-time, and
+let the Stats tab filter by season.** The discriminator is "is this a test
+pool?", not "when was it created?".
+
+> ⚠️ **This is me changing a decision you made yesterday, because Q4 gave
+> information that wasn't on the table then. Your explicit sign-off on dropping
+> the date cutoff is the first thing I need.**
+
+### 8.1 The test-pool discriminator (replaces the date cutoff)
+
+A pool is a **test pool** (excluded from every stat) iff:
+
+1. `isSimPool(pool, id)` — `simRunId`, `sim-` season prefix, or `sim-` id prefix
+   (`functions/src/nflFinalize.ts:228`, already exists), **OR**
+2. it is an NFL season pool with **`seasonType == 1` (preseason)** — Kevin:
+   *"Preseason games are for my testing only, not a real season pool."*
+   `seasonType` is on the pool doc, so this needs no backfill.
+
+Everything else is **real** and counts, regardless of creation date — NFL
+playoffs (`NFL_PLAYOFFS`), March Madness (`BRACKET`), regular-season NFL
+(`seasonType == 2`), Squares, Props.
+
+This lives as ONE shared predicate `isTestPool(pool, id)` in `shared/` so client
+(`liveStats`) and server (`stats/global` writers) cannot drift — the exact split
+codex flagged in §2.4.
+
+### 8.2 The gap this leaves, and why step 0 is a CENSUS (Kevin-run, read-only)
+
+§2.6 found that legacy Squares/Props/Playoff **test runners** create pools
+through the normal path with **no marker** and non-preseason types — so the
+discriminator above would NOT catch them. Whether any such pools exist **in
+production** (vs only in the emulator) is unknown from here and cannot be
+guessed.
+
+**Step 0 — census (Kevin, read-only, no mutation).** Run the read-only
+firestore-census (see `mmp-diagnostics-and-tooling`) to enumerate every pool by
+`type`, `seasonType`, `simRunId`, `createdAt`, `isLocked`, `scoredThroughWeek`.
+This answers, with data instead of assumption:
+- Do unmarked legacy test pools exist in prod? If none, the discriminator is
+  complete and step 0b is deleted.
+- How many preseason (`seasonType == 1`) pools exist, and are they all yours?
+- Are there real pre-2026-09-09 pools (confirming Q4)?
+
+**Step 0b (only if the census finds unmarked test pools).** Tag them with an
+explicit `isTestPool: true` field — a small, reviewed, dry-run-first prod
+mutation. If the census is clean, this never happens.
+
+Everything below assumes the census either finds nothing or step 0b has tagged
+what it found.
+
+### 8.3 The money-correctness fixes (unchanged by Q2/Q3/Q4 — still required)
+
+These are defects independent of the test-pool question; the numbers are wrong
+until they land. All verified in code during earlier review rounds.
+
+- **Step 1 — `calculatePoolPot` for NFL season AND Props pools
+  (functions, `statsTrigger.ts`).** Today NFL_PICKEM/SURVIVOR/MARGIN and PROPS
+  fall through to the squares branch and evaluate to **0** (§2.5, and codex R3
+  finding (j) for PROPS). Route them to entry-fee / props-cost calculations, and
+  read paid state from **Member Records** (`pools/{id}/members/{uid}.paidStatus`),
+  NOT entry docs, which keep `UNPAID` forever (§2.8).
+
+- **Step 2 — recompute selection + an incremental writer
+  (functions, `statsTrigger.ts`).** `recalculateGlobalStats` selects
+  `isLocked == true`; NFL pools are `isLocked: false` (§2.7), so change the
+  selector to include NFL pools via **`scoredThroughWeek >= 1`** (Kevin's Q5).
+  Separately, `onPoolLocked` never fires for NFL pools, so `stats/global` would
+  be correct once and then rot (codex R3 finding (h)) — add **either** a writer
+  on the `scoredThroughWeek` 0→≥1 transition **or** a scheduled recompute. This
+  plan proposes a **daily scheduled recompute** (simpler, kill-switch + dry-run
+  house pattern, no new trigger surface).
+
+- **Step 3 — apply `isTestPool` in BOTH `stats/global` writers AND in
+  `liveStats`.** The Overview cards read `liveStats` client-side (§2.4), so the
+  filter must land there too, computed from Member-Records paid state — codex R3
+  finding (i): filtering pools alone leaves the Overview inflated because it uses
+  `entryFee × head count` (`SuperAdmin.tsx:348-353`). Best fix: have the Overview
+  consume the corrected backend aggregate rather than recomputing.
+
+### 8.4 The display + scoping answers (Q2, Q4)
+
+- **Step 4 — Stats tab: all-time, filterable by season/sport/type
+  (frontend, `AdminStatsDashboard.tsx`).** Q2: *"All time totals but filtered by
+  season."* Keep `stats/global` as the flat all-time headline (no season
+  dimension on the public doc). The **Stats tab** reduces over real pools
+  client-side (as `liveStats` already does) with filter controls: season, sport,
+  pool type. All-time is the default; filters narrow it. This is item 3 and stays
+  last — filtering wrong numbers faster is not progress, so it follows steps 1–3.
+
+- **totalUsers / totalPools (Q4): exclude test pools, NO date gate.** Include all
+  real historical pools/users (playoffs, March Madness). This is just
+  `isTestPool` applied to the count — not the date cutoff. Needs a Coolify
+  rebuild (frontend).
+
+### 8.5 Q3 — profile visibility toggle (NEW feature, own sub-plan)
+
+Q3: *"stats/global stays world-readable, but allow the user to Hide them (switch
+Public → Private)."* Interpreting this against the code: `stats/global` is a
+site-wide aggregate no single user owns, but the **public player profile**
+(`/profile/:uid`, backed by `publicProfiles/{uid}`, `firestore.rules:38
+allow read: if true`) IS per-user and is exactly the thing a user would want to
+hide. So:
+
+- `stats/global` stays world-readable — **no rules change** (Q3 first clause).
+- **New:** a per-user **profile visibility** control. Add
+  `visibility: 'PUBLIC' | 'PRIVATE'` (default `PUBLIC`) to the user doc; the
+  `recomputeUserProfile` projection (`userProfile.ts:76`) writes it onto
+  `publicProfiles/{uid}`; a private profile's projection is withheld or reduced
+  to a name-only stub; the `/profile/:uid` route shows a "this profile is
+  private" state; `firestore.rules` on `publicProfiles/{uid}` gates a private
+  doc to owner + SUPER_ADMIN. A toggle lands on the profile-edit surface.
+
+> ⚠️ **INTERPRETATION FLAG.** I read Q3's "the user hides them" as **profile
+> visibility**, because a single user cannot hide the site-wide `stats/global`.
+> If you actually meant a **SUPER_ADMIN toggle to make the whole public stats
+> display private site-wide**, that is a different (smaller) build — say which.
+
+### 8.6 Proposed sequencing (one PR at a time, per §2d cadence)
+
+| PR | Scope | Gate | Kevin needed |
+|---|---|---|---|
+| — | **Step 0 census** | read-only | **runs it** (creds) |
+| A | `isTestPool` shared predicate + unit tests | plan-gated (money) | review |
+| B | Step 1 — `calculatePoolPot` NFL+Props from Member Records | plan-gated | review |
+| C | Step 2 — recompute selection + scheduled recompute | plan-gated | review |
+| D | Step 3 — apply filter server + Overview | plan-gated | **Coolify rebuild** |
+| E | Step 4 — Stats tab filters | frontend | **Coolify rebuild** |
+| F | Q3 — profile visibility toggle | plan-gated (world-readable) | **Coolify rebuild** |
+| — | **Recalculate Global Stats** (after A–D) | prod-data | **runs it** |
+
+Order matters: the recalculate (last) must run only after A–D are deployed, or
+it overwrites `stats/global` with NFL volume of zero (§2.7 / the §4 step-order
+lesson).
+
+### 8.7 What I need from you at the top of the morning
+
+1. **Sign off on dropping the 2026-09-09 date cutoff** in favor of the
+   `isTestPool` discriminator (§8.0). This reverses yesterday's Q6.
+2. **Confirm the Q3 interpretation** — profile visibility, not a site-wide admin
+   toggle (§8.5).
+3. **Run the census** (§8.2) so the discriminator is validated against real prod
+   data before any code ships.
+
+With those three, I build A→F one at a time, each codex-reviewed, and hand you
+the recalculate + Coolify triggers at the right points.
+
+### 8.8 Review log (this section)
+
+| Round | Reviewer | Findings |
+|---|---|---|
+| — | — | pending `codex exec review` on this §8 |
