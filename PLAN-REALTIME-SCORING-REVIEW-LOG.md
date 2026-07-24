@@ -33,14 +33,17 @@ cross-model gate (CLAUDE.md §2c). qodo is billing-blocked (§2b) and did not ru
 | r17 | 3 | in-transaction lease validation; per-entry (not pool-wide) watermark; enqueue-reason so delayed Survivor finals score |
 | r18 | 4 | export from `index.ts`; lease owner+unexpired+revision in-txn; monotone watermark (not `max`); durable >24h finalize observation |
 | r19 | 2 | fix leftover `max` aggregate; ESPN re-fetch for >24h finalize (a Firestore query alone can't observe it) |
+| — | — | **Kevin ruling 2026-07-25: Survivor + Margin weekly hard lock (60/30/5). Design simplified — all 3 types live-scorable; PR-0 added; provisional reduced to finalization-completeness; PR-B′ reveal race narrowed to Pick'em.** |
+| r20 | 3 | PR-0 must server-enforce `WEEKLY` (a manager save omits `lockMode` → reverts to per-game); disallow overrides on S/M (Math.max/positive-only makes "move-earlier" unworkable); arm deep-sweep-with-writes as prerequisite for >24h finalize |
+| r21 | 3 | doc consistency — update morning takeover to the ruling; unconditional S/M override rejection; record r20 in this log |
 
 ## Verdict
 
-Zero findings rejected — all 72 were valid against source (each load-bearing claim
-verified against the cited files before absorbing, per CLAUDE.md). Rounds 1–11
-found genuine defects in the core scoring/reveal/lifecycle design; rounds 12–19
-refined the single flagged PR-B′ concurrency/authorization protocol and the >24h
-observation edge. The loop was stopped deliberately after r19 on the evidence that
-the core design is settled and the residual is implementation-level specification
-of a flagged sub-PR — see plan §9. PR-B′'s concurrency contract carries into its
-own code review, where codex runs on a diff and can converge to clean.
+**21 rounds, 77 findings, 0 rejected** — all valid against source (each
+load-bearing claim verified against the cited files before absorbing, per
+CLAUDE.md). Rounds 1–11 found genuine defects in the core scoring/reveal/lifecycle
+design; 12–19 refined the flagged PR-B′ concurrency/authorization protocol and the
+>24h observation edge; then **Kevin's 2026-07-25 weekly-hard-lock ruling simplified
+the design** (all three pool types live-scorable, PR-0 added), and r20–21 hardened
+and reconciled that ruling across the docs. PR-B′'s concurrency contract carries
+into its own code review, where codex runs on a diff and can converge to clean.

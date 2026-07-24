@@ -634,8 +634,10 @@ each guard fails when removed — PICKUP §1):
   (`WEEK_LOCKED`); standings move as games finish, not only at week-complete;
 - a **weekly-locked Margin** pool likewise: no-pick booked `-14` after lock,
   made-pick graded live as its game finalizes;
-- **PR-0 guards**: Survivor/Margin default to `WEEKLY`; a `weekLockOverride` that
-  would push the deadline *past* first kickoff is rejected for those types;
+- **PR-0 guards**: Survivor/Margin default to `WEEKLY` and a plain manager
+  settings save cannot revert it (server-forced); **every** `weekLockOverride` /
+  `extendWeekDeadline` on a Survivor/Margin pool is rejected **unconditionally**
+  (not just ones crossing first kickoff — the deadline is set-once, codex r21);
 - provisional passes still withhold finalization markers / `finalizedAt` / recap
   until the week is fully terminal (they gate completeness, not penalties);
 - a second run with an unchanged terminal fingerprint writes nothing;
@@ -746,11 +748,15 @@ unscored; note it in the arming checklist, don't leave it implicit.
   own); the >24h stale-slate observation (§3a crit. 6) reuses the deep sweep.
 - No prod-data mutation and no deploy by Claude (Kevin's gates).
 
-## 9. Codex review status — 19 rounds, converged on the plan's altitude
+## 9. Codex review status — 21 rounds, converged on the plan's altitude
 
-This plan was adversarially reviewed by `codex exec review` across **19 rounds**;
-every finding was absorbed with written evidence in the git history
-(`docs(plan): absorb codex r1..r19`). The trajectory is the record:
+This plan was adversarially reviewed by `codex exec review` across **21 rounds** (77
+findings, 0 rejected); every finding was absorbed with written evidence in the git
+history (`docs(plan): absorb codex r1..r21`). **Kevin's 2026-07-25 weekly-hard-lock
+ruling** (§3b) landed between r19 and r20 and *simplified* the design — all three
+pool types live-scorable, PR-0 added, the provisional flag reduced to finalization
+completeness, and PR-B′'s reveal-race machinery narrowed to Pick'em only. The
+trajectory is the record:
 
 - **Rounds 1–11 found genuine design defects** in the core scoring path and fixed
   them — candidate selection excluding new/omitted-`seasonType` pools, mid-week
