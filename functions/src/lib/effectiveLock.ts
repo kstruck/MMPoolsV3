@@ -64,6 +64,30 @@ export function weekLockDecision(
  * lock checks passed, the first submission *after* a deadline would throw before
  * recording anything, leaving no freeze to defend against a later buffer change.
  */
+/**
+ * Establish (and return) the hard deadline for a pool+week, doing nothing for
+ * pools that do not use the hard lock.
+ *
+ * Skips the transaction entirely when the stored freeze is already at or earlier
+ * than the computed deadline — otherwise every 15-minute reminder pass would open
+ * a pointless transaction per pool, ~96 a day outside reminder windows.
+ */
+export async function ensureHardLockFreezeForPoolDoc(
+  poolRef: {
+    get: () => Promise<{ data: () => Record<string, unknown> | undefined }>;
+    update: (data: Record<string, unknown>) => Promise<unknown>;
+  },
+  runTransaction: never,
+  pool: { type?: string; settings?: LockSettings; hardLockByWeek?: Record<string | number, unknown> } | undefined,
+  week: number,
+  gameStartTimes: number[],
+): Promise<number | undefined> {
+  if (!usesWeeklyHardLock(pool?.type) || gameStartTimes.length === 0) return undefined;
+  const { lockAt, freezeTo } = weekLockDecision(pool, week, gameStartTimes);
+  if (freezeTo === undefined) return lockAt; // already frozen at or before this
+  return ensureHardLockFreeze(poolRef, runTransaction, week, lockAt);
+}
+
 export async function ensureHardLockFreeze(
   poolRef: {
     get: () => Promise<{ data: () => Record<string, unknown> | undefined }>;

@@ -11,7 +11,7 @@ import { sendCourierSMS } from "./notifications/smsService";
 import { getSquarePrivateMap, getSquareEmails } from "./squarePrivate";
 import { withHeartbeat } from "./lib/heartbeat";
 import { reminderPassVerdict } from "./lib/heartbeatVerdicts";
-import { effectiveLockSettings, usesWeeklyHardLock, resolveHardWeekLock, frozenHardLockFor, ensureHardLockFreeze } from "./lib/effectiveLock";
+import { effectiveLockSettings, usesWeeklyHardLock, resolveHardWeekLock, frozenHardLockFor, ensureHardLockFreezeForPoolDoc } from "./lib/effectiveLock";
 
 
 
@@ -857,10 +857,6 @@ export async function checkNFLNonPickerReminders(
     weekCache: WeekContextCache = newWeekContextCache(),
 ) {
     try {
-        // Off switch (default ON when the reminders config is absent — NFL pools
-        // predate per-pool reminder settings).
-        const reminders = (pool as unknown as { reminders?: { lock?: { enabled?: boolean } } }).reminders;
-        if (reminders?.lock?.enabled === false) return;
         if (!pool.season || pool.status === 'archived') return;
 
         // --- 1. Determine the current week ---
@@ -869,6 +865,29 @@ export async function checkNFLNonPickerReminders(
         const weekContext = await getWeekContext(db, pool.season, seasonType, now, weekCache);
         if (!weekContext) return;
         const { week, weekGames } = weekContext;
+
+        // The hard-lock freeze is established BEFORE the reminder off-switch on
+        // purpose: it is enforcement state, not a notification. Tying it to the
+        // reminders opt-out would mean a pool with reminders disabled never froze a
+        // deadline, and could then be reopened by widening the buffer after the fact.
+        try {
+            await ensureHardLockFreezeForPoolDoc(
+                db.collection('pools').doc(pool.id) as never,
+                db.runTransaction.bind(db) as never,
+                pool as { type?: string; settings?: { lockBufferMinutes?: number }; hardLockByWeek?: Record<string, unknown> },
+                week,
+                weekGames.map(g => g.startTime),
+            );
+        } catch (e) {
+            // Best-effort: a failed freeze must not stop reminders. submitNFLPicks and
+            // proxyPick freeze too, so this is one of several writers.
+            console.warn(`[runReminders] hard-lock freeze failed for pool ${pool.id} week ${week}:`, e);
+        }
+
+        // Off switch (default ON when the reminders config is absent — NFL pools
+        // predate per-pool reminder settings).
+        const reminders = (pool as unknown as { reminders?: { lock?: { enabled?: boolean } } }).reminders;
+        if (reminders?.lock?.enabled === false) return;
 
         // --- 2. Effective week lock (mirrors nflPools.ts submitNFLPicks) ---
         // effectiveLockSettings applies the Survivor/Margin hard weekly deadline
@@ -889,29 +908,12 @@ export async function checkNFLNonPickerReminders(
         // pass runs every 15 minutes and sees the week ~36h out, so it normally
         // freezes the deadline long before it arrives — which is what stops a late
         // buffer widening from reopening a week that has already closed.
+        // The freeze was established above (before the reminders off-switch); fold it
+        // in so the "last call" email quotes the deadline the server enforces.
         const poolType = (pool as unknown as { type?: string }).type;
-        const hardLock = usesWeeklyHardLock(poolType);
-        let effectiveLock = rawLock;
-        if (hardLock) {
-          const frozen = frozenHardLockFor(pool as { hardLockByWeek?: Record<string, unknown> }, week);
-          effectiveLock = resolveHardWeekLock(frozen, rawLock);
-          try {
-            // Via a transaction, never a blind write: this pass works from a
-            // run-wide snapshot, so a stale later value could otherwise overwrite an
-            // earlier freeze a concurrent submission had just stored — reopening the
-            // week the freeze exists to close.
-            effectiveLock = await ensureHardLockFreeze(
-              db.collection('pools').doc(pool.id) as never,
-              db.runTransaction.bind(db) as never,
-              week,
-              rawLock,
-            );
-          } catch (e) {
-            // Best-effort: a failed freeze must not stop reminders going out. The
-            // submit path freezes too, so this is belt-and-braces.
-            console.warn(`[runReminders] hard-lock freeze failed for pool ${pool.id} week ${week}:`, e);
-          }
-        }
+        const effectiveLock = usesWeeklyHardLock(poolType)
+          ? resolveHardWeekLock(frozenHardLockFor(pool as { hardLockByWeek?: Record<string, unknown> }, week), rawLock)
+          : rawLock;
 
         // --- 3. Send windows: bail fast before touching entries ---
         const hoursUntilLock = (effectiveLock - now) / (1000 * 60 * 60);
