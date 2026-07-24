@@ -15,6 +15,7 @@ import {
     cancelPoolSchema,
     closePoolSchema,
 } from "./schemas/poolExceptions";
+import { usesWeeklyHardLock, normalizeLockBufferMinutes } from "./lib/effectiveLock";
 
 // Commissioner exception tools (UX overhaul Phase 3.6).
 // Real seasons have exceptions — a member in the hospital, a mis-set deadline,
@@ -112,6 +113,19 @@ export const extendWeekDeadline = validated(
 
     const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth!.token.role as string | undefined);
 
+    // Survivor/Margin run a HARD weekly deadline before the first kickoff (Kevin's
+    // ruling 2026-07-25). An extension there could push the deadline past a game
+    // that has already been played, so the pick could be changed with the result
+    // known — and those are the pool types scored live game-by-game. The deadline is
+    // set once, via the lock-buffer preset. Refused outright rather than clamped, so
+    // the commissioner gets a clear answer instead of a silently ignored extension.
+    if (usesWeeklyHardLock(pool.type)) {
+        throw new HttpsError(
+            "failed-precondition",
+            "HARD_WEEKLY_LOCK: Survivor and Margin pools use a fixed weekly deadline before the first kickoff and cannot be extended. Change the pool's pick deadline setting instead (it applies from the next unlocked week).",
+        );
+    }
+
     const games = await loadWeekGames(db, pool, weekNum);
     const lockBufferMs = (pool.settings?.lockBufferMinutes ?? 5) * 60 * 1000;
     const earliestGameTime = Math.min(...games.map((g) => g.startTime));
@@ -183,13 +197,20 @@ export const proxyPick = validated(
 
     const games = await loadWeekGames(db, pool, weekNum);
     const now = Date.now();
-    const lockBufferMs = (pool.settings?.lockBufferMinutes ?? 5) * 60 * 1000;
+    // Hard-lock types (Survivor/Margin) snap the buffer to an allowed preset and
+    // ignore overrides entirely — see effectiveLock.effectiveLockSettings.
+    const hardLock = usesWeeklyHardLock(type);
+    const lockBufferMs = (hardLock
+        ? normalizeLockBufferMinutes(pool.settings?.lockBufferMinutes)
+        : (pool.settings?.lockBufferMinutes ?? 5)) * 60 * 1000;
     const earliestGameTime = Math.min(...games.map((g) => g.startTime));
 
     // Deadline override: if the commissioner extended this week, locks are
-    // measured against the override instead of kickoff - buffer.
-    const rawOverride = pool.settings?.weekLockOverrides?.[weekNum]
-        ?? pool.settings?.weekLockOverrides?.[String(weekNum)];
+    // measured against the override instead of kickoff - buffer. NEVER for
+    // hard-lock pools: an override there could push the deadline past a kickoff
+    // that already happened, letting a proxy pick land on a known result.
+    const rawOverride = hardLock ? undefined : (pool.settings?.weekLockOverrides?.[weekNum]
+        ?? pool.settings?.weekLockOverrides?.[String(weekNum)]);
     const override = typeof rawOverride === "number" ? rawOverride : undefined;
 
     const weekLockAt = override ?? (earliestGameTime - lockBufferMs);
@@ -280,8 +301,10 @@ export const proxyPick = validated(
                 throw new HttpsError("invalid-argument", `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in week ${weekNum}.`);
             }
 
-            // Lock checks (respecting the override).
-            const isWeeklyLock = pool.settings?.lockMode === "WEEKLY";
+            // Lock checks (respecting the override — which hardLock types never have).
+            // Weekly lock is derived from the pool TYPE for Survivor/Margin so a
+            // settings write cannot downgrade it to per-game.
+            const isWeeklyLock = hardLock || pool.settings?.lockMode === "WEEKLY";
             if (isWeeklyLock && weekLocked) {
                 throw new HttpsError("failed-precondition", "WEEK_LOCKED: This week is locked. Extend the deadline first if an exception is warranted.");
             }

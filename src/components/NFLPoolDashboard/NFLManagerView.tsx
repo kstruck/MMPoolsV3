@@ -12,6 +12,7 @@ import { NFLManagerBentoDashboard } from './NFLManagerBentoDashboard';
 import { RecordPayoutsCard } from './RecordPayoutsCard';
 import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
+import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
 
 interface NFLManagerViewProps {
   pool: Pool;
@@ -67,7 +68,15 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // Pick'em-specific
   const [confidenceMode, setConfidenceMode] = useState<boolean>(settings.confidenceMode ?? false);
   const [lockMode, setLockMode] = useState<'PER_GAME' | 'WEEKLY'>(settings.lockMode ?? 'PER_GAME');
-  const [lockBufferMinutes, setLockBufferMinutes] = useState<number>(settings.lockBufferMinutes ?? 5);
+  // Survivor/Margin use a hard weekly deadline whose only knob is this buffer, and
+  // the server snaps it to {60,30,5} — so show a legacy value (e.g. 10) as the
+  // preset the server would actually apply rather than a value the picker cannot
+  // represent.
+  const [lockBufferMinutes, setLockBufferMinutes] = useState<number>(
+    usesWeeklyHardLock(pool.type)
+      ? normalizeLockBufferMinutes(settings.lockBufferMinutes)
+      : (settings.lockBufferMinutes ?? 5)
+  );
   const [payoutMode, setPayoutMode] = useState<string>(settings.payoutMode ?? 'SEASON');
   const [pointsPerPick, setPointsPerPick] = useState<number>(settings.pointsPerPick ?? 1);
   const [thursdayBonus, setThursdayBonus] = useState<number>(settings.primetimeBonus?.thursday ?? 0);
@@ -265,9 +274,14 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           rebuyDeadlineWeek,
           rebuyCost,
           pickLosersMode,
+          // Survivor/Margin run a HARD weekly deadline before the first kickoff;
+          // the buffer is the only knob. The server derives the weekly lock from
+          // the pool type and re-snaps this to an allowed preset, so omitting or
+          // tampering with it cannot move the deadline to/past kickoff.
+          lockBufferMinutes,
         };
       } else if (type === 'NFL_MARGIN') {
-        updatedSettings = { ...updatedSettings, payoutMode: marginPayoutMode };
+        updatedSettings = { ...updatedSettings, payoutMode: marginPayoutMode, lockBufferMinutes };
       }
 
       await dbService.updatePool(pool.id, {
@@ -719,6 +733,27 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           )}
 
           {/* ── Survivor Rules ── */}
+          {(type === 'NFL_SURVIVOR' || type === 'NFL_MARGIN') && (
+            <div className="space-y-4">
+              <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted border-b border-line pb-2">Pick Deadline</p>
+              <div>
+                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Weekly Deadline</label>
+                <select
+                  value={lockBufferMinutes}
+                  onChange={e => setLockBufferMinutes(parseInt(e.target.value))}
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                >
+                  <option value={60}>1 hour before the first kickoff</option>
+                  <option value={30}>30 minutes before the first kickoff</option>
+                  <option value={5}>5 minutes before the first kickoff</option>
+                </select>
+                <p className="font-body text-[10px] text-faint mt-1">
+                  All picks for the week lock at this deadline — before any game starts — and cannot be changed afterward.
+                </p>
+              </div>
+            </div>
+          )}
+
           {type === 'NFL_SURVIVOR' && (
             <div className="space-y-4">
               <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted border-b border-line pb-2">Survivor Rules</p>

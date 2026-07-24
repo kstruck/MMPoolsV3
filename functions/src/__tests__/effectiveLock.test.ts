@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { effectiveGameLockAt, effectiveWeekLockAt, isGameLocked } from '../lib/effectiveLock';
+import {
+  effectiveGameLockAt,
+  effectiveWeekLockAt,
+  isGameLocked,
+  usesWeeklyHardLock,
+  normalizeLockBufferMinutes,
+  effectiveLockSettings,
+  LOCK_BUFFER_PRESETS,
+} from '../lib/effectiveLock';
 
 const MIN = 60_000;
 const kickoff = 1_800_000_000_000;
@@ -36,5 +44,80 @@ describe('isGameLocked', () => {
     const lock = kickoff - 5 * MIN;
     expect(isGameLocked(lock - 1, kickoff, 1, {})).toBe(false);
     expect(isGameLocked(lock, kickoff, 1, {})).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Weekly HARD lock — Survivor + Margin (Kevin's ruling 2026-07-25)
+// ---------------------------------------------------------------------------
+
+describe('usesWeeklyHardLock', () => {
+  it('is true for Survivor and Margin, false for Pick\'em and anything else', () => {
+    expect(usesWeeklyHardLock('NFL_SURVIVOR')).toBe(true);
+    expect(usesWeeklyHardLock('NFL_MARGIN')).toBe(true);
+    expect(usesWeeklyHardLock('NFL_PICKEM')).toBe(false);
+    expect(usesWeeklyHardLock('SQUARES')).toBe(false);
+    expect(usesWeeklyHardLock(undefined)).toBe(false);
+  });
+});
+
+describe('normalizeLockBufferMinutes', () => {
+  it('keeps the allowed presets', () => {
+    for (const preset of LOCK_BUFFER_PRESETS) {
+      expect(normalizeLockBufferMinutes(preset)).toBe(preset);
+    }
+  });
+
+  it('snaps anything else to the 5-minute default', () => {
+    // 0 would put the deadline AT kickoff and a negative one AFTER it — the two
+    // values that would break "the deadline is before the first game".
+    expect(normalizeLockBufferMinutes(0)).toBe(5);
+    expect(normalizeLockBufferMinutes(-90)).toBe(5);
+    expect(normalizeLockBufferMinutes(15)).toBe(5);
+    expect(normalizeLockBufferMinutes(undefined)).toBe(5);
+    expect(normalizeLockBufferMinutes('60')).toBe(5);
+    expect(normalizeLockBufferMinutes(null)).toBe(5);
+  });
+});
+
+describe('effectiveLockSettings', () => {
+  it('passes Pick\'em settings through untouched (extensions still work)', () => {
+    const settings = { lockBufferMinutes: 15, weekLockOverrides: { 1: kickoff + 60 * MIN } };
+    expect(effectiveLockSettings(settings, 'NFL_PICKEM')).toEqual(settings);
+  });
+
+  it('drops overrides for hard-lock pools so the deadline cannot move past kickoff', () => {
+    const later = kickoff + 60 * MIN;
+    const settings = { lockBufferMinutes: 60, weekLockOverrides: { 1: later } };
+    const survivor = effectiveLockSettings(settings, 'NFL_SURVIVOR');
+    expect(survivor.weekLockOverrides).toBeUndefined();
+    expect(effectiveWeekLockAt([kickoff], 1, survivor)).toBe(kickoff - 60 * MIN);
+    // ...and the un-normalized settings would have pushed it PAST kickoff:
+    expect(effectiveWeekLockAt([kickoff], 1, settings)).toBe(later);
+  });
+
+  it('snaps an out-of-range buffer for hard-lock pools', () => {
+    const margin = effectiveLockSettings({ lockBufferMinutes: 0 }, 'NFL_MARGIN');
+    expect(margin.lockBufferMinutes).toBe(5);
+    expect(effectiveWeekLockAt([kickoff], 1, margin)).toBe(kickoff - 5 * MIN);
+  });
+
+  it('the hard deadline is ALWAYS before the first kickoff, for every input', () => {
+    // The invariant the whole ruling exists to guarantee: picks close before any
+    // game of the week starts, so a weekly pick can never change once a game has
+    // been played. Exercised against inputs that defeat the raw settings path.
+    const hostile = [
+      { lockBufferMinutes: 0 },
+      { lockBufferMinutes: -120 },
+      { lockBufferMinutes: undefined },
+      { weekLockOverrides: { 1: kickoff + 5 * 3600_000 } },
+      { lockBufferMinutes: 60, weekLockOverrides: { 1: kickoff + MIN } },
+    ];
+    for (const type of ['NFL_SURVIVOR', 'NFL_MARGIN']) {
+      for (const settings of hostile) {
+        const lockAt = effectiveWeekLockAt([kickoff, kickoff + 3600_000], 1, effectiveLockSettings(settings, type));
+        expect(lockAt).toBeLessThan(kickoff);
+      }
+    }
   });
 });

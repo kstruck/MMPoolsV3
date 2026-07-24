@@ -18,6 +18,7 @@ import { AICommissioner } from '../AICommissioner';
 import { useToast } from '../ui/Toast';
 import { Button } from '../ui';
 import { now as serverNow } from '../../utils/serverClock';
+import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
 import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
 
@@ -173,10 +174,17 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // Server-corrected clock — device time can drift and lie about the deadline.
   const isWeekLocked = useMemo(() => {
     if (weeklyGames.length === 0) return false;
-    const bufferMs = (castPool.settings?.lockBufferMinutes ?? 5) * 60 * 1000;
+    // Survivor/Margin run a hard weekly deadline and the server snaps their buffer
+    // to an allowed preset — normalize here too, or the UI would disagree with the
+    // server on a legacy value (a stored 0 would show picks open past the deadline
+    // the server actually enforces).
+    const bufferMinutes = usesWeeklyHardLock(castPool.type)
+      ? normalizeLockBufferMinutes(castPool.settings?.lockBufferMinutes)
+      : (castPool.settings?.lockBufferMinutes ?? 5);
+    const bufferMs = bufferMinutes * 60 * 1000;
     const earliestKickoff = Math.min(...weeklyGames.map(g => g.startTime));
     return serverNow() >= (earliestKickoff - bufferMs);
-  }, [weeklyGames, castPool.settings?.lockBufferMinutes]);
+  }, [weeklyGames, castPool.settings?.lockBufferMinutes, castPool.type]);
 
   // Time remaining to earliest game this week
   const earliestGame = useMemo(() => {

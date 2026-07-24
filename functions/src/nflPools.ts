@@ -10,7 +10,7 @@ import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } 
 import { isPoolType, type PoolType } from "./shared/poolTypes";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
 import type { MemberRecord } from "./shared/memberRecord";
-import { effectiveWeekLockAt, isGameLocked as isGameLockedAt } from "./lib/effectiveLock";
+import { effectiveWeekLockAt, isGameLocked as isGameLockedAt, effectiveLockSettings, usesWeeklyHardLock } from "./lib/effectiveLock";
 import {
   validateCreateInput,
   assertNotBanned,
@@ -370,7 +370,13 @@ export async function submitNFLPicksInternal(
   // 2. Determine lock context — single source of truth (effectiveLock helper, ADR 0004).
   // Folds in lock buffer + per-game kickoff + commissioner week override; every per-game
   // check below uses isGameLockedAt so the override is always respected.
-  const effectiveWeekLock = effectiveWeekLockAt(games.map(g => g.startTime), week, pool.settings);
+  //
+  // effectiveLockSettings applies the Survivor/Margin HARD weekly deadline: it snaps
+  // the buffer to an allowed preset and drops weekLockOverrides for those types, so
+  // no settings write can move their deadline to or past the first kickoff. Pick'em
+  // settings pass through untouched.
+  const lockSettings = effectiveLockSettings(pool.settings, type);
+  const effectiveWeekLock = effectiveWeekLockAt(games.map(g => g.startTime), week, lockSettings);
   const weekLocked = now >= effectiveWeekLock;
 
   // Write variables inside transactions
@@ -413,7 +419,7 @@ export async function submitNFLPicksInternal(
           const game = games.find(g => g.id === gameId);
           if (!game) throw new HttpsError('invalid-argument', `Game ${gameId} not found.`);
 
-          const isGameLocked = isGameLockedAt(now, game.startTime, week, pool.settings);
+          const isGameLocked = isGameLockedAt(now, game.startTime, week, lockSettings);
           const oldPick = existingEntry?.picks?.[gameId];
 
           if (isGameLocked && oldPick !== pickedTeam) {
@@ -482,12 +488,14 @@ export async function submitNFLPicksInternal(
         throw new HttpsError('invalid-argument', `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in week ${week}.`);
       }
 
-      const isWeeklyLock = pool.settings?.lockMode === 'WEEKLY';
+      // HARD weekly lock, derived from the pool TYPE (not settings.lockMode) so a
+      // settings write that omits or changes lockMode cannot reopen picks mid-week.
+      const isWeeklyLock = usesWeeklyHardLock(type) || pool.settings?.lockMode === 'WEEKLY';
       if (isWeeklyLock && weekLocked) {
-        throw new HttpsError('failed-precondition', 'WEEK_LOCKED: Survivor pools lock at the kickoff of the first game.');
+        throw new HttpsError('failed-precondition', 'WEEK_LOCKED: Survivor picks are locked for this week.');
       }
 
-      const isGameLocked = isGameLockedAt(now, game.startTime, week, pool.settings);
+      const isGameLocked = isGameLockedAt(now, game.startTime, week, lockSettings);
       const oldPick = survivorEntry.picks?.[week];
       if (!isWeeklyLock && isGameLocked && oldPick !== teamPicked) {
         throw new HttpsError('failed-precondition', `GAME_LOCKED: The game for ${teamPicked} has already locked.`);
@@ -534,12 +542,13 @@ export async function submitNFLPicksInternal(
         throw new HttpsError('invalid-argument', `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in week ${week}.`);
       }
 
-      const isWeeklyLock = pool.settings?.lockMode === 'WEEKLY';
+      // HARD weekly lock, derived from the pool TYPE — see the Survivor branch.
+      const isWeeklyLock = usesWeeklyHardLock(type) || pool.settings?.lockMode === 'WEEKLY';
       if (isWeeklyLock && weekLocked) {
-        throw new HttpsError('failed-precondition', 'WEEK_LOCKED: Margin pools lock at the kickoff of the first game.');
+        throw new HttpsError('failed-precondition', 'WEEK_LOCKED: Margin picks are locked for this week.');
       }
 
-      const isGameLocked = isGameLockedAt(now, game.startTime, week, pool.settings);
+      const isGameLocked = isGameLockedAt(now, game.startTime, week, lockSettings);
       const oldPick = marginEntry.picks?.[week];
       if (!isWeeklyLock && isGameLocked && oldPick !== teamPicked) {
         throw new HttpsError('failed-precondition', `GAME_LOCKED: The game for ${teamPicked} has already locked.`);
