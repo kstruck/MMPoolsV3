@@ -118,10 +118,19 @@ the window and the revision check is the backstop. This interleaving must be tes
 time-bounded lease is not a mutex: if the original invocation is delayed past
 `until`, a retry can acquire the lease and score, then the original resumes and
 overwrites entry maps / the fingerprint — and both passes can carry the *same*
-`lockRevision`, so the final revision check does not catch it. So the lease carries
-an **owner/fencing token** that the worker **re-verifies before every batch and the
-final publish**, aborting the moment it finds the lease is no longer its own. Expiry
-bounds a dead worker; the token stops a resurrected one from writing.
+`lockRevision`, so the final revision check does not catch it. So the single lease
+record `pool.autoScore.scoringLease = { owner, until }` (this exact path, one
+record everywhere the plan refers to a lease — codex r16) carries a unique
+**owner/fencing token**.
+
+**Fence EVERY side-effect of the pass, not just entry batches + publish (codex
+r16).** A slow worker that has lost its lease to a newer pass must not run *any*
+mutation with stale data — not the entry batches, not `standings/current`, and not
+the post-publish writes either (`maybeFinalizeNFLPool`, the weekly recap,
+`SCORE_FINALIZED`, the `SURVIVOR_AUTO_STRIKE` audit). So the worker **re-verifies
+its `owner` token before every one of those writes** (or makes each conditional on
+the current fence) and aborts the instant the lease is no longer its own. Expiry
+bounds a dead worker; the token stops a resurrected one from writing anything.
 
 **Every lock-affecting settings writer must go through the guard, not just
 `extendWeekDeadline` (codex r12).** `weekLockOverrides` is also reachable through
@@ -175,10 +184,16 @@ synchronization.** Concretely (codex r14/r15):
   a just-cancelled pool (`maybeFinalizeNFLPool` checks cancellation only *after* the
   writes and cannot undo them).
 - **Entry mutators** — `submitNFLPicks`, `proxyPick`, `executeSurvivorRebuy` — must
-  each advance a **shared entry revision inside their own transaction** (entries
-  today carry no `updatedAt`), which the scorer folds into the fingerprint; a
-  watermark that only `submitNFLPicks` bumps leaves a late proxy pick ungraded or a
-  rebuy status stale forever. All of this is PR-B′.
+  do **both** (codex r15/r16): (i) **read/conflict with the pool lease** in their
+  own transaction and wait/retry while it is held — a watermark alone only
+  *schedules a later pass* and does not stop the race where the scorer's missing-pick
+  update and a still-valid submission interleave (one writes a false strike, or the
+  other gets rejected against a just-eliminated entry); and (ii) **advance a shared
+  entry-revision watermark inside that same transaction** (entries carry no
+  `updatedAt` today), which the scorer folds into the fingerprint so a mutation that
+  lands right after a scoring read still forces one more pass. A watermark that only
+  `submitNFLPicks` bumps leaves a late proxy pick ungraded or a rebuy status stale
+  forever. All of this is PR-B′.
 
 ### 3b. Never apply a missing-pick penalty while any pick is still open
 
@@ -324,7 +339,9 @@ export async function scoreNFLWeekInternal(
   extraction would lose the `request.uid` the inline scorer uses.
 - **Persisted-state contract (codex r11).** The feature adds exactly these new
   fields, and every reference above must use these paths: `pool.autoScore`
-  (fingerprint-by-week, final-count/marker bookkeeping, `scoringLeaseUntil`),
+  (fingerprint-by-week, per-week submit/entry-revision watermark, and the single
+  fenced lease record **`scoringLease: { owner, until }`** — expiry **and** owner
+  token together, codex r16),
   **`pool.publishedWeeks.{week}`** (immutable per-week publication marker, §3a/§4),
   and **`pool.settings.lockRevision`** (monotonic, bumped by `extendWeekDeadline`,
   §3a). PR-A itself writes none of these — they arrive with PR-B / PR-B′ — but the
@@ -522,9 +539,14 @@ exactly why the reconciliation tier is a separate, carefully-designed sub-PR** �
 it changes survivor recompute semantics and must not ride along with the LIVE
 tier.
 
-**For the pilot** this tier may ship as a distinct follow-up sub-PR (the LIVE tier
-is the real-time requirement). The manual-fallback caveat is **type-specific**
-(codex r12): a manual `scoreNFLWeek` re-score of a corrected week is correct for
+**Split, revised (codex r16):** the **durable terminal-transition enqueue ships in
+PR-B itself**, not as a follow-up — a postponed game that first goes `FINAL`/`CANCELLED`
+after the 24h window would otherwise never reach the scorer and stay unscored until
+a manual click, which violates the game-end requirement. It is cheap (the sync path
+just writes a queue marker on any nonterminal→terminal transition, and the drain is
+the same fingerprint check). Only the **Survivor reset-and-replay** correction
+handling stays a follow-up sub-PR, because it changes survivor recompute semantics.
+The manual-fallback caveat is **type-specific** (codex r12): a manual `scoreNFLWeek` re-score of a corrected week is correct for
 **Pick'em and Margin** (both replace that week's map and recompute the season total
 additively — idempotent), but **NOT for Survivor** — re-scoring week N leaves later
 `strikeWeeks` in place and skips later-week recomputation once eliminated, so it
