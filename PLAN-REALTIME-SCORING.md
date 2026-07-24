@@ -81,6 +81,16 @@ already records that honoring the override in `nflPools.ts` is an unfinished
 follow-up — so the override path is not yet load-bearing, which is the safe moment
 to add this guard.
 
+**The check must be transactional, not read-only (codex r6).** A plain read of
+`publishedWeeks` races the scorer: `extendWeekDeadline` could read the marker
+unset and write the override in the same instant the scorer publishes the first
+result, leaving an accepted extension *after* the outcome was exposed. So (a) the
+scorer **stamps `publishedWeeks.{week}` in the same write (batch/transaction) as —
+or strictly before — the first visible `standings/current` write for that week**,
+and (b) `extendWeekDeadline` performs its marker check **and** override write
+inside a Firestore transaction that reads `publishedWeeks.{week}`, so the two
+serialize and one always loses cleanly.
+
 ### 3b. Never apply a missing-pick penalty while any pick is still open
 
 **Correctness core (codex P1c/r2).** In `PER_GAME` mode a member may legitimately
@@ -182,11 +192,17 @@ onSchedule({ schedule: '*/10 * * * *', timeZone: 'America/New_York' }, withHeart
 Run body:
 
 1. Read + gate via `readJobGate` / `configReadFailedVerdict` (copy deep-sweep).
-2. **Cheap early-out (LIVE tier only)**: query `nfl_games` in the active window
-   (`syncScoresWindow`'s pattern). If empty → fall through to the reconciliation
-   tier (§5b) and otherwise `return { detail: { activeSlates: 0 } }`. This is what
-   keeps a 10-minute all-day cadence essentially free outside game windows (one
-   indexed query, no pool reads).
+2. **Active-window query + control flow (codex r6)**: query `nfl_games` in the
+   active window using the existing **`HOT_WINDOW_LOOKBACK_MS` (24h)**
+   (nflSchedule.ts:363), **not** a 2h lookback — a slate must stay eligible until
+   its games actually finalize, and a single-game slate (**the HOF pilot**) or any
+   game running past 2h would otherwise be dropped before its normal final and
+   never scored (a normal final does not enqueue the reconciliation queue). If the
+   window is **non-empty → process steps 3–8** (the live path). Only when the live
+   window **and** the reconciliation queue (§5b) are both empty does the run
+   `return { detail: { activeSlates: 0 } }`. The 24h lower bound + the fingerprint
+   skip keep a 10-minute cadence cheap: outside game days the window is empty; on a
+   game day an unchanged slate costs one skip check.
 3. Derive the live `(season, seasonType, week)` slot(s) from the active games —
    the `week` comes from the game docs, it is **not** a pool field (see below).
 4. **Candidate pools** (codex P1a/P1b): NFL pool docs are **season-long** — they
@@ -203,16 +219,24 @@ Run body:
      (codex r3): newly created pools have **no `scoredThroughWeek` field** until
      their first successful score, and a Firestore inequality **omits
      missing-field docs** — so that query would exclude every brand-new pool and
-     its first game would never score. Query on `(type, season, seasonType)`
-     equality only.
+     its first game would never score.
+   - **not** filter `seasonType` in the query (codex r6): the create schema allows
+     an **omitted `seasonType`**, and scoring treats missing/legacy-string values
+     as regular season via `Number(pool.seasonType || 2)`. A `seasonType == 2`
+     equality omits those valid docs. Query the **superset `(type, season)`** and
+     normalize `Number(pool.seasonType || 2)` **in memory** to match the live
+     slot's seasonType.
    - The in-memory post-filter excludes pools in any **terminal lifecycle state**,
-     derived canonically — not from a single field (codex r4/r5). `isFinal` alone
-     is insufficient: `cancelPool` sets `status: "CANCELED"` **without** `isFinal`
-     (poolExceptions.ts), and admin-close sets `CLOSED`; scoring a voided pool
-     would write entry scores, standings, recaps and audit events for it. Exclude
-     `FINAL` / `CANCELED` / `CLOSED` (use the shared lifecycle derivation the rest
-     of the app uses, `shared/editability.ts` `normalizePhase`, rather than
-     re-implementing the status vocab).
+     using an **explicit backend predicate over the statuses actually persisted**,
+     not `normalizePhase` (codex r6 corrected r5): `normalizePhase`
+     (`shared/editability.ts:43`) maps only `ARCHIVED`/`COMPLETED` → `archived`
+     and sends **`CANCELED` → `open`**, so it would NOT exclude a cancelled pool.
+     `cancelPool` persists `status: "CANCELED"` (poolExceptions.ts:336) and
+     admin-close persists `COMPLETED`; finalized pools carry `isFinal`/`finalizedAt`.
+     Exclude when `isFinal === true` **or** `finalizedAt` set **or**
+     `status ∈ {CANCELED, COMPLETED}` — the same terminal set `nflFinalize.ts`
+     uses (`status === 'CANCELED'` at :247/:474). Scoring a voided pool would
+     otherwise write entry scores, standings, recaps and audit for it.
    - It must **not** filter on `scoredWeeks.{week}`: the scorer writes that marker
      on *every* pass including the first partial-game pass, so filtering on it
      would drop the pool after one game and block all later games. The
@@ -274,16 +298,21 @@ source alongside the active window; a slate whose fingerprint is genuinely
 unchanged still costs only the skip check. This keeps the live path cheap and
 makes a late correction self-healing.
 
-**Correcting week N must re-derive weeks N..latest (codex r5).** A Survivor
-correction cannot rescore only week N: `computeSurvivorWeekUpdate` retains later
-strike weeks but re-stamps `eliminatedWeek` to the corrected week whenever the
-entry is still eliminated — so a harmless Week-1 restatement for an entry actually
-eliminated in Week 3 would relabel its final rank as a Week-1 elimination. The
-reconciliation rescore must therefore replay **every scored week from the
-corrected week through the latest scored week** (`scoredWeeks` gives the set), in
-order, so downstream elimination ordering is re-derived rather than corrupted.
-(Pick'em and Margin are per-week additive and do not need the forward replay, but
-replaying them is harmless and keeps one code path.)
+**Correcting week N requires a Survivor state RESET, not sequential rescores
+(codex r5/r6).** Simply calling the scorer for weeks N..latest does **not**
+re-derive Survivor state: `computeSurvivorWeekUpdate` (a) retains later
+`strikeWeeks`, and (b) once the entry is eliminated in the corrected earlier week,
+**skips every later week** (the `status==='ELIMINATED' && eliminatedWeek < week`
+early-return, engine:433) — so a Week-3 strike stays in the ledger and never gets
+cleaned up after a Week-1 correction changes the picture. The reconciliation path
+therefore needs a **replay mode that first strips the entry's entire
+strike/exempt/elimination ledger from week N forward to a clean slate, then
+replays weeks N..latest in order** (`scoredWeeks` gives the set) — a genuine
+addition to the survivor recompute contract, not a loop over the existing call.
+Pick'em and Margin are per-week additive and need no forward replay. **This is
+exactly why the reconciliation tier is a separate, carefully-designed sub-PR** —
+it changes survivor recompute semantics and must not ride along with the LIVE
+tier.
 
 **For the pilot** this tier may ship as a distinct follow-up sub-PR (the LIVE tier
 is the real-time requirement); until it exists, a late correction is reconciled by
