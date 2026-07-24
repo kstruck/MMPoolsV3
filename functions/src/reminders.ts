@@ -11,6 +11,7 @@ import { sendCourierSMS } from "./notifications/smsService";
 import { getSquarePrivateMap, getSquareEmails } from "./squarePrivate";
 import { withHeartbeat } from "./lib/heartbeat";
 import { reminderPassVerdict } from "./lib/heartbeatVerdicts";
+import { effectiveLockSettings } from "./lib/effectiveLock";
 
 
 
@@ -870,7 +871,14 @@ export async function checkNFLNonPickerReminders(
         const { week, weekGames } = weekContext;
 
         // --- 2. Effective week lock (mirrors nflPools.ts submitNFLPicks) ---
-        const settings = (pool.settings ?? {}) as { lockBufferMinutes?: number; weekLockOverrides?: Record<number, number> };
+        // effectiveLockSettings applies the Survivor/Margin hard weekly deadline
+        // (buffer snapped to a preset, overrides dropped) exactly as the submit path
+        // does — otherwise a "last call" email could quote a deadline LATER than the
+        // one the server enforces, telling members to pick after picks had closed.
+        const settings = effectiveLockSettings(
+          pool.settings as { lockBufferMinutes?: number; weekLockOverrides?: Record<number, number> } | undefined,
+          (pool as unknown as { type?: string }).type,
+        ) as { lockBufferMinutes?: number; weekLockOverrides?: Record<number, number> };
         const lockBufferMs = (settings.lockBufferMinutes ?? 5) * 60 * 1000;
         const weekLockOverride: number | undefined = settings.weekLockOverrides?.[week];
         const computedLock = Math.min(...weekGames.map(g => g.startTime)) - lockBufferMs;

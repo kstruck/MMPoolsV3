@@ -1064,7 +1064,21 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               with your name and reason, and members are emailed — no silent changes.
             </p>
 
-            {/* ── Extend Week Deadline ── */}
+            {/* ── Extend Week Deadline — not available on hard-lock pools ── */}
+            {usesWeeklyHardLock(type) ? (
+              <div className="bg-page border border-line rounded-lg p-5 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Clock size={14} className="text-navy-700 dark:text-gold-400" />
+                  <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Week Deadline</p>
+                </div>
+                <p className="font-body text-[11px] text-faint leading-relaxed">
+                  This pool uses a <strong>fixed weekly deadline</strong> before the first kickoff, so picks
+                  can't be reopened once the week locks — that's what keeps scores honest while games are
+                  being played. To change how early picks close, use <strong>Pick Deadline</strong> in
+                  Settings; it applies from the next unlocked week.
+                </p>
+              </div>
+            ) : (
             <div className="bg-page border border-line rounded-lg p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <Clock size={14} className="text-navy-700 dark:text-gold-400" />
@@ -1109,6 +1123,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 </button>
               </div>
             </div>
+            )}
 
             {/* ── Proxy Pick ── */}
             <div className="bg-page border border-line rounded-lg p-5 space-y-4">

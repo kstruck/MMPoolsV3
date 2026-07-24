@@ -5,6 +5,7 @@ import { getWeekStatus, weekDeadline, type WeekStatus } from '../../utils/nflPen
 import { formatDeadline } from '../../utils/formatTime';
 import { now as serverNow } from '../../utils/serverClock';
 import { Button } from '../ui';
+import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
 
 interface WeekChecklistProps {
     pool: Pool;
@@ -43,7 +44,12 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
     const castPool = pool as any;
     const seasonType = Number(castPool.seasonType);
     const totalWeeks = seasonType === 1 ? 4 : 18;
-    const lockBufferMinutes = castPool.settings?.lockBufferMinutes ?? 5;
+    // Hard-lock pools (Survivor/Margin) have their buffer snapped to a preset by
+    // the server, so normalize here or the checklist's deadline disagrees with the
+    // one actually enforced (a stored 0 would show the week due until kickoff).
+    const lockBufferMinutes = usesWeeklyHardLock(pool.type)
+        ? normalizeLockBufferMinutes(castPool.settings?.lockBufferMinutes)
+        : (castPool.settings?.lockBufferMinutes ?? 5);
 
     const weeks = useMemo(() => {
         return Array.from({ length: totalWeeks }, (_, i) => i + 1).map(week => {

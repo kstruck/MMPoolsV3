@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import type { NFLGame, Pool } from '../types';
 import { getWeekStatus, weekDeadline } from '../utils/nflPending';
 import { now as serverNow } from '../utils/serverClock';
+import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
 
 /**
  * Lightweight per-pool "does this member owe picks?" lookups for the
@@ -52,7 +53,11 @@ export function computePendingStatus(pool: Pool, entry: any, seasonGames: NFLGam
 
     const seasonType = Number(castPool.seasonType);
     const totalWeeks = seasonType === 1 ? 4 : 18;
-    const lockBufferMinutes = castPool.settings?.lockBufferMinutes ?? 5;
+    // Hard-lock pools (Survivor/Margin) have their buffer snapped to a preset by the
+    // server, so normalize here or the "picks due" CTA outlives the enforced deadline.
+    const lockBufferMinutes = usesWeeklyHardLock(pool.type)
+        ? normalizeLockBufferMinutes(castPool.settings?.lockBufferMinutes)
+        : (castPool.settings?.lockBufferMinutes ?? 5);
     const now = serverNow();
 
     for (let week = 1; week <= totalWeeks; week++) {
