@@ -166,10 +166,16 @@ prose here:
    fires if the sync path *sees* the transition, but `syncScoresWindow` uses a 24h
    lookback — a suspended game finalizing after 24h is never re-fetched, so nothing
    enqueues it and it stays unscored (the daily deep sweep is normally disabled).
-   Drive the enqueue from a **durable source of not-yet-terminal games regardless of
-   age** — a cheap periodic query on `nfl_games` where `status ∉ {FINAL,CANCELLED}`
-   and `startTime` is in the past — so a late finalize is always observed. (Rare for
-   a preseason pilot, but real for postponed games.)
+   A Firestore query alone cannot observe the finalize (codex r19): nothing updates
+   `nfl_games` past 24h — `syncScoresWindow` stops fetching ESPN and the auto-scorer
+   makes no ESPN calls — so the stale docs never flip to `FINAL` to be queried. The
+   durable path must therefore **re-fetch ESPN for stale not-yet-terminal slates**
+   (a query on `nfl_games` where `status ∉ {FINAL,CANCELLED}` and `startTime` is
+   past finds *which* slates to re-fetch; the fetch is what surfaces the finalize),
+   then enqueue. This is exactly what `nflDeepScoreSweepJob` already does — so the
+   concrete pilot answer is **arm the deep sweep** (Kevin, K2) or give this job a
+   narrow stale-slate re-fetch. Rare for a preseason pilot, but real for postponed
+   games; state it in the arming notes.
 
 **Every lock-affecting settings writer must go through the guard, not just
 `extendWeekDeadline` (codex r12).** `weekLockOverrides` is also reachable through
@@ -503,8 +509,10 @@ Run body:
    missing-pick penalty). Fold a **per-entry revision watermark** into the skip
    decision — each entry mutator bumps its **own entry doc's** revision (never a
    pool-wide `submitSeq` field — that is a single-document write hotspot at peak
-   submission, §3a criterion 5, codex r17), and the scorer aggregates them (max, or
-   an "any entry changed since last scored" query) into the fingerprint — so a
+   submission, §3a criterion 5, codex r17). The scorer aggregates via a value that
+   **changes on every entry mutation — a monotone sum or a "count of entries with
+   revision > lastScoredRevision" query, NOT `max`** (codex r18/r19: `max` stays put
+   when a lower entry moves 2→3, skipping the boundary pick forever) — so a
    post-read submission forces exactly one more pass.
    **Fingerprint unchanged → skip the pool, no writes.** Changed → call
    `scoreNFLWeekInternal(...)`.
@@ -698,6 +706,37 @@ The job ships inert; Kevin arms it dry-run, watches, then flips live.
 ## 8. Explicitly NOT in scope
 
 - No change to the scoring *math* (grades, tiebreakers, survivor/margin rules).
-- No change to `scoreNFLWeek`'s auth or the manual button's behavior.
-- No ESPN fetch in the new job (reads `nfl_games`, which the sync jobs own).
+- No change to `scoreNFLWeek`'s auth or the manual button's behavior beyond
+  deriving `provisional` from slate completion (§4).
+- The new *live* job makes no ESPN fetch (reads `nfl_games`, which the sync jobs
+  own); the >24h stale-slate observation (§3a crit. 6) reuses the deep sweep.
 - No prod-data mutation and no deploy by Claude (Kevin's gates).
+
+## 9. Codex review status — 19 rounds, converged on the plan's altitude
+
+This plan was adversarially reviewed by `codex exec review` across **19 rounds**;
+every finding was absorbed with written evidence in the git history
+(`docs(plan): absorb codex r1..r19`). The trajectory is the record:
+
+- **Rounds 1–11 found genuine design defects** in the core scoring path and fixed
+  them — candidate selection excluding new/omitted-`seasonType` pools, mid-week
+  penalty application before pick windows close, the Pick'em-vs-Survivor/Margin
+  pick-mutability split, reveal leaks (graded-game gating, pick-count summaries),
+  finalization/recap firing on partial passes, terminal-lifecycle filtering,
+  fingerprint completeness. **The core design has been stable since ~r11.**
+- **Rounds 12–19 all refine ONE flagged mechanism** — PR-B′'s fenced-mutex +
+  authorization protocol (lease/fencing/lockRevision, server-only scorer fields,
+  merge-preserving settings, per-entry watermarks) and the >24h stale-slate
+  observation. Each round sharpened the *specification* of that protocol; none
+  surfaced a new class of defect in PR-A/PR-B's scoring or reveal logic.
+
+**Stop rationale (judged on evidence, per CLAUDE.md §2c).** A prose plan for a
+distributed mutual-exclusion protocol can always be specified one level deeper —
+that is why r12–19 never "came back clean." But a plan's job is to capture the
+design and *flag* the hard part, and that is done: PR-B′'s concurrency contract is
+consolidated as explicit acceptance criteria (§3a) to be finalized against real
+code in **PR-B′'s own implementation review**, where `codex exec review` runs on a
+diff and *can* converge to clean. Continuing to iterate mutex prose on the plan is
+lower-value than building PR-A/PR-B (whose design is settled) and letting PR-B′'s
+code carry its own review. The loop was stopped here deliberately, not because a
+round returned clean.
