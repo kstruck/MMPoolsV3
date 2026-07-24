@@ -63,6 +63,20 @@ the live scorer contributes a game's result to standings **only when the game is
 terminal AND `gameLockClosed(g)`** — so an override that extends a finalized
 game's pick window cannot surface that game's outcome before the deadline.
 
+**Accompanying guard on `extendWeekDeadline` (codex r4).** That callable
+(poolExceptions.ts:104) lets a commissioner write `settings.weekLockOverrides.{week}`
+**after** the original lock. Once the live scorer has published a game's result to
+`standings/current`, a later extension cannot retract what members already saw —
+the reveal guarantee would fail retroactively. So `extendWeekDeadline` **must
+reject an extension for a week whose results the auto-scorer has already
+published** (e.g. `standings.current.lastScoredWeek >= week`, or a per-week
+`publishedAt` marker the scorer stamps). This is a small guard on a *different*
+function; it ships as its own PR alongside PR-B (it touches authorization-adjacent
+lifecycle, so classify it against the plan gate). Note poolExceptions.ts:101
+already records that honoring the override in `nflPools.ts` is an unfinished
+follow-up — so the override path is not yet load-bearing, which is the safe moment
+to add this guard.
+
 ### 3b. Never apply a missing-pick penalty while any pick is still open
 
 **Correctness core (codex P1c/r2).** In `PER_GAME` mode a member may legitimately
@@ -94,25 +108,48 @@ export async function scoreNFLWeekInternal(
   db: Firestore,
   poolId: string,
   week: number,
-  opts: { dryRun?: boolean; deferMissingPenalties?: boolean } = {},
+  opts: {
+    dryRun?: boolean;
+    provisional?: boolean;
+    actor?: { uid: string; role: string; label: string };
+  } = {},
 ): Promise<ScoreWeekResult>   // { pickemScored, survivorScored, marginScored, standingsWritten, ... }
 ```
 
 - The callable `scoreNFLWeek` keeps its auth/RBAC/`ACTIVE_GAMES` gate and its
-  schema, then delegates to `scoreNFLWeekInternal` with **both options at their
-  defaults (`false`)** — i.e. the existing full-week, penalty-applying behavior.
-  **Zero behavior change** for the existing button — proven by the existing
-  emulator fixtures (`nfl-pickem-preseason-lifecycle` et al.) passing unchanged.
-- `opts.dryRun` (default `false`): when true, compute grades + standings and
-  **return the counts, writing nothing** (the deep-sweep dry-run contract).
-- `opts.deferMissingPenalties` (default `false`): when true, Survivor entries
-  with no pick this week are left untouched (no strike, no this-week write) and
-  Margin entries with no pick are left unscored for the week (no `-14`) — see §3b.
-  Only the live scorer (§5) sets it, and only while the week has non-terminal
-  games. Default `false` keeps every current caller identical.
-- No new persisted fields in this PR; it ships **no scheduled job** — only the
-  extraction plus the deferral option, so a codex round on it is cheap and the
-  blast radius is a refactor the fixtures already cover.
+  schema, then delegates to `scoreNFLWeekInternal` with `dryRun:false`,
+  `provisional:false`, and `actor` = its authenticated caller
+  (`{ uid, role:'ADMIN', label:'Host' }`, the current attribution). **Zero
+  behavior change** for the existing button — proven by the existing emulator
+  fixtures (`nfl-pickem-preseason-lifecycle` et al.) passing unchanged.
+- `opts.dryRun` (default `false`): compute grades + standings and **return the
+  counts, writing nothing** (the deep-sweep dry-run contract).
+- `opts.provisional` (default `false`) — **one flag, the whole "this is a live
+  mid-week pass" behavior** (codex r2/r4). When true:
+  1. **Missing-pick penalties are deferred** — Survivor no-pick entries are left
+     untouched (no strike), Margin no-pick entries unscored (no `-14`). Pick'em
+     needs nothing (unmade pick = 0). (§3b)
+  2. **Reveal gate** — only games that are terminal AND `gameLockClosed(g)` are
+     graded into standings. (§3a)
+  3. **No finalization-sensitive markers** — it does **not** write
+     `scoredWeeks.{week}` / `scoredThroughWeek` and does **not** call
+     `maybeFinalizeNFLPool` (codex r4). Otherwise a provisional pass on a
+     season's last slate would write `finalizedAt` + season-history while picks
+     are still open, because `maybeFinalizeNFLPool` (nflFinalize.ts) keys off
+     `scoredWeeks` + terminal status, **not** effective locks. It still writes
+     the reveal-safe `standings/current` (that is the whole point — live
+     standings).
+  The live scorer (§5) sets `provisional = NOT (every week game terminal AND
+  now >= max effectiveGameLockAt over the full slate)`. When it clears, the run
+  is the authoritative complete pass (penalties applied, markers written,
+  finalize checked). Default `false` keeps every current caller identical.
+- `opts.actor` (default the callable's `Host`): threads audit attribution so
+  `SCORE_FINALIZED` / `SURVIVOR_AUTO_STRIKE` keep the caller's identity, and
+  `nflAutoScoreJob` passes a **`SYSTEM`** actor (codex r4). Without this the
+  extraction would lose the `request.uid` the inline scorer uses.
+- No new persisted fields beyond `pool.autoScore` (§5). It ships **no scheduled
+  job** — only the extraction + these options, so a codex round on it is cheap
+  and the blast radius is a refactor the fixtures already cover.
 
 **Gates:** all five + `codex exec review --base origin/main`. This PR is the
 risk-bearing one (it moves scoring code); keep it isolated.
@@ -152,8 +189,14 @@ Run body:
      their first successful score, and a Firestore inequality **omits
      missing-field docs** — so that query would exclude every brand-new pool and
      its first game would never score. Query on `(type, season, seasonType)`
-     equality only, then apply the already-scored / `isFinal` filter **in memory**
-     after retrieval.
+     equality only.
+   - The in-memory post-filter excludes **only fully-finalized pools
+     (`isFinal === true`)** (codex r4). It must **not** filter on
+     `scoredWeeks.{week}`: the scorer writes that marker on *every* pass including
+     the first partial-game pass, so filtering on it would drop the pool after one
+     game and block all later games. The **fingerprint (step 5) is the sole
+     decider** of whether an unfinalized pool needs another pass. (A finalized
+     pool with a late correction re-enters only via the reconciliation queue, §5b.)
    **Any NEW composite index must be deployed AND built BEFORE this code ships**
    (the #219/#223 silent `FAILED_PRECONDITION` lesson). The scored `week` is the
    live slot's week, passed to `scoreNFLWeekInternal` — not read from the pool.
@@ -179,11 +222,12 @@ Run body:
      memory for the report only — writing it on a dry run both breaks the
      dry-run-writes-nothing contract and, worse, would leave the fingerprint
      "already current" so the first live run *skips the pool and never scores it*.
-6. `deferMissingPenalties` and the reveal gate are computed from the **full
-   `(season, seasonType, week)` slate** the scorer reads, per §3a/§3b:
-   `deferMissingPenalties = NOT (every week game terminal AND now >= max
-   effectiveGameLockAt)`. Once that condition clears, the run scores the full
-   week with penalties applied — the same pass that fires `maybeFinalizeNFLPool`.
+6. `provisional` is computed from the **full `(season, seasonType, week)` slate**
+   the scorer reads, per §3/§4: `provisional = NOT (every week game terminal AND
+   now >= max effectiveGameLockAt)`. While `provisional`, penalties are deferred,
+   only lock-closed terminal games are revealed, and no finalization markers are
+   written. Once it clears, the run is the authoritative complete pass (penalties
+   applied, `scoredWeeks` written, `maybeFinalizeNFLPool` checked).
 7. Per-run safety cap (mirror `MAX_*_PER_RUN`) so one run can't fan out
    unbounded; overflow rolls to the next run and is reported.
 8. Return a `scoreSyncHeartbeat`-style verdict: `{ ok, detail: { activeSlates,
@@ -235,6 +279,10 @@ each guard fails when removed — PICKUP §1):
 - a game flipping to **CANCELLED** re-scores;
 - a `FINAL` game whose `weekLockOverride` still extends its lock is **not**
   graded/revealed until the override passes;
+- a `provisional` pass on a season's **last** slate does **not** write
+  `scoredWeeks` / `finalizedAt` (no premature finalization); the complete pass
+  does;
+- the scheduled job's writes carry the **`SYSTEM`** actor in the audit log;
 - a regular-season pool is **not** scored during a preseason slot of the same
   week number;
 - dry-run writes nothing **and leaves the fingerprint unset**, so the first live
@@ -268,9 +316,12 @@ day to spare; defer C2 unless Kevin asks for live cross-member movement.
 
 ## 7. Sequencing & gates
 
-1. **PR-A** extract `scoreNFLWeekInternal` — behavior-preserving, isolated.
-2. **PR-B** `nflAutoScoreJob` — scheduled, gated, deployed OFF.
-3. **(PR-C1 / PR-C2)** optional projection, only if time remains.
+1. **PR-A** extract `scoreNFLWeekInternal` (with `dryRun` / `provisional` /
+   `actor` options) — behavior-preserving, isolated.
+2. **PR-B** `nflAutoScoreJob` — scheduled, gated, deployed OFF (LIVE tier; the
+   reconciliation tier §5b may be a distinct follow-up sub-PR).
+3. **PR-B′** `extendWeekDeadline` publish guard (§3a) — small, ships alongside B.
+4. **(PR-C1 / PR-C2)** optional live in-progress projection, only if time remains.
 
 One PR at a time. Each: all five gates green → `codex exec review --base
 origin/main`, absorb/reject every finding with written evidence, report to
