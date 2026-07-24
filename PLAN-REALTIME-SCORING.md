@@ -166,6 +166,20 @@ scorer **replaces whole `weeklyPoints`/`weeklyScores` maps**, the later commit
 silently loses the other's updates. The lease duration (with renewal if a pass can
 exceed it) must cover a full pass. Same PR-B′ as the guard.
 
+**General principle (so this stops being enumerated writer-by-writer): any writer
+that mutates scoring-relevant pool or entry state must participate in this
+synchronization.** Concretely (codex r14/r15):
+- **Lifecycle writers** — `cancelPool`, `closePool`, admin-close, **and the client
+  archive path** — must acquire/conflict with the scoring lease before they commit,
+  or the selection-time terminal check races a live pass and the scorer writes into
+  a just-cancelled pool (`maybeFinalizeNFLPool` checks cancellation only *after* the
+  writes and cannot undo them).
+- **Entry mutators** — `submitNFLPicks`, `proxyPick`, `executeSurvivorRebuy` — must
+  each advance a **shared entry revision inside their own transaction** (entries
+  today carry no `updatedAt`), which the scorer folds into the fingerprint; a
+  watermark that only `submitNFLPicks` bumps leaves a late proxy pick ungraded or a
+  rebuy status stale forever. All of this is PR-B′.
+
 ### 3b. Never apply a missing-pick penalty while any pick is still open
 
 **Correctness core (codex P1c/r2).** In `PER_GAME` mode a member may legitimately
@@ -199,9 +213,27 @@ have different pick shapes, and only one is safe to score live:
 Terminality and the max-lock **are computed from the full `(season, seasonType,
 week)` slate** the scorer reads (nflPools.ts:762-766), **not** the `now + 2h`
 active-window query — a Friday final can be the only game in that window while
-Sunday games sit outside it (codex r2). *(Alternative to enable live S/M later: add
-a submit-side guard that freezes a weekly pick once its selected game locks — a
-product change to `submitNFLPicks`, out of scope here.)*
+Sunday games sit outside it (codex r2).
+
+> **⚠️ KEVIN DECISION — live scoring for Survivor/Margin (codex r11/r15).** Scoping
+> S/M to the complete pass means an S/M member sees no movement until the week's
+> last game ends (a Thursday result waits for MNF) — which is narrower than a
+> literal reading of G1's "game-by-game for every pool". The blocker is real: an
+> S/M weekly pick stays swappable across games (nflPools.ts:490-493/542-545), so a
+> Thursday result can't be safely published while the pick can still change.
+> **Two honest options:**
+> - **(A) Ship v1 as: live per-game Pick'em, week-complete Survivor/Margin.**
+>   Recommended — Pick'em is the pilot's primary mode (the wizard hardcodes
+>   STRAIGHT Pick'em), so most pools get true game-by-game now, and S/M update
+>   correctly at week end. Zero product risk.
+> - **(B) Make S/M live too** by adding a submit-side guard that **freezes a weekly
+>   pick once its selected game locks** (reject replacing a pick whose *old* game
+>   has locked, nflPools.ts:490/542). That closes the mutability hole and lets S/M
+>   score per-game — but it changes pick UX and is its own product+PR.
+>
+> The plan builds (A); (B) is a fast-follow if Kevin wants literal game-by-game for
+> S/M. **PR-B does not claim to satisfy game-by-game for S/M** — stated plainly so
+> the promise isn't overclaimed.
 
 ## 4. PR-A — Extract `scoreNFLWeekInternal` (behavior-preserving refactor)
 
@@ -547,9 +579,10 @@ each guard fails when removed — PICKUP §1):
 
 ## 6. PR-C — Live in-progress projection (OPTIONAL, fast-follow if time allows)
 
-PR-B satisfies the stated requirement: standings move through the day as games
-end. PR-C is the enhancement — a score that ticks **while a game is still being
-played**, before it is `FINAL`.
+PR-B satisfies the stated requirement **for Pick'em** (and for Survivor/Margin at
+week-complete, pending the Kevin decision in §3b): standings move through the day
+as games end. PR-C is the enhancement — a score that ticks **while a game is still
+being played**, before it is `FINAL`.
 
 Two independent pieces, cheapest first:
 
