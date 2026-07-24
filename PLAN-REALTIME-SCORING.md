@@ -102,8 +102,17 @@ when it writes an override; the scorer captures `lockRevision` at grade time and
 r8). The entry/audit writes precede the standings write, so guarding only the
 publish would let an extension land after a false strike audit was already written
 (which a retry cannot un-write) and leave an entry transiently eliminated while its
-newly-extended window is open. Reserve/validate the revision up front and abort the
-whole pass on mismatch, retrying with freshly recomputed effective locks. Same
+newly-extended window is open.
+
+**A single up-front revision check is still not a reservation (codex r9):** an
+extension can commit *after* the check but *before* the first chunked entry batch
+(the scorer commits in ≤400-op batches, nflPools.ts:787-803). Serialize the
+**whole pass**, not an instant: the scorer takes a short **durable lease**
+(`pool.autoScore.scoringLeaseUntil`, a few minutes) before it begins writing, and
+`extendWeekDeadline` **refuses (or waits) while a live lease is held** and bumps
+`lockRevision` when it does write; the scorer still re-validates the revision at
+its final publish and discards the pass on mismatch. The lease bounds the window
+and the revision check is the backstop. This interleaving must be tested. Same
 PR-B′ as the guard.
 
 ### 3b. Never apply a missing-pick penalty while any pick is still open
@@ -155,9 +164,17 @@ export async function scoreNFLWeekInternal(
   counts, writing nothing** (the deep-sweep dry-run contract).
 - `opts.provisional` (default `false`) — **one flag, the whole "this is a live
   mid-week pass" behavior** (codex r2/r4). When true:
-  1. **Missing-pick penalties are deferred** — Survivor no-pick entries are left
-     untouched (no strike), Margin no-pick entries unscored (no `-14`). Pick'em
-     needs nothing (unmade pick = 0). (§3b)
+  1. **Defer any entry whose own pick is not yet gradeable** — not just missing
+     picks (codex r9). For Survivor/Margin (one pick per week) the entry's week is
+     **left entirely unwritten** when it has *no pick* **or** when its **selected
+     game is not yet terminal-and-lock-closed**. Reusing the current helpers on the
+     lock-closed subset is unsafe otherwise: `evaluateSurvivorWeek` returns
+     `survived:true` when the picked game is absent from the subset (a false
+     exemption), and Margin's `scoreMarginWeek(...) ?? 0` writes a visible `0` —
+     both surface through `standings/current` and leak/mis-state submission. So no
+     missing-pick strike, no `-14`, **and** no survived/zero write for a
+     still-pending selected game. Pick'em is naturally per-game (grades only
+     eligible games, unmade pick = 0).
   2. **Reveal gate** — only games that are terminal AND `gameLockClosed(g)` are
      graded into standings (§3a). **Also recompute every per-week SUMMARY over
      that lock-closed set only** (codex r8): the inline scorer sets
@@ -300,7 +317,13 @@ Run body:
    unchanged after the override expires the fingerprint would match and the pool
    would take the skip path forever, never revealing it (codex r3). Encoding the
    eligibility bit makes the hash change the moment the lock opens, forcing the
-   rescore. **Fingerprint unchanged → skip the pool, no writes.** Changed → call
+   rescore. It **also hashes the pool's scoring-relevant settings** (codex r9) —
+   `pickMode`/`confidenceMode` (Pick'em), `maxStrikes`/`pickLosersMode`/
+   `autoSurviveExemptionEnabled` (Survivor), and any grading-affecting Margin
+   setting — since the engine's output changes when these change even with
+   identical game data; without them a mid-week STRAIGHT→ATS or `maxStrikes` edit
+   would leave the tuple unchanged and skip the pool forever.
+   **Fingerprint unchanged → skip the pool, no writes.** Changed → call
    `scoreNFLWeekInternal(...)`.
    - **Dry-run persists nothing (codex r2):** the fingerprint is written
      **only after a successful LIVE scoring pass**. A dry run computes it in
@@ -354,10 +377,12 @@ Two more cases the queue must cover (codex r8):
   the expiry with the queue entry).
 - **Finalized pools with a late correction.** The LIVE-tier terminal predicate
   excludes `finalizedAt` pools, but a correction after finalization must still
-  rescore them. **Queued slates use a reconciliation path that bypasses the
-  finalized/terminal exclusion** and re-finalizes afterward — otherwise the queued
-  finalized pool is filtered out before `scoreNFLWeekInternal` runs and its
-  standings/season-history stay stale.
+  rescore them. The queued reconciliation path **bypasses the finalization
+  exclusion ONLY** (`isFinal`/`finalizedAt`) and re-finalizes afterward — it must
+  **still apply the CANCELED/COMPLETED/ARCHIVED exclusions** (codex r9): a slate
+  queued while active can be canceled or archived before the drain, and
+  `maybeFinalizeNFLPool` only checks cancellation *after* the writes, so it cannot
+  undo entry/standings/recap/audit writes into a voided pool.
 
 **Correcting week N requires a Survivor state RESET, not sequential rescores
 (codex r5/r6).** Simply calling the scorer for weeks N..latest does **not**
