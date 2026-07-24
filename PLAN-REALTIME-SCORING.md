@@ -248,9 +248,10 @@ HARD lock before the first game of the week.**
 
 - **Weekly hard deadline** = first kickoff of the week − a manager-chosen buffer,
   offered as three presets: **60 / 30 / 5 minutes** before kickoff.
-- **Once the week locks, no picks are accepted** (Survivor and Margin), and a
-  `weekLockOverride` may only move the deadline **earlier**, never past first
-  kickoff — the deadline is *hard*.
+- **Once the week locks, no picks are accepted** (Survivor and Margin). The
+  deadline is *hard* and set once via the buffer preset — there is **no per-week
+  `weekLockOverride`** for these types (PR-0 rejects it; see §7 PR-0 for why a
+  "move-earlier override" doesn't fit how overrides actually work).
 
 **Consequence — the mutable-pick problem disappears, and ALL THREE types become
 live-scorable per-game.** With a weekly hard lock before the first game, a
@@ -285,13 +286,13 @@ run live. Formally `provisional = the week still has a non-terminal game`, compu
 from the full `(season, seasonType, week)` slate (nflPools.ts:762-766), not the
 `now+2h` window (codex r2).
 
-**This also shrinks PR-B′.** For Survivor/Margin the deadline can only move earlier,
-so a result can never be reopened after it is revealed — the `extendWeekDeadline`
-publish/reveal race (and its `publishedWeeks`/`lockRevision` machinery) **does not
-apply to weekly-locked types**. It remains only for Pick'em's per-game
-`extendWeekDeadline` path, a much narrower residual. The scorer **lease** (mutex
-between concurrent scoring passes) and the **entry-revision watermark** are still
-needed regardless — those are about concurrent scorers, not pick mutability.
+**This also shrinks PR-B′.** Survivor/Margin take no override at all, so a result
+can never be reopened after it is revealed — the `extendWeekDeadline` publish/reveal
+race (and its `publishedWeeks`/`lockRevision` machinery) **does not apply to
+weekly-locked types**. It remains only for Pick'em's per-game `extendWeekDeadline`
+path, a much narrower residual. The scorer **lease** (mutex between concurrent
+scoring passes) and the **entry-revision watermark** are still needed regardless —
+those are about concurrent scorers, not pick mutability.
 
 ## 4. PR-A — Extract `scoreNFLWeekInternal` (behavior-preserving refactor)
 
@@ -687,11 +688,26 @@ day to spare; defer C2 unless Kevin asks for live cross-member movement.
 0. **PR-0 — Survivor/Margin weekly hard lock** (§3b, Kevin's ruling). Default/force
    `lockMode: 'WEEKLY'` for `NFL_SURVIVOR` + `NFL_MARGIN` (create paths + a
    migration/backfill for any existing pilot pools), replace the free-number buffer
-   with the **60/30/5 preset** picker, and guard `weekLockOverride` to move-earlier-
-   only for weekly-locked types. Mostly config over existing infrastructure
-   (WEEKLY lock + `lockBufferMinutes` already work). Plan-gated (it changes lock =
-   scoring/authorization behavior). **This lands first — it is what makes S/M
-   live-scorable**, and it's independently useful for the pilot.
+   with the **60/30/5 preset** picker.
+   - **Server-enforce the lock, don't trust the client (codex r20).** An ordinary
+     `NFLManagerView` save replaces the whole `settings` map and its Survivor/Margin
+     branches **omit** `lockMode`/`lockBufferMinutes` — and submission treats a
+     missing `lockMode` as `PER_GAME`. So a normal save would silently revert S/M to
+     mutable picks and break live-scoring safety. PR-0 must **force `lockMode:
+     'WEEKLY'` for these types server-side on every settings write** (and default the
+     buffer), independent of the client payload — not merely send the fields from
+     the UI.
+   - **Disallow `weekLockOverride` for weekly-locked S/M entirely (codex r20).** The
+     deadline is set once via the buffer preset and is *hard*; there is no per-week
+     extension. This sidesteps the fact that `extendWeekDeadline` only accepts
+     *positive* (later) minutes and `effectiveGameLockAt` uses `Math.max` (ignoring
+     earlier overrides) — a "move-earlier-only" override would need a whole separate
+     early-lock field wired through every lock path, which the hard-deadline design
+     doesn't need. Reject overrides on Survivor/Margin.
+   Mostly config over existing infrastructure (WEEKLY lock + `lockBufferMinutes`
+   already work). Plan-gated (it changes lock = scoring/authorization behavior).
+   **This lands first — it is what makes S/M live-scorable**, and it's independently
+   useful for the pilot.
 1. **PR-A** extract `scoreNFLWeekInternal` (with `dryRun` / `provisional` /
    `actor` options) — behavior-preserving, isolated.
 2. **PR-B** `nflAutoScoreJob` — scheduled, gated, deployed OFF (LIVE tier; the
@@ -710,6 +726,16 @@ One PR at a time. Each: all five gates green → `codex exec review --base
 origin/main`, absorb/reject every finding with written evidence, report to
 Kevin, then start the next (CLAUDE.md §2c/§2d). Nothing deploys — Kevin's gate.
 The job ships inert; Kevin arms it dry-run, watches, then flips live.
+
+**Arming prerequisite for the >24h-late finalize path (codex r20).** A game that
+first goes terminal more than 24h after kickoff is only observed if something
+re-fetches ESPN and writes `nfl_games` — but `nflAutoScoreJob` makes no ESPN call
+and `nflDeepScoreSweepJob` is disabled/dry-run by default (dry-run does not write
+`nfl_games`). So **before `nflAutoScoreJob` is flipped to live writes**, either the
+deep sweep must be armed **with writes** (`nflDeepSweep.enabled=true, dryRun=false`,
+after its own dry-run trial — Kevin K2) **or** the narrow stale-slate re-fetch
+(§5b) must be built. Until one exists, a postponed game finalizing past 24h stays
+unscored; note it in the arming checklist, don't leave it implicit.
 
 ## 8. Explicitly NOT in scope
 
