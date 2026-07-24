@@ -157,8 +157,9 @@ prose here:
    concurrent pre-kickoff submissions and could drop valid picks (codex r17). The
    scorer's skip decision must use an aggregate that **changes on every entry
    mutation** — **not `max`** (codex r18): independent per-entry bumps mean a lower
-   entry moving 2→3 leaves `max` unchanged and skips forever. Use a monotone sum of
-   revisions, or a **"count of entries with revision > lastScoredRevision"** query,
+   entry moving 2→3 leaves `max` unchanged and skips forever. Use a monotone
+   **sum/checksum of per-entry revisions** (a `count > lastScoredRevision` also
+   stalls once an entry re-increments above the threshold — codex r22),
    or an `updatedAt`-since query. Lease contention for a submission only arises for
    a boundary pick committing right at lock — normal pre-lock traffic never touches
    the lease.
@@ -273,7 +274,8 @@ week locks (nflPools.ts:485-488). So:
 manager-editable `lockBufferMinutes` (NFLManagerView.tsx:70). **PR-0** (below) is
 the small change: **default/force Survivor & Margin to `WEEKLY`** (they default
 `PER_GAME` today — JoinPool.tsx:212), turn the free-number buffer into the **60/30/5
-preset picker**, and guard `weekLockOverride` to move-earlier-only for these types.
+preset picker**, and **reject `weekLockOverride`/`extendWeekDeadline` unconditionally**
+for these types (the deadline is set-once; see §7 PR-0 for why "move-earlier" can't work).
 
 **What "provisional" now means (simplified).** Because picks are immutable after the
 weekly lock, missing-pick penalties are **determined at lock time** (before any
@@ -333,11 +335,16 @@ export async function scoreNFLWeekInternal(
   1. **All three types score live per-game** (§3b, Kevin's 2026-07-25 ruling).
      Because Survivor/Margin now use a **weekly hard lock**, their picks are
      immutable after the deadline, so a provisional pass grades finalized games and
-     applies penalties for all three types — a no-pick Survivor entry is struck /
-     a no-pick Margin entry booked `-14` on the first pass after the week locks
-     (the miss is certain at lock, before any game). `provisional` does **not**
-     defer penalties; it defers only finalization completeness (points 3–4). A
-     finalized game grades when it goes `FINAL`; standings update live.
+     applies penalties. **But a no-pick penalty must be gated on `now >=
+     effectiveWeekLockAt`, not merely on the pass running** (codex r22): the
+     active-window query reaches 2h *before* kickoff, so a pass can fire before the
+     weekly lock (which is kickoff − 60/30/5), and striking a no-pick Survivor entry
+     then would eliminate a member whose pick window is still open —
+     `submitNFLPicks` would then reject their valid pick as `ELIMINATED`. So a
+     Survivor no-pick strike / Margin `-14` (and any Survivor state update) fires
+     only once `now >= effectiveWeekLockAt`; made-pick grading is naturally safe
+     (only `FINAL` games grade, always post-lock). `provisional` does **not** defer
+     penalties past that lock; it defers only finalization completeness (points 3–4).
   2. **Reveal gate** — only games that are terminal AND `gameLockClosed(g)` are
      graded into standings (§3a). **Also recompute every per-week SUMMARY over
      that lock-closed set only** (codex r8): the inline scorer sets
@@ -373,11 +380,15 @@ export async function scoreNFLWeekInternal(
   finishes in a single **complete** pass (all terminal, lock passed), which would
   otherwise publish `standings/current` without ever stamping the marker and leave
   the week reopenable after its result was exposed.
-  The live scorer (§5) sets `provisional = the week still has a non-terminal
-  game` (computed from the full slate). Penalties and grading run on every pass
-  (§3b); when `provisional` clears — the week is fully terminal — the run
-  additionally writes the finalization markers, checks `maybeFinalizeNFLPool`, and
-  creates the recap. Default `false` keeps every current caller identical.
+  The live scorer (§5) sets `provisional = NOT (every game in the week is terminal
+  AND every terminal game is reveal-eligible, i.e. `gameLockClosed`)` — the
+  `gameLockClosed` term still matters for Pick'em, where a game can be `FINAL`
+  while its `weekLockOverride` keeps it withheld (§3a); dropping it would let the
+  completion pass stamp `scoredWeeks`/finalize/recap before that hidden game is
+  revealable (codex r22). Penalties (gated on the weekly lock, point 1) and grading
+  run on every pass; when `provisional` clears the run additionally writes the
+  finalization markers, checks `maybeFinalizeNFLPool`, and creates the recap.
+  Default `false` keeps every current caller identical.
 - `opts.actor` (default the callable's `Host`): threads audit attribution so
   `SCORE_FINALIZED` / `SURVIVOR_AUTO_STRIKE` keep the caller's identity, and
   `nflAutoScoreJob` passes a **`SYSTEM`** actor (codex r4). Without this the
@@ -510,9 +521,10 @@ Run body:
    decision — each entry mutator bumps its **own entry doc's** revision (never a
    pool-wide `submitSeq` field — that is a single-document write hotspot at peak
    submission, §3a criterion 5, codex r17). The scorer aggregates via a value that
-   **changes on every entry mutation — a monotone sum or a "count of entries with
-   revision > lastScoredRevision" query, NOT `max`** (codex r18/r19: `max` stays put
-   when a lower entry moves 2→3, skipping the boundary pick forever) — so a
+   **changes on every entry mutation — a monotone SUM/checksum of per-entry
+   revisions, NOT `max` and NOT a `count > lastScoredRevision`** (codex r18/r19/r22:
+   `max` stalls when a lower entry moves 2→3; a count stalls once an entry already
+   above the threshold re-increments — only a sum/checksum moves every time) — so a
    post-read submission forces exactly one more pass.
    **Fingerprint unchanged → skip the pool, no writes.** Changed → call
    `scoreNFLWeekInternal(...)`.
@@ -522,11 +534,12 @@ Run body:
      dry-run-writes-nothing contract and, worse, would leave the fingerprint
      "already current" so the first live run *skips the pool and never scores it*.
 6. `provisional` is computed from the **full `(season, seasonType, week)` slate**
-   the scorer reads, per §3b/§4: `provisional = the week still has a non-terminal
-   game`. Grading and penalties run on every pass (all three types are weekly- or
-   per-game-locked, so picks are immutable). While `provisional`, only the
-   finalization markers / `maybeFinalizeNFLPool` / recap are withheld; when it
-   clears, the run writes `scoredWeeks`, checks finalize, and creates the recap.
+   the scorer reads, per §3b/§4: `provisional = NOT (every game terminal AND every
+   terminal game `gameLockClosed`)`. Grading runs every pass; Survivor/Margin
+   no-pick penalties are gated on `now >= effectiveWeekLockAt` (§4 point 1). While
+   `provisional`, only the finalization markers / `maybeFinalizeNFLPool` / recap are
+   withheld; when it clears, the run writes `scoredWeeks`, checks finalize, and
+   creates the recap.
 7. Per-run safety cap (mirror `MAX_*_PER_RUN`) so one run can't fan out
    unbounded; overflow rolls to the next run and is reported.
 8. Return a `scoreSyncHeartbeat`-style verdict: `{ ok, detail: { activeSlates,
