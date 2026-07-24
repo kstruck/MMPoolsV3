@@ -53,6 +53,23 @@ export function weekLockDecision(
 }
 
 /**
+ * KNOWN RESIDUAL (codex r5, deferred to the settings-path PR).
+ *
+ * The freeze defends a week only if it was recorded before that week's original
+ * deadline passed. Every server path that touches the week now records it — pick
+ * submission, proxy pick, and the 15-minute reminder pass (which freezes
+ * unconditionally, above the reminders off-switch) — but settings are still
+ * written straight to Firestore by the manager UI, so there is no write-time hook.
+ *
+ * The remaining hole is narrow: a manager would have to set a wider buffer, have
+ * NO reminder pass fire and NO member submit before that wider deadline passed
+ * (the pass runs every 15 minutes), then narrow it again. It closes completely
+ * when settings edits move behind the server-owned `updatePoolSettings` path — the
+ * same change PLAN-REALTIME-SCORING assigns to PR-B′ — which can freeze
+ * transactionally at the moment the buffer changes.
+ */
+
+/**
  * Persist the week's hard deadline, monotonically (it may only move EARLIER), and
  * return the value now in force.
  *

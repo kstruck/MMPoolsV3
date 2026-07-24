@@ -94,7 +94,12 @@ service cloud.firestore {
         return !changed.hasAny([
           'managerUid', 'ownerId', 'createdAt', 'createdBy',
           'axisNumbers', 'squares', 'participants',
-          'billing' // Billing status managed exclusively by Cloud Functions
+          'billing', // Billing status managed exclusively by Cloud Functions
+          // Frozen weekly pick deadlines for Survivor/Margin. The server only ever
+          // moves these EARLIER; a manager who could clear the map would erase the
+          // record of a deadline that already passed and reopen that week by
+          // widening the lock buffer.
+          'hardLockByWeek'
         ]);
       }
 

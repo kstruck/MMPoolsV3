@@ -181,9 +181,12 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     return () => clearInterval(id);
   }, []);
 
-  const isWeekLocked = useMemo(() => {
+  // Returns the deadline too, not just a boolean: several views render a "locks
+  // at" time, and showing the first kickoff there would tell a Survivor/Margin
+  // member they can pick up to 60 minutes later than the server allows.
+  const weekLock = useMemo(() => {
     void lockTick;
-    if (weeklyGames.length === 0) return false;
+    if (weeklyGames.length === 0) return { deadline: null as number | null, locked: false };
     // Survivor/Margin run a hard weekly deadline and the server snaps their buffer
     // to an allowed preset — normalize here too, or the UI would disagree with the
     // server on a legacy value (a stored 0 would show picks open past the deadline
@@ -199,8 +202,9 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     const deadline = usesWeeklyHardLock(castPool.type)
       ? resolveHardWeekLock(frozenHardLockFor(castPool, selectedWeek), computed)
       : computed;
-    return serverNow() >= deadline;
+    return { deadline, locked: serverNow() >= deadline };
   }, [weeklyGames, castPool.settings?.lockBufferMinutes, castPool.type, castPool.hardLockByWeek, selectedWeek, lockTick]);
+  const isWeekLocked = weekLock.locked;
 
   // Time remaining to earliest game this week
   const earliestGame = useMemo(() => {
@@ -416,6 +420,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     setSelectedWeek={setSelectedWeek}
                     isWeekLocked={isWeekLocked}
                     earliestGame={earliestGame}
+                    weekLockAt={weekLock.deadline}
                     onBack={onBack}
                     onOpenAuth={onOpenAuth}
                     isManager={isManager}
@@ -512,13 +517,13 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                               </div>
                             </div>
 
-                            {earliestGame && !isWeekLocked && (
+                            {weekLock.deadline !== null && !isWeekLocked && (
                               <div className="bg-page p-3 rounded-lg text-center border border-line">
                                 <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted block mb-1">
                                   Locks in
                                 </span>
                                 <span className="text-gold-600 dark:text-gold-400 num font-bold text-sm">
-                                  {new Date(earliestGame.startTime).toLocaleString()}
+                                  {new Date(weekLock.deadline).toLocaleString()}
                                 </span>
                               </div>
                             )}
