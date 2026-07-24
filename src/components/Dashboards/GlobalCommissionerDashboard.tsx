@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Crown, DollarSign, Users, Settings, ArrowRight, Trophy } from 'lucide-react';
 import type { User, Pool } from '../../types';
 import { Button } from '../ui';

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router';
 import { Lock } from 'lucide-react';
 import type { PoolType } from '../types';
 import { useFeatureFlags } from '../hooks/useFeatureFlags';

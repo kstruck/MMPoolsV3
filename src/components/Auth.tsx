@@ -1,6 +1,6 @@
 import { logger } from '../utils/logger';
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { authService } from '../services/authService';
 import { Mail, Lock, User, ArrowRight, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from './ui';

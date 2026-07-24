@@ -2,7 +2,7 @@ import { logger } from '../utils/logger';
 import { CANONICAL_ROLES, normalizeRole, roleBadge } from '../utils/roles';
 import { ConfirmActionModal } from './admin/ConfirmActionModal';
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import type { GameState, Pool, User, SystemSettings, PropSeed, PlayoffTeam, PoolTheme, LoyaltyTier } from '../types';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';

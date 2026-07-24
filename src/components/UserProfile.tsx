@@ -11,7 +11,7 @@ import type { SeasonHistoryEntry } from '../services/historyService';
 import { formatDeadline } from '../utils/formatTime';
 
 import { Save, User as UserIcon, Phone, Twitter, Facebook, Linkedin, Globe, Instagram, Loader, Copy, Users, Link as LinkIcon, Edit2, Mail, ShieldAlert, Trophy, Medal, History } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 interface UserProfileProps {

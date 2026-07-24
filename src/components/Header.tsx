@@ -5,7 +5,7 @@ import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy, RefreshCw, CheckC
 import { authService } from '../services/authService';
 import { isSuperAdmin, canCreatePool, canAccessPoolCreation } from '../utils/auth';
 import { logger } from '../utils/logger';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router';
 import { ThemeToggle } from './ui/ThemeToggle';
 import { cn } from './ui/cn';
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Trophy, Grid3X3, Lock, ArrowRight, ArrowLeft, Check } from 'lucide-react';
 // import { settingsService } from '../services/settingsService';
 import { Header } from './Header';
