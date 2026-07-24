@@ -568,7 +568,9 @@ Run body:
 ### 5b. Reconciliation tier — late ESPN corrections (codex r3)
 
 The active-window early-out means a slate is invisible to the LIVE tier once its
-games are >2h past kickoff. But `syncNFLScoresJob` / `nflDeepScoreSweepJob`
+games fall outside the **24h** `HOT_WINDOW_LOOKBACK_MS` (§5 step 2) — a correction
+a few hours after kickoff is still caught live; the gap is corrections/finals
+beyond 24h. `syncNFLScoresJob` / `nflDeepScoreSweepJob`
 reconcile ESPN stat corrections **days later** (`detectStatCorrections`, A5) — a
 Sunday score restated on Tuesday. Those corrected `nfl_games` writes would never
 reach the fingerprint comparison, so standings (and finalized projections) would
@@ -805,11 +807,11 @@ unscored; note it in the arming checklist, don't leave it implicit.
   own); the >24h stale-slate observation (§3a crit. 6) reuses the deep sweep.
 - No prod-data mutation and no deploy by Claude (Kevin's gates).
 
-## 9. Codex review status — 24 rounds, converged on the plan's altitude
+## 9. Codex review status — 26 rounds, converged on the plan's altitude
 
-This plan was adversarially reviewed by `codex exec review` across **24 rounds** (85
+This plan was adversarially reviewed by `codex exec review` across **26 rounds** (89
 findings, 0 rejected); every finding was absorbed with written evidence in the git
-history (`docs(plan): absorb codex r1..r24`). **Kevin's 2026-07-25 weekly-hard-lock
+history (`docs(plan): absorb codex r1..r26`). **Kevin's 2026-07-25 weekly-hard-lock
 ruling** (§3b) landed between r19 and r20 and *simplified* the design — all three
 pool types live-scorable, PR-0 added, the provisional flag reduced to finalization
 completeness, and PR-B′'s reveal-race machinery narrowed to Pick'em only. The

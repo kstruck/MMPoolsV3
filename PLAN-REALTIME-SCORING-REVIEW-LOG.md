@@ -39,10 +39,12 @@ cross-model gate (CLAUDE.md §2c). qodo is billing-blocked (§2b) and did not ru
 | r22 | 4 | gate S/M no-pick penalty on `effectiveWeekLockAt` (active window precedes the lock); keep `gameLockClosed` in provisional completion (Pick'em overrides); sum-only watermark (count also stalls); unconditional override reject |
 | r23 | 3 | include a weekly-lock-passed bit in the fingerprint (else at-lock penalty waits for a game to finalize); migration must CLEAR existing overrides on S/M; backfill `publishedWeeks` for pre-rollout scored weeks |
 | r24 | 3 | move S/M lock-field write-lockdown into PR-0 (a client save reverts it before PR-B′); fence `nflFinalizeSweepJob` with the scoring lease; update this log through r24 |
+| r25 | 2 | PR-0 also freezes per-week deadline + protects `lockBufferMinutes` (a save omitting it reverts to 5min); lossless rescore-queue drain (append-only / versioned ack) |
+| r26 | 2 (P3) | doc consistency only — stale "2h" live-window boundary → 24h; record r25 here. **No P1/P2 design findings — convergence.** |
 
 ## Verdict
 
-**24 rounds, 85 findings, 0 rejected** — all valid against source (each
+**26 rounds, 89 findings, 0 rejected** — all valid against source (each
 load-bearing claim verified against the cited files before absorbing, per
 CLAUDE.md). Rounds 1–11 found genuine defects in the core scoring/reveal/lifecycle
 design; 12–19 refined the flagged PR-B′ concurrency/authorization protocol and the
