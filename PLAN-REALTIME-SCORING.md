@@ -426,8 +426,9 @@ export async function scoreNFLWeekInternal(
   **`scoringLease: { owner, until }`** — expiry **and** owner token together, codex
   r16; entry-revision watermarks live on the entry docs, not here),
   **`pool.publishedWeeks.{week}`** (immutable per-week publication marker, §3a/§4),
-  and **`pool.settings.lockRevision`** (monotonic, bumped by `extendWeekDeadline`,
-  §3a). PR-A itself writes none of these — they arrive with PR-B / PR-B′ — but the
+  **`pool.settings.lockRevision`** (monotonic, bumped by `extendWeekDeadline`, §3a),
+  and **`pool.frozenWeekLockAt.{week}`** (server-only set-once frozen weekly deadline
+  for S/M, §7 PR-0, codex r31). PR-A itself writes none of these — they arrive with PR-B / PR-B′ — but the
   contract is declared here so an implementation cannot quietly omit the
   `publishedWeeks` marker `extendWeekDeadline` must read. It ships **no scheduled
   job** — only the extraction + these options, so a codex round on it is cheap and
@@ -794,8 +795,12 @@ day to spare; defer C2 unless Kevin asks for live cross-member movement.
      reopening picks. And to stop even a legitimate mid-week buffer change from
      moving an already-announced deadline, PR-0 **freezes each week's effective
      deadline once established** — snapshot `effectiveWeekLockAt` to a per-week field
-     the first time the week's deadline is computed, and read the frozen value
-     thereafter so a later settings edit cannot shift a live week's lock.
+     the first time the week's deadline is computed (`pool.frozenWeekLockAt.{week}`,
+     **server-only + set-once**, consumed by every lock check — `effectiveLock.ts`,
+     `submitNFLPicks`, `proxyPick`), and read the frozen value thereafter so a later
+     settings edit cannot shift a live week's lock. This field is in the protected /
+     server-only set alongside `lockMode`/`lockBufferMinutes` (codex r31) — a
+     wholesale `settings` replace must not clear it.
    - **Validate the buffer to the {60, 30, 5} set server-side (codex r29)** — not
      just protect the field. `updatePoolSettings` takes `settings` as an opaque map,
      so once direct writes are blocked a manager could still call the callable with
@@ -855,11 +860,11 @@ unscored; note it in the arming checklist, don't leave it implicit.
   own); the >24h stale-slate observation (§3a crit. 6) reuses the deep sweep.
 - No prod-data mutation and no deploy by Claude (Kevin's gates).
 
-## 9. Codex review status — 26 rounds, converged on the plan's altitude
+## 9. Codex review status — 31 rounds (loop capped by Kevin at ~10)
 
-This plan was adversarially reviewed by `codex exec review` across **26 rounds** (89
-findings, 0 rejected); every finding was absorbed with written evidence in the git
-history (`docs(plan): absorb codex r1..r26`). **Kevin's 2026-07-25 weekly-hard-lock
+This plan was adversarially reviewed by `codex exec review` across **31 rounds** (99
+findings, 0 rejected; the loop was stopped at Kevin's cost cap, not on a clean round); every finding was absorbed with written evidence in the git
+history (`docs(plan): absorb codex r1..r31`). **Kevin's 2026-07-25 weekly-hard-lock
 ruling** (§3b) landed between r19 and r20 and *simplified* the design — all three
 pool types live-scorable, PR-0 added, the provisional flag reduced to finalization
 completeness, and PR-B′'s reveal-race machinery narrowed to Pick'em only. The

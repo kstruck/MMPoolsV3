@@ -10,7 +10,7 @@ log is the index; §9 of the plan carries the stop rationale.
 `codex exec review --base origin/main` (OpenAI, gpt-5.6-terra), the required
 cross-model gate (CLAUDE.md §2c). qodo is billing-blocked (§2b) and did not run.
 
-## Rounds (24)
+## Rounds (31 — loop capped by Kevin at ~10, actual 31)
 
 | Round | Findings | Theme (all absorbed with written evidence) |
 |---|---|---|
@@ -40,17 +40,28 @@ cross-model gate (CLAUDE.md §2c). qodo is billing-blocked (§2b) and did not ru
 | r23 | 3 | include a weekly-lock-passed bit in the fingerprint (else at-lock penalty waits for a game to finalize); migration must CLEAR existing overrides on S/M; backfill `publishedWeeks` for pre-rollout scored weeks |
 | r24 | 3 | move S/M lock-field write-lockdown into PR-0 (a client save reverts it before PR-B′); fence `nflFinalizeSweepJob` with the scoring lease; update this log through r24 |
 | r25 | 2 | PR-0 also freezes per-week deadline + protects `lockBufferMinutes` (a save omitting it reverts to 5min); lossless rescore-queue drain (append-only / versioned ack) |
-| r26 | 2 (P3) | doc consistency only — stale "2h" live-window boundary → 24h; record r25 here. **No P1/P2 design findings — convergence.** |
+| r26 | 2 (P3) | doc consistency only — stale "2h" live-window boundary → 24h; record r25 here |
+| r27 | 3 | enqueue manual spread edits for ATS rescore; `gameLockClosed` in §3b formula; retry finalize on complete-but-unfinalized pool |
+| r28 | 2 | pending-state for locked-but-unfinished S/M made picks (engine writes survived/0 otherwise); add `FINAL` to terminal pool-status predicate |
+| r29 | 3 | server-validate buffer to {60,30,5}; deep-sweep lookback is bounded (7–30d) so needs uncapped re-fetch; override guard is a *current* concern (submissions honor overrides today) |
+| r30 | 3 | dry-run reads queue read-only (no ack); enqueue failed finalization beyond 24h window; correct morning-doc K2 deep-sweep note |
+| r31 | 2 | protect the server-only set-once `frozenWeekLockAt.{week}`; update the review trail |
 
 ## Verdict
 
-**26 rounds, 89 findings, 0 rejected** — all valid against source (each
+**31 rounds, 99 findings, 0 rejected** — all valid against source (each
 load-bearing claim verified against the cited files before absorbing, per
 CLAUDE.md). Rounds 1–11 found genuine defects in the core scoring/reveal/lifecycle
 design; 12–19 refined the flagged PR-B′ concurrency/authorization protocol and the
 >24h observation edge; then **Kevin's 2026-07-25 weekly-hard-lock ruling simplified
-the design** (all three pool types live-scorable, PR-0 added), and r20–24 hardened
-and reconciled that ruling across the docs (penalty-at-lock timing, migration of
-existing pools, cold-start markers, and pulling the S/M write-lockdown forward into
-PR-0). PR-B′'s concurrency contract carries into its own code review, where codex
-runs on a diff and can converge to clean.
+the design** (all three pool types live-scorable, PR-0 added), and r20–31 hardened
+and reconciled that ruling (penalty-at-lock timing, made-pick pending state, pool
+migration, cold-start markers, dry-run/queue interaction, and the frozen deadline).
+
+**The loop was STOPPED at Kevin's direction (cap ~10 reviews) — not because a round
+returned clean.** Severity had trended down (P3-only at r26) but P1/P2 edge findings
+kept surfacing on the concurrency + arming interactions, which is expected for a
+prose spec of a distributed scoring protocol. The core scoring/reveal/lock design is
+settled and thoroughly evidenced; the residual is implementation-level specification
+of PR-B′ (fenced mutex) and the arming/queue mechanics, which carry into those
+sub-PRs' own code review, where codex runs on a diff and can converge to clean.
