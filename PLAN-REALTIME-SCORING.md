@@ -349,9 +349,15 @@ export async function scoreNFLWeekInternal(
      then would eliminate a member whose pick window is still open —
      `submitNFLPicks` would then reject their valid pick as `ELIMINATED`. So a
      Survivor no-pick strike / Margin `-14` (and any Survivor state update) fires
-     only once `now >= effectiveWeekLockAt`; made-pick grading is naturally safe
-     (only `FINAL` games grade, always post-lock). `provisional` does **not** defer
-     penalties past that lock; it defers only finalization completeness (points 3–4).
+     only once `now >= effectiveWeekLockAt`. **A made pick is still PENDING until its
+     own picked game is terminal (codex r28):** the engine helpers do **not** skip a
+     not-yet-`FINAL` picked game — `computeSurvivorWeekUpdate` reports `survived:true`
+     and `scoreMarginWeek(...)===null` becomes `0` — so writing those would show an
+     unplayed pick as a survival / a `0` margin that flips at game final. So a
+     Survivor/Margin entry is written **only when its picked team's game is terminal**;
+     until then the entry's week is left untouched (test the locked-but-unfinished
+     pick case explicitly). `provisional` does **not** defer penalties past the weekly
+     lock; it defers only finalization completeness (points 3–4).
   2. **Reveal gate** — only games that are terminal AND `gameLockClosed(g)` are
      graded into standings (§3a). **Also recompute every per-week SUMMARY over
      that lock-closed set only** (codex r8): the inline scorer sets
@@ -487,8 +493,10 @@ Run body:
      `cancelPool` persists `status: "CANCELED"` (poolExceptions.ts:336) and
      admin-close persists `COMPLETED`; finalized pools carry `isFinal`/`finalizedAt`.
      Exclude when `isFinal === true` **or** `finalizedAt` set **or**
-     `status` (compared **case-insensitively**) ∈ `{CANCELED, COMPLETED,
-     ARCHIVED}`. `nflFinalize.ts` uses `status === 'CANCELED'` (:247/:474);
+     `status` (compared **case-insensitively**) ∈ `{FINAL, CANCELED, COMPLETED,
+     ARCHIVED}` — `FINAL` is a settled pool status (payout handling treats it so)
+     distinct from the `isFinal` boolean, and omitting it would rewrite a settled
+     pool every active slot (codex r28). `nflFinalize.ts` uses `status === 'CANCELED'` (:247/:474);
      `ARCHIVED` is added because `dbService.archivePool` persists `status:
      'archived'` while leaving `isFinal`/`finalizedAt` unset (codex r7), and the
      casing across these write paths is inconsistent. Scoring a voided/archived
