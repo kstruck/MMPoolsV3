@@ -576,7 +576,12 @@ Run body:
      takes the unchanged-fingerprint skip and the pool stays unfinalized forever
      (the sweep is disabled by default). Fold **finalization completion into the
      skip state**: a complete-but-not-yet-`finalizedAt` pool is never skipped — the
-     idempotent finalize is retried each pass until it succeeds.
+     idempotent finalize is retried each pass until it succeeds. **And because that
+     retry only fires while the slate is a live candidate, a finalize still failing
+     when the slate leaves the 24h window must be ENQUEUED (§5b)** so it is retried
+     beyond the window (codex r30) — otherwise the pool falls out of both the live
+     tier and the default-off finalizer and stays unfinalized. (Equivalently, arming
+     the live finalizer is a prerequisite; enqueue is the self-contained option.)
 6. `provisional` is computed from the **full `(season, seasonType, week)` slate**
    the scorer reads, per §3b/§4: `provisional = NOT (every game terminal AND every
    terminal game `gameLockClosed`)`. Grading runs every pass; Survivor/Margin
@@ -684,6 +689,14 @@ in the arming notes that a late Survivor **correction** has **no safe manual rep
 and must wait
 for the reset-replay sub-PR — do not tell Kevin to manually re-score a Survivor
 week.
+
+**Dry-run must NOT acknowledge queue events (codex r30).** During the dry-run
+watching period, a queued correction or delayed final can be the only candidate for
+an out-of-window slate; if the dry-run drain *acknowledges/clears* it, flipping to
+live leaves no queue item and no active-window candidate, so the stale result is
+never applied. So a dry-run pass **reads the queue read-only** (computes what it
+would do, acknowledges nothing) — only a live pass clears an event. Test the
+dry-run→live handoff leaves every observed event intact.
 
 **Idempotent + kill-switched + dry-run-first**, exactly like the deep sweep:
 Kevin arms `{ enabled: true, dryRun: true }`, watches the audit/heartbeat detail
