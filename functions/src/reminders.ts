@@ -633,38 +633,61 @@ async function executeAutoLock(db: admin.firestore.Firestore, pool: GameState) {
 }
 
 // --- BRACKET REMINDER LOGIC ---
+export type BracketTrigger = '24h' | '1h' | 'locked' | null;
+
+/**
+ * Which bracket lock reminder is due, given hours until lock. Pure so the
+ * cadence guarantee below can be TESTED rather than asserted in prose.
+ *
+ * WINDOW WIDTH IS LOAD-BEARING. `checkBracketReminders` fires each trigger at
+ * most once (createNotificationOnce dedupe), so a window that falls entirely
+ * between two polls is a reminder NEVER sent — not merely delayed. runReminders
+ * polls every 15 minutes (#265), so every window here MUST be wider than 15
+ * minutes or a lock can slip through it. These are 0.4h = 24 min > 15 min,
+ * which guarantees at least one poll lands in-band; the dedupe absorbs the 1–2
+ * polls that do. The old windows were 0.2h = 12 min < 15 min and were missable
+ * under the new cadence — codex review of #265, verified by the polling
+ * simulation in reminderBracketCadence.test.ts. If the cadence changes again,
+ * these bounds must stay wider than the new interval.
+ *
+ * '24h' and '1h' stay gated on the pool's auto flags; 'locked' is not gated,
+ * matching the original behaviour.
+ */
+export function bracketReminderTrigger(
+    hoursUntilLock: number,
+    reminders: { auto24h?: boolean; auto1h?: boolean } | undefined,
+): BracketTrigger {
+    if (hoursUntilLock <= 24 && hoursUntilLock > 23.6 && reminders?.auto24h) return '24h';
+    if (hoursUntilLock <= 1 && hoursUntilLock > 0.6 && reminders?.auto1h) return '1h';
+    if (hoursUntilLock <= 0 && hoursUntilLock > -0.4) return 'locked';
+    return null;
+}
+
 async function checkBracketReminders(db: admin.firestore.Firestore, pool: BracketPool, now: number) {
     if (!pool.lockAt) return;
 
     const msUntilLock = pool.lockAt - now;
     const hoursUntilLock = msUntilLock / (1000 * 60 * 60);
 
-    const is24h = hoursUntilLock <= 24 && hoursUntilLock > 23.8;
-    const is1h = hoursUntilLock <= 1 && hoursUntilLock > 0.8;
-    const isLockMsg = hoursUntilLock <= 0 && hoursUntilLock > -0.2;
+    const trigger = bracketReminderTrigger(hoursUntilLock, pool.reminders);
+    if (!trigger) return;
 
-    let trigger = '';
     let emailSubject = '';
     let emailBody = '';
     let smsBody = '';
 
-    if (is24h && pool.reminders?.auto24h) {
-        trigger = '24h';
+    if (trigger === '24h') {
         emailSubject = `24 Hours to Lock: ${pool.name}`;
         emailBody = `<p>Your bracket pool <strong>${escapeHtml(pool.name)}</strong> locks in exactly 24 hours. Make sure your entries are filled out and paid.</p>`;
         smsBody = `Pool ${pool.name} locks in 24 hours! Get your bracket in.`;
-    } else if (is1h && pool.reminders?.auto1h) {
-        trigger = '1h';
+    } else if (trigger === '1h') {
         emailSubject = `1 Hour WARNING: ${pool.name}`;
         emailBody = `<p>Your bracket pool <strong>${escapeHtml(pool.name)}</strong> is locking in 1 HOUR! Finalize your entries now.</p>`;
         smsBody = `1 HOUR WARNING! Pool ${pool.name} locks soon.`;
-    } else if (isLockMsg) {
-        trigger = 'locked';
+    } else { // 'locked'
         emailSubject = `Pool Locked: ${pool.name}`;
         emailBody = `<p>Your bracket pool <strong>${escapeHtml(pool.name)}</strong> is now locked. Good luck!</p>`;
         smsBody = `Pool ${pool.name} is now locked! Good luck.`;
-    } else {
-        return;
     }
 
     const key = `BRACKET_REMINDER:${pool.id}:${trigger}`;
