@@ -1,6 +1,6 @@
-# HANDOFF — Session entry point (updated 2026-07-23: #265 functions deployed; FRONTEND REBUILD STILL OWED)
+# HANDOFF — Session entry point (updated 2026-07-24: functions + frontend both current)
 
-> ## ⚠️ STOP POINT 2026-07-23 — #265 functions deployed, FRONTEND REBUILD STILL OWED
+> ## ✅ STOP POINT 2026-07-24 — #265 functions deployed; frontend rebuilt and caught up
 >
 > **Functions are deployed from <!-- deploy-state:current --> `main` @ `49c12a9`.**
 > Deployed 2026-07-23 (bare `--only functions --project gridiron-gamble-uzuqo`,
@@ -11,13 +11,10 @@
 > each needed an isolated redeploy to clear a secret/plain env-var overlap after
 > a stray `functions/.env` (now comment-only) — both landed clean.
 >
-> ⚠️ **The FRONTEND is BEHIND, at <!-- deploy-state:ignore --> `main` @ `00153e5`.**
-> Coolify last built it there. The #261 `src/App.tsx` fix (public profile
-> header/footer) has NEVER reached the frontend, because pushing to `main` does
-> not rebuild it — a manual Coolify trigger is owed, and it brings the frontend
-> to `49c12a9` (#262/#265 are functions-only, no frontend change). Until then the public profile page
-> renders with no header/footer. Steps: KEVIN-TASKS-2026-07-23.md §1. The
-> FUNCTIONS queue is empty.
+> ✅ **The FRONTEND is now CURRENT.** Kevin merged #266 and triggered the Coolify
+> rebuild on 2026-07-24; the #261 profile fix is live — verified against
+> `/profile/:uid` (header + footer render for a logged-out viewer, bundle
+> `index-BhilVMpo.js`). No frontend rebuild owed. The FUNCTIONS queue is empty.
 >
 > ⚠️ The SHA appears **once** in this file, in the tagged claim above. Every
 > other mention says "the tagged SHA" on purpose: `docs-state-invariants` only
@@ -29,7 +26,8 @@
 >
 > ### What shipped since the morning
 >
-> **2026-07-23:** #261 (frontend — profile header/footer, **rebuild owed**, above),
+> **2026-07-23:** #261 (frontend — profile header/footer, **now live** after the
+> 2026-07-24 Coolify rebuild),
 > [#262](https://github.com/kstruck/MMPoolsV3/pull/262) (functions —
 > `runReminders` read fix, **deployed**) and
 > [#265](https://github.com/kstruck/MMPoolsV3/pull/265) (functions — 15-min
