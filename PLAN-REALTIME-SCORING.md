@@ -120,12 +120,24 @@ the general manager path — `NFLManagerView` → `dbService.updatePool(..., {se
 and the rules let a manager update non-protected fields while the pool is `OPEN`
 — so a manager could set `settings.weekLockOverrides.{week}` directly, after a
 result is published, without any lease/`lockRevision` bump, and `submitNFLPicks`
-would honor it (picks changeable after the outcome is visible). Resolution: make
-`weekLockOverrides` a **protected settings field** — writable **only** via
-`extendWeekDeadline` (which carries the guard + revision bump) and **rejected** by
-the general settings-update path (`updatePoolSettings`/`buildPoolSettingsUpdate`
-and the corresponding `firestore.rules` protected-field list). This is a rules +
-settings-validation change and rides in PR-B′.
+would honor it (picks changeable after the outcome is visible).
+
+Resolution — **all scorer-owned state is server-only, and direct client writes to
+`settings` are denied** (codex r12/r13). Two facts make a field-list rule
+insufficient: (a) more than `weekLockOverrides` is scorer-owned — `publishedWeeks`,
+the whole `autoScore` map, and `settings.lockRevision` are too, and a manager could
+clear `publishedWeeks` to reopen a revealed week just as easily (make **every**
+scorer-control field server-only, not just the override); and (b)
+`NFLManagerView` sends a **complete `settings` replacement** through
+`dbService.updatePool`, and `firestore.rules` `affectedKeys()` only reports the
+top-level `settings` key — so adding a nested key to a protected-field list does
+**not** block an override injected inside a wholesale settings write. So the rules
+must **deny client-direct writes to `settings` (and to `publishedWeeks`/`autoScore`)
+for these pools** and route permitted settings edits through a **server callable
+(`updatePoolSettings`)** that validates nested keys, refuses the scorer-owned ones,
+and is the only path that can touch `weekLockOverrides`/`lockRevision` — under the
+lease + revision guard. This rules + settings-validation change rides in PR-B′;
+it is the reason this work is plan-gated on both authorization and scoring.
 
 **The lease is also the mutex between scorers (codex r10).** It is not only an
 `extendWeekDeadline` blocker: **every** scoring path — a second `nflAutoScoreJob`
