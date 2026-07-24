@@ -114,6 +114,19 @@ extension can commit *after* the check but *before* the first chunked entry batc
 its final publish and discards the pass on mismatch. The lease bounds the window
 and the revision check is the backstop. This interleaving must be tested.
 
+**Every lock-affecting settings writer must go through the guard, not just
+`extendWeekDeadline` (codex r12).** `weekLockOverrides` is also reachable through
+the general manager path — `NFLManagerView` → `dbService.updatePool(..., {settings})`,
+and the rules let a manager update non-protected fields while the pool is `OPEN`
+— so a manager could set `settings.weekLockOverrides.{week}` directly, after a
+result is published, without any lease/`lockRevision` bump, and `submitNFLPicks`
+would honor it (picks changeable after the outcome is visible). Resolution: make
+`weekLockOverrides` a **protected settings field** — writable **only** via
+`extendWeekDeadline` (which carries the guard + revision bump) and **rejected** by
+the general settings-update path (`updatePoolSettings`/`buildPoolSettingsUpdate`
+and the corresponding `firestore.rules` protected-field list). This is a rules +
+settings-validation change and rides in PR-B′.
+
 **The lease is also the mutex between scorers (codex r10).** It is not only an
 `extendWeekDeadline` blocker: **every** scoring path — a second `nflAutoScoreJob`
 invocation (a capped run that overruns the 10-min cadence, or a Scheduler retry),
@@ -440,9 +453,17 @@ it changes survivor recompute semantics and must not ride along with the LIVE
 tier.
 
 **For the pilot** this tier may ship as a distinct follow-up sub-PR (the LIVE tier
-is the real-time requirement); until it exists, a late correction is reconciled by
-Kevin re-scoring manually — state that in the arming notes rather than leaving it
-silent.
+is the real-time requirement). The manual-fallback caveat is **type-specific**
+(codex r12): a manual `scoreNFLWeek` re-score of a corrected week is correct for
+**Pick'em and Margin** (both replace that week's map and recompute the season total
+additively — idempotent), but **NOT for Survivor** — re-scoring week N leaves later
+`strikeWeeks` in place and skips later-week recomputation once eliminated, so it
+cannot repair downstream elimination ordering. Therefore, until the reset-and-replay
+support ships: **exclude Survivor pools from the reconciliation queue** (Pick'em and
+Margin late corrections self-heal or manual-heal safely), and state in the arming
+notes that a late Survivor correction has **no safe manual repair** and must wait
+for the reset-replay sub-PR — do not tell Kevin to manually re-score a Survivor
+week.
 
 **Idempotent + kill-switched + dry-run-first**, exactly like the deep sweep:
 Kevin arms `{ enabled: true, dryRun: true }`, watches the audit/heartbeat detail
