@@ -134,15 +134,32 @@ it the moment the first game finalizes would **strike/penalize members whose pic
 window is still open**, and can eliminate a Survivor entry before their valid
 submission arrives.
 
-**Rule:** apply missing-pick penalties (Survivor no-pick strike, Margin `-14`)
-only when **every game in the week is terminal AND `now >= max(effectiveGameLockAt)`
-over all week games** — i.e. the last possible pick window has closed and there is
-nothing left to grade. Pick'em needs no deferral (an unmade pick scores 0, no
-penalty); only Survivor and Margin are gated. Terminality and the max-lock **must
-be computed from the full `(season, seasonType, week)` slate** the scorer reads
-(nflPools.ts:762-766), **not** from the `now + 2h` active-window query — a Friday
-final can be the only game in that window while Sunday games sit outside it
-(codex r2).
+**Rule (Pick'em vs Survivor/Margin split, codex r11).** These two pool families
+have different pick shapes, and only one is safe to score live:
+
+- **Pick'em** has one immutable-once-locked pick *per game* — `submitNFLPicks`
+  refuses to change a pick whose game has locked (nflPools.ts:419). So a locked,
+  finished game's pick is final and can be graded live, per game. **Pick'em is the
+  provisional/live path.**
+- **Survivor and Margin** have a single *weekly* pick that is **mutable across
+  games**: `submitNFLPicks` only checks the *newly selected* team's game lock
+  (nflPools.ts:490-493 / 542-545), so a member may replace a locked/finished
+  Thursday selection with a Sunday team right up until the week's **last** game
+  locks. Grading their Thursday game early could strike/eliminate or score an entry
+  whose pick is still legitimately changeable. **Therefore Survivor and Margin are
+  NOT scored provisionally at all — they are scored only on the COMPLETE pass**
+  (every game terminal AND `now >= max(effectiveGameLockAt)` over the full slate),
+  when no replacement can occur and the missing-pick penalty is genuine. This also
+  makes the earlier provisional-subset hazards (false auto-survive exemption,
+  survived/zero writes for a pending pick) moot for S/M — they simply never run
+  mid-week.
+
+Terminality and the max-lock **are computed from the full `(season, seasonType,
+week)` slate** the scorer reads (nflPools.ts:762-766), **not** the `now + 2h`
+active-window query — a Friday final can be the only game in that window while
+Sunday games sit outside it (codex r2). *(Alternative to enable live S/M later: add
+a submit-side guard that freezes a weekly pick once its selected game locks — a
+product change to `submitNFLPicks`, out of scope here.)*
 
 ## 4. PR-A — Extract `scoreNFLWeekInternal` (behavior-preserving refactor)
 
@@ -164,34 +181,30 @@ export async function scoreNFLWeekInternal(
 ```
 
 - The callable `scoreNFLWeek` keeps its auth/RBAC/`ACTIVE_GAMES` gate and its
-  schema, then delegates to `scoreNFLWeekInternal` with `dryRun:false`,
-  `provisional:false`, and `actor` = its authenticated caller
-  (`{ uid, role:'ADMIN', label:'Host' }`, the current attribution). **Zero
-  behavior change** for the existing button — proven by the existing emulator
-  fixtures (`nfl-pickem-preseason-lifecycle` et al.) passing unchanged.
+  schema, then delegates to `scoreNFLWeekInternal` with `dryRun:false`, `actor` =
+  its authenticated caller (`{ uid, role:'ADMIN', label:'Host' }`), and
+  **`provisional` computed from full-slate completion, NOT hard-coded `false`**
+  (codex r11). The callable lets a SUPER_ADMIN score while games are still active
+  (the `ACTIVE_GAMES` gate exempts them); hard-coding `provisional:false` there
+  would apply Survivor strikes / Margin `-14` / finalization artifacts while later
+  pick windows are open — the exact hazard the flag exists to prevent. So both the
+  button and the job derive `provisional` the same way. **Zero behavior change for
+  the button on a normal end-of-week score** (all games terminal, locks passed →
+  `provisional:false` → identical); the only change is that an admin scoring
+  *mid-week* now gets the same safeguards. Proven by the existing emulator fixtures
+  (`nfl-pickem-preseason-lifecycle` et al.) passing unchanged.
 - `opts.dryRun` (default `false`): compute grades + standings and **return the
   counts, writing nothing** (the deep-sweep dry-run contract).
 - `opts.provisional` (default `false`) — **one flag, the whole "this is a live
   mid-week pass" behavior** (codex r2/r4). When true:
-  1. **Defer any entry whose own pick is not yet gradeable** — not just missing
-     picks (codex r9). For Survivor/Margin (one pick per week) the entry's week is
-     **left entirely unwritten** when it has *no pick* **or** when its **selected
-     game is not yet terminal-and-lock-closed**. Reusing the current helpers on the
-     lock-closed subset is unsafe otherwise: `evaluateSurvivorWeek` returns
-     `survived:true` when the picked game is absent from the subset (a false
-     exemption), and Margin's `scoreMarginWeek(...) ?? 0` writes a visible `0` —
-     both surface through `standings/current` and leak/mis-state submission. So no
-     missing-pick strike, no `-14`, **and** no survived/zero write for a
-     still-pending selected game. Pick'em is naturally per-game (grades only
-     eligible games, unmade pick = 0).
-     **Survivor auto-survive exemption must be evaluated on the FULL slate, not
-     the lock-closed subset** (codex r10): `computeSurvivorWeekUpdate` runs
-     `checkAutoSurviveExemption` before grading, and a subset in which the entry
-     has used every team would grant a false exemption (keeping a losing pick
-     ALIVE) when an unused team still plays a later, unclosed game. So the
-     provisional survivor path cannot simply hand the filtered game list to the
-     existing helper — compute the exemption from the whole week (or defer
-     exemptions to the complete pass).
+  1. **Provisional is Pick'em-only; Survivor/Margin are skipped until the complete
+     pass** (§3b, codex r11). Because a Survivor/Margin weekly pick stays mutable
+     across games until the week's last lock, a provisional pass **writes nothing**
+     for those two types — no strike, no `-14`, no survived/zero, no standings row
+     change. It grades only Pick'em, whose per-game picks are immutable once
+     locked. (This dissolves the earlier provisional-subset hazards — false
+     auto-survive exemption, survived/zero writes for a pending pick — since S/M
+     never run mid-week.) The complete pass scores all three types normally.
   2. **Reveal gate** — only games that are terminal AND `gameLockClosed(g)` are
      graded into standings (§3a). **Also recompute every per-week SUMMARY over
      that lock-closed set only** (codex r8): the inline scorer sets
@@ -235,9 +248,16 @@ export async function scoreNFLWeekInternal(
   `SCORE_FINALIZED` / `SURVIVOR_AUTO_STRIKE` keep the caller's identity, and
   `nflAutoScoreJob` passes a **`SYSTEM`** actor (codex r4). Without this the
   extraction would lose the `request.uid` the inline scorer uses.
-- No new persisted fields beyond `pool.autoScore` (§5). It ships **no scheduled
-  job** — only the extraction + these options, so a codex round on it is cheap
-  and the blast radius is a refactor the fixtures already cover.
+- **Persisted-state contract (codex r11).** The feature adds exactly these new
+  fields, and every reference above must use these paths: `pool.autoScore`
+  (fingerprint-by-week, final-count/marker bookkeeping, `scoringLeaseUntil`),
+  **`pool.publishedWeeks.{week}`** (immutable per-week publication marker, §3a/§4),
+  and **`pool.settings.lockRevision`** (monotonic, bumped by `extendWeekDeadline`,
+  §3a). PR-A itself writes none of these — they arrive with PR-B / PR-B′ — but the
+  contract is declared here so an implementation cannot quietly omit the
+  `publishedWeeks` marker `extendWeekDeadline` must read. It ships **no scheduled
+  job** — only the extraction + these options, so a codex round on it is cheap and
+  the blast radius is a refactor the fixtures already cover.
 
 **Gates:** all five + `codex exec review --base origin/main`. This PR is the
 risk-bearing one (it moves scoring code); keep it isolated.
@@ -436,12 +456,21 @@ latency (a game ending at 4:12 is scored by ~4:27) meets "as each game ends".
 
 **Gates:** all five + codex. Emulator coverage (assert concrete values, verify
 each guard fails when removed — PICKUP §1):
-- a partially-final week scores only the finished games;
-- a Survivor entry with **no pick** on a week that still has non-terminal games
-  is **not struck** (deferral), and **is** struck once every game is terminal;
-- a Margin entry with no pick is unscored while the week is live, `-14` once
-  terminal;
+- a **Pick'em** partially-final week scores only the finished (lock-closed)
+  games, and its `weeklyResults.total` counts only those (no leak of open-pick
+  counts, §4);
+- a **Survivor** pool is **not written at all** on a provisional pass (no strike,
+  no exemption) while the week has open games; it is struck/scored only on the
+  complete pass (all terminal, locks passed) — including the swap case: a member
+  who replaces a locked Thursday pick with a Sunday team before the last lock is
+  scored on the Sunday result, not eliminated on the Thursday one;
+- a **Margin** pool is likewise unscored provisionally and scored (incl. `-14`
+  for a genuine miss) only on the complete pass;
+- an admin `scoreNFLWeek` call **mid-week** (active games) behaves provisionally
+  (no premature S/M penalties), and on a fully-terminal week is identical to today;
 - a second run with an unchanged terminal fingerprint writes nothing;
+- a mid-week pool **settings** change (STRAIGHT→ATS, `maxStrikes`) re-scores
+  (fingerprint includes settings, §5);
 - an ESPN score **correction** (same FINAL count, changed score) re-scores;
 - an ATS locked-**spread** correction after a final re-scores (fingerprint
   includes `spread.value`);
