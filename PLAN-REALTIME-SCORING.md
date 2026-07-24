@@ -130,10 +130,11 @@ onSchedule({ schedule: '*/10 * * * *', timeZone: 'America/New_York' }, withHeart
 Run body:
 
 1. Read + gate via `readJobGate` / `configReadFailedVerdict` (copy deep-sweep).
-2. **Cheap early-out**: query `nfl_games` in the active window
-   (`syncScoresWindow`'s pattern). If empty → `return { detail: { activeSlates: 0 } }`.
-   This is what keeps a 10-minute all-day cadence essentially free outside game
-   windows (one indexed query, no pool reads).
+2. **Cheap early-out (LIVE tier only)**: query `nfl_games` in the active window
+   (`syncScoresWindow`'s pattern). If empty → fall through to the reconciliation
+   tier (§5b) and otherwise `return { detail: { activeSlates: 0 } }`. This is what
+   keeps a 10-minute all-day cadence essentially free outside game windows (one
+   indexed query, no pool reads).
 3. Derive the live `(season, seasonType, week)` slot(s) from the active games —
    the `week` comes from the game docs, it is **not** a pool field (see below).
 4. **Candidate pools** (codex P1a/P1b): NFL pool docs are **season-long** — they
@@ -146,13 +147,16 @@ Run body:
      and score them prematurely;
    - **not** filter on `pool.isLocked` (it stays `false` on live pools — filtering
      on it excludes exactly the pools to score);
-   - exclude already-finalized pools (`isFinal !== true` / `scoredThroughWeek`
-     past the slot) to bound the set.
-   Reuse the finalize-sweep candidate pattern; the `pools(type, scoredThroughWeek)`
-   composite index is already deployed+Enabled. **Any NEW composite index must be
-   deployed AND built BEFORE this code ships** (the #219/#223 silent
-   `FAILED_PRECONDITION` lesson). The scored `week` is the live slot's week,
-   passed to `scoreNFLWeekInternal` — not read from the pool.
+   - **not** reuse the finalizer's `scoredThroughWeek`-inequality candidate query
+     (codex r3): newly created pools have **no `scoredThroughWeek` field** until
+     their first successful score, and a Firestore inequality **omits
+     missing-field docs** — so that query would exclude every brand-new pool and
+     its first game would never score. Query on `(type, season, seasonType)`
+     equality only, then apply the already-scored / `isFinal` filter **in memory**
+     after retrieval.
+   **Any NEW composite index must be deployed AND built BEFORE this code ships**
+   (the #219/#223 silent `FAILED_PRECONDITION` lesson). The scored `week` is the
+   live slot's week, passed to `scoreNFLWeekInternal` — not read from the pool.
 5. **Change-detection skip (cost guard, codex P2)**: a bare `FINAL` **count** is
    unchanged when ESPN restates a final score and does not grow when a game flips
    to `CANCELLED` — both change grades, so a count would skip the pool forever
@@ -161,8 +165,14 @@ Run body:
    `(gameId, status, home, away, spread.value)` tuples
    (`pool.autoScore.fingerprintByWeek[week]`). `spread.value` is included because
    ATS Pick'em grades on it (engine:71-75) and a SuperAdmin correction to a
-   locked spread can change winners without touching the score (codex r2).
-   **Fingerprint unchanged → skip the pool, no writes.** Changed → call
+   locked spread can change winners without touching the score (codex r2). The
+   tuple **also includes each terminal game's current reveal-eligibility bit**
+   `gameLockClosed(g)` (§3a) — otherwise a game finalized under a still-open
+   `weekLockOverride` is withheld on one run, and because the raw game data is
+   unchanged after the override expires the fingerprint would match and the pool
+   would take the skip path forever, never revealing it (codex r3). Encoding the
+   eligibility bit makes the hash change the moment the lock opens, forcing the
+   rescore. **Fingerprint unchanged → skip the pool, no writes.** Changed → call
    `scoreNFLWeekInternal(...)`.
    - **Dry-run persists nothing (codex r2):** the fingerprint is written
      **only after a successful LIVE scoring pass**. A dry run computes it in
@@ -179,6 +189,27 @@ Run body:
 8. Return a `scoreSyncHeartbeat`-style verdict: `{ ok, detail: { activeSlates,
    poolsScored, poolsSkipped, overflow } }`. Dry-run reports the same counts
    with `poolsScored` meaning "would score".
+
+### 5b. Reconciliation tier — late ESPN corrections (codex r3)
+
+The active-window early-out means a slate is invisible to the LIVE tier once its
+games are >2h past kickoff. But `syncNFLScoresJob` / `nflDeepScoreSweepJob`
+reconcile ESPN stat corrections **days later** (`detectStatCorrections`, A5) — a
+Sunday score restated on Tuesday. Those corrected `nfl_games` writes would never
+reach the fingerprint comparison, so standings (and finalized projections) would
+go stale. The auto-scorer must therefore also rescore **recently-corrected
+terminal slates**, not only the kickoff window.
+
+Durable handoff (reuse what already detects corrections, don't widen the frequent
+scan): when `syncScoresWindow` reports `corrections > 0` for a slate, **enqueue
+that `(season, seasonType, week)`** (a small `nfl_rescore_queue` marker doc, or a
+`system` field). Each `nflAutoScoreJob` run drains the queue as a second candidate
+source alongside the active window; a slate whose fingerprint is genuinely
+unchanged still costs only the skip check. This keeps the live path cheap and
+makes a late correction self-healing. **For the pilot** this tier may ship as a
+distinct follow-up sub-PR (the LIVE tier is the real-time requirement); until it
+exists, a late correction is reconciled by Kevin re-scoring manually — state that
+in the arming notes rather than leaving it silent.
 
 **Idempotent + kill-switched + dry-run-first**, exactly like the deep sweep:
 Kevin arms `{ enabled: true, dryRun: true }`, watches the audit/heartbeat detail
