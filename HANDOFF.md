@@ -1,18 +1,21 @@
-# HANDOFF — Session entry point (updated 2026-07-23: #262 functions deployed; FRONTEND REBUILD STILL OWED)
+# HANDOFF — Session entry point (updated 2026-07-23: #265 functions deployed; FRONTEND REBUILD STILL OWED)
 
-> ## ⚠️ STOP POINT 2026-07-23 — #262 functions deployed, FRONTEND REBUILD STILL OWED
+> ## ⚠️ STOP POINT 2026-07-23 — #265 functions deployed, FRONTEND REBUILD STILL OWED
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `a497e18`.**
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `49c12a9`.**
 > Deployed 2026-07-23 (bare `--only functions --project gridiron-gamble-uzuqo`,
-> confirmed `✔ Deploy complete!`). This carries #261 and #262 — the public-profile
-> header/footer fix and the `runReminders` read-amplification fix (~966K
-> Firestore reads/day removed; verify the drop via Query Insights).
+> confirmed `✔ Deploy complete!`). Carries #261, #262 and #265 — the
+> public-profile header/footer fix, the `runReminders` read-amplification fix
+> (~966K Firestore reads/day removed; verify the drop via Query Insights), and
+> the 15-minute reminder cadence. `createCheckoutSession` / `handleStripeWebhook`
+> each needed an isolated redeploy to clear a secret/plain env-var overlap after
+> a stray `functions/.env` (now comment-only) — both landed clean.
 >
 > ⚠️ **The FRONTEND is BEHIND, at <!-- deploy-state:ignore --> `main` @ `00153e5`.**
 > Coolify last built it there. The #261 `src/App.tsx` fix (public profile
 > header/footer) has NEVER reached the frontend, because pushing to `main` does
 > not rebuild it — a manual Coolify trigger is owed, and it brings the frontend
-> to `a497e18` (#262 has no frontend change). Until then the public profile page
+> to `49c12a9` (#262/#265 are functions-only, no frontend change). Until then the public profile page
 > renders with no header/footer. Steps: KEVIN-TASKS-2026-07-23.md §1. The
 > FUNCTIONS queue is empty.
 >
@@ -26,9 +29,12 @@
 >
 > ### What shipped since the morning
 >
-> **2026-07-23:** #261 (frontend — profile header/footer, **rebuild owed**, above)
-> and [#262](https://github.com/kstruck/MMPoolsV3/pull/262) (functions —
-> `runReminders` read fix, **deployed**) landed on top of the list below.
+> **2026-07-23:** #261 (frontend — profile header/footer, **rebuild owed**, above),
+> [#262](https://github.com/kstruck/MMPoolsV3/pull/262) (functions —
+> `runReminders` read fix, **deployed**) and
+> [#265](https://github.com/kstruck/MMPoolsV3/pull/265) (functions — 15-min
+> reminder cadence + bracket-window widening, **deployed**) landed on top of the
+> list below.
 >
 > The three morning PRs plus three more, all merged and now deployed:
 >
@@ -44,8 +50,9 @@
 > Kevin's two rulings (2026-07-22): **pin all wall-clock jobs to ET** (#259), and
 > **scope the PLAN gate to blast radius, not file count** (#260). Both live.
 >
-> Test counts now: functions vitest **956** (+9 from #262's
-> `reminderWeekContext` guards), emulator **132**, root vitest **291**.
+> Test counts now: functions vitest **962** (+9 from #262's
+> `reminderWeekContext` guards, +6 from #265's `reminderBracketCadence`),
+> emulator **132**, root vitest **291**.
 >
 > **qodo is billing-blocked** as of 2026-07-21 and reviewed none of these six.
 > codex (CLAUDE.md §2c) is the only working reviewer. See CLAUDE.md §2b.

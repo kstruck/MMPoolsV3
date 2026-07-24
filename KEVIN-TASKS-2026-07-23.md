@@ -2,25 +2,36 @@
 
 **Target: the Hall of Fame game, 2026-08-06.** 14 days out.
 
-**No production data was touched. Nothing was deployed.** Two PRs are open from
-today's session.
+> ⚠️ **END-OF-DAY UPDATE (2026-07-23) — this was the MORNING plan; most of it
+> is now DONE.** #262 (reads fix) and #265 (15-min cadence) are merged AND their
+> functions deployed at `49c12a9`; the docs PRs (#263 stats answers, #264
+> deploy-state) are merged. So in the table below, items **2, 3, 5 and 6a
+> (cadence) are complete** — do NOT redo them. **What actually remains yours:**
+> the **Coolify frontend rebuild** (§1, still owed — the profile fix is still not
+> live) and the **next-day reads verification** (§4). Q2/Q3/Q4 (§6b–d) are still
+> open decisions.
+
+*(Original morning framing, kept for the record: "No production data was touched.
+Nothing was deployed. Two PRs are open.")*
 
 ---
 
 ## 0. The 60-second version
 
-| # | Task | Why it can't be mine | Section | Time |
+*(Statuses reflect the end-of-day update above.)*
+
+| # | Task | Status | Section | Time |
 |---|---|---|---|---|
-| 1 | **Coolify rebuild** — still owed from #261, and NOT done | Manual dashboard trigger | §1 | 5 min |
-| 2 | Merge [#262](https://github.com/kstruck/MMPoolsV3/pull/262) — the Firestore reads fix | Merge is yours | §2 | 3 min |
-| 3 | **Deploy functions** after #262 merges | Deploys are yours | §3 | 10 min |
-| 4 | Verify the reads actually dropped, next day | Console access | §4 | 3 min |
-| 5 | Merge the docs PR (stats plan answers) | Merge is yours | §5 | 1 min |
-| 6 | Decide 3 open questions (Q2/Q3/Q4 + reminder cadence) | Yours to call | §6 | 5 min |
+| 1 | **Coolify rebuild** — still owed from #261 | ⏳ STILL YOURS | §1 | 5 min |
+| 2 | Merge [#262](https://github.com/kstruck/MMPoolsV3/pull/262) — the Firestore reads fix | ✅ DONE | §2 | — |
+| 3 | **Deploy functions** | ✅ DONE (at `49c12a9`) | §3 | — |
+| 4 | Verify the reads actually dropped, next day | ⏳ STILL YOURS | §4 | 3 min |
+| 5 | Merge the docs PR (stats plan answers) | ✅ DONE (#263) | §5 | — |
+| 6 | Decide open questions — cadence ✅ (#265); Q2/Q3/Q4 still open | ⏳ Q2/Q3/Q4 | §6 | 5 min |
 
 **Headline: I found the 1.4M reads/day driver, and it was not what the docs
-said.** Measured, fixed, reviewed, PR open. It is `runReminders` scanning the
-whole NFL season once per pool every five minutes. Details in §2.
+said.** Measured, fixed, reviewed, shipped. It is `runReminders` scanning the
+whole NFL season once per pool every five minutes (now every 15). Details in §2.
 
 ---
 
@@ -79,10 +90,10 @@ nfl_games WHERE (season = ? AND startTime > ?)
   780 executions / 6h   ·   305 docs scanned each   =   237,900 reads / 6h
 ```
 
-That is `runReminders`, which runs **every 5 minutes** and, **once per NFL
-pool**, pulls the entire remaining season — 305 documents — to compute a single
-integer that does not depend on the pool. ~966K reads/day. The comment above it
-called it "the cheap bail-out path".
+That is `runReminders`, which ran **every 5 minutes** (now every 15 after #265)
+and, **once per NFL pool**, pulls the entire remaining season — 305 documents —
+to compute a single integer that does not depend on the pool. ~966K reads/day.
+The comment above it called it "the cheap bail-out path".
 
 The fix memoizes that lookup per run. Same queries, same result, ~11 executions
 per run become 1.
@@ -186,8 +197,10 @@ measured.
 5. **The decisive check, and the one to trust** — GCP → Firestore → **Query
    insights**, 6-hour window, ~1 hour after deploy. The row
    `nfl_games WHERE (season = ? AND startTime > ?)` should fall from **~780
-   executions per 6h to ~72**. That row is exactly what this PR changes, so it
-   is a clean signal; the total-reads graph mixes in everything else.
+   executions per 6h to ~24** — ~72/6h from #262's memoization, then a further
+   3× from #265 dropping the cadence to every 15 min (both now deployed). That
+   row is exactly what these PRs change, so it is a clean signal; the total-reads
+   graph mixes in everything else.
 6. **If step 5 does not drop**, tell me — that would mean the fix did not take
    effect, which is a different problem from "the total is still high".
 7. **If step 5 drops but the total stays near 1.4M**, that is not a failure of
@@ -233,12 +246,12 @@ Not blocking — I have working assumptions for all four and will proceed on the
 if you'd rather not spend the time. But three touch a **world-readable money
 document**, so I'd rather you saw them.
 
-**a. `runReminders` cadence — free 3× on top of #262.**
-It runs **every 5 minutes**, but its reminder tiers are **T-36h** and **T-4h** —
-hour-granularity windows. Polling them every 5 minutes buys nothing and costs
-3× the reads of every-15-minutes. I did not change it because **it changes
-delivery timing on the path that pages your members**, and that is your call.
-Say "make it 15" and it's a two-line PR.
+**a. `runReminders` cadence — DONE (#265, deployed 2026-07-23).** You said "drop
+to 15m", so this is no longer a question. It now runs **every 15 minutes** — the
+3× reads reduction that stacks on #262. codex review caught that the 12-min
+BRACKET lock windows would be missable at 15-min polling (they fire once, so a
+missed window is a never-sent reminder); those were widened to 24 min and
+guarded by a polling simulation.
 
 **b. Q2 — all-time totals, or season-scoped?** Arguably settled in effect by the
 2026-09-09 cutoff (which makes them season-scoped in practice). Confirm rather

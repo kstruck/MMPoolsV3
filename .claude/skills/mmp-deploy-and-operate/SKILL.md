@@ -107,7 +107,7 @@ All schedules without an explicit `timeZone` run in **UTC** for v2 `onSchedule`.
 |---|---|---|---|---|
 | `autoLockPools` | every 1 min (300s/512MiB) | Locks due pools: SQUARES via `reminders.lock.enabled` + `lockAt`, BRACKET via root `lockAt` (due = within 30s); generates axis digits; bounded concurrency 15 | **NONE** — always live | `autoLock.ts:41` |
 | `syncGameStatus` | every 1 min | ESPN score pull for active squares pools; per-pool transactions; heartbeat doc `system/scoreSync` | **NONE** — always live | `scoreUpdates.ts:1081` |
-| `runReminders` | every 5 min | Deadline/lock reminder emails | NONE | `reminders.ts:113` |
+| `runReminders` | every 15 min (was 5 min until #265, 2026-07-23) | Deadline/lock reminder emails | NONE | `reminders.ts:115` |
 | `syncNFLScoresJob` | `*/5 * * * *` | Refreshes `nfl_games` scores + flex-schedule moves; preserves locked spreads | NONE | `nflSchedule.ts:221` |
 | `scheduledBracketSync` | every 10 min | Syncs all non-finalized tournaments from ESPN, then rescores all bracket entries | NONE (no-ops when no active tournaments) | `espnBracket.ts:1027` |
 | `checkPlayoffScores` | every 30 min | NFL playoff score sync | NONE | `playoffPools.ts:376` |

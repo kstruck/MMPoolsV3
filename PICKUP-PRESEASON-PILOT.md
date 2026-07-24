@@ -29,7 +29,7 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 ## 0. State as of 2026-07-23 — read this before anything else
 
-**Everything through #262 is merged, and FUNCTIONS are deployed through #262**
+**Everything through #265 is merged, and FUNCTIONS are deployed through #265**
 (the deployed SHA is the tagged claim in §2 — not repeated here, so it cannot
 rot). #262 removed the ~966K-reads/day `runReminders` amplification; verify the
 drop via Query Insights, KEVIN-TASKS-2026-07-23.md §4.
@@ -170,11 +170,11 @@ state. Concretely:
 
 ## 2. Live state (verified 2026-07-23)
 
-> ⚠️ **FUNCTIONS queue empty (deployed through #262); FRONTEND rebuild STILL
+> ⚠️ **FUNCTIONS queue empty (deployed through #265); FRONTEND rebuild STILL
 > OWED as of 2026-07-23.** Functions are deployed at the SHA tagged below,
-> which carries #261 and #262. The frontend is BEHIND — Coolify has not been
-> rebuilt for #261's `src/App.tsx` fix, so the public-profile header/footer is
-> not yet live. Steps to fix: KEVIN-TASKS-2026-07-23.md §1.
+> which carries #261, #262 and #265. The frontend is BEHIND — Coolify has not
+> been rebuilt for #261's `src/App.tsx` fix, so the public-profile header/footer
+> is not yet live. Steps to fix: KEVIN-TASKS-2026-07-23.md §1.
 >
 > **HANDOFF.md's STOP POINT box is authoritative for deploy state.** Both files
 > agree on the DEPLOYED SOURCE SHA below — which is what is RUNNING, not what
@@ -187,15 +187,15 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `a497e18`.**
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `49c12a9`.**
 Deployed 2026-07-23 (bare `--only functions --project gridiron-gamble-uzuqo`,
-`✔ Deploy complete!`). Carries #261 and #262 on top of the six PRs in HANDOFF's
-STOP POINT box and the 2026-07-21 baseline (which carried **#239, the
-Firestore-reads fix**).
+`✔ Deploy complete!`). Carries #261, #262 and #265 (15-min reminder cadence) on
+top of the six PRs in HANDOFF's STOP POINT box and the 2026-07-21 baseline
+(which carried **#239, the Firestore-reads fix**).
 
 **The FRONTEND is BEHIND, at <!-- deploy-state:ignore --> `main` @ `00153e5`** —
 Coolify last built it there; the #261 profile fix needs a manual rebuild to
-reach `a497e18` (KEVIN-TASKS-2026-07-23.md §1).
+reach `49c12a9` (KEVIN-TASKS-2026-07-23.md §1).
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is

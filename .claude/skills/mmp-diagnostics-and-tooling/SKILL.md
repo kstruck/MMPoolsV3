@@ -56,7 +56,7 @@ options anywhere in `functions/src`).
 | `autoClosePools` (daily 08:00 UTC) | `[autoClosePools] disabled (...)` while kill-switch off; `DRY-RUN: would close N pool(s)` in dry-run; `closed X/Y pool(s)` live | `failed to close <id>`; live-run closing far more than expected; NOTE: LIVE (actually closing) as of 2026-07-06 | `admin_audit` action `AUTO_CLOSE_SWEEP` has the count + 10-pool sample every run (§4) |
 | `syncGameStatus` (every 1 min) | `[Sync] Processing N pools (...)` or `[Sync] No active or recently completed pools found` | `[Sync] Failed to write system/scoreSync status doc`; repeated ESPN fetch errors; heartbeat `system/scoreSync` older than a few minutes during a live game | heartbeat doc `system/scoreSync` `{lastSyncAt, status: 'ok'|'error', detail?}` (`functions/src/scoreUpdates.ts:1065-1079`) |
 | `autoLockPools` (every 1 min) | `[AutoLock] Starting auto-lock check`, `Found N ... pools ready to lock`, `SUCCESSFULLY LOCKED: <id>`, `Completed auto-lock check` | `[AutoLock] Critical error:`, `Failed to lock pool <id>` | pool doc `lockAt` vs now; `mmp-debugging-playbook` for lock failures |
-| `runReminders` (every 5 min) | `[runReminders] Starting reminder check`, `Found N pools to check`, `Email queued for <to>` | `Error queuing email` | `mail` collection + email check in §2 |
+| `runReminders` (every 15 min; was 5 min until #265, 2026-07-23) | `[runReminders] Starting reminder check`, `Found N pools to check`, `Email queued for <to>` | `Error queuing email`; heartbeat `runReminders` older than ~45 min (3× the 15-min interval — `findStaleJobs` toleranceMultiplier; ~15 min is normal) | `mail` collection + email check in §2 |
 | `enforceBillingStatus` (daily 03:00 UTC) | `[BillingEnforce] Starting billing enforcement`, per-pool `trial → grace_period` transitions | `[BillingEnforce] Error transitioning pool`, `Failed to send grace-period email` | `mmp-config-and-flags` for billing config; note the `settings/billing_config` vs `config/billing_config` split-brain |
 | `scheduledHealthCheck` (hourly) | (quiet — writes `health/latest`) | `health/latest.updatedAt` older than ~2h | §2 |
 | `scoreNFLWeek` (MANUAL callable — still no scheduled NFL scorer as of 2026-07-12; first live NFL season is 2026) | invocation logs on demand | absence of logs during an NFL week means nobody scored it — that is the expected (bad) default | `mmp-nfl-season-campaign` |
@@ -273,7 +273,9 @@ Existing ops scripts (`functions/scripts/backfillSquarePrivate.mjs` is the model
 `scripts/inspectPool.js`, `scripts/checkPoolConfig.js` are older and inconsistent) use
 a service-account JSON key, expected at `scripts/service-account.json` (repo root
 convention) — **which is NOT in `.gitignore` as of 2026-07-06**. The pre-commit secret
-scan (`scripts/scan_secrets.py`, pattern `-----BEGIN PRIVATE KEY-----`) would catch a
+scan (`scripts/scan_secrets.py`, which matches the PEM `BEGIN PRIVATE KEY` header —
+written without the surrounding dashes here so this doc does not trip its own scanner)
+would catch a
 staged key, but don't rely on it: prefer keeping the key OUTSIDE the repo and pointing
 `GOOGLE_APPLICATION_CREDENTIALS` at it. Get a key from Firebase console → Project
 settings → Service accounts → Generate new private key (SUPER_ADMIN/owner only).
