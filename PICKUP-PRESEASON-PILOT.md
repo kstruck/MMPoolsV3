@@ -34,10 +34,9 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 rot). #262 removed the ~966K-reads/day `runReminders` amplification; verify the
 drop via Query Insights, KEVIN-TASKS-2026-07-23.md §4.
 
-⚠️ **The FRONTEND is BEHIND.** The #261 public-profile header/footer fix
-(`src/App.tsx`) has NOT reached prod — pushing to `main` does not rebuild the
-frontend, and the manual **Coolify rebuild is still owed** (KEVIN-TASKS-2026-07-23.md
-§1). Until then the public profile page renders with no header/footer.
+✅ **The FRONTEND is now CURRENT.** The #261 public-profile header/footer fix is
+live after the 2026-07-24 Coolify rebuild — verified against `/profile/:uid`
+(header + footer render). No rebuild owed.
 
 Earlier: the morning's #255/#256/#257 plus #243, #259, #260 all shipped; #255
 closed the banned-commissioner authz gap in prod; Kevin's two rulings landed —
@@ -170,11 +169,10 @@ state. Concretely:
 
 ## 2. Live state (verified 2026-07-23)
 
-> ⚠️ **FUNCTIONS queue empty (deployed through #265); FRONTEND rebuild STILL
-> OWED as of 2026-07-23.** Functions are deployed at the SHA tagged below,
-> which carries #261, #262 and #265. The frontend is BEHIND — Coolify has not
-> been rebuilt for #261's `src/App.tsx` fix, so the public-profile header/footer
-> is not yet live. Steps to fix: KEVIN-TASKS-2026-07-23.md §1.
+> ✅ **FUNCTIONS queue empty (deployed through #265); FRONTEND rebuilt and
+> current as of 2026-07-24.** Functions are deployed at the SHA tagged below,
+> which carries #261, #262 and #265. The frontend was rebuilt on Coolify
+> 2026-07-24 — the #261 profile fix is live (verified). No rebuild owed.
 >
 > **HANDOFF.md's STOP POINT box is authoritative for deploy state.** Both files
 > agree on the DEPLOYED SOURCE SHA below — which is what is RUNNING, not what
@@ -193,9 +191,8 @@ Deployed 2026-07-23 (bare `--only functions --project gridiron-gamble-uzuqo`,
 top of the six PRs in HANDOFF's STOP POINT box and the 2026-07-21 baseline
 (which carried **#239, the Firestore-reads fix**).
 
-**The FRONTEND is BEHIND, at <!-- deploy-state:ignore --> `main` @ `00153e5`** —
-Coolify last built it there; the #261 profile fix needs a manual rebuild to
-reach `49c12a9` (KEVIN-TASKS-2026-07-23.md §1).
+**The FRONTEND is current** — Coolify rebuilt 2026-07-24, the #261 profile fix
+is live (verified against `/profile/:uid`: header + footer render).
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is
