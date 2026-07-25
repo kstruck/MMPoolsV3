@@ -875,7 +875,18 @@ export async function scoreNFLWeekInternal(
    */
   const weeklyPickReady = (pick: string | undefined): boolean => {
     if (!provisional) return true;
-    if (!pick) return weekLockPassed;
+    // NOTHING about a hard-locked week is due before its deadline — not the
+    // no-pick penalty, and not a made pick either. The second half matters for
+    // one case: ESPN can mark a game CANCELLED days BEFORE kickoff, which makes
+    // it terminal while the pick window is still wide open. Grading it would
+    // publish a VOID survival / a 0 margin into member-readable standings —
+    // revealing that member's pick — for a pick they can still change, and the
+    // value would then flip. For a game that reached a normal FINAL this check
+    // is already satisfied (its kickoff has passed, and the weekly lock sits a
+    // buffer BEFORE the earliest kickoff), so it costs nothing in the normal
+    // path.
+    if (!weekLockPassed) return false;
+    if (!pick) return true;
     const g = games.find(
       gm => gm.homeTeam.abbreviation === pick || gm.awayTeam.abbreviation === pick,
     );

@@ -250,6 +250,29 @@ describe('provisional Survivor — penalties wait for the weekly lock, grades wa
     expect(result.aliveCount).toBe(2);
   });
 
+  it('does NOT grade a pick whose game is CANCELLED before kickoff', async () => {
+    // codex r4. ESPN can mark a game CANCELLED days ahead, which makes it
+    // terminal while the pick window is still open. Grading it would publish
+    // Carol's pick — as a VOID survival — into member-readable standings for a
+    // week she can still change, and the value would flip when she did.
+    await setup(1.5);
+    await db.collection('nfl_games').doc('g1').update({ status: 'CANCELLED' });
+
+    await score();
+
+    expect((await entryDoc(poolId, PICKER)).weeklyResults).toBeUndefined();
+  });
+
+  it('grades a pre-kickoff CANCELLED pick once the weekly lock passes', async () => {
+    await setup(-0.5);
+    await db.collection('nfl_games').doc('g1').update({ status: 'CANCELLED' });
+
+    await score();
+
+    // Cancelled = survive, per evaluateSurvivorWeek.
+    expect((await entryDoc(poolId, PICKER)).weeklyResults[1].survived).toBe(true);
+  });
+
   it('strikes the no-pick entry on the first pass AFTER the lock, with no game final', async () => {
     await setup(-0.5); // kickoff 30m ago, so the 5m-before lock has passed
     await score();
