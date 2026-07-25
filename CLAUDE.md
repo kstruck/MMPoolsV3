@@ -38,10 +38,11 @@ section to wait for, poll, or report on qodo is **revoked** — including the
 `gh pr checks <n>` (CI) is still required and still gates. That is unrelated to
 qodo.
 
-**§2c (codex) is the only reviewer**, which makes it the only second opinion.
-Weigh its findings on evidence rather than deferring to them, and **self-review
-the diff yourself** — a clean codex round is not proof, especially on a small
-diff where it may return clean on round 1.
+**§2c (codex) is qodo's temporary replacement** (Kevin, 2026-07-25) and the only
+reviewer — which makes it the only second opinion. Run it on every PR, capped at
+**5 rounds**. Weigh its findings on evidence rather than deferring to them, and
+**self-review the diff yourself** — a clean codex round is not proof, especially
+on a small diff where it may return clean on round 1.
 
 <details>
 <summary>If Kevin restores qodo, this is what made it worth checking</summary>
