@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import type { NFLGame, Pool } from '../types';
 import { getWeekStatus, weekDeadline } from '../utils/nflPending';
 import { now as serverNow } from '../utils/serverClock';
+import { effectiveBufferMinutesForWeek } from '@shared/weeklyHardLock';
 
 /**
  * Lightweight per-pool "does this member owe picks?" lookups for the
@@ -52,12 +53,14 @@ export function computePendingStatus(pool: Pool, entry: any, seasonGames: NFLGam
 
     const seasonType = Number(castPool.seasonType);
     const totalWeeks = seasonType === 1 ? 4 : 18;
-    const lockBufferMinutes = castPool.settings?.lockBufferMinutes ?? 5;
     const now = serverNow();
 
     for (let week = 1; week <= totalWeeks; week++) {
         const weekGames = seasonGames.filter(g => g.week === week && Number(g.seasonType) === seasonType);
         if (weekGames.length === 0) continue;
+        // Per week: a hard-lock pool's deadline is frozen per week, and the "picks
+        // due" CTA must not outlive the deadline the server enforces.
+        const lockBufferMinutes = effectiveBufferMinutesForWeek(castPool, week, weekGames.map(g => g.startTime));
         const status = getWeekStatus(pool.type as string, entry, weekGames, week, lockBufferMinutes);
         const deadline = weekDeadline(weekGames, lockBufferMinutes);
         if (status === 'due' && deadline !== null && deadline > now) {

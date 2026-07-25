@@ -12,6 +12,7 @@ import { NFLManagerBentoDashboard } from './NFLManagerBentoDashboard';
 import { RecordPayoutsCard } from './RecordPayoutsCard';
 import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
+import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
 
 interface NFLManagerViewProps {
   pool: Pool;
@@ -67,7 +68,15 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // Pick'em-specific
   const [confidenceMode, setConfidenceMode] = useState<boolean>(settings.confidenceMode ?? false);
   const [lockMode, setLockMode] = useState<'PER_GAME' | 'WEEKLY'>(settings.lockMode ?? 'PER_GAME');
-  const [lockBufferMinutes, setLockBufferMinutes] = useState<number>(settings.lockBufferMinutes ?? 5);
+  // Survivor/Margin use a hard weekly deadline whose only knob is this buffer, and
+  // the server snaps it to {60,30,5} — so show a legacy value (e.g. 10) as the
+  // preset the server would actually apply rather than a value the picker cannot
+  // represent.
+  const [lockBufferMinutes, setLockBufferMinutes] = useState<number>(
+    usesWeeklyHardLock(pool.type)
+      ? normalizeLockBufferMinutes(settings.lockBufferMinutes)
+      : (settings.lockBufferMinutes ?? 5)
+  );
   const [payoutMode, setPayoutMode] = useState<string>(settings.payoutMode ?? 'SEASON');
   const [pointsPerPick, setPointsPerPick] = useState<number>(settings.pointsPerPick ?? 1);
   const [thursdayBonus, setThursdayBonus] = useState<number>(settings.primetimeBonus?.thursday ?? 0);
@@ -265,9 +274,14 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           rebuyDeadlineWeek,
           rebuyCost,
           pickLosersMode,
+          // Survivor/Margin run a HARD weekly deadline before the first kickoff;
+          // the buffer is the only knob. The server derives the weekly lock from
+          // the pool type and re-snaps this to an allowed preset, so omitting or
+          // tampering with it cannot move the deadline to/past kickoff.
+          lockBufferMinutes,
         };
       } else if (type === 'NFL_MARGIN') {
-        updatedSettings = { ...updatedSettings, payoutMode: marginPayoutMode };
+        updatedSettings = { ...updatedSettings, payoutMode: marginPayoutMode, lockBufferMinutes };
       }
 
       await dbService.updatePool(pool.id, {
@@ -719,6 +733,27 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           )}
 
           {/* ── Survivor Rules ── */}
+          {(type === 'NFL_SURVIVOR' || type === 'NFL_MARGIN') && (
+            <div className="space-y-4">
+              <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted border-b border-line pb-2">Pick Deadline</p>
+              <div>
+                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Weekly Deadline</label>
+                <select
+                  value={lockBufferMinutes}
+                  onChange={e => setLockBufferMinutes(parseInt(e.target.value))}
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                >
+                  <option value={60}>1 hour before the first kickoff</option>
+                  <option value={30}>30 minutes before the first kickoff</option>
+                  <option value={5}>5 minutes before the first kickoff</option>
+                </select>
+                <p className="font-body text-[10px] text-faint mt-1">
+                  All picks for the week lock at this deadline — before any game starts — and cannot be changed afterward.
+                </p>
+              </div>
+            </div>
+          )}
+
           {type === 'NFL_SURVIVOR' && (
             <div className="space-y-4">
               <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted border-b border-line pb-2">Survivor Rules</p>
@@ -1029,7 +1064,21 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               with your name and reason, and members are emailed — no silent changes.
             </p>
 
-            {/* ── Extend Week Deadline ── */}
+            {/* ── Extend Week Deadline — not available on hard-lock pools ── */}
+            {usesWeeklyHardLock(type) ? (
+              <div className="bg-page border border-line rounded-lg p-5 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Clock size={14} className="text-navy-700 dark:text-gold-400" />
+                  <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Week Deadline</p>
+                </div>
+                <p className="font-body text-[11px] text-faint leading-relaxed">
+                  This pool uses a <strong>fixed weekly deadline</strong> before the first kickoff, so a week
+                  can't be reopened once it locks — that's what keeps scores honest while games are being
+                  played. <strong>Pick Deadline</strong> in Settings controls how early picks close for weeks
+                  that haven't locked yet.
+                </p>
+              </div>
+            ) : (
             <div className="bg-page border border-line rounded-lg p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <Clock size={14} className="text-navy-700 dark:text-gold-400" />
@@ -1074,6 +1123,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 </button>
               </div>
             </div>
+            )}
 
             {/* ── Proxy Pick ── */}
             <div className="bg-page border border-line rounded-lg p-5 space-y-4">

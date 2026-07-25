@@ -43,6 +43,8 @@ interface NFLUserBentoDashboardProps {
   setSelectedWeek: (week: number) => void;
   isWeekLocked: boolean;
   earliestGame: NFLGame | null;
+  /** Effective pick deadline for the week (hard-lock aware). Falls back to kickoff. */
+  weekLockAt?: number | null;
   onBack: () => void;
   onOpenAuth: () => void;
   isManager: boolean;
@@ -129,6 +131,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   setSelectedWeek: _setSelectedWeek,
   isWeekLocked: _isWeekLocked,
   earliestGame: _earliestGame,
+  weekLockAt,
   onBack,
   onOpenAuth: _onOpenAuth,
   isManager,
@@ -755,7 +758,9 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
               <Lock size={12} className="text-faint" /> Picks Deadline
             </span>
             <span className="text-gold-600 dark:text-gold-400 font-display font-bold uppercase tracking-[0.05em] animate-pulse num">
-              {_earliestGame ? new Date(_earliestGame.startTime).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : 'Kickoff'} Lock
+              {weekLockAt != null
+                ? new Date(weekLockAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+                : _earliestGame ? new Date(_earliestGame.startTime).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : 'Kickoff'} Lock
             </span>
           </div>
         </div>
