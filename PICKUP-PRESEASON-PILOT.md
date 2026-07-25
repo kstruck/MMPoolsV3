@@ -5,9 +5,9 @@
 > Read `PICKUP-PRESEASON-PILOT.md` §0 first, then `HANDOFF.md`'s STOP POINT box.
 > The target is the Hall of Fame game, 2026-08-06. Deploy and prod-data
 > mutations are Kevin's; code, tests and PRs are yours. Follow CLAUDE.md §2b
-> (qodo is billing-blocked — check the three surfaces once, do not wait) and
-> §2c (`codex exec review --base origin/main`, expect several rounds). Tell me
-> what you plan to do before you do it.
+> (qodo is OFF — do not check it) and §2c (`codex exec review --base
+> origin/main`, capped at 5 rounds per PR). Tell me what you plan to do before
+> you do it.
 
 Written 2026-07-21. **The target is the Hall of Fame game, 2026-08-06** (Thu,
 8:00pm ET, CAR at ARI) — that is the clock, set by Kevin on 2026-07-21. The
@@ -43,8 +43,8 @@ closed the banned-commissioner authz gap in prod; Kevin's two rulings landed —
 **timezones pinned to ET** (#259) and the **PLAN gate scoped to blast radius**
 (#260). See HANDOFF's STOP POINT box.
 
-**qodo is billing-blocked** and reviewed none of the six; codex is the only
-active reviewer (CLAUDE.md §2b).
+**qodo is OFF** — Kevin removed the check entirely on 2026-07-25 (CLAUDE.md
+§2b). codex is the only reviewer.
 
 The overnight-of-2026-07-22 effort took on four product items Kevin queued —
 profile header/footer, SuperAdmin Overview stats, a filterable Stats tab, and a
