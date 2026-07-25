@@ -498,7 +498,7 @@ floating promise from another test file can trip. Re-run before investigating.
 - **Every scheduled job should write something on every run** so "never fired"
   and "never ran" are distinguishable — `withHeartbeat()` in
   `functions/src/lib/heartbeat.ts` does this; use it for any new job.
-- qodo reviews PRs. Its **defect** findings have been consistently good (12/12
-  valid). Its **style/compliance** findings are miscalibrated to this repo
-  (5/5 rejected: snake_case ×2, import order, `:any` counts, dependency
-  placement). Judge on evidence, reply either way.
+- **`codex exec review --base origin/main` reviews PRs — run it before opening
+  one, 5 rounds max** (CLAUDE.md §2c). It is qodo's temporary replacement;
+  **qodo is OFF, do not check it** (§2b). Judge each finding on evidence and
+  reply either way — a rejection needs written reasoning on the PR.
