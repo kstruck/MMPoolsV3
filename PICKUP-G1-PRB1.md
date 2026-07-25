@@ -130,7 +130,10 @@ onSchedule({ schedule: '*/10 * * * *', timeZone: 'America/New_York' }, withHeart
 
 **Both wiring steps or the job is silently dead:**
 1. Export `nflAutoScoreJob` from `functions/src/index.ts` — Firebase only deploys
-   what the entry point exports. This is the `syncPlayInPicks` trap.
+   what the entry point exports. This is the `syncPlayInPicks` trap. Now enforced
+   by `callableExportSurface.test.ts` ("scheduled job export surface"), which
+   scans every `onSchedule()` declaration and fails if index.ts never names it —
+   so, like step 2, the gates cannot go green without it.
 2. Add `nflAutoScoreJob: { everyMinutes: 10 }` to `SCHEDULED_JOB_EXPECTATIONS`
    (`lib/heartbeat.ts:228`). The heartbeat contract test scans every
    `withHeartbeat()` call and fails if the job is absent — so the gates cannot go
