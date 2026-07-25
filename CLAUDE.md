@@ -26,7 +26,12 @@ Each skill carries a "When NOT to use this skill" routing table to its
 siblings and provenance/re-verify commands — trust the commands over the
 prose if they disagree; skills are point-in-time snapshots.
 
-## 2b. qodo — DO NOT CHECK (Kevin, 2026-07-25)
+## 2b. qodo — DO NOT CHECK (Kevin, 2026-07-25 ET)
+
+<!-- Dates in this repo are ET (#259). Commits from a late-evening session stamp
+     the PREVIOUS day in local MT (-0600) — e.g. 07-24 22:24 MT is 07-25 00:24 ET.
+     A git date one day behind a doc date is expected, not a defect. -->
+
 
 🛑 **Kevin removed the qodo check until further notice.** Do not poll it, do not
 check its surfaces, do not mention it in a PR body or in a report to Kevin. It
