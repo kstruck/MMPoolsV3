@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router';
 import { Trophy, ShieldAlert, Coins, Users, ArrowRight, LogIn, Mail, Phone, Check } from 'lucide-react';
 import { dbService } from '../services/dbService';
 import { logger } from '../utils/logger';

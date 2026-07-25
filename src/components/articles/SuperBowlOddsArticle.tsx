@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Trophy } from 'lucide-react';
 
 export const SuperBowlOddsArticle: React.FC = () => {

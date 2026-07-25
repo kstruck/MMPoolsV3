@@ -1,7 +1,7 @@
 import { logger } from '../../utils/logger';
 import { BillingGate } from '../billing';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { createPortal } from 'react-dom';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
 import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock, ChevronDown, ChevronUp, Palette, Bell, CreditCard, Key, Globe, Trash2, ClipboardList, Mail, AlertTriangle } from 'lucide-react';

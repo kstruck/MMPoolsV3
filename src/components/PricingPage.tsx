@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router';
 import type { User, Pool, BillingConfig } from '../types';
 import { DEFAULT_TRIAL_DAYS, DEFAULT_FORMAT_TIER_MAP, normalizeLegacyPackage } from '@shared/schemas/billingConfig';
 import { Header } from './Header';

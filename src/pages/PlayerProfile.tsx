@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router';
 import { Target, Trophy, Calendar, TrendingUp, Users, Award, DollarSign, BarChart3, ListChecks, Shield } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';

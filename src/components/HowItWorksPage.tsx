@@ -3,7 +3,7 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import type { User } from '../types';
 import { HelpCircle, CheckCircle, Shield, Trophy, LayoutGrid, BookOpen, AlertCircle, Mail, Sparkles, Zap, Star, Lightbulb, MessageCircle } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { canAccessPoolCreation } from '../utils/auth';
 import { emailService } from '../services/emailService';
 import { logger } from '../utils/logger';

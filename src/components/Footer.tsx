@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Logo } from './Logo';
 
 /* Footer is navy chrome — always dark in both themes. */

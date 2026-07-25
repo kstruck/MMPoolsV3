@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import type { User } from '../types';
 import { Trophy, LayoutGrid, CheckCircle2, Heart, Users, Shield, Zap, Percent, Target, Timer, Grid3X3 } from 'lucide-react';
 import { Header } from './Header';

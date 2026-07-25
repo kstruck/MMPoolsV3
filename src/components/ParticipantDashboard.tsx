@@ -1,6 +1,6 @@
 import { logger } from '../utils/logger';
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router';
 import type { User, GameState, Winner, Pool, PlayoffPool, BracketPool, SystemSettings, PoolType, NFLGame } from '../types';
 import { isNFLSeasonPool, getMyNFLEntry, subscribeToSeasonGames, computePendingStatus, type PoolPendingStatus } from '../services/nflStatusService';
 import { formatDeadline } from '../utils/formatTime';
