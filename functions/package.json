@@ -1,44 +1,43 @@
 {
-    "name": "functions",
-    "scripts": {
-        "build": "node scripts/copy-shared.mjs && tsc",
-        "typecheck": "node scripts/copy-shared.mjs && tsc --noEmit",
-        "test": "node scripts/copy-shared.mjs && vitest run",
-        "test:emulator": "node scripts/copy-shared.mjs && npx firebase emulators:exec --only firestore --project demo-mmp \"vitest run --config vitest.emulator.config.ts\"",
-        "serve": "npm run build && npx firebase emulators:start --only functions",
-        "shell": "npm run build && npx firebase functions:shell",
-        "start": "npm run shell",
-        "deploy": "npx firebase deploy --only functions",
-        "logs": "npx firebase functions:log"
-    },
-    "engines": {
-        "node": "22"
-    },
-    "main": "lib/index.js",
-    "dependencies": {
-        "@google/genai": "^1.44.0",
-        "@google/generative-ai": "^0.24.1",
-        "@sentry/node": "^10.66.0",
-        "firebase-admin": "^12.7.0",
-        "firebase-functions": "^7.0.5",
-        "stripe": "^22.1.1",
-        "zod": "^4.4.3"
-    },
-    "devDependencies": {
-        "@jest/types": "^30.3.0",
-        "@types/node": "^22.0.0",
-        "firebase-functions-test": "^3.1.1",
-        "typescript": "^5.0.0",
-        "vitest": "^4.1.10"
-    },
-    "overrides": {
-        "@tootallnate/once": ">=3.0.1",
-        "uuid": ">=11.1.1",
-        "qs": ">=6.13.0",
-        "websocket-driver": ">=0.7.5",
-        "brace-expansion@<=1.1.15": "1.1.16",
-        "brace-expansion@2.0.0 - 2.1.1": "2.1.2",
-        "brace-expansion@5.0.0 - 5.0.6": "5.0.7"
-    },
-    "private": true
+  "name": "functions",
+  "scripts": {
+    "build": "node scripts/copy-shared.mjs && tsc",
+    "typecheck": "node scripts/copy-shared.mjs && tsc --noEmit",
+    "test": "node scripts/copy-shared.mjs && vitest run",
+    "test:emulator": "node scripts/copy-shared.mjs && npx firebase emulators:exec --only firestore --project demo-mmp \"vitest run --config vitest.emulator.config.ts\"",
+    "serve": "npm run build && npx firebase emulators:start --only functions",
+    "shell": "npm run build && npx firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "npx firebase deploy --only functions",
+    "logs": "npx firebase functions:log"
+  },
+  "engines": {
+    "node": "22"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "@google/genai": "^1.44.0",
+    "@google/generative-ai": "^0.24.1",
+    "@sentry/node": "^10.66.0",
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^7.0.5",
+    "stripe": "^22.1.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@jest/types": "^30.3.0",
+    "@types/node": "^22.0.0",
+    "firebase-functions-test": "^3.1.1",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "@tootallnate/once": ">=3.0.1",
+    "uuid": ">=11.1.1",
+    "qs": ">=6.13.0",
+    "websocket-driver": ">=0.7.5",
+    "brace-expansion": "5.0.8",
+    "postcss": ">=8.5.18"
+  },
+  "private": true
 }
