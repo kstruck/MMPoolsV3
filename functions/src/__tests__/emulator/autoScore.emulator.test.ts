@@ -833,6 +833,24 @@ describe('scoring lease — the mutex between scorers', () => {
     expect((await entryDoc('p-lease3', 'alice')).weeklyPoints[1]).toBe(1);
   }, 60000);
 
+  it('a stale scoring clock does not produce an already-expired lease', async () => {
+    // codex r1. `opts.now` is the injectable SCORING clock: the auto-scorer
+    // captures it once per run and hands the same value to every pool it works
+    // through. Acquiring the lease from it means a run that has been going longer
+    // than the TTL writes a lease that is already expired, and the first fenced
+    // write — which compares against the real clock — throws FENCE_LOST, so every
+    // pool after that point in the run scores nothing.
+    await seedScorable('p-stale-clock');
+    const result = await scoreNFLWeekInternal(db, 'p-stale-clock', 1, {
+      pool: await poolDoc('p-stale-clock'), games: await loadSlate(), actor: SYSTEM_ACTOR,
+      now: Date.now() - SCORING_LEASE_TTL_MS - 60_000,
+    });
+
+    expect(result.leaseBusy).toBe(false);
+    expect(result.standingsWritten).toBe(true);
+    expect((await entryDoc('p-stale-clock', 'alice')).weeklyPoints[1]).toBe(1);
+  }, 60000);
+
   it('a lockRevision bump mid-pass discards the rest of the pass', async () => {
     // The backstop for an override that commits between lease acquisition and the
     // next fenced commit. Simulated by bumping the revision under a held fence,

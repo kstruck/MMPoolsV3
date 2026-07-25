@@ -109,7 +109,15 @@ service cloud.firestore {
           //                     fingerprints; clearing the lease breaks the mutex;
           //   scoredWeeks /
           //   scoredThroughWeek — the finalization completeness markers.
-          'publishedWeeks', 'autoScore', 'scoredWeeks', 'scoredThroughWeek'
+          'publishedWeeks', 'autoScore', 'scoredWeeks', 'scoredThroughWeek',
+          // The pool TYPE decides which rules apply to it, so a manager who could
+          // change it could step out of every type-scoped protection and back in.
+          // Concretely (codex r1): flip an NFL pool to SQUARES, write
+          // settings.weekLockOverrides while nflSettingsWriteBlocked() no longer
+          // fires, flip it back — reopening a published week's deadline. Nothing
+          // legitimately rewrites `type` after creation; a same-value write is not
+          // an affectedKey, so the wizards' full-object updates still pass.
+          'type'
         ]);
       }
 
@@ -124,10 +132,16 @@ service cloud.firestore {
       //
       // Scoped to NFL pools because they are the ones scored live game-by-game;
       // bracket/squares/props settings keep their existing client path.
+      //
+      // Checks BOTH the stored and the incoming type. `type` is protected above,
+      // so they cannot legitimately differ — testing both is defence in depth
+      // against a future rule that relaxes that protection.
       function nflSettingsWriteBlocked() {
         let changed = request.resource.data.diff(resource.data).affectedKeys();
-        return !(resource.data.get('type', '') in ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'])
-               || !changed.hasAny(['settings']);
+        let nflTypes = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
+        let isNfl = resource.data.get('type', '') in nflTypes
+                    || request.resource.data.get('type', '') in nflTypes;
+        return !isNfl || !changed.hasAny(['settings']);
       }
 
       // Pool is in an editable state.

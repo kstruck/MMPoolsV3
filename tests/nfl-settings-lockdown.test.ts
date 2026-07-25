@@ -34,6 +34,10 @@ describe('firestore.rules — scorer-owned pool fields are server-only', () => {
     'scoredThroughWeek',
     // Frozen Survivor/Margin weekly deadlines (PR-0).
     'hardLockByWeek',
+    // A manager who could change `type` could flip an NFL pool to a non-NFL type,
+    // write settings.weekLockOverrides while the NFL settings block no longer
+    // applies, and flip it back — reopening a published week (codex r1).
+    'type',
   ])('protectedFieldsUnchanged() lists %s', (field) => {
     const block = rules.slice(
       rules.indexOf('function protectedFieldsUnchanged()'),

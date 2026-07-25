@@ -242,7 +242,11 @@ export const proxyPick = validated(
     }
 
     const games = await loadWeekGames(db, pool, weekNum);
-    const now = Date.now();
+    // MUTABLE, refreshed at the top of every transaction attempt below — the
+    // scoring lease can bounce this call and `retryWhileScoring` re-runs the
+    // transaction up to a second later. A clock captured once out here would keep
+    // re-asserting a deadline that has since passed (codex r1).
+    let now = Date.now();
     // Hard-lock types (Survivor/Margin) snap the buffer to an allowed preset and
     // ignore overrides entirely — see effectiveLock.effectiveLockSettings.
     const hardLock = usesWeeklyHardLock(type);
@@ -274,7 +278,8 @@ export const proxyPick = validated(
             games.map((g) => g.startTime),
           )) ?? computedWeekLock)
         : computedWeekLock;
-    const weekLocked = now >= weekLockAt;
+    // `weekLockAt` and `gameLockAt` are fixed instants; only the clock moves.
+    let weekLocked = now >= weekLockAt;
     const gameLockAt = (g: NFLGame) => override ?? (g.startTime - lockBufferMs);
 
     // Resolve display name for entry creation
@@ -286,7 +291,11 @@ export const proxyPick = validated(
         // pick landing mid-pass is the same interleave as a member submission
         // (PLAN-REALTIME-SCORING §3a). Read first: Firestore requires it, and it
         // puts the pool doc in this transaction's read set.
-        await assertNoScoringInProgress(transaction, poolRef, Date.now());
+        // Fresh clock per ATTEMPT — this body re-runs on a Firestore contention
+        // retry and on a lease-busy retry, and every lock check below reads `now`.
+        now = Date.now();
+        weekLocked = now >= weekLockAt;
+        await assertNoScoringInProgress(transaction, poolRef, now);
         const entrySnap = await transaction.get(entryRef);
         const existingEntry = entrySnap.exists ? entrySnap.data() : null;
 

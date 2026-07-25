@@ -353,7 +353,11 @@ export async function submitNFLPicksInternal(
   assertNFLPickMembership(pool, uid, ctx.actorRole);
 
   const type = pool.type;
-  const now = Date.now();
+  // MUTABLE, and refreshed at the top of every transaction attempt below. The
+  // lease can bounce a submission and `retryWhileScoring` re-runs the transaction
+  // up to a second later — a clock captured once out here would keep re-asserting
+  // a deadline that has since passed and commit a late pick (codex r1).
+  let now = Date.now();
 
   // 1. Fetch weekly games from firestore to validate lock-deadlines
   const gamesSnap = await db.collection('nfl_games')
@@ -411,7 +415,8 @@ export async function submitNFLPicksInternal(
   const effectiveWeekLock = decision.freezeTo !== undefined
     ? await ensureHardLockFreeze(poolRef, db.runTransaction.bind(db) as never, week, decision.lockAt)
     : decision.lockAt;
-  const weekLocked = now >= effectiveWeekLock;
+  // `effectiveWeekLock` is a fixed instant, so only the clock has to move.
+  let weekLocked = now >= effectiveWeekLock;
 
   // Write variables inside transactions
   const entryRef = poolRef.collection('entries').doc(uid);
@@ -421,7 +426,11 @@ export async function submitNFLPicksInternal(
     // submission must not interleave with a scoring pass, and putting the pool
     // doc in this transaction's read set also makes Firestore abort us if the
     // scorer commits while we are open.
-    await assertNoScoringInProgress(transaction, poolRef, Date.now());
+    // Fresh clock per ATTEMPT — this body re-runs on a Firestore contention retry
+    // and on a lease-busy retry, and every lock check below reads `now`.
+    now = Date.now();
+    weekLocked = now >= effectiveWeekLock;
+    await assertNoScoringInProgress(transaction, poolRef, now);
     const entrySnap = await transaction.get(entryRef);
     const existingEntry = entrySnap.exists ? entrySnap.data() : null;
     // Member Record read (before any writes) for the base-dues stamp below (ADR 0005).
@@ -887,8 +896,6 @@ export async function scoreNFLWeekInternal(
   week: number,
   opts: ScoreWeekOptions,
 ): Promise<ScoreWeekResult> {
-  const now = opts.now ?? Date.now();
-
   // A dry run writes nothing, so it needs no mutex — and taking one would park a
   // real scoring pass behind a report.
   if (opts.dryRun) return scoreWeekPass(db, poolId, week, opts, undefined);
@@ -898,7 +905,15 @@ export async function scoreNFLWeekInternal(
   // single point is what makes the mutex hold across all of them. Two passes
   // reading the same stale entries would each REPLACE whole weeklyPoints /
   // weeklyScores maps, and the later commit would silently lose the other's work.
-  const fence = await acquireScoringLease(db, poolId, now);
+  //
+  // The lease uses the WALL clock, deliberately not `opts.now`. `opts.now` is the
+  // injectable SCORING clock — the auto-scorer captures it once per run and
+  // passes the same value to every pool it processes in sequence. A run that has
+  // been working for longer than the lease TTL would otherwise write a lease that
+  // is already expired, and the first fenced write (which compares against the
+  // real clock) would throw FENCE_LOST and score nothing for every pool after
+  // that point. Found by codex r1.
+  const fence = await acquireScoringLease(db, poolId, Date.now());
   if (!fence) {
     return {
       success: true,
