@@ -5,10 +5,12 @@ import { withHeartbeat, configReadFailedVerdict } from './lib/heartbeat';
 import { readJobGate, HOT_WINDOW_LOOKBACK_MS } from './nflSchedule';
 import { scoreNFLWeekInternal } from './nflPools';
 import { isWeekComplete } from './lib/weekCompletion';
+import { isSimPool } from './nflFinalize';
 import {
   isTerminalPool,
   computeWeekFingerprint,
   autoScoreHeartbeat,
+  rotateForRun,
   type AutoScoreResult,
 } from './lib/autoScoreDecisions';
 import type { NFLGame } from './nflPoolTypes';
@@ -43,11 +45,16 @@ import type { NFLGame } from './nflPoolTypes';
 const NFL_POOL_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'] as const;
 
 /**
- * Safety cap on pools SCORED per run, mirroring autoClosePools /
- * nflFinalizeSweepJob. Counting only scored pools (not skipped ones) is what
- * makes overflow drain: a scored pool records its fingerprint and takes the
- * cheap skip path next run, so the pools deferred by the cap are the ones that
- * get served 10 minutes later.
+ * Safety cap on pools ATTEMPTED per run, mirroring autoClosePools /
+ * nflFinalizeSweepJob. Pools that take the cheap fingerprint skip do not count
+ * against it — only pools the scorer is actually invoked on.
+ *
+ * It counts ATTEMPTS rather than successful scores on purpose. A pool that
+ * scores nothing (no entries, or every entry still held pending) deliberately
+ * banks no fingerprint, so it is retried on every run — and if those retries were
+ * free, a slate with more than a capful of them would consume the whole cap
+ * forever and the pools behind them would never be reached. An attempt costs the
+ * same reads whether or not it scores anybody, so the cap has to price it.
  */
 const MAX_POOLS_PER_RUN = 200;
 
@@ -141,8 +148,18 @@ export async function findCandidatePools(
   return snap.docs
     .map(d => ({ id: d.id, pool: d.data() as any }))
     .filter(({ pool }) => Number(pool.seasonType || 2) === slate.seasonType)
+    // Simulation pools live in the same collections as real ones. The harness
+    // owns their scoring (simFinalizePool is the only finalize door) and
+    // cleanupSimPool asserts zero residue afterwards, so a scheduled pass
+    // writing their entries, standings, recap and audit would both corrupt a
+    // run in flight and leave residue the cleanup contract does not expect.
+    // maybeFinalizeNFLPool refusing to FINALIZE a sim pool does not prevent any
+    // of those writes. nflLockWatchJob and the finalize sweep already filter
+    // this way; this job was the odd one out.
+    .filter(({ id, pool }) => !isSimPool(pool, id))
     .filter(({ pool }) => !isTerminalPool(pool));
 }
+
 
 /**
  * One pass of the auto-scorer. Extracted from the scheduled wrapper so the whole
@@ -161,8 +178,10 @@ export async function autoScoreOnce(
   result.activeSlates = slates.length;
   if (slates.length === 0) return result;
 
+  let attempts = 0;
   for (const slate of slates) {
-    for (const { id: poolId, pool } of await findCandidatePools(db, slate)) {
+    const candidates = rotateForRun(await findCandidatePools(db, slate), now);
+    for (const { id: poolId, pool } of candidates) {
       const fingerprint = computeWeekFingerprint(pool, slate.week, slate.games, now);
       const stored = pool.autoScore?.fingerprintByWeek?.[String(slate.week)];
       if (stored === fingerprint) {
@@ -170,10 +189,11 @@ export async function autoScoreOnce(
         continue;
       }
 
-      if (result.poolsScored >= MAX_POOLS_PER_RUN) {
+      if (attempts >= MAX_POOLS_PER_RUN) {
         result.overflow++;
         continue;
       }
+      attempts++;
 
       try {
         const scored = await scoreNFLWeekInternal(db, poolId, slate.week, {
@@ -226,7 +246,13 @@ export async function autoScoreOnce(
 }
 
 export const nflAutoScoreJob = onSchedule(
-  { schedule: '*/10 * * * *', timeZone: 'America/New_York' },
+  // timeoutSeconds/memory mirror nflFinalizeSweepJob: a full cap of pools is far
+  // more than the platform's 60s default allows, and a run that dies part-way
+  // would report a throw rather than an honest overflow. 540s also stays inside
+  // the 10-minute cadence, so two runs cannot overlap. A run that does exhaust
+  // the budget is self-healing — fingerprints are written per pool as it goes,
+  // so the next run resumes rather than restarting.
+  { schedule: '*/10 * * * *', timeZone: 'America/New_York', timeoutSeconds: 540, memory: '512MiB' },
   withHeartbeat('nflAutoScoreJob', async () => {
     const db = admin.firestore();
 

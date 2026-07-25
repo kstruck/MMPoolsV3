@@ -509,6 +509,25 @@ describe('autoScoreOnce — candidate selection, skip and dry-run', () => {
     expect((await entryDoc('p-omitted', 'alice')).totalScore).toBe(1);
   }, 60000);
 
+  it.each([
+    ['a simRunId stamp', 'p-sim-stamped', { simRunId: 'run-x' }],
+    ['a sim- pool id', 'sim-p-auto', {}],
+  ])('never touches a simulation pool (%s)', async (_label, simPoolId, over) => {
+    // The harness owns sim scoring (simFinalizePool is the only finalize door)
+    // and cleanupSimPool asserts zero residue afterwards. A scheduled pass would
+    // corrupt a run in flight and leave residue — and maybeFinalizeNFLPool
+    // refusing to FINALIZE a sim pool does not stop any of these writes.
+    await setupJob();
+    await seedPool(simPoolId, 'NFL_PICKEM', { lockBufferMinutes: 5, pickMode: 'STRAIGHT' }, over);
+    await seedEntry(simPoolId, 'simmer', { picks: { g1: 'KC' }, weeklyPoints: {}, totalScore: 0 });
+
+    const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
+
+    expect(r.poolsScored).toBe(1); // the real pool only
+    expect((await entryDoc(simPoolId, 'simmer')).totalScore).toBe(0);
+    expect(await standingsDoc(simPoolId)).toBeUndefined();
+  }, 60000);
+
   it('reports no slates when nothing is in the active window', async () => {
     await wipe();
     await seedGames([gameDoc('old', { startTime: Date.now() - 40 * HOUR })]);

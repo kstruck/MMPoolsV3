@@ -9,6 +9,7 @@ import {
   isTerminalPool,
   computeWeekFingerprint,
   autoScoreHeartbeat,
+  rotateForRun,
   type AutoScoreResult,
 } from '../lib/autoScoreDecisions';
 import { isTerminalGame, isWeekComplete } from '../lib/weekCompletion';
@@ -217,6 +218,36 @@ describe('autoScoreHeartbeat', () => {
     const v = autoScoreHeartbeat(result({ poolsFailed: 2 }), false);
     expect(v.ok).toBe(false);
     expect(v.error).toMatch(/2 pool\(s\) failed/);
+  });
+});
+
+describe('rotateForRun — the per-run cap must not starve the tail', () => {
+  const items = ['a', 'b', 'c', 'd'];
+  const INTERVAL = 10 * 60 * 1000;
+
+  it('advances the starting point by one per run interval', () => {
+    expect(rotateForRun(items, 0, INTERVAL)).toEqual(['a', 'b', 'c', 'd']);
+    expect(rotateForRun(items, INTERVAL, INTERVAL)).toEqual(['b', 'c', 'd', 'a']);
+    expect(rotateForRun(items, 2 * INTERVAL, INTERVAL)).toEqual(['c', 'd', 'a', 'b']);
+  });
+
+  it('is stable within a single run interval', () => {
+    expect(rotateForRun(items, INTERVAL, INTERVAL))
+      .toEqual(rotateForRun(items, INTERVAL + 60_000, INTERVAL));
+  });
+
+  it('brings every item to the front within one cycle', () => {
+    // The actual guarantee: no item can be permanently stuck behind a capful of
+    // pools that bank no fingerprint and are therefore retried every run.
+    const firsts = new Set(
+      items.map((_, i) => rotateForRun(items, i * INTERVAL, INTERVAL)[0]),
+    );
+    expect(firsts).toEqual(new Set(items));
+  });
+
+  it('preserves length and contents, and handles an empty list', () => {
+    expect(rotateForRun(items, 7 * INTERVAL, INTERVAL).sort()).toEqual([...items].sort());
+    expect(rotateForRun([], 5 * INTERVAL, INTERVAL)).toEqual([]);
   });
 });
 

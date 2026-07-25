@@ -91,6 +91,15 @@ export const createNFLPool = validated(
 
     const newPool: any = {
       ...data,
+      // Season is persisted as a STRING, always. nfl_games.season is written as
+      // a string by the importer, and Firestore equality is type-sensitive — so
+      // a pool created with `season: 2026` (the create envelope is permissive
+      // and passes the payload through) matches no games at all: every member's
+      // pick submission throws NOT_FOUND, manual scoring finds no slate, and the
+      // scheduled scorer's candidate query never returns it. Coercing here fixes
+      // all of those at once, which querying both representations per call site
+      // would not.
+      season: String(season),
       id: poolId,
       createdByUid: uid,
       ownerId: uid,

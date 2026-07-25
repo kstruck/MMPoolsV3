@@ -54,6 +54,24 @@ describe('Member Record wiring (emulator)', () => {
     expect(m.userName).toBe('Owner One');
   });
 
+  it('persists season as a STRING even when the payload sends a number', async () => {
+    // The create envelope is permissive (ADR-0001) and passes the payload
+    // through, so a numeric season used to be stored as-is. nfl_games.season is
+    // written as a string and Firestore equality is type-sensitive, so such a
+    // pool matched NO games anywhere: pick submission threw NOT_FOUND, manual
+    // scoring found no slate, and the scheduled scorer's candidate query never
+    // returned it. Coerced once at creation rather than tolerated per query.
+    await seedUser('numseason', 'Num Season', 'MEMBER');
+    const res = (await wrappedCreateNFL({
+      data: { type: 'NFL_PICKEM', name: 'Numeric', season: 2026, settings: { entryFee: 0, payouts: { places: [], bonuses: [] } } },
+      auth: { uid: 'numseason', token: { name: 'Num Season' } },
+    } as never)) as { poolId: string };
+
+    const pool = (await db.collection('pools').doc(res.poolId).get()).data()!;
+    expect(pool.season).toBe('2026');
+    expect(typeof pool.season).toBe('string');
+  });
+
   it('joinNFLPool seeds the joiner Member Record', async () => {
     await seedUser('owner2', 'Owner Two', 'MEMBER');
     await seedUser('joiner2', 'Joiner Two');

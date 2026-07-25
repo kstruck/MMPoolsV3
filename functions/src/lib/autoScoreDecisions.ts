@@ -116,6 +116,27 @@ export function computeWeekFingerprint(
     .digest('hex');
 }
 
+/** The auto-scorer's cadence, and so the step size of the rotation below. */
+export const RUN_INTERVAL_MS = 10 * 60 * 1000;
+
+/**
+ * Rotate the candidate order by run, so the per-run cap cannot permanently
+ * starve the tail of a large slate.
+ *
+ * Firestore returns candidates in a stable document order, so without rotation
+ * the same prefix is attempted every run — and pools that legitimately bank no
+ * fingerprint (no entries, or every entry still held pending) are attempted
+ * every run by design. A slate with more than a capful of those would pin the
+ * window over the same pools forever and the ones behind them would never be
+ * scored at all. Advancing the start by one run-interval slides the window
+ * across the whole list, so every pool reaches the front within one cycle.
+ */
+export function rotateForRun<T>(items: T[], now: number, intervalMs = RUN_INTERVAL_MS): T[] {
+  if (items.length === 0) return items;
+  const start = Math.floor(now / intervalMs) % items.length;
+  return [...items.slice(start), ...items.slice(0, start)];
+}
+
 export interface AutoScoreResult {
   activeSlates: number;
   /** Pools scored — or that WOULD be scored, on a dry run. */
