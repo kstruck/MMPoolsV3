@@ -83,12 +83,43 @@ function definedAs(re: RegExp): Array<{ name: string; file: string }> {
   return found;
 }
 
-const indexText = fs.readFileSync(INDEX, 'utf8');
+/**
+ * The names index.ts actually RE-EXPORTS, parsed from its `export { ... } from
+ * '...'` clauses.
+ *
+ * This used to be a raw `\bname\b` search over the whole file, and codex holed
+ * it: a name that appears only in a COMMENT satisfied the search. index.ts:70
+ * names `releaseStaleCouponReservations` in exactly that position, so deleting
+ * its export while leaving the comment would have kept this test green while
+ * the job stopped deploying — a guard vouched for by a comment ABOUT the code
+ * it is checking, which is the same shape the whole file exists to stop.
+ *
+ * For `X as Y` the LOCAL name X is recorded: that is what the source-side scan
+ * finds, and the function ships either way, under the alias.
+ *
+ * Only this one export form is parsed because it is the only one index.ts uses
+ * (no `export *`, no `export const`). Any other form under-reports, which
+ * surfaces as a FALSE orphan — loud and wrong, not quiet and wrong, which is
+ * the safe direction for a guard to break in.
+ */
+function indexExports(): Set<string> {
+  const text = blankComments(fs.readFileSync(INDEX, 'utf8'));
+  const names = new Set<string>();
+  for (const m of text.matchAll(/export\s*\{([^}]*)\}\s*from/g)) {
+    for (const spec of m[1].split(',')) {
+      const local = spec.trim().split(/\s+as\s+/)[0].trim();
+      if (local) names.add(local);
+    }
+  }
+  return names;
+}
 
-/** Names defined in the codebase that index.ts never mentions. */
+const exported = indexExports();
+
+/** Names defined in the codebase that index.ts does not re-export. */
 function orphansOf(defined: Array<{ name: string; file: string }>): string[] {
   return defined
-    .filter(({ name }) => !new RegExp(`\\b${name}\\b`).test(indexText))
+    .filter(({ name }) => !exported.has(name))
     .map(({ name, file }) => `${name} (${file})`)
     .sort();
 }
