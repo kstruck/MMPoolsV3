@@ -11,6 +11,7 @@ import { isPoolType, type PoolType } from "./shared/poolTypes";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
 import type { MemberRecord } from "./shared/memberRecord";
 import { effectiveWeekLockAt, isGameLocked as isGameLockedAt, effectiveLockSettings, usesWeeklyHardLock, weekLockDecision, ensureHardLockFreeze } from "./lib/effectiveLock";
+import { isTerminalGame, isWeekComplete } from "./lib/weekCompletion";
 import {
   validateCreateInput,
   assertNotBanned,
@@ -90,6 +91,15 @@ export const createNFLPool = validated(
 
     const newPool: any = {
       ...data,
+      // Season is persisted as a STRING, always. nfl_games.season is written as
+      // a string by the importer, and Firestore equality is type-sensitive — so
+      // a pool created with `season: 2026` (the create envelope is permissive
+      // and passes the payload through) matches no games at all: every member's
+      // pick submission throws NOT_FOUND, manual scoring finds no slate, and the
+      // scheduled scorer's candidate query never returns it. Coercing here fixes
+      // all of those at once, which querying both representations per call site
+      // would not.
+      season: String(season),
       id: poolId,
       createdByUid: uid,
       ownerId: uid,
@@ -763,6 +773,8 @@ export interface ScoreWeekResult {
   success: true;
   message: string;
   dryRun: boolean;
+  /** Whether this pass ran under the mid-week reveal/finalization safeguards. */
+  provisional: boolean;
   pickemScored: number;
   survivorScored: number;
   marginScored: number;
@@ -770,6 +782,15 @@ export interface ScoreWeekResult {
   standings: ReturnType<typeof buildStandingsRows>;
   standingsWritten: boolean;
   recapWritten: boolean;
+  /**
+   * The finalize check THREW. Finalization is best-effort and deliberately does
+   * not fail the scoring pass, which means a season-completing pass can leave a
+   * pool unfinalized with nothing to say so — and the backstop sweep is disabled
+   * by default. Surfaced so a scheduled caller can decline to record this pass as
+   * settled and retry it. `false` also covers "finalize declined cleanly" (season
+   * not complete yet), which is the normal mid-season answer, not a failure.
+   */
+  finalizeFailed: boolean;
 }
 
 /**
@@ -785,6 +806,20 @@ export interface ScoreWeekResult {
  *
  * `opts.actor` threads audit attribution — without it the extraction would lose
  * the caller identity the inline scorer took from `request.auth`.
+ *
+ * `opts.provisional` is the whole "this is a live mid-week pass" behavior, and
+ * defaults to `false` so every pre-existing caller is byte-identical. When true:
+ *  1. Penalties are gated on the WEEKLY lock, not on the pass running, and a made
+ *     pick stays untouched until its own picked game concludes.
+ *  2. Only concluded, lock-closed games are graded — including the per-week
+ *     summary counts, since a raw pick count leaks how many still-open picks each
+ *     member has already submitted.
+ *  3. No `scoredWeeks`/`scoredThroughWeek` markers and no `maybeFinalizeNFLPool`,
+ *     so a mid-week pass on a season's last slate cannot finalize it.
+ *  4. No weekly recap (its create trigger fires AI trash-talk, and the later
+ *     complete pass would only UPDATE the doc, so it would never refire on
+ *     complete standings) and no `SCORE_FINALIZED` audit.
+ * `standings/current` IS still written — live standings are the point.
  */
 export async function scoreNFLWeekInternal(
   db: admin.firestore.Firestore,
@@ -797,10 +832,66 @@ export async function scoreNFLWeekInternal(
     // the scheduled scorer will pass a SYSTEM actor here.
     actor: AuditOptions['actor'];
     dryRun?: boolean;
+    provisional?: boolean;
+    /** Injectable clock — the lock gates below are time-dependent. */
+    now?: number;
   },
 ): Promise<ScoreWeekResult> {
-  const { pool, games, actor, dryRun = false } = opts;
+  const { pool, games, actor, dryRun = false, provisional = false, now = Date.now() } = opts;
   const poolRef = db.collection('pools').doc(poolId);
+
+  const lockSettings = effectiveLockSettings(pool?.settings, pool?.type);
+  const gameLockClosed = (g: NFLGame) => isGameLockedAt(now, g.startTime, week, lockSettings);
+  const revealed = (g: NFLGame) => isTerminalGame(g) && gameLockClosed(g);
+
+  // Pick'em grades off this set. On a complete pass it IS `games`, so nothing
+  // changes; on a provisional pass it withholds both un-concluded games and
+  // concluded-but-still-unlocked ones (the Pick'em override case).
+  const gradableGames = provisional ? games.filter(revealed) : games;
+
+  // The weekly deadline for penalty purposes — hard-lock aware (frozen value
+  // wins for Survivor/Margin). Read-only: persisting the freeze belongs to the
+  // submission path, not to the scorer.
+  const weekLockAt = weekLockDecision(
+    pool as { type?: string; settings?: typeof pool.settings; hardLockByWeek?: Record<string, unknown> },
+    week,
+    games.map(g => g.startTime),
+  ).lockAt;
+  const weekLockPassed = now >= weekLockAt;
+
+  /**
+   * Is this entry's week ready to be written on a provisional pass?
+   *
+   * Two distinct holds, and conflating them is the bug this guards:
+   *  - NO PICK: the penalty (Survivor strike / Margin -14) is due at the WEEKLY
+   *    LOCK, not merely because a pass fired. The scorer's candidate window
+   *    reaches 2h before kickoff, so a pass can run while the pick window is
+   *    still open — striking then eliminates a member whose valid pick
+   *    submitNFLPicks would afterwards reject as ELIMINATED.
+   *  - MADE PICK: the engines do NOT skip a non-terminal picked game —
+   *    computeSurvivorWeekUpdate reports `survived: true` and scoreMarginWeek
+   *    returns null (→ 0). Writing that would publish an unplayed pick as a
+   *    survival or a 0 margin that flips when the game ends.
+   */
+  const weeklyPickReady = (pick: string | undefined): boolean => {
+    if (!provisional) return true;
+    // NOTHING about a hard-locked week is due before its deadline — not the
+    // no-pick penalty, and not a made pick either. The second half matters for
+    // one case: ESPN can mark a game CANCELLED days BEFORE kickoff, which makes
+    // it terminal while the pick window is still wide open. Grading it would
+    // publish a VOID survival / a 0 margin into member-readable standings —
+    // revealing that member's pick — for a pick they can still change, and the
+    // value would then flip. For a game that reached a normal FINAL this check
+    // is already satisfied (its kickoff has passed, and the weekly lock sits a
+    // buffer BEFORE the earliest kickoff), so it costs nothing in the normal
+    // path.
+    if (!weekLockPassed) return false;
+    if (!pick) return true;
+    const g = games.find(
+      gm => gm.homeTeam.abbreviation === pick || gm.awayTeam.abbreviation === pick,
+    );
+    return !!g && isTerminalGame(g);
+  };
 
   let pickemScored = 0;
   let survivorScored = 0;
@@ -810,9 +901,10 @@ export async function scoreNFLWeekInternal(
   const entriesSnap = await poolRef.collection('entries').get();
   if (entriesSnap.empty) {
     return {
-      success: true, message: 'No entries to score.', dryRun,
+      success: true, message: 'No entries to score.', dryRun, provisional,
       pickemScored: 0, survivorScored: 0, marginScored: 0, aliveCount: 0,
       standings: [], standingsWritten: false, recapWritten: false,
+      finalizeFailed: false,
     };
   }
 
@@ -874,7 +966,7 @@ export async function scoreNFLWeekInternal(
 
     if (pool.type === 'NFL_PICKEM') {
       const entry = doc.data() as NFLPickemEntry;
-      const { points, correctCount } = scorePickemEntry(entry, games, pool);
+      const { points, correctCount } = scorePickemEntry(entry, gradableGames, pool);
 
       const weeklyPoints = { ...(entry.weeklyPoints || {}), [week]: points };
       const totalScore = Object.values(weeklyPoints).reduce((sum, p) => sum + p, 0);
@@ -883,7 +975,12 @@ export async function scoreNFLWeekInternal(
       // and previously discarded — makes accuracy truthful (ADR 0004). resultsVersion lets the
       // Phase E per-user aggregate recompute idempotently. Per-game graded outcomes + pick
       // mode added by ADR 0005 (written post-final only — reveal-safe; rescore overwrites).
-      const picksThisWeek = games.filter(g => !!entry.picks?.[g.id]).length;
+      // Counted over the GRADABLE set, not the whole slate. buildStandingsRows
+      // copies `total` into member-readable standings/current, so on a
+      // provisional pass a raw slate count would tell every member how many
+      // still-open picks each rival has already submitted — a reveal hole even
+      // though the grades themselves are lock-safe.
+      const picksThisWeek = gradableGames.filter(g => !!entry.picks?.[g.id]).length;
       const weeklyResults = {
         ...((entry as any).weeklyResults || {}),
         [week]: {
@@ -891,7 +988,7 @@ export async function scoreNFLWeekInternal(
           total: picksThisWeek,
           points,
           mode: pool.settings?.pickMode === 'ATS' ? 'ATS' : 'STRAIGHT',
-          games: gradePickemGames(entry, games, pool),
+          games: gradePickemGames(entry, gradableGames, pool),
         },
       };
 
@@ -920,6 +1017,17 @@ export async function scoreNFLWeekInternal(
     } else if (pool.type === 'NFL_SURVIVOR') {
       const entry = doc.data() as SurvivorEntry;
 
+      // Mid-week hold: nothing is written for this entry's week until its
+      // penalty is actually due (weekly lock passed) or its own pick concluded.
+      if (!weeklyPickReady(entry.picks?.[week])) {
+        if (entry.status !== 'ELIMINATED') aliveCount++;
+        continue;
+      }
+
+      // The FULL slate is passed on purpose — checkAutoSurviveExemption derives
+      // "teams playing this week" from it, so a filtered list would invent an
+      // exemption for a member whose only remaining teams simply have not
+      // kicked off yet.
       // Idempotent per-(entry, week) recompute — set semantics, revive-capable
       // on rescore, rebuy-aware, strike audit deduped. See
       // computeSurvivorWeekUpdate for the full contract.
@@ -963,6 +1071,10 @@ export async function scoreNFLWeekInternal(
       const pick = entry.picks[week];
       let weekScore = 0;
 
+      // Same mid-week hold as Survivor: the -14 is due at the weekly lock, and a
+      // made pick must not be published as a 0 that flips when its game ends.
+      if (!weeklyPickReady(pick)) continue;
+
       if (pick) {
         const res = scoreMarginWeek(pick, games);
         weekScore = res ?? 0;
@@ -1005,8 +1117,15 @@ export async function scoreNFLWeekInternal(
     }
   }
 
-  // 3. Margin leaderboard sorting
-  if (pool.type === 'NFL_MARGIN') {
+  // 3. Margin leaderboard sorting.
+  //
+  // Gated on something actually having been scored. A provisional pass whose
+  // picks are all still pending scores nobody, and ranks derived from unchanged
+  // season totals are unchanged too — but staging them anyway is a write per
+  // entry, every poll, each one firing the entry-change profile recompute. That
+  // pool also banks no fingerprint (by design, so a late entry is not skipped
+  // forever), so the retry is meant to be read-only.
+  if (pool.type === 'NFL_MARGIN' && marginScored > 0) {
     // Flush pending score writes first so the re-read ranks on THIS week's
     // fresh totals rather than last week's stale data.
     await flushBatch();
@@ -1032,6 +1151,8 @@ export async function scoreNFLWeekInternal(
   // ponytail: single doc, fine for realistic pool sizes; shard to standings/part_N
   // before the 1MB doc limit if a pool ever has >500 entries (ADR 0004 shard path).
   const standingsRows = buildStandingsRows(pool.type, await readScoredEntries());
+  const recapWritten = !dryRun && !provisional;
+  let finalizeFailed = false;
   if (!dryRun) {
     await poolRef.collection('standings').doc('current').set({
       poolType: pool.type,
@@ -1040,54 +1161,78 @@ export async function scoreNFLWeekInternal(
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       rows: standingsRows,
     });
+
+    // Publication marker — set-once, and NOT provisional-only. It is the durable
+    // evidence that a week's result has been shown to members, which the
+    // deadline-extension guard reads. A one-game slate (the HOF opener) finishes
+    // in a single COMPLETE pass, so gating this on `provisional` would publish
+    // standings with no marker and leave the week reopenable after its result
+    // was exposed. Stamped only when something was actually revealed, so a pass
+    // that fires 2h before kickoff with nothing concluded does not claim
+    // publication.
+    const revealedAny = games.some(revealed);
     await poolRef.update({
       lastScoredAt: admin.firestore.FieldValue.serverTimestamp(),
-      scoredThroughWeek: Math.max(Number(pool.scoredThroughWeek || 0), Number(week)),
-      // Which weeks have actually been scored (out-of-order safe) — the Season
-      // Finalization completeness check reads this, not scoredThroughWeek.
-      [`scoredWeeks.${week}`]: true,
+      ...(revealedAny ? { [`publishedWeeks.${week}`]: true } : {}),
+      // Finalization-sensitive markers are withheld on a provisional pass:
+      // maybeFinalizeNFLPool keys off scoredWeeks + terminal game status and does
+      // NOT consult effective locks, so writing them mid-week would let a pass on
+      // the season's last slate finalize the pool while picks are still open.
+      ...(provisional ? {} : {
+        scoredThroughWeek: Math.max(Number(pool.scoredThroughWeek || 0), Number(week)),
+        // Which weeks have actually been scored (out-of-order safe) — the Season
+        // Finalization completeness check reads this, not scoredThroughWeek.
+        [`scoredWeeks.${week}`]: true,
+      }),
     });
 
-    // 3c. Season Finalization (ADR 0005 Phase 3): if this scoring pass completed the
-    // season, finalize automatically — stats never wait on a human. Best-effort:
-    // a finalize failure must never fail the scoring call (the sweep job catches up).
-    try {
-      await maybeFinalizeNFLPool(db, poolId);
-    } catch (e) {
-      console.warn(`[scoreNFLWeek] finalize check failed for ${poolId} (sweep will retry):`, e);
+    if (!provisional) {
+      // 3c. Season Finalization (ADR 0005 Phase 3): if this scoring pass completed the
+      // season, finalize automatically — stats never wait on a human. Best-effort:
+      // a finalize failure must never fail the scoring call (the sweep job catches up).
+      try {
+        await maybeFinalizeNFLPool(db, poolId);
+      } catch (e) {
+        finalizeFailed = true;
+        console.warn(`[scoreNFLWeek] finalize check failed for ${poolId} (sweep will retry):`, e);
+      }
+
+      // 4. Generate automated Weekly Recap. buildWeeklyRecap omits undefined
+      // optional fields — Firestore's set() throws on a literal `undefined` value
+      // (no ignoreUndefinedProperties here), which crashed every prior call that
+      // had no sharp user / no MNF tiebreaker / a non-Survivor pool.
+      const recapRef = poolRef.collection('weekly_recaps').doc(`week_${week}`);
+      const recapDoc = buildWeeklyRecap({ poolId, week, poolType: pool.type, sharpUser, closestTie, aliveCount });
+      await recapRef.set(recapDoc);
+
+      await writeAuditEvent({
+        poolId,
+        type: 'SCORE_FINALIZED',
+        message: `NFL Pool Scoring concluded for Week ${week}`,
+        severity: 'INFO',
+        actor: actor,
+        payload: { week }
+      });
     }
-
-    // 4. Generate automated Weekly Recap. buildWeeklyRecap omits undefined
-    // optional fields — Firestore's set() throws on a literal `undefined` value
-    // (no ignoreUndefinedProperties here), which crashed every prior call that
-    // had no sharp user / no MNF tiebreaker / a non-Survivor pool.
-    const recapRef = poolRef.collection('weekly_recaps').doc(`week_${week}`);
-    const recapDoc = buildWeeklyRecap({ poolId, week, poolType: pool.type, sharpUser, closestTie, aliveCount });
-    await recapRef.set(recapDoc);
-
-    await writeAuditEvent({
-      poolId,
-      type: 'SCORE_FINALIZED',
-      message: `NFL Pool Scoring concluded for Week ${week}`,
-      severity: 'INFO',
-      actor: actor,
-      payload: { week }
-    });
   }
 
   return {
     success: true,
     message: dryRun
       ? `Week ${week} dry run — nothing written.`
-      : `Week ${week} scored successfully.`,
+      : provisional
+        ? `Week ${week} scored provisionally — live standings updated.`
+        : `Week ${week} scored successfully.`,
     dryRun,
+    provisional,
     pickemScored,
     survivorScored,
     marginScored,
     aliveCount,
     standings: standingsRows,
     standingsWritten: !dryRun,
-    recapWritten: !dryRun,
+    recapWritten,
+    finalizeFailed,
   };
 }
 
@@ -1140,10 +1285,21 @@ export const scoreNFLWeek = validated(
 
     // The pool doc and the slate are already in hand — pass them down rather
     // than paying for the same two reads again inside the scorer.
+    //
+    // `provisional` is DERIVED here, not hard-coded false. The ACTIVE_GAMES gate
+    // above exempts SUPER_ADMIN, so this button can score mid-week — and a
+    // hard-coded `false` would then apply Survivor strikes, Margin -14s and
+    // finalization artifacts while later pick windows are still open, which is
+    // the exact hazard the flag exists to prevent. On a normal end-of-week score
+    // every game is concluded and locked, so this is `false` and the button
+    // behaves exactly as before.
+    const now = Date.now();
     const result = await scoreNFLWeekInternal(db, poolId, week, {
       pool,
       games,
       actor: { uid, role: 'ADMIN', label: 'Host' },
+      provisional: !isWeekComplete(pool, week, games, now),
+      now,
     });
 
     // Response shape is unchanged on purpose: dbService.scoreNFLWeek types it as
