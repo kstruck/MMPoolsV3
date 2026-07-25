@@ -1106,8 +1106,15 @@ export async function scoreNFLWeekInternal(
     }
   }
 
-  // 3. Margin leaderboard sorting
-  if (pool.type === 'NFL_MARGIN') {
+  // 3. Margin leaderboard sorting.
+  //
+  // Gated on something actually having been scored. A provisional pass whose
+  // picks are all still pending scores nobody, and ranks derived from unchanged
+  // season totals are unchanged too — but staging them anyway is a write per
+  // entry, every poll, each one firing the entry-change profile recompute. That
+  // pool also banks no fingerprint (by design, so a late entry is not skipped
+  // forever), so the retry is meant to be read-only.
+  if (pool.type === 'NFL_MARGIN' && marginScored > 0) {
     // Flush pending score writes first so the re-read ranks on THIS week's
     // fresh totals rather than last week's stale data.
     await flushBatch();

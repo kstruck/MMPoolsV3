@@ -312,6 +312,24 @@ describe('provisional Margin — the -14 is due at the lock, not at the pass', (
     expect((await entryDoc(poolId, NOPICK)).seasonTotal).toBe(0);
   });
 
+  it('writes NO entry docs at all when every pick is still pending', async () => {
+    // codex r3. The rank pass used to run unconditionally, so a pool with
+    // nothing to score still took one write per entry — every ten minutes, each
+    // firing the entry-change profile recompute — on a retry that is supposed to
+    // be read-only because the pass banks no fingerprint.
+    await setup(-0.5);
+    await db.collection('pools').doc(poolId).collection('entries').doc(NOPICK)
+      .set({ picks: { 1: 'BUF' }, usedTeams: ['BUF'] }, { merge: true }); // both entries now pending
+
+    await score();
+
+    for (const uid of [NOPICK, PICKER]) {
+      const e = await entryDoc(poolId, uid);
+      expect(e.rank, `${uid} rank`).toBeUndefined();
+      expect(e.weeklyScores, `${uid} scores`).toEqual({});
+    }
+  });
+
   it('applies -14 after the lock, and leaves a made pick pending', async () => {
     await setup(-0.5);
     await score();
