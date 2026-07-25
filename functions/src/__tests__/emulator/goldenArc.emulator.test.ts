@@ -5,7 +5,8 @@ import {
     simStartRun, simJoinMembers, simSubmitPicks, simExecuteRebuy,
     simSeedNFLGames, simFinalizePool, cleanupSimPool,
 } from '../../simHarness';
-import { scoreNFLWeek, submitNFLPicks } from '../../nflPools';
+import { scoreNFLWeek, submitNFLPicks, scoreNFLWeekInternal } from '../../nflPools';
+import type { NFLGame } from '../../nflPoolTypes';
 
 /**
  * Golden-arc emulator gate (PLAN-NFL-SIM-HARNESS Phases 2-3).
@@ -219,6 +220,117 @@ describe('golden arc — survivor rebuy through the real path', () => {
 
         await wCleanup({ data: { poolId, runId, deleteGames: true }, auth: superAdmin } as never);
     }, 60000);
+});
+
+/**
+ * PR-A extraction gate: scoreNFLWeekInternal's dryRun writes NOTHING while still
+ * computing the standings a live pass would publish, and the live pass through
+ * the same internal materialises exactly what the dry run predicted.
+ *
+ * Margin on purpose — its rank pass re-reads the entries mid-scoring, which is
+ * the one place a dry run could silently report last week's stale numbers.
+ */
+describe('scoreNFLWeekInternal — dry run computes without writing', () => {
+    const runId = 'run-dryrun-margin';
+    const poolId = `pool-${runId}`;
+    const DEE = `sim-${runId}-dee`;
+    const EVE = `sim-${runId}-eve`;
+
+    const loadArgs = async () => {
+        const poolSnap = await db.collection('pools').doc(poolId).get();
+        const gamesSnap = await db.collection('nfl_games')
+            .where('season', '==', `sim-${runId}`)
+            .where('seasonType', '==', 2)
+            .where('week', '==', 1)
+            .get();
+        return {
+            pool: poolSnap.data() as any,
+            games: gamesSnap.docs.map(d => d.data() as NFLGame),
+        };
+    };
+
+    it('reports the standings it would publish, writes nothing, then the live pass matches', async () => {
+        const { simWriteEntries } = await import('../../simHarness');
+        const wWrite = test.wrap(simWriteEntries);
+
+        await wStart({ data: { runId, scenarioId: 'dryrun-margin' }, auth: superAdmin } as never);
+        await seedSimPool(poolId, runId, 'NFL_MARGIN', {
+            entryFee: 0, payouts: { places: [], bonuses: [] },
+        });
+        // KC beats BUF by 17: Dee (KC) +17, Eve (BUF) -17.
+        await wSeed({
+            data: {
+                runId,
+                games: [{ week: 1, seasonType: 2, startTime: Date.now() - 4 * HOUR, status: 'FINAL', isMonday: false, homeTeam: T('KC'), awayTeam: T('BUF'), scores: { home: 27, away: 10 }, spread: { value: -3, locked: true } }],
+            },
+            auth: superAdmin,
+        } as never);
+        const marginEntry = (ownerUid: string, userName: string, team: string) => ({
+            ownerUid, userName, picks: { 1: team }, usedTeams: [team],
+            weeklyScores: {}, seasonTotal: 0, negativeBurden: 0, positiveWeeks: 0,
+            bestWeek: 0, submittedAt: 0, paidStatus: 'PAID',
+        });
+        await wWrite({
+            data: {
+                poolId, runId,
+                entries: [marginEntry(DEE, 'Dee', 'KC'), marginEntry(EVE, 'Eve', 'BUF')],
+            },
+            auth: superAdmin,
+        } as never);
+
+        // --- dry run ---
+        const dry = await scoreNFLWeekInternal(db, poolId, 1, {
+            ...(await loadArgs()),
+            actor: { uid: 'system', role: 'SYSTEM', label: 'Scoring Engine' },
+            dryRun: true,
+        });
+
+        expect(dry.dryRun).toBe(true);
+        expect(dry.marginScored).toBe(2);
+        expect(dry.standingsWritten).toBe(false);
+        expect(dry.recapWritten).toBe(false);
+
+        // The rows are computed from THIS week's staged scores — a dry run that
+        // re-read the (unwritten) entries would report seasonTotal 0 and no rank.
+        const dryByUid = Object.fromEntries(dry.standings.map(r => [r.ownerUid, r]));
+        expect(dryByUid[DEE].seasonTotal).toBe(17);
+        expect(dryByUid[EVE].seasonTotal).toBe(-17);
+        expect(dryByUid[DEE].rank).toBe(1);
+        expect(dryByUid[EVE].rank).toBe(2);
+
+        // ...and nothing at all was persisted.
+        const deeAfterDry = (await db.collection('pools').doc(poolId).collection('entries').doc(DEE).get()).data()!;
+        expect(deeAfterDry.seasonTotal).toBe(0);
+        expect(deeAfterDry.weeklyScores).toEqual({});
+        expect(deeAfterDry.rank).toBeUndefined();
+        expect((await db.collection('pools').doc(poolId).collection('standings').doc('current').get()).exists).toBe(false);
+        expect((await db.collection('pools').doc(poolId).collection('weekly_recaps').doc('week_1').get()).exists).toBe(false);
+        const poolAfterDry = (await db.collection('pools').doc(poolId).get()).data()!;
+        expect(poolAfterDry.scoredWeeks).toBeUndefined();
+        expect(poolAfterDry.lastScoredAt).toBeUndefined();
+
+        // --- live run through the same internal ---
+        const live = await scoreNFLWeekInternal(db, poolId, 1, {
+            ...(await loadArgs()),
+            actor: { uid: 'admin-1', role: 'ADMIN', label: 'Host' },
+        });
+
+        expect(live.dryRun).toBe(false);
+        expect(live.marginScored).toBe(2);
+        expect(live.standingsWritten).toBe(true);
+        expect(live.standings).toEqual(dry.standings); // the dry run's prediction held
+
+        const deeAfterLive = (await db.collection('pools').doc(poolId).collection('entries').doc(DEE).get()).data()!;
+        expect(deeAfterLive.seasonTotal).toBe(17);
+        expect(deeAfterLive.rank).toBe(1);
+        const standings = (await db.collection('pools').doc(poolId).collection('standings').doc('current').get()).data()!;
+        expect(standings.lastScoredWeek).toBe(1);
+        expect(standings.rows).toHaveLength(2);
+        expect((await db.collection('pools').doc(poolId).collection('weekly_recaps').doc('week_1').get()).exists).toBe(true);
+        expect((await db.collection('pools').doc(poolId).get()).data()!.scoredWeeks).toEqual({ 1: true });
+
+        await wCleanup({ data: { poolId, runId, deleteGames: true }, auth: superAdmin } as never);
+    }, 90000);
 });
 
 describe('phase 6 — stranded-run sweep', () => {

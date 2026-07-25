@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from 'firebase-functions/v2/https';
-import { writeAuditEvent } from "./audit";
+import { writeAuditEvent, type AuditOptions } from "./audit";
 import { checkBillingAccess } from "./billing";
 import { writeLedgerEvent } from "./paymentLedger";
 import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMode, assertPaidParticipantCeiling, simRunIdForCreate } from "./poolOps";
@@ -754,63 +754,81 @@ export const executeSurvivorRebuy = validated(
 );
 
 /**
- * Evaluates and scores an NFL week. Fetches all games, parses scores, evaluates picks,
- * updates standings, and creates automated weekly recap summaries.
- * SuperAdmin or Pool Owner only.
+ * What a scoring pass did. Every field is reported on dry runs too — including
+ * `standings`, the rows the pass WOULD have published. A dry run that only
+ * returned counts would be unverifiable (the count is one row per entry either
+ * way); the rows are what make a dry-run trial evidence rather than a claim.
  */
-export const scoreNFLWeek = validated(
-  // owner/SUPER_ADMIN check happens in-handler (assertPoolOwnerOrSuperAdmin
-  // needs the pool doc's owner fields, unavailable at the role-gate stage).
-  { schema: scoreNFLWeekSchema, label: "scoreNFLWeek", appCheck: "monitor" },
-  async ({ poolId, week }, request) => {
-  const uid = request.auth!.uid;
-  const db = admin.firestore();
+export interface ScoreWeekResult {
+  success: true;
+  message: string;
+  dryRun: boolean;
+  pickemScored: number;
+  survivorScored: number;
+  marginScored: number;
+  aliveCount: number;
+  standings: ReturnType<typeof buildStandingsRows>;
+  standingsWritten: boolean;
+  recapWritten: boolean;
+}
 
+/**
+ * Scores one NFL week, extracted verbatim from the scoreNFLWeek callable. Auth,
+ * the ACTIVE_GAMES gate and the pool/games reads stay in the wrapper — the pool
+ * doc and the week's slate are passed IN so a caller that already holds them
+ * (the callable today, the scheduled scorer next) never reads them twice.
+ *
+ * `opts.dryRun` computes every grade and the standings projection and writes
+ * NOTHING (the deep-sweep dry-run contract): no entry writes, no standings, no
+ * pool markers, no recap, no audit events, no finalize check. The counts still
+ * come back, so a dry pass reports what a live pass would have done.
+ *
+ * `opts.actor` threads audit attribution — without it the extraction would lose
+ * the caller identity the inline scorer took from `request.auth`.
+ */
+export async function scoreNFLWeekInternal(
+  db: admin.firestore.Firestore,
+  poolId: string,
+  week: number,
+  opts: {
+    pool: any;
+    games: NFLGame[];
+    // Reuses the audit contract's actor so an invalid role fails to compile —
+    // the scheduled scorer will pass a SYSTEM actor here.
+    actor: AuditOptions['actor'];
+    dryRun?: boolean;
+  },
+): Promise<ScoreWeekResult> {
+  const { pool, games, actor, dryRun = false } = opts;
   const poolRef = db.collection('pools').doc(poolId);
-  const poolSnap = await poolRef.get();
-  if (!poolSnap.exists) {
-    throw new HttpsError('not-found', 'Pool not found.');
-  }
 
-  const pool = poolSnap.data() as any;
-  
-  // RBAC checks
-  const userRole = request.auth!.token.role || 'USER';
-  try {
-    assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
-  } catch {
-    throw new HttpsError('permission-denied', 'Only pool managers or super admins can trigger scoring.');
-  }
-
-  // 1. Retrieve all NFL games for this season and week
-  const gamesSnap = await db.collection('nfl_games')
-    .where('season', '==', pool.season)
-    .where('seasonType', '==', Number(pool.seasonType || 2))
-    .where('week', '==', week)
-    .get();
-
-  const games = gamesSnap.docs.map(doc => doc.data() as NFLGame);
-  if (games.length === 0) {
-    throw new HttpsError('failed-precondition', `No games found to score for week ${week}.`);
-  }
-
-  // Confirm all games are final
-  const activeGamesCount = games.filter(g => g.status !== 'FINAL' && g.status !== 'CANCELLED').length;
-  if (activeGamesCount > 0 && userRole !== 'SUPER_ADMIN') {
-    throw new HttpsError('failed-precondition', `ACTIVE_GAMES: Cannot score the week while ${activeGamesCount} games are still active.`);
-  }
+  let pickemScored = 0;
+  let survivorScored = 0;
+  let marginScored = 0;
 
   // 2. Fetch all entries
   const entriesSnap = await poolRef.collection('entries').get();
   if (entriesSnap.empty) {
-    return { success: true, message: 'No entries to score.' };
+    return {
+      success: true, message: 'No entries to score.', dryRun,
+      pickemScored: 0, survivorScored: 0, marginScored: 0, aliveCount: 0,
+      standings: [], standingsWritten: false, recapWritten: false,
+    };
   }
 
   // Staged, chunked writes — a single batch caps at 500 ops, so pools with
   // >500 entries (or >250 Margin entries) would throw on commit and score nobody.
   let batch = db.batch();
   let opCount = 0;
+  // Dry runs never touch the batch; they record what WOULD have been written so
+  // the two re-read passes below (Margin ranks, standings projection) still see
+  // this week's numbers instead of last week's stale committed ones.
+  const stagedDry = new Map<string, any>();
   const stage = async (ref: admin.firestore.DocumentReference, data: any) => {
+    if (dryRun) {
+      stagedDry.set(ref.path, { ...(stagedDry.get(ref.path) || {}), ...data });
+      return;
+    }
     batch.update(ref, data);
     if (++opCount >= 400) {
       await batch.commit();
@@ -819,11 +837,23 @@ export const scoreNFLWeek = validated(
     }
   };
   const flushBatch = async () => {
-    if (opCount > 0) {
-      await batch.commit();
-      batch = db.batch();
-      opCount = 0;
+    if (dryRun || opCount === 0) return;
+    await batch.commit();
+    batch = db.batch();
+    opCount = 0;
+  };
+  // Post-write view of the entries. Live: re-read (authoritative, unchanged).
+  // Dry: the pre-read docs with the staged updates merged over them.
+  const readScoredEntries = async (): Promise<any[]> => {
+    if (dryRun) {
+      return entriesSnap.docs.map(d => ({
+        ...(d.data() as any),
+        ...(stagedDry.get(d.ref.path) || {}),
+        id: d.id,
+      }));
     }
+    const snap = await poolRef.collection('entries').get();
+    return snap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
   };
 
   // Recaps highlighting metrics
@@ -871,6 +901,7 @@ export const scoreNFLWeek = validated(
         weeklyResults,
         resultsVersion: (((entry as any).resultsVersion) || 0) + 1,
       });
+      pickemScored++;
 
       // Sharp calculation
       if (!sharpUser || points > sharpUser.val) {
@@ -912,10 +943,11 @@ export const scoreNFLWeek = validated(
           weeklyResults,
           resultsVersion: (((entry as any).resultsVersion) || 0) + 1,
         });
+        survivorScored++;
       }
       if (result.alive) aliveCount++;
 
-      if (result.strikeIsNew) {
+      if (result.strikeIsNew && !dryRun) {
         await writeAuditEvent({
           poolId,
           type: 'SURVIVOR_AUTO_STRIKE',
@@ -969,6 +1001,7 @@ export const scoreNFLWeek = validated(
         weeklyResults,
         resultsVersion: (((entry as any).resultsVersion) || 0) + 1
       });
+      marginScored++;
     }
   }
 
@@ -977,8 +1010,7 @@ export const scoreNFLWeek = validated(
     // Flush pending score writes first so the re-read ranks on THIS week's
     // fresh totals rather than last week's stale data.
     await flushBatch();
-    const updatedEntriesSnap = await poolRef.collection('entries').get();
-    const updatedEntries = updatedEntriesSnap.docs.map(doc => doc.data() as MarginEntry);
+    const updatedEntries = (await readScoredEntries()) as MarginEntry[];
     const ranked = sortMarginLeaderboard(updatedEntries);
 
     // Write standings back
@@ -999,52 +1031,123 @@ export const scoreNFLWeek = validated(
   // raw entry reads tighten to own-entry-only.
   // ponytail: single doc, fine for realistic pool sizes; shard to standings/part_N
   // before the 1MB doc limit if a pool ever has >500 entries (ADR 0004 shard path).
-  const projectionSnap = await poolRef.collection('entries').get();
-  const standingsRows = buildStandingsRows(
-    pool.type,
-    projectionSnap.docs.map(d => ({ ...(d.data() as any), id: d.id })),
-  );
-  await poolRef.collection('standings').doc('current').set({
-    poolType: pool.type,
-    season: String(pool.season ?? ''),
-    lastScoredWeek: week,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    rows: standingsRows,
-  });
-  await poolRef.update({
-    lastScoredAt: admin.firestore.FieldValue.serverTimestamp(),
-    scoredThroughWeek: Math.max(Number(pool.scoredThroughWeek || 0), Number(week)),
-    // Which weeks have actually been scored (out-of-order safe) — the Season
-    // Finalization completeness check reads this, not scoredThroughWeek.
-    [`scoredWeeks.${week}`]: true,
-  });
+  const standingsRows = buildStandingsRows(pool.type, await readScoredEntries());
+  if (!dryRun) {
+    await poolRef.collection('standings').doc('current').set({
+      poolType: pool.type,
+      season: String(pool.season ?? ''),
+      lastScoredWeek: week,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      rows: standingsRows,
+    });
+    await poolRef.update({
+      lastScoredAt: admin.firestore.FieldValue.serverTimestamp(),
+      scoredThroughWeek: Math.max(Number(pool.scoredThroughWeek || 0), Number(week)),
+      // Which weeks have actually been scored (out-of-order safe) — the Season
+      // Finalization completeness check reads this, not scoredThroughWeek.
+      [`scoredWeeks.${week}`]: true,
+    });
 
-  // 3c. Season Finalization (ADR 0005 Phase 3): if this scoring pass completed the
-  // season, finalize automatically — stats never wait on a human. Best-effort:
-  // a finalize failure must never fail the scoring call (the sweep job catches up).
-  try {
-    await maybeFinalizeNFLPool(db, poolId);
-  } catch (e) {
-    console.warn(`[scoreNFLWeek] finalize check failed for ${poolId} (sweep will retry):`, e);
+    // 3c. Season Finalization (ADR 0005 Phase 3): if this scoring pass completed the
+    // season, finalize automatically — stats never wait on a human. Best-effort:
+    // a finalize failure must never fail the scoring call (the sweep job catches up).
+    try {
+      await maybeFinalizeNFLPool(db, poolId);
+    } catch (e) {
+      console.warn(`[scoreNFLWeek] finalize check failed for ${poolId} (sweep will retry):`, e);
+    }
+
+    // 4. Generate automated Weekly Recap. buildWeeklyRecap omits undefined
+    // optional fields — Firestore's set() throws on a literal `undefined` value
+    // (no ignoreUndefinedProperties here), which crashed every prior call that
+    // had no sharp user / no MNF tiebreaker / a non-Survivor pool.
+    const recapRef = poolRef.collection('weekly_recaps').doc(`week_${week}`);
+    const recapDoc = buildWeeklyRecap({ poolId, week, poolType: pool.type, sharpUser, closestTie, aliveCount });
+    await recapRef.set(recapDoc);
+
+    await writeAuditEvent({
+      poolId,
+      type: 'SCORE_FINALIZED',
+      message: `NFL Pool Scoring concluded for Week ${week}`,
+      severity: 'INFO',
+      actor: actor,
+      payload: { week }
+    });
   }
 
-  // 4. Generate automated Weekly Recap. buildWeeklyRecap omits undefined
-  // optional fields — Firestore's set() throws on a literal `undefined` value
-  // (no ignoreUndefinedProperties here), which crashed every prior call that
-  // had no sharp user / no MNF tiebreaker / a non-Survivor pool.
-  const recapRef = poolRef.collection('weekly_recaps').doc(`week_${week}`);
-  const recapDoc = buildWeeklyRecap({ poolId, week, poolType: pool.type, sharpUser, closestTie, aliveCount });
-  await recapRef.set(recapDoc);
+  return {
+    success: true,
+    message: dryRun
+      ? `Week ${week} dry run — nothing written.`
+      : `Week ${week} scored successfully.`,
+    dryRun,
+    pickemScored,
+    survivorScored,
+    marginScored,
+    aliveCount,
+    standings: standingsRows,
+    standingsWritten: !dryRun,
+    recapWritten: !dryRun,
+  };
+}
 
-  await writeAuditEvent({
-    poolId,
-    type: 'SCORE_FINALIZED',
-    message: `NFL Pool Scoring concluded for Week ${week}`,
-    severity: 'INFO',
-    actor: { uid, role: 'ADMIN', label: 'Host' },
-    payload: { week }
-  });
+/**
+ * Evaluates and scores an NFL week. Fetches all games, parses scores, evaluates picks,
+ * updates standings, and creates automated weekly recap summaries.
+ * SuperAdmin or Pool Owner only.
+ */
+export const scoreNFLWeek = validated(
+  // owner/SUPER_ADMIN check happens in-handler (assertPoolOwnerOrSuperAdmin
+  // needs the pool doc's owner fields, unavailable at the role-gate stage).
+  { schema: scoreNFLWeekSchema, label: "scoreNFLWeek", appCheck: "monitor" },
+  async ({ poolId, week }, request) => {
+    const uid = request.auth!.uid;
+    const db = admin.firestore();
 
-  return { success: true, message: `Week ${week} scored successfully.` };
+    const poolRef = db.collection('pools').doc(poolId);
+    const poolSnap = await poolRef.get();
+    if (!poolSnap.exists) {
+      throw new HttpsError('not-found', 'Pool not found.');
+    }
+
+    const pool = poolSnap.data() as any;
+
+    // RBAC checks
+    const userRole = request.auth!.token.role || 'USER';
+    try {
+      assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
+    } catch {
+      throw new HttpsError('permission-denied', 'Only pool managers or super admins can trigger scoring.');
+    }
+
+    // 1. Retrieve all NFL games for this season and week
+    const gamesSnap = await db.collection('nfl_games')
+      .where('season', '==', pool.season)
+      .where('seasonType', '==', Number(pool.seasonType || 2))
+      .where('week', '==', week)
+      .get();
+
+    const games = gamesSnap.docs.map(doc => doc.data() as NFLGame);
+    if (games.length === 0) {
+      throw new HttpsError('failed-precondition', `No games found to score for week ${week}.`);
+    }
+
+    // Confirm all games are final
+    const activeGamesCount = games.filter(g => g.status !== 'FINAL' && g.status !== 'CANCELLED').length;
+    if (activeGamesCount > 0 && userRole !== 'SUPER_ADMIN') {
+      throw new HttpsError('failed-precondition', `ACTIVE_GAMES: Cannot score the week while ${activeGamesCount} games are still active.`);
+    }
+
+    // The pool doc and the slate are already in hand — pass them down rather
+    // than paying for the same two reads again inside the scorer.
+    const result = await scoreNFLWeekInternal(db, poolId, week, {
+      pool,
+      games,
+      actor: { uid, role: 'ADMIN', label: 'Host' },
+    });
+
+    // Response shape is unchanged on purpose: dbService.scoreNFLWeek types it as
+    // { success, message } and NFLManagerView renders the message.
+    return { success: result.success, message: result.message };
   },
 );
