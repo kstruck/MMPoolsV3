@@ -941,7 +941,18 @@ export async function scoreNFLWeekInternal(
     // which is the safe direction. Restated ESPN scores are the reconciliation
     // tier's job (§5b), not this fence's.
     const fresh = (await db.collection('pools').doc(poolId).get()).data();
-    return await scoreWeekPass(db, poolId, week, fresh ? { ...opts, pool: fresh } : opts, fence);
+    if (!fresh) return await scoreWeekPass(db, poolId, week, opts, fence);
+
+    // `provisional` is derived by the CALLER from the same pre-lease snapshot, and
+    // it gates finalization — `scoredWeeks`, `maybeFinalizeNFLPool`, the weekly
+    // recap. An override that landed in the gap makes the week incomplete, so a
+    // `provisional: false` computed from the stale doc would finalize a week whose
+    // pick window is open. Re-derived here, and only ever made MORE provisional:
+    // OR-ing preserves a caller (or a test) that deliberately forced it on, and
+    // withholding is always the safe direction.
+    const provisional = (opts.provisional ?? false)
+      || !isWeekComplete(fresh, week, opts.games, opts.now ?? Date.now());
+    return await scoreWeekPass(db, poolId, week, { ...opts, pool: fresh, provisional }, fence);
   } finally {
     // Best-effort: a failed release only means the lease expires on its own TTL,
     // which is what the expiry is for. Throwing here would mask the real error.

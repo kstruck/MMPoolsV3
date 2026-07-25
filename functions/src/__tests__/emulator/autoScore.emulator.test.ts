@@ -878,6 +878,31 @@ describe('scoring lease — the mutex between scorers', () => {
     expect((await poolDoc('p-stale-pool')).publishedWeeks).toBeUndefined();
   }, 60000);
 
+  it('re-derives `provisional` from the post-lease pool, so a gap override cannot finalize', async () => {
+    // Self-review follow-up to codex r2. `provisional` is computed by the CALLER
+    // from the same pre-lease snapshot, and it gates the heavy artifacts:
+    // scoredWeeks, maybeFinalizeNFLPool, the weekly recap (whose CREATE trigger
+    // fires AI trash-talk and never refires). An override landing in the gap makes
+    // the week incomplete, so a stale `provisional: false` would finalize a week
+    // whose pick window is open.
+    await seedScorable('p-stale-provisional');
+    const stalePool = await poolDoc('p-stale-provisional');
+    await db.collection('pools').doc('p-stale-provisional').update({
+      'settings.weekLockOverrides.1': Date.now() + 3 * HOUR,
+    });
+
+    // provisional deliberately NOT passed: the caller's snapshot says complete.
+    const result = await scoreNFLWeekInternal(db, 'p-stale-provisional', 1, {
+      pool: stalePool, games: await loadSlate(), actor: SYSTEM_ACTOR,
+    });
+
+    expect(result.provisional).toBe(true);
+    const pool = await poolDoc('p-stale-provisional');
+    expect(pool.scoredWeeks).toBeUndefined();
+    expect(pool.finalizedAt).toBeUndefined();
+    expect(result.recapWritten).toBe(false);
+  }, 60000);
+
   it('a lockRevision bump mid-pass discards the rest of the pass', async () => {
     // The backstop for an override that commits between lease acquisition and the
     // next fenced commit. Simulated by bumping the revision under a held fence,
