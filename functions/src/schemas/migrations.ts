@@ -27,3 +27,18 @@ export const backfillMemberRecordsSchema = z.strictObject({
     limit: z.number().int().positive().max(100).optional(),
     startAfter: z.string().min(1).max(1500).optional(),
 });
+
+/**
+ * backfillPublishedWeeks - SUPER_ADMIN prod batch migration (PLAN-REALTIME-SCORING
+ * §4). Stamps `publishedWeeks.{week}` for weeks scored BEFORE the auto-scorer
+ * started writing the marker, so the new extendWeekDeadline publish guard sees
+ * them.
+ *
+ * dryRun defaults TRUE at the schema layer, same reasoning as above: a handler-side
+ * truthy check runs LIVE when the flag is omitted.
+ */
+export const backfillPublishedWeeksSchema = z.strictObject({
+    dryRun: z.boolean().optional().default(true),
+    limit: z.number().int().positive().max(200).optional(),
+    startAfter: z.string().min(1).max(1500).optional(),
+});

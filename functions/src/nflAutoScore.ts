@@ -13,6 +13,7 @@ import {
   rotateForRun,
   type AutoScoreResult,
 } from './lib/autoScoreDecisions';
+import { readEntryRevisionSum } from './lib/entryRevision';
 import type { NFLGame } from './nflPoolTypes';
 
 /**
@@ -31,14 +32,16 @@ import type { NFLGame } from './nflPoolTypes';
  * leave every pool "already current" so the first LIVE run skips them all and
  * never scores anything.
  *
- * OUT OF SCOPE, and an arming prerequisite rather than a gap in this job:
- *  - the `nfl_rescore_queue` durable tier (§5b) that catches ESPN corrections
- *    and finals landing beyond the 24h window;
- *  - the per-entry submission revision watermark (§7 PR-B′), without which a
- *    submission committing after the scorer reads entries can be skipped by an
- *    unchanged fingerprint.
- * Both are only reachable once the job is armed, and §7 requires them before
- * arming — the job ships inert.
+ * CONCURRENCY (PR-B′): every pass runs under the fenced scoring lease taken
+ * inside `scoreNFLWeekInternal`, so this job, the manual "Score Week" button and
+ * the finalize sweep cannot overlap on one pool. The skip decision folds in the
+ * per-entry revision sum, so a submission committing after the previous pass
+ * read entries always forces one more pass.
+ *
+ * OUT OF SCOPE, and an arming prerequisite rather than a gap in this job: the
+ * `nfl_rescore_queue` durable tier (§5b) that catches ESPN corrections and
+ * finals landing beyond the 24h window. It is only reachable once the job is
+ * armed, and §7 requires it before arming — the job ships inert.
  */
 
 /** Pool types this job scores. */
@@ -182,9 +185,17 @@ export async function autoScoreOnce(
   for (const slate of slates) {
     const candidates = rotateForRun(await findCandidatePools(db, slate), now);
     for (const { id: poolId, pool } of candidates) {
-      const fingerprint = computeWeekFingerprint(pool, slate.week, slate.games, now);
+      // The entry-revision sum is the term that makes a submission committing
+      // after the previous pass's entries read defeat the skip (§7 PR-B′). A
+      // `null` means the aggregate could not be read: treat it as "unknown" and
+      // score, never as 0 — guessing would reinstate exactly the skip-forever
+      // hole the watermark exists to close.
+      const entryRevisionSum = await readEntryRevisionSum(db, poolId);
+      const fingerprint = entryRevisionSum === null
+        ? null
+        : computeWeekFingerprint(pool, slate.week, slate.games, now, entryRevisionSum);
       const stored = pool.autoScore?.fingerprintByWeek?.[String(slate.week)];
-      if (stored === fingerprint) {
+      if (fingerprint !== null && stored === fingerprint) {
         result.poolsSkipped++;
         continue;
       }
@@ -204,6 +215,14 @@ export async function autoScoreOnce(
           provisional: !isWeekComplete(pool, slate.week, slate.games, now),
           now,
         });
+        // The mutex refused this pool to us — another scorer (the manual button,
+        // the finalize sweep, an overrunning previous run) owns it. Nothing was
+        // read or written, so it is a skip, not a score and not a failure; the
+        // next 10-minute run picks it up.
+        if (scored.leaseBusy) {
+          result.poolsSkipped++;
+          continue;
+        }
         result.poolsScored++;
 
         // The fingerprint is recorded ONLY after a live pass that actually did
@@ -228,8 +247,11 @@ export async function autoScoreOnce(
         // terminal, so nothing else will ever move the hash — an entry submitted
         // afterwards would be skipped forever. Nothing was written, so there is
         // nothing to remember; retrying costs one entries read per poll.
+        //
+        // Nor may a pass whose fingerprint is `null` (the entry-revision
+        // aggregate was unreadable): there is no hash to bank.
         const scoredAny = scored.pickemScored + scored.survivorScored + scored.marginScored > 0;
-        if (!opts.dryRun && !scored.finalizeFailed && scoredAny) {
+        if (!opts.dryRun && fingerprint !== null && !scored.finalizeFailed && scoredAny) {
           await db.collection('pools').doc(poolId).update({
             [`autoScore.fingerprintByWeek.${slate.week}`]: fingerprint,
             'autoScore.lastRunAt': admin.firestore.FieldValue.serverTimestamp(),

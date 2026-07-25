@@ -16,7 +16,7 @@ import {
     writePoolCreationSideEffects,
 } from './lib/poolCreation';
 import { loadBillingConfig } from './billing';
-import { buildPoolSettingsUpdate } from './lib/poolUpdate';
+import { buildPoolSettingsUpdate, flattenSettingsPatch } from './lib/poolUpdate';
 
 // Helper to determine if user can manage pool
 export const assertPoolOwnerOrSuperAdmin = (pool: any, uid: string, userRole?: string) => {
@@ -383,8 +383,15 @@ export const updatePoolSettings = validated(
     // re-quote + delta payment. No-op for free/trial pools (billing.paid absent).
     assertPaidCeilingForUpdate(pool?.billing as any, set);
 
+    // Merge-preserving settings write (PLAN-REALTIME-SCORING §3a, PR-B′). The
+    // manager UI sends a COMPLETE settings object, so a `{ settings: {...} }`
+    // update would REPLACE the map and silently delete the server-owned fields it
+    // omits — `weekLockOverrides` (reverting an accepted deadline extension) and
+    // `lockRevision` (breaking the scoring concurrency protocol). Per-key dotted
+    // writes carry them through untouched. Runs AFTER the paid-ceiling gate,
+    // which reads the nested shape.
     const patch: Record<string, unknown> = {
-        ...set,
+        ...flattenSettingsPatch(set, pool?.type as string | undefined),
         updatedAt: Timestamp.now(),
     };
     for (const key of clearLegacy) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPoolSettingsUpdate } from '../lib/poolUpdate';
+import { buildPoolSettingsUpdate, flattenSettingsPatch, SERVER_OWNED_SETTINGS_KEYS } from '../lib/poolUpdate';
 import { normalizePhase, isGroupEditable, classifyUpdateKey } from '../shared/editability';
 
 describe('normalizePhase', () => {
@@ -51,5 +51,60 @@ describe('buildPoolSettingsUpdate', () => {
     expect(plan.set.paymentHandles).toEqual({ venmo: '@me', googlePay: 'g' });
     expect(plan.set.venmo).toBe('@me');
     expect(plan.clearLegacy.sort()).toEqual(['cashapp', 'paypal', 'zelle']);
+  });
+});
+
+describe('flattenSettingsPatch — merge-preserving settings writes (PR-B′)', () => {
+  it('expands a whole-settings replacement into per-key dotted writes', () => {
+    // THE BUG THIS EXISTS FOR: NFLManagerView sends a COMPLETE settings object,
+    // and a Firestore `update({ settings: {...} })` REPLACES the map. A routine
+    // save after a commissioner extended a deadline would silently delete
+    // `weekLockOverrides` — reverting the accepted deadline — and reset
+    // `lockRevision`, breaking the scoring concurrency protocol.
+    expect(flattenSettingsPatch({ name: 'N', settings: { entryFee: 5, pickMode: 'ATS' } }, 'NFL_PICKEM'))
+      .toEqual({ name: 'N', 'settings.entryFee': 5, 'settings.pickMode': 'ATS' });
+  });
+
+  it('leaves a payload with no settings key untouched', () => {
+    expect(flattenSettingsPatch({ name: 'N' }, 'NFL_PICKEM')).toEqual({ name: 'N' });
+  });
+
+  it('REJECTS the server-owned nested keys', () => {
+    for (const key of SERVER_OWNED_SETTINGS_KEYS) {
+      expect(() => flattenSettingsPatch({ settings: { [key]: { 1: 123 } } }, 'NFL_PICKEM'))
+        .toThrow(/managed by the server/);
+    }
+  });
+
+  it('rejects a settings key that would escape its own field path', () => {
+    // `settings.a.b` written as a dotted path lands somewhere else entirely.
+    expect(() => flattenSettingsPatch({ settings: { 'a.b': 1 } }, 'NFL_PICKEM'))
+      .toThrow(/not a valid settings key/);
+    expect(() => flattenSettingsPatch({ settings: { '`x`': 1 } }, 'NFL_PICKEM'))
+      .toThrow(/not a valid settings key/);
+  });
+
+  it('rejects a non-object settings value', () => {
+    expect(() => flattenSettingsPatch({ settings: null }, 'NFL_PICKEM')).toThrow(/must be an object/);
+    expect(() => flattenSettingsPatch({ settings: [1] }, 'NFL_PICKEM')).toThrow(/must be an object/);
+  });
+
+  it('forces WEEKLY lock and snaps the buffer to a preset for Survivor/Margin', () => {
+    // codex r29: protecting the field is not enough once direct writes are
+    // blocked — a manager can still call the callable with an arbitrary buffer
+    // and move the "hard" deadline.
+    for (const type of ['NFL_SURVIVOR', 'NFL_MARGIN']) {
+      const out = flattenSettingsPatch({ settings: { lockMode: 'PER_GAME', lockBufferMinutes: 0 } }, type);
+      expect(out['settings.lockMode']).toBe('WEEKLY');
+      expect(out['settings.lockBufferMinutes']).toBe(5);
+    }
+    expect(flattenSettingsPatch({ settings: { lockBufferMinutes: 60 } }, 'NFL_SURVIVOR')['settings.lockBufferMinutes'])
+      .toBe(60);
+  });
+
+  it('leaves Pick’em lock settings alone — it keeps per-game locks and extensions', () => {
+    const out = flattenSettingsPatch({ settings: { lockMode: 'PER_GAME', lockBufferMinutes: 15 } }, 'NFL_PICKEM');
+    expect(out['settings.lockMode']).toBe('PER_GAME');
+    expect(out['settings.lockBufferMinutes']).toBe(15);
   });
 });
