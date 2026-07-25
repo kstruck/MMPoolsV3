@@ -160,6 +160,30 @@ describe('scheduled job export surface', () => {
     expect(defined.length).toBeGreaterThanOrEqual(20);
   });
 
+  it('every onSchedule() call is in the `export const` shape the scan looks for', () => {
+    // SCHEDULED_RE is anchored on `export const X = ... onSchedule(`, so a job
+    // written `const j = onSchedule(...)` — never exported at all — would be
+    // invisible to the scan and pass by absence. That is the one direction this
+    // guard can be wrong in QUIETLY, so the convention gets an assertion rather
+    // than a comment: every onSchedule() call site must be one the scan sees.
+    //
+    // Counted over the same comment-blanked text, so prose (lib/heartbeat.ts,
+    // revenueAggregates.ts) does not inflate it. `import { onSchedule } from`
+    // has no paren after the identifier and is not counted.
+    let callSites = 0;
+    for (const file of sourceFiles(SRC)) {
+      const text = blankComments(fs.readFileSync(file, 'utf8'));
+      callSites += [...text.matchAll(/onSchedule\s*\(/g)].length;
+    }
+    expect(
+      defined.length,
+      `${callSites} onSchedule() call sites but only ${defined.length} match ` +
+        '`export const X = onSchedule(`. A job declared some other way is not ' +
+        'checked for its index.ts export. Use the standard shape, or widen ' +
+        'SCHEDULED_RE to cover the new one.',
+    ).toBe(callSites);
+  });
+
   it('exports EVERY defined scheduled job from index.ts', () => {
     // NO EXEMPTIONS, and there is deliberately no allowlist to add one to.
     // Every scheduled job in the codebase is exported today, so a failure here
