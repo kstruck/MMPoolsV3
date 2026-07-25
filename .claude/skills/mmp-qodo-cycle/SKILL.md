@@ -1,18 +1,19 @@
 ---
 name: mmp-qodo-cycle
 description: >
-  Use whenever a PR in march-melee-pools is awaiting or receiving a qodo.ai
-  review and the findings need to be absorbed: Kevin says "qodo is running",
-  "check the qodo report", "absorb the review", or a PR sits open after push
-  and qodo comments are expected. Encodes the standing autonomous loop
-  (authorized by Kevin 2026-07-11): watch the PR, pull ALL three comment
-  surfaces, make a validity call on every finding BEFORE fixing, fix the real
-  ones, rerun the full gate set, push, repeat until dry, then notify Kevin
-  with a per-finding verdict table. Also records qodo's track record and the
-  severity-curve stop rule.
+  DORMANT — Kevin removed the qodo check entirely on 2026-07-25 (CLAUDE.md
+  §2b). Do NOT load this skill and do NOT check qodo on a PR. It is kept only
+  so the absorption loop is recoverable if Kevin restores qodo; if he does,
+  it covers watching the PR, pulling ALL three comment surfaces, making a
+  validity call on every finding BEFORE fixing, rerunning the full gate set,
+  and reporting a per-finding verdict table. codex (CLAUDE.md §2c) is the
+  only reviewer in the meantime.
 ---
 
 # mmp-qodo-cycle — absorb a qodo.ai PR review autonomously
+
+> 🛑 **DORMANT as of 2026-07-25.** Kevin removed the qodo check until further
+> notice. Nothing below runs unless he restores it. See CLAUDE.md §2b.
 
 Repo: `D:\march-melee-pools`. qodo.ai reviews PRs on this GitHub repo
 (kstruck/MMPoolsV3; 14-day trial started 2026-07-10). Standing authorization

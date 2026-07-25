@@ -76,8 +76,9 @@ config/console act with a verification step. Suggested order as listed.
   prod probe (needs a probe user + credentials), or accept A3a-only coverage.
   My read: A3a + the chaos drill covers the risk for preseason; decide before
   regular season, not before HOF. *Source: TOMORROW-TASKS NFL-2.*
-- ☐ **K15 · qodo:** restore billing or retire it from CLAUDE.md §2b (codex on
-  Terra is working). Doc-only either way.
+- ☑ **K15 · qodo: CLOSED 2026-07-25** — Kevin retired the check entirely. CLAUDE.md
+  §2b now forbids checking it; codex (§2c, 5 rounds max) is its temporary
+  replacement. Restore path kept in a collapsed block in §2b.
 - ☐ **K16 · NotebookLM sync habit:** add the repo/DECISION-LOG.md as a source in
   the MarchMeleePools notebook; re-sync after significant merges (no API — it's
   a 1-minute manual act).

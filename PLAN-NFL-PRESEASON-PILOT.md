@@ -175,9 +175,11 @@ Plus the two prod-gated sub-steps carved out of A6 and A7 above.
 
 ## 4. Autonomy rules for this run
 
-- **You MAY**: create branches/worktrees, write code+tests, run all gates, open PRs,
-  absorb qodo, merge your own green PRs after the review window (qodo track record and
-  the merge discipline are in HANDOFF.md).
+- **You MAY**: create branches/worktrees, write code+tests, run all gates, run and
+  absorb `codex exec review --base origin/main` (5 rounds max, CLAUDE.md §2c), open
+  PRs. **Do NOT check qodo** — the check was removed 2026-07-25 (§2b); codex is its
+  temporary replacement. Merging is Kevin's call now, not a post-review-window
+  self-merge: there is no second reviewer left to constitute a review window.
 - **You MUST STOP and log to TOMORROW-TASKS.md (don't guess)** if: an item requires a
   prod-data mutation or GCP/Firebase console action (A6's arm + import, deploy);
   a change would touch `firestore.rules` write/read paths; a design choice in A5 is

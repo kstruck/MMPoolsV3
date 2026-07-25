@@ -26,89 +26,53 @@ Each skill carries a "When NOT to use this skill" routing table to its
 siblings and provenance/re-verify commands — trust the commands over the
 prose if they disagree; skills are point-in-time snapshots.
 
-## 2b. Opening a PR is not the end of the task — wait for qodo
+## 2b. qodo — DO NOT CHECK (Kevin, 2026-07-25 ET)
 
-> 🛑 **QODO IS BILLING-BLOCKED — 2026-07-22.** It posted "Qodo reviews are
-> paused because your trial has ended" on #253 and returned **zero findings on
-> all four PRs opened overnight 07-21/22**, across all three surfaces. Treat a
-> qodo review as NOT COMING until Kevin says billing is restored.
->
-> **THIS REPLACES THE 3-MINUTE POLL BELOW.** Check the three surfaces ONCE, in
-> one pass, and move on — no waiting window at all. The 2026-07-21 box and its
-> "poll for up to 3 minutes" procedure are superseded for as long as billing is
-> blocked; they describe a reviewer that was still answering intermittently, and
-> this one is not answering. If a report ever does appear, the absorb-or-reject
-> rule still applies in full.
->
-> **§2c (codex) is now the only working reviewer** — which means it is also the
-> only second opinion, so weigh its findings on evidence rather than deferring
-> to them.
->
-> ⚠️ **DO NOT BLOCK ON QODO — 2026-07-21.** Kevin reported the qodo plan is out
-> of tokens, so reviews may be intermittent or stop entirely. **Never wait on a
-> review before reporting a PR, and never call a PR blocked on one.**
->
-> Stated precisely, because the distinction matters: qodo was still posting
-> reviews when this note was written, so do not assume silence means it is dead,
-> and do not assume a review will come. `gh pr checks <n>` is still required and
-> still gates.
->
-> **THE PROCEDURE, single-valued (Kevin, 2026-07-21).** Before you push a
-> follow-up commit, poll the three surfaces below for up to **3 minutes**.
-> If a report lands in that window, absorb or reject every finding with written
-> evidence before pushing. If nothing has appeared after 3 minutes, assume qodo
-> is not going to respond on this PR and proceed — do not wait longer, and do not
-> report the PR as blocked. A silent reviewer must never become a stalled PR.
->
-> **This note OVERRIDES the "wait for the qodo review" instruction below for as
-> long as it stands.** Read the rest of §2b as: *when a qodo report EXISTS, read
-> every finding and absorb or reject each one with written evidence.* The
-> waiting half is suspended — an unconditional "wait before reporting" can block
-> a PR indefinitely against a reviewer that may never answer, which is the
-> opposite of what the rule is for. Kevin will say when it resumes.
->
-> Meanwhile the review burden falls back on the author, and §2c is now the
-> primary cross-model gate rather than a supplement to qodo.
+<!-- Dates in this repo are ET (#259). Commits from a late-evening session stamp
+     the PREVIOUS day in local MT (-0600) — e.g. 07-24 22:24 MT is 07-25 00:24 ET.
+     A git date one day behind a doc date is expected, not a defect. -->
 
-**After opening ANY pull request, check for a qodo review — and when one
-exists, read every finding and absorb or reject each with written evidence
-before reporting the PR as done.** Kevin should never have to ask whether qodo
-was checked. (Per the box above, the *waiting* part is currently suspended
-entirely: check the three surfaces ONCE, in a single pass, and proceed. No
-3-minute window, no watcher — qodo is billing-blocked and is not answering.)
 
-This lived in `mmp-qodo-cycle` and in auto-memory and was still dropped
-under load on 2026-07-21 (checked on two PRs only when asked, skipped on
-three others), so it is promoted here where a fresh session cannot miss it.
+🛑 **Kevin removed the qodo check until further notice.** Do not poll it, do not
+check its surfaces, do not mention it in a PR body or in a report to Kevin. It
+has been billing-blocked since 2026-07-21 and posts only a "your trial has
+ended" notice; checking it is pure overhead. Every prior instruction in this
+section to wait for, poll, or report on qodo is **revoked** — including the
+3-minute poll and the check-once-then-proceed fallback that replaced it.
 
-Why it earns a top-level rule: qodo's **defect** findings on this repo are
-17/17 valid and have caught things code-reading did not — a live production
-spread-unlock bug (#235), a `RangeError` on corrupt feed data (#231), and a
-vulnerable `brace-expansion` in `functions/` that a root-only fix missed and
-that CI's root-scoped audit could never catch (#240). Its **style/compliance**
-findings are miscalibrated to this camelCase TypeScript repo and are 7/7
-rejected (snake_case ×3, import order, `:any` counts, dependency placement).
-Judge on evidence and **reply either way** — a rejection needs written
-reasoning on the PR, not silence.
+`gh pr checks <n>` (CI) is still required and still gates. That is unrelated to
+qodo.
 
-Mechanics. qodo spreads a single report across **three** surfaces and any
-one of them can be empty on a given PR, so check all three — a report is
-not absent until all three are:
+**§2c (codex) is qodo's temporary replacement** (Kevin, 2026-07-25) and the only
+reviewer — which makes it the only second opinion. Run it on every PR, capped at
+**5 rounds**. Weigh its findings on evidence rather than deferring to them, and
+**self-review the diff yourself** — a clean codex round is not proof, especially
+on a small diff where it may return clean on round 1.
+
+<details>
+<summary>If Kevin restores qodo, this is what made it worth checking</summary>
+
+Its **defect** findings on this repo were 17/17 valid and caught things
+code-reading did not: a live production spread-unlock bug (#235), a `RangeError`
+on corrupt feed data (#231), and a vulnerable `brace-expansion` in `functions/`
+that a root-only fix missed and CI's root-scoped audit could never catch (#240).
+Its **style/compliance** findings were 7/7 rejected as miscalibrated to this
+camelCase TypeScript repo (snake_case ×3, import order, `:any` counts,
+dependency placement).
+
+A single report spreads across **three** surfaces and any one can be empty, so a
+report is not absent until all three are:
 
 ```
-gh pr checks <n>                                        # CI
 gh pr view <n> --json comments                          # numbered findings
 gh api repos/kstruck/MMPoolsV3/pulls/<n>/comments       # inline detail
 gh api repos/kstruck/MMPoolsV3/pulls/<n>/reviews        # review-surface report
 ```
 
-The `reviews` line is not optional padding: qodo can post as a review plus
-inline comments while the issue-comment list is empty, so a procedure
-without it can conclude "no findings" on a PR that has them. (Caught by
-qodo, on the PR that introduced this very section.)
-
-Re-check after pushing fixes: qodo marks absorbed findings `✓ Resolved`,
-and that is the confirmation — not your own belief that you addressed them.
+Absorb or reject each finding with written evidence — a rejection needs
+reasoning on the PR, not silence. qodo marks absorbed findings `✓ Resolved`, and
+that is the confirmation, not your own belief that you addressed them.
+</details>
 
 ## 2c. Cross-model review is REQUIRED before opening a PR
 
@@ -206,13 +170,21 @@ existed to stop. Written, reviewed, and holed in the same hour.
 §2b.** Codex is not automatically right — verify its claims against the code
 before acting, as with any reviewer.
 
-**Expect several rounds, and keep going until one comes back clean.** Measured
-over the 2026-07-21 run: #245 took 4 rounds / 11 findings, #248 took 9 rounds,
-#250 took 4 rounds / 15 findings. The pattern is consistent and worth knowing in
-advance — **round 1 finds defects in the code, and rounds 2+ find defects in the
-fixes**, including in the guards written to prove the fixes. Three separate
-times it holed a test that looked like it guarded and did not. Budget for that
-rather than treating round 1 as the review.
+**Expect several rounds — but stop at 5 per artifact (Kevin, 2026-07-25).**
+Codex runs are paid; Kevin capped them at ten that morning and tightened it to
+**five** the same day. **The cap is the single stopping rule and it beats "keep
+going until clean."** If round 5 still has open findings, STOP anyway: write the
+residual into the PR body as named, unresolved findings, say plainly that the PR
+carries them, and let Kevin decide. Never report a PR as done while silently
+holding findings, and never keep running rounds past 5 to chase a clean one.
+
+Measured over the 2026-07-21 run (before the cap): #245 took 4 rounds / 11
+findings, #248 took 9 rounds, #250 took 4 rounds / 15 findings. The pattern is
+worth knowing in advance — **round 1 finds defects in the code, and rounds 2+
+find defects in the fixes**, including in the guards written to prove the fixes.
+Three separate times it holed a test that looked like it guarded and did not. So
+do not treat a clean round 1 as the review: **self-review the diff yourself**,
+which is now the only other reviewer there is (§2b).
 
 A rejection is a legitimate outcome and must be written down with reasoning. Of
 those 30 findings, 3 were rejected: two would have made a monitor cry wolf

@@ -49,7 +49,7 @@ For each: import `withCorrelationId` from `../utils/correlationId` (adjust depth
 - **`dryRun` defaults true at the SCHEMA layer** (`z.boolean().optional().default(true)`), never a handler-side `=== true`.
 - **An idempotency marker goes in the SAME batch as the write it guards** — a marker written after a loop that flushes at 400 ops is not atomic.
 
-**Batch it:** group SWEEP-LATER callables by file (e.g. all of `bracketEntries.ts` together), one PR per logical group of ~3–8 callables. Gates green before each commit. This keeps PRs reviewable and lets qodo absorb per-batch.
+**Batch it:** group SWEEP-LATER callables by file (e.g. all of `bracketEntries.ts` together), one PR per logical group of ~3–8 callables. Gates green before each commit. This keeps PRs reviewable and keeps each review pass to a diff a reviewer can actually hold.
 
 ---
 
@@ -122,7 +122,7 @@ For each: import `withCorrelationId` from `../utils/correlationId` (adjust depth
 ## Workflow conventions (follow exactly)
 
 - **Branch + worktree per chunk**, off latest `origin/main`: `git checkout -b <name> origin/main` (main is checked out by the primary worktree, so branch off `origin/main`, don't `git checkout main`). Run `node functions/scripts/copy-shared.mjs` + `npm --prefix functions install` in a fresh worktree before building (the copy-shared step is why root tests fail with "cannot find module ../shared/schemas/quote" on a fresh checkout).
-- **One PR per chunk**, push, let CI run. qodo posts placeholder → summary → inline findings; **validity-call each finding before fixing** (track record: real but low-severity; honor the severity stop rule). Fix real ones, reject false ones with evidence on the PR, re-run gates. qodo does NOT re-review after a fix push — give ~10 min then move on.
+- **One PR per chunk.** Run `codex exec review --base origin/main` BEFORE opening it (CLAUDE.md §2c — **5 rounds max**, the cap is the stopping rule). **Validity-call each finding before fixing**; fix real ones, reject false ones with written reasoning on the PR. Then push and let CI run. **Do NOT check qodo** — the check was removed 2026-07-25 (CLAUDE.md §2b); codex is its temporary replacement.
 - **CI `security-audit` runs `npm audit --audit-level=high` at the REPO ROOT.** A functions-only dep change can pass locally and fail that gate — check root too.
 - Commit messages: end with `Co-Authored-By: Claude <noreply@anthropic.com>`. PR bodies: end with the Claude Code footer.
 - **VERIFY A MERGE LANDED before assuming anything downstream** — `gh pr view <N> --json state` == `MERGED` AND `git log origin/main` shows the merge commit.
@@ -130,7 +130,7 @@ For each: import `withCorrelationId` from `../utils/correlationId` (adjust depth
 ## Overnight-autonomy expectations (Kevin is away)
 
 - Keep working through chunks without per-chunk approval (standing grant — see auto-memory `overnight-autonomy-protocol`). Sweep A first, then Sweep B batches until done or blocked.
-- **You MAY:** open PRs, push branches, run all gates, absorb qodo, iterate.
+- **You MAY:** open PRs, push branches, run all gates, run + absorb codex reviews, iterate.
 - **You MUST STOP and leave a note (don't guess) if:** a callable's real client payload is ambiguous and grepping the FE doesn't resolve it (guessing a `.strict()` schema can break prod calls — flag it, skip that one, keep going on the rest); a gate goes red and the fix isn't obvious; a change would touch `firestore.rules` write-paths (that's a *different* parked effort with its own risk profile — note it, don't fold it in here).
 - Before ending the stretch, **leave a morning takeover doc**: fold status into HANDOFF.md + update this file (which SWEEP-LATER callables are done, which remain, any skipped-and-why, next concrete batch). Commit SHAs for everything pushed.
 
