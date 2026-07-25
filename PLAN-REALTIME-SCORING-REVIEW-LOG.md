@@ -47,6 +47,34 @@ cross-model gate (CLAUDE.md §2c). qodo is billing-blocked (§2b) and did not ru
 | r30 | 3 | dry-run reads queue read-only (no ack); enqueue failed finalization beyond 24h window; correct morning-doc K2 deep-sweep note |
 | r31 | 2 | protect the server-only set-once `frozenWeekLockAt.{week}`; update the review trail |
 
+## Implementation rounds
+
+Each sub-PR gets its own `codex exec review --base origin/main` cycle on the diff.
+Kevin capped these at **5 rounds per PR** (2026-07-25, tightened from 10 — paid runs).
+
+| PR | Rounds | Outcome |
+|---|---|---|
+| PR-A (`scoreNFLWeekInternal`) | 1 | **clean on round 1** — no findings. Verdict: the extraction preserves validation, authorization, game-loading, scoring and live-write behavior; the dry-run path stages updates in memory so projected standings reflect the current pass without persisting. |
+
+### Scoping deviation from §4 — `provisional` deferred to PR-B
+
+Plan §4 lists `dryRun`, `provisional` and `actor` as PR-A's options. **PR-A ships
+`dryRun` + `actor` only.** `provisional` is not an option toggle — its three
+behaviors (Survivor/Margin writes held until the picked game is terminal,
+finalization-marker + recap suppression, per-week summary recomputed over the
+lock-closed set) are real behavior change, and nothing consumes them until the
+scheduled scorer exists. Landing them here would mean shipping unexercised
+scoring semantics one PR ahead of their only caller. They move to PR-B, which
+consumes them and can test them end to end. One logical item per PR (CLAUDE.md
+§2d). No plan text is invalidated — §4's `provisional` contract stands as written
+and is PR-B's acceptance criteria.
+
+One addition beyond §4: the result carries the **standings rows** the pass would
+publish, not just counts. A count is one row per entry whether or not the dry run
+merges this week's staged scores, so a count-only result would make the dry-run
+trial unverifiable — the rows are what turn Kevin's PR-B dry-run trial into
+evidence.
+
 ## Verdict
 
 **31 rounds, 99 findings, 0 rejected** — all valid against source (each
