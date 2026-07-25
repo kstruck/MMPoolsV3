@@ -1,0 +1,608 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import * as admin from 'firebase-admin';
+import './setup';
+import { scoreNFLWeekInternal } from '../../nflPools';
+import { autoScoreOnce } from '../../nflAutoScore';
+import { computeWeekFingerprint } from '../../lib/autoScoreDecisions';
+import type { NFLGame } from '../../nflPoolTypes';
+
+/**
+ * G1 PR-B1 write-path coverage: the `provisional` contract inside
+ * scoreNFLWeekInternal, and the nflAutoScoreJob pass around it.
+ *
+ * These are emulator tests rather than unit tests because every guarantee here
+ * is about what is and is NOT persisted — "the fingerprint stays unset", "the
+ * entry's week is untouched", "scoredWeeks was not written". A test that only
+ * inspected the return value would pass against a scorer that wrote all of it.
+ */
+
+const HOUR = 60 * 60 * 1000;
+const db = admin.firestore();
+
+const T = (abbr: string) => ({ id: abbr, name: abbr, abbreviation: abbr, logoUrl: '' });
+const SYSTEM_ACTOR = { uid: 'system', role: 'SYSTEM' as const, label: 'Auto Scorer' };
+
+const SEASON = 'auto-2026';
+
+async function wipe() {
+  for (const col of ['nfl_games', 'pools']) {
+    const snap = await db.collection(col).get();
+    await Promise.all(snap.docs.map(async d => {
+      for (const sub of ['entries', 'standings', 'weekly_recaps', 'audit', 'audit_dedupe']) {
+        const s = await d.ref.collection(sub).get();
+        await Promise.all(s.docs.map(x => x.ref.delete()));
+      }
+      await d.ref.delete();
+    }));
+  }
+}
+
+function gameDoc(id: string, over: Partial<NFLGame> = {}): NFLGame {
+  return {
+    id, espnGameId: id, week: 1, season: SEASON, seasonType: 1,
+    homeTeam: T('KC'), awayTeam: T('BUF'),
+    startTime: Date.now() - 4 * HOUR, status: 'FINAL', scores: { home: 27, away: 24 },
+    clock: '0:00', period: 4, isMonday: false, spread: { value: -3, locked: true },
+    ...over,
+  } as NFLGame;
+}
+
+async function seedGames(games: NFLGame[]) {
+  await Promise.all(games.map(g =>
+    db.collection('nfl_games').doc(g.id).set(JSON.parse(JSON.stringify(g))),
+  ));
+}
+
+async function seedPool(poolId: string, type: string, settings: Record<string, unknown>, over: Record<string, unknown> = {}) {
+  await db.collection('pools').doc(poolId).set({
+    name: `Auto ${type}`, type, league: 'NFL',
+    season: SEASON, seasonType: 1,
+    ownerId: 'owner-1', participantIds: ['owner-1'],
+    status: 'OPEN', billing: { status: 'free' },
+    settings: { entryFee: 0, payouts: { places: [], bonuses: [] }, ...settings },
+    ...over,
+  });
+}
+
+async function seedEntry(poolId: string, uid: string, data: Record<string, unknown>) {
+  await db.collection('pools').doc(poolId).collection('entries').doc(uid).set({
+    id: uid, poolId, ownerUid: uid, userName: uid, submittedAt: 0, paidStatus: 'PAID', ...data,
+  });
+}
+
+const poolDoc = async (poolId: string) => (await db.collection('pools').doc(poolId).get()).data()!;
+const entryDoc = async (poolId: string, uid: string) =>
+  (await db.collection('pools').doc(poolId).collection('entries').doc(uid).get()).data()!;
+const standingsDoc = async (poolId: string) =>
+  (await db.collection('pools').doc(poolId).collection('standings').doc('current').get()).data();
+
+async function loadSlate(week = 1): Promise<NFLGame[]> {
+  const snap = await db.collection('nfl_games')
+    .where('season', '==', SEASON).where('seasonType', '==', 1).where('week', '==', week).get();
+  return snap.docs.map(d => d.data() as NFLGame);
+}
+
+// ---------------------------------------------------------------------------
+// provisional — the reveal gate
+// ---------------------------------------------------------------------------
+
+describe('provisional Pick’em — only concluded, lock-closed games are revealed', () => {
+  const poolId = 'p-pickem-partial';
+  const ALICE = 'alice';
+
+  beforeEach(async () => {
+    await wipe();
+    // g1 finished; g2 kicks off in 3h and Alice has already picked it.
+    await seedGames([
+      gameDoc('g1'),
+      gameDoc('g2', {
+        id: 'g2', homeTeam: T('SF'), awayTeam: T('DAL'),
+        startTime: Date.now() + 3 * HOUR, status: 'SCHEDULED', scores: undefined,
+      }),
+    ]);
+    await seedPool(poolId, 'NFL_PICKEM', { lockBufferMinutes: 5, pickMode: 'STRAIGHT', confidenceMode: false });
+    await seedEntry(poolId, ALICE, { picks: { g1: 'KC', g2: 'SF' }, weeklyPoints: {}, totalScore: 0 });
+  });
+
+  it('scores the finished game, and counts ONLY it in the week summary', async () => {
+    const result = await scoreNFLWeekInternal(db, poolId, 1, {
+      pool: await poolDoc(poolId), games: await loadSlate(),
+      actor: SYSTEM_ACTOR, provisional: true,
+    });
+
+    expect(result.provisional).toBe(true);
+    const alice = await entryDoc(poolId, ALICE);
+    expect(alice.weeklyPoints[1]).toBe(1);      // KC won g1
+    expect(alice.weeklyResults[1].correct).toBe(1);
+    // THE LEAK THIS GUARDS: `total` is copied verbatim into member-readable
+    // standings/current. Counting the whole slate would tell every rival that
+    // Alice has already submitted a pick for the unplayed g2.
+    expect(alice.weeklyResults[1].total).toBe(1);
+    expect(Object.keys(alice.weeklyResults[1].games)).toEqual(['g1']);
+  });
+
+  it('publishes live standings but writes NO finalization markers', async () => {
+    await scoreNFLWeekInternal(db, poolId, 1, {
+      pool: await poolDoc(poolId), games: await loadSlate(),
+      actor: SYSTEM_ACTOR, provisional: true,
+    });
+
+    expect((await standingsDoc(poolId))!.lastScoredWeek).toBe(1);
+    const pool = await poolDoc(poolId);
+    expect(pool.scoredWeeks).toBeUndefined();
+    expect(pool.scoredThroughWeek).toBeUndefined();
+    expect(pool.finalizedAt).toBeUndefined();
+    // The recap CREATE trigger fires AI trash-talk, and the later complete pass
+    // would only UPDATE the doc — so a provisional create would permanently
+    // freeze the recap on incomplete standings.
+    expect((await db.collection('pools').doc(poolId).collection('weekly_recaps').doc('week_1').get()).exists).toBe(false);
+  });
+
+  it('stamps publishedWeeks as soon as anything is revealed', async () => {
+    await scoreNFLWeekInternal(db, poolId, 1, {
+      pool: await poolDoc(poolId), games: await loadSlate(),
+      actor: SYSTEM_ACTOR, provisional: true,
+    });
+    expect((await poolDoc(poolId)).publishedWeeks).toEqual({ 1: true });
+  });
+
+  it('does NOT claim publication when nothing has been revealed yet', async () => {
+    // A pass can fire up to 2h before kickoff. Marking the week published then
+    // would close the deadline-extension door over a week nobody has seen.
+    await db.collection('nfl_games').doc('g1').update({
+      status: 'SCHEDULED', startTime: Date.now() + 2 * HOUR,
+    });
+    await scoreNFLWeekInternal(db, poolId, 1, {
+      pool: await poolDoc(poolId), games: await loadSlate(),
+      actor: SYSTEM_ACTOR, provisional: true,
+    });
+    expect((await poolDoc(poolId)).publishedWeeks).toBeUndefined();
+  });
+
+  it('withholds a FINAL game whose week override still extends its lock', async () => {
+    await db.collection('pools').doc(poolId).update({
+      'settings.weekLockOverrides': { 1: Date.now() + 2 * HOUR },
+    });
+    await scoreNFLWeekInternal(db, poolId, 1, {
+      pool: await poolDoc(poolId), games: await loadSlate(),
+      actor: SYSTEM_ACTOR, provisional: true,
+    });
+
+    // The game is over, but picks are still open — so it earns nothing yet and
+    // the week is not published.
+    const alice = await entryDoc(poolId, ALICE);
+    expect(alice.weeklyPoints[1]).toBe(0);
+    expect(alice.weeklyResults[1].total).toBe(0);
+    expect((await poolDoc(poolId)).publishedWeeks).toBeUndefined();
+  });
+
+  it('reveals it once the override has passed', async () => {
+    await db.collection('pools').doc(poolId).update({
+      'settings.weekLockOverrides': { 1: Date.now() - HOUR },
+    });
+    await scoreNFLWeekInternal(db, poolId, 1, {
+      pool: await poolDoc(poolId), games: await loadSlate(),
+      actor: SYSTEM_ACTOR, provisional: true,
+    });
+    expect((await entryDoc(poolId, ALICE)).weeklyPoints[1]).toBe(1);
+  });
+
+  it('a COMPLETE pass writes the markers, the recap and the publication marker', async () => {
+    await db.collection('nfl_games').doc('g2').update({
+      status: 'FINAL', startTime: Date.now() - 2 * HOUR, scores: { home: 21, away: 17 },
+    });
+    const result = await scoreNFLWeekInternal(db, poolId, 1, {
+      pool: await poolDoc(poolId), games: await loadSlate(), actor: SYSTEM_ACTOR,
+    });
+
+    expect(result.provisional).toBe(false);
+    const alice = await entryDoc(poolId, ALICE);
+    expect(alice.weeklyPoints[1]).toBe(2);
+    expect(alice.weeklyResults[1].total).toBe(2);
+    const pool = await poolDoc(poolId);
+    expect(pool.scoredWeeks).toEqual({ 1: true });
+    expect(pool.scoredThroughWeek).toBe(1);
+    expect(pool.publishedWeeks).toEqual({ 1: true });
+    expect((await db.collection('pools').doc(poolId).collection('weekly_recaps').doc('week_1').get()).exists).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// provisional — Survivor / Margin penalty timing
+// ---------------------------------------------------------------------------
+
+describe('provisional Survivor — penalties wait for the weekly lock, grades wait for the game', () => {
+  const poolId = 'p-surv';
+  const NOPICK = 'nopick';
+  const PICKER = 'picker';
+
+  /** Kickoff `inHours` from now; the weekly lock is 5 minutes before it. */
+  async function setup(inHours: number) {
+    await wipe();
+    await seedGames([
+      gameDoc('g1', { startTime: Date.now() + inHours * HOUR, status: 'SCHEDULED', scores: undefined }),
+    ]);
+    await seedPool(poolId, 'NFL_SURVIVOR', {
+      lockBufferMinutes: 5, maxStrikes: 0, pickLosersMode: false, autoSurviveExemptionEnabled: false,
+      maxRebuys: 0, rebuyDeadlineWeek: 0,
+    });
+    await seedEntry(poolId, NOPICK, { status: 'ALIVE', strikesUsed: 0, strikeWeeks: [], rebuysUsed: 0, usedTeams: [], picks: {}, exemptWeeks: [] });
+    await seedEntry(poolId, PICKER, { status: 'ALIVE', strikesUsed: 0, strikeWeeks: [], rebuysUsed: 0, usedTeams: ['KC'], picks: { 1: 'KC' }, exemptWeeks: [] });
+  }
+
+  const score = async () => scoreNFLWeekInternal(db, poolId, 1, {
+    pool: await poolDoc(poolId), games: await loadSlate(), actor: SYSTEM_ACTOR, provisional: true,
+  });
+
+  it('does NOT strike a no-pick entry while its pick window is still open', async () => {
+    // The candidate window reaches 2h before kickoff, so a pass genuinely fires
+    // here. Striking now eliminates a member whose valid pick submitNFLPicks
+    // would then reject as ELIMINATED.
+    await setup(1.5);
+    const result = await score();
+
+    const nopick = await entryDoc(poolId, NOPICK);
+    expect(nopick.status).toBe('ALIVE');
+    expect(nopick.strikeWeeks).toEqual([]);
+    expect(nopick.weeklyResults).toBeUndefined();
+    expect(result.survivorScored).toBe(0);
+    // Still counted alive, so the recap/attrition number stays honest.
+    expect(result.aliveCount).toBe(2);
+  });
+
+  it('strikes the no-pick entry on the first pass AFTER the lock, with no game final', async () => {
+    await setup(-0.5); // kickoff 30m ago, so the 5m-before lock has passed
+    await score();
+
+    const nopick = await entryDoc(poolId, NOPICK);
+    expect(nopick.strikeWeeks).toEqual([1]);
+    expect(nopick.status).toBe('ELIMINATED'); // maxStrikes 0
+  });
+
+  it('leaves a made pick UNTOUCHED until its own game concludes', async () => {
+    await setup(-0.5);
+    await score();
+
+    // computeSurvivorWeekUpdate reports survived:true for an unfinished game —
+    // writing that would publish an unplayed pick as a survival.
+    const picker = await entryDoc(poolId, PICKER);
+    expect(picker.weeklyResults).toBeUndefined();
+    expect(picker.status).toBe('ALIVE');
+  });
+
+  it('grades the made pick once the game finalizes', async () => {
+    await setup(-0.5);
+    await score();
+    await db.collection('nfl_games').doc('g1').update({ status: 'FINAL', scores: { home: 27, away: 24 } });
+    await score();
+
+    const picker = await entryDoc(poolId, PICKER);
+    expect(picker.weeklyResults[1].survived).toBe(true);   // KC won
+    expect(picker.status).toBe('ALIVE');
+  });
+});
+
+describe('provisional Margin — the -14 is due at the lock, not at the pass', () => {
+  const poolId = 'p-margin';
+  const NOPICK = 'm-nopick';
+  const PICKER = 'm-picker';
+
+  async function setup(inHours: number) {
+    await wipe();
+    await seedGames([
+      gameDoc('g1', { startTime: Date.now() + inHours * HOUR, status: 'SCHEDULED', scores: undefined }),
+    ]);
+    await seedPool(poolId, 'NFL_MARGIN', { lockBufferMinutes: 5 });
+    for (const uid of [NOPICK, PICKER]) {
+      await seedEntry(poolId, uid, {
+        picks: uid === PICKER ? { 1: 'KC' } : {}, usedTeams: uid === PICKER ? ['KC'] : [],
+        weeklyScores: {}, seasonTotal: 0, negativeBurden: 0, positiveWeeks: 0, bestWeek: 0,
+      });
+    }
+  }
+
+  const score = async () => scoreNFLWeekInternal(db, poolId, 1, {
+    pool: await poolDoc(poolId), games: await loadSlate(), actor: SYSTEM_ACTOR, provisional: true,
+  });
+
+  it('applies no penalty while picks are still open', async () => {
+    await setup(1.5);
+    await score();
+    expect((await entryDoc(poolId, NOPICK)).weeklyScores).toEqual({});
+    expect((await entryDoc(poolId, NOPICK)).seasonTotal).toBe(0);
+  });
+
+  it('applies -14 after the lock, and leaves a made pick pending', async () => {
+    await setup(-0.5);
+    await score();
+
+    expect((await entryDoc(poolId, NOPICK)).weeklyScores).toEqual({ 1: -14 });
+    // A pending pick would otherwise score 0 — indistinguishable from a real
+    // zero-margin result, and it would flip when the game ends.
+    expect((await entryDoc(poolId, PICKER)).weeklyScores).toEqual({});
+  });
+
+  it('grades the made pick live once its game ends', async () => {
+    await setup(-0.5);
+    await score();
+    await db.collection('nfl_games').doc('g1').update({ status: 'FINAL', scores: { home: 27, away: 10 } });
+    await score();
+
+    expect((await entryDoc(poolId, PICKER)).weeklyScores).toEqual({ 1: 17 });
+    // Standings move as games finish — the whole point of the live tier.
+    const rows = (await standingsDoc(poolId))!.rows as Array<{ ownerUid: string; seasonTotal: number }>;
+    expect(rows.find(r => r.ownerUid === PICKER)!.seasonTotal).toBe(17);
+    expect(rows.find(r => r.ownerUid === NOPICK)!.seasonTotal).toBe(-14);
+  });
+});
+
+describe('provisional never finalizes a season', () => {
+  const poolId = 'p-final';
+
+  it('withholds finalization mid-week, then the complete pass finalizes', async () => {
+    await wipe();
+    // The season's ONLY slate: one game done, one still to play.
+    await seedGames([
+      gameDoc('g1'),
+      gameDoc('g2', {
+        id: 'g2', homeTeam: T('SF'), awayTeam: T('DAL'),
+        startTime: Date.now() + 3 * HOUR, status: 'SCHEDULED', scores: undefined,
+      }),
+    ]);
+    await seedPool(poolId, 'NFL_PICKEM', { lockBufferMinutes: 5, pickMode: 'STRAIGHT', confidenceMode: false });
+    await seedEntry(poolId, 'alice', { picks: { g1: 'KC', g2: 'SF' }, weeklyPoints: {}, totalScore: 0 });
+
+    await scoreNFLWeekInternal(db, poolId, 1, {
+      pool: await poolDoc(poolId), games: await loadSlate(), actor: SYSTEM_ACTOR, provisional: true,
+    });
+    // maybeFinalizeNFLPool keys off scoredWeeks + terminal status and never
+    // consults effective locks, so writing scoredWeeks here would finalize the
+    // pool — and write season history — while g2's picks are still open.
+    expect((await poolDoc(poolId)).finalizedAt).toBeUndefined();
+    expect((await db.collection('users').doc('alice').collection('seasonHistory').doc(poolId).get()).exists).toBe(false);
+
+    await db.collection('nfl_games').doc('g2').update({
+      status: 'FINAL', startTime: Date.now() - 2 * HOUR, scores: { home: 21, away: 17 },
+    });
+    await scoreNFLWeekInternal(db, poolId, 1, {
+      pool: await poolDoc(poolId), games: await loadSlate(), actor: SYSTEM_ACTOR,
+    });
+    expect((await poolDoc(poolId)).finalizedAt).toBeTruthy();
+  }, 60000);
+});
+
+// ---------------------------------------------------------------------------
+// the job
+// ---------------------------------------------------------------------------
+
+describe('autoScoreOnce — candidate selection, skip and dry-run', () => {
+  const poolId = 'p-job';
+
+  /**
+   * A live week-1 slate plus an unplayed week 2, so the SEASON is not complete.
+   *
+   * Without that week-2 game the pool finalizes on its very first complete pass —
+   * correct behaviour, and exactly what a one-game preseason slate does — but it
+   * then becomes a terminal pool and drops out of candidate selection, which
+   * makes every skip/re-score assertion below untestable.
+   */
+  async function setupJob(poolOver: Record<string, unknown> = {}) {
+    await wipe();
+    await seedGames([
+      gameDoc('g1'),
+      gameDoc('wk2', {
+        id: 'wk2', week: 2, homeTeam: T('SF'), awayTeam: T('DAL'),
+        startTime: Date.now() + 7 * 24 * HOUR, status: 'SCHEDULED', scores: undefined,
+      }),
+    ]);
+    await seedPool(poolId, 'NFL_PICKEM', { lockBufferMinutes: 5, pickMode: 'STRAIGHT', confidenceMode: false }, poolOver);
+    await seedEntry(poolId, 'alice', { picks: { g1: 'KC' }, weeklyPoints: {}, totalScore: 0 });
+  }
+
+  it('scores a live pool and records the fingerprint', async () => {
+    await setupJob();
+    const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
+
+    expect(r).toMatchObject({ activeSlates: 1, poolsScored: 1, poolsSkipped: 0, poolsFailed: 0, overflow: 0 });
+    expect((await entryDoc(poolId, 'alice')).totalScore).toBe(1);
+    expect((await poolDoc(poolId)).autoScore.fingerprintByWeek['1']).toEqual(expect.any(String));
+  }, 60000);
+
+  it('writes with the SYSTEM actor', async () => {
+    await setupJob();
+    await autoScoreOnce(db, Date.now(), { dryRun: false });
+
+    const audit = await db.collection('pools').doc(poolId).collection('audit').get();
+    const scored = audit.docs.map(d => d.data()).find(a => a.type === 'SCORE_FINALIZED');
+    expect(scored?.actor?.role).toBe('SYSTEM');
+    expect(scored?.actor?.label).toBe('Auto Scorer');
+  }, 60000);
+
+  it('a second run with an unchanged fingerprint writes NOTHING', async () => {
+    await setupJob();
+    await autoScoreOnce(db, Date.now(), { dryRun: false });
+    const before = await entryDoc(poolId, 'alice');
+
+    const second = await autoScoreOnce(db, Date.now(), { dryRun: false });
+
+    expect(second).toMatchObject({ poolsScored: 0, poolsSkipped: 1 });
+    // resultsVersion increments on every staged entry write, so an unchanged
+    // value is proof no write happened — not merely that the values matched.
+    expect((await entryDoc(poolId, 'alice')).resultsVersion).toBe(before.resultsVersion);
+  }, 60000);
+
+  it.each([
+    ['a restated final score', async () => db.collection('nfl_games').doc('g1').update({ scores: { home: 30, away: 24 } })],
+    ['a CANCELLED flip', async () => db.collection('nfl_games').doc('g1').update({ status: 'CANCELLED' })],
+    ['a corrected locked spread', async () => db.collection('nfl_games').doc('g1').update({ spread: { value: -9.5, locked: true } })],
+    ['a mid-week settings edit', async () => db.collection('pools').doc(poolId).update({ 'settings.pickMode': 'ATS' })],
+  ])('re-scores after %s', async (_label, mutate) => {
+    await setupJob();
+    await autoScoreOnce(db, Date.now(), { dryRun: false });
+    await mutate();
+
+    const after = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(after).toMatchObject({ poolsScored: 1, poolsSkipped: 0 });
+  }, 60000);
+
+  it('DRY RUN writes nothing AND leaves the fingerprint unset', async () => {
+    await setupJob();
+    const dry = await autoScoreOnce(db, Date.now(), { dryRun: true });
+
+    expect(dry.poolsScored).toBe(1); // "would score"
+    expect((await entryDoc(poolId, 'alice')).totalScore).toBe(0);
+    expect(await standingsDoc(poolId)).toBeUndefined();
+    // The subtle one: persisting the fingerprint on a dry run would leave the
+    // pool "already current", so the first LIVE run would skip it forever.
+    expect((await poolDoc(poolId)).autoScore).toBeUndefined();
+
+    const live = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(live.poolsScored).toBe(1);
+    expect((await entryDoc(poolId, 'alice')).totalScore).toBe(1);
+  }, 60000);
+
+  it.each([
+    ['isFinal', { isFinal: true }],
+    ['finalizedAt', { finalizedAt: Date.now() }],
+    ['status CANCELED', { status: 'CANCELED' }],
+    ['status archived', { status: 'archived' }],
+    ['status COMPLETED', { status: 'COMPLETED' }],
+  ])('skips a terminal pool (%s)', async (_label, over) => {
+    await setupJob(over);
+    const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
+
+    expect(r).toMatchObject({ poolsScored: 0, poolsSkipped: 0 });
+    expect((await entryDoc(poolId, 'alice')).totalScore).toBe(0);
+  }, 60000);
+
+  it('does NOT score a regular-season pool during a preseason slot of the same week', async () => {
+    // Both have a "week 1". Matching on the bare week number would score the
+    // regular-season pool months early.
+    await setupJob();
+    await seedPool('p-regular', 'NFL_PICKEM', { lockBufferMinutes: 5, pickMode: 'STRAIGHT' }, { seasonType: 2 });
+    await seedEntry('p-regular', 'alice', { picks: { g1: 'KC' }, weeklyPoints: {}, totalScore: 0 });
+
+    const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
+
+    expect(r.poolsScored).toBe(1);
+    expect((await entryDoc('p-regular', 'alice')).totalScore).toBe(0);
+  }, 60000);
+
+  it('scores a pool whose seasonType is OMITTED as regular season, not preseason', async () => {
+    // The create schema allows the field to be absent and scoring reads
+    // `Number(pool.seasonType || 2)`, so an equality filter in the query would
+    // silently drop these pools.
+    await wipe();
+    await seedGames([gameDoc('g1', { seasonType: 2 })]);
+    // Written WITHOUT a seasonType field at all — the shape the create schema
+    // permits, not a null or a zero.
+    await db.collection('pools').doc('p-omitted').set({
+      name: 'Omitted', type: 'NFL_PICKEM', league: 'NFL', season: SEASON,
+      ownerId: 'owner-1', participantIds: ['owner-1'], status: 'OPEN',
+      billing: { status: 'free' },
+      settings: { entryFee: 0, payouts: { places: [], bonuses: [] }, lockBufferMinutes: 5, pickMode: 'STRAIGHT' },
+    });
+    await seedEntry('p-omitted', 'alice', { picks: { g1: 'KC' }, weeklyPoints: {}, totalScore: 0 });
+
+    const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(r.poolsScored).toBe(1);
+    expect((await entryDoc('p-omitted', 'alice')).totalScore).toBe(1);
+  }, 60000);
+
+  it('reports no slates when nothing is in the active window', async () => {
+    await wipe();
+    await seedGames([gameDoc('old', { startTime: Date.now() - 40 * HOUR })]);
+    expect(await autoScoreOnce(db, Date.now(), { dryRun: false }))
+      .toMatchObject({ activeSlates: 0, poolsScored: 0 });
+  }, 60000);
+
+  it('keeps a slate eligible for the full 24h window, not just 2h', async () => {
+    // A single-game slate (the Hall of Fame opener) or a game running long would
+    // otherwise drop out before it finalized and never be scored.
+    await wipe();
+    await seedGames([gameDoc('g1', { startTime: Date.now() - 20 * HOUR })]);
+    await seedPool(poolId, 'NFL_PICKEM', { lockBufferMinutes: 5, pickMode: 'STRAIGHT' });
+    await seedEntry(poolId, 'alice', { picks: { g1: 'KC' }, weeklyPoints: {}, totalScore: 0 });
+
+    expect(await autoScoreOnce(db, Date.now(), { dryRun: false }))
+      .toMatchObject({ activeSlates: 1, poolsScored: 1 });
+  }, 60000);
+
+  it('judges completeness from the WHOLE week, not the windowed subset', async () => {
+    await wipe();
+    // Thursday game done and in-window; Monday game still ahead and OUTSIDE the
+    // +2h window. Reading only the window would call the week finished tonight.
+    await seedGames([
+      gameDoc('thu'),
+      gameDoc('mon', {
+        id: 'mon', homeTeam: T('SF'), awayTeam: T('DAL'), isMonday: true,
+        startTime: Date.now() + 3 * 24 * HOUR, status: 'SCHEDULED', scores: undefined,
+      }),
+    ]);
+    await seedPool(poolId, 'NFL_PICKEM', { lockBufferMinutes: 5, pickMode: 'STRAIGHT' });
+    await seedEntry(poolId, 'alice', { picks: { thu: 'KC' }, weeklyPoints: {}, totalScore: 0 });
+
+    await autoScoreOnce(db, Date.now(), { dryRun: false });
+
+    // Provisional: standings published, no finalization markers.
+    expect((await standingsDoc(poolId))!.lastScoredWeek).toBe(1);
+    expect((await poolDoc(poolId)).scoredWeeks).toBeUndefined();
+  }, 60000);
+
+  it('one failing pool does not stop the others, and marks the run unhealthy', async () => {
+    await setupJob();
+    // An entries subcollection the scorer can read but a pool doc shaped so the
+    // engine throws: a pool type it does not know, with the NFL type kept for
+    // candidate selection, is not reachable — so break the slate instead by
+    // removing the field buildStandingsRows needs. Simpler: a second pool with a
+    // corrupt settings blob that makes grading throw.
+    await seedPool('p-broken', 'NFL_PICKEM', { lockBufferMinutes: 5, pickMode: 'STRAIGHT' });
+    await seedEntry('p-broken', 'bob', { picks: null, weeklyPoints: {}, totalScore: 0 });
+
+    const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
+
+    expect(r.poolsFailed).toBe(1);
+    expect(r.poolsScored).toBe(1);
+    expect((await entryDoc(poolId, 'alice')).totalScore).toBe(1);
+  }, 60000);
+});
+
+describe('fingerprint gate — the guard fails when removed', () => {
+  /** Live week 1 plus an unplayed week 2, so the pool never finalizes mid-test. */
+  async function seedOngoing(poolId: string) {
+    await wipe();
+    await seedGames([
+      gameDoc('g1'),
+      gameDoc('wk2', {
+        id: 'wk2', week: 2, homeTeam: T('SF'), awayTeam: T('DAL'),
+        startTime: Date.now() + 7 * 24 * HOUR, status: 'SCHEDULED', scores: undefined,
+      }),
+    ]);
+    await seedPool(poolId, 'NFL_PICKEM', { lockBufferMinutes: 5, pickMode: 'STRAIGHT' });
+    await seedEntry(poolId, 'alice', { picks: { g1: 'KC' }, weeklyPoints: {}, totalScore: 0 });
+  }
+
+  it('the stored fingerprint is what causes the skip', async () => {
+    await seedOngoing('p-fp');
+
+    await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect((await autoScoreOnce(db, Date.now(), { dryRun: false })).poolsSkipped).toBe(1);
+
+    // Clear ONLY the fingerprint — nothing else about the world changes — and the
+    // pool is scored again. If the skip came from anywhere else this would still
+    // report a skip, and the test above would be vacuous.
+    await db.collection('pools').doc('p-fp').update({ autoScore: admin.firestore.FieldValue.delete() });
+    expect((await autoScoreOnce(db, Date.now(), { dryRun: false })).poolsScored).toBe(1);
+  }, 60000);
+
+  it('the computed fingerprint actually matches what was stored', async () => {
+    await seedOngoing('p-fp2');
+
+    const now = Date.now();
+    await autoScoreOnce(db, now, { dryRun: false });
+
+    const pool = await poolDoc('p-fp2');
+    expect(pool.autoScore.fingerprintByWeek['1'])
+      .toBe(computeWeekFingerprint(pool, 1, await loadSlate(), now));
+  }, 60000);
+});
