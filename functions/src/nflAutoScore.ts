@@ -186,19 +186,30 @@ export async function autoScoreOnce(
         });
         result.poolsScored++;
 
-        // The fingerprint is recorded ONLY after a successful live pass.
+        // The fingerprint is recorded ONLY after a live pass that actually did
+        // something. Three separate reasons to withhold it, and each one is a
+        // skip-forever bug if you get it wrong:
         //
         // A dry run must not write it: that would both break the
         // dry-run-writes-nothing contract and leave the pool looking current, so
         // the first live run would skip it and never score it at all.
         //
-        // A pass whose finalize THREW must not record it either. Finalization is
+        // A pass whose finalize THREW must not record it. Finalization is
         // best-effort and does not fail the pass, so a season-completing pass
         // could otherwise bank its fingerprint, take the skip path on every later
         // poll, and leave the pool unfinalized forever — the backstop sweep is
-        // disabled by default. Declining to record it means the idempotent
-        // finalize is retried on the next pass.
-        if (!opts.dryRun && !scored.finalizeFailed) {
+        // disabled by default. Declining to record it retries the idempotent
+        // finalize next pass.
+        //
+        // A pass that scored NOTHING must not record it either. The pool may have
+        // had no entries at all (the scorer returns before it can finalize, so
+        // finalization never even runs), or every entry may still be held pending
+        // by the provisional gates. In both cases the games can already be
+        // terminal, so nothing else will ever move the hash — an entry submitted
+        // afterwards would be skipped forever. Nothing was written, so there is
+        // nothing to remember; retrying costs one entries read per poll.
+        const scoredAny = scored.pickemScored + scored.survivorScored + scored.marginScored > 0;
+        if (!opts.dryRun && !scored.finalizeFailed && scoredAny) {
           await db.collection('pools').doc(poolId).update({
             [`autoScore.fingerprintByWeek.${slate.week}`]: fingerprint,
             'autoScore.lastRunAt': admin.firestore.FieldValue.serverTimestamp(),

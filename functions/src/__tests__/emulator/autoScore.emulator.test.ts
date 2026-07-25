@@ -595,6 +595,52 @@ describe('fingerprint gate — the guard fails when removed', () => {
     expect((await autoScoreOnce(db, Date.now(), { dryRun: false })).poolsScored).toBe(1);
   }, 60000);
 
+  it('banks NO fingerprint for a pass that scored nothing, so a later entry still scores', async () => {
+    // codex r1 P2. The pool has no entries, so the scorer returns before it can
+    // finalize and nothing at all is written. Its games are ALREADY terminal, so
+    // if this pass banked a fingerprint nothing would ever move the hash again
+    // and an entry submitted afterwards would be skipped forever.
+    await wipe();
+    await seedGames([gameDoc('g1')]);
+    await seedPool('p-empty', 'NFL_PICKEM', { lockBufferMinutes: 5, pickMode: 'STRAIGHT' });
+
+    await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect((await poolDoc('p-empty')).autoScore).toBeUndefined();
+
+    await seedEntry('p-empty', 'alice', { picks: { g1: 'KC' }, weeklyPoints: {}, totalScore: 0 });
+    expect((await autoScoreOnce(db, Date.now(), { dryRun: false })).poolsScored).toBe(1);
+    expect((await entryDoc('p-empty', 'alice')).totalScore).toBe(1);
+  }, 60000);
+
+  it('banks NO fingerprint while every entry is still held pending', async () => {
+    // Same trap via the provisional gates: a Survivor pool whose only entry has a
+    // made pick on an unfinished game scores nobody. Its OTHER games being
+    // terminal must not be enough to bank the hash.
+    await wipe();
+    await seedGames([
+      gameDoc('done'),
+      gameDoc('later', {
+        id: 'later', homeTeam: T('SF'), awayTeam: T('DAL'),
+        startTime: Date.now() - 0.5 * HOUR, status: 'IN_PROGRESS', scores: { home: 0, away: 0 },
+      }),
+    ]);
+    await seedPool('p-pending', 'NFL_SURVIVOR', {
+      lockBufferMinutes: 5, maxStrikes: 0, pickLosersMode: false,
+      autoSurviveExemptionEnabled: false, maxRebuys: 0, rebuyDeadlineWeek: 0,
+    });
+    await seedEntry('p-pending', 'carol', {
+      status: 'ALIVE', strikesUsed: 0, strikeWeeks: [], rebuysUsed: 0,
+      usedTeams: ['SF'], picks: { 1: 'SF' }, exemptWeeks: [],
+    });
+
+    await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect((await poolDoc('p-pending')).autoScore).toBeUndefined();
+
+    await db.collection('nfl_games').doc('later').update({ status: 'FINAL', scores: { home: 24, away: 20 } });
+    await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect((await entryDoc('p-pending', 'carol')).weeklyResults[1].survived).toBe(true);
+  }, 60000);
+
   it('the computed fingerprint actually matches what was stored', async () => {
     await seedOngoing('p-fp2');
 
