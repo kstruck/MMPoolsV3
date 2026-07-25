@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { buildPoolSettingsUpdate, flattenSettingsPatch, SERVER_OWNED_SETTINGS_KEYS } from '../lib/poolUpdate';
+import {
+  buildPoolSettingsUpdate,
+  flattenSettingsPatch,
+  touchesLockSettings,
+  SERVER_OWNED_SETTINGS_KEYS,
+  LOCK_AFFECTING_SETTINGS_KEYS,
+} from '../lib/poolUpdate';
 import { normalizePhase, isGroupEditable, classifyUpdateKey } from '../shared/editability';
 
 describe('normalizePhase', () => {
@@ -106,5 +112,51 @@ describe('flattenSettingsPatch — merge-preserving settings writes (PR-B′)', 
     const out = flattenSettingsPatch({ settings: { lockMode: 'PER_GAME', lockBufferMinutes: 15 } }, 'NFL_PICKEM');
     expect(out['settings.lockMode']).toBe('PER_GAME');
     expect(out['settings.lockBufferMinutes']).toBe(15);
+  });
+});
+
+describe("Pick'em lock buffer — bounded, not free-form (codex r3)", () => {
+  it('REJECTS a negative buffer, which would move the lock AFTER kickoff', () => {
+    // effectiveGameLockAt computes `kickoff - buffer`, so -60 puts the lock an
+    // hour past kickoff and lets a pick change on a game whose result is already
+    // published. publishedWeeks does not cover this — it only guards EXTENSIONS.
+    expect(() => flattenSettingsPatch({ settings: { lockBufferMinutes: -60 } }, 'NFL_PICKEM'))
+      .toThrow(/lockBufferMinutes/);
+  });
+
+  it('rejects a non-numeric or absurdly wide buffer', () => {
+    expect(() => flattenSettingsPatch({ settings: { lockBufferMinutes: 'soon' } }, 'NFL_PICKEM'))
+      .toThrow(/lockBufferMinutes/);
+    expect(() => flattenSettingsPatch({ settings: { lockBufferMinutes: 10000 } }, 'NFL_PICKEM'))
+      .toThrow(/lockBufferMinutes/);
+  });
+
+  it('accepts the ordinary range, including 0 (lock exactly at kickoff)', () => {
+    expect(flattenSettingsPatch({ settings: { lockBufferMinutes: 0 } }, 'NFL_PICKEM'))
+      .toEqual({ 'settings.lockBufferMinutes': 0 });
+    expect(flattenSettingsPatch({ settings: { lockBufferMinutes: 1440 } }, 'NFL_PICKEM'))
+      .toEqual({ 'settings.lockBufferMinutes': 1440 });
+  });
+});
+
+describe('touchesLockSettings — which saves must serialize with the scoring lease', () => {
+  it.each(LOCK_AFFECTING_SETTINGS_KEYS)('flags settings.%s', (key) => {
+    expect(touchesLockSettings({ [`settings.${key}`]: 1 })).toBe(true);
+  });
+
+  it('includes confidenceMode, which silently converts a pool to weekly locking', () => {
+    // Submission derives weekly-lock mode from
+    // `settings.confidenceMode || settings.lockMode === 'WEEKLY'`.
+    expect(LOCK_AFFECTING_SETTINGS_KEYS).toContain('confidenceMode');
+  });
+
+  it('does NOT flag an ordinary cosmetic save', () => {
+    expect(touchesLockSettings({ name: 'N', 'settings.entryFee': 5 })).toBe(false);
+  });
+
+  it('treats an unflattened whole-settings write as lock-affecting', () => {
+    // Defence against a future caller that skips flattenSettingsPatch: an
+    // unexamined settings blob must not be waved through the lease check.
+    expect(touchesLockSettings({ settings: { entryFee: 5 } })).toBe(true);
   });
 });

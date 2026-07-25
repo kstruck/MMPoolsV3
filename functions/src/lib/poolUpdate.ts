@@ -86,6 +86,30 @@ export function buildPoolSettingsUpdate(
  */
 export const SERVER_OWNED_SETTINGS_KEYS: readonly string[] = ['weekLockOverrides', 'lockRevision'];
 
+/**
+ * Settings whose value changes WHEN a pick locks, and therefore what the scorer
+ * is allowed to reveal. A write touching any of these has to serialize with a
+ * live scoring pass and bump `settings.lockRevision` (see poolOps.updatePoolSettings).
+ *
+ * `confidenceMode` is on the list because submission derives weekly-lock mode
+ * from `settings.confidenceMode || settings.lockMode === 'WEEKLY'` — flipping it
+ * silently converts a Pick'em pool from per-game to weekly locking.
+ */
+export const LOCK_AFFECTING_SETTINGS_KEYS: readonly string[] =
+  ['lockMode', 'lockBufferMinutes', 'confidenceMode', 'weekLockOverrides'];
+
+/** Widest Pick'em buffer we will store: a full day before the first kickoff. */
+const MAX_PICKEM_LOCK_BUFFER_MINUTES = 24 * 60;
+
+export function touchesLockSettings(patch: Record<string, unknown>): boolean {
+  // `flattenSettingsPatch` always expands a `settings` key into dotted paths, so
+  // the first test is the real one. The second is defence against a future caller
+  // that skips the flatten: an unexamined whole-settings write must be treated as
+  // lock-affecting, not waved through.
+  return LOCK_AFFECTING_SETTINGS_KEYS.some((k) => `settings.${k}` in patch)
+    || 'settings' in patch;
+}
+
 /** Firestore field paths split on `.`; a settings key containing one would
  *  silently write somewhere else entirely. Reject anything unusual outright. */
 const SAFE_SETTINGS_KEY = /^[A-Za-z0-9_]{1,100}$/;
@@ -137,11 +161,29 @@ export function flattenSettingsPatch(
       out['settings.lockMode'] = 'WEEKLY';
       continue;
     }
-    if (hardLock && key === 'lockBufferMinutes') {
-      // Protecting the field is not enough (codex r29): once direct writes are
-      // blocked, a manager can still call this callable with 0/15/arbitrary and
-      // move the "hard" deadline. Snap it to an allowed preset on the way in.
-      out['settings.lockBufferMinutes'] = normalizeLockBufferMinutes(value);
+    if (key === 'lockBufferMinutes') {
+      if (hardLock) {
+        // Protecting the field is not enough (codex r29): once direct writes are
+        // blocked, a manager can still call this callable with 0/15/arbitrary and
+        // move the "hard" deadline. Snap it to an allowed preset on the way in.
+        out['settings.lockBufferMinutes'] = normalizeLockBufferMinutes(value);
+        continue;
+      }
+      // Pick'em keeps a free-form buffer, but not an ARBITRARY one (codex r3).
+      // `effectiveGameLockAt` computes `kickoff - buffer`, so a NEGATIVE buffer
+      // moves the lock AFTER kickoff and lets picks be changed on a game whose
+      // result is already published — the reveal hole `publishedWeeks` does not
+      // cover, because that marker only guards deadline EXTENSIONS. Rejected
+      // rather than clamped so a mis-set value is visible instead of silently
+      // reinterpreted.
+      const n = Number(value);
+      if (!Number.isFinite(n) || n < 0 || n > MAX_PICKEM_LOCK_BUFFER_MINUTES) {
+        rejected.push(
+          `settings.lockBufferMinutes (must be between 0 and ${MAX_PICKEM_LOCK_BUFFER_MINUTES} minutes)`,
+        );
+        continue;
+      }
+      out['settings.lockBufferMinutes'] = n;
       continue;
     }
     out[`settings.${key}`] = value;
