@@ -164,13 +164,21 @@ existed to stop. Written, reviewed, and holed in the same hour.
 §2b.** Codex is not automatically right — verify its claims against the code
 before acting, as with any reviewer.
 
-**Expect several rounds, and keep going until one comes back clean.** Measured
-over the 2026-07-21 run: #245 took 4 rounds / 11 findings, #248 took 9 rounds,
-#250 took 4 rounds / 15 findings. The pattern is consistent and worth knowing in
-advance — **round 1 finds defects in the code, and rounds 2+ find defects in the
-fixes**, including in the guards written to prove the fixes. Three separate
-times it holed a test that looked like it guarded and did not. Budget for that
-rather than treating round 1 as the review.
+**Expect several rounds — but stop at 5 per artifact (Kevin, 2026-07-25).**
+Codex runs are paid; Kevin capped them at ten that morning and tightened it to
+**five** the same day. **The cap is the single stopping rule and it beats "keep
+going until clean."** If round 5 still has open findings, STOP anyway: write the
+residual into the PR body as named, unresolved findings, say plainly that the PR
+carries them, and let Kevin decide. Never report a PR as done while silently
+holding findings, and never keep running rounds past 5 to chase a clean one.
+
+Measured over the 2026-07-21 run (before the cap): #245 took 4 rounds / 11
+findings, #248 took 9 rounds, #250 took 4 rounds / 15 findings. The pattern is
+worth knowing in advance — **round 1 finds defects in the code, and rounds 2+
+find defects in the fixes**, including in the guards written to prove the fixes.
+Three separate times it holed a test that looked like it guarded and did not. So
+do not treat a clean round 1 as the review: **self-review the diff yourself**,
+which is now the only other reviewer there is (§2b).
 
 A rejection is a legitimate outcome and must be written down with reasoning. Of
 those 30 findings, 3 were rejected: two would have made a monitor cry wolf
