@@ -851,6 +851,33 @@ describe('scoring lease — the mutex between scorers', () => {
     expect((await entryDoc('p-stale-clock', 'alice')).weeklyPoints[1]).toBe(1);
   }, 60000);
 
+  it('grades from the pool as it is AFTER the lease, not the caller snapshot', async () => {
+    // codex r2. The caller reads the pool doc BEFORE the lease exists, so an
+    // extendWeekDeadline can commit in between — it correctly sees no live lease,
+    // writes the override and bumps lockRevision, and the fence then captures the
+    // ALREADY-BUMPED revision, so the revision backstop never fires. Grading from
+    // the stale snapshot would reveal a finished game while the newly accepted
+    // override keeps picks open.
+    await seedScorable('p-stale-pool');
+    const stalePool = await poolDoc('p-stale-pool');
+
+    // The extension lands in the gap.
+    await db.collection('pools').doc('p-stale-pool').update({
+      'settings.weekLockOverrides.1': Date.now() + 3 * HOUR,
+      'settings.lockRevision': 1,
+    });
+
+    const result = await scoreNFLWeekInternal(db, 'p-stale-pool', 1, {
+      pool: stalePool, games: await loadSlate(), actor: SYSTEM_ACTOR, provisional: true,
+    });
+
+    expect(result.leaseBusy).toBe(false);
+    // Withheld: the game is FINAL but its pick window was reopened.
+    expect(result.pickemScored).toBe(1);
+    expect((await entryDoc('p-stale-pool', 'alice')).weeklyResults[1].total).toBe(0);
+    expect((await poolDoc('p-stale-pool')).publishedWeeks).toBeUndefined();
+  }, 60000);
+
   it('a lockRevision bump mid-pass discards the rest of the pass', async () => {
     // The backstop for an override that commits between lease acquisition and the
     // next fenced commit. Simulated by bumping the revision under a held fence,

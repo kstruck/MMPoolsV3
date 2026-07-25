@@ -925,7 +925,23 @@ export async function scoreNFLWeekInternal(
     };
   }
   try {
-    return await scoreWeekPass(db, poolId, week, opts, fence);
+    // RE-READ the pool now that the lease is held (codex r2).
+    //
+    // `opts.pool` was fetched by the caller BEFORE the lease existed, so an
+    // `extendWeekDeadline` could have committed in between: it correctly saw no
+    // live lease, wrote the override and bumped `lockRevision` — and the fence
+    // captured the ALREADY-BUMPED revision, so the revision backstop never fires.
+    // Grading from the stale doc would then treat a finished game as revealable
+    // and publish it while the newly accepted override keeps picks open. Once the
+    // lease is held no further extension can commit, so this one read is the
+    // point at which the snapshot becomes trustworthy.
+    //
+    // Only the POOL is re-read, not the slate: a stale `games` snapshot can only
+    // be older, and older can only UNDER-reveal (a game not yet seen as terminal),
+    // which is the safe direction. Restated ESPN scores are the reconciliation
+    // tier's job (§5b), not this fence's.
+    const fresh = (await db.collection('pools').doc(poolId).get()).data();
+    return await scoreWeekPass(db, poolId, week, fresh ? { ...opts, pool: fresh } : opts, fence);
   } finally {
     // Best-effort: a failed release only means the lease expires on its own TTL,
     // which is what the expiry is for. Throwing here would mask the real error.
@@ -1268,7 +1284,20 @@ async function scoreWeekPass(
   await flushBatch();
 
   // Strike audits, now that the entry writes they describe have committed.
+  //
+  // A `SURVIVOR_AUTO_STRIKE` is immutable — a corrective rescore cannot remove
+  // one — and this loop is serial, so on a large pool it can outlive the lease
+  // and keep emitting strikes from a superseded pass (codex r2). It cannot be
+  // done inside the fenced transaction (different collection, its own writer), so
+  // the fence is re-asserted and RENEWED as the loop runs. The renewal is
+  // time-based rather than per-audit: an empty fenced write is a transaction on
+  // the pool doc, and one per strike would serialize hundreds of them.
+  let lastFenceTouch = Date.now();
   for (const strike of pendingStrikeAudits) {
+    if (fence && Date.now() - lastFenceTouch > fence.ttlMs / 2) {
+      await fencedWrite(db, poolRef, fence, () => {});
+      lastFenceTouch = Date.now();
+    }
     await writeAuditEvent({
       poolId,
       type: 'SURVIVOR_AUTO_STRIKE',
