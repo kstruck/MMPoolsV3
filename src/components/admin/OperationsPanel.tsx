@@ -60,9 +60,26 @@ const call = (name: string, data: Record<string, unknown> = {}) =>
 const runBackfill = async (dryRun: boolean, includeFinished = false) => {
   let cursor: string | undefined;
   let pages = 0;
-  const agg = { dryRun, includeFinished, poolsScanned: 0, finishedPoolsSkipped: 0, testPoolsSkipped: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, failures: [] as any[] };
+  // 25 on the incl.-finished path, 100 otherwise. A finished pool used to cost one
+  // `continue`; now it costs the full per-member walk, so the same page size is a
+  // very different amount of work. 25 is the handler's own default page size and
+  // matches backfillProfileData, the other migration that does per-member work.
+  const limit = includeFinished ? 25 : 100;
+  const agg = { ok: true, dryRun, includeFinished, poolsScanned: 0, finishedPoolsSkipped: 0, testPoolsSkipped: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, resumeFrom: null as string | null, error: null as string | null, failures: [] as any[] };
   do {
-    const r: any = await call('backfillMemberRecords', { dryRun, includeFinished, limit: 100, startAfter: cursor });
+    let r: any;
+    try {
+      r = await call('backfillMemberRecords', { dryRun, includeFinished, limit, startAfter: cursor });
+    } catch (e) {
+      // The paging cursor lives in this closure, so an unhandled throw loses it and
+      // the run can only restart from pool #1 — into the same wall. Report it
+      // instead: `resumeFrom` is the last cursor that WAS accepted, and the
+      // callable is idempotent, so a follow-up run can be pointed at it.
+      agg.ok = false;
+      agg.resumeFrom = cursor ?? null;
+      agg.error = e instanceof Error ? e.message : String(e);
+      return agg;
+    }
     agg.poolsScanned += r.poolsScanned || 0;
     agg.membersCreated += r.membersCreated || 0;
     agg.membersAlreadyPresent += r.membersAlreadyPresent || 0;
@@ -75,6 +92,13 @@ const runBackfill = async (dryRun: boolean, includeFinished = false) => {
     cursor = r.nextCursor || undefined;
     pages++;
   } while (cursor && pages < 100);
+  // A run that stopped on the page cap rather than on an exhausted cursor has NOT
+  // finished, and saying otherwise is the same lie as swallowing the throw.
+  if (cursor) {
+    agg.ok = false;
+    agg.resumeFrom = cursor;
+    agg.error = `Stopped at the ${pages}-page cap with pools remaining.`;
+  }
   return agg;
 };
 
@@ -304,14 +328,21 @@ export const OperationsPanel: React.FC = () => {
     setRunning(action.id);
     try {
       const result = await action.run();
+      // An op that RETURNS `ok: false` did not succeed — it reported a failure
+      // instead of throwing one, which is how the roster backfill surfaces a
+      // partial run together with the cursor needed to resume it. Logging that as
+      // a green line, and auditing it as a success, would be the same lie as
+      // swallowing an exception.
+      const ok = (result as { ok?: unknown } | null)?.ok !== false;
       // 400, not 160: a migration's dry run IS its evidence, and at 160 the roster
       // backfill's report (226 chars with every count at zero) lost its last three
       // counters — including the finished-pool count its own card tells the operator
       // to read before running the destructive variant. Truncation is still the
       // design, for the ops that return unbounded plannedWrites arrays.
-      setLog((prev) => [{ id: action.id, ok: true, text: `${action.label}: ${JSON.stringify(result).slice(0, 400)}` }, ...prev]);
-      toast.success(`${action.label} completed.`);
-      await dbService.logAdminAction({ action: `OP_${action.id.toUpperCase()}`, status: 'success', metadata: { label: action.label } });
+      setLog((prev) => [{ id: action.id, ok, text: `${action.label}: ${JSON.stringify(result).slice(0, 400)}` }, ...prev]);
+      if (ok) toast.success(`${action.label} completed.`);
+      else toast.error(`${action.label} did not complete — read the Run Log.`);
+      await dbService.logAdminAction({ action: `OP_${action.id.toUpperCase()}`, status: ok ? 'success' : 'error', metadata: { label: action.label } });
     } catch (e) {
       const msg = getUserMessage(e, `${action.label} failed.`);
       setLog((prev) => [{ id: action.id, ok: false, text: `${action.label}: ${msg}` }, ...prev]);

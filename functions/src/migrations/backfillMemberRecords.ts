@@ -69,7 +69,24 @@ async function collectMembers(db: Firestore, poolId: string, pool: any): Promise
 }
 
 export const backfillMemberRecords = validated(
-    { schema: backfillMemberRecordsSchema, label: "backfillMemberRecords", role: "SUPER_ADMIN", appCheck: "monitor" },
+    {
+      schema: backfillMemberRecordsSchema,
+      label: "backfillMemberRecords",
+      role: "SUPER_ADMIN",
+      appCheck: "monitor",
+      // This callable ran on the v2 DEFAULT of 60s, which was survivable only
+      // because the Operations button could not reach finished pools: they cost
+      // one `continue` each. `includeFinished` makes that same page do the full
+      // per-member walk — an entries get, a member get and a user get per member,
+      // then a write, a roster recompute and a pool write per pool, all serial.
+      // 60s does not cover a page of populated legacy pools, and a timeout is
+      // not merely slow: the client's paging cursor lives in memory, so the run
+      // cannot resume past the page that died (codex r3).
+      //
+      // 300s/512MiB is the established batch-migration budget in this repo —
+      // autoClosePools.ts:32, autoLock.ts:48, feedReplay.ts:59.
+      options: { timeoutSeconds: 300, memory: "512MiB" },
+    },
     async (input, request) => {
   if (!request.auth || request.auth.token?.role !== 'SUPER_ADMIN') {
     throw new HttpsError("permission-denied", "Super Admin only.");

@@ -152,7 +152,13 @@ describe('step 5 — destructive admin actions write an audit trail', () => {
   it('OperationsPanel audits every op via logAdminAction (success + error)', () => {
     expect(ops).toContain('dbService.logAdminAction');
     expect(ops).toContain('OP_');
-    expect(ops).toContain("status: 'success'");
+    // The resolved path no longer hardcodes 'success': an op that RETURNS
+    // `ok: false` (a partial migration reporting its resume cursor rather than
+    // throwing) must be audited as an ERROR, so the status is selected. Asserting
+    // the whole ternary is stricter than the old literal — it pins that BOTH
+    // outcomes come off one decision instead of always writing 'success'.
+    expect(ops).toMatch(/status:\s*ok\s*\?\s*'success'\s*:\s*'error'/);
+    // ...and the thrown-exception path still audits its own error.
     expect(ops).toContain("status: 'error'");
   });
   it('conference tournament re-inits live in Operations', () => {
@@ -226,6 +232,24 @@ describe('P4 — the roster backfill dry run can be read in the Run Log', () => 
     expect(ops).toContain("id: 'backfillMemberRecordsFinished'");
     expect(ops).toContain('runBackfill(true, true)');
     expect(ops).toContain('runBackfill(false, true)');
+  });
+
+  it('a partial run is reported, not swallowed, and carries a resume cursor', () => {
+    // codex r3: the paging cursor lives in runBackfill's closure, so an unhandled
+    // throw loses it and the migration can only restart from pool #1.
+    expect(keys).toContain('ok');
+    expect(keys).toContain('resumeFrom');
+    expect(ops).toContain('agg.resumeFrom = cursor');
+    // ...and `ok: false` must actually reach the operator rather than being
+    // rendered as a green success line.
+    expect(ops).toMatch(/\?\.ok\s*!==\s*false/);
+    expect(ops).toContain("status: ok ? 'success' : 'error'");
+  });
+
+  it('the incl.-finished sweep uses the smaller page size', () => {
+    // A finished pool used to cost one `continue`; it now costs the full
+    // per-member walk, so 100/page is a different amount of work entirely.
+    expect(ops).toContain('const limit = includeFinished ? 25 : 100;');
   });
 
   it('the panel never SENDS the retired includeAll flag', () => {
