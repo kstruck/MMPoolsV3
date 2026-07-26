@@ -274,6 +274,9 @@ export interface StatsRecomputeResult {
     errors: number;
     /** True when nothing was written (the gate's report-only mode). */
     dryRun: boolean;
+    /** Did this run actually overwrite stats/global? False on a dry run, and
+     *  false when `errors > 0` — a partial total is never published. */
+    published: boolean;
 }
 
 /**
@@ -309,7 +312,18 @@ async function selectPoolsForStats(db: admin.firestore.Firestore): Promise<Map<s
     const pools = new Map<string, any>();
     for (const doc of [...lockedSnap.docs, ...scoredSnap.docs]) {
         const data = doc.data();
-        if (data) pools.set(doc.id, data);
+        if (!data) continue;
+        // A CANCELED pool's contest is void, so its money is not prize volume.
+        // This matters specifically because of the new scored-week half: cancelPool
+        // leaves `scoredThroughWeek` and the paid Member Records intact, so a
+        // canceled NFL pool that had already scored a week WOULD be admitted by
+        // that query and counted on every run. The old isLocked-only selector
+        // never reached it. Found by codex r1 on this PR.
+        //
+        // CANCELED only — not COMPLETED. A finished pool is exactly the case that
+        // SHOULD count; excluding it would delete real history from the totals.
+        if (data.status === 'CANCELED') continue;
+        pools.set(doc.id, data);
     }
     return pools;
 }
@@ -349,7 +363,11 @@ export async function recomputeGlobalStats(
                 totalAllTimeCharity += charityAmount;
                 count++;
             } else {
+                // Counted as an error, not merely logged: a NaN pot is money
+                // missing from the total in exactly the same way a thrown one is,
+                // and it used to slip past the guard below silently (codex r1).
                 console.warn(`Pool ${poolId} returned NaN pot`);
+                errors++;
             }
         } catch (err) {
             console.error(`Error calculating pot for pool ${poolId}:`, err);
@@ -357,7 +375,20 @@ export async function recomputeGlobalStats(
         }
     }
 
-    if (!opts.dryRun) {
+    // DO NOT PUBLISH A PARTIAL TOTAL. If any selected pool could not be priced —
+    // a transient subcollection read failure is enough — the sum is an UNDERCOUNT,
+    // and this write is an absolute overwrite of a world-readable money document.
+    // Publishing it would replace a correct figure with a smaller wrong one and
+    // leave it there until the next successful run. Keeping the previous value is
+    // strictly better: stale beats wrong on a public number. The heartbeat already
+    // reports `ok: false` in this case, so a persistent failure is visible rather
+    // than silent. Found by codex r1 on this PR.
+    const publish = !opts.dryRun && errors === 0;
+    if (!opts.dryRun && errors > 0) {
+        console.error(`[stats] refusing to publish: ${errors} pool(s) could not be priced — keeping the previous stats/global`);
+    }
+
+    if (publish) {
         // Overwrite the global stat with the recalculated total
         await db.doc("stats/global").set({
             totalPrizes: totalAllTimePrizes,
@@ -374,6 +405,7 @@ export async function recomputeGlobalStats(
         pools: count,
         errors,
         dryRun: opts.dryRun,
+        published: publish,
     };
 }
 
@@ -439,6 +471,19 @@ export const recalculateGlobalStats = validated(
  * rather than double-counting one, and it needs no new trigger surface on the
  * pools collection — which is already carrying `onPoolLocked` plus the scorer's
  * writes. The cost is up to a day of staleness on a marketing figure. Cheap.
+ *
+ * ACCEPTED RACE, stated rather than hidden (codex r1 P2). The recompute's
+ * ABSOLUTE write and `onPoolLocked`'s `FieldValue.increment` are not serialized:
+ * a pool that locks mid-run is either missed (its increment gets overwritten) or
+ * counted twice (the query saw it, the trigger lands after). That race already
+ * existed for the manual Recalculate button — a nightly schedule widens the
+ * exposure, it does not create it. Accepted because THIS IS THE RECONCILER: the
+ * next run recomputes from source and overwrites, so any drift is bounded to one
+ * day and self-corrects. The same reasoning is already on record in the
+ * 2026-07-18 migration audit, which named periodic recalculation as the answer to
+ * at-least-once trigger delivery. Serializing it properly needs a generation
+ * counter or a transaction over a document two writers use differently — real
+ * work, for a marketing figure that heals itself overnight.
  *
  * FAIL-SAFE OFF. Absent config means disabled, exactly like every other gated job
  * here, and `dryRun` defaults TRUE so arming it in two steps is the natural path:

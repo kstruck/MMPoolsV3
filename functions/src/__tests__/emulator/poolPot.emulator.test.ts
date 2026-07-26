@@ -233,6 +233,60 @@ describe('recomputeGlobalStats — selection', () => {
     expect(r.totalPrizes).toBe(20 + 30);
   });
 
+  it('skips a CANCELED NFL pool that had already scored a week (codex r1)', async () => {
+    // cancelPool leaves scoredThroughWeek and the paid Member Records intact, so
+    // the new scored-week query ADMITS a canceled pool that the old isLocked-only
+    // selector never reached. Its contest is void; its money is not prize volume.
+    await db.collection('pools').doc('n5').set({
+      type: 'NFL_PICKEM', isLocked: false, scoredThroughWeek: 4, status: 'CANCELED',
+      settings: { entryFee: 50 },
+    });
+    await member('n5', 'a', { paidStatus: 'PAID' });
+
+    const r = await recomputeGlobalStats(db, { dryRun: true });
+    expect(r.pools).toBe(0);
+    expect(r.totalPrizes).toBe(0);
+  });
+
+  it('a COMPLETED pool still counts — only CANCELED is excluded', async () => {
+    // Guards the over-correction: excluding finished pools would delete real
+    // history from the public totals, which is the opposite failure.
+    await db.collection('pools').doc('n6').set({
+      type: 'NFL_PICKEM', isLocked: false, scoredThroughWeek: 18, status: 'COMPLETED',
+      settings: { entryFee: 50 },
+    });
+    await member('n6', 'a', { paidStatus: 'PAID' });
+
+    const r = await recomputeGlobalStats(db, { dryRun: true });
+    expect(r.pools).toBe(1);
+    expect(r.totalPrizes).toBe(50);
+  });
+
+  it('refuses to PUBLISH a partial total when a pool could not be priced (codex r1)', async () => {
+    // stats/global is world-readable and this write is an absolute overwrite, so
+    // publishing an undercount replaces a correct figure with a smaller wrong one
+    // and leaves it there. Stale beats wrong on a public number.
+    await db.doc('stats/global').set({ totalPrizes: 500, totalDonated: 50 });
+    await db.collection('pools').doc('s6').set({
+      type: 'SQUARES', isLocked: true, costPerSquare: 10, squares: [{ id: 0, owner: 'a' }],
+    });
+    // Reaches calculatePoolPot's pre-existing NaN guard: gross = 1 x Infinity,
+    // charity = 100% of Infinity, prizePot = Infinity - Infinity = NaN. Contrived
+    // on purpose — a real NaN comes from corrupt stored data, which is exactly
+    // what that guard is there for. `costPerSquare: NaN` does NOT work, because
+    // `NaN || 0` is 0 and the pot comes out a clean zero.
+    await db.collection('pools').doc('s7').set({
+      type: 'SQUARES', isLocked: true, costPerSquare: Number.POSITIVE_INFINITY,
+      squares: [{ id: 0, owner: 'b' }],
+      charity: { enabled: true, percentage: 100 },
+    });
+
+    const r = await recomputeGlobalStats(db, { dryRun: false });
+    expect(r.errors).toBe(1);
+    expect(r.published).toBe(false);
+    expect((await statsGlobal()).totalPrizes).toBe(500); // previous value kept
+  });
+
   it('skips admin-closed pools (T2), which are locked for lifecycle reasons only', async () => {
     await db.collection('pools').doc('s3').set({
       type: 'SQUARES', isLocked: true, costPerSquare: 10, closedVia: 'ADMIN_CLOSE',
