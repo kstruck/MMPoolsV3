@@ -114,16 +114,32 @@ describe('calculatePoolPot — NFL season pools read Member Records (§2.8)', ()
 });
 
 describe('calculatePoolPot — PROPS pools read propCards (codex R3 finding (j))', () => {
-  it('counts paid cards at props.cost', async () => {
+  it('counts EVERY card at props.cost — isPaid is not a real field on this path', async () => {
+    // The asymmetry with BRACKET/NFL is the point. codex r1 on this PR found that
+    // nothing writes `isPaid`: purchasePropCard omits it, no UI sets it, and
+    // firestore.rules allows propCards writes to SUPER_ADMIN only. Filtering on it
+    // published ZERO for every real Props pool. Card count is also what
+    // PoolStatistics.tsx and the SuperAdmin Overview already call the props pot.
     const pool = { type: 'PROPS', props: { cost: 15 } };
     await db.collection('pools').doc('q1').set(pool);
     const cards = db.collection('pools').doc('q1').collection('propCards');
-    await cards.doc('c1').set({ userId: 'a', isPaid: true });
-    await cards.doc('c2').set({ userId: 'b', isPaid: true });
-    await cards.doc('c3').set({ userId: 'c' }); // never marked paid
+    await cards.doc('c1').set({ userId: 'a' });
+    await cards.doc('c2').set({ userId: 'b' });
+    await cards.doc('c3').set({ userId: 'c' });
 
     const { prizePot } = await calculatePoolPot(db, 'q1', pool);
-    expect(prizePot).toBe(30);
+    expect(prizePot).toBe(45);
+  });
+
+  it('a card carrying isPaid still counts once — the flag is inert, not a filter', async () => {
+    const pool = { type: 'PROPS', props: { cost: 10 } };
+    await db.collection('pools').doc('q3').set(pool);
+    const cards = db.collection('pools').doc('q3').collection('propCards');
+    await cards.doc('c1').set({ userId: 'a', isPaid: true });
+    await cards.doc('c2').set({ userId: 'b', isPaid: false });
+
+    const { prizePot } = await calculatePoolPot(db, 'q3', pool);
+    expect(prizePot).toBe(20);
   });
 
   it('a Props pool with no cost contributes nothing and reads no cards', async () => {

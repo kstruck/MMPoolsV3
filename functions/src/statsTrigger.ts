@@ -49,10 +49,26 @@ const memberRecordsPot = async (
  * (the owner, at create). A Member-Records pot would therefore report ~0 for every
  * real Props pool.
  *
- * `isPaid` on the card is the paid-state truth, and the commissioner UI already
- * reads exactly this (`AdminPanel.tsx`: `cards.filter(c => c.isPaid).length *
- * props.cost`). Paid-only matches the BRACKET / NFL_PLAYOFFS branch — this
- * function reports money collected, not money owed.
+ * EVERY card counts, not only cards flagged `isPaid`. That asymmetry with the
+ * BRACKET and NFL branches is deliberate and was nearly a shipped defect — the
+ * first version of this filtered on `isPaid === true`, and codex found that
+ * NOTHING WRITES THAT FIELD. Verified before accepting: `purchasePropCard`
+ * creates cards without it; no UI sets it (`AdminPanel.tsx` only READS it, for a
+ * paid/owed split that is therefore permanently $0/$100%); and
+ * `firestore.rules` `match /propCards/{userId}` allows `write: if isSuperAdmin()`,
+ * so a commissioner could not set it even if a control existed. A paid-only props
+ * pot would have published ZERO for every real Props pool — the same confidently
+ * wrong number this whole change exists to remove, just arrived at differently.
+ *
+ * Card count is also what the product already calls the props pot everywhere it
+ * is displayed: `PoolStatistics.tsx` (`propCards.length * props.cost`) and the
+ * SuperAdmin Overview. And it matches the SQUARES branch directly above, which
+ * has always counted squares SOLD rather than squares paid — squares and prop
+ * cards are both per-unit purchases, so that is the closer analogue.
+ *
+ * FOLLOW-UP OWED, not fixed here: Props has no payment-state path at all. NFL got
+ * one (Member Records + `setPaidStatus`); Props never did. Building one is a
+ * feature with a UI, a callable and a rules change — its own PR.
  */
 const propsPot = async (
     db: admin.firestore.Firestore,
@@ -62,7 +78,7 @@ const propsPot = async (
     const cost = Number(pool.props?.cost) || 0;
     if (cost <= 0) return 0;
     const cardsSnap = await db.collection('pools').doc(poolId).collection('propCards').get();
-    return cardsSnap.docs.filter((d) => d.data()?.isPaid === true).length * cost;
+    return cardsSnap.size * cost;
 };
 
 /**
