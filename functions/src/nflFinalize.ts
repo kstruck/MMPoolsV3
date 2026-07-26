@@ -2,6 +2,7 @@ import * as functions from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import type { Firestore } from "firebase-admin/firestore";
 import { NFL_SEASON_TYPES } from "./shared/poolTypes";
+import { isSimPool } from "./shared/testPool";
 import { sortMarginLeaderboard } from "./nflScoringEngine";
 import { recomputeUserProfile } from "./userProfile";
 import { writeAdminAudit } from "./lib/adminAudit";
@@ -225,14 +226,12 @@ function recordOfSurvivor(e: any): Record<string, number | boolean | null> {
  * `allowSim` is passed — ONLY the guarded `simFinalizePool` harness callable sets it,
  * so a full-season Sim Run never writes seasonHistory/profile docs as a side effect
  * of inline scoring or the sweep. (PLAN-NFL-SIM-HARNESS Phase 0.2, Codex R1#2/R2#1.)
+ *
+ * `isSimPool` now LIVES IN shared/testPool.ts and is re-exported here unchanged, so
+ * the client's stats surface applies the identical rule (PLAN-STATS-INTEGRITY §2.4).
+ * Existing importers (nflAutoScore, nflLockWatch, the sweep below) keep this path.
  */
-export function isSimPool(pool: any, poolId?: string): boolean {
-  return Boolean(
-    pool?.simRunId ||
-    String(pool?.season || '').startsWith('sim-') ||
-    (poolId || '').startsWith('sim-'),
-  );
-}
+export { isSimPool };
 
 export async function maybeFinalizeNFLPool(
   db: Firestore,

@@ -34,6 +34,10 @@ describe('firestore.rules — scorer-owned pool fields are server-only', () => {
     'scoredThroughWeek',
     // Frozen Survivor/Margin weekly deadlines (PR-0).
     'hardLockByWeek',
+    // The stats discriminator (PLAN-STATS-INTEGRITY §8.1 arm 3). Writable by a
+    // manager, it hides their own pool's volume; clearable, it pushes a test
+    // pool's fake pot into the world-readable stats/global document.
+    'isTestPool',
     // A manager who could change `type` could flip an NFL pool to a non-NFL type,
     // write settings.weekLockOverrides while the NFL settings block no longer
     // applies, and flip it back — reopening a published week (codex r1).

@@ -110,6 +110,13 @@ service cloud.firestore {
           //   scoredWeeks /
           //   scoredThroughWeek — the finalization completeness markers.
           'publishedWeeks', 'autoScore', 'scoredWeeks', 'scoredThroughWeek',
+          // Stats discriminator (PLAN-STATS-INTEGRITY §8.1, arm 3). A pool marked
+          // isTestPool is excluded from every published money figure, so a manager
+          // who could WRITE it could hide their own pool's volume, and one who
+          // could CLEAR it could push a test pool's fake pot into the
+          // world-readable stats/global document. Kevin sets it as data (console /
+          // Admin SDK, which bypass rules) when labelling legacy test pools.
+          'isTestPool',
           // The pool TYPE decides which rules apply to it, so a manager who could
           // change it could step out of every type-scoped protection and back in.
           // Concretely (codex r1): flip an NFL pool to SQUARES, write
