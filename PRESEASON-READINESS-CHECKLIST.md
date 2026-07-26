@@ -152,10 +152,12 @@ config/console act with a verification step. Suggested order as listed.
   2. **`nflDeepSweep` live WITH WRITES** — a dry-run deep sweep does not write
      `nfl_games`, so a game finalizing >24h after kickoff is never observed.
   3. **Run the `publishedWeeks` cold-start backfill** (SuperAdmin → Operations,
-     dry-run first). #279's `extendWeekDeadline` publish guard reads that marker,
-     and only the auto-scorer writes it — so weeks scored MANUALLY before #279
-     are unmarked and can still be reopened after their results were shown. Arming
-     the scorer without this leaves exactly the hole the guard exists to close.
+     dry-run first). #279's `extendWeekDeadline` publish guard reads that marker.
+     **Every** scoring pass writes it — the manual "Score Week" button included,
+     since it runs through the same `scoreNFLWeekInternal` — so this is purely a
+     COLD-START gap: weeks scored before that code shipped carry no marker and can
+     still be reopened after their results were shown. Manual scoring from here on
+     marks its own weeks; nothing is permanently unprotected.
 
   So the pilot answer is unchanged: **Kevin clicks "Score Week N" per
   pool after each preseason slate**, and that must be ON the schedule (Sun/Mon).

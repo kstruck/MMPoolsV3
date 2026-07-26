@@ -67,9 +67,13 @@
 >
 > ⚠️ **#279 did NOT reach a clean codex round.** 3 rounds ran — 8 findings, all
 > absorbed with a regression guard each — and round 4 returned `Quota exceeded.
-> Check your plan and billing details` on two attempts. **The codex quota needs
-> topping up before any further cross-model review is possible** (CLAUDE.md §2c),
-> which blocks opening the next PR under that rule.
+> Check your plan and billing details` on two attempts, so the PR merged carrying
+> an un-run round rather than a converged one.
+>
+> **The quota RECOVERED later the same evening** and `codex exec review` works
+> again — it reviewed the docs PR that wrote this box. **Cross-model review is NOT
+> blocked; do not skip it on the next PR.** The failure is recorded because it is
+> a real availability risk mid-effort, not because it is still in force.
 >
 > ⚠️ **A pending prod-data action:** the `publishedWeeks` cold-start backfill has
 > NOT been run. Until it is, the new publish guard does not fire on weeks scored
