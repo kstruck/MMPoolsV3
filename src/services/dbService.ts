@@ -141,6 +141,16 @@ export interface ScoreSyncStatus {
 
 /** Global statistics tracked across all pools */
 export interface GlobalStats {
+    /** Entries on non-SQUARES pools. Separate from `totalSquaresSold` on purpose:
+     *  the SuperAdmin Overview used to add both into one "Squares Sold" figure —
+     *  two different units under one label. Optional because the stored
+     *  `stats/global` document does not carry it; only the client aggregate does. */
+    totalEntries?: number;
+    /** What the server actually stores as prize volume in `stats/global`
+     *  (`statsTrigger.ts`). The interface previously named only `totalRevenue`,
+     *  which the recompute writes as a backwards-compat alias of the same figure —
+     *  so the field the document is really keyed on was missing from the type. */
+    totalPrizes?: number;
     totalPools: number;
     totalSquaresSold: number;
     totalRevenue: number;

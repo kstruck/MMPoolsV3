@@ -182,16 +182,21 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
               </span>
             </div>
 
-            {/* Metric C */}
-            <div className="bg-surface border border-line p-4 rounded-2xl relative overflow-hidden group hover:border-gold-500/40 transition-colors duration-150">
+            {/* Metric C — this card used to read `totalSquaresSold`, which summed
+                actual squares AND every NFL/bracket/props ENTRY into one number
+                under the label "Squares Sold". Two different units, one figure.
+                They are counted separately now and both are shown. */}
+            <div className="bg-surface border border-line p-4 rounded-2xl relative overflow-hidden group hover:border-gold-500/40 transition-colors duration-150" title="Squares claimed on SQUARES pools, and entries on every other pool type. Test pools are excluded from both.">
               <div className="absolute top-3 right-3 p-1.5 rounded-lg bg-gold-500/10 text-gold-600 dark:text-gold-400">
                 <Trophy size={16} />
               </div>
               <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.16em] block mb-1">
-                Squares Sold
+                Squares / Entries
               </span>
               <span className="text-2xl font-display font-bold text-[color:var(--text)] num leading-none">
                 {stats?.totalSquaresSold || 0}
+                <span className="text-muted"> / </span>
+                {stats?.totalEntries || 0}
               </span>
             </div>
 

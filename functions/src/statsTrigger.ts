@@ -13,6 +13,7 @@ import { validated } from "./lib/validated";
 import { recalculateGlobalStatsSchema } from "./schemas/noInputAdmin";
 import { NFL_SEASON_TYPES } from "./shared/poolTypes";
 import { computeRosterSummary, type DuesInputs, type MemberRecord } from "./shared/memberRecord";
+import { isTestPool } from "./shared/testPool";
 
 /**
  * Dues actually COLLECTED, read from a pool's Member Records — the money in the pot.
@@ -197,16 +198,28 @@ export const onPoolLocked = onDocumentUpdated("pools/{poolId}", async (event) =>
         // Trigger only when transitioning from unlocked -> locked
         if (!before.isLocked && after.isLocked) {
             const db = admin.firestore();
-            const { prizePot, charityAmount } = await calculatePoolPot(db, event.params.poolId, after);
 
-            if (prizePot > 0 || charityAmount > 0) {
-                await db.doc("stats/global").set({
-                    totalPrizes: FieldValue.increment(prizePot),
-                    totalDonated: FieldValue.increment(charityAmount),
-                    lastUpdated: FieldValue.serverTimestamp()
-                }, { merge: true });
+            // Test pools add nothing to the world-readable money totals
+            // (PLAN-STATS-INTEGRITY §8.1). Scoped to the STATS block only, not to
+            // the whole trigger: the "Numbers Set" member emails below must still
+            // fire for a sim pool, because the simulators exercise that path on
+            // purpose. This is a stats change, not a behaviour change to the
+            // harness — and a `return` here would have been the quiet way to make
+            // it one.
+            if (isTestPool(after, event.params.poolId)) {
+                console.log(`[Stats] pool ${event.params.poolId} is a Test Pool — contributing nothing to stats/global`);
+            } else {
+                const { prizePot, charityAmount } = await calculatePoolPot(db, event.params.poolId, after);
 
-                console.log(`[Stats] Added $${prizePot} prizes / $${charityAmount} charity for pool ${event.params.poolId}`);
+                if (prizePot > 0 || charityAmount > 0) {
+                    await db.doc("stats/global").set({
+                        totalPrizes: FieldValue.increment(prizePot),
+                        totalDonated: FieldValue.increment(charityAmount),
+                        lastUpdated: FieldValue.serverTimestamp()
+                    }, { merge: true });
+
+                    console.log(`[Stats] Added $${prizePot} prizes / $${charityAmount} charity for pool ${event.params.poolId}`);
+                }
             }
 
             // --- EMAIL NOTIFICATION LOGIC ---
@@ -272,6 +285,8 @@ export interface StatsRecomputeResult {
     pools: number;
     /** Pools whose pot threw — each one is money missing from the totals. */
     errors: number;
+    /** Excluded by isTestPool. Reported so "the number dropped" is explainable. */
+    testPoolsSkipped: number;
     /** True when nothing was written (the gate's report-only mode). */
     dryRun: boolean;
     /** Did this run actually overwrite stats/global? False on a dry run, and
@@ -351,11 +366,19 @@ export async function recomputeGlobalStats(
     let count = 0;
     let errors = 0;
 
+    let testPoolsSkipped = 0;
+
     for (const [poolId, pool] of pools) {
         try {
             // T2: admin-closed pools are locked for lifecycle reasons only — their
             // economics must never be recomputed with the squares-only pot logic.
             if (pool.closedVia === ADMIN_CLOSE) continue;
+
+            // The same shared predicate the trigger and the SuperAdmin Overview
+            // use (PLAN-STATS-INTEGRITY §8.1). One module, three callers — the
+            // client/server split IS the reported bug (§2.4), so this must never
+            // become a second copy of the rule.
+            if (isTestPool(pool, poolId)) { testPoolsSkipped++; continue; }
 
             const { prizePot, charityAmount } = await calculatePoolPot(db, poolId, pool);
             if (!isNaN(prizePot)) {
@@ -404,6 +427,7 @@ export async function recomputeGlobalStats(
         totalDonated: totalAllTimeCharity,
         pools: count,
         errors,
+        testPoolsSkipped,
         dryRun: opts.dryRun,
         published: publish,
     };
