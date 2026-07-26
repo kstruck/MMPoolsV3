@@ -110,6 +110,20 @@ service cloud.firestore {
           //   scoredWeeks /
           //   scoredThroughWeek — the finalization completeness markers.
           'publishedWeeks', 'autoScore', 'scoredWeeks', 'scoredThroughWeek',
+          // Stats discriminator (PLAN-STATS-INTEGRITY §8.1, arm 3). A pool marked
+          // isTestPool is excluded from every published money figure, so a manager
+          // who could WRITE it could hide their own pool's volume, and one who
+          // could CLEAR it could push a test pool's fake pot into the
+          // world-readable stats/global document. Kevin sets it as data (console /
+          // Admin SDK, which bypass rules) when labelling legacy test pools.
+          //
+          // `simRunId` rides along for the same reason: it is arm 1 of the same
+          // discriminator AND the sim-harness trust anchor. It is already stripped
+          // from every client CREATE payload (poolOps.ts PRIVILEGED_POOL_FIELDS);
+          // leaving it writable on UPDATE reopened that hole with one extra step.
+          // Nothing client-side writes it — the server stamps it for SUPER_ADMIN
+          // callers only.
+          'isTestPool', 'simRunId',
           // The pool TYPE decides which rules apply to it, so a manager who could
           // change it could step out of every type-scoped protection and back in.
           // Concretely (codex r1): flip an NFL pool to SQUARES, write
@@ -144,6 +158,69 @@ service cloud.firestore {
         return !isNfl || !changed.hasAny(['settings']);
       }
 
+      // `seasonType` is arm 2 of the stats test-pool discriminator
+      // (PLAN-STATS-INTEGRITY §8.1): an NFL season pool on seasonType 1 is
+      // preseason, i.e. Kevin's own testing, and counts toward nothing. So a
+      // manager who can write it can move a real regular-season pool out of every
+      // published money figure — and back in. Found by codex r1 on PR A.
+      //
+      // NOT added to protectedFieldsUnchanged(), which is unscoped: the SQUARES
+      // setup wizard legitimately rewrites `seasonType` on an existing pool when
+      // the commissioner re-picks the game (AdminPanel.tsx selectGame ->
+      // updateConfig -> dbService.updatePool). Freezing it everywhere would break
+      // that save. The discriminator only READS seasonType on NFL season pools, so
+      // that is the only place it needs freezing.
+      //
+      // Same both-sides type check as nflSettingsWriteBlocked(), and for the same
+      // reason: `type` is protected above, so they cannot legitimately differ.
+      function nflSeasonTypeWriteBlocked() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let nflTypes = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
+        let isNfl = resource.data.get('type', '') in nflTypes
+                    || request.resource.data.get('type', '') in nflTypes;
+        return !isNfl || !changed.hasAny(['seasonType']);
+      }
+
+      // Arm 1 of the stats discriminator also reads a `sim-` SEASON prefix
+      // (shared/testPool.ts isSimPool). A manager of an OPEN pool could otherwise
+      // rewrite `season` to `sim-anything` and drop their own paid pool out of
+      // every published money figure — and out of the sim-aware scoring paths that
+      // already skip sim pools (nflAutoScore, nflLockWatch, the finalize sweep),
+      // which is the older and worse half of the same hole. Found by codex r2.
+      //
+      // A blanket freeze on `season` would be wrong: it rides along in the
+      // full-object update the Props wizard sends (PropsWizard.tsx UPDATE MODE).
+      // Only the TRANSITION INTO a sim- value is denied. A same-value write is not
+      // an affectedKey, so an unchanged season never reaches this check at all.
+      //
+      // A changed `season` must be a STRING or a NUMBER. Numbers are allowed
+      // because a wizard may persist a legacy numeric year and no number
+      // stringifies to a sim- prefix. Everything else — list, map, bool — is
+      // DENIED, because JS coercion makes them forgeable: `String(['sim-x'])` is
+      // exactly `'sim-x'`, so a Firestore array value sails past a string-only
+      // check here and is then classified as a sim pool by isSimPool, taking the
+      // pool out of nflAutoScore, nflLockWatch and the finalize sweep. Found by
+      // codex r4; the JS side now also requires a string, so the trick is dead at
+      // both ends.
+      //
+      // Only the server stamps a legitimate sim- season — the harness creates
+      // through the Admin SDK create callables, which rules never see.
+      //
+      // `(?s)` IS LOAD-BEARING, not decoration (codex r3). matches() is a RE2
+      // FULL-string match, and RE2's `.` does not match a newline by default — so
+      // a bare 'sim-.*' returns FALSE for the value "sim-\nanything", which this
+      // rule would then have allowed. isSimPool would still classify it as a test
+      // pool, because it only does String(season).startsWith('sim-'). The inline
+      // (?s) flag makes `.` match newlines and closes that bypass.
+      function seasonNotForgedSim() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let s = request.resource.data.get('season', '');
+        return !changed.hasAny(['season'])
+               || (s is string && !s.matches('(?s)sim-.*'))
+               || s is int
+               || s is float;
+      }
+
       // Pool is in an editable state.
       // NOTE: 'PUBLISHED' is removed — status was renamed to 'OPEN'.
       function poolIsEditable() {
@@ -164,7 +241,7 @@ service cloud.firestore {
 
       // Update: Owner/Manager (filtered) OR SuperAdmin (unrestricted)
       allow update: if request.auth != null && (
-        (isPoolManager() && protectedFieldsUnchanged() && nflSettingsWriteBlocked() && poolIsEditable())
+        (isPoolManager() && protectedFieldsUnchanged() && nflSettingsWriteBlocked() && nflSeasonTypeWriteBlocked() && seasonNotForgedSim() && poolIsEditable())
         || isSuperAdmin()
       );
                     

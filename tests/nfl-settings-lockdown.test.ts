@@ -34,16 +34,64 @@ describe('firestore.rules — scorer-owned pool fields are server-only', () => {
     'scoredThroughWeek',
     // Frozen Survivor/Margin weekly deadlines (PR-0).
     'hardLockByWeek',
+    // The stats discriminator (PLAN-STATS-INTEGRITY §8.1 arm 3). Writable by a
+    // manager, it hides their own pool's volume; clearable, it pushes a test
+    // pool's fake pot into the world-readable stats/global document.
+    'isTestPool',
+    // Arm 1 of the same discriminator, and the sim-harness trust anchor. Already
+    // stripped from client CREATE payloads; unprotected on UPDATE it reopened the
+    // same hole one step later (codex r1 on PR A).
+    'simRunId',
     // A manager who could change `type` could flip an NFL pool to a non-NFL type,
     // write settings.weekLockOverrides while the NFL settings block no longer
     // applies, and flip it back — reopening a published week (codex r1).
     'type',
   ])('protectedFieldsUnchanged() lists %s', (field) => {
+    // Sliced to the END of protectedFieldsUnchanged (i.e. the next function), not
+    // to poolIsEditable — otherwise a field merely quoted in one of the helpers in
+    // between would satisfy this assertion while being unprotected.
     const block = rules.slice(
       rules.indexOf('function protectedFieldsUnchanged()'),
-      rules.indexOf('function poolIsEditable()'),
+      rules.indexOf('function nflSettingsWriteBlocked()'),
     );
     expect(block).toContain(`'${field}'`);
+  });
+
+  it('blocks a client seasonType write on NFL pools — arm 2 of the discriminator', () => {
+    // Deliberately NOT in protectedFieldsUnchanged(), which is unscoped: the
+    // SQUARES setup wizard rewrites seasonType on an existing pool when the
+    // commissioner re-picks the game (AdminPanel.tsx selectGame -> updateConfig ->
+    // dbService.updatePool), so an unscoped freeze would break that save. The
+    // predicate only reads seasonType on NFL season pools.
+    const block = rules.slice(
+      rules.indexOf('function nflSeasonTypeWriteBlocked()'),
+      rules.indexOf('function seasonNotForgedSim()'),
+    );
+    expect(block).toContain("'seasonType'");
+    for (const type of ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN']) {
+      expect(block).toContain(`'${type}'`);
+    }
+  });
+
+  it('denies a client transition INTO a sim- season — arm 1 of the discriminator', () => {
+    // Not a freeze on `season`: it rides along in the Props wizard's full-object
+    // update. Only the transition into a sim- value is denied, because that value
+    // is what isSimPool reads (and what the sim-aware scoring paths skip on).
+    const block = rules.slice(
+      rules.indexOf('function seasonNotForgedSim()'),
+      rules.indexOf('function poolIsEditable()'),
+    );
+    expect(block).toContain("'season'");
+    // The (?s) flag is the finding, not a style choice (codex r3): matches() is a
+    // RE2 FULL-string match and RE2's `.` skips newlines, so a bare 'sim-.*' is
+    // false for "sim-\nanything" — which the rule would then allow, while
+    // isSimPool's String(season).startsWith('sim-') still calls it a test pool.
+    expect(block).toContain("matches('(?s)sim-.*')");
+    // A changed season must be a string or a number. List/map values are denied,
+    // because String(['sim-x']) === 'sim-x' forged a sim season past a string-only
+    // check (codex r4). Numbers stay allowed — no number stringifies to 'sim-'.
+    expect(block).toContain('s is int');
+    expect(block).toContain('s is float');
   });
 
   it('denies a client-direct settings write on NFL pools', () => {
@@ -61,6 +109,8 @@ describe('firestore.rules — scorer-owned pool fields are server-only', () => {
     expect(stmt).toContain('isPoolManager()');
     expect(stmt).toContain('protectedFieldsUnchanged()');
     expect(stmt).toContain('nflSettingsWriteBlocked()');
+    expect(stmt).toContain('nflSeasonTypeWriteBlocked()');
+    expect(stmt).toContain('seasonNotForgedSim()');
   });
 });
 
