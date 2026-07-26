@@ -1,8 +1,72 @@
-# HANDOFF — Session entry point (updated 2026-07-24: functions + frontend both current)
+# HANDOFF — Session entry point (updated 2026-07-25: G1 PR-B′ deployed, queues empty)
 
-> ## ✅ STOP POINT 2026-07-24 — #265 functions deployed; frontend rebuilt and caught up
+> ## ✅ STOP POINT 2026-07-25 — G1 PR-B′ (#279) deployed and prod-verified
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `49c12a9`.**
+> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `8a55b84`.**
+> Deployed 2026-07-25 in this order: `--only functions`, then
+> `--only firestore:rules`, then the manual Coolify frontend rebuild. The order is
+> load-bearing here — the new rules DENY a client-direct `settings` write on NFL
+> pools, and the old frontend bundle still did exactly that, so commissioner
+> "Save Settings" is broken between the rules deploy and the Coolify rebuild. Both
+> deploys ended `✔ Deploy complete!`; Coolify's deployed SHA was checked against
+> `git rev-parse origin/main`.
+>
+> **Prod-verified, not assumed:** an NFL Pick'em pool (Confidence Mode + Weekly
+> lock — so the `confidenceMode`/`lockMode` lock-affecting path) saved from its
+> Manager tab through the new `updatePoolSettings` callable: "Pool settings saved
+> successfully!". That is the one check that exercises the rules-deny + callable
+> pair end to end.
+>
+> **The FUNCTIONS and FRONTEND queues are both EMPTY.**
+>
+> ### The deploy lesson from this run — a FOURTH silent-success incident
+>
+> **The first `--only functions` run ended WITHOUT `✔ Deploy complete!` and left 10
+> functions stale**, printing no error at all — the command simply returned. The
+> stale set included `nflAutoScoreJob` and `nflFinalizeSweepJob`, both changed by
+> #279. A second identical run reported every other function `Skipped (No changes
+> detected)` and updated exactly those 10, then printed `Deploy complete!`.
+>
+> **Rule: re-run a full-fleet deploy until EVERY function reports `Skipped (No
+> changes detected)`.** That all-Skipped report is the positive evidence. The
+> absence of an error message is not evidence of anything — which is the same
+> lesson as the three silent-success incidents already recorded below
+> (`--only functions:a,b,c` deploying only `a`, and the two stale-checkout
+> deploys).
+>
+> ### What #279 shipped — G1 PR-B′, concurrency + authorization hardening
+>
+> The guards `PLAN-REALTIME-SCORING.md` §7 requires **before `nflAutoScoreJob` can
+> be armed live**: the fenced scoring lease (`pool.autoScore.scoringLease`) as the
+> mutex across every scorer, `settings.lockRevision`, the `extendWeekDeadline`
+> publish guard reading `pool.publishedWeeks`, server-only scorer fields with a
+> merge-preserving `updatePoolSettings`, and the per-entry submission watermark.
+>
+> Baselines moved: functions unit **1004 → 1048**, emulator **177 → 187** pass (10
+> skipped, unchanged), root vitest **291 → 301**.
+>
+> **`nflAutoScore` is still UNSET = disabled** (fail-safe). Two prerequisites
+> remain before arming: **PR-B2** (the `nfl_rescore_queue` durable tier — not
+> started, it is the next PR) and **`nflDeepSweep` live WITH WRITES** (a dry-run
+> deep sweep does not write `nfl_games`, so a game finalizing >24h after kickoff
+> is never observed at all).
+>
+> ⚠️ **#279 did NOT reach a clean codex round.** 3 rounds ran — 8 findings, all
+> absorbed with a regression guard each — and round 4 returned `Quota exceeded.
+> Check your plan and billing details` on two attempts. **The codex quota needs
+> topping up before any further cross-model review is possible** (CLAUDE.md §2c),
+> which blocks opening the next PR under that rule.
+>
+> ⚠️ **A pending prod-data action:** the `publishedWeeks` cold-start backfill has
+> NOT been run. Until it is, the new publish guard does not fire on weeks scored
+> before this release — no worse than before it shipped, but run it before the
+> auto-scorer is ever armed. **SuperAdmin → Operations → "Backfill Published
+> Weeks (dry run)"** first, review `plannedWrites`, then the live button. Steps in
+> `MORNING-2026-07-26.md` §2c.
+
+> ## ✅ STOP POINT 2026-07-24 — #265 functions deployed (SUPERSEDED by the box above)
+>
+> **Functions were deployed from <!-- deploy-state:ignore --> `main` @ `49c12a9`.**
 > Deployed 2026-07-23 (bare `--only functions --project gridiron-gamble-uzuqo`,
 > confirmed `✔ Deploy complete!`). Carries #261, #262 and #265 — the
 > public-profile header/footer fix, the `runReminders` read-amplification fix
@@ -11,10 +75,11 @@
 > each needed an isolated redeploy to clear a secret/plain env-var overlap after
 > a stray `functions/.env` (now comment-only) — both landed clean.
 >
-> ✅ **The FRONTEND is now CURRENT.** Kevin merged #266 and triggered the Coolify
-> rebuild on 2026-07-24; the #261 profile fix is live — verified against
+> ✅ **The FRONTEND was CURRENT as of 2026-07-24.** Kevin merged #266 and triggered
+> the Coolify rebuild; the #261 profile fix went live — verified against
 > `/profile/:uid` (header + footer render for a logged-out viewer, bundle
-> `index-BhilVMpo.js`). No frontend rebuild owed. The FUNCTIONS queue is empty.
+> `index-BhilVMpo.js`). Both queues were empty **at that date**; the 2026-07-25
+> box above is the current state.
 >
 > ⚠️ The SHA appears **once** in this file, in the tagged claim above. Every
 > other mention says "the tagged SHA" on purpose: `docs-state-invariants` only

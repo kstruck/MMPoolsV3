@@ -103,20 +103,66 @@ config/console act with a verification step. Suggested order as listed.
   reads dropped. *Source: PLAN-READS-RUNREMINDERS §4.*
 - ☐ **E5 · #133 tailwindcss 4.x dependabot** — stale since 07-06; close or take
   deliberately (it's a major with real migration work). Low priority.
+- ☐ **E6 · Commissioner settings-save UX — make saving findable and its result
+  unmissable.** *(Kevin, 2026-07-25, while smoke-testing the #279 deploy.)*
+  **DUE BEFORE 08-06** — every pilot commissioner meets this screen, and a save
+  they cannot find or cannot confirm is the kind of friction that reads as "the
+  app is broken" during the one week the pilot has to go well.
+
+  The Manager tab's settings editor (`NFLManagerView.tsx`) is a long,
+  multi-section form — General, Host Profile & Contact Links, Pick'em Rules,
+  Scoring Configuration — with a **single "Save Pool Settings" button at the very
+  bottom** and a success banner at the very top. On a laptop viewport the button
+  is below the fold from most sections, and the confirmation banner is off-screen
+  from the button, so a commissioner can save successfully and see nothing happen.
+
+  Kevin's ask, verbatim in substance:
+  1. **A save control in every section**, not just at the bottom.
+  2. **Make it stand out** — dark green, or yellow that turns green on success.
+  3. **Confirmation as a popup/modal as well as the banner** — "make it obvious".
+
+  Notes for whoever builds it:
+  - All sections submit the SAME payload through one `handleSaveSettings` →
+    `dbService.updatePoolSettings`. Per-section buttons are a placement change,
+    not N new save paths — do not fragment the payload.
+  - `useToast` is already imported in this component (`toast.success` /
+    `toast.confirm`), so the floating-confirmation half is close to free. Check
+    whether `toast.success` is prominent enough before building a bespoke modal.
+  - A **sticky save bar** is the obvious alternative to N buttons and is less
+    code; if it tests better, propose it — but Kevin asked for per-section
+    buttons, so that is the default unless he says otherwise.
+  - Scope guard: this is presentation only. It must not change what
+    `updatePoolSettings` sends, and must not reintroduce a client-direct
+    `settings` write — `firestore.rules` denies those on NFL pools since #279.
+  - Frontend-only ⇒ **needs the manual Coolify rebuild**, no functions deploy.
+  - Classification: **ordinary change** — touches none of money / authorization /
+    production data / scoring. No PLAN doc. Still takes all five gates + codex.
 
 ---
 
 ## 6. GAP ANALYSIS — not on any list until now
 
-- ☐ **G1 · NOBODY SCORES A PRESEASON WEEK AUTOMATICALLY.** There is still no
-  scheduled scorer: `scoreNFLWeek` is a manual per-pool button, and the finalize
-  sweep only FINALIZES pools that were already scored. **For the pilot this is
-  Kevin clicking "Score Week 1" per pool after HOF weekend — fine for a handful
-  of test pools, but it must be ON the schedule** (Sun/Mon after each preseason
-  slate), and the regular-season decision (build a scheduled scorer vs accept
-  the Tuesday ritual for P pools × 18 weeks) should be made DURING preseason.
-  *Evidence: mmp-nfl-season-campaign §1.2 ("still no automated weekly scoring,
-  re-verified 2026-07-12").*
+- ☐ **G1 · NOBODY SCORES A PRESEASON WEEK AUTOMATICALLY — still true, but the
+  reason changed.** *(Updated 2026-07-25.)* A scheduled scorer now EXISTS:
+  `nflAutoScoreJob` shipped in #276 and is deployed, and #279 added the
+  concurrency + authorization guards §7 requires before arming it. **It is
+  switched OFF** — `system/config.nflAutoScore` is unset and the gate is fail-safe.
+  **Three prerequisites remain before it may be armed:**
+  1. **PR-B2** — the `nfl_rescore_queue` durable tier (not started; next PR).
+  2. **`nflDeepSweep` live WITH WRITES** — a dry-run deep sweep does not write
+     `nfl_games`, so a game finalizing >24h after kickoff is never observed.
+  3. **Run the `publishedWeeks` cold-start backfill** (SuperAdmin → Operations,
+     dry-run first). #279's `extendWeekDeadline` publish guard reads that marker,
+     and only the auto-scorer writes it — so weeks scored MANUALLY before #279
+     are unmarked and can still be reopened after their results were shown. Arming
+     the scorer without this leaves exactly the hole the guard exists to close.
+
+  So the pilot answer is unchanged: **Kevin clicks "Score Week N" per
+  pool after each preseason slate**, and that must be ON the schedule (Sun/Mon).
+  The regular-season decision is now "arm the scorer vs keep the manual ritual",
+  not "build one".
+  *Superseding: mmp-nfl-season-campaign §1.2's "still no automated weekly scoring,
+  re-verified 2026-07-12" predates #276 and is stale.*
 - ☐ **G2 · End-to-end reminder delivery has never been verified in prod.**
   We tuned cadence and windows, but no preseason pool with a real member has
   ever received a T-36h/T-4h email. Cheap test: K6's test pool with Kevin as a
@@ -144,7 +190,7 @@ config/console act with a verification step. Suggested order as listed.
 | When | What |
 |---|---|
 | **Now – Jul 26** | K1 start (watch dry-run reports) · K11 PITR click · K12 census · K13 sign-offs · K16 NotebookLM source · E1 begins after K12/K13 |
-| **Jul 27 – Jul 30** | K1 arm · K2 watch→arm · K3 check Tuesday 07-28 · K5 doc cleanup · K6 create test pools · G2 reminder test rides on K6 · K8 recruit begins · E1 continues, E2 |
+| **Jul 27 – Jul 30** | K1 arm · K2 watch→arm · K3 check Tuesday 07-28 · K5 doc cleanup · K6 create test pools · G2 reminder test rides on K6 · K8 recruit begins · E1 continues, E2 · **E6 settings-save UX** (small, frontend-only — land it before K6 so the test pools are created against the fixed screen) |
 | **Jul 31 – Aug 4** | K4 spreads for HOF/wk1 · K7 pricing published · K9 messaging check · G3 App Check decision · G4 sizing paragraph · E1 finishes → Kevin Recalculate |
 | **Aug 6 (HOF)** | First live preseason game. Watch: heartbeats, lock tripwire, score sync. |
 | **Aug 7–9** | **G1: score + finalize the HOF week** (manual clicks) · verify finalize sweep report |
