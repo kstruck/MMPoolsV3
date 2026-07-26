@@ -58,6 +58,14 @@
 > 1. **PR-B2** — the `nfl_rescore_queue` durable tier (not started; next PR).
 > 2. **`nflDeepSweep` live WITH WRITES** — a dry-run deep sweep does not write
 >    `nfl_games`, so a game finalizing >24h after kickoff is never observed.
+>    **This is a BOUNDED fix, not a complete one** (plan §3a crit. 6): the deep
+>    sweep only re-fetches inside its own `lookbackDays` window (default 7, max
+>    30), so a game that first goes terminal beyond that window is still never
+>    fetched and stays unscored. Adequate for the preseason pilot — no realistic
+>    postponement exceeds 30 days — and the arming note must say so out loud. The
+>    general answer is the **uncapped stale-slate re-fetch** (query `nfl_games`
+>    for past-start non-terminal games with no age cap, re-fetch ESPN, enqueue),
+>    which must be built **before the regular season**.
 > 3. **The `publishedWeeks` backfill must have been RUN** (see below). Arming
 >    without it leaves every manually-scored pre-#279 week unmarked, so the new
 >    publish guard cannot stop those weeks being reopened after their results were
