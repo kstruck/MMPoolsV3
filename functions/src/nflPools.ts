@@ -42,6 +42,15 @@ import {
   poolUsesSpreads
 } from './nflScoringEngine';
 import { maybeFinalizeNFLPool } from './nflFinalize';
+import {
+  acquireScoringLease,
+  releaseScoringLease,
+  fencedWrite,
+  assertNoScoringInProgress,
+  retryWhileScoring,
+  type ScoringFence,
+} from './lib/scoringLease';
+import { nextEntryRevision, ENTRY_REVISION_FIELD } from './lib/entryRevision';
 import { fetchNFLWeekSchedule } from './nflSchedule';
 import { recomputeWeekConsensus } from './consensus';
 import { validated } from "./lib/validated";
@@ -344,7 +353,11 @@ export async function submitNFLPicksInternal(
   assertNFLPickMembership(pool, uid, ctx.actorRole);
 
   const type = pool.type;
-  const now = Date.now();
+  // MUTABLE, and refreshed at the top of every transaction attempt below. The
+  // lease can bounce a submission and `retryWhileScoring` re-runs the transaction
+  // up to a second later — a clock captured once out here would keep re-asserting
+  // a deadline that has since passed and commit a late pick (codex r1).
+  let now = Date.now();
 
   // 1. Fetch weekly games from firestore to validate lock-deadlines
   const gamesSnap = await db.collection('nfl_games')
@@ -402,12 +415,22 @@ export async function submitNFLPicksInternal(
   const effectiveWeekLock = decision.freezeTo !== undefined
     ? await ensureHardLockFreeze(poolRef, db.runTransaction.bind(db) as never, week, decision.lockAt)
     : decision.lockAt;
-  const weekLocked = now >= effectiveWeekLock;
+  // `effectiveWeekLock` is a fixed instant, so only the clock has to move.
+  let weekLocked = now >= effectiveWeekLock;
 
   // Write variables inside transactions
   const entryRef = poolRef.collection('entries').doc(uid);
 
-  await db.runTransaction(async (transaction) => {
+  await retryWhileScoring(() => db.runTransaction(async (transaction) => {
+    // Reads first (Firestore requires it) and the lease read first of all: a
+    // submission must not interleave with a scoring pass, and putting the pool
+    // doc in this transaction's read set also makes Firestore abort us if the
+    // scorer commits while we are open.
+    // Fresh clock per ATTEMPT — this body re-runs on a Firestore contention retry
+    // and on a lease-busy retry, and every lock check below reads `now`.
+    now = Date.now();
+    weekLocked = now >= effectiveWeekLock;
+    await assertNoScoringInProgress(transaction, poolRef, now);
     const entrySnap = await transaction.get(entryRef);
     const existingEntry = entrySnap.exists ? entrySnap.data() : null;
     // Member Record read (before any writes) for the base-dues stamp below (ADR 0005).
@@ -475,7 +498,14 @@ export async function submitNFLPicksInternal(
         paidStatus: existingEntry?.paidStatus ?? 'UNPAID'
       };
 
-      transaction.set(entryRef, { ...pickemEntry, ...(requestId ? { lastRequestId: requestId } : {}) }, { merge: true });
+      transaction.set(entryRef, {
+        ...pickemEntry,
+        ...(requestId ? { lastRequestId: requestId } : {}),
+        // Per-entry watermark, advanced INSIDE this transaction so a submission
+        // that commits after the scorer read entries still changes the week
+        // fingerprint and forces one more pass (lib/entryRevision.ts).
+        [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
+      }, { merge: true });
 
     } else if (type === 'NFL_SURVIVOR') {
       const survivorEntry = (existingEntry as SurvivorEntry) || {
@@ -532,7 +562,11 @@ export async function submitNFLPicksInternal(
       survivorEntry.usedTeams = [...new Set([...oldUsed, teamPicked])];
       survivorEntry.submittedAt = now;
 
-      transaction.set(entryRef, { ...survivorEntry, ...(requestId ? { lastRequestId: requestId } : {}) }, { merge: true });
+      transaction.set(entryRef, {
+        ...survivorEntry,
+        ...(requestId ? { lastRequestId: requestId } : {}),
+        [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
+      }, { merge: true });
 
     } else if (type === 'NFL_MARGIN') {
       const marginEntry = (existingEntry as MarginEntry) || {
@@ -584,7 +618,11 @@ export async function submitNFLPicksInternal(
       marginEntry.usedTeams = [...new Set([...oldUsed, teamPicked])];
       marginEntry.submittedAt = now;
 
-      transaction.set(entryRef, { ...marginEntry, ...(requestId ? { lastRequestId: requestId } : {}) }, { merge: true });
+      transaction.set(entryRef, {
+        ...marginEntry,
+        ...(requestId ? { lastRequestId: requestId } : {}),
+        [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
+      }, { merge: true });
     }
 
     // Base-dues stamp (ADR 0005 Phase 4): submitting a playable entry starts fee
@@ -598,7 +636,7 @@ export async function submitNFLPicksInternal(
       entryFee: Number(pool.settings?.entryFee ?? 0),
       hasPlayableEntry: true,
     }, existingMember, now);
-  });
+  }));
 
   // Fully-open live consensus (2026-07-09): refresh this pool's week immediately so the crowd
   // split updates on every submit, not at kickoff. Idempotent full-week recompute; non-fatal so
@@ -674,7 +712,11 @@ export async function executeSurvivorRebuyInternal(
   const memberRef = membersCol(db, poolId).doc(uid);
   const rebuyAmt = settings.rebuyCost ?? settings.entryFee ?? 0;
 
-  await db.runTransaction(async (transaction) => {
+  await retryWhileScoring(() => db.runTransaction(async (transaction) => {
+    // Same mutex as pick submission: a rebuy flips ELIMINATED → ALIVE and wipes
+    // the strike ledger, so interleaving it with a scoring pass that is writing
+    // strikes from a pre-rebuy snapshot re-eliminates the player who just paid.
+    await assertNoScoringInProgress(transaction, poolRef, Date.now());
     const entrySnap = await transaction.get(entryRef);
     // Member Record read (before writes) so rebuy dues land on the roster (ADR 0003).
     const memberSnap = await transaction.get(memberRef);
@@ -704,7 +746,10 @@ export async function executeSurvivorRebuyInternal(
       // <= lastRebuyWeek.
       lastRebuyWeek: week,
       rebuysUsed: entry.rebuysUsed + 1,
-      eliminatedWeek: null
+      eliminatedWeek: null,
+      // A rebuy is an entry mutation like any other — without the bump the
+      // scorer's fingerprint is unchanged and the revived entry is skipped.
+      [ENTRY_REVISION_FIELD]: nextEntryRevision((entry as any)[ENTRY_REVISION_FIELD]),
     });
 
     // 4. Add rebuy dues to the Member Record so Dues Expected reflects them.
@@ -717,7 +762,7 @@ export async function executeSurvivorRebuyInternal(
         role: 'PARTICIPANT', paidStatus: 'UNPAID', joinedAt: Date.now(), rebuyOwed: rebuyAmt,
       }, { merge: false });
     }
-  });
+  }));
 
   await writeAuditEvent({
     poolId,
@@ -791,6 +836,24 @@ export interface ScoreWeekResult {
    * not complete yet), which is the normal mid-season answer, not a failure.
    */
   finalizeFailed: boolean;
+  /**
+   * Another scoring pass held the fenced lease, so this one did nothing at all —
+   * nothing read, nothing written. Distinct from a failure: it is the mutex
+   * working. A caller must NOT record this pass as settled; retry later.
+   */
+  leaseBusy: boolean;
+}
+
+export interface ScoreWeekOptions {
+  pool: any;
+  games: NFLGame[];
+  // Reuses the audit contract's actor so an invalid role fails to compile —
+  // the scheduled scorer will pass a SYSTEM actor here.
+  actor: AuditOptions['actor'];
+  dryRun?: boolean;
+  provisional?: boolean;
+  /** Injectable clock — the lock gates below are time-dependent. */
+  now?: number;
 }
 
 /**
@@ -820,25 +883,104 @@ export interface ScoreWeekResult {
  *     complete pass would only UPDATE the doc, so it would never refire on
  *     complete standings) and no `SCORE_FINALIZED` audit.
  * `standings/current` IS still written — live standings are the point.
+ *
+ * CONCURRENCY (PR-B′). A live pass takes the fenced scoring lease for the whole
+ * pool before it writes anything, and every write asserts that lease inside its
+ * own committing transaction. This is the single point where all scorers
+ * serialize, so no caller can forget to. A pass that finds the lease held returns
+ * `leaseBusy: true` having read and written NOTHING.
  */
 export async function scoreNFLWeekInternal(
   db: admin.firestore.Firestore,
   poolId: string,
   week: number,
-  opts: {
-    pool: any;
-    games: NFLGame[];
-    // Reuses the audit contract's actor so an invalid role fails to compile —
-    // the scheduled scorer will pass a SYSTEM actor here.
-    actor: AuditOptions['actor'];
-    dryRun?: boolean;
-    provisional?: boolean;
-    /** Injectable clock — the lock gates below are time-dependent. */
-    now?: number;
-  },
+  opts: ScoreWeekOptions,
+): Promise<ScoreWeekResult> {
+  // A dry run writes nothing, so it needs no mutex — and taking one would park a
+  // real scoring pass behind a report.
+  if (opts.dryRun) return scoreWeekPass(db, poolId, week, opts, undefined);
+
+  // Every scorer goes through here — the scheduled job, the manual "Score Week"
+  // button, and (next) the reconciliation drain — so acquiring the lease at this
+  // single point is what makes the mutex hold across all of them. Two passes
+  // reading the same stale entries would each REPLACE whole weeklyPoints /
+  // weeklyScores maps, and the later commit would silently lose the other's work.
+  //
+  // The lease uses the WALL clock, deliberately not `opts.now`. `opts.now` is the
+  // injectable SCORING clock — the auto-scorer captures it once per run and
+  // passes the same value to every pool it processes in sequence. A run that has
+  // been working for longer than the lease TTL would otherwise write a lease that
+  // is already expired, and the first fenced write (which compares against the
+  // real clock) would throw FENCE_LOST and score nothing for every pool after
+  // that point. Found by codex r1.
+  const fence = await acquireScoringLease(db, poolId, Date.now());
+  if (!fence) {
+    return {
+      success: true,
+      message: 'Another scoring pass is already running for this pool; nothing was written.',
+      dryRun: false, provisional: opts.provisional ?? false,
+      pickemScored: 0, survivorScored: 0, marginScored: 0, aliveCount: 0,
+      standings: [], standingsWritten: false, recapWritten: false,
+      finalizeFailed: false, leaseBusy: true,
+    };
+  }
+  try {
+    // RE-READ the pool now that the lease is held (codex r2).
+    //
+    // `opts.pool` was fetched by the caller BEFORE the lease existed, so an
+    // `extendWeekDeadline` could have committed in between: it correctly saw no
+    // live lease, wrote the override and bumped `lockRevision` — and the fence
+    // captured the ALREADY-BUMPED revision, so the revision backstop never fires.
+    // Grading from the stale doc would then treat a finished game as revealable
+    // and publish it while the newly accepted override keeps picks open. Once the
+    // lease is held no further extension can commit, so this one read is the
+    // point at which the snapshot becomes trustworthy.
+    //
+    // Only the POOL is re-read, not the slate: a stale `games` snapshot can only
+    // be older, and older can only UNDER-reveal (a game not yet seen as terminal),
+    // which is the safe direction. Restated ESPN scores are the reconciliation
+    // tier's job (§5b), not this fence's.
+    const fresh = (await db.collection('pools').doc(poolId).get()).data();
+    if (!fresh) return await scoreWeekPass(db, poolId, week, opts, fence);
+
+    // `provisional` is derived by the CALLER from the same pre-lease snapshot, and
+    // it gates finalization — `scoredWeeks`, `maybeFinalizeNFLPool`, the weekly
+    // recap. An override that landed in the gap makes the week incomplete, so a
+    // `provisional: false` computed from the stale doc would finalize a week whose
+    // pick window is open. Re-derived here, and only ever made MORE provisional:
+    // OR-ing preserves a caller (or a test) that deliberately forced it on, and
+    // withholding is always the safe direction.
+    const provisional = (opts.provisional ?? false)
+      || !isWeekComplete(fresh, week, opts.games, opts.now ?? Date.now());
+    return await scoreWeekPass(db, poolId, week, { ...opts, pool: fresh, provisional }, fence);
+  } finally {
+    // Best-effort: a failed release only means the lease expires on its own TTL,
+    // which is what the expiry is for. Throwing here would mask the real error.
+    await releaseScoringLease(db, poolId, fence).catch((e) => {
+      console.warn(`[scoreNFLWeek] lease release failed for ${poolId}:`, e);
+    });
+  }
+}
+
+/**
+ * One scoring pass, under a fence when it writes. `fence === undefined` means a
+ * dry run: no lease, no writes, no assertions.
+ */
+async function scoreWeekPass(
+  db: admin.firestore.Firestore,
+  poolId: string,
+  week: number,
+  opts: ScoreWeekOptions,
+  fence: ScoringFence | undefined,
 ): Promise<ScoreWeekResult> {
   const { pool, games, actor, dryRun = false, provisional = false, now = Date.now() } = opts;
   const poolRef = db.collection('pools').doc(poolId);
+  // Every `fence!` below is safe exactly because of this line. Asserted rather
+  // than assumed: a future refactor that reached the write path without a lease
+  // would otherwise fence nothing and look fine.
+  if (!dryRun && !fence) {
+    throw new Error('scoreWeekPass: a writing pass requires a scoring fence.');
+  }
 
   const lockSettings = effectiveLockSettings(pool?.settings, pool?.type);
   const gameLockClosed = (g: NFLGame) => isGameLockedAt(now, g.startTime, week, lockSettings);
@@ -904,35 +1046,45 @@ export async function scoreNFLWeekInternal(
       success: true, message: 'No entries to score.', dryRun, provisional,
       pickemScored: 0, survivorScored: 0, marginScored: 0, aliveCount: 0,
       standings: [], standingsWritten: false, recapWritten: false,
-      finalizeFailed: false,
+      finalizeFailed: false, leaseBusy: false,
     };
   }
 
-  // Staged, chunked writes — a single batch caps at 500 ops, so pools with
-  // >500 entries (or >250 Margin entries) would throw on commit and score nobody.
-  let batch = db.batch();
-  let opCount = 0;
-  // Dry runs never touch the batch; they record what WOULD have been written so
+  // Staged, chunked writes — a transaction caps at 500 ops (400 entries + the
+  // pool doc's own lease renewal stays well inside it), so pools with >500
+  // entries would throw on commit and score nobody.
+  //
+  // These are TRANSACTIONS rather than plain batches because the fence has to be
+  // asserted in the same commit as the data (lib/scoringLease.ts): a separate
+  // "do I still hold the lease?" check before a `batch.commit()` is a TOCTOU race
+  // — a newer pass can take the lease in between, and the stale writes land
+  // anyway. A lost fence throws `aborted` out of here and aborts the whole pass,
+  // deliberately: continuing would write grades computed against settings the
+  // fence just invalidated.
+  let staged: Array<[admin.firestore.DocumentReference, any]> = [];
+  // Dry runs never stage a write; they record what WOULD have been written so
   // the two re-read passes below (Margin ranks, standings projection) still see
   // this week's numbers instead of last week's stale committed ones.
   const stagedDry = new Map<string, any>();
+  const commitStaged = async () => {
+    if (staged.length === 0) return;
+    const chunk = staged;
+    staged = [];
+    await fencedWrite(db, poolRef, fence!, (tx) => {
+      for (const [ref, data] of chunk) tx.update(ref, data);
+    });
+  };
   const stage = async (ref: admin.firestore.DocumentReference, data: any) => {
     if (dryRun) {
       stagedDry.set(ref.path, { ...(stagedDry.get(ref.path) || {}), ...data });
       return;
     }
-    batch.update(ref, data);
-    if (++opCount >= 400) {
-      await batch.commit();
-      batch = db.batch();
-      opCount = 0;
-    }
+    staged.push([ref, data]);
+    if (staged.length >= 400) await commitStaged();
   };
   const flushBatch = async () => {
-    if (dryRun || opCount === 0) return;
-    await batch.commit();
-    batch = db.batch();
-    opCount = 0;
+    if (dryRun) return;
+    await commitStaged();
   };
   // Post-write view of the entries. Live: re-read (authoritative, unchanged).
   // Dry: the pre-read docs with the staged updates merged over them.
@@ -960,6 +1112,7 @@ export async function scoreNFLWeekInternal(
 
   // Survivor tracking
   let aliveCount = 0;
+  const pendingStrikeAudits: Array<{ userName: string }> = [];
 
   for (const doc of entriesSnap.docs) {
     const entryRef = doc.ref;
@@ -1055,15 +1208,14 @@ export async function scoreNFLWeekInternal(
       }
       if (result.alive) aliveCount++;
 
+      // BUFFERED, not written here. An audit event cannot participate in the
+      // fenced transaction (different collection, its own writer), and a strike
+      // audit is the one artifact a retry cannot un-write — so it is emitted only
+      // after the entry writes it describes have actually committed under the
+      // fence. A pass that loses the lease throws out of the flush below and
+      // never reaches this, which is the point.
       if (result.strikeIsNew && !dryRun) {
-        await writeAuditEvent({
-          poolId,
-          type: 'SURVIVOR_AUTO_STRIKE',
-          message: `Participant ${entry.userName} suffered a strike in week ${week}`,
-          severity: 'WARNING',
-          actor: { uid: 'system', role: 'SYSTEM', label: 'Scoring Engine' },
-          payload: { week }
-        });
+        pendingStrikeAudits.push({ userName: entry.userName });
       }
 
     } else if (pool.type === 'NFL_MARGIN') {
@@ -1142,6 +1294,31 @@ export async function scoreNFLWeekInternal(
 
   await flushBatch();
 
+  // Strike audits, now that the entry writes they describe have committed.
+  //
+  // A `SURVIVOR_AUTO_STRIKE` is immutable — a corrective rescore cannot remove
+  // one — and this loop is serial, so on a large pool it can outlive the lease
+  // and keep emitting strikes from a superseded pass (codex r2). It cannot be
+  // done inside the fenced transaction (different collection, its own writer), so
+  // the fence is re-asserted and RENEWED as the loop runs. The renewal is
+  // time-based rather than per-audit: an empty fenced write is a transaction on
+  // the pool doc, and one per strike would serialize hundreds of them.
+  let lastFenceTouch = Date.now();
+  for (const strike of pendingStrikeAudits) {
+    if (fence && Date.now() - lastFenceTouch > fence.ttlMs / 2) {
+      await fencedWrite(db, poolRef, fence, () => {});
+      lastFenceTouch = Date.now();
+    }
+    await writeAuditEvent({
+      poolId,
+      type: 'SURVIVOR_AUTO_STRIKE',
+      message: `Participant ${strike.userName} suffered a strike in week ${week}`,
+      severity: 'WARNING',
+      actor: { uid: 'system', role: 'SYSTEM', label: 'Scoring Engine' },
+      payload: { week }
+    });
+  }
+
   // 3b. Member-readable standings projection + pool-level scoring markers (ADR 0005
   // Phase 2). Written AFTER all entry writes commit so rows reflect this scoring pass
   // (including the Margin rank pass). Rows are allowlist-built — no picks, confidence,
@@ -1154,13 +1331,18 @@ export async function scoreNFLWeekInternal(
   const recapWritten = !dryRun && !provisional;
   let finalizeFailed = false;
   if (!dryRun) {
-    await poolRef.collection('standings').doc('current').set({
+    // The standings publish and the publication marker land in ONE fenced
+    // transaction. The marker must not be able to lag the reveal it certifies:
+    // `extendWeekDeadline` reads it transactionally, so a marker written a moment
+    // after the rows would leave a window in which an extension is accepted for a
+    // week whose result members can already see.
+    const standingsDoc = {
       poolType: pool.type,
       season: String(pool.season ?? ''),
       lastScoredWeek: week,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       rows: standingsRows,
-    });
+    };
 
     // Publication marker — set-once, and NOT provisional-only. It is the durable
     // evidence that a week's result has been shown to members, which the
@@ -1171,7 +1353,9 @@ export async function scoreNFLWeekInternal(
     // that fires 2h before kickoff with nothing concluded does not claim
     // publication.
     const revealedAny = games.some(revealed);
-    await poolRef.update({
+    await fencedWrite(db, poolRef, fence!, (tx) => {
+      tx.set(poolRef.collection('standings').doc('current'), standingsDoc);
+    }, {
       lastScoredAt: admin.firestore.FieldValue.serverTimestamp(),
       ...(revealedAny ? { [`publishedWeeks.${week}`]: true } : {}),
       // Finalization-sensitive markers are withheld on a provisional pass:
@@ -1190,8 +1374,12 @@ export async function scoreNFLWeekInternal(
       // 3c. Season Finalization (ADR 0005 Phase 3): if this scoring pass completed the
       // season, finalize automatically — stats never wait on a human. Best-effort:
       // a finalize failure must never fail the scoring call (the sweep job catches up).
+      //
+      // The fence is threaded IN rather than rechecked around the call: the
+      // finalizer writes season history and stamps `finalizedAt`, and a pass that
+      // lost its lease must not do either from a partially-updated entry set.
       try {
-        await maybeFinalizeNFLPool(db, poolId);
+        await maybeFinalizeNFLPool(db, poolId, { fence });
       } catch (e) {
         finalizeFailed = true;
         console.warn(`[scoreNFLWeek] finalize check failed for ${poolId} (sweep will retry):`, e);
@@ -1203,7 +1391,10 @@ export async function scoreNFLWeekInternal(
       // had no sharp user / no MNF tiebreaker / a non-Survivor pool.
       const recapRef = poolRef.collection('weekly_recaps').doc(`week_${week}`);
       const recapDoc = buildWeeklyRecap({ poolId, week, poolType: pool.type, sharpUser, closestTie, aliveCount });
-      await recapRef.set(recapDoc);
+      // Fenced: creating this doc fires onWeeklyRecapCreated → AI trash-talk, and
+      // the later authoritative pass only UPDATEs it, so a recap created from a
+      // pass that lost its lease can never be regenerated on correct standings.
+      await fencedWrite(db, poolRef, fence!, (tx) => { tx.set(recapRef, recapDoc); });
 
       await writeAuditEvent({
         poolId,
@@ -1233,6 +1424,7 @@ export async function scoreNFLWeekInternal(
     standingsWritten: !dryRun,
     recapWritten,
     finalizeFailed,
+    leaseBusy: false,
   };
 }
 

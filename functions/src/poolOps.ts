@@ -16,7 +16,8 @@ import {
     writePoolCreationSideEffects,
 } from './lib/poolCreation';
 import { loadBillingConfig } from './billing';
-import { buildPoolSettingsUpdate } from './lib/poolUpdate';
+import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } from './lib/poolUpdate';
+import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } from './lib/scoringLease';
 
 // Helper to determine if user can manage pool
 export const assertPoolOwnerOrSuperAdmin = (pool: any, uid: string, userRole?: string) => {
@@ -372,7 +373,16 @@ export const updatePoolSettings = validated(
     const pool = snap.data();
     const claimRole = request.auth!.token.role as string | undefined;
     assertNotBanned(claimRole, undefined);
-    assertPoolOwnerOrSuperAdmin(pool, uid, claimRole);
+    // `firestore.rules` isPoolManager() allowed `ownerId` OR `managerUid` to write
+    // pool settings directly, and this callable is now the ONLY path for that write
+    // on NFL pools — so it must accept the same principals or a DESIGNATED MANAGER
+    // loses a capability they have today (codex r3). assertPoolOwnerOrSuperAdmin
+    // resolves a single owner (`createdByUid || ownerId || managerUid`) and so
+    // rejects a distinct managerUid whenever an owner is present. Preserving the
+    // rules' principal set, not widening it.
+    if ((pool as { managerUid?: string } | undefined)?.managerUid !== uid) {
+        assertPoolOwnerOrSuperAdmin(pool, uid, claimRole);
+    }
 
     // Pure gate: validates each key against the editability matrix for the
     // pool's lifecycle phase; throws failed-precondition on any disallowed key.
@@ -383,15 +393,46 @@ export const updatePoolSettings = validated(
     // re-quote + delta payment. No-op for free/trial pools (billing.paid absent).
     assertPaidCeilingForUpdate(pool?.billing as any, set);
 
+    // Merge-preserving settings write (PLAN-REALTIME-SCORING §3a, PR-B′). The
+    // manager UI sends a COMPLETE settings object, so a `{ settings: {...} }`
+    // update would REPLACE the map and silently delete the server-owned fields it
+    // omits — `weekLockOverrides` (reverting an accepted deadline extension) and
+    // `lockRevision` (breaking the scoring concurrency protocol). Per-key dotted
+    // writes carry them through untouched. Runs AFTER the paid-ceiling gate,
+    // which reads the nested shape.
     const patch: Record<string, unknown> = {
-        ...set,
+        ...flattenSettingsPatch(set, pool?.type as string | undefined),
         updatedAt: Timestamp.now(),
     };
     for (const key of clearLegacy) {
         patch[key] = FieldValue.delete();
     }
 
-    await poolRef.update(patch);
+    // A lock-affecting settings edit is a lock change, and must serialize with the
+    // scoring fence exactly as `extendWeekDeadline` does (codex r3). Without this a
+    // manager could save a new `lockBufferMinutes` mid-pass: the plain update would
+    // land, the in-flight pass would still hold a matching `lockRevision`, and it
+    // would publish grades — and `publishedWeeks` — computed against the OLD lock
+    // while the new one keeps that week's picks open.
+    if (touchesLockSettings(patch)) {
+        await retryWhileScoring(() => db.runTransaction(async (tx) => {
+            const current = (await tx.get(poolRef)).data() as Record<string, unknown> | undefined;
+            if (leaseIsLive(readScoringLease(current), Date.now())) {
+                throw new HttpsError(
+                    'aborted',
+                    'SCORING_IN_PROGRESS: this pool is being scored right now. Try again in a moment.',
+                );
+            }
+            tx.update(poolRef, {
+                ...patch,
+                // Invalidates any pass that captured the old value — the backstop
+                // for a scorer that acquired its lease between our read and here.
+                'settings.lockRevision': readLockRevision(current) + 1,
+            });
+        }));
+    } else {
+        await poolRef.update(patch);
+    }
 
     // ADR 0005 Phase 4: an entryFee edit (only possible pre-lock per the editability
     // matrix) cascade-updates feeOwed on this pool's FEE-LIABLE Member Records so the

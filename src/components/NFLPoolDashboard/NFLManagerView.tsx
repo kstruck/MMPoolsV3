@@ -284,7 +284,14 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         updatedSettings = { ...updatedSettings, payoutMode: marginPayoutMode, lockBufferMinutes };
       }
 
-      await dbService.updatePool(pool.id, {
+      // Routed through the server callable, not dbService.updatePool: firestore.rules
+      // now DENIES a client-direct write to `settings` on NFL pools. A wholesale
+      // settings replacement is exactly how an override could be injected after a
+      // result was published, and `affectedKeys()` cannot see inside one — so the
+      // server merges per key and refuses the scorer-owned fields
+      // (PLAN-REALTIME-SCORING §3a). It also means this save no longer wipes
+      // `weekLockOverrides` / `lockRevision` by omitting them.
+      await dbService.updatePoolSettings(pool.id, {
         name: poolName,
         managerName: editManagerName,
         contactEmail: editContactEmail,

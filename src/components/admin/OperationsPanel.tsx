@@ -56,6 +56,29 @@ const runBackfill = async (dryRun: boolean) => {
   return agg;
 };
 
+/**
+ * publishedWeeks cold-start backfill (PLAN-REALTIME-SCORING §4). Same paging shape
+ * as the roster backfill above: one click covers every NFL pool, and the dry run
+ * accumulates `plannedWrites` so the report is reviewable evidence rather than a
+ * count. Idempotent — a second live run reports poolsChanged: 0.
+ */
+const runPublishedWeeksBackfill = async (dryRun: boolean) => {
+  let cursor: string | undefined;
+  let pages = 0;
+  const agg = { dryRun, poolsScanned: 0, poolsChanged: 0, weeksMarked: 0, plannedWrites: [] as any[], failures: [] as any[] };
+  do {
+    const r: any = await call('backfillPublishedWeeks', { dryRun, limit: 200, startAfter: cursor });
+    agg.poolsScanned += r.poolsScanned || 0;
+    agg.poolsChanged += r.poolsChanged || 0;
+    agg.weeksMarked += r.weeksMarked || 0;
+    if (Array.isArray(r.plannedWrites)) agg.plannedWrites.push(...r.plannedWrites);
+    if (Array.isArray(r.failures)) agg.failures.push(...r.failures);
+    cursor = r.nextCursor || undefined;
+    pages++;
+  } while (cursor && pages < 100);
+  return agg;
+};
+
 const ACTIONS: OpAction[] = [
   {
     id: 'recalculateGlobalStats',
@@ -137,6 +160,24 @@ const ACTIONS: OpAction[] = [
     destructive: true,
     icon: Wrench,
     run: () => call('backfillProfileData', { dryRun: false }),
+  },
+  {
+    id: 'backfillPublishedWeeks:dry',
+    label: 'Backfill Published Weeks (dry run)',
+    description: 'Report which already-scored NFL weeks would be stamped as published, per pool. Read the plannedWrites list and confirm those weeks really were scored before running it live. Writes nothing.',
+    blastRadius: 'Read-only — no writes. Reports plannedWrites per pool.',
+    destructive: false,
+    icon: CheckCircle2,
+    run: () => runPublishedWeeksBackfill(true),
+  },
+  {
+    id: 'backfillPublishedWeeks',
+    label: 'Backfill Published Weeks',
+    description: 'Stamp pool.publishedWeeks for weeks scored BEFORE the auto-scorer started writing that marker. The extendWeekDeadline guard reads it to refuse reopening a week whose results members have already seen — without this, legacy weeks are still extendable. Marker-only and idempotent: a second run reports zero.',
+    blastRadius: 'Writes publishedWeeks.{week} on NFL pools. Nothing else on the doc is touched. Conservative by design: a week may be marked published that could technically still have been extended.',
+    destructive: true,
+    icon: Wrench,
+    run: () => runPublishedWeeksBackfill(false),
   },
   {
     id: 'fixParticipantIds:dry',

@@ -16,6 +16,15 @@ import {
     closePoolSchema,
 } from "./schemas/poolExceptions";
 import { usesWeeklyHardLock, normalizeLockBufferMinutes, ensureHardLockFreezeForPoolDoc } from "./lib/effectiveLock";
+import {
+    assertNoScoringInProgress,
+    retryWhileScoring,
+    leaseIsLive,
+    readScoringLease,
+    readLockRevision,
+} from "./lib/scoringLease";
+import { nextEntryRevision, ENTRY_REVISION_FIELD } from "./lib/entryRevision";
+import { extensionRefusal } from "./lib/publishedWeeks";
 
 // Commissioner exception tools (UX overhaul Phase 3.6).
 // Real seasons have exceptions — a member in the hospital, a mis-set deadline,
@@ -132,9 +141,46 @@ export const extendWeekDeadline = validated(
     const baseLockTime = earliestGameTime - lockBufferMs;
     const newLockTime = baseLockTime + extraMin * 60000;
 
-    await poolRef.update({
-        [`settings.weekLockOverrides.${weekNum}`]: newLockTime,
-    });
+    // The publish guard + the lock-revision bump, in ONE transaction with the
+    // override write (PLAN-REALTIME-SCORING §3a, codex r6/r7).
+    //
+    // A plain read-then-write races the scorer in both directions:
+    //  - read the marker unset, and the scorer publishes the first result in the
+    //    same instant → an extension accepted AFTER the outcome was exposed;
+    //  - check, then let the scorer's chunked entry batches start, then commit →
+    //    the pass writes grades computed against the pre-extension deadline.
+    // Serializing the marker read with the write closes the first. The second
+    // needs the LEASE (refuse while a pass owns the pool) plus `lockRevision`,
+    // which every fenced write of that pass re-asserts — so a pass that was
+    // already in flight discards its remaining writes instead of landing them.
+    await retryWhileScoring(() => db.runTransaction(async (tx) => {
+        const snap = await tx.get(poolRef);
+        const current = snap.data() as Record<string, unknown> | undefined;
+
+        const refusal = extensionRefusal(
+            current, weekNum, leaseIsLive(readScoringLease(current), Date.now()),
+        );
+        if (refusal === 'WEEK_ALREADY_PUBLISHED') {
+            throw new HttpsError(
+                "failed-precondition",
+                `WEEK_ALREADY_PUBLISHED: Week ${weekNum}'s results have already been shown to members, so its deadline can no longer be extended.`,
+            );
+        }
+        if (refusal === 'SCORING_IN_PROGRESS') {
+            throw new HttpsError(
+                "aborted",
+                "SCORING_IN_PROGRESS: this week is being scored right now. Try again in a moment.",
+            );
+        }
+
+        tx.update(poolRef, {
+            [`settings.weekLockOverrides.${weekNum}`]: newLockTime,
+            // Monotonic, and the backstop the scorer re-asserts at every fenced
+            // write: an override that lands between a pass's lease acquisition
+            // and its next commit invalidates that pass.
+            'settings.lockRevision': readLockRevision(current) + 1,
+        });
+    }));
 
     await writeAuditEvent({
         poolId: pool.id,
@@ -196,7 +242,11 @@ export const proxyPick = validated(
     }
 
     const games = await loadWeekGames(db, pool, weekNum);
-    const now = Date.now();
+    // MUTABLE, refreshed at the top of every transaction attempt below — the
+    // scoring lease can bounce this call and `retryWhileScoring` re-runs the
+    // transaction up to a second later. A clock captured once out here would keep
+    // re-asserting a deadline that has since passed (codex r1).
+    let now = Date.now();
     // Hard-lock types (Survivor/Margin) snap the buffer to an allowed preset and
     // ignore overrides entirely — see effectiveLock.effectiveLockSettings.
     const hardLock = usesWeeklyHardLock(type);
@@ -228,14 +278,24 @@ export const proxyPick = validated(
             games.map((g) => g.startTime),
           )) ?? computedWeekLock)
         : computedWeekLock;
-    const weekLocked = now >= weekLockAt;
+    // `weekLockAt` and `gameLockAt` are fixed instants; only the clock moves.
+    let weekLocked = now >= weekLockAt;
     const gameLockAt = (g: NFLGame) => override ?? (g.startTime - lockBufferMs);
 
     // Resolve display name for entry creation
     const targetUserDoc = await db.collection("users").doc(targetUid).get();
     const targetName = targetUserDoc.exists ? ((targetUserDoc.data() as User).name || "Participant") : "Participant";
 
-    await db.runTransaction(async (transaction) => {
+    await retryWhileScoring(() => db.runTransaction(async (transaction) => {
+        // Entry mutators participate in the scoring mutex — a commissioner proxy
+        // pick landing mid-pass is the same interleave as a member submission
+        // (PLAN-REALTIME-SCORING §3a). Read first: Firestore requires it, and it
+        // puts the pool doc in this transaction's read set.
+        // Fresh clock per ATTEMPT — this body re-runs on a Firestore contention
+        // retry and on a lease-busy retry, and every lock check below reads `now`.
+        now = Date.now();
+        weekLocked = now >= weekLockAt;
+        await assertNoScoringInProgress(transaction, poolRef, now);
         const entrySnap = await transaction.get(entryRef);
         const existingEntry = entrySnap.exists ? entrySnap.data() : null;
 
@@ -276,6 +336,10 @@ export const proxyPick = validated(
                 paidStatus: existingEntry?.paidStatus ?? "UNPAID",
                 proxySubmittedBy: uid,
                 proxyReason: reason,
+                // Per-entry watermark: a late proxy pick must move the scorer's
+                // fingerprint or it is graded on the next pass that happens to
+                // change for some other reason — possibly never.
+                [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
             }, { merge: true });
 
         } else {
@@ -335,9 +399,10 @@ export const proxyPick = validated(
                 submittedAt: now,
                 proxySubmittedBy: uid,
                 proxyReason: reason,
+                [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
             }, { merge: true });
         }
-    });
+    }));
 
     await writeAuditEvent({
         poolId: pool.id,

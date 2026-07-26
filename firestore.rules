@@ -99,8 +99,49 @@ service cloud.firestore {
           // moves these EARLIER; a manager who could clear the map would erase the
           // record of a deadline that already passed and reopen that week by
           // widening the lock buffer.
-          'hardLockByWeek'
+          'hardLockByWeek',
+          // Scorer-owned state (PLAN-REALTIME-SCORING §3a, PR-B′). Every one of
+          // these is a field a manager could otherwise use to undo the reveal
+          // guarantee or the scoring mutex:
+          //   publishedWeeks  — clearing it reopens a week whose result members
+          //                     have already seen;
+          //   autoScore       — holds the fenced scoring lease and the per-week
+          //                     fingerprints; clearing the lease breaks the mutex;
+          //   scoredWeeks /
+          //   scoredThroughWeek — the finalization completeness markers.
+          'publishedWeeks', 'autoScore', 'scoredWeeks', 'scoredThroughWeek',
+          // The pool TYPE decides which rules apply to it, so a manager who could
+          // change it could step out of every type-scoped protection and back in.
+          // Concretely (codex r1): flip an NFL pool to SQUARES, write
+          // settings.weekLockOverrides while nflSettingsWriteBlocked() no longer
+          // fires, flip it back — reopening a published week's deadline. Nothing
+          // legitimately rewrites `type` after creation; a same-value write is not
+          // an affectedKey, so the wizards' full-object updates still pass.
+          'type'
         ]);
+      }
+
+      // NFL pool settings are SERVER-ONLY (PLAN-REALTIME-SCORING §3a, codex
+      // r12/r13). A nested-field allowlist cannot do this job: the manager UI
+      // sends a COMPLETE `settings` replacement and `affectedKeys()` only reports
+      // the top-level `settings` key, so an override injected inside a wholesale
+      // settings write is invisible to any per-field rule. Denying the key
+      // outright and routing edits through the `updatePoolSettings` callable —
+      // which merges per key and refuses the server-owned ones — is what actually
+      // closes it.
+      //
+      // Scoped to NFL pools because they are the ones scored live game-by-game;
+      // bracket/squares/props settings keep their existing client path.
+      //
+      // Checks BOTH the stored and the incoming type. `type` is protected above,
+      // so they cannot legitimately differ — testing both is defence in depth
+      // against a future rule that relaxes that protection.
+      function nflSettingsWriteBlocked() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let nflTypes = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
+        let isNfl = resource.data.get('type', '') in nflTypes
+                    || request.resource.data.get('type', '') in nflTypes;
+        return !isNfl || !changed.hasAny(['settings']);
       }
 
       // Pool is in an editable state.
@@ -123,7 +164,7 @@ service cloud.firestore {
 
       // Update: Owner/Manager (filtered) OR SuperAdmin (unrestricted)
       allow update: if request.auth != null && (
-        (isPoolManager() && protectedFieldsUnchanged() && poolIsEditable())
+        (isPoolManager() && protectedFieldsUnchanged() && nflSettingsWriteBlocked() && poolIsEditable())
         || isSuperAdmin()
       );
                     

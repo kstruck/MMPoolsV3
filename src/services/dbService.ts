@@ -1456,6 +1456,28 @@ export const dbService = {
         }
     },
 
+    /**
+     * Server-validated pool settings edit. REQUIRED for NFL pools — firestore.rules
+     * denies a client-direct write to `settings` on them (PLAN-REALTIME-SCORING
+     * §3a): a wholesale settings replacement is how a commissioner could otherwise
+     * inject `weekLockOverrides` after a result was published, or wipe the
+     * server-owned lock fields by simply omitting them. The callable merges per key
+     * and carries the server-owned ones through untouched.
+     */
+    updatePoolSettings: async (poolId: string, updates: Record<string, unknown>): Promise<{ success: boolean }> => {
+        try {
+            const fn = httpsCallable<{ poolId: string; updates: Record<string, unknown> }, { success: boolean }>(functions, 'updatePoolSettings');
+            const result = await fn({ poolId, updates });
+            return result.data;
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'updatePoolSettings', poolId }
+            });
+            throw error;
+        }
+    },
+
     /** Commissioner exception: extend a week's pick deadline by extraMinutes (capped at 24h server-side). Emails all members. */
     extendWeekDeadline: async (poolId: string, week: number, extraMinutes: number, reason: string): Promise<{ success: boolean; newLockTime: number; emailed: number }> => {
         try {

@@ -4,6 +4,8 @@ import './setup';
 import { scoreNFLWeekInternal } from '../../nflPools';
 import { autoScoreOnce } from '../../nflAutoScore';
 import { computeWeekFingerprint } from '../../lib/autoScoreDecisions';
+import { readEntryRevisionSum } from '../../lib/entryRevision';
+import { acquireScoringLease, fencedWrite, SCORING_LEASE_TTL_MS } from '../../lib/scoringLease';
 import type { NFLGame } from '../../nflPoolTypes';
 
 /**
@@ -75,6 +77,14 @@ const entryDoc = async (poolId: string, uid: string) =>
   (await db.collection('pools').doc(poolId).collection('entries').doc(uid).get()).data()!;
 const standingsDoc = async (poolId: string) =>
   (await db.collection('pools').doc(poolId).collection('standings').doc('current').get()).data();
+
+/** An unplayed Week 2, so a fixture's season never completes and the pool stays
+ *  live. Without it a one-week fixture finalizes on its first pass and is then
+ *  filtered out as terminal — which silently makes any follow-up pass a no-op. */
+const laterWeekGame = () => gameDoc('wk2-later', {
+  id: 'wk2-later', week: 2, homeTeam: T('SF'), awayTeam: T('DAL'),
+  startTime: Date.now() + 7 * 24 * HOUR, status: 'SCHEDULED', scores: undefined,
+});
 
 async function loadSlate(week = 1): Promise<NFLGame[]> {
   const snap = await db.collection('nfl_games')
@@ -665,7 +675,10 @@ describe('fingerprint gate — the guard fails when removed', () => {
     await seedPool('p-empty', 'NFL_PICKEM', { lockBufferMinutes: 5, pickMode: 'STRAIGHT' });
 
     await autoScoreOnce(db, Date.now(), { dryRun: false });
-    expect((await poolDoc('p-empty')).autoScore).toBeUndefined();
+    // The pass DOES take (and release) the scoring lease, which lives under
+    // `autoScore` — so the assertion is about the fingerprint map specifically,
+    // not the whole map being absent.
+    expect((await poolDoc('p-empty')).autoScore?.fingerprintByWeek).toBeUndefined();
 
     await seedEntry('p-empty', 'alice', { picks: { g1: 'KC' }, weeklyPoints: {}, totalScore: 0 });
     expect((await autoScoreOnce(db, Date.now(), { dryRun: false })).poolsScored).toBe(1);
@@ -694,7 +707,7 @@ describe('fingerprint gate — the guard fails when removed', () => {
     });
 
     await autoScoreOnce(db, Date.now(), { dryRun: false });
-    expect((await poolDoc('p-pending')).autoScore).toBeUndefined();
+    expect((await poolDoc('p-pending')).autoScore?.fingerprintByWeek).toBeUndefined();
 
     await db.collection('nfl_games').doc('later').update({ status: 'FINAL', scores: { home: 24, away: 20 } });
     await autoScoreOnce(db, Date.now(), { dryRun: false });
@@ -709,6 +722,212 @@ describe('fingerprint gate — the guard fails when removed', () => {
 
     const pool = await poolDoc('p-fp2');
     expect(pool.autoScore.fingerprintByWeek['1'])
-      .toBe(computeWeekFingerprint(pool, 1, await loadSlate(), now));
+      .toBe(computeWeekFingerprint(pool, 1, await loadSlate(), now, await readEntryRevisionSum(db, 'p-fp2') ?? 0));
+  }, 60000);
+});
+
+// ---------------------------------------------------------------------------
+// PR-B′ — the per-entry submission watermark
+// ---------------------------------------------------------------------------
+
+describe('entry-revision watermark — a late submission defeats the skip', () => {
+  it('re-scores a pool whose entry revision moved, with games and settings unchanged', async () => {
+    // The hole this closes: submitNFLPicks captures its clock BEFORE its
+    // transaction, so a valid pick can commit after the scorer has read entries.
+    // Every other fingerprint term (games, scores, spreads, settings, lock bits)
+    // is identical here on purpose — the revision sum is the only thing that
+    // moves, which is the whole guarantee.
+    await wipe();
+    // An unplayed Week 2 keeps the season incomplete — a single-game, single-week
+    // fixture finalizes on its first complete pass and the pool then drops out of
+    // candidate selection entirely, so every later assertion would be vacuous.
+    await seedGames([gameDoc('g1'), laterWeekGame()]);
+    await seedPool('p-rev', 'NFL_PICKEM', { lockBufferMinutes: 5, pickMode: 'STRAIGHT' });
+    await seedEntry('p-rev', 'alice', { picks: { g1: 'KC' }, weeklyPoints: {}, totalScore: 0, revision: 1 });
+
+    expect((await autoScoreOnce(db, Date.now(), { dryRun: false })).poolsScored).toBe(1);
+    // Second pass with nothing changed: skipped, as before.
+    expect((await autoScoreOnce(db, Date.now(), { dryRun: false })).poolsSkipped).toBe(1);
+
+    // A second member submits — a NEW entry, so the sum moves 1 -> 3.
+    await seedEntry('p-rev', 'bob', { picks: { g1: 'BUF' }, weeklyPoints: {}, totalScore: 0, revision: 2 });
+    expect((await autoScoreOnce(db, Date.now(), { dryRun: false })).poolsScored).toBe(1);
+    expect((await entryDoc('p-rev', 'bob')).weeklyPoints[1]).toBe(0); // BUF lost
+
+    // And an EDIT to an existing entry moves the sum too. This is the case a
+    // `max` aggregate misses (a lower entry moving 1 -> 4 leaves max at 2) and a
+    // count misses (bob was already above any threshold).
+    await db.collection('pools').doc('p-rev').collection('entries').doc('alice')
+      .update({ revision: 4 });
+    expect((await autoScoreOnce(db, Date.now(), { dryRun: false })).poolsScored).toBe(1);
+  }, 60000);
+
+  it('a legacy entry with no revision field still counts as a change once it moves', async () => {
+    // Entries written before this release carry no `revision`, so the aggregate
+    // omits them and the sum starts at 0. The first mutation takes them to 1,
+    // which is itself a change — a legacy pool is not permanently invisible.
+    await wipe();
+    await seedGames([gameDoc('g1'), laterWeekGame()]);
+    await seedPool('p-legacy', 'NFL_PICKEM', { lockBufferMinutes: 5, pickMode: 'STRAIGHT' });
+    await seedEntry('p-legacy', 'alice', { picks: { g1: 'KC' }, weeklyPoints: {}, totalScore: 0 });
+
+    expect(await readEntryRevisionSum(db, 'p-legacy')).toBe(0);
+    await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect((await autoScoreOnce(db, Date.now(), { dryRun: false })).poolsSkipped).toBe(1);
+
+    await db.collection('pools').doc('p-legacy').collection('entries').doc('alice')
+      .update({ revision: 1 });
+    expect(await readEntryRevisionSum(db, 'p-legacy')).toBe(1);
+    expect((await autoScoreOnce(db, Date.now(), { dryRun: false })).poolsScored).toBe(1);
+  }, 60000);
+});
+
+// ---------------------------------------------------------------------------
+// PR-B′ — the fenced scoring lease
+// ---------------------------------------------------------------------------
+
+describe('scoring lease — the mutex between scorers', () => {
+  const seedScorable = async (poolId: string) => {
+    await wipe();
+    await seedGames([gameDoc('g1')]);
+    await seedPool(poolId, 'NFL_PICKEM', { lockBufferMinutes: 5, pickMode: 'STRAIGHT' });
+    await seedEntry(poolId, 'alice', { picks: { g1: 'KC' }, weeklyPoints: {}, totalScore: 0 });
+  };
+
+  it('a second pass does nothing at all while the first holds the lease', async () => {
+    await seedScorable('p-lease');
+    const held = await acquireScoringLease(db, 'p-lease', Date.now());
+    expect(held).not.toBeNull();
+
+    const result = await scoreNFLWeekInternal(db, 'p-lease', 1, {
+      pool: await poolDoc('p-lease'), games: await loadSlate(), actor: SYSTEM_ACTOR,
+    });
+
+    expect(result.leaseBusy).toBe(true);
+    expect(result.standingsWritten).toBe(false);
+    // The load-bearing half: not merely "reported busy" but WROTE NOTHING.
+    expect((await entryDoc('p-lease', 'alice')).weeklyPoints).toEqual({});
+    expect(await standingsDoc('p-lease')).toBeUndefined();
+  }, 60000);
+
+  it('the auto-scorer counts a lease-held pool as skipped, not scored', async () => {
+    await seedScorable('p-lease2');
+    await acquireScoringLease(db, 'p-lease2', Date.now());
+
+    const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(r.poolsScored).toBe(0);
+    expect(r.poolsSkipped).toBe(1);
+    expect(r.poolsFailed).toBe(0);
+    // No fingerprint banked — a pass that never ran must not mark the pool current.
+    expect((await poolDoc('p-lease2')).autoScore?.fingerprintByWeek).toBeUndefined();
+  }, 60000);
+
+  it('an expired lease does not block a new pass', async () => {
+    await seedScorable('p-lease3');
+    await acquireScoringLease(db, 'p-lease3', Date.now() - SCORING_LEASE_TTL_MS - 1000);
+
+    const result = await scoreNFLWeekInternal(db, 'p-lease3', 1, {
+      pool: await poolDoc('p-lease3'), games: await loadSlate(), actor: SYSTEM_ACTOR,
+    });
+    expect(result.leaseBusy).toBe(false);
+    expect((await entryDoc('p-lease3', 'alice')).weeklyPoints[1]).toBe(1);
+  }, 60000);
+
+  it('a stale scoring clock does not produce an already-expired lease', async () => {
+    // codex r1. `opts.now` is the injectable SCORING clock: the auto-scorer
+    // captures it once per run and hands the same value to every pool it works
+    // through. Acquiring the lease from it means a run that has been going longer
+    // than the TTL writes a lease that is already expired, and the first fenced
+    // write — which compares against the real clock — throws FENCE_LOST, so every
+    // pool after that point in the run scores nothing.
+    await seedScorable('p-stale-clock');
+    const result = await scoreNFLWeekInternal(db, 'p-stale-clock', 1, {
+      pool: await poolDoc('p-stale-clock'), games: await loadSlate(), actor: SYSTEM_ACTOR,
+      now: Date.now() - SCORING_LEASE_TTL_MS - 60_000,
+    });
+
+    expect(result.leaseBusy).toBe(false);
+    expect(result.standingsWritten).toBe(true);
+    expect((await entryDoc('p-stale-clock', 'alice')).weeklyPoints[1]).toBe(1);
+  }, 60000);
+
+  it('grades from the pool as it is AFTER the lease, not the caller snapshot', async () => {
+    // codex r2. The caller reads the pool doc BEFORE the lease exists, so an
+    // extendWeekDeadline can commit in between — it correctly sees no live lease,
+    // writes the override and bumps lockRevision, and the fence then captures the
+    // ALREADY-BUMPED revision, so the revision backstop never fires. Grading from
+    // the stale snapshot would reveal a finished game while the newly accepted
+    // override keeps picks open.
+    await seedScorable('p-stale-pool');
+    const stalePool = await poolDoc('p-stale-pool');
+
+    // The extension lands in the gap.
+    await db.collection('pools').doc('p-stale-pool').update({
+      'settings.weekLockOverrides.1': Date.now() + 3 * HOUR,
+      'settings.lockRevision': 1,
+    });
+
+    const result = await scoreNFLWeekInternal(db, 'p-stale-pool', 1, {
+      pool: stalePool, games: await loadSlate(), actor: SYSTEM_ACTOR, provisional: true,
+    });
+
+    expect(result.leaseBusy).toBe(false);
+    // Withheld: the game is FINAL but its pick window was reopened.
+    expect(result.pickemScored).toBe(1);
+    expect((await entryDoc('p-stale-pool', 'alice')).weeklyResults[1].total).toBe(0);
+    expect((await poolDoc('p-stale-pool')).publishedWeeks).toBeUndefined();
+  }, 60000);
+
+  it('re-derives `provisional` from the post-lease pool, so a gap override cannot finalize', async () => {
+    // Self-review follow-up to codex r2. `provisional` is computed by the CALLER
+    // from the same pre-lease snapshot, and it gates the heavy artifacts:
+    // scoredWeeks, maybeFinalizeNFLPool, the weekly recap (whose CREATE trigger
+    // fires AI trash-talk and never refires). An override landing in the gap makes
+    // the week incomplete, so a stale `provisional: false` would finalize a week
+    // whose pick window is open.
+    await seedScorable('p-stale-provisional');
+    const stalePool = await poolDoc('p-stale-provisional');
+    await db.collection('pools').doc('p-stale-provisional').update({
+      'settings.weekLockOverrides.1': Date.now() + 3 * HOUR,
+    });
+
+    // provisional deliberately NOT passed: the caller's snapshot says complete.
+    const result = await scoreNFLWeekInternal(db, 'p-stale-provisional', 1, {
+      pool: stalePool, games: await loadSlate(), actor: SYSTEM_ACTOR,
+    });
+
+    expect(result.provisional).toBe(true);
+    const pool = await poolDoc('p-stale-provisional');
+    expect(pool.scoredWeeks).toBeUndefined();
+    expect(pool.finalizedAt).toBeUndefined();
+    expect(result.recapWritten).toBe(false);
+  }, 60000);
+
+  it('a lockRevision bump mid-pass discards the rest of the pass', async () => {
+    // The backstop for an override that commits between lease acquisition and the
+    // next fenced commit. Simulated by bumping the revision under a held fence,
+    // which is exactly what extendWeekDeadline does.
+    await seedScorable('p-rev-guard');
+    const fence = (await acquireScoringLease(db, 'p-rev-guard', Date.now()))!;
+    await db.collection('pools').doc('p-rev-guard').update({ 'settings.lockRevision': 99 });
+
+    await expect(
+      fencedWrite(db, db.collection('pools').doc('p-rev-guard'), fence, () => {}, { probe: true }),
+    ).rejects.toThrow(/FENCE_LOST/);
+    expect((await poolDoc('p-rev-guard')).probe).toBeUndefined();
+  }, 60000);
+
+  it('a pass that lost the lease to another owner commits nothing', async () => {
+    await seedScorable('p-steal');
+    const mine = (await acquireScoringLease(db, 'p-steal', Date.now()))!;
+    // Someone else takes it (only possible once mine expires, which is the exact
+    // stalled-worker case the fencing token exists for).
+    await db.collection('pools').doc('p-steal')
+      .update({ 'autoScore.scoringLease': { owner: 'someone-else', until: Date.now() + 60000 } });
+
+    await expect(
+      fencedWrite(db, db.collection('pools').doc('p-steal'), mine, () => {}, { probe: true }),
+    ).rejects.toThrow(/FENCE_LOST/);
+    expect((await poolDoc('p-steal')).probe).toBeUndefined();
   }, 60000);
 });

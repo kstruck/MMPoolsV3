@@ -68,17 +68,24 @@ export function isTerminalPool(pool: {
  *    applying at the deadline. Pick'em has no such penalty, so including the bit
  *    there would only buy a pointless extra pass.
  *
- * KNOWN GAP (PR-B′, deliberate): entry mutations are NOT a term. `submitNFLPicks`
- * captures its clock before its transaction, so a valid submission can commit
- * after the scorer has read entries; with games and settings unchanged this hash
- * matches and that entry keeps an omitted grade until something else moves.
- * Closed by the per-entry revision watermark, which §7 requires before arming.
+ *  - `entryRevisionSum`: entry mutations. `submitNFLPicks` captures its clock
+ *    before its transaction, so a valid submission can commit AFTER the scorer
+ *    has read entries; with games and settings unchanged the rest of this hash
+ *    matches and that entry would keep an omitted grade until something else
+ *    moved. The sum is monotone and changes on EVERY mutation — see
+ *    lib/entryRevision.ts for why a max or a count stalls instead.
+ *
+ * `entryRevisionSum` defaults to 0 only so the pure fingerprint tests can pin
+ * one term at a time; the job always passes the real value, and
+ * `autoScore.emulator.test.ts` pins that wiring (a bumped entry revision must
+ * defeat the skip).
  */
 export function computeWeekFingerprint(
   pool: { type?: string; settings?: any },
   week: number,
   games: NFLGame[],
   now: number,
+  entryRevisionSum = 0,
 ): string {
   const lockSettings = effectiveLockSettings(pool?.settings, pool?.type);
 
@@ -112,7 +119,13 @@ export function computeWeekFingerprint(
   }
 
   return createHash('sha256')
-    .update([`week=${week}`, ...gameTerms, ...settingsTerms, ...lockTerms].join('|'))
+    .update([
+      `week=${week}`,
+      ...gameTerms,
+      ...settingsTerms,
+      ...lockTerms,
+      `entryRev=${entryRevisionSum}`,
+    ].join('|'))
     .digest('hex');
 }
 

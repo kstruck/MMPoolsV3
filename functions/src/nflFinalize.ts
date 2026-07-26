@@ -7,6 +7,7 @@ import { recomputeUserProfile } from "./userProfile";
 import { writeAdminAudit } from "./lib/adminAudit";
 import type { NFLPickemEntry, SurvivorEntry, MarginEntry } from "./nflPoolTypes";
 import { withHeartbeat, configReadFailedVerdict } from "./lib/heartbeat";
+import { fencedWrite, withScoringLease, type ScoringFence } from "./lib/scoringLease";
 
 /**
  * Season Finalization (ADR 0005 decision 2 / PLAN-PLAYER-PROFILES Phase 3).
@@ -236,8 +237,15 @@ export function isSimPool(pool: any, poolId?: string): boolean {
 export async function maybeFinalizeNFLPool(
   db: Firestore,
   poolId: string,
-  opts?: { allowSim?: boolean },
+  opts?: { allowSim?: boolean; fence?: ScoringFence },
 ): Promise<FinalizeOutcome> {
+  // Season-history and `finalizedAt` writes go through the caller's scoring
+  // fence when there is one (PLAN-REALTIME-SCORING §3a): this function snapshots
+  // the entry set and derives final ranks from it, so a pass that lost its lease
+  // would write season history computed from entries a newer pass has since
+  // rewritten — and `finalizedAt` is terminal, so nothing retracts it. Callers
+  // without a fence (the sim harness's simFinalizePool) keep the plain write.
+  const fence = opts?.fence;
   const poolRef = db.collection('pools').doc(poolId);
   const poolSnap = await poolRef.get();
   if (!poolSnap.exists) return { finalized: false, reason: 'pool missing' };
@@ -261,11 +269,24 @@ export async function maybeFinalizeNFLPool(
   const ranked = computeFinalRanks(pool.type, entries);
   const season = String(pool.season ?? '');
 
-  let batch = db.batch();
-  let ops = 0;
+  let staged: Array<[FirebaseFirestore.DocumentReference, Record<string, unknown>]> = [];
+  const commitStaged = async () => {
+    if (staged.length === 0) return;
+    const chunk = staged;
+    staged = [];
+    if (fence) {
+      await fencedWrite(db, poolRef, fence, (tx) => {
+        for (const [ref, data] of chunk) tx.set(ref, data, { merge: true });
+      });
+      return;
+    }
+    const batch = db.batch();
+    for (const [ref, data] of chunk) batch.set(ref, data, { merge: true });
+    await batch.commit();
+  };
   for (const { entry, rank, record, points } of ranked) {
     if (!entry.ownerUid) continue;
-    batch.set(
+    staged.push([
       db.collection('users').doc(entry.ownerUid).collection('seasonHistory').doc(poolId),
       {
         poolId,
@@ -280,16 +301,20 @@ export async function maybeFinalizeNFLPool(
         isChampion: rank === 1,
         completedAt: Date.now(),
       },
-      { merge: true },
-    );
-    if (++ops >= 400) { await batch.commit(); batch = db.batch(); ops = 0; }
+    ]);
+    if (staged.length >= 400) await commitStaged();
   }
-  if (ops > 0) await batch.commit();
+  await commitStaged();
 
-  await poolRef.update({
+  const finalizeStamp = {
     finalizedAt: admin.firestore.FieldValue.serverTimestamp(),
     ...(pool.firstFinalizedAt ? {} : { firstFinalizedAt: admin.firestore.FieldValue.serverTimestamp() }),
-  });
+  };
+  if (fence) {
+    await fencedWrite(db, poolRef, fence, () => {}, finalizeStamp);
+  } else {
+    await poolRef.update(finalizeStamp);
+  }
 
   // Refresh each member's public profile projection (bounded by pool size;
   // best-effort per member so one bad profile never blocks the rest).
@@ -529,9 +554,25 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
     // game kicking off tonight — both just incremented `skipped`.
     const blockedReasons: Record<string, string> = {};
     const stalled: string[] = [];
+    // How many pools this run stepped over because a live scoring pass held the
+    // lease. Reported, not treated as a failure — the sweep runs daily and the
+    // scorer's own finalize call reaches the same pools every 10 minutes.
+    let leaseBusy = 0;
     for (const d of capped) {
       try {
-        const outcome = await maybeFinalizeNFLPool(db, d.id);
+        // The sweep is an INDEPENDENT caller of maybeFinalizeNFLPool: without the
+        // lease it can overlap a live scoring pass, snapshot a half-updated entry
+        // set, and write season history from it (codex r24). Same mutex, same
+        // record.
+        const leased = await withScoringLease(db, d.id, Date.now(), (fence) =>
+          maybeFinalizeNFLPool(db, d.id, { fence }));
+        if (leased === 'LEASE_BUSY') {
+          leaseBusy++;
+          skipped++;
+          blockedReasons[d.id] = 'scoring lease held by another pass';
+          continue;
+        }
+        const outcome = leased;
         if (outcome.finalized) {
           finalized++;
         } else {
@@ -551,7 +592,8 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
     console.log(
       `[nflFinalizeSweep] finalized ${finalized}, skipped ${skipped} of ${capped.length} processed this run ` +
       `(scope seasonTypes ${gate.liveSeasonTypes?.join(',')}); ${stale.length} stale candidates, ` +
-      `${outOfScope} out-of-scope, ${deferred} over the ${MAX_PER_RUN} cap; ${stalled.length} stalled.`,
+      `${outOfScope} out-of-scope, ${deferred} over the ${MAX_PER_RUN} cap; ${stalled.length} stalled; ` +
+      `${leaseBusy} held by a live scoring pass.`,
       { blockedReasons: sampleReasons, stalled: stalled.slice(0, 50) },
     );
     const audited = await writeAdminAudit({
@@ -560,7 +602,7 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
       targetType: "pool",
       metadata: {
         // These reconcile: candidates = processed + outOfScope + deferred.
-        dryRun: false, finalized, skipped,
+        dryRun: false, finalized, skipped, leaseBusy,
         candidates: stale.length, processed: capped.length, outOfScope, deferred,
         liveSeasonTypes: gate.liveSeasonTypes,
         // Capped so one bad season can't bloat an audit doc past Firestore's 1MiB limit.
@@ -570,7 +612,7 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
       status: "success",
     });
 
-    return sweepRunVerdict(blockedReasons, { finalized, skipped, candidates: stale.length }, audited);
+    return sweepRunVerdict(blockedReasons, { finalized, skipped, leaseBusy, candidates: stale.length }, audited);
   }),
 );
 
