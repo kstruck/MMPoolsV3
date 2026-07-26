@@ -29,8 +29,31 @@ interface OpAction {
   run: () => Promise<unknown>;
 }
 
-const call = (name: string, data: Record<string, unknown> = {}) =>
-  httpsCallable(functions, name)(data).then((r) => r.data);
+/**
+ * `timeoutMs` exists because the Firebase JS SDK applies its OWN callable deadline —
+ * 70 seconds by default — independently of whatever the function is provisioned for.
+ * Raising a server budget without raising this one just moves the abort to the
+ * browser: the request rejects at 70s while the function keeps running to completion
+ * server-side, so the client reports a failure for work that actually succeeded, and
+ * its resume cursor points at a page already done (codex r4).
+ */
+const call = (name: string, data: Record<string, unknown> = {}, timeoutMs?: number) =>
+  httpsCallable(functions, name, timeoutMs ? { timeout: timeoutMs } : undefined)(data).then((r) => r.data);
+
+/** Server budget for backfillMemberRecords is 300s; the client waits slightly longer
+ *  so the SERVER's own deadline is what fails a page, never a race between the two. */
+const BACKFILL_TIMEOUT_MS = 310_000;
+
+/**
+ * Last cursor a backfill run stopped on, so clicking Run again continues instead of
+ * restarting at pool #1 (codex r4). Module-scoped rather than component state because
+ * ACTIONS is a module-level const whose closures cannot see a hook.
+ *
+ * Keyed by the run's flags: resuming a wide sweep from a narrow sweep's cursor would
+ * silently skip pools. Cleared on a clean finish, so a completed migration always
+ * starts over from the beginning next time.
+ */
+const backfillResume = new Map<string, string>();
 
 /**
  * Member Record roster backfill (ADR 0003). The callable pages ~100 pools per call and
@@ -58,26 +81,29 @@ const call = (name: string, data: Record<string, unknown> = {}) =>
  * operator to read a number the UI could not display (codex r1).
  */
 const runBackfill = async (dryRun: boolean, includeFinished = false) => {
-  let cursor: string | undefined;
+  const resumeKey = `${dryRun}:${includeFinished}`;
+  let cursor: string | undefined = backfillResume.get(resumeKey);
+  const resumedFrom = cursor ?? null;
   let pages = 0;
   // 25 on the incl.-finished path, 100 otherwise. A finished pool used to cost one
   // `continue`; now it costs the full per-member walk, so the same page size is a
   // very different amount of work. 25 is the handler's own default page size and
   // matches backfillProfileData, the other migration that does per-member work.
   const limit = includeFinished ? 25 : 100;
-  const agg = { ok: true, dryRun, includeFinished, poolsScanned: 0, finishedPoolsSkipped: 0, testPoolsSkipped: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, resumeFrom: null as string | null, error: null as string | null, failures: [] as any[] };
+  const agg = { ok: true, dryRun, includeFinished, poolsScanned: 0, finishedPoolsSkipped: 0, testPoolsSkipped: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, resumedFrom, resumeFrom: null as string | null, error: null as string | null, failures: [] as any[] };
   do {
     let r: any;
     try {
-      r = await call('backfillMemberRecords', { dryRun, includeFinished, limit, startAfter: cursor });
+      r = await call('backfillMemberRecords', { dryRun, includeFinished, limit, startAfter: cursor }, BACKFILL_TIMEOUT_MS);
     } catch (e) {
       // The paging cursor lives in this closure, so an unhandled throw loses it and
-      // the run can only restart from pool #1 — into the same wall. Report it
-      // instead: `resumeFrom` is the last cursor that WAS accepted, and the
-      // callable is idempotent, so a follow-up run can be pointed at it.
+      // the run can only restart from pool #1 — into the same wall. Report it AND
+      // park it: `resumeFrom` is the last cursor that WAS accepted, the callable is
+      // idempotent, and clicking Run again picks up from there.
       agg.ok = false;
       agg.resumeFrom = cursor ?? null;
       agg.error = e instanceof Error ? e.message : String(e);
+      if (cursor) backfillResume.set(resumeKey, cursor);
       return agg;
     }
     agg.poolsScanned += r.poolsScanned || 0;
@@ -97,7 +123,12 @@ const runBackfill = async (dryRun: boolean, includeFinished = false) => {
   if (cursor) {
     agg.ok = false;
     agg.resumeFrom = cursor;
-    agg.error = `Stopped at the ${pages}-page cap with pools remaining.`;
+    agg.error = `Stopped at the ${pages}-page cap with pools remaining. Run again to continue from resumeFrom.`;
+    backfillResume.set(resumeKey, cursor);
+  } else {
+    // Finished cleanly — drop the checkpoint so the next click is a full sweep and
+    // never silently starts partway through.
+    backfillResume.delete(resumeKey);
   }
   return agg;
 };

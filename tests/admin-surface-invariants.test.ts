@@ -246,6 +246,33 @@ describe('P4 — the roster backfill dry run can be read in the Run Log', () => 
     expect(ops).toContain("status: ok ? 'success' : 'error'");
   });
 
+  it('the client callable deadline is raised past the SDK default', () => {
+    // codex r4: the Firebase JS SDK enforces its own 70s callable deadline, so a
+    // 300s server budget alone just moves the abort into the browser — the client
+    // reports failure for work the server went on to finish.
+    expect(ops).toMatch(/httpsCallable\(functions,\s*name,\s*timeoutMs\s*\?\s*\{\s*timeout:\s*timeoutMs\s*\}/);
+    expect(ops).toContain('BACKFILL_TIMEOUT_MS');
+    const clientMs = Number(ops.match(/BACKFILL_TIMEOUT_MS = ([\d_]+)/)![1].replace(/_/g, ''));
+    const serverS = Number(
+      read('functions/src/migrations/backfillMemberRecords.ts').match(/timeoutSeconds:\s*(\d+)/)![1],
+    );
+    // Strictly greater, so the SERVER's deadline is always what fails a page —
+    // never a race between two equal timers.
+    expect(clientMs).toBeGreaterThan(serverS * 1000);
+  });
+
+  it('the reported resume cursor is actually usable', () => {
+    // Reporting resumeFrom while offering no way to submit it would leave a wedged
+    // migration restarting at pool #1 forever (codex r4).
+    expect(ops).toContain('backfillResume.set(resumeKey, cursor)');
+    expect(ops).toContain('backfillResume.get(resumeKey)');
+    // Keyed by the run's flags — resuming a wide sweep from a narrow sweep's
+    // cursor would silently skip pools.
+    expect(ops).toContain('const resumeKey = `${dryRun}:${includeFinished}`');
+    // ...and a clean finish must clear it, or the next run silently starts partway.
+    expect(ops).toContain('backfillResume.delete(resumeKey)');
+  });
+
   it('the incl.-finished sweep uses the smaller page size', () => {
     // A finished pool used to cost one `continue`; it now costs the full
     // per-member walk, so 100/page is a different amount of work entirely.
