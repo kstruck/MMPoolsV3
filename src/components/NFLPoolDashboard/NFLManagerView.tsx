@@ -14,6 +14,43 @@ import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
 
+/**
+ * The save control, repeated at the end of every settings section (E6, #281).
+ *
+ * Kevin, smoke-testing #279: the settings form is four sections long, the only
+ * save button was at the very bottom, and the success banner is at the very top —
+ * so on a laptop you can save successfully and see nothing happen. Every pilot
+ * commissioner meets this screen in the one week the pilot has to go well.
+ *
+ * MODULE SCOPE, not nested inside NFLManagerView (codex r1). Declared inside, it
+ * is a NEW component type on every parent state render, so React unmounts and
+ * remounts all five buttons on every keystroke in the form — which loses keyboard
+ * focus right after a save, the exact moment this feature exists to make legible.
+ * It also trips `react-hooks/static-components` five times.
+ *
+ * ONE handler, not five. Every section submits the SAME payload through
+ * `handleSaveSettings`; this is a placement change, not a new save path. Do not
+ * "improve" it by having each section send only its own fields — the callable
+ * merges per key, so a partial payload looks identical and quietly changes what a
+ * save means.
+ */
+const SaveSettingsControl: React.FC<{ onSave: () => void; isSaving: boolean; justSaved: boolean }> = ({
+  onSave, isSaving, justSaved,
+}) => (
+  <div className="pt-2 border-t border-line flex justify-end">
+    <button
+      onClick={onSave}
+      disabled={isSaving}
+      className={`${justSaved
+        ? 'bg-[#0F7B4A] hover:bg-[#0d6b40]'
+        : 'bg-[#0B5C37] hover:bg-[#0F7B4A]'} disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-3 px-8 rounded-lg flex items-center gap-2 shadow-card transition-all duration-150 hover:-translate-y-px cursor-pointer text-sm`}
+    >
+      {justSaved ? <CheckCircle size={15} /> : <Save size={15} />}
+      {isSaving ? 'Saving...' : justSaved ? 'Saved!' : 'Save Pool Settings'}
+    </button>
+  </div>
+);
+
 interface NFLManagerViewProps {
   pool: Pool;
   entries: any[];
@@ -41,6 +78,16 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [settingsFeedback, setSettingsFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  // E6 (#281): drives the green "Saved!" state on every save button. A timestamp
+  // rather than a boolean so a second save re-triggers the flash even while the
+  // first one is still showing.
+  const [justSavedAt, setJustSavedAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (justSavedAt === null) return;
+    const t = setTimeout(() => setJustSavedAt(null), 4000);
+    return () => clearTimeout(t);
+  }, [justSavedAt]);
+
 
   const type = pool.type;
   const castPool = pool as any;
@@ -300,9 +347,20 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         settings: updatedSettings
       });
       setSettingsFeedback({ type: 'success', message: 'Pool settings saved successfully!' });
+      // E6 (#281). The banner alone was not enough: it renders at the TOP of a
+      // long multi-section form, and the only save button was at the BOTTOM, so a
+      // commissioner on a laptop could save successfully and see nothing happen.
+      // The toast floats over the viewport wherever they are.
+      toast.success('Pool settings saved!');
+      // Drives the per-section buttons' green "Saved!" state. Cleared on a timer
+      // rather than left latched, so the NEXT save is visibly a new event —
+      // a button that says "Saved!" forever confirms nothing.
+      setJustSavedAt(Date.now());
     } catch (err: any) {
       logger.error('Failed to save pool settings:', err);
       setSettingsFeedback({ type: 'error', message: err.message || 'Failed to save settings.' });
+      toast.error(err.message || 'Failed to save settings.');
+      setJustSavedAt(null);
     } finally {
       setIsSavingSettings(false);
     }
@@ -622,6 +680,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 </select>
               </div>
             </div>
+            <SaveSettingsControl onSave={handleSaveSettings} isSaving={isSavingSettings} justSaved={justSavedAt !== null} />
           </div>
 
           {/* ── Pick'em Rules ── */}
@@ -736,6 +795,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   </div>
                 </div>
               </div>
+              <SaveSettingsControl onSave={handleSaveSettings} isSaving={isSavingSettings} justSaved={justSavedAt !== null} />
             </div>
           )}
 
@@ -758,6 +818,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   All picks for the week lock at this deadline — before any game starts — and cannot be changed afterward.
                 </p>
               </div>
+              <SaveSettingsControl onSave={handleSaveSettings} isSaving={isSavingSettings} justSaved={justSavedAt !== null} />
             </div>
           )}
 
@@ -850,20 +911,14 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <option value="HYBRID">Hybrid (Season-End + Weekly)</option>
                 </select>
               </div>
+              <SaveSettingsControl onSave={handleSaveSettings} isSaving={isSavingSettings} justSaved={justSavedAt !== null} />
             </div>
           )}
 
-          {/* ── Save Button ── */}
-          <div className="pt-2 border-t border-line flex justify-end">
-            <button
-              onClick={handleSaveSettings}
-              disabled={isSavingSettings}
-              className="bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-3 px-8 rounded-lg flex items-center gap-2 shadow-card transition-all duration-150 hover:-translate-y-px cursor-pointer text-sm"
-            >
-              <Save size={15} />
-              {isSavingSettings ? 'Saving...' : 'Save Pool Settings'}
-            </button>
-          </div>
+          {/* ── Save Button ──
+              Kept at the bottom as well as in each section: removing it would
+              break the muscle memory of anyone who already knows this screen. */}
+          <SaveSettingsControl onSave={handleSaveSettings} isSaving={isSavingSettings} justSaved={justSavedAt !== null} />
         </div>
       </div>
 
