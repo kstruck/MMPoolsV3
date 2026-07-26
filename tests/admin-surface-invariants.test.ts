@@ -161,6 +161,81 @@ describe('step 5 — destructive admin actions write an audit trail', () => {
   });
 });
 
+/**
+ * PLAN-PAYMENT-TRUTH P4 — a migration's dry run IS its evidence, so the Run Log
+ * must actually be able to DISPLAY the counters its own card tells the operator
+ * to read.
+ *
+ * This is a regression guard for a defect in P4 itself, found by codex r1: the
+ * two new skip counters were appended to the end of the aggregate, and the Run
+ * Log renders a truncated `JSON.stringify`. `finishedPoolsSkipped` began at
+ * index 188 of a 226-character report with every count at zero, past the
+ * 160-char limit then in force — so the "run the dry run first and read the
+ * count" instruction pointed at a number that never appeared on screen.
+ *
+ * Deliberately reconstructs the rendered string from the SOURCE rather than
+ * asserting a key order literally: it fails if the keys are reordered, if a new
+ * counter is inserted ahead of them, or if the truncation limit is lowered.
+ */
+describe('P4 — the roster backfill dry run can be read in the Run Log', () => {
+  const ops = read('src/components/admin/OperationsPanel.tsx');
+
+  const sliceLimit = Number(ops.match(/JSON\.stringify\(result\)\.slice\(0,\s*(\d+)\)/)![1]);
+  const aggBody = ops.match(/const agg = \{([\s\S]*?)\};/)![1];
+  const keys = aggBody
+    .split(',')
+    .map((s) => s.trim().split(':')[0].trim())
+    .filter((k) => /^\w+$/.test(k));
+
+  // Guard the parse itself — a silent mis-parse would make every assertion below
+  // vacuously pass.
+  it('parsed the aggregate shape out of the source', () => {
+    expect(sliceLimit).toBeGreaterThan(0);
+    expect(keys).toContain('poolsScanned');
+    expect(keys).toContain('finishedPoolsSkipped');
+    expect(keys).toContain('simPoolsSkipped');
+    expect(keys).toContain('failures');
+  });
+
+  // Zeros are the WORST case for position and the BEST case for length: every
+  // count renders as one character, so a counter that is out of range here is out
+  // of range for every real run too.
+  const rendered = JSON.stringify(
+    Object.fromEntries(keys.map((k) => [k, k === 'failures' ? [] : 0])),
+  );
+
+  it.each(['poolsScanned', 'finishedPoolsSkipped', 'simPoolsSkipped'])(
+    'counter %s survives Run Log truncation',
+    (key) => {
+      const at = rendered.indexOf(`"${key}"`);
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(at).toBeLessThan(sliceLimit);
+    },
+  );
+
+  it('the whole zero-valued report fits, so nothing is silently dropped', () => {
+    expect(rendered.length).toBeLessThanOrEqual(sliceLimit);
+  });
+
+  it('failures stays last — it is the only unbounded field', () => {
+    expect(keys[keys.length - 1]).toBe('failures');
+  });
+
+  it('both incl.-finished cards exist and the dry run is not destructive', () => {
+    expect(ops).toContain("id: 'backfillMemberRecordsFinished:dry'");
+    expect(ops).toContain("id: 'backfillMemberRecordsFinished'");
+    expect(ops).toContain('runBackfill(true, true)');
+    expect(ops).toContain('runBackfill(false, true)');
+  });
+
+  it('the panel never SENDS the retired includeAll flag', () => {
+    // Matches a payload key, not the word: the docblock explains what includeAll
+    // was and why it was split, and that prose is worth keeping. A bare
+    // `not.toContain('includeAll')` failed on exactly that comment.
+    expect(ops).not.toMatch(/includeAll\s*:/);
+  });
+});
+
 describe('step 6b — server-side user email search', () => {
   it('userSync writes the lowercased searchEmail field', () => {
     expect(read('functions/src/userSync.ts')).toContain('searchEmail');

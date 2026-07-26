@@ -45,11 +45,20 @@ const call = (name: string, data: Record<string, unknown> = {}) =>
  *
  * `finishedPoolsSkipped` is accumulated because it is the number to read off the narrow
  * dry run: it is how many pools the includeFinished variant would additionally touch.
+ *
+ * KEY ORDER IS LOAD-BEARING. The Run Log renders a TRUNCATED `JSON.stringify` of this
+ * object, so a counter's position decides whether an operator can see it at all. The
+ * two skip counters sit directly after poolsScanned because they are what the dry run
+ * exists to report; `failures` stays last because it is the only unbounded field.
+ * Measured, not assumed: with the counters appended at the end instead, the key
+ * `finishedPoolsSkipped` began at index 188 of a 226-char report and was cut off by the
+ * 160-char limit even with every count at zero — the dry-run card instructed the
+ * operator to read a number the UI could not display (codex r1).
  */
 const runBackfill = async (dryRun: boolean, includeFinished = false) => {
   let cursor: string | undefined;
   let pages = 0;
-  const agg = { dryRun, includeFinished, poolsScanned: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, simPoolsSkipped: 0, finishedPoolsSkipped: 0, failures: [] as any[] };
+  const agg = { dryRun, includeFinished, poolsScanned: 0, finishedPoolsSkipped: 0, simPoolsSkipped: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, failures: [] as any[] };
   do {
     const r: any = await call('backfillMemberRecords', { dryRun, includeFinished, limit: 100, startAfter: cursor });
     agg.poolsScanned += r.poolsScanned || 0;
@@ -293,7 +302,12 @@ export const OperationsPanel: React.FC = () => {
     setRunning(action.id);
     try {
       const result = await action.run();
-      setLog((prev) => [{ id: action.id, ok: true, text: `${action.label}: ${JSON.stringify(result).slice(0, 160)}` }, ...prev]);
+      // 400, not 160: a migration's dry run IS its evidence, and at 160 the roster
+      // backfill's report (226 chars with every count at zero) lost its last three
+      // counters — including the finished-pool count its own card tells the operator
+      // to read before running the destructive variant. Truncation is still the
+      // design, for the ops that return unbounded plannedWrites arrays.
+      setLog((prev) => [{ id: action.id, ok: true, text: `${action.label}: ${JSON.stringify(result).slice(0, 400)}` }, ...prev]);
       toast.success(`${action.label} completed.`);
       await dbService.logAdminAction({ action: `OP_${action.id.toUpperCase()}`, status: 'success', metadata: { label: action.label } });
     } catch (e) {
