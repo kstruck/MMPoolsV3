@@ -37,6 +37,23 @@ import { computeRosterSummary, type DuesInputs, type MemberRecord } from "./shar
  * `memberDues` is shared with the commissioner roster, so redefining "collected"
  * moves a second money surface, and the fix is a product decision. Pinned by a
  * test in poolPot.emulator.test.ts so it is a recorded decision.
+ *
+ * ⚠️ SECOND KNOWN GAP, also inherited (codex r3, verified): NFL payment state has
+ * TWO commissioner controls that write to DIFFERENT PLACES.
+ *   - `NFLManagerView` roster toggle -> `dbService.setPaidStatus` -> the MEMBER
+ *     RECORD. This is the authoritative path, and it is what this function reads.
+ *   - `NFLManagerBentoDashboard` "detailed payment" panel ->
+ *     `updateEntryPayment` -> `pools/{id}/entries/{entryId}` ONLY.
+ * A commissioner who marks a member paid through the SECOND control leaves the
+ * Member Record UNPAID, and this pot under-reports that member's dues.
+ *
+ * Not fixed here because the fix is to unify the write path — either make
+ * `updateEntryPayment` also reconcile the Member Record, or point that panel at
+ * `setPaidStatus` — and that is a change to a shared money callable that BRACKET
+ * pools also use, where entries genuinely ARE the truth. Its own PR, with its own
+ * review. Reading entries here instead would be worse: §2.8 is the finding that
+ * NFL entry docs keep `UNPAID` forever, so that source is wrong in the common
+ * case and this one is wrong only when the second control is used.
  */
 const memberRecordsPot = async (
     db: admin.firestore.Firestore,
@@ -103,15 +120,36 @@ const propsPot = async (
 export const calculatePoolPot = async (db: admin.firestore.Firestore, poolId: string, pool: any): Promise<{ prizePot: number; charityAmount: number }> => {
     let grossPot = 0;
 
-    if (pool.type === 'BRACKET' || pool.type === 'NFL_PLAYOFFS') {
+    if (pool.type === 'BRACKET') {
         const entryFee = pool.settings?.entryFee || 0;
         if (entryFee > 0) {
-            const collectionName = pool.type === 'BRACKET' ? 'entries' : 'playoff_entries';
-            const entriesSnap = await db.collection('pools').doc(poolId).collection(collectionName).get();
+            const entriesSnap = await db.collection('pools').doc(poolId).collection('entries').get();
             const paidEntriesCount = entriesSnap.docs.filter(doc => {
                 const data = doc.data();
                 return data.paidStatus === 'PAID' || data.paid === true;
             }).length;
+            grossPot = paidEntriesCount * entryFee;
+        }
+    } else if (pool.type === 'NFL_PLAYOFFS') {
+        // A FOURTH zero-pot pool type, and the one nobody had counted: this
+        // branch used to read a `playoff_entries` SUBCOLLECTION that does not
+        // exist. `playoff_entries` appears exactly ONCE in the whole repository —
+        // in the line this replaces. Nothing has ever written it.
+        //
+        // Playoff entries live in the pool document's `entries` MAP, and the paid
+        // flag is `entries.{id}.paid`, set by playoffPools.ts's `togglePaid`
+        // action. `migrations/backfillMemberRecords.ts` says so in as many words:
+        // "Playoff entries live on the pool doc (pool.entries map)".
+        //
+        // So every real NFL_PLAYOFFS pool has been contributing $0 to the
+        // world-readable prize total for as long as this function has existed —
+        // and Kevin HAS real playoff pools (his Q4 answer is about exactly them).
+        // Found by codex r1 on PR D, which noticed that switching the Overview to
+        // the server aggregate would have made this long-standing zero VISIBLE.
+        const entryFee = pool.settings?.entryFee || 0;
+        if (entryFee > 0) {
+            const entries = Object.values((pool.entries || {}) as Record<string, any>);
+            const paidEntriesCount = entries.filter((e: any) => e?.paid === true || e?.paidStatus === 'PAID').length;
             grossPot = paidEntriesCount * entryFee;
         }
     } else if ((NFL_SEASON_TYPES as readonly string[]).includes(String(pool.type ?? ''))) {

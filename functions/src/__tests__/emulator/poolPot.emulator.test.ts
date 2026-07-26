@@ -189,6 +189,35 @@ describe('calculatePoolPot — the existing branches are untouched', () => {
     expect(prizePot).toBe(20);
   });
 
+  it('NFL_PLAYOFFS prices the pool.entries MAP, not a subcollection nobody writes', async () => {
+    // `playoff_entries` appeared exactly ONCE in the repository — in the line this
+    // replaced. Playoff entries live in the pool document's `entries` map and the
+    // paid flag is `entries.{id}.paid` (playoffPools.ts togglePaid). So every real
+    // playoff pool has been contributing $0 to the world-readable prize total for
+    // as long as calculatePoolPot has existed. Found by codex r1 on PR D.
+    const pool = {
+      type: 'NFL_PLAYOFFS',
+      settings: { entryFee: 20 },
+      entries: {
+        e1: { userId: 'a', paid: true },
+        e2: { userId: 'b', paid: true },
+        e3: { userId: 'c' },              // unpaid
+        e4: { userId: 'd', paid: false }, // explicitly unpaid
+      },
+    };
+    await db.collection('pools').doc('pl1').set(pool);
+    // Seeded to prove the OLD source is empty and would still return 0.
+    const { prizePot } = await calculatePoolPot(db, 'pl1', pool);
+    expect(prizePot).toBe(40);
+  });
+
+  it('NFL_PLAYOFFS also accepts paidStatus PAID, matching the BRACKET reader', async () => {
+    const pool = { type: 'NFL_PLAYOFFS', settings: { entryFee: 15 }, entries: { e1: { paidStatus: 'PAID' } } };
+    await db.collection('pools').doc('pl2').set(pool);
+    const { prizePot } = await calculatePoolPot(db, 'pl2', pool);
+    expect(prizePot).toBe(15);
+  });
+
   it('BRACKET still uses entry docs, which for that type ARE the payment truth', async () => {
     const pool = { type: 'BRACKET', settings: { entryFee: 12 } };
     await db.collection('pools').doc('b1').set(pool);
