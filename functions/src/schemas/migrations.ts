@@ -21,9 +21,23 @@ import { z } from "zod";
  */
 export const backfillMemberRecordsSchema = z.strictObject({
     dryRun: z.boolean().optional().default(true),
-    // Omission means "skip sim-/completed/archived/canceled pools" - the safe
-    // subset. Only an explicit true widens the sweep.
-    includeAll: z.boolean().optional(),
+    // REPLACES `includeAll` (PLAN-PAYMENT-TRUTH P4, Kevin's Q3 2026-07-26).
+    //
+    // `includeAll` conflated two independent questions and answered both with one
+    // boolean: "process finished pools?" and "process sim/test pools?". Reaching
+    // the historical pools whose money the all-time total is missing REQUIRED
+    // setting it, which also aimed the migration at sim data - pure write
+    // amplification against the pools PR D just taught the stats to ignore.
+    //
+    // So it is split. This flag widens the sweep over FINISHED pools only; the
+    // sim-pool exclusion is now unconditional in the handler and there is no
+    // longer any input that can switch it off.
+    //
+    // Defaulted here rather than left bare-optional, same reasoning as dryRun
+    // above and the #183 fixParticipantIds lesson: the narrow sweep must be what
+    // an omitted flag means, declared at the schema layer where it is
+    // machine-checked, not inferred from a handler-side truthy check.
+    includeFinished: z.boolean().optional().default(false),
     limit: z.number().int().positive().max(100).optional(),
     startAfter: z.string().min(1).max(1500).optional(),
 });

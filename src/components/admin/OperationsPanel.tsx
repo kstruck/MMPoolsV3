@@ -36,19 +36,30 @@ const call = (name: string, data: Record<string, unknown> = {}) =>
  * Member Record roster backfill (ADR 0003). The callable pages ~100 pools per call and
  * returns a nextCursor; this loops all pages and accumulates the invariant report so one
  * click covers every pool. Dry run writes nothing.
+ *
+ * `includeFinished` widens the sweep over COMPLETED / CANCELED / archived / final pools
+ * (PLAN-PAYMENT-TRUTH P4). It replaces the old `includeAll`, which this panel never sent
+ * — which is exactly the D25 defect: the button could not reach the historical pools the
+ * all-time total is missing. Sim pools are skipped by the callable unconditionally and
+ * no flag here can change that.
+ *
+ * `finishedPoolsSkipped` is accumulated because it is the number to read off the narrow
+ * dry run: it is how many pools the includeFinished variant would additionally touch.
  */
-const runBackfill = async (dryRun: boolean) => {
+const runBackfill = async (dryRun: boolean, includeFinished = false) => {
   let cursor: string | undefined;
   let pages = 0;
-  const agg = { dryRun, poolsScanned: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, failures: [] as any[] };
+  const agg = { dryRun, includeFinished, poolsScanned: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, simPoolsSkipped: 0, finishedPoolsSkipped: 0, failures: [] as any[] };
   do {
-    const r: any = await call('backfillMemberRecords', { dryRun, limit: 100, startAfter: cursor });
+    const r: any = await call('backfillMemberRecords', { dryRun, includeFinished, limit: 100, startAfter: cursor });
     agg.poolsScanned += r.poolsScanned || 0;
     agg.membersCreated += r.membersCreated || 0;
     agg.membersAlreadyPresent += r.membersAlreadyPresent || 0;
     agg.guestSkipped += r.guestSkipped || 0;
     agg.participantIdsWithoutMember += r.participantIdsWithoutMember || 0;
     agg.poolsFlipped += r.poolsFlipped || 0;
+    agg.simPoolsSkipped += r.simPoolsSkipped || 0;
+    agg.finishedPoolsSkipped += r.finishedPoolsSkipped || 0;
     if (Array.isArray(r.failures)) agg.failures.push(...r.failures);
     cursor = r.nextCursor || undefined;
     pages++;
@@ -127,8 +138,8 @@ const ACTIONS: OpAction[] = [
   },
   {
     id: 'backfillMemberRecords:dry',
-    label: 'Backfill Member Roster (dry run)',
-    description: 'Report how many members (incl. commissioners / no-entry members) would be added to each pool roster. Writes nothing.',
+    label: 'Backfill Member Roster — active only (dry run)',
+    description: 'Report how many members (incl. commissioners / no-entry members) would be added to each pool roster, across ACTIVE pools only. Read finishedPoolsSkipped in the result — that is how many more pools the "incl. finished" variant below would reach. Writes nothing.',
     blastRadius: 'Read-only — no writes. Reports invariant counts.',
     destructive: false,
     icon: CheckCircle2,
@@ -136,12 +147,30 @@ const ACTIONS: OpAction[] = [
   },
   {
     id: 'backfillMemberRecords',
-    label: 'Backfill Member Roster',
-    description: 'Create Member Records for every existing member (incl. commissioners and members with no entry) across all pools. Idempotent — skips members already present.',
-    blastRadius: 'Creates pools/{id}/members docs across every pool; sets rosterSchemaVersion per pool.',
+    label: 'Backfill Member Roster — active only',
+    description: 'Create Member Records for every existing member (incl. commissioners and members with no entry) across ACTIVE pools. Skips finished/canceled/archived pools. Idempotent — skips members already present.',
+    blastRadius: 'Creates pools/{id}/members docs across active pools; sets rosterSchemaVersion per pool.',
     destructive: true,
     icon: Users,
     run: () => runBackfill(false),
+  },
+  {
+    id: 'backfillMemberRecordsFinished:dry',
+    label: 'Backfill Member Roster incl. finished (dry run)',
+    description: 'Same as above but ALSO covers COMPLETED / CANCELED / archived / final pools — the historical pools whose dues the all-time total is currently missing (D25). Sim/test pools are still skipped and no option here can include them. Writes nothing. Run this before the live version.',
+    blastRadius: 'Read-only — no writes. Reports invariant counts incl. simPoolsSkipped.',
+    destructive: false,
+    icon: CheckCircle2,
+    run: () => runBackfill(true, true),
+  },
+  {
+    id: 'backfillMemberRecordsFinished',
+    label: 'Backfill Member Roster incl. finished',
+    description: 'Create Member Records across ALL non-sim pools including finished ones. This is the D25 repair, and it must run BEFORE Recalculate Global Stats — backfilling afterwards means the recalculate published an under-count and nobody re-ran it. Idempotent.',
+    blastRadius: 'Creates pools/{id}/members docs across every non-sim pool, finished ones included; sets rosterSchemaVersion per pool.',
+    destructive: true,
+    icon: Users,
+    run: () => runBackfill(false, true),
   },
   {
     id: 'backfillProfileData:dry',
