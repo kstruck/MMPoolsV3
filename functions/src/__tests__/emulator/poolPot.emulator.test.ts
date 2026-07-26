@@ -287,6 +287,60 @@ describe('recomputeGlobalStats — selection', () => {
     expect((await statsGlobal()).totalPrizes).toBe(500); // previous value kept
   });
 
+  it('excludes every arm of isTestPool from the public totals (PR D)', async () => {
+    // One real pool and one of each discriminator arm. The real pool is the
+    // control: without it a broken filter that excluded EVERYTHING would pass.
+    await db.collection('pools').doc('real').set({
+      type: 'SQUARES', isLocked: true, costPerSquare: 10, squares: [{ id: 0, owner: 'a' }],
+    });
+    // arm 1a — persisted simRunId
+    await db.collection('pools').doc('t1').set({
+      type: 'SQUARES', isLocked: true, costPerSquare: 10, simRunId: 'run-abc1',
+      squares: [{ id: 0, owner: 'a' }],
+    });
+    // arm 1b — sim- season
+    await db.collection('pools').doc('t2').set({
+      type: 'SQUARES', isLocked: true, costPerSquare: 10, season: 'sim-run-abc1',
+      squares: [{ id: 0, owner: 'a' }],
+    });
+    // arm 1c — sim- doc id
+    await db.collection('pools').doc('sim-legacy').set({
+      type: 'SQUARES', isLocked: true, costPerSquare: 10, squares: [{ id: 0, owner: 'a' }],
+    });
+    // arm 2 — NFL preseason. Kevin: preseason pools NEVER count, including
+    // friends' pools. Expect the Overview to look quiet through the pilot.
+    await db.collection('pools').doc('t4').set({
+      type: 'NFL_PICKEM', isLocked: false, scoredThroughWeek: 1, seasonType: 1,
+      settings: { entryFee: 25 },
+    });
+    await member('t4', 'a', { paidStatus: 'PAID' });
+    // arm 3 — the explicit flag Kevin sets on legacy untagged test pools
+    await db.collection('pools').doc('t5').set({
+      type: 'SQUARES', isLocked: true, costPerSquare: 10, isTestPool: true,
+      squares: [{ id: 0, owner: 'a' }],
+    });
+
+    const r = await recomputeGlobalStats(db, { dryRun: true });
+    expect(r.pools).toBe(1);
+    expect(r.totalPrizes).toBe(10);
+    expect(r.testPoolsSkipped).toBe(5);
+  });
+
+  it('a REGULAR-season NFL pool is not caught by the preseason arm', async () => {
+    // The over-correction guard: seasonType 2 must still count, or the fix that
+    // removes test pools also removes the season the pilot exists to prepare for.
+    await db.collection('pools').doc('t6').set({
+      type: 'NFL_PICKEM', isLocked: false, scoredThroughWeek: 1, seasonType: 2,
+      settings: { entryFee: 25 },
+    });
+    await member('t6', 'a', { paidStatus: 'PAID' });
+
+    const r = await recomputeGlobalStats(db, { dryRun: true });
+    expect(r.pools).toBe(1);
+    expect(r.totalPrizes).toBe(25);
+    expect(r.testPoolsSkipped).toBe(0);
+  });
+
   it('skips admin-closed pools (T2), which are locked for lifecycle reasons only', async () => {
     await db.collection('pools').doc('s3').set({
       type: 'SQUARES', isLocked: true, costPerSquare: 10, closedVia: 'ADMIN_CLOSE',

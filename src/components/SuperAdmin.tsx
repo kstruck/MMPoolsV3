@@ -4,7 +4,8 @@ import { ConfirmActionModal } from './admin/ConfirmActionModal';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import type { GameState, Pool, User, SystemSettings, PropSeed, PlayoffTeam, PoolTheme, LoyaltyTier } from '../types';
-import { dbService } from '../services/dbService';
+import { dbService, type GlobalStats } from '../services/dbService';
+import { isTestPool } from '@shared/testPool';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
@@ -331,43 +332,71 @@ export const SuperAdmin: React.FC = () => {
         return { mapping, list };
     }, [activeTiers, users, userPoolCounts]);
 
-    // Compute real-time live stats directly from loaded data as fallback
-    const liveStats = useMemo(() => {
-        let totalSquaresSold = 0;
-        let totalRevenue = 0;
-        let totalDonated = 0;
+    // The money half of the Overview now comes from the SERVER aggregate
+    // (stats/global), not from a browser re-derivation. See liveStats below.
+    const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
+    useEffect(() => dbService.onGlobalStatsUpdate(setGlobalStats), []);
 
-        pools.forEach((pool: any) => {
+    /**
+     * The Overview cards (PLAN-STATS-INTEGRITY §8.3 step 3). Two separate defects
+     * were fixed here; they are easy to conflate.
+     *
+     * 1. TEST POOLS WERE COUNTED. This aggregated EVERY loaded pool with no
+     *    filter at all (§2.4), which is why Kevin's Overview read 138 pools and
+     *    $38,991 of prize volume. `isTestPool` is the shared predicate — the same
+     *    module the `stats/global` writers use, so the two cannot drift again.
+     *    That drift IS the original bug: these cards never read `stats/global`,
+     *    so a backend-only fix would have changed nothing on this screen.
+     *
+     * 2. THE MONEY WAS A HEAD COUNT. It computed `entryFee × (entryCount ||
+     *    participantCount || participantIds.length)` — everyone who joined,
+     *    whether or not they ever paid — and no client can fix that, because the
+     *    paid state lives in per-pool Member Record subcollections this page does
+     *    not load (§2.8, codex R3 finding (i)). So the money figures now come
+     *    from `stats/global`, which PRs B and C taught to compute a real,
+     *    paid-only, test-pool-free total server-side.
+     *
+     *    ⚠️ That document only becomes correct once PRs A–D are DEPLOYED and
+     *    Kevin presses Recalculate Global Stats. Until then these cards show the
+     *    OLD stored figure. That is the plan's step order (§8.6), not a bug — and
+     *    it is strictly better than the alternative, which was a number that
+     *    looked live and was structurally wrong.
+     *
+     * Counts stay client-side: they are derivable from what this page already has,
+     * and `stats/global` carries no pool or user count.
+     */
+    const liveStats = useMemo(() => {
+        // Test pools count toward nothing — including friends' preseason pools
+        // (Kevin, 2026-07-25). Expect these cards to look quiet through the pilot.
+        const realPools = pools.filter((pool: any) => !isTestPool(pool, pool.id));
+
+        let totalSquaresSold = 0;
+        let totalEntries = 0;
+
+        realPools.forEach((pool: any) => {
             if (pool.type === 'SQUARES') {
-                const sold = pool.squares ? pool.squares.filter((s: any) => s.owner).length : 0;
-                totalSquaresSold += sold;
-                totalRevenue += (pool.costPerSquare || 0) * sold;
-                if (pool.charity?.enabled) {
-                    totalDonated += ((pool.costPerSquare || 0) * sold) * ((pool.charity.percentage || 0) / 100);
-                }
-            } else if (pool.type === 'BRACKET' || pool.type === 'NFL_PLAYOFFS' || pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') {
-                const count = pool.entryCount || pool.participantCount || (pool.participantIds ? pool.participantIds.length : 0);
-                totalSquaresSold += count;
-                totalRevenue += (pool.settings?.entryFee || 0) * count;
-                if (pool.settings?.charity?.enabled) {
-                    totalDonated += ((pool.settings.entryFee || 0) * count) * ((pool.settings.charity.percentage || 0) / 100);
-                }
-            } else if (pool.type === 'PROPS') {
-                const count = pool.entryCount || pool.participantCount || (pool.participantIds ? pool.participantIds.length : 0);
-                totalSquaresSold += count;
-                totalRevenue += (pool.props?.cost || 0) * count;
+                totalSquaresSold += pool.squares ? pool.squares.filter((s: any) => s.owner).length : 0;
+            } else {
+                // "Squares Sold" used to add THESE into the squares total, so the
+                // card was summing squares and NFL/bracket/props ENTRIES into one
+                // mislabelled number. They are different units; they get separate
+                // counters now.
+                totalEntries += pool.entryCount || pool.participantCount || (pool.participantIds ? pool.participantIds.length : 0);
             }
         });
 
         return {
-            totalPools: pools.length,
-            totalUsers: users.length,
+            totalPools: realPools.length,
+            // Sim runs create run-scoped uids (`sim-<runId>-alice`), so they are
+            // identifiable and excluded for the same reason the pools are.
+            totalUsers: users.filter((u: User) => !String(u.id || '').startsWith('sim-')).length,
             totalSquaresSold,
-            totalRevenue,
-            totalDonated,
+            totalEntries,
+            totalRevenue: globalStats?.totalPrizes ?? 0,
+            totalDonated: globalStats?.totalDonated ?? 0,
             lastUpdated: Date.now()
         };
-    }, [pools, users]);
+    }, [pools, users, globalStats]);
 
     // --- EFFECTS ---
     useEffect(() => {
