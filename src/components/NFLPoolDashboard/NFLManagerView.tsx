@@ -14,6 +14,43 @@ import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
 
+/**
+ * The save control, repeated at the end of every settings section (E6, #281).
+ *
+ * Kevin, smoke-testing #279: the settings form is four sections long, the only
+ * save button was at the very bottom, and the success banner is at the very top —
+ * so on a laptop you can save successfully and see nothing happen. Every pilot
+ * commissioner meets this screen in the one week the pilot has to go well.
+ *
+ * MODULE SCOPE, not nested inside NFLManagerView (codex r1). Declared inside, it
+ * is a NEW component type on every parent state render, so React unmounts and
+ * remounts all five buttons on every keystroke in the form — which loses keyboard
+ * focus right after a save, the exact moment this feature exists to make legible.
+ * It also trips `react-hooks/static-components` five times.
+ *
+ * ONE handler, not five. Every section submits the SAME payload through
+ * `handleSaveSettings`; this is a placement change, not a new save path. Do not
+ * "improve" it by having each section send only its own fields — the callable
+ * merges per key, so a partial payload looks identical and quietly changes what a
+ * save means.
+ */
+const SaveSettingsControl: React.FC<{ onSave: () => void; isSaving: boolean; justSaved: boolean }> = ({
+  onSave, isSaving, justSaved,
+}) => (
+  <div className="pt-2 border-t border-line flex justify-end">
+    <button
+      onClick={onSave}
+      disabled={isSaving}
+      className={`${justSaved
+        ? 'bg-[#0F7B4A] hover:bg-[#0d6b40]'
+        : 'bg-[#0B5C37] hover:bg-[#0F7B4A]'} disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-3 px-8 rounded-lg flex items-center gap-2 shadow-card transition-all duration-150 hover:-translate-y-px cursor-pointer text-sm`}
+    >
+      {justSaved ? <CheckCircle size={15} /> : <Save size={15} />}
+      {isSaving ? 'Saving...' : justSaved ? 'Saved!' : 'Save Pool Settings'}
+    </button>
+  </div>
+);
+
 interface NFLManagerViewProps {
   pool: Pool;
   entries: any[];
@@ -51,34 +88,6 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     return () => clearTimeout(t);
   }, [justSavedAt]);
 
-  /**
-   * The save control, repeated at the end of every settings section (E6, #281).
-   *
-   * Kevin, smoke-testing #279: the form is four sections long, the only save
-   * button was at the very bottom, and the success banner is at the very top —
-   * so on a laptop you can save successfully and see nothing happen. Every pilot
-   * commissioner meets this screen in the one week the pilot has to go well.
-   *
-   * ONE handler, not N. Every section submits the SAME payload through
-   * `handleSaveSettings`; this is a placement change, not a new save path. Do not
-   * "improve" it by having each section send only its own fields — the callable
-   * merges per key, and a partial payload would look identical while quietly
-   * changing what a save means.
-   */
-  const SaveSettingsButton = ({ label = 'Save Pool Settings' }: { label?: string }) => (
-    <div className="pt-2 border-t border-line flex justify-end">
-      <button
-        onClick={handleSaveSettings}
-        disabled={isSavingSettings}
-        className={`${justSavedAt
-          ? 'bg-[#0F7B4A] hover:bg-[#0d6b40]'
-          : 'bg-[#0B5C37] hover:bg-[#0F7B4A]'} disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-3 px-8 rounded-lg flex items-center gap-2 shadow-card transition-all duration-150 hover:-translate-y-px cursor-pointer text-sm`}
-      >
-        {justSavedAt ? <CheckCircle size={15} /> : <Save size={15} />}
-        {isSavingSettings ? 'Saving...' : justSavedAt ? 'Saved!' : label}
-      </button>
-    </div>
-  );
 
   const type = pool.type;
   const castPool = pool as any;
@@ -671,7 +680,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 </select>
               </div>
             </div>
-            <SaveSettingsButton />
+            <SaveSettingsControl onSave={handleSaveSettings} isSaving={isSavingSettings} justSaved={justSavedAt !== null} />
           </div>
 
           {/* ── Pick'em Rules ── */}
@@ -786,7 +795,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   </div>
                 </div>
               </div>
-              <SaveSettingsButton />
+              <SaveSettingsControl onSave={handleSaveSettings} isSaving={isSavingSettings} justSaved={justSavedAt !== null} />
             </div>
           )}
 
@@ -809,7 +818,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   All picks for the week lock at this deadline — before any game starts — and cannot be changed afterward.
                 </p>
               </div>
-              <SaveSettingsButton />
+              <SaveSettingsControl onSave={handleSaveSettings} isSaving={isSavingSettings} justSaved={justSavedAt !== null} />
             </div>
           )}
 
@@ -902,14 +911,14 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <option value="HYBRID">Hybrid (Season-End + Weekly)</option>
                 </select>
               </div>
-              <SaveSettingsButton />
+              <SaveSettingsControl onSave={handleSaveSettings} isSaving={isSavingSettings} justSaved={justSavedAt !== null} />
             </div>
           )}
 
           {/* ── Save Button ──
               Kept at the bottom as well as in each section: removing it would
               break the muscle memory of anyone who already knows this screen. */}
-          <SaveSettingsButton />
+          <SaveSettingsControl onSave={handleSaveSettings} isSaving={isSavingSettings} justSaved={justSavedAt !== null} />
         </div>
       </div>
 
