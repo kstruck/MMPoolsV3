@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
-import { calculatePoolPot } from '../../statsTrigger';
+import { calculatePoolPot, recomputeGlobalStats } from '../../statsTrigger';
 
 /**
  * calculatePoolPot against a live Firestore emulator (PLAN-STATS-INTEGRITY §8.3
@@ -26,6 +26,9 @@ async function wipe() {
     }
     await p.ref.delete();
   }
+  // The recompute suite below writes this; leaving it behind would let one test's
+  // total satisfy the next test's assertion.
+  await db.doc('stats/global').delete();
 }
 
 /** Member Record fields the dues maths actually reads (shared/memberRecord.ts). */
@@ -174,6 +177,97 @@ describe('calculatePoolPot — PROPS pools read propCards (codex R3 finding (j))
     await db.collection('pools').doc('q2').collection('propCards').doc('c1').set({ userId: 'a', isPaid: true });
     const { prizePot } = await calculatePoolPot(db, 'q2', pool);
     expect(prizePot).toBe(0);
+  });
+});
+
+/**
+ * The recompute's SELECTION rule (PLAN-STATS-INTEGRITY §2.7, Kevin's Q5).
+ *
+ * `recalculateGlobalStats` queried `isLocked == true` alone, and NFL season pools
+ * are created `isLocked: false` (`nflPools.ts:100`) — they lock per week at
+ * kickoff and finalize by stamping `finalizedAt`. So the recompute had never once
+ * visited an NFL pool: PR B taught calculatePoolPot to price them, and without
+ * this it would never be asked.
+ */
+describe('recomputeGlobalStats — selection', () => {
+  async function statsGlobal() {
+    return (await db.doc('stats/global').get()).data() ?? {};
+  }
+
+  it('visits an UNLOCKED NFL pool that has scored a week — the §2.7 defect', async () => {
+    const pool = { type: 'NFL_PICKEM', isLocked: false, scoredThroughWeek: 3, settings: { entryFee: 25 } };
+    await db.collection('pools').doc('n1').set(pool);
+    await member('n1', 'a', { paidStatus: 'PAID' });
+    await member('n1', 'b', { paidStatus: 'PAID' });
+
+    const r = await recomputeGlobalStats(db, { dryRun: true });
+    expect(r.pools).toBe(1);
+    expect(r.totalPrizes).toBe(50);
+  });
+
+  it('ignores an NFL pool that has never scored a week', async () => {
+    // scoredThroughWeek 0, and Firestore inequality filters also drop documents
+    // missing the field entirely — both cases are "no real volume yet".
+    await db.collection('pools').doc('n2').set({ type: 'NFL_PICKEM', isLocked: false, scoredThroughWeek: 0, settings: { entryFee: 25 } });
+    await member('n2', 'a', { paidStatus: 'PAID' });
+    await db.collection('pools').doc('n3').set({ type: 'NFL_PICKEM', isLocked: false, settings: { entryFee: 25 } });
+    await member('n3', 'a', { paidStatus: 'PAID' });
+
+    const r = await recomputeGlobalStats(db, { dryRun: true });
+    expect(r.pools).toBe(0);
+    expect(r.totalPrizes).toBe(0);
+  });
+
+  it('still visits locked non-NFL pools, and counts a pool in BOTH sets exactly once', async () => {
+    await db.collection('pools').doc('s2').set({
+      type: 'SQUARES', isLocked: true, costPerSquare: 10,
+      squares: [{ id: 0, owner: 'a' }, { id: 1, owner: 'b' }],
+    });
+    // Satisfies both queries — the dedupe by document id is what stops this
+    // pool's money being added to the public totals twice.
+    await db.collection('pools').doc('n4').set({ type: 'NFL_MARGIN', isLocked: true, scoredThroughWeek: 2, settings: { entryFee: 30 } });
+    await member('n4', 'a', { paidStatus: 'PAID' });
+
+    const r = await recomputeGlobalStats(db, { dryRun: true });
+    expect(r.pools).toBe(2);
+    expect(r.totalPrizes).toBe(20 + 30);
+  });
+
+  it('skips admin-closed pools (T2), which are locked for lifecycle reasons only', async () => {
+    await db.collection('pools').doc('s3').set({
+      type: 'SQUARES', isLocked: true, costPerSquare: 10, closedVia: 'ADMIN_CLOSE',
+      squares: [{ id: 0, owner: 'a' }],
+    });
+    const r = await recomputeGlobalStats(db, { dryRun: true });
+    expect(r.pools).toBe(0);
+  });
+
+  it('dryRun writes NOTHING to the world-readable stats/global', async () => {
+    await db.doc('stats/global').set({ totalPrizes: 999, totalDonated: 111 });
+    await db.collection('pools').doc('s4').set({
+      type: 'SQUARES', isLocked: true, costPerSquare: 10, squares: [{ id: 0, owner: 'a' }],
+    });
+
+    const dry = await recomputeGlobalStats(db, { dryRun: true });
+    expect(dry.totalPrizes).toBe(10);
+    expect(dry.dryRun).toBe(true);
+    // Untouched — the whole point of the gate's report-only mode.
+    expect((await statsGlobal()).totalPrizes).toBe(999);
+
+    await recomputeGlobalStats(db, { dryRun: false });
+    expect((await statsGlobal()).totalPrizes).toBe(10);
+  });
+
+  it('is idempotent — it writes ABSOLUTE totals, never increments', async () => {
+    // This is what makes running it on a schedule safe, and it is the property
+    // the 2026-07-18 migration audit called the pattern to copy.
+    await db.collection('pools').doc('s5').set({
+      type: 'SQUARES', isLocked: true, costPerSquare: 10, squares: [{ id: 0, owner: 'a' }, { id: 1, owner: 'b' }],
+    });
+    await recomputeGlobalStats(db, { dryRun: false });
+    await recomputeGlobalStats(db, { dryRun: false });
+    await recomputeGlobalStats(db, { dryRun: false });
+    expect((await statsGlobal()).totalPrizes).toBe(20);
   });
 });
 

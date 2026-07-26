@@ -264,4 +264,8 @@ export const SCHEDULED_JOB_EXPECTATIONS: Record<string, JobExpectation> = {
     syncGameStatus: { everyMinutes: 1 },                  // 'every 1 minutes'
     siteAveragesJob: { everyMinutes: 24 * 60 },           // '30 3 * * *' ET
     webhookDurabilitySweep: { everyMinutes: 24 * 60 },    // '15 5 * * *' ET
+    // Keeps the world-readable stats/global from rotting: onPoolLocked never
+    // fires for NFL season pools, so without this the public money figures are
+    // correct exactly once (PLAN-STATS-INTEGRITY §8.3 step 2, codex R3 (h)).
+    recomputeGlobalStatsDaily: { everyMinutes: 24 * 60 }, // '45 5 * * *' ET
 };

@@ -1,7 +1,9 @@
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { FieldValue } from "firebase-admin/firestore";
 import { onCall } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { withHeartbeat, configReadFailedVerdict } from "./lib/heartbeat";
 
 import { sendEmail } from "./reminders";
 import { renderEmailHtml } from "./emailStyles";
@@ -245,6 +247,136 @@ export const onPoolLocked = onDocumentUpdated("pools/{poolId}", async (event) =>
     }
 });
 
+/**
+ * The daily recompute's kill-switch, read from `system/config.statsRecompute`.
+ *
+ * Pure so the fail-safe defaults are unit-tested rather than discovered in
+ * production — same shape and same reason as `readSweepGate` in nflFinalize.ts.
+ *
+ * BOTH defaults fail safe, and the second one matters more than it looks:
+ * absent/garbage config means DISABLED, and `dryRun` defaults TRUE, so
+ * `{ enabled: true }` on its own reports without writing. That makes arming a
+ * two-step act — see what it would publish, then publish — on a job whose only
+ * write target is a WORLD-READABLE money document.
+ */
+export function readStatsRecomputeGate(
+    cfg: { enabled?: unknown; dryRun?: unknown } | undefined | null,
+): { enabled: boolean; dryRun: boolean } {
+    return { enabled: cfg?.enabled === true, dryRun: cfg?.dryRun !== false };
+}
+
+export interface StatsRecomputeResult {
+    totalPrizes: number;
+    totalDonated: number;
+    /** Pools that contributed a figure. */
+    pools: number;
+    /** Pools whose pot threw — each one is money missing from the totals. */
+    errors: number;
+    /** True when nothing was written (the gate's report-only mode). */
+    dryRun: boolean;
+}
+
+/**
+ * Which pools count as having real volume? (PLAN-STATS-INTEGRITY §2.7, Kevin's Q5.)
+ *
+ * This used to be `isLocked == true` alone — and `nflPools.ts:100` creates NFL
+ * season pools with **`isLocked: false`**. They lock per week at kickoff and
+ * finalize by stamping `finalizedAt`; the pool-level flag is never flipped. So
+ * the recompute has never once visited an NFL pool, which is the half of §2.5
+ * that a pot fix alone does not reach: PR B taught `calculatePoolPot` to price
+ * them, and this is what makes it get asked.
+ *
+ * Kevin's Q5 answer is `scoredThroughWeek >= 1` — a pool has real volume once it
+ * has actually scored a week.
+ *
+ * TWO QUERIES, NOT AN `or` FILTER, and not a full-collection scan. Firestore
+ * disjunctions across two fields want a composite index, and this repo has been
+ * bitten twice by a query that needed an index nobody built: A5's feed snapshots
+ * and `nflFinalizeSweepJob`, which threw FAILED_PRECONDITION every day for ten
+ * days while looking fine. Both of these are SINGLE-FIELD predicates served by
+ * the automatic index, so there is no index to forget. Deduped by document id
+ * because a pool can satisfy both.
+ *
+ * `scoredThroughWeek >= 1` also excludes documents missing the field entirely —
+ * Firestore inequality semantics — which is the behaviour wanted: squares and
+ * bracket pools keep coming in through the `isLocked` half.
+ */
+async function selectPoolsForStats(db: admin.firestore.Firestore): Promise<Map<string, any>> {
+    const [lockedSnap, scoredSnap] = await Promise.all([
+        db.collection("pools").where("isLocked", "==", true).get(),
+        db.collection("pools").where("scoredThroughWeek", ">=", 1).get(),
+    ]);
+    const pools = new Map<string, any>();
+    for (const doc of [...lockedSnap.docs, ...scoredSnap.docs]) {
+        const data = doc.data();
+        if (data) pools.set(doc.id, data);
+    }
+    return pools;
+}
+
+/**
+ * Recompute `stats/global` from source and overwrite it.
+ *
+ * Extracted from the callable so the daily schedule below and the SuperAdmin
+ * button run the SAME code — two implementations of a money rollup is how they
+ * drift, and §2.4 is this repo's cautionary tale about exactly that.
+ *
+ * Idempotent by construction: it writes ABSOLUTE totals with `set`, never
+ * `increment`. Re-running it is always safe, which is what makes a schedule the
+ * right shape for it (and what the 2026-07-18 migration audit already noted as
+ * the pattern the other backfills should copy).
+ */
+export async function recomputeGlobalStats(
+    db: admin.firestore.Firestore,
+    opts: { dryRun: boolean },
+): Promise<StatsRecomputeResult> {
+    const pools = await selectPoolsForStats(db);
+
+    let totalAllTimePrizes = 0;
+    let totalAllTimeCharity = 0;
+    let count = 0;
+    let errors = 0;
+
+    for (const [poolId, pool] of pools) {
+        try {
+            // T2: admin-closed pools are locked for lifecycle reasons only — their
+            // economics must never be recomputed with the squares-only pot logic.
+            if (pool.closedVia === ADMIN_CLOSE) continue;
+
+            const { prizePot, charityAmount } = await calculatePoolPot(db, poolId, pool);
+            if (!isNaN(prizePot)) {
+                totalAllTimePrizes += prizePot;
+                totalAllTimeCharity += charityAmount;
+                count++;
+            } else {
+                console.warn(`Pool ${poolId} returned NaN pot`);
+            }
+        } catch (err) {
+            console.error(`Error calculating pot for pool ${poolId}:`, err);
+            errors++;
+        }
+    }
+
+    if (!opts.dryRun) {
+        // Overwrite the global stat with the recalculated total
+        await db.doc("stats/global").set({
+            totalPrizes: totalAllTimePrizes,
+            totalRevenue: totalAllTimePrizes, // Backwards compat or Total Volume? Let's treat Revenue as Prizes for now or sum? Let's just track Prizes and Donated separately.
+            totalDonated: totalAllTimeCharity,
+            lastUpdated: FieldValue.serverTimestamp(),
+            recalculatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+    }
+
+    return {
+        totalPrizes: totalAllTimePrizes,
+        totalDonated: totalAllTimeCharity,
+        pools: count,
+        errors,
+        dryRun: opts.dryRun,
+    };
+}
+
 // Callable: Manually recalculate global stats from ALL existing locked/finished pools
 export const recalculateGlobalStats = validated(
     {
@@ -272,55 +404,12 @@ export const recalculateGlobalStats = validated(
     // Kevin to smoke-test the SuperAdmin surface after deploy.
     async (_input, request) => {
     try {
-
-        const db = admin.firestore();
-
-        // Fetch ALL pools that are locked (includes active and finished)
-        const poolsSnap = await db.collection("pools")
-            .where("isLocked", "==", true)
-            .get();
-
-        let totalAllTimePrizes = 0;
-        let totalAllTimeCharity = 0;
-        let count = 0;
-        let errors = 0;
-
-        for (const doc of poolsSnap.docs) {
-            try {
-                const pool = doc.data();
-                if (!pool) continue; // Safety check
-                // T2: admin-closed pools are locked for lifecycle reasons only — their
-                // economics must never be recomputed with the squares-only pot logic.
-                if (pool.closedVia === ADMIN_CLOSE) continue;
-
-                const { prizePot, charityAmount } = await calculatePoolPot(db, doc.id, pool);
-                if (!isNaN(prizePot)) {
-                    totalAllTimePrizes += prizePot;
-                    totalAllTimeCharity += charityAmount;
-                    count++;
-                } else {
-                    console.warn(`Pool ${doc.id} returned NaN pot`);
-                }
-            } catch (err) {
-                console.error(`Error calculating pot for pool ${doc.id}:`, err);
-                errors++;
-            }
-        }
-
-        // Overwrite the global stat with the recalculated total
-        await db.doc("stats/global").set({
-            totalPrizes: totalAllTimePrizes,
-            totalRevenue: totalAllTimePrizes, // Backwards compat or Total Volume? Let's treat Revenue as Prizes for now or sum? Let's just track Prizes and Donated separately.
-            totalDonated: totalAllTimeCharity,
-            lastUpdated: FieldValue.serverTimestamp(),
-            recalculatedAt: FieldValue.serverTimestamp()
-        }, { merge: true });
-
+        const r = await recomputeGlobalStats(admin.firestore(), { dryRun: false });
         return {
             success: true,
-            message: `Recalculated from ${count} pools. Skipped ${errors} errors.`,
-            totalPrizes: totalAllTimePrizes,
-            totalDonated: totalAllTimeCharity
+            message: `Recalculated from ${r.pools} pools. Skipped ${r.errors} errors.`,
+            totalPrizes: r.totalPrizes,
+            totalDonated: r.totalDonated
         };
     } catch (e: any) {
         console.error("Recalculate Error:", e);
@@ -332,3 +421,59 @@ export const recalculateGlobalStats = validated(
         };
     }
 });
+
+/**
+ * The daily recompute (PLAN-STATS-INTEGRITY §8.3 step 2, second half).
+ *
+ * WHY A SCHEDULE AND NOT A TRIGGER. `onPoolLocked` is the only event-driven
+ * writer of `stats/global`, and it fires on unlocked→locked — which NFL season
+ * pools NEVER do (`nflPools.ts:100` creates them `isLocked: false`; they use
+ * per-week kickoff locks and finalize by stamping `finalizedAt`). So fixing the
+ * recompute's SELECTION alone makes the public numbers correct exactly once, and
+ * then they rot the moment the next NFL pool scores a week — until somebody
+ * remembers to press Recalculate. That is codex R3 finding (h).
+ *
+ * A trigger on the `scoredThroughWeek` 0→≥1 transition was the alternative. A
+ * schedule wins here: it is idempotent by construction (the recompute writes
+ * ABSOLUTE totals, never increments), it self-heals a missed or duplicated event
+ * rather than double-counting one, and it needs no new trigger surface on the
+ * pools collection — which is already carrying `onPoolLocked` plus the scorer's
+ * writes. The cost is up to a day of staleness on a marketing figure. Cheap.
+ *
+ * FAIL-SAFE OFF. Absent config means disabled, exactly like every other gated job
+ * here, and `dryRun` defaults TRUE so arming it in two steps is the natural path:
+ * `{ enabled: true }` first, read the heartbeat detail to see what it WOULD
+ * publish, then `{ enabled: true, dryRun: false }`.
+ *
+ * 05:45 ET, i.e. after `nflFinalizeSweepJob` (04:30) and `webhookDurabilitySweep`
+ * (05:15), so a night's finalizations are already reflected. Not 01:00-01:59 ET
+ * (happens twice on fall-back) and not 02:00-02:59 ET (does not exist on
+ * spring-forward).
+ *
+ * Comment kept ABOVE the onSchedule() call: the wrapping ratchet in
+ * __tests__/heartbeat.test.ts scans a fixed character window from `onSchedule(`
+ * for `withHeartbeat(`, and blanked comments still occupy their length.
+ */
+export const recomputeGlobalStatsDaily = onSchedule(
+    { schedule: "45 5 * * *", timeZone: "America/New_York", timeoutSeconds: 540, memory: "512MiB" },
+    withHeartbeat('recomputeGlobalStatsDaily', async () => {
+        const db = admin.firestore();
+        let cfg: { enabled?: boolean; dryRun?: boolean } | undefined;
+        try {
+            cfg = (await db.doc("system/config").get()).data()?.statsRecompute;
+        } catch (e) {
+            // Stays disabled, and says so honestly rather than looking healthy.
+            return configReadFailedVerdict('recomputeGlobalStatsDaily', e);
+        }
+        const gate = readStatsRecomputeGate(cfg);
+        if (!gate.enabled) return { detail: { enabled: false } };
+
+        const { dryRun } = gate;
+        const r = await recomputeGlobalStats(db, { dryRun });
+        console.log(`[stats] daily recompute${dryRun ? ' (DRY RUN, nothing written)' : ''}: ` +
+            `$${r.totalPrizes} prizes / $${r.totalDonated} charity from ${r.pools} pools, ${r.errors} errors`);
+        // A run that could not price some pools is DEGRADED, not healthy: it just
+        // overwrote a world-readable money document with an under-count.
+        return { ok: r.errors === 0, detail: { ...r } };
+    })
+);
