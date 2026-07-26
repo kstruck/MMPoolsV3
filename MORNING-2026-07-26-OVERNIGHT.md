@@ -63,9 +63,12 @@ half.
    auditing dev dependencies, which is the same class of hole #249 exists to
    close.
 
-   Note also that `gh run rerun` replays the **old** workflow file (npm 10) —
-   only a fresh push, which recomputes the PR's merge ref against the new main,
-   picks up #283.
+   **Measured, not assumed:** `gh run rerun` replays the **old** workflow file.
+   I re-ran #282's Security Scan after #283 merged and the log still shows npm
+   10's `Invalid package tree` with no npm-11 step — run `30188289401`, job
+   `89762468513`. Only a **fresh push**, which recomputes the PR's merge ref
+   against the new main, picks up #283. So do not bother rerunning; tell me and
+   I will rebase and push.
 2. **Merge #283 first anyway** (it is correct regardless — the quick endpoint is
    retired permanently), then admin-merge the rest past the red check, on the
    evidence that I ran `npm audit --audit-level=high` locally at **22:07 MT,
@@ -85,24 +88,56 @@ The stats PRs are **stacked** — each is branched off the previous one, so thei
 diffs contain their parents' commits. Merging out of order will produce
 conflicts.
 
-| # | PR | What | Order |
+**#283 is already merged** (`bb8209f` on `main`) — it is not in this queue.
+
+| # | PR | What | Depends on |
 |---|---|---|---|
-| 1 | [#283](https://github.com/kstruck/MMPoolsV3/pull/283) | CI: npm 11 + audit retry | first, independent |
-| 2 | [#282](https://github.com/kstruck/MMPoolsV3/pull/282) | **A** — shared `isTestPool` predicate + server-only flag | |
-| 3 | [#284](https://github.com/kstruck/MMPoolsV3/pull/284) | **B** — `calculatePoolPot` for NFL season, Props **and playoffs** | |
-| 4 | [#285](https://github.com/kstruck/MMPoolsV3/pull/285) | **C** — recompute selection + daily scheduled recompute | after B |
-| 5 | [#286](https://github.com/kstruck/MMPoolsV3/pull/286) | **D** — apply the filter server-side AND in the Overview | after C |
-| 6 | [#287](https://github.com/kstruck/MMPoolsV3/pull/287) | **E6** — settings-save UX (#281) | independent, any time |
+| 1 | [#282](https://github.com/kstruck/MMPoolsV3/pull/282) | **A** — shared `isTestPool` predicate + server-only flag | nothing |
+| 2 | [#284](https://github.com/kstruck/MMPoolsV3/pull/284) | **B** — `calculatePoolPot` for NFL season, Props **and playoffs** | nothing |
+| 3 | [#285](https://github.com/kstruck/MMPoolsV3/pull/285) | **C** — recompute selection + daily scheduled recompute | **B** |
+| 4 | [#286](https://github.com/kstruck/MMPoolsV3/pull/286) | **D** — apply the filter server-side AND in the Overview | **A and C** |
+| — | [#287](https://github.com/kstruck/MMPoolsV3/pull/287) | **E6** — settings-save UX (#281) | nothing — merge any time |
+
+**Verified ancestry** (`git merge-base` / `--is-ancestor` against `origin/*`, run
+2026-07-26 — codex challenged the order and this is the check that settled it):
+
+- **A and B are independent** — both rooted at `8a55b84`, and they share no file.
+- **C contains B.**
+- **D contains B and C**, and carries **A's content as replayed commits** rather
+  than A's actual commits: rebasing D onto C linearised the merge of A. So the
+  files are there, the ancestry link is not.
+
+A → B → C → D satisfies every real constraint. **But because D duplicates A's
+content, expect D to need a rebase once A, B and C are on `main`** — git will
+usually drop the already-applied patches by patch-id, and where it does not, it
+conflicts. **That rebase is mine. Tell me rather than resolving it by hand.**
 
 For each one:
 
 1. Open the PR link.
 2. Read its body — every one carries a **Known residuals** section, and #284's
    is the one that matters most.
-3. Check CI:
+3. Check CI **for that PR** — substitute its number, do not just re-run the one
+   below (codex caught me hardcoding 282 under a "for each one" heading):
 
 ```bash
 gh pr checks 282
+```
+
+```bash
+gh pr checks 284
+```
+
+```bash
+gh pr checks 285
+```
+
+```bash
+gh pr checks 286
+```
+
+```bash
+gh pr checks 287
 ```
 
    Expect `build-and-test`, `emulator-tests`, `nginx-validate`, `CodeQL`,
@@ -215,13 +250,33 @@ only.
 
 ---
 
-### 2d. Then, and only then, run Recalculate Global Stats
+### 2d. Recalculate Global Stats — NOT YET
 
-**SuperAdmin → Operations → Recalculate Global Stats.** Prod-data action, yours.
+> ⚠️ **Corrected 2026-07-26 after codex reviewed this file against
+> `PLAN-PAYMENT-TRUTH.md`.** An earlier version of this section said to
+> recalculate as soon as A–D were deployed. **That was wrong, and my own two
+> documents contradicted each other.** Deploying A–D makes the pot *maths*
+> correct; it does not make the *inputs* complete. Recalculating now publishes a
+> known under-count to a world-readable document — the exact failure §4 of
+> `PLAN-STATS-INTEGRITY.md` warns about, just from the other direction.
 
-Running it **before** A–D are deployed overwrites the world-readable
-`stats/global` with NFL volume of **zero**. That is the §4 step-order lesson in
-`PLAN-STATS-INTEGRITY.md`, and it is why this is last.
+**SuperAdmin → Operations → Recalculate Global Stats.** Prod-data action, yours —
+and it is the **last** step of a longer sequence, not of this one.
+
+Three things must land first, all in `PLAN-PAYMENT-TRUTH.md`:
+
+1. **D13** — repoint the Bento payment control, so the two stores stop diverging;
+2. **the reconciliation** for pools that already diverged (§4 of that plan, Q5) —
+   D13 is forward-only and fixes nothing that has already happened;
+3. **D25** — the historical backfill, run with finished pools included, so
+   completed NFL pools stop contributing $0.
+
+Running it **before** A–D are deployed is worse still: that overwrites
+`stats/global` with NFL volume of **zero**.
+
+**So: deploy A–D now, leave the number alone, and recalculate after the payment
+plan lands.** The figure on the card stays stale in the meantime, which is the
+correct trade — it is stale rather than confidently wrong.
 
 **Expect the numbers to DROP, and to look quiet.** That is the fix working:
 
