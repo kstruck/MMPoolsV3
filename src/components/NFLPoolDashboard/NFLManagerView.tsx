@@ -41,6 +41,44 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [settingsFeedback, setSettingsFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  // E6 (#281): drives the green "Saved!" state on every save button. A timestamp
+  // rather than a boolean so a second save re-triggers the flash even while the
+  // first one is still showing.
+  const [justSavedAt, setJustSavedAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (justSavedAt === null) return;
+    const t = setTimeout(() => setJustSavedAt(null), 4000);
+    return () => clearTimeout(t);
+  }, [justSavedAt]);
+
+  /**
+   * The save control, repeated at the end of every settings section (E6, #281).
+   *
+   * Kevin, smoke-testing #279: the form is four sections long, the only save
+   * button was at the very bottom, and the success banner is at the very top —
+   * so on a laptop you can save successfully and see nothing happen. Every pilot
+   * commissioner meets this screen in the one week the pilot has to go well.
+   *
+   * ONE handler, not N. Every section submits the SAME payload through
+   * `handleSaveSettings`; this is a placement change, not a new save path. Do not
+   * "improve" it by having each section send only its own fields — the callable
+   * merges per key, and a partial payload would look identical while quietly
+   * changing what a save means.
+   */
+  const SaveSettingsButton = ({ label = 'Save Pool Settings' }: { label?: string }) => (
+    <div className="pt-2 border-t border-line flex justify-end">
+      <button
+        onClick={handleSaveSettings}
+        disabled={isSavingSettings}
+        className={`${justSavedAt
+          ? 'bg-[#0F7B4A] hover:bg-[#0d6b40]'
+          : 'bg-[#0B5C37] hover:bg-[#0F7B4A]'} disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-3 px-8 rounded-lg flex items-center gap-2 shadow-card transition-all duration-150 hover:-translate-y-px cursor-pointer text-sm`}
+      >
+        {justSavedAt ? <CheckCircle size={15} /> : <Save size={15} />}
+        {isSavingSettings ? 'Saving...' : justSavedAt ? 'Saved!' : label}
+      </button>
+    </div>
+  );
 
   const type = pool.type;
   const castPool = pool as any;
@@ -300,9 +338,20 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         settings: updatedSettings
       });
       setSettingsFeedback({ type: 'success', message: 'Pool settings saved successfully!' });
+      // E6 (#281). The banner alone was not enough: it renders at the TOP of a
+      // long multi-section form, and the only save button was at the BOTTOM, so a
+      // commissioner on a laptop could save successfully and see nothing happen.
+      // The toast floats over the viewport wherever they are.
+      toast.success('Pool settings saved!');
+      // Drives the per-section buttons' green "Saved!" state. Cleared on a timer
+      // rather than left latched, so the NEXT save is visibly a new event —
+      // a button that says "Saved!" forever confirms nothing.
+      setJustSavedAt(Date.now());
     } catch (err: any) {
       logger.error('Failed to save pool settings:', err);
       setSettingsFeedback({ type: 'error', message: err.message || 'Failed to save settings.' });
+      toast.error(err.message || 'Failed to save settings.');
+      setJustSavedAt(null);
     } finally {
       setIsSavingSettings(false);
     }
@@ -622,6 +671,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 </select>
               </div>
             </div>
+            <SaveSettingsButton />
           </div>
 
           {/* ── Pick'em Rules ── */}
@@ -736,6 +786,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   </div>
                 </div>
               </div>
+              <SaveSettingsButton />
             </div>
           )}
 
@@ -758,6 +809,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   All picks for the week lock at this deadline — before any game starts — and cannot be changed afterward.
                 </p>
               </div>
+              <SaveSettingsButton />
             </div>
           )}
 
@@ -850,20 +902,14 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <option value="HYBRID">Hybrid (Season-End + Weekly)</option>
                 </select>
               </div>
+              <SaveSettingsButton />
             </div>
           )}
 
-          {/* ── Save Button ── */}
-          <div className="pt-2 border-t border-line flex justify-end">
-            <button
-              onClick={handleSaveSettings}
-              disabled={isSavingSettings}
-              className="bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-3 px-8 rounded-lg flex items-center gap-2 shadow-card transition-all duration-150 hover:-translate-y-px cursor-pointer text-sm"
-            >
-              <Save size={15} />
-              {isSavingSettings ? 'Saving...' : 'Save Pool Settings'}
-            </button>
-          </div>
+          {/* ── Save Button ──
+              Kept at the bottom as well as in each section: removing it would
+              break the muscle memory of anyone who already knows this screen. */}
+          <SaveSettingsButton />
         </div>
       </div>
 
