@@ -40,8 +40,10 @@ const call = (name: string, data: Record<string, unknown> = {}) =>
  * `includeFinished` widens the sweep over COMPLETED / CANCELED / archived / final pools
  * (PLAN-PAYMENT-TRUTH P4). It replaces the old `includeAll`, which this panel never sent
  * — which is exactly the D25 defect: the button could not reach the historical pools the
- * all-time total is missing. Sim pools are skipped by the callable unconditionally and
- * no flag here can change that.
+ * all-time total is missing. Sim-harness pools and pools carrying the hand-applied
+ * `isTestPool` marker are skipped by the callable unconditionally and no flag here can
+ * change that. NFL preseason pools ARE processed: they are excluded from published
+ * stats but they are the 2026-08-06 pilot, and their payment controls need the records.
  *
  * `finishedPoolsSkipped` is accumulated because it is the number to read off the narrow
  * dry run: it is how many pools the includeFinished variant would additionally touch.
@@ -58,7 +60,7 @@ const call = (name: string, data: Record<string, unknown> = {}) =>
 const runBackfill = async (dryRun: boolean, includeFinished = false) => {
   let cursor: string | undefined;
   let pages = 0;
-  const agg = { dryRun, includeFinished, poolsScanned: 0, finishedPoolsSkipped: 0, simPoolsSkipped: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, failures: [] as any[] };
+  const agg = { dryRun, includeFinished, poolsScanned: 0, finishedPoolsSkipped: 0, testPoolsSkipped: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, failures: [] as any[] };
   do {
     const r: any = await call('backfillMemberRecords', { dryRun, includeFinished, limit: 100, startAfter: cursor });
     agg.poolsScanned += r.poolsScanned || 0;
@@ -67,7 +69,7 @@ const runBackfill = async (dryRun: boolean, includeFinished = false) => {
     agg.guestSkipped += r.guestSkipped || 0;
     agg.participantIdsWithoutMember += r.participantIdsWithoutMember || 0;
     agg.poolsFlipped += r.poolsFlipped || 0;
-    agg.simPoolsSkipped += r.simPoolsSkipped || 0;
+    agg.testPoolsSkipped += r.testPoolsSkipped || 0;
     agg.finishedPoolsSkipped += r.finishedPoolsSkipped || 0;
     if (Array.isArray(r.failures)) agg.failures.push(...r.failures);
     cursor = r.nextCursor || undefined;
@@ -166,8 +168,8 @@ const ACTIONS: OpAction[] = [
   {
     id: 'backfillMemberRecordsFinished:dry',
     label: 'Backfill Member Roster incl. finished (dry run)',
-    description: 'Same as above but ALSO covers COMPLETED / CANCELED / archived / final pools — the historical pools whose dues the all-time total is currently missing (D25). Sim/test pools are still skipped and no option here can include them. Writes nothing. Run this before the live version.',
-    blastRadius: 'Read-only — no writes. Reports invariant counts incl. simPoolsSkipped.',
+    description: 'Same as above but ALSO covers COMPLETED / CANCELED / archived / final pools — the historical pools whose dues the all-time total is currently missing (D25). Sim-harness pools and any pool you have marked isTestPool are still skipped, and no option here can include them. NFL preseason pools ARE included: they count toward no published stat, but they are the pilot and their payment controls need Member Records. Writes nothing. Run this before the live version.',
+    blastRadius: 'Read-only — no writes. Reports invariant counts incl. testPoolsSkipped.',
     destructive: false,
     icon: CheckCircle2,
     run: () => runBackfill(true, true),

@@ -193,7 +193,7 @@ describe('P4 — the roster backfill dry run can be read in the Run Log', () => 
     expect(sliceLimit).toBeGreaterThan(0);
     expect(keys).toContain('poolsScanned');
     expect(keys).toContain('finishedPoolsSkipped');
-    expect(keys).toContain('simPoolsSkipped');
+    expect(keys).toContain('testPoolsSkipped');
     expect(keys).toContain('failures');
   });
 
@@ -204,7 +204,7 @@ describe('P4 — the roster backfill dry run can be read in the Run Log', () => 
     Object.fromEntries(keys.map((k) => [k, k === 'failures' ? [] : 0])),
   );
 
-  it.each(['poolsScanned', 'finishedPoolsSkipped', 'simPoolsSkipped'])(
+  it.each(['poolsScanned', 'finishedPoolsSkipped', 'testPoolsSkipped'])(
     'counter %s survives Run Log truncation',
     (key) => {
       const at = rendered.indexOf(`"${key}"`);

@@ -8,7 +8,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { ROSTER_SCHEMA_VERSION } from "../shared/memberRecord";
 import { recomputeRosterSummary } from "../lib/rosterSummary";
 import { isFinishedPool } from "../lib/poolInclusion";
-import { isSimPool } from "../shared/testPool";
+import { isSimPool, isExplicitlyMarkedTestPool } from "../shared/testPool";
 import { validated } from "../lib/validated";
 import { backfillMemberRecordsSchema } from "../schemas/migrations";
 
@@ -91,11 +91,13 @@ export const backfillMemberRecords = validated(
     dryRun,
     includeFinished,
     poolsScanned: 0,
-    /** Total skipped = simPoolsSkipped + finishedPoolsSkipped. Kept so the shape
+    /** Total skipped = testPoolsSkipped + finishedPoolsSkipped. Kept so the shape
      *  stays a superset of the previous report rather than a replacement. */
     poolsSkipped: 0,
-    /** Never processed, at any flag setting. */
-    simPoolsSkipped: 0,
+    /** Sim-harness pools plus pools carrying the hand-applied `isTestPool` marker.
+     *  Never processed, at any flag setting. Does NOT include NFL preseason —
+     *  those are the pilot and ARE backfilled. */
+    testPoolsSkipped: 0,
     /** Skipped only because includeFinished was false — i.e. the number that
      *  re-running with the flag on WOULD reach. This is the figure to read off
      *  the dry run before going live. */
@@ -114,21 +116,27 @@ export const backfillMemberRecords = validated(
     const pool: any = doc.data();
     // (Cursor still advances over skipped pools — pagination stays correct.)
 
-    // UNCONDITIONAL. No input can switch this off, which is the point of Q3: the
-    // sim harness's pools are machine-generated and get swept, so writing Member
-    // Records onto them is write amplification against data that is about to be
-    // deleted and that PR D already excludes from every published number.
+    // UNCONDITIONAL. No input can switch this off, which is the point of Q3:
+    // writing Member Records onto test data is write amplification against pools
+    // PR D already excludes from every published number, and sim pools get swept
+    // out from under it anyway.
     //
-    // Deliberately `isSimPool`, NOT `isTestPool`. `isTestPool` also matches NFL
-    // PRESEASON pools (shared/testPool.ts arm 2), and those are the 2026-08-06
-    // pilot — real pools with real members owing real dues, excluded from GLOBAL
-    // STATS only. Skipping them here would leave them with no Member Records,
-    // which is precisely the state that makes setPaidStatus throw
-    // ("Member is not on this pool's roster", setPaidStatus.ts:46) and would
-    // break the pilot's payment controls the moment P1 repoints them.
-    if (isSimPool(pool, poolId)) {
+    // This is arms 1 and 3 of `isTestPool`, deliberately NOT arm 2. Arm 2 is NFL
+    // PRESEASON (seasonType 1), and preseason is the 2026-08-06 pilot — real
+    // pools, real members, real dues, excluded from GLOBAL STATS only. Skipping
+    // those here would leave them with no Member Records, which is exactly the
+    // state that makes setPaidStatus throw ("Member is not on this pool's
+    // roster", setPaidStatus.ts:46), so it would break the pilot's payment
+    // controls the moment P1 repoints them.
+    //
+    // Arm 3 is not optional either (codex r2): the legacy Squares/Props/Playoff
+    // test runners create pools through the normal path with NO sim marker, so
+    // `isSimPool` alone does not see them. The hand-applied `isTestPool: true`
+    // flag from the K12 census is the only thing that does, and the Operations
+    // card promises those are never included.
+    if (isSimPool(pool, poolId) || isExplicitlyMarkedTestPool(pool)) {
       report.poolsSkipped++;
-      report.simPoolsSkipped++;
+      report.testPoolsSkipped++;
       continue;
     }
 
