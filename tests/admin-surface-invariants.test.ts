@@ -264,8 +264,16 @@ describe('P4 — the roster backfill dry run can be read in the Run Log', () => 
   it('the reported resume cursor is actually usable', () => {
     // Reporting resumeFrom while offering no way to submit it would leave a wedged
     // migration restarting at pool #1 forever (codex r4).
-    expect(ops).toContain('backfillResume.set(resumeKey, cursor)');
+    expect(ops).toContain('backfillResume.set(resumeKey, { cursor: at,');
     expect(ops).toContain('backfillResume.get(resumeKey)');
+    // Both stop paths park — the thrown-error one and the page-cap one.
+    expect(ops.match(/\bpark\(cursor\)/g) ?? []).toHaveLength(2);
+    // The checkpoint carries the WORK, not just the position (codex r5): a resumed
+    // run that reported only its own pages would undercount the migration evidence.
+    // The fold/snapshot themselves are behaviour-tested in
+    // src/utils/resumableReport.test.ts; this only pins that the panel uses them.
+    expect(ops).toContain('partial: snapshotReport(agg)');
+    expect(ops).toContain('foldParkedReport(agg, parked.partial)');
     // Keyed by the run's flags — resuming a wide sweep from a narrow sweep's
     // cursor would silently skip pools.
     expect(ops).toContain('const resumeKey = `${dryRun}:${includeFinished}`');
