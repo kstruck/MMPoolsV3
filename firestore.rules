@@ -181,6 +181,31 @@ service cloud.firestore {
         return !isNfl || !changed.hasAny(['seasonType']);
       }
 
+      // Arm 1 of the stats discriminator also reads a `sim-` SEASON prefix
+      // (shared/testPool.ts isSimPool). A manager of an OPEN pool could otherwise
+      // rewrite `season` to `sim-anything` and drop their own paid pool out of
+      // every published money figure — and out of the sim-aware scoring paths that
+      // already skip sim pools (nflAutoScore, nflLockWatch, the finalize sweep),
+      // which is the older and worse half of the same hole. Found by codex r2.
+      //
+      // A blanket freeze on `season` would be wrong: it rides along in the
+      // full-object update the Props wizard sends (PropsWizard.tsx UPDATE MODE).
+      // Only the TRANSITION INTO a sim- value is denied. A same-value write is not
+      // an affectedKey, so an unchanged season never reaches this check at all.
+      //
+      // Non-string seasons pass: isSimPool does String(season).startsWith('sim-'),
+      // and no number stringifies to a sim- prefix. Denying them would break a
+      // wizard that persists a numeric year, for no security gain.
+      //
+      // Only the server stamps a legitimate sim- season — the harness creates
+      // through the Admin SDK create callables, which rules never see.
+      function seasonNotForgedSim() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        return !changed.hasAny(['season'])
+               || !(request.resource.data.get('season', '') is string)
+               || !request.resource.data.get('season', '').matches('sim-.*');
+      }
+
       // Pool is in an editable state.
       // NOTE: 'PUBLISHED' is removed — status was renamed to 'OPEN'.
       function poolIsEditable() {
@@ -201,7 +226,7 @@ service cloud.firestore {
 
       // Update: Owner/Manager (filtered) OR SuperAdmin (unrestricted)
       allow update: if request.auth != null && (
-        (isPoolManager() && protectedFieldsUnchanged() && nflSettingsWriteBlocked() && nflSeasonTypeWriteBlocked() && poolIsEditable())
+        (isPoolManager() && protectedFieldsUnchanged() && nflSettingsWriteBlocked() && nflSeasonTypeWriteBlocked() && seasonNotForgedSim() && poolIsEditable())
         || isSuperAdmin()
       );
                     

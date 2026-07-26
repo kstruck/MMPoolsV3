@@ -4,7 +4,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { writeAuditEvent, type AuditOptions } from "./audit";
 import { checkBillingAccess } from "./billing";
 import { writeLedgerEvent } from "./paymentLedger";
-import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMode, assertPaidParticipantCeiling, simRunIdForCreate } from "./poolOps";
+import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMode, assertPaidParticipantCeiling, simRunIdForCreate, assertSeasonNotForgedSim } from "./poolOps";
 import { loadBillingConfig } from "./billing";
 import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } from "./lib/systemGuards";
 import { isPoolType, type PoolType } from "./shared/poolTypes";
@@ -125,6 +125,7 @@ export const createNFLPool = validated(
     // Sim harness trust anchor (stripped from clients; SUPER_ADMIN-only stamp).
     const simRunId = simRunIdForCreate((request.data || {}) as Record<string, any>, claimRole);
     if (simRunId) newPool.simRunId = simRunId;
+    assertSeasonNotForgedSim(newPool.season, simRunId);
 
     const userRef = db.collection('users').doc(uid);
 

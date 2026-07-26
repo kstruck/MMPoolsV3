@@ -65,12 +65,24 @@ describe('firestore.rules — scorer-owned pool fields are server-only', () => {
     // predicate only reads seasonType on NFL season pools.
     const block = rules.slice(
       rules.indexOf('function nflSeasonTypeWriteBlocked()'),
-      rules.indexOf('function poolIsEditable()'),
+      rules.indexOf('function seasonNotForgedSim()'),
     );
     expect(block).toContain("'seasonType'");
     for (const type of ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN']) {
       expect(block).toContain(`'${type}'`);
     }
+  });
+
+  it('denies a client transition INTO a sim- season — arm 1 of the discriminator', () => {
+    // Not a freeze on `season`: it rides along in the Props wizard's full-object
+    // update. Only the transition into a sim- value is denied, because that value
+    // is what isSimPool reads (and what the sim-aware scoring paths skip on).
+    const block = rules.slice(
+      rules.indexOf('function seasonNotForgedSim()'),
+      rules.indexOf('function poolIsEditable()'),
+    );
+    expect(block).toContain("'season'");
+    expect(block).toContain("matches('sim-.*')");
   });
 
   it('denies a client-direct settings write on NFL pools', () => {
@@ -89,6 +101,7 @@ describe('firestore.rules — scorer-owned pool fields are server-only', () => {
     expect(stmt).toContain('protectedFieldsUnchanged()');
     expect(stmt).toContain('nflSettingsWriteBlocked()');
     expect(stmt).toContain('nflSeasonTypeWriteBlocked()');
+    expect(stmt).toContain('seasonNotForgedSim()');
   });
 });
 

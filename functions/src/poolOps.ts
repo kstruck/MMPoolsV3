@@ -64,6 +64,27 @@ export function simRunIdForCreate(rawData: Record<string, any>, claimRole: strin
     return raw;
 }
 
+/**
+ * A `sim-` SEASON is the second clause of isSimPool (shared/testPool.ts), which
+ * means it is simultaneously (a) arm 1 of the stats test-pool discriminator and
+ * (b) what nflAutoScore / nflLockWatch / the finalize sweep already skip on.
+ *
+ * The sim harness legitimately creates pools carrying one — through the real
+ * create callables, as a SUPER_ADMIN caller with a well-formed run id
+ * (PLAN-NFL-SIM-HARNESS Phase 5). Nobody else may: an ordinary creator who could
+ * mint `season: 'sim-x'` would keep their own paid pool out of every published
+ * money figure and out of automated scoring. Found by codex r2 on PR A; the
+ * update-side half of the same hole is firestore.rules seasonNotForgedSim().
+ *
+ * Gated on the STAMPED simRunId, not on the raw claim — so it fails closed for a
+ * SUPER_ADMIN whose run id was malformed and therefore not stamped.
+ */
+export function assertSeasonNotForgedSim(season: unknown, stampedSimRunId: string | undefined): void {
+    if (!String(season ?? '').startsWith('sim-')) return;
+    if (stampedSimRunId) return;
+    throw new HttpsError('permission-denied', 'A "sim-" season is reserved for the simulation harness.');
+}
+
 // Strip privileged fields from a client-supplied payload before it is spread
 // into a pool document. Prevents clients from self-granting paid/active status.
 export const stripPrivilegedPoolFields = <T extends Record<string, any>>(data: T): T => {
@@ -285,6 +306,7 @@ export const createPool = validated(
         // input is the pre-strip payload — simRunId is privileged and only honored per claimRole.
         const simRunId = simRunIdForCreate(input, claimRole);
         if (simRunId) newPool.simRunId = simRunId;
+        assertSeasonNotForgedSim(newPool.season, simRunId);
 
         // Initialize Squares-specific data
         if (isSquaresPool) {
