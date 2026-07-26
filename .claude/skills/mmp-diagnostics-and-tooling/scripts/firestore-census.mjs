@@ -69,11 +69,21 @@ function initApp() {
     process.exit(1);
 }
 
-function isTestPool(name, slug) {
+// Name/slug HEURISTIC. Renamed from isTestPool to end a collision with the real
+// predicate below — they answer different questions and one of them is authority.
+function looksLikeTestPoolByName(name, slug) {
     if (typeof slug === 'string' && slug.startsWith('sim-')) return true;
     if (typeof name !== 'string') return false;
     return TEST_NAME_PREFIXES.some((p) => name.startsWith(p));
 }
+
+// Deliberately does NOT import shared/testPool.ts and re-run the discriminator
+// here. Two reasons, and the second is the important one:
+//   1. It would tie this read-only diagnostic to a specific merge order.
+//   2. A second copy of that rule is the defect PLAN-STATS-INTEGRITY §2.4 is
+//      about. Printing the three INPUTS the predicate reads is strictly better
+//      than printing a verdict: it stays true whatever the predicate does next,
+//      and it shows Kevin *why* a pool is or is not caught.
 
 function ageMinutes(ms) {
     return typeof ms === 'number' ? Math.round((Date.now() - ms) / 60000) : null;
@@ -86,12 +96,27 @@ async function run() {
     // Single field-masked scan of /pools (read-only; ~1 read per pool doc).
     const snap = await db
         .collection('pools')
-        .select('name', 'slug', 'status', 'closedVia', 'isFinal', 'type', 'billing', 'scores.gameStatus')
+        .select(
+            'name', 'slug', 'status', 'closedVia', 'isFinal', 'type', 'billing', 'scores.gameStatus',
+            // Stats discriminator inputs (PLAN-STATS-INTEGRITY §8.1 / K12).
+            'simRunId', 'season', 'seasonType', 'isTestPool', 'createdAt', 'isLocked', 'scoredThroughWeek',
+        )
         .get();
 
     const stuckOpen = [];
     const missingBilling = [];
     const testPools = [];
+    // K12 (§8.2): every pool the NAME heuristic calls a test pool, with the three
+    // discriminator inputs alongside. §2.6 predicted this set — the legacy
+    // Squares/Props/Playoff runners create through the normal path, so they carry
+    // no simRunId and a non-preseason type, and no filter can find them.
+    //
+    // A row where simRunId is null AND season is not `sim-…` AND seasonType is not
+    // 1 AND isTestPool is null is one the discriminator does NOT catch: THAT is
+    // the pool Kevin labels with `isTestPool: true`. If every row has at least one
+    // marker, the discriminator is complete and §8.2 step 0b never happens.
+    const unmarkedLegacyTestPools = [];
+    const byTypeAndSeasonType = {};
 
     for (const doc of snap.docs) {
         const d = doc.data();
@@ -103,7 +128,25 @@ async function run() {
 
         if (d.billing === undefined) missingBilling.push(row);
 
-        if (isTestPool(d.name, d.slug)) testPools.push({ ...row, slug: d.slug ?? null });
+        const byName = looksLikeTestPoolByName(d.name, d.slug);
+        if (byName) testPools.push({ ...row, slug: d.slug ?? null });
+
+        const key = `${d.type ?? '?'}/seasonType=${d.seasonType ?? '(unset)'}`;
+        byTypeAndSeasonType[key] = (byTypeAndSeasonType[key] ?? 0) + 1;
+
+        if (byName) {
+            unmarkedLegacyTestPools.push({
+                ...row,
+                slug: d.slug ?? null,
+                season: d.season ?? null,
+                seasonType: d.seasonType ?? null,
+                simRunId: d.simRunId ?? null,
+                isTestPool: d.isTestPool ?? null,
+                createdAt: d.createdAt ?? null,
+                isLocked: d.isLocked ?? null,
+                scoredThroughWeek: d.scoredThroughWeek ?? null,
+            });
+        }
     }
 
     // Heartbeats (single-doc reads; Admin SDK bypasses rules).
@@ -120,6 +163,9 @@ async function run() {
         stuckOpen: { count: stuckOpen.length, sample: stuckOpen.slice(0, SAMPLE_CAP) },
         missingBilling: { count: missingBilling.length, sample: missingBilling.slice(0, SAMPLE_CAP) },
         testPools: { count: testPools.length, sample: testPools.slice(0, SAMPLE_CAP) },
+        // K12 — no sample cap: this list is meant to be acted on, not skimmed.
+        unmarkedLegacyTestPools: { count: unmarkedLegacyTestPools.length, rows: unmarkedLegacyTestPools },
+        byTypeAndSeasonType,
         heartbeats: {
             scoreSync: {
                 exists: scoreSync.exists,
@@ -159,6 +205,24 @@ async function run() {
         if (section.count > SAMPLE_CAP) console.log(`   ... and ${section.count - SAMPLE_CAP} more (use --json for full sample cap)`);
         console.log('');
     }
+    console.log('-- Pools by type / seasonType (stats scope):');
+    for (const [k, n] of Object.entries(report.byTypeAndSeasonType).sort()) console.log(`   ${k}: ${n}`);
+    console.log('');
+
+    console.log(`-- K12: test-named pools with their discriminator inputs: ${report.unmarkedLegacyTestPools.count}`);
+    console.log('   LABEL any row marked NEEDS-LABEL: set `isTestPool: true` (boolean) on that');
+    console.log('   pool doc in the Firestore console. Rows marked "caught by" are already excluded.');
+    for (const r of report.unmarkedLegacyTestPools.rows) {
+        const caughtBy =
+            r.simRunId ? 'simRunId'
+            : (typeof r.season === 'string' && r.season.startsWith('sim-')) ? 'sim- season'
+            : Number(r.seasonType || 2) === 1 ? 'preseason seasonType=1'
+            : r.isTestPool === true ? 'isTestPool flag'
+            : null;
+        console.log(`   ${r.id}  [${r.type ?? '?'}/seasonType=${r.seasonType ?? '(unset)'}] season=${r.season ?? '(unset)'} simRunId=${r.simRunId ?? '-'} isTestPool=${r.isTestPool ?? '-'}  ${caughtBy ? `caught by ${caughtBy}` : '*** NEEDS-LABEL ***'}  ${r.name ?? '(no name)'}`);
+    }
+    console.log('');
+
     const hb = report.heartbeats;
     console.log(`-- system/scoreSync: ${hb.scoreSync.exists ? `status=${hb.scoreSync.status}, ${hb.scoreSync.ageMinutes} min old` : 'MISSING'}`);
     console.log(`-- health/latest:    ${hb.healthLatest.exists ? `${hb.healthLatest.ageMinutes} min old, failing: ${hb.healthLatest.failingChecks.length ? hb.healthLatest.failingChecks.join('; ') : 'none'}` : 'MISSING'}`);
