@@ -87,6 +87,11 @@ describe('firestore.rules — scorer-owned pool fields are server-only', () => {
     // false for "sim-\nanything" — which the rule would then allow, while
     // isSimPool's String(season).startsWith('sim-') still calls it a test pool.
     expect(block).toContain("matches('(?s)sim-.*')");
+    // A changed season must be a string or a number. List/map values are denied,
+    // because String(['sim-x']) === 'sim-x' forged a sim season past a string-only
+    // check (codex r4). Numbers stay allowed — no number stringifies to 'sim-'.
+    expect(block).toContain('s is int');
+    expect(block).toContain('s is float');
   });
 
   it('denies a client-direct settings write on NFL pools', () => {

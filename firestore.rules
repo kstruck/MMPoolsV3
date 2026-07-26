@@ -193,9 +193,15 @@ service cloud.firestore {
       // Only the TRANSITION INTO a sim- value is denied. A same-value write is not
       // an affectedKey, so an unchanged season never reaches this check at all.
       //
-      // Non-string seasons pass: isSimPool does String(season).startsWith('sim-'),
-      // and no number stringifies to a sim- prefix. Denying them would break a
-      // wizard that persists a numeric year, for no security gain.
+      // A changed `season` must be a STRING or a NUMBER. Numbers are allowed
+      // because a wizard may persist a legacy numeric year and no number
+      // stringifies to a sim- prefix. Everything else — list, map, bool — is
+      // DENIED, because JS coercion makes them forgeable: `String(['sim-x'])` is
+      // exactly `'sim-x'`, so a Firestore array value sails past a string-only
+      // check here and is then classified as a sim pool by isSimPool, taking the
+      // pool out of nflAutoScore, nflLockWatch and the finalize sweep. Found by
+      // codex r4; the JS side now also requires a string, so the trick is dead at
+      // both ends.
       //
       // Only the server stamps a legitimate sim- season — the harness creates
       // through the Admin SDK create callables, which rules never see.
@@ -208,9 +214,11 @@ service cloud.firestore {
       // (?s) flag makes `.` match newlines and closes that bypass.
       function seasonNotForgedSim() {
         let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let s = request.resource.data.get('season', '');
         return !changed.hasAny(['season'])
-               || !(request.resource.data.get('season', '') is string)
-               || !request.resource.data.get('season', '').matches('(?s)sim-.*');
+               || (s is string && !s.matches('(?s)sim-.*'))
+               || s is int
+               || s is float;
       }
 
       // Pool is in an editable state.

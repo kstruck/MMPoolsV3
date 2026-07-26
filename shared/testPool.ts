@@ -34,9 +34,27 @@ export interface TestPoolDocLike {
 export function isSimPool(pool: TestPoolDocLike | null | undefined, poolId?: string): boolean {
   return Boolean(
     pool?.simRunId ||
-    String(pool?.season || '').startsWith('sim-') ||
+    isSimSeason(pool?.season) ||
     (poolId || '').startsWith('sim-'),
   );
+}
+
+/**
+ * ONE deliberate behaviour change from the original `nflFinalize.ts` version, and
+ * it is a tightening: the season must be an actual STRING.
+ *
+ * The original wrote `String(pool?.season || '').startsWith('sim-')`, and
+ * `String(['sim-x'])` is exactly `'sim-x'` — so a Firestore ARRAY value forged a
+ * sim season, which took a real pool out of nflAutoScore, nflLockWatch and the
+ * finalize sweep. Found by codex r4. firestore.rules seasonNotForgedSim() now
+ * refuses list/map seasons on update as well; this kills the coercion at the
+ * other end, so neither half depends on the other being right.
+ *
+ * Nothing legitimate regresses: every writer of a sim season persists a string
+ * (`simSeason(runId)`), and `createNFLPool` coerces with `String(season)`.
+ */
+function isSimSeason(season: unknown): boolean {
+  return typeof season === 'string' && season.startsWith('sim-');
 }
 
 /**

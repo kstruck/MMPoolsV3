@@ -21,6 +21,14 @@ describe('isSimPool', () => {
   it('passes a real pool (real season, auto id, no simRunId)', () => {
     expect(isSimPool({ season: '2025', type: 'NFL_PICKEM' }, 'aUtoGen3RatedId')).toBe(false);
   });
+  it('is not fooled by a LIST season — String(["sim-x"]) === "sim-x" (codex r4)', () => {
+    // The original String(...) coercion made a Firestore array value forge a sim
+    // season, which took a real pool out of nflAutoScore, nflLockWatch and the
+    // finalize sweep. The season must be an actual string.
+    expect(isSimPool({ season: ['sim-x'] } as never, 'aUtoGen3RatedId')).toBe(false);
+    expect(isSimPool({ season: { 0: 'sim-x' } } as never, 'aUtoGen3RatedId')).toBe(false);
+    expect(isSimPool({ season: 2026 } as never, 'aUtoGen3RatedId')).toBe(false);
+  });
 });
 
 // The stats discriminator (PLAN-STATS-INTEGRITY §8.1, amended by Kevin 2026-07-25):
