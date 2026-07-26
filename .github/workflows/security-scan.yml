@@ -20,11 +20,45 @@ jobs:
         with:
           node-version: '22'
 
+      # npm 10 — the version bundled with node 22 — audits against
+      # /-/npm/v1/security/audits/quick, which the registry has RETIRED. It now
+      # answers `400 Invalid package tree, run npm install to rebuild your
+      # package-lock.json`, npm treats that as a fatal error, and this REQUIRED
+      # check goes red on every branch including main. npm 11 uses the bulk
+      # advisory endpoint instead and is unaffected.
+      #
+      # Not inferred — measured on 2026-07-26. Against the SAME lockfiles on one
+      # machine: `npm audit --audit-level=high` under npm 11.16.0 exits 0 and
+      # reports only moderates; `npx npm@10 audit --audit-level=high` fails with
+      # the exact 400 above. Control: rerunning the last GREEN Security Scan
+      # (PR #280, 03:48Z, unchanged lockfile) reproduced the failure, which is
+      # what proves it is the registry and not any branch's content.
+      #
+      # Pinned to the major, not `latest`: this step must not start failing on
+      # npm 12's release day. Revisit when node ships npm 11 by default.
+      - name: Use npm 11 (npm 10's audit endpoint was retired)
+        run: npm install -g npm@11
+
       - name: Install Dependencies
         run: npm ci
 
+      # Retries REGISTRY errors only. A real advisory at >=high still fails on the
+      # first attempt — `npm audit` exits 1 for both cases, so the two are told
+      # apart by npm's own "audit endpoint returned an error" line. If the registry
+      # is still unreachable after three tries the step FAILS. It is never masked:
+      # a security gate that goes green when it could not run is worse than one
+      # that is red, which is the whole reason #249 added the functions/ half.
       - name: Run NPM Audit
-        run: npm audit --audit-level=high
+        run: |
+          for i in 1 2 3; do
+            out=$(npm audit --audit-level=high 2>&1) && { echo "$out"; exit 0; }
+            echo "$out"
+            grep -q "audit endpoint returned an error" <<<"$out" || exit 1
+            echo "npm registry error (attempt $i/3) — retrying in 20s"
+            sleep 20
+          done
+          echo "::error::npm audit could not reach the registry after 3 attempts. NOT masked — failing."
+          exit 1
 
       # functions/ IS THE DEPLOYED TREE and has its own lockfile, so a
       # root-only audit says nothing about it. That is not hypothetical: a
@@ -37,7 +71,16 @@ jobs:
 
       - name: Run NPM Audit (functions)
         working-directory: functions
-        run: npm audit --audit-level=high
+        run: |
+          for i in 1 2 3; do
+            out=$(npm audit --audit-level=high 2>&1) && { echo "$out"; exit 0; }
+            echo "$out"
+            grep -q "audit endpoint returned an error" <<<"$out" || exit 1
+            echo "npm registry error (attempt $i/3) — retrying in 20s"
+            sleep 20
+          done
+          echo "::error::npm audit could not reach the registry after 3 attempts. NOT masked — failing."
+          exit 1
 
       - name: Setup Python
         uses: actions/setup-python@v5
