@@ -101,6 +101,37 @@ correctly). So the callable **must not** be deleted or made NFL-only. Option 3
 leaves it exactly as it is for bracket callers and simply stops the NFL panel
 using it.
 
+### Three things found while specifying P1 (none of which codex named)
+
+1. **There are TWO Bento paths, not one.** `togglePayment`
+   (`NFLManagerBentoDashboard.tsx:78`) *and* `saveDetailedPayment` (`:91`) both
+   call `updateBracketEntryPayment` → `updateEntryPayment`. codex named only the
+   detailed panel. Both need repointing.
+
+2. **The ledger UI is entry-backed.** `ledgerStats` (`:167`) counts
+   `e.paidStatus` from entries, and the table renders `player.paymentMethod` /
+   `paidAt` / `paymentNote` (`:746,760,775`) from the same source. So repointing
+   the writer *without more* would leave that table blank and the collected/
+   remaining figures stuck.
+
+   ⇒ **`setPaidStatus` must write the Member Record as truth AND mirror the
+   display fields onto the entry, in the same transaction.** That keeps the UI
+   unchanged, keeps one writer, and makes the two stores agree *by construction*
+   — which means P2's reconciliation is genuinely a one-off for historical data
+   rather than a recurring cleanup. It also makes the entry's `paidStatus`
+   finally *be* what `bracketEntries.ts:416` already calls it: an accurate
+   display projection.
+
+3. **`setPaidStatus` throws when no Member Record exists** (`setPaidStatus.ts:46`
+   — *"Member is not on this pool's roster"*). On a legacy NFL pool that is every
+   member, so a naive repoint converts a working-but-wrong action into a hard
+   error for exactly the pools this plan is trying to repair.
+
+   ⇒ **Sequencing changes: P4's backfill must run BEFORE P1 reaches those pools.**
+   The id mapping is at least unambiguous — for NFL season pools the entry doc id
+   *is* the uid (`nflPools.ts:486,512,573`) and the Bento already derives
+   `uid: e.ownerUid || e.id` (`:148`).
+
 ### Test plan
 
 Emulator, against the real callables: mark paid through the Bento path and assert
@@ -222,7 +253,25 @@ idempotent (it skips members already present).
 
 ---
 
-## 5. Decisions I need — the whole plan is blocked on these
+## 5. DECISIONS — ANSWERED BY KEVIN 2026-07-26. Build against these.
+
+| Q | Answer |
+|---|---|
+| **Q1** | **Option 3.** Extend `setPaidStatus` with the detail fields; repoint the Bento panel at it. `updateEntryPayment` untouched for BRACKET. |
+| **Q2** | **Option B.** Rebuys are dues owed — add a rebuy-paid control. |
+| **Q3** | **Split the flag.** New `includeFinished`; the sim/test exclusion becomes unconditional and cannot be switched off. |
+| **Q4** | Implied by Q2 — roster `duesCollected` and the pot move together. Accepted. |
+| **Q5** | **Build the reconciliation pass now**, rather than counting first. |
+
+> **Q5 note.** I had recommended counting first. Kevin's answer is strictly
+> better than the way I framed the choice: the reconciliation is **dry-run-first
+> by house rule**, so *its own dry run is the count*. One pass yields both the
+> number and the fix, instead of a query and then a migration. P0 is therefore
+> folded into P2 and is no longer a separate step.
+
+The original questions are kept below for the record.
+
+## 5b. The questions as originally written
 
 1. **Q1 — D13 option 3?** Extend `setPaidStatus` with the detail fields and
    repoint the Bento panel at it, leaving `updateEntryPayment` untouched for
@@ -249,17 +298,25 @@ idempotent (it skips members already present).
 
 | # | Scope | Gate | Kevin needed |
 |---|---|---|---|
-| P0 | **Read-only divergence count** — how many NFL members have entry `PAID` + Member Record `UNPAID`? | read-only | **runs it** (creds) |
 | P1 | D13 — `setPaidStatus` takes the detail fields; Bento repointed | plan-gated (money + authz) | review |
-| P2 | Reconciliation for the pools P0 finds — **only if P0 says it is worth it** | plan-gated (prod data) | review + runs it |
+| P2 | Reconciliation migration, **dry-run default** — its dry run is also the divergence count | plan-gated (prod data) | review + **runs it** |
 | P3 | D12 — the rebuy-paid control (option B) | plan-gated (money) | review |
-| P4 | D25 — split the backfill flag, add the Operations button | plan-gated (prod data) | review |
-| — | **Backfill dry run, then live** | prod-data | **runs it** |
+| P4 | D25 — split the backfill flag into `includeFinished`, add the Operations button | plan-gated (prod data) | review |
+| — | **Reconciliation + backfill: dry run, read the report, then live** | prod-data | **runs it** |
 | — | **Recalculate Global Stats** | prod-data | **runs it** |
 
-**P0 first, deliberately.** It is a read-only query and it decides whether P2 is a
-migration or a five-minute manual fix. Writing the reconciliation before knowing
-the number is how a one-off script becomes a week.
+**Revised order after specifying P1: P4 → P1 → P2 → P3.**
+
+- **P4 first** because `setPaidStatus` refuses to write when no Member Record
+  exists, and on legacy NFL pools that is every member (§2 finding 3). Repointing
+  before the backfill would hard-error exactly the pools being repaired.
+- **P1 before P2**, still: reconciling before the write path is fixed means the
+  stores start diverging again the next time someone opens the Bento panel.
+- **P3 last** — it is independent of the other three.
+
+**P2 and P4 both dry-run by default**, per Rule 1 and the `fixParticipantIds`
+lesson (PR #183): the flag must fail safe **at the schema layer**, not in a
+handler truthy check.
 
 All of it lands **after** the A–D stats chain is merged and deployed. None of it
 blocks that chain — A–D are correct as they stand; these three make the number
