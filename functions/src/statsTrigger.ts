@@ -9,9 +9,73 @@ import { getSquareEmails } from "./squarePrivate";
 import { isAdminCloseTransition, ADMIN_CLOSE } from "./lib/lifecycle";
 import { validated } from "./lib/validated";
 import { recalculateGlobalStatsSchema } from "./schemas/noInputAdmin";
+import { NFL_SEASON_TYPES } from "./shared/poolTypes";
+import { computeRosterSummary, type DuesInputs, type MemberRecord } from "./shared/memberRecord";
 
-// Helper to calculate total pot and charity for a pool
-const calculatePoolPot = async (db: admin.firestore.Firestore, poolId: string, pool: any): Promise<{ prizePot: number; charityAmount: number }> => {
+/**
+ * Dues actually COLLECTED, read from a pool's Member Records — the money in the pot.
+ *
+ * NFL season pools keep payment truth in `pools/{id}/members/{uid}.paidStatus`,
+ * NOT in entry documents: entries are seeded `UNPAID` at first pick submission and
+ * `setPaidStatus` never touches them (PLAN-STATS-INTEGRITY §2.8). Reusing the
+ * entry-fee branch above would therefore compute ZERO for a fully paid pool —
+ * plausible, confident and wrong, which is the specific failure §2.8 exists to
+ * stop.
+ *
+ * Reuses `computeRosterSummary` rather than re-deriving the arithmetic. It is the
+ * same helper `lib/rosterSummary.ts` already uses for the commissioner-facing
+ * roster, and it carries three rules this must not get wrong on its own: a member
+ * counts only when `paidStatus === 'PAID'`; the per-record `feeOwed` stamp wins
+ * over the pool fee, so a seeded owner who never played owes 0 (ADR 0005); and
+ * `rebuyPaid` is added on top, which is how Survivor rebuy money reaches the pot.
+ */
+const memberRecordsPot = async (
+    db: admin.firestore.Firestore,
+    poolId: string,
+    inputs: DuesInputs,
+): Promise<number> => {
+    const membersSnap = await db.collection('pools').doc(poolId).collection('members').get();
+    const members = membersSnap.docs.map((d) => d.data() as MemberRecord);
+    return computeRosterSummary(members, inputs).duesCollected;
+};
+
+/**
+ * PROPS pots come from `propCards`, NOT from Member Records.
+ *
+ * Verified rather than assumed, because getting this backwards is the same class
+ * of error as §2.8: `propBets.ts` adds one auto-id doc per card under
+ * `pools/{id}/propCards` and never writes a Member Record for the buyer —
+ * `ensureMemberRecord` is called only from `nflPools.ts` and `lib/poolCreation.ts`
+ * (the owner, at create). A Member-Records pot would therefore report ~0 for every
+ * real Props pool.
+ *
+ * `isPaid` on the card is the paid-state truth, and the commissioner UI already
+ * reads exactly this (`AdminPanel.tsx`: `cards.filter(c => c.isPaid).length *
+ * props.cost`). Paid-only matches the BRACKET / NFL_PLAYOFFS branch — this
+ * function reports money collected, not money owed.
+ */
+const propsPot = async (
+    db: admin.firestore.Firestore,
+    poolId: string,
+    pool: any,
+): Promise<number> => {
+    const cost = Number(pool.props?.cost) || 0;
+    if (cost <= 0) return 0;
+    const cardsSnap = await db.collection('pools').doc(poolId).collection('propCards').get();
+    return cardsSnap.docs.filter((d) => d.data()?.isPaid === true).length * cost;
+};
+
+/**
+ * Total pot and charity for one pool.
+ *
+ * Exported for unit tests. Before this change, NFL_PICKEM / NFL_SURVIVOR /
+ * NFL_MARGIN and PROPS all fell through to the squares branch — none of them has
+ * a `squares` array or a `costPerSquare`, so every one of them evaluated to a pot
+ * of exactly ZERO (PLAN-STATS-INTEGRITY §2.5 and codex R3 finding (j)). The
+ * `stats/global` document is world-readable, so that was a published zero, and
+ * pressing Recalculate would have re-published it.
+ */
+export const calculatePoolPot = async (db: admin.firestore.Firestore, poolId: string, pool: any): Promise<{ prizePot: number; charityAmount: number }> => {
     let grossPot = 0;
 
     if (pool.type === 'BRACKET' || pool.type === 'NFL_PLAYOFFS') {
@@ -25,6 +89,13 @@ const calculatePoolPot = async (db: admin.firestore.Firestore, poolId: string, p
             }).length;
             grossPot = paidEntriesCount * entryFee;
         }
+    } else if ((NFL_SEASON_TYPES as readonly string[]).includes(String(pool.type ?? ''))) {
+        grossPot = await memberRecordsPot(db, poolId, {
+            poolType: pool.type,
+            entryFee: pool.settings?.entryFee ?? 0,
+        });
+    } else if (pool.type === 'PROPS') {
+        grossPot = await propsPot(db, poolId, pool);
     } else {
         let squaresSold = 0;
         if (pool.squares && Array.isArray(pool.squares)) {
