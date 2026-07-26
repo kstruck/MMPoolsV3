@@ -27,10 +27,18 @@
 > #279. A second identical run reported every other function `Skipped (No changes
 > detected)` and updated exactly those 10, then printed `Deploy complete!`.
 >
-> **Rule: re-run a full-fleet deploy until EVERY function reports `Skipped (No
-> changes detected)`.** That all-Skipped report is the positive evidence. The
-> absence of an error message is not evidence of anything — which is the same
-> lesson as the three silent-success incidents already recorded below
+> **What the evidence actually is, stated precisely.** The second run accounted
+> for the WHOLE fleet with no gaps: every function reported either `Skipped (No
+> changes detected)` or `Successful update operation`, and the run ended
+> `✔ Deploy complete!`. That is sound coverage. It is **not** an all-Skipped
+> report — that pass updated 10 functions, so it cannot be its own confirmation.
+> A third pass reporting nothing but Skipped has NOT been run; it would be
+> belt-and-braces, not a gap.
+>
+> **Rule for future deploys: keep re-running the full-fleet deploy until a run
+> reports EVERY function `Skipped (No changes detected)`.** That report is the
+> positive evidence. The absence of an error message is not evidence of anything —
+> the same lesson as the three silent-success incidents already recorded below
 > (`--only functions:a,b,c` deploying only `a`, and the two stale-checkout
 > deploys).
 >
@@ -45,11 +53,17 @@
 > Baselines moved: functions unit **1004 → 1048**, emulator **177 → 187** pass (10
 > skipped, unchanged), root vitest **291 → 301**.
 >
-> **`nflAutoScore` is still UNSET = disabled** (fail-safe). Two prerequisites
-> remain before arming: **PR-B2** (the `nfl_rescore_queue` durable tier — not
-> started, it is the next PR) and **`nflDeepSweep` live WITH WRITES** (a dry-run
-> deep sweep does not write `nfl_games`, so a game finalizing >24h after kickoff
-> is never observed at all).
+> **`nflAutoScore` is still UNSET = disabled** (fail-safe). **THREE prerequisites
+> remain before arming** — all three, not any two:
+> 1. **PR-B2** — the `nfl_rescore_queue` durable tier (not started; next PR).
+> 2. **`nflDeepSweep` live WITH WRITES** — a dry-run deep sweep does not write
+>    `nfl_games`, so a game finalizing >24h after kickoff is never observed.
+> 3. **The `publishedWeeks` backfill must have been RUN** (see below). Arming
+>    without it leaves every manually-scored pre-#279 week unmarked, so the new
+>    publish guard cannot stop those weeks being reopened after their results were
+>    shown — exactly the hole it exists to close.
+>
+> `PRESEASON-READINESS-CHECKLIST.md` G1 carries the same three; keep them in sync.
 >
 > ⚠️ **#279 did NOT reach a clean codex round.** 3 rounds ran — 8 findings, all
 > absorbed with a regression guard each — and round 4 returned `Quota exceeded.
