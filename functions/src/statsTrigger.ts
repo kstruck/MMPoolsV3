@@ -27,7 +27,16 @@ import { computeRosterSummary, type DuesInputs, type MemberRecord } from "./shar
  * roster, and it carries three rules this must not get wrong on its own: a member
  * counts only when `paidStatus === 'PAID'`; the per-record `feeOwed` stamp wins
  * over the pool fee, so a seeded owner who never played owes 0 (ADR 0005); and
- * `rebuyPaid` is added on top, which is how Survivor rebuy money reaches the pot.
+ * `rebuyPaid` is added on top.
+ *
+ * ⚠️ KNOWN GAP, inherited not introduced (codex r2, verified): NOTHING WRITES
+ * `rebuyPaid`. `executeSurvivorRebuyInternal` increments `rebuyOwed` only,
+ * `setPaidStatus` touches only the base `paidStatus`, and no other writer exists
+ * in `functions/src` or `src/`. So Survivor rebuy money contributes ZERO to the
+ * pot today — an UNDER-count, not an over-count. Left alone here on purpose:
+ * `memberDues` is shared with the commissioner roster, so redefining "collected"
+ * moves a second money surface, and the fix is a product decision. Pinned by a
+ * test in poolPot.emulator.test.ts so it is a recorded decision.
  */
 const memberRecordsPot = async (
     db: admin.firestore.Firestore,

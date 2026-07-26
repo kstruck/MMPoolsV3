@@ -69,7 +69,7 @@ describe('calculatePoolPot — NFL season pools read Member Records (§2.8)', ()
     expect(prizePot).toBe(80);
   });
 
-  it('adds Survivor rebuy money that was actually paid', async () => {
+  it('adds rebuy money when rebuyPaid is set — but SEE THE NEXT TEST, nothing sets it', async () => {
     const pool = { type: 'NFL_SURVIVOR', settings: { entryFee: 20 } };
     await db.collection('pools').doc('p3').set(pool);
     await member('p3', 'a', { paidStatus: 'PAID', rebuyOwed: 20, rebuyPaid: 20 });
@@ -78,6 +78,32 @@ describe('calculatePoolPot — NFL season pools read Member Records (§2.8)', ()
 
     const { prizePot } = await calculatePoolPot(db, 'p3', pool);
     expect(prizePot).toBe(20 + 20 + 20);
+  });
+
+  it('OPEN DEFECT: a real Survivor rebuy contributes NOTHING, because rebuyPaid is never written', async () => {
+    // Found by codex r2 on this PR and verified before accepting:
+    // executeSurvivorRebuyInternal (nflPools.ts:758,763) increments `rebuyOwed`
+    // ONLY, setPaidStatus touches only the base `paidStatus`, and a grep across
+    // functions/src and src/ finds NO writer of `rebuyPaid` anywhere. So
+    // memberDues's `collected += rebuyPaid` is always +0 in production and every
+    // rebuy dollar is missing from the pot.
+    //
+    // NOT fixed here, deliberately. `memberDues` is the SHARED dues helper that
+    // also backs the commissioner roster (lib/rosterSummary.ts), so redefining
+    // "collected" moves a second money surface at the same time. And the honest
+    // options — add a rebuy-paid control, or treat paidStatus PAID as covering
+    // rebuyOwed — are a product decision, not a refactor. Its own PR.
+    //
+    // Pinned so the gap is a recorded decision rather than a surprise, and so
+    // whoever fixes it has a test that flips.
+    const pool = { type: 'NFL_SURVIVOR', settings: { entryFee: 20 } };
+    await db.collection('pools').doc('p7').set(pool);
+    // Exactly the shape production produces: rebuyOwed from the rebuy path,
+    // paidStatus PAID from the commissioner, rebuyPaid absent.
+    await member('p7', 'a', { paidStatus: 'PAID', rebuyOwed: 20 });
+
+    const { prizePot } = await calculatePoolPot(db, 'p7', pool);
+    expect(prizePot).toBe(20); // base fee only — the $20 rebuy is invisible
   });
 
   it('honours the per-record feeOwed stamp — a seeded owner who never played owes 0', async () => {
