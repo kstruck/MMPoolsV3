@@ -44,6 +44,13 @@ const PRIVILEGED_POOL_FIELDS = [
     'winners', 'winnerDetermined', 'isPaid', 'paidOut', 'payouts',
     'createdByUid', 'ownerId', 'managerUid', 'coManagers', 'role',
     'id', 'createdAt', 'updatedAt', 'poolCredits', 'simRunId',
+    // Stats discriminator (PLAN-STATS-INTEGRITY §8.1 arm 3, codex r1). The create
+    // envelopes are PERMISSIVE (ADR-0001) and spread the surviving payload
+    // straight into the Admin SDK write, which firestore.rules never sees — so
+    // without this line any authenticated creator could ship `isTestPool: true`
+    // in their create call and keep their pool's money out of every published
+    // figure. Only the server (console / Admin SDK) sets this field.
+    'isTestPool',
 ];
 
 // Sim harness trust anchor (PLAN-TEST-SUITE 8f): simRunId is stripped from

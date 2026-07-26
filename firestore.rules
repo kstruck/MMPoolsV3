@@ -116,7 +116,14 @@ service cloud.firestore {
           // could CLEAR it could push a test pool's fake pot into the
           // world-readable stats/global document. Kevin sets it as data (console /
           // Admin SDK, which bypass rules) when labelling legacy test pools.
-          'isTestPool',
+          //
+          // `simRunId` rides along for the same reason: it is arm 1 of the same
+          // discriminator AND the sim-harness trust anchor. It is already stripped
+          // from every client CREATE payload (poolOps.ts PRIVILEGED_POOL_FIELDS);
+          // leaving it writable on UPDATE reopened that hole with one extra step.
+          // Nothing client-side writes it — the server stamps it for SUPER_ADMIN
+          // callers only.
+          'isTestPool', 'simRunId',
           // The pool TYPE decides which rules apply to it, so a manager who could
           // change it could step out of every type-scoped protection and back in.
           // Concretely (codex r1): flip an NFL pool to SQUARES, write
@@ -151,6 +158,29 @@ service cloud.firestore {
         return !isNfl || !changed.hasAny(['settings']);
       }
 
+      // `seasonType` is arm 2 of the stats test-pool discriminator
+      // (PLAN-STATS-INTEGRITY §8.1): an NFL season pool on seasonType 1 is
+      // preseason, i.e. Kevin's own testing, and counts toward nothing. So a
+      // manager who can write it can move a real regular-season pool out of every
+      // published money figure — and back in. Found by codex r1 on PR A.
+      //
+      // NOT added to protectedFieldsUnchanged(), which is unscoped: the SQUARES
+      // setup wizard legitimately rewrites `seasonType` on an existing pool when
+      // the commissioner re-picks the game (AdminPanel.tsx selectGame ->
+      // updateConfig -> dbService.updatePool). Freezing it everywhere would break
+      // that save. The discriminator only READS seasonType on NFL season pools, so
+      // that is the only place it needs freezing.
+      //
+      // Same both-sides type check as nflSettingsWriteBlocked(), and for the same
+      // reason: `type` is protected above, so they cannot legitimately differ.
+      function nflSeasonTypeWriteBlocked() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let nflTypes = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
+        let isNfl = resource.data.get('type', '') in nflTypes
+                    || request.resource.data.get('type', '') in nflTypes;
+        return !isNfl || !changed.hasAny(['seasonType']);
+      }
+
       // Pool is in an editable state.
       // NOTE: 'PUBLISHED' is removed — status was renamed to 'OPEN'.
       function poolIsEditable() {
@@ -171,7 +201,7 @@ service cloud.firestore {
 
       // Update: Owner/Manager (filtered) OR SuperAdmin (unrestricted)
       allow update: if request.auth != null && (
-        (isPoolManager() && protectedFieldsUnchanged() && nflSettingsWriteBlocked() && poolIsEditable())
+        (isPoolManager() && protectedFieldsUnchanged() && nflSettingsWriteBlocked() && nflSeasonTypeWriteBlocked() && poolIsEditable())
         || isSuperAdmin()
       );
                     

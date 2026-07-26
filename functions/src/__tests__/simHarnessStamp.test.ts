@@ -21,6 +21,17 @@ describe('simRunId trust anchor', () => {
         expect(clean).not.toHaveProperty('simRunId');
     });
 
+    // Same class, found by codex r1 on PR A: the stats discriminator's explicit
+    // arm. The create envelopes are PERMISSIVE and spread the surviving payload
+    // into an Admin SDK write that firestore.rules never sees, so a creator who
+    // could smuggle this field through would keep their own pool's money out of
+    // every published figure.
+    it('isTestPool is stripped from client create payloads', () => {
+        const clean = stripPrivilegedPoolFields({ name: 'x', isTestPool: true });
+        expect(clean).not.toHaveProperty('isTestPool');
+        expect(clean.name).toBe('x');
+    });
+
     it('stamps only for SUPER_ADMIN', () => {
         expect(simRunIdForCreate({ simRunId: 'run-12345' }, 'SUPER_ADMIN')).toBe('run-12345');
         expect(simRunIdForCreate({ simRunId: 'run-12345' }, 'COMMISSIONER')).toBeUndefined();
