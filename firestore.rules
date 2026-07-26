@@ -199,11 +199,18 @@ service cloud.firestore {
       //
       // Only the server stamps a legitimate sim- season — the harness creates
       // through the Admin SDK create callables, which rules never see.
+      //
+      // `(?s)` IS LOAD-BEARING, not decoration (codex r3). matches() is a RE2
+      // FULL-string match, and RE2's `.` does not match a newline by default — so
+      // a bare 'sim-.*' returns FALSE for the value "sim-\nanything", which this
+      // rule would then have allowed. isSimPool would still classify it as a test
+      // pool, because it only does String(season).startsWith('sim-'). The inline
+      // (?s) flag makes `.` match newlines and closes that bypass.
       function seasonNotForgedSim() {
         let changed = request.resource.data.diff(resource.data).affectedKeys();
         return !changed.hasAny(['season'])
                || !(request.resource.data.get('season', '') is string)
-               || !request.resource.data.get('season', '').matches('sim-.*');
+               || !request.resource.data.get('season', '').matches('(?s)sim-.*');
       }
 
       // Pool is in an editable state.

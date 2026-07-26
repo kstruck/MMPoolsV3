@@ -82,7 +82,11 @@ describe('firestore.rules — scorer-owned pool fields are server-only', () => {
       rules.indexOf('function poolIsEditable()'),
     );
     expect(block).toContain("'season'");
-    expect(block).toContain("matches('sim-.*')");
+    // The (?s) flag is the finding, not a style choice (codex r3): matches() is a
+    // RE2 FULL-string match and RE2's `.` skips newlines, so a bare 'sim-.*' is
+    // false for "sim-\nanything" — which the rule would then allow, while
+    // isSimPool's String(season).startsWith('sim-') still calls it a test pool.
+    expect(block).toContain("matches('(?s)sim-.*')");
   });
 
   it('denies a client-direct settings write on NFL pools', () => {
