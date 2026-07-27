@@ -8,12 +8,22 @@ import { isWeekComplete } from './lib/weekCompletion';
 import { isSimPool } from './nflFinalize';
 import {
   isTerminalPool,
+  isRetiredPool,
+  nextWithheldLockAt,
   computeWeekFingerprint,
   autoScoreHeartbeat,
   rotateForRun,
   type AutoScoreResult,
 } from './lib/autoScoreDecisions';
 import { readEntryRevisionSum } from './lib/entryRevision';
+import {
+  readRescoreQueue,
+  groupBySlate,
+  ackRescoreEvents,
+  enqueueRescore,
+  survivorAllowedForGroup,
+  slateKeyOf,
+} from './lib/rescoreQueue';
 import type { NFLGame } from './nflPoolTypes';
 
 /**
@@ -38,10 +48,13 @@ import type { NFLGame } from './nflPoolTypes';
  * per-entry revision sum, so a submission committing after the previous pass
  * read entries always forces one more pass.
  *
- * OUT OF SCOPE, and an arming prerequisite rather than a gap in this job: the
- * `nfl_rescore_queue` durable tier (§5b) that catches ESPN corrections and
- * finals landing beyond the 24h window. It is only reachable once the job is
- * armed, and §7 requires it before arming — the job ships inert.
+ * RECONCILIATION (§5b): every run also drains `nfl_rescore_queue`, the durable
+ * tier that catches what the 24h window cannot see — an ESPN correction days
+ * later, a postponed game first going terminal, a manual locked-spread edit, and
+ * a terminal game this job itself withheld behind an unexpired lock override.
+ * Queued slates score finalized pools too (and re-finalize), but never retired
+ * ones. A dry run reads the queue and acknowledges NOTHING, so flipping to live
+ * still finds the work.
  */
 
 /** Pool types this job scores. */
@@ -142,6 +155,7 @@ export async function findActiveSlates(
 export async function findCandidatePools(
   db: Firestore,
   slate: ActiveSlate,
+  opts: { includeFinalized?: boolean } = {},
 ): Promise<Array<{ id: string; pool: any }>> {
   const snap = await db.collection('pools')
     .where('type', 'in', NFL_POOL_TYPES as unknown as string[])
@@ -160,31 +174,86 @@ export async function findCandidatePools(
     // of those writes. nflLockWatchJob and the finalize sweep already filter
     // this way; this job was the odd one out.
     .filter(({ id, pool }) => !isSimPool(pool, id))
-    .filter(({ pool }) => !isTerminalPool(pool));
+    // The queued tier passes `includeFinalized` so a late correction can rescore a
+    // pool the scorer already finalized — `scoreNFLWeekInternal` re-finalizes at
+    // the end of the same pass. The retirement statuses still apply either way;
+    // see `isRetiredPool` for why that split is not symmetric.
+    .filter(({ pool }) => (opts.includeFinalized ? !isRetiredPool(pool) : !isTerminalPool(pool)));
+}
+
+/**
+ * The full slate for a queued (season, seasonType, week). The live tier gets this
+ * for free from `findActiveSlates`; a queued slate is outside the window, so it
+ * has to be read directly.
+ *
+ * Same three-equality query `findActiveSlates` already uses per slot, so it rides
+ * the same index and cannot introduce a new FAILED_PRECONDITION.
+ */
+export async function readSlateGames(
+  db: Firestore,
+  slot: { season: string; seasonType: number; week: number },
+): Promise<NFLGame[]> {
+  const snap = await db.collection('nfl_games')
+    .where('season', '==', slot.season)
+    .where('seasonType', '==', slot.seasonType)
+    .where('week', '==', slot.week)
+    .get();
+  return snap.docs.map(d => d.data() as NFLGame);
 }
 
 
+
+/** Mutable state shared by every slate in one run. */
+interface RunContext {
+  /** Pools the scorer was actually invoked on, against MAX_POOLS_PER_RUN. */
+  attempts: number;
+  /** `lockPending` reminders already enqueued this run, keyed slate+instant, so N pools on one slate do not write N copies. */
+  remindersSent: Set<string>;
+}
+
+interface SlatePassOptions {
+  dryRun: boolean;
+  now: number;
+  /** Queued tier only: rescore pools this job already finalized. */
+  includeFinalized: boolean;
+  /** False on a `correction`-only queued group — Survivor cannot be repaired by a re-score yet. */
+  survivorAllowed: boolean;
+}
+
 /**
- * One pass of the auto-scorer. Extracted from the scheduled wrapper so the whole
- * write path is testable without a scheduler, and so the caller owns the gate.
+ * Score every eligible pool on one slate. Shared by both candidate sources — the
+ * live active window and the queue drain — so the fingerprint skip, the cap, the
+ * lease handling and the fingerprint-banking rules cannot drift between them.
+ *
+ * Returns false if any pool on this slate threw, which is what stops the queued
+ * tier from acknowledging an event whose work did not complete.
  */
-export async function autoScoreOnce(
+async function scoreSlateOnce(
   db: Firestore,
-  now: number,
-  opts: { dryRun: boolean; lookbackMs?: number },
-): Promise<AutoScoreResult> {
-  const result: AutoScoreResult = {
-    activeSlates: 0, poolsScored: 0, poolsSkipped: 0, overflow: 0, poolsFailed: 0,
-  };
-
-  const slates = await findActiveSlates(db, now, opts.lookbackMs ?? HOT_WINDOW_LOOKBACK_MS);
-  result.activeSlates = slates.length;
-  if (slates.length === 0) return result;
-
-  let attempts = 0;
-  for (const slate of slates) {
-    const candidates = rotateForRun(await findCandidatePools(db, slate), now);
-    for (const { id: poolId, pool } of candidates) {
+  slate: ActiveSlate,
+  opts: SlatePassOptions,
+  result: AutoScoreResult,
+  ctx: RunContext,
+): Promise<boolean> {
+  const now = opts.now;
+  let allOk = true;
+  const candidates = rotateForRun(
+    await findCandidatePools(db, slate, { includeFinalized: opts.includeFinalized }),
+    now,
+  );
+  for (const { id: poolId, pool } of candidates) {
+      // A late Survivor CORRECTION has no safe automatic repair: re-scoring week N
+      // keeps later strikeWeeks and, once the entry is eliminated there, skips
+      // every later week — so the elimination ordering downstream stays wrong.
+      // Deferred until the reset-and-replay sub-PR rather than applied badly.
+      if (!opts.survivorAllowed && pool?.type === 'NFL_SURVIVOR') {
+        result.survivorCorrectionsDeferred++;
+        console.warn(
+          `[nflAutoScoreJob] Survivor pool ${poolId} skipped for a queued correction on ` +
+          `${slateKeyOf(slate)} week ${slate.week} — needs the reset-and-replay path.`,
+        );
+        continue;
+      }
       // The entry-revision sum is the term that makes a submission committing
       // after the previous pass's entries read defeat the skip (§7 PR-B′). A
       // `null` means the aggregate could not be read: treat it as "unknown" and
@@ -200,11 +269,12 @@ export async function autoScoreOnce(
         continue;
       }
 
-      if (attempts >= MAX_POOLS_PER_RUN) {
+      if (ctx.attempts >= MAX_POOLS_PER_RUN) {
         result.overflow++;
+        allOk = false;
         continue;
       }
-      attempts++;
+      ctx.attempts++;
 
       try {
         const scored = await scoreNFLWeekInternal(db, poolId, slate.week, {
@@ -221,9 +291,36 @@ export async function autoScoreOnce(
         // next 10-minute run picks it up.
         if (scored.leaseBusy) {
           result.poolsSkipped++;
+          // Nothing was done for this pool, so a queued event covering it has not
+          // been served yet — hold the ack rather than dropping the reconciliation
+          // on the floor because another scorer happened to hold the lease.
+          allOk = false;
           continue;
         }
         result.poolsScored++;
+
+        // A terminal game withheld behind an unexpired lock override is the one
+        // case where nothing external will ever make this slate a candidate again
+        // once it leaves the 24h window. Leave a durable reminder for the instant
+        // the lock closes. Live passes only: a dry run writes nothing, and the
+        // reminder is a write.
+        if (!opts.dryRun) {
+          const withheldAt = nextWithheldLockAt(pool, slate.week, slate.games, now);
+          if (withheldAt !== null) {
+            const key = `${slateKeyOf(slate)}@${withheldAt}`;
+            if (!ctx.remindersSent.has(key)) {
+              ctx.remindersSent.add(key);
+              await enqueueRescore(db, {
+                season: slate.season,
+                seasonType: slate.seasonType,
+                week: slate.week,
+                reason: 'lockPending',
+                enqueuedAt: now,
+                notBefore: withheldAt,
+              });
+            }
+          }
+        }
 
         // The fingerprint is recorded ONLY after a live pass that actually did
         // something. Three separate reasons to withhold it, and each one is a
@@ -259,12 +356,109 @@ export async function autoScoreOnce(
         }
       } catch (e) {
         result.poolsFailed++;
+        allOk = false;
         console.error(`[nflAutoScoreJob] scoring failed for pool ${poolId} week ${slate.week}:`, e);
       }
+  }
+  return allOk;
+}
+
+/**
+ * One pass of the auto-scorer. Extracted from the scheduled wrapper so the whole
+ * write path is testable without a scheduler, and so the caller owns the gate.
+ *
+ * TWO candidate sources, in order: the live active window, then the queue drain.
+ * A slate can legitimately appear in both (a correction landing on a slate still
+ * inside the window); the fingerprint skip makes the second visit cost one
+ * entries read, and processing it anyway is what lets the event be acknowledged.
+ */
+export async function autoScoreOnce(
+  db: Firestore,
+  now: number,
+  opts: { dryRun: boolean; lookbackMs?: number },
+): Promise<AutoScoreResult> {
+  const result: AutoScoreResult = {
+    activeSlates: 0, poolsScored: 0, poolsSkipped: 0, overflow: 0, poolsFailed: 0,
+    queuedEvents: 0, queuedSlates: 0, queuedDeferred: 0, queuedAcked: 0,
+    survivorCorrectionsDeferred: 0,
+  };
+  const ctx: RunContext = { attempts: 0, remindersSent: new Set() };
+
+  const slates = await findActiveSlates(db, now, opts.lookbackMs ?? HOT_WINDOW_LOOKBACK_MS);
+  result.activeSlates = slates.length;
+  for (const slate of slates) {
+    await scoreSlateOnce(
+      db, slate,
+      { dryRun: opts.dryRun, now, includeFinalized: false, survivorAllowed: true },
+      result, ctx,
+    );
+  }
+
+  await drainRescoreQueue(db, now, opts.dryRun, result, ctx);
+  return result;
+}
+
+/**
+ * The reconciliation tier (§5b).
+ *
+ * ACKNOWLEDGEMENT RULES, both of which are skip-forever bugs if you get them
+ * wrong:
+ *  - a DRY RUN acknowledges nothing (codex r30). During the watching period a
+ *    queued event is often the ONLY candidate for an out-of-window slate; clearing
+ *    it on a dry run would leave the live flip with no queue item and no active
+ *    slate, so the stale result would never be applied at all.
+ *  - a live drain acknowledges a slate only if every pool on it completed. A throw,
+ *    a lease held by another scorer, or the per-run cap all leave the work unserved,
+ *    and nothing else outside the window would ever retry it.
+ * Events are deleted by the exact ids that were read, so an enqueue landing
+ * mid-drain is untouched and drains next run.
+ */
+async function drainRescoreQueue(
+  db: Firestore,
+  now: number,
+  dryRun: boolean,
+  result: AutoScoreResult,
+  ctx: RunContext,
+): Promise<void> {
+  const { events, deferred, malformed } = await readRescoreQueue(db, now);
+  result.queuedDeferred = deferred;
+  result.queuedEvents = events.length;
+
+  const groups = groupBySlate(events);
+  result.queuedSlates = groups.length;
+
+  for (const group of groups) {
+    const games = await readSlateGames(db, group);
+    // A queued slate with no games in `nfl_games` cannot be scored and never will
+    // be — acknowledge it rather than draining the same dead event every 10 min.
+    if (games.length === 0) {
+      console.warn(`[nflAutoScoreJob] queued slate ${slateKeyOf(group)} has no games; dropping ${group.ids.length} event(s).`);
+      if (!dryRun) { await ackRescoreEvents(db, group.ids); result.queuedAcked += group.ids.length; }
+      continue;
+    }
+
+    const allOk = await scoreSlateOnce(
+      db,
+      { season: group.season, seasonType: group.seasonType, week: group.week, games },
+      {
+        dryRun, now,
+        includeFinalized: true,
+        survivorAllowed: survivorAllowedForGroup(group.reasons),
+      },
+      result, ctx,
+    );
+
+    if (!dryRun && allOk) {
+      await ackRescoreEvents(db, group.ids);
+      result.queuedAcked += group.ids.length;
     }
   }
 
-  return result;
+  if (!dryRun && malformed.length > 0) {
+    console.warn(`[nflAutoScoreJob] dropping ${malformed.length} unparseable rescore event(s).`);
+    await ackRescoreEvents(db, malformed);
+    result.queuedAcked += malformed.length;
+  }
 }
 
 export const nflAutoScoreJob = onSchedule(

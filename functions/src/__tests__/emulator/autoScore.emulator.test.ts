@@ -6,6 +6,9 @@ import { autoScoreOnce } from '../../nflAutoScore';
 import { computeWeekFingerprint } from '../../lib/autoScoreDecisions';
 import { readEntryRevisionSum } from '../../lib/entryRevision';
 import { acquireScoringLease, fencedWrite, SCORING_LEASE_TTL_MS } from '../../lib/scoringLease';
+import {
+  enqueueRescore, readRescoreQueue, ackRescoreEvents, RESCORE_QUEUE, type RescoreReason,
+} from '../../lib/rescoreQueue';
 import type { NFLGame } from '../../nflPoolTypes';
 
 /**
@@ -27,7 +30,7 @@ const SYSTEM_ACTOR = { uid: 'system', role: 'SYSTEM' as const, label: 'Auto Scor
 const SEASON = 'auto-2026';
 
 async function wipe() {
-  for (const col of ['nfl_games', 'pools']) {
+  for (const col of ['nfl_games', 'pools', 'nfl_rescore_queue']) {
     const snap = await db.collection(col).get();
     await Promise.all(snap.docs.map(async d => {
       for (const sub of ['entries', 'standings', 'weekly_recaps', 'audit', 'audit_dedupe']) {
@@ -929,5 +932,214 @@ describe('scoring lease — the mutex between scorers', () => {
       fencedWrite(db, db.collection('pools').doc('p-steal'), mine, () => {}, { probe: true }),
     ).rejects.toThrow(/FENCE_LOST/);
     expect((await poolDoc('p-steal')).probe).toBeUndefined();
+  }, 60000);
+});
+
+// ---------------------------------------------------------------------------
+// PR-B2 — the nfl_rescore_queue reconciliation tier (plan §5b)
+// ---------------------------------------------------------------------------
+
+/**
+ * Every case here is about a slate the LIVE tier cannot see: its games kicked off
+ * more than 24h ago, so `findActiveSlates` returns nothing and only the queue can
+ * make it a candidate. That is the whole point of the tier, and it is also why
+ * these have to be emulator tests — the guarantees are about which docs exist
+ * afterwards (was the event acknowledged? was the pool written?), not about a
+ * returned object.
+ */
+describe('rescore queue — the tier that catches what the 24h window cannot', () => {
+  const STALE = 48 * HOUR;
+
+  /** A finished week-1 slate whose kickoff is two days back, plus an unplayed week 2 so nothing finalizes. */
+  const seedStale = async (poolId: string, type = 'NFL_PICKEM', settings: Record<string, unknown> = {}) => {
+    await wipe();
+    await seedGames([
+      gameDoc('g1', { startTime: Date.now() - STALE }),
+      laterWeekGame(),
+    ]);
+    await seedPool(poolId, type, { lockBufferMinutes: 5, pickMode: 'STRAIGHT', ...settings });
+    await seedEntry(poolId, 'alice', { picks: { g1: 'KC' }, weeklyPoints: {}, totalScore: 0 });
+  };
+
+  const enqueue = (reason: RescoreReason, over: Record<string, unknown> = {}) =>
+    enqueueRescore(db, { season: SEASON, seasonType: 1, week: 1, reason, enqueuedAt: Date.now(), ...over });
+
+  const queueSize = async () => (await db.collection(RESCORE_QUEUE).get()).size;
+
+  it('the live tier alone does NOTHING with a stale slate — the gap the queue exists to close', async () => {
+    await seedStale('p-q-baseline');
+    const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(r.activeSlates).toBe(0);
+    expect(r.poolsScored).toBe(0);
+    expect((await entryDoc('p-q-baseline', 'alice')).weeklyPoints[1]).toBeUndefined();
+  }, 60000);
+
+  it('a queued terminal event scores that stale slate and acknowledges the event', async () => {
+    await seedStale('p-q-terminal');
+    await enqueue('terminal');
+
+    const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(r.queuedEvents).toBe(1);
+    expect(r.queuedSlates).toBe(1);
+    expect(r.poolsScored).toBe(1);
+    expect(r.queuedAcked).toBe(1);
+    expect((await entryDoc('p-q-terminal', 'alice')).weeklyPoints[1]).toBe(1);
+    expect(await queueSize()).toBe(0);
+  }, 60000);
+
+  it('a DRY RUN reads the queue, writes nothing and acknowledges NOTHING', async () => {
+    // codex r30. During the watching period a queued event is often the only
+    // candidate for an out-of-window slate; clearing it on a dry run would leave
+    // the live flip with no queue item and no active slate, so the stale result
+    // would never be applied at all.
+    await seedStale('p-q-dry');
+    await enqueue('correction');
+
+    const dry = await autoScoreOnce(db, Date.now(), { dryRun: true });
+    expect(dry.queuedEvents).toBe(1);
+    expect(dry.poolsScored).toBe(1);          // "would score"
+    expect(dry.queuedAcked).toBe(0);
+    expect(await queueSize()).toBe(1);
+    expect((await entryDoc('p-q-dry', 'alice')).weeklyPoints[1]).toBeUndefined();
+    expect((await poolDoc('p-q-dry')).autoScore?.fingerprintByWeek).toBeUndefined();
+
+    // The handoff: the first live run still finds the work.
+    const live = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(live.poolsScored).toBe(1);
+    expect(live.queuedAcked).toBe(1);
+    expect((await entryDoc('p-q-dry', 'alice')).weeklyPoints[1]).toBe(1);
+  }, 60000);
+
+  it('an event enqueued DURING a drain survives the acknowledgement', async () => {
+    // The lossless requirement (codex r25) spelled out as the exact interleaving:
+    // read the queue, let a new event land, then acknowledge. Deleting by the ids
+    // that were READ is what makes the newcomer survive — a "clear the slate
+    // marker" ack would take it with the rest.
+    await seedStale('p-q-interleave');
+    await enqueue('terminal');
+
+    const read = await readRescoreQueue(db, Date.now());
+    expect(read.events).toHaveLength(1);
+    await enqueue('correction');                       // lands mid-drain
+    await ackRescoreEvents(db, read.events.map(e => e.id));
+
+    const after = await readRescoreQueue(db, Date.now());
+    expect(after.events).toHaveLength(1);
+    expect(after.events[0].event.reason).toBe('correction');
+  }, 60000);
+
+  it('a queued correction rescores a pool this job already FINALIZED', async () => {
+    await seedStale('p-q-finalized');
+    await db.collection('pools').doc('p-q-finalized').update({ finalizedAt: Date.now() - HOUR });
+    await enqueue('correction');
+
+    const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(r.poolsScored).toBe(1);
+    expect((await entryDoc('p-q-finalized', 'alice')).weeklyPoints[1]).toBe(1);
+  }, 60000);
+
+  it('a queued event never writes into a RETIRED pool', async () => {
+    // codex r9: a slate queued while active can be cancelled before the drain,
+    // and maybeFinalizeNFLPool only checks cancellation AFTER the writes, so it
+    // cannot undo entry/standings/recap/audit writes into a voided pool.
+    await seedStale('p-q-cancelled');
+    await db.collection('pools').doc('p-q-cancelled').update({ status: 'CANCELED' });
+    await enqueue('correction');
+
+    const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(r.poolsScored).toBe(0);
+    expect((await entryDoc('p-q-cancelled', 'alice')).weeklyPoints[1]).toBeUndefined();
+    // Still acknowledged: nothing was owed, so re-draining it every 10 minutes forever is pure cost.
+    expect(await queueSize()).toBe(0);
+  }, 60000);
+
+  it('defers a Survivor pool on a correction-ONLY group, and scores it when the group carries a terminal', async () => {
+    await seedStale('p-q-surv', 'NFL_SURVIVOR', {
+      maxStrikes: 0, pickLosersMode: false, autoSurviveExemptionEnabled: false,
+      maxRebuys: 0, rebuyDeadlineWeek: 0,
+    });
+    await seedEntry('p-q-surv', 'alice', {
+      status: 'ALIVE', strikesUsed: 0, strikeWeeks: [], rebuysUsed: 0,
+      usedTeams: ['KC'], picks: { 1: 'KC' }, exemptWeeks: [],
+    });
+    await enqueue('correction');
+
+    const deferred = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(deferred.survivorCorrectionsDeferred).toBe(1);
+    expect(deferred.poolsScored).toBe(0);
+    // Acknowledged anyway — there is no repair to retry until reset-and-replay ships.
+    expect(await queueSize()).toBe(0);
+
+    // A delayed FIRST final is a normal first score and is safe for Survivor.
+    await enqueue('terminal');
+    const allowed = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(allowed.survivorCorrectionsDeferred).toBe(0);
+    expect(allowed.poolsScored).toBe(1);
+  }, 60000);
+
+  it('holds a lockPending event until its notBefore, then drains it', async () => {
+    await seedStale('p-q-notbefore');
+    await enqueue('lockPending', { notBefore: Date.now() + HOUR });
+
+    const early = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(early.queuedDeferred).toBe(1);
+    expect(early.queuedEvents).toBe(0);
+    expect(early.poolsScored).toBe(0);
+    expect(await queueSize()).toBe(1);          // left in place, not acknowledged
+
+    const later = await autoScoreOnce(db, Date.now() + 2 * HOUR, { dryRun: false });
+    expect(later.queuedEvents).toBe(1);
+    expect(later.poolsScored).toBe(1);
+    expect(await queueSize()).toBe(0);
+  }, 60000);
+
+  it('a live run drops an unparseable event instead of draining it forever', async () => {
+    await seedStale('p-q-junk');
+    await db.collection(RESCORE_QUEUE).add({ season: '', week: 'nope', reason: 'terminal' });
+
+    const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(r.queuedEvents).toBe(0);
+    expect(r.queuedAcked).toBe(1);
+    expect(await queueSize()).toBe(0);
+  }, 60000);
+
+  it('a queued slate with no games is acknowledged rather than drained forever', async () => {
+    await seedStale('p-q-nogames');
+    await enqueueRescore(db, { season: SEASON, seasonType: 1, week: 9, reason: 'terminal', enqueuedAt: Date.now() });
+
+    const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(r.queuedSlates).toBe(1);
+    expect(r.poolsScored).toBe(0);
+    expect(await queueSize()).toBe(0);
+  }, 60000);
+
+  it('a live pass leaves a lockPending reminder for a terminal game held behind an override', async () => {
+    // The §5b codex-r8 case: nothing terminal happens AT the override's expiry, so
+    // without this reminder the eligibility bit is never re-evaluated once the
+    // slate leaves the 24h window and the result is never revealed.
+    await wipe();
+    await seedGames([gameDoc('g1', { startTime: Date.now() - 3 * HOUR }), laterWeekGame()]);
+    await seedPool('p-q-withheld', 'NFL_PICKEM', {
+      lockBufferMinutes: 5, pickMode: 'STRAIGHT', weekLockOverrides: { 1: Date.now() + 3 * HOUR },
+    });
+    await seedEntry('p-q-withheld', 'alice', { picks: { g1: 'KC' }, weeklyPoints: {}, totalScore: 0 });
+
+    await autoScoreOnce(db, Date.now(), { dryRun: false });
+    const snap = await db.collection(RESCORE_QUEUE).get();
+    expect(snap.size).toBe(1);
+    expect(snap.docs[0].data().reason).toBe('lockPending');
+    expect(snap.docs[0].data().notBefore).toBeGreaterThan(Date.now());
+  }, 60000);
+
+  it('a DRY RUN writes no lockPending reminder — a dry run writes nothing at all', async () => {
+    await wipe();
+    await seedGames([gameDoc('g1', { startTime: Date.now() - 3 * HOUR }), laterWeekGame()]);
+    await seedPool('p-q-withheld-dry', 'NFL_PICKEM', {
+      lockBufferMinutes: 5, pickMode: 'STRAIGHT', weekLockOverrides: { 1: Date.now() + 3 * HOUR },
+    });
+    await seedEntry('p-q-withheld-dry', 'alice', { picks: { g1: 'KC' }, weeklyPoints: {}, totalScore: 0 });
+
+    await autoScoreOnce(db, Date.now(), { dryRun: true });
+    expect(await queueSize()).toBe(0);
   }, 60000);
 });

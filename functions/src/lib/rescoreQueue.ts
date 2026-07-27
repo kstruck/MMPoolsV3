@@ -1,0 +1,214 @@
+// `nfl_rescore_queue` — the durable reconciliation tier (PLAN-REALTIME-SCORING §5b).
+//
+// WHY IT EXISTS. `nflAutoScoreJob`'s live tier only ever looks at slates inside the
+// 24h `HOT_WINDOW_LOOKBACK_MS`. Three real events change a week's grades from
+// OUTSIDE that window, and none of them would ever reach the scorer:
+//   - an ESPN stat correction days later (`detectStatCorrections`, A5);
+//   - a suspended/postponed game first going FINAL — or CANCELLED — more than 24h
+//     after its scheduled kickoff (a CANCELLED one still carries a void, deferred
+//     penalties and the week's completion);
+//   - a manual locked-spread edit, which `detectStatCorrections` does not even
+//     compare, but which ATS grading reads.
+// Plus one that originates inside the scorer: a terminal game deferred solely
+// because a `weekLockOverride` has not expired yet. Nothing terminal happens AT
+// the expiry, so without a durable reminder the eligibility bit is never
+// re-evaluated once the slate falls out of the window.
+//
+// SHAPE: append-only events, acknowledged individually (§5b, codex r25). The
+// naive "read slate → process → clear marker" loses any event enqueued between
+// the read and the clear, and outside the hot window nothing else repairs it.
+// Each enqueue is a distinct auto-ID doc; the drain deletes exactly the ids it
+// read, so an event written mid-drain is simply still there on the next run.
+// Deliberately NOT a deterministic per-slate doc id: that would make an enqueue
+// during a drain overwrite the doc the drain is about to delete — the same loss
+// in a different costume.
+//
+// Server-only: `firestore.rules` has no `match` for this collection and no
+// catch-all allow, so client access is denied by default. Nothing to add there.
+import * as admin from 'firebase-admin';
+import type { Firestore } from 'firebase-admin/firestore';
+
+export const RESCORE_QUEUE = 'nfl_rescore_queue';
+
+/**
+ * Why a slate was enqueued. The reason is load-bearing, not decoration: until the
+ * Survivor reset-and-replay sub-PR ships, a `correction` cannot be safely applied
+ * to a Survivor pool (re-scoring week N leaves later `strikeWeeks` in place and
+ * skips later weeks once the entry is eliminated), while a `terminal` one — a
+ * delayed first final — is a normal first score and is safe for every type.
+ */
+export type RescoreReason = 'correction' | 'terminal' | 'spread' | 'lockPending';
+
+export interface RescoreEvent {
+  season: string;
+  seasonType: number;
+  week: number;
+  reason: RescoreReason;
+  /** ms epoch. Passed in rather than `serverTimestamp()` so it is readable by the drain and pinnable in tests. */
+  enqueuedAt: number;
+  /**
+   * `lockPending` only: the instant the deferred game's lock closes. The drain
+   * leaves the event untouched until then — reading it early would burn a pass
+   * that can only reach the same "still withheld" answer.
+   */
+  notBefore?: number;
+}
+
+export interface QueuedEvent {
+  id: string;
+  event: RescoreEvent;
+}
+
+export interface SlateGroup {
+  season: string;
+  seasonType: number;
+  week: number;
+  reasons: Set<RescoreReason>;
+  ids: string[];
+}
+
+export function slateKeyOf(e: { season: string; seasonType: number; week: number }): string {
+  return `${e.season}_${e.seasonType}_${e.week}`;
+}
+
+const REASONS: readonly RescoreReason[] = ['correction', 'terminal', 'spread', 'lockPending'];
+
+/** A stored doc is only usable if every field the drain needs survived the round trip. */
+export function parseRescoreEvent(data: unknown): RescoreEvent | null {
+  const d = data as Record<string, unknown> | undefined;
+  if (!d) return null;
+  const season = typeof d.season === 'string' ? d.season : '';
+  const seasonType = Number(d.seasonType);
+  const week = Number(d.week);
+  const reason = d.reason as RescoreReason;
+  if (!season || !Number.isFinite(seasonType) || !Number.isFinite(week) || week <= 0) return null;
+  if (!REASONS.includes(reason)) return null;
+  const notBefore = Number(d.notBefore);
+  return {
+    season,
+    seasonType,
+    week,
+    reason,
+    enqueuedAt: Number.isFinite(Number(d.enqueuedAt)) ? Number(d.enqueuedAt) : 0,
+    ...(Number.isFinite(notBefore) && notBefore > 0 ? { notBefore } : {}),
+  };
+}
+
+/**
+ * Append one event. Returns false rather than throwing — the callers are the
+ * score-sync write path and the scorer itself, and neither may be failed by a
+ * queue write. The boolean is counted by the caller and surfaced in its
+ * heartbeat, because a swallowed failure nobody counts is exactly how the A5
+ * snapshot outage hid for days (`ScoreSyncResult.snapshotFailures`).
+ */
+export async function enqueueRescore(db: Firestore, event: RescoreEvent): Promise<boolean> {
+  try {
+    await db.collection(RESCORE_QUEUE).add({
+      season: event.season,
+      seasonType: event.seasonType,
+      week: event.week,
+      reason: event.reason,
+      enqueuedAt: event.enqueuedAt,
+      ...(event.notBefore ? { notBefore: event.notBefore } : {}),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return true;
+  } catch (e) {
+    console.error(`[rescoreQueue] enqueue failed for ${slateKeyOf(event)} (${event.reason}):`, e);
+    return false;
+  }
+}
+
+export interface QueueRead {
+  /** Actionable now. */
+  events: QueuedEvent[];
+  /** Held back by `notBefore`; left in place, not read as work. */
+  deferred: number;
+  /** Ids of docs that could never be acted on. Cleared by a live drain so they cannot accumulate forever. */
+  malformed: string[];
+}
+
+/**
+ * Read the queue. No composite index and no ordering: the collection is tiny by
+ * construction (a handful of events between two 10-minute drains) and an
+ * `orderBy` here would be one more way to die with a silent FAILED_PRECONDITION —
+ * the failure mode that took out A5 and the finalize sweep.
+ */
+export async function readRescoreQueue(db: Firestore, now: number, limit = 500): Promise<QueueRead> {
+  const snap = await db.collection(RESCORE_QUEUE).limit(limit).get();
+  const out: QueueRead = { events: [], deferred: 0, malformed: [] };
+  for (const doc of snap.docs) {
+    const event = parseRescoreEvent(doc.data());
+    if (!event) { out.malformed.push(doc.id); continue; }
+    if (event.notBefore && event.notBefore > now) { out.deferred++; continue; }
+    out.events.push({ id: doc.id, event });
+  }
+  return out;
+}
+
+/** Collapse the events into one unit of work per slate, keeping every id for the ack. */
+export function groupBySlate(events: QueuedEvent[]): SlateGroup[] {
+  const groups = new Map<string, SlateGroup>();
+  for (const { id, event } of events) {
+    const key = slateKeyOf(event);
+    let g = groups.get(key);
+    if (!g) {
+      g = { season: event.season, seasonType: event.seasonType, week: event.week, reasons: new Set(), ids: [] };
+      groups.set(key, g);
+    }
+    g.reasons.add(event.reason);
+    g.ids.push(id);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * May a Survivor pool be scored from this group?
+ *
+ * A late `correction` cannot be repaired for Survivor by re-scoring the week —
+ * `computeSurvivorWeekUpdate` retains later `strikeWeeks` and skips every later
+ * week once the entry is eliminated, so the downstream elimination ordering stays
+ * wrong. That needs the reset-and-replay sub-PR. A `terminal` / `spread` /
+ * `lockPending` event is a first score or a fresh grade of the same week and is
+ * safe, so a group carrying any of those scores Survivor normally.
+ */
+export function survivorAllowedForGroup(reasons: Set<RescoreReason>): boolean {
+  for (const r of reasons) if (r !== 'correction') return true;
+  return false;
+}
+
+export interface SpreadShape { value?: unknown; locked?: unknown }
+
+/**
+ * Does an `nfl_games` update need a rescore because a LOCKED spread moved?
+ *
+ * ATS Pick'em grades on `spread.value` and the fingerprint includes it, but
+ * `detectStatCorrections` never compares `spread` — so a line corrected after the
+ * 24h window leaves finalized ATS standings permanently wrong (codex r27).
+ *
+ * Two shapes qualify. The second is the easy miss: editing the value while the
+ * line is UNLOCKED and then re-locking it never changes a locked spread's value,
+ * so a "locked && value changed" test alone lets the corrected line through.
+ *
+ * Scoped to LOCKED spreads on purpose — that is what keeps it quiet.
+ * `syncScoresWindow` rewrites the whole slate every 5 minutes and would trip an
+ * unconditional watcher on every ESPN line move; it explicitly PRESERVES a locked
+ * spread's value, so a locked value only ever changes when a human sets it.
+ *
+ * Lives in lib/ so it is unit-testable without importing the trigger (and with it
+ * firebase-functions and the admin module graph).
+ */
+export function lockedSpreadChanged(before: SpreadShape | undefined, after: SpreadShape | undefined): boolean {
+  if (after?.locked !== true) return false;
+  if (before?.locked !== true) return true;          // just locked — the value is newly authoritative
+  return Number(before?.value ?? 0) !== Number(after?.value ?? 0);
+}
+
+/** Delete acknowledged events. Chunked: a batch commits at most 500 writes. */
+export async function ackRescoreEvents(db: Firestore, ids: string[]): Promise<void> {
+  for (let i = 0; i < ids.length; i += 400) {
+    const batch = db.batch();
+    for (const id of ids.slice(i, i + 400)) batch.delete(db.collection(RESCORE_QUEUE).doc(id));
+    await batch.commit();
+  }
+}

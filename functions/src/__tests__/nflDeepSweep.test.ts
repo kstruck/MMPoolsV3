@@ -74,6 +74,7 @@ describe('syncScoresWindow — the lookback is what it queries', () => {
     expect(result).toEqual({
       slates: 0, gamesWritten: 0, corrections: 0,
       slatesNotReconciled: 0, snapshotFailures: 0, correctionReportFailures: 0,
+      rescoreEnqueueFailures: 0,
     });
   });
 
@@ -96,6 +97,10 @@ describe('syncScoresWindow — the lookback is what it queries', () => {
  */
 function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: number) {
   const writes: Array<{ id: string; data: any }> = [];
+  // The §5b handoff: syncScoresWindow enqueues a rescore event after it commits a
+  // slate. Recorded rather than ignored so the enqueue is asserted here, at the
+  // one place that knows whether a correction or a first-final actually happened.
+  const enqueued: any[] = [];
   const docOf = (id: string) => ({
     id,
     exists: stored[id] !== undefined,
@@ -112,7 +117,15 @@ function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: nu
     },
   };
   const db = {
-    collection: () => ({ ...query, doc: (id: string) => ({ id, _id: id }) }),
+    collection: (name: string) => ({
+      ...query,
+      doc: (id: string) => ({ id, _id: id }),
+      async add(data: any) {
+        if (name !== 'nfl_rescore_queue') throw new Error(`unexpected add to ${name}`);
+        enqueued.push(data);
+        return { id: `q${enqueued.length}` };
+      },
+    }),
     async getAll(...refs: any[]) {
       return refs.map((r) => docOf(r._id));
     },
@@ -122,7 +135,7 @@ function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: nu
     }),
     doc: () => ({ async get() { return { data: () => undefined }; } }),
   } as unknown as Firestore;
-  return { db, writes };
+  return { db, writes, enqueued };
 }
 
 const espnGame = (over: Record<string, any>) => ({
@@ -238,13 +251,81 @@ describe('syncScoresWindow — an unreconciled slate is counted, however it fail
       }),
     });
     expect(r.slatesNotReconciled).toBe(0);
+    expect(r.rescoreEnqueueFailures).toBe(0);
     expect(scoreSyncHeartbeat(r).ok).toBe(true);
+  });
+});
+
+// PLAN-REALTIME-SCORING §5b — the durable handoff to nfl_rescore_queue. These are
+// the enqueue half; the drain half lives in autoScore.emulator.test.ts.
+describe('syncScoresWindow — the rescore handoff', () => {
+  const NOW = 1_760_000_000_000;
+  const HOUR = 60 * 60 * 1000;
+  const storedLive = {
+    espn_thu: { id: 'espn_thu', season: '2026', seasonType: 1, week: 1, startTime: NOW - 20 * HOUR, status: 'LIVE' },
+  };
+  const storedFinal = {
+    espn_thu: {
+      id: 'espn_thu', season: '2026', seasonType: 1, week: 1, startTime: NOW - 20 * HOUR,
+      status: 'FINAL', scores: { home: 27, away: 24 },
+    },
+  };
+  const fresh = (over: Record<string, any> = {}) =>
+    [espnGame({ id: 'espn_thu', startTime: NOW - 20 * HOUR, status: 'FINAL', scores: { home: 27, away: 24 }, ...over })] as any;
+
+  it('enqueues on a nonterminal → terminal transition', async () => {
+    // The postponed-game case: a first FINAL is the ONLY signal, and past 24h the
+    // live tier can no longer see the slate at all.
+    const { db, enqueued } = fakeDbWithDocs(storedLive, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, { fetchSlate: async () => ({ games: fresh(), raw: { ok: true } }) });
+
+    expect(r.rescoreEnqueueFailures).toBe(0);
+    expect(enqueued).toHaveLength(1);
+    expect(enqueued[0]).toMatchObject({ season: '2026', seasonType: 1, week: 1, reason: 'terminal' });
+  });
+
+  it('enqueues a CANCELLED transition too, not just a FINAL', async () => {
+    // A game postponed and later cancelled past 24h still carries a void, the
+    // deferred penalties and the week's completion (codex r10).
+    const { db, enqueued } = fakeDbWithDocs(storedLive, NOW, HOT_WINDOW_LOOKBACK_MS);
+    await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({ games: fresh({ status: 'CANCELLED', scores: undefined }), raw: { ok: true } }),
+    });
+    expect(enqueued.map((e: any) => e.reason)).toEqual(['terminal']);
+  });
+
+  it('enqueues a correction on an already-FINAL game', async () => {
+    // detectStatCorrections only fires on games that were ALREADY final, which is
+    // the other half of the pair — a Sunday score restated on the Tuesday.
+    const { db, enqueued } = fakeDbWithDocs(storedFinal, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({ games: fresh({ scores: { home: 30, away: 24 } }), raw: { ok: true } }),
+    });
+    expect(r.corrections).toBe(1);
+    expect(enqueued.map((e: any) => e.reason)).toEqual(['correction']);
+  });
+
+  it('enqueues NOTHING when a final slate is simply rewritten unchanged', async () => {
+    // The 5-minute job rewrites the whole slate on every run; without this the
+    // queue would fill with no-op events all night.
+    const { db, enqueued } = fakeDbWithDocs(storedFinal, NOW, HOT_WINDOW_LOOKBACK_MS);
+    await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, { fetchSlate: async () => ({ games: fresh(), raw: { ok: true } }) });
+    expect(enqueued).toHaveLength(0);
+  });
+
+  it('enqueues NOTHING on a dry run — no game changed, so there is nothing to reconcile', async () => {
+    const { db, enqueued, writes } = fakeDbWithDocs(storedLive, NOW, HOT_WINDOW_LOOKBACK_MS);
+    await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      dryRun: true, fetchSlate: async () => ({ games: fresh(), raw: { ok: true } }),
+    });
+    expect(writes).toHaveLength(0);
+    expect(enqueued).toHaveLength(0);
   });
 
   it('judges on games returned, not on whether a raw payload came with them', async () => {
     // Fixtures elsewhere in this file pass raw:null WITH games. That is a test
     // convenience, not an outage, and counting it would make the signal cry wolf.
-    const { db } = fakeDbWithDocs(oneStoredGame, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const { db } = fakeDbWithDocs(storedLive, NOW, HOT_WINDOW_LOOKBACK_MS);
     const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
       fetchSlate: async () => ({
         games: [espnGame({ id: 'espn_thu', startTime: NOW - 20 * HOUR, status: 'FINAL' })] as any,
@@ -259,6 +340,7 @@ describe('scoreSyncHeartbeat — not throwing is not the same as healthy', () =>
   const clean = {
     slates: 2, gamesWritten: 16, corrections: 0,
     slatesNotReconciled: 0, snapshotFailures: 0, correctionReportFailures: 0,
+    rescoreEnqueueFailures: 0,
   };
 
   it('reports ok on a clean run', () => {
@@ -294,6 +376,13 @@ describe('scoreSyncHeartbeat — not throwing is not the same as healthy', () =>
     expect(scoreSyncHeartbeat({ ...clean, slatesNotReconciled: 1 }).detail).toEqual({
       slates: 2, gamesWritten: 16, corrections: 0,
       slatesNotReconciled: 1, snapshotFailures: 0, correctionReportFailures: 0,
+      rescoreEnqueueFailures: 0,
     });
+  });
+
+  it('reports NOT ok when a rescore handoff was lost — the standings stay stale with nobody told', () => {
+    const v = scoreSyncHeartbeat({ ...clean, corrections: 1, rescoreEnqueueFailures: 1 });
+    expect(v.ok).toBe(false);
+    expect(v.error).toContain('1 rescore handoff(s) not enqueued');
   });
 });

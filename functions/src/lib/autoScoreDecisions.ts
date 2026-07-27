@@ -9,6 +9,7 @@
 import { createHash } from 'crypto';
 import {
   effectiveLockSettings,
+  effectiveGameLockAt,
   isGameLocked as isGameLockedAt,
   weekLockDecision,
   usesWeeklyHardLock,
@@ -41,8 +42,64 @@ export function isTerminalPool(pool: {
   if (!pool) return true;
   if (pool.isFinal === true) return true;
   if (pool.finalizedAt !== undefined && pool.finalizedAt !== null) return true;
+  return isRetiredPool(pool);
+}
+
+/**
+ * The half of `isTerminalPool` the QUEUED reconciliation tier still honours
+ * (§5b, codex r9).
+ *
+ * A late correction must be able to rescore a pool the scorer itself finalized —
+ * that is the whole point of the queue — so the drain bypasses the FINALIZATION
+ * markers (`isFinal` / `finalizedAt`, both written by `maybeFinalizeNFLPool`) and
+ * re-finalizes afterwards. It must NOT bypass the retirement STATUSES: a slate
+ * queued while active can be cancelled or archived before the drain reaches it,
+ * and `maybeFinalizeNFLPool` only checks cancellation AFTER the writes, so it
+ * cannot undo entry/standings/recap/audit writes into a voided pool.
+ *
+ * `FINAL` as a status stays on the retired side, which is stricter than the
+ * plan's literal "bypass the finalization exclusion" wording and is deliberate:
+ * `maybeFinalizeNFLPool` writes `finalizedAt`/`firstFinalizedAt` and never this
+ * status — the status is what payout handling stamps once money has been settled
+ * against the standings. Rescoring THAT silently is a worse failure than leaving
+ * it stale, and it is a manual decision either way.
+ */
+export function isRetiredPool(pool: { status?: unknown } | undefined | null): boolean {
+  if (!pool) return true;
   const status = typeof pool.status === 'string' ? pool.status.toUpperCase() : '';
   return TERMINAL_POOL_STATUSES.has(status);
+}
+
+/**
+ * When must this pool's week be looked at again because a TERMINAL game is still
+ * behind its own lock (§5b, codex r8)?
+ *
+ * A Pick'em commissioner can push one game's lock ~24h later. A game that
+ * finalizes at kickoff+3h under an override expiring at kickoff+23h55m is
+ * withheld by the pass that sees it, and the slate has left the 24h live window
+ * by the time the override expires — and NOTHING happens AT the expiry to make it
+ * a candidate again, so the reveal never runs and the raw game data never changes
+ * to move the fingerprint. Returning the earliest such lock instant lets the pass
+ * enqueue a `lockPending` reminder for exactly that moment.
+ *
+ * `null` when nothing is withheld: either no game is terminal yet (the live
+ * window still covers those) or every terminal game is already revealable.
+ */
+export function nextWithheldLockAt(
+  pool: { type?: string; settings?: unknown } | undefined,
+  week: number,
+  games: NFLGame[],
+  now: number,
+): number | null {
+  const lockSettings = effectiveLockSettings(pool?.settings as never, pool?.type);
+  let earliest: number | null = null;
+  for (const g of games) {
+    if (!isTerminalGame(g)) continue;
+    if (isGameLockedAt(now, g.startTime, week, lockSettings)) continue;
+    const lockAt = effectiveGameLockAt(g.startTime, week, lockSettings);
+    if (earliest === null || lockAt < earliest) earliest = lockAt;
+  }
+  return earliest;
 }
 
 /**
@@ -160,6 +217,26 @@ export interface AutoScoreResult {
   overflow: number;
   /** Pools whose scoring threw. The run continues; this is what makes it unhealthy. */
   poolsFailed: number;
+
+  // ---- the queued reconciliation tier (§5b) ----
+  /** Queue events actionable this run. */
+  queuedEvents: number;
+  /** Distinct slates the queue asked for. */
+  queuedSlates: number;
+  /** Events held back by `notBefore` (a deferred lock). Left in the queue, not work. */
+  queuedDeferred: number;
+  /** Events deleted after their slate was processed. Always 0 on a dry run — see below. */
+  queuedAcked: number;
+  /**
+   * Survivor pools skipped on a `correction`-only group because re-scoring cannot
+   * repair elimination ordering until the reset-and-replay sub-PR ships.
+   *
+   * Reported, but deliberately NOT unhealthy: there is no action anyone can take
+   * on the alert today, and an alarm with no remedy is how the real ones get
+   * ignored (the same argument that keeps `overflow` healthy). The arming notes
+   * carry the standing caveat instead.
+   */
+  survivorCorrectionsDeferred: number;
 }
 
 /**

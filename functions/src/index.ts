@@ -55,6 +55,10 @@ export { nflLockWatchJob } from "./nflLockWatch";
 // Real-time scoring LIVE tier (PLAN-REALTIME-SCORING §5, G1 PR-B1): 10-minute
 // provisional scorer. Kill-switch + dry-run gated; ships OFF.
 export { nflAutoScoreJob } from "./nflAutoScore";
+// The locked-spread half of the nfl_rescore_queue handoff (PLAN-REALTIME-SCORING
+// §5b). Enqueue-only: it never scores anything itself, and the queue is inert
+// until nflAutoScoreJob is armed.
+export { nflSpreadRescoreTrigger } from "./nflSpreadRescore";
 export { sendManualReminder } from "./manualReminders";
 // Sim harness (PLAN-TEST-SUITE 8e/8f): SUPER_ADMIN-only, simRunId-scoped Test
 // Suite mutations + cleanup. See functions/src/simHarness.ts.
