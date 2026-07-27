@@ -1065,7 +1065,7 @@ describe('rescore queue — the tier that catches what the 24h window cannot', (
     await enqueue('correction');
 
     const deferred = await autoScoreOnce(db, Date.now(), { dryRun: false });
-    expect(deferred.survivorCorrectionsDeferred).toBe(1);
+    expect(deferred.survivorQueuedDeferred).toBe(1);
     expect(deferred.poolsScored).toBe(0);
     // Acknowledged anyway — there is no repair to retry until reset-and-replay ships.
     expect(await queueSize()).toBe(0);
@@ -1073,7 +1073,7 @@ describe('rescore queue — the tier that catches what the 24h window cannot', (
     // A delayed FIRST final is a normal first score and is safe for Survivor.
     await enqueue('terminal');
     const allowed = await autoScoreOnce(db, Date.now(), { dryRun: false });
-    expect(allowed.survivorCorrectionsDeferred).toBe(0);
+    expect(allowed.survivorQueuedDeferred).toBe(0);
     expect(allowed.poolsScored).toBe(1);
   }, 60000);
 

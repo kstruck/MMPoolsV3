@@ -228,15 +228,16 @@ export interface AutoScoreResult {
   /** Events deleted after their slate was processed. Always 0 on a dry run — see below. */
   queuedAcked: number;
   /**
-   * Survivor pools skipped on a `correction`-only group because re-scoring cannot
-   * repair elimination ordering until the reset-and-replay sub-PR ships.
+   * Survivor pools a queued pass skipped because re-scoring cannot repair
+   * elimination ordering until the reset-and-replay sub-PR ships — a correction,
+   * or any reason at all once the week has already been scored.
    *
    * Reported, but deliberately NOT unhealthy: there is no action anyone can take
    * on the alert today, and an alarm with no remedy is how the real ones get
    * ignored (the same argument that keeps `overflow` healthy). The arming notes
    * carry the standing caveat instead.
    */
-  survivorCorrectionsDeferred: number;
+  survivorQueuedDeferred: number;
 }
 
 /**

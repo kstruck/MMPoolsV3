@@ -255,7 +255,7 @@ async function scoreSlateOnce(
       // the reset-and-replay sub-PR.
       if (opts.queuedReasons && pool?.type === 'NFL_SURVIVOR'
           && !survivorAllowedForGroup(opts.queuedReasons, pool, slate.week)) {
-        result.survivorCorrectionsDeferred++;
+        result.survivorQueuedDeferred++;
         console.warn(
           `[nflAutoScoreJob] Survivor pool ${poolId} skipped for a queued rescore of ` +
           `${slateKeyOf(slate)} week ${slate.week} — needs the reset-and-replay path.`,
@@ -412,7 +412,7 @@ export async function autoScoreOnce(
   const result: AutoScoreResult = {
     activeSlates: 0, poolsScored: 0, poolsSkipped: 0, overflow: 0, poolsFailed: 0,
     queuedEvents: 0, queuedSlates: 0, queuedDeferred: 0, queuedAcked: 0,
-    survivorCorrectionsDeferred: 0,
+    survivorQueuedDeferred: 0,
   };
   const ctx: RunContext = { attempts: 0, remindersSent: new Set() };
 
