@@ -16,8 +16,17 @@ import { z } from "zod";
  *
  * startAfter is a PAGINATION CURSOR compared against FieldPath.documentId() - a
  * document id. Not trimmed: altering it would silently skip or repeat a page.
- * OperationsPanel sends the key with undefined on the first page, so it must be
- * optional rather than absent-only.
+ *
+ * IT MUST ACCEPT NULL AS FIRST-PAGE. OperationsPanel sends `startAfter: cursor`
+ * with cursor undefined on page 1, and the Firebase JS SDK's callable
+ * serializer encodes an explicit-undefined property as NULL on the wire — so
+ * the server receives `startAfter: null`, which a plain `.optional()` rejects.
+ * Found in prod 2026-07-27: the FIRST dry-run page of the D25 backfill failed
+ * schema validation before scanning a single pool. The emulator suite never
+ * saw it because firebase-functions-test bypasses the client serializer.
+ * For a cursor, null is unambiguously "no cursor yet" — this is not the
+ * null-means-clear convention (updateEntryPayment), so mapping null→undefined
+ * loses nothing.
  */
 export const backfillMemberRecordsSchema = z.strictObject({
     dryRun: z.boolean().optional().default(true),
@@ -39,7 +48,10 @@ export const backfillMemberRecordsSchema = z.strictObject({
     // machine-checked, not inferred from a handler-side truthy check.
     includeFinished: z.boolean().optional().default(false),
     limit: z.number().int().positive().max(100).optional(),
-    startAfter: z.string().min(1).max(1500).optional(),
+    startAfter: z.preprocess(
+        (v) => (v === null ? undefined : v),
+        z.string().min(1).max(1500).optional(),
+    ),
 });
 
 /**
@@ -54,5 +66,10 @@ export const backfillMemberRecordsSchema = z.strictObject({
 export const backfillPublishedWeeksSchema = z.strictObject({
     dryRun: z.boolean().optional().default(true),
     limit: z.number().int().positive().max(200).optional(),
-    startAfter: z.string().min(1).max(1500).optional(),
+    // Same null-as-first-page contract as backfillMemberRecordsSchema above —
+    // OperationsPanel sends the identical `startAfter: cursor` shape here.
+    startAfter: z.preprocess(
+        (v) => (v === null ? undefined : v),
+        z.string().min(1).max(1500).optional(),
+    ),
 });

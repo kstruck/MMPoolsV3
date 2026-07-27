@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { markEntryPaidStatusSchema } from '../schemas/tournamentAdmin';
 import { calculatePlayoffScoresSchema } from '../schemas/playoffEntries';
-import { backfillMemberRecordsSchema } from '../schemas/migrations';
+import { backfillMemberRecordsSchema, backfillPublishedWeeksSchema } from '../schemas/migrations';
 import { importNFLScheduleSchema } from '../schemas/nflSchedule';
 import { searchUsersByEmailSchema } from '../schemas/userManagement';
 import { recomputeMyProfileSchema } from '../schemas/userProfile';
@@ -49,13 +49,28 @@ describe('backfillMemberRecords — dry-run must default SAFE at the schema laye
   it('only an explicit false arms it', () => {
     expect(backfillMemberRecordsSchema.parse({ dryRun: false }).dryRun).toBe(false);
   });
-  it("accepts OperationsPanel's real payload, including a first-page undefined cursor", () => {
-    // OperationsPanel.tsx runBackfill — call('backfillMemberRecords',
-    // { dryRun, includeFinished, limit: 100, startAfter: cursor }) where `cursor`
-    // is undefined on page 1, so the KEY IS PRESENT with an undefined value. An
-    // absent-key-only optional would reject this.
+  it("accepts OperationsPanel's real WIRE payload — the first-page cursor arrives as NULL", () => {
+    // The old version of this test asserted `startAfter: undefined` — the shape
+    // the panel's SOURCE writes. But the Firebase JS SDK's callable serializer
+    // encodes an explicit-undefined property as NULL on the wire, so the server
+    // never sees undefined; it sees null. That gap failed the FIRST page of the
+    // D25 prod dry run (2026-07-27) with "expected string, received null" — the
+    // test was green while guarding a payload that cannot occur in production.
+    expect(backfillMemberRecordsSchema.safeParse({ dryRun: true, includeFinished: false, limit: 100, startAfter: null }).success).toBe(true);
+    // null parses AS first-page: the handler's `if (startAfter)` gate must see undefined.
+    expect(backfillMemberRecordsSchema.parse({ startAfter: null }).startAfter).toBeUndefined();
+    // The pre-serializer shape stays accepted too (firebase-functions-test sends it).
     expect(backfillMemberRecordsSchema.safeParse({ dryRun: true, includeFinished: false, limit: 100, startAfter: undefined }).success).toBe(true);
     expect(backfillMemberRecordsSchema.safeParse({ dryRun: false, includeFinished: true, limit: 100, startAfter: 'poolAbc' }).success).toBe(true);
+    // A real cursor still cannot be junk.
+    expect(backfillMemberRecordsSchema.safeParse({ startAfter: '' }).success).toBe(false);
+    expect(backfillMemberRecordsSchema.safeParse({ startAfter: 42 }).success).toBe(false);
+  });
+
+  it('backfillPublishedWeeks accepts the identical null first-page cursor (same panel shape)', () => {
+    expect(backfillPublishedWeeksSchema.safeParse({ dryRun: true, limit: 200, startAfter: null }).success).toBe(true);
+    expect(backfillPublishedWeeksSchema.parse({ startAfter: null }).startAfter).toBeUndefined();
+    expect(backfillPublishedWeeksSchema.safeParse({ startAfter: 42 }).success).toBe(false);
   });
   it('caps limit at the handler ceiling', () => {
     expect(backfillMemberRecordsSchema.safeParse({ limit: 101 }).success).toBe(false);
