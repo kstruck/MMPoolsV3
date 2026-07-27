@@ -209,6 +209,12 @@ const runReconcilePaymentTruth = async (dryRun: boolean) => {
     cursor = r.nextCursor || undefined;
     pages++;
   } while (cursor && pages < 100);
+  if (cursor) {
+    // Page-cap exit with pools left (codex r1): report it as incomplete with
+    // the cursor in hand instead of an ok:true that silently covered a prefix.
+    agg.ok = false;
+    agg.failures.push({ poolId: '(page cap)', error: `stopped after 100 pages with pools remaining; resume cursor: ${cursor}` });
+  }
   return agg;
 };
 

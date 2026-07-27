@@ -152,36 +152,55 @@ export const reconcilePaymentTruth = validated(
 
         if (entryPaid && !memberPaid) {
           // The pre-P1 Bento write: commissioner marked paid, only the entry heard.
-          report.membersPromoted++;
           notedFix(poolId, uid, 'PROMOTE_MEMBER');
           if (!dryRun) {
-            // Same field conventions as setPaidStatus's authoritative PAID write.
-            const stampedPaidAt = typeof entry.paidAt === 'number' ? entry.paidAt : Date.now();
-            await doc.ref.collection('members').doc(uid).set({
-              paidStatus: 'PAID',
-              paidAt: stampedPaidAt,
-              paidBy: actorUid,
-              ...(typeof entry.paymentMethod === 'string' && entry.paymentMethod
-                ? { paymentMethod: entry.paymentMethod }
-                : {}),
-              ...(typeof entry.paymentNote === 'string' && entry.paymentNote
-                ? { paymentNote: entry.paymentNote.slice(0, 500) }
-                : {}),
-            }, { merge: true });
-            // The missing ledger row — the shared ledger's reader contract is
-            // `note` (PaymentLedgerEvent / PaymentsPanel).
-            await doc.ref.collection('payments').add({
-              type: 'MARKED_PAID',
-              uid,
-              entryName: member.userName ?? entry.userName,
-              amount: typeof entryFee === 'number' ? entryFee : undefined,
-              actorUid,
-              at: Date.now(),
-              createdAt: FieldValue.serverTimestamp(),
-              note: 'reconciled — pre-P1 payment recorded on the entry doc only',
+            // ONE transaction for the promotion + its ledger row (codex r1, P1
+            // severity): written separately, a crash between the two leaves the
+            // member PAID with the ledger row permanently missing — a re-run
+            // reads the pair as consistent and never appends it. The tx also
+            // RE-READS both docs, so a concurrent setPaidStatus between the
+            // page read and this fix makes the tx a no-op instead of a
+            // duplicate payment event.
+            const mRef = doc.ref.collection('members').doc(uid);
+            const ledgerRef = doc.ref.collection('payments').doc();
+            const acted = await db.runTransaction(async (tx) => {
+              const [freshM, freshE] = await Promise.all([tx.get(mRef), tx.get(entryDoc.ref)]);
+              const fm: any = freshM.data();
+              const fe: any = freshE.data();
+              if (!freshM.exists || fe?.paidStatus !== 'PAID' || fm?.paidStatus === 'PAID') return false;
+              // Same field conventions as setPaidStatus's authoritative PAID write.
+              const stampedPaidAt = typeof fe.paidAt === 'number' ? fe.paidAt : Date.now();
+              tx.set(mRef, {
+                paidStatus: 'PAID',
+                paidAt: stampedPaidAt,
+                paidBy: actorUid,
+                ...(typeof fe.paymentMethod === 'string' && fe.paymentMethod
+                  ? { paymentMethod: fe.paymentMethod }
+                  : {}),
+                ...(typeof fe.paymentNote === 'string' && fe.paymentNote
+                  ? { paymentNote: fe.paymentNote.slice(0, 500) }
+                  : {}),
+              }, { merge: true });
+              // The missing ledger row — the shared ledger's reader contract is
+              // `note` (PaymentLedgerEvent / PaymentsPanel).
+              tx.set(ledgerRef, {
+                type: 'MARKED_PAID',
+                uid,
+                entryName: fm?.userName ?? fe?.userName,
+                amount: typeof entryFee === 'number' ? entryFee : undefined,
+                actorUid,
+                at: Date.now(),
+                createdAt: FieldValue.serverTimestamp(),
+                note: 'reconciled — pre-P1 payment recorded on the entry doc only',
+              });
+              return true;
             });
+            if (acted) { report.membersPromoted++; changedThisPool++; }
+            else report.alreadyConsistent++; // raced with a live setPaidStatus
+          } else {
+            report.membersPromoted++;
+            changedThisPool++;
           }
-          changedThisPool++;
         } else if (memberPaid && !entryPaid) {
           // Truth store already right; the display projection never got written
           // pre-P1. Mirror with P1's field conventions.
