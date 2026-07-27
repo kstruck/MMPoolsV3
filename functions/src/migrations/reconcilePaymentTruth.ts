@@ -182,16 +182,28 @@ export const reconcilePaymentTruth = validated(
                   : {}),
               }, { merge: true });
               // The missing ledger row — the shared ledger's reader contract is
-              // `note` (PaymentLedgerEvent / PaymentsPanel).
+              // `note` (PaymentLedgerEvent / PaymentsPanel). The original
+              // method/txn detail from the entry folds into it (codex r3) so
+              // the audit history keeps what the commissioner recorded, and
+              // every optional field uses a conditional spread — this project
+              // deliberately does NOT set ignoreUndefinedProperties, so a
+              // literal undefined ABORTS the whole transaction (codex r3;
+              // nflPools.ts:482 records the same crash class).
+              const entryName = fm?.userName ?? fe?.userName;
+              const noteParts = [
+                typeof fe.paymentMethod === 'string' && fe.paymentMethod ? fe.paymentMethod : undefined,
+                typeof fe.paymentNote === 'string' && fe.paymentNote ? fe.paymentNote.slice(0, 500) : undefined,
+                'reconciled — pre-P1 payment recorded on the entry doc only',
+              ].filter(Boolean);
               tx.set(ledgerRef, {
                 type: 'MARKED_PAID',
                 uid,
-                entryName: fm?.userName ?? fe?.userName,
-                amount: typeof entryFee === 'number' ? entryFee : undefined,
+                ...(entryName !== undefined ? { entryName } : {}),
+                ...(typeof entryFee === 'number' ? { amount: entryFee } : {}),
                 actorUid,
                 at: Date.now(),
                 createdAt: FieldValue.serverTimestamp(),
-                note: 'reconciled — pre-P1 payment recorded on the entry doc only',
+                note: noteParts.join(' — '),
               });
               return true;
             });

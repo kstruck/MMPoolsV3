@@ -388,7 +388,8 @@ describe('reconcilePaymentTruth — the divergence one-off (P2)', () => {
     expect(ledger.size).toBe(1);
     expect(ledger.docs[0].data().uid).toBe('m1');
     expect(ledger.docs[0].data().amount).toBe(25);
-    expect(String(ledger.docs[0].data().note)).toMatch(/reconciled/);
+    // The commissioner's original detail survives into the audit note (codex r3).
+    expect(String(ledger.docs[0].data().note)).toMatch(/Venmo — txn 9 — reconciled/);
 
     // m2's entry display now matches its record, method carried across.
     const e2 = (await db.collection('pools').doc(poolId).collection('entries').doc('m2').get()).data() as any;

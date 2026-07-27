@@ -182,20 +182,27 @@ const runPublishedWeeksBackfill = async (dryRun: boolean) => {
  * run IS the divergence count. Idempotent, so an aborted run is simply re-run
  * from the start — everything already fixed reads back as consistent.
  */
-/** Cursor parked by a page-cap exit, keyed by dryRun, so the next click resumes
- *  past the cap instead of rescanning the same prefix forever (codex r2).
- *  Cleared on a clean finish. Module-scoped, same reasoning as backfillResume. */
-const reconcileResume = new Map<boolean, string>();
+/** Page-cap park for the reconciliation, keyed by dryRun: cursor + the partial
+ *  report so a resumed click reports the WHOLE run, not just its own pages
+ *  (codex r2/r3 — same lesson as backfillResume: counters are the evidence on
+ *  a money migration). Cleared on a clean finish. */
+const reconcileResume = new Map<boolean, { cursor: string; partial: ResumableReport; plannedFixes: any[] }>();
 
 const runReconcilePaymentTruth = async (dryRun: boolean) => {
-  let cursor: string | undefined = reconcileResume.get(dryRun);
+  const parked = reconcileResume.get(dryRun);
+  let cursor: string | undefined = parked?.cursor;
   let pages = 0;
   const agg = {
     ok: true, dryRun,
     poolsScanned: 0, membersPromoted: 0, entriesMirrored: 0, alreadyConsistent: 0,
     entriesPaidNoMember: 0, testPoolsSkipped: 0, otherTypeSkipped: 0,
     failures: [] as any[], plannedFixes: [] as any[], plannedFixesTruncated: false,
+    resumedFrom: parked?.cursor ?? null,
   };
+  if (parked) {
+    foldParkedReport(agg, parked.partial);
+    agg.plannedFixes.push(...parked.plannedFixes);
+  }
   do {
     // Cursor sent only when present — the JS SDK encodes explicit-undefined as
     // null on the wire (the schema also takes null, belt + suspenders, #296).
@@ -216,9 +223,9 @@ const runReconcilePaymentTruth = async (dryRun: boolean) => {
   } while (cursor && pages < 100);
   if (cursor) {
     // Page-cap exit with pools left (codex r1): report it as incomplete, park
-    // the cursor so the NEXT click continues from here (codex r2) instead of
-    // rescanning the same prefix forever.
-    reconcileResume.set(dryRun, cursor);
+    // the cursor AND the partial counters so the NEXT click continues from
+    // here and its final report covers the whole run (codex r2/r3).
+    reconcileResume.set(dryRun, { cursor, partial: snapshotReport(agg), plannedFixes: [...agg.plannedFixes] });
     agg.ok = false;
     agg.failures.push({ poolId: '(page cap)', error: `stopped after 100 pages with pools remaining; click Run again to resume from ${cursor}` });
   } else {
