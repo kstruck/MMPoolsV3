@@ -260,11 +260,19 @@ export function survivorAllowedForGroup(
   let hasNonCorrection = false;
   for (const r of reasons) if (r !== 'correction') { hasNonCorrection = true; break; }
   if (!hasNonCorrection) return false;
-  const marked = (field: unknown): boolean => {
+  // AT OR AFTER, not just this week (codex r7). Survivor state is sequential: a
+  // suspended week-2 game going terminal after week 3 was scored would run week 2
+  // against a ledger that already carries week-3 strikes and elimination, and
+  // `computeSurvivorWeekUpdate` can then rewrite `eliminatedWeek` backwards to
+  // week 2 even when that week's pick WON. Out-of-order is as corrupting as a
+  // replay, so the licence requires that nothing from this week onward has been
+  // touched.
+  const markedAtOrAfter = (field: unknown): boolean => {
     const map = field as Record<string, unknown> | undefined;
-    return !!map && typeof map === 'object' && map[String(week)] === true;
+    if (!map || typeof map !== 'object') return false;
+    return Object.entries(map).some(([k, v]) => v === true && Number(k) >= week);
   };
-  return !marked(pool?.scoredWeeks) && !marked(pool?.publishedWeeks);
+  return !markedAtOrAfter(pool?.scoredWeeks) && !markedAtOrAfter(pool?.publishedWeeks);
 }
 
 export interface SpreadShape { value?: unknown; locked?: unknown }

@@ -118,8 +118,17 @@ describe('survivorAllowedForGroup — the one thing a queued pass may do to Surv
     expect(survivorAllowedForGroup(set('lockPending'), scoredWk1, 1)).toBe(false);
   });
 
-  it('is per WEEK — a scored week 1 does not block a first score of week 2', () => {
+  it('an EARLIER scored week does not block a first score of a later one', () => {
     expect(survivorAllowedForGroup(set('terminal'), scoredWk1, 2)).toBe(true);
+  });
+
+  it('DEFERS when a LATER week has already been scored — out of order is as bad as a replay', () => {
+    // codex r7: Survivor state is sequential. A suspended week-2 game going
+    // terminal after week 3 was scored would run week 2 against a ledger that
+    // already carries week-3 strikes and elimination, and computeSurvivorWeekUpdate
+    // can rewrite eliminatedWeek backwards to week 2 even when that pick WON.
+    expect(survivorAllowedForGroup(set('terminal'), { scoredWeeks: { '3': true } }, 2)).toBe(false);
+    expect(survivorAllowedForGroup(set('terminal'), { publishedWeeks: { '3': true } }, 2)).toBe(false);
   });
 
   it('DEFERS a week that was only PROVISIONALLY scored — the ledger already exists', () => {
@@ -136,8 +145,12 @@ describe('survivorAllowedForGroup — the one thing a queued pass may do to Surv
     expect(survivorAllowedForGroup(set('terminal'), { scoredWeeks: { '1': false }, publishedWeeks: {} }, 1)).toBe(true);
   });
 
-  it('publishedWeeks is per week too', () => {
+  it('an earlier publishedWeeks marker does not block a later week', () => {
     expect(survivorAllowedForGroup(set('terminal'), { publishedWeeks: { '1': true } }, 2)).toBe(true);
+  });
+
+  it('ignores false markers on later weeks — only a real one blocks', () => {
+    expect(survivorAllowedForGroup(set('terminal'), { scoredWeeks: { '5': false } }, 2)).toBe(true);
   });
 
   it('allows a group that carries a correction AND a terminal', () => {
