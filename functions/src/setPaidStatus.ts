@@ -16,7 +16,7 @@ export const setPaidStatus = validated(
   { schema: setPaidStatusSchema, label: "setPaidStatus", appCheck: "monitor" },
   async (input, request) => {
   const uid = request.auth!.uid;
-  const { poolId, memberUid, isPaid, claim } = input;
+  const { poolId, memberUid, isPaid, claim, paymentMethod, paidAt, paymentNote } = input;
 
   const db = admin.firestore();
   const poolRef = db.collection('pools').doc(poolId);
@@ -40,16 +40,49 @@ export const setPaidStatus = validated(
 
   const entryFee: number | undefined = pool.settings?.entryFee;
   let memberName: string | undefined;
-  // Member Record mutation + ledger append in one transaction (ADR 0003 item 5).
+  // Member Record mutation + ledger append + entry-doc mirror in ONE transaction
+  // (ADR 0003 item 5; PLAN-PAYMENT-TRUTH P1). The mirror is REQUIRED, not
+  // cosmetic: the Bento ledger UI is entry-backed (ledgerStats counts
+  // entry.paidStatus and the table renders entry paymentMethod/paidAt/
+  // paymentNote), so repointing that panel here without mirroring would blank
+  // its table and freeze the collected/remaining figures. Mirroring in the same
+  // transaction makes the two stores agree by construction, which is what turns
+  // P2's reconciliation into a one-off for historical data.
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(mRef);
     if (!snap.exists) throw new HttpsError("not-found", "Member is not on this pool's roster.");
+    // NFL entry docs are keyed by uid (nflPools), so the member's entry — when
+    // they have one — lives at entries/{memberUid}. Members without an entry
+    // (e.g. the commissioner, or joined-not-yet-picked) simply have no doc to
+    // mirror onto. Read inside the tx (all reads before writes).
+    const entryRef = poolRef.collection('entries').doc(memberUid);
+    const entrySnap = await tx.get(entryRef);
     memberName = snap.data()?.userName;
+    const stampedPaidAt = typeof paidAt === 'number' ? paidAt : Date.now();
     tx.set(mRef, {
       paidStatus: isPaid ? 'PAID' : 'UNPAID',
-      paidAt: isPaid ? Date.now() : FieldValue.delete(),
+      paidAt: isPaid ? stampedPaidAt : FieldValue.delete(),
       paidBy: uid,
+      ...(paymentMethod !== undefined ? { paymentMethod } : {}),
+      ...(paymentNote !== undefined
+        ? { paymentNote: paymentNote === null ? FieldValue.delete() : paymentNote.slice(0, 500) }
+        : {}),
     }, { merge: true });
+    if (entrySnap.exists) {
+      // Field semantics copied from updateEntryPayment verbatim, so the panel's
+      // display behaves exactly as it did when it called that path: method is
+      // overwritten-or-cleared every time, date/note only when sent (null keeps
+      // the old client write's literal-null clear).
+      tx.update(entryRef, {
+        paidStatus: isPaid ? 'PAID' : 'UNPAID',
+        paymentMethod: paymentMethod ?? FieldValue.delete(),
+        ...(paidAt !== undefined ? { paidAt } : {}),
+        ...(paymentNote !== undefined
+          ? { paymentNote: paymentNote === null ? null : paymentNote.slice(0, 500) }
+          : {}),
+        updatedAt: Date.now(),
+      });
+    }
     const ledgerRef = poolRef.collection('payments').doc();
     tx.set(ledgerRef, {
       type: isPaid ? 'MARKED_PAID' : 'MARKED_UNPAID',
@@ -59,6 +92,11 @@ export const setPaidStatus = validated(
       actorUid: uid,
       at: Date.now(),
       createdAt: FieldValue.serverTimestamp(),
+      // Dispute-prevention detail, when the commissioner recorded it.
+      ...(paymentMethod !== undefined ? { paymentMethod } : {}),
+      ...(paymentNote !== undefined && paymentNote !== null
+        ? { paymentNote: paymentNote.slice(0, 500) }
+        : {}),
     });
   });
 

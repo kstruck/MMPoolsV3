@@ -22,7 +22,14 @@ export const claimByCodeSchema = z.strictObject({
  * setPaidStatus — dual-mode contract preserved exactly:
  *   claim present  → member self-report (own record only, enforced in handler)
  *   claim absent   → authoritative commissioner/owner/admin mark via isPaid
- * dbService today only sends { poolId, memberUid, isPaid }.
+ *
+ * PLAN-PAYMENT-TRUTH P1: the authoritative mode also carries the payment detail
+ * fields the Bento ledger edits (method / date / note), so the panel can stop
+ * calling the display-only updateEntryPayment. paidAt/paymentNote mirror
+ * updateEntryPaymentSchema's shape (nullable = explicit clear). paymentMethod is
+ * a BOUNDED STRING, not that schema's enum: the Bento select already offers
+ * Zelle / PayPal / Card, which the enum rejects at the boundary, and no server
+ * logic branches on the value — it is ledger/display metadata.
  */
 export const setPaidStatusSchema = z
     .strictObject({
@@ -30,11 +37,20 @@ export const setPaidStatusSchema = z
         memberUid: z.string().trim().min(1).max(200),
         isPaid: z.boolean().optional(),
         claim: z.boolean().optional(),
+        paymentMethod: z.string().trim().min(1).max(40).optional(),
+        paidAt: z.number().finite().nullable().optional(),
+        paymentNote: z.string().max(500).nullable().optional(),
     })
     // Exactly one mode: { poolId, memberUid } alone used to slip into the
     // authoritative branch as isPaid=undefined and write UNPAID (qodo, PR #165).
     .refine((o) => (o.isPaid !== undefined) !== (o.claim !== undefined), {
         message: "exactly one of isPaid (authoritative) or claim (self-report) is required",
+    })
+    // Detail fields ride only with the authoritative mark — a member's
+    // self-report must not stamp commissioner-facing payment details.
+    .refine((o) => o.claim === undefined
+        || (o.paymentMethod === undefined && o.paidAt === undefined && o.paymentNote === undefined), {
+        message: "payment details are only valid with the authoritative isPaid mark",
     });
 
 export type CreateClaimCodeInput = z.infer<typeof createClaimCodeSchema>;

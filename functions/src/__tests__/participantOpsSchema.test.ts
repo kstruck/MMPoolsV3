@@ -41,7 +41,25 @@ describe("setPaidStatusSchema", () => {
     });
     it("rejects missing memberUid and unknown fields", () => {
         expect(setPaidStatusSchema.safeParse({ poolId: "p1", isPaid: true }).success).toBe(false);
-        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", isPaid: true, paidAt: 0 }).success).toBe(false);
+        // paidAt was this test's "unknown field" example until P1 made it real —
+        // strictObject still rejects anything actually unknown.
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", isPaid: true, bogusField: 0 }).success).toBe(false);
+    });
+
+    it("P1 detail fields: accepted with isPaid, rejected with claim, bounded", () => {
+        expect(setPaidStatusSchema.safeParse({
+            poolId: "p1", memberUid: "u2", isPaid: true,
+            paymentMethod: "Zelle", paidAt: 1_750_000_000_000, paymentNote: "txn 123",
+        }).success).toBe(true);
+        // null = explicit clear, same contract as updateEntryPaymentSchema
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", isPaid: false, paidAt: null, paymentNote: null }).success).toBe(true);
+        // a self-report may not stamp commissioner-facing payment details
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", claim: true, paymentMethod: "Cash" }).success).toBe(false);
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", claim: true, paidAt: 1 }).success).toBe(false);
+        // bounds
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", isPaid: true, paymentMethod: "" }).success).toBe(false);
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", isPaid: true, paymentMethod: "x".repeat(41) }).success).toBe(false);
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", isPaid: true, paymentNote: "x".repeat(501) }).success).toBe(false);
     });
 
     it("requires exactly one mode — neither or both isPaid/claim rejected (qodo PR #165)", () => {

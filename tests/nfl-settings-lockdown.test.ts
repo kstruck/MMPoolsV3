@@ -128,3 +128,19 @@ describe('NFLManagerView — settings saves route through the server callable', 
     expect(read('src/services/dbService.ts')).toContain("httpsCallable<{ poolId: string; updates: Record<string, unknown> }");
   });
 });
+
+describe('NFLManagerBentoDashboard — payment writes route through setPaidStatus (PLAN-PAYMENT-TRUTH P1)', () => {
+  const bento = read('src/components/NFLPoolDashboard/NFLManagerBentoDashboard.tsx');
+
+  it('BOTH panel paths call dbService.setPaidStatus and neither calls updateBracketEntryPayment', () => {
+    // The miswired control (D13): this panel used to call updateEntryPayment,
+    // which writes ONLY the display-legacy entry doc — so a commissioner
+    // "marking paid" left the Member Record UNPAID, appended nothing to the
+    // payments ledger, and kept the member's dues out of the pot. There were
+    // TWO such paths (togglePayment AND saveDetailedPayment); reverting either
+    // one reintroduces the split-brain, so this pins the absence of the old
+    // callable from the whole file, not just one handler.
+    expect(bento).toContain('dbService.setPaidStatus(');
+    expect(bento).not.toContain('updateBracketEntryPayment');
+  });
+});
