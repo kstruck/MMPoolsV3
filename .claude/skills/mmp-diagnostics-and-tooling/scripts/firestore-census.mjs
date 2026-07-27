@@ -6,10 +6,10 @@
 //      (Mirrors isAutoCloseEligible in functions/src/lib/lifecycle.ts:71-77.)
 //   2. Pools missing the `billing` field (Firestore cannot query for a missing
 //      field, so this needs a scan — that is why this script exists).
-//   3. Test-pool census: pools created by the in-app Test Suite / simulators
-//      (name prefixes "AI Test -", "Bracket Test -", "Playoff Test -",
-//      "Props Test -", "E2E Full Tournament Test", or slug starting "sim-").
-//      There is NO isTestPool flag — naming conventions are the only marker.
+//   3. Test-pool census: pools whose NAME contains the word "test" (case-
+//      insensitive, word-bounded — covers every simulator prefix AND names
+//      like "… TEST 5") or whose slug starts "sim-". Naming is a heuristic
+//      for finding candidates; `isTestPool: true` is the real marker.
 //   4. Freshness of system/scoreSync (squares score-sync heartbeat) and
 //      health/latest (hourly adminHealth snapshot).
 //
@@ -23,8 +23,8 @@
 // Credentials (checked in order):
 //   1. FIRESTORE_EMULATOR_HOST set        -> emulator, no key needed
 //   2. GOOGLE_APPLICATION_CREDENTIALS set -> that key file (keep it OUTSIDE the repo)
-//   3. <repoRoot>/scripts/service-account.json (legacy repo convention; NOT
-//      gitignored as of 2026-07-06 — prefer option 2)
+//   3. <repoRoot>/scripts/service-account.json (legacy repo convention;
+//      gitignored since 2026-07-26 — still prefer option 2)
 
 import { createRequire } from 'node:module';
 import { readFileSync, existsSync } from 'node:fs';
@@ -42,13 +42,17 @@ const AS_JSON = process.argv.includes('--json');
 const SAMPLE_CAP = 20;
 
 const TERMINAL_STATUSES = ['CANCELED', 'COMPLETED']; // lib/lifecycle.ts:17
-const TEST_NAME_PREFIXES = [
-    'AI Test -',                 // squaresSimulator.ts:49
-    'Bracket Test -',            // bracketSimulator.ts:67
-    'Playoff Test -',            // playoffSimulator.ts:56
-    'Props Test -',              // propsSimulator.ts:56
-    'E2E Full Tournament Test',  // bracketE2ESimulator.ts:103
-];
+// Word-boundary "test" anywhere in the name, case-insensitive. Replaces a
+// PREFIX-ONLY list ('AI Test -', 'Bracket Test -', 'Playoff Test -',
+// 'Props Test -', 'E2E Full Tournament Test' — all of which this still
+// matches) because the prefix form could not see a pool with "Test" at the
+// END of its name: "Kevin Struck's 2026 NFL Weekly Pick'em TEST 5"
+// (XMKNsLhj1B1w5njsR5sm) counted toward the public totals and the census
+// never listed it (K12, 2026-07-26). The word boundary keeps "Contest" /
+// "Greatest" from matching. Recall over precision: a false positive is one
+// extra row for Kevin to glance at, a false negative is a test pool silently
+// inside the public stats.
+const TEST_NAME_PATTERN = /\btest\b/i;
 
 function initApp() {
     if (process.env.FIRESTORE_EMULATOR_HOST) {
@@ -74,7 +78,7 @@ function initApp() {
 function looksLikeTestPoolByName(name, slug) {
     if (typeof slug === 'string' && slug.startsWith('sim-')) return true;
     if (typeof name !== 'string') return false;
-    return TEST_NAME_PREFIXES.some((p) => name.startsWith(p));
+    return TEST_NAME_PATTERN.test(name);
 }
 
 // Deliberately does NOT import shared/testPool.ts and re-run the discriminator
