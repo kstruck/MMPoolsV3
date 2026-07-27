@@ -174,15 +174,15 @@ describe('setPaidStatus — detail fields + entry mirror (P1)', () => {
     expect(e.paidAt).toBe(backdated);
     expect(e.paymentNote).toBe('txn 123');
 
-    // Exactly one ledger row, carrying the dispute-prevention detail.
+    // Exactly one ledger row, carrying the dispute-prevention detail under
+    // `note` — the field PaymentLedgerEvent/PaymentsPanel actually render.
     const ledger = await db.collection('pools').doc(poolId).collection('payments').get();
     expect(ledger.size).toBe(1);
     const row = ledger.docs[0].data();
     expect(row.type).toBe('MARKED_PAID');
     expect(row.uid).toBe('p1_m1');
     expect(row.amount).toBe(25);
-    expect(row.paymentMethod).toBe('Zelle');
-    expect(row.paymentNote).toBe('txn 123');
+    expect(row.note).toBe('Zelle — txn 123');
 
     // rosterSummary.paidCount moved.
     const summary = (await db.collection('pools').doc(poolId).collection('rosterSummary').doc('current').get()).data() as Record<string, any>;

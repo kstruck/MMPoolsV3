@@ -83,6 +83,14 @@ export const setPaidStatus = validated(
         updatedAt: Date.now(),
       });
     }
+    // Dispute-prevention detail, when the commissioner recorded it. The shared
+    // ledger's reader contract is `note` (PaymentLedgerEvent / PaymentsPanel,
+    // same field the rebuy and payout writers use — codex r1), so method and
+    // note fold into it rather than landing in fields nothing renders.
+    const noteParts = [
+      paymentMethod,
+      typeof paymentNote === 'string' ? paymentNote.slice(0, 500) : undefined,
+    ].filter(Boolean);
     const ledgerRef = poolRef.collection('payments').doc();
     tx.set(ledgerRef, {
       type: isPaid ? 'MARKED_PAID' : 'MARKED_UNPAID',
@@ -92,11 +100,7 @@ export const setPaidStatus = validated(
       actorUid: uid,
       at: Date.now(),
       createdAt: FieldValue.serverTimestamp(),
-      // Dispute-prevention detail, when the commissioner recorded it.
-      ...(paymentMethod !== undefined ? { paymentMethod } : {}),
-      ...(paymentNote !== undefined && paymentNote !== null
-        ? { paymentNote: paymentNote.slice(0, 500) }
-        : {}),
+      ...(noteParts.length > 0 ? { note: noteParts.join(' — ') } : {}),
     });
   });
 
