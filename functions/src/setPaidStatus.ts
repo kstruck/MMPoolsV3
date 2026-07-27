@@ -66,9 +66,27 @@ export const setPaidStatus = validated(
       if (typeof m.rebuyOwed === 'number') {
         owed = m.rebuyOwed;
       } else {
-        const rebuysUsed: number = entrySnap.exists ? ((entrySnap.data() as any).rebuysUsed ?? 0) : 0;
-        const rebuyCost: number = pool.settings?.rebuyCost ?? pool.settings?.entryFee ?? 0;
-        owed = rebuysUsed * rebuyCost;
+        // Derivation chain for the never-stamped case (codex r4): the pool's
+        // REBUY_DUE ledger events carry the amount actually charged AT REBUY
+        // TIME, so they survive a later rebuyCost settings edit. Only when no
+        // events exist either (the oldest window) does the count × CURRENT
+        // price approximation apply.
+        const dueEvents = await tx.get(
+          poolRef.collection('payments')
+            .where('uid', '==', memberUid)
+            .where('type', '==', 'REBUY_DUE'),
+        );
+        const fromLedger = dueEvents.docs.reduce((sum, d) => {
+          const amt = (d.data() as any).amount;
+          return sum + (typeof amt === 'number' ? amt : 0);
+        }, 0);
+        if (dueEvents.size > 0) {
+          owed = fromLedger;
+        } else {
+          const rebuysUsed: number = entrySnap.exists ? ((entrySnap.data() as any).rebuysUsed ?? 0) : 0;
+          const rebuyCost: number = pool.settings?.rebuyCost ?? pool.settings?.entryFee ?? 0;
+          owed = rebuysUsed * rebuyCost;
+        }
       }
       const prevPaid = typeof m.rebuyPaid === 'number' ? m.rebuyPaid : 0;
       const nextPaid = settleRebuys ? owed : 0;

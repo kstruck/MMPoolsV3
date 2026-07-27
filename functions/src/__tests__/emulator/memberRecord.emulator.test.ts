@@ -419,6 +419,31 @@ describe('setPaidStatus settleRebuys — the rebuy-paid control (P3)', () => {
     expect((await calculatePoolPot(db, poolId, pool)).prizePot).toBe(25 + 40);
   });
 
+  it('LEGACY derive prefers REBUY_DUE ledger amounts over the CURRENT price (codex r4)', async () => {
+    // Two rebuys happened at $15; the commissioner later raised rebuyCost to
+    // $20. The ledger rows carry what was actually charged.
+    await db.collection('pools').doc(poolId).set({
+      id: poolId, type: 'NFL_SURVIVOR', name: 'P3 Price Drift', ownerId: 'p3_boss',
+      participantIds: ['p3_boss', 'p3_drift'], status: 'OPEN', settings: { entryFee: 25, rebuyCost: 20 },
+    });
+    await db.collection('pools').doc(poolId).collection('members').doc('p3_drift').set({
+      uid: 'p3_drift', poolId, userName: 'Drift', role: 'PARTICIPANT', paidStatus: 'UNPAID', // NO rebuyOwed
+    });
+    await db.collection('pools').doc(poolId).collection('entries').doc('p3_drift').set({
+      id: 'p3_drift', ownerUid: 'p3_drift', rebuysUsed: 2, paidStatus: 'UNPAID',
+    });
+    for (const week of [2, 3]) {
+      await db.collection('pools').doc(poolId).collection('payments').add({
+        type: 'REBUY_DUE', uid: 'p3_drift', amount: 15, actorUid: 'p3_drift', at: Date.now(), note: `Survivor rebuy (week ${week})`,
+      });
+    }
+
+    await wrappedSetPaid({ data: { poolId, memberUid: 'p3_drift', settleRebuys: true }, auth: BOSS } as never);
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('p3_drift').get()).data() as any;
+    expect(m.rebuyOwed).toBe(30); // 15 + 15 from the ledger — NOT 2 × the current $20
+    expect(m.rebuyPaid).toBe(30);
+  });
+
   it('a STAMPED rebuyOwed of 0 is trusted — no derive, no event', async () => {
     await seedRebuyPool();
     await db.collection('pools').doc(poolId).collection('members').doc('p3_m1').set({ rebuyOwed: 0 }, { merge: true });

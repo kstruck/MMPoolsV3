@@ -1102,7 +1102,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                           const owed = typeof row.rebuyOwed === 'number'
                             ? row.rebuyOwed
                             : (row.rebuysUsed ?? 0) * rebuyCost;
-                          if (!(owed > 0)) return null;
+                          // The callable requires a Member Record (it throws
+                          // "not on this pool's roster") — offering the button
+                          // to a record-less row is an action that can never
+                          // succeed (codex r4). The backfill creates the record.
+                          if (!(owed > 0) || !row.hasMember) return null;
                           const settled = (row.rebuyPaid ?? 0) >= owed;
                           return (
                             <button

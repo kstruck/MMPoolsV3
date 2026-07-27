@@ -91,8 +91,15 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
                 if (m.paidStatus === 'PAID') { collected += fee; paid++; }
                 collected += m.rebuyPaid ?? 0;
             }
-            // Participants who joined but have no Member Record yet still owe the fee.
+            // Participants who joined but have no Member Record yet still owe the
+            // fee — and their entry's rebuys (codex r4: a partially backfilled
+            // pool dropped unmatched entries' rebuy dues from Expected).
             expected += Math.max(0, memberCount - members.length) * entryFee;
+            const memberUids = new Set(members.map((m: any) => m.uid));
+            for (const e of entries as any[]) {
+                const uid = e.ownerUid || e.id;
+                if (!memberUids.has(uid)) expected += (e.rebuysUsed ?? 0) * rebuyCost;
+            }
             return { paidCount: paid, unpaidCount: Math.max(0, memberCount - paid), collected, expected };
         }
         // Pre-backfill fallback: entries carry no settlement state, so rebuys
