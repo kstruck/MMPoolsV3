@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 import {
@@ -6,6 +6,7 @@ import {
     simSeedNFLGames, simFinalizePool, cleanupSimPool,
 } from '../../simHarness';
 import { scoreNFLWeek, submitNFLPicks, scoreNFLWeekInternal } from '../../nflPools';
+import { updatePoolSettings } from '../../poolOps';
 import type { NFLGame } from '../../nflPoolTypes';
 
 /**
@@ -34,6 +35,7 @@ const wFinalize = test.wrap(simFinalizePool);
 const wCleanup = test.wrap(cleanupSimPool);
 const wScore = test.wrap(scoreNFLWeek);
 const wPublicSubmit = test.wrap(submitNFLPicks);
+const wUpdateSettings = test.wrap(updatePoolSettings);
 
 const superAdmin = { uid: 'admin-1', token: { role: 'SUPER_ADMIN' } } as any;
 
@@ -218,7 +220,141 @@ describe('golden arc — survivor rebuy through the real path', () => {
         const member = (await db.collection('pools').doc(poolId).collection('members').doc(CAROL).get()).data();
         expect(member?.rebuyOwed).toBe(20);
 
+        // The rebuy-week check (nflPools executeSurvivorRebuyInternal, "Verify
+        // Deadline cutoff"): a rebuy for a week past rebuyDeadlineWeek (3 here)
+        // is refused before any entry state is read, and changes nothing.
+        await expect(wRebuy({ data: { poolId, runId, subjectUid: CAROL, week: 4 }, auth: superAdmin } as never))
+            .rejects.toThrow(/PAST_DEADLINE/);
+        carol = (await db.collection('pools').doc(poolId).collection('entries').doc(CAROL).get()).data()!;
+        expect(carol.rebuysUsed).toBe(1);
+        expect((await db.collection('pools').doc(poolId).collection('members').doc(CAROL).get()).data()?.rebuyOwed).toBe(20);
+
         await wCleanup({ data: { poolId, runId, deleteGames: true }, auth: superAdmin } as never);
+    }, 60000);
+});
+
+/**
+ * Weekly HARD lock through the REAL submit path (Kevin's ruling 2026-07-25,
+ * PR-0 / #272). Survivor and Margin share the enforcement but each throws its
+ * own WEEK_LOCKED message, so both types run the same arc: a submit before the
+ * deadline is accepted, a submit after it is refused, and BOTH record the
+ * week's frozen deadline (`hardLockByWeek`) — the refused one too, because the
+ * freeze is persisted BEFORE the lock check (freeze-before-enforce), which is
+ * what stops a later buffer widening from reopening a week that already threw.
+ */
+describe.each([
+    ['NFL_SURVIVOR', 'run-golden-hardlock-surv'],
+    ['NFL_MARGIN', 'run-golden-hardlock-margin'],
+] as const)('golden arc — %s weekly hard lock through the real submit path', (type, runId) => {
+    const poolId = `pool-${runId}`;
+    const ALICE = `sim-${runId}-alice`;
+    const SEC = 1000;
+    const MINUTE = 60 * SEC;
+
+    it('accepts pre-deadline, throws WEEK_LOCKED at T+1s, and freezes the deadline both times', async () => {
+        await wStart({ data: { runId, scenarioId: `golden-hardlock-${type}` }, auth: superAdmin } as never);
+        // No lock settings on purpose: the hard lock derives from the pool TYPE
+        // and the absent buffer snaps to the 5-minute preset.
+        await seedSimPool(poolId, runId, type, { entryFee: 10, payouts: { places: [], bonuses: [] } });
+        const now = Date.now();
+        const week1Start = now + 10 * MINUTE;        // deadline (−5min buffer) ≈ now+5min → OPEN
+        const week2Start = now + 5 * MINUTE - SEC;   // deadline ≈ now−1s → LOCKED, submit lands at T+1s
+        await wSeed({
+            data: {
+                runId,
+                games: [
+                    { week: 1, seasonType: 2, startTime: week1Start, status: 'SCHEDULED', isMonday: false, homeTeam: T('KC'), awayTeam: T('BUF'), scores: { home: 0, away: 0 }, spread: { value: -3, locked: true } },
+                    { week: 2, seasonType: 2, startTime: week2Start, status: 'SCHEDULED', isMonday: false, homeTeam: T('SF'), awayTeam: T('DAL'), scores: { home: 0, away: 0 }, spread: { value: -7, locked: true } },
+                ],
+            },
+            auth: superAdmin,
+        } as never);
+        await wJoin({ data: { poolId, runId, members: [{ uid: ALICE, name: 'Alice' }] }, auth: superAdmin } as never);
+
+        // Week 1: deadline ~5 minutes away → accepted, and the successful
+        // submit records the frozen deadline for its week.
+        await wSubmit({ data: { poolId, runId, subjectUid: ALICE, week: 1, picks: { 1: 'KC' } }, auth: superAdmin } as never);
+        let pool = (await db.collection('pools').doc(poolId).get()).data()!;
+        expect(pool.hardLockByWeek?.['1']).toBe(week1Start - 5 * MINUTE);
+
+        // Week 2: the deadline passed one second ago → the hard weekly lock refuses.
+        await expect(wSubmit({ data: { poolId, runId, subjectUid: ALICE, week: 2, picks: { 2: 'SF' } }, auth: superAdmin } as never))
+            .rejects.toThrow(/WEEK_LOCKED/);
+
+        // …and the REFUSED submit still recorded the freeze (freeze-before-enforce,
+        // nflPools: persisted before the lock is enforced, precisely so the first
+        // post-deadline submit leaves a frozen value behind).
+        pool = (await db.collection('pools').doc(poolId).get()).data()!;
+        expect(pool.hardLockByWeek?.['2']).toBe(week2Start - 5 * MINUTE);
+
+        // Only the accepted week-1 pick reached the entry.
+        const entry = (await db.collection('pools').doc(poolId).collection('entries').doc(ALICE).get()).data()!;
+        expect(entry.picks['1']).toBe('KC');
+        expect(entry.picks['2']).toBeUndefined();
+
+        await wCleanup({ data: { poolId, runId, deleteGames: true }, auth: superAdmin } as never);
+    }, 60000);
+});
+
+/**
+ * KNOWN RESIDUAL (effectiveLock.ts, codex r5 — deferred to the settings-path
+ * PR): the freeze defends a week only if something recorded it before that
+ * week's original deadline passed. Settings edits now DO go through the
+ * `updatePoolSettings` callable (PR-B′), but the callable still does not
+ * freeze the outgoing deadline when a lock-affecting save lands — so on a week
+ * NOBODY touched (no submit, no proxy pick, no reminder pass), a deadline that
+ * passes unfrozen can be reopened by narrowing the buffer.
+ *
+ * it.fails() documents the hole WITHOUT fixing it (report-only): the body
+ * asserts the DESIRED behaviour — the narrow cannot reopen the week — which is
+ * exactly what does not hold today. When updatePoolSettings learns to freeze
+ * transactionally on lock-affecting saves, this test reports "expected failure
+ * passed" — flip it to a plain it() and it becomes the fix's regression guard.
+ *
+ * THE TRAP THIS TEST MUST AVOID: any submit before the narrow — even a REFUSED
+ * one — records the freeze (freeze-before-enforce) and the reopen disappears.
+ * So the body must not "sanity check" the locked state by submitting first.
+ */
+describe('golden arc — hard-lock freeze residual (updatePoolSettings does not freeze)', () => {
+    const runId = 'run-golden-freeze-residual';
+    const poolId = `pool-${runId}`;
+    const ALICE = `sim-${runId}-alice`;
+    const MINUTE = 60_000;
+
+    afterAll(async () => {
+        await wCleanup({ data: { poolId, runId, deleteGames: true }, auth: superAdmin } as never);
+    });
+
+    it.fails('a buffer narrow through updatePoolSettings must not reopen a week whose deadline already passed', async () => {
+        await wStart({ data: { runId, scenarioId: 'golden-freeze-residual' }, auth: superAdmin } as never);
+        // Buffer 60: with kickoff 10 minutes out, the deadline (kickoff − 60min)
+        // passed ~50 minutes ago. Nothing has touched the week, so nothing froze it.
+        await seedSimPool(poolId, runId, 'NFL_SURVIVOR', {
+            entryFee: 10, lockBufferMinutes: 60, payouts: { places: [], bonuses: [] },
+        });
+        const kickoffAt = Date.now() + 10 * MINUTE;
+        await wSeed({
+            data: {
+                runId,
+                games: [{ week: 1, seasonType: 2, startTime: kickoffAt, status: 'SCHEDULED', isMonday: false, homeTeam: T('KC'), awayTeam: T('BUF'), scores: { home: 0, away: 0 }, spread: { value: -3, locked: true } }],
+            },
+            auth: superAdmin,
+        } as never);
+        await wJoin({ data: { poolId, runId, members: [{ uid: ALICE, name: 'Alice' }] }, auth: superAdmin } as never);
+
+        // The manager narrows 60 → 5 through the REAL settings path. The newly
+        // computed deadline is kickoff − 5min ≈ 5 minutes FROM NOW: the closed
+        // week is open again, because no frozen value exists to hold it.
+        await wUpdateSettings({
+            data: { poolId, updates: { settings: { lockBufferMinutes: 5 } } },
+            auth: superAdmin,
+        } as never);
+
+        // DESIRED: the week stays locked. TODAY: this submit is accepted.
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: ALICE, week: 1, picks: { 1: 'KC' } },
+            auth: superAdmin,
+        } as never)).rejects.toThrow(/WEEK_LOCKED/);
     }, 60000);
 });
 

@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
+import ftest from 'firebase-functions-test';
 import { calculatePoolPot, recomputeGlobalStats } from '../../statsTrigger';
+import { finalizeTournamentPayouts } from '../../bracketScoring';
 
 /**
  * calculatePoolPot against a live Firestore emulator (PLAN-STATS-INTEGRITY §8.3
@@ -430,4 +432,53 @@ describe('calculatePoolPot — the existing branches are untouched', () => {
     const { prizePot } = await calculatePoolPot(db, 'b1', pool);
     expect(prizePot).toBe(24);
   });
+});
+
+/**
+ * OPEN DEFECT, REPORT ONLY (Kevin 2026-07-26, MORNING-2026-07-26-OVERNIGHT §7):
+ * `finalizeTournamentPayouts` sizes the pot from PAID entries
+ * (functions/src/bracketScoring.ts:410-411) but ranks payouts over ALL entries
+ * (:414-421) — so an UNPAID rank-1 entry is paid out of a pot it did not fund,
+ * and the members who DID fund it get nothing.
+ *
+ * it.fails() pins the defect without fixing it: the body asserts the natural
+ * product rule — an entry that did not fund the pot cannot win money from it —
+ * which is exactly what does not hold today. Whichever way the fix goes
+ * (exclude UNPAID entries from ranking, or size the pot over every ranked
+ * entry), this flips to "expected failure passed"; promote it to a plain it()
+ * pinning the chosen semantics then.
+ */
+describe('finalizeTournamentPayouts — unpaid winner paid from a pot they did not fund (bracketScoring.ts:410)', () => {
+  const test = ftest();
+  const wFinalizePayouts = test.wrap(finalizeTournamentPayouts);
+  const superAdmin = { uid: 'admin-1', token: { role: 'SUPER_ADMIN' } };
+
+  it.fails('an UNPAID rank-1 entry receives no payout', async () => {
+    const tid = 'potdefect-t1';
+    await db.collection('tournaments').doc(tid).set({ isFinalized: true, seasonYear: 2026 });
+    await db.collection('pools').doc('potdefect-pool').set({
+      name: 'Pot defect', type: 'BRACKET', tournamentId: tid, status: 'COMPLETED',
+      // rank 1 wins 100% of the pot
+      settings: { entryFee: 10, payouts: { places: [{ rank: 1, percentage: 100 }], bonuses: [] } },
+    });
+    const entries = db.collection('pools').doc('potdefect-pool').collection('entries');
+    // No ownerUid on purpose: keeps the post-finalization season-history and
+    // recap steps from writing user docs this suite would have to clean up.
+    await entries.doc('freeloader').set({ rank: 1, score: 30, paidStatus: 'UNPAID' });
+    await entries.doc('funder-a').set({ rank: 2, score: 20, paidStatus: 'PAID' });
+    await entries.doc('funder-b').set({ rank: 3, score: 10, paidStatus: 'PAID' });
+
+    await wFinalizePayouts({ data: { tournamentId: tid }, auth: superAdmin } as never);
+
+    // Cleanup BEFORE the assertion: in an it.fails() the assertion throwing is
+    // the expected path, so anything after it would never run. (The pool and
+    // its entries are wiped by the next test's beforeEach; the tournament doc
+    // is the one thing wipe() does not touch.)
+    await db.collection('tournaments').doc(tid).delete();
+
+    // Pot today: 2 paid × $10 = $20 — and 100% of it lands on the UNPAID
+    // rank-1 entry. DESIRED: no payout to an entry that put nothing in.
+    const freeloader = (await entries.doc('freeloader').get()).data()!;
+    expect(freeloader.amountWon ?? 0).toBe(0);
+  }, 30000);
 });
