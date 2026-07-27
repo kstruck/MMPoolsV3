@@ -58,28 +58,48 @@ export const setPaidStatus = validated(
     const entryRef = poolRef.collection('entries').doc(memberUid);
     const entrySnap = await tx.get(entryRef);
     memberName = snap.data()?.userName;
-    const stampedPaidAt = typeof paidAt === 'number' ? paidAt : Date.now();
-    tx.set(mRef, {
-      paidStatus: isPaid ? 'PAID' : 'UNPAID',
-      paidAt: isPaid ? stampedPaidAt : FieldValue.delete(),
-      paidBy: uid,
-      ...(paymentMethod !== undefined ? { paymentMethod } : {}),
-      ...(paymentNote !== undefined
-        ? { paymentNote: paymentNote === null ? FieldValue.delete() : paymentNote.slice(0, 500) }
-        : {}),
-    }, { merge: true });
+    // paidAt: number = commissioner-chosen date, null = explicit clear-the-date
+    // (paid, but no date on record — codex r2), absent = stamp now.
+    const stampedPaidAt =
+      typeof paidAt === 'number' ? paidAt : (paidAt === null ? undefined : Date.now());
+    if (isPaid) {
+      tx.set(mRef, {
+        paidStatus: 'PAID',
+        paidAt: stampedPaidAt ?? FieldValue.delete(),
+        paidBy: uid,
+        ...(paymentMethod !== undefined ? { paymentMethod } : {}),
+        ...(paymentNote !== undefined
+          ? { paymentNote: paymentNote === null ? FieldValue.delete() : paymentNote.slice(0, 500) }
+          : {}),
+      }, { merge: true });
+    } else {
+      // UNPAID is a full clear (schema refuses details with it): stale
+      // method/date/note on an unpaid member misreads as a payment record.
+      tx.set(mRef, {
+        paidStatus: 'UNPAID',
+        paidAt: FieldValue.delete(),
+        paidBy: uid,
+        paymentMethod: FieldValue.delete(),
+        paymentNote: FieldValue.delete(),
+      }, { merge: true });
+    }
     if (entrySnap.exists) {
-      // Field semantics copied from updateEntryPayment verbatim, so the panel's
-      // display behaves exactly as it did when it called that path: method is
-      // overwritten-or-cleared every time, date/note only when sent (null keeps
-      // the old client write's literal-null clear).
+      // Mirror keeps updateEntryPayment's field conventions (method
+      // overwritten-or-cleared, literal-null clears for date/note) so the
+      // entry-backed panel displays exactly what it used to — except the
+      // UNPAID transition, which now clears the details instead of preserving
+      // stale ones (codex r2, deliberate divergence from the old path).
       tx.update(entryRef, {
         paidStatus: isPaid ? 'PAID' : 'UNPAID',
         paymentMethod: paymentMethod ?? FieldValue.delete(),
-        ...(paidAt !== undefined ? { paidAt } : {}),
-        ...(paymentNote !== undefined
-          ? { paymentNote: paymentNote === null ? null : paymentNote.slice(0, 500) }
-          : {}),
+        ...(isPaid
+          ? {
+              ...(paidAt !== undefined ? { paidAt } : {}),
+              ...(paymentNote !== undefined
+                ? { paymentNote: paymentNote === null ? null : paymentNote.slice(0, 500) }
+                : {}),
+            }
+          : { paidAt: null, paymentNote: null }),
         updatedAt: Date.now(),
       });
     }

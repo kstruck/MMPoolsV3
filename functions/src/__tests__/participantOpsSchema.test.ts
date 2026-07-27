@@ -51,11 +51,15 @@ describe("setPaidStatusSchema", () => {
             poolId: "p1", memberUid: "u2", isPaid: true,
             paymentMethod: "Zelle", paidAt: 1_750_000_000_000, paymentNote: "txn 123",
         }).success).toBe(true);
-        // null = explicit clear, same contract as updateEntryPaymentSchema
-        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", isPaid: false, paidAt: null, paymentNote: null }).success).toBe(true);
+        // null = explicit clear-the-date while staying PAID
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", isPaid: true, paidAt: null, paymentNote: null }).success).toBe(true);
         // a self-report may not stamp commissioner-facing payment details
         expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", claim: true, paymentMethod: "Cash" }).success).toBe(false);
         expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", claim: true, paidAt: 1 }).success).toBe(false);
+        // UNPAID is a full clear — details with it would dress an unpaid member
+        // in a payment record (codex r2)
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", isPaid: false, paymentMethod: "Cash" }).success).toBe(false);
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", isPaid: false, paidAt: null }).success).toBe(false);
         // bounds
         expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", isPaid: true, paymentMethod: "" }).success).toBe(false);
         expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", isPaid: true, paymentMethod: "x".repeat(41) }).success).toBe(false);

@@ -103,11 +103,15 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     setSavingLedgerId(entryId);
     try {
       const timestamp = editDate ? new Date(editDate).getTime() : Date.now();
-      await dbService.setPaidStatus(pool.id, memberUidFor(entryId), editPaidStatus === 'PAID', {
-        paymentMethod: editMethod,
-        paidAt: editPaidStatus === 'PAID' ? timestamp : null,
-        paymentNote: editNote || null,
-      });
+      // Details ride only with PAID; an UNPAID save is a full clear server-side
+      // (the schema refuses details with it — an unpaid member must not display
+      // a payment method and transaction note).
+      await dbService.setPaidStatus(
+        pool.id, memberUidFor(entryId), editPaidStatus === 'PAID',
+        editPaidStatus === 'PAID'
+          ? { paymentMethod: editMethod, paidAt: timestamp, paymentNote: editNote || null }
+          : undefined,
+      );
       setEditingEntryId(null);
     } catch (err) {
       console.error("Failed to update detailed payment:", err);

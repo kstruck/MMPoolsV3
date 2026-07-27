@@ -194,23 +194,29 @@ describe('setPaidStatus — detail fields + entry mirror (P1)', () => {
     expect(prizePot).toBe(25);
   });
 
-  it('marking UNPAID clears through both stores with updateEntryPayment parity', async () => {
+  it('marking UNPAID is a FULL clear through both stores (codex r2)', async () => {
     await seedP1Pool();
     await wrappedSetPaid({
       data: { poolId, memberUid: 'p1_m1', isPaid: true, paymentMethod: 'Cash', paidAt: 1_750_000_000_000, paymentNote: 'x' },
       auth: BOSS,
     } as never);
-    // The Bento toggle sends NO details on the way back down.
+    // UNPAID sends no details (the schema refuses them) — and the server
+    // clears the stale ones, so an unpaid member never displays a payment
+    // method or a transaction note.
     await wrappedSetPaid({ data: { poolId, memberUid: 'p1_m1', isPaid: false }, auth: BOSS } as never);
 
     const m = (await db.collection('pools').doc(poolId).collection('members').doc('p1_m1').get()).data() as Record<string, any>;
     expect(m.paidStatus).toBe('UNPAID');
     expect(m.paidAt).toBeUndefined();
+    expect(m.paymentMethod).toBeUndefined();
+    expect(m.paymentNote).toBeUndefined();
 
     const e = (await db.collection('pools').doc(poolId).collection('entries').doc('p1_m1').get()).data() as Record<string, any>;
     expect(e.paidStatus).toBe('UNPAID');
-    // Parity with updateEntryPayment: a detail-less write clears the method.
     expect(e.paymentMethod).toBeUndefined();
+    // Entry-doc clears keep the old client write's literal-null convention.
+    expect(e.paidAt).toBeNull();
+    expect(e.paymentNote).toBeNull();
 
     const ledger = await db.collection('pools').doc(poolId).collection('payments').get();
     expect(ledger.size).toBe(2); // MARKED_PAID + MARKED_UNPAID — the audit trail keeps both
@@ -218,6 +224,24 @@ describe('setPaidStatus — detail fields + entry mirror (P1)', () => {
     const pool = (await db.collection('pools').doc(poolId).get()).data() as Record<string, any>;
     const { prizePot } = await calculatePoolPot(db, poolId, pool);
     expect(prizePot).toBe(0);
+  });
+
+  it('isPaid true + paidAt null clears the date while staying PAID, in BOTH stores (codex r2)', async () => {
+    await seedP1Pool();
+    await wrappedSetPaid({
+      data: { poolId, memberUid: 'p1_m1', isPaid: true, paidAt: 1_750_000_000_000 },
+      auth: BOSS,
+    } as never);
+    await wrappedSetPaid({
+      data: { poolId, memberUid: 'p1_m1', isPaid: true, paidAt: null },
+      auth: BOSS,
+    } as never);
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('p1_m1').get()).data() as Record<string, any>;
+    expect(m.paidStatus).toBe('PAID');
+    expect(m.paidAt).toBeUndefined(); // cleared, NOT re-stamped with Date.now()
+    const e = (await db.collection('pools').doc(poolId).collection('entries').doc('p1_m1').get()).data() as Record<string, any>;
+    expect(e.paidStatus).toBe('PAID');
+    expect(e.paidAt).toBeNull();
   });
 
   it('a member WITHOUT an entry doc can still be marked paid, and no entry doc appears', async () => {

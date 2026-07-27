@@ -46,11 +46,14 @@ export const setPaidStatusSchema = z
     .refine((o) => (o.isPaid !== undefined) !== (o.claim !== undefined), {
         message: "exactly one of isPaid (authoritative) or claim (self-report) is required",
     })
-    // Detail fields ride only with the authoritative mark — a member's
-    // self-report must not stamp commissioner-facing payment details.
-    .refine((o) => o.claim === undefined
+    // Detail fields ride only with the authoritative PAID mark. A member's
+    // self-report must not stamp commissioner-facing payment details, and an
+    // UNPAID mark is a full clear — sending details with it would let the
+    // roster show an unpaid member with a payment method and a transaction
+    // note (codex r2 on P1).
+    .refine((o) => o.isPaid === true
         || (o.paymentMethod === undefined && o.paidAt === undefined && o.paymentNote === undefined), {
-        message: "payment details are only valid with the authoritative isPaid mark",
+        message: "payment details are only valid with the authoritative isPaid: true mark",
     });
 
 export type CreateClaimCodeInput = z.infer<typeof createClaimCodeSchema>;
