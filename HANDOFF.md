@@ -1,8 +1,26 @@
 # HANDOFF — Session entry point (updated 2026-07-27: payment-truth P4+P1 FULLY SHIPPED — backfill live-run, D13+D25 closed in prod)
 
-> ## ✅ STOP POINT 2026-07-27 (evening) — P2 shipped; DIVERGENCE COUNT = ZERO; Recalculate is unblocked
+> ## ✅ STOP POINT 2026-07-27 (night) — PLAN-PAYMENT-TRUTH BUILD QUEUE COMPLETE (P4+P1+P2+P3 all live)
 >
-> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `b1df185`.**
+> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `6b7e439`.**
+> P3 (#308, the rebuy-paid control — `rebuyPaid` finally has a writer) merged
+> and deployed the same hour: `--only functions:setPaidStatus`, Coolify
+> rebuilt (bundle `index-Na2D7cdu.js`). The only runtime files changed since
+> the previous tag are setPaidStatus + its schema, both deployed; rules
+> unchanged — fleet ≡ tag. #308 carries ONE named residual (client-side legacy
+> rebuy pricing vs the server's ledger-priced settle; display-only,
+> self-correcting, plausibly-zero population — see the PR body).
+>
+> **Every build item of PLAN-PAYMENT-TRUTH is now shipped and deployed**:
+> P4 backfill (live-run, 72 records), P1 Bento repoint, P2 reconciliation
+> (prod divergence count = ZERO), P3 rebuy control. **The single remaining
+> action is Kevin's Recalculate Global Stats click** (Operations, destructive
+> type-RUN card) — every gate it waited on is satisfied. After that the plan
+> is closed; D11 (Props payment model) stays an open product question.
+
+> ### Historical: the 2026-07-27 evening stop point (superseded same day)
+>
+> **Functions + rules were deployed from <!-- deploy-state:ignore --> `main` @ `b1df185`.**
 > P2 (#306, `reconcilePaymentTruth`) merged and deployed the same hour:
 > `--only functions:reconcilePaymentTruth,functions:setPaidStatus` (the second
 > carries the undefined-amount ledger-write fix — this project has no

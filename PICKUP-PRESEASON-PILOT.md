@@ -196,7 +196,9 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `b1df185`.**
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `6b7e439`.**
+(P3 #308 deployed incrementally — only setPaidStatus changed; fleet ≡ tag.
+Prior claim: <!-- deploy-state:ignore --> `main` @ `b1df185` —)
 (P2 #306 deployed incrementally on top of the state below — only
 `reconcilePaymentTruth` + `setPaidStatus` changed; fleet ≡ tag. The prior
 claim, kept for its history:)
