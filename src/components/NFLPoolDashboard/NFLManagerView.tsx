@@ -1108,6 +1108,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                           // succeed (codex r4). The backfill creates the record.
                           if (!(owed > 0) || !row.hasMember) return null;
                           const settled = (row.rebuyPaid ?? 0) >= owed;
+                          // The label shows what REMAINS to collect (codex r5):
+                          // after settling $20 and a fresh $20 rebuy, owed 40 /
+                          // paid 20 means $20 outstanding — and that is the
+                          // delta the callable will record.
+                          const outstanding = Math.max(0, owed - (row.rebuyPaid ?? 0));
                           return (
                             <button
                               onClick={() => handleSettleRebuys(row.uid, !settled)}
@@ -1119,7 +1124,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                                   : 'bg-gold-500/15 border border-gold-500/30 text-gold-700 dark:text-gold-400 hover:bg-gold-500/25'
                               }`}
                             >
-                              {settled ? `Rebuys $${owed} settled` : `Rebuys $${owed} owed`}
+                              {settled ? `Rebuys $${owed} settled` : `Rebuys $${outstanding} owed`}
                             </button>
                           );
                         })()}
