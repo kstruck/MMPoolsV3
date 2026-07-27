@@ -196,19 +196,20 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `24544eb`.**
-Deployed 2026-07-27 ~01:20 ET (`--only functions` with one 429-quota solo
-redeploy of `syncGameStatus`, then `--only firestore:rules`, both
-`✔ Deploy complete!`). Carries **P4 (#290, incl.-finished backfill)** on top of
-the previous <!-- deploy-state:ignore --> `main` @ `8a55b84` state (#279), which
-sat on <!-- deploy-state:ignore --> `main` @ `49c12a9` (#261/#262/#265).
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `25e730e`.**
+Deployed incrementally 2026-07-27 as each PR landed: the full fleet at the
+#290 merge (429-quota solo redeploy of `syncGameStatus`), rules the same hour,
+then the #296 backfill-cursor functions and #294's `setPaidStatus` — no other
+runtime file changed in between (diff-verified), so the fleet ≡ the tag.
+Previous states: <!-- deploy-state:ignore --> `main` @ `8a55b84` (#279) on
+<!-- deploy-state:ignore --> `main` @ `49c12a9` (#261/#262/#265).
 
-**The FRONTEND is NOT current as of this claim** — see HANDOFF.md stop point
-and MORNING-2026-07-27.md §6: the Coolify rebuild is deliberately pending
-(backfill must run between rebuild #1 and PR #294's merge). The paragraph
-below describes the 2026-07-25 state: Coolify rebuilt then on `8a55b84`
-(SHA verified against `git rev-parse origin/main`), and the #279 settings
-cutover was smoke-tested in prod: an NFL Pick'em pool's Manager tab saved
+**The FRONTEND is current with this claim** — Coolify rebuilt twice on
+2026-07-27 (bundle `index-CYTPq50I.js`), and the D25 backfill live-ran in
+between (dry 72 predicted → live 72 created, 0 failures → dry 0 remaining).
+The paragraph below describes the 2026-07-25 state: Coolify rebuilt then on
+the #279 commit (SHA verified against `git rev-parse origin/main`), and the
+#279 settings cutover was smoke-tested in prod: an NFL Pick'em pool's Manager tab saved
 successfully through the new `updatePoolSettings` callable.
 
 ⚠️ **The first `--only functions` run ENDED WITHOUT `✔ Deploy complete!` and left
