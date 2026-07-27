@@ -1,8 +1,29 @@
-# HANDOFF — Session entry point (updated 2026-07-25: G1 PR-B′ deployed, queues empty)
+# HANDOFF — Session entry point (updated 2026-07-27: payment-truth cycle A backend deployed; frontend rebuild + backfill are Kevin's next clicks)
 
-> ## ✅ STOP POINT 2026-07-25 — G1 PR-B′ (#279) deployed and prod-verified
+> ## ⏸ STOP POINT 2026-07-27 — P4 merged + backend deployed; Coolify rebuild + backfill PENDING
 >
-> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `8a55b84`.**
+> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `24544eb`.**
+> Deployed 2026-07-27 ~01:20 ET by the overnight session (Kevin's explicit
+> grant): `--only functions` (one 429-quota casualty, `syncGameStatus`,
+> redeployed solo — all 164 functions confirmed `Successful update`), then
+> `--only firestore:rules` (`✔ Deploy complete!` both). This carries P4
+> (#290, the incl.-finished backfill) plus the already-live stats chain.
+> Merged to main the same night WITHOUT further functions-runtime changes:
+> #289 (deps), #291 (tests), #292 (tooling), #293 + #280 (docs).
+>
+> ⚠️ **The FRONTEND was deliberately NOT rebuilt** — prod still serves the
+> pre-P4 bundle (`index-B9-VBKZp.js`, verified unchanged 17+ min after five
+> merges, which also settles the deploy-model question: Coolify is MANUAL,
+> merging main ships nothing). Two click-sets remain, IN THIS ORDER, per
+> MORNING-2026-07-27.md §6: (1) Coolify rebuild → incl.-finished backfill
+> dry+live in the SuperAdmin Operations panel; (2) merge PR #294 (P1) →
+> `--only functions` → Coolify rebuild #2. **#294 must NOT merge before the
+> backfill has live-run** — the repointed Bento hard-errors on pools without
+> Member Records.
+
+> ### Historical: the 2026-07-25 stop point (superseded)
+>
+> **Functions + rules were deployed from <!-- deploy-state:ignore --> `main` @ `8a55b84`.**
 > Deployed 2026-07-25 in this order: `--only functions`, then
 > `--only firestore:rules`, then the manual Coolify frontend rebuild. The order is
 > load-bearing here — the new rules DENY a client-direct `settings` write on NFL
