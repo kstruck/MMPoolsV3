@@ -37,14 +37,19 @@ export const setPaidStatusSchema = z
         memberUid: z.string().trim().min(1).max(200),
         isPaid: z.boolean().optional(),
         claim: z.boolean().optional(),
+        // PLAN-PAYMENT-TRUTH P3 (Q2 = option B): rebuys are dues OWED, settled
+        // out of band like base dues — this is the commissioner control that
+        // finally gives `rebuyPaid` a writer. true settles ALL currently-owed
+        // rebuy dues (rebuyPaid := rebuyOwed); false reverses to 0.
+        settleRebuys: z.boolean().optional(),
         paymentMethod: z.string().trim().min(1).max(40).optional(),
         paidAt: z.number().finite().nullable().optional(),
         paymentNote: z.string().max(500).nullable().optional(),
     })
     // Exactly one mode: { poolId, memberUid } alone used to slip into the
     // authoritative branch as isPaid=undefined and write UNPAID (qodo, PR #165).
-    .refine((o) => (o.isPaid !== undefined) !== (o.claim !== undefined), {
-        message: "exactly one of isPaid (authoritative) or claim (self-report) is required",
+    .refine((o) => [o.isPaid, o.claim, o.settleRebuys].filter((v) => v !== undefined).length === 1, {
+        message: "exactly one of isPaid (authoritative), claim (self-report) or settleRebuys is required",
     })
     // Detail fields ride only with the authoritative PAID mark. A member's
     // self-report must not stamp commissioner-facing payment details, and an

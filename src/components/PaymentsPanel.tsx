@@ -31,6 +31,8 @@ const EVENT_LABELS: Record<PaymentLedgerEvent['type'], { label: string; tone: st
     MARKED_PAID: { label: 'marked PAID', tone: 'text-[#0F7B4A] dark:text-[#3FB77F]' },
     MARKED_UNPAID: { label: 'marked UNPAID', tone: 'text-[#B4530A] dark:text-[#E8853D]' },
     REBUY_DUE: { label: 'rebuy — dues added', tone: 'text-gold-700 dark:text-gold-400' },
+    REBUY_SETTLED: { label: 'rebuy dues settled', tone: 'text-[#0F7B4A] dark:text-[#3FB77F]' },
+    REBUY_UNSETTLED: { label: 'rebuy settlement reversed', tone: 'text-[#B4530A] dark:text-[#E8853D]' },
     PAYOUT_PAID: { label: 'payout sent', tone: 'text-[#0F7B4A] dark:text-[#3FB77F]' },
     PAYOUT_UNPAID: { label: 'payout mark reversed', tone: 'text-[#B4530A] dark:text-[#E8853D]' },
 };
@@ -55,20 +57,59 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
     const myMember = useMemo(() => members.find(m => m.uid === user.id) ?? null, [members, user.id]);
     const isPaid = (myMember?.paidStatus ?? myEntry?.paidStatus) === 'PAID';
     const myRebuys: number = myEntry?.rebuysUsed ?? 0;
-    const myTotalDue = entryFee + myRebuys * rebuyCost;
+    // Rebuy dues settle INDEPENDENTLY of base dues (P3 / setPaidStatus
+    // settleRebuys): a STAMPED rebuyOwed is truth; a member record that never
+    // got the stamp (rebuy pre-dates the 2026-07-08 writer) derives the debt
+    // from the entry's rebuysUsed — the same legacy fallback the callable and
+    // the roster chip use (codex r3).
+    const myRebuyOwed: number = typeof myMember?.rebuyOwed === 'number'
+        ? myMember.rebuyOwed
+        : myRebuys * rebuyCost;
+    const myRebuyOutstanding = Math.max(0, myRebuyOwed - (myMember?.rebuyPaid ?? 0));
+    const myTotalDue = (isPaid ? 0 : entryFee) + myRebuyOutstanding;
 
     // Pot: prefer the Member Record roster (everyone who joined) so the count and expected
     // dues are right even before members submit entries; fall back to entries pre-backfill.
+    // Mirrors shared/memberRecord.ts memberDues: collected = paid base fees +
+    // rebuyPaid — an owed rebuy is EXPECTED money, not collected money (codex r1
+    // on P3: the old maths booked every rebuy as collected the moment it
+    // happened, which is defect D12 wearing a UI hat).
     const pot = useMemo(() => {
         const realParticipants = ((castPool.participantIds || []) as string[]).filter(id => id && id !== 'guest');
         const memberCount = Math.max(members.length, realParticipants.length, entries.length);
-        const paidSource = members.length > 0 ? members : entries;
-        const paid = paidSource.filter((m: any) => m.paidStatus === 'PAID').length;
+        if (members.length > 0) {
+            const entryByUid = new Map(entries.map((e: any) => [e.ownerUid || e.id, e]));
+            let expected = 0, collected = 0, paid = 0;
+            for (const m of members) {
+                const fee = m.feeOwed ?? entryFee; // ADR 0005: seeded owner carries 0
+                // Un-stamped legacy rebuys fall back to entry evidence (codex r3);
+                // a stamped value — including 0 — is trusted as-is.
+                const rebuyOwed = typeof m.rebuyOwed === 'number'
+                    ? m.rebuyOwed
+                    : ((entryByUid.get(m.uid) as any)?.rebuysUsed ?? 0) * rebuyCost;
+                expected += fee + rebuyOwed;
+                if (m.paidStatus === 'PAID') { collected += fee; paid++; }
+                collected += m.rebuyPaid ?? 0;
+            }
+            // Participants who joined but have no Member Record yet still owe the
+            // fee — and their entry's rebuys (codex r4: a partially backfilled
+            // pool dropped unmatched entries' rebuy dues from Expected).
+            expected += Math.max(0, memberCount - members.length) * entryFee;
+            const memberUids = new Set(members.map((m: any) => m.uid));
+            for (const e of entries as any[]) {
+                const uid = e.ownerUid || e.id;
+                if (!memberUids.has(uid)) expected += (e.rebuysUsed ?? 0) * rebuyCost;
+            }
+            return { paidCount: paid, unpaidCount: Math.max(0, memberCount - paid), collected, expected };
+        }
+        // Pre-backfill fallback: entries carry no settlement state, so rebuys
+        // count toward expected only.
+        const paid = entries.filter((e: any) => e.paidStatus === 'PAID').length;
         const totalRebuys = entries.reduce((sum, e) => sum + (e.rebuysUsed ?? 0), 0);
         return {
             paidCount: paid,
             unpaidCount: Math.max(0, memberCount - paid),
-            collected: paid * entryFee + totalRebuys * rebuyCost,
+            collected: paid * entryFee,
             expected: memberCount * entryFee + totalRebuys * rebuyCost,
         };
     }, [members, entries, castPool.participantIds, entryFee, rebuyCost]);
@@ -110,11 +151,18 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
                         {!isPaid && myTotalDue > 0 && (
                             <p className="text-sm font-body font-bold text-[color:var(--text)] mt-2">
                                 You owe <span className="text-gold-700 dark:text-gold-400 num">${myTotalDue}</span>
-                                {myRebuys > 0 && <span className="text-muted num"> (${entryFee} entry + {myRebuys} rebuy{myRebuys > 1 ? 's' : ''} × ${rebuyCost})</span>}
+                                {myRebuyOutstanding > 0 && <span className="text-muted num"> (${entryFee} entry + ${myRebuyOutstanding} rebuy dues)</span>}
                                 {' '}to the commissioner.
                             </p>
                         )}
-                        {isPaid && (
+                        {isPaid && myRebuyOutstanding > 0 && (
+                            // Base dues and rebuy dues settle separately (P3) — a PAID
+                            // badge must not hide an outstanding rebuy debt.
+                            <p className="text-sm font-body font-bold text-[color:var(--text)] mt-2">
+                                Entry fee paid — you still owe <span className="text-gold-700 dark:text-gold-400 num">${myRebuyOutstanding}</span> in rebuy dues.
+                            </p>
+                        )}
+                        {isPaid && myRebuyOutstanding === 0 && (
                             <p className="text-xs font-body text-muted mt-2">
                                 Marked paid by the commissioner — see the ledger below for the timestamped record.
                             </p>
@@ -128,7 +176,9 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
                     )}
                 </div>
 
-                {!isPaid && paymentInstructions && (
+                {/* Anyone with a positive balance needs the instructions — incl.
+                    the new rebuy-only debtor whose base dues are PAID (codex r3). */}
+                {myTotalDue > 0 && paymentInstructions && (
                     <div className="mt-4 pt-4 border-t border-line">
                         <span className="font-display font-bold uppercase text-[12px] tracking-[0.16em] text-muted block mb-1">How to Pay</span>
                         <p className="text-sm font-body text-[color:var(--text)] leading-relaxed">{linkify(paymentInstructions)}</p>

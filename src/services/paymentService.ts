@@ -6,7 +6,7 @@ import { logger } from '../utils/logger';
 
 export interface PaymentLedgerEvent {
     id: string;
-    type: 'MARKED_PAID' | 'MARKED_UNPAID' | 'REBUY_DUE' | 'PAYOUT_PAID' | 'PAYOUT_UNPAID';
+    type: 'MARKED_PAID' | 'MARKED_UNPAID' | 'REBUY_DUE' | 'REBUY_SETTLED' | 'REBUY_UNSETTLED' | 'PAYOUT_PAID' | 'PAYOUT_UNPAID';
     uid: string;
     entryId?: string;
     entryName?: string;
