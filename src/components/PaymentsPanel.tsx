@@ -58,9 +58,13 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
     const isPaid = (myMember?.paidStatus ?? myEntry?.paidStatus) === 'PAID';
     const myRebuys: number = myEntry?.rebuysUsed ?? 0;
     // Rebuy dues settle INDEPENDENTLY of base dues (P3 / setPaidStatus
-    // settleRebuys): the Member Record is truth; pre-backfill entries can only
-    // say how many rebuys happened, never that they were settled.
-    const myRebuyOwed: number = myMember ? (myMember.rebuyOwed ?? 0) : myRebuys * rebuyCost;
+    // settleRebuys): a STAMPED rebuyOwed is truth; a member record that never
+    // got the stamp (rebuy pre-dates the 2026-07-08 writer) derives the debt
+    // from the entry's rebuysUsed — the same legacy fallback the callable and
+    // the roster chip use (codex r3).
+    const myRebuyOwed: number = typeof myMember?.rebuyOwed === 'number'
+        ? myMember.rebuyOwed
+        : myRebuys * rebuyCost;
     const myRebuyOutstanding = Math.max(0, myRebuyOwed - (myMember?.rebuyPaid ?? 0));
     const myTotalDue = (isPaid ? 0 : entryFee) + myRebuyOutstanding;
 
@@ -74,10 +78,16 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
         const realParticipants = ((castPool.participantIds || []) as string[]).filter(id => id && id !== 'guest');
         const memberCount = Math.max(members.length, realParticipants.length, entries.length);
         if (members.length > 0) {
+            const entryByUid = new Map(entries.map((e: any) => [e.ownerUid || e.id, e]));
             let expected = 0, collected = 0, paid = 0;
             for (const m of members) {
                 const fee = m.feeOwed ?? entryFee; // ADR 0005: seeded owner carries 0
-                expected += fee + (m.rebuyOwed ?? 0);
+                // Un-stamped legacy rebuys fall back to entry evidence (codex r3);
+                // a stamped value — including 0 — is trusted as-is.
+                const rebuyOwed = typeof m.rebuyOwed === 'number'
+                    ? m.rebuyOwed
+                    : ((entryByUid.get(m.uid) as any)?.rebuysUsed ?? 0) * rebuyCost;
+                expected += fee + rebuyOwed;
                 if (m.paidStatus === 'PAID') { collected += fee; paid++; }
                 collected += m.rebuyPaid ?? 0;
             }
@@ -159,7 +169,9 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
                     )}
                 </div>
 
-                {!isPaid && paymentInstructions && (
+                {/* Anyone with a positive balance needs the instructions — incl.
+                    the new rebuy-only debtor whose base dues are PAID (codex r3). */}
+                {myTotalDue > 0 && paymentInstructions && (
                     <div className="mt-4 pt-4 border-t border-line">
                         <span className="font-display font-bold uppercase text-[12px] tracking-[0.16em] text-muted block mb-1">How to Pay</span>
                         <p className="text-sm font-body text-[color:var(--text)] leading-relaxed">{linkify(paymentInstructions)}</p>
