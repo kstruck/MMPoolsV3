@@ -182,8 +182,13 @@ const runPublishedWeeksBackfill = async (dryRun: boolean) => {
  * run IS the divergence count. Idempotent, so an aborted run is simply re-run
  * from the start — everything already fixed reads back as consistent.
  */
+/** Cursor parked by a page-cap exit, keyed by dryRun, so the next click resumes
+ *  past the cap instead of rescanning the same prefix forever (codex r2).
+ *  Cleared on a clean finish. Module-scoped, same reasoning as backfillResume. */
+const reconcileResume = new Map<boolean, string>();
+
 const runReconcilePaymentTruth = async (dryRun: boolean) => {
-  let cursor: string | undefined;
+  let cursor: string | undefined = reconcileResume.get(dryRun);
   let pages = 0;
   const agg = {
     ok: true, dryRun,
@@ -210,10 +215,14 @@ const runReconcilePaymentTruth = async (dryRun: boolean) => {
     pages++;
   } while (cursor && pages < 100);
   if (cursor) {
-    // Page-cap exit with pools left (codex r1): report it as incomplete with
-    // the cursor in hand instead of an ok:true that silently covered a prefix.
+    // Page-cap exit with pools left (codex r1): report it as incomplete, park
+    // the cursor so the NEXT click continues from here (codex r2) instead of
+    // rescanning the same prefix forever.
+    reconcileResume.set(dryRun, cursor);
     agg.ok = false;
-    agg.failures.push({ poolId: '(page cap)', error: `stopped after 100 pages with pools remaining; resume cursor: ${cursor}` });
+    agg.failures.push({ poolId: '(page cap)', error: `stopped after 100 pages with pools remaining; click Run again to resume from ${cursor}` });
+  } else {
+    reconcileResume.delete(dryRun);
   }
   return agg;
 };

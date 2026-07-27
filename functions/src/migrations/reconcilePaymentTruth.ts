@@ -204,19 +204,36 @@ export const reconcilePaymentTruth = validated(
         } else if (memberPaid && !entryPaid) {
           // Truth store already right; the display projection never got written
           // pre-P1. Mirror with P1's field conventions.
-          report.entriesMirrored++;
           notedFix(poolId, uid, 'MIRROR_ENTRY');
           if (!dryRun) {
-            await entryDoc.ref.update({
-              paidStatus: 'PAID',
-              paidAt: typeof member.paidAt === 'number' ? member.paidAt : null,
-              ...(typeof member.paymentMethod === 'string' && member.paymentMethod
-                ? { paymentMethod: member.paymentMethod }
-                : {}),
-              updatedAt: Date.now(),
+            // Transactional for the same reason as the promotion (codex r2): a
+            // commissioner un-marking this member between the page read and
+            // here commits BOTH docs UNPAID via setPaidStatus, and a blind
+            // entry write would resurrect a stale PAID display that the next
+            // reconciliation reads as a historical payment — promoting the
+            // member back and minting a ledger event for money nobody marked.
+            const mRef = doc.ref.collection('members').doc(uid);
+            const acted = await db.runTransaction(async (tx) => {
+              const [freshM, freshE] = await Promise.all([tx.get(mRef), tx.get(entryDoc.ref)]);
+              const fm: any = freshM.data();
+              const fe: any = freshE.data();
+              if (!freshE.exists || fm?.paidStatus !== 'PAID' || fe?.paidStatus === 'PAID') return false;
+              tx.update(entryDoc.ref, {
+                paidStatus: 'PAID',
+                paidAt: typeof fm.paidAt === 'number' ? fm.paidAt : null,
+                ...(typeof fm.paymentMethod === 'string' && fm.paymentMethod
+                  ? { paymentMethod: fm.paymentMethod }
+                  : {}),
+                updatedAt: Date.now(),
+              });
+              return true;
             });
+            if (acted) { report.entriesMirrored++; changedThisPool++; }
+            else report.alreadyConsistent++; // raced with a live setPaidStatus
+          } else {
+            report.entriesMirrored++;
+            changedThisPool++;
           }
-          changedThisPool++;
         } else {
           report.alreadyConsistent++;
         }
