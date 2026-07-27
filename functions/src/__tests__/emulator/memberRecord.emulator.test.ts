@@ -392,6 +392,44 @@ describe('setPaidStatus settleRebuys — the rebuy-paid control (P3)', () => {
     expect((await calculatePoolPot(db, poolId, pool)).prizePot).toBe(25); // back to base dues only
   });
 
+  it('LEGACY: a member whose rebuy pre-dates the rebuyOwed writer settles from the entry evidence (codex r2)', async () => {
+    // Survivor pools exist since 2026-05-25; the rebuyOwed writer since
+    // 2026-07-08 (1bb7e89). A rebuy from that window left rebuysUsed on the
+    // entry and NOTHING on the (backfill-created) member record.
+    await db.collection('pools').doc(poolId).set({
+      id: poolId, type: 'NFL_SURVIVOR', name: 'P3 Legacy', ownerId: 'p3_boss',
+      participantIds: ['p3_boss', 'p3_leg'], status: 'COMPLETED', settings: { entryFee: 25, rebuyCost: 20 },
+    });
+    await db.collection('pools').doc(poolId).collection('members').doc('p3_leg').set({
+      uid: 'p3_leg', poolId, userName: 'Legacy', role: 'PARTICIPANT', paidStatus: 'PAID', // NO rebuyOwed
+    });
+    await db.collection('pools').doc(poolId).collection('entries').doc('p3_leg').set({
+      id: 'p3_leg', ownerUid: 'p3_leg', rebuysUsed: 2, paidStatus: 'PAID',
+    });
+
+    await wrappedSetPaid({ data: { poolId, memberUid: 'p3_leg', settleRebuys: true }, auth: BOSS } as never);
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('p3_leg').get()).data() as any;
+    // Debt derived (2 × $20), STAMPED so every money surface sees it, and settled.
+    expect(m.rebuyOwed).toBe(40);
+    expect(m.rebuyPaid).toBe(40);
+    const ledger = await db.collection('pools').doc(poolId).collection('payments').get();
+    expect(ledger.docs.map((d) => d.data().type)).toEqual(['REBUY_SETTLED']);
+    expect(ledger.docs[0].data().amount).toBe(40);
+    const pool = (await db.collection('pools').doc(poolId).get()).data() as any;
+    expect((await calculatePoolPot(db, poolId, pool)).prizePot).toBe(25 + 40);
+  });
+
+  it('a STAMPED rebuyOwed of 0 is trusted — no derive, no event', async () => {
+    await seedRebuyPool();
+    await db.collection('pools').doc(poolId).collection('members').doc('p3_m1').set({ rebuyOwed: 0 }, { merge: true });
+    await db.collection('pools').doc(poolId).collection('entries').doc('p3_m1').set({ id: 'p3_m1', ownerUid: 'p3_m1', rebuysUsed: 3 });
+    await wrappedSetPaid({ data: { poolId, memberUid: 'p3_m1', settleRebuys: true }, auth: BOSS } as never);
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('p3_m1').get()).data() as any;
+    expect(m.rebuyOwed).toBe(0);
+    expect(m.rebuyPaid ?? 0).toBe(0);
+    expect((await db.collection('pools').doc(poolId).collection('payments').get()).size).toBe(0);
+  });
+
   it('refuses non-commissioners and members not on the roster', async () => {
     await seedRebuyPool();
     await expect(wrappedSetPaid({ data: { poolId, memberUid: 'p3_m1', settleRebuys: true }, auth: { uid: 'p3_m1', token: {} } } as never))

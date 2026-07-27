@@ -50,16 +50,34 @@ export const setPaidStatus = validated(
   // rejected in the plan.
   if (settleRebuys !== undefined) {
     await db.runTransaction(async (tx) => {
-      const snap = await tx.get(mRef);
+      const entryRef = poolRef.collection('entries').doc(memberUid);
+      const [snap, entrySnap] = await Promise.all([tx.get(mRef), tx.get(entryRef)]);
       if (!snap.exists) throw new HttpsError("not-found", "Member is not on this pool's roster.");
       const m: any = snap.data();
-      const owed = typeof m.rebuyOwed === 'number' ? m.rebuyOwed : 0;
+      // LEGACY FALLBACK (codex r2): survivor pools have existed since
+      // 2026-05-25 but the rebuyOwed writer only since 2026-07-08 (1bb7e89),
+      // and the backfill copies only paidStatus — so a rebuy from that window
+      // left rebuysUsed on the entry with NOTHING on the member record. When
+      // the field was never stamped, derive the debt from the surviving
+      // evidence and stamp it as part of the settlement, so every money
+      // surface converges. A STAMPED rebuyOwed (any number, incl. 0) is
+      // always trusted as-is — the live writer owns it.
+      let owed: number;
+      if (typeof m.rebuyOwed === 'number') {
+        owed = m.rebuyOwed;
+      } else {
+        const rebuysUsed: number = entrySnap.exists ? ((entrySnap.data() as any).rebuysUsed ?? 0) : 0;
+        const rebuyCost: number = pool.settings?.rebuyCost ?? pool.settings?.entryFee ?? 0;
+        owed = rebuysUsed * rebuyCost;
+      }
       const prevPaid = typeof m.rebuyPaid === 'number' ? m.rebuyPaid : 0;
       const nextPaid = settleRebuys ? owed : 0;
       // Transition-only, same contract as the base-dues ledger: re-clicking a
       // settled row is not a payment event.
       if (nextPaid === prevPaid) return;
-      tx.set(mRef, { rebuyPaid: nextPaid }, { merge: true });
+      // Stamping rebuyOwed too makes the legacy-derived debt visible to
+      // memberDues/rosterSummary — not just to this settlement.
+      tx.set(mRef, { rebuyPaid: nextPaid, rebuyOwed: owed }, { merge: true });
       const entryName = m.userName;
       tx.set(poolRef.collection('payments').doc(), {
         type: settleRebuys ? 'REBUY_SETTLED' : 'REBUY_UNSETTLED',

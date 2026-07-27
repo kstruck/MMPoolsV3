@@ -1091,26 +1091,34 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                           <DollarSign size={10} />
                           {isSavingPayment === row.uid ? 'Saving...' : row.paidStatus || 'UNPAID'}
                         </button>
-                        {(row.rebuyOwed ?? 0) > 0 && (
+                        {(() => {
                           // Rebuy dues are a SEPARATE settlement from base dues
                           // (P3, Q2 option B) — the member was told "$X due to
                           // the commissioner" at rebuy time, and this is where
-                          // the commissioner records collecting it.
-                          <button
-                            onClick={() => handleSettleRebuys(row.uid, !((row.rebuyPaid ?? 0) >= row.rebuyOwed))}
-                            disabled={isSavingPayment === row.uid}
-                            title={(row.rebuyPaid ?? 0) >= row.rebuyOwed ? 'Rebuy dues settled — click to reverse' : 'Click when the rebuy money is collected'}
-                            className={`mt-1.5 block ml-auto px-3 py-1 rounded-md font-display font-bold uppercase text-[9px] tracking-[0.08em] transition-all duration-150 hover:-translate-y-px cursor-pointer ${
-                              (row.rebuyPaid ?? 0) >= row.rebuyOwed
-                                ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
-                                : 'bg-gold-500/15 border border-gold-500/30 text-gold-700 dark:text-gold-400 hover:bg-gold-500/25'
-                            }`}
-                          >
-                            {(row.rebuyPaid ?? 0) >= row.rebuyOwed
-                              ? `Rebuys $${row.rebuyOwed} settled`
-                              : `Rebuys $${row.rebuyOwed} owed`}
-                          </button>
-                        )}
+                          // the commissioner records collecting it. Legacy
+                          // members (rebuy pre-dates the 2026-07-08 rebuyOwed
+                          // writer) derive the debt from the entry's rebuysUsed
+                          // — the server stamps it properly on settle.
+                          const owed = typeof row.rebuyOwed === 'number'
+                            ? row.rebuyOwed
+                            : (row.rebuysUsed ?? 0) * rebuyCost;
+                          if (!(owed > 0)) return null;
+                          const settled = (row.rebuyPaid ?? 0) >= owed;
+                          return (
+                            <button
+                              onClick={() => handleSettleRebuys(row.uid, !settled)}
+                              disabled={isSavingPayment === row.uid}
+                              title={settled ? 'Rebuy dues settled — click to reverse' : 'Click when the rebuy money is collected'}
+                              className={`mt-1.5 block ml-auto px-3 py-1 rounded-md font-display font-bold uppercase text-[9px] tracking-[0.08em] transition-all duration-150 hover:-translate-y-px cursor-pointer ${
+                                settled
+                                  ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
+                                  : 'bg-gold-500/15 border border-gold-500/30 text-gold-700 dark:text-gold-400 hover:bg-gold-500/25'
+                              }`}
+                            >
+                              {settled ? `Rebuys $${owed} settled` : `Rebuys $${owed} owed`}
+                            </button>
+                          );
+                        })()}
                       </td>
 
                       <td className="py-3.5 px-5 text-right">
