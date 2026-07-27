@@ -91,6 +91,15 @@ export const reconcilePaymentTruth = validated(
      *  re-run BEFORE this migration goes live. Report-only: creating records is
      *  the backfill's job, not this one's. */
     entriesPaidNoMember: 0,
+    /** entry PAID + member UNPAID, but the member HAS payments-ledger history —
+     *  meaning the authoritative setPaidStatus path was used on them at some
+     *  point, and the UNPAID record may be a deliberate later un-mark that the
+     *  (never-updated) entry simply predates. Promoting would resurrect a
+     *  reversed payment and mint a ledger event for it, so these are REPORTED
+     *  (plannedFixes: AMBIGUOUS_SKIPPED) for the operator to resolve by hand,
+     *  never auto-promoted (codex r4). Only members with ZERO ledger history —
+     *  whose only-ever write path was the Bento entry write — are promoted. */
+    ambiguousSkipped: 0,
     /** Sim-harness pools + hand-flagged isTestPool pools. Unconditional. */
     testPoolsSkipped: 0,
     /** Pools whose type keeps payment on the entry itself — nothing to reconcile. */
@@ -98,11 +107,11 @@ export const reconcilePaymentTruth = validated(
     failures: [] as { poolId: string; error: string }[],
     nextCursor: null as string | null,
     /** Capped list of the individual fixes (planned on dry, applied on live). */
-    plannedFixes: [] as { poolId: string; uid: string; fix: 'PROMOTE_MEMBER' | 'MIRROR_ENTRY' }[],
+    plannedFixes: [] as { poolId: string; uid: string; fix: 'PROMOTE_MEMBER' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' }[],
     plannedFixesTruncated: false,
   };
 
-  const notedFix = (poolId: string, uid: string, fix: 'PROMOTE_MEMBER' | 'MIRROR_ENTRY') => {
+  const notedFix = (poolId: string, uid: string, fix: 'PROMOTE_MEMBER' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED') => {
     if (report.plannedFixes.length < PLANNED_FIX_CAP) report.plannedFixes.push({ poolId, uid, fix });
     else report.plannedFixesTruncated = true;
   };
@@ -127,11 +136,24 @@ export const reconcilePaymentTruth = validated(
 
     try {
       const entryFee: number | undefined = pool.settings?.entryFee;
-      const [entriesSnap, membersSnap] = await Promise.all([
+      const [entriesSnap, membersSnap, paymentsSnap] = await Promise.all([
         doc.ref.collection('entries').get(),
         doc.ref.collection('members').get(),
+        doc.ref.collection('payments').get(),
       ]);
       const membersById = new Map(membersSnap.docs.map((m) => [m.id, m.data() as any]));
+      // Members with ANY MARKED_* ledger history were touched by the
+      // authoritative setPaidStatus path at some point (it has always appended a
+      // row per transition; the Bento entry path never wrote one). For them an
+      // entry/member disagreement is not recoverable history — see
+      // ambiguousSkipped above.
+      const uidsWithLedgerHistory = new Set(
+        paymentsSnap.docs
+          .map((p) => p.data() as any)
+          .filter((p) => p.type === 'MARKED_PAID' || p.type === 'MARKED_UNPAID')
+          .map((p) => p.uid)
+          .filter(Boolean),
+      );
       let changedThisPool = 0;
 
       for (const entryDoc of entriesSnap.docs) {
@@ -151,6 +173,14 @@ export const reconcilePaymentTruth = validated(
         }
 
         if (entryPaid && !memberPaid) {
+          if (uidsWithLedgerHistory.has(uid)) {
+            // A pre-P1 un-mark through the roster toggle leaves exactly this
+            // shape (member UNPAID via setPaidStatus, entry never updated) —
+            // the entry is STALE, not recoverable history. Operator's call.
+            report.ambiguousSkipped++;
+            notedFix(poolId, uid, 'AMBIGUOUS_SKIPPED');
+            continue;
+          }
           // The pre-P1 Bento write: commissioner marked paid, only the entry heard.
           notedFix(poolId, uid, 'PROMOTE_MEMBER');
           if (!dryRun) {
@@ -235,6 +265,12 @@ export const reconcilePaymentTruth = validated(
                 paidAt: typeof fm.paidAt === 'number' ? fm.paidAt : null,
                 ...(typeof fm.paymentMethod === 'string' && fm.paymentMethod
                   ? { paymentMethod: fm.paymentMethod }
+                  : {}),
+                // The note converges too (codex r4) — the entry-backed UI
+                // renders it, and a mirror that drops it reports success while
+                // the display still disagrees with the record.
+                ...(typeof fm.paymentNote === 'string' && fm.paymentNote
+                  ? { paymentNote: fm.paymentNote.slice(0, 500) }
                   : {}),
                 updatedAt: Date.now(),
               });

@@ -195,7 +195,7 @@ const runReconcilePaymentTruth = async (dryRun: boolean) => {
   const agg = {
     ok: true, dryRun,
     poolsScanned: 0, membersPromoted: 0, entriesMirrored: 0, alreadyConsistent: 0,
-    entriesPaidNoMember: 0, testPoolsSkipped: 0, otherTypeSkipped: 0,
+    entriesPaidNoMember: 0, ambiguousSkipped: 0, testPoolsSkipped: 0, otherTypeSkipped: 0,
     failures: [] as any[], plannedFixes: [] as any[], plannedFixesTruncated: false,
     resumedFrom: parked?.cursor ?? null,
   };
@@ -213,6 +213,7 @@ const runReconcilePaymentTruth = async (dryRun: boolean) => {
     agg.entriesMirrored += r.entriesMirrored || 0;
     agg.alreadyConsistent += r.alreadyConsistent || 0;
     agg.entriesPaidNoMember += r.entriesPaidNoMember || 0;
+    agg.ambiguousSkipped += r.ambiguousSkipped || 0;
     agg.testPoolsSkipped += r.testPoolsSkipped || 0;
     agg.otherTypeSkipped += r.otherTypeSkipped || 0;
     if (Array.isArray(r.failures)) agg.failures.push(...r.failures);
@@ -319,7 +320,7 @@ const ACTIONS: OpAction[] = [
   {
     id: 'reconcilePaymentTruth:dry',
     label: 'Reconcile Payment Truth (dry run)',
-    description: 'THE DIVERGENCE COUNT (PLAN-PAYMENT-TRUTH P2). Reports every NFL season pool member whose two payment stores disagree: entry says PAID while the Member Record says UNPAID (the pre-P1 Bento write — their dues are missing from the pot), or Member Record PAID while the entry display says UNPAID. Lists the planned fixes (capped at 50). If entriesPaidNoMember is NONZERO, re-run the incl.-finished roster backfill first. Writes nothing.',
+    description: 'THE DIVERGENCE COUNT (PLAN-PAYMENT-TRUTH P2). Reports every NFL season pool member whose two payment stores disagree: entry says PAID while the Member Record says UNPAID (the pre-P1 Bento write — their dues are missing from the pot), or Member Record PAID while the entry display says UNPAID. Members with payments-ledger history are never auto-promoted — they show as AMBIGUOUS_SKIPPED for you to resolve by hand, because their UNPAID record may be a deliberate later un-mark. Lists the planned fixes (capped at 50). If entriesPaidNoMember is NONZERO, re-run the incl.-finished roster backfill first. Writes nothing.',
     blastRadius: 'Read-only — no writes. Reports divergence counts + planned fixes.',
     destructive: false,
     icon: CheckCircle2,
