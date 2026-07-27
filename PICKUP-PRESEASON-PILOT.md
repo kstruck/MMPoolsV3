@@ -196,7 +196,11 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `25e730e`.**
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `b1df185`.**
+(P2 #306 deployed incrementally on top of the state below — only
+`reconcilePaymentTruth` + `setPaidStatus` changed; fleet ≡ tag. The prior
+claim, kept for its history:)
+<!-- deploy-state:ignore --> `main` @ `25e730e` —
 Deployed incrementally 2026-07-27 as each PR landed: the full fleet at the
 #290 merge (429-quota solo redeploy of `syncGameStatus`), rules the same hour,
 then the #296 backfill-cursor functions and #294's `setPaidStatus` — no other

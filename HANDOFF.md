@@ -1,8 +1,28 @@
 # HANDOFF — Session entry point (updated 2026-07-27: payment-truth P4+P1 FULLY SHIPPED — backfill live-run, D13+D25 closed in prod)
 
-> ## ✅ STOP POINT 2026-07-27 (afternoon) — the whole payment-truth cycle is LIVE
+> ## ✅ STOP POINT 2026-07-27 (evening) — P2 shipped; DIVERGENCE COUNT = ZERO; Recalculate is unblocked
 >
-> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `25e730e`.**
+> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `b1df185`.**
+> P2 (#306, `reconcilePaymentTruth`) merged and deployed the same hour:
+> `--only functions:reconcilePaymentTruth,functions:setPaidStatus` (the second
+> carries the undefined-amount ledger-write fix — this project has no
+> ignoreUndefinedProperties), Coolify rebuilt (bundle `index-Bb038KuO.js`).
+> No other functions-runtime source and no rules changed between the previous
+> tag and this one, so the live fleet ≡ the tag.
+>
+> **The P2 dry run RAN in prod and the answer is ZERO divergence**: 15 NFL
+> season pools scanned (+8 test-skipped +112 other-type = 135 docs, matches
+> the census exactly), 3 consistent-paid pairs, 0 promotions, 0 mirrors,
+> 0 orphaned paid entries, 0 ambiguous, 0 failures. Nobody ever hit the D13
+> trap on a pool that had Member Records — the live reconciliation is
+> vacuously satisfied. **The only remaining gate before Recalculate Global
+> Stats is Kevin's own click** (destructive card, type-RUN): backfill ✓,
+> P1 ✓, P2 count ✓ = 0. After Recalculate: P3 (rebuy-paid control) is the
+> last plan item.
+
+> ### Historical: the 2026-07-27 afternoon stop point (superseded same day)
+>
+> **Functions + rules were deployed from <!-- deploy-state:ignore --> `main` @ `25e730e`.**
 > Everything between the two named states was deployed as it landed
 > (2026-07-27, Kevin's execution grant): the full fleet at the #290 merge
 > (164 functions, one 429-quota solo-redeploy of `syncGameStatus`), rules the
