@@ -436,10 +436,20 @@ export const dbService = {
     },
 
     // Authoritative paid-status write via the setPaidStatus callable — works for members
-    // with OR without an entry (writes the Member Record + ledger). Commissioner/owner only.
-    setPaidStatus: async (poolId: string, memberUid: string, isPaid: boolean): Promise<void> => {
+    // with OR without an entry (writes the Member Record + ledger, and mirrors the display
+    // fields onto the entry doc when one exists). Commissioner/owner only. The optional
+    // details carry the Bento ledger's method/date/note (PLAN-PAYMENT-TRUTH P1).
+    setPaidStatus: async (
+        poolId: string, memberUid: string, isPaid: boolean,
+        details?: { paymentMethod?: string; paidAt?: number | null; paymentNote?: string | null },
+    ): Promise<void> => {
         const fn = httpsCallable(functions, 'setPaidStatus');
-        await fn(withCorrelationId({ poolId, memberUid, isPaid }));
+        await fn(withCorrelationId({
+            poolId, memberUid, isPaid,
+            ...(details?.paymentMethod ? { paymentMethod: details.paymentMethod } : {}),
+            ...(details?.paidAt !== undefined ? { paidAt: details.paidAt } : {}),
+            ...(details?.paymentNote !== undefined ? { paymentNote: details.paymentNote } : {}),
+        }));
     },
 
     // Pool Consensus (ADR 0004) — server aggregate, post-lock, keyed by gameId. Member-readable.

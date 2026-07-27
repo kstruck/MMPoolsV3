@@ -75,11 +75,22 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   const [editDate, setEditDate] = useState('');
   const [editNote, setEditNote] = useState('');
 
+  // Both payment writes go through setPaidStatus — the AUTHORITATIVE path
+  // (PLAN-PAYMENT-TRUTH P1 / D13). The old updateEntryPayment callable wrote
+  // only the display-legacy entry doc, so a commissioner using this panel
+  // marked someone paid while the Member Record, the payments ledger, the
+  // roster summary and the pot all still said UNPAID. setPaidStatus writes the
+  // Member Record as truth and mirrors the display fields onto the entry in
+  // the same transaction, so this panel's entry-backed table keeps working.
+  const memberUidFor = (entryId: string) => {
+    const entry = entries.find(e => e.id === entryId);
+    return entry?.ownerUid || entryId; // NFL entry docs are keyed by uid
+  };
+
   const togglePayment = async (entryId: string, currentPaid: boolean) => {
     setTogglingId(entryId);
     try {
-      const nextStatus = currentPaid ? 'UNPAID' : 'PAID';
-      await dbService.updateBracketEntryPayment(pool.id, entryId, nextStatus);
+      await dbService.setPaidStatus(pool.id, memberUidFor(entryId), !currentPaid);
     } catch (err) {
       console.error("Failed to update payment status:", err);
       toast.error("Failed to update payment status in database.");
@@ -91,16 +102,15 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   const saveDetailedPayment = async (entryId: string) => {
     setSavingLedgerId(entryId);
     try {
-      // Server-side since Phase 5 (updateEntryPayment callable) — the raw entry
-      // write is denied by rules now, and never worked for commissioners anyway.
       const timestamp = editDate ? new Date(editDate).getTime() : Date.now();
-      await dbService.updateBracketEntryPayment(
-        pool.id, entryId, editPaidStatus,
-        editMethod as Parameters<typeof dbService.updateBracketEntryPayment>[3],
-        {
-          paidAt: editPaidStatus === 'PAID' ? timestamp : null,
-          paymentNote: editNote || null,
-        },
+      // Details ride only with PAID; an UNPAID save is a full clear server-side
+      // (the schema refuses details with it — an unpaid member must not display
+      // a payment method and transaction note).
+      await dbService.setPaidStatus(
+        pool.id, memberUidFor(entryId), editPaidStatus === 'PAID',
+        editPaidStatus === 'PAID'
+          ? { paymentMethod: editMethod, paidAt: timestamp, paymentNote: editNote || null }
+          : undefined,
       );
       setEditingEntryId(null);
     } catch (err) {
