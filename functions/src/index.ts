@@ -107,6 +107,7 @@ export { onMemberRecordWrite, onWinnerWrite, onPoolRosterFieldsChange } from "./
 export { backfillMemberRecords } from "./migrations/backfillMemberRecords";
 export { backfillProfileData } from "./migrations/backfillProfileData";
 export { backfillPublishedWeeks } from "./migrations/backfillPublishedWeeks";
+export { reconcilePaymentTruth } from "./migrations/reconcilePaymentTruth";
 
 // --- CONSENSUS + LIVE WIN PROBABILITY (ADR 0004) ---
 export { consensusRefreshJob, recomputeConsensus } from "./consensus";

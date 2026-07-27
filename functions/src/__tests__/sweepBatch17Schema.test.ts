@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { markEntryPaidStatusSchema } from '../schemas/tournamentAdmin';
 import { calculatePlayoffScoresSchema } from '../schemas/playoffEntries';
-import { backfillMemberRecordsSchema, backfillPublishedWeeksSchema } from '../schemas/migrations';
+import { backfillMemberRecordsSchema, backfillPublishedWeeksSchema, reconcilePaymentTruthSchema } from '../schemas/migrations';
 import { importNFLScheduleSchema } from '../schemas/nflSchedule';
 import { searchUsersByEmailSchema } from '../schemas/userManagement';
 import { recomputeMyProfileSchema } from '../schemas/userProfile';
@@ -183,5 +183,23 @@ describe('no-input callables must accept BOTH null and {}', () => {
     ['recalculateGlobalStats', recalculateGlobalStatsSchema],
   ])('%s still rejects unknown fields', (_name, schema) => {
     expect(schema.safeParse({ rogue: 1 }).success).toBe(false);
+  });
+});
+
+describe('reconcilePaymentTruth — dry-run must default SAFE at the schema layer (P2)', () => {
+  it('defaults dryRun to TRUE when omitted, and only explicit false arms it', () => {
+    expect(reconcilePaymentTruthSchema.parse({}).dryRun).toBe(true);
+    expect(reconcilePaymentTruthSchema.parse({ dryRun: false }).dryRun).toBe(false);
+  });
+  it('takes the wire-shape null cursor as first-page (JS SDK undefined→null, #296)', () => {
+    expect(reconcilePaymentTruthSchema.safeParse({ dryRun: true, limit: 25, startAfter: null }).success).toBe(true);
+    expect(reconcilePaymentTruthSchema.parse({ startAfter: null }).startAfter).toBeUndefined();
+    expect(reconcilePaymentTruthSchema.safeParse({ startAfter: 'poolAbc' }).success).toBe(true);
+  });
+  it('rejects junk cursors, out-of-range limits and unknown fields', () => {
+    expect(reconcilePaymentTruthSchema.safeParse({ startAfter: '' }).success).toBe(false);
+    expect(reconcilePaymentTruthSchema.safeParse({ startAfter: 42 }).success).toBe(false);
+    expect(reconcilePaymentTruthSchema.safeParse({ limit: 101 }).success).toBe(false);
+    expect(reconcilePaymentTruthSchema.safeParse({ rogue: 1 }).success).toBe(false);
   });
 });

@@ -73,3 +73,23 @@ export const backfillPublishedWeeksSchema = z.strictObject({
         z.string().min(1).max(1500).optional(),
     ),
 });
+
+/**
+ * reconcilePaymentTruth - SUPER_ADMIN prod one-off (PLAN-PAYMENT-TRUTH P2, Q5).
+ * Converges the two payment stores on NFL season pools that diverged before P1:
+ * entry-PAID/member-UNPAID promotes the member (+ missing ledger row);
+ * member-PAID/entry-UNPAID mirrors the entry display. Its DRY RUN is the
+ * divergence count.
+ *
+ * dryRun defaults TRUE at the schema layer (house Rule 1); the cursor takes
+ * null as first-page (the JS SDK undefined→null encoding, same as the two
+ * schemas above — found in prod on the D25 run, 2026-07-27).
+ */
+export const reconcilePaymentTruthSchema = z.strictObject({
+    dryRun: z.boolean().optional().default(true),
+    limit: z.number().int().positive().max(100).optional(),
+    startAfter: z.preprocess(
+        (v) => (v === null ? undefined : v),
+        z.string().min(1).max(1500).optional(),
+    ),
+});

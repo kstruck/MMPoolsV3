@@ -175,6 +175,43 @@ const runPublishedWeeksBackfill = async (dryRun: boolean) => {
   return agg;
 };
 
+/**
+ * Payment-truth reconciliation (PLAN-PAYMENT-TRUTH P2). Same paging shape as
+ * the publishedWeeks backfill: counters aggregate across pages; the capped
+ * plannedFixes list makes the dry run reviewable evidence, and per Q5 the dry
+ * run IS the divergence count. Idempotent, so an aborted run is simply re-run
+ * from the start — everything already fixed reads back as consistent.
+ */
+const runReconcilePaymentTruth = async (dryRun: boolean) => {
+  let cursor: string | undefined;
+  let pages = 0;
+  const agg = {
+    ok: true, dryRun,
+    poolsScanned: 0, membersPromoted: 0, entriesMirrored: 0, alreadyConsistent: 0,
+    entriesPaidNoMember: 0, testPoolsSkipped: 0, otherTypeSkipped: 0,
+    failures: [] as any[], plannedFixes: [] as any[], plannedFixesTruncated: false,
+  };
+  do {
+    // Cursor sent only when present — the JS SDK encodes explicit-undefined as
+    // null on the wire (the schema also takes null, belt + suspenders, #296).
+    const r: any = await call('reconcilePaymentTruth', { dryRun, limit: 25, ...(cursor ? { startAfter: cursor } : {}) }, BACKFILL_TIMEOUT_MS);
+    agg.ok = agg.ok && r.ok !== false;
+    agg.poolsScanned += r.poolsScanned || 0;
+    agg.membersPromoted += r.membersPromoted || 0;
+    agg.entriesMirrored += r.entriesMirrored || 0;
+    agg.alreadyConsistent += r.alreadyConsistent || 0;
+    agg.entriesPaidNoMember += r.entriesPaidNoMember || 0;
+    agg.testPoolsSkipped += r.testPoolsSkipped || 0;
+    agg.otherTypeSkipped += r.otherTypeSkipped || 0;
+    if (Array.isArray(r.failures)) agg.failures.push(...r.failures);
+    if (Array.isArray(r.plannedFixes)) agg.plannedFixes.push(...r.plannedFixes);
+    agg.plannedFixesTruncated = agg.plannedFixesTruncated || r.plannedFixesTruncated === true;
+    cursor = r.nextCursor || undefined;
+    pages++;
+  } while (cursor && pages < 100);
+  return agg;
+};
+
 const ACTIONS: OpAction[] = [
   {
     id: 'recalculateGlobalStats',
@@ -256,6 +293,24 @@ const ACTIONS: OpAction[] = [
     destructive: true,
     icon: Users,
     run: () => runBackfill(false, true),
+  },
+  {
+    id: 'reconcilePaymentTruth:dry',
+    label: 'Reconcile Payment Truth (dry run)',
+    description: 'THE DIVERGENCE COUNT (PLAN-PAYMENT-TRUTH P2). Reports every NFL season pool member whose two payment stores disagree: entry says PAID while the Member Record says UNPAID (the pre-P1 Bento write — their dues are missing from the pot), or Member Record PAID while the entry display says UNPAID. Lists the planned fixes (capped at 50). If entriesPaidNoMember is NONZERO, re-run the incl.-finished roster backfill first. Writes nothing.',
+    blastRadius: 'Read-only — no writes. Reports divergence counts + planned fixes.',
+    destructive: false,
+    icon: CheckCircle2,
+    run: () => runReconcilePaymentTruth(true),
+  },
+  {
+    id: 'reconcilePaymentTruth',
+    label: 'Reconcile Payment Truth',
+    description: 'Applies the fixes the dry run counted: promotes Member Records where the entry recorded a pre-P1 payment (and appends the missing payments-ledger row), and mirrors entry displays where the Member Record is already PAID. NFL season pools only; sim and isTestPool pools are never touched. Run AFTER the roster backfill and BEFORE Recalculate Global Stats. Idempotent.',
+    blastRadius: 'Writes members.paidStatus + payments ledger rows + entry display fields on diverged NFL pools; recomputes roster summaries and commissioner aggregates.',
+    destructive: true,
+    icon: Users,
+    run: () => runReconcilePaymentTruth(false),
   },
   {
     id: 'backfillProfileData:dry',
