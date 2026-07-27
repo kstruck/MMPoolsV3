@@ -23,8 +23,8 @@
 // Credentials (checked in order):
 //   1. FIRESTORE_EMULATOR_HOST set        -> emulator, no key needed
 //   2. GOOGLE_APPLICATION_CREDENTIALS set -> that key file (keep it OUTSIDE the repo)
-//   3. <repoRoot>/scripts/service-account.json (legacy repo convention; NOT
-//      gitignored as of 2026-07-06 — prefer option 2)
+//   3. <repoRoot>/scripts/service-account.json (legacy repo convention;
+//      gitignored since 2026-07-26 — still prefer option 2)
 
 import { createRequire } from 'node:module';
 import { readFileSync, existsSync } from 'node:fs';
