@@ -29,6 +29,10 @@ dist-ssr
 .env.development.local
 .env.test.local
 .env.production.local
+# Prod admin keys — the census script documents scripts/service-account.json as
+# a legacy credential location; a key dropped there must never be committable.
+scripts/service-account.json
+*service-account*.json
 
 # Test files
 test-*.html
