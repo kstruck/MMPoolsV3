@@ -152,12 +152,146 @@ describe('step 5 — destructive admin actions write an audit trail', () => {
   it('OperationsPanel audits every op via logAdminAction (success + error)', () => {
     expect(ops).toContain('dbService.logAdminAction');
     expect(ops).toContain('OP_');
-    expect(ops).toContain("status: 'success'");
+    // The resolved path no longer hardcodes 'success': an op that RETURNS
+    // `ok: false` (a partial migration reporting its resume cursor rather than
+    // throwing) must be audited as an ERROR, so the status is selected. Asserting
+    // the whole ternary is stricter than the old literal — it pins that BOTH
+    // outcomes come off one decision instead of always writing 'success'.
+    expect(ops).toMatch(/status:\s*ok\s*\?\s*'success'\s*:\s*'error'/);
+    // ...and the thrown-exception path still audits its own error.
     expect(ops).toContain("status: 'error'");
   });
   it('conference tournament re-inits live in Operations', () => {
     expect(ops).toContain('initializeBig12TournamentHttp');
     expect(ops).toContain('initializeBigEastTournamentHttp');
+  });
+});
+
+/**
+ * PLAN-PAYMENT-TRUTH P4 — a migration's dry run IS its evidence, so the Run Log
+ * must actually be able to DISPLAY the counters its own card tells the operator
+ * to read.
+ *
+ * This is a regression guard for a defect in P4 itself, found by codex r1: the
+ * two new skip counters were appended to the end of the aggregate, and the Run
+ * Log renders a truncated `JSON.stringify`. `finishedPoolsSkipped` began at
+ * index 188 of a 226-character report with every count at zero, past the
+ * 160-char limit then in force — so the "run the dry run first and read the
+ * count" instruction pointed at a number that never appeared on screen.
+ *
+ * Deliberately reconstructs the rendered string from the SOURCE rather than
+ * asserting a key order literally: it fails if the keys are reordered, if a new
+ * counter is inserted ahead of them, or if the truncation limit is lowered.
+ */
+describe('P4 — the roster backfill dry run can be read in the Run Log', () => {
+  const ops = read('src/components/admin/OperationsPanel.tsx');
+
+  const sliceLimit = Number(ops.match(/JSON\.stringify\(result\)\.slice\(0,\s*(\d+)\)/)![1]);
+  const aggBody = ops.match(/const agg = \{([\s\S]*?)\};/)![1];
+  const keys = aggBody
+    .split(',')
+    .map((s) => s.trim().split(':')[0].trim())
+    .filter((k) => /^\w+$/.test(k));
+
+  // Guard the parse itself — a silent mis-parse would make every assertion below
+  // vacuously pass.
+  it('parsed the aggregate shape out of the source', () => {
+    expect(sliceLimit).toBeGreaterThan(0);
+    expect(keys).toContain('poolsScanned');
+    expect(keys).toContain('finishedPoolsSkipped');
+    expect(keys).toContain('testPoolsSkipped');
+    expect(keys).toContain('failures');
+  });
+
+  // Zeros are the WORST case for position and the BEST case for length: every
+  // count renders as one character, so a counter that is out of range here is out
+  // of range for every real run too.
+  const rendered = JSON.stringify(
+    Object.fromEntries(keys.map((k) => [k, k === 'failures' ? [] : 0])),
+  );
+
+  it.each(['poolsScanned', 'finishedPoolsSkipped', 'testPoolsSkipped'])(
+    'counter %s survives Run Log truncation',
+    (key) => {
+      const at = rendered.indexOf(`"${key}"`);
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(at).toBeLessThan(sliceLimit);
+    },
+  );
+
+  it('the whole zero-valued report fits, so nothing is silently dropped', () => {
+    expect(rendered.length).toBeLessThanOrEqual(sliceLimit);
+  });
+
+  it('failures stays last — it is the only unbounded field', () => {
+    expect(keys[keys.length - 1]).toBe('failures');
+  });
+
+  it('both incl.-finished cards exist and the dry run is not destructive', () => {
+    expect(ops).toContain("id: 'backfillMemberRecordsFinished:dry'");
+    expect(ops).toContain("id: 'backfillMemberRecordsFinished'");
+    expect(ops).toContain('runBackfill(true, true)');
+    expect(ops).toContain('runBackfill(false, true)');
+  });
+
+  it('a partial run is reported, not swallowed, and carries a resume cursor', () => {
+    // codex r3: the paging cursor lives in runBackfill's closure, so an unhandled
+    // throw loses it and the migration can only restart from pool #1.
+    expect(keys).toContain('ok');
+    expect(keys).toContain('resumeFrom');
+    expect(ops).toContain('agg.resumeFrom = cursor');
+    // ...and `ok: false` must actually reach the operator rather than being
+    // rendered as a green success line.
+    expect(ops).toMatch(/\?\.ok\s*!==\s*false/);
+    expect(ops).toContain("status: ok ? 'success' : 'error'");
+  });
+
+  it('the client callable deadline is raised past the SDK default', () => {
+    // codex r4: the Firebase JS SDK enforces its own 70s callable deadline, so a
+    // 300s server budget alone just moves the abort into the browser — the client
+    // reports failure for work the server went on to finish.
+    expect(ops).toMatch(/httpsCallable\(functions,\s*name,\s*timeoutMs\s*\?\s*\{\s*timeout:\s*timeoutMs\s*\}/);
+    expect(ops).toContain('BACKFILL_TIMEOUT_MS');
+    const clientMs = Number(ops.match(/BACKFILL_TIMEOUT_MS = ([\d_]+)/)![1].replace(/_/g, ''));
+    const serverS = Number(
+      read('functions/src/migrations/backfillMemberRecords.ts').match(/timeoutSeconds:\s*(\d+)/)![1],
+    );
+    // Strictly greater, so the SERVER's deadline is always what fails a page —
+    // never a race between two equal timers.
+    expect(clientMs).toBeGreaterThan(serverS * 1000);
+  });
+
+  it('the reported resume cursor is actually usable', () => {
+    // Reporting resumeFrom while offering no way to submit it would leave a wedged
+    // migration restarting at pool #1 forever (codex r4).
+    expect(ops).toContain('backfillResume.set(resumeKey, { cursor: at,');
+    expect(ops).toContain('backfillResume.get(resumeKey)');
+    // Both stop paths park — the thrown-error one and the page-cap one.
+    expect(ops.match(/\bpark\(cursor\)/g) ?? []).toHaveLength(2);
+    // The checkpoint carries the WORK, not just the position (codex r5): a resumed
+    // run that reported only its own pages would undercount the migration evidence.
+    // The fold/snapshot themselves are behaviour-tested in
+    // src/utils/resumableReport.test.ts; this only pins that the panel uses them.
+    expect(ops).toContain('partial: snapshotReport(agg)');
+    expect(ops).toContain('foldParkedReport(agg, parked.partial)');
+    // Keyed by the run's flags — resuming a wide sweep from a narrow sweep's
+    // cursor would silently skip pools.
+    expect(ops).toContain('const resumeKey = `${dryRun}:${includeFinished}`');
+    // ...and a clean finish must clear it, or the next run silently starts partway.
+    expect(ops).toContain('backfillResume.delete(resumeKey)');
+  });
+
+  it('the incl.-finished sweep uses the smaller page size', () => {
+    // A finished pool used to cost one `continue`; it now costs the full
+    // per-member walk, so 100/page is a different amount of work entirely.
+    expect(ops).toContain('const limit = includeFinished ? 25 : 100;');
+  });
+
+  it('the panel never SENDS the retired includeAll flag', () => {
+    // Matches a payload key, not the word: the docblock explains what includeAll
+    // was and why it was split, and that prose is worth keeping. A bare
+    // `not.toContain('includeAll')` failed on exactly that comment.
+    expect(ops).not.toMatch(/includeAll\s*:/);
   });
 });
 

@@ -7,7 +7,8 @@ import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { ROSTER_SCHEMA_VERSION } from "../shared/memberRecord";
 import { recomputeRosterSummary } from "../lib/rosterSummary";
-import { isActivePoolForStats } from "../lib/poolInclusion";
+import { isFinishedPool } from "../lib/poolInclusion";
+import { isSimPool, isExplicitlyMarkedTestPool } from "../shared/testPool";
 import { validated } from "../lib/validated";
 import { backfillMemberRecordsSchema } from "../schemas/migrations";
 
@@ -68,15 +69,33 @@ async function collectMembers(db: Firestore, poolId: string, pool: any): Promise
 }
 
 export const backfillMemberRecords = validated(
-    { schema: backfillMemberRecordsSchema, label: "backfillMemberRecords", role: "SUPER_ADMIN", appCheck: "monitor" },
+    {
+      schema: backfillMemberRecordsSchema,
+      label: "backfillMemberRecords",
+      role: "SUPER_ADMIN",
+      appCheck: "monitor",
+      // This callable ran on the v2 DEFAULT of 60s, which was survivable only
+      // because the Operations button could not reach finished pools: they cost
+      // one `continue` each. `includeFinished` makes that same page do the full
+      // per-member walk — an entries get, a member get and a user get per member,
+      // then a write, a roster recompute and a pool write per pool, all serial.
+      // 60s does not cover a page of populated legacy pools, and a timeout is
+      // not merely slow: the client's paging cursor lives in memory, so the run
+      // cannot resume past the page that died (codex r3).
+      //
+      // 300s/512MiB is the established batch-migration budget in this repo —
+      // autoClosePools.ts:32, autoLock.ts:48, feedReplay.ts:59.
+      options: { timeoutSeconds: 300, memory: "512MiB" },
+    },
     async (input, request) => {
   if (!request.auth || request.auth.token?.role !== 'SUPER_ADMIN') {
     throw new HttpsError("permission-denied", "Super Admin only.");
   }
   const dryRun = input.dryRun; // default TRUE
-  // By default, only backfill REAL pools (skip sim-*/COMPLETED/archived/CANCELED test junk).
-  // Pass includeAll:true to process every pool.
-  const includeAll = input.includeAll === true;
+  // Widen the sweep over FINISHED pools (COMPLETED / CANCELED / archived / final /
+  // admin-closed). Default FALSE at the schema layer. Sim pools are NOT affected by
+  // this flag — see the unconditional skip in the loop below.
+  const includeFinished = input.includeFinished; // default FALSE
   const limit = Math.min(input.limit ?? 25, 100);
   const startAfter: string | undefined = input.startAfter;
 
@@ -87,9 +106,19 @@ export const backfillMemberRecords = validated(
 
   const report = {
     dryRun,
-    includeAll,
+    includeFinished,
     poolsScanned: 0,
+    /** Total skipped = testPoolsSkipped + finishedPoolsSkipped. Kept so the shape
+     *  stays a superset of the previous report rather than a replacement. */
     poolsSkipped: 0,
+    /** Sim-harness pools plus pools carrying the hand-applied `isTestPool` marker.
+     *  Never processed, at any flag setting. Does NOT include NFL preseason —
+     *  those are the pilot and ARE backfilled. */
+    testPoolsSkipped: 0,
+    /** Skipped only because includeFinished was false — i.e. the number that
+     *  re-running with the flag on WOULD reach. This is the figure to read off
+     *  the dry run before going live. */
+    finishedPoolsSkipped: 0,
     membersCreated: 0,
     membersAlreadyPresent: 0,
     guestSkipped: 0,
@@ -102,10 +131,37 @@ export const backfillMemberRecords = validated(
   for (const doc of snap.docs) {
     const poolId = doc.id;
     const pool: any = doc.data();
-    // Skip sim-*/completed/archived/canceled test pools unless includeAll. (Cursor still
-    // advances over skipped pools — pagination stays correct.)
-    if (!includeAll && !isActivePoolForStats(pool, poolId)) {
+    // (Cursor still advances over skipped pools — pagination stays correct.)
+
+    // UNCONDITIONAL. No input can switch this off, which is the point of Q3:
+    // writing Member Records onto test data is write amplification against pools
+    // PR D already excludes from every published number, and sim pools get swept
+    // out from under it anyway.
+    //
+    // This is arms 1 and 3 of `isTestPool`, deliberately NOT arm 2. Arm 2 is NFL
+    // PRESEASON (seasonType 1), and preseason is the 2026-08-06 pilot — real
+    // pools, real members, real dues, excluded from GLOBAL STATS only. Skipping
+    // those here would leave them with no Member Records, which is exactly the
+    // state that makes setPaidStatus throw ("Member is not on this pool's
+    // roster", setPaidStatus.ts:46), so it would break the pilot's payment
+    // controls the moment P1 repoints them.
+    //
+    // Arm 3 is not optional either (codex r2): the legacy Squares/Props/Playoff
+    // test runners create pools through the normal path with NO sim marker, so
+    // `isSimPool` alone does not see them. The hand-applied `isTestPool: true`
+    // flag from the K12 census is the only thing that does, and the Operations
+    // card promises those are never included.
+    if (isSimPool(pool, poolId) || isExplicitlyMarkedTestPool(pool)) {
       report.poolsSkipped++;
+      report.testPoolsSkipped++;
+      continue;
+    }
+
+    // Conditional: finished pools are the ones the all-time total is missing, so
+    // reaching them is the whole reason this flag exists.
+    if (!includeFinished && isFinishedPool(pool)) {
+      report.poolsSkipped++;
+      report.finishedPoolsSkipped++;
       continue;
     }
     report.poolsScanned++;

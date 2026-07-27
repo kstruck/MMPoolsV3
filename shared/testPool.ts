@@ -80,8 +80,26 @@ function isSimSeason(season: unknown): boolean {
  */
 export function isTestPool(pool: TestPoolDocLike | null | undefined, poolId?: string): boolean {
   if (isSimPool(pool, poolId)) return true;
-  if (pool?.isTestPool === true) return true;
+  if (isExplicitlyMarkedTestPool(pool)) return true;
   return isPreseasonNflPool(pool);
+}
+
+/**
+ * Arm 3 on its own: the durable, operator-applied `isTestPool: true` marker.
+ *
+ * Exported because the Member Record backfill (PLAN-PAYMENT-TRUTH P4) needs
+ * "is this a test pool for reasons OTHER than being preseason?". It must skip
+ * sim pools and hand-labelled legacy test pools, but must NOT skip preseason —
+ * preseason is the 2026-08-06 pilot, whose members owe real dues and therefore
+ * need Member Records for `setPaidStatus` to work at all. Full `isTestPool`
+ * would skip them; `isSimPool` alone would wrongly backfill hand-labelled ones
+ * (codex r2).
+ *
+ * Exported rather than re-derived inline so arm 3 has exactly one definition —
+ * a second copy of one of these arms is the defect this file's header is about.
+ */
+export function isExplicitlyMarkedTestPool(pool: TestPoolDocLike | null | undefined): boolean {
+  return pool?.isTestPool === true;
 }
 
 /** NFL season pool (PICKEM/SURVIVOR/MARGIN) on seasonType 1 = preseason. */

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { isSimPool } from '../nflFinalize';
-import { isTestPool } from '../shared/testPool';
-import { isActivePoolForStats } from '../lib/poolInclusion';
+import { isTestPool, isExplicitlyMarkedTestPool } from '../shared/testPool';
+import { isActivePoolForStats, isFinishedPool } from '../lib/poolInclusion';
 import { simSeason, simUidPrefix } from '../lib/simNamespace';
 
 // Phase 0 sim-safety guards (PLAN-NFL-SIM-HARNESS). The load-bearing fact under
@@ -102,6 +102,107 @@ describe('isActivePoolForStats — sim exclusion', () => {
   });
   it('includes a real active pool', () => {
     expect(isActivePoolForStats({ ...active, season: '2025' }, 'aUtoGen3RatedId')).toBe(true);
+  });
+});
+
+// PLAN-PAYMENT-TRUTH P4. `isFinishedPool` was extracted from `isActivePoolForStats`
+// so the Member Record backfill can gate on "finished?" separately from "sim?".
+// These guard BOTH halves of that claim: the extraction is behaviour-preserving,
+// and the two predicates are genuinely independent.
+describe('isFinishedPool — the status half, split out for the backfill', () => {
+  const active = { type: 'NFL_PICKEM', status: 'OPEN' };
+
+  it('catches every finished/closed shape', () => {
+    expect(isFinishedPool({ ...active, status: 'COMPLETED' })).toBe(true);
+    expect(isFinishedPool({ ...active, status: 'CANCELED' })).toBe(true);
+    expect(isFinishedPool({ ...active, status: 'archived' })).toBe(true);
+    expect(isFinishedPool({ ...active, isFinal: true })).toBe(true);
+    expect(isFinishedPool({ ...active, closedVia: 'ADMIN_CLOSE' })).toBe(true);
+    expect(isFinishedPool({ ...active, closedVia: 'SCORED_OUT' })).toBe(true);
+  });
+
+  it('does not catch an active pool', () => {
+    expect(isFinishedPool(active)).toBe(false);
+  });
+
+  it('says NOTHING about sim-ness — that is the point of the split', () => {
+    // A sim pool that is still open is not "finished". If these two collapsed
+    // back into one boolean, includeFinished would re-open the sweep onto sim
+    // data, which is the D25 defect Q3 split apart.
+    expect(isFinishedPool({ ...active, simRunId: 'run-abc123' })).toBe(false);
+    expect(isSimPool({ ...active, simRunId: 'run-abc123' }, 'aUtoGen3RatedId')).toBe(true);
+  });
+
+  it('composes back to the original isActivePoolForStats behaviour', () => {
+    // The extraction must be behaviour-preserving for consensus.ts and
+    // commissionerAggregate.ts, which were not touched.
+    for (const p of [
+      active,
+      { ...active, status: 'COMPLETED' },
+      { ...active, status: 'CANCELED' },
+      { ...active, status: 'archived' },
+      { ...active, isFinal: true },
+      { ...active, closedVia: 'ADMIN_CLOSE' },
+      { ...active, simRunId: 'run-abc123' },
+      { ...active, season: 'sim-run-abc123' },
+    ]) {
+      const expected = !isFinishedPool(p) && !isSimPool(p, 'aUtoGen3RatedId');
+      expect(isActivePoolForStats(p, 'aUtoGen3RatedId')).toBe(expected);
+    }
+  });
+
+});
+
+/**
+ * The exact skip rule the Member Record backfill applies (PLAN-PAYMENT-TRUTH P4):
+ * arms 1 and 3 of `isTestPool`, deliberately NOT arm 2.
+ *
+ * Both halves are load-bearing and BOTH were got wrong once. Using full
+ * `isTestPool` would skip the preseason pilot; using bare `isSimPool` silently
+ * backfilled hand-labelled legacy test pools (codex r2). This pins the seam.
+ */
+describe('P4 backfill skip rule — sim OR hand-marked, but never merely preseason', () => {
+  const skippedByBackfill = (pool: any, id?: string) =>
+    isSimPool(pool, id) || isExplicitlyMarkedTestPool(pool);
+
+  const preseason = { type: 'NFL_PICKEM', status: 'OPEN', seasonType: 1, season: '2026' };
+
+  it('leaves NFL PRESEASON pools reachable — they are the 2026-08-06 pilot', () => {
+    // Excluded from every published stat, but real pools with real members owing
+    // real dues. Skipping them here would leave them without Member Records,
+    // which is exactly the state that makes setPaidStatus throw once P1 repoints
+    // the payment control at it.
+    expect(isTestPool(preseason, 'realPoolId')).toBe(true);        // excluded from stats
+    expect(skippedByBackfill(preseason, 'realPoolId')).toBe(false); // but still backfilled
+    expect(isFinishedPool(preseason)).toBe(false);
+  });
+
+  it('skips a hand-marked legacy test pool with no sim marker at all', () => {
+    // The legacy Squares/Props/Playoff runners create pools through the normal
+    // path, so arms 1 and 2 cannot see them; the K12 census flag is the only
+    // signal. isSimPool alone returns false here — the r2 defect.
+    const legacy = { type: 'SQUARES', status: 'COMPLETED', season: '2024', isTestPool: true };
+    expect(isSimPool(legacy, 'autoGenId')).toBe(false);
+    expect(skippedByBackfill(legacy, 'autoGenId')).toBe(true);
+  });
+
+  it('skips a hand-marked PRESEASON pool — an explicit marker still wins', () => {
+    expect(skippedByBackfill({ ...preseason, isTestPool: true }, 'realPoolId')).toBe(true);
+  });
+
+  it('only an exact true marks a pool — no truthy coercion', () => {
+    for (const v of ['true', 1, {}, [], 'yes']) {
+      expect(isExplicitlyMarkedTestPool({ isTestPool: v } as any)).toBe(false);
+    }
+    expect(isExplicitlyMarkedTestPool({ isTestPool: true })).toBe(true);
+    expect(isExplicitlyMarkedTestPool(null)).toBe(false);
+    expect(isExplicitlyMarkedTestPool(undefined)).toBe(false);
+  });
+
+  it('still backfills an ordinary finished real pool — that is the whole point', () => {
+    const real = { type: 'SQUARES', status: 'COMPLETED', season: '2024' };
+    expect(skippedByBackfill(real, 'autoGenId')).toBe(false);
+    expect(isFinishedPool(real)).toBe(true); // reached only with includeFinished
   });
 });
 

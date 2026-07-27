@@ -50,14 +50,31 @@ describe('backfillMemberRecords — dry-run must default SAFE at the schema laye
     expect(backfillMemberRecordsSchema.parse({ dryRun: false }).dryRun).toBe(false);
   });
   it("accepts OperationsPanel's real payload, including a first-page undefined cursor", () => {
-    // OperationsPanel.tsx:45 — call('backfillMemberRecords', { dryRun, limit: 100, startAfter: cursor })
-    // where `cursor` is undefined on page 1, so the KEY IS PRESENT with an
-    // undefined value. An absent-key-only optional would reject this.
-    expect(backfillMemberRecordsSchema.safeParse({ dryRun: true, limit: 100, startAfter: undefined }).success).toBe(true);
-    expect(backfillMemberRecordsSchema.safeParse({ dryRun: false, limit: 100, startAfter: 'poolAbc' }).success).toBe(true);
+    // OperationsPanel.tsx runBackfill — call('backfillMemberRecords',
+    // { dryRun, includeFinished, limit: 100, startAfter: cursor }) where `cursor`
+    // is undefined on page 1, so the KEY IS PRESENT with an undefined value. An
+    // absent-key-only optional would reject this.
+    expect(backfillMemberRecordsSchema.safeParse({ dryRun: true, includeFinished: false, limit: 100, startAfter: undefined }).success).toBe(true);
+    expect(backfillMemberRecordsSchema.safeParse({ dryRun: false, includeFinished: true, limit: 100, startAfter: 'poolAbc' }).success).toBe(true);
   });
   it('caps limit at the handler ceiling', () => {
     expect(backfillMemberRecordsSchema.safeParse({ limit: 101 }).success).toBe(false);
+  });
+
+  // PLAN-PAYMENT-TRUTH P4 (Kevin's Q3). `includeAll` conflated "process finished
+  // pools?" with "process sim pools?"; it is split so the sim exclusion can no
+  // longer be switched off by any input.
+  it('defaults includeFinished to FALSE when omitted — the narrow sweep', () => {
+    expect(backfillMemberRecordsSchema.parse({}).includeFinished).toBe(false);
+  });
+  it('only an explicit true widens the sweep over finished pools', () => {
+    expect(backfillMemberRecordsSchema.parse({ includeFinished: true }).includeFinished).toBe(true);
+  });
+  it('REJECTS the retired includeAll flag rather than ignoring it', () => {
+    // strictObject, so a stale caller fails loudly instead of silently getting
+    // the narrow sweep it did not ask for. Nothing in src/ sent it — the
+    // Operations button never passed it, which IS defect D25.
+    expect(backfillMemberRecordsSchema.safeParse({ includeAll: true }).success).toBe(false);
   });
 });
 

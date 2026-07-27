@@ -6,6 +6,7 @@ import { ConfirmActionModal } from './ConfirmActionModal';
 import { useToast } from '../ui/Toast';
 import { getUserMessage } from '../../utils/errorMessages';
 import { Wrench, RefreshCw, Database, Trophy, Users, CheckCircle2, XCircle } from 'lucide-react';
+import { foldParkedReport, snapshotReport, type ResumableReport } from '../../utils/resumableReport';
 
 /**
  * Consolidated global operations (T7). Every GLOBAL batch/maintenance action
@@ -29,30 +30,120 @@ interface OpAction {
   run: () => Promise<unknown>;
 }
 
-const call = (name: string, data: Record<string, unknown> = {}) =>
-  httpsCallable(functions, name)(data).then((r) => r.data);
+/**
+ * `timeoutMs` exists because the Firebase JS SDK applies its OWN callable deadline —
+ * 70 seconds by default — independently of whatever the function is provisioned for.
+ * Raising a server budget without raising this one just moves the abort to the
+ * browser: the request rejects at 70s while the function keeps running to completion
+ * server-side, so the client reports a failure for work that actually succeeded, and
+ * its resume cursor points at a page already done (codex r4).
+ */
+const call = (name: string, data: Record<string, unknown> = {}, timeoutMs?: number) =>
+  httpsCallable(functions, name, timeoutMs ? { timeout: timeoutMs } : undefined)(data).then((r) => r.data);
+
+/** Server budget for backfillMemberRecords is 300s; the client waits slightly longer
+ *  so the SERVER's own deadline is what fails a page, never a race between the two. */
+const BACKFILL_TIMEOUT_MS = 310_000;
+
+/**
+ * Where a backfill run stopped, so clicking Run again continues instead of restarting
+ * at pool #1 (codex r4). Module-scoped rather than component state because ACTIONS is
+ * a module-level const whose closures cannot see a hook.
+ *
+ * Holds the counters as well as the cursor (codex r5): parking the cursor alone let a
+ * resumed run finish `ok: true` while reporting only the pages IT did, and for a money
+ * migration the dry run's numbers are the evidence.
+ *
+ * Keyed by the run's flags: resuming a wide sweep from a narrow sweep's cursor would
+ * silently skip pools. Cleared on a clean finish, so a completed migration always
+ * starts over from the beginning next time.
+ */
+const backfillResume = new Map<string, { cursor: string; partial: ResumableReport }>();
 
 /**
  * Member Record roster backfill (ADR 0003). The callable pages ~100 pools per call and
  * returns a nextCursor; this loops all pages and accumulates the invariant report so one
  * click covers every pool. Dry run writes nothing.
+ *
+ * `includeFinished` widens the sweep over COMPLETED / CANCELED / archived / final pools
+ * (PLAN-PAYMENT-TRUTH P4). It replaces the old `includeAll`, which this panel never sent
+ * — which is exactly the D25 defect: the button could not reach the historical pools the
+ * all-time total is missing. Sim-harness pools and pools carrying the hand-applied
+ * `isTestPool` marker are skipped by the callable unconditionally and no flag here can
+ * change that. NFL preseason pools ARE processed: they are excluded from published
+ * stats but they are the 2026-08-06 pilot, and their payment controls need the records.
+ *
+ * `finishedPoolsSkipped` is accumulated because it is the number to read off the narrow
+ * dry run: it is how many pools the includeFinished variant would additionally touch.
+ *
+ * KEY ORDER IS LOAD-BEARING. The Run Log renders a TRUNCATED `JSON.stringify` of this
+ * object, so a counter's position decides whether an operator can see it at all. The
+ * two skip counters sit directly after poolsScanned because they are what the dry run
+ * exists to report; `failures` stays last because it is the only unbounded field.
+ * Measured, not assumed: with the counters appended at the end instead, the key
+ * `finishedPoolsSkipped` began at index 188 of a 226-char report and was cut off by the
+ * 160-char limit even with every count at zero — the dry-run card instructed the
+ * operator to read a number the UI could not display (codex r1).
  */
-const runBackfill = async (dryRun: boolean) => {
-  let cursor: string | undefined;
+const runBackfill = async (dryRun: boolean, includeFinished = false) => {
+  const resumeKey = `${dryRun}:${includeFinished}`;
+  const parked = backfillResume.get(resumeKey);
+  let cursor: string | undefined = parked?.cursor;
   let pages = 0;
-  const agg = { dryRun, poolsScanned: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, failures: [] as any[] };
+  // 25 on the incl.-finished path, 100 otherwise. A finished pool used to cost one
+  // `continue`; now it costs the full per-member walk, so the same page size is a
+  // very different amount of work. 25 is the handler's own default page size and
+  // matches backfillProfileData, the other migration that does per-member work.
+  const limit = includeFinished ? 25 : 100;
+  const agg = { ok: true, dryRun, includeFinished, poolsScanned: 0, finishedPoolsSkipped: 0, testPoolsSkipped: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, resumedFrom: parked?.cursor ?? null, resumeFrom: null as string | null, error: null as string | null, failures: [] as any[] };
+
+  // Carry the earlier pages' counters into this run (codex r5). Parking only the
+  // cursor meant a resumed run started from zero and could finish ok:true while
+  // reporting a fraction of the work — and for a money migration the dry run's
+  // numbers ARE the evidence, so an undercount is the failure, not a cosmetic gap.
+  if (parked) foldParkedReport(agg, parked.partial);
+
+  /** Park the cursor WITH the work so far. */
+  const park = (at: string) => backfillResume.set(resumeKey, { cursor: at, partial: snapshotReport(agg) });
   do {
-    const r: any = await call('backfillMemberRecords', { dryRun, limit: 100, startAfter: cursor });
+    let r: any;
+    try {
+      r = await call('backfillMemberRecords', { dryRun, includeFinished, limit, startAfter: cursor }, BACKFILL_TIMEOUT_MS);
+    } catch (e) {
+      // The paging cursor lives in this closure, so an unhandled throw loses it and
+      // the run can only restart from pool #1 — into the same wall. Report it AND
+      // park it: `resumeFrom` is the last cursor that WAS accepted, the callable is
+      // idempotent, and clicking Run again picks up from there.
+      agg.ok = false;
+      agg.resumeFrom = cursor ?? null;
+      agg.error = e instanceof Error ? e.message : String(e);
+      if (cursor) park(cursor);
+      return agg;
+    }
     agg.poolsScanned += r.poolsScanned || 0;
     agg.membersCreated += r.membersCreated || 0;
     agg.membersAlreadyPresent += r.membersAlreadyPresent || 0;
     agg.guestSkipped += r.guestSkipped || 0;
     agg.participantIdsWithoutMember += r.participantIdsWithoutMember || 0;
     agg.poolsFlipped += r.poolsFlipped || 0;
+    agg.testPoolsSkipped += r.testPoolsSkipped || 0;
+    agg.finishedPoolsSkipped += r.finishedPoolsSkipped || 0;
     if (Array.isArray(r.failures)) agg.failures.push(...r.failures);
     cursor = r.nextCursor || undefined;
     pages++;
   } while (cursor && pages < 100);
+  // A run that stopped on the page cap rather than on an exhausted cursor has NOT
+  // finished, and saying otherwise is the same lie as swallowing the throw.
+  if (cursor) {
+    agg.ok = false;
+    agg.resumeFrom = cursor;
+    agg.error = `Stopped at the ${pages}-page cap with pools remaining. Run again to continue from resumeFrom.`;
+    park(cursor);
+  } else {
+    // Finished cleanly — drop the checkpoint so the next click is a full sweep and
+    // never silently starts partway through.
+    backfillResume.delete(resumeKey);
+  }
   return agg;
 };
 
@@ -127,8 +218,8 @@ const ACTIONS: OpAction[] = [
   },
   {
     id: 'backfillMemberRecords:dry',
-    label: 'Backfill Member Roster (dry run)',
-    description: 'Report how many members (incl. commissioners / no-entry members) would be added to each pool roster. Writes nothing.',
+    label: 'Backfill Member Roster — active only (dry run)',
+    description: 'Report how many members (incl. commissioners / no-entry members) would be added to each pool roster, across ACTIVE pools only. Read finishedPoolsSkipped in the result — that is how many more pools the "incl. finished" variant below would reach. Writes nothing.',
     blastRadius: 'Read-only — no writes. Reports invariant counts.',
     destructive: false,
     icon: CheckCircle2,
@@ -136,12 +227,30 @@ const ACTIONS: OpAction[] = [
   },
   {
     id: 'backfillMemberRecords',
-    label: 'Backfill Member Roster',
-    description: 'Create Member Records for every existing member (incl. commissioners and members with no entry) across all pools. Idempotent — skips members already present.',
-    blastRadius: 'Creates pools/{id}/members docs across every pool; sets rosterSchemaVersion per pool.',
+    label: 'Backfill Member Roster — active only',
+    description: 'Create Member Records for every existing member (incl. commissioners and members with no entry) across ACTIVE pools. Skips finished/canceled/archived pools. Idempotent — skips members already present.',
+    blastRadius: 'Creates pools/{id}/members docs across active pools; sets rosterSchemaVersion per pool.',
     destructive: true,
     icon: Users,
     run: () => runBackfill(false),
+  },
+  {
+    id: 'backfillMemberRecordsFinished:dry',
+    label: 'Backfill Member Roster incl. finished (dry run)',
+    description: 'Same as above but ALSO covers COMPLETED / CANCELED / archived / final pools — the historical pools whose dues the all-time total is currently missing (D25). Sim-harness pools and any pool you have marked isTestPool are still skipped, and no option here can include them. NFL preseason pools ARE included: they count toward no published stat, but they are the pilot and their payment controls need Member Records. Writes nothing. Run this before the live version.',
+    blastRadius: 'Read-only — no writes. Reports invariant counts incl. testPoolsSkipped.',
+    destructive: false,
+    icon: CheckCircle2,
+    run: () => runBackfill(true, true),
+  },
+  {
+    id: 'backfillMemberRecordsFinished',
+    label: 'Backfill Member Roster incl. finished',
+    description: 'Create Member Records across ALL non-sim pools including finished ones. This is the D25 repair, and it must run BEFORE Recalculate Global Stats — backfilling afterwards means the recalculate published an under-count and nobody re-ran it. Idempotent.',
+    blastRadius: 'Creates pools/{id}/members docs across every non-sim pool, finished ones included; sets rosterSchemaVersion per pool.',
+    destructive: true,
+    icon: Users,
+    run: () => runBackfill(false, true),
   },
   {
     id: 'backfillProfileData:dry',
@@ -264,9 +373,21 @@ export const OperationsPanel: React.FC = () => {
     setRunning(action.id);
     try {
       const result = await action.run();
-      setLog((prev) => [{ id: action.id, ok: true, text: `${action.label}: ${JSON.stringify(result).slice(0, 160)}` }, ...prev]);
-      toast.success(`${action.label} completed.`);
-      await dbService.logAdminAction({ action: `OP_${action.id.toUpperCase()}`, status: 'success', metadata: { label: action.label } });
+      // An op that RETURNS `ok: false` did not succeed — it reported a failure
+      // instead of throwing one, which is how the roster backfill surfaces a
+      // partial run together with the cursor needed to resume it. Logging that as
+      // a green line, and auditing it as a success, would be the same lie as
+      // swallowing an exception.
+      const ok = (result as { ok?: unknown } | null)?.ok !== false;
+      // 400, not 160: a migration's dry run IS its evidence, and at 160 the roster
+      // backfill's report (226 chars with every count at zero) lost its last three
+      // counters — including the finished-pool count its own card tells the operator
+      // to read before running the destructive variant. Truncation is still the
+      // design, for the ops that return unbounded plannedWrites arrays.
+      setLog((prev) => [{ id: action.id, ok, text: `${action.label}: ${JSON.stringify(result).slice(0, 400)}` }, ...prev]);
+      if (ok) toast.success(`${action.label} completed.`);
+      else toast.error(`${action.label} did not complete — read the Run Log.`);
+      await dbService.logAdminAction({ action: `OP_${action.id.toUpperCase()}`, status: ok ? 'success' : 'error', metadata: { label: action.label } });
     } catch (e) {
       const msg = getUserMessage(e, `${action.label} failed.`);
       setLog((prev) => [{ id: action.id, ok: false, text: `${action.label}: ${msg}` }, ...prev]);
