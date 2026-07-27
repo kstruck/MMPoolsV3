@@ -27,16 +27,27 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 ---
 
-## 0. State as of 2026-07-23 — read this before anything else
+## 0. State as of 2026-07-25 — read this before anything else
 
-**Everything through #265 is merged, and FUNCTIONS are deployed through #265**
-(the deployed SHA is the tagged claim in §2 — not repeated here, so it cannot
-rot). #262 removed the ~966K-reads/day `runReminders` amplification; verify the
-drop via Query Insights, KEVIN-TASKS-2026-07-23.md §4.
+**Everything through #279 (G1 PR-B′) is merged AND deployed** — functions, then
+`firestore:rules`, then the Coolify frontend rebuild, all on 2026-07-25. The
+deployed SHA is the tagged claim in §2 — not repeated here, so it cannot rot.
+**Both the functions and frontend queues are EMPTY.** #262 removed the
+~966K-reads/day `runReminders` amplification; verify the drop via Query
+Insights, KEVIN-TASKS-2026-07-23.md §4.
 
-✅ **The FRONTEND is now CURRENT.** The #261 public-profile header/footer fix is
-live after the 2026-07-24 Coolify rebuild — verified against `/profile/:uid`
-(header + footer render). No rebuild owed.
+✅ **The FRONTEND is CURRENT** as of the 2026-07-25 rebuild (SHA checked against
+`git rev-parse origin/main`), which carried #279's `NFLManagerView` cutover onto
+the `updatePoolSettings` callable. Smoke-tested in prod. **No rebuild owed.**
+
+⚠️ **One prod-data action is PENDING:** the `publishedWeeks` cold-start backfill
+has not been run (**SuperAdmin → Operations → "Backfill Published Weeks (dry
+run)"** first). It is an arming prerequisite for `nflAutoScoreJob` — see
+HANDOFF's STOP POINT box and `MORNING-2026-07-26.md` §2c.
+
+⚠️ **#279 did not reach a clean codex round** (3 rounds, 8 findings all absorbed;
+round 4 hit an OpenAI quota error). Noted so nobody reads "merged + deployed" as
+"fully reviewed".
 
 Earlier: the morning's #255/#256/#257 plus #243, #259, #260 all shipped; #255
 closed the banned-commissioner authz gap in prod; Kevin's two rulings landed —
@@ -167,12 +178,12 @@ state. Concretely:
 
 ---
 
-## 2. Live state (verified 2026-07-23)
+## 2. Live state (verified 2026-07-25)
 
-> ✅ **FUNCTIONS queue empty (deployed through #265); FRONTEND rebuilt and
-> current as of 2026-07-24.** Functions are deployed at the SHA tagged below,
-> which carries #261, #262 and #265. The frontend was rebuilt on Coolify
-> 2026-07-24 — the #261 profile fix is live (verified). No rebuild owed.
+> ✅ **BOTH queues empty — deployed through #279 (G1 PR-B′).** Functions and
+> `firestore:rules` are deployed at the SHA tagged below, and the frontend was
+> rebuilt on Coolify 2026-07-25 on the same commit (SHA checked against
+> `git rev-parse origin/main`). **No rebuild owed.**
 >
 > **HANDOFF.md's STOP POINT box is authoritative for deploy state.** Both files
 > agree on the DEPLOYED SOURCE SHA below — which is what is RUNNING, not what
@@ -185,14 +196,24 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `49c12a9`.**
-Deployed 2026-07-23 (bare `--only functions --project gridiron-gamble-uzuqo`,
-`✔ Deploy complete!`). Carries #261, #262 and #265 (15-min reminder cadence) on
-top of the six PRs in HANDOFF's STOP POINT box and the 2026-07-21 baseline
-(which carried **#239, the Firestore-reads fix**).
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `8a55b84`.**
+Deployed 2026-07-25 (bare `--only functions`, then `--only firestore:rules`,
+both `✔ Deploy complete!`). Carries **#279 (G1 PR-B′)** on top of the previous
+<!-- deploy-state:ignore --> `main` @ `49c12a9` state, which carried #261/#262/#265.
 
-**The FRONTEND is current** — Coolify rebuilt 2026-07-24, the #261 profile fix
-is live (verified against `/profile/:uid`: header + footer render).
+**The FRONTEND is current** — Coolify rebuilt 2026-07-25 on the same commit
+(SHA verified against `git rev-parse origin/main`), and the #279 settings
+cutover was smoke-tested in prod: an NFL Pick'em pool's Manager tab saved
+successfully through the new `updatePoolSettings` callable.
+
+⚠️ **The first `--only functions` run ENDED WITHOUT `✔ Deploy complete!` and left
+10 functions stale** — including `nflAutoScoreJob` and `nflFinalizeSweepJob`,
+both changed by #279. No error was printed; the command simply returned. A
+second identical run reported every other function `Skipped (No changes
+detected)` and updated exactly those 10, then printed `Deploy complete!`.
+**Re-run a full-fleet deploy until every function reports Skipped.** That
+all-Skipped report is the only positive evidence the fleet is current; the
+absence of an error is not.
 
 Armed in prod, all **dry-run**: `nflSpreadLock`, `nflLockWatch`,
 `nflFeedSnapshots` (`retentionDays: 45`). `nflFinalize` is
@@ -301,19 +322,21 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — ⚠️ FRONTEND REBUILD OWED (functions empty)
+## 4. Deploy queue — EMPTY (functions, rules and frontend all current)
 
-> **Functions: nothing owed.** #255, #256, #257, #243, #259 and #260 are all
-> merged and deployed at the SHA tagged in §2.
+> **Nothing is owed as of 2026-07-25.** #279 deployed functions → rules → Coolify
+> frontend, in that order, and the settings save was smoke-tested in prod. The
+> recipe below is kept because it is the one that has worked every time — see
+> also `MORNING-2026-07-26.md` §2b, which is PowerShell-correct and carries the
+> functions-before-rules-before-Coolify ordering constraint this deploy proved
+> matters.
 >
-> ⚠️ **Frontend: a Coolify rebuild IS owed** once the public-profile
-> header/footer fix merges — it changes `src/App.tsx`, and per the table below
-> `src/**` requires a manual Coolify trigger. The recipe below is kept
-> because it is the one that has worked every time — see also
-> `MORNING-2026-07-22.md` §2, which is PowerShell-correct.
+> ⚠️ **When you do deploy: re-run `--only functions` until EVERY function reports
+> `Skipped (No changes detected)`.** On 2026-07-25 the first full-fleet run ended
+> without `✔ Deploy complete!`, printed no error, and left 10 functions stale.
+> The all-Skipped report is the evidence; a missing error is not.
 
-**As of 2026-07-22 evening the FUNCTIONS queue is empty and a FRONTEND rebuild
-is owed** for the public-profile header/footer fix (see the box above). The
+**As of 2026-07-25 the FUNCTIONS, RULES and FRONTEND queues are all EMPTY.** The
 deployed source SHA is the tagged claim in §2 — not repeated here, so it cannot
 drift out of sync with it. `main` advances past it with every
 docs-only commit — that is drift in the marker, not a deploy queue; the queue is
@@ -394,11 +417,11 @@ Always confirm the change is in the file on disk before deploying — not that
    under `"2"` in `bySeasonType`. Then set `nflFinalize.liveSeasonTypes` to an
    array containing the number **1** — `dryRun:false` **alone does nothing**,
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
-2. **Deploy — functions DONE, FRONTEND REBUILD OWED.** Functions shipped
-   2026-07-22 evening and #255's authz fix is live. The public-profile
-   header/footer fix lands after that commit and changes `src/App.tsx`, so it
-   needs a manual **Coolify rebuild** — pushing to `main` does not trigger one.
-   Recipe: `MORNING-2026-07-22.md` §2.
+2. **Deploy — NOTHING OWED as of 2026-07-25.** #279 shipped functions, rules and
+   the Coolify frontend rebuild, and the commissioner settings save was
+   smoke-tested in prod. Next deploy recipe (with the ordering constraint):
+   `MORNING-2026-07-26.md` §2b. **Pending prod-data action:** run the
+   `publishedWeeks` backfill dry-run (SuperAdmin → Operations).
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.
