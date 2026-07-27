@@ -284,14 +284,19 @@ export interface SpreadShape { value?: unknown; locked?: unknown }
  * `detectStatCorrections` never compares `spread` — so a line corrected after the
  * 24h window leaves finalized ATS standings permanently wrong (codex r27).
  *
- * BOTH SIDES must be locked, and the value must have moved. Two exclusions, each
- * of which would otherwise fire on routine traffic:
- *  - an UNLOCKED line moving is every ESPN sync. `syncScoresWindow` rewrites the
- *    whole slate every 5 minutes and preserves locked values, so a locked value
- *    only ever changes when a human sets it.
+ * The test is on the PREVIOUS state: the line was LOCKED and its value moved.
+ * Only the before-side is gated, because ATS grades on `spread.value` whatever
+ * `locked` says — so a superadmin who corrects a locked line and unlocks it in the
+ * same write is still a correction the scorer has to see (codex r9). Requiring the
+ * after-side to be locked as well would drop exactly that edit.
+ *
+ * Two exclusions survive, each of which would otherwise fire on routine traffic:
+ *  - an already-UNLOCKED line moving is every ESPN sync. `syncScoresWindow`
+ *    rewrites the whole slate every 5 minutes and preserves locked values, so a
+ *    locked value only ever changes when a human sets it.
  *  - `false → true` is `lockNFLSpreadsJob` doing its weekly job on every upcoming
- *    game (codex r1/P2). Treating that as a correction would queue a rescore for
- *    a slate whose games have not kicked off, days early. The case it gives up —
+ *    game (codex r1). Treating that as a correction would queue a rescore for a
+ *    slate whose games have not kicked off, days early. The case it gives up —
  *    edit while unlocked, then lock — is a line being SET before kickoff, which
  *    the live window already covers; it is not a post-final correction.
  *
@@ -299,7 +304,7 @@ export interface SpreadShape { value?: unknown; locked?: unknown }
  * firebase-functions and the admin module graph).
  */
 export function lockedSpreadChanged(before: SpreadShape | undefined, after: SpreadShape | undefined): boolean {
-  if (after?.locked !== true || before?.locked !== true) return false;
+  if (before?.locked !== true) return false;
   return Number(before?.value ?? 0) !== Number(after?.value ?? 0);
 }
 

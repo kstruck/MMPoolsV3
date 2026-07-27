@@ -252,8 +252,15 @@ describe('lockedSpreadChanged — the manual line edit detectStatCorrections can
     expect(lockedSpreadChanged({ value: -3, locked: true }, { value: -3, locked: true })).toBe(false);
   });
 
-  it('stays quiet on an unlock', () => {
+  it('stays quiet on a bare unlock — nothing about the grade changed', () => {
     expect(lockedSpreadChanged({ value: -3, locked: true }, { value: -3, locked: false })).toBe(false);
+  });
+
+  it('FIRES when a locked line is corrected and unlocked in the same write', () => {
+    // codex r9: ATS grades on spread.value whatever `locked` says, and the spread
+    // UI can save both changes at once. Gating on the AFTER side being locked
+    // would drop exactly this correction.
+    expect(lockedSpreadChanged({ value: -3, locked: true }, { value: -6.5, locked: false })).toBe(true);
   });
 });
 
