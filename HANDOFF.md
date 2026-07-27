@@ -1,25 +1,37 @@
-# HANDOFF — Session entry point (updated 2026-07-27: payment-truth cycle A backend deployed; frontend rebuild + backfill are Kevin's next clicks)
+# HANDOFF — Session entry point (updated 2026-07-27: payment-truth P4+P1 FULLY SHIPPED — backfill live-run, D13+D25 closed in prod)
 
-> ## ⏸ STOP POINT 2026-07-27 — P4 merged + backend deployed; Coolify rebuild + backfill PENDING
+> ## ✅ STOP POINT 2026-07-27 (afternoon) — the whole payment-truth cycle is LIVE
 >
-> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `24544eb`.**
-> Deployed 2026-07-27 ~01:20 ET by the overnight session (Kevin's explicit
-> grant): `--only functions` (one 429-quota casualty, `syncGameStatus`,
-> redeployed solo — all 164 functions confirmed `Successful update`), then
-> `--only firestore:rules` (`✔ Deploy complete!` both). This carries P4
-> (#290, the incl.-finished backfill) plus the already-live stats chain.
-> Merged to main the same night WITHOUT further functions-runtime changes:
-> #289 (deps), #291 (tests), #292 (tooling), #293 + #280 (docs).
+> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `25e730e`.**
+> Everything between the two named states was deployed as it landed
+> (2026-07-27, Kevin's execution grant): the full fleet at the #290 merge
+> (164 functions, one 429-quota solo-redeploy of `syncGameStatus`), rules the
+> same hour, then `backfillMemberRecords` + `backfillPublishedWeeks` at #296
+> and `setPaidStatus` at #294. No other functions-runtime file changed in
+> between (verified by diff), and rules did not change after their deploy —
+> so the live fleet ≡ the tagged SHA. Frontend: Coolify rebuilt TWICE
+> (manual, via dashboard; bundle now `index-CYTPq50I.js` from the same
+> commit, healthcheck healthy both times).
 >
-> ⚠️ **The FRONTEND was deliberately NOT rebuilt** — prod still serves the
-> pre-P4 bundle (`index-B9-VBKZp.js`, verified unchanged 17+ min after five
-> merges, which also settles the deploy-model question: Coolify is MANUAL,
-> merging main ships nothing). Two click-sets remain, IN THIS ORDER, per
-> MORNING-2026-07-27.md §6: (1) Coolify rebuild → incl.-finished backfill
-> dry+live in the SuperAdmin Operations panel; (2) merge PR #294 (P1) →
-> `--only functions` → Coolify rebuild #2. **#294 must NOT merge before the
-> backfill has live-run** — the repointed Bento hard-errors on pools without
-> Member Records.
+> **The D25 backfill RAN, live, and verified three ways:** dry run predicted
+> 72 member creations across 127 pools (= census exactly: 135 docs − 2 sim −
+> 6 flagged; testPoolsSkipped 8); the live run (Kevin typed the RUN confirm)
+> created exactly 72 with zero failures and stamped 127 pools; the follow-up
+> dry run reported 0 to create / 152 already present. **D13 is closed**: the
+> P1 Bento (both paths through `setPaidStatus`, entry mirror in-transaction)
+> is the deployed frontend.
+>
+> **Found-in-prod during the run, fixed same night (#296):** the backfill's
+> FIRST page failed schema validation — the Firebase JS SDK encodes the
+> panel's explicit-undefined `startAfter` as null on the wire, and
+> `z.string().optional()` rejected it. The emulator suite was green because
+> firebase-functions-test bypasses the client serializer. Cursor schemas now
+> take null as first-page; the panel conditional-spreads the cursor.
+>
+> **Still gated (unchanged):** Recalculate Global Stats waits for P2's
+> reconciliation (NOT BUILT — next session's job, PLAN-PAYMENT-TRUTH §4/P2),
+> then P3 (rebuy-paid control). `nflAutoScore` / `statsRecompute` stay unset.
+> Open PRs: only #133 (tailwind major, deliberately untouched).
 
 > ### Historical: the 2026-07-25 stop point (superseded)
 >
