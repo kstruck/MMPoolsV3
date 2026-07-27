@@ -305,7 +305,14 @@ export interface SpreadShape { value?: unknown; locked?: unknown }
  */
 export function lockedSpreadChanged(before: SpreadShape | undefined, after: SpreadShape | undefined): boolean {
   if (before?.locked !== true) return false;
-  return Number(before?.value ?? 0) !== Number(after?.value ?? 0);
+  // ABSENT is not 0 (codex r10). Coercing a missing value to zero hides a real
+  // grading change in both directions — clearing a locked `0` spread, or setting
+  // one where there was none — because ATS falls back to straight-up when there
+  // is no numeric spread, and `computeWeekFingerprint` distinguishes the two as
+  // well (`g.spread?.value ?? ''`).
+  const val = (s: SpreadShape | undefined): number | null =>
+    s?.value === null || s?.value === undefined ? null : Number(s.value);
+  return val(before) !== val(after);
 }
 
 /** Delete acknowledged events. Chunked: a batch commits at most 500 writes. */

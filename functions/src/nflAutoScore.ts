@@ -406,60 +406,60 @@ async function scoreSlateOnce(
         const needsFinalizeRetry = !opts.dryRun && scored.finalizeFailed && !ctx.finalizeRetriesSent.has(poolId);
 
         // And the fingerprint must still describe the pool we actually scored
-        // (codex r8). `updatePoolSettings` does not serialize against the scorer,
-        // so a manager can change `pickMode` / `maxStrikes` — neither of which
-        // bumps `lockRevision`, so the fence does not fire — after the in-lease
-        // re-read. This pass then graded with the OLD settings; banking the
-        // pre-lease hash would mark the pool current under the NEW ones, and for
-        // an out-of-window queued slate nothing would ever make it a candidate
-        // again. Recomputed from the post-pass read: any drift withholds the
-        // fingerprint, which costs one more pass and re-scores correctly.
-        const postFingerprint = opts.dryRun || fingerprint === null || entryRevisionSum === null
-          ? fingerprint
-          : computeWeekFingerprint(post, slate.week, slate.games, now, entryRevisionSum);
-        const settingsDrifted = postFingerprint !== fingerprint;
-        if (settingsDrifted) {
-          // And the queue event must not be acknowledged: withholding the
-          // fingerprint only earns another pass while the slate is still a
-          // candidate, and an out-of-window one is a candidate ONLY through the
-          // queue. Acking here would apply the new setting never.
-          allOk = false;
-          console.warn(`[nflAutoScoreJob] pool ${poolId} week ${slate.week} changed during the pass; withholding the fingerprint so it re-scores.`);
-        }
-
+        // (codex r8/r10). `updatePoolSettings` does not serialize against the
+        // scorer, and `pickMode` / `maxStrikes` bump no `lockRevision`, so the
+        // fence never fires: a save landing after the scorer's in-lease re-read
+        // means this pass graded with the OLD settings, and banking the hash would
+        // mark the pool current under the NEW ones. For an out-of-window queued
+        // slate nothing would then make it a candidate again.
+        //
+        // Checked INSIDE the write transaction rather than against a prior read.
+        // Comparing an earlier snapshot only shrinks the window — a save landing
+        // between that read and the commit still slips through — whereas a
+        // transaction that re-reads and aborts has no window at all.
         const scoredAny = scored.pickemScored + scored.survivorScored + scored.marginScored > 0;
-        const bankFingerprint = !opts.dryRun && fingerprint !== null && !scored.finalizeFailed
-          && scoredAny && !settingsDrifted;
+        const bankFingerprint = !opts.dryRun && fingerprint !== null && !scored.finalizeFailed && scoredAny;
         if (bankFingerprint || needsReminder || needsFinalizeRetry) {
-          const batch = db.batch();
-          if (needsFinalizeRetry) {
-            batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({
-              season: slate.season,
-              seasonType: slate.seasonType,
-              week: slate.week,
-              reason: 'finalizeRetry',
-              enqueuedAt: now,
-              poolId,
-            }));
-          }
-          if (bankFingerprint) {
-            batch.update(db.collection('pools').doc(poolId), {
-              [`autoScore.fingerprintByWeek.${slate.week}`]: fingerprint,
-              'autoScore.lastRunAt': admin.firestore.FieldValue.serverTimestamp(),
-            });
-          }
-          if (needsReminder) {
-            batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({
-              season: slate.season,
-              seasonType: slate.seasonType,
-              week: slate.week,
-              reason: 'lockPending',
-              enqueuedAt: now,
-              notBefore: withheldAt!,
-            }));
-          }
+          let drifted = false;
+          const poolRef = db.collection('pools').doc(poolId);
+          const queueDoc = () => db.collection(RESCORE_QUEUE).doc();
           try {
-            await batch.commit();
+            await db.runTransaction(async (tx) => {
+              drifted = false;           // reset per attempt — a transaction can retry
+              if (bankFingerprint) {
+                const live = (await tx.get(poolRef)).data();
+                const liveFingerprint = entryRevisionSum === null
+                  ? null
+                  : computeWeekFingerprint(live ?? {}, slate.week, slate.games, now, entryRevisionSum);
+                drifted = liveFingerprint !== fingerprint;
+              }
+              if (needsFinalizeRetry) {
+                tx.set(queueDoc(), rescoreEventDoc({
+                  season: slate.season, seasonType: slate.seasonType, week: slate.week,
+                  reason: 'finalizeRetry', enqueuedAt: now, poolId,
+                }));
+              }
+              if (bankFingerprint && !drifted) {
+                tx.update(poolRef, {
+                  [`autoScore.fingerprintByWeek.${slate.week}`]: fingerprint,
+                  'autoScore.lastRunAt': admin.firestore.FieldValue.serverTimestamp(),
+                });
+              }
+              if (needsReminder) {
+                tx.set(queueDoc(), rescoreEventDoc({
+                  season: slate.season, seasonType: slate.seasonType, week: slate.week,
+                  reason: 'lockPending', enqueuedAt: now, notBefore: withheldAt!,
+                }));
+              }
+            });
+            if (drifted) {
+              // The queue event must NOT be acknowledged: withholding the
+              // fingerprint only earns another pass while the slate is still a
+              // candidate, and an out-of-window one is a candidate ONLY through
+              // the queue.
+              allOk = false;
+              console.warn(`[nflAutoScoreJob] pool ${poolId} week ${slate.week} changed during the pass; fingerprint withheld so it re-scores.`);
+            }
             // Only after it is durable — otherwise a failure here would suppress
             // the retry by the next pool on the same slate in this very run.
             if (needsReminder) ctx.remindersSent.add(reminderKey!);
@@ -543,7 +543,7 @@ async function drainRescoreQueue(
   result.queuedEvents = events.length;
 
   const { slateWork, finalizeRetries } = partitionQueue(events);
-  await drainFinalizeRetries(db, finalizeRetries, dryRun, result);
+  await drainFinalizeRetries(db, finalizeRetries, dryRun, result, ctx);
 
   const groups = groupBySlate(slateWork);
   result.queuedSlates = groups.length;
@@ -597,12 +597,21 @@ async function drainFinalizeRetries(
   events: QueuedEvent[],
   dryRun: boolean,
   result: AutoScoreResult,
+  ctx: RunContext,
 ): Promise<void> {
   for (const { id, event } of events) {
     const poolId = event.poolId!;   // parseRescoreEvent rejects a finalizeRetry without one
     // A dry run acknowledges nothing and writes nothing, exactly like the slate
     // path — otherwise the watching period would consume the only retry there is.
     if (dryRun) continue;
+
+    // These attempts are priced against the SAME cap as ordinary scoring (codex
+    // r10). Each one reads the season's games and the pool's entries and can
+    // recompute profiles, so after a finalization outage a backlog of them would
+    // otherwise consume the whole 540s budget before any queued slate is reached
+    // — and unlike a slate, they are free to defer: the event stays put.
+    if (ctx.attempts >= MAX_POOLS_PER_RUN) { result.overflow++; continue; }
+    ctx.attempts++;
 
     const fence = await acquireScoringLease(db, poolId, Date.now());
     // Another scorer owns the pool. Leave the event alone; the next run retries.

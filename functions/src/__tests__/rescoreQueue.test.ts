@@ -256,6 +256,18 @@ describe('lockedSpreadChanged — the manual line edit detectStatCorrections can
     expect(lockedSpreadChanged({ value: -3, locked: true }, { value: -3, locked: false })).toBe(false);
   });
 
+  it('FIRES when a locked spread is CLEARED, and when one is set where there was none', () => {
+    // codex r10: coercing absent to 0 hid a real grading change in both
+    // directions — ATS falls back to straight-up with no numeric spread.
+    expect(lockedSpreadChanged({ value: 0, locked: true }, { value: undefined, locked: true })).toBe(true);
+    expect(lockedSpreadChanged({ value: 0, locked: true }, { value: null, locked: true })).toBe(true);
+    expect(lockedSpreadChanged({ value: undefined, locked: true }, { value: 0, locked: true })).toBe(true);
+  });
+
+  it('stays quiet when a locked spread of 0 is rewritten as 0', () => {
+    expect(lockedSpreadChanged({ value: 0, locked: true }, { value: 0, locked: true })).toBe(false);
+  });
+
   it('FIRES when a locked line is corrected and unlocked in the same write', () => {
     // codex r9: ATS grades on spread.value whatever `locked` says, and the spread
     // UI can save both changes at once. Gating on the AFTER side being locked
