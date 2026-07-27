@@ -92,17 +92,20 @@ export const setPaidStatus = validated(
       // the PAID mirror gets the RESOLVED timestamp (the quick toggle sends no
       // paidAt; without this the member record says now while the panel's
       // date column says N/A).
+      // An omitted method PRESERVES the stored one on both stores (codex r4 —
+      // the old path's delete-when-absent would diverge from the member
+      // record, which merge-preserves it); UNPAID still clears everything.
       tx.update(entryRef, {
         paidStatus: isPaid ? 'PAID' : 'UNPAID',
-        paymentMethod: paymentMethod ?? FieldValue.delete(),
         ...(isPaid
           ? {
+              ...(paymentMethod !== undefined ? { paymentMethod } : {}),
               paidAt: stampedPaidAt ?? null,
               ...(paymentNote !== undefined
                 ? { paymentNote: paymentNote === null ? null : paymentNote.slice(0, 500) }
                 : {}),
             }
-          : { paidAt: null, paymentNote: null }),
+          : { paymentMethod: FieldValue.delete(), paidAt: null, paymentNote: null }),
         updatedAt: Date.now(),
       });
     }

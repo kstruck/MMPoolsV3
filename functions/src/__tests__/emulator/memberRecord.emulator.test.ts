@@ -249,6 +249,12 @@ describe('setPaidStatus — detail fields + entry mirror (P1)', () => {
     expect(e.paymentMethod).toBe('Cash');
     expect(e.paymentNote).toBe('corrected');
 
+    // Re-asserting PAID without a method preserves the stored one on BOTH
+    // stores (codex r4 — the mirror used to delete what the member record kept).
+    await wrappedSetPaid({ data: { poolId, memberUid: 'p1_m1', isPaid: true }, auth: BOSS } as never);
+    expect(((await db.collection('pools').doc(poolId).collection('members').doc('p1_m1').get()).data() as Record<string, any>).paymentMethod).toBe('Cash');
+    expect(((await db.collection('pools').doc(poolId).collection('entries').doc('p1_m1').get()).data() as Record<string, any>).paymentMethod).toBe('Cash');
+
     const ledger = await db.collection('pools').doc(poolId).collection('payments').get();
     expect(ledger.size).toBe(1); // the original MARKED_PAID transition only
   });
