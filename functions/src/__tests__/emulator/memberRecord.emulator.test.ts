@@ -226,6 +226,33 @@ describe('setPaidStatus — detail fields + entry mirror (P1)', () => {
     expect(prizePot).toBe(0);
   });
 
+  it('a metadata-only edit of a PAID row updates details WITHOUT another ledger event (codex r3)', async () => {
+    await seedP1Pool();
+    // Quick toggle: no details sent — the mirror still gets the RESOLVED
+    // timestamp, so the panel's date column matches the authoritative record.
+    const before = Date.now();
+    await wrappedSetPaid({ data: { poolId, memberUid: 'p1_m1', isPaid: true }, auth: BOSS } as never);
+    let e = (await db.collection('pools').doc(poolId).collection('entries').doc('p1_m1').get()).data() as Record<string, any>;
+    expect(typeof e.paidAt).toBe('number');
+    expect(e.paidAt).toBeGreaterThanOrEqual(before);
+
+    // Editing method/note on the already-PAID row is not a payment-state
+    // change — the details move, the ledger does not grow.
+    await wrappedSetPaid({
+      data: { poolId, memberUid: 'p1_m1', isPaid: true, paymentMethod: 'Cash', paymentNote: 'corrected' },
+      auth: BOSS,
+    } as never);
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('p1_m1').get()).data() as Record<string, any>;
+    expect(m.paymentMethod).toBe('Cash');
+    expect(m.paymentNote).toBe('corrected');
+    e = (await db.collection('pools').doc(poolId).collection('entries').doc('p1_m1').get()).data() as Record<string, any>;
+    expect(e.paymentMethod).toBe('Cash');
+    expect(e.paymentNote).toBe('corrected');
+
+    const ledger = await db.collection('pools').doc(poolId).collection('payments').get();
+    expect(ledger.size).toBe(1); // the original MARKED_PAID transition only
+  });
+
   it('isPaid true + paidAt null clears the date while staying PAID, in BOTH stores (codex r2)', async () => {
     await seedP1Pool();
     await wrappedSetPaid({

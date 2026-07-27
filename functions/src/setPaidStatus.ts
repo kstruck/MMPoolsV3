@@ -86,15 +86,18 @@ export const setPaidStatus = validated(
     if (entrySnap.exists) {
       // Mirror keeps updateEntryPayment's field conventions (method
       // overwritten-or-cleared, literal-null clears for date/note) so the
-      // entry-backed panel displays exactly what it used to — except the
-      // UNPAID transition, which now clears the details instead of preserving
-      // stale ones (codex r2, deliberate divergence from the old path).
+      // entry-backed panel displays exactly what it used to — with two
+      // deliberate divergences from the old path (codex r2/r3): the UNPAID
+      // transition clears the details instead of preserving stale ones, and
+      // the PAID mirror gets the RESOLVED timestamp (the quick toggle sends no
+      // paidAt; without this the member record says now while the panel's
+      // date column says N/A).
       tx.update(entryRef, {
         paidStatus: isPaid ? 'PAID' : 'UNPAID',
         paymentMethod: paymentMethod ?? FieldValue.delete(),
         ...(isPaid
           ? {
-              ...(paidAt !== undefined ? { paidAt } : {}),
+              paidAt: stampedPaidAt ?? null,
               ...(paymentNote !== undefined
                 ? { paymentNote: paymentNote === null ? null : paymentNote.slice(0, 500) }
                 : {}),
@@ -103,25 +106,34 @@ export const setPaidStatus = validated(
         updatedAt: Date.now(),
       });
     }
-    // Dispute-prevention detail, when the commissioner recorded it. The shared
-    // ledger's reader contract is `note` (PaymentLedgerEvent / PaymentsPanel,
-    // same field the rebuy and payout writers use — codex r1), so method and
-    // note fold into it rather than landing in fields nothing renders.
-    const noteParts = [
-      paymentMethod,
-      typeof paymentNote === 'string' ? paymentNote.slice(0, 500) : undefined,
-    ].filter(Boolean);
-    const ledgerRef = poolRef.collection('payments').doc();
-    tx.set(ledgerRef, {
-      type: isPaid ? 'MARKED_PAID' : 'MARKED_UNPAID',
-      uid: memberUid,
-      entryName: memberName,
-      amount: typeof entryFee === 'number' ? entryFee : undefined,
-      actorUid: uid,
-      at: Date.now(),
-      createdAt: FieldValue.serverTimestamp(),
-      ...(noteParts.length > 0 ? { note: noteParts.join(' — ') } : {}),
-    });
+    // Append a ledger event ONLY on a real status transition (codex r3): a
+    // metadata-only edit of an already-PAID row is not a payment-state change,
+    // and a MARKED_PAID row per note edit reads as money moving again in the
+    // member-facing ledger.
+    const priorStatus = snap.data()?.paidStatus;
+    const isTransition = isPaid ? priorStatus !== 'PAID' : priorStatus === 'PAID';
+    if (isTransition) {
+      // Dispute-prevention detail, when the commissioner recorded it. The
+      // shared ledger's reader contract is `note` (PaymentLedgerEvent /
+      // PaymentsPanel, same field the rebuy and payout writers use — codex r1),
+      // so method and note fold into it rather than landing in fields nothing
+      // renders.
+      const noteParts = [
+        paymentMethod,
+        typeof paymentNote === 'string' ? paymentNote.slice(0, 500) : undefined,
+      ].filter(Boolean);
+      const ledgerRef = poolRef.collection('payments').doc();
+      tx.set(ledgerRef, {
+        type: isPaid ? 'MARKED_PAID' : 'MARKED_UNPAID',
+        uid: memberUid,
+        entryName: memberName,
+        amount: typeof entryFee === 'number' ? entryFee : undefined,
+        actorUid: uid,
+        at: Date.now(),
+        createdAt: FieldValue.serverTimestamp(),
+        ...(noteParts.length > 0 ? { note: noteParts.join(' — ') } : {}),
+      });
+    }
   });
 
   // Derived projections refresh right after (eventual — not in the write tx because they
