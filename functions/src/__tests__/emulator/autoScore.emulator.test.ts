@@ -1117,7 +1117,10 @@ describe('rescore queue — the tier that catches what the 24h window cannot', (
 
   it('a live run drops an unparseable event instead of draining it forever', async () => {
     await seedStale('p-q-junk');
-    await db.collection(RESCORE_QUEUE).add({ season: '', week: 'nope', reason: 'terminal' });
+    // notBefore: 0 so it is actionable — that is what makes it a poison pill
+    // worth clearing. A doc missing the field entirely is invisible to the drain's
+    // range query instead, so it can never be re-read either.
+    await db.collection(RESCORE_QUEUE).add({ season: '', week: 'nope', reason: 'terminal', notBefore: 0 });
 
     const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
     expect(r.queuedEvents).toBe(0);

@@ -529,15 +529,23 @@ export async function syncScoresWindow(
       if (doc.exists) existingById.set(doc.id, doc.data() as NFLGame);
     }
 
-    // The nonterminal → terminal transition, measured against the WHOLE slate's
-    // stored state rather than the in-window subset (§5b). A postponed game can
-    // first go FINAL — or CANCELLED, which still carries a void, deferred
-    // penalties and the week's completion — more than 24h after its scheduled
-    // kickoff, at which point the live tier's window can no longer see it. A game
-    // with no stored doc counts as a transition: it is arriving already terminal.
-    const firstTerminal = freshGames.some(g =>
-      isTerminalGame(g) && !isTerminalGame({ status: existingById.get(g.id)?.status ?? 'SCHEDULED' }),
-    );
+    // Any arrival at a terminal status the game was not already sitting in,
+    // measured against the WHOLE slate's stored state rather than the in-window
+    // subset (§5b). Three shapes, and the third was missed at first (codex r3):
+    //  - nonterminal → FINAL: a postponed game finalizing >24h after its
+    //    scheduled kickoff, which the live tier's window can no longer see;
+    //  - nonterminal → CANCELLED: still carries a void, deferred penalties and
+    //    the week's completion;
+    //  - CANCELLED ⇄ FINAL: both are terminal, so a "became terminal" test never
+    //    fires, and `detectStatCorrections` ignores it too because it only
+    //    compares games that were ALREADY FINAL. A pool finalized on the void
+    //    would keep it forever.
+    // A game with no stored doc counts: it is arriving already terminal.
+    const firstTerminal = freshGames.some(g => {
+      if (!isTerminalGame(g)) return false;
+      const prev = existingById.get(g.id)?.status ?? 'SCHEDULED';
+      return prev !== g.status;
+    });
 
     const batch = db.batch();
     for (const freshGame of freshGames) {

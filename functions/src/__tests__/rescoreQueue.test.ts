@@ -30,14 +30,16 @@ const ev = (over: Partial<QueuedEvent['event']> & { id?: string } = {}): QueuedE
 describe('parseRescoreEvent — a malformed doc must not become work', () => {
   it('accepts a well-formed event', () => {
     expect(parseRescoreEvent({ season: '2026', seasonType: 1, week: 2, reason: 'correction', enqueuedAt: 5 }))
-      .toEqual({ season: '2026', seasonType: 1, week: 2, reason: 'correction', enqueuedAt: 5 });
+      .toEqual({ season: '2026', seasonType: 1, week: 2, reason: 'correction', enqueuedAt: 5, notBefore: 0 });
   });
 
-  it('keeps notBefore only when it is a real instant', () => {
+  it('normalizes notBefore to 0 when it is not a real instant', () => {
+    // Always a number, never absent: the drain filters on it in the QUERY, and a
+    // Firestore inequality omits docs missing the field.
     expect(parseRescoreEvent({ season: '2026', seasonType: 1, week: 2, reason: 'lockPending', enqueuedAt: 5, notBefore: 900 })?.notBefore)
       .toBe(900);
     expect(parseRescoreEvent({ season: '2026', seasonType: 1, week: 2, reason: 'lockPending', enqueuedAt: 5, notBefore: null })?.notBefore)
-      .toBeUndefined();
+      .toBe(0);
   });
 
   it('rejects an unknown reason rather than defaulting it', () => {
@@ -82,31 +84,47 @@ describe('groupBySlate — one unit of work per slate, every id kept for the ack
   });
 });
 
-describe('survivorAllowedForGroup — the one deferral, and its exact boundary', () => {
+describe('survivorAllowedForGroup — the one thing a queued pass may do to Survivor', () => {
   const set = (...r: RescoreReason[]) => new Set<RescoreReason>(r);
+  const unscored = {};
+  const scoredWk1 = { scoredWeeks: { '1': true } };
 
   it('DEFERS a correction-only group', () => {
-    // Re-scoring week N leaves later strikeWeeks in place and skips every later
-    // week once the entry is eliminated there, so the elimination ordering
-    // downstream stays wrong. No safe automatic repair until reset-and-replay.
-    expect(survivorAllowedForGroup(set('correction'))).toBe(false);
+    // Re-scoring week N leaves later strikeWeeks in place and rewrites
+    // eliminatedWeek to N, after which every later week is skipped and the
+    // elimination ordering is wrong. No safe repair until reset-and-replay.
+    expect(survivorAllowedForGroup(set('correction'), unscored, 1)).toBe(false);
   });
 
-  it('ALLOWS a delayed first final — that is a normal first score', () => {
-    expect(survivorAllowedForGroup(set('terminal'))).toBe(true);
+  it('ALLOWS a delayed first final on a week nobody has completed', () => {
+    expect(survivorAllowedForGroup(set('terminal'), unscored, 1)).toBe(true);
+  });
+
+  it('DEFERS every reason once the week is already scored', () => {
+    // codex r3: the damage is re-running a SCORED week, not the reason label. A
+    // spread edit or a delayed final on another game corrupts the ledger exactly
+    // as a correction would.
+    expect(survivorAllowedForGroup(set('terminal'), scoredWk1, 1)).toBe(false);
+    expect(survivorAllowedForGroup(set('spread'), scoredWk1, 1)).toBe(false);
+    expect(survivorAllowedForGroup(set('lockPending'), scoredWk1, 1)).toBe(false);
+  });
+
+  it('is per WEEK — a scored week 1 does not block a first score of week 2', () => {
+    expect(survivorAllowedForGroup(set('terminal'), scoredWk1, 2)).toBe(true);
+  });
+
+  it('treats a provisionally-scored week as unscored, because it is not finished', () => {
+    // Only a COMPLETE pass writes scoredWeeks, and a provisional pass writes no
+    // elimination that a re-run would have to preserve.
+    expect(survivorAllowedForGroup(set('terminal'), { scoredWeeks: { '1': false } }, 1)).toBe(true);
   });
 
   it('allows a group that carries a correction AND a terminal', () => {
-    expect(survivorAllowedForGroup(set('correction', 'terminal'))).toBe(true);
-  });
-
-  it('allows spread and lockPending groups', () => {
-    expect(survivorAllowedForGroup(set('spread'))).toBe(true);
-    expect(survivorAllowedForGroup(set('lockPending'))).toBe(true);
+    expect(survivorAllowedForGroup(set('correction', 'terminal'), unscored, 1)).toBe(true);
   });
 
   it('an empty set is not allowed — no positive reason means no licence', () => {
-    expect(survivorAllowedForGroup(set())).toBe(false);
+    expect(survivorAllowedForGroup(set(), unscored, 1)).toBe(false);
   });
 });
 

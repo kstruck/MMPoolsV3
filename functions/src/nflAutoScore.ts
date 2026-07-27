@@ -24,6 +24,7 @@ import {
   survivorAllowedForGroup,
   slateKeyOf,
   RESCORE_QUEUE,
+  type RescoreReason,
 } from './lib/rescoreQueue';
 import type { NFLGame } from './nflPoolTypes';
 
@@ -217,8 +218,12 @@ interface SlatePassOptions {
   now: number;
   /** Queued tier only: rescore pools this job already finalized. */
   includeFinalized: boolean;
-  /** False on a `correction`-only queued group — Survivor cannot be repaired by a re-score yet. */
-  survivorAllowed: boolean;
+  /**
+   * The queued group's reasons, or null on the live tier. Survivor eligibility is
+   * decided per POOL from these plus the pool's own `scoredWeeks`, so it cannot
+   * be precomputed for the slate.
+   */
+  queuedReasons: Set<RescoreReason> | null;
 }
 
 /**
@@ -243,14 +248,16 @@ async function scoreSlateOnce(
     now,
   );
   for (const { id: poolId, pool } of candidates) {
-      // A late Survivor CORRECTION has no safe automatic repair: re-scoring week N
-      // keeps later strikeWeeks and, once the entry is eliminated there, skips
-      // every later week — so the elimination ordering downstream stays wrong.
-      // Deferred until the reset-and-replay sub-PR rather than applied badly.
-      if (!opts.survivorAllowed && pool?.type === 'NFL_SURVIVOR') {
+      // Re-running a Survivor week has no safe automatic repair: it keeps the
+      // later strikeWeeks while rewriting eliminatedWeek to the re-run week, after
+      // which every later week is skipped and the ledger is wrong. Only a delayed
+      // FIRST score of an unscored week goes through; everything else waits for
+      // the reset-and-replay sub-PR.
+      if (opts.queuedReasons && pool?.type === 'NFL_SURVIVOR'
+          && !survivorAllowedForGroup(opts.queuedReasons, pool, slate.week)) {
         result.survivorCorrectionsDeferred++;
         console.warn(
-          `[nflAutoScoreJob] Survivor pool ${poolId} skipped for a queued correction on ` +
+          `[nflAutoScoreJob] Survivor pool ${poolId} skipped for a queued rescore of ` +
           `${slateKeyOf(slate)} week ${slate.week} — needs the reset-and-replay path.`,
         );
         continue;
@@ -414,7 +421,7 @@ export async function autoScoreOnce(
   for (const slate of slates) {
     await scoreSlateOnce(
       db, slate,
-      { dryRun: opts.dryRun, now, includeFinalized: false, survivorAllowed: true },
+      { dryRun: opts.dryRun, now, includeFinalized: false, queuedReasons: null },
       result, ctx,
     );
   }
@@ -465,11 +472,7 @@ async function drainRescoreQueue(
     const allOk = await scoreSlateOnce(
       db,
       { season: group.season, seasonType: group.seasonType, week: group.week, games },
-      {
-        dryRun, now,
-        includeFinalized: true,
-        survivorAllowed: survivorAllowedForGroup(group.reasons),
-      },
+      { dryRun, now, includeFinalized: true, queuedReasons: group.reasons },
       result, ctx,
     );
 

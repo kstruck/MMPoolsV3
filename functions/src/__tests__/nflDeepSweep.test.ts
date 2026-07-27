@@ -291,6 +291,21 @@ describe('syncScoresWindow — the rescore handoff', () => {
     expect(enqueued.map((e: any) => e.reason)).toEqual(['terminal']);
   });
 
+  it('enqueues a CANCELLED → FINAL reactivation, which neither test alone catches', async () => {
+    // codex r3: both statuses are terminal, so a "became terminal" test never
+    // fires; detectStatCorrections ignores it too because it only compares games
+    // that were ALREADY FINAL. Without this a pool finalized on the void keeps it.
+    const storedCancelled = {
+      espn_thu: {
+        id: 'espn_thu', season: '2026', seasonType: 1, week: 1,
+        startTime: NOW - 20 * HOUR, status: 'CANCELLED',
+      },
+    };
+    const { db, enqueued } = fakeDbWithDocs(storedCancelled, NOW, HOT_WINDOW_LOOKBACK_MS);
+    await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, { fetchSlate: async () => ({ games: fresh(), raw: { ok: true } }) });
+    expect(enqueued.map((e: any) => e.reason)).toEqual(['terminal']);
+  });
+
   it('enqueues a correction on an already-FINAL game', async () => {
     // detectStatCorrections only fires on games that were ALREADY final, which is
     // the other half of the pair — a Sunday score restated on the Tuesday.

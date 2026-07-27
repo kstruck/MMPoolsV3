@@ -47,9 +47,15 @@ export interface RescoreEvent {
   /** ms epoch. Passed in rather than `serverTimestamp()` so it is readable by the drain and pinnable in tests. */
   enqueuedAt: number;
   /**
-   * `lockPending` only: the instant the deferred game's lock closes. The drain
-   * leaves the event untouched until then — reading it early would burn a pass
-   * that can only reach the same "still withheld" answer.
+   * The instant this event becomes actionable — the closing of a deferred lock
+   * for `lockPending`, and 0 (immediately) for everything else.
+   *
+   * ALWAYS STORED, never omitted, because the drain filters on it in the QUERY
+   * (codex r3): with an in-memory filter, a `limit` page full of future
+   * reminders starves a correction sitting behind them, and the only
+   * reconciliation path for an out-of-window slate silently stalls until those
+   * locks expire. A Firestore inequality omits docs missing the field, so a
+   * defaulted 0 is what keeps ordinary events visible.
    */
   notBefore?: number;
 }
@@ -90,7 +96,7 @@ export function parseRescoreEvent(data: unknown): RescoreEvent | null {
     week,
     reason,
     enqueuedAt: Number.isFinite(Number(d.enqueuedAt)) ? Number(d.enqueuedAt) : 0,
-    ...(Number.isFinite(notBefore) && notBefore > 0 ? { notBefore } : {}),
+    notBefore: Number.isFinite(notBefore) && notBefore > 0 ? notBefore : 0,
   };
 }
 
@@ -110,7 +116,7 @@ export function rescoreEventDoc(event: RescoreEvent): Record<string, unknown> {
     week: event.week,
     reason: event.reason,
     enqueuedAt: event.enqueuedAt,
-    ...(event.notBefore ? { notBefore: event.notBefore } : {}),
+    notBefore: event.notBefore ?? 0,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 }
@@ -141,20 +147,34 @@ export interface QueueRead {
 }
 
 /**
- * Read the queue. No composite index and no ordering: the collection is tiny by
- * construction (a handful of events between two 10-minute drains) and an
- * `orderBy` here would be one more way to die with a silent FAILED_PRECONDITION —
- * the failure mode that took out A5 and the finalize sweep.
+ * Read the actionable part of the queue.
+ *
+ * The `notBefore <= now` filter is in the QUERY, not in memory (codex r3): a page
+ * of future `lockPending` reminders would otherwise sit in front of a correction
+ * and starve it, and outside the hot window that correction has no other path.
+ * A range filter ordered by the same single field needs no composite index, so
+ * this cannot die with the silent FAILED_PRECONDITION that took out A5 and the
+ * finalize sweep.
+ *
+ * `deferred` is a count query rather than a fetch — it is heartbeat detail during
+ * the dry-run watching period, not work.
  */
 export async function readRescoreQueue(db: Firestore, now: number, limit = 500): Promise<QueueRead> {
-  const snap = await db.collection(RESCORE_QUEUE).limit(limit).get();
+  const snap = await db.collection(RESCORE_QUEUE)
+    .where('notBefore', '<=', now)
+    .orderBy('notBefore')
+    .limit(limit)
+    .get();
   const out: QueueRead = { events: [], deferred: 0, malformed: [] };
   for (const doc of snap.docs) {
     const event = parseRescoreEvent(doc.data());
+    // Unusable, and it passed the actionable filter, so it would be re-read every
+    // run forever. (A doc with no `notBefore` at all is invisible to the query
+    // instead — inert rather than a poison pill, and nothing writes one.)
     if (!event) { out.malformed.push(doc.id); continue; }
-    if (event.notBefore && event.notBefore > now) { out.deferred++; continue; }
     out.events.push({ id: doc.id, event });
   }
+  out.deferred = (await db.collection(RESCORE_QUEUE).where('notBefore', '>', now).count().get()).data().count;
   return out;
 }
 
@@ -175,18 +195,32 @@ export function groupBySlate(events: QueuedEvent[]): SlateGroup[] {
 }
 
 /**
- * May a Survivor pool be scored from this group?
+ * May a Survivor pool be scored from this group, for this week?
  *
- * A late `correction` cannot be repaired for Survivor by re-scoring the week —
- * `computeSurvivorWeekUpdate` retains later `strikeWeeks` and skips every later
- * week once the entry is eliminated, so the downstream elimination ordering stays
- * wrong. That needs the reset-and-replay sub-PR. A `terminal` / `spread` /
- * `lockPending` event is a first score or a fresh grade of the same week and is
- * safe, so a group carrying any of those scores Survivor normally.
+ * TWO conditions, and the second was the hole (codex r3). Re-running a week that
+ * has ALREADY been scored is unsafe for Survivor whatever the reason:
+ * `computeSurvivorWeekUpdate` keeps the later `strikeWeeks` while rewriting
+ * `eliminatedWeek` to the re-run week, after which the
+ * `status === 'ELIMINATED' && eliminatedWeek < week` early-return skips every
+ * later week and the ledger and standings are wrong. So a `spread` or a delayed
+ * `terminal` on some other game in a scored week is just as damaging as a
+ * `correction` — repairing any of them needs the reset-and-replay sub-PR.
+ *
+ * What survives is the case the plan wanted to keep: a delayed FIRST score of a
+ * week nobody has completed yet. `scoredWeeks.{week}` is written only by a
+ * COMPLETE pass, so a provisionally-scored week still qualifies — it is not
+ * finished, and a provisional pass writes no elimination it has to preserve.
  */
-export function survivorAllowedForGroup(reasons: Set<RescoreReason>): boolean {
-  for (const r of reasons) if (r !== 'correction') return true;
-  return false;
+export function survivorAllowedForGroup(
+  reasons: Set<RescoreReason>,
+  pool: { scoredWeeks?: unknown } | undefined,
+  week: number,
+): boolean {
+  let hasNonCorrection = false;
+  for (const r of reasons) if (r !== 'correction') { hasNonCorrection = true; break; }
+  if (!hasNonCorrection) return false;
+  const scored = pool?.scoredWeeks as Record<string, unknown> | undefined;
+  return !(scored && typeof scored === 'object' && scored[String(week)] === true);
 }
 
 export interface SpreadShape { value?: unknown; locked?: unknown }
