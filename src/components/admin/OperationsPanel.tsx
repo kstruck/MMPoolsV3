@@ -217,7 +217,14 @@ const runReconcilePaymentTruth = async (dryRun: boolean) => {
     agg.testPoolsSkipped += r.testPoolsSkipped || 0;
     agg.otherTypeSkipped += r.otherTypeSkipped || 0;
     if (Array.isArray(r.failures)) agg.failures.push(...r.failures);
-    if (Array.isArray(r.plannedFixes)) agg.plannedFixes.push(...r.plannedFixes);
+    // Enforce the documented 50-item cap GLOBALLY, not per page (codex r5):
+    // each page can return up to 25 fixes with its own flag false, so an
+    // unbounded aggregate would bury the counters the Run Log exists to show.
+    if (Array.isArray(r.plannedFixes)) {
+      const room = 50 - agg.plannedFixes.length;
+      agg.plannedFixes.push(...r.plannedFixes.slice(0, Math.max(0, room)));
+      if (r.plannedFixes.length > room) agg.plannedFixesTruncated = true;
+    }
     agg.plannedFixesTruncated = agg.plannedFixesTruncated || r.plannedFixesTruncated === true;
     cursor = r.nextCursor || undefined;
     pages++;
