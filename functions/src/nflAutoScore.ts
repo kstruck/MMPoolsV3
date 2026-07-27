@@ -312,7 +312,18 @@ async function scoreSlateOnce(
         // once it leaves the 24h window. Leave a durable reminder for the instant
         // the lock closes. Live passes only: a dry run writes nothing, and the
         // reminder is a write.
-        const withheldAt = opts.dryRun ? null : nextWithheldLockAt(pool, slate.week, slate.games, now);
+        //
+        // Decided from a POST-PASS re-read, not the candidate snapshot (codex
+        // r5). `extendWeekDeadline` can commit between candidate selection and
+        // the scorer's lease: the scorer re-reads and correctly withholds the
+        // result, but a stale snapshot here sees nothing withheld, so the pass
+        // would bank a fingerprint with no reminder behind it and the reveal
+        // would fall out of both candidate sources for good. One extra read, and
+        // only on a live pass that actually scored.
+        const post = opts.dryRun
+          ? pool
+          : ((await db.collection('pools').doc(poolId).get()).data() ?? pool);
+        const withheldAt = opts.dryRun ? null : nextWithheldLockAt(post, slate.week, slate.games, now);
         const reminderKey = withheldAt === null ? null : `${slateKeyOf(slate)}@${withheldAt}`;
         const needsReminder = reminderKey !== null && !ctx.remindersSent.has(reminderKey);
 
