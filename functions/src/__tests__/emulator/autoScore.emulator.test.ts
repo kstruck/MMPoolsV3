@@ -1077,6 +1077,28 @@ describe('rescore queue — the tier that catches what the 24h window cannot', (
     expect(allowed.poolsScored).toBe(1);
   }, 60000);
 
+  it('HOLDS the acknowledgement when a pool on the slate threw', async () => {
+    // The ack rule the finalize-failure and lost-reminder cases also ride on: an
+    // out-of-window slate has no other candidate source, so acknowledging work
+    // that did not complete strands it permanently. Provoked with a Survivor
+    // entry whose strikeWeeks is a map rather than an array, which is what the
+    // engine actually throws on.
+    await seedStale('p-q-throws', 'NFL_SURVIVOR', {
+      maxStrikes: 0, pickLosersMode: false, autoSurviveExemptionEnabled: false,
+      maxRebuys: 0, rebuyDeadlineWeek: 0,
+    });
+    await seedEntry('p-q-throws', 'alice', {
+      status: 'ALIVE', strikesUsed: 0, strikeWeeks: {}, rebuysUsed: 0,
+      usedTeams: ['KC'], picks: { 1: 'KC' }, exemptWeeks: [],
+    });
+    await enqueue('terminal');
+
+    const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(r.poolsFailed).toBe(1);
+    expect(r.queuedAcked).toBe(0);
+    expect(await queueSize()).toBe(1);
+  }, 60000);
+
   it('holds a lockPending event until its notBefore, then drains it', async () => {
     await seedStale('p-q-notbefore');
     await enqueue('lockPending', { notBefore: Date.now() + HOUR });

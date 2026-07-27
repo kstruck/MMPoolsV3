@@ -304,13 +304,16 @@ async function scoreSlateOnce(
         // once it leaves the 24h window. Leave a durable reminder for the instant
         // the lock closes. Live passes only: a dry run writes nothing, and the
         // reminder is a write.
+        let reminderLost = false;
         if (!opts.dryRun) {
           const withheldAt = nextWithheldLockAt(pool, slate.week, slate.games, now);
           if (withheldAt !== null) {
             const key = `${slateKeyOf(slate)}@${withheldAt}`;
             if (!ctx.remindersSent.has(key)) {
+              // Recorded before the await so a failure cannot make N pools on one
+              // slate each retry the same write inside one run.
               ctx.remindersSent.add(key);
-              await enqueueRescore(db, {
+              reminderLost = !await enqueueRescore(db, {
                 season: slate.season,
                 seasonType: slate.seasonType,
                 week: slate.week,
@@ -318,6 +321,9 @@ async function scoreSlateOnce(
                 enqueuedAt: now,
                 notBefore: withheldAt,
               });
+              if (reminderLost) {
+                console.error(`[nflAutoScoreJob] lockPending reminder LOST for ${slateKeyOf(slate)} week ${slate.week}; withholding the fingerprint so the pool is retried.`);
+              }
             }
           }
         }
@@ -347,13 +353,25 @@ async function scoreSlateOnce(
         //
         // Nor may a pass whose fingerprint is `null` (the entry-revision
         // aggregate was unreadable): there is no hash to bank.
+        //
+        // And nor may a pass whose `lockPending` reminder did not persist (codex
+        // r1/P1). Banking it would take the skip path on every later poll, and
+        // once the slate leaves the 24h window there is no queue event either —
+        // the withheld result would never be revealed by anything.
         const scoredAny = scored.pickemScored + scored.survivorScored + scored.marginScored > 0;
-        if (!opts.dryRun && fingerprint !== null && !scored.finalizeFailed && scoredAny) {
+        if (!opts.dryRun && fingerprint !== null && !scored.finalizeFailed && scoredAny && !reminderLost) {
           await db.collection('pools').doc(poolId).update({
             [`autoScore.fingerprintByWeek.${slate.week}`]: fingerprint,
             'autoScore.lastRunAt': admin.firestore.FieldValue.serverTimestamp(),
           });
         }
+
+        // Work the queue must not consider served (codex r1/P1). Finalization is
+        // best-effort inside the scorer and does not fail the pass, but for an
+        // out-of-window slate the queue event is the ONLY thing that will bring
+        // the pool back — acknowledging it would strand `finalizedAt` and the
+        // season-history projection stale forever. Same for a lost reminder.
+        if (scored.finalizeFailed || reminderLost) allOk = false;
       } catch (e) {
         result.poolsFailed++;
         allOk = false;

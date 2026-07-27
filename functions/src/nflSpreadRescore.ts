@@ -24,7 +24,13 @@ import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { enqueueRescore, lockedSpreadChanged, type SpreadShape } from './lib/rescoreQueue';
 import * as admin from 'firebase-admin';
 
-export const nflSpreadRescoreTrigger = onDocumentUpdated('nfl_games/{gameId}', async (event) => {
+// `retry: true` is what makes the handoff durable (codex r1/P1). This trigger is
+// the ONLY signal for a post-hot-window line correction: if the queue write fails
+// transiently and the handler resolves anyway, the affected ATS standings stay
+// wrong permanently with nobody told. Throwing under retry hands it to the
+// platform's at-least-once redelivery instead. A duplicate event is harmless —
+// the drain groups by slate and acknowledges every id it read.
+export const nflSpreadRescoreTrigger = onDocumentUpdated({ document: 'nfl_games/{gameId}', retry: true }, async (event) => {
   const before = event.data?.before.data();
   const after = event.data?.after.data();
   if (!before || !after) return;
@@ -41,5 +47,6 @@ export const nflSpreadRescoreTrigger = onDocumentUpdated('nfl_games/{gameId}', a
   const ok = await enqueueRescore(admin.firestore(), {
     season, seasonType, week, reason: 'spread', enqueuedAt: Date.now(),
   });
-  console.log(`[nflSpreadRescore] locked spread changed on ${event.params.gameId}; enqueue ${ok ? 'ok' : 'FAILED'} for ${season}/${seasonType}/wk${week}.`);
+  if (!ok) throw new Error(`[nflSpreadRescore] enqueue failed for ${season}/${seasonType}/wk${week}; retrying.`);
+  console.log(`[nflSpreadRescore] locked spread changed on ${event.params.gameId}; enqueued ${season}/${seasonType}/wk${week}.`);
 });

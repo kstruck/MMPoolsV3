@@ -141,12 +141,13 @@ describe('lockedSpreadChanged — the manual line edit detectStatCorrections can
     expect(lockedSpreadChanged({ value: -3, locked: true }, { value: -3.5, locked: true })).toBe(true);
   });
 
-  it('fires when an edited line is locked for the first time', () => {
-    // The miss a "locked && value changed" test alone would ship: edit while
-    // unlocked, then lock — the locked value never "changes" and the corrected
-    // line grades ATS silently.
-    expect(lockedSpreadChanged({ value: -3.5, locked: false }, { value: -3.5, locked: true })).toBe(true);
-    expect(lockedSpreadChanged(undefined, { value: -7, locked: true })).toBe(true);
+  it('stays quiet on the weekly false → true lock, however the value moves', () => {
+    // codex r1/P2: lockNFLSpreadsJob flips every upcoming game to locked on its
+    // own schedule. Calling that a correction would queue a rescore for a slate
+    // whose games have not kicked off — days early, on every game.
+    expect(lockedSpreadChanged({ value: -3.5, locked: false }, { value: -3.5, locked: true })).toBe(false);
+    expect(lockedSpreadChanged({ value: -3, locked: false }, { value: -4, locked: true })).toBe(false);
+    expect(lockedSpreadChanged(undefined, { value: -7, locked: true })).toBe(false);
   });
 
   it('stays quiet on an unlocked line moving — that is every ESPN sync', () => {

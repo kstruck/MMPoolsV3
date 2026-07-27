@@ -186,21 +186,22 @@ export interface SpreadShape { value?: unknown; locked?: unknown }
  * `detectStatCorrections` never compares `spread` — so a line corrected after the
  * 24h window leaves finalized ATS standings permanently wrong (codex r27).
  *
- * Two shapes qualify. The second is the easy miss: editing the value while the
- * line is UNLOCKED and then re-locking it never changes a locked spread's value,
- * so a "locked && value changed" test alone lets the corrected line through.
- *
- * Scoped to LOCKED spreads on purpose — that is what keeps it quiet.
- * `syncScoresWindow` rewrites the whole slate every 5 minutes and would trip an
- * unconditional watcher on every ESPN line move; it explicitly PRESERVES a locked
- * spread's value, so a locked value only ever changes when a human sets it.
+ * BOTH SIDES must be locked, and the value must have moved. Two exclusions, each
+ * of which would otherwise fire on routine traffic:
+ *  - an UNLOCKED line moving is every ESPN sync. `syncScoresWindow` rewrites the
+ *    whole slate every 5 minutes and preserves locked values, so a locked value
+ *    only ever changes when a human sets it.
+ *  - `false → true` is `lockNFLSpreadsJob` doing its weekly job on every upcoming
+ *    game (codex r1/P2). Treating that as a correction would queue a rescore for
+ *    a slate whose games have not kicked off, days early. The case it gives up —
+ *    edit while unlocked, then lock — is a line being SET before kickoff, which
+ *    the live window already covers; it is not a post-final correction.
  *
  * Lives in lib/ so it is unit-testable without importing the trigger (and with it
  * firebase-functions and the admin module graph).
  */
 export function lockedSpreadChanged(before: SpreadShape | undefined, after: SpreadShape | undefined): boolean {
-  if (after?.locked !== true) return false;
-  if (before?.locked !== true) return true;          // just locked — the value is newly authoritative
+  if (after?.locked !== true || before?.locked !== true) return false;
   return Number(before?.value ?? 0) !== Number(after?.value ?? 0);
 }
 
