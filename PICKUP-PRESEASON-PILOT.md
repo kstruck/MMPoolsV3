@@ -196,12 +196,17 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `8a55b84`.**
-Deployed 2026-07-25 (bare `--only functions`, then `--only firestore:rules`,
-both `✔ Deploy complete!`). Carries **#279 (G1 PR-B′)** on top of the previous
-<!-- deploy-state:ignore --> `main` @ `49c12a9` state, which carried #261/#262/#265.
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `24544eb`.**
+Deployed 2026-07-27 ~01:20 ET (`--only functions` with one 429-quota solo
+redeploy of `syncGameStatus`, then `--only firestore:rules`, both
+`✔ Deploy complete!`). Carries **P4 (#290, incl.-finished backfill)** on top of
+the previous <!-- deploy-state:ignore --> `main` @ `8a55b84` state (#279), which
+sat on <!-- deploy-state:ignore --> `main` @ `49c12a9` (#261/#262/#265).
 
-**The FRONTEND is current** — Coolify rebuilt 2026-07-25 on the same commit
+**The FRONTEND is NOT current as of this claim** — see HANDOFF.md stop point
+and MORNING-2026-07-27.md §6: the Coolify rebuild is deliberately pending
+(backfill must run between rebuild #1 and PR #294's merge). The paragraph
+below describes the 2026-07-25 state: Coolify rebuilt then on `8a55b84`
 (SHA verified against `git rev-parse origin/main`), and the #279 settings
 cutover was smoke-tested in prod: an NFL Pick'em pool's Manager tab saved
 successfully through the new `updatePoolSettings` callable.
