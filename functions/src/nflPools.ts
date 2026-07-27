@@ -51,6 +51,7 @@ import {
   type ScoringFence,
 } from './lib/scoringLease';
 import { nextEntryRevision, ENTRY_REVISION_FIELD } from './lib/entryRevision';
+import { isVoidedPool } from './lib/autoScoreDecisions';
 import { fetchNFLWeekSchedule } from './nflSchedule';
 import { recomputeWeekConsensus } from './consensus';
 import { validated } from "./lib/validated";
@@ -843,6 +844,16 @@ export interface ScoreWeekResult {
    * working. A caller must NOT record this pass as settled; retry later.
    */
   leaseBusy: boolean;
+  /**
+   * The pool was VOIDED (cancelled / closed out / archived) by the time the lease
+   * was held, so this pass did nothing at all. Every caller filters retired pools
+   * from its own candidate snapshot, but `cancelPool` takes no lease and can
+   * commit in the gap — and `maybeFinalizeNFLPool` only notices cancellation
+   * AFTER the entry/standings/recap/audit writes, so it cannot undo them.
+   * Like `leaseBusy`, this is nothing-happened, not a failure — but unlike it,
+   * retrying will never help.
+   */
+  poolRetired: boolean;
 }
 
 export interface ScoreWeekOptions {
@@ -922,7 +933,7 @@ export async function scoreNFLWeekInternal(
       dryRun: false, provisional: opts.provisional ?? false,
       pickemScored: 0, survivorScored: 0, marginScored: 0, aliveCount: 0,
       standings: [], standingsWritten: false, recapWritten: false,
-      finalizeFailed: false, leaseBusy: true,
+      finalizeFailed: false, leaseBusy: true, poolRetired: false,
     };
   }
   try {
@@ -943,6 +954,23 @@ export async function scoreNFLWeekInternal(
     // tier's job (§5b), not this fence's.
     const fresh = (await db.collection('pools').doc(poolId).get()).data();
     if (!fresh) return await scoreWeekPass(db, poolId, week, opts, fence);
+
+    // The same gap, for the other lifecycle write (codex r5). `cancelPool` takes
+    // no lease, so it can void the pool between the caller's candidate read and
+    // this one. Every caller filters retired pools from its OWN snapshot and
+    // `maybeFinalizeNFLPool` only checks cancellation after the writes — this is
+    // the one point where the answer is trustworthy, so the refusal belongs here
+    // rather than in any single caller.
+    if (isVoidedPool(fresh)) {
+      return {
+        success: true,
+        message: 'This pool has been voided; nothing was scored.',
+        dryRun: false, provisional: opts.provisional ?? false,
+        pickemScored: 0, survivorScored: 0, marginScored: 0, aliveCount: 0,
+        standings: [], standingsWritten: false, recapWritten: false,
+        finalizeFailed: false, leaseBusy: false, poolRetired: true,
+      };
+    }
 
     // `provisional` is derived by the CALLER from the same pre-lease snapshot, and
     // it gates finalization — `scoredWeeks`, `maybeFinalizeNFLPool`, the weekly
@@ -1047,7 +1075,7 @@ async function scoreWeekPass(
       success: true, message: 'No entries to score.', dryRun, provisional,
       pickemScored: 0, survivorScored: 0, marginScored: 0, aliveCount: 0,
       standings: [], standingsWritten: false, recapWritten: false,
-      finalizeFailed: false, leaseBusy: false,
+      finalizeFailed: false, leaseBusy: false, poolRetired: false,
     };
   }
 
@@ -1425,7 +1453,7 @@ async function scoreWeekPass(
     standingsWritten: !dryRun,
     recapWritten,
     finalizeFailed,
-    leaseBusy: false,
+    leaseBusy: false, poolRetired: false,
   };
 }
 

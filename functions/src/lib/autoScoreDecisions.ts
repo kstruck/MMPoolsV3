@@ -70,6 +70,30 @@ export function isRetiredPool(pool: { status?: unknown } | undefined | null): bo
   return TERMINAL_POOL_STATUSES.has(status);
 }
 
+/** Retired because the pool was VOIDED — cancelled, closed out or archived. */
+const VOIDED_POOL_STATUSES = new Set(['CANCELED', 'COMPLETED', 'ARCHIVED']);
+
+/**
+ * The subset of retirement that no scorer may ever write into, checked INSIDE the
+ * lease rather than from a candidate snapshot (codex r5).
+ *
+ * `cancelPool` takes no scoring lease, so it can commit `status: "CANCELED"`
+ * between a caller's candidate read and the scorer acquiring its lease. Every
+ * caller filters on its own stale snapshot, and `maybeFinalizeNFLPool` only
+ * checks cancellation AFTER the entry/standings/recap/audit writes — so without a
+ * guard at the post-lease re-read, a voided pool still gets written.
+ *
+ * DELIBERATELY NARROWER than `isRetiredPool`: status `FINAL` is excluded. That
+ * status is what payout handling stamps on a settled pool, and a commissioner
+ * re-scoring one through the manual button is a legitimate flow today. Blocking
+ * it would be a behavior change well outside the race this closes.
+ */
+export function isVoidedPool(pool: { status?: unknown } | undefined | null): boolean {
+  if (!pool) return true;
+  const status = typeof pool.status === 'string' ? pool.status.toUpperCase() : '';
+  return VOIDED_POOL_STATUSES.has(status);
+}
+
 /**
  * When must this pool's week be looked at again because a TERMINAL game is still
  * behind its own lock (§5b, codex r8)?
@@ -238,6 +262,8 @@ export interface AutoScoreResult {
    * carry the standing caveat instead.
    */
   survivorQueuedDeferred: number;
+  /** Pool-targeted finalization retries the drain ran (§5b, codex r5). */
+  finalizeRetries: number;
 }
 
 /**

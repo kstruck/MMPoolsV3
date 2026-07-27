@@ -37,7 +37,7 @@ export const RESCORE_QUEUE = 'nfl_rescore_queue';
  * skips later weeks once the entry is eliminated), while a `terminal` one — a
  * delayed first final — is a normal first score and is safe for every type.
  */
-export type RescoreReason = 'correction' | 'terminal' | 'spread' | 'lockPending';
+export type RescoreReason = 'correction' | 'terminal' | 'spread' | 'lockPending' | 'finalizeRetry';
 
 export interface RescoreEvent {
   season: string;
@@ -58,6 +58,13 @@ export interface RescoreEvent {
    * defaulted 0 is what keeps ordinary events visible.
    */
   notBefore?: number;
+  /**
+   * `finalizeRetry` only, and REQUIRED there: finalization is per pool, not per
+   * slate. Every other reason describes a change to the SLATE and applies to
+   * whichever pools are playing it, which is why the drain groups those by slate
+   * and this one does not.
+   */
+  poolId?: string;
 }
 
 export interface QueuedEvent {
@@ -77,7 +84,7 @@ export function slateKeyOf(e: { season: string; seasonType: number; week: number
   return `${e.season}_${e.seasonType}_${e.week}`;
 }
 
-const REASONS: readonly RescoreReason[] = ['correction', 'terminal', 'spread', 'lockPending'];
+const REASONS: readonly RescoreReason[] = ['correction', 'terminal', 'spread', 'lockPending', 'finalizeRetry'];
 
 /** A stored doc is only usable if every field the drain needs survived the round trip. */
 export function parseRescoreEvent(data: unknown): RescoreEvent | null {
@@ -90,6 +97,11 @@ export function parseRescoreEvent(data: unknown): RescoreEvent | null {
   if (!season || !Number.isFinite(seasonType) || !Number.isFinite(week) || week <= 0) return null;
   if (!REASONS.includes(reason)) return null;
   const notBefore = Number(d.notBefore);
+  const poolId = typeof d.poolId === 'string' && d.poolId ? d.poolId : undefined;
+  // A finalizeRetry names a POOL. Without one there is nothing to finalize, and
+  // silently treating it as slate work would re-score a whole slate to chase a
+  // finalization that failed on one pool.
+  if (reason === 'finalizeRetry' && !poolId) return null;
   return {
     season,
     seasonType,
@@ -97,6 +109,7 @@ export function parseRescoreEvent(data: unknown): RescoreEvent | null {
     reason,
     enqueuedAt: Number.isFinite(Number(d.enqueuedAt)) ? Number(d.enqueuedAt) : 0,
     notBefore: Number.isFinite(notBefore) && notBefore > 0 ? notBefore : 0,
+    ...(poolId ? { poolId } : {}),
   };
 }
 
@@ -117,6 +130,7 @@ export function rescoreEventDoc(event: RescoreEvent): Record<string, unknown> {
     reason: event.reason,
     enqueuedAt: event.enqueuedAt,
     notBefore: event.notBefore ?? 0,
+    ...(event.poolId ? { poolId: event.poolId } : {}),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 }
@@ -176,6 +190,22 @@ export async function readRescoreQueue(db: Firestore, now: number, limit = 500):
   }
   out.deferred = (await db.collection(RESCORE_QUEUE).where('notBefore', '>', now).count().get()).data().count;
   return out;
+}
+
+/**
+ * Split the queue into its two kinds of work.
+ *
+ * A `finalizeRetry` is pool-scoped and must NOT re-score anything — the week
+ * scored fine, it was `maybeFinalizeNFLPool` that threw. Feeding it through the
+ * slate path would re-score every pool on the slate to chase one pool's
+ * finalization, and for Survivor the round-3 `scoredWeeks` gate would defer it
+ * outright, so the retry would never actually run.
+ */
+export function partitionQueue(events: QueuedEvent[]): { slateWork: QueuedEvent[]; finalizeRetries: QueuedEvent[] } {
+  const slateWork: QueuedEvent[] = [];
+  const finalizeRetries: QueuedEvent[] = [];
+  for (const e of events) (e.event.reason === 'finalizeRetry' ? finalizeRetries : slateWork).push(e);
+  return { slateWork, finalizeRetries };
 }
 
 /** Collapse the events into one unit of work per slate, keeping every id for the ack. */

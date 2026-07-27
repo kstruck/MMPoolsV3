@@ -1156,6 +1156,78 @@ describe('rescore queue — the tier that catches what the 24h window cannot', (
     expect(snap.docs[0].data().notBefore).toBeGreaterThan(Date.now());
   }, 60000);
 
+  it('refuses to write into a pool voided AFTER the candidate read — inside the lease', async () => {
+    // codex r5: cancelPool takes no scoring lease, so it can commit between a
+    // caller's candidate snapshot and the scorer acquiring one. Simulated by
+    // handing the scorer a healthy snapshot and voiding the stored doc first —
+    // which is exactly the state the post-lease re-read sees.
+    await seedStale('p-voided-race');
+    const healthySnapshot = await poolDoc('p-voided-race');
+    await db.collection('pools').doc('p-voided-race').update({ status: 'CANCELED' });
+
+    const result = await scoreNFLWeekInternal(db, 'p-voided-race', 1, {
+      pool: healthySnapshot, games: await loadSlate(), actor: SYSTEM_ACTOR,
+    });
+
+    expect(result.poolRetired).toBe(true);
+    expect(result.pickemScored).toBe(0);
+    // maybeFinalizeNFLPool only checks cancellation AFTER the writes, so without
+    // the guard every one of these would already exist.
+    expect((await entryDoc('p-voided-race', 'alice')).weeklyPoints?.[1]).toBeUndefined();
+    expect(await standingsDoc('p-voided-race')).toBeUndefined();
+    expect((await poolDoc('p-voided-race')).publishedWeeks).toBeUndefined();
+  }, 60000);
+
+  it('still scores a pool whose status is FINAL — that is settled, not voided', async () => {
+    // The in-lease guard is deliberately narrower than the candidate filter:
+    // FINAL is what payout handling stamps, and re-scoring one by hand is a
+    // legitimate flow. Blocking it would be an unrelated behavior change.
+    await seedStale('p-final-status');
+    const snapshot = await poolDoc('p-final-status');
+    await db.collection('pools').doc('p-final-status').update({ status: 'FINAL' });
+
+    const result = await scoreNFLWeekInternal(db, 'p-final-status', 1, {
+      pool: snapshot, games: await loadSlate(), actor: SYSTEM_ACTOR,
+    });
+
+    expect(result.poolRetired).toBe(false);
+    expect(result.pickemScored).toBe(1);
+  }, 60000);
+
+  it('runs a queued finalizeRetry as finalization ONLY, then acknowledges it', async () => {
+    // codex r5: withholding the fingerprint only retries while the slate is still
+    // in the 24h window, and a slate can carry no terminal/correction event at
+    // all — after which finalizedAt and season history stay stale with
+    // nflFinalizeSweepJob disabled by default.
+    await seedStale('p-fin-retry');
+    const before = await entryDoc('p-fin-retry', 'alice');
+    await enqueueRescore(db, {
+      season: SEASON, seasonType: 1, week: 1, reason: 'finalizeRetry',
+      enqueuedAt: Date.now(), poolId: 'p-fin-retry',
+    });
+
+    const r = await autoScoreOnce(db, Date.now(), { dryRun: false });
+    expect(r.finalizeRetries).toBe(1);
+    expect(r.queuedAcked).toBe(1);
+    expect(r.queuedSlates).toBe(0);          // NOT slate work — nothing was re-scored
+    expect(r.poolsScored).toBe(0);
+    expect((await entryDoc('p-fin-retry', 'alice')).weeklyPoints).toEqual(before.weeklyPoints);
+    expect(await queueSize()).toBe(0);
+  }, 60000);
+
+  it('a DRY RUN neither finalizes nor acknowledges a finalizeRetry', async () => {
+    await seedStale('p-fin-retry-dry');
+    await enqueueRescore(db, {
+      season: SEASON, seasonType: 1, week: 1, reason: 'finalizeRetry',
+      enqueuedAt: Date.now(), poolId: 'p-fin-retry-dry',
+    });
+
+    const dry = await autoScoreOnce(db, Date.now(), { dryRun: true });
+    expect(dry.finalizeRetries).toBe(0);
+    expect(dry.queuedAcked).toBe(0);
+    expect(await queueSize()).toBe(1);
+  }, 60000);
+
   it('a DRY RUN writes no lockPending reminder — a dry run writes nothing at all', async () => {
     await wipe();
     await seedGames([gameDoc('g1', { startTime: Date.now() - 3 * HOUR }), laterWeekGame()]);

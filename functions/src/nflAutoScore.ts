@@ -5,7 +5,8 @@ import { withHeartbeat, configReadFailedVerdict } from './lib/heartbeat';
 import { readJobGate, HOT_WINDOW_LOOKBACK_MS } from './nflSchedule';
 import { scoreNFLWeekInternal } from './nflPools';
 import { isWeekComplete } from './lib/weekCompletion';
-import { isSimPool } from './nflFinalize';
+import { isSimPool, maybeFinalizeNFLPool } from './nflFinalize';
+import { acquireScoringLease, releaseScoringLease } from './lib/scoringLease';
 import {
   isTerminalPool,
   isRetiredPool,
@@ -21,10 +22,12 @@ import {
   groupBySlate,
   ackRescoreEvents,
   rescoreEventDoc,
+  partitionQueue,
   survivorAllowedForGroup,
   slateKeyOf,
   RESCORE_QUEUE,
   type RescoreReason,
+  type QueuedEvent,
 } from './lib/rescoreQueue';
 import type { NFLGame } from './nflPoolTypes';
 
@@ -211,6 +214,8 @@ interface RunContext {
   attempts: number;
   /** `lockPending` reminders already enqueued this run, keyed slate+instant, so N pools on one slate do not write N copies. */
   remindersSent: Set<string>;
+  /** Pools that already have a `finalizeRetry` from this run — a pool can be reached by both tiers in one pass. */
+  finalizeRetriesSent: Set<string>;
 }
 
 interface SlatePassOptions {
@@ -305,6 +310,13 @@ async function scoreSlateOnce(
           allOk = false;
           continue;
         }
+        // The pool was voided between the candidate read and the lease. Nothing
+        // was written and nothing ever will be, so this is a skip that must NOT
+        // hold the ack — retrying it every 10 minutes forever buys nothing.
+        if (scored.poolRetired) {
+          result.poolsSkipped++;
+          continue;
+        }
         result.poolsScored++;
 
         // A terminal game withheld behind an unexpired lock override is the one
@@ -360,10 +372,32 @@ async function scoreSlateOnce(
         // queue event either — so the withheld result is never revealed by
         // anything. Batched, either both land or neither does and the pool is
         // simply retried.
+        // A finalization failure gets a DURABLE, POOL-TARGETED retry (codex r5).
+        // Withholding the fingerprint alone only retries the pool while the slate
+        // is still in the 24h window — and a slate can carry no terminal or
+        // correction event at all (games already FINAL at deploy, or a superadmin
+        // edit), so after 24h `finalizedAt` and the season-history projection
+        // would stay stale with `nflFinalizeSweepJob` disabled by default.
+        //
+        // The retry re-runs FINALIZATION ONLY, not the scoring pass: the week
+        // scored fine. That is also what makes it safe for Survivor, which the
+        // round-3 `scoredWeeks` gate would otherwise defer forever.
+        const needsFinalizeRetry = !opts.dryRun && scored.finalizeFailed && !ctx.finalizeRetriesSent.has(poolId);
+
         const scoredAny = scored.pickemScored + scored.survivorScored + scored.marginScored > 0;
         const bankFingerprint = !opts.dryRun && fingerprint !== null && !scored.finalizeFailed && scoredAny;
-        if (bankFingerprint || needsReminder) {
+        if (bankFingerprint || needsReminder || needsFinalizeRetry) {
           const batch = db.batch();
+          if (needsFinalizeRetry) {
+            batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({
+              season: slate.season,
+              seasonType: slate.seasonType,
+              week: slate.week,
+              reason: 'finalizeRetry',
+              enqueuedAt: now,
+              poolId,
+            }));
+          }
           if (bankFingerprint) {
             batch.update(db.collection('pools').doc(poolId), {
               [`autoScore.fingerprintByWeek.${slate.week}`]: fingerprint,
@@ -385,18 +419,15 @@ async function scoreSlateOnce(
             // Only after it is durable — otherwise a failure here would suppress
             // the retry by the next pool on the same slate in this very run.
             if (needsReminder) ctx.remindersSent.add(reminderKey!);
+            if (needsFinalizeRetry) ctx.finalizeRetriesSent.add(poolId);
           } catch (e) {
+            // The handoff did not persist, so the slate event must not be treated
+            // as served — that is the only thing left that will bring this pool
+            // back once the window closes.
             allOk = false;
-            console.error(`[nflAutoScoreJob] fingerprint/reminder commit failed for pool ${poolId} week ${slate.week}:`, e);
+            console.error(`[nflAutoScoreJob] fingerprint/reminder/finalize-retry commit failed for pool ${poolId} week ${slate.week}:`, e);
           }
         }
-
-        // Work the queue must not consider served (codex r1/P1). Finalization is
-        // best-effort inside the scorer and does not fail the pass, but for an
-        // out-of-window slate the queue event is the ONLY thing that will bring
-        // the pool back — acknowledging it would strand `finalizedAt` and the
-        // season-history projection stale forever.
-        if (scored.finalizeFailed) allOk = false;
       } catch (e) {
         result.poolsFailed++;
         allOk = false;
@@ -423,9 +454,9 @@ export async function autoScoreOnce(
   const result: AutoScoreResult = {
     activeSlates: 0, poolsScored: 0, poolsSkipped: 0, overflow: 0, poolsFailed: 0,
     queuedEvents: 0, queuedSlates: 0, queuedDeferred: 0, queuedAcked: 0,
-    survivorQueuedDeferred: 0,
+    survivorQueuedDeferred: 0, finalizeRetries: 0,
   };
-  const ctx: RunContext = { attempts: 0, remindersSent: new Set() };
+  const ctx: RunContext = { attempts: 0, remindersSent: new Set(), finalizeRetriesSent: new Set() };
 
   const slates = await findActiveSlates(db, now, opts.lookbackMs ?? HOT_WINDOW_LOOKBACK_MS);
   result.activeSlates = slates.length;
@@ -467,7 +498,10 @@ async function drainRescoreQueue(
   result.queuedDeferred = deferred;
   result.queuedEvents = events.length;
 
-  const groups = groupBySlate(events);
+  const { slateWork, finalizeRetries } = partitionQueue(events);
+  await drainFinalizeRetries(db, finalizeRetries, dryRun, result);
+
+  const groups = groupBySlate(slateWork);
   result.queuedSlates = groups.length;
 
   for (const group of groups) {
@@ -497,6 +531,50 @@ async function drainRescoreQueue(
     console.warn(`[nflAutoScoreJob] dropping ${malformed.length} unparseable rescore event(s).`);
     await ackRescoreEvents(db, malformed);
     result.queuedAcked += malformed.length;
+  }
+}
+
+/**
+ * Re-run FINALIZATION for pools whose finalize threw during a scoring pass
+ * (codex r5). No scoring, by design: the week scored fine, and re-scoring would
+ * be both wasteful and — for Survivor on an already-scored week — unsafe.
+ *
+ * Runs under the scoring lease because `maybeFinalizeNFLPool` snapshots the entry
+ * set and derives final ranks from it; a pass that lost the lease would write
+ * season history computed from entries a newer pass has since rewritten, and
+ * `finalizedAt` is terminal (PLAN-REALTIME-SCORING §3a).
+ *
+ * `maybeFinalizeNFLPool` is idempotent and refuses cleanly when the season is not
+ * complete, so a clean RETURN — finalized or declined — is the retry doing its
+ * job and the event is acknowledged. Only a THROW holds it.
+ */
+async function drainFinalizeRetries(
+  db: Firestore,
+  events: QueuedEvent[],
+  dryRun: boolean,
+  result: AutoScoreResult,
+): Promise<void> {
+  for (const { id, event } of events) {
+    const poolId = event.poolId!;   // parseRescoreEvent rejects a finalizeRetry without one
+    // A dry run acknowledges nothing and writes nothing, exactly like the slate
+    // path — otherwise the watching period would consume the only retry there is.
+    if (dryRun) continue;
+
+    const fence = await acquireScoringLease(db, poolId, Date.now());
+    // Another scorer owns the pool. Leave the event alone; the next run retries.
+    if (!fence) { result.poolsSkipped++; continue; }
+    try {
+      const outcome = await maybeFinalizeNFLPool(db, poolId, { fence });
+      console.log(`[nflAutoScoreJob] finalize retry for pool ${poolId}: ${outcome.finalized ? 'finalized' : `declined (${outcome.reason})`}.`);
+      await ackRescoreEvents(db, [id]);
+      result.queuedAcked++;
+      result.finalizeRetries++;
+    } catch (e) {
+      result.poolsFailed++;
+      console.error(`[nflAutoScoreJob] finalize retry FAILED for pool ${poolId}; event held for the next run:`, e);
+    } finally {
+      await releaseScoringLease(db, poolId, fence).catch(() => undefined);
+    }
   }
 }
 

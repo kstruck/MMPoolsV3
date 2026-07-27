@@ -13,10 +13,11 @@ import {
   survivorAllowedForGroup,
   slateKeyOf,
   lockedSpreadChanged,
+  partitionQueue,
   type RescoreReason,
   type QueuedEvent,
 } from '../lib/rescoreQueue';
-import { isRetiredPool, isTerminalPool, nextWithheldLockAt } from '../lib/autoScoreDecisions';
+import { isRetiredPool, isTerminalPool, isVoidedPool, nextWithheldLockAt } from '../lib/autoScoreDecisions';
 import type { NFLGame } from '../nflPoolTypes';
 
 const ev = (over: Partial<QueuedEvent['event']> & { id?: string } = {}): QueuedEvent => {
@@ -40,6 +41,14 @@ describe('parseRescoreEvent — a malformed doc must not become work', () => {
       .toBe(900);
     expect(parseRescoreEvent({ season: '2026', seasonType: 1, week: 2, reason: 'lockPending', enqueuedAt: 5, notBefore: null })?.notBefore)
       .toBe(0);
+  });
+
+  it('rejects a finalizeRetry with no poolId — finalization is per POOL', () => {
+    // Treating it as slate work would re-score a whole slate to chase one pool's
+    // finalization; there is no safe default.
+    expect(parseRescoreEvent({ season: '2026', seasonType: 1, week: 1, reason: 'finalizeRetry', enqueuedAt: 1 })).toBeNull();
+    expect(parseRescoreEvent({ season: '2026', seasonType: 1, week: 1, reason: 'finalizeRetry', enqueuedAt: 1, poolId: 'p1' })?.poolId)
+      .toBe('p1');
   });
 
   it('rejects an unknown reason rather than defaulting it', () => {
@@ -125,6 +134,46 @@ describe('survivorAllowedForGroup — the one thing a queued pass may do to Surv
 
   it('an empty set is not allowed — no positive reason means no licence', () => {
     expect(survivorAllowedForGroup(set(), unscored, 1)).toBe(false);
+  });
+});
+
+describe('partitionQueue — finalize retries are pool work, not slate work', () => {
+  it('splits finalizeRetry out of the slate stream', () => {
+    const { slateWork, finalizeRetries } = partitionQueue([
+      ev({ id: 'a', reason: 'terminal' }),
+      ev({ id: 'b', reason: 'finalizeRetry', poolId: 'p1' }),
+      ev({ id: 'c', reason: 'correction' }),
+    ]);
+    expect(slateWork.map(e => e.id)).toEqual(['a', 'c']);
+    expect(finalizeRetries.map(e => e.id)).toEqual(['b']);
+  });
+
+  it('keeps a finalizeRetry out of groupBySlate, so it can never re-score a slate', () => {
+    // The point of the split: the week SCORED fine — finalization threw. Sending
+    // it down the slate path would re-score every pool on the slate, and the
+    // Survivor scoredWeeks gate would defer it outright so it never ran at all.
+    const { slateWork } = partitionQueue([ev({ id: 'b', reason: 'finalizeRetry', poolId: 'p1' })]);
+    expect(groupBySlate(slateWork)).toEqual([]);
+  });
+});
+
+describe('isRetiredPool vs isTerminalPool vs isVoidedPool', () => {
+  it.each(['CANCELED', 'COMPLETED', 'ARCHIVED', 'archived'])('%s is voided — no scorer may write into it', (status) => {
+    expect(isVoidedPool({ status })).toBe(true);
+  });
+
+  it('status FINAL is retired but NOT voided', () => {
+    // Payout handling stamps FINAL on a settled pool. A commissioner re-scoring
+    // one through the manual button is a legitimate flow today, so the in-lease
+    // guard must not start refusing it — that would be a behavior change well
+    // outside the cancelPool race it closes.
+    expect(isRetiredPool({ status: 'FINAL' })).toBe(true);
+    expect(isVoidedPool({ status: 'FINAL' })).toBe(false);
+  });
+
+  it('a live pool is neither, and a missing pool is both', () => {
+    expect(isVoidedPool({ status: 'OPEN' })).toBe(false);
+    expect(isVoidedPool(undefined)).toBe(true);
   });
 });
 
