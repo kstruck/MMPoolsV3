@@ -108,7 +108,11 @@ const runBackfill = async (dryRun: boolean, includeFinished = false) => {
   do {
     let r: any;
     try {
-      r = await call('backfillMemberRecords', { dryRun, includeFinished, limit, startAfter: cursor }, BACKFILL_TIMEOUT_MS);
+      // Conditional spread, not `startAfter: cursor` — the Firebase JS SDK
+      // serializes an explicit-undefined property as NULL on the wire, which
+      // failed the first page of the prod dry run 2026-07-27. The schema now
+      // also accepts null (belt), this is the suspenders.
+      r = await call('backfillMemberRecords', { dryRun, includeFinished, limit, ...(cursor ? { startAfter: cursor } : {}) }, BACKFILL_TIMEOUT_MS);
     } catch (e) {
       // The paging cursor lives in this closure, so an unhandled throw loses it and
       // the run can only restart from pool #1 — into the same wall. Report it AND
@@ -158,7 +162,8 @@ const runPublishedWeeksBackfill = async (dryRun: boolean) => {
   let pages = 0;
   const agg = { dryRun, poolsScanned: 0, poolsChanged: 0, weeksMarked: 0, plannedWrites: [] as any[], failures: [] as any[] };
   do {
-    const r: any = await call('backfillPublishedWeeks', { dryRun, limit: 200, startAfter: cursor });
+    // Same undefined→null wire trap as runBackfill above.
+    const r: any = await call('backfillPublishedWeeks', { dryRun, limit: 200, ...(cursor ? { startAfter: cursor } : {}) });
     agg.poolsScanned += r.poolsScanned || 0;
     agg.poolsChanged += r.poolsChanged || 0;
     agg.weeksMarked += r.weeksMarked || 0;
