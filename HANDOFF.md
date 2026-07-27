@@ -11,12 +11,16 @@
 > rebuy pricing vs the server's ledger-priced settle; display-only,
 > self-correcting, plausibly-zero population — see the PR body).
 >
-> **Every build item of PLAN-PAYMENT-TRUTH is now shipped and deployed**:
-> P4 backfill (live-run, 72 records), P1 Bento repoint, P2 reconciliation
-> (prod divergence count = ZERO), P3 rebuy control. **The single remaining
-> action is Kevin's Recalculate Global Stats click** (Operations, destructive
-> type-RUN card) — every gate it waited on is satisfied. After that the plan
-> is closed; D11 (Props payment model) stays an open product question.
+> **PLAN-PAYMENT-TRUTH IS CLOSED.** Every build item shipped and deployed
+> (P4 backfill live-run 72 records · P1 Bento repoint · P2 reconciliation
+> with prod divergence count = ZERO · P3 rebuy control), and **Kevin ran
+> Recalculate Global Stats on 2026-07-27**:
+> `{"success":true,"message":"Recalculated from 31 pools. Skipped 0 errors.","totalPrizes":645,"totalDonated":0}`.
+> The homepage now shows **$645 Total Prizes Awarded** (verified live) —
+> down from the $5,535 the public doc carried before, which was inflated by
+> test-pool money; $645 is the discriminator-filtered honest figure the whole
+> stats+payment-truth chain existed to produce. D11 (Props payment model)
+> stays an open product question; #308's one named display residual stands.
 
 > ### Historical: the 2026-07-27 evening stop point (superseded same day)
 >
