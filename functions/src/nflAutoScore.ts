@@ -405,8 +405,31 @@ async function scoreSlateOnce(
         // round-3 `scoredWeeks` gate would otherwise defer forever.
         const needsFinalizeRetry = !opts.dryRun && scored.finalizeFailed && !ctx.finalizeRetriesSent.has(poolId);
 
+        // And the fingerprint must still describe the pool we actually scored
+        // (codex r8). `updatePoolSettings` does not serialize against the scorer,
+        // so a manager can change `pickMode` / `maxStrikes` — neither of which
+        // bumps `lockRevision`, so the fence does not fire — after the in-lease
+        // re-read. This pass then graded with the OLD settings; banking the
+        // pre-lease hash would mark the pool current under the NEW ones, and for
+        // an out-of-window queued slate nothing would ever make it a candidate
+        // again. Recomputed from the post-pass read: any drift withholds the
+        // fingerprint, which costs one more pass and re-scores correctly.
+        const postFingerprint = opts.dryRun || fingerprint === null || entryRevisionSum === null
+          ? fingerprint
+          : computeWeekFingerprint(post, slate.week, slate.games, now, entryRevisionSum);
+        const settingsDrifted = postFingerprint !== fingerprint;
+        if (settingsDrifted) {
+          // And the queue event must not be acknowledged: withholding the
+          // fingerprint only earns another pass while the slate is still a
+          // candidate, and an out-of-window one is a candidate ONLY through the
+          // queue. Acking here would apply the new setting never.
+          allOk = false;
+          console.warn(`[nflAutoScoreJob] pool ${poolId} week ${slate.week} changed during the pass; withholding the fingerprint so it re-scores.`);
+        }
+
         const scoredAny = scored.pickemScored + scored.survivorScored + scored.marginScored > 0;
-        const bankFingerprint = !opts.dryRun && fingerprint !== null && !scored.finalizeFailed && scoredAny;
+        const bankFingerprint = !opts.dryRun && fingerprint !== null && !scored.finalizeFailed
+          && scoredAny && !settingsDrifted;
         if (bankFingerprint || needsReminder || needsFinalizeRetry) {
           const batch = db.batch();
           if (needsFinalizeRetry) {

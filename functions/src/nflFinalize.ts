@@ -9,6 +9,7 @@ import { writeAdminAudit } from "./lib/adminAudit";
 import type { NFLPickemEntry, SurvivorEntry, MarginEntry } from "./nflPoolTypes";
 import { withHeartbeat, configReadFailedVerdict } from "./lib/heartbeat";
 import { fencedWrite, withScoringLease, type ScoringFence } from "./lib/scoringLease";
+import { isVoidedPool } from "./lib/autoScoreDecisions";
 
 /**
  * Season Finalization (ADR 0005 decision 2 / PLAN-PLAYER-PROFILES Phase 3).
@@ -251,7 +252,12 @@ export async function maybeFinalizeNFLPool(
   const pool = poolSnap.data() as any;
 
   if (!NFL_SEASON_TYPES.includes(pool.type)) return { finalized: false, reason: 'not an NFL season pool' };
-  if (pool.status === 'CANCELED') return { finalized: false, reason: 'canceled' };
+  // Every VOIDED status, not just CANCELED (codex r8). `checkFence` now refuses a
+  // voided pool inside the write transaction, so a COMPLETED/ARCHIVED pool that is
+  // season-complete but unfinalized would reach `fencedWrite` and throw FENCE_LOST
+  // on every sweep, forever. Declining here is the same answer, cleanly, before
+  // any write is attempted.
+  if (isVoidedPool(pool)) return { finalized: false, reason: 'voided (cancelled, closed or archived)' };
   if (isSimPool(pool, poolId) && !opts?.allowSim) {
     return { finalized: false, reason: 'sim pool (finalize only via simFinalizePool)' };
   }
@@ -495,7 +501,10 @@ export const nflFinalizeSweepJob = functions.scheduler.onSchedule(
       // Test Pools are marked by the persisted simRunId field / sim- season — their doc
       // IDs are server-generated, so an id-prefix check alone excludes NOTHING (Codex R1#1).
       if (isSimPool(p, d.id)) return false;
-      if (p.status === 'CANCELED') return false;
+      // Same widening as maybeFinalizeNFLPool's decline (codex r8): a closed or
+      // archived pool is never finalizable, so leaving it in the candidate set
+      // only burns the per-run cap that in-scope pools need.
+      if (isVoidedPool(p)) return false;
       const finalizedAt = p.finalizedAt?.toMillis?.() ?? 0;
       const lastScoredAt = p.lastScoredAt?.toMillis?.() ?? 0;
       return finalizedAt === 0 || finalizedAt < lastScoredAt;
