@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 import { createNFLPool, joinNFLPool, executeSurvivorRebuy } from '../../nflPools';
 import { setPaidStatus } from '../../setPaidStatus';
+import { reconcilePaymentTruth } from '../../migrations/reconcilePaymentTruth';
 import { calculatePoolPot } from '../../statsTrigger';
 
 // Verifies the additive Member Record wiring (ADR 0003) against a live Firestore
@@ -15,6 +16,7 @@ const wrappedCreateNFL = test.wrap(createNFLPool);
 const wrappedJoin = test.wrap(joinNFLPool);
 const wrappedRebuy = test.wrap(executeSurvivorRebuy);
 const wrappedSetPaid = test.wrap(setPaidStatus);
+const wrappedReconcile = test.wrap(reconcilePaymentTruth);
 
 async function seedUser(uid: string, name: string, role = 'PARTICIPANT') {
   await db.collection('users').doc(uid).set({ role, name, email: `${uid}@example.com` });
@@ -304,5 +306,157 @@ describe('setPaidStatus — detail fields + entry mirror (P1)', () => {
     const m = (await db.collection('pools').doc(poolId).collection('members').doc('p1_m1').get()).data() as Record<string, any>;
     expect(m.memberReportedPaid).toBe(true);
     expect(m.paidStatus).toBe('UNPAID'); // a claim never touches the authoritative field
+  });
+});
+
+/**
+ * PLAN-PAYMENT-TRUTH P2 (Q5): the one-off reconciliation for the population
+ * NOTHING else repairs — members who already had a Member Record and were then
+ * marked paid through the pre-P1 Bento (entry-only write). The backfill skips
+ * existing members and P1 is forward-only.
+ *
+ * Direction rules: entry-PAID/member-UNPAID promotes the member (the entry
+ * carries the commissioner's real action for exactly this population) and
+ * appends the missing ledger row; member-PAID/entry-UNPAID mirrors the entry
+ * display (truth already right — no ledger row). Q5: the dry run IS the count.
+ */
+describe('reconcilePaymentTruth — the divergence one-off (P2)', () => {
+  const poolId = 'p2_pool';
+  const BOSS = { uid: 'p2_boss', token: { role: 'SUPER_ADMIN' } };
+
+  async function seedDivergedPool() {
+    // validated({role}) enforces claim AND users-doc agreement (assertCallerRole).
+    await seedUser('p2_boss', 'Boss', 'SUPER_ADMIN');
+    await db.collection('pools').doc(poolId).set({
+      id: poolId, type: 'NFL_PICKEM', name: 'P2 Pool', ownerId: 'p2_boss',
+      participantIds: ['p2_boss'], status: 'COMPLETED', settings: { entryFee: 25 },
+    });
+    const members = db.collection('pools').doc(poolId).collection('members');
+    const entries = db.collection('pools').doc(poolId).collection('entries');
+    // m1: the D13 victim — Bento said PAID (entry), record still UNPAID.
+    await members.doc('m1').set({ uid: 'm1', poolId, userName: 'Victim', paidStatus: 'UNPAID' });
+    await entries.doc('m1').set({ id: 'm1', ownerUid: 'm1', paidStatus: 'PAID', paidAt: 1_700_000_000_000, paymentMethod: 'Venmo', paymentNote: 'txn 9' });
+    // m2: roster toggle was used (correct path) — record PAID, display never mirrored.
+    await members.doc('m2').set({ uid: 'm2', poolId, userName: 'Display', paidStatus: 'PAID', paidAt: 1_690_000_000_000, paymentMethod: 'Cash', paymentNote: 'venmo ref 4' });
+    await entries.doc('m2').set({ id: 'm2', ownerUid: 'm2', paidStatus: 'UNPAID' });
+    // m6: entry PAID + member UNPAID, BUT the ledger shows the roster toggle
+    // touched them (a MARKED_UNPAID row) — so the entry is a STALE display of a
+    // payment the commissioner later reversed, not recoverable history.
+    await members.doc('m6').set({ uid: 'm6', poolId, userName: 'Reversed', paidStatus: 'UNPAID' });
+    await entries.doc('m6').set({ id: 'm6', ownerUid: 'm6', paidStatus: 'PAID' });
+    await db.collection('pools').doc(poolId).collection('payments').add({
+      type: 'MARKED_UNPAID', uid: 'm6', actorUid: 'p2_boss', at: 1_699_000_000_000,
+    });
+    // m3: consistent-paid. m5: consistent-unpaid.
+    await members.doc('m3').set({ uid: 'm3', poolId, userName: 'Fine', paidStatus: 'PAID' });
+    await entries.doc('m3').set({ id: 'm3', ownerUid: 'm3', paidStatus: 'PAID' });
+    await members.doc('m5').set({ uid: 'm5', poolId, userName: 'Unpaid', paidStatus: 'UNPAID' });
+    await entries.doc('m5').set({ id: 'm5', ownerUid: 'm5', paidStatus: 'UNPAID' });
+    // m4: entry PAID with NO member record — the backfill's job, report-only here.
+    await entries.doc('m4').set({ id: 'm4', ownerUid: 'm4', paidStatus: 'PAID' });
+  }
+
+  it('DRY RUN is the divergence count and writes NOTHING', async () => {
+    await seedDivergedPool();
+    const r: any = await wrappedReconcile({ data: { dryRun: true }, auth: BOSS } as never);
+    expect(r.ok).toBe(true);
+    expect(r.poolsScanned).toBe(1);
+    expect(r.membersPromoted).toBe(1);
+    expect(r.entriesMirrored).toBe(1);
+    expect(r.alreadyConsistent).toBe(2);
+    expect(r.entriesPaidNoMember).toBe(1);
+    expect(r.ambiguousSkipped).toBe(1); // m6 — ledger history, never auto-promoted
+    expect(r.plannedFixes).toEqual(expect.arrayContaining([
+      { poolId, uid: 'm1', fix: 'PROMOTE_MEMBER' },
+      { poolId, uid: 'm2', fix: 'MIRROR_ENTRY' },
+      { poolId, uid: 'm6', fix: 'AMBIGUOUS_SKIPPED' },
+    ]));
+    // Nothing moved: only the SEEDED ledger row, m1 still UNPAID on the record,
+    // m2 still UNPAID on the entry.
+    expect((await db.collection('pools').doc(poolId).collection('payments').get()).size).toBe(1);
+    expect(((await db.collection('pools').doc(poolId).collection('members').doc('m1').get()).data() as any).paidStatus).toBe('UNPAID');
+    expect(((await db.collection('pools').doc(poolId).collection('entries').doc('m2').get()).data() as any).paidStatus).toBe('UNPAID');
+  });
+
+  it('LIVE run converges both stores, appends the missing ledger row, moves the projections — then finds nothing', async () => {
+    await seedDivergedPool();
+    const r: any = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never);
+    expect(r.ok).toBe(true);
+    expect(r.membersPromoted).toBe(1);
+    expect(r.entriesMirrored).toBe(1);
+
+    // m1 promoted with the entry's detail carried onto the record.
+    const m1 = (await db.collection('pools').doc(poolId).collection('members').doc('m1').get()).data() as any;
+    expect(m1.paidStatus).toBe('PAID');
+    expect(m1.paidAt).toBe(1_700_000_000_000);
+    expect(m1.paidBy).toBe('p2_boss');
+    expect(m1.paymentMethod).toBe('Venmo');
+    expect(m1.paymentNote).toBe('txn 9');
+
+    // ...and exactly ONE NEW ledger row (the seeded MARKED_UNPAID for m6 makes
+    // two total), under `note` (the reader contract), for the PROMOTION only —
+    // the mirror is display repair, not a payment event.
+    const ledger = await db.collection('pools').doc(poolId).collection('payments').get();
+    expect(ledger.size).toBe(2);
+    const promoted = ledger.docs.map((d) => d.data()).find((p: any) => p.uid === 'm1') as any;
+    expect(promoted.amount).toBe(25);
+    // The commissioner's original detail survives into the audit note (codex r3).
+    expect(String(promoted.note)).toMatch(/Venmo — txn 9 — reconciled/);
+
+    // m2's entry display now matches its record — method AND note carried across.
+    const e2 = (await db.collection('pools').doc(poolId).collection('entries').doc('m2').get()).data() as any;
+    expect(e2.paidStatus).toBe('PAID');
+    expect(e2.paidAt).toBe(1_690_000_000_000);
+    expect(e2.paymentMethod).toBe('Cash');
+    expect(e2.paymentNote).toBe('venmo ref 4');
+
+    // m4 still has no member record — creating one is the backfill's job.
+    expect((await db.collection('pools').doc(poolId).collection('members').doc('m4').get()).exists).toBe(false);
+
+    // m6 stays exactly as the commissioner left them: UNPAID record, no new
+    // ledger event — the stale entry display is the operator's call.
+    expect(((await db.collection('pools').doc(poolId).collection('members').doc('m6').get()).data() as any).paidStatus).toBe('UNPAID');
+
+    // Projections moved: m1, m2, m3 now paid.
+    const summary = (await db.collection('pools').doc(poolId).collection('rosterSummary').doc('current').get()).data() as any;
+    expect(summary.paidCount).toBe(3);
+    const pool = (await db.collection('pools').doc(poolId).get()).data() as any;
+    expect((await calculatePoolPot(db, poolId, pool)).prizePot).toBe(75);
+
+    // Idempotent: a second live run finds nothing new (m6 stays ambiguous, not re-counted as work).
+    const r2: any = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never);
+    expect(r2.membersPromoted).toBe(0);
+    expect(r2.entriesMirrored).toBe(0);
+    expect(r2.ambiguousSkipped).toBe(1);
+    expect((await db.collection('pools').doc(poolId).collection('payments').get()).size).toBe(2);
+  });
+
+  it('never touches sim/flagged pools or non-NFL-season types', async () => {
+    await seedUser('p2_boss', 'Boss', 'SUPER_ADMIN');
+    // A flagged pool with a textbook divergence: must stay wrong.
+    await db.collection('pools').doc('p2_flagged').set({
+      id: 'p2_flagged', type: 'NFL_PICKEM', name: 'Flagged', ownerId: 'p2_boss', isTestPool: true, settings: { entryFee: 10 },
+    });
+    await db.collection('pools').doc('p2_flagged').collection('members').doc('x').set({ uid: 'x', poolId: 'p2_flagged', paidStatus: 'UNPAID' });
+    await db.collection('pools').doc('p2_flagged').collection('entries').doc('x').set({ id: 'x', ownerUid: 'x', paidStatus: 'PAID' });
+    // A BRACKET pool: the entry IS the payment store there — out of scope.
+    await db.collection('pools').doc('p2_bracket').set({
+      id: 'p2_bracket', type: 'BRACKET', name: 'Bracket', ownerId: 'p2_boss', settings: { entryFee: 10 },
+    });
+
+    const r: any = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never);
+    expect(r.testPoolsSkipped).toBe(1);
+    expect(r.otherTypeSkipped).toBe(1);
+    expect(r.poolsScanned).toBe(0);
+    expect(((await db.collection('pools').doc('p2_flagged').collection('members').doc('x').get()).data() as any).paidStatus).toBe('UNPAID');
+  });
+
+  it('refuses non-SUPER_ADMIN callers (claim AND users-doc must agree)', async () => {
+    await seedUser('p2_pleb', 'Pleb'); // PARTICIPANT users-doc, no admin claim
+    await expect(wrappedReconcile({ data: { dryRun: true }, auth: { uid: 'p2_pleb', token: {} } } as never))
+      .rejects.toThrow(/required role|Super Admin/i);
+    // Claim without the users-doc role is refused too — the two-source gate.
+    await expect(wrappedReconcile({ data: { dryRun: true }, auth: { uid: 'p2_pleb', token: { role: 'SUPER_ADMIN' } } } as never))
+      .rejects.toThrow(/required role/i);
   });
 });

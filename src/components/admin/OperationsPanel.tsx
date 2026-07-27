@@ -175,6 +175,73 @@ const runPublishedWeeksBackfill = async (dryRun: boolean) => {
   return agg;
 };
 
+/**
+ * Payment-truth reconciliation (PLAN-PAYMENT-TRUTH P2). Same paging shape as
+ * the publishedWeeks backfill: counters aggregate across pages; the capped
+ * plannedFixes list makes the dry run reviewable evidence, and per Q5 the dry
+ * run IS the divergence count. Idempotent, so an aborted run is simply re-run
+ * from the start — everything already fixed reads back as consistent.
+ */
+/** Page-cap park for the reconciliation, keyed by dryRun: cursor + the partial
+ *  report so a resumed click reports the WHOLE run, not just its own pages
+ *  (codex r2/r3 — same lesson as backfillResume: counters are the evidence on
+ *  a money migration). Cleared on a clean finish. */
+const reconcileResume = new Map<boolean, { cursor: string; partial: ResumableReport; plannedFixes: any[] }>();
+
+const runReconcilePaymentTruth = async (dryRun: boolean) => {
+  const parked = reconcileResume.get(dryRun);
+  let cursor: string | undefined = parked?.cursor;
+  let pages = 0;
+  const agg = {
+    ok: true, dryRun,
+    poolsScanned: 0, membersPromoted: 0, entriesMirrored: 0, alreadyConsistent: 0,
+    entriesPaidNoMember: 0, ambiguousSkipped: 0, testPoolsSkipped: 0, otherTypeSkipped: 0,
+    failures: [] as any[], plannedFixes: [] as any[], plannedFixesTruncated: false,
+    resumedFrom: parked?.cursor ?? null,
+  };
+  if (parked) {
+    foldParkedReport(agg, parked.partial);
+    agg.plannedFixes.push(...parked.plannedFixes);
+  }
+  do {
+    // Cursor sent only when present — the JS SDK encodes explicit-undefined as
+    // null on the wire (the schema also takes null, belt + suspenders, #296).
+    const r: any = await call('reconcilePaymentTruth', { dryRun, limit: 25, ...(cursor ? { startAfter: cursor } : {}) }, BACKFILL_TIMEOUT_MS);
+    agg.ok = agg.ok && r.ok !== false;
+    agg.poolsScanned += r.poolsScanned || 0;
+    agg.membersPromoted += r.membersPromoted || 0;
+    agg.entriesMirrored += r.entriesMirrored || 0;
+    agg.alreadyConsistent += r.alreadyConsistent || 0;
+    agg.entriesPaidNoMember += r.entriesPaidNoMember || 0;
+    agg.ambiguousSkipped += r.ambiguousSkipped || 0;
+    agg.testPoolsSkipped += r.testPoolsSkipped || 0;
+    agg.otherTypeSkipped += r.otherTypeSkipped || 0;
+    if (Array.isArray(r.failures)) agg.failures.push(...r.failures);
+    // Enforce the documented 50-item cap GLOBALLY, not per page (codex r5):
+    // each page can return up to 25 fixes with its own flag false, so an
+    // unbounded aggregate would bury the counters the Run Log exists to show.
+    if (Array.isArray(r.plannedFixes)) {
+      const room = 50 - agg.plannedFixes.length;
+      agg.plannedFixes.push(...r.plannedFixes.slice(0, Math.max(0, room)));
+      if (r.plannedFixes.length > room) agg.plannedFixesTruncated = true;
+    }
+    agg.plannedFixesTruncated = agg.plannedFixesTruncated || r.plannedFixesTruncated === true;
+    cursor = r.nextCursor || undefined;
+    pages++;
+  } while (cursor && pages < 100);
+  if (cursor) {
+    // Page-cap exit with pools left (codex r1): report it as incomplete, park
+    // the cursor AND the partial counters so the NEXT click continues from
+    // here and its final report covers the whole run (codex r2/r3).
+    reconcileResume.set(dryRun, { cursor, partial: snapshotReport(agg), plannedFixes: [...agg.plannedFixes] });
+    agg.ok = false;
+    agg.failures.push({ poolId: '(page cap)', error: `stopped after 100 pages with pools remaining; click Run again to resume from ${cursor}` });
+  } else {
+    reconcileResume.delete(dryRun);
+  }
+  return agg;
+};
+
 const ACTIONS: OpAction[] = [
   {
     id: 'recalculateGlobalStats',
@@ -256,6 +323,24 @@ const ACTIONS: OpAction[] = [
     destructive: true,
     icon: Users,
     run: () => runBackfill(false, true),
+  },
+  {
+    id: 'reconcilePaymentTruth:dry',
+    label: 'Reconcile Payment Truth (dry run)',
+    description: 'THE DIVERGENCE COUNT (PLAN-PAYMENT-TRUTH P2). Reports every NFL season pool member whose two payment stores disagree: entry says PAID while the Member Record says UNPAID (the pre-P1 Bento write — their dues are missing from the pot), or Member Record PAID while the entry display says UNPAID. Members with payments-ledger history are never auto-promoted — they show as AMBIGUOUS_SKIPPED for you to resolve by hand, because their UNPAID record may be a deliberate later un-mark. Lists the planned fixes (capped at 50). If entriesPaidNoMember is NONZERO, re-run the incl.-finished roster backfill first. Writes nothing.',
+    blastRadius: 'Read-only — no writes. Reports divergence counts + planned fixes.',
+    destructive: false,
+    icon: CheckCircle2,
+    run: () => runReconcilePaymentTruth(true),
+  },
+  {
+    id: 'reconcilePaymentTruth',
+    label: 'Reconcile Payment Truth',
+    description: 'Applies the fixes the dry run counted: promotes Member Records where the entry recorded a pre-P1 payment (and appends the missing payments-ledger row), and mirrors entry displays where the Member Record is already PAID. NFL season pools only; sim and isTestPool pools are never touched. Run AFTER the roster backfill and BEFORE Recalculate Global Stats. Idempotent.',
+    blastRadius: 'Writes members.paidStatus + payments ledger rows + entry display fields on diverged NFL pools; recomputes roster summaries and commissioner aggregates.',
+    destructive: true,
+    icon: Users,
+    run: () => runReconcilePaymentTruth(false),
   },
   {
     id: 'backfillProfileData:dry',

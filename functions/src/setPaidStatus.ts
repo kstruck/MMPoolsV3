@@ -126,11 +126,16 @@ export const setPaidStatus = validated(
         typeof paymentNote === 'string' ? paymentNote.slice(0, 500) : undefined,
       ].filter(Boolean);
       const ledgerRef = poolRef.collection('payments').doc();
+      // Conditional spreads on every optional field: this project deliberately
+      // does NOT set ignoreUndefinedProperties (nflPools.ts:482 records the
+      // crash class), so `amount: undefined` on a pool with no entryFee would
+      // abort the WHOLE transaction — the paid mark included (codex r3 on P2,
+      // which copied this shape and got caught).
       tx.set(ledgerRef, {
         type: isPaid ? 'MARKED_PAID' : 'MARKED_UNPAID',
         uid: memberUid,
-        entryName: memberName,
-        amount: typeof entryFee === 'number' ? entryFee : undefined,
+        ...(memberName !== undefined ? { entryName: memberName } : {}),
+        ...(typeof entryFee === 'number' ? { amount: entryFee } : {}),
         actorUid: uid,
         at: Date.now(),
         createdAt: FieldValue.serverTimestamp(),
