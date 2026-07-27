@@ -1178,6 +1178,50 @@ describe('rescore queue — the tier that catches what the 24h window cannot', (
     expect((await poolDoc('p-voided-race')).publishedWeeks).toBeUndefined();
   }, 60000);
 
+  it('aborts the fenced write when the pool is voided MID-PASS, after the guard passed', async () => {
+    // codex r6: the pre-flight guard is read-then-write. cancelPool takes no
+    // lease, so it can commit between that read and the first fenced write —
+    // which is why the assertion also lives inside the fence transaction.
+    await seedStale('p-void-midpass');
+    const fence = (await acquireScoringLease(db, 'p-void-midpass', Date.now()))!;
+    await db.collection('pools').doc('p-void-midpass').update({ status: 'ARCHIVED' });
+
+    await expect(
+      fencedWrite(db, db.collection('pools').doc('p-void-midpass'), fence, () => {}, { probe: true }),
+    ).rejects.toThrow(/FENCE_LOST/);
+    expect((await poolDoc('p-void-midpass')).probe).toBeUndefined();
+  }, 60000);
+
+  it('reschedules a lockPending reminder when the deadline moved under it', async () => {
+    // codex r6: the reminder names ONE instant. If the override moves after the
+    // pass that wrote it, the drain arrives, finds the reveal bit still false
+    // under the NEW deadline, takes the fingerprint skip — and acknowledging
+    // there would retire the slate's only remaining candidate.
+    await wipe();
+    await seedGames([gameDoc('g1', { startTime: Date.now() - 30 * HOUR }), laterWeekGame()]);
+    await seedPool('p-reminder-move', 'NFL_PICKEM', {
+      lockBufferMinutes: 5, pickMode: 'STRAIGHT', weekLockOverrides: { 1: Date.now() + 4 * HOUR },
+    });
+    await seedEntry('p-reminder-move', 'alice', { picks: { g1: 'KC' }, weeklyPoints: {}, totalScore: 0 });
+    // Bank a fingerprint so the drain takes the SKIP path, which is where the
+    // reschedule has to happen.
+    await autoScoreOnce(db, Date.now(), { dryRun: false });
+    const banked = (await poolDoc('p-reminder-move')).autoScore?.fingerprintByWeek?.['1'];
+    expect(banked).toBeUndefined();          // nothing revealed, so nothing banked
+    await db.collection('pools').doc('p-reminder-move')
+      .update({ 'autoScore.fingerprintByWeek.1': 'forced-skip' });
+
+    // Drain a stale reminder while the deadline sits further out.
+    await db.collection(RESCORE_QUEUE).get().then(s => Promise.all(s.docs.map(d => d.ref.delete())));
+    await enqueue('lockPending', { notBefore: Date.now() - HOUR });
+    await autoScoreOnce(db, Date.now(), { dryRun: false });
+
+    const snap = await db.collection(RESCORE_QUEUE).get();
+    expect(snap.size).toBe(1);
+    expect(snap.docs[0].data().reason).toBe('lockPending');
+    expect(snap.docs[0].data().notBefore).toBeGreaterThan(Date.now());
+  }, 60000);
+
   it('still scores a pool whose status is FINAL — that is settled, not voided', async () => {
     // The in-lease guard is deliberately narrower than the candidate filter:
     // FINAL is what payout handling stamps, and re-scoring one by hand is a

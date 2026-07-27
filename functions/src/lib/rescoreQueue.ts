@@ -236,21 +236,35 @@ export function groupBySlate(events: QueuedEvent[]): SlateGroup[] {
  * `terminal` on some other game in a scored week is just as damaging as a
  * `correction` — repairing any of them needs the reset-and-replay sub-PR.
  *
- * What survives is the case the plan wanted to keep: a delayed FIRST score of a
- * week nobody has completed yet. `scoredWeeks.{week}` is written only by a
- * COMPLETE pass, so a provisionally-scored week still qualifies — it is not
- * finished, and a provisional pass writes no elimination it has to preserve.
+ * What survives is a delayed FIRST score of a week nothing has touched yet.
+ *
+ * TWO markers, not one (codex r6). `scoredWeeks` alone is not enough: it is
+ * written only by a COMPLETE pass, but a PROVISIONAL pass on a weekly-locked
+ * Survivor pool already writes `strikeWeeks` / `eliminatedWeek` / weekly results
+ * the moment the weekly lock passes and a picked game finalizes. That ledger is
+ * exactly what a replay corrupts, so a provisionally-scored week is NOT safe to
+ * re-run either. `publishedWeeks.{week}` is the marker that catches it — the
+ * scorer stamps it on ANY pass that revealed anything, provisional included.
+ *
+ * That does narrow the allowed case considerably: a slate where anything was
+ * already revealed defers. Deliberate — without reset-and-replay the only safe
+ * Survivor replay is one where no ledger exists yet, and deferring is
+ * recoverable while a corrupted elimination ordering is not. Pick'em and Margin
+ * are unaffected; they are per-week additive.
  */
 export function survivorAllowedForGroup(
   reasons: Set<RescoreReason>,
-  pool: { scoredWeeks?: unknown } | undefined,
+  pool: { scoredWeeks?: unknown; publishedWeeks?: unknown } | undefined,
   week: number,
 ): boolean {
   let hasNonCorrection = false;
   for (const r of reasons) if (r !== 'correction') { hasNonCorrection = true; break; }
   if (!hasNonCorrection) return false;
-  const scored = pool?.scoredWeeks as Record<string, unknown> | undefined;
-  return !(scored && typeof scored === 'object' && scored[String(week)] === true);
+  const marked = (field: unknown): boolean => {
+    const map = field as Record<string, unknown> | undefined;
+    return !!map && typeof map === 'object' && map[String(week)] === true;
+  };
+  return !marked(pool?.scoredWeeks) && !marked(pool?.publishedWeeks);
 }
 
 export interface SpreadShape { value?: unknown; locked?: unknown }

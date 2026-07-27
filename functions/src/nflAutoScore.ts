@@ -22,6 +22,7 @@ import {
   groupBySlate,
   ackRescoreEvents,
   rescoreEventDoc,
+  enqueueRescore,
   partitionQueue,
   survivorAllowedForGroup,
   slateKeyOf,
@@ -279,6 +280,26 @@ async function scoreSlateOnce(
       const stored = pool.autoScore?.fingerprintByWeek?.[String(slate.week)];
       if (fingerprint !== null && stored === fingerprint) {
         result.poolsSkipped++;
+        // RESCHEDULE a still-withheld reveal before dropping this pool (codex r6).
+        // The reminder a previous pass wrote names ONE instant, and an override
+        // can move after that pass read the pool — so the drain arrives, finds the
+        // reveal bit still false under the NEW deadline, takes this skip, and the
+        // ack below would retire the only candidate the slate has left. Recomputing
+        // it here makes the reminder self-healing however many times the deadline
+        // moves. Queued tier only: inside the window the live tier finds the slate
+        // anyway, and a dry run writes nothing.
+        if (opts.queuedReasons && !opts.dryRun) {
+          const stillWithheld = nextWithheldLockAt(pool, slate.week, slate.games, now);
+          const key = stillWithheld === null ? null : `${slateKeyOf(slate)}@${stillWithheld}`;
+          if (key !== null && !ctx.remindersSent.has(key)) {
+            const ok = await enqueueRescore(db, {
+              season: slate.season, seasonType: slate.seasonType, week: slate.week,
+              reason: 'lockPending', enqueuedAt: now, notBefore: stillWithheld!,
+            });
+            if (ok) ctx.remindersSent.add(key);
+            else allOk = false;   // hold the ack; the reminder is the only candidate left
+          }
+        }
         continue;
       }
 
@@ -564,6 +585,18 @@ async function drainFinalizeRetries(
     // Another scorer owns the pool. Leave the event alone; the next run retries.
     if (!fence) { result.poolsSkipped++; continue; }
     try {
+      // Retired since the retry was queued (codex r6). `maybeFinalizeNFLPool`
+      // rejects only an exact `CANCELED`, so without this it would happily
+      // rewrite finalization stamps and season-history projections for a
+      // COMPLETED / ARCHIVED / payout-settled FINAL pool that the queued scoring
+      // path excludes. Acknowledged, not held: it is a no-op forever.
+      const current = (await db.collection('pools').doc(poolId).get()).data();
+      if (isRetiredPool(current)) {
+        console.log(`[nflAutoScoreJob] finalize retry for pool ${poolId} dropped — pool is retired.`);
+        await ackRescoreEvents(db, [id]);
+        result.queuedAcked++;
+        continue;
+      }
       const outcome = await maybeFinalizeNFLPool(db, poolId, { fence });
       console.log(`[nflAutoScoreJob] finalize retry for pool ${poolId}: ${outcome.finalized ? 'finalized' : `declined (${outcome.reason})`}.`);
       await ackRescoreEvents(db, [id]);

@@ -122,10 +122,22 @@ describe('survivorAllowedForGroup — the one thing a queued pass may do to Surv
     expect(survivorAllowedForGroup(set('terminal'), scoredWk1, 2)).toBe(true);
   });
 
-  it('treats a provisionally-scored week as unscored, because it is not finished', () => {
-    // Only a COMPLETE pass writes scoredWeeks, and a provisional pass writes no
-    // elimination that a re-run would have to preserve.
-    expect(survivorAllowedForGroup(set('terminal'), { scoredWeeks: { '1': false } }, 1)).toBe(true);
+  it('DEFERS a week that was only PROVISIONALLY scored — the ledger already exists', () => {
+    // codex r6: scoredWeeks alone is not enough. A provisional pass on a
+    // weekly-locked Survivor pool writes strikeWeeks / eliminatedWeek the moment
+    // the weekly lock passes and a picked game finalizes, and publishedWeeks is
+    // stamped by ANY pass that revealed anything. That ledger is exactly what a
+    // replay corrupts.
+    expect(survivorAllowedForGroup(set('terminal'), { publishedWeeks: { '1': true } }, 1)).toBe(false);
+    expect(survivorAllowedForGroup(set('spread'), { publishedWeeks: { 1: true } }, 1)).toBe(false);
+  });
+
+  it('still allows a week nothing has touched — neither marker set', () => {
+    expect(survivorAllowedForGroup(set('terminal'), { scoredWeeks: { '1': false }, publishedWeeks: {} }, 1)).toBe(true);
+  });
+
+  it('publishedWeeks is per week too', () => {
+    expect(survivorAllowedForGroup(set('terminal'), { publishedWeeks: { '1': true } }, 2)).toBe(true);
   });
 
   it('allows a group that carries a correction AND a terminal', () => {
