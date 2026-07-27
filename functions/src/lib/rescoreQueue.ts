@@ -95,23 +95,35 @@ export function parseRescoreEvent(data: unknown): RescoreEvent | null {
 }
 
 /**
- * Append one event. Returns false rather than throwing — the callers are the
- * score-sync write path and the scorer itself, and neither may be failed by a
- * queue write. The boolean is counted by the caller and surfaced in its
- * heartbeat, because a swallowed failure nobody counts is exactly how the A5
- * snapshot outage hid for days (`ScoreSyncResult.snapshotFailures`).
+ * The stored shape of one event. Exposed separately from `enqueueRescore` so a
+ * caller can put the event in the SAME batch as the write that caused it
+ * (codex r2) — the enqueue and the change it describes must land together or not
+ * at all. A separate write after a successful commit has a real losing
+ * interleaving: the game is persisted as terminal/corrected, the queue write
+ * fails, and no later sync ever sees a transition again, so once the slate
+ * leaves the hot window its standings are stale permanently.
+ */
+export function rescoreEventDoc(event: RescoreEvent): Record<string, unknown> {
+  return {
+    season: event.season,
+    seasonType: event.seasonType,
+    week: event.week,
+    reason: event.reason,
+    enqueuedAt: event.enqueuedAt,
+    ...(event.notBefore ? { notBefore: event.notBefore } : {}),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+/**
+ * Append one event on its own. Returns false rather than throwing, so a caller
+ * that must not be failed by a queue write can decide what to do — every current
+ * caller either retries (the spread trigger, under `retry: true`) or withholds
+ * the state that would make it skip the work next time.
  */
 export async function enqueueRescore(db: Firestore, event: RescoreEvent): Promise<boolean> {
   try {
-    await db.collection(RESCORE_QUEUE).add({
-      season: event.season,
-      seasonType: event.seasonType,
-      week: event.week,
-      reason: event.reason,
-      enqueuedAt: event.enqueuedAt,
-      ...(event.notBefore ? { notBefore: event.notBefore } : {}),
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    await db.collection(RESCORE_QUEUE).add(rescoreEventDoc(event));
     return true;
   } catch (e) {
     console.error(`[rescoreQueue] enqueue failed for ${slateKeyOf(event)} (${event.reason}):`, e);

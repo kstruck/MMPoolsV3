@@ -74,7 +74,6 @@ describe('syncScoresWindow — the lookback is what it queries', () => {
     expect(result).toEqual({
       slates: 0, gamesWritten: 0, corrections: 0,
       slatesNotReconciled: 0, snapshotFailures: 0, correctionReportFailures: 0,
-      rescoreEnqueueFailures: 0,
     });
   });
 
@@ -101,6 +100,7 @@ function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: nu
   // slate. Recorded rather than ignored so the enqueue is asserted here, at the
   // one place that knows whether a correction or a first-final actually happened.
   const enqueued: any[] = [];
+  let autoIds = 0;
   const docOf = (id: string) => ({
     id,
     exists: stored[id] !== undefined,
@@ -119,18 +119,17 @@ function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: nu
   const db = {
     collection: (name: string) => ({
       ...query,
-      doc: (id: string) => ({ id, _id: id }),
-      async add(data: any) {
-        if (name !== 'nfl_rescore_queue') throw new Error(`unexpected add to ${name}`);
-        enqueued.push(data);
-        return { id: `q${enqueued.length}` };
-      },
+      // doc() with no id is how a batch appends a queue event.
+      doc: (id?: string) => ({ id: id ?? `auto${autoIds++}`, _id: id ?? `auto${autoIds}`, _col: name }),
     }),
     async getAll(...refs: any[]) {
       return refs.map((r) => docOf(r._id));
     },
     batch: () => ({
-      set: (ref: any, data: any) => writes.push({ id: ref._id, data }),
+      set: (ref: any, data: any) => {
+        if (ref._col === 'nfl_rescore_queue') enqueued.push(data);
+        else writes.push({ id: ref._id, data });
+      },
       async commit() { /* no-op */ },
     }),
     doc: () => ({ async get() { return { data: () => undefined }; } }),
@@ -251,7 +250,6 @@ describe('syncScoresWindow — an unreconciled slate is counted, however it fail
       }),
     });
     expect(r.slatesNotReconciled).toBe(0);
-    expect(r.rescoreEnqueueFailures).toBe(0);
     expect(scoreSyncHeartbeat(r).ok).toBe(true);
   });
 });
@@ -279,7 +277,6 @@ describe('syncScoresWindow — the rescore handoff', () => {
     const { db, enqueued } = fakeDbWithDocs(storedLive, NOW, HOT_WINDOW_LOOKBACK_MS);
     const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, { fetchSlate: async () => ({ games: fresh(), raw: { ok: true } }) });
 
-    expect(r.rescoreEnqueueFailures).toBe(0);
     expect(enqueued).toHaveLength(1);
     expect(enqueued[0]).toMatchObject({ season: '2026', seasonType: 1, week: 1, reason: 'terminal' });
   });
@@ -340,7 +337,6 @@ describe('scoreSyncHeartbeat — not throwing is not the same as healthy', () =>
   const clean = {
     slates: 2, gamesWritten: 16, corrections: 0,
     slatesNotReconciled: 0, snapshotFailures: 0, correctionReportFailures: 0,
-    rescoreEnqueueFailures: 0,
   };
 
   it('reports ok on a clean run', () => {
@@ -376,13 +372,7 @@ describe('scoreSyncHeartbeat — not throwing is not the same as healthy', () =>
     expect(scoreSyncHeartbeat({ ...clean, slatesNotReconciled: 1 }).detail).toEqual({
       slates: 2, gamesWritten: 16, corrections: 0,
       slatesNotReconciled: 1, snapshotFailures: 0, correctionReportFailures: 0,
-      rescoreEnqueueFailures: 0,
     });
   });
 
-  it('reports NOT ok when a rescore handoff was lost — the standings stay stale with nobody told', () => {
-    const v = scoreSyncHeartbeat({ ...clean, corrections: 1, rescoreEnqueueFailures: 1 });
-    expect(v.ok).toBe(false);
-    expect(v.error).toContain('1 rescore handoff(s) not enqueued');
-  });
 });

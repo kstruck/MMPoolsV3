@@ -7,7 +7,7 @@ import { captureFeedSnapshot, pruneExpiredSnapshots, readSnapshotGate, reportSta
 import { opsCourierAuthToken } from './lib/opsAlertDispatcher';
 import { withHeartbeat, configReadFailedVerdict } from './lib/heartbeat';
 import { isTerminalGame } from './lib/weekCompletion';
-import { enqueueRescore } from './lib/rescoreQueue';
+import { RESCORE_QUEUE, rescoreEventDoc } from './lib/rescoreQueue';
 import type { Firestore } from 'firebase-admin/firestore';
 import { validated } from "./lib/validated";
 import { importNFLScheduleSchema } from "./schemas/nflSchedule";
@@ -404,15 +404,6 @@ export interface ScoreSyncResult {
    * with nobody told. That is the most expensive silent failure in this file.
    */
   correctionReportFailures: number;
-  /**
-   * Slates whose `nfl_rescore_queue` handoff could not be written (§5b).
-   *
-   * `enqueueRescore` returns false rather than throwing — a queue write must never
-   * fail a score sync — so this counter is the only thing standing between a lost
-   * handoff and a silently stale set of standings. Same reasoning as
-   * `correctionReportFailures` directly above.
-   */
-  rescoreEnqueueFailures: number;
 }
 
 /**
@@ -447,7 +438,7 @@ export async function syncScoresWindow(
   const fetchSlate = opts.fetchSlate ?? fetchNFLWeekScheduleWithRaw;
   const empty: ScoreSyncResult = {
     slates: 0, gamesWritten: 0, corrections: 0, slatesNotReconciled: 0, snapshotFailures: 0,
-    correctionReportFailures: 0, rescoreEnqueueFailures: 0,
+    correctionReportFailures: 0,
   };
 
   // Only games in the active window: started within the last `lookbackMs` (still live
@@ -489,7 +480,6 @@ export async function syncScoresWindow(
   let slatesNotReconciled = 0;
   let snapshotFailures = 0;
   let correctionReportFailures = 0;
-  let rescoreEnqueueFailures = 0;
 
   for (const [_, slot] of weeksToSync) {
     const { games: freshGames, raw } = await fetchSlate(slot.week, slot.season, slot.seasonType);
@@ -580,21 +570,26 @@ export async function syncScoresWindow(
       const cleanedGame = JSON.parse(JSON.stringify(freshGame));
       batch.set(gameRef, cleanedGame, { merge: true });
     }
+
+    // The rescore handoff rides IN the same batch as the games it describes
+    // (codex r2). Enqueueing after the commit has a losing interleaving: the
+    // terminal/corrected game is persisted, the queue write fails, and no later
+    // sync sees a transition again — so once the slate leaves the hot window its
+    // standings stay stale with nothing to fix them. In the batch, a failed
+    // enqueue simply fails the whole slate write and the next 5-minute run
+    // reconciles it from the same prior state.
+    //
+    // Write path only: a dry run changes no game, so there is nothing to
+    // reconcile. Both reasons can fire for one slate — they are distinct events
+    // and the drain unions them, which is what lets a Survivor pool be scored for
+    // a delayed final on a slate that also carries a correction.
+    for (const reason of ['correction', 'terminal'] as const) {
+      if (reason === 'correction' ? corrections.length === 0 : !firstTerminal) continue;
+      batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({ ...slateKey, reason, enqueuedAt: now }));
+    }
+
     await batch.commit();
     gamesWritten += freshGames.length;
-
-    // Enqueue AFTER the commit, so the queue can never point at data that was not
-    // written. Only on the write path: a dry run changes no game, so there is
-    // nothing for the scorer to reconcile and an event would just drain to a
-    // no-op. Both reasons can fire for one slate — they are distinct events and
-    // the drain unions them, which is what lets a Survivor pool be scored for a
-    // delayed final on a slate that also carries a correction.
-    if (corrections.length > 0) {
-      if (!await enqueueRescore(db, { ...slateKey, reason: 'correction', enqueuedAt: now })) rescoreEnqueueFailures++;
-    }
-    if (firstTerminal) {
-      if (!await enqueueRescore(db, { ...slateKey, reason: 'terminal', enqueuedAt: now })) rescoreEnqueueFailures++;
-    }
   }
 
   // Pruning belongs to the 5-minute job only: it is retention maintenance, not
@@ -606,7 +601,7 @@ export async function syncScoresWindow(
 
   return {
     slates: weeksToSync.size, gamesWritten, corrections: correctionCount,
-    slatesNotReconciled, snapshotFailures, correctionReportFailures, rescoreEnqueueFailures,
+    slatesNotReconciled, snapshotFailures, correctionReportFailures,
   };
 }
 
@@ -628,16 +623,11 @@ export function scoreSyncHeartbeat(r: ScoreSyncResult): {
     slates: r.slates, gamesWritten: r.gamesWritten, corrections: r.corrections,
     slatesNotReconciled: r.slatesNotReconciled, snapshotFailures: r.snapshotFailures,
     correctionReportFailures: r.correctionReportFailures,
-    rescoreEnqueueFailures: r.rescoreEnqueueFailures,
   };
   const degraded: string[] = [];
   if (r.slatesNotReconciled > 0) degraded.push(`${r.slatesNotReconciled} slate(s) returned no games`);
   if (r.snapshotFailures > 0) degraded.push(`${r.snapshotFailures} snapshot write(s) failed`);
   if (r.correctionReportFailures > 0) degraded.push(`${r.correctionReportFailures} stat-correction report(s) undelivered`);
-  // A lost handoff means the standings this correction/final should have moved are
-  // stale until someone scores the week by hand — the sweep's own alarm is the
-  // only place that shows up.
-  if (r.rescoreEnqueueFailures > 0) degraded.push(`${r.rescoreEnqueueFailures} rescore handoff(s) not enqueued`);
   return degraded.length > 0
     ? { ok: false, error: degraded.join('; '), detail }
     : { ok: true, detail };
