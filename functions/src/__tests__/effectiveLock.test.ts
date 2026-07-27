@@ -47,6 +47,27 @@ describe('isGameLocked', () => {
     expect(isGameLocked(lock - 1, kickoff, 1, {})).toBe(false);
     expect(isGameLocked(lock, kickoff, 1, {})).toBe(true);
   });
+
+  // Buffer-edge at second granularity. Every enforcement site compares
+  // `now >= lockAt`, so the deadline INSTANT itself is locked: an off-by-one
+  // that flips >= to > (or a seconds/millis mixup at a call site) moves real
+  // money-adjacent picks across the boundary. T-1s open / T locked / T+1s
+  // locked pins both sides.
+  it('buffer edge T±1s: open one second before the deadline, locked at and after it', () => {
+    const SEC = 1000;
+    const lock = kickoff - 5 * MIN;
+    expect(isGameLocked(lock - SEC, kickoff, 1, {})).toBe(false);
+    expect(isGameLocked(lock, kickoff, 1, {})).toBe(true);
+    expect(isGameLocked(lock + SEC, kickoff, 1, {})).toBe(true);
+  });
+
+  it('the weekly deadline is an exact instant (first kickoff − buffer), no rounding', () => {
+    // The weekly check in nflPools is `now >= effectiveWeekLockAt(...)` — the
+    // same comparison as isGameLocked — so pinning the computed instant to the
+    // millisecond is what makes the T±1s cases above cover the weekly path too.
+    const surv = effectiveLockSettings({ lockBufferMinutes: 60 }, 'NFL_SURVIVOR');
+    expect(effectiveWeekLockAt([kickoff, kickoff + 3 * 3600_000], 1, surv)).toBe(kickoff - 60 * MIN);
+  });
 });
 
 // ---------------------------------------------------------------------------
