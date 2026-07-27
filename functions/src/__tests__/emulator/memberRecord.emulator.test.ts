@@ -310,6 +310,98 @@ describe('setPaidStatus — detail fields + entry mirror (P1)', () => {
 });
 
 /**
+ * PLAN-PAYMENT-TRUTH P3 (Q2 = option B): the rebuy-paid control — the writer
+ * `rebuyPaid` never had. A rebuy is dues OWED ("$X due to the commissioner",
+ * SurvivorPickEntry copy), settled out of band and INDEPENDENTLY of base dues.
+ * memberDues has always added rebuyPaid to `collected`, so this moves BOTH
+ * money surfaces at once (the pot and the roster's duesCollected) — the plan
+ * requires tests on both.
+ */
+describe('setPaidStatus settleRebuys — the rebuy-paid control (P3)', () => {
+  const poolId = 'p3_pool';
+  const BOSS = { uid: 'p3_boss', token: {} };
+
+  async function seedRebuyPool() {
+    await db.collection('pools').doc(poolId).set({
+      id: poolId, type: 'NFL_SURVIVOR', name: 'P3 Pool', ownerId: 'p3_boss',
+      participantIds: ['p3_boss', 'p3_m1'], status: 'OPEN', settings: { entryFee: 25, rebuyCost: 20 },
+    });
+    // Exactly the shape production produces: rebuyOwed from executeSurvivorRebuy,
+    // base dues PAID from the commissioner, rebuyPaid absent.
+    await db.collection('pools').doc(poolId).collection('members').doc('p3_m1').set({
+      uid: 'p3_m1', poolId, userName: 'Rebuyer', role: 'PARTICIPANT', paidStatus: 'PAID', rebuyOwed: 20,
+    });
+  }
+
+  it('settle flips rebuyPaid to rebuyOwed, appends ONE ledger event, and moves BOTH money surfaces', async () => {
+    await seedRebuyPool();
+    // Before: the D12 defect state — the $20 rebuy is invisible.
+    let pool = (await db.collection('pools').doc(poolId).get()).data() as any;
+    expect((await calculatePoolPot(db, poolId, pool)).prizePot).toBe(25);
+
+    await wrappedSetPaid({ data: { poolId, memberUid: 'p3_m1', settleRebuys: true }, auth: BOSS } as never);
+
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('p3_m1').get()).data() as any;
+    expect(m.rebuyPaid).toBe(20);
+    expect(m.paidStatus).toBe('PAID'); // base dues untouched — independent settlements
+
+    const ledger = await db.collection('pools').doc(poolId).collection('payments').get();
+    expect(ledger.size).toBe(1);
+    expect(ledger.docs[0].data().type).toBe('REBUY_SETTLED');
+    expect(ledger.docs[0].data().amount).toBe(20);
+
+    // Money surface 1: the pot now counts the rebuy dollar.
+    pool = (await db.collection('pools').doc(poolId).get()).data() as any;
+    expect((await calculatePoolPot(db, poolId, pool)).prizePot).toBe(45);
+    // Money surface 2: the roster projection agrees.
+    const summary = (await db.collection('pools').doc(poolId).collection('rosterSummary').doc('current').get()).data() as any;
+    expect(summary.duesCollected).toBe(45);
+    expect(summary.duesExpected).toBe(45);
+
+    // Transition-only: settling an already-settled member appends nothing.
+    await wrappedSetPaid({ data: { poolId, memberUid: 'p3_m1', settleRebuys: true }, auth: BOSS } as never);
+    expect((await db.collection('pools').doc(poolId).collection('payments').get()).size).toBe(1);
+  });
+
+  it('a LATER rebuy reopens the debt, and settling again moves only the delta', async () => {
+    await seedRebuyPool();
+    await wrappedSetPaid({ data: { poolId, memberUid: 'p3_m1', settleRebuys: true }, auth: BOSS } as never);
+    // Second rebuy: owed grows to 40 while paid stays 20 → outstanding again.
+    await db.collection('pools').doc(poolId).collection('members').doc('p3_m1').set({ rebuyOwed: 40 }, { merge: true });
+
+    await wrappedSetPaid({ data: { poolId, memberUid: 'p3_m1', settleRebuys: true }, auth: BOSS } as never);
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('p3_m1').get()).data() as any;
+    expect(m.rebuyPaid).toBe(40);
+    const ledger = await db.collection('pools').doc(poolId).collection('payments').get();
+    expect(ledger.size).toBe(2);
+    const amounts = ledger.docs.map((d) => d.data().amount).sort();
+    expect(amounts).toEqual([20, 20]); // each event carries the amount that MOVED
+  });
+
+  it('unsettle reverses to 0 with a REBUY_UNSETTLED event carrying the reversed amount', async () => {
+    await seedRebuyPool();
+    await wrappedSetPaid({ data: { poolId, memberUid: 'p3_m1', settleRebuys: true }, auth: BOSS } as never);
+    await wrappedSetPaid({ data: { poolId, memberUid: 'p3_m1', settleRebuys: false }, auth: BOSS } as never);
+
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('p3_m1').get()).data() as any;
+    expect(m.rebuyPaid).toBe(0);
+    const events = (await db.collection('pools').doc(poolId).collection('payments').get()).docs.map((d) => d.data());
+    expect(events.map((e: any) => e.type).sort()).toEqual(['REBUY_SETTLED', 'REBUY_UNSETTLED']);
+    expect((events.find((e: any) => e.type === 'REBUY_UNSETTLED') as any).amount).toBe(20);
+    const pool = (await db.collection('pools').doc(poolId).get()).data() as any;
+    expect((await calculatePoolPot(db, poolId, pool)).prizePot).toBe(25); // back to base dues only
+  });
+
+  it('refuses non-commissioners and members not on the roster', async () => {
+    await seedRebuyPool();
+    await expect(wrappedSetPaid({ data: { poolId, memberUid: 'p3_m1', settleRebuys: true }, auth: { uid: 'p3_m1', token: {} } } as never))
+      .rejects.toThrow(/commissioner/i);
+    await expect(wrappedSetPaid({ data: { poolId, memberUid: 'nobody', settleRebuys: true }, auth: BOSS } as never))
+      .rejects.toThrow(/roster/i);
+  });
+});
+
+/**
  * PLAN-PAYMENT-TRUTH P2 (Q5): the one-off reconciliation for the population
  * NOTHING else repairs — members who already had a Member Record and were then
  * marked paid through the pre-P1 Bento (entry-only write). The backfill skips

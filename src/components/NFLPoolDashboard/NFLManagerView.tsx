@@ -183,7 +183,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       byUid.set(uid, { ...(byUid.get(uid) || { uid }), ...patch, uid });
     };
     for (const uid of ((pool as any).participantIds || [])) put(uid, {});
-    for (const m of members) put(m.uid, { userName: m.userName, memberPaid: m.paidStatus, hasMember: true, rebuyOwed: m.rebuyOwed });
+    for (const m of members) put(m.uid, { userName: m.userName, memberPaid: m.paidStatus, hasMember: true, rebuyOwed: m.rebuyOwed, rebuyPaid: m.rebuyPaid });
     for (const e of entries) {
       const uid = e.ownerUid || e.id;
       put(uid, { entry: e, hasEntry: true, entryPaid: e.paidStatus, userName: byUid.get(uid)?.userName || e.userName, status: e.status, strikesUsed: e.strikesUsed, rebuysUsed: e.rebuysUsed, seasonTotal: e.seasonTotal });
@@ -282,6 +282,22 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         logger.error(`Failed to set paid status for ${uid}:`, err);
         setFeedback({ type: 'error', message: 'Mark-paid for members without an entry needs the payments update deployed. Deploy functions to enable.' });
       }
+    } finally {
+      setIsSavingPayment(null);
+    }
+  };
+
+  // Rebuy settlement (PLAN-PAYMENT-TRUTH P3): a member's rebuy dues are owed
+  // and settled INDEPENDENTLY of base dues — the same button state machine as
+  // the paid toggle, against the settleRebuys mode of the same callable.
+  const handleSettleRebuys = async (uid: string, settle: boolean) => {
+    setIsSavingPayment(uid);
+    setFeedback(null);
+    try {
+      await dbService.settleRebuys(pool.id, uid, settle);
+    } catch (err: any) {
+      logger.error(`Failed to settle rebuys for ${uid}:`, err);
+      setFeedback({ type: 'error', message: 'Rebuy settlement failed — is the payments update deployed?' });
     } finally {
       setIsSavingPayment(null);
     }
@@ -1075,6 +1091,26 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                           <DollarSign size={10} />
                           {isSavingPayment === row.uid ? 'Saving...' : row.paidStatus || 'UNPAID'}
                         </button>
+                        {(row.rebuyOwed ?? 0) > 0 && (
+                          // Rebuy dues are a SEPARATE settlement from base dues
+                          // (P3, Q2 option B) — the member was told "$X due to
+                          // the commissioner" at rebuy time, and this is where
+                          // the commissioner records collecting it.
+                          <button
+                            onClick={() => handleSettleRebuys(row.uid, !((row.rebuyPaid ?? 0) >= row.rebuyOwed))}
+                            disabled={isSavingPayment === row.uid}
+                            title={(row.rebuyPaid ?? 0) >= row.rebuyOwed ? 'Rebuy dues settled — click to reverse' : 'Click when the rebuy money is collected'}
+                            className={`mt-1.5 block ml-auto px-3 py-1 rounded-md font-display font-bold uppercase text-[9px] tracking-[0.08em] transition-all duration-150 hover:-translate-y-px cursor-pointer ${
+                              (row.rebuyPaid ?? 0) >= row.rebuyOwed
+                                ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
+                                : 'bg-gold-500/15 border border-gold-500/30 text-gold-700 dark:text-gold-400 hover:bg-gold-500/25'
+                            }`}
+                          >
+                            {(row.rebuyPaid ?? 0) >= row.rebuyOwed
+                              ? `Rebuys $${row.rebuyOwed} settled`
+                              : `Rebuys $${row.rebuyOwed} owed`}
+                          </button>
+                        )}
                       </td>
 
                       <td className="py-3.5 px-5 text-right">

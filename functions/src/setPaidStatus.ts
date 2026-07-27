@@ -16,7 +16,7 @@ export const setPaidStatus = validated(
   { schema: setPaidStatusSchema, label: "setPaidStatus", appCheck: "monitor" },
   async (input, request) => {
   const uid = request.auth!.uid;
-  const { poolId, memberUid, isPaid, claim, paymentMethod, paidAt, paymentNote } = input;
+  const { poolId, memberUid, isPaid, claim, settleRebuys, paymentMethod, paidAt, paymentNote } = input;
 
   const db = admin.firestore();
   const poolRef = db.collection('pools').doc(poolId);
@@ -37,6 +37,46 @@ export const setPaidStatus = validated(
     pool.ownerId === uid || pool.managerUid === uid || pool.createdByUid === uid ||
     request.auth!.token?.role === 'SUPER_ADMIN';
   if (!isOwner) throw new HttpsError("permission-denied", "Only the commissioner can set paid status.");
+
+  // --- Rebuy settlement (PLAN-PAYMENT-TRUTH P3, Q2 = option B) ---
+  // A rebuy is money OWED and collected out of band — the rebuy confirmation
+  // tells the member "$X due to the commissioner" (SurvivorPickEntry). This is
+  // the control that settles it: rebuyPaid := rebuyOwed (or back to 0), which
+  // is the field memberDues has always added to `collected` — every rebuy
+  // dollar was invisible to the pot and the roster until now because nothing
+  // wrote it. Independent of base-dues paidStatus on purpose: a member who
+  // paid their entry fee and still owes a rebuy is settled and unsettled at
+  // the same time, which is exactly why option A (fold into paidStatus) was
+  // rejected in the plan.
+  if (settleRebuys !== undefined) {
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(mRef);
+      if (!snap.exists) throw new HttpsError("not-found", "Member is not on this pool's roster.");
+      const m: any = snap.data();
+      const owed = typeof m.rebuyOwed === 'number' ? m.rebuyOwed : 0;
+      const prevPaid = typeof m.rebuyPaid === 'number' ? m.rebuyPaid : 0;
+      const nextPaid = settleRebuys ? owed : 0;
+      // Transition-only, same contract as the base-dues ledger: re-clicking a
+      // settled row is not a payment event.
+      if (nextPaid === prevPaid) return;
+      tx.set(mRef, { rebuyPaid: nextPaid }, { merge: true });
+      const entryName = m.userName;
+      tx.set(poolRef.collection('payments').doc(), {
+        type: settleRebuys ? 'REBUY_SETTLED' : 'REBUY_UNSETTLED',
+        uid: memberUid,
+        ...(entryName !== undefined ? { entryName } : {}),
+        // The amount that MOVED, not the running total — ledger rows are events.
+        amount: Math.abs(nextPaid - prevPaid),
+        actorUid: uid,
+        at: Date.now(),
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    });
+    await recomputeRosterSummary(db, poolId);
+    const rebuyOwner = ownerOf(pool);
+    if (rebuyOwner) await recomputeCommissionerAggregate(db, rebuyOwner);
+    return { success: true, mode: 'rebuys' as const };
+  }
 
   const entryFee: number | undefined = pool.settings?.entryFee;
   let memberName: string | undefined;

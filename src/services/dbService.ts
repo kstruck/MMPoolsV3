@@ -452,6 +452,14 @@ export const dbService = {
         }));
     },
 
+    // Rebuy settlement (PLAN-PAYMENT-TRUTH P3): commissioner marks a member's
+    // rebuy dues settled (rebuyPaid := rebuyOwed) or reverses it. Same callable,
+    // third exclusive mode.
+    settleRebuys: async (poolId: string, memberUid: string, settled: boolean): Promise<void> => {
+        const fn = httpsCallable(functions, 'setPaidStatus');
+        await fn(withCorrelationId({ poolId, memberUid, settleRebuys: settled }));
+    },
+
     // Pool Consensus (ADR 0004) — server aggregate, post-lock, keyed by gameId. Member-readable.
     subscribeToPoolConsensus: (poolId: string, callback: (byGame: Record<string, any>) => void) => {
         const q = query(collection(db, 'pools', poolId, 'consensus'));

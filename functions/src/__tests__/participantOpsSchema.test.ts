@@ -71,4 +71,14 @@ describe("setPaidStatusSchema", () => {
         expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2" }).success).toBe(false);
         expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", isPaid: true, claim: true }).success).toBe(false);
     });
+
+    it("P3 settleRebuys is a third EXCLUSIVE mode, and carries no payment details", () => {
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", settleRebuys: true }).success).toBe(true);
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", settleRebuys: false }).success).toBe(true);
+        // combining modes rejected
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", settleRebuys: true, isPaid: true }).success).toBe(false);
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", settleRebuys: true, claim: true }).success).toBe(false);
+        // details ride only with isPaid: true
+        expect(setPaidStatusSchema.safeParse({ poolId: "p1", memberUid: "u2", settleRebuys: true, paymentMethod: "Cash" }).success).toBe(false);
+    });
 });

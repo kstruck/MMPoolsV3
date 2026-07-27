@@ -31,6 +31,8 @@ const EVENT_LABELS: Record<PaymentLedgerEvent['type'], { label: string; tone: st
     MARKED_PAID: { label: 'marked PAID', tone: 'text-[#0F7B4A] dark:text-[#3FB77F]' },
     MARKED_UNPAID: { label: 'marked UNPAID', tone: 'text-[#B4530A] dark:text-[#E8853D]' },
     REBUY_DUE: { label: 'rebuy — dues added', tone: 'text-gold-700 dark:text-gold-400' },
+    REBUY_SETTLED: { label: 'rebuy dues settled', tone: 'text-[#0F7B4A] dark:text-[#3FB77F]' },
+    REBUY_UNSETTLED: { label: 'rebuy settlement reversed', tone: 'text-[#B4530A] dark:text-[#E8853D]' },
     PAYOUT_PAID: { label: 'payout sent', tone: 'text-[#0F7B4A] dark:text-[#3FB77F]' },
     PAYOUT_UNPAID: { label: 'payout mark reversed', tone: 'text-[#B4530A] dark:text-[#E8853D]' },
 };
