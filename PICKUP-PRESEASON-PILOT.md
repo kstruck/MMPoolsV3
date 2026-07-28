@@ -224,9 +224,12 @@ runtime file changed in between (diff-verified), so the fleet ≡ the tag.
 Previous states: <!-- deploy-state:ignore --> `main` @ `8a55b84` (#279) on
 <!-- deploy-state:ignore --> `main` @ `49c12a9` (#261/#262/#265).
 
-⚠️ **The FRONTEND is NOT current with this claim.** The live bundle is
-`index-Na2D7cdu.js` (the #308 rebuild) and it predates #297/#298; #311 changed no
-frontend code, so a rebuild is optional — see HANDOFF's STOP POINT box, and §0.
+⚠️ **The FRONTEND is NOT current with this claim, and a rebuild is OWED.** The
+live bundle is `index-Na2D7cdu.js` (the #308 rebuild) and it predates #297/#298,
+both of which changed root `package.json` runtime dependencies — the trigger §4's
+own queue table names. #311 changed no frontend code, so nothing is visibly
+broken; that makes it low urgency, not optional. See HANDOFF's STOP POINT box and
+§0.
 (Historical: Coolify rebuilt twice on 2026-07-27 to bundle `index-CYTPq50I.js`,
 and the D25 backfill live-ran in between — dry 72 predicted → live 72 created,
 0 failures → dry 0 remaining.)

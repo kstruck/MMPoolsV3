@@ -18,7 +18,7 @@ Repo: `D:\march-melee-pools` (March Melee Pools / Gridiron Gamble). This skill t
 | Doc of record | A repo markdown file that is the authoritative statement of something (semantics, a plan, findings). If it's not in a doc of record, it doesn't survive the session. |
 | Locked plan | A `PLAN-*.md` that went through the grill + adversarial review loop and is frozen for sign-off; implementation tracks against it. |
 | Grill / grill-with-docs | Act 1 interview/interrogation that produces the plan draft (plans open with "Locked via grill-with-docs"). |
-| Review log | `PLAN-X-REVIEW-LOG.md` — verbatim record of adversarial Codex review rounds against a plan (MAX_ROUNDS=5). |
+| Review log | `PLAN-X-REVIEW-LOG.md` — verbatim record of adversarial Codex review rounds against a plan (judgement up to 10 rounds, Kevin's sign-off with a reason past that — CLAUDE.md §2c, 2026-07-27. Logs written before that date used MAX_ROUNDS=5). |
 | Sweep | Deterministic grep-based complete-instance enumeration feeding plan items (`PLAN-X-SWEEPS.md`) — exists to kill the "reviewer finds one more instance every round" pattern. |
 | ADR | Architecture Decision Record in `docs/adr/NNNN-slug.md`. |
 | Ticket | `T1`, `T2`, ... numbered finding-to-work items from an audit (e.g., T1–T14 in AUDIT-REPORT-PRESEASON.md). |
@@ -120,7 +120,7 @@ Rules observed in practice: every claim carries a `file.ts:line` cite; proceed-g
 ```markdown
 # Plan Review Log: <plan title>
 Act 1 (grill-with-docs) complete — plan locked (<PLAN_FILE>), CONTEXT.md updated with
-<new terms>. MAX_ROUNDS=5. PLAN_FILE=<PLAN_FILE>.
+<new terms>. MAX_ROUNDS=10 (CLAUDE.md §2c — ask Kevin with a reason past 10; stop on evidence, not on the counter). PLAN_FILE=<PLAN_FILE>.
 
 ## Round 1 — Codex (thread <id>)
 VERDICT: REVISE. N findings, all accepted (final arbiter: Claude). Summary:

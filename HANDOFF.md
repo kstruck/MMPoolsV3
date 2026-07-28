@@ -51,10 +51,13 @@
 >    population, not just 2026. There are no legacy manually-scored weeks to
 >    stamp because the season has not started. **Do NOT click the destructive
 >    button**; it would be a no-op. It stays closed with no maintenance:
->    `scoreNFLWeekInternal` is the only scoring path (`nflPools.ts:894`), the
->    manual "Score Week" callable delegates to it (`nflPools.ts:1490`), and the
->    `publishedWeeks.{week}` stamp lives inside it (`nflPools.ts:1361`) — so
->    hand-scoring the HOF week marks it too.
+>    `scoreNFLWeekInternal` is the only scoring path and the manual "Score Week"
+>    callable delegates to it, and the `publishedWeeks.{week}` stamp lives inside
+>    that function — so hand-scoring the HOF week marks it too. **Precisely:** the
+>    stamp is written only when `games.some(revealed)` is true, so a mid-week
+>    provisional click that reveals nothing does not mark the week. (Grep the
+>    symbols rather than trusting line numbers — an earlier draft of this box
+>    cited three that #311 had already shifted.)
 > 2. ⬜ **PR-B2 must be watched in DRY RUN before live — and the watch only
 >    counts if it SAW something.** Arm `{ enabled: true, dryRun: true }` and read
 >    the heartbeat detail. Before the preseason starts there is nothing to
