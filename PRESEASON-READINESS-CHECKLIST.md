@@ -148,7 +148,8 @@ config/console act with a verification step. Suggested order as listed.
   `nflAutoScoreJob` shipped in #276 and is deployed, and #279 added the
   concurrency + authorization guards §7 requires before arming it. **It is
   switched OFF** — `system/config.nflAutoScore` is unset and the gate is fail-safe.
-  **Three prerequisites remain before it may be armed:**
+  **Of the three prerequisites, ONE IS CLOSED and two remain** — HANDOFF's STOP
+  POINT box carries the same count:
   1. **PR-B2 — BUILT AND DEPLOYED** (#311, 2026-07-27), but it must be WATCHED
      IN DRY RUN before live: arm `{ enabled: true, dryRun: true }`, read the
      heartbeat detail for a day, then flip `dryRun: false`. Deployed is not
