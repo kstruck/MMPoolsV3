@@ -44,8 +44,9 @@ section to wait for, poll, or report on qodo is **revoked** — including the
 qodo.
 
 **§2c (codex) is qodo's temporary replacement** (Kevin, 2026-07-25) and the only
-reviewer — which makes it the only second opinion. Run it on every PR, capped at
-**5 rounds**. Weigh its findings on evidence rather than deferring to them, and
+reviewer — which makes it the only second opinion. Run it on every PR, with
+judgement **up to 10 rounds** (Kevin, 2026-07-27 — it was 5; past 10 needs his
+sign-off and a stated reason). Weigh its findings on evidence rather than deferring to them, and
 **self-review the diff yourself** — a clean codex round is not proof, especially
 on a small diff where it may return clean on round 1.
 
@@ -170,13 +171,18 @@ existed to stop. Written, reviewed, and holed in the same hour.
 §2b.** Codex is not automatically right — verify its claims against the code
 before acting, as with any reviewer.
 
-**Expect several rounds — but stop at 5 per artifact (Kevin, 2026-07-25).**
-Codex runs are paid; Kevin capped them at ten that morning and tightened it to
-**five** the same day. **The cap is the single stopping rule and it beats "keep
-going until clean."** If round 5 still has open findings, STOP anyway: write the
-residual into the PR body as named, unresolved findings, say plainly that the PR
-carries them, and let Kevin decide. Never report a PR as done while silently
-holding findings, and never keep running rounds past 5 to chase a clean one.
+**Expect several rounds. Use judgement up to 10 per artifact; past 10, ask
+Kevin first and say WHY that artifact needs more (Kevin, 2026-07-27).** The cap
+was 5 earlier that week; it was raised after a 5-round stop left two P1 findings
+unresolved on #311, and resolving them turned out to need six more rounds — the
+new code written to close a finding has never been reviewed, so it earns its own
+round. Codex runs are paid, so do not burn rounds on trivial diffs.
+
+**The stopping rule is evidence, not the counter**: stop when a round comes back
+clean AND your own read of the diff agrees. If you stop with findings still open,
+write them into the PR body as named, unresolved findings, say plainly that the
+PR carries them, and let Kevin decide. Never report a PR as done while silently
+holding findings.
 
 Measured over the 2026-07-21 run (before the cap): #245 took 4 rounds / 11
 findings, #248 took 9 rounds, #250 took 4 rounds / 15 findings. The pattern is

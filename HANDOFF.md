@@ -1,8 +1,99 @@
-# HANDOFF — Session entry point (updated 2026-07-27: payment-truth P4+P1 FULLY SHIPPED — backfill live-run, D13+D25 closed in prod)
+# HANDOFF — Session entry point (updated 2026-07-27: G1 PR-B2 deployed — the rescore queue is live and INERT; one arming prerequisite closed)
 
-> ## ✅ STOP POINT 2026-07-27 (night) — PLAN-PAYMENT-TRUTH BUILD QUEUE COMPLETE (P4+P1+P2+P3 all live)
+> ## ✅ STOP POINT 2026-07-27 (late night) — G1 PR-B2 SHIPPED; `publishedWeeks` prerequisite CLOSED
 >
-> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `6b7e439`.**
+> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `d3d2b0d`.**
+> #311 (`nfl_rescore_queue`, PLAN-REALTIME-SCORING §5b) merged and deployed the
+> same hour. **Verified three ways, not assumed:** the first run created
+> `nflSpreadRescoreTrigger` and reported every other function
+> `Successful update operation` ending `✔ Deploy complete!`; a SECOND full-fleet
+> run reported every function `Skipped (No changes detected)` — the all-Skipped
+> report that is the actual positive evidence; and `firebase functions:list`
+> shows `nflSpreadRescoreTrigger` as v2 on
+> `google.cloud.firestore.document.v1.updated`, us-central1, nodejs22.
+>
+> The whole fleet updated on the first run rather than a handful, because
+> `npm --prefix functions ci` rebuilt `node_modules` and every uploaded bundle
+> hash moved. Expected, not a defect.
+>
+> **Rules did not change in #311**, so they remain ≡ this tag.
+>
+> ⚠️ **FRONTEND: a rebuild IS owed — just not by #311.** #311 changed no frontend
+> code, but the live bundle is still `index-Na2D7cdu.js`, which PREDATES #297 and
+> #298. Those bumped ROOT `package.json` runtime dependencies (framer-motion
+> 11 → 12 among them), and this repo's own deploy-queue rule is that a
+> `package.json` change needs a Coolify trigger — so the frontend queue is NOT
+> empty. Nothing is visibly broken, which is why this is low urgency rather than
+> no urgency. The Coolify dashboard is
+> <http://72.60.68.7:8000/project/ycoooow0g4c08ogso404k8o4/environment/ogs0cg0gg0kcgkgc8sg4c8g4/application/ics4kkww0c8oo0gw4wkg8w4o/deployment>
+> → **Redeploy** (this URL was in no repo doc before now).
+>
+> ### The queue is DEPLOYED but INERT
+>
+> `system/config.nflAutoScore` stays UNSET = disabled. The enqueue side starts
+> writing events immediately, and they ACCUMULATE — nothing drains them while the
+> job is off. **A dry run does not drain them either:** it reads the queue,
+> reports what it would do, and acknowledges NOTHING by design (codex r30), so
+> the events survive the flip to live and are applied then. So during the
+> dry-run watch, judge the queue against what the run REPORTED: every event the
+> heartbeat says it observed must still be there afterwards. An empty queue is
+> not a fault on its own — it just means nothing was enqueued, which is the
+> normal state before the season starts — but see prerequisite 2 below: an empty
+> queue also means the watch has proven nothing about the queue path.
+>
+> ### Arming prerequisites: 1 of 3 CLOSED
+>
+> 1. ✅ **The `publishedWeeks` cold-start backfill is CLOSED — and it never needs
+>    running.** The dry run executed in prod on 2026-07-27:
+>    `{"dryRun":true,"poolsScanned":15,"poolsChanged":0,"weeksMarked":0,"plannedWrites":[],"failures":[]}`.
+>    `poolsScanned: 15` matches the census exactly, and the migration queries ALL
+>    NFL-season-type pools with no season filter — so that zero covers the whole
+>    population, not just 2026. There are no legacy manually-scored weeks to
+>    stamp because the season has not started. **Do NOT click the destructive
+>    button**; it would be a no-op. It stays closed with no maintenance:
+>    `scoreNFLWeekInternal` is the only scoring path and the manual "Score Week"
+>    callable delegates to it, and the `publishedWeeks.{week}` stamp lives inside
+>    that function — so hand-scoring the HOF week marks it too. **Precisely:** the
+>    stamp is written only when `games.some(revealed)` is true, so a mid-week
+>    provisional click that reveals nothing does not mark the week. (Grep the
+>    symbols rather than trusting line numbers — an earlier draft of this box
+>    cited three that #311 had already shifted.)
+> 2. ⬜ **PR-B2 must be watched in DRY RUN before live — and the watch only
+>    counts if it SAW something.** Arm `{ enabled: true, dryRun: true }` and read
+>    the heartbeat detail. Before the preseason starts there is nothing to
+>    enqueue, so `queuedEvents: 0` for a day proves only that the scheduler
+>    wrapper runs — it exercises none of the read/group/no-ack path. The bar is
+>    **at least one event observed AND still in the queue afterwards** (a dry run
+>    acknowledges nothing, so it must survive). If no natural event appears
+>    before the HOF game, either accept that this prerequisite is UNPROVEN and
+>    say so out loud when arming, or arm live only after the first real slate has
+>    produced one.
+> 3. ⬜ **The >24h stale-finalize path** (plan §7) — still open. Either arm
+>    `nflDeepSweep` with writes after its own dry-run trial, or build the
+>    uncapped stale-slate re-fetch.
+>
+> ### What #311 carries
+>
+> **11 codex rounds, 21 findings, all absorbed, none carried** (Kevin raised the
+> cap from 5 → 10 mid-effort and authorized round 11 specifically). Round 4 came
+> back clean and self-review still found a stale counter name; round 8's first
+> finding was a REGRESSION introduced by round 6's own fix. The R11 fix — widening
+> the transition predicate so a reinstated `CANCELLED` game enqueues — is the one
+> change that has not itself been through a round.
+>
+> **Risk is concentrated in one place: queued Survivor rescoring.** A queued pass
+> may score Survivor only when no week AT OR AFTER the queued one carries a
+> `scoredWeeks` or `publishedWeeks` marker. Everything else is refused, because
+> `computeSurvivorWeekUpdate` retains later strikes while rewriting
+> `eliminatedWeek` — both a replay and an out-of-order run corrupt the ledger.
+> What remains is a **deferral, not a corruption**: it surfaces as
+> `survivorQueuedDeferred` in the heartbeat and waits for the reset-and-replay
+> sub-PR. **A late Survivor correction has NO safe manual repair — do not
+> hand-score a Survivor week to fix one.** Pick'em and Margin are unaffected.
+
+> ### Historical: the 2026-07-27 night stop point (superseded the same night)
+>
+> **Functions + rules were deployed from <!-- deploy-state:ignore --> `main` @ `6b7e439`.**
 > P3 (#308, the rebuy-paid control — `rebuyPaid` finally has a writer) merged
 > and deployed the same hour: `--only functions:setPaidStatus`, Coolify
 > rebuilt (bundle `index-Na2D7cdu.js`). The only runtime files changed since
@@ -909,7 +1000,7 @@ Remaining optional items (SLO objects, cosmetic chunk-splitting) listed in the
 
 - Deploy: `npm --prefix functions ci` first (NOT `install` — it rewrites the lockfile and dirties the tree the deploy packages), then `npx firebase deploy --only functions:… --project gridiron-gamble-uzuqo`. Functions before rules. Frontend = Coolify — **manual trigger only**, pushing to `main` does NOT auto-deploy it (corrects a stale claim that lived here; matches CLAUDE.md + the mmp-deploy-and-operate skill).
 - Emulator tests need Java on PATH: `JAVA_HOME=/c/Program Files/Eclipse Adoptium/jdk-21.0.11.10-hotspot`; run `npm --prefix functions run test:emulator`. Unit: `npm --prefix functions test` (410 tests; emulator suite 39).
-- **PR review = `codex exec review --base origin/main`, 5 rounds max** (CLAUDE.md §2c). **qodo is OFF** — Kevin removed the check on 2026-07-25 (§2b); codex is its temporary replacement. Validate every finding before fixing; a rejection needs written reasoning on the PR.
+- **PR review = `codex exec review --base origin/main`, judgement up to 10 rounds; past 10 ask Kevin with a reason** (CLAUDE.md §2c, his 2026-07-27 ruling — it was 5). **qodo is OFF** — Kevin removed the check on 2026-07-25 (§2b); codex is its temporary replacement. Validate every finding before fixing; a rejection needs written reasoning on the PR.
 - Untracked strays at root: `PLAN-LOOPS.md`, `PLAN-SECURITY-OBSERVABILITY*.md` (copies of branch-committed files). Harmless; don't commit blindly.
 
 ## Do NOT re-do

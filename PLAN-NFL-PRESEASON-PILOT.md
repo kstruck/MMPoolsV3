@@ -176,7 +176,7 @@ Plus the two prod-gated sub-steps carved out of A6 and A7 above.
 ## 4. Autonomy rules for this run
 
 - **You MAY**: create branches/worktrees, write code+tests, run all gates, run and
-  absorb `codex exec review --base origin/main` (5 rounds max, CLAUDE.md §2c), open
+  absorb `codex exec review --base origin/main` (up to 10 rounds, CLAUDE.md §2c), open
   PRs. **Do NOT check qodo** — the check was removed 2026-07-25 (§2b); codex is its
   temporary replacement. Merging is Kevin's call now, not a post-review-window
   self-merge: there is no second reviewer left to constitute a review window.

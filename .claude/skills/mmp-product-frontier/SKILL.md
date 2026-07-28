@@ -50,7 +50,7 @@ Every **plan-gated** change follows this pipeline — money, authorization, prod
 | 1. Hunch | State the claim + the observation that triggered it | a sentence, not code |
 | 2. Archaeology | Read `mmp-failure-archaeology` + the `PLAN-*-REVIEW-LOG.md` files. **Do not re-fight settled battles** (list in A4). Check whether the premise is still true in current code — grep it, don't trust docs | notes with file:line cites |
 | 3. Plan | Write `PLAN-<name>.md` at repo root: goal, approach, phases, per-phase evidence criteria. Terms per `CONTEXT.md`. Template conventions in `mmp-docs-and-writing` | `PLAN-*.md` |
-| 4. Adversarial review | Run the plan through adversarial review rounds (historically Codex, MAX_ROUNDS=5); log every round verbatim with severity-ranked findings + accept/reject + how the plan changed | `PLAN-*-REVIEW-LOG.md` |
+| 4. Adversarial review | Run the plan through adversarial review rounds (Codex; judgement up to 10 rounds, Kevin's sign-off with a reason past that — CLAUDE.md §2c. Logs predating 2026-07-27 used MAX_ROUNDS=5); log every round verbatim with severity-ranked findings + accept/reject + how the plan changed | `PLAN-*-REVIEW-LOG.md` |
 | 5. Sweep | Deterministic grep sweeps to close enumeration gaps (complete instance lists, not finding-by-finding whack-a-mole) | e.g. `PLAN-SUPERADMIN-CONTROL-SWEEPS.md` |
 | 6. Proceed gate | Kevin signs off. No implementation before this | explicit go-ahead |
 | 7. Implement | Own git worktree, own branch. Prod-data mutations ship behind a kill-switch, dry-run default (`autoClosePools` is the reference implementation). Deploy ritual per `mmp-deploy-and-operate` | commits, per-phase status checkmarks written back into the PLAN |

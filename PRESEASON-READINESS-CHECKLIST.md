@@ -77,7 +77,8 @@ config/console act with a verification step. Suggested order as listed.
   My read: A3a + the chaos drill covers the risk for preseason; decide before
   regular season, not before HOF. *Source: TOMORROW-TASKS NFL-2.*
 - ☑ **K15 · qodo: CLOSED 2026-07-25** — Kevin retired the check entirely. CLAUDE.md
-  §2b now forbids checking it; codex (§2c, 5 rounds max) is its temporary
+  §2b now forbids checking it; codex (§2c — judgement up to 10 rounds, Kevin's
+  sign-off with a reason past 10, per his 2026-07-27 ruling) is its temporary
   replacement. Restore path kept in a collapsed block in §2b.
 - ☐ **K16 · NotebookLM sync habit:** add the repo/DECISION-LOG.md as a source in
   the MarchMeleePools notebook; re-sync after significant merges (no API — it's
@@ -147,17 +148,33 @@ config/console act with a verification step. Suggested order as listed.
   `nflAutoScoreJob` shipped in #276 and is deployed, and #279 added the
   concurrency + authorization guards §7 requires before arming it. **It is
   switched OFF** — `system/config.nflAutoScore` is unset and the gate is fail-safe.
-  **Three prerequisites remain before it may be armed:**
-  1. **PR-B2** — the `nfl_rescore_queue` durable tier (not started; next PR).
+  **Of the three prerequisites, ONE IS CLOSED and two remain** — HANDOFF's STOP
+  POINT box carries the same count:
+  1. **PR-B2 — BUILT AND DEPLOYED** (#311, 2026-07-27), but it must be WATCHED
+     IN DRY RUN before live, **and the watch only counts if it SAW something**:
+     arm `{ enabled: true, dryRun: true }` and read the heartbeat detail.
+     `queuedEvents: 0` for a day — the normal case before the preseason starts —
+     proves only that the scheduler wrapper runs and exercises none of the
+     queue's read/group/no-ack path. The bar is **at least one event observed AND
+     still in the queue afterwards** (a dry run acknowledges nothing, so it must
+     survive). If none appears before the HOF game, flip `dryRun: false` only
+     with this prerequisite explicitly named as unproven. Deployed is not
+     proven.
   2. **`nflDeepSweep` live WITH WRITES** — a dry-run deep sweep does not write
      `nfl_games`, so a game finalizing >24h after kickoff is never observed.
-  3. **Run the `publishedWeeks` cold-start backfill** (SuperAdmin → Operations,
-     dry-run first). #279's `extendWeekDeadline` publish guard reads that marker.
-     **Every** scoring pass writes it — the manual "Score Week" button included,
-     since it runs through the same `scoreNFLWeekInternal` — so this is purely a
-     COLD-START gap: weeks scored before that code shipped carry no marker and can
-     still be reopened after their results were shown. Manual scoring from here on
-     marks its own weeks; nothing is permanently unprotected.
+     STILL OPEN.
+  3. ✅ **The `publishedWeeks` cold-start backfill is CLOSED — and never needs
+     running.** The prod dry run on 2026-07-27 returned
+     `poolsScanned: 15, poolsChanged: 0, weeksMarked: 0, failures: []`. The
+     migration queries ALL NFL-season-type pools with no season filter, so that
+     zero covers the whole population: there are no legacy manually-scored weeks
+     to stamp because the season has not started. **Do not click the destructive
+     button — it is a no-op.** It stays closed on its own, because any pass that
+     REVEALS a lock-closed result writes the marker — the manual "Score Week"
+     button included, since it runs through the same `scoreNFLWeekInternal`. Note
+     the precision: `publishedWeeks` is stamped only when `games.some(revealed)`
+     is true, so a mid-week provisional click that reveals nothing does NOT mark
+     the week. Scoring the completed HOF week does.
 
   So the pilot answer is unchanged: **Kevin clicks "Score Week N" per
   pool after each preseason slate**, and that must be ON the schedule (Sun/Mon).

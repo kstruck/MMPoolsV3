@@ -6,8 +6,8 @@
 > The target is the Hall of Fame game, 2026-08-06. Deploy and prod-data
 > mutations are Kevin's; code, tests and PRs are yours. Follow CLAUDE.md §2b
 > (qodo is OFF — do not check it) and §2c (`codex exec review --base
-> origin/main`, capped at 5 rounds per PR). Tell me what you plan to do before
-> you do it.
+> origin/main`; use judgement up to 10 rounds per artifact, and ask Kevin with a
+> reason before going past 10). Tell me what you plan to do before you do it.
 
 Written 2026-07-21. **The target is the Hall of Fame game, 2026-08-06** (Thu,
 8:00pm ET, CAR at ARI) — that is the clock, set by Kevin on 2026-07-21. The
@@ -27,23 +27,35 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 ---
 
-## 0. State as of 2026-07-25 — read this before anything else
+## 0. State as of 2026-07-27 — read this before anything else
 
-**Everything through #279 (G1 PR-B′) is merged AND deployed** — functions, then
-`firestore:rules`, then the Coolify frontend rebuild, all on 2026-07-25. The
-deployed SHA is the tagged claim in §2 — not repeated here, so it cannot rot.
-**Both the functions and frontend queues are EMPTY.** #262 removed the
-~966K-reads/day `runReminders` amplification; verify the drop via Query
-Insights, KEVIN-TASKS-2026-07-23.md §4.
+**Everything through #311 (G1 PR-B2) is merged AND deployed.** The deployed SHA
+is the tagged claim in §2 — not repeated here, so it cannot rot.
+**FUNCTIONS and RULES queues: EMPTY. FRONTEND queue: a Coolify rebuild is OWED**
+for #297/#298 (see the next paragraph and §4).
 
-✅ **The FRONTEND is CURRENT** as of the 2026-07-25 rebuild (SHA checked against
-`git rev-parse origin/main`), which carried #279's `NFLManagerView` cutover onto
-the `updatePoolSettings` callable. Smoke-tested in prod. **No rebuild owed.**
+(Historical, 2026-07-25: everything through #279 (G1 PR-B′) shipped — functions,
+then `firestore:rules`, then the Coolify rebuild — and both queues were empty
+then. #262 removed the ~966K-reads/day `runReminders` amplification; verify the
+drop via Query Insights, KEVIN-TASKS-2026-07-23.md §4.)
 
-⚠️ **One prod-data action is PENDING:** the `publishedWeeks` cold-start backfill
-has not been run (**SuperAdmin → Operations → "Backfill Published Weeks (dry
-run)"** first). It is an arming prerequisite for `nflAutoScoreJob` — see
-HANDOFF's STOP POINT box and `MORNING-2026-07-26.md` §2c.
+⚠️ **The FRONTEND is BEHIND by two dependency bumps as of 2026-07-27, and a
+rebuild is OWED.** The last Coolify rebuild left the live bundle at
+`index-Na2D7cdu.js`, which predates #297 and #298 — both changed root
+`package.json` runtime dependencies, which is this repo's stated trigger for a
+Coolify rebuild. #311 changed no frontend code, so nothing is visibly broken;
+that makes it low urgency, not absent. Dashboard URL in HANDOFF's STOP POINT
+box. (Historical:
+the 2026-07-25 rebuild carried #279's `NFLManagerView` cutover onto the
+`updatePoolSettings` callable and was smoke-tested in prod.)
+
+✅ **The `publishedWeeks` backfill is CLOSED (2026-07-27) and never needs
+running.** The prod dry run returned `poolsScanned: 15, poolsChanged: 0,
+weeksMarked: 0, failures: []` — no legacy manually-scored weeks exist to stamp,
+across the whole NFL pool population (the migration applies no season filter).
+**Do not click the destructive button; it is a no-op.** See HANDOFF's STOP POINT
+box. `MORNING-2026-07-26.md` §2c describes it as owed — that doc is a dated
+morning note and is now historical on this point.
 
 ⚠️ **#279 did not reach a clean codex round** (3 rounds, 8 findings all absorbed;
 round 4 hit an OpenAI quota error). Noted so nobody reads "merged + deployed" as
@@ -178,12 +190,14 @@ state. Concretely:
 
 ---
 
-## 2. Live state (verified 2026-07-25)
+## 2. Live state (verified 2026-07-27)
 
-> ✅ **BOTH queues empty — deployed through #279 (G1 PR-B′).** Functions and
-> `firestore:rules` are deployed at the SHA tagged below, and the frontend was
-> rebuilt on Coolify 2026-07-25 on the same commit (SHA checked against
-> `git rev-parse origin/main`). **No rebuild owed.**
+> ⚠️ **FUNCTIONS and RULES are deployed at the SHA tagged below (#311, G1 PR-B2).
+> The FRONTEND is NOT — a Coolify rebuild is OWED for #297/#298.**
+>
+> (Historical, 2026-07-25: both queues were empty through #279, with the frontend
+> rebuilt on Coolify on the same commit, SHA checked against
+> `git rev-parse origin/main`.)
 >
 > **HANDOFF.md's STOP POINT box is authoritative for deploy state.** Both files
 > agree on the DEPLOYED SOURCE SHA below — which is what is RUNNING, not what
@@ -196,7 +210,12 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `6b7e439`.**
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `d3d2b0d`.**
+(#311 / G1 PR-B2 deployed as the FULL FLEET, twice: the first run created
+`nflSpreadRescoreTrigger` and updated everything else, the second reported every
+function `Skipped (No changes detected)` — that all-Skipped run is the evidence.
+Rules unchanged by #311, so they remain ≡ this tag.
+Prior claim: <!-- deploy-state:ignore --> `main` @ `6b7e439` —)
 (P3 #308 deployed incrementally — only setPaidStatus changed; fleet ≡ tag.
 Prior claim: <!-- deploy-state:ignore --> `main` @ `b1df185` —)
 (P2 #306 deployed incrementally on top of the state below — only
@@ -210,9 +229,15 @@ runtime file changed in between (diff-verified), so the fleet ≡ the tag.
 Previous states: <!-- deploy-state:ignore --> `main` @ `8a55b84` (#279) on
 <!-- deploy-state:ignore --> `main` @ `49c12a9` (#261/#262/#265).
 
-**The FRONTEND is current with this claim** — Coolify rebuilt twice on
-2026-07-27 (bundle `index-CYTPq50I.js`), and the D25 backfill live-ran in
-between (dry 72 predicted → live 72 created, 0 failures → dry 0 remaining).
+⚠️ **The FRONTEND is NOT current with this claim, and a rebuild is OWED.** The
+live bundle is `index-Na2D7cdu.js` (the #308 rebuild) and it predates #297/#298,
+both of which changed root `package.json` runtime dependencies — the trigger §4's
+own queue table names. #311 changed no frontend code, so nothing is visibly
+broken; that makes it low urgency, not optional. See HANDOFF's STOP POINT box and
+§0.
+(Historical: Coolify rebuilt twice on 2026-07-27 to bundle `index-CYTPq50I.js`,
+and the D25 backfill live-ran in between — dry 72 predicted → live 72 created,
+0 failures → dry 0 remaining.)
 The paragraph below describes the 2026-07-25 state: Coolify rebuilt then on
 the #279 commit (SHA verified against `git rev-parse origin/main`), and the
 #279 settings cutover was smoke-tested in prod: an NFL Pick'em pool's Manager tab saved
@@ -334,7 +359,7 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — EMPTY (functions, rules and frontend all current)
+## 4. Deploy queue — functions and rules EMPTY; frontend REBUILD OWED (#297/#298)
 
 > **Nothing is owed as of 2026-07-25.** #279 deployed functions → rules → Coolify
 > frontend, in that order, and the settings save was smoke-tested in prod. The
@@ -348,7 +373,10 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 > without `✔ Deploy complete!`, printed no error, and left 10 functions stale.
 > The all-Skipped report is the evidence; a missing error is not.
 
-**As of 2026-07-25 the FUNCTIONS, RULES and FRONTEND queues are all EMPTY.** The
+**As of 2026-07-27 the FUNCTIONS and RULES queues are EMPTY** (#311 deployed;
+verification in HANDOFF's STOP POINT box). **The FRONTEND queue is NOT empty:** a
+Coolify rebuild is OWED for #297/#298, which changed root `package.json` runtime
+dependencies — the trigger this table already names. The
 deployed source SHA is the tagged claim in §2 — not repeated here, so it cannot
 drift out of sync with it. `main` advances past it with every
 docs-only commit — that is drift in the marker, not a deploy queue; the queue is
@@ -429,11 +457,22 @@ Always confirm the change is in the file on disk before deploying — not that
    under `"2"` in `bySeasonType`. Then set `nflFinalize.liveSeasonTypes` to an
    array containing the number **1** — `dryRun:false` **alone does nothing**,
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
-2. **Deploy — NOTHING OWED as of 2026-07-25.** #279 shipped functions, rules and
-   the Coolify frontend rebuild, and the commissioner settings save was
-   smoke-tested in prod. Next deploy recipe (with the ordering constraint):
-   `MORNING-2026-07-26.md` §2b. **Pending prod-data action:** run the
-   `publishedWeeks` backfill dry-run (SuperAdmin → Operations).
+2. **Deploy — the FUNCTIONS queue is EMPTY as of 2026-07-27** (#311 deployed;
+   see HANDOFF's STOP POINT box for the verification). Next deploy recipe (with
+   the ordering constraint): `MORNING-2026-07-26.md` §2b. **The `publishedWeeks`
+   backfill is closed** (§0) — but TWO actions remain before `nflAutoScore` can go
+   live, and both are yours: (a) **PR-B2 must be watched in dry run, and the
+   watch only counts if it SAW something** — arm `{ enabled: true, dryRun: true }`
+   and read the heartbeat detail. `queuedEvents: 0` for a day (the normal
+   pre-HOF case) proves only the scheduler wrapper; the bar is at least one event
+   observed AND still queued afterwards, since a dry run acknowledges nothing.
+   If none appears before the HOF game, flip live only with that prerequisite
+   named as unproven; and (b) **`nflDeepSweep` must be
+   armed WITH WRITES** after its own dry-run trial (or the uncapped stale-slate
+   re-fetch built), otherwise a game finalizing >24h after kickoff is never
+   observed. HANDOFF's STOP POINT box carries the same two. **Also owed:** the
+   Coolify rebuild for #297/#298 (§4) — low urgency, since nothing is visibly
+   broken, but not optional: they changed root `package.json` runtime deps.
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.
@@ -534,6 +573,7 @@ floating promise from another test file can trip. Re-run before investigating.
   and "never ran" are distinguishable — `withHeartbeat()` in
   `functions/src/lib/heartbeat.ts` does this; use it for any new job.
 - **`codex exec review --base origin/main` reviews PRs — run it before opening
-  one, 5 rounds max** (CLAUDE.md §2c). It is qodo's temporary replacement;
+  one; judgement up to 10 rounds, Kevin's sign-off with a reason past 10**
+  (CLAUDE.md §2c, his 2026-07-27 ruling). It is qodo's temporary replacement;
   **qodo is OFF, do not check it** (§2b). Judge each finding on evidence and
   reply either way — a rejection needs written reasoning on the PR.
