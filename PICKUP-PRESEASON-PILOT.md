@@ -27,14 +27,17 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 ---
 
-## 0. State as of 2026-07-25 — read this before anything else
+## 0. State as of 2026-07-27 — read this before anything else
 
-**Everything through #279 (G1 PR-B′) is merged AND deployed** — functions, then
-`firestore:rules`, then the Coolify frontend rebuild, all on 2026-07-25. The
-deployed SHA is the tagged claim in §2 — not repeated here, so it cannot rot.
-**Both the functions and frontend queues are EMPTY.** #262 removed the
-~966K-reads/day `runReminders` amplification; verify the drop via Query
-Insights, KEVIN-TASKS-2026-07-23.md §4.
+**Everything through #311 (G1 PR-B2) is merged AND deployed.** The deployed SHA
+is the tagged claim in §2 — not repeated here, so it cannot rot.
+**FUNCTIONS and RULES queues: EMPTY. FRONTEND queue: a Coolify rebuild is OWED**
+for #297/#298 (see the next paragraph and §4).
+
+(Historical, 2026-07-25: everything through #279 (G1 PR-B′) shipped — functions,
+then `firestore:rules`, then the Coolify rebuild — and both queues were empty
+then. #262 removed the ~966K-reads/day `runReminders` amplification; verify the
+drop via Query Insights, KEVIN-TASKS-2026-07-23.md §4.)
 
 ⚠️ **The FRONTEND is BEHIND by two dependency bumps as of 2026-07-27, and a
 rebuild is OWED.** The last Coolify rebuild left the live bundle at
@@ -187,12 +190,14 @@ state. Concretely:
 
 ---
 
-## 2. Live state (verified 2026-07-25)
+## 2. Live state (verified 2026-07-27)
 
-> ✅ **BOTH queues empty — deployed through #279 (G1 PR-B′).** Functions and
-> `firestore:rules` are deployed at the SHA tagged below, and the frontend was
-> rebuilt on Coolify 2026-07-25 on the same commit (SHA checked against
-> `git rev-parse origin/main`). **No rebuild owed.**
+> ⚠️ **FUNCTIONS and RULES are deployed at the SHA tagged below (#311, G1 PR-B2).
+> The FRONTEND is NOT — a Coolify rebuild is OWED for #297/#298.**
+>
+> (Historical, 2026-07-25: both queues were empty through #279, with the frontend
+> rebuilt on Coolify on the same commit, SHA checked against
+> `git rev-parse origin/main`.)
 >
 > **HANDOFF.md's STOP POINT box is authoritative for deploy state.** Both files
 > agree on the DEPLOYED SOURCE SHA below — which is what is RUNNING, not what
