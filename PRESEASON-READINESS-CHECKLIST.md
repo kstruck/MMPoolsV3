@@ -163,9 +163,12 @@ config/console act with a verification step. Suggested order as listed.
      migration queries ALL NFL-season-type pools with no season filter, so that
      zero covers the whole population: there are no legacy manually-scored weeks
      to stamp because the season has not started. **Do not click the destructive
-     button — it is a no-op.** It stays closed on its own, because every scoring
-     pass writes the marker (the manual "Score Week" button included, since it
-     runs through the same `scoreNFLWeekInternal`).
+     button — it is a no-op.** It stays closed on its own, because any pass that
+     REVEALS a lock-closed result writes the marker — the manual "Score Week"
+     button included, since it runs through the same `scoreNFLWeekInternal`. Note
+     the precision: `publishedWeeks` is stamped only when `games.some(revealed)`
+     is true, so a mid-week provisional click that reveals nothing does NOT mark
+     the week. Scoring the completed HOF week does.
 
   So the pilot answer is unchanged: **Kevin clicks "Score Week N" per
   pool after each preseason slate**, and that must be ON the schedule (Sun/Mon).

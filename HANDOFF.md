@@ -18,10 +18,13 @@
 >
 > **Rules did not change in #311**, so they remain ≡ this tag.
 >
-> ⚠️ **FRONTEND: no rebuild owed by #311** (it changed no frontend code), but the
-> live bundle is still `index-Na2D7cdu.js`, which PREDATES #297 and #298 — two
-> frontend dependency bumps merged after the last Coolify rebuild. Rebuilding is
-> optional and nothing is broken; the Coolify dashboard is
+> ⚠️ **FRONTEND: a rebuild IS owed — just not by #311.** #311 changed no frontend
+> code, but the live bundle is still `index-Na2D7cdu.js`, which PREDATES #297 and
+> #298. Those bumped ROOT `package.json` runtime dependencies (framer-motion
+> 11 → 12 among them), and this repo's own deploy-queue rule is that a
+> `package.json` change needs a Coolify trigger — so the frontend queue is NOT
+> empty. Nothing is visibly broken, which is why this is low urgency rather than
+> no urgency. The Coolify dashboard is
 > <http://72.60.68.7:8000/project/ycoooow0g4c08ogso404k8o4/environment/ogs0cg0gg0kcgkgc8sg4c8g4/application/ics4kkww0c8oo0gw4wkg8w4o/deployment>
 > → **Redeploy** (this URL was in no repo doc before now).
 >
@@ -35,8 +38,8 @@
 > dry-run watch, judge the queue against what the run REPORTED: every event the
 > heartbeat says it observed must still be there afterwards. An empty queue is
 > not a fault on its own — it just means nothing was enqueued, which is the
-> normal state when no correction, delayed terminal, spread edit or withheld lock
-> has occurred.
+> normal state before the season starts — but see prerequisite 2 below: an empty
+> queue also means the watch has proven nothing about the queue path.
 >
 > ### Arming prerequisites: 1 of 3 CLOSED
 >
@@ -52,9 +55,16 @@
 >    manual "Score Week" callable delegates to it (`nflPools.ts:1490`), and the
 >    `publishedWeeks.{week}` stamp lives inside it (`nflPools.ts:1361`) — so
 >    hand-scoring the HOF week marks it too.
-> 2. ⬜ **PR-B2 must be watched in DRY RUN before live.** It is deployed, not
->    proven. Arm `{ enabled: true, dryRun: true }`, watch the heartbeat detail for
->    a day, then flip `dryRun: false`.
+> 2. ⬜ **PR-B2 must be watched in DRY RUN before live — and the watch only
+>    counts if it SAW something.** Arm `{ enabled: true, dryRun: true }` and read
+>    the heartbeat detail. Before the preseason starts there is nothing to
+>    enqueue, so `queuedEvents: 0` for a day proves only that the scheduler
+>    wrapper runs — it exercises none of the read/group/no-ack path. The bar is
+>    **at least one event observed AND still in the queue afterwards** (a dry run
+>    acknowledges nothing, so it must survive). If no natural event appears
+>    before the HOF game, either accept that this prerequisite is UNPROVEN and
+>    say so out loud when arming, or arm live only after the first real slate has
+>    produced one.
 > 3. ⬜ **The >24h stale-finalize path** (plan §7) — still open. Either arm
 >    `nflDeepSweep` with writes after its own dry-run trial, or build the
 >    uncapped stale-slate re-fetch.

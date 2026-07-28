@@ -36,10 +36,13 @@ deployed SHA is the tagged claim in §2 — not repeated here, so it cannot rot.
 ~966K-reads/day `runReminders` amplification; verify the drop via Query
 Insights, KEVIN-TASKS-2026-07-23.md §4.
 
-⚠️ **The FRONTEND is BEHIND by two dependency bumps as of 2026-07-27.** The last
-Coolify rebuild left the live bundle at `index-Na2D7cdu.js`, which predates #297
-and #298. Nothing is broken and #311 changed no frontend code, so a rebuild is
-**optional** — see HANDOFF's STOP POINT box for the dashboard URL. (Historical:
+⚠️ **The FRONTEND is BEHIND by two dependency bumps as of 2026-07-27, and a
+rebuild is OWED.** The last Coolify rebuild left the live bundle at
+`index-Na2D7cdu.js`, which predates #297 and #298 — both changed root
+`package.json` runtime dependencies, which is this repo's stated trigger for a
+Coolify rebuild. #311 changed no frontend code, so nothing is visibly broken;
+that makes it low urgency, not absent. Dashboard URL in HANDOFF's STOP POINT
+box. (Historical:
 the 2026-07-25 rebuild carried #279's `NFLManagerView` cutover onto the
 `updatePoolSettings` callable and was smoke-tested in prod.)
 
@@ -363,8 +366,9 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 > The all-Skipped report is the evidence; a missing error is not.
 
 **As of 2026-07-27 the FUNCTIONS and RULES queues are EMPTY** (#311 deployed;
-verification in HANDOFF's STOP POINT box). **The FRONTEND is optionally behind** —
-the live bundle predates #297/#298, and a rebuild is Kevin's call, not owed. The
+verification in HANDOFF's STOP POINT box). **The FRONTEND queue is NOT empty:** a
+Coolify rebuild is OWED for #297/#298, which changed root `package.json` runtime
+dependencies — the trigger this table already names. The
 deployed source SHA is the tagged claim in §2 — not repeated here, so it cannot
 drift out of sync with it. `main` advances past it with every
 docs-only commit — that is drift in the marker, not a deploy queue; the queue is
@@ -454,7 +458,8 @@ Always confirm the change is in the file on disk before deploying — not that
    flip `dryRun: false`; deployed is not proven; and (b) **`nflDeepSweep` must be
    armed WITH WRITES** after its own dry-run trial (or the uncapped stale-slate
    re-fetch built), otherwise a game finalizing >24h after kickoff is never
-   observed. HANDOFF's STOP POINT box carries the same two. **Optional:** a Coolify
+   observed. HANDOFF's STOP POINT box carries the same two. **Also owed:** the
+   Coolify rebuild for #297/#298 (§4). **Optional:** a Coolify
    rebuild would pick up #297/#298, which the live bundle predates.
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
