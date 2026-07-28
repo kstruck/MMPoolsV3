@@ -36,9 +36,12 @@ deployed SHA is the tagged claim in §2 — not repeated here, so it cannot rot.
 ~966K-reads/day `runReminders` amplification; verify the drop via Query
 Insights, KEVIN-TASKS-2026-07-23.md §4.
 
-✅ **The FRONTEND is CURRENT** as of the 2026-07-25 rebuild (SHA checked against
-`git rev-parse origin/main`), which carried #279's `NFLManagerView` cutover onto
-the `updatePoolSettings` callable. Smoke-tested in prod. **No rebuild owed.**
+⚠️ **The FRONTEND is BEHIND by two dependency bumps as of 2026-07-27.** The last
+Coolify rebuild left the live bundle at `index-Na2D7cdu.js`, which predates #297
+and #298. Nothing is broken and #311 changed no frontend code, so a rebuild is
+**optional** — see HANDOFF's STOP POINT box for the dashboard URL. (Historical:
+the 2026-07-25 rebuild carried #279's `NFLManagerView` cutover onto the
+`updatePoolSettings` callable and was smoke-tested in prod.)
 
 ✅ **The `publishedWeeks` backfill is CLOSED (2026-07-27) and never needs
 running.** The prod dry run returned `poolsScanned: 15, poolsChanged: 0,

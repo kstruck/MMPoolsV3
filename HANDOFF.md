@@ -28,8 +28,12 @@
 > ### The queue is DEPLOYED but INERT
 >
 > `system/config.nflAutoScore` stays UNSET = disabled. The enqueue side starts
-> writing events immediately — they simply accumulate and drain to no-ops on the
-> first armed dry run. Nothing scores until Kevin arms it.
+> writing events immediately, and they ACCUMULATE — nothing drains them while the
+> job is off. **A dry run does not drain them either:** it reads the queue,
+> reports what it would do, and acknowledges NOTHING by design (codex r30), so
+> the events survive the flip to live and are applied then. Do not read a
+> non-empty queue during the dry-run watch as a fault; an EMPTY one after a dry
+> run would be the bug.
 >
 > ### Arming prerequisites: 1 of 3 CLOSED
 >
