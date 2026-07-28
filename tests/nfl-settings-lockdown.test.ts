@@ -144,3 +144,30 @@ describe('NFLManagerBentoDashboard — payment writes route through setPaidStatu
     expect(bento).not.toContain('updateBracketEntryPayment');
   });
 });
+
+describe('NFLManagerView — the roster toggle has no legacy payment fallback', () => {
+  const view = read('src/components/NFLPoolDashboard/NFLManagerView.tsx');
+
+  it('calls dbService.setPaidStatus and never updateBracketEntryPayment', () => {
+    // The roster toggle kept a pre-deploy fallback: when setPaidStatus threw it
+    // wrote `pools/{id}/entries/{entryId}` directly via updateBracketEntryPayment.
+    // That fallback was correct only while pools had no Member Records — the D25
+    // backfill closed that on 2026-07-27. Left in place it is a live split-brain
+    // hazard: any error on the authoritative path (a transient permission or
+    // network failure, a future server-side rejection) would quietly mark the
+    // member paid on the display-legacy entry doc while the Member Record, the
+    // payments ledger, the roster summary and the pot all still said UNPAID —
+    // exactly the D13 defect PLAN-PAYMENT-TRUTH P1 existed to close, reachable
+    // again through the error path. This pins its absence from the whole file.
+    expect(view).toContain('dbService.setPaidStatus(pool.id, uid, nextPaid)');
+    expect(view).not.toContain('updateBracketEntryPayment');
+  });
+
+  it('surfaces the real failure instead of the stale pre-deploy advice', () => {
+    // Both handlers used to tell the commissioner to "deploy functions" — advice
+    // that has been wrong since setPaidStatus/settleRebuys went live, and that
+    // hides the actual server message (e.g. a genuine authorization refusal).
+    expect(view).not.toContain('Deploy functions to enable');
+    expect(view).not.toContain('is the payments update deployed?');
+  });
+});

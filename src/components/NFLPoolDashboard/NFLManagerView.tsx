@@ -260,28 +260,32 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     }
   };
 
-  const handleTogglePayment = async (uid: string, currentStatus: string, hasEntry: boolean) => {
+  // setPaidStatus is the ONLY payment writer here (PLAN-PAYMENT-TRUTH P1 / D13).
+  // It writes the Member Record as truth, appends the ledger row and mirrors the
+  // display fields onto the entry in one transaction, and it works for members
+  // with or without an entry (incl. the commissioner).
+  //
+  // This used to fall back to the legacy `updateEntryPayment` callable (reached
+  // through its dbService wrapper — deliberately not named here, because
+  // tests/nfl-settings-lockdown.test.ts pins that identifier's absence from this
+  // whole file, comments included)
+  // when setPaidStatus threw, because on a pool with no Member Records it threw
+  // for EVERY member ("Member is not on this pool's roster" — PLAN-PAYMENT-TRUTH
+  // §2 item 3). That precondition is gone: the D25 backfill ran in prod on
+  // 2026-07-27 (72 member records created, 127 pools stamped, follow-up dry run
+  // 0-to-create / 152-already-present), so every pool has them. The fallback is
+  // now pure downside — an error on the authoritative path would silently write
+  // the display-legacy entry doc instead and recreate exactly the split-brain
+  // D13 existed to close. An error must surface as an error.
+  const handleTogglePayment = async (uid: string, currentStatus: string) => {
     setIsSavingPayment(uid);
     setFeedback(null);
     const nextPaid = currentStatus !== 'PAID';
     try {
-      // Authoritative path: writes the Member Record + ledger, works for members with or
-      // without an entry (incl. the commissioner). Requires the setPaidStatus function deployed.
       await dbService.setPaidStatus(pool.id, uid, nextPaid);
     } catch (err: any) {
-      // Pre-deploy fallback: members who already have an entry can still be marked via the
-      // existing direct entry write. Member-only rows need the function deployed.
-      if (hasEntry) {
-        try {
-          await dbService.updateBracketEntryPayment(pool.id, uid, nextPaid ? 'PAID' : 'UNPAID');
-        } catch (err2: any) {
-          logger.error(`Failed to update payment for ${uid}:`, err2);
-          setFeedback({ type: 'error', message: 'Permission denied or update failed.' });
-        }
-      } else {
-        logger.error(`Failed to set paid status for ${uid}:`, err);
-        setFeedback({ type: 'error', message: 'Mark-paid for members without an entry needs the payments update deployed. Deploy functions to enable.' });
-      }
+      logger.error(`Failed to set paid status for ${uid}:`, err);
+      setFeedback({ type: 'error', message: err?.message || 'Failed to update payment status.' });
     } finally {
       setIsSavingPayment(null);
     }
@@ -297,7 +301,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       await dbService.settleRebuys(pool.id, uid, settle);
     } catch (err: any) {
       logger.error(`Failed to settle rebuys for ${uid}:`, err);
-      setFeedback({ type: 'error', message: 'Rebuy settlement failed — is the payments update deployed?' });
+      setFeedback({ type: 'error', message: err?.message || 'Rebuy settlement failed.' });
     } finally {
       setIsSavingPayment(null);
     }
@@ -1080,7 +1084,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
                       <td className="py-3.5 px-5 text-right">
                         <button
-                          onClick={() => handleTogglePayment(row.uid, row.paidStatus, row.hasEntry)}
+                          onClick={() => handleTogglePayment(row.uid, row.paidStatus)}
                           disabled={isSavingPayment === row.uid}
                           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-all duration-150 hover:-translate-y-px cursor-pointer ${
                             row.paidStatus === 'PAID'
