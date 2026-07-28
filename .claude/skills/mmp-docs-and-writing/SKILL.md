@@ -134,10 +134,16 @@ VERDICT: REVISE. Confirmed all round-1 fixes landed. N new findings...
 ### Claude's response
 ...
 
-## Resolution — CONVERGED (cap reached, not deadlocked)
+## Resolution — <CONVERGED (clean final round) | STOPPED WITH FINDINGS OPEN>
 <N> rounds, <M> findings total, <acceptance stats>. <Trajectory: finding count/severity
-falling; core flaws → adjacent nits.> <Open counter-positions, if any.> Plan is locked
-for sign-off.
+falling; core flaws → adjacent nits.> <Open counter-positions, if any.>
+
+Pick the label from EVIDENCE, not the counter (CLAUDE.md §2c): "CONVERGED" requires a
+final round that came back clean AND your own read of the plan agreeing. If the last
+round still produced findings or changed the plan, the honest label is "STOPPED WITH
+FINDINGS OPEN" — name them here and in the PR body, and say plainly that the plan
+carries them. Going past 10 rounds needs Kevin's sign-off and a stated reason; a
+round-10 stop with findings open is a stop, not a convergence.
 ```
 
 Rules: findings are severity-tagged `(Critical|High|Medium|Low)`, numbered, carry file:line evidence; every round ends with an explicit "Claude's response" stating accept/reject per finding; the Resolution section distinguishes APPROVED vs "cap reached, all findings resolved, not approved" vs deadlock with a recorded counter-position (PLAN-USER-MGMT-REVIEW-LOG round 5 has one).

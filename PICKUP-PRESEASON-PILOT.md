@@ -354,7 +354,7 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — functions and rules EMPTY; frontend optionally behind
+## 4. Deploy queue — functions and rules EMPTY; frontend REBUILD OWED (#297/#298)
 
 > **Nothing is owed as of 2026-07-25.** #279 deployed functions → rules → Coolify
 > frontend, in that order, and the settings save was smoke-tested in prod. The
