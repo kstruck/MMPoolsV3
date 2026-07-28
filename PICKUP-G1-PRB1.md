@@ -235,7 +235,7 @@ Baselines after PR-A: functions **972**, emulator **133**, root **291**. Also
 `npm audit --audit-level=high` in root **and** `functions/` — CI audits them
 separately.
 
-**Review: `codex exec review --base origin/main`, 5 rounds MAX** (CLAUDE.md §2c —
+**Review: `codex exec review --base origin/main`, judgement up to 10 rounds** (CLAUDE.md §2c —
 the cap is the stopping rule and beats "until clean"). If round 5 still has open
 findings, stop and name them in the PR body as unresolved. **Do NOT check qodo** —
 removed 2026-07-25 (§2b). Self-review the diff yourself; codex is the only other

@@ -221,9 +221,12 @@ runtime file changed in between (diff-verified), so the fleet ≡ the tag.
 Previous states: <!-- deploy-state:ignore --> `main` @ `8a55b84` (#279) on
 <!-- deploy-state:ignore --> `main` @ `49c12a9` (#261/#262/#265).
 
-**The FRONTEND is current with this claim** — Coolify rebuilt twice on
-2026-07-27 (bundle `index-CYTPq50I.js`), and the D25 backfill live-ran in
-between (dry 72 predicted → live 72 created, 0 failures → dry 0 remaining).
+⚠️ **The FRONTEND is NOT current with this claim.** The live bundle is
+`index-Na2D7cdu.js` (the #308 rebuild) and it predates #297/#298; #311 changed no
+frontend code, so a rebuild is optional — see HANDOFF's STOP POINT box, and §0.
+(Historical: Coolify rebuilt twice on 2026-07-27 to bundle `index-CYTPq50I.js`,
+and the D25 backfill live-ran in between — dry 72 predicted → live 72 created,
+0 failures → dry 0 remaining.)
 The paragraph below describes the 2026-07-25 state: Coolify rebuilt then on
 the #279 commit (SHA verified against `git rev-parse origin/main`), and the
 #279 settings cutover was smoke-tested in prod: an NFL Pick'em pool's Manager tab saved
@@ -345,7 +348,7 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — EMPTY (functions, rules and frontend all current)
+## 4. Deploy queue — functions and rules EMPTY; frontend optionally behind
 
 > **Nothing is owed as of 2026-07-25.** #279 deployed functions → rules → Coolify
 > frontend, in that order, and the settings save was smoke-tested in prod. The
@@ -359,7 +362,9 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 > without `✔ Deploy complete!`, printed no error, and left 10 functions stale.
 > The all-Skipped report is the evidence; a missing error is not.
 
-**As of 2026-07-25 the FUNCTIONS, RULES and FRONTEND queues are all EMPTY.** The
+**As of 2026-07-27 the FUNCTIONS and RULES queues are EMPTY** (#311 deployed;
+verification in HANDOFF's STOP POINT box). **The FRONTEND is optionally behind** —
+the live bundle predates #297/#298, and a rebuild is Kevin's call, not owed. The
 deployed source SHA is the tagged claim in §2 — not repeated here, so it cannot
 drift out of sync with it. `main` advances past it with every
 docs-only commit — that is drift in the marker, not a deploy queue; the queue is
@@ -545,6 +550,7 @@ floating promise from another test file can trip. Re-run before investigating.
   and "never ran" are distinguishable — `withHeartbeat()` in
   `functions/src/lib/heartbeat.ts` does this; use it for any new job.
 - **`codex exec review --base origin/main` reviews PRs — run it before opening
-  one, 5 rounds max** (CLAUDE.md §2c). It is qodo's temporary replacement;
+  one; judgement up to 10 rounds, Kevin's sign-off with a reason past 10**
+  (CLAUDE.md §2c, his 2026-07-27 ruling). It is qodo's temporary replacement;
   **qodo is OFF, do not check it** (§2b). Judge each finding on evidence and
   reply either way — a rejection needs written reasoning on the PR.

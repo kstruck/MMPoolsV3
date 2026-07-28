@@ -31,9 +31,12 @@
 > writing events immediately, and they ACCUMULATE — nothing drains them while the
 > job is off. **A dry run does not drain them either:** it reads the queue,
 > reports what it would do, and acknowledges NOTHING by design (codex r30), so
-> the events survive the flip to live and are applied then. Do not read a
-> non-empty queue during the dry-run watch as a fault; an EMPTY one after a dry
-> run would be the bug.
+> the events survive the flip to live and are applied then. So during the
+> dry-run watch, judge the queue against what the run REPORTED: every event the
+> heartbeat says it observed must still be there afterwards. An empty queue is
+> not a fault on its own — it just means nothing was enqueued, which is the
+> normal state when no correction, delayed terminal, spread edit or withheld lock
+> has occurred.
 >
 > ### Arming prerequisites: 1 of 3 CLOSED
 >
@@ -984,7 +987,7 @@ Remaining optional items (SLO objects, cosmetic chunk-splitting) listed in the
 
 - Deploy: `npm --prefix functions ci` first (NOT `install` — it rewrites the lockfile and dirties the tree the deploy packages), then `npx firebase deploy --only functions:… --project gridiron-gamble-uzuqo`. Functions before rules. Frontend = Coolify — **manual trigger only**, pushing to `main` does NOT auto-deploy it (corrects a stale claim that lived here; matches CLAUDE.md + the mmp-deploy-and-operate skill).
 - Emulator tests need Java on PATH: `JAVA_HOME=/c/Program Files/Eclipse Adoptium/jdk-21.0.11.10-hotspot`; run `npm --prefix functions run test:emulator`. Unit: `npm --prefix functions test` (410 tests; emulator suite 39).
-- **PR review = `codex exec review --base origin/main`, 5 rounds max** (CLAUDE.md §2c). **qodo is OFF** — Kevin removed the check on 2026-07-25 (§2b); codex is its temporary replacement. Validate every finding before fixing; a rejection needs written reasoning on the PR.
+- **PR review = `codex exec review --base origin/main`, judgement up to 10 rounds; past 10 ask Kevin with a reason** (CLAUDE.md §2c, his 2026-07-27 ruling — it was 5). **qodo is OFF** — Kevin removed the check on 2026-07-25 (§2b); codex is its temporary replacement. Validate every finding before fixing; a rejection needs written reasoning on the PR.
 - Untracked strays at root: `PLAN-LOOPS.md`, `PLAN-SECURITY-OBSERVABILITY*.md` (copies of branch-committed files). Harmless; don't commit blindly.
 
 ## Do NOT re-do
