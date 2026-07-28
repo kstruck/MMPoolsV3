@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * The post-commit projection refresh must NEVER fail its caller.
@@ -64,10 +66,7 @@ describe('setPaidStatus routes its post-commit refresh through the best-effort h
   // Source ratchet, same idiom as heartbeat.test.ts. Reverting either call site
   // back to a bare `await recomputeRosterSummary(...)` reintroduces the
   // reject-after-commit path, and no behavioural test above would notice.
-  const src = require('node:fs').readFileSync(
-    require('node:path').join(__dirname, '..', 'setPaidStatus.ts'),
-    'utf8',
-  ) as string;
+  const src = fs.readFileSync(path.join(__dirname, '..', 'setPaidStatus.ts'), 'utf8');
 
   it('calls refreshProjectionsBestEffort on BOTH branches (rebuy settle and paid mark)', () => {
     expect(src.match(/refreshProjectionsBestEffort\(db, poolId, pool\)/g)?.length).toBe(2);
