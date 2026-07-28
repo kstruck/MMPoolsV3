@@ -6,8 +6,8 @@
 > The target is the Hall of Fame game, 2026-08-06. Deploy and prod-data
 > mutations are Kevin's; code, tests and PRs are yours. Follow CLAUDE.md §2b
 > (qodo is OFF — do not check it) and §2c (`codex exec review --base
-> origin/main`, capped at 5 rounds per PR). Tell me what you plan to do before
-> you do it.
+> origin/main`; use judgement up to 10 rounds per artifact, and ask Kevin with a
+> reason before going past 10). Tell me what you plan to do before you do it.
 
 Written 2026-07-21. **The target is the Hall of Fame game, 2026-08-06** (Thu,
 8:00pm ET, CAR at ARI) — that is the clock, set by Kevin on 2026-07-21. The
@@ -40,10 +40,13 @@ Insights, KEVIN-TASKS-2026-07-23.md §4.
 `git rev-parse origin/main`), which carried #279's `NFLManagerView` cutover onto
 the `updatePoolSettings` callable. Smoke-tested in prod. **No rebuild owed.**
 
-⚠️ **One prod-data action is PENDING:** the `publishedWeeks` cold-start backfill
-has not been run (**SuperAdmin → Operations → "Backfill Published Weeks (dry
-run)"** first). It is an arming prerequisite for `nflAutoScoreJob` — see
-HANDOFF's STOP POINT box and `MORNING-2026-07-26.md` §2c.
+✅ **The `publishedWeeks` backfill is CLOSED (2026-07-27) and never needs
+running.** The prod dry run returned `poolsScanned: 15, poolsChanged: 0,
+weeksMarked: 0, failures: []` — no legacy manually-scored weeks exist to stamp,
+across the whole NFL pool population (the migration applies no season filter).
+**Do not click the destructive button; it is a no-op.** See HANDOFF's STOP POINT
+box. `MORNING-2026-07-26.md` §2c describes it as owed — that doc is a dated
+morning note and is now historical on this point.
 
 ⚠️ **#279 did not reach a clean codex round** (3 rounds, 8 findings all absorbed;
 round 4 hit an OpenAI quota error). Noted so nobody reads "merged + deployed" as
@@ -196,7 +199,12 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `6b7e439`.**
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `d3d2b0d`.**
+(#311 / G1 PR-B2 deployed as the FULL FLEET, twice: the first run created
+`nflSpreadRescoreTrigger` and updated everything else, the second reported every
+function `Skipped (No changes detected)` — that all-Skipped run is the evidence.
+Rules unchanged by #311, so they remain ≡ this tag.
+Prior claim: <!-- deploy-state:ignore --> `main` @ `6b7e439` —)
 (P3 #308 deployed incrementally — only setPaidStatus changed; fleet ≡ tag.
 Prior claim: <!-- deploy-state:ignore --> `main` @ `b1df185` —)
 (P2 #306 deployed incrementally on top of the state below — only
@@ -429,11 +437,11 @@ Always confirm the change is in the file on disk before deploying — not that
    under `"2"` in `bySeasonType`. Then set `nflFinalize.liveSeasonTypes` to an
    array containing the number **1** — `dryRun:false` **alone does nothing**,
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
-2. **Deploy — NOTHING OWED as of 2026-07-25.** #279 shipped functions, rules and
-   the Coolify frontend rebuild, and the commissioner settings save was
-   smoke-tested in prod. Next deploy recipe (with the ordering constraint):
-   `MORNING-2026-07-26.md` §2b. **Pending prod-data action:** run the
-   `publishedWeeks` backfill dry-run (SuperAdmin → Operations).
+2. **Deploy — the FUNCTIONS queue is EMPTY as of 2026-07-27** (#311 deployed;
+   see HANDOFF's STOP POINT box for the verification). Next deploy recipe (with
+   the ordering constraint): `MORNING-2026-07-26.md` §2b. **No prod-data action
+   is pending** — the `publishedWeeks` backfill is closed (§0). **Optional:** a
+   Coolify rebuild would pick up #297/#298, which the live bundle predates.
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.

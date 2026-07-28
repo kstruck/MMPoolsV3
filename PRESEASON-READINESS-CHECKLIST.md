@@ -148,16 +148,22 @@ config/console act with a verification step. Suggested order as listed.
   concurrency + authorization guards §7 requires before arming it. **It is
   switched OFF** — `system/config.nflAutoScore` is unset and the gate is fail-safe.
   **Three prerequisites remain before it may be armed:**
-  1. **PR-B2** — the `nfl_rescore_queue` durable tier (not started; next PR).
+  1. **PR-B2 — BUILT AND DEPLOYED** (#311, 2026-07-27), but it must be WATCHED
+     IN DRY RUN before live: arm `{ enabled: true, dryRun: true }`, read the
+     heartbeat detail for a day, then flip `dryRun: false`. Deployed is not
+     proven.
   2. **`nflDeepSweep` live WITH WRITES** — a dry-run deep sweep does not write
      `nfl_games`, so a game finalizing >24h after kickoff is never observed.
-  3. **Run the `publishedWeeks` cold-start backfill** (SuperAdmin → Operations,
-     dry-run first). #279's `extendWeekDeadline` publish guard reads that marker.
-     **Every** scoring pass writes it — the manual "Score Week" button included,
-     since it runs through the same `scoreNFLWeekInternal` — so this is purely a
-     COLD-START gap: weeks scored before that code shipped carry no marker and can
-     still be reopened after their results were shown. Manual scoring from here on
-     marks its own weeks; nothing is permanently unprotected.
+     STILL OPEN.
+  3. ✅ **The `publishedWeeks` cold-start backfill is CLOSED — and never needs
+     running.** The prod dry run on 2026-07-27 returned
+     `poolsScanned: 15, poolsChanged: 0, weeksMarked: 0, failures: []`. The
+     migration queries ALL NFL-season-type pools with no season filter, so that
+     zero covers the whole population: there are no legacy manually-scored weeks
+     to stamp because the season has not started. **Do not click the destructive
+     button — it is a no-op.** It stays closed on its own, because every scoring
+     pass writes the marker (the manual "Score Week" button included, since it
+     runs through the same `scoreNFLWeekInternal`).
 
   So the pilot answer is unchanged: **Kevin clicks "Score Week N" per
   pool after each preseason slate**, and that must be ON the schedule (Sun/Mon).

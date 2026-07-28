@@ -1,8 +1,79 @@
-# HANDOFF — Session entry point (updated 2026-07-27: payment-truth P4+P1 FULLY SHIPPED — backfill live-run, D13+D25 closed in prod)
+# HANDOFF — Session entry point (updated 2026-07-27: G1 PR-B2 deployed — the rescore queue is live and INERT; one arming prerequisite closed)
 
-> ## ✅ STOP POINT 2026-07-27 (night) — PLAN-PAYMENT-TRUTH BUILD QUEUE COMPLETE (P4+P1+P2+P3 all live)
+> ## ✅ STOP POINT 2026-07-27 (late night) — G1 PR-B2 SHIPPED; `publishedWeeks` prerequisite CLOSED
 >
-> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `6b7e439`.**
+> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `d3d2b0d`.**
+> #311 (`nfl_rescore_queue`, PLAN-REALTIME-SCORING §5b) merged and deployed the
+> same hour. **Verified three ways, not assumed:** the first run created
+> `nflSpreadRescoreTrigger` and reported every other function
+> `Successful update operation` ending `✔ Deploy complete!`; a SECOND full-fleet
+> run reported every function `Skipped (No changes detected)` — the all-Skipped
+> report that is the actual positive evidence; and `firebase functions:list`
+> shows `nflSpreadRescoreTrigger` as v2 on
+> `google.cloud.firestore.document.v1.updated`, us-central1, nodejs22.
+>
+> The whole fleet updated on the first run rather than a handful, because
+> `npm --prefix functions ci` rebuilt `node_modules` and every uploaded bundle
+> hash moved. Expected, not a defect.
+>
+> **Rules did not change in #311**, so they remain ≡ this tag.
+>
+> ⚠️ **FRONTEND: no rebuild owed by #311** (it changed no frontend code), but the
+> live bundle is still `index-Na2D7cdu.js`, which PREDATES #297 and #298 — two
+> frontend dependency bumps merged after the last Coolify rebuild. Rebuilding is
+> optional and nothing is broken; the Coolify dashboard is
+> <http://72.60.68.7:8000/project/ycoooow0g4c08ogso404k8o4/environment/ogs0cg0gg0kcgkgc8sg4c8g4/application/ics4kkww0c8oo0gw4wkg8w4o/deployment>
+> → **Redeploy** (this URL was in no repo doc before now).
+>
+> ### The queue is DEPLOYED but INERT
+>
+> `system/config.nflAutoScore` stays UNSET = disabled. The enqueue side starts
+> writing events immediately — they simply accumulate and drain to no-ops on the
+> first armed dry run. Nothing scores until Kevin arms it.
+>
+> ### Arming prerequisites: 1 of 3 CLOSED
+>
+> 1. ✅ **The `publishedWeeks` cold-start backfill is CLOSED — and it never needs
+>    running.** The dry run executed in prod on 2026-07-27:
+>    `{"dryRun":true,"poolsScanned":15,"poolsChanged":0,"weeksMarked":0,"plannedWrites":[],"failures":[]}`.
+>    `poolsScanned: 15` matches the census exactly, and the migration queries ALL
+>    NFL-season-type pools with no season filter — so that zero covers the whole
+>    population, not just 2026. There are no legacy manually-scored weeks to
+>    stamp because the season has not started. **Do NOT click the destructive
+>    button**; it would be a no-op. It stays closed with no maintenance:
+>    `scoreNFLWeekInternal` is the only scoring path (`nflPools.ts:894`), the
+>    manual "Score Week" callable delegates to it (`nflPools.ts:1490`), and the
+>    `publishedWeeks.{week}` stamp lives inside it (`nflPools.ts:1361`) — so
+>    hand-scoring the HOF week marks it too.
+> 2. ⬜ **PR-B2 must be watched in DRY RUN before live.** It is deployed, not
+>    proven. Arm `{ enabled: true, dryRun: true }`, watch the heartbeat detail for
+>    a day, then flip `dryRun: false`.
+> 3. ⬜ **The >24h stale-finalize path** (plan §7) — still open. Either arm
+>    `nflDeepSweep` with writes after its own dry-run trial, or build the
+>    uncapped stale-slate re-fetch.
+>
+> ### What #311 carries
+>
+> **11 codex rounds, 21 findings, all absorbed, none carried** (Kevin raised the
+> cap from 5 → 10 mid-effort and authorized round 11 specifically). Round 4 came
+> back clean and self-review still found a stale counter name; round 8's first
+> finding was a REGRESSION introduced by round 6's own fix. The R11 fix — widening
+> the transition predicate so a reinstated `CANCELLED` game enqueues — is the one
+> change that has not itself been through a round.
+>
+> **Risk is concentrated in one place: queued Survivor rescoring.** A queued pass
+> may score Survivor only when no week AT OR AFTER the queued one carries a
+> `scoredWeeks` or `publishedWeeks` marker. Everything else is refused, because
+> `computeSurvivorWeekUpdate` retains later strikes while rewriting
+> `eliminatedWeek` — both a replay and an out-of-order run corrupt the ledger.
+> What remains is a **deferral, not a corruption**: it surfaces as
+> `survivorQueuedDeferred` in the heartbeat and waits for the reset-and-replay
+> sub-PR. **A late Survivor correction has NO safe manual repair — do not
+> hand-score a Survivor week to fix one.** Pick'em and Margin are unaffected.
+
+> ### Historical: the 2026-07-27 night stop point (superseded the same night)
+>
+> **Functions + rules were deployed from <!-- deploy-state:ignore --> `main` @ `6b7e439`.**
 > P3 (#308, the rebuy-paid control — `rebuyPaid` finally has a writer) merged
 > and deployed the same hour: `--only functions:setPaidStatus`, Coolify
 > rebuilt (bundle `index-Na2D7cdu.js`). The only runtime files changed since
