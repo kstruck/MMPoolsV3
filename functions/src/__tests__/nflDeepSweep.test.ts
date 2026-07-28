@@ -306,6 +306,37 @@ describe('syncScoresWindow — the rescore handoff', () => {
     expect(enqueued.map((e: any) => e.reason)).toEqual(['terminal']);
   });
 
+  it('enqueues a CANCELLED → SCHEDULED reinstatement', async () => {
+    // codex r11: the pool already graded this game VOID. Nothing else revisits
+    // that until the game next goes terminal, which may never happen — and
+    // detectStatCorrections ignores it because it only compares prior FINALs.
+    const storedCancelled = {
+      espn_thu: {
+        id: 'espn_thu', season: '2026', seasonType: 1, week: 1,
+        startTime: NOW - 20 * HOUR, status: 'CANCELLED',
+      },
+    };
+    const { db, enqueued } = fakeDbWithDocs(storedCancelled, NOW, HOT_WINDOW_LOOKBACK_MS);
+    await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({ games: fresh({ status: 'SCHEDULED', scores: undefined }), raw: { ok: true } }),
+    });
+    expect(enqueued.map((e: any) => e.reason)).toEqual(['terminal']);
+  });
+
+  it('enqueues NOTHING for SCHEDULED → IN_PROGRESS — every live game, every 5 minutes', async () => {
+    const storedScheduled = {
+      espn_thu: {
+        id: 'espn_thu', season: '2026', seasonType: 1, week: 1,
+        startTime: NOW - 20 * HOUR, status: 'SCHEDULED',
+      },
+    };
+    const { db, enqueued } = fakeDbWithDocs(storedScheduled, NOW, HOT_WINDOW_LOOKBACK_MS);
+    await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({ games: fresh({ status: 'IN_PROGRESS', scores: undefined }), raw: { ok: true } }),
+    });
+    expect(enqueued).toHaveLength(0);
+  });
+
   it('enqueues a correction on an already-FINAL game', async () => {
     // detectStatCorrections only fires on games that were ALREADY final, which is
     // the other half of the pair — a Sunday score restated on the Tuesday.

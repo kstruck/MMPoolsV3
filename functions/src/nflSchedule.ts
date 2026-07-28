@@ -529,22 +529,28 @@ export async function syncScoresWindow(
       if (doc.exists) existingById.set(doc.id, doc.data() as NFLGame);
     }
 
-    // Any arrival at a terminal status the game was not already sitting in,
-    // measured against the WHOLE slate's stored state rather than the in-window
-    // subset (§5b). Three shapes, and the third was missed at first (codex r3):
+    // Any status change where EITHER side is terminal, measured against the WHOLE
+    // slate's stored state rather than the in-window subset (§5b). Four shapes,
+    // and only the first was obvious:
     //  - nonterminal → FINAL: a postponed game finalizing >24h after its
     //    scheduled kickoff, which the live tier's window can no longer see;
     //  - nonterminal → CANCELLED: still carries a void, deferred penalties and
     //    the week's completion;
-    //  - CANCELLED ⇄ FINAL: both are terminal, so a "became terminal" test never
-    //    fires, and `detectStatCorrections` ignores it too because it only
-    //    compares games that were ALREADY FINAL. A pool finalized on the void
-    //    would keep it forever.
-    // A game with no stored doc counts: it is arriving already terminal.
+    //  - CANCELLED ⇄ FINAL (codex r3): both are terminal, so a "became terminal"
+    //    test never fires, and `detectStatCorrections` ignores it too because it
+    //    only compares games that were ALREADY FINAL. A pool finalized on the
+    //    void would keep it forever;
+    //  - CANCELLED → SCHEDULED / IN_PROGRESS (codex r11): a reinstated game. The
+    //    pool already graded it VOID, and nothing else would revisit that until
+    //    the game next goes terminal — which may never happen.
+    // A game with no stored doc counts as arriving from SCHEDULED, so one that
+    // arrives already terminal is a transition. A nonterminal → nonterminal move
+    // (SCHEDULED → IN_PROGRESS) is NOT: it changes no grade, and it is every live
+    // game on every 5-minute run.
     const firstTerminal = freshGames.some(g => {
-      if (!isTerminalGame(g)) return false;
       const prev = existingById.get(g.id)?.status ?? 'SCHEDULED';
-      return prev !== g.status;
+      if (prev === g.status) return false;
+      return isTerminalGame(g) || isTerminalGame({ status: prev });
     });
 
     const batch = db.batch();
