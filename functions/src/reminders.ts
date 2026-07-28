@@ -9,7 +9,7 @@ import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { isOptedOut, buildUnsubUrl, getPrefs, EmailCategory } from "./emailPrefs";
 import { sendCourierSMS } from "./notifications/smsService";
 import {
-    DeliveryTally, DeliveryOutcome, newDeliveryTally, recordDelivery, recordSms, recordPoolError,
+    DeliveryTally, DeliveryOutcome, newDeliveryTally, recordDelivery, recordPoolError,
 } from "./lib/deliveryTally";
 import { getSquarePrivateMap, getSquareEmails } from "./squarePrivate";
 import { withHeartbeat } from "./lib/heartbeat";
@@ -274,7 +274,7 @@ async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: Playof
             // Send SMS if opted in and pool enables SMS
             if (pool.reminders?.smsEnabled && recipient.smsOptIn && recipient.phone) {
                 const smsMessage = `Hi ${recipient.name}, your entry "${recipient.entryName}" in ${pool.name} is Unpaid. Pool locks in < 2 hours!`;
-                recordSms(tally, await sendCourierSMS(recipient.phone, smsMessage));
+                recordDelivery(tally, await sendCourierSMS(recipient.phone, smsMessage));
             }
         }
 
@@ -740,7 +740,7 @@ async function checkBracketReminders(db: admin.firestore.Firestore, pool: Bracke
             }
 
             if (pool.reminders?.smsEnabled && userData.smsOptIn && userData.phone) {
-                recordSms(tally, await sendCourierSMS(userData.phone, smsBody));
+                recordDelivery(tally, await sendCourierSMS(userData.phone, smsBody));
                 smsSentCount++;
             }
         }

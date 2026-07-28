@@ -170,8 +170,10 @@ export const sendSecuritySMSAlert = validated(
 
     try {
         const message = "Security Alert: A request to change your account email has been initiated.";
-        const success = await sendCourierSMS(userData.phone, message);
-        return { success, message: success ? "Alert sent" : "Failed to send SMS" };
+        // 'skipped' = Courier not configured; not an error, but nothing was sent.
+        const outcome = await sendCourierSMS(userData.phone, message);
+        const success = outcome === 'queued';
+        return { success, message: success ? "Alert sent" : outcome === 'skipped' ? "SMS not configured" : "Failed to send SMS" };
     } catch (error: any) {
         console.error(`[SecuritySMS] Failed:`, error);
         throw new functions.https.HttpsError("internal", error.message);
@@ -214,8 +216,9 @@ export const testSmsHttp = functions.https.onRequest({ secrets: [courierAuthToke
     console.log(`[TestSMS] Raw phone: ${phone}, E.164: ${e164}`);
     console.log(`[TestSMS] Token present: ${!!courierAuthToken.value()}, Token length: ${courierAuthToken.value()?.length}`);
 
-    const success = await sendCourierSMS(phone, "This is a test message from March Melee Pools 🏀");
-    res.send({ success, phone_raw: phone, phone_e164: e164, token_present: !!courierAuthToken.value() });
+    const outcome = await sendCourierSMS(phone, "This is a test message from March Melee Pools 🏀");
+    const success = outcome === 'queued';
+    res.send({ success, outcome, phone_raw: phone, phone_e164: e164, token_present: !!courierAuthToken.value() });
 });
 
 /**

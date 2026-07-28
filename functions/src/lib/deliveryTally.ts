@@ -30,6 +30,14 @@
  * failed *send*, and distinct from `failedPools` (handlers that threw out to
  * the run loop) — three different ways to lose a reminder, counted apart so the
  * heartbeat says which one happened.
+ *
+ * WHAT IS STILL NOT COUNTED, named rather than implied. Two catches inside
+ * `reminders.ts` swallow errors and are deliberately left out, because neither
+ * is a lost reminder and folding them in would blur what the counters mean:
+ * the `[AutoRelease]` catch in `checkPaymentReminders` (a failed square
+ * release), and `executeAutoLock`'s catch (a failed lock — already the
+ * business of `autoLockPools` and `autoLockVerdict`, so counting it here
+ * would double-report it against the wrong job).
  */
 export type DeliveryOutcome = 'queued' | 'skipped' | 'failed';
 
@@ -56,18 +64,6 @@ export const newDeliveryTally = (): DeliveryTally => ({
 export function recordDelivery(tally: DeliveryTally | undefined, outcome: DeliveryOutcome): DeliveryOutcome {
   if (tally) tally[outcome]++;
   return outcome;
-}
-
-/**
- * Record an SMS result. `sendCourierSMS` already returned a boolean — this is
- * the reader it never had. A `false` from it means the provider refused or the
- * request threw; an unconfigured Courier token also returns false and is
- * counted as a failure on purpose, because a reminder pass that believes it is
- * sending SMS and is not should not look healthy.
- */
-export function recordSms(tally: DeliveryTally | undefined, ok: boolean): boolean {
-  if (tally) tally[ok ? 'queued' : 'failed']++;
-  return ok;
 }
 
 /** A pool whose handler swallowed its own error — its reminders may never have run. */

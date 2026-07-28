@@ -1,12 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-  newDeliveryTally,
-  recordDelivery,
-  recordSms,
-  recordPoolError,
-} from '../lib/deliveryTally';
+import { newDeliveryTally, recordDelivery, recordPoolError } from '../lib/deliveryTally';
 
 /**
  * `runReminders` could not see delivery failures its helpers swallowed. A run
@@ -34,11 +29,13 @@ describe('DeliveryTally counters', () => {
     expect(t).toEqual({ queued: 1, skipped: 2, failed: 1, poolErrors: 0 });
   });
 
-  it('maps an SMS boolean onto queued/failed and passes the boolean through', () => {
+  it("treats an SMS 'skipped' as a config state, not a fault", () => {
+    // sendCourierSMS returns 'skipped' when Courier is not configured. Counting
+    // that as a failure would mark every reminder pass unhealthy forever on a
+    // project that simply does not send SMS.
     const t = newDeliveryTally();
-    expect(recordSms(t, true)).toBe(true);
-    expect(recordSms(t, false)).toBe(false);
-    expect(t).toMatchObject({ queued: 1, failed: 1 });
+    recordDelivery(t, 'skipped');
+    expect(t).toMatchObject({ failed: 0, skipped: 1 });
   });
 
   it('counts a swallowed pool error apart from a failed send', () => {
@@ -54,7 +51,6 @@ describe('DeliveryTally counters', () => {
     // that pass no tally. Throwing here would take down those paths.
     expect(() => {
       recordDelivery(undefined, 'failed');
-      recordSms(undefined, false);
       recordPoolError(undefined);
     }).not.toThrow();
     expect(recordDelivery(undefined, 'queued')).toBe('queued');
@@ -90,10 +86,13 @@ describe('the reminder pass threads the tally through EVERY send', () => {
     expect(untallied, `untallied sendEmail sites:\n${untallied.join('\n')}`).toEqual([]);
   });
 
-  it('every SMS send in the pass goes through recordSms', () => {
+  it('every SMS send in the pass is recorded', () => {
+    // sendCourierSMS returns a DeliveryOutcome, so it feeds recordDelivery
+    // directly — and its 'skipped' (Courier not configured) stays a config
+    // state rather than being graded as a delivery failure.
     const unrecorded = passSendCalls
       .filter((l) => /\bsendCourierSMS\(/.test(l))
-      .filter((l) => !/recordSms\(tally, await sendCourierSMS\(/.test(l));
+      .filter((l) => !/recordDelivery\(tally, await sendCourierSMS\(/.test(l));
     expect(unrecorded, `unrecorded SMS sites:\n${unrecorded.join('\n')}`).toEqual([]);
   });
 });
