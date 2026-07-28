@@ -86,6 +86,24 @@ describe('the reminder pass threads the tally through EVERY send', () => {
     expect(untallied, `untallied sendEmail sites:\n${untallied.join('\n')}`).toEqual([]);
   });
 
+  it('runReminders BINDS the Courier secret — Gen 2 sees only what it binds', () => {
+    // Without this the job's courierAuthToken.value() is empty and every SMS
+    // reminder it tries to send silently is not sent. It went unnoticed for the
+    // life of the job because sendCourierSMS's boolean had no reader. Deleting
+    // the binding restores that exact silence, and nothing else in CI notices.
+    expect(src).toContain('{ schedule: "every 15 minutes", secrets: [courierAuthToken] }');
+  });
+
+  it('the post-send audit write has its OWN catch, so it cannot fake a lost reminder', () => {
+    // logAudit runs after every email is sent. Left under the handler's outer
+    // catch, a failed audit write increments poolErrors and marks a successful
+    // delivery pass unhealthy — a false alarm on the signal this file exists to
+    // make trustworthy. Source-level because driving the real handler to its
+    // send stage needs a full Firestore fake; same idiom as heartbeat.test.ts.
+    const guarded = /try \{\s*await logAudit\([\s\S]{0,400}?\} catch \(auditErr\)/.test(src);
+    expect(guarded, 'logAudit is no longer wrapped in its own try/catch').toBe(true);
+  });
+
   it('every SMS send in the pass is recorded', () => {
     // sendCourierSMS returns a DeliveryOutcome, so it feeds recordDelivery
     // directly — and its 'skipped' (Courier not configured) stays a config

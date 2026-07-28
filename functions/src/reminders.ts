@@ -7,7 +7,7 @@ import { GameState, NotificationLog, Square, AuditLogEvent, Pool, PlayoffPool, P
 import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { isOptedOut, buildUnsubUrl, getPrefs, EmailCategory } from "./emailPrefs";
-import { sendCourierSMS } from "./notifications/smsService";
+import { courierAuthToken, sendCourierSMS } from "./notifications/smsService";
 import {
     DeliveryTally, DeliveryOutcome, newDeliveryTally, recordDelivery, recordPoolError,
 } from "./lib/deliveryTally";
@@ -137,7 +137,20 @@ async function logAudit(db: admin.firestore.Firestore, poolId: string, message: 
 // 2026-07-23, after #262 memoized the per-pool NFL week lookup. A 15-minute
 // cadence still lands every reminder inside its multi-hour window; see
 // PLAN-READS-RUNREMINDERS.md §4.
-export const runReminders = functions.scheduler.onSchedule("every 15 minutes", withHeartbeat('runReminders', async () => {
+//
+// ⚠️ `secrets: [courierAuthToken]` is NEW and it is a BEHAVIOUR CHANGE, not
+// housekeeping (codex r2, P2). Gen-2 functions only see a secret they bind, and
+// this job never bound it — so `courierAuthToken.value()` has always been empty
+// here and **every SMS reminder this job tried to send has silently not been
+// sent**, for as long as the job has existed. Nothing surfaced it because
+// `sendCourierSMS`'s boolean had no reader; adding the reader is what exposed
+// it. The secret itself already exists (userManagement binds it), so this adds
+// no new deploy prerequisite. On deploy, SMS reminders start actually going out
+// to members who have a phone number and have opted in. Reverting is deleting
+// this one option — the job keeps working, minus SMS.
+export const runReminders = functions.scheduler.onSchedule(
+    { schedule: "every 15 minutes", secrets: [courierAuthToken] },
+    withHeartbeat('runReminders', async () => {
     const db = admin.firestore();
     const now = Date.now();
     let failedPools = 0;
@@ -197,7 +210,8 @@ export const runReminders = functions.scheduler.onSchedule("every 15 minutes", w
     // `delivery.skipped` (no address, unsubscribed, opted out of the category)
     // is NOT a failure and never degrades the run — see lib/deliveryTally.ts.
     return reminderPassVerdict({ failedPools, delivery });
-}));
+}),
+);
 
 // --- PLAYOFF REMINDER LOGIC ---
 async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: PlayoffPool, now: number, tally?: DeliveryTally) {
@@ -1005,7 +1019,16 @@ export async function checkNFLNonPickerReminders(
         }
 
         if (sentCount > 0) {
-            await logAudit(db, pool.id, `Sent T-${tier} non-picker reminders for Week ${week} (${sentCount} emails)`, 'NOTIFICATION_SENT', { tier, week, sentCount });
+            // Its own catch, deliberately (codex r2): this runs AFTER every email
+            // has been sent, so a failed audit write is a lost log line, not a lost
+            // reminder. Left inside the outer catch it would increment poolErrors
+            // and mark the whole run unhealthy on a successful delivery pass —
+            // a false alarm on the signal this PR exists to make trustworthy.
+            try {
+                await logAudit(db, pool.id, `Sent T-${tier} non-picker reminders for Week ${week} (${sentCount} emails)`, 'NOTIFICATION_SENT', { tier, week, sentCount });
+            } catch (auditErr) {
+                console.warn(`[NFLNonPickerReminders] audit write failed for pool ${pool.id} (${sentCount} emails already sent):`, auditErr);
+            }
         }
     } catch (e) {
         // Tolerate transient/mocked db failures — never break the scheduler loop.
