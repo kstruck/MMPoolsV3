@@ -182,22 +182,47 @@ export function monetizationVerdict(
  * every pool threw still reported healthy — and reminders are the last thing
  * standing between a member and a missed lock.
  *
- * KNOWN GAP, carried over from the inline version rather than quietly dropped:
- * this cannot see failures the nested helpers swallow on their own.
- * `checkNFLNonPickerReminders` catches its own query errors, `sendEmail`
- * catches queue failures, and `sendCourierSMS` returns a boolean nobody reads.
- * A run where every email failed to queue still reports zero failed pools.
- * Closing that means plumbing an outcome back through each helper — a real
- * change to the delivery path, and its own PR.
+ * THE GAP THIS USED TO CARRY IS NOW CLOSED. `failedPools` alone could not see
+ * failures the nested helpers swallowed on their own — `sendEmail` caught its
+ * own queue failures, `sendCourierSMS` returned a boolean nobody read, and
+ * `checkNFLNonPickerReminders` swallowed its own errors wholesale — so a run
+ * where EVERY email failed to queue reported zero failed pools and a healthy
+ * beat. `DeliveryTally` (`lib/deliveryTally.ts`) now carries those outcomes out
+ * of the helpers, and this grades them.
+ *
+ * Three distinct losses, graded together because any one of them means a member
+ * did not get told:
+ *   - `failedPools`          — the pool's handler threw out to the run loop;
+ *   - `delivery.poolErrors`  — a handler swallowed its own error, so the pool
+ *                              was never fully evaluated;
+ *   - `delivery.failed`      — a send was attempted and did not get through.
+ *
+ * `delivery.skipped` is deliberately NOT graded and deliberately still
+ * reported. It counts recipients with no address, an invalid address, an
+ * unsubscribe, or a category opt-out — all correct outcomes. Grading them would
+ * mark a perfectly healthy pool with one unsubscribed member unhealthy forever,
+ * which is the crying-wolf mode this file's header warns about.
+ *
+ * `delivery` stays optional so a caller that has not been taught to tally yet
+ * degrades to the old behaviour rather than crashing on `undefined`.
  */
-export function reminderPassVerdict(run: { failedPools: number }): HeartbeatVerdict {
-  return run.failedPools > 0
-    ? {
-        ok: false,
-        error: `${run.failedPools} pool(s) failed during the reminder pass`,
-        detail: { failedPools: run.failedPools },
-      }
-    : { detail: { failedPools: 0 } };
+export function reminderPassVerdict(run: {
+  failedPools: number;
+  delivery?: { queued: number; skipped: number; failed: number; poolErrors: number };
+}): HeartbeatVerdict {
+  const d = run.delivery ?? { queued: 0, skipped: 0, failed: 0, poolErrors: 0 };
+  const detail = {
+    failedPools: run.failedPools,
+    queued: d.queued,
+    skipped: d.skipped,
+    deliveryFailures: d.failed,
+    poolErrors: d.poolErrors,
+  };
+  const lost: string[] = [];
+  if (run.failedPools > 0) lost.push(`${run.failedPools} pool(s) failed during the reminder pass`);
+  if (d.poolErrors > 0) lost.push(`${d.poolErrors} pool(s) errored internally and may not have been evaluated`);
+  if (d.failed > 0) lost.push(`${d.failed} notification(s) failed to send`);
+  return lost.length > 0 ? { ok: false, error: lost.join('; '), detail } : { detail };
 }
 
 // ------------------------------------------------- webhook durability sweep

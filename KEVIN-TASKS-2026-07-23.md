@@ -272,9 +272,9 @@ so — you may want the raw registered-user figure regardless of date.
 
 1. **Stats integrity implementation** — steps 1–3 of the revised plan. Money +
    world-readable doc, so it goes one careful PR at a time.
-2. **`sendEmail` / `sendCourierSMS` outcome plumbing** — `runReminders` cannot
-   see delivery failures its helpers swallow; a run where every email failed to
-   queue still reports zero failed pools.
+2. ~~**`sendEmail` / `sendCourierSMS` outcome plumbing**~~ — **DONE 2026-07-28**
+   (built, not yet merged/deployed). `DeliveryTally` +
+   `reminderPassVerdict`.
 3. **The bounded-query follow-up to #262** — composite index +
    `orderBy(startTime).limit(1)`, taking reads from ~133K/day to ~10K/day. Needs
    an index deployed **and fully built** before the code ships, and it changes
