@@ -91,10 +91,11 @@ config/console act with a verification step. Suggested order as listed.
   apply filter server+Overview → Stats tab filters → profile-visibility
   toggle. Then Kevin runs Recalculate. One PR at a time, codex-reviewed.
   *Source: PLAN-STATS-INTEGRITY §8.6.*
-- ☐ **E2 · sendEmail / sendCourierSMS outcome plumbing** — runReminders cannot
-  see delivery failures its helpers swallow; a run where every email failed
-  still reports zero failed pools. Wants its own careful PR (member-paging
-  path). *Source: PICKUP "best next engineering work".*
+- ☑ **E2 · sendEmail / sendCourierSMS outcome plumbing** — **BUILT 2026-07-28**,
+  not yet merged or deployed. `DeliveryTally` counts queued/skipped/failed plus
+  swallowed per-pool errors, and `reminderPassVerdict` marks the run unhealthy on
+  a failed send or an un-evaluated pool. *Source: PICKUP "best next engineering
+  work".*
 - ☐ **E3 · Scheduled Auth export** (PLAN-BACKUPS-PHASE3 step 6) — code,
   blocked on K11's bucket+IAM.
 - ☐ **E4 · Bounded-query follow-up to #262** — composite index +

@@ -134,10 +134,11 @@ Items 1 and 2 of the previous list are DONE — [#256](https://github.com/kstruc
 and [#257](https://github.com/kstruck/MMPoolsV3/pull/257) are merged and
 deployed. What is left:
 
-1. **Plumb an outcome through `sendEmail` / `sendCourierSMS`** so `runReminders`
-   can see delivery failures its helpers swallow. A run where every email failed
-   to queue still reports zero failed pools. This changes the delivery path that
-   pages members, so it wants its own careful PR.
+1. ~~**Plumb an outcome through `sendEmail` / `sendCourierSMS`.**~~ **DONE
+   2026-07-28** — `DeliveryTally` (`functions/src/lib/deliveryTally.ts`) carries
+   queued/skipped/failed out of the helpers and `reminderPassVerdict` grades
+   them, so a pass that delivered nothing is no longer a healthy beat. `skipped`
+   (unsubscribed, opted out, no address) is reported and deliberately NOT graded.
 2. **The scheduled Auth export** (`PLAN-BACKUPS-PHASE3.md` step 6) — deferred
    CODE, not a console click. Blocked on Kevin creating the GCS bucket + IAM.
 3. ~~**Unify scheduled-job timezones.**~~ **DONE** — #259, deployed 2026-07-22.
@@ -333,9 +334,11 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
   fail when `autoLock`'s failure count is deleted. **Still true in prod:** the
   production evidence above covers three of nine handlers, on their HEALTHY path
   only — no failure path has ever executed in prod.
-- **`runReminders` cannot see failures its nested helpers swallow** — `sendEmail`
-  catches queue failures, `sendCourierSMS` returns a boolean nobody reads. A run
-  where every reminder email failed to queue still reports zero failed pools.
+- ~~**`runReminders` cannot see failures its nested helpers swallow.**~~
+  **CLOSED 2026-07-28** — the three swallows (`sendEmail`'s queue catch,
+  `sendCourierSMS`'s unread boolean, `checkNFLNonPickerReminders`'s outer catch)
+  are all counted now and graded by `reminderPassVerdict`. **Still true in prod:**
+  no failure path of this job has ever executed there.
 - **Eight files wrap a job that cannot report failure at all** (`adminHealth`,
   `consensus`, `espnBracket`, `expertPicks`, `expertProfiles`,
   `revenueAggregates`, `stripe`, `winProbability`), on a shrink-only list.

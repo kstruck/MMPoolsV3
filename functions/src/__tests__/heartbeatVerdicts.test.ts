@@ -162,14 +162,53 @@ describe('monetizationDryRunVerdict', () => {
 });
 
 describe('reminderPassVerdict', () => {
+  const clean = { queued: 0, skipped: 0, failed: 0, poolErrors: 0 };
+
   it('a clean pass is healthy', () => {
-    expect(reminderPassVerdict({ failedPools: 0 })).toEqual({ detail: { failedPools: 0 } });
+    expect(reminderPassVerdict({ failedPools: 0, delivery: clean })).toEqual({
+      detail: { failedPools: 0, queued: 0, skipped: 0, deliveryFailures: 0, poolErrors: 0 },
+    });
+  });
+
+  it('a caller with no tally still grades — the field is optional, not required', () => {
+    // Guards the migration itself: a helper that has not been taught to tally
+    // must degrade to the old behaviour, not read `.failed` off undefined.
+    expect(reminderPassVerdict({ failedPools: 0 })).toMatchObject({ detail: { failedPools: 0 } });
   });
 
   it('a thrown pool is a failure — reminders are the last line before a missed lock', () => {
-    const v = reminderPassVerdict({ failedPools: 2 });
+    const v = reminderPassVerdict({ failedPools: 2, delivery: clean });
     expect(v).toMatchObject({ ok: false, detail: { failedPools: 2 } });
     expect(v && 'error' in v && v.error).toMatch(/2 pool\(s\) failed during the reminder pass/);
+  });
+
+  it('a run where every send failed is UNHEALTHY even with zero failed pools', () => {
+    // THE defect this counter exists for: per-helper catches meant a pass that
+    // delivered nothing at all reported `failedPools: 0` and a healthy beat.
+    const v = reminderPassVerdict({ failedPools: 0, delivery: { ...clean, failed: 9 } });
+    expect(v).toMatchObject({ ok: false, detail: { deliveryFailures: 9 } });
+    expect(v && 'error' in v && v.error).toMatch(/9 notification\(s\) failed to send/);
+  });
+
+  it('a pool that swallowed its own error is UNHEALTHY — it was never evaluated', () => {
+    const v = reminderPassVerdict({ failedPools: 0, delivery: { ...clean, poolErrors: 1 } });
+    expect(v).toMatchObject({ ok: false, detail: { poolErrors: 1 } });
+    expect(v && 'error' in v && v.error).toMatch(/1 pool\(s\) errored internally/);
+  });
+
+  it('SKIPS are reported and never graded — opt-outs must not cry wolf', () => {
+    // A pool whose members have unsubscribed is healthy. Grading skips would
+    // mark it degraded forever and train the operator to ignore the signal.
+    const v = reminderPassVerdict({ failedPools: 0, delivery: { queued: 3, skipped: 40, failed: 0, poolErrors: 0 } });
+    expect(v).toEqual({ detail: { failedPools: 0, queued: 3, skipped: 40, deliveryFailures: 0, poolErrors: 0 } });
+  });
+
+  it('reports every loss at once rather than only the first', () => {
+    const v = reminderPassVerdict({ failedPools: 1, delivery: { ...clean, failed: 2, poolErrors: 3 } });
+    const err = v && 'error' in v ? String(v.error) : '';
+    expect(err).toMatch(/1 pool\(s\) failed during the reminder pass/);
+    expect(err).toMatch(/3 pool\(s\) errored internally/);
+    expect(err).toMatch(/2 notification\(s\) failed to send/);
   });
 });
 

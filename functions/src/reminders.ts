@@ -8,6 +8,9 @@ import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { isOptedOut, buildUnsubUrl, getPrefs, EmailCategory } from "./emailPrefs";
 import { sendCourierSMS } from "./notifications/smsService";
+import {
+    DeliveryTally, DeliveryOutcome, newDeliveryTally, recordDelivery, recordSms, recordPoolError,
+} from "./lib/deliveryTally";
 import { getSquarePrivateMap, getSquareEmails } from "./squarePrivate";
 import { withHeartbeat } from "./lib/heartbeat";
 import { reminderPassVerdict } from "./lib/heartbeatVerdicts";
@@ -21,11 +24,24 @@ import { effectiveLockSettings, usesWeeklyHardLock, resolveHardWeekLock, frozenH
  * Sends an email by writing to the /mail collection (triggered by EmailJS or other service).
  * Honors unsubscribe opt-outs and injects the per-recipient unsubscribe link
  * (templates carry a {{UNSUB_URL}} placeholder in the footer).
+ *
+ * Returns its outcome and records it in `tally` when one is passed. It still
+ * never throws — a failed reminder email must not take down the pass — but the
+ * failure is no longer invisible. `skipped` (no address, opted out) is NOT a
+ * failure; see lib/deliveryTally.ts. Callers outside the reminder pass pass no
+ * tally and are unaffected.
  */
-export async function sendEmail(db: admin.firestore.Firestore, to: string, subject: string, html: string, context?: Record<string, unknown>) {
+export async function sendEmail(
+    db: admin.firestore.Firestore,
+    to: string,
+    subject: string,
+    html: string,
+    context?: Record<string, unknown>,
+    tally?: DeliveryTally,
+): Promise<DeliveryOutcome> {
     if (!to || !to.includes('@')) {
         console.warn(`Skipping email to invalid address: ${to}`);
-        return;
+        return recordDelivery(tally, 'skipped');
     }
 
     try {
@@ -38,7 +54,7 @@ export async function sendEmail(db: admin.firestore.Firestore, to: string, subje
             // marketing opt-out — flag via context.transactional
             if (!context?.transactional && await isOptedOut(db, to)) {
                 console.log(`Skipping email to ${to}: recipient has unsubscribed`);
-                return;
+                return recordDelivery(tally, 'skipped');
             }
             // Per-category opt-out (senders tag mail via context.category).
             const category = context?.category as EmailCategory | undefined;
@@ -46,7 +62,7 @@ export async function sendEmail(db: admin.firestore.Firestore, to: string, subje
                 const prefs = await getPrefs(db, to);
                 if (prefs.categories[category] === false) {
                     console.log(`Skipping email to ${to}: opted out of '${category}' emails`);
-                    return;
+                    return recordDelivery(tally, 'skipped');
                 }
             }
             unsubUrl = await buildUnsubUrl(db, to);
@@ -65,8 +81,10 @@ export async function sendEmail(db: admin.firestore.Firestore, to: string, subje
             createdAt: FieldValue.serverTimestamp(),
         });
         console.log(`Email queued for ${to}: ${subject}`);
+        return recordDelivery(tally, 'queued');
     } catch (error) {
         console.error("Error queuing email:", error);
+        return recordDelivery(tally, 'failed');
     }
 }
 
@@ -123,6 +141,7 @@ export const runReminders = functions.scheduler.onSchedule("every 15 minutes", w
     const db = admin.firestore();
     const now = Date.now();
     let failedPools = 0;
+    const delivery = newDeliveryTally();
     console.log(`[runReminders] Starting reminder check at ${new Date(now).toISOString()}`);
     const poolsSnapshot = await db.collection("pools").get();
     console.log(`[runReminders] Found ${poolsSnapshot.size} pools to check`);
@@ -139,23 +158,23 @@ export const runReminders = functions.scheduler.onSchedule("every 15 minutes", w
             // --- TYPE: SQUARES or PROPS --- 
             if (pool.type === 'SQUARES' || pool.type === 'PROPS' || !pool.type) {
                 if (!pool.reminders) continue;
-                if (pool.reminders.payment?.enabled && pool.type === 'SQUARES') await checkPaymentReminders(db, pool as GameState, now);
-                if (pool.reminders.lock?.enabled && (pool.type === 'SQUARES' || !pool.type)) await checkLockReminders(db, pool as GameState, now);
+                if (pool.reminders.payment?.enabled && pool.type === 'SQUARES') await checkPaymentReminders(db, pool as GameState, now, delivery);
+                if (pool.reminders.lock?.enabled && (pool.type === 'SQUARES' || !pool.type)) await checkLockReminders(db, pool as GameState, now, delivery);
             }
 
             // --- TYPE: NFL PLAYOFFS ---
             else if (pool.type === 'NFL_PLAYOFFS') {
-                await checkPlayoffReminders(db, pool, now);
+                await checkPlayoffReminders(db, pool, now, delivery);
             }
 
             // --- TYPE: BRACKET ---
             else if (pool.type === 'BRACKET') {
-                await checkBracketReminders(db, pool as BracketPool, now);
+                await checkBracketReminders(db, pool as BracketPool, now, delivery);
             }
 
             // --- TYPE: NFL SEASON POOLS (Pick'em / Survivor / Margin) ---
             else if (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') {
-                await checkNFLNonPickerReminders(db, pool as NFLSeasonPool, now, weekCache);
+                await checkNFLNonPickerReminders(db, pool as NFLSeasonPool, now, weekCache, delivery);
             }
 
         } catch (poolError: unknown) {
@@ -169,19 +188,19 @@ export const runReminders = functions.scheduler.onSchedule("every 15 minutes", w
     // others — which meant a run where every pool threw still reported healthy.
     // Reminders are the last thing standing between a member and a missed lock.
     //
-    // KNOWN GAP, stated rather than implied: this counts pools whose handler
-    // THREW. It does NOT see failures the nested helpers swallow on their own —
-    // checkNFLNonPickerReminders catches its own query errors, sendEmail catches
-    // queue failures, and sendCourierSMS returns a boolean nobody reads. A run
-    // where every email failed to queue still reports zero failed pools. Closing
-    // that means plumbing an outcome back through each helper, which is a real
-    // change to the delivery path and wants its own PR rather than a 4am edit
-    // to the job that pages members. Raised by codex review on this PR.
-    return reminderPassVerdict({ failedPools });
+    // THREE ways a reminder is lost, counted apart because they mean different
+    // things (the KNOWN GAP this comment used to describe is now closed):
+    //   failedPools          — the pool's handler threw out to this loop;
+    //   delivery.poolErrors  — a handler swallowed its own error, so the pool
+    //                          was never fully evaluated;
+    //   delivery.failed      — a send was attempted and did not get through.
+    // `delivery.skipped` (no address, unsubscribed, opted out of the category)
+    // is NOT a failure and never degrades the run — see lib/deliveryTally.ts.
+    return reminderPassVerdict({ failedPools, delivery });
 }));
 
 // --- PLAYOFF REMINDER LOGIC ---
-async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: PlayoffPool, now: number) {
+async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: PlayoffPool, now: number, tally?: DeliveryTally) {
     // 1. Check if locking soon (Start of Wild Card is traditionally the lock)
     // Using `lockDate` or `lockAt` if available.
     const lockTime = pool.lockDate;
@@ -250,12 +269,12 @@ async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: Playof
             const html = renderEmailHtml('Payment Reminder', body, `${BASE_URL}/pool/${pool.id}`, 'View Pool');
 
             // Queue Email
-            await sendEmail(db, recipient.email, subject, html, { category: 'reminders' });
+            await sendEmail(db, recipient.email, subject, html, { category: 'reminders' }, tally);
 
             // Send SMS if opted in and pool enables SMS
             if (pool.reminders?.smsEnabled && recipient.smsOptIn && recipient.phone) {
                 const smsMessage = `Hi ${recipient.name}, your entry "${recipient.entryName}" in ${pool.name} is Unpaid. Pool locks in < 2 hours!`;
-                await sendCourierSMS(recipient.phone, smsMessage);
+                recordSms(tally, await sendCourierSMS(recipient.phone, smsMessage));
             }
         }
 
@@ -264,7 +283,7 @@ async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: Playof
     }
 }
 
-export async function checkPaymentReminders(db: admin.firestore.Firestore, pool: GameState, now: number) {
+export async function checkPaymentReminders(db: admin.firestore.Firestore, pool: GameState, now: number, tally?: DeliveryTally) {
     const settings = pool.reminders!.payment;
 
     const bucketSizeMs = settings.repeatEveryHours * 60 * 60 * 1000;
@@ -298,7 +317,7 @@ export async function checkPaymentReminders(db: admin.firestore.Firestore, pool:
             <p>You have ${unpaidSquares.length} squares that are reserved but unpaid.</p>
         `;
         const html = renderEmailHtml(`Action Needed: Unpaid Squares`, emailBody, `${BASE_URL}/pool/${pool.id}`, 'Manage Pool');
-        await sendEmail(db, pool.contactEmail, `Action Needed: ${unpaidSquares.length} Unpaid Squares`, html, { category: 'reminders' });
+        await sendEmail(db, pool.contactEmail, `Action Needed: ${unpaidSquares.length} Unpaid Squares`, html, { category: 'reminders' }, tally);
         await logAudit(db, pool.id, `Sent payment reminder to host (${unpaidSquares.length} unpaid)`, 'NOTIFICATION_SENT', { dedupeKey: hostKey });
     }
 
@@ -333,7 +352,7 @@ export async function checkPaymentReminders(db: admin.firestore.Firestore, pool:
                     <p>Please pay the host: ${escapeHtml(pool.paymentInstructions || 'See pool details')}</p>
                 `;
                     const html = renderEmailHtml(`Payment Reminder`, emailBody, `${BASE_URL}/pool/${pool.id}`, 'View Pool');
-                    await sendEmail(db, email, `Reminder: ${squares.length} Squares Pending Payment`, html, { category: 'reminders' });
+                    await sendEmail(db, email, `Reminder: ${squares.length} Squares Pending Payment`, html, { category: 'reminders' }, tally);
                 }
             }
         }
@@ -399,7 +418,7 @@ export async function checkPaymentReminders(db: admin.firestore.Firestore, pool:
                     <p>Released squares: ${squaresToRelease.map(s => `#${s.id}`).join(', ')}</p>
                 `;
                 const html = renderEmailHtml(`Squares Auto-Released`, emailBody, `${BASE_URL}/pool/${pool.id}`, 'View Pool');
-                await sendEmail(db, pool.contactEmail, `${squaresToRelease.length} Squares Auto-Released: ${pool.name}`, html);
+                await sendEmail(db, pool.contactEmail, `${squaresToRelease.length} Squares Auto-Released: ${pool.name}`, html, undefined, tally);
 
                 console.log(`[AutoRelease] Released ${squaresToRelease.length} squares from pool ${pool.id}`);
             } catch (e) {
@@ -410,7 +429,7 @@ export async function checkPaymentReminders(db: admin.firestore.Firestore, pool:
 }
 
 // --- WAITLIST NOTIFICATION ---
-export async function notifyWaitlist(db: admin.firestore.Firestore, pool: GameState, releasedCount: number) {
+export async function notifyWaitlist(db: admin.firestore.Firestore, pool: GameState, releasedCount: number, tally?: DeliveryTally) {
     if (!pool.waitlist || pool.waitlist.length === 0) return;
 
     const emailSubject = `Squares Available: ${pool.name}`;
@@ -421,7 +440,7 @@ export async function notifyWaitlist(db: admin.firestore.Firestore, pool: GameSt
     const html = renderEmailHtml(`Squares Available!`, emailBody, `${BASE_URL}/pool/${pool.id}`, 'Claim Squares Now');
 
     for (const entry of pool.waitlist) {
-        await sendEmail(db, entry.email, emailSubject, html, { category: 'announcements' });
+        await sendEmail(db, entry.email, emailSubject, html, { category: 'announcements' }, tally);
     }
 
     await logAudit(db, pool.id, `Notified ${pool.waitlist.length} waitlisted users about ${releasedCount} released squares`, 'NOTIFICATION_SENT', {
@@ -432,7 +451,7 @@ export async function notifyWaitlist(db: admin.firestore.Firestore, pool: GameSt
 
 // Removed duplicate import
 
-async function checkLockReminders(db: admin.firestore.Firestore, pool: GameState | PropsPool, now: number) {
+async function checkLockReminders(db: admin.firestore.Firestore, pool: GameState | PropsPool, now: number, tally?: DeliveryTally) {
     const settings = pool.reminders!.lock;
     if (!settings.lockAt) return;
 
@@ -482,7 +501,7 @@ async function checkLockReminders(db: admin.firestore.Firestore, pool: GameState
                 if (contactEmail) {
                     const hostBody = `<p>Your pool <strong>${escapeHtml(pool.name)}</strong> locks soon.</p>`;
                     const hostHtml = renderEmailHtml(`Pool Locking Soon`, hostBody, `${BASE_URL}/pool/${pool.id}`, 'Manage Pool');
-                    await sendEmail(db, contactEmail, `Pool Locking in ${Math.round(minutesUntilLock / 60)} Hours`, hostHtml, { category: 'reminders' });
+                    await sendEmail(db, contactEmail, `Pool Locking in ${Math.round(minutesUntilLock / 60)} Hours`, hostHtml, { category: 'reminders' }, tally);
                 }
 
                 if (pool.type === 'SQUARES' || !pool.type) {
@@ -490,7 +509,7 @@ async function checkLockReminders(db: admin.firestore.Firestore, pool: GameState
                     for (const email of uniqueEmails) {
                         const userBody = `<p>The pool locks in approximately ${Math.round(minutesUntilLock / 60)} hours.</p>`;
                         const userHtml = renderEmailHtml(`Grid Locking Soon: ${pool.name}`, userBody, `${BASE_URL}/pool/${pool.id}`, 'Check Your Squares');
-                        await sendEmail(db, email, `Grid Locking Soon: ${pool.name}`, userHtml, { category: 'reminders' });
+                        await sendEmail(db, email, `Grid Locking Soon: ${pool.name}`, userHtml, { category: 'reminders' }, tally);
                     }
                 }
 
@@ -664,7 +683,7 @@ export function bracketReminderTrigger(
     return null;
 }
 
-async function checkBracketReminders(db: admin.firestore.Firestore, pool: BracketPool, now: number) {
+async function checkBracketReminders(db: admin.firestore.Firestore, pool: BracketPool, now: number, tally?: DeliveryTally) {
     if (!pool.lockAt) return;
 
     const msUntilLock = pool.lockAt - now;
@@ -716,12 +735,12 @@ async function checkBracketReminders(db: admin.firestore.Firestore, pool: Bracke
 
             if (userData.email) {
                 const html = renderEmailHtml(emailSubject, emailBody, `${BASE_URL}/pool/${pool.id}`, 'View Pool');
-                await sendEmail(db, userData.email, emailSubject, html, { category: 'reminders' });
+                await sendEmail(db, userData.email, emailSubject, html, { category: 'reminders' }, tally);
                 emailsSentCount++;
             }
 
             if (pool.reminders?.smsEnabled && userData.smsOptIn && userData.phone) {
-                await sendCourierSMS(userData.phone, smsBody);
+                recordSms(tally, await sendCourierSMS(userData.phone, smsBody));
                 smsSentCount++;
             }
         }
@@ -855,6 +874,7 @@ export async function checkNFLNonPickerReminders(
     // cache is a no-op memo for a single pool. runReminders passes ONE cache for
     // the whole run, which is where the saving comes from.
     weekCache: WeekContextCache = newWeekContextCache(),
+    tally?: DeliveryTally,
 ) {
     try {
         if (!pool.season || pool.status === 'archived') return;
@@ -980,7 +1000,7 @@ export async function checkNFLNonPickerReminders(
                 <p>Don't get caught with an empty slate — lock in your ${picksWord} now.</p>
             `;
             const html = renderEmailHtml(title, body, `${BASE_URL}/pool/${pool.id}`, 'Make Your Picks');
-            await sendEmail(db, email, subject, html, { poolId: pool.id, category: 'reminders' });
+            await sendEmail(db, email, subject, html, { poolId: pool.id, category: 'reminders' }, tally);
             sentCount++;
         }
 
@@ -988,7 +1008,11 @@ export async function checkNFLNonPickerReminders(
             await logAudit(db, pool.id, `Sent T-${tier} non-picker reminders for Week ${week} (${sentCount} emails)`, 'NOTIFICATION_SENT', { tier, week, sentCount });
         }
     } catch (e) {
-        // Tolerate transient/mocked db failures — never break the scheduler loop
+        // Tolerate transient/mocked db failures — never break the scheduler loop.
+        // COUNTED, though: this catch sits OUTSIDE the whole handler, so a pool
+        // that lands here had its reminders skipped entirely and the run loop's
+        // own `failedPools` never sees it.
+        recordPoolError(tally);
         console.error(`[NFLNonPickerReminders] Error for pool ${pool.id}:`, e);
     }
 }
