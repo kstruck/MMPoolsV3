@@ -25,6 +25,7 @@
 import { randomUUID } from 'crypto';
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { DocumentReference, Firestore, Transaction } from 'firebase-admin/firestore';
+import { isVoidedPool } from './autoScoreDecisions';
 
 /** The single lease record. One path, everywhere — §3a codex r16. */
 export const SCORING_LEASE_PATH = 'autoScore.scoringLease';
@@ -101,6 +102,19 @@ export function checkFence(pool: PoolDoc, fence: ScoringFence, now: number): voi
   }
   if (readLockRevision(pool) !== fence.lockRevision) {
     throw new HttpsError('aborted', 'FENCE_LOST: the pool lock changed during this scoring pass.');
+  }
+  // Lifecycle, checked in the SAME transaction as the write (codex r6). A
+  // pre-flight guard before the pass is read-then-write: `cancelPool` and the
+  // admin close take no scoring lease, so they can commit between the check and
+  // the first fenced write, and every scoring write downstream would land in a
+  // voided pool. `maybeFinalizeNFLPool` cannot undo them — it only tests
+  // cancellation, and only after its own writes.
+  //
+  // Here rather than in one caller because `fencedWrite` is the single door every
+  // scoring write goes through, so one assertion covers the scheduled job, the
+  // manual button, the finalize sweep and the reconciliation drain at once.
+  if (isVoidedPool(pool as { status?: unknown })) {
+    throw new HttpsError('aborted', 'FENCE_LOST: the pool was voided during this scoring pass.');
   }
 }
 

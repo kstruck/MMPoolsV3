@@ -201,7 +201,9 @@ describe('computeWeekFingerprint — every skip-forever trap', () => {
 
 describe('autoScoreHeartbeat', () => {
   const result = (over: Partial<AutoScoreResult> = {}): AutoScoreResult => ({
-    activeSlates: 1, poolsScored: 3, poolsSkipped: 2, overflow: 0, poolsFailed: 0, ...over,
+    activeSlates: 1, poolsScored: 3, poolsSkipped: 2, overflow: 0, poolsFailed: 0,
+    queuedEvents: 0, queuedSlates: 0, queuedDeferred: 0, queuedAcked: 0,
+    survivorQueuedDeferred: 0, finalizeRetries: 0, ...over,
   });
 
   it('is healthy on a clean run and carries the counts', () => {

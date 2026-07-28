@@ -6,6 +6,8 @@ import { detectStatCorrections } from './lib/feedSnapshot';
 import { captureFeedSnapshot, pruneExpiredSnapshots, readSnapshotGate, reportStatCorrections } from './feedSnapshotStore';
 import { opsCourierAuthToken } from './lib/opsAlertDispatcher';
 import { withHeartbeat, configReadFailedVerdict } from './lib/heartbeat';
+import { isTerminalGame } from './lib/weekCompletion';
+import { RESCORE_QUEUE, rescoreEventDoc } from './lib/rescoreQueue';
 import type { Firestore } from 'firebase-admin/firestore';
 import { validated } from "./lib/validated";
 import { importNFLScheduleSchema } from "./schemas/nflSchedule";
@@ -527,6 +529,30 @@ export async function syncScoresWindow(
       if (doc.exists) existingById.set(doc.id, doc.data() as NFLGame);
     }
 
+    // Any status change where EITHER side is terminal, measured against the WHOLE
+    // slate's stored state rather than the in-window subset (§5b). Four shapes,
+    // and only the first was obvious:
+    //  - nonterminal → FINAL: a postponed game finalizing >24h after its
+    //    scheduled kickoff, which the live tier's window can no longer see;
+    //  - nonterminal → CANCELLED: still carries a void, deferred penalties and
+    //    the week's completion;
+    //  - CANCELLED ⇄ FINAL (codex r3): both are terminal, so a "became terminal"
+    //    test never fires, and `detectStatCorrections` ignores it too because it
+    //    only compares games that were ALREADY FINAL. A pool finalized on the
+    //    void would keep it forever;
+    //  - CANCELLED → SCHEDULED / IN_PROGRESS (codex r11): a reinstated game. The
+    //    pool already graded it VOID, and nothing else would revisit that until
+    //    the game next goes terminal — which may never happen.
+    // A game with no stored doc counts as arriving from SCHEDULED, so one that
+    // arrives already terminal is a transition. A nonterminal → nonterminal move
+    // (SCHEDULED → IN_PROGRESS) is NOT: it changes no grade, and it is every live
+    // game on every 5-minute run.
+    const firstTerminal = freshGames.some(g => {
+      const prev = existingById.get(g.id)?.status ?? 'SCHEDULED';
+      if (prev === g.status) return false;
+      return isTerminalGame(g) || isTerminalGame({ status: prev });
+    });
+
     const batch = db.batch();
     for (const freshGame of freshGames) {
       const gameRef = db.collection('nfl_games').doc(freshGame.id);
@@ -558,6 +584,24 @@ export async function syncScoresWindow(
       const cleanedGame = JSON.parse(JSON.stringify(freshGame));
       batch.set(gameRef, cleanedGame, { merge: true });
     }
+
+    // The rescore handoff rides IN the same batch as the games it describes
+    // (codex r2). Enqueueing after the commit has a losing interleaving: the
+    // terminal/corrected game is persisted, the queue write fails, and no later
+    // sync sees a transition again — so once the slate leaves the hot window its
+    // standings stay stale with nothing to fix them. In the batch, a failed
+    // enqueue simply fails the whole slate write and the next 5-minute run
+    // reconciles it from the same prior state.
+    //
+    // Write path only: a dry run changes no game, so there is nothing to
+    // reconcile. Both reasons can fire for one slate — they are distinct events
+    // and the drain unions them, which is what lets a Survivor pool be scored for
+    // a delayed final on a slate that also carries a correction.
+    for (const reason of ['correction', 'terminal'] as const) {
+      if (reason === 'correction' ? corrections.length === 0 : !firstTerminal) continue;
+      batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({ ...slateKey, reason, enqueuedAt: now }));
+    }
+
     await batch.commit();
     gamesWritten += freshGames.length;
   }
