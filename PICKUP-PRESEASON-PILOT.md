@@ -456,14 +456,18 @@ Always confirm the change is in the file on disk before deploying — not that
    see HANDOFF's STOP POINT box for the verification). Next deploy recipe (with
    the ordering constraint): `MORNING-2026-07-26.md` §2b. **The `publishedWeeks`
    backfill is closed** (§0) — but TWO actions remain before `nflAutoScore` can go
-   live, and both are yours: (a) **PR-B2 must be watched in dry run** — arm
-   `{ enabled: true, dryRun: true }`, read the heartbeat detail for a day, then
-   flip `dryRun: false`; deployed is not proven; and (b) **`nflDeepSweep` must be
+   live, and both are yours: (a) **PR-B2 must be watched in dry run, and the
+   watch only counts if it SAW something** — arm `{ enabled: true, dryRun: true }`
+   and read the heartbeat detail. `queuedEvents: 0` for a day (the normal
+   pre-HOF case) proves only the scheduler wrapper; the bar is at least one event
+   observed AND still queued afterwards, since a dry run acknowledges nothing.
+   If none appears before the HOF game, flip live only with that prerequisite
+   named as unproven; and (b) **`nflDeepSweep` must be
    armed WITH WRITES** after its own dry-run trial (or the uncapped stale-slate
    re-fetch built), otherwise a game finalizing >24h after kickoff is never
    observed. HANDOFF's STOP POINT box carries the same two. **Also owed:** the
-   Coolify rebuild for #297/#298 (§4). **Optional:** a Coolify
-   rebuild would pick up #297/#298, which the live bundle predates.
+   Coolify rebuild for #297/#298 (§4) — low urgency, since nothing is visibly
+   broken, but not optional: they changed root `package.json` runtime deps.
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.

@@ -151,8 +151,14 @@ config/console act with a verification step. Suggested order as listed.
   **Of the three prerequisites, ONE IS CLOSED and two remain** — HANDOFF's STOP
   POINT box carries the same count:
   1. **PR-B2 — BUILT AND DEPLOYED** (#311, 2026-07-27), but it must be WATCHED
-     IN DRY RUN before live: arm `{ enabled: true, dryRun: true }`, read the
-     heartbeat detail for a day, then flip `dryRun: false`. Deployed is not
+     IN DRY RUN before live, **and the watch only counts if it SAW something**:
+     arm `{ enabled: true, dryRun: true }` and read the heartbeat detail.
+     `queuedEvents: 0` for a day — the normal case before the preseason starts —
+     proves only that the scheduler wrapper runs and exercises none of the
+     queue's read/group/no-ack path. The bar is **at least one event observed AND
+     still in the queue afterwards** (a dry run acknowledges nothing, so it must
+     survive). If none appears before the HOF game, flip `dryRun: false` only
+     with this prerequisite explicitly named as unproven. Deployed is not
      proven.
   2. **`nflDeepSweep` live WITH WRITES** — a dry-run deep sweep does not write
      `nfl_games`, so a game finalizing >24h after kickoff is never observed.
