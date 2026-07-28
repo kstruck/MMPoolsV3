@@ -234,7 +234,10 @@ scoring is implemented without, in order:
 1. A `PLAN-*.md` at repo root (goal, phased approach, key decisions +
    tradeoffs, risks/open questions, out-of-scope).
 2. An adversarial review loop logged verbatim in `PLAN-*-REVIEW-LOG.md`
-   (in practice: Codex as reviewer, MAX_ROUNDS=5, each round's findings with
+   (in practice: Codex as reviewer, judgement up to 10 rounds and Kevin's
+   sign-off with a reason past that — CLAUDE.md §2c, 2026-07-27; it was
+   MAX_ROUNDS=5, which the older logs in this repo were written under —
+   each round's findings with
    severity + accept/reject + the author's response; explicit resolution
    status at the end).
 3. A sweep pass (`PLAN-*-SWEEPS.md`): deterministic grep-built COMPLETE

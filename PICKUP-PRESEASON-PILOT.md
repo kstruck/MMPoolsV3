@@ -448,10 +448,13 @@ Always confirm the change is in the file on disk before deploying — not that
 2. **Deploy — the FUNCTIONS queue is EMPTY as of 2026-07-27** (#311 deployed;
    see HANDOFF's STOP POINT box for the verification). Next deploy recipe (with
    the ordering constraint): `MORNING-2026-07-26.md` §2b. **The `publishedWeeks`
-   backfill is closed** (§0) — but a CONFIG action is still pending before
-   `nflAutoScore` can go live: `nflDeepSweep` must be armed WITH WRITES after its
-   own dry-run trial (or the uncapped stale-slate re-fetch built), otherwise a
-   game finalizing >24h after kickoff is never observed. **Optional:** a Coolify
+   backfill is closed** (§0) — but TWO actions remain before `nflAutoScore` can go
+   live, and both are yours: (a) **PR-B2 must be watched in dry run** — arm
+   `{ enabled: true, dryRun: true }`, read the heartbeat detail for a day, then
+   flip `dryRun: false`; deployed is not proven; and (b) **`nflDeepSweep` must be
+   armed WITH WRITES** after its own dry-run trial (or the uncapped stale-slate
+   re-fetch built), otherwise a game finalizing >24h after kickoff is never
+   observed. HANDOFF's STOP POINT box carries the same two. **Optional:** a Coolify
    rebuild would pick up #297/#298, which the live bundle predates.
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
