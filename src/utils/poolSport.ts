@@ -2,6 +2,8 @@
 // GameOps filter and grouping so the two never drift (they used to be two
 // copies of the same switch, and NFL season pools fell through to "Other").
 
+import { isSimPool } from '@shared/testPool';
+
 const NFL_SEASON_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
 
 /** Display bucket for a pool's `league` field (SQUARES + legacy fallback). */
@@ -130,10 +132,12 @@ export function isActiveManagedPool(
   if (pool.status === 'archived') return false;
   // Test Pools: the persisted simRunId field (or sim- season) is the trust anchor —
   // callable-created sim pools have server-generated doc IDs, so the id/slug prefix
-  // check alone excludes nothing (PLAN-NFL-SIM-HARNESS Phase 0.4, mirrors
-  // functions/src/lib/poolInclusion.ts).
-  if (pool.simRunId || String(pool.season || '').startsWith('sim-')) return false;
+  // check alone excludes nothing (PLAN-NFL-SIM-HARNESS Phase 0.4).
+  //
+  // Delegated to `isSimPool`, the canonical predicate, rather than re-derived —
+  // this file and functions/src/lib/poolInclusion.ts each carried their own copy,
+  // and both copies predated the array-season hardening (codex r4 on #290).
+  // `key` keeps the slug arm, which isSimPool takes as its single id argument.
   const key = pool.id || pool.slug || '';
-  if (typeof key === 'string' && key.startsWith('sim-')) return false;
-  return true;
+  return !isSimPool(pool, key);
 }

@@ -103,6 +103,24 @@ describe('isActivePoolForStats — sim exclusion', () => {
   it('includes a real active pool', () => {
     expect(isActivePoolForStats({ ...active, season: '2025' }, 'aUtoGen3RatedId')).toBe(true);
   });
+
+  it('agrees with the canonical isSimPool on an ARRAY season — the divergence the copy carried', () => {
+    // This predicate used to re-derive the sim rule with
+    // `String(pool.season || '').startsWith('sim-')`, and `String(['sim-x'])` is
+    // exactly 'sim-x'. So a Firestore ARRAY season forged a sim pool HERE while
+    // the hardened `isSimPool` (codex r4, typeof === 'string') correctly said no
+    // — a real pool silently dropped from commissioner rosters and stats. Stated
+    // as agreement between the two, which is the property that must hold.
+    const pool = { ...active, season: ['sim-x'] as unknown as string };
+    expect(isSimPool(pool, 'aUtoGen3RatedId')).toBe(false);
+    expect(isActivePoolForStats(pool, 'aUtoGen3RatedId')).toBe(true);
+  });
+
+  it('keeps its own SLUG arm, which isSimPool does not have', () => {
+    // isSimPool takes ONE id. The slug is resolved by isActivePoolForStats and
+    // handed in, so delegating must not lose this arm.
+    expect(isActivePoolForStats({ ...active, slug: 'sim-legacy' }, undefined)).toBe(false);
+  });
 });
 
 // PLAN-PAYMENT-TRUTH P4. `isFinishedPool` was extracted from `isActivePoolForStats`
