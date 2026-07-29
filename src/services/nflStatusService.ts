@@ -2,7 +2,7 @@ import { collection, getDocs, query, where, limit, onSnapshot } from 'firebase/f
 import { db } from '../firebase';
 import { logger } from '../utils/logger';
 import type { NFLGame, Pool } from '../types';
-import { getWeekStatus, weekDeadline } from '../utils/nflPending';
+import { gamesForPoolWeek, getWeekStatus, poolSeasonType, weekDeadline } from '../utils/nflPending';
 import { now as serverNow } from '../utils/serverClock';
 import { effectiveBufferMinutesForWeek } from '@shared/weeklyHardLock';
 
@@ -51,12 +51,12 @@ export function computePendingStatus(pool: Pool, entry: any, seasonGames: NFLGam
     const castPool = pool as any;
     if (pool.type === 'NFL_SURVIVOR' && entry?.status === 'ELIMINATED') return null;
 
-    const seasonType = Number(castPool.seasonType);
+    const seasonType = poolSeasonType(castPool);
     const totalWeeks = seasonType === 1 ? 4 : 18;
     const now = serverNow();
 
     for (let week = 1; week <= totalWeeks; week++) {
-        const weekGames = seasonGames.filter(g => g.week === week && Number(g.seasonType) === seasonType);
+        const weekGames = gamesForPoolWeek(seasonGames, castPool, week);
         if (weekGames.length === 0) continue;
         // Per week: a hard-lock pool's deadline is frozen per week, and the "picks
         // due" CTA must not outlive the deadline the server enforces.

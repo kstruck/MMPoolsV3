@@ -31,7 +31,9 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 **Everything through #317 is merged AND deployed.** The deployed SHA is the
 tagged claim in §2 — not repeated here, so it cannot rot.
-**FUNCTIONS, RULES and FRONTEND queues: ALL EMPTY.**
+**FUNCTIONS and RULES queues: EMPTY. FRONTEND queue: a Coolify rebuild is OWED**
+— not for #313–#317, which the 2026-07-28 rebuild covered, but for the
+2026-07-29 seasonType-filter fix, which changed frontend source only. See §4.
 
 Five PRs shipped on 2026-07-28: #313 (payment fallback removal + the post-commit
 projection fix), #314 (reminder delivery outcomes), #315 (one definition of the
@@ -39,10 +41,13 @@ sim-pool rule), #316/#317 (docs). Functions were deployed twice, the second run
 reporting every function `Skipped (No changes detected)` — that all-Skipped run
 is the evidence, not the absence of an error. Rules unchanged by all five.
 
-✅ **The owed Coolify rebuild is DONE (2026-07-28).** The live bundle moved
+✅ **The rebuild owed on 2026-07-28 is DONE.** The live bundle moved
 `index-Na2D7cdu.js` → **`index-gn5gQtFU.js`**, verified in the browser with cache
-disabled. That clears the #297/#298 dependency-bump debt AND #313/#315's
-frontend changes in one rebuild. Dashboard URL in HANDOFF's STOP POINT box.
+disabled. That cleared the #297/#298 dependency-bump debt AND #313/#315's
+frontend changes in one rebuild. ⚠️ **A NEW rebuild is owed for the 2026-07-29
+seasonType-filter fix** — until it runs, `index-gn5gQtFU.js` is still what pools
+load and no manager or member sees that fix. Dashboard URL in HANDOFF's STOP
+POINT box.
 (Historical: the 2026-07-25 rebuild carried #279's `NFLManagerView` cutover onto
 the `updatePoolSettings` callable and was smoke-tested in prod.)
 
@@ -155,13 +160,15 @@ deployed. What is left:
    documents — while the roster panel on the same page shows them correctly. The
    unfinished half of D13; belongs in `PLAN-PAYMENT-TRUTH`, not a new plan.
    Agreed with Kevin 2026-07-28. Detail in HANDOFF's STOP POINT box.
-5. **Give the manager surfaces the seasonType filter the member surfaces have.**
-   `NFLManagerView.tsx:162` / `NFLManagerBentoDashboard.tsx:147` filter on `week`
-   alone; `WeekChecklist.tsx:49` / `NFLPoolDashboard.tsx:156` also require
-   `Number(g.seasonType) === Number(pool.seasonType)`. Diagnose which side is
-   wrong from the existing `[NFLPoolDashboard] weeklyGames filter ran:` console
-   log before changing either — the manager's `allGamesFinal` gate for Score &
-   Recap reads the unfiltered set, so this is scoring-adjacent.
+5. ~~**Give the manager surfaces the seasonType filter the member surfaces
+   have.**~~ **DONE 2026-07-29** — `gamesForPoolWeek` and `poolSeasonType`
+   (`src/utils/nflPending.ts`) are the only definitions; 18 call sites across
+   manager, member and service surfaces delegate. The member side was NOT the
+   correct one to copy: it read `Number(pool.seasonType)` with no default, which
+   is `NaN` on a pool that omits the field — and omitting it means REGULAR season
+   per `shared/schemas/nfl.ts`. Such a pool showed no games at all. Detail in
+   HANDOFF's STOP POINT box. **A Coolify rebuild is owed before any of it is
+   live.**
 6. **Split the commissioner page into tabs** — Overview / Members & Payments /
    Settings / Scoring. Agreed with Kevin 2026-07-28. Pure layout, not
    plan-gated; it also removes the five duplicate `SaveSettingsControl`
@@ -397,9 +404,10 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — functions, rules AND frontend all EMPTY (2026-07-28)
+## 4. Deploy queue — functions and rules EMPTY; FRONTEND REBUILD OWED (2026-07-29)
 
-> **Nothing is owed as of 2026-07-25.** #279 deployed functions → rules → Coolify
+> **Historical (2026-07-25), kept for the recipe — not a current queue claim;
+> the current queue is the paragraph below this block.** #279 deployed functions → rules → Coolify
 > frontend, in that order, and the settings save was smoke-tested in prod. The
 > recipe below is kept because it is the one that has worked every time — see
 > also `MORNING-2026-07-26.md` §2b, which is PowerShell-correct and carries the
@@ -411,9 +419,12 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 > without `✔ Deploy complete!`, printed no error, and left 10 functions stale.
 > The all-Skipped report is the evidence; a missing error is not.
 
-**As of 2026-07-28 ALL THREE queues — FUNCTIONS, RULES and FRONTEND — are EMPTY**
-(#313–#317 deployed, second full-fleet run all-`Skipped`; rules unchanged by all
-five; Coolify rebuilt to `index-gn5gQtFU.js`). Verification in HANDOFF's STOP
+**As of 2026-07-29 the FUNCTIONS and RULES queues are EMPTY and the FRONTEND
+queue is NOT.** All three were empty at `0a705c0` (#313–#317 deployed, second
+full-fleet run all-`Skipped`; rules unchanged by all five; Coolify rebuilt to
+`index-gn5gQtFU.js`). The seasonType-filter fix then changed `src/**` only, which
+the table below makes a **manual Coolify trigger** — no functions or rules
+deploy is owed by it, and none should be run. Verification in HANDOFF's STOP
 POINT box. The
 deployed source SHA is the tagged claim in §2 — not repeated here, so it cannot
 drift out of sync with it. `main` advances past it with every

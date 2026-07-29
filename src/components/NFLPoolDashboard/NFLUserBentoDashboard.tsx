@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router';
 import type { User as UserType, Pool, NFLGame, WeeklyRecap } from '../../types';
 import { NFLGameTicker } from './NFLGameTicker';
 import { dbService } from '../../services/dbService';
+import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
 import { 
   LayoutGrid, 
   CheckCircle2, 
@@ -209,10 +210,9 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
   // Full slate for the selected week (used to list every game, not just the focus game).
   const weeklyGames = useMemo(() => {
-    return _games
-      .filter(g => g.week === selectedWeek && Number(g.seasonType) === Number(castPool.seasonType))
+    return gamesForPoolWeek(_games, castPool, selectedWeek)
       .sort((a, b) => (a.startTime < b.startTime ? -1 : 1));
-  }, [_games, selectedWeek, castPool.seasonType]);
+  }, [_games, selectedWeek, castPool]);
 
   // Rebuy only exists on Survivor pools, and the cutoff is a DATE (the first kickoff of the
   // rebuyDeadlineWeek), not a "Week 4-6" range. Null on non-survivor pools -> the node hides.
@@ -220,7 +220,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     if (_pool.type !== 'NFL_SURVIVOR') return null;
     const wk = castPool.settings?.rebuyDeadlineWeek;
     if (!wk) return null;
-    const wkGames = _games.filter(g => g.week === wk && Number(g.seasonType) === Number(castPool.seasonType));
+    const wkGames = gamesForPoolWeek(_games, castPool, wk);
     const label = wkGames.length
       ? new Date(Math.min(...wkGames.map(g => g.startTime))).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
       : `Week ${wk}`;
@@ -260,7 +260,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
   useEffect(() => dbService.subscribeToPoolConsensus(_pool.id, setPoolConsensus), [_pool.id]);
   useEffect(
-    () => dbService.subscribeToSiteConsensus(String(castPool.season), Number(castPool.seasonType), selectedWeek, _pool.type, setSiteConsensus),
+    () => dbService.subscribeToSiteConsensus(String(castPool.season), poolSeasonType(castPool), selectedWeek, _pool.type, setSiteConsensus),
     [castPool.season, castPool.seasonType, selectedWeek, _pool.type],
   );
   useEffect(() => {
@@ -340,7 +340,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   };
 
   const weeklyHistoryData = useMemo(() => {
-    const totalWeeks = Number(castPool.seasonType) === 1 ? 4 : 18;
+    const totalWeeks = poolSeasonType(castPool) === 1 ? 4 : 18;
     const history = [];
     for (let w = 1; w <= totalWeeks; w++) {
       let val = 0;
