@@ -27,27 +27,35 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 ---
 
-## 0. State as of 2026-07-27 — read this before anything else
+## 0. State as of 2026-07-28 — read this before anything else
 
-**Everything through #311 (G1 PR-B2) is merged AND deployed.** The deployed SHA
-is the tagged claim in §2 — not repeated here, so it cannot rot.
-**FUNCTIONS and RULES queues: EMPTY. FRONTEND queue: a Coolify rebuild is OWED**
-for #297/#298 (see the next paragraph and §4).
+**Everything through #317 is merged AND deployed.** The deployed SHA is the
+tagged claim in §2 — not repeated here, so it cannot rot.
+**FUNCTIONS, RULES and FRONTEND queues: ALL EMPTY.**
+
+Five PRs shipped on 2026-07-28: #313 (payment fallback removal + the post-commit
+projection fix), #314 (reminder delivery outcomes), #315 (one definition of the
+sim-pool rule), #316/#317 (docs). Functions were deployed twice, the second run
+reporting every function `Skipped (No changes detected)` — that all-Skipped run
+is the evidence, not the absence of an error. Rules unchanged by all five.
+
+✅ **The owed Coolify rebuild is DONE (2026-07-28).** The live bundle moved
+`index-Na2D7cdu.js` → **`index-gn5gQtFU.js`**, verified in the browser with cache
+disabled. That clears the #297/#298 dependency-bump debt AND #313/#315's
+frontend changes in one rebuild. Dashboard URL in HANDOFF's STOP POINT box.
+(Historical: the 2026-07-25 rebuild carried #279's `NFLManagerView` cutover onto
+the `updatePoolSettings` callable and was smoke-tested in prod.)
+
+⚠️ **NEW IN PROD: `runReminders` can send SMS for the first time.** #314 bound
+`COURIER_AUTH_TOKEN` to it; the job had never bound the secret, so every SMS
+reminder it tried to send had silently not been sent for the life of the job.
+Kevin merged it knowing this. Details and the back-out in HANDOFF's STOP POINT
+box.
 
 (Historical, 2026-07-25: everything through #279 (G1 PR-B′) shipped — functions,
 then `firestore:rules`, then the Coolify rebuild — and both queues were empty
 then. #262 removed the ~966K-reads/day `runReminders` amplification; verify the
 drop via Query Insights, KEVIN-TASKS-2026-07-23.md §4.)
-
-⚠️ **The FRONTEND is BEHIND by two dependency bumps as of 2026-07-27, and a
-rebuild is OWED.** The last Coolify rebuild left the live bundle at
-`index-Na2D7cdu.js`, which predates #297 and #298 — both changed root
-`package.json` runtime dependencies, which is this repo's stated trigger for a
-Coolify rebuild. #311 changed no frontend code, so nothing is visibly broken;
-that makes it low urgency, not absent. Dashboard URL in HANDOFF's STOP POINT
-box. (Historical:
-the 2026-07-25 rebuild carried #279's `NFLManagerView` cutover onto the
-`updatePoolSettings` callable and was smoke-tested in prod.)
 
 ✅ **The `publishedWeeks` backfill is CLOSED (2026-07-27) and never needs
 running.** The prod dry run returned `poolsScanned: 15, poolsChanged: 0,
@@ -142,6 +150,22 @@ deployed. What is left:
 2. **The scheduled Auth export** (`PLAN-BACKUPS-PHASE3.md` step 6) — deferred
    CODE, not a console click. Blocked on Kevin creating the GCS bucket + IAM.
 3. ~~**Unify scheduled-job timezones.**~~ **DONE** — #259, deployed 2026-07-22.
+4. **Point the Bento Buy-In Ledger at Member Records.** It is `entries`-derived
+   today, so it shows `$0` and "no members" on a pool whose members have no entry
+   documents — while the roster panel on the same page shows them correctly. The
+   unfinished half of D13; belongs in `PLAN-PAYMENT-TRUTH`, not a new plan.
+   Agreed with Kevin 2026-07-28. Detail in HANDOFF's STOP POINT box.
+5. **Give the manager surfaces the seasonType filter the member surfaces have.**
+   `NFLManagerView.tsx:162` / `NFLManagerBentoDashboard.tsx:147` filter on `week`
+   alone; `WeekChecklist.tsx:49` / `NFLPoolDashboard.tsx:156` also require
+   `Number(g.seasonType) === Number(pool.seasonType)`. Diagnose which side is
+   wrong from the existing `[NFLPoolDashboard] weeklyGames filter ran:` console
+   log before changing either — the manager's `allGamesFinal` gate for Score &
+   Recap reads the unfiltered set, so this is scoring-adjacent.
+6. **Split the commissioner page into tabs** — Overview / Members & Payments /
+   Settings / Scoring. Agreed with Kevin 2026-07-28. Pure layout, not
+   plan-gated; it also removes the five duplicate `SaveSettingsControl`
+   instances, which all call the same `handleSaveSettings`.
 
 ### Contradictions Kevin ruled on — 2026-07-22
 
@@ -191,10 +215,12 @@ state. Concretely:
 
 ---
 
-## 2. Live state (verified 2026-07-27)
+## 2. Live state (verified 2026-07-28)
 
-> ⚠️ **FUNCTIONS and RULES are deployed at the SHA tagged below (#311, G1 PR-B2).
-> The FRONTEND is NOT — a Coolify rebuild is OWED for #297/#298.**
+> ✅ **FUNCTIONS, RULES and FRONTEND are ALL current at the SHA tagged below
+> (#313–#317). Every queue is empty.** Functions deployed twice, the second run
+> all-`Skipped`; rules unchanged by all five; Coolify rebuilt and the bundle
+> verified in the browser as `index-gn5gQtFU.js`.
 >
 > (Historical, 2026-07-25: both queues were empty through #279, with the frontend
 > rebuilt on Coolify on the same commit, SHA checked against
@@ -211,11 +237,15 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `d3d2b0d`.**
-(#311 / G1 PR-B2 deployed as the FULL FLEET, twice: the first run created
-`nflSpreadRescoreTrigger` and updated everything else, the second reported every
-function `Skipped (No changes detected)` — that all-Skipped run is the evidence.
-Rules unchanged by #311, so they remain ≡ this tag.
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `0a705c0`.**
+(#313–#317 deployed as the FULL FLEET, twice: the first run reported every
+function `Successful update operation` — expected, because
+`npm --prefix functions ci` moved every bundle hash — and the second reported
+every function `Skipped (No changes detected)`. That all-Skipped run is the
+evidence. Rules unchanged by all five, so they remain ≡ this tag. FRONTEND also
+current: Coolify rebuilt, bundle `index-gn5gQtFU.js`.
+Prior claim: <!-- deploy-state:ignore --> `main` @ `d3d2b0d` —)
+(#311 / G1 PR-B2 deployed as the FULL FLEET, twice; rules unchanged.
 Prior claim: <!-- deploy-state:ignore --> `main` @ `6b7e439` —)
 (P3 #308 deployed incrementally — only setPaidStatus changed; fleet ≡ tag.
 Prior claim: <!-- deploy-state:ignore --> `main` @ `b1df185` —)
@@ -230,12 +260,11 @@ runtime file changed in between (diff-verified), so the fleet ≡ the tag.
 Previous states: <!-- deploy-state:ignore --> `main` @ `8a55b84` (#279) on
 <!-- deploy-state:ignore --> `main` @ `49c12a9` (#261/#262/#265).
 
-⚠️ **The FRONTEND is NOT current with this claim, and a rebuild is OWED.** The
-live bundle is `index-Na2D7cdu.js` (the #308 rebuild) and it predates #297/#298,
-both of which changed root `package.json` runtime dependencies — the trigger §4's
-own queue table names. #311 changed no frontend code, so nothing is visibly
-broken; that makes it low urgency, not optional. See HANDOFF's STOP POINT box and
-§0.
+✅ **The FRONTEND is current with this claim.** Coolify rebuilt on 2026-07-28 and
+the live bundle is `index-gn5gQtFU.js`, verified in the browser with cache
+disabled. That single rebuild cleared both the #297/#298 dependency-bump debt
+(root `package.json` runtime deps — the trigger §4's own queue table names) and
+#313/#315's frontend changes. See HANDOFF's STOP POINT box and §0.
 (Historical: Coolify rebuilt twice on 2026-07-27 to bundle `index-CYTPq50I.js`,
 and the D25 backfill live-ran in between — dry 72 predicted → live 72 created,
 0 failures → dry 0 remaining.)
@@ -376,10 +405,10 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 > without `✔ Deploy complete!`, printed no error, and left 10 functions stale.
 > The all-Skipped report is the evidence; a missing error is not.
 
-**As of 2026-07-27 the FUNCTIONS and RULES queues are EMPTY** (#311 deployed;
-verification in HANDOFF's STOP POINT box). **The FRONTEND queue is NOT empty:** a
-Coolify rebuild is OWED for #297/#298, which changed root `package.json` runtime
-dependencies — the trigger this table already names. The
+**As of 2026-07-28 ALL THREE queues — FUNCTIONS, RULES and FRONTEND — are EMPTY**
+(#313–#317 deployed, second full-fleet run all-`Skipped`; rules unchanged by all
+five; Coolify rebuilt to `index-gn5gQtFU.js`). Verification in HANDOFF's STOP
+POINT box. The
 deployed source SHA is the tagged claim in §2 — not repeated here, so it cannot
 drift out of sync with it. `main` advances past it with every
 docs-only commit — that is drift in the marker, not a deploy queue; the queue is
