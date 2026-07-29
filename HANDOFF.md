@@ -1,32 +1,117 @@
-# HANDOFF — Session entry point (updated 2026-07-27: G1 PR-B2 deployed — the rescore queue is live and INERT; one arming prerequisite closed)
+# HANDOFF — Session entry point (updated 2026-07-28: five PRs shipped and deployed; BOTH queues empty; SMS reminders are live for the first time)
 
-> ## ✅ STOP POINT 2026-07-27 (late night) — G1 PR-B2 SHIPPED; `publishedWeeks` prerequisite CLOSED
+> ## ✅ STOP POINT 2026-07-28 — #313–#317 SHIPPED; functions, rules and frontend all current
 >
-> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `d3d2b0d`.**
-> #311 (`nfl_rescore_queue`, PLAN-REALTIME-SCORING §5b) merged and deployed the
-> same hour. **Verified three ways, not assumed:** the first run created
-> `nflSpreadRescoreTrigger` and reported every other function
-> `Successful update operation` ending `✔ Deploy complete!`; a SECOND full-fleet
-> run reported every function `Skipped (No changes detected)` — the all-Skipped
-> report that is the actual positive evidence; and `firebase functions:list`
-> shows `nflSpreadRescoreTrigger` as v2 on
-> `google.cloud.firestore.document.v1.updated`, us-central1, nodejs22.
+> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `0a705c0`.**
+> Five PRs merged and deployed the same morning: #313 (payment fallback removal +
+> the post-commit projection fix), #314 (reminder delivery outcomes), #315 (one
+> definition of the sim-pool rule), #316 and #317 (docs).
 >
-> The whole fleet updated on the first run rather than a handful, because
-> `npm --prefix functions ci` rebuilt `node_modules` and every uploaded bundle
-> hash moved. Expected, not a defect.
+> **Verified, not assumed.** The first full-fleet run reported every function
+> `Successful update operation` and ended `✔ Deploy complete!`; a SECOND
+> full-fleet run reported every function `Skipped (No changes detected)` and
+> ended `✔ Deploy complete!` — **that all-Skipped run is the positive evidence**,
+> and it is the check that caught ten silently-stale functions on the #279
+> deploy. The whole fleet moved on run 1 because `npm --prefix functions ci`
+> rebuilt `node_modules` and every uploaded bundle hash changed. Expected, not a
+> defect.
 >
-> **Rules did not change in #311**, so they remain ≡ this tag.
+> **Rules did not change in any of the five**, so they remain ≡ this tag.
 >
-> ⚠️ **FRONTEND: a rebuild IS owed — just not by #311.** #311 changed no frontend
-> code, but the live bundle is still `index-Na2D7cdu.js`, which PREDATES #297 and
-> #298. Those bumped ROOT `package.json` runtime dependencies (framer-motion
-> 11 → 12 among them), and this repo's own deploy-queue rule is that a
-> `package.json` change needs a Coolify trigger — so the frontend queue is NOT
-> empty. Nothing is visibly broken, which is why this is low urgency rather than
-> no urgency. The Coolify dashboard is
+> ✅ **FRONTEND: the owed rebuild is DONE.** Coolify rebuilt 2026-07-28; the live
+> bundle moved from `index-Na2D7cdu.js` to **`index-gn5gQtFU.js`**, verified in
+> the browser with cache disabled. That clears both the #297/#298 dependency-bump
+> debt and #313/#315's frontend changes. **BOTH DEPLOY QUEUES ARE EMPTY.**
+> Dashboard, for next time:
 > <http://72.60.68.7:8000/project/ycoooow0g4c08ogso404k8o4/environment/ogs0cg0gg0kcgkgc8sg4c8g4/application/ics4kkww0c8oo0gw4wkg8w4o/deployment>
-> → **Redeploy** (this URL was in no repo doc before now).
+> → **Redeploy**.
+>
+> ### ⚠️ NEW IN PROD: `runReminders` can send SMS for the first time
+>
+> #314 bound `COURIER_AUTH_TOKEN` to `runReminders`. Gen-2 functions see only the
+> secrets they bind, and this job bound none — so `courierAuthToken.value()` was
+> empty inside it and **every SMS reminder it ever tried to send silently was not
+> sent**, for the life of the job. Nothing surfaced it because
+> `sendCourierSMS`'s boolean had no reader; adding that reader is what exposed
+> it. As of this deploy those texts actually go out, to members with a phone
+> number who have opted in. Kevin merged #314 knowing this. To back it out, delete
+> the `secrets:` option from the schedule and redeploy — the job keeps working,
+> minus SMS.
+>
+> `runReminders`' heartbeat now carries `queued` / `skipped` / `deliveryFailures`
+> / `poolErrors` beside `failedPools`. **Healthy is `failedPools`,
+> `deliveryFailures` and `poolErrors` ALL zero**; `skipped` is informational
+> (opt-outs, missing addresses, Courier unconfigured) and never graded.
+>
+> ### KNOWN OPEN, found while verifying this deploy (2026-07-28)
+>
+> Three display/consistency defects, none caused by these five PRs, all on the
+> commissioner surface. None is a data-integrity problem — the authoritative
+> stores are correct in every case.
+>
+> 1. **The Bento Buy-In Ledger is blind to members with no entry.** Every figure
+>    on that card is `entries`-derived (`NFLManagerBentoDashboard.tsx:174-181`),
+>    so a pool whose members have Member Records but no entry documents shows
+>    `$0` projected/collected and "No members matching filter criteria" — while
+>    the Member Roster panel on the SAME page reads Member Records and shows them
+>    correctly. This is the half of D13 that P1 could not reach:
+>    `setPaidStatus.ts:162` mirrors display fields onto the entry only
+>    `if (entrySnap.exists)`. Fix is to point the ledger at Member Records.
+> 2. **Manager surfaces do not apply the seasonType filter that member surfaces
+>    do.** `NFLManagerView.tsx:162` and `NFLManagerBentoDashboard.tsx:147` filter
+>    `g.week === week` alone; `WeekChecklist.tsx:49` and
+>    `NFLPoolDashboard.tsx:156` also require
+>    `Number(g.seasonType) === Number(pool.seasonType)`. On a pool holding a
+>    week-1 game of the other season type, the manager counts it and the member
+>    checklist does not — observed live as "Total Matchups: 1" next to a `W1 —`
+>    (no-games) chip and a "Week 2 picks not in yet" banner. Not only cosmetic:
+>    the manager's `allGamesFinal` gate for Score & Recap
+>    (`NFLManagerView.tsx:164`) reads the unfiltered set.
+> 3. **Five `SaveSettingsControl` instances** in `NFLManagerView.tsx` (703, 818,
+>    841, 934, 941), all calling the same `handleSaveSettings`. Harmless —
+>    deliberate placement per the comment at `:32` — but it reads as a bug, and
+>    it exists because the commissioner page is far too long. A tabbed split
+>    (Overview / Members & Payments / Settings / Scoring) is agreed with Kevin.
+> 4. **NO UI RENDERS `system/heartbeats`.** Every scheduled job's liveness and
+>    verdict is written there (`lib/heartbeat.ts:46,84`), and the only way to
+>    read it is the Firebase console. The SuperAdmin **Overview** tab's "Ops
+>    Health" card is NOT it — that shows open monetization alerts and failed
+>    Stripe webhooks plus a Sentry deep-link, nothing about jobs. The one
+>    heartbeat the client does subscribe to is `system/scoreSync`, a different
+>    doc for bracket score-sync freshness. So the whole `withHeartbeat`
+>    investment — every verdict in `heartbeatVerdicts.ts`, including #314's new
+>    delivery counters — is invisible to the operator by default. **Read it at**
+>    <https://console.firebase.google.com/project/gridiron-gamble-uzuqo/firestore/data/~2Fsystem~2Fheartbeats>
+>    until a panel exists. Found 2026-07-28 while trying to verify #314 in prod.
+>
+> **First post-deploy `runReminders` beat: all counters zero** (Kevin,
+> 2026-07-28). That proves the new build is live — `deliveryFailures` and
+> `poolErrors` exist only in code that shipped this morning — but it does NOT
+> exercise the delivery accounting: `queued: 0` / `skipped: 0` means no pool was
+> inside a reminder window. Same trap as the PR-B2 queue watch below: a quiet run
+> exercises the scheduler wrapper, not the path. Unproven until a real reminder
+> window opens.
+>
+> ### Standing, unrelated to this deploy
+>
+> **App Check is inert in prod.** `VITE_RECAPTCHA_SITE_KEY` is absent from the
+> Coolify build environment, so `src/firebase.ts:24-32` never initializes App
+> Check and every prod bundle logs `⚠️ SECURITY: App Check is NOT active`.
+> Nothing breaks because the callables run App Check in `monitor` mode — they log
+> attestation state and do not reject on it. Long-standing, documented in
+> `mmp-build-and-env`; recorded here because it was re-observed on 2026-07-28 and
+> should not be re-diagnosed a fourth time.
+>
+> ### Historical: the 2026-07-27 stop point (superseded by the box above)
+>
+> **Functions + rules were deployed from <!-- deploy-state:ignore --> `main` @ `d3d2b0d`.**
+> #311 (`nfl_rescore_queue`, PLAN-REALTIME-SCORING §5b) merged and deployed the
+> same hour, verified three ways: an all-`Successful update operation` first run
+> ending `✔ Deploy complete!`; a SECOND full-fleet run reporting every function
+> `Skipped (No changes detected)`; and `firebase functions:list` showing
+> `nflSpreadRescoreTrigger` as v2 on
+> `google.cloud.firestore.document.v1.updated`, us-central1, nodejs22. Rules did
+> not change in #311.
 >
 > ### The queue is DEPLOYED but INERT
 >
