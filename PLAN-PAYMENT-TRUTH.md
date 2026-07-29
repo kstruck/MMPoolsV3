@@ -322,6 +322,35 @@ All of it lands **after** the A–D stats chain is merged and deployed. None of 
 blocks that chain — A–D are correct as they stand; these three make the number
 they produce *complete*.
 
+### 6a. P1's transitional fallback — CLOSED 2026-07-28
+
+P1 shipped (#294) carrying one named transitional residual: **`NFLManagerView`'s
+roster toggle kept a fallback to `updateBracketEntryPayment` →
+`updateEntryPayment` when `setPaidStatus` threw.** It was named in
+`MORNING-2026-07-27.md` §5 as "correct until the backfill runs everywhere, then
+it should be removed (not this PR)".
+
+**That condition is now met and the fallback is removed.** No new plan gate: the
+removal is P1's own stated end-state, and both halves of the reasoning are
+already in this document — §2 finding 3 (why the fallback had to exist:
+`setPaidStatus` throws `"Member is not on this pool's roster"`, which on a legacy
+NFL pool was every member) and §4 / §6's P4-first ordering (what removes that
+condition). The prod evidence closing it is the D25 backfill live run on
+2026-07-27: **72 member records created across 127 pools, zero failures, and a
+follow-up dry run reporting 0-to-create / 152-already-present.**
+
+Why removing it is a fix and not just tidying: `setPaidStatus` throwing no longer
+means "not deployed yet", it means the write genuinely failed. Falling back then
+writes the *display-legacy* entry doc alone — the D13 split-brain this plan
+exists to close, reachable again through the error path, and silent because the
+UI reads the same entry doc it just wrote. `tests/nfl-settings-lockdown.test.ts`
+now pins the absence of `updateBracketEntryPayment` from `NFLManagerView.tsx`,
+alongside the existing Bento guard.
+
+**Unchanged: `updateEntryPayment` itself stays** — BRACKET pools' entry doc
+genuinely *is* their payment store (§2 "Blast radius"), and its six remaining
+callers are all BRACKET or SuperAdmin paths.
+
 ---
 
 ## 7. Explicitly out of scope

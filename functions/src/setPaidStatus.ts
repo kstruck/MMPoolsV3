@@ -7,8 +7,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
 import { setPaidStatusSchema } from "./schemas/participantOps";
 import { membersCol } from "./lib/memberRecord";
-import { recomputeRosterSummary } from "./lib/rosterSummary";
-import { recomputeCommissionerAggregate, ownerOf } from "./lib/commissionerAggregate";
+import { refreshProjectionsBestEffort } from "./lib/refreshProjections";
 
 export const setPaidStatus = validated(
   // Dual-mode contract preserved: claim present = member self-report; claim
@@ -108,9 +107,10 @@ export const setPaidStatus = validated(
         createdAt: FieldValue.serverTimestamp(),
       });
     });
-    await recomputeRosterSummary(db, poolId);
-    const rebuyOwner = ownerOf(pool);
-    if (rebuyOwner) await recomputeCommissionerAggregate(db, rebuyOwner);
+    // Non-fatal by design — see lib/refreshProjections.ts. The rebuy settlement
+    // above is committed; failing the callable here would report collected money
+    // as uncollected and invite a reversing retry.
+    await refreshProjectionsBestEffort(db, poolId, pool);
     return { success: true, mode: 'rebuys' as const };
   }
 
@@ -221,10 +221,10 @@ export const setPaidStatus = validated(
   });
 
   // Derived projections refresh right after (eventual — not in the write tx because they
-  // fan-out read all members/pools; the onMemberWrite trigger also covers this).
-  await recomputeRosterSummary(db, poolId);
-  const owner = ownerOf(pool);
-  if (owner) await recomputeCommissionerAggregate(db, owner);
+  // fan-out read all members/pools; onMemberRecordWrite also covers this). NON-FATAL:
+  // the payment above is committed, and rejecting here would report it as failed and
+  // invite a retry that reverses it. See lib/refreshProjections.ts.
+  await refreshProjectionsBestEffort(db, poolId, pool);
 
   return { success: true, mode: 'paid' as const };
   },
