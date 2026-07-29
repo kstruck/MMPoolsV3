@@ -397,7 +397,7 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — functions and rules EMPTY; frontend REBUILD OWED (#297/#298)
+## 4. Deploy queue — functions, rules AND frontend all EMPTY (2026-07-28)
 
 > **Nothing is owed as of 2026-07-25.** #279 deployed functions → rules → Coolify
 > frontend, in that order, and the settings save was smoke-tested in prod. The
@@ -508,9 +508,9 @@ Always confirm the change is in the file on disk before deploying — not that
    named as unproven; and (b) **`nflDeepSweep` must be
    armed WITH WRITES** after its own dry-run trial (or the uncapped stale-slate
    re-fetch built), otherwise a game finalizing >24h after kickoff is never
-   observed. HANDOFF's STOP POINT box carries the same two. **Also owed:** the
-   Coolify rebuild for #297/#298 (§4) — low urgency, since nothing is visibly
-   broken, but not optional: they changed root `package.json` runtime deps.
+   observed. HANDOFF's STOP POINT box carries the same two.
+   (~~Also owed: the Coolify rebuild for #297/#298~~ — **DONE 2026-07-28**,
+   bundle `index-gn5gQtFU.js`. Nothing is owed on the frontend.)
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.
