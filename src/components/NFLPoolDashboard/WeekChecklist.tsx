@@ -53,7 +53,7 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
             const status = getWeekStatus(pool.type, entry, weekGames, week, lockBufferMinutes);
             return { week, status, deadline: weekDeadline(weekGames, lockBufferMinutes) };
         });
-    }, [games, entry, pool.type, seasonType, totalWeeks, castPool]);
+    }, [games, entry, pool.type, totalWeeks, castPool]);
 
     // The nearest upcoming week the user hasn't finished — that's the one to nag about
     const nextDue = useMemo(() => {

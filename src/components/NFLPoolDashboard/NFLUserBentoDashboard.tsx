@@ -185,6 +185,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   };
 
   const castPool = _pool as any;
+  const seasonType = poolSeasonType(castPool);
   const [sidebarActive, setSidebarActive] = useState('dashboard');
   const [awayLogoErr, setAwayLogoErr] = useState(false);
   const [homeLogoErr, setHomeLogoErr] = useState(false);
@@ -225,7 +226,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       ? new Date(Math.min(...wkGames.map(g => g.startTime))).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
       : `Week ${wk}`;
     return { week: wk, label };
-  }, [_pool.type, castPool.settings, _games, castPool.seasonType]);
+  }, [_pool.type, castPool, _games]);
 
   // Selected focus game rides in the URL (?game=) so a click updates the top panel and
   // Back/refresh restore it. Defaults to the live game, else the next kickoff.
@@ -260,8 +261,8 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
   useEffect(() => dbService.subscribeToPoolConsensus(_pool.id, setPoolConsensus), [_pool.id]);
   useEffect(
-    () => dbService.subscribeToSiteConsensus(String(castPool.season), poolSeasonType(castPool), selectedWeek, _pool.type, setSiteConsensus),
-    [castPool.season, castPool.seasonType, selectedWeek, _pool.type],
+    () => dbService.subscribeToSiteConsensus(String(castPool.season), seasonType, selectedWeek, _pool.type, setSiteConsensus),
+    [castPool.season, seasonType, selectedWeek, _pool.type],
   );
   useEffect(() => {
     if (!focusGame) { setFocusWinProb(null); return; }
@@ -340,7 +341,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   };
 
   const weeklyHistoryData = useMemo(() => {
-    const totalWeeks = poolSeasonType(castPool) === 1 ? 4 : 18;
+    const totalWeeks = seasonType === 1 ? 4 : 18;
     const history = [];
     for (let w = 1; w <= totalWeeks; w++) {
       let val = 0;
@@ -357,7 +358,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       history.push({ week: w, name: `W${w}`, value: val });
     }
     return history.slice(0, Math.max(selectedWeek, 5));
-  }, [myEntry, _pool.type, castPool.seasonType, selectedWeek]);
+  }, [myEntry, _pool.type, seasonType, selectedWeek]);
 
   // Real attrition: count alive + cumulative strikes per week from actual entries.
   const attritionHistoryData = useMemo(() => {
