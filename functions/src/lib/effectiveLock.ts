@@ -53,20 +53,39 @@ export function weekLockDecision(
 }
 
 /**
- * KNOWN RESIDUAL (codex r5, deferred to the settings-path PR).
+ * KNOWN RESIDUAL (codex r5) — STILL OPEN, but for a different reason than it
+ * says below the line. Restated 2026-07-28 after #279 shipped.
  *
  * The freeze defends a week only if it was recorded before that week's original
- * deadline passed. Every server path that touches the week now records it — pick
+ * deadline passed. Every server path that touches the week records it — pick
  * submission, proxy pick, and the 15-minute reminder pass (which freezes
- * unconditionally, above the reminders off-switch) — but settings are still
- * written straight to Firestore by the manager UI, so there is no write-time hook.
+ * unconditionally, above the reminders off-switch).
  *
- * The remaining hole is narrow: a manager would have to set a wider buffer, have
- * NO reminder pass fire and NO member submit before that wider deadline passed
- * (the pass runs every 15 minutes), then narrow it again. It closes completely
- * when settings edits move behind the server-owned `updatePoolSettings` path — the
- * same change PLAN-REALTIME-SCORING assigns to PR-B′ — which can freeze
- * transactionally at the moment the buffer changes.
+ * ⚠️ **The clause this comment used to carry — "settings are still written
+ * straight to Firestore by the manager UI, so there is no write-time hook" — is
+ * FALSE as of #279 (PR-B′).** `firestore.rules` `nflSettingsWriteBlocked()` now
+ * DENIES a client-direct `settings` write on NFL season pools, and the manager
+ * UI goes through the `updatePoolSettings` callable
+ * (`tests/nfl-settings-lockdown.test.ts` pins both halves). So the write-time
+ * hook the old text asked for **exists**.
+ *
+ * What is still missing is that the hook does not FREEZE. `updatePoolSettings`
+ * (`poolOps.ts`, the `touchesLockSettings` branch) serializes a lock-affecting
+ * edit against the scoring lease and bumps `settings.lockRevision` — both
+ * necessary, neither of them a freeze. It never calls
+ * `ensureHardLockFreezeForPoolDoc`, so nothing records the week's deadline at
+ * the moment the buffer changes.
+ *
+ * The hole is therefore the same SIZE as before and just as narrow: a manager
+ * would have to widen the buffer, have NO reminder pass fire and NO member
+ * submit before that wider deadline passed (the pass runs every 15 minutes),
+ * then narrow it again.
+ *
+ * **Closing it is now a small, well-located change** — freeze inside the
+ * `touchesLockSettings` transaction, where the pool doc is already read under
+ * the lease check — rather than the architectural move the old text implied.
+ * It is NOT done here: it writes a scoring deadline, so it is plan-gated
+ * (`mmp-change-control` §1: scoring) and wants its own PR and its own review.
  */
 
 /**

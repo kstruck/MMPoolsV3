@@ -46,8 +46,16 @@ export function normalizeLockBufferMinutes(raw: unknown): number {
  * Without this, a commissioner could reopen a week they had already closed: set
  * the pool to a 60-minute buffer, let that deadline pass, then switch to 5
  * minutes — the recomputed lock lands 55 minutes later and picks are live again
- * on a week that was locked. (Settings are written straight to Firestore by the
- * manager UI, so this cannot be caught by validating the write.)
+ * on a week that was locked.
+ *
+ * (This used to add "settings are written straight to Firestore by the manager
+ * UI, so this cannot be caught by validating the write." That stopped being
+ * true at #279 — client-direct `settings` writes on NFL pools are denied by
+ * `firestore.rules` and go through `updatePoolSettings`. The monotonic rule is
+ * still the right answer, for a better reason: it holds for EVERY writer,
+ * present and future, without each one having to remember. `updatePoolSettings`
+ * does not freeze the week today — see the KNOWN RESIDUAL in
+ * `functions/src/lib/effectiveLock.ts`.)
  *
  * So the server remembers the earliest deadline it has ever computed for the
  * week (`pool.hardLockByWeek.{week}`) and resolves against it. Tightening the
