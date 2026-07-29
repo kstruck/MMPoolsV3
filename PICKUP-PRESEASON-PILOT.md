@@ -166,6 +166,12 @@ deployed. What is left:
    Settings / Scoring. Agreed with Kevin 2026-07-28. Pure layout, not
    plan-gated; it also removes the five duplicate `SaveSettingsControl`
    instances, which all call the same `handleSaveSettings`.
+7. **Surface `system/heartbeats` in the SuperAdmin UI.** Every scheduled job's
+   liveness and verdict is written there and NOTHING renders it — the Overview
+   tab's "Ops Health" card shows alerts and webhooks, not jobs. `findStaleJobs`
+   (`lib/heartbeat.ts`) already computes the never-ran/stale verdict server-side
+   and has tests; it just has no reader. Until then the only way to check a job
+   is the Firebase console (link in HANDOFF's STOP POINT box).
 
 ### Contradictions Kevin ruled on — 2026-07-22
 

@@ -72,6 +72,25 @@
 >    deliberate placement per the comment at `:32` — but it reads as a bug, and
 >    it exists because the commissioner page is far too long. A tabbed split
 >    (Overview / Members & Payments / Settings / Scoring) is agreed with Kevin.
+> 4. **NO UI RENDERS `system/heartbeats`.** Every scheduled job's liveness and
+>    verdict is written there (`lib/heartbeat.ts:46,84`), and the only way to
+>    read it is the Firebase console. The SuperAdmin **Overview** tab's "Ops
+>    Health" card is NOT it — that shows open monetization alerts and failed
+>    Stripe webhooks plus a Sentry deep-link, nothing about jobs. The one
+>    heartbeat the client does subscribe to is `system/scoreSync`, a different
+>    doc for bracket score-sync freshness. So the whole `withHeartbeat`
+>    investment — every verdict in `heartbeatVerdicts.ts`, including #314's new
+>    delivery counters — is invisible to the operator by default. **Read it at**
+>    <https://console.firebase.google.com/project/gridiron-gamble-uzuqo/firestore/data/~2Fsystem~2Fheartbeats>
+>    until a panel exists. Found 2026-07-28 while trying to verify #314 in prod.
+>
+> **First post-deploy `runReminders` beat: all counters zero** (Kevin,
+> 2026-07-28). That proves the new build is live — `deliveryFailures` and
+> `poolErrors` exist only in code that shipped this morning — but it does NOT
+> exercise the delivery accounting: `queued: 0` / `skipped: 0` means no pool was
+> inside a reminder window. Same trap as the PR-B2 queue watch below: a quiet run
+> exercises the scheduler wrapper, not the path. Unproven until a real reminder
+> window opens.
 >
 > ### Standing, unrelated to this deploy
 >
