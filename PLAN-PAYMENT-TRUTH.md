@@ -411,17 +411,25 @@ entry-backed.
 
 ### Evidence
 
-`src/utils/poolRoster.test.ts` — 20 cases covering the entry-less member, the
+`src/utils/poolRoster.test.ts` — 23 cases covering the entry-less member, the
 unset fee, a stamped `feeOwed: 0`, owed-vs-settled rebuys, the un-stamped
 `rebuyOwed` fallback and its stamped-zero counterpart, partially backfilled pools,
-the pre-backfill path, the guest sentinel and both clamps. **10 mutations applied
-and all 10 killed**, including reinstating `entryFee || 20` and making the pot
-ignore Member Records.
+the pre-backfill path, the guest sentinel, the uid union and both clamps.
 
 `tests/admin-surface-invariants.test.ts` — wiring invariants plus the T3 fake-card
 guard extended to the commissioner bento (it had only ever covered the super-admin
-one, which is why the same defect class survived there). **8 mutations applied and
-all 8 killed.**
+one, which is why the same defect class survived there).
+
+**23 mutations applied across the two files, all 23 killed** — including
+reinstating `entryFee || 20`, making the pot ignore Member Records, dropping the
+`members` prop, forking `PaymentsPanel`'s maths back off, reverting the head count
+to `Math.max`, and putting the raw kickoff back in place of the enforced lock.
+
+### Review log — P5
+
+| Round | Reviewer | Findings |
+|---|---|---|
+| 1 | codex | **3 findings, all P2, all VALID and all absorbed. None rejected.** (a) **The replacement deadline was wrong too.** Removing the hardcoded sixteen-hour countdown, the first draft showed the first KICKOFF and labelled it the lock. Picks close `lockBufferMinutes` earlier (default 5; Survivor/Margin allow 5/30/60) and a hard-lock pool's deadline is frozen per week, so commissioners would have read a cutoff up to an hour late — a fabricated deadline replaced by a differently-wrong one. Worse, `weekDeadline` and `effectiveBufferMinutesForWeek` already existed and are what `WeekChecklist` (the MEMBER-facing surface) uses, so the hand-rolled `Math.min` was a fourth definition inside a PR whose whole point was collapsing definitions. Now delegates to both. (b) **The green all-clear could contradict the card's own Outstanding Due tile.** Base dues and rebuy dues settle independently under P3, so every member can be `PAID` while rebuy dollars are owed — and the unpaid LIST is empty in precisely that case, since those members' base dues really are paid. Gating on the list meant "All buy-ins cleared!" could sit above a positive balance. Now gated on `outstandingDue(pot) === 0`, with a distinct state that names the rebuy debt and points at the control that settles it. (c) **The head count undercounted a person evidenced only by an entry.** `Math.max(members.length, participantIds.length, entries.length)` is the roster size only when the sets nest; where an entry exists for a uid in neither `members` nor `participantIds`, the max is short AND `memberCount - members.length` is 0, so that person's base fee vanished from `expected` while `buildPoolRoster` still listed them — the card disagreeing with itself, which is the exact failure this section exists to end. Now a uid UNION shared with `buildPoolRoster`, and record-less people are walked per-uid rather than counted by difference. **Inherited, not introduced:** (c) came verbatim from `PaymentsPanel`, so the member-facing pot had it too and is fixed by the same change. |
 
 ### The mirror stays
 

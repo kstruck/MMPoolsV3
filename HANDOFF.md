@@ -90,8 +90,21 @@
 >    `entryFee || 20`, so a free pool projected a pot nobody owed, and Clearing
 >    Rate divided by entry holders rather than by everyone who joined — 100% on a
 >    pool where one of four members had paid. Guarded by
->    `src/utils/poolRoster.test.ts` (20 cases, 10 mutations killed) and wiring
->    invariants in `tests/admin-surface-invariants.test.ts` (8 mutations killed).
+>    `src/utils/poolRoster.test.ts` (23 cases) plus wiring invariants in
+>    `tests/admin-surface-invariants.test.ts`; **23 mutations applied across the
+>    two, all 23 killed.**
+>
+>    **codex found three more, all valid, all absorbed** — full detail in
+>    `PLAN-PAYMENT-TRUTH` §6b's review log. Two are worth knowing here because they
+>    are about the FIX, not the original defect: the replacement pick deadline
+>    showed the first kickoff rather than the lock the server enforces
+>    (`lockBufferMinutes` earlier, up to an hour on Survivor/Margin), and the green
+>    "all buy-ins cleared" state could sit directly above a positive Outstanding
+>    Due, because base dues and rebuy dues settle independently under P3 and the
+>    unpaid list is empty in exactly that case. The third — a head count taken as
+>    `Math.max` of three source sizes rather than their union — was **inherited
+>    verbatim from `PaymentsPanel`**, so the member-facing pot had it too and is
+>    fixed by the same change.
 >
 >    ⚠️ **One stale comment is knowingly left behind:** `functions/src/setPaidStatus.ts`
 >    still explains the entry mirror as REQUIRED because "the Bento ledger UI is

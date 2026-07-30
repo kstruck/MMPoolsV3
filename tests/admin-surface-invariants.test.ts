@@ -123,6 +123,49 @@ describe('commissioner Buy-In Ledger is roster-backed, not entry-backed', () => 
     expect(bento).not.toContain('ledgerStats');
   });
 
+  // codex r1 on this PR. Three findings, three wirings that a later edit could
+  // undo without any behaviour test noticing, because each is about which
+  // FUNCTION the card calls.
+  it('shows the deadline the SERVER enforces, not the first kickoff', () => {
+    // Picks close lockBufferMinutes before kickoff (default 5; Survivor/Margin
+    // allow 5/30/60) and a hard-lock pool's deadline is frozen per week. A
+    // kickoff-based label is a fabricated deadline wearing a real timestamp.
+    expect(bento).toContain('effectiveBufferMinutesForWeek');
+    expect(bento).toContain('weekDeadline(weeklyGames, buffer)');
+    // The same pair WeekChecklist uses, which is what members read — the two
+    // surfaces must not state different deadlines.
+    const checklist = read('src/components/NFLPoolDashboard/WeekChecklist.tsx');
+    expect(checklist).toContain('effectiveBufferMinutesForWeek');
+    expect(checklist).toContain('weekDeadline(');
+    // And no hand-rolled min-of-kickoffs, which is what the first fix did.
+    expect(bento).not.toMatch(/Math\.min\(\.\.\.[\w.]*times/);
+  });
+
+  it('never claims the ledger is clear while dues are outstanding', () => {
+    // Base dues and rebuy dues settle independently (P3), so every member can be
+    // PAID while rebuy dollars are still owed — and the unpaid LIST is empty in
+    // exactly that case. Gating the green all-clear on the list made the card
+    // contradict its own Outstanding Due tile.
+    expect(bento).toContain('outstandingDue(pot) > 0');
+    const allClear = bento.indexOf('All buy-ins cleared!');
+    const gate = bento.indexOf('outstandingDue(pot) > 0');
+    expect(allClear).toBeGreaterThan(-1);
+    expect(gate).toBeGreaterThan(-1);
+    // The gate must be evaluated BEFORE the all-clear branch, or it cannot
+    // suppress it.
+    expect(gate).toBeLessThan(allClear);
+  });
+
+  it('the head count comes from the roster UID union, not a max of sizes', () => {
+    const util = read('src/utils/poolRoster.ts');
+    expect(util).toContain('rosterUids(');
+    expect(util).toContain('const memberCount = uids.size');
+    // The undercounting expression must be gone — with it, a person evidenced
+    // only by an entry was listed on the card but charged nothing.
+    expect(util).not.toMatch(/Math\.max\(\s*memberList\.length/);
+    expect(util).not.toMatch(/memberCount\s*-\s*memberList\.length/);
+  });
+
   it('the member-facing pot and the commissioner ledger share ONE definition', () => {
     // Two readers of the same money must not drift; that drift is what let the
     // roster panel and the ledger card disagree on the same page.

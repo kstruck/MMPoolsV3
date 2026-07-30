@@ -64,6 +64,30 @@ export interface RosterRow {
 /** Entry docs are keyed by uid for NFL pools, but prefer `ownerUid` when present. */
 const uidOf = (entry: any): string => entry?.ownerUid || entry?.id;
 
+/**
+ * Every uid that counts as a person on this pool, from all three evidence
+ * sources. 'guest' is the unclaimed-square sentinel, never a person.
+ *
+ * codex r1: the head count used to be
+ * `Math.max(members.length, participantIds.length, entries.length)`, which is
+ * the roster size only when the sets nest. On a legacy or partially backfilled
+ * pool where an ENTRY exists for someone absent from both `members` and
+ * `participantIds`, the max undercounts — and then
+ * `memberCount - members.length` is 0, so that person's base fee silently drops
+ * out of `expected` while `buildPoolRoster` still lists them. The head count and
+ * the roster must come from the same set or the card can disagree with itself.
+ */
+function rosterUids({ pool, members, entries }: RosterInputs): Set<string> {
+  const uids = new Set<string>();
+  const add = (uid: string | undefined) => {
+    if (uid && uid !== 'guest') uids.add(uid);
+  };
+  for (const uid of (pool?.participantIds || [])) add(uid);
+  for (const m of members || []) add(m?.uid);
+  for (const e of entries || []) add(uidOf(e));
+  return uids;
+}
+
 /** First defined value — `??` chains, but tolerant of a missing intermediate object. */
 const pick = <T>(...vals: (T | undefined | null)[]): T | undefined => {
   for (const v of vals) if (v !== undefined) return v as T;
@@ -165,8 +189,10 @@ export function rosterPotStats({ pool, members, entries }: RosterInputs): PotSta
   const memberList = members || [];
   const entryList = entries || [];
 
-  const realParticipants = ((pool?.participantIds || []) as string[]).filter((id) => id && id !== 'guest');
-  const memberCount = Math.max(memberList.length, realParticipants.length, entryList.length);
+  // Same set buildPoolRoster produces rows from, so the head count and the roster
+  // can never disagree.
+  const uids = rosterUids({ pool, members, entries });
+  const memberCount = uids.size;
 
   if (memberList.length > 0) {
     const entryByUid = new Map(entryList.map((e: any) => [uidOf(e), e]));
@@ -188,13 +214,15 @@ export function rosterPotStats({ pool, members, entries }: RosterInputs): PotSta
       }
       collected += m.rebuyPaid ?? 0;
     }
-    // Participants who joined but have no Member Record yet still owe the fee —
-    // and their entry's rebuys (codex r4: a partially backfilled pool dropped
-    // unmatched entries' rebuy dues from Expected).
-    expected += Math.max(0, memberCount - memberList.length) * entryFee;
+    // Anyone on the roster with no Member Record yet still owes the fee — and
+    // their entry's rebuys (codex r4: a partially backfilled pool dropped
+    // unmatched entries' rebuy dues from Expected). Walked per-uid rather than as
+    // a count difference, so a person evidenced only by an entry is charged
+    // instead of vanishing (codex r1 on this PR).
     const memberUids = new Set(memberList.map((m: any) => m.uid));
-    for (const e of entryList as any[]) {
-      if (!memberUids.has(uidOf(e))) expected += (e.rebuysUsed ?? 0) * rebuyCost;
+    for (const uid of uids) {
+      if (memberUids.has(uid)) continue;
+      expected += entryFee + ((entryByUid.get(uid) as any)?.rebuysUsed ?? 0) * rebuyCost;
     }
     return { memberCount, paidCount: paid, unpaidCount: Math.max(0, memberCount - paid), collected, expected };
   }

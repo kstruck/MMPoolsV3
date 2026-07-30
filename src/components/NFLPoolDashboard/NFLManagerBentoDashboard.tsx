@@ -29,7 +29,8 @@ import {
   YAxis,
   Tooltip
 } from 'recharts';
-import { gamesForPoolWeek } from '../../utils/nflPending';
+import { gamesForPoolWeek, weekDeadline } from '../../utils/nflPending';
+import { effectiveBufferMinutesForWeek } from '@shared/weeklyHardLock';
 import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate } from '../../utils/poolRoster';
 import { formatDeadline } from '../../utils/formatTime';
 
@@ -195,16 +196,22 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     });
   }, [roster, ledgerSearch, ledgerFilter]);
 
-  // First kickoff of the displayed week — the only real deadline this card has.
-  // It used to render a hardcoded sixteen-hour countdown unconditionally, on
-  // every pool, whether or not the week held a single game.
-  const nextKickoff = useMemo(() => {
-    const times = weeklyGames
-      .map(g => (g as any).startTime)
-      .map(t => (typeof t === 'number' ? t : Date.parse(t)))
-      .filter(t => Number.isFinite(t)) as number[];
-    return times.length > 0 ? Math.min(...times) : null;
-  }, [weeklyGames]);
+  // The deadline the SERVER actually enforces for this week. It used to render a
+  // hardcoded sixteen-hour countdown unconditionally, on every pool, whether or
+  // not the week held a single game.
+  //
+  // codex r1: the first version of this fix showed the first KICKOFF and called
+  // it the lock. Picks close `lockBufferMinutes` BEFORE kickoff (default 5;
+  // Survivor/Margin allow 5/30/60) and a hard-lock pool's deadline is frozen per
+  // week — so a kickoff-based label hands the commissioner a cutoff up to an hour
+  // late. Replacing a fabricated deadline with a differently-wrong one is not a
+  // fix. These are the same two helpers WeekChecklist uses, which is the surface
+  // MEMBERS read, so the commissioner and the members cannot be shown two
+  // different deadlines.
+  const weekLockTime = useMemo(() => {
+    const buffer = effectiveBufferMinutesForWeek(castPool, week, weeklyGames.map(g => g.startTime));
+    return weekDeadline(weeklyGames, buffer);
+  }, [castPool, week, weeklyGames]);
 
   const handleNudge = async (player: { uid: string; name: string }) => {
     setIsNudging(player.uid);
@@ -307,9 +314,9 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
               <p className="font-body text-xs text-muted leading-relaxed mb-2">
                 <strong className="num">{submissionStats.submitted}</strong> of <strong className="num">{submissionStats.total}</strong> active participants have successfully locked-in their selections.
               </p>
-              {nextKickoff !== null && (
+              {weekLockTime !== null && (
                 <span className="font-display font-bold text-[10px] text-gold-600 dark:text-gold-400 uppercase tracking-[0.08em] flex items-center gap-1.5">
-                  <AlertCircle size={12} /> Picks lock at first kickoff — {formatDeadline(nextKickoff)}
+                  <AlertCircle size={12} /> Week {week} picks lock {formatDeadline(weekLockTime)}
                 </span>
               )}
             </div>
@@ -444,6 +451,21 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
               // the green all-clear on a pool nobody had joined.
               <div className="text-muted font-display font-bold text-xs uppercase text-center py-6 bg-page border border-line rounded-lg">
                 No members have joined yet.
+              </div>
+            ) : outstandingDue(pot) > 0 ? (
+              // codex r1: base dues and REBUY dues settle independently (P3), so
+              // every member can be PAID while rebuy dollars are still owed. The
+              // all-clear was gated on the unpaid LIST being empty, which made the
+              // card contradict its own Outstanding Due tile — green "all cleared"
+              // above a positive balance. The unpaid list cannot show these members
+              // (their base dues really are paid), so the honest thing is to name
+              // the debt and point at the control that settles it.
+              <div className="text-gold-700 dark:text-gold-400 font-display font-bold text-xs uppercase text-center py-6 bg-gold-400/10 border border-gold-500/40 rounded-lg flex flex-col items-center gap-1">
+                <AlertCircle size={20} />
+                <span>Base buy-ins all cleared</span>
+                <span className="font-body normal-case font-semibold text-[11px] text-muted">
+                  <span className="num">${outstandingDue(pot)}</span> still outstanding in rebuy dues — settle it on the member roster below.
+                </span>
               </div>
             ) : (
               <div className="text-[#0F7B4A] font-display font-bold text-xs uppercase text-center py-6 bg-[#E4F5EC] border border-[#BEE7D0] rounded-lg flex flex-col items-center gap-1">

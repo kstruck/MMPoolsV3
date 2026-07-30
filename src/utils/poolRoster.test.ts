@@ -265,6 +265,51 @@ describe('rosterPotStats', () => {
     expect(pot.expected).toBe(60);
   });
 
+  it('counts the UID UNION, not the largest single source (codex r1)', () => {
+    // members and participantIds hold a,b; an entry exists for c alone. A
+    // max(2, 2, 1) head count returns 2 — undercounting the roster
+    // buildPoolRoster actually produces, and then `memberCount - members.length`
+    // is 0, so c's base fee silently disappears from `expected`.
+    const args = inputs({
+      pool: pool({ participantIds: ['a', 'b'] }),
+      members: [
+        { uid: 'a', paidStatus: 'PAID' },
+        { uid: 'b', paidStatus: 'UNPAID' },
+      ],
+      entries: [{ id: 'c', ownerUid: 'c', paidStatus: 'UNPAID' }],
+    });
+    const pot = rosterPotStats(args);
+    expect(pot.memberCount).toBe(3);
+    expect(pot.expected).toBe(60); // a + b + c, one fee each
+    expect(pot.unpaidCount).toBe(2);
+    // The head count and the roster must be the same set of people.
+    expect(pot.memberCount).toBe(buildPoolRoster(args).length);
+  });
+
+  it('an entry-only person’s rebuy dues are charged too (codex r1)', () => {
+    const pot = rosterPotStats(
+      inputs({
+        pool: pool({ settings: { entryFee: 20, rebuyCost: 5 }, participantIds: ['a'] }),
+        members: [{ uid: 'a', paidStatus: 'PAID' }],
+        entries: [{ id: 'c', ownerUid: 'c', rebuysUsed: 4 }],
+      }),
+    );
+    expect(pot.memberCount).toBe(2);
+    expect(pot.expected).toBe(60); // a: 20; c: 20 fee + 4 x 5 rebuy
+  });
+
+  it('the guest sentinel is excluded from the head count as well as the roster', () => {
+    const pot = rosterPotStats(
+      inputs({
+        pool: pool({ participantIds: ['a', 'guest'] }),
+        members: [{ uid: 'a', paidStatus: 'PAID' }],
+        entries: [{ id: 'guest', ownerUid: 'guest' }],
+      }),
+    );
+    expect(pot.memberCount).toBe(1);
+    expect(pot.expected).toBe(20);
+  });
+
   it('an empty pool is $0 / 0%, not a divide-by-zero', () => {
     const pot = rosterPotStats(inputs({ pool: pool({ participantIds: [] }) }));
     expect(pot).toEqual({ memberCount: 0, paidCount: 0, unpaidCount: 0, collected: 0, expected: 0 });
