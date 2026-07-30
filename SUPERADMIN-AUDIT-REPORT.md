@@ -76,9 +76,9 @@ Evidence: `src/utils/bracketScoring.ts` (148), `src/components/BracketPoolDashbo
 Why it matters: silent client/server scoring divergence.
 Fix: move canonical scoring into `shared/`.
 
-**Finding: Repo root is a session-artifact dumping ground.** 13 PLAN/AUDIT/REVIEW markdown files, 308 committed skill files, tracked `scripts/espn_output.txt`, a stale tracked `src/nginx.conf` that differs from the real prod `nginx.conf`, and role-escalation one-off scripts (`functions/setUserAdmin.cjs`, `reinit_big12.js`) that contradict CONTEXT.md's "Operations tab is the sole home" rule.
+**Finding: Repo root is a session-artifact dumping ground.** 13 PLAN/AUDIT/REVIEW markdown files, 308 committed skill files, tracked `scripts/espn_output.txt`, a stale tracked `src/nginx.conf` that differs from the real prod `nginx.conf` (**DELETED 2026-07-29**), and role-escalation one-off scripts (`functions/setUserAdmin.cjs`, `reinit_big12.js`) that contradict CONTEXT.md's "Operations tab is the sole home" rule.
 Why it matters: signal-to-noise for humans and agents; a stale nginx.conf that could be deployed by mistake breaks Google sign-in.
-Fix: `docs/plans/archive/` sweep; delete `src/nginx.conf`; move ops scripts behind Operations callables or into `scripts/ops/` clearly labeled.
+Fix: `docs/plans/archive/` sweep; ~~delete `src/nginx.conf`~~ (**DONE 2026-07-29**); move ops scripts behind Operations callables or into `scripts/ops/` clearly labeled.
 
 ## Frontend Architecture
 
@@ -197,7 +197,7 @@ Fix: lazy-load heavy admin panels; split vendor-firebase.
 - **God component** — `SuperAdmin.tsx`.
 - **God service** — `dbService.ts` client-side; `onCall` handlers server-side with no service boundary.
 - **Mixed concerns** — presentation, data fetching, privileged writes, and one-off seasonal ops (hardcoded 2025/2026 tournament seeding) all in one file.
-- **Hidden coupling** — role in three stores; scoring in three files; CSP duplicated across `firebase.json` + three nginx blocks + a stale `src/nginx.conf`.
+- **Hidden coupling** — role in three stores; scoring in three files; CSP duplicated across `firebase.json` + three nginx blocks + a stale `src/nginx.conf`. **PARTLY CLOSED 2026-07-29:** the stale copy is deleted and `tests/csp-invariants.test.ts` now fails if the remaining four diverge. The three nginx blocks are NOT redundancy — `add_header` does not inherit into a `location` that declares its own, so each must re-assert the full set. This coupling was named here and still cost 13 days of silently-dropped Sentry events; naming it was not enough.
 - **Duplicated business logic** — Fix Scoring / Fix Participants / Init Big East / Big 12 re-init in 2–3 tabs with different guards.
 - **Weak boundaries** — client writes to pools/entries that should be callables; unauthenticated callables writing to hot docs.
 - **Config sprawl** — root/functions dependency skew, Node-version roulette, `legacy-peer-deps` in Docker.
@@ -286,7 +286,7 @@ docs/
 ## Phase 2: Structural cleanup (maintainability + clarity)
 - De-duplicate destructive ops → Operations is the sole home; remove System/Tournament duplicates; move Big12/BigEast (and add March Madness + other pool types) re-init into Operations/Tournament consistently.
 - Extract `SuperAdmin.tsx` into per-tab modules.
-- Delete verified dead code (~2,500 lines); archive completed PLAN-*.md; delete `src/nginx.conf`.
+- Delete verified dead code (~2,500 lines); archive completed PLAN-*.md; ~~delete `src/nginx.conf`~~ (**DONE 2026-07-29**).
 - Standardize admin auth on `assertCallerRole`; route client-side privileged writes through audited callables.
 - Move the Global Props seed editor into a modal (fix the scroll-to-top UX).
 - Rebuild "NFL Schedule" into an **NFL Pools** manager (import + per-week schedule viewer + management of the NFL pool types), not just an importer.

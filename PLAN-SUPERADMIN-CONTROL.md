@@ -78,7 +78,7 @@ Six phases. Phase 0 stops the bleeding (the live app-wide crash + the security b
 5.2 Move `waitlist` out of the pool god-doc into a subcollection; authenticate + throttle `joinWaitlist`/`createClaimCode`; enforce App Check server-side.
 5.3 Paginate admin pools/users; lazy-load heavy admin panels; split `vendor-firebase` chunk.
 5.4 **Extract `SuperAdmin.tsx`** (4,321 lines) into per-tab modules under `components/admin/tabs/`.
-5.5 Reconcile dependency + Node versions (firebase-admin major, Node 20/22); `npm ci` in Docker; write ARCHITECTURE.md; delete dead code + stale `src/nginx.conf`; clean up the duplicate "Men's 2025" tournament selector entry.
+5.5 Reconcile dependency + Node versions (firebase-admin major, Node 20/22); `npm ci` in Docker; write ARCHITECTURE.md; delete dead code + ~~stale `src/nginx.conf`~~ (**DELETED 2026-07-29**); clean up the duplicate "Men's 2025" tournament selector entry.
 5.6 **Canonical-role migration (split out per Codex #10).** The codebase still writes legacy `PARTICIPANT`/`POOL_MANAGER` role values live (`firestore.rules:222`, `functions/src/participant.ts:32`, `functions/src/lib/poolCreation.ts:62`, `authService.ts`, `userSync.ts`). Do this as ONE deliberate migration: deploy the cleaned writers, run an **audited role backfill** over existing user docs + claims, then switch role-filtered Members queries (`where('role','==',...)`) to canonical values. Until this lands, do NOT partially rename roles — canonical queries would silently miss legacy docs.
 
 ## Key decisions & tradeoffs

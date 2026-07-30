@@ -1,4 +1,4 @@
-# HANDOFF — Session entry point (updated 2026-07-29: the seasonType filter has ONE definition; a FRONTEND rebuild is owed again)
+# HANDOFF — Session entry point (updated 2026-07-29: browser-side Sentry was CSP-blocked for 13 days and is fixed; #319 deployed; a FRONTEND rebuild is owed for the CSP fix)
 
 > ## ✅ STOP POINT 2026-07-28 — #313–#317 SHIPPED; functions, rules and frontend all current
 >
@@ -18,14 +18,17 @@
 >
 > **Rules did not change in any of the five**, so they remain ≡ this tag.
 >
-> ⚠️ **FRONTEND: a rebuild is OWED again, as of 2026-07-29.** The 2026-07-28
-> rebuild did land — the live bundle moved from `index-Na2D7cdu.js` to
-> **`index-gn5gQtFU.js`**, verified in the browser with cache disabled, clearing
-> both the #297/#298 dependency-bump debt and #313/#315's frontend changes — and
-> both queues WERE empty at `0a705c0`. The seasonType-filter PR below then changed
-> frontend source only, so **FUNCTIONS and RULES stay EMPTY and the FRONTEND queue
-> is NOT empty**: nothing that fix touches reaches a member or a commissioner
-> until Coolify rebuilds.
+> ✅ **#319 (seasonType filter) is MERGED AND LIVE.** Merged `31d1b8c`; Kevin
+> rebuilt Coolify 2026-07-29 and the live bundle moved `index-gn5gQtFU.js` →
+> **`index-DYJ4N7zt.js`**, confirmed from his own browser console. That rebuild
+> also cleared the #297/#298 dependency-bump debt and #313/#315's frontend
+> changes carried by the previous one.
+>
+> ⚠️ **FRONTEND: a rebuild is OWED AGAIN for the CSP fix.** It changes
+> `nginx.conf` (and `firebase.json`, which serves nothing here), so
+> **FUNCTIONS and RULES stay EMPTY — do NOT deploy either.** `nginx.conf` is
+> baked into the image at `Dockerfile:37`, so the CSP change reaches nobody until
+> Coolify rebuilds. **Until then browser-side Sentry stays blocked.**
 > Dashboard:
 > <http://72.60.68.7:8000/project/ycoooow0g4c08ogso404k8o4/environment/ogs0cg0gg0kcgkgc8sg4c8g4/application/ics4kkww0c8oo0gw4wkg8w4o/deployment>
 > → **Redeploy**.
@@ -51,7 +54,8 @@
 >
 > Four display/consistency defects, none caused by these five PRs. None is a
 > data-integrity problem — the authoritative stores are correct in every case.
-> **Item 2 is CLOSED**; 1, 3 and 4 are open.
+> **Item 2 is CLOSED (#319, merged `31d1b8c` and deployed)**; 1, 3 and 4 are
+> open. Items 5–10 below came from Kevin's 2026-07-29 walkthrough.
 >
 > 1. **The Bento Buy-In Ledger is blind to members with no entry.** Every figure
 >    on that card is `entries`-derived (`NFLManagerBentoDashboard.tsx:174-181`),
@@ -108,6 +112,69 @@
 > inside a reminder window. Same trap as the PR-B2 queue watch below: a quiet run
 > exercises the scheduler wrapper, not the path. Unproven until a real reminder
 > window opens.
+>
+> ### Pool Manager surface defects — Kevin's walkthrough 2026-07-29
+>
+> Kevin worked the commissioner surfaces on a live Pick'em pool and raised five;
+> two more turned up while verifying them. Every one is confirmed in source. None
+> is a data-integrity problem — the authoritative stores are correct throughout.
+>
+> 5. **The cog on Manage My Pools is a dead end for every non-SQUARES pool.**
+>    `GlobalCommissionerDashboard.tsx:102` navigates to `/admin/${pool.id}`
+>    unconditionally; `AdminRoute.tsx:143` serves only `SQUARES` and renders
+>    *"Admin panel is only available for SQUARES pools"* for anything else — its
+>    own comment calls that branch `// Fallback for unknown types`, so a Pick'em
+>    pool is being treated as unknown. That is every NFL pool, on the
+>    commissioner's primary navigation. `ManagerDashboard.tsx:713,785` route the
+>    same way. Small fix, disproportionate reach.
+> 6. **The Buy-In Ledger chart is clipped by a NEGATIVE left margin.**
+>    `NFLManagerBentoDashboard.tsx:418` sets
+>    `margin={{ top: 2, right: 10, left: -25, bottom: 2 }}` on a
+>    `layout="vertical"` BarChart, which drags the category labels
+>    ("Collected"/"Pending") off the left edge. **Distinct from item 1** — that is
+>    the empty data, this is the layout. Both are on the same card.
+> 7. **The Full Ledger modal is empty for the same reason as the card**, so
+>    item 1's scope is wider than recorded: the "Advanced Payment Ledger" modal's
+>    four tiles (Total Projected / Collected / Outstanding Due / Clearing Rate)
+>    all read `$0`/`0%` from the same `entries`-derived source.
+> 8. **The manager "AI Commissioner Chat" contains no AI.**
+>    `handleSendBanter` (`NFLManagerBentoDashboard.tsx:220-233`) prepends a
+>    hardcoded prefix to the typed text and pushes it into local React state — no
+>    API call, no Gemini, no persistence, gone on refresh. The Savage/Pro/Analyst
+>    selector only changes which prefix string is used; "AI MODERATION ACTIVE" and
+>    "BANTER ENGINE STATUS" are decorative. **Not to be confused with
+>    `AICommissioner.tsx`, which IS real** — it persists to
+>    `pools/{id}/ai_requests` and `ai_artifacts` with comments. Two different
+>    things share the name.
+>
+>    🔨 **KEVIN'S RULING 2026-07-29: make it real.** Gemini-backed, persisted, and
+>    deletable by the pool manager, **rate-limited to no more than 5 posts per day
+>    per pool**. ⚠️ **This is PLAN-GATED** — it needs a new callable, a new
+>    Firestore collection and new `firestore.rules`, which trips the
+>    **authorization** trigger in `mmp-change-control` §1. The limit MUST be
+>    enforced server-side in the callable against a stored counter, and the rules
+>    must forbid direct client writes to the banter collection; a client-side
+>    limit is decoration and is bypassed by writing to Firestore directly.
+> 9. **Fabricated data is rendered as commissioner analysis.**
+>    `NFLManagerBentoDashboard.tsx:126,135` hardcode `'Sarah K.'` as the
+>    top-player fallback, and `:140` seeds the feed with *"Sarah K. is currently
+>    leading, but historically has collapsed in Week 13."* — on a one-player pool
+>    where no week has ever been played. `Sarah K.` is mock data from
+>    `DevDashboardPreview.tsx:131` that leaked into production code. Same class as
+>    the T3 "no fake dashboard cards" invariant in
+>    `tests/admin-surface-invariants.test.ts`, which does not cover this file.
+>    🔨 **KEVIN'S RULING 2026-07-29: remove it** — delete the seed and the
+>    fallback, show an honest empty state.
+> 10. **The "View" button on ManagerDashboard is broken.**
+>    `ManagerDashboard.tsx:786` builds its target with BACKSLASHES —
+>    `window.location.href = \`\pool\${pool.id}\`` — and `\p` is not an escape
+>    sequence, so it navigates to a literal `\pool\<id>`. Read from source;
+>    **not reproduced in a browser.**
+>
+> **Item 5 is queued next. Items 6, 7, 9 and the duplicate-save item 3 are all on
+> `NFLManagerBentoDashboard`/`NFLManagerView` and should be absorbed into the
+> tabbed-split PR rather than fixed four separate times.** Item 8 waits on its
+> plan; item 10 is recorded, unbuilt.
 >
 > ### Standing, unrelated to this deploy
 >
@@ -982,7 +1049,36 @@ Baselines measured on merged `main` at 0a7b9b6 (2026-07-18): root vitest **257**
 
 ## Phase 2 observability (#8–14) — SHIPPED, merged, deployed, prod-verified
 
-PR [#171](https://github.com/kstruck/MMPoolsV3/pull/171) (all 7 plan items — Sentry FE spine, correlation id, business-failure→Sentry wiring, ops alert dispatcher, readiness endpoint, in-app Ops Health card, SLOs) merged `7b2a522`, functions + frontend deployed, qodo's 4 findings fixed pre-merge. **One post-deploy bug found+fixed**: `readiness` was configured at 128MiB and OOM'd at cold start (Admin SDK + Node 22 alone use ~131MiB) — Kevin's live GCP Uptime Check test caught it as a 503, fixed in a same-day follow-up PR #173 (bumped to 256MiB, merged, redeployed) — Uptime Check now green. Firestore `system/config.opsAlerts` populated (Kevin). Sentry confirmed live in prod (`window.__SENTRY__` present, real DSN baked into the bundle, verified via direct browser check against `marchmeleepools.com`).
+PR [#171](https://github.com/kstruck/MMPoolsV3/pull/171) (all 7 plan items — Sentry FE spine, correlation id, business-failure→Sentry wiring, ops alert dispatcher, readiness endpoint, in-app Ops Health card, SLOs) merged `7b2a522`, functions + frontend deployed, qodo's 4 findings fixed pre-merge. **One post-deploy bug found+fixed**: `readiness` was configured at 128MiB and OOM'd at cold start (Admin SDK + Node 22 alone use ~131MiB) — Kevin's live GCP Uptime Check test caught it as a 503, fixed in a same-day follow-up PR #173 (bumped to 256MiB, merged, redeployed) — Uptime Check now green. Firestore `system/config.opsAlerts` populated (Kevin). ⚠️ **The "Sentry confirmed live in prod" claim that stood here from 2026-07-17 was FALSE and is corrected below.**
+
+> ### ⚠️ CORRECTION 2026-07-29: browser-side Sentry never sent a single event
+>
+> This section used to read *"Sentry confirmed live in prod (`window.__SENTRY__`
+> present, real DSN baked into the bundle, verified via direct browser check)"*.
+> Every one of those observations was TRUE. The conclusion drawn from them was
+> not. They prove `Sentry.init()` **ran**; they say nothing about whether an
+> envelope could **leave the browser**. It could not: `nginx.conf`'s CSP
+> `connect-src` never listed Sentry's ingest host, so the browser refused every
+> send with `Refused to connect because it violates the document's Content
+> Security Policy`.
+>
+> The CSP was hardened 2026-07-03 (`e13f6c9`, T11); the Sentry FE spine landed
+> 2026-07-16 (`96811cf`). Thirteen days apart, and `connect-src` was never
+> updated — so **every client-side error from 2026-07-16 to 2026-07-29 was
+> silently dropped**, and the empty Sentry dashboard read as "no errors".
+>
+> **Server-side Sentry was never affected.** `functions/src/lib/sentryServer.ts`
+> sends from Cloud Functions, where no browser CSP applies. If the 2026-07-22
+> triage saw events, those are the likely source — that has NOT been confirmed
+> either way.
+>
+> Fixed 2026-07-29 by adding `https://*.ingest.us.sentry.io` to all four CSP
+> declarations, guarded by `tests/csp-invariants.test.ts`. **This is the third
+> instance of the same failure mode** — after #314's unbound
+> `COURIER_AUTH_TOKEN` and the zero-counter reminder heartbeat: a send path that
+> swallowed everything, where the absence of output read as health. When
+> verifying a reporting path, the bar is *an event observed at the destination*,
+> never *the client initialized*.
 
 **Not done (optional, not urgent):**
 - GCP Cloud Monitoring SLO objects + burn-rate alerting policies (uptime check alone is done; the other 3 SLOs — checkout success, webhook error rate, latency p95 — still need console setup). Target numbers in `PLAN-SECURITY-OBSERVABILITY.md`'s Phase 2 SLO section.
@@ -1019,7 +1115,9 @@ SUPER_ADMIN sessions.
 ## Phase 2 observability — CLOSED 2026-07-17
 
 PR #171 merged+deployed, PR #173 (readiness OOM fix) merged+deployed, Firestore
-`opsAlerts` populated, GCP Uptime Check green, Sentry confirmed live in prod.
+`opsAlerts` populated, GCP Uptime Check green. **Browser-side Sentry was NOT
+live** despite the claim that stood here — CSP-blocked from 2026-07-16 until
+2026-07-29; see the correction box above.
 Remaining optional items (SLO objects, cosmetic chunk-splitting) listed in the
 "Current state" section above — not blocking, not time-sensitive.
 
