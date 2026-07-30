@@ -96,28 +96,39 @@ against #231, #235 and #240, the PRs where its findings were valid; do not guess
 this from memory.
 
 ```bash
-Q='qodo-code-review'
+QB='qodo-code-review[bot]'    # REST endpoints
+QG='qodo-code-review'         # gh pr view
+NOISE='busy working|trial has ended|reviews are paused|quota|billing'
+
+# SET THIS IMMEDIATELY BEFORE the push you want reviewed:
+#   SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+# On the FIRST arming of a new PR, the epoch default is correct.
+SINCE="${SINCE:-1970-01-01T00:00:00Z}"
+
 for i in $(seq 1 12); do
-  # Inline findings (REST: login carries the [bot] suffix)
-  R=$(gh api repos/kstruck/MMPoolsV3/pulls/<N>/comments \
-        -q "[.[] | select(.user.login | startswith(\"$Q\"))] | length")
-  # Review-surface report with a real body (gh pr view: no [bot] suffix)
+  # Inline findings — --paginate, or a PR with 30+ existing comments hides them
+  R=$(gh api --paginate repos/kstruck/MMPoolsV3/pulls/<N>/comments \
+        -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | .id" | wc -l)
+  # Review-surface report with a real body
   S=$(gh pr view <N> --json reviews \
-        -q "[.reviews[] | select(.author.login | startswith(\"$Q\")) | select(.body != \"\")] | length")
-  # A CLEAN summary can land as an issue comment — count it, but never the placeholder
+        -q ".reviews[] | select(.author.login == \"$QG\") | select(.body != \"\") | select(.submittedAt > \"$SINCE\") | .id" | wc -l)
+  # A CLEAN zero-findings summary arrives as an issue comment — count it, never the noise
   C=$(gh pr view <N> --json comments \
-        -q "[.comments[] | select(.author.login | startswith(\"$Q\")) | select(.body | test(\"busy working|trial has ended|reviews are paused|quota|billing\"; \"i\") | not)] | length")
+        -q ".comments[] | select(.author.login == \"$QG\") | select(.createdAt > \"$SINCE\") | select(.body | test(\"$NOISE\"; \"i\") | not) | .id" | wc -l)
   [ "${R:-0}" -gt 0 ] || [ "${S:-0}" -gt 0 ] || [ "${C:-0}" -gt 0 ] && { echo "QODO REPORTED"; exit 0; }
   sleep 45
 done; echo TIMEOUT
 ```
 
-⚠️ **Two things this filtering is for, both of which broke earlier versions.**
+⚠️ **Five things this filtering is for. Every one of them broke an earlier draft
+of this very watcher — do not "simplify" any of them back out.**
 
-1. **Author.** An earlier version counted *every* inline comment and non-empty
-   review body regardless of who wrote them, so a human comment landing before
-   qodo finished would fire the watcher and start the absorption flow with no
-   qodo result at all.
+1. **Author, matched EXACTLY.** An earlier version counted *every* inline comment
+   and non-empty review body regardless of who wrote them, so a human comment
+   landing before qodo finished would fire the watcher and start the absorption
+   flow with no qodo result at all. The fix after that used `startswith`, which is
+   still too loose — any account named `qodo-code-review-anything` would satisfy
+   it. Both logins are known exactly, so both are compared with `==`.
 2. **The placeholder vs. a clean report.** qodo posts *"Qodo is busy working"* as
    an issue comment **first**, so a watcher that exits on any activity returns
    seconds in and records a review that never happened. But the opposite
@@ -134,6 +145,19 @@ done; echo TIMEOUT
    `reviews are paused`, `quota` and `billing`. **If the only qodo comment on a PR
    is one of those, the check has FAILED, not passed — tell Kevin, because it means
    the subscription needs attention.**
+4. **`SINCE`, or a re-arm can never time out.** Re-arming after a fix push
+   immediately sees the ORIGINAL summary and findings still sitting on the PR and
+   exits `QODO REPORTED` at once — so it can never distinguish a genuine
+   re-review from the artifacts of the first one, and the "record a timeout as
+   *qodo did not re-review*" instruction below becomes unreachable. Stamp
+   `SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)` **before** the push and the watcher
+   counts only what arrives after it.
+5. **`--paginate`, or findings 31+ vanish.** The REST inline-comment endpoint
+   returns 30 per page by default. On a PR that already has 30+ inline comments,
+   an unpaginated read misses qodo's findings entirely — and because a qodo
+   summary can independently satisfy `C`, the watcher would exit reporting a
+   review whose actual findings it never fetched. The full-report step in §2 uses
+   `--paginate` for the same reason.
 
 **TIMEOUT is not clean.** If the window expires with nothing, say so explicitly —
 "qodo did not report within N minutes" — rather than treating silence as a pass.
@@ -144,9 +168,13 @@ reading a missing signal as a good one.
 
 ```bash
 gh pr view <N> --json reviews -q '.reviews[] | {author: .author.login, state, body}'
-gh api repos/kstruck/MMPoolsV3/pulls/<N>/comments -q '.[] | {path, line, body}'
+gh api --paginate repos/kstruck/MMPoolsV3/pulls/<N>/comments -q '.[] | {path, line, body}'
 gh pr view <N> --json comments -q '.comments[] | {author: .author.login, body}'
 ```
+
+**`--paginate` on the inline endpoint is load-bearing**, not tidiness: it returns
+30 per page, so on a busy PR the unpaginated form silently drops qodo's later
+findings and you would absorb a partial report believing it was the whole one.
 
 ### 3. Validity call per finding (BEFORE any edit)
 
