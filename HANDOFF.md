@@ -39,7 +39,24 @@
 > ✅ **The Bento truth pass (#322, merged `6676580`) is REBUILT AND VERIFIED
 > LIVE.** The rebuild was triggered 2026-07-30 and the live bundle moved
 > `index-D1wLGiMy.js` → **`index-C31xivRN.js`**, read straight off the prod HTML.
-> The hash MUST move for a `src/**` change, and it did.
+>
+> ⚠️ **A moved bundle hash proves the rebuild shipped; an UNMOVED one does not
+> disprove it.** The rule "the hash must change for a `src/**` change" is the
+> right default and it held here, but it is not universal, and treating it as
+> universal will one day condemn a perfectly good deploy. Vite hashes the
+> **emitted** bundle: a `src/**` change confined to test files, or to code the
+> tree-shake drops, emits byte-identical assets and leaves the hash alone. #322
+> itself contains such a file (`src/utils/poolRoster.test.ts`) — it happened to
+> ship emitted changes too, so the hash moved.
+>
+> So: a changed hash is **positive evidence**, and it is the check to reach for
+> first. A hash that has NOT changed is **inconclusive** — go read the Coolify
+> deployment log and confirm the run finished, rather than concluding the rebuild
+> failed. An absent error is not evidence either way; that mistake is what hid
+> the Sentry outage for thirteen days.
+>
+> An `nginx.conf`-only change never moves the hash at all — verify that class by
+> curling the prod response header instead (see PICKUP §0).
 >
 > ✅ **ALL THREE DEPLOY QUEUES ARE EMPTY.** #322 touches `src/` and `tests/` only
 > — `git diff --name-only origin/main...HEAD -- functions/ shared/ firestore.rules`
