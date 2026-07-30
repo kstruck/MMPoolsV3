@@ -2,12 +2,15 @@
 name: mmp-qodo-cycle
 description: >
   LIVE again as of 2026-07-30 — Kevin's qodo subscription is active and he
-  asked for the check on every PR (CLAUDE.md §2b). Load this when a qodo
-  report lands on a PR you authored: it covers watching the PR, pulling ALL
-  three comment surfaces (any one can be empty, so a report is not absent
-  until all three are), making a validity call on every finding BEFORE
-  fixing, rerunning the full gate set, and reporting a per-finding verdict
-  table. Runs ALONGSIDE codex (CLAUDE.md §2c), not instead of it.
+  asked for the check on every PR (CLAUDE.md §2b). **Load this the moment you
+  OPEN a PR or mark one ready for review — not when a report arrives.** The
+  watcher that detects the report lives in here, so waiting for a report
+  before loading the skill is circular and the check never runs. Covers
+  arming the watcher, pulling ALL three comment surfaces (any one can be
+  empty, so a report is not absent until all three are), making a validity
+  call on every finding BEFORE fixing, rerunning the full gate set, and
+  reporting a per-finding verdict table. Runs ALONGSIDE codex (CLAUDE.md
+  §2c), not instead of it.
 ---
 
 # mmp-qodo-cycle — absorb a qodo.ai PR review autonomously
@@ -19,9 +22,15 @@ description: >
 > rule.
 
 Repo: `D:\march-melee-pools`. qodo.ai reviews PRs on this GitHub repo
-(kstruck/MMPoolsV3; 14-day trial started 2026-07-10). Standing authorization
-from Kevin (2026-07-11): when a qodo report lands on a PR I authored, run this
-loop WITHOUT asking, then notify with results.
+(kstruck/MMPoolsV3). Standing authorization from Kevin (2026-07-11, and the
+2026-07-30 restore): run this loop WITHOUT asking, then notify with results.
+
+⚠️ **Load this WHEN YOU OPEN THE PR, not when a report lands.** The trigger used
+to be "when a qodo report lands on a PR I authored", which is circular — the
+watcher that *detects* the report is in §1 of this file, so an agent waiting for a
+report before loading the skill never arms the watcher and never performs the
+check. A freshly-opened PR has no qodo activity on it by definition. Open the PR
+(or mark a draft ready — qodo SKIPS DRAFTS, see §0), then come straight here.
 
 ## Track record + the stop rule (calibration)
 
