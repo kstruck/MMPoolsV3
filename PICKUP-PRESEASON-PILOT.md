@@ -31,9 +31,10 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 **Everything through #321 is merged AND deployed.** The deployed SHA is the
 tagged claim in §2 — not repeated here, so it cannot rot.
-**ALL THREE QUEUES ARE EMPTY.** Everything through #322 is merged, deployed and
-verified: #313–#317, #319, #320, #321 and the 2026-07-30 Bento truth pass have
-all been rebuilt, each confirmed by the live bundle hash actually moving. See §4.
+**ALL THREE QUEUES ARE EMPTY.** Everything through #324 is merged, deployed and
+verified: #313–#317, #319, #320, #321, the 2026-07-30 Bento truth pass (#322) and
+the tabbed commissioner split (#324) have all been rebuilt, each confirmed by the
+live bundle hash actually moving. See §4.
 
 Five PRs shipped on 2026-07-28: #313 (payment fallback removal + the post-commit
 projection fix), #314 (reminder delivery outcomes), #315 (one definition of the
@@ -51,8 +52,9 @@ remembering: it changes `nginx.conf`, which is baked into the image at
 `nginx.conf`-only change does **not** move the bundle hash, so verify that class
 by curling the response header instead. ✅ **The 2026-07-30 Bento truth pass
 (#322) is ALSO rebuilt** — `index-D1wLGiMy.js` → **`index-C31xivRN.js`**, read off
-the prod HTML. Nothing is owed on the frontend. Dashboard URL in HANDOFF's STOP
-POINT box for next time.
+the prod HTML — **and so is the tabbed commissioner split (#324)**,
+`index-C31xivRN.js` → **`index-CR5oJEHh.js`**. Nothing is owed on the frontend.
+Dashboard URL in HANDOFF's STOP POINT box for next time.
 (Historical: the 2026-07-25 rebuild carried #279's `NFLManagerView` cutover onto
 the `updatePoolSettings` callable and was smoke-tested in prod.)
 
@@ -192,16 +194,17 @@ deployed. What is left:
    money surfaces should not wait on a layout refactor. Extending the T3 fake-card
    invariant to that file turned up three more fabrications (two no-op
    commissioner buttons, an invented audit trail, a hardcoded pick deadline), all
-   removed. **Still open: the five duplicate save buttons**, which belong to the
-   tabbed split — item 6 below — since that is the change that removes the reason
-   they exist. Detail in HANDOFF's STOP POINT box, items 1/6/7/9.
+   removed. **The five duplicate save buttons closed the same day** with the
+   tabbed split (#324) — item 6 below. Detail in HANDOFF's STOP POINT box, items
+   1/3/6/7/9.
 9. **Make the manager banter panel real** — Gemini-backed, persisted, deletable,
    **5 posts/day/pool enforced server-side** (Kevin's ruling 2026-07-29).
    **PLAN-GATED**: new callable + collection + rules = the authorization trigger.
-6. **Split the commissioner page into tabs** — Overview / Members & Payments /
-   Settings / Scoring. Agreed with Kevin 2026-07-28. Pure layout, not
-   plan-gated; it also removes the five duplicate `SaveSettingsControl`
-   instances, which all call the same `handleSaveSettings`.
+6. ~~**Split the commissioner page into tabs.**~~ **DONE 2026-07-30 (#324)** —
+   Overview / Members & Payments / Scoring / Settings, and four of the five
+   `SaveSettingsControl` instances are gone with it. Not plan-gated: pure layout,
+   no callable touched. ⚠️ **Rebuilt but not visually verified** — see
+   `MORNING-2026-07-30.md` task 1b.
 7. **Surface `system/heartbeats` in the SuperAdmin UI.** Every scheduled job's
    liveness and verdict is written there and NOTHING renders it — the Overview
    tab's "Ops Health" card shows alerts and webhooks, not jobs. `findStaleJobs`
@@ -433,7 +436,7 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — ALL THREE EMPTY as of 2026-07-30 (#322 merged, rebuilt and verified)
+## 4. Deploy queue — ALL THREE EMPTY as of 2026-07-30 (#322 and #324 merged, rebuilt and verified)
 
 > **Historical (2026-07-25), kept for the recipe — not a current queue claim;
 > the current queue is the paragraph below this block.** #279 deployed functions → rules → Coolify
