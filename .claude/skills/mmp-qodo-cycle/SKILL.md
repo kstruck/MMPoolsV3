@@ -81,9 +81,19 @@ inline comments with an empty issue-comment list):
 
 ```bash
 # STAY IN THE PR's WORKTREE. Do NOT cd to D:/march-melee-pools.
-gh pr view <N> --json comments,reviews -q '(.comments | length) + (.reviews | length)'
-gh api repos/kstruck/MMPoolsV3/pulls/<N>/comments -q 'length'   # inline findings
+# Paginated REST on all three — same reason as the watcher (see note 5 below).
+R=repos/kstruck/MMPoolsV3
+gh api --paginate $R/issues/<N>/comments -q 'length'   # summary / zero-findings report
+gh api --paginate $R/pulls/<N>/comments  -q 'length'   # inline findings
+gh api --paginate $R/pulls/<N>/reviews   -q 'length'   # review-surface report
 ```
+
+**These are a quick eyeball only — prefer arming the watcher below.** They are
+deliberately paginated REST rather than `gh pr view --json`: this example block
+used the GraphQL form and an unpaginated inline query, which the rest of this
+skill spends two notes explaining can return 0 after qodo has posted. *(qodo's own
+finding on PR #326 — the first PR reviewed under the restored rule. Ten codex
+rounds fixed the watcher and §2 and missed this block.)*
 
 🛑 **This block used to start `cd D:/march-melee-pools`, and that was a real
 hazard.** PRs are made from a worktree (Rule 4), nothing in §§2–4 changes the
@@ -117,8 +127,14 @@ QB='qodo-code-review[bot]'    # REST — the watcher is all REST, so this is the
 # Matched against the comment's HEADING (first ~120 chars), never the whole body.
 NOISE='Qodo is busy working|trial has ended|reviews are paused|exceeded your'
 
-# SET THIS IMMEDIATELY BEFORE the push you want reviewed:
-#   SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+# SET THIS IMMEDIATELY BEFORE the push you want reviewed. Note the '1 second ago':
+#   SINCE=$(date -u -d '1 second ago' +%Y-%m-%dT%H:%M:%SZ)
+# GitHub timestamps are whole seconds and the comparisons below are strict '>', so
+# a stamp taken in the SAME second qodo posts would EXCLUDE that artifact and the
+# watcher would report a false TIMEOUT — blocking the gate on a PR that was
+# reviewed. Backing off one second errs the other way: at worst one pre-push
+# artifact is counted, which phase 2's settle and your own validity pass both
+# catch. A false timeout is the more expensive mistake. (qodo's finding on #326.)
 # On the FIRST arming of a new PR, the epoch default is correct.
 SINCE="${SINCE:-1970-01-01T00:00:00Z}"
 
