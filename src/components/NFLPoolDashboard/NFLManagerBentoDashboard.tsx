@@ -5,12 +5,10 @@ import { getUserMessage } from '../../utils/errorMessages';
 import { useToast } from '../ui/Toast';
 import { Badge } from '../ui';
 import {
-  Lock,
   Volume2,
   Send,
   Activity,
   CheckCircle,
-  ShieldCheck,
   AlertCircle,
   Search,
   DollarSign,
@@ -18,7 +16,6 @@ import {
   Edit,
   Save,
   PartyPopper,
-  RefreshCw,
   Megaphone
 } from 'lucide-react';
 import {
@@ -33,10 +30,14 @@ import {
   Tooltip
 } from 'recharts';
 import { gamesForPoolWeek } from '../../utils/nflPending';
+import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate } from '../../utils/poolRoster';
+import { formatDeadline } from '../../utils/formatTime';
 
 interface NFLManagerBentoDashboardProps {
   pool: Pool;
   entries: any[];
+  /** Member Records — roster + payment truth, incl. members with no entry (ADR 0003) */
+  members: any[];
   games: NFLGame[];
   week: number;
   user: UserType | null;
@@ -46,6 +47,7 @@ interface NFLManagerBentoDashboardProps {
 export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> = ({
   pool,
   entries,
+  members,
   games: _games,
   week,
   user: _user,
@@ -55,10 +57,17 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   const toast = useToast();
   const [aiMood, setAiMood] = useState<'savage' | 'professional' | 'analyst'>('savage');
   const [banterText, setBanterText] = useState('');
-  const [banterFeed, setBanterFeed] = useState<string[]>([
-    "COMMISSIONER: Warm welcome to the active NFL pool. Good luck!",
-    "COMMISSIONER: Friendly reminder that unsubmitted picks lock at kickoff. Don't be that person."
-  ]);
+  // Starts EMPTY. It used to be seeded with invented commissioner analysis: a
+  // claim that the current leader had a history of collapsing late in the
+  // season, where the top-player fallback on an empty pool was a mock name
+  // lifted from DevDashboardPreview — so a one-player pool that had never
+  // played a week was shown a scouting report on a rival. Nothing posted here
+  // is persisted (HANDOFF item 8), so an empty feed is the honest start.
+  //
+  // tests/admin-surface-invariants.test.ts asserts the removed strings are
+  // absent from this FILE, comments included. Paraphrase them; never quote them
+  // back in, or the guard fails on the explanation of its own defect.
+  const [banterFeed, setBanterFeed] = useState<string[]>([]);
 
   const [isNudging, setIsNudging] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -82,16 +91,15 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   // marked someone paid while the Member Record, the payments ledger, the
   // roster summary and the pot all still said UNPAID. setPaidStatus writes the
   // Member Record as truth and mirrors the display fields onto the entry in
-  // the same transaction, so this panel's entry-backed table keeps working.
-  const memberUidFor = (entryId: string) => {
-    const entry = entries.find(e => e.id === entryId);
-    return entry?.ownerUid || entryId; // NFL entry docs are keyed by uid
-  };
-
-  const togglePayment = async (entryId: string, currentPaid: boolean) => {
-    setTogglingId(entryId);
+  // the same transaction.
+  //
+  // Every row on this card is now a ROSTER row keyed by uid, so no entry-id
+  // indirection is needed: an entry-derived row could not name a member who has
+  // no entry, which is exactly why this card showed "no members".
+  const togglePayment = async (uid: string, currentPaid: boolean) => {
+    setTogglingId(uid);
     try {
-      await dbService.setPaidStatus(pool.id, memberUidFor(entryId), !currentPaid);
+      await dbService.setPaidStatus(pool.id, uid, !currentPaid);
     } catch (err) {
       console.error("Failed to update payment status:", err);
       toast.error("Failed to update payment status in database.");
@@ -100,15 +108,15 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     }
   };
 
-  const saveDetailedPayment = async (entryId: string) => {
-    setSavingLedgerId(entryId);
+  const saveDetailedPayment = async (uid: string) => {
+    setSavingLedgerId(uid);
     try {
       const timestamp = editDate ? new Date(editDate).getTime() : Date.now();
       // Details ride only with PAID; an UNPAID save is a full clear server-side
       // (the schema refuses details with it — an unpaid member must not display
       // a payment method and transaction note).
       await dbService.setPaidStatus(
-        pool.id, memberUidFor(entryId), editPaidStatus === 'PAID',
+        pool.id, uid, editPaidStatus === 'PAID',
         editPaidStatus === 'PAID'
           ? { paymentMethod: editMethod, paidAt: timestamp, paymentNote: editNote || null }
           : undefined,
@@ -122,25 +130,14 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     }
   };
 
-  const topPlayerName = useMemo(() => {
-    if (entries.length === 0) return 'Sarah K.';
-    const sorted = [...entries].sort((a, b) => {
-      if (pool.type === 'NFL_PICKEM') return (b.totalScore || 0) - (a.totalScore || 0);
-      if (pool.type === 'NFL_SURVIVOR') {
-        if (a.status !== b.status) return a.status === 'ALIVE' ? -1 : 1;
-        return (a.strikesUsed || 0) - (b.strikesUsed || 0);
-      }
-      return (b.seasonTotal || 0) - (a.seasonTotal || 0);
-    });
-    return sorted[0]?.userName || sorted[0]?.ownerName || 'Sarah K.';
-  }, [entries, pool.type]);
-
-  React.useEffect(() => {
-    setBanterFeed([
-      `COMMISSIONER: ${topPlayerName} is currently leading, but historically has collapsed in Week 13. Place your bets accordingly!`,
-      "COMMISSIONER: Friendly reminder that unsubmitted picks lock at kickoff. Don't be that person."
-    ]);
-  }, [topPlayerName]);
+  // Roster truth for every money figure and every member row on this card
+  // (utils/poolRoster — the same merge the Member Roster panel below uses).
+  const roster = useMemo(
+    () => buildPoolRoster({ pool, members, entries })
+      .map(r => ({ ...r, displayName: r.userName || 'Member' }))
+      .sort((a, b) => (a.isOwner ? -1 : b.isOwner ? 1 : a.displayName.localeCompare(b.displayName))),
+    [pool, members, entries],
+  );
 
   // Derived unsubmitted players list.
   // Pick'em: unsubmitted = at least one current-week game without a pick (picks keyed by gameId).
@@ -171,38 +168,43 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     return { total, submitted, pendingCount, percentage };
   }, [entries, unsubmittedPlayers]);
 
-  // Financial Ledger calculations
-  const ledgerStats = useMemo(() => {
-    const fee = castPool.settings?.entryFee || 20;
-    const totalPlayers = entries.length;
-    const paidCount = entries.filter(e => e.paidStatus === 'PAID').length;
-    const collected = paidCount * fee;
-    const remaining = (totalPlayers - paidCount) * fee;
-    return { fee, collected, remaining, total: totalPlayers * fee };
-  }, [entries, castPool.settings?.entryFee]);
+  // Financial Ledger calculations — roster-derived, so a member who joined but
+  // has not submitted an entry is counted. This card previously read `entries`
+  // alone AND defaulted a missing entryFee to 20, so a real pool could report
+  // both "$0 collected of $0" and a $20-per-head pot that was never owed.
+  const pot = useMemo(() => rosterPotStats({ pool, members, entries }), [pool, members, entries]);
+  const unpaidRoster = useMemo(() => roster.filter(r => r.paidStatus !== 'PAID'), [roster]);
 
-  // Filtered unpaid players to show in summary dashboard (MAX 10)
-  const dashboardUnpaidPlayers = useMemo(() => {
-    const unpaid = entries.filter(e => e.paidStatus !== 'PAID');
-    return unpaid.slice(0, 10);
-  }, [entries]);
+  // Unpaid members shown on the summary card (MAX 10)
+  const dashboardUnpaidPlayers = useMemo(() => unpaidRoster.slice(0, 10), [unpaidRoster]);
 
-  // Filtered list of players for full Payment Ledger Modal
+  // Filtered roster for the full Payment Ledger Modal
   const ledgerFilteredPlayers = useMemo(() => {
-    return entries.filter(p => {
-      const name = (p.userName || p.ownerName || '').toLowerCase();
-      const email = (p.email || '').toLowerCase();
-      const query = ledgerSearch.toLowerCase();
-      const matchesSearch = name.includes(query) || email.includes(query);
+    const query = ledgerSearch.toLowerCase();
+    return roster.filter(p => {
+      const matchesSearch =
+        p.displayName.toLowerCase().includes(query) ||
+        (p.email || '').toLowerCase().includes(query) ||
+        (p.paymentNote || '').toLowerCase().includes(query);
 
-      const status = p.paidStatus || 'UNPAID';
       const matchesFilter = ledgerFilter === 'ALL' ||
-                            (ledgerFilter === 'PAID' && status === 'PAID') ||
-                            (ledgerFilter === 'UNPAID' && status !== 'PAID');
+                            (ledgerFilter === 'PAID' && p.paidStatus === 'PAID') ||
+                            (ledgerFilter === 'UNPAID' && p.paidStatus !== 'PAID');
 
       return matchesSearch && matchesFilter;
     });
-  }, [entries, ledgerSearch, ledgerFilter]);
+  }, [roster, ledgerSearch, ledgerFilter]);
+
+  // First kickoff of the displayed week — the only real deadline this card has.
+  // It used to render a hardcoded sixteen-hour countdown unconditionally, on
+  // every pool, whether or not the week held a single game.
+  const nextKickoff = useMemo(() => {
+    const times = weeklyGames
+      .map(g => (g as any).startTime)
+      .map(t => (typeof t === 'number' ? t : Date.parse(t)))
+      .filter(t => Number.isFinite(t)) as number[];
+    return times.length > 0 ? Math.min(...times) : null;
+  }, [weeklyGames]);
 
   const handleNudge = async (player: { uid: string; name: string }) => {
     setIsNudging(player.uid);
@@ -232,45 +234,6 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     setBanterText('');
   };
 
-  const auditLogs = useMemo(() => {
-    const logs = [
-      { time: '10 mins ago', msg: `Commissioner finalized standings for Week ${week - 1 > 0 ? week - 1 : 1}`, severity: 'INFO' },
-      { time: '1 hour ago', msg: `System executed automated schedule synchronization with ESPN APIs for ${_games.length} games`, severity: 'SYSTEM' }
-    ];
-
-    const picker = entries.find(e => e.picks && Object.keys(e.picks).length > 0);
-    if (picker) {
-      logs.push({
-        time: '2 hours ago',
-        msg: `${picker.userName || picker.ownerName} submitted picks for Week ${week}`,
-        severity: 'USER'
-      });
-    } else {
-      logs.push({
-        time: '2 hours ago',
-        msg: `No active picks sheet submissions processed yet for Week ${week}`,
-        severity: 'USER'
-      });
-    }
-
-    const paidPlayer = entries.find(e => e.paidStatus === 'PAID');
-    if (paidPlayer) {
-      logs.push({
-        time: '1 day ago',
-        msg: `Commissioner marked ${paidPlayer.userName || paidPlayer.ownerName} buy-in as PAID`,
-        severity: 'INFO'
-      });
-    } else {
-      logs.push({
-        time: '1 day ago',
-        msg: `Buy-in tracking initialized for ${entries.length} members`,
-        severity: 'INFO'
-      });
-    }
-
-    return logs;
-  }, [entries, week, _games.length]);
-
   // Submission Health PieChart Data (Recharts)
   const submissionPieData = useMemo(() => {
     return [
@@ -284,16 +247,16 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     return [
       {
         name: 'Collected',
-        Amount: ledgerStats.collected,
+        Amount: pot.collected,
         fill: '#0F7B4A'
       },
       {
         name: 'Outstanding',
-        Amount: ledgerStats.remaining,
+        Amount: outstandingDue(pot),
         fill: '#C9A867'
       }
     ];
-  }, [ledgerStats]);
+  }, [pot]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
@@ -344,9 +307,11 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
               <p className="font-body text-xs text-muted leading-relaxed mb-2">
                 <strong className="num">{submissionStats.submitted}</strong> of <strong className="num">{submissionStats.total}</strong> active participants have successfully locked-in their selections.
               </p>
-              <span className="font-display font-bold text-[10px] text-gold-600 dark:text-gold-400 uppercase tracking-[0.08em] flex items-center gap-1.5 animate-pulse">
-                <AlertCircle size={12} /> Deadline approaches in 16 hours
-              </span>
+              {nextKickoff !== null && (
+                <span className="font-display font-bold text-[10px] text-gold-600 dark:text-gold-400 uppercase tracking-[0.08em] flex items-center gap-1.5">
+                  <AlertCircle size={12} /> Picks lock at first kickoff — {formatDeadline(nextKickoff)}
+                </span>
+              )}
             </div>
           </div>
 
@@ -415,9 +380,15 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <div className="md:col-span-2 bg-page border border-line p-3 rounded-lg h-24">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={financialBarData} layout="vertical" margin={{ top: 2, right: 10, left: -25, bottom: 2 }}>
+                {/* A NEGATIVE left margin dragged the category labels off the left
+                    edge — "Collected"/"Outstanding" were clipped away entirely on a
+                    layout="vertical" chart, where the Y axis IS the label column.
+                    The margin must leave room for the widest tick, and the axis
+                    needs an explicit width or recharts falls back to its 60px
+                    default and re-crops the same labels. */}
+                <BarChart data={financialBarData} layout="vertical" margin={{ top: 2, right: 12, left: 4, bottom: 2 }}>
                   <XAxis type="number" stroke="#24507F" fontSize={8} tickFormatter={(v) => `$${v}`} />
-                  <YAxis type="category" dataKey="name" stroke="#24507F" fontSize={8} />
+                  <YAxis type="category" dataKey="name" stroke="#24507F" fontSize={8} width={68} />
                   <Tooltip cursor={{ fill: 'rgba(19,27,43,0.04)' }} contentStyle={{ backgroundColor: 'var(--card)', borderColor: 'var(--line)', color: 'var(--text)', borderRadius: '10px', fontSize: '9px' }} />
                   <Bar dataKey="Amount" radius={[0, 4, 4, 0]}>
                     {financialBarData.map((d, index) => (
@@ -430,48 +401,50 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
             <div className="bg-page border border-line p-3.5 rounded-lg text-center flex flex-col justify-center">
               <span className="font-display font-bold uppercase text-[9px] tracking-[0.08em] text-faint block mb-0.5">Projected Pot</span>
-              <span className="font-display font-bold text-xl text-gold-600 dark:text-gold-400 num">${ledgerStats.total}</span>
+              <span className="font-display font-bold text-xl text-gold-600 dark:text-gold-400 num">${pot.expected}</span>
             </div>
           </div>
 
           {/* Members list limited to 10 UNPAID players */}
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-1">Unpaid Players (<span className="num">{entries.filter(e => e.paidStatus !== 'PAID').length}</span>)</span>
+              <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-1">Unpaid Members (<span className="num">{unpaidRoster.length}</span>)</span>
               <span className="font-display font-bold text-[8px] text-faint uppercase tracking-[0.08em]">Showing Max 10</span>
             </div>
 
             {dashboardUnpaidPlayers.length > 0 ? (
-              dashboardUnpaidPlayers.map((player) => {
-                const entryId = player.id;
-                const isPaid = player.paidStatus === 'PAID';
-                return (
-                  <div
-                    key={entryId}
-                    className="flex justify-between items-center p-3 rounded-lg border border-line bg-page hover:bg-surface transition-all duration-150"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-md font-display font-bold text-xs flex items-center justify-center bg-navy-800 text-white">
-                        {(player.userName || player.ownerName || 'U').substring(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <span className="font-display font-bold text-xs text-[color:var(--text)] block uppercase leading-none mb-1">
-                          {player.userName || player.ownerName || 'Anonymous Player'}
-                        </span>
-                        <span className="font-body font-semibold text-[9px] text-faint">{player.email || 'No email registered'}</span>
-                      </div>
+              dashboardUnpaidPlayers.map((player) => (
+                <div
+                  key={player.uid}
+                  className="flex justify-between items-center p-3 rounded-lg border border-line bg-page hover:bg-surface transition-all duration-150"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-md font-display font-bold text-xs flex items-center justify-center bg-navy-800 text-white">
+                      {player.displayName.substring(0, 2).toUpperCase()}
                     </div>
-
-                    <button
-                      onClick={() => togglePayment(entryId, isPaid)}
-                      disabled={togglingId === entryId}
-                      className="flex items-center gap-2 bg-navy-800 hover:bg-navy-700 text-white px-3.5 py-1.5 rounded-md text-[10px] font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px"
-                    >
-                      {togglingId === entryId ? 'Saving...' : 'Mark Paid'}
-                    </button>
+                    <div>
+                      <span className="font-display font-bold text-xs text-[color:var(--text)] block uppercase leading-none mb-1">
+                        {player.displayName}
+                      </span>
+                      <span className="font-body font-semibold text-[9px] text-faint">{player.email || 'No email registered'}</span>
+                    </div>
                   </div>
-                );
-              })
+
+                  <button
+                    onClick={() => togglePayment(player.uid, false)}
+                    disabled={togglingId === player.uid}
+                    className="flex items-center gap-2 bg-navy-800 hover:bg-navy-700 text-white px-3.5 py-1.5 rounded-md text-[10px] font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px"
+                  >
+                    {togglingId === player.uid ? 'Saving...' : 'Mark Paid'}
+                  </button>
+                </div>
+              ))
+            ) : pot.memberCount === 0 ? (
+              // An empty roster is NOT "all buy-ins cleared" — the old card showed
+              // the green all-clear on a pool nobody had joined.
+              <div className="text-muted font-display font-bold text-xs uppercase text-center py-6 bg-page border border-line rounded-lg">
+                No members have joined yet.
+              </div>
             ) : (
               <div className="text-[#0F7B4A] font-display font-bold text-xs uppercase text-center py-6 bg-[#E4F5EC] border border-[#BEE7D0] rounded-lg flex flex-col items-center gap-1">
                 <CheckCircle size={24} />
@@ -544,6 +517,11 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
           {/* Scrolling Feed of Recent Banters */}
           <div className="space-y-3 max-h-40 overflow-y-auto pr-1">
             <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-1">Live banter feed</span>
+            {banterFeed.length === 0 && (
+              <div className="p-3.5 bg-page border border-line rounded-lg font-body text-xs text-muted leading-relaxed">
+                Nothing posted yet. Anything you post here is local to this browser tab and is not saved.
+              </div>
+            )}
             {banterFeed.map((item, idx) => (
               <div key={idx} className="p-3.5 bg-page border border-line rounded-lg font-body text-xs text-[color:var(--text)] leading-relaxed font-semibold flex items-start gap-2">
                 <Megaphone size={13} className="text-brandred-600 shrink-0 mt-0.5" aria-hidden="true" />
@@ -555,72 +533,35 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
         <div className="mt-6 pt-4 border-t border-line flex justify-between items-center text-[10px]">
           <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">Banter engine status</span>
-          <span className="text-gold-600 dark:text-gold-400 font-display font-bold uppercase tracking-[0.08em]">
-            AI Moderation ACTIVE
+          {/* This used to claim an active AI moderation capability. There is no AI
+              and no moderation here yet — nothing is sent anywhere (HANDOFF item
+              8). PLAN-BANTER-PANEL makes it real; until then the label says
+              what it actually does. */}
+          <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">
+            Draft only — not saved
           </span>
         </div>
       </div>
 
-      {/* CARD 4: COMMISSIONER CONTROLS & TRANSACTION FEED */}
-      <div
-        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
-      >
-        <div>
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Commissioner Actions</h3>
-              <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint mt-0.5">Active League Administration Tools</p>
-            </div>
-            <ShieldCheck size={18} className="text-navy-700 dark:text-gold-400" />
-          </div>
+      {/* CARD 4 IS GONE — it was "Commissioner Actions" and every part of it was
+          fabricated:
 
-          {/* Quick Admin Toggles */}
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <button
-              onClick={() => toast.info('Initiating ESPN Sync score recalculation...')}
-              className="bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold text-xs uppercase tracking-[0.05em] py-4 rounded-lg transition-all duration-150 shadow-red-cta hover:-translate-y-px flex items-center justify-center gap-2"
-            >
-              <RefreshCw size={13} /> Recalculate Scores
-            </button>
+            * "Recalculate Scores" popped a toast announcing that an ESPN score
+              recalculation had begun, and called NOTHING. The real control is
+              "Score & Recap Week N" further down this same page. A commissioner
+              who clicked the decoy before the Hall of Fame game would have been
+              told the scores were recalculating when nothing had happened.
+            * "Toggle Locks" popped a toast announcing a lock change and called
+              nothing. There is no client lock toggle; locks are time-derived.
+            * The "League operations log" invented its own history: hardcoded
+              relative timestamps attached to a standings finalization and an
+              ESPN schedule sync, neither of which had ever run on the pool.
 
-            <button
-              onClick={() => toast.info('Toggling locks status...')}
-              className="bg-navy-800 hover:bg-navy-700 text-white font-display font-bold text-xs uppercase tracking-[0.05em] py-4 rounded-lg transition-all duration-150 hover:-translate-y-px flex items-center justify-center gap-2"
-            >
-              <Lock size={13} /> Toggle Locks
-            </button>
-          </div>
-
-          {/* Interactive Audit Trail Log entries */}
-          <div className="space-y-3">
-            <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-1">League operations log</span>
-            {auditLogs.map((log, idx) => (
-              <div key={idx} className="flex justify-between items-center p-3 bg-page border border-line rounded-lg text-xs">
-                <div>
-                  <span className="font-body text-[color:var(--text)] font-semibold leading-relaxed block">{log.msg}</span>
-                  <span className="font-display font-bold text-[9px] text-faint uppercase tracking-[0.08em]">{log.time}</span>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-[8px] font-display font-bold tracking-[0.16em] uppercase border shrink-0 ml-4 ${
-                  log.severity === 'SYSTEM'
-                    ? 'bg-navy-600/10 border-navy-600/30 text-navy-700 dark:text-gold-400'
-                    : log.severity === 'USER'
-                      ? 'bg-gold-400/10 border-gold-500/40 text-gold-600 dark:text-gold-400'
-                      : 'bg-surface border-line text-muted'
-                }`}>
-                  {log.severity}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-6 pt-4 border-t border-line flex justify-between items-center text-[10px]">
-          <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">Audit logs status</span>
-          <span className="text-gold-600 dark:text-gold-400 font-display font-bold uppercase tracking-[0.08em]">
-            Secured behind TLS & SHA-256
-          </span>
-        </div>
-      </div>
+          The genuine equivalent already exists and is already reachable: the
+          Payments tab renders the append-only payment ledger
+          (pools/{id}/payments) with real timestamps, for the commissioner too.
+          A second copy here would be a duplicate reader, so this card is
+          removed rather than rebuilt. */}
 
       {/* FULL FEATURED PAYMENT LEDGER MODAL */}
       {isLedgerOpen && (
@@ -649,10 +590,13 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
             <div className="p-6 bg-surface border-b border-line space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {[
-                  { title: 'Total Projected', value: `$${ledgerStats.total}`, color: 'text-[color:var(--text)]' },
-                  { title: 'Total Collected', value: `$${ledgerStats.collected}`, color: 'text-[#0F7B4A]' },
-                  { title: 'Outstanding Due', value: `$${ledgerStats.remaining}`, color: 'text-gold-600 dark:text-gold-400' },
-                  { title: 'Clearing Rate', value: `${entries.length > 0 ? Math.round((entries.filter(e => e.paidStatus === 'PAID').length / entries.length) * 100) : 0}%`, color: 'text-navy-700 dark:text-gold-400' }
+                  { title: 'Total Projected', value: `$${pot.expected}`, color: 'text-[color:var(--text)]' },
+                  { title: 'Total Collected', value: `$${pot.collected}`, color: 'text-[#0F7B4A]' },
+                  { title: 'Outstanding Due', value: `$${outstandingDue(pot)}`, color: 'text-gold-600 dark:text-gold-400' },
+                  // Denominator is everyone who JOINED, not everyone with an entry —
+                  // the old figure read 100% on a pool where only the one entry
+                  // holder had paid and three other members had not.
+                  { title: 'Clearing Rate', value: `${clearingRate(pot)}%`, color: 'text-navy-700 dark:text-gold-400' }
                 ].map((stat, idx) => (
                   <div key={idx} className="bg-page border border-line p-3 rounded-lg text-center">
                     <span className="font-display font-bold uppercase text-[8px] tracking-[0.08em] text-faint block mb-0.5">{stat.title}</span>
@@ -708,15 +652,15 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                 <tbody className="divide-y divide-line">
                   {ledgerFilteredPlayers.length > 0 ? (
                     ledgerFilteredPlayers.map((player) => {
-                      const entryId = player.id;
-                      const isEditing = editingEntryId === entryId;
+                      const rowUid = player.uid;
+                      const isEditing = editingEntryId === rowUid;
                       const isPaid = player.paidStatus === 'PAID';
 
                       return (
-                        <tr key={entryId} className="hover:bg-page transition-colors duration-150">
+                        <tr key={rowUid} className="hover:bg-page transition-colors duration-150">
                           {/* Name / Email */}
                           <td className="py-3 px-2">
-                            <span className="font-display font-bold text-[color:var(--text)] block uppercase">{player.userName || player.ownerName || 'Anonymous'}</span>
+                            <span className="font-display font-bold text-[color:var(--text)] block uppercase">{player.displayName}</span>
                             <span className="font-body text-[9px] text-faint">{player.email || 'No email registered'}</span>
                           </td>
 
@@ -792,8 +736,8 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                             {isEditing ? (
                               <div className="flex justify-end gap-1.5">
                                 <button
-                                  onClick={() => saveDetailedPayment(entryId)}
-                                  disabled={savingLedgerId === entryId}
+                                  onClick={() => saveDetailedPayment(rowUid)}
+                                  disabled={savingLedgerId === rowUid}
                                   className="p-1 bg-navy-800 text-white hover:bg-navy-700 rounded-sm transition-all duration-150 disabled:opacity-50"
                                 >
                                   <Save size={14} />
@@ -808,7 +752,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                             ) : (
                               <button
                                 onClick={() => {
-                                  setEditingEntryId(entryId);
+                                  setEditingEntryId(rowUid);
                                   setEditPaidStatus(player.paidStatus || 'UNPAID');
                                   setEditMethod(player.paymentMethod || 'Venmo');
                                   setEditDate(player.paidAt ? new Date(player.paidAt).toISOString().split('T')[0] : '');
@@ -826,7 +770,14 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                   ) : (
                     <tr>
                       <td colSpan={6} className="text-center py-10 text-faint font-body font-bold">
-                        No members matching filter criteria.
+                        {/* An empty ROSTER and an empty FILTER are different facts. The
+                            old table said "no members matching filter criteria" for
+                            both, which read as a filter problem on a pool that simply
+                            had nobody in it — and, before the roster fix, on pools that
+                            did. */}
+                        {roster.length === 0
+                          ? 'No members have joined this pool yet.'
+                          : 'No members match the current search or filter.'}
                       </td>
                     </tr>
                   )}

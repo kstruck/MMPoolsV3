@@ -13,6 +13,7 @@ import { RecordPayoutsCard } from './RecordPayoutsCard';
 import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek } from '../../utils/nflPending';
+import { buildPoolRoster } from '../../utils/poolRoster';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
 
 /**
@@ -178,26 +179,16 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // moment they join, before any pick is made (ADR 0003). Falls back gracefully to entries
   // when Member Records are absent (pre-backfill).
   const roster = useMemo(() => {
-    const byUid = new Map<string, any>();
-    const put = (uid: string, patch: any) => {
-      if (!uid || uid === 'guest') return;
-      byUid.set(uid, { ...(byUid.get(uid) || { uid }), ...patch, uid });
-    };
-    for (const uid of ((pool as any).participantIds || [])) put(uid, {});
-    for (const m of members) put(m.uid, { userName: m.userName, memberPaid: m.paidStatus, hasMember: true, rebuyOwed: m.rebuyOwed, rebuyPaid: m.rebuyPaid });
-    for (const e of entries) {
-      const uid = e.ownerUid || e.id;
-      put(uid, { entry: e, hasEntry: true, entryPaid: e.paidStatus, userName: byUid.get(uid)?.userName || e.userName, status: e.status, strikesUsed: e.strikesUsed, rebuysUsed: e.rebuysUsed, seasonTotal: e.seasonTotal });
-    }
-    const ownerId = (pool as any).ownerId;
-    const rows = [...byUid.values()].map(r => {
+    // The merge itself lives in utils/poolRoster so the Bento Buy-In Ledger reads
+    // the same roster this panel does; only the pick state, the display-name
+    // fallback and the owner-first sort are this surface's own.
+    const rows = buildPoolRoster({ pool, members, entries }).map(r => {
       const picks = r.entry?.picks || {};
       const picked = !!r.hasEntry && (type === 'NFL_PICKEM'
         ? (weeklyGames.length > 0 && weeklyGames.every(g => !!picks[g.id]))
         : !!picks[week]);
       const userName = r.userName || (r.uid === user?.id ? (user?.name || 'You') : 'Member');
-      const paidStatus = r.hasMember ? (r.memberPaid || 'UNPAID') : (r.entryPaid || 'UNPAID');
-      return { ...r, userName, paidStatus, picked, isOwner: r.uid === ownerId };
+      return { ...r, userName, picked };
     });
     return rows.sort((a, b) => (a.isOwner ? -1 : b.isOwner ? 1 : a.userName.localeCompare(b.userName)));
   }, [members, entries, pool, weeklyGames, week, type, user]);
@@ -501,10 +492,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     <div className="max-w-6xl mx-auto space-y-8">
       
       {/* Premium Bento Overview Dashboard */}
-      <NFLManagerBentoDashboard 
-        pool={pool} 
-        entries={entries} 
-        games={games} 
+      <NFLManagerBentoDashboard
+        pool={pool}
+        entries={entries}
+        members={members}
+        games={games}
         week={week} 
         user={user} 
         onSelectTab={onSelectTab} 

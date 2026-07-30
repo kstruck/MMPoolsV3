@@ -353,6 +353,85 @@ callers are all BRACKET or SuperAdmin paths.
 
 ---
 
+## 6b. P5 — the READER side of D13 (added 2026-07-30)
+
+⚖️ **Money surface, so plan-gated. Kevin ruled on 2026-07-28 that this belongs
+here rather than in a new `PLAN-*.md`**, because it is the other half of a defect
+this plan already names.
+
+### What was still wrong after P1–P4
+
+P1 fixed the **writer**: every payment write now goes through `setPaidStatus`,
+which makes the Member Record truth and mirrors the display fields onto the entry.
+§4 item 2 above records why the mirror was required — *"the ledger UI is
+entry-backed"* — and treats that as a constraint to preserve.
+
+It was a constraint worth removing instead. Because the mirror only fires
+`if (entrySnap.exists)`, an entry-backed **reader** cannot see a member who never
+submitted an entry, and there is no write that can fix that. Observed live by
+Kevin on 2026-07-29: on a pool whose members held Member Records but no entry
+documents, the Buy-In Ledger card and the Advanced Payment Ledger modal both
+reported `$0` projected, `$0` collected, `0%` clearing rate and *"no members
+matching filter criteria"* — while the Member Roster panel **on the same page**
+listed those members correctly, because it reads Member Records.
+
+Two figures on that card were independently wrong, and neither needed an empty
+roster to be wrong:
+
+* The entry fee defaulted to `entryFee || 20`, so a pool with no fee projected a
+  pot of $20 per head that nobody owed.
+* Clearing Rate divided paid members by **entry holders**, so a pool where one of
+  four members had paid and only that member had an entry reported **100%**.
+
+### What shipped
+
+There were already **three** independent derivations of this data — the roster
+merge in `NFLManagerView`, the dues maths in `PaymentsPanel` (hardened over four
+codex rounds under P3), and the Bento card's own entries-only version. Adding a
+fourth was the wrong move; the disagreement *was* the multiplicity, the same
+one-definition defect as #315, #319 and HANDOFF item 11.
+
+So the first two moved into `src/utils/poolRoster.ts` unchanged, comments
+included, and all three surfaces now read from there:
+
+| Export | What it is | Readers |
+|---|---|---|
+| `buildPoolRoster` | participantIds + Member Records + entries merged into one row per member, Member Record winning on `paidStatus` and on the payment detail | `NFLManagerView` roster panel, Bento card, Bento modal |
+| `rosterPotStats` | `{ memberCount, paidCount, unpaidCount, collected, expected }` — the P3 dues maths verbatim | `PaymentsPanel` pot, Bento card, Bento modal |
+| `outstandingDue` / `clearingRate` | derived, clamped at 0 and divide-by-zero-safe | Bento card, Bento modal |
+
+`shared/memberRecord.ts` was deliberately **not** touched. Its `MemberRecord`
+interface still omits `paymentMethod` and `paymentNote` even though
+`setPaidStatus` writes both onto the record — a real inaccuracy, but `shared/` is
+compiled into `functions/` by the predeploy hook, so declaring two optional fields
+there would have owed a full functions deploy for a change with no runtime effect.
+Fold it into the next PR that touches `functions/`, together with the now-obsolete
+comment in `setPaidStatus.ts` that still justifies the mirror by the reader being
+entry-backed.
+
+### Evidence
+
+`src/utils/poolRoster.test.ts` — 20 cases covering the entry-less member, the
+unset fee, a stamped `feeOwed: 0`, owed-vs-settled rebuys, the un-stamped
+`rebuyOwed` fallback and its stamped-zero counterpart, partially backfilled pools,
+the pre-backfill path, the guest sentinel and both clamps. **10 mutations applied
+and all 10 killed**, including reinstating `entryFee || 20` and making the pot
+ignore Member Records.
+
+`tests/admin-surface-invariants.test.ts` — wiring invariants plus the T3 fake-card
+guard extended to the commissioner bento (it had only ever covered the super-admin
+one, which is why the same defect class survived there). **8 mutations applied and
+all 8 killed.**
+
+### The mirror stays
+
+Nothing here makes `setPaidStatus`'s entry mirror removable. `reconcilePaymentTruth`
+depends on the two stores converging, and BRACKET pools' entry doc genuinely is
+their payment store (§7). Only the *justification* recorded in §4 item 2 is out of
+date.
+
+---
+
 ## 7. Explicitly out of scope
 
 - **Props payment state (D11).** Props has no payment path at all. Separate

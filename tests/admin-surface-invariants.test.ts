@@ -29,6 +29,107 @@ describe('T3 — no fake dashboard cards', () => {
   });
 });
 
+/**
+ * T3 extended to the COMMISSIONER bento (2026-07-29).
+ *
+ * The T3 guard only ever covered the super-admin bento, which is why the same
+ * defect class survived untouched on the pool-manager one: a mock player name
+ * from DevDashboardPreview was the top-player fallback and seeded the banter
+ * feed with "<name> is currently leading, but historically has collapsed in
+ * Week 13" — on pools where no week had ever been played. Alongside it were an
+ * invented operations log with hardcoded relative timestamps, an unconditional
+ * "deadline in 16 hours", and two commissioner buttons that fired a toast
+ * claiming work had started and called nothing at all.
+ *
+ * These are string checks against the SOURCE on purpose: every one of these
+ * strings was a literal in the file, so a literal is what fails if one returns.
+ */
+describe('T3 — no fabricated data on the commissioner bento', () => {
+  const bento = read('src/components/NFLPoolDashboard/NFLManagerBentoDashboard.tsx');
+
+  // Guard the guard: a renamed/moved file would make every not.toContain below
+  // vacuously pass on an empty-ish string.
+  it('read the commissioner bento source', () => {
+    expect(bento).toContain('NFLManagerBentoDashboard');
+    expect(bento.length).toBeGreaterThan(5000);
+  });
+
+  it.each([
+    // Mock roster name leaked from DevDashboardPreview.tsx.
+    'Sarah K.',
+    // Invented commissioner analysis about a season that has not happened.
+    'historically has collapsed in Week 13',
+    // A countdown that was true of no pool.
+    'Deadline approaches in 16 hours',
+    // Buttons that reported starting work they never started.
+    'Initiating ESPN Sync score recalculation',
+    'Toggling locks status',
+    // Fabricated audit-trail entries with hardcoded relative times.
+    'Commissioner finalized standings for Week',
+    'automated schedule synchronization with ESPN APIs',
+    '10 mins ago',
+    '1 hour ago',
+    '2 hours ago',
+    // Claimed a moderation capability that does not exist.
+    'AI Moderation ACTIVE',
+  ])('fabricated string %j is gone', (s) => {
+    expect(bento).not.toContain(s);
+  });
+
+  // The mock name must also stay out of the shared roster helper the card now
+  // reads, and out of the manager view that renders it.
+  it.each([
+    'src/utils/poolRoster.ts',
+    'src/components/NFLPoolDashboard/NFLManagerView.tsx',
+  ])('%s carries no mock roster name', (p) => {
+    expect(read(p)).not.toContain('Sarah K.');
+  });
+});
+
+/**
+ * The commissioner money card reads ROSTER truth, not entry documents.
+ *
+ * HANDOFF items 1 and 7: every figure on the Buy-In Ledger and in the Advanced
+ * Payment Ledger modal was `entries`-derived, so a pool whose members held
+ * Member Records but no entry documents showed $0 / 0% / "no members" beside a
+ * Member Roster panel on the SAME page that listed them correctly. Root cause is
+ * the half of D13 that P1 could not reach: setPaidStatus mirrors display fields
+ * onto the entry only when the entry exists.
+ *
+ * Behaviour lives in src/utils/poolRoster.test.ts; this pins the WIRING, which
+ * is the part a future edit can quietly undo.
+ */
+describe('commissioner Buy-In Ledger is roster-backed, not entry-backed', () => {
+  const bento = read('src/components/NFLPoolDashboard/NFLManagerBentoDashboard.tsx');
+
+  it('takes Member Records as a prop and feeds them to the shared helpers', () => {
+    expect(bento).toMatch(/members:\s*any\[\]/);
+    expect(bento).toContain("from '../../utils/poolRoster'");
+    expect(bento).toContain('rosterPotStats({ pool, members, entries })');
+    expect(bento).toContain('buildPoolRoster({ pool, members, entries })');
+  });
+
+  it('the manager view actually passes Member Records down', () => {
+    expect(read('src/components/NFLPoolDashboard/NFLManagerView.tsx')).toMatch(
+      /<NFLManagerBentoDashboard[\s\S]{0,400}?members=\{members\}/,
+    );
+  });
+
+  it('no entry-derived money figure survives on the card', () => {
+    // The specific expressions that produced the $0 report. Matching the
+    // expressions rather than the words keeps this from tripping on prose.
+    expect(bento).not.toMatch(/entries\.filter\([^)]*paidStatus/);
+    expect(bento).not.toMatch(/entryFee\s*\|\|\s*20/);
+    expect(bento).not.toContain('ledgerStats');
+  });
+
+  it('the member-facing pot and the commissioner ledger share ONE definition', () => {
+    // Two readers of the same money must not drift; that drift is what let the
+    // roster panel and the ledger card disagree on the same page.
+    expect(read('src/components/PaymentsPanel.tsx')).toContain('rosterPotStats({ pool, members, entries })');
+  });
+});
+
 describe('T7 — Operations tab is wired', () => {
   const admin = read('src/components/SuperAdmin.tsx');
   it('imports OperationsPanel', () => {

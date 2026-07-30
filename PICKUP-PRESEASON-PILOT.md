@@ -27,14 +27,13 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 ---
 
-## 0. State as of 2026-07-28 — read this before anything else
+## 0. State as of 2026-07-30 — read this before anything else
 
-**Everything through #317 is merged AND deployed.** The deployed SHA is the
+**Everything through #321 is merged AND deployed.** The deployed SHA is the
 tagged claim in §2 — not repeated here, so it cannot rot.
 **FUNCTIONS and RULES queues: EMPTY. FRONTEND queue: a Coolify rebuild is OWED**
-— not for #313–#317, #319 or #320 (all three rebuilt; the CSP fix is verified live
-and Sentry now delivers from prod), but for the 2026-07-29 AdminRoute fix, which
-changes `src/**`. See §4.
+— not for #313–#317, #319, #320 or #321 (all rebuilt and verified live), but for
+the 2026-07-30 Bento truth pass, which changes `src/**`. See §4.
 
 Five PRs shipped on 2026-07-28: #313 (payment fallback removal + the post-commit
 projection fix), #314 (reminder delivery outcomes), #315 (one definition of the
@@ -42,15 +41,17 @@ sim-pool rule), #316/#317 (docs). Functions were deployed twice, the second run
 reporting every function `Skipped (No changes detected)` — that all-Skipped run
 is the evidence, not the absence of an error. Rules unchanged by all five.
 
-✅ **The rebuild owed on 2026-07-28 is DONE.** The live bundle moved
-`index-Na2D7cdu.js` → **`index-gn5gQtFU.js`**, verified in the browser with cache
-disabled. That cleared the #297/#298 dependency-bump debt AND #313/#315's
-frontend changes in one rebuild. ✅ **#319's rebuild is ALSO DONE** — bundle
-`index-gn5gQtFU.js` → **`index-DYJ4N7zt.js`** (Kevin, 2026-07-29, confirmed from
-his browser console), so the seasonType fix is live. ⚠️ **A NEW rebuild is owed
-for the CSP fix**, which changes `nginx.conf` — baked into the image at
-`Dockerfile:37`, so it reaches nobody until Coolify rebuilds. Dashboard URL in
-HANDOFF's STOP POINT box.
+✅ **Every rebuild owed before 2026-07-30 is DONE**, each verified by the live
+bundle hash actually moving: `index-Na2D7cdu.js` → `index-gn5gQtFU.js` (#297/#298
+dependency bumps plus #313/#315's frontend changes) → `index-DYJ4N7zt.js` (#319
+seasonType, Kevin 2026-07-29) → **`index-D1wLGiMy.js`** (#320 CSP + #321
+AdminRoute). The CSP fix needed a rebuild for a different reason worth
+remembering: it changes `nginx.conf`, which is baked into the image at
+`Dockerfile:37`, so it reaches nobody until Coolify rebuilds — and an
+`nginx.conf`-only change does **not** move the bundle hash, so verify that class
+by curling the response header instead. ⚠️ **A NEW rebuild is owed for the
+2026-07-30 Bento truth pass**, which changes `src/**`. Dashboard URL in HANDOFF's
+STOP POINT box.
 (Historical: the 2026-07-25 rebuild carried #279's `NFLManagerView` cutover onto
 the `updatePoolSettings` callable and was smoke-tested in prod.)
 
@@ -175,18 +176,24 @@ deployed. What is left:
 6. ~~**Add Sentry's ingest host to the CSP.**~~ **DONE 2026-07-29** — browser-side
    Sentry had been CSP-blocked since 2026-07-16 and every client error was
    silently dropped; HANDOFF's "Sentry confirmed live in prod" claim was false.
-   Guarded by `tests/csp-invariants.test.ts`. **Needs a Coolify rebuild to take
-   effect.**
+   Guarded by `tests/csp-invariants.test.ts`. **Rebuilt and verified live
+   2026-07-29** — the header returns the ingest host on all three nginx location
+   blocks and a real event landed in Sentry from prod.
 7. ~~**Route the Manage-My-Pools cog to the right surface.**~~ **DONE
    2026-07-29** — the cog was never the bug. `AdminRoute` had no branch for the
    three NFL season types, so they hit its `// Fallback for unknown types`.
    Fixed in the router, which closed all three entry points at once. No
    authorization change: the ownership guard precedes every branch. Detail in
    HANDOFF's STOP POINT box, item 5.
-8. **Absorb the Bento defects into the tabbed split** — the clipped chart
-   (negative left margin), the entries-derived ledger card AND modal, the five
-   duplicate save buttons, and the fabricated `Sarah K.` banter seed all live on
-   the same two components. Four findings, one refactor.
+8. ~~**Absorb the Bento defects into the tabbed split.**~~ **MOSTLY DONE
+   2026-07-30** — the clipped chart, the entries-derived ledger card AND modal,
+   and the fabricated banter seed shipped as their own PR instead, because the
+   money surfaces should not wait on a layout refactor. Extending the T3 fake-card
+   invariant to that file turned up three more fabrications (two no-op
+   commissioner buttons, an invented audit trail, a hardcoded pick deadline), all
+   removed. **Still open: the five duplicate save buttons**, which belong to the
+   tabbed split — item 6 below — since that is the change that removes the reason
+   they exist. Detail in HANDOFF's STOP POINT box, items 1/6/7/9.
 9. **Make the manager banter panel real** — Gemini-backed, persisted, deletable,
    **5 posts/day/pool enforced server-side** (Kevin's ruling 2026-07-29).
    **PLAN-GATED**: new callable + collection + rules = the authorization trigger.
@@ -425,7 +432,7 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — functions and rules EMPTY; FRONTEND REBUILD OWED for the CSP fix (2026-07-29)
+## 4. Deploy queue — functions and rules EMPTY; FRONTEND REBUILD OWED for the Bento truth pass (2026-07-30)
 
 > **Historical (2026-07-25), kept for the recipe — not a current queue claim;
 > the current queue is the paragraph below this block.** #279 deployed functions → rules → Coolify
@@ -440,13 +447,15 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 > without `✔ Deploy complete!`, printed no error, and left 10 functions stale.
 > The all-Skipped report is the evidence; a missing error is not.
 
-**As of 2026-07-29 the FUNCTIONS and RULES queues are EMPTY and the FRONTEND
+**As of 2026-07-30 the FUNCTIONS and RULES queues are EMPTY and the FRONTEND
 queue is NOT.** All three were empty at `0a705c0` (#313–#317 deployed, second
-full-fleet run all-`Skipped`; rules unchanged by all five; Coolify rebuilt to
-`index-gn5gQtFU.js`). The seasonType-filter fix then changed `src/**` only, which
-the table below makes a **manual Coolify trigger** — no functions or rules
-deploy is owed by it, and none should be run. Verification in HANDOFF's STOP
-POINT box. The
+full-fleet run all-`Skipped`; rules unchanged by all five). Since then #319,
+#320, #321 and the 2026-07-30 Bento truth pass have ALL been `src/**`,
+`nginx.conf`, docs and tests only — which the table below makes a **manual
+Coolify trigger** and nothing else. **No functions or rules deploy is owed by any
+of them, and none should be run.** The Bento PR deliberately avoided touching
+`shared/`, which the table's second row would have turned into a functions
+deploy. Verification in HANDOFF's STOP POINT box. The
 deployed source SHA is the tagged claim in §2 — not repeated here, so it cannot
 drift out of sync with it. `main` advances past it with every
 docs-only commit — that is drift in the marker, not a deploy queue; the queue is
@@ -542,7 +551,8 @@ Always confirm the change is in the file on disk before deploying — not that
    re-fetch built), otherwise a game finalizing >24h after kickoff is never
    observed. HANDOFF's STOP POINT box carries the same two.
    (~~Also owed: the Coolify rebuild for #297/#298~~ — **DONE 2026-07-28**,
-   bundle `index-gn5gQtFU.js`. Nothing is owed on the frontend.)
+   bundle `index-gn5gQtFU.js`. For the CURRENT frontend queue see §0 and §4, not
+   this line: rebuilds have been owed and cleared several times since.)
 3. **NFL-2 decision** — build or skip alarm A3(b), the synthetic pick probe.
    Needs a prod probe identity + probe pool. Recommendation on file: skip for
    the pilot, revisit before charging money in September.
