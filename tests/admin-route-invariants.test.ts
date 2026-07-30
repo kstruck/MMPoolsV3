@@ -33,8 +33,15 @@ describe('AdminRoute — every pool type has a destination', () => {
     expect([...EXPLICIT, ...REDIRECTED].sort()).toEqual([...POOL_TYPES].sort());
   });
 
-  it.each(EXPLICIT)('branches explicitly on %s', type => {
-    expect(ADMIN_ROUTE).toContain(`'${type}'`);
+  // Asserting the COMPARISON, not just the string. 'SQUARES' also appears inside
+  // the fallback's error message, so a bare toContain would pass even if its
+  // branch were deleted.
+  it.each(['PROPS', 'NFL_PLAYOFFS', 'BRACKET'])('compares type === %s', type => {
+    expect(ADMIN_ROUTE).toContain(`currentPool.type === '${type}'`);
+  });
+
+  it('reaches SQUARES by falling through the guard clause', () => {
+    expect(ADMIN_ROUTE).toContain("currentPool.type !== 'SQUARES'");
   });
 
   it('routes NFL season pools through the shared predicate, not a local list', () => {
@@ -57,8 +64,8 @@ describe('AdminRoute — every pool type has a destination', () => {
     const guard = ADMIN_ROUTE.indexOf('You do not have permission to manage this pool');
     expect(guard).toBeGreaterThan(-1);
     expect(ADMIN_ROUTE.indexOf('isNflSeasonType(')).toBeGreaterThan(guard);
-    for (const type of EXPLICIT) {
-      expect(ADMIN_ROUTE.indexOf(`'${type}'`)).toBeGreaterThan(guard);
+    for (const type of ['PROPS', 'NFL_PLAYOFFS', 'BRACKET']) {
+      expect(ADMIN_ROUTE.indexOf(`currentPool.type === '${type}'`)).toBeGreaterThan(guard);
     }
   });
 });
