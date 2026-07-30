@@ -1,4 +1,4 @@
-# HANDOFF — Session entry point (updated 2026-07-30: the commissioner Buy-In Ledger reads ROSTER truth and the fabricated cards are gone; a FRONTEND rebuild is owed for that)
+# HANDOFF — Session entry point (updated 2026-07-30: the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, and ALL THREE DEPLOY QUEUES ARE EMPTY)
 
 > ## ✅ STOP POINT 2026-07-28 — #313–#317 SHIPPED; functions, rules and frontend all current
 >
@@ -36,12 +36,19 @@
 > **`index-D1wLGiMy.js`**, read straight off the prod HTML. Kevin then confirmed
 > in the browser that the cog opens the NFL commissioner surface and Back works.
 >
-> ⚠️ **FRONTEND: a rebuild is OWED for the Bento truth pass (PR A, 2026-07-30)**,
-> which changes `src/**`. **FUNCTIONS and RULES stay EMPTY — do NOT deploy
-> either.** That PR touches `src/` and `tests/` only; it deliberately does not
-> touch `shared/`, which is compiled into functions and would have pulled a
-> functions deploy along with it.
-> Dashboard:
+> ✅ **The Bento truth pass (#322, merged `6676580`) is REBUILT AND VERIFIED
+> LIVE.** The rebuild was triggered 2026-07-30 and the live bundle moved
+> `index-D1wLGiMy.js` → **`index-C31xivRN.js`**, read straight off the prod HTML.
+> The hash MUST move for a `src/**` change, and it did.
+>
+> ✅ **ALL THREE DEPLOY QUEUES ARE EMPTY.** #322 touches `src/` and `tests/` only
+> — `git diff --name-only origin/main...HEAD -- functions/ shared/ firestore.rules`
+> returned zero files — so functions and rules remain ≡ the tagged SHA above. It
+> deliberately avoided `shared/`, which is compiled into functions and would have
+> pulled a functions deploy along with it. **Do NOT deploy functions or rules for
+> frontend-only work.**
+>
+> Dashboard, for the next time a `src/**` change lands:
 > <http://72.60.68.7:8000/project/ycoooow0g4c08ogso404k8o4/environment/ogs0cg0gg0kcgkgc8sg4c8g4/application/ics4kkww0c8oo0gw4wkg8w4o/deployment>
 > → **Redeploy**.
 >
