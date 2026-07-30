@@ -32,9 +32,9 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 **Everything through #317 is merged AND deployed.** The deployed SHA is the
 tagged claim in §2 — not repeated here, so it cannot rot.
 **FUNCTIONS and RULES queues: EMPTY. FRONTEND queue: a Coolify rebuild is OWED**
-— not for #313–#317 or #319, both of which have been rebuilt, but for the
-2026-07-29 CSP fix, which changes `nginx.conf`. See §4. Until it runs,
-browser-side Sentry stays blocked.
+— not for #313–#317, #319 or #320 (all three rebuilt; the CSP fix is verified live
+and Sentry now delivers from prod), but for the 2026-07-29 AdminRoute fix, which
+changes `src/**`. See §4.
 
 Five PRs shipped on 2026-07-28: #313 (payment fallback removal + the post-commit
 projection fix), #314 (reminder delivery outcomes), #315 (one definition of the
@@ -177,10 +177,12 @@ deployed. What is left:
    silently dropped; HANDOFF's "Sentry confirmed live in prod" claim was false.
    Guarded by `tests/csp-invariants.test.ts`. **Needs a Coolify rebuild to take
    effect.**
-7. **Route the Manage-My-Pools cog to the right surface.** It goes to
-   `/admin/:id` for every pool type and `AdminRoute` serves only SQUARES, so the
-   commissioner's primary nav dead-ends on every NFL pool. Next up after the CSP
-   fix. Detail in HANDOFF's STOP POINT box, item 5.
+7. ~~**Route the Manage-My-Pools cog to the right surface.**~~ **DONE
+   2026-07-29** — the cog was never the bug. `AdminRoute` had no branch for the
+   three NFL season types, so they hit its `// Fallback for unknown types`.
+   Fixed in the router, which closed all three entry points at once. No
+   authorization change: the ownership guard precedes every branch. Detail in
+   HANDOFF's STOP POINT box, item 5.
 8. **Absorb the Bento defects into the tabbed split** — the clipped chart
    (negative left margin), the entries-derived ledger card AND modal, the five
    duplicate save buttons, and the fabricated `Sarah K.` banter seed all live on

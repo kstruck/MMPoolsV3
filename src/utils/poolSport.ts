@@ -3,8 +3,7 @@
 // copies of the same switch, and NFL season pools fell through to "Other").
 
 import { isSimPool } from '@shared/testPool';
-
-const NFL_SEASON_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
+import { NFL_SEASON_TYPES } from '@shared/poolTypes';
 
 /** Display bucket for a pool's `league` field (SQUARES + legacy fallback). */
 export function getLeagueDisplayName(league: string | undefined): string {
@@ -34,7 +33,7 @@ export function getPoolSport(pool: SportClassifiable): string {
   if (pool.type === 'BRACKET') return 'March Madness';
   if (pool.type === 'NFL_PLAYOFFS') return 'NFL Playoffs';
   if (pool.type === 'PROPS') return 'Props Pool';
-  if (NFL_SEASON_TYPES.includes(pool.type ?? '')) return 'NFL Football';
+  if ((NFL_SEASON_TYPES as readonly string[]).includes(pool.type ?? '')) return 'NFL Football';
   // SQUARES and any legacy type: bucket by league.
   return getLeagueDisplayName(pool.league);
 }

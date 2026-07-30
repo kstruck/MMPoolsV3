@@ -1,4 +1,4 @@
-# HANDOFF — Session entry point (updated 2026-07-29: browser-side Sentry was CSP-blocked for 13 days and is fixed; #319 deployed; a FRONTEND rebuild is owed for the CSP fix)
+# HANDOFF — Session entry point (updated 2026-07-29: Sentry delivery PROVEN in prod for the first time; /admin/:id no longer dead-ends on NFL pools; a FRONTEND rebuild is owed)
 
 > ## ✅ STOP POINT 2026-07-28 — #313–#317 SHIPPED; functions, rules and frontend all current
 >
@@ -24,11 +24,15 @@
 > also cleared the #297/#298 dependency-bump debt and #313/#315's frontend
 > changes carried by the previous one.
 >
-> ⚠️ **FRONTEND: a rebuild is OWED AGAIN for the CSP fix.** It changes
-> `nginx.conf` (and `firebase.json`, which serves nothing here), so
-> **FUNCTIONS and RULES stay EMPTY — do NOT deploy either.** `nginx.conf` is
-> baked into the image at `Dockerfile:37`, so the CSP change reaches nobody until
-> Coolify rebuilds. **Until then browser-side Sentry stays blocked.**
+> ✅ **The CSP fix (#320) is MERGED, REBUILT and VERIFIED LIVE.** Confirmed by
+> reading the prod response header on all three nginx location blocks — `/`,
+> `/pool/:id` and `/join/:id` all return `https://*.ingest.us.sentry.io` in
+> `connect-src` — and then by an event landing in Sentry (see the correction box
+> below). Checking all three mattered: patching two of three would have looked
+> identical from the homepage.
+>
+> ⚠️ **FRONTEND: a rebuild is OWED AGAIN for the AdminRoute fix**, which changes
+> `src/**`. **FUNCTIONS and RULES stay EMPTY — do NOT deploy either.**
 > Dashboard:
 > <http://72.60.68.7:8000/project/ycoooow0g4c08ogso404k8o4/environment/ogs0cg0gg0kcgkgc8sg4c8g4/application/ics4kkww0c8oo0gw4wkg8w4o/deployment>
 > → **Redeploy**.
@@ -119,7 +123,20 @@
 > two more turned up while verifying them. Every one is confirmed in source. None
 > is a data-integrity problem — the authoritative stores are correct throughout.
 >
-> 5. **The cog on Manage My Pools is a dead end for every non-SQUARES pool.**
+> 5. ✅ **CLOSED 2026-07-29 — the cog was a dead end for every non-SQUARES pool.**
+>    Root cause was NOT the cog. `AdminRoute` branched on PROPS, NFL_PLAYOFFS,
+>    BRACKET and SQUARES — four of the seven `POOL_TYPES` — so the three NFL season
+>    types fell through to the branch its own comment calls
+>    `// Fallback for unknown types`. Fixing it in the router closed all three
+>    entry points at once instead of patching each card. NFL pools now redirect to
+>    `/pool/:id?tab=manager`, which is where their commissioner surface actually
+>    lives; the tab rides in the URL by design, so mounting a second copy of the
+>    dashboard at `/admin/:id` would have given that tab two URLs and nowhere to
+>    keep state. **No authorization change** — the ownership guard at
+>    `AdminRoute:78-81` sits above every branch, and `PoolRoute` computes
+>    `isManager` itself, so the redirect defers the check rather than widening it.
+>    Guarded by `tests/admin-route-invariants.test.ts`, which fails if an eighth
+>    pool type is added without an admin destination. Original report:
 >    `GlobalCommissionerDashboard.tsx:102` navigates to `/admin/${pool.id}`
 >    unconditionally; `AdminRoute.tsx:143` serves only `SQUARES` and renders
 >    *"Admin panel is only available for SQUARES pools"* for anything else — its
@@ -165,16 +182,34 @@
 >    `tests/admin-surface-invariants.test.ts`, which does not cover this file.
 >    🔨 **KEVIN'S RULING 2026-07-29: remove it** — delete the seed and the
 >    fallback, show an honest empty state.
-> 10. **The "View" button on ManagerDashboard is broken.**
->    `ManagerDashboard.tsx:786` builds its target with BACKSLASHES —
->    `window.location.href = \`\pool\${pool.id}\`` — and `\p` is not an escape
->    sequence, so it navigates to a literal `\pool\<id>`. Read from source;
->    **not reproduced in a browser.**
+> 10. ❌ **RETRACTED 2026-07-29 — this finding was NOT REAL.** It claimed
+>    `ManagerDashboard.tsx:786` built its target with backslashes
+>    (`` `\pool\${pool.id}` ``). It does not, and it never has:
+>    `git log -S '`\pool\${pool.id}`' -- src/components/ManagerDashboard.tsx`
+>    returns **no commits**, and the line reads `` `/pool/${pool.id}` `` at the
+>    byte level (`od -c`). It was a misread of rendered grep output, asserted
+>    without reproducing — the exact "a scary reading of a command's output is a
+>    hypothesis, not a finding" failure CLAUDE.md §2c warns about. Left in place
+>    rather than deleted so the retraction is visible to whoever read the claim.
 >
-> **Item 5 is queued next. Items 6, 7, 9 and the duplicate-save item 3 are all on
+>    **The related finding that IS real** — same class, different file:
+>    `AdminRoute.tsx:85` built the Bracket share URL as
+>    `` `${window.location.origin} /pool/${identifier} ` `` — a space on each side
+>    of the path, so every Bracket share link carried
+>    `https://host /pool/abc `. Verified at the byte level before acting on it
+>    this time. **FIXED 2026-07-29** and guarded by
+>    `tests/admin-route-invariants.test.ts`. Stray whitespace in a template
+>    literal fails no typecheck, no lint and no existing test, which is why it
+>    survived.
+> 11. **`src/utils/poolSport.ts` kept a private copy of `NFL_SEASON_TYPES`**
+>    while `shared/poolTypes.ts:21` holds the canonical list plus an
+>    `isNflSeasonType` predicate. Same one-definition defect as #315 and #319, in
+>    a file #315 had already touched. **FIXED 2026-07-29** — it now delegates.
+>
+> **Items 6, 7, 9 and the duplicate-save item 3 are all on
 > `NFLManagerBentoDashboard`/`NFLManagerView` and should be absorbed into the
 > tabbed-split PR rather than fixed four separate times.** Item 8 waits on its
-> plan; item 10 is recorded, unbuilt.
+> plan.
 >
 > ### Standing, unrelated to this deploy
 >
@@ -1073,7 +1108,30 @@ PR [#171](https://github.com/kstruck/MMPoolsV3/pull/171) (all 7 plan items — S
 > either way.
 >
 > Fixed 2026-07-29 by adding `https://*.ingest.us.sentry.io` to all four CSP
-> declarations, guarded by `tests/csp-invariants.test.ts`. **This is the third
+> declarations (#320), guarded by `tests/csp-invariants.test.ts`.
+>
+> **PROVEN END-TO-END, at the destination — 2026-07-29.** Before the fix the
+> project had received exactly ONE event in its entire lifetime:
+> `phase2-sentry-smoke-test`, Jul 17 05:32 UTC, tagged `url
+> http://localhost:5173/` **100%** and `environment development` **100%**. That is
+> the Vite dev server — no nginx, therefore no CSP — which is precisely why the
+> smoke test passed while prod never worked. `MARCH-MELEE-POOLS-WEB-2` did not
+> exist; Sentry rejected the short ID as invalid (checked `WEB-1` as a control to
+> confirm that was a real absence and not bad filter syntax). So production
+> events, ever: **zero**.
+>
+> After the rebuild, Kevin threw an uncaught error on the live site — the same
+> mechanism the Jul 17 event used, `auto.browser.browserapierrors.setTimeout` —
+> and `csp-verify 2026-07-30T04:35:36.261Z` arrived within a minute as
+> **`MARCH-MELEE-POOLS-WEB-2`**, tagged `environment production`. **That short-ID
+> counter incrementing for the first time in the project's life is the proof**,
+> not the absence of a console error.
+>
+> Two practical notes for next time: `Sentry.captureMessage` does NOT work from
+> the console — `src/sentry.ts` loads the SDK by dynamic `import()` and never puts
+> it on `window`, so throw an uncaught error instead. And `tracesSampleRate` is
+> `0.2` outside dev, so a passive page-load check is a 1-in-5 dice roll and its
+> silence means nothing. **This is the third
 > instance of the same failure mode** — after #314's unbound
 > `COURIER_AUTH_TOKEN` and the zero-counter reminder heartbeat: a send path that
 > swallowed everything, where the absence of output read as health. When
