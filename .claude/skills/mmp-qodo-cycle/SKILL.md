@@ -96,18 +96,24 @@ confusion (PR #116/#117, see `mmp-change-control`); do not reintroduce the shape
 of it.
 
 Background watcher — **LIVE again as of 2026-07-30.** (Bash run_in_background;
-harness re-invokes on exit; note tool timeout caps ~10 min — re-arm on wake if
-still empty):
+harness re-invokes on exit; the tool caps a run at roughly 10 minutes.)
+
+**If it wakes still empty, re-arm it unchanged.** **If it wakes mid-settle — i.e.
+it printed nothing but qodo HAS posted — re-arm with the SAME `SINCE` and skip
+straight to phase 2**; do not treat the interruption as a timeout and do not
+restart the floor from a fresh detect. The phases below are sized to fit one
+10-minute run (4 min detect + ~5 min settle), so this should be rare rather than
+routine.
 
 **Its author login is `qodo-code-review[bot]`** on the REST endpoints and
 `qodo-code-review` via `gh pr view` — the `[bot]` suffix is present in one and
-absent in the other, which is why the filters below differ. Confirmed empirically
-against #231, #235 and #240, the PRs where its findings were valid; do not guess
-this from memory.
+absent in the other. Confirmed empirically against #231, #235 and #240, the PRs
+where its findings were valid; do not guess this from memory. The watcher below
+is entirely REST, so it only needs the `[bot]` form; the `gh pr view` form still
+matters if you filter output from §2's review query.
 
 ```bash
-QB='qodo-code-review[bot]'    # REST endpoints
-QG='qodo-code-review'         # gh pr view
+QB='qodo-code-review[bot]'    # REST — the watcher is all REST, so this is the only one it needs
 NOISE='busy working|trial has ended|reviews are paused|quota|billing'
 
 # SET THIS IMMEDIATELY BEFORE the push you want reviewed:
@@ -115,18 +121,25 @@ NOISE='busy working|trial has ended|reviews are paused|quota|billing'
 # On the FIRST arming of a new PR, the epoch default is correct.
 SINCE="${SINCE:-1970-01-01T00:00:00Z}"
 
-inline() { gh api --paginate repos/kstruck/MMPoolsV3/pulls/<N>/comments \
+# ALL THREE on paginated REST. `gh pr view --json` is GraphQL and returns only
+# the first page, so on a busy PR a qodo summary or review body past that cap is
+# invisible and every predicate stays 0 while qodo has in fact reported.
+R="repos/kstruck/MMPoolsV3"
+inline() { gh api --paginate $R/pulls/<N>/comments \
     -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | .id" | wc -l; }
-reviewbody() { gh pr view <N> --json reviews \
-    -q ".reviews[] | select(.author.login == \"$QG\") | select(.body != \"\") | select(.submittedAt > \"$SINCE\") | .id" | wc -l; }
-summary() { gh pr view <N> --json comments \
-    -q ".comments[] | select(.author.login == \"$QG\") | select(.createdAt > \"$SINCE\") | select(.body | test(\"$NOISE\"; \"i\") | not) | .id" | wc -l; }
+reviewbody() { gh api --paginate $R/pulls/<N>/reviews \
+    -q ".[] | select(.user.login == \"$QB\") | select(.body != \"\") | select(.submitted_at > \"$SINCE\") | .id" | wc -l; }
+summary() { gh api --paginate $R/issues/<N>/comments \
+    -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | select(.body | test(\"$NOISE\"; \"i\") | not) | .id" | wc -l; }
 
-# PHASE 1 — detect any qodo artifact
+# PHASE 1 — detect any qodo artifact. Deliberately 4 min, NOT 9: the settle phase
+# below needs its 180s floor plus quiet polls, and the background tool is capped
+# around 10 minutes. A 9-minute detect phase leaves no room to settle and the
+# watcher gets killed after qodo has posted but before it reports.
 SEEN=0
-for i in $(seq 1 12); do
+for i in $(seq 1 8); do
   [ "$(inline)" -gt 0 ] || [ "$(reviewbody)" -gt 0 ] || [ "$(summary)" -gt 0 ] && { SEEN=1; break; }
-  sleep 45
+  sleep 30
 done
 [ "$SEEN" = 1 ] || { echo TIMEOUT; exit 0; }
 
@@ -199,12 +212,17 @@ draft of this very file — do not "simplify" any of them back out.**
    *qodo did not re-review*" instruction below becomes unreachable. Stamp
    `SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)` **before** the push and the watcher
    counts only what arrives after it.
-5. **`--paginate`, or findings 31+ vanish.** The REST inline-comment endpoint
-   returns 30 per page by default. On a PR that already has 30+ inline comments,
-   an unpaginated read misses qodo's findings entirely — and because a qodo
-   summary can independently satisfy `C`, the watcher would exit reporting a
-   review whose actual findings it never fetched. The full-report step in §2 uses
-   `--paginate` for the same reason.
+5. **Paginated REST on ALL THREE surfaces.** Two separate holes, the second
+   introduced by the fix for the first. (i) The REST inline-comment endpoint
+   returns 30 per page, so on a PR with 30+ inline comments an unpaginated read
+   misses qodo's findings entirely — and since a summary independently satisfies
+   the predicate, the watcher would exit reporting a review whose findings it
+   never fetched. (ii) That fix then used `gh pr view --json` for the other two
+   surfaces, which is **GraphQL and also returns only a first page**: a qodo
+   summary or review body beyond that cap leaves every predicate at 0 while qodo
+   has in fact reported, so the check times out on a PR that WAS reviewed. All
+   three surfaces now use `gh api --paginate`, which has the side benefit of one
+   author constant (`$QB`) rather than two. §2 paginates for the same reason.
 
 **TIMEOUT is not clean.** If the window expires with nothing, say so explicitly —
 "qodo did not report within N minutes" — rather than treating silence as a pass.
