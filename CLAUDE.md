@@ -75,7 +75,15 @@ while each `codex exec review` is a paid API call, so the round budget is spent
 on codex, not qodo.
 
 **The stopping rule is joint.** Stop when **qodo is clean AND a codex round is
-clean AND your own read of the diff agrees**. Two independent reviewers coming
+clean AND your own read of the diff agrees**.
+
+⚠️ **"qodo is clean" means qodo has REPORTED and every finding it raised is fixed
+or rejected with written reasoning — NOT that a fresh qodo pass came back empty.**
+qodo was observed **not** re-reviewing after a fix push on the same PR, so gating
+on a second clean pass is unsatisfiable and would deadlock this rule on exactly
+the PRs where it found something real. Its `✓ Resolved` marks are the
+confirmation. Re-arming its watcher after a fix is fine; *waiting* on it is not,
+and a timeout is "qodo did not re-review", never "qodo is clean". Two independent reviewers coming
 back clean is stronger evidence than one doing so, so when qodo is also clean you
 should reach that bar in **fewer codex rounds** than the §2c cap allows — spend
 the cap only when the reviewers disagree, when findings keep landing, or on a

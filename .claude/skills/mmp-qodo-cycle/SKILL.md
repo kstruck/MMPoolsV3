@@ -74,21 +74,42 @@ Background watcher — **LIVE again as of 2026-07-30.** (Bash run_in_background;
 harness re-invokes on exit; note tool timeout caps ~10 min — re-arm on wake if
 still empty):
 
+**Its author login is `qodo-code-review[bot]`** on the REST endpoints and
+`qodo-code-review` via `gh pr view` — the `[bot]` suffix is present in one and
+absent in the other, which is why the filters below differ. Confirmed empirically
+against #231, #235 and #240, the PRs where its findings were valid; do not guess
+this from memory.
+
 ```bash
+Q='qodo-code-review'
 for i in $(seq 1 12); do
-  R=$(gh api repos/kstruck/MMPoolsV3/pulls/<N>/comments -q 'length')
-  S=$(gh pr view <N> --json reviews -q '[.reviews[] | select(.body != "")] | length')
-  [ "${R:-0}" -gt 0 ] || [ "${S:-0}" -gt 0 ] && { echo "QODO FINDINGS POSTED"; exit 0; }
+  # Inline findings (REST: login carries the [bot] suffix)
+  R=$(gh api repos/kstruck/MMPoolsV3/pulls/<N>/comments \
+        -q "[.[] | select(.user.login | startswith(\"$Q\"))] | length")
+  # Review-surface report with a real body (gh pr view: no [bot] suffix)
+  S=$(gh pr view <N> --json reviews \
+        -q "[.reviews[] | select(.author.login | startswith(\"$Q\")) | select(.body != \"\")] | length")
+  # A CLEAN summary can land as an issue comment — count it, but never the placeholder
+  C=$(gh pr view <N> --json comments \
+        -q "[.comments[] | select(.author.login | startswith(\"$Q\")) | select(.body | test(\"busy working\"; \"i\") | not)] | length")
+  [ "${R:-0}" -gt 0 ] || [ "${S:-0}" -gt 0 ] || [ "${C:-0}" -gt 0 ] && { echo "QODO REPORTED"; exit 0; }
   sleep 45
 done; echo TIMEOUT
 ```
 
-⚠️ **It waits on FINDINGS, not on activity.** An earlier version exited on
-`comments + reviews > 0`, which the placeholder alone satisfies — qodo posts
-*"Qodo is busy working"* as an issue comment before it has reviewed anything, so
-that watcher returned "posted" seconds in and the cycle recorded a clean review
-that had never happened. This one polls the INLINE findings endpoint and
-non-empty review bodies, and ignores issue comments entirely.
+⚠️ **Two things this filtering is for, both of which broke earlier versions.**
+
+1. **Author.** An earlier version counted *every* inline comment and non-empty
+   review body regardless of who wrote them, so a human comment landing before
+   qodo finished would fire the watcher and start the absorption flow with no
+   qodo result at all.
+2. **The placeholder vs. a clean report.** qodo posts *"Qodo is busy working"* as
+   an issue comment **first**, so a watcher that exits on any activity returns
+   seconds in and records a review that never happened. But the opposite
+   over-correction is also wrong: ignoring issue comments outright would miss a
+   qodo summary that reports **no findings**, which is exactly the clean result
+   the stopping rule needs. So issue comments count — with the placeholder
+   excluded by content.
 
 **TIMEOUT is not clean.** If the window expires with nothing, say so explicitly —
 "qodo did not report within N minutes" — rather than treating silence as a pass.
@@ -138,14 +159,35 @@ go green (`gh pr checks <N>`).
 
 ### 5. Repeat until dry
 
-**Round 2 is back on** (billing restored 2026-07-30). The 2026-07-22 override
-that ended the cycle after one check is gone; re-arm the watcher after a fix
-push, exactly as described below.
+**Round 2 is back on** (billing restored 2026-07-30) — but read the next
+paragraph before you make a clean round 2 a *requirement*.
 
-qodo re-reviews on push (incremental). Re-arm the watcher. Cycle ends when:
-a round produces zero findings, OR every remaining finding is INVALID /
-below the severity stop rule, OR 5 rounds (MAX_ROUNDS convention) — whichever
-first. Deadlock ≠ silence: if stopping with open disputed findings, say so.
+⚠️ **DO NOT gate on a second qodo pass. It may never come.** The observed-behaviour
+list above records that qodo **did not re-review after a fix push on the same
+PR** — the #157–159 "rounds" were separate PRs. So a stopping rule of the form
+"keep going until a fresh qodo round is clean" can be **unsatisfiable**: you fix
+its finding, re-arm, and the watcher simply times out. That would deadlock the
+joint gate in CLAUDE.md §2b on every PR where qodo actually finds something,
+which is precisely the PRs that matter most.
+
+**What "qodo is clean" means for the §2b stopping rule:**
+
+> qodo has **REPORTED**, and every finding it raised is either fixed or rejected
+> with written reasoning on the PR.
+
+That is the bar — a per-finding resolution, not a fresh empty pass. qodo marks
+absorbed findings `✓ Resolved`, and that mark is the confirmation. If it *does*
+re-review on your push, treat a clean result as corroboration and a new finding
+as a new round; just never *wait* on one.
+
+The observation is from a single PR, so it may not hold universally. Re-arm the
+watcher if you like — it costs nothing but wall-clock — but record TIMEOUT as
+"qodo did not re-review", never as "qodo is clean".
+
+Cycle ends when: every finding is fixed or rejected with reasoning, OR every
+remaining one is INVALID / below the severity stop rule, OR 5 rounds (MAX_ROUNDS
+convention) — whichever first. Deadlock ≠ silence: if stopping with open disputed
+findings, say so.
 
 ### 6. Notify Kevin
 
