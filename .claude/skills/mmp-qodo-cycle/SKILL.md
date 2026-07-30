@@ -80,10 +80,20 @@ qodo posts to THREE surfaces; check all of them (a report is often review +
 inline comments with an empty issue-comment list):
 
 ```bash
-cd D:/march-melee-pools
+# STAY IN THE PR's WORKTREE. Do NOT cd to D:/march-melee-pools.
 gh pr view <N> --json comments,reviews -q '(.comments | length) + (.reviews | length)'
 gh api repos/kstruck/MMPoolsV3/pulls/<N>/comments -q 'length'   # inline findings
 ```
+
+🛑 **This block used to start `cd D:/march-melee-pools`, and that was a real
+hazard.** PRs are made from a worktree (Rule 4), nothing in §§2–4 changes the
+directory back, and every one of those steps writes: you read the cited code, run
+the gates, commit and push the fix, and re-run codex. After that `cd` they would
+all run against the **primary checkout on `main`** instead of the PR branch. The
+`gh` commands take `<N>` and need no particular directory — they work fine from
+the worktree. This repo already has a clobber incident from cross-worktree
+confusion (PR #116/#117, see `mmp-change-control`); do not reintroduce the shape
+of it.
 
 Background watcher — **LIVE again as of 2026-07-30.** (Bash run_in_background;
 harness re-invokes on exit; note tool timeout caps ~10 min — re-arm on wake if
@@ -205,9 +215,17 @@ reading a missing signal as a good one.
 
 ```bash
 gh pr view <N> --json reviews -q '.reviews[] | {author: .author.login, state, body}'
-gh api --paginate repos/kstruck/MMPoolsV3/pulls/<N>/comments -q '.[] | {path, line, body}'
+gh api --paginate repos/kstruck/MMPoolsV3/pulls/<N>/comments \
+  -q '.[] | {author: .user.login, path, line, body}'
 gh pr view <N> --json comments -q '.comments[] | {author: .author.login, body}'
 ```
+
+**Keep the author on every line, and validity-call only qodo's.** The inline
+command used to project `{path, line, body}` with no author, so on a PR that also
+has human review comments the per-finding pass in §3 could not tell them apart —
+and would absorb or reject a colleague's comment as though qodo had written it,
+while the watcher had counted only `qodo-code-review[bot]`. If you want just
+qodo's, add `| select(.user.login == "qodo-code-review[bot]")`.
 
 **`--paginate` on the inline endpoint is load-bearing**, not tidiness: it returns
 30 per page, so on a busy PR the unpaginated form silently drops qodo's later
