@@ -58,12 +58,26 @@
 > An `nginx.conf`-only change never moves the hash at all — verify that class by
 > curling the prod response header instead (see PICKUP §0).
 >
-> ✅ **ALL THREE DEPLOY QUEUES ARE EMPTY.** #322 touches `src/` and `tests/` only
-> — `git diff --name-only origin/main...HEAD -- functions/ shared/ firestore.rules`
-> returned zero files — so functions and rules remain ≡ the tagged SHA above. It
-> deliberately avoided `shared/`, which is compiled into functions and would have
-> pulled a functions deploy along with it. **Do NOT deploy functions or rules for
+> ✅ **ALL THREE DEPLOY QUEUES ARE EMPTY.** #322 touches `src/`, `tests/` and docs
+> only, so functions and rules remain ≡ the tagged SHA above. It deliberately
+> avoided `shared/`, which is compiled into functions and would have pulled a
+> functions deploy along with it. **Do NOT deploy functions or rules for
 > frontend-only work.**
+>
+> Check it against the MERGE COMMIT, not against `origin/main`:
+>
+> ```
+> git diff --name-only <sha>^ <sha> -- functions/ shared/ firestore.rules firestore.indexes.json
+> ```
+>
+> ⚠️ **`origin/main...HEAD` is the trap here, and it is a different trap from the
+> two-dot one in CLAUDE.md §2c.** Once the PR is merged, `origin/main` CONTAINS
+> it, so that diff compares only whatever landed afterwards and returns empty **no
+> matter what the PR changed**. It is a valid scope check while the branch is
+> unmerged and a vacuous one the moment it lands — which is exactly when the next
+> session reads this box. For `6676580` the merge-commit form returns empty, and
+> `git show --name-only --format= 6676580` lists nine files, none of them
+> deploy-relevant.
 >
 > Dashboard, for the next time a `src/**` change lands:
 > <http://72.60.68.7:8000/project/ycoooow0g4c08ogso404k8o4/environment/ogs0cg0gg0kcgkgc8sg4c8g4/application/ics4kkww0c8oo0gw4wkg8w4o/deployment>
