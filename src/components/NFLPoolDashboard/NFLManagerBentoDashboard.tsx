@@ -80,7 +80,8 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   const [ledgerFilter, setLedgerFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL');
 
   // Local state for editing payment details in ledger
-  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  // Keyed by member UID, not entry id — the ledger's rows are roster rows now.
+  const [editingUid, setEditingUid] = useState<string | null>(null);
   const [editPaidStatus, setEditPaidStatus] = useState<'PAID' | 'UNPAID'>('UNPAID');
   const [editMethod, setEditMethod] = useState('Venmo');
   const [editDate, setEditDate] = useState('');
@@ -97,13 +98,22 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   // Every row on this card is now a ROSTER row keyed by uid, so no entry-id
   // indirection is needed: an entry-derived row could not name a member who has
   // no entry, which is exactly why this card showed "no members".
+  //
+  // Both handlers report the SERVER's reason via getUserMessage instead of a
+  // hardcoded string. That matters more now than it did: `setPaidStatus` throws
+  // `not-found` ("Member is not on this pool's roster") when no Member Record
+  // exists, and the roster this card renders deliberately falls back to
+  // participantIds and entries, so it can list someone the write path will
+  // reject. The P4 backfill makes that rare — 152 records present, 0 to create on
+  // its last prod dry run — but the old copy blamed permissions or the network
+  // for it, which is the wrong thing to go debug.
   const togglePayment = async (uid: string, currentPaid: boolean) => {
     setTogglingId(uid);
     try {
       await dbService.setPaidStatus(pool.id, uid, !currentPaid);
     } catch (err) {
       console.error("Failed to update payment status:", err);
-      toast.error("Failed to update payment status in database.");
+      toast.error(getUserMessage(err, 'Failed to update payment status. Please try again.'));
     } finally {
       setTogglingId(null);
     }
@@ -122,10 +132,10 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
           ? { paymentMethod: editMethod, paidAt: timestamp, paymentNote: editNote || null }
           : undefined,
       );
-      setEditingEntryId(null);
+      setEditingUid(null);
     } catch (err) {
       console.error("Failed to update detailed payment:", err);
-      toast.error("Database error: Insufficient permissions or network loss.");
+      toast.error(getUserMessage(err, 'Failed to save the payment details. Please try again.'));
     } finally {
       setSavingLedgerId(null);
     }
@@ -452,7 +462,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                   </div>
 
                   <button
-                    onClick={() => togglePayment(player.uid, false)}
+                    onClick={() => togglePayment(player.uid, player.paidStatus === 'PAID')}
                     disabled={togglingId === player.uid}
                     className="flex items-center gap-2 bg-navy-800 hover:bg-navy-700 text-white px-3.5 py-1.5 rounded-md text-[10px] font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px"
                   >
@@ -615,7 +625,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                 </div>
               </div>
               <button
-                onClick={() => { setIsLedgerOpen(false); setEditingEntryId(null); }}
+                onClick={() => { setIsLedgerOpen(false); setEditingUid(null); }}
                 className="p-2 hover:bg-page rounded-md text-muted hover:text-[color:var(--text)] transition-all duration-150"
               >
                 <X size={20} />
@@ -689,7 +699,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                   {ledgerFilteredPlayers.length > 0 ? (
                     ledgerFilteredPlayers.map((player) => {
                       const rowUid = player.uid;
-                      const isEditing = editingEntryId === rowUid;
+                      const isEditing = editingUid === rowUid;
                       const isPaid = player.paidStatus === 'PAID';
 
                       return (
@@ -779,7 +789,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                                   <Save size={14} />
                                 </button>
                                 <button
-                                  onClick={() => setEditingEntryId(null)}
+                                  onClick={() => setEditingUid(null)}
                                   className="p-1 bg-page text-muted border border-line hover:bg-surface rounded-sm transition-all duration-150"
                                 >
                                   <X size={14} />
@@ -788,7 +798,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                             ) : (
                               <button
                                 onClick={() => {
-                                  setEditingEntryId(rowUid);
+                                  setEditingUid(rowUid);
                                   setEditPaidStatus(player.paidStatus || 'UNPAID');
                                   setEditMethod(player.paymentMethod || 'Venmo');
                                   setEditDate(player.paidAt ? new Date(player.paidAt).toISOString().split('T')[0] : '');
