@@ -105,23 +105,44 @@ NOISE='busy working|trial has ended|reviews are paused|quota|billing'
 # On the FIRST arming of a new PR, the epoch default is correct.
 SINCE="${SINCE:-1970-01-01T00:00:00Z}"
 
+inline() { gh api --paginate repos/kstruck/MMPoolsV3/pulls/<N>/comments \
+    -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | .id" | wc -l; }
+reviewbody() { gh pr view <N> --json reviews \
+    -q ".reviews[] | select(.author.login == \"$QG\") | select(.body != \"\") | select(.submittedAt > \"$SINCE\") | .id" | wc -l; }
+summary() { gh pr view <N> --json comments \
+    -q ".comments[] | select(.author.login == \"$QG\") | select(.createdAt > \"$SINCE\") | select(.body | test(\"$NOISE\"; \"i\") | not) | .id" | wc -l; }
+
+# PHASE 1 — detect any qodo artifact
+SEEN=0
 for i in $(seq 1 12); do
-  # Inline findings — --paginate, or a PR with 30+ existing comments hides them
-  R=$(gh api --paginate repos/kstruck/MMPoolsV3/pulls/<N>/comments \
-        -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | .id" | wc -l)
-  # Review-surface report with a real body
-  S=$(gh pr view <N> --json reviews \
-        -q ".reviews[] | select(.author.login == \"$QG\") | select(.body != \"\") | select(.submittedAt > \"$SINCE\") | .id" | wc -l)
-  # A CLEAN zero-findings summary arrives as an issue comment — count it, never the noise
-  C=$(gh pr view <N> --json comments \
-        -q ".comments[] | select(.author.login == \"$QG\") | select(.createdAt > \"$SINCE\") | select(.body | test(\"$NOISE\"; \"i\") | not) | .id" | wc -l)
-  [ "${R:-0}" -gt 0 ] || [ "${S:-0}" -gt 0 ] || [ "${C:-0}" -gt 0 ] && { echo "QODO REPORTED"; exit 0; }
+  [ "$(inline)" -gt 0 ] || [ "$(reviewbody)" -gt 0 ] || [ "$(summary)" -gt 0 ] && { SEEN=1; break; }
   sleep 45
-done; echo TIMEOUT
+done
+[ "$SEEN" = 1 ] || { echo TIMEOUT; exit 0; }
+
+# PHASE 2 — SETTLE. qodo posts its summary BEFORE its inline findings (§0), so
+# exiting on first sight yields a partial report. Wait for the inline count to
+# hold steady across 3 consecutive polls before declaring the report complete.
+PREV=-1; STABLE=0
+for i in $(seq 1 20); do
+  NOW=$(inline)
+  if [ "$NOW" = "$PREV" ]; then STABLE=$((STABLE+1)); else STABLE=0; fi
+  [ "$STABLE" -ge 2 ] && { echo "QODO REPORTED — $NOW inline finding(s)"; exit 0; }
+  PREV=$NOW; sleep 20
+done
+echo "QODO REPORTED — count still moving after settle window, treat as PARTIAL"
 ```
 
-⚠️ **Five things this filtering is for. Every one of them broke an earlier draft
-of this very watcher — do not "simplify" any of them back out.**
+⚠️ **Six things this watcher's shape is for. Every one of them broke an earlier
+draft of this very file — do not "simplify" any of them back out.**
+
+0. **Two phases, because the summary lands BEFORE the findings.** §0 records the
+   order: placeholder → summary issue comment → inline findings. A single-phase
+   watcher exits the moment the summary appears, so §2 then fetches a report whose
+   findings do not exist yet, and the mandatory gate is satisfied by a partial
+   review. Phase 1 detects that qodo is posting; phase 2 waits for the inline
+   count to hold steady across consecutive polls before calling it complete. A
+   genuine zero-findings summary still completes — the count simply settles at 0.
 
 1. **Author, matched EXACTLY.** An earlier version counted *every* inline comment
    and non-empty review body regardless of who wrote them, so a human comment
