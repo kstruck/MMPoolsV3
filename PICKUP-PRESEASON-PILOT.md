@@ -32,8 +32,9 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 **Everything through #317 is merged AND deployed.** The deployed SHA is the
 tagged claim in §2 — not repeated here, so it cannot rot.
 **FUNCTIONS and RULES queues: EMPTY. FRONTEND queue: a Coolify rebuild is OWED**
-— not for #313–#317, which the 2026-07-28 rebuild covered, but for the
-2026-07-29 seasonType-filter fix, which changed frontend source only. See §4.
+— not for #313–#317 or #319, both of which have been rebuilt, but for the
+2026-07-29 CSP fix, which changes `nginx.conf`. See §4. Until it runs,
+browser-side Sentry stays blocked.
 
 Five PRs shipped on 2026-07-28: #313 (payment fallback removal + the post-commit
 projection fix), #314 (reminder delivery outcomes), #315 (one definition of the
@@ -44,10 +45,12 @@ is the evidence, not the absence of an error. Rules unchanged by all five.
 ✅ **The rebuild owed on 2026-07-28 is DONE.** The live bundle moved
 `index-Na2D7cdu.js` → **`index-gn5gQtFU.js`**, verified in the browser with cache
 disabled. That cleared the #297/#298 dependency-bump debt AND #313/#315's
-frontend changes in one rebuild. ⚠️ **A NEW rebuild is owed for the 2026-07-29
-seasonType-filter fix** — until it runs, `index-gn5gQtFU.js` is still what pools
-load and no manager or member sees that fix. Dashboard URL in HANDOFF's STOP
-POINT box.
+frontend changes in one rebuild. ✅ **#319's rebuild is ALSO DONE** — bundle
+`index-gn5gQtFU.js` → **`index-DYJ4N7zt.js`** (Kevin, 2026-07-29, confirmed from
+his browser console), so the seasonType fix is live. ⚠️ **A NEW rebuild is owed
+for the CSP fix**, which changes `nginx.conf` — baked into the image at
+`Dockerfile:37`, so it reaches nobody until Coolify rebuilds. Dashboard URL in
+HANDOFF's STOP POINT box.
 (Historical: the 2026-07-25 rebuild carried #279's `NFLManagerView` cutover onto
 the `updatePoolSettings` callable and was smoke-tested in prod.)
 
@@ -167,8 +170,24 @@ deployed. What is left:
    correct one to copy: it read `Number(pool.seasonType)` with no default, which
    is `NaN` on a pool that omits the field — and omitting it means REGULAR season
    per `shared/schemas/nfl.ts`. Such a pool showed no games at all. Detail in
-   HANDOFF's STOP POINT box. **A Coolify rebuild is owed before any of it is
-   live.**
+   HANDOFF's STOP POINT box. **Merged `31d1b8c` and REBUILT — live as of
+   2026-07-29, bundle `index-DYJ4N7zt.js`.**
+6. ~~**Add Sentry's ingest host to the CSP.**~~ **DONE 2026-07-29** — browser-side
+   Sentry had been CSP-blocked since 2026-07-16 and every client error was
+   silently dropped; HANDOFF's "Sentry confirmed live in prod" claim was false.
+   Guarded by `tests/csp-invariants.test.ts`. **Needs a Coolify rebuild to take
+   effect.**
+7. **Route the Manage-My-Pools cog to the right surface.** It goes to
+   `/admin/:id` for every pool type and `AdminRoute` serves only SQUARES, so the
+   commissioner's primary nav dead-ends on every NFL pool. Next up after the CSP
+   fix. Detail in HANDOFF's STOP POINT box, item 5.
+8. **Absorb the Bento defects into the tabbed split** — the clipped chart
+   (negative left margin), the entries-derived ledger card AND modal, the five
+   duplicate save buttons, and the fabricated `Sarah K.` banter seed all live on
+   the same two components. Four findings, one refactor.
+9. **Make the manager banter panel real** — Gemini-backed, persisted, deletable,
+   **5 posts/day/pool enforced server-side** (Kevin's ruling 2026-07-29).
+   **PLAN-GATED**: new callable + collection + rules = the authorization trigger.
 6. **Split the commissioner page into tabs** — Overview / Members & Payments /
    Settings / Scoring. Agreed with Kevin 2026-07-28. Pure layout, not
    plan-gated; it also removes the five duplicate `SaveSettingsControl`
@@ -404,7 +423,7 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — functions and rules EMPTY; FRONTEND REBUILD OWED (2026-07-29)
+## 4. Deploy queue — functions and rules EMPTY; FRONTEND REBUILD OWED for the CSP fix (2026-07-29)
 
 > **Historical (2026-07-25), kept for the recipe — not a current queue claim;
 > the current queue is the paragraph below this block.** #279 deployed functions → rules → Coolify
