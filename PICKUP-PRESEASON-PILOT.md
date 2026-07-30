@@ -31,9 +31,9 @@ which one you mean; "preseason week 1" alone is ambiguous in this repo.
 
 **Everything through #321 is merged AND deployed.** The deployed SHA is the
 tagged claim in §2 — not repeated here, so it cannot rot.
-**FUNCTIONS and RULES queues: EMPTY. FRONTEND queue: a Coolify rebuild is OWED**
-— not for #313–#317, #319, #320 or #321 (all rebuilt and verified live), but for
-the 2026-07-30 Bento truth pass, which changes `src/**`. See §4.
+**ALL THREE QUEUES ARE EMPTY.** Everything through #322 is merged, deployed and
+verified: #313–#317, #319, #320, #321 and the 2026-07-30 Bento truth pass have
+all been rebuilt, each confirmed by the live bundle hash actually moving. See §4.
 
 Five PRs shipped on 2026-07-28: #313 (payment fallback removal + the post-commit
 projection fix), #314 (reminder delivery outcomes), #315 (one definition of the
@@ -49,9 +49,10 @@ AdminRoute). The CSP fix needed a rebuild for a different reason worth
 remembering: it changes `nginx.conf`, which is baked into the image at
 `Dockerfile:37`, so it reaches nobody until Coolify rebuilds — and an
 `nginx.conf`-only change does **not** move the bundle hash, so verify that class
-by curling the response header instead. ⚠️ **A NEW rebuild is owed for the
-2026-07-30 Bento truth pass**, which changes `src/**`. Dashboard URL in HANDOFF's
-STOP POINT box.
+by curling the response header instead. ✅ **The 2026-07-30 Bento truth pass
+(#322) is ALSO rebuilt** — `index-D1wLGiMy.js` → **`index-C31xivRN.js`**, read off
+the prod HTML. Nothing is owed on the frontend. Dashboard URL in HANDOFF's STOP
+POINT box for next time.
 (Historical: the 2026-07-25 rebuild carried #279's `NFLManagerView` cutover onto
 the `updatePoolSettings` callable and was smoke-tested in prod.)
 
@@ -432,7 +433,7 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 
 ---
 
-## 4. Deploy queue — functions and rules EMPTY; FRONTEND REBUILD OWED for the Bento truth pass (2026-07-30)
+## 4. Deploy queue — ALL THREE EMPTY as of 2026-07-30 (#322 merged, rebuilt and verified)
 
 > **Historical (2026-07-25), kept for the recipe — not a current queue claim;
 > the current queue is the paragraph below this block.** #279 deployed functions → rules → Coolify
@@ -447,13 +448,13 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 > without `✔ Deploy complete!`, printed no error, and left 10 functions stale.
 > The all-Skipped report is the evidence; a missing error is not.
 
-**As of 2026-07-30 the FUNCTIONS and RULES queues are EMPTY and the FRONTEND
-queue is NOT.** All three were empty at `0a705c0` (#313–#317 deployed, second
+**As of 2026-07-30 ALL THREE queues are EMPTY.** All three were empty at `0a705c0` (#313–#317 deployed, second
 full-fleet run all-`Skipped`; rules unchanged by all five). Since then #319,
 #320, #321 and the 2026-07-30 Bento truth pass have ALL been `src/**`,
 `nginx.conf`, docs and tests only — which the table below makes a **manual
-Coolify trigger** and nothing else. **No functions or rules deploy is owed by any
-of them, and none should be run.** The Bento PR deliberately avoided touching
+Coolify trigger** and nothing else — and every one of those triggers has been
+run and verified by the bundle hash moving. **No functions or rules deploy is
+owed by any of them, and none should be run.** The Bento PR deliberately avoided touching
 `shared/`, which the table's second row would have turned into a functions
 deploy. Verification in HANDOFF's STOP POINT box. The
 deployed source SHA is the tagged claim in §2 — not repeated here, so it cannot

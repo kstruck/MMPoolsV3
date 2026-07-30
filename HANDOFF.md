@@ -1,4 +1,4 @@
-# HANDOFF — Session entry point (updated 2026-07-30: the commissioner Buy-In Ledger reads ROSTER truth and the fabricated cards are gone; a FRONTEND rebuild is owed for that)
+# HANDOFF — Session entry point (updated 2026-07-30: the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, and ALL THREE DEPLOY QUEUES ARE EMPTY)
 
 > ## ✅ STOP POINT 2026-07-28 — #313–#317 SHIPPED; functions, rules and frontend all current
 >
@@ -36,12 +36,66 @@
 > **`index-D1wLGiMy.js`**, read straight off the prod HTML. Kevin then confirmed
 > in the browser that the cog opens the NFL commissioner surface and Back works.
 >
-> ⚠️ **FRONTEND: a rebuild is OWED for the Bento truth pass (PR A, 2026-07-30)**,
-> which changes `src/**`. **FUNCTIONS and RULES stay EMPTY — do NOT deploy
-> either.** That PR touches `src/` and `tests/` only; it deliberately does not
-> touch `shared/`, which is compiled into functions and would have pulled a
-> functions deploy along with it.
-> Dashboard:
+> ✅ **The Bento truth pass (#322, merged `6676580`) is REBUILT AND VERIFIED
+> LIVE.** The rebuild was triggered 2026-07-30 and the live bundle moved
+> `index-D1wLGiMy.js` → **`index-C31xivRN.js`**, read straight off the prod HTML.
+>
+> ⚠️ **A moved bundle hash proves the rebuild shipped; an UNMOVED one does not
+> disprove it.** The rule "the hash must change for a `src/**` change" is the
+> right default and it held here, but it is not universal, and treating it as
+> universal will one day condemn a perfectly good deploy. Vite hashes the
+> **emitted** bundle: a `src/**` change confined to test files, or to code the
+> tree-shake drops, emits byte-identical assets and leaves the hash alone. #322
+> itself contains such a file (`src/utils/poolRoster.test.ts`) — it happened to
+> ship emitted changes too, so the hash moved.
+>
+> So: a changed hash is **positive evidence**, and it is the check to reach for
+> first. A hash that has NOT changed is **inconclusive** — go read the Coolify
+> deployment log and confirm the run finished, rather than concluding the rebuild
+> failed. An absent error is not evidence either way; that mistake is what hid
+> the Sentry outage for thirteen days.
+>
+> An `nginx.conf`-only change never moves the hash at all — verify that class by
+> curling the prod response header instead (see PICKUP §0).
+>
+> ✅ **ALL THREE DEPLOY QUEUES ARE EMPTY.** #322 touches `src/`, `tests/` and docs
+> only, so functions and rules remain ≡ the tagged SHA above. It deliberately
+> avoided `shared/`, which is compiled into functions and would have pulled a
+> functions deploy along with it. **Do NOT deploy functions or rules for
+> frontend-only work.**
+>
+> Check it against the MERGE COMMIT:
+>
+> ```
+> git diff --name-only <sha>^ <sha> -- functions/ shared/ firestore.rules firestore.indexes.json
+> ```
+>
+> That form works from `main`, which is where a later session actually stands. Do
+> **not** reach for `origin/main...HEAD` to re-check a MERGED PR: from a branch cut
+> off post-merge `main` it compares only what landed afterwards and reports empty
+> whatever the PR did. (It is not vacuous everywhere — this repo squash-merges, so
+> the original PR branch never becomes an ancestor of `main` and the three-dot diff
+> still lists that PR's files *from the branch itself* — verified on
+> `claude/bento-truth` after #322 merged. Whether that branch is still THERE
+> depends on repo settings: `gh pr merge --delete-branch` did not remove
+> `origin/claude/bento-truth`, and the merged branches for #319/#320/#321 are all
+> still on the remote too.) Three-dot remains the right scope check for an **open**
+> PR, exactly as CLAUDE.md §2c says.
+>
+> For `6676580` the merge-commit form returns empty, and
+> `git show --name-only --format= 6676580` lists nine files: three docs, five
+> under `src/`, one under `tests/`. **None of them is relevant to the FUNCTIONS or
+> RULES queues** — but **four** of them are EMITTED `src/**` code
+> (`NFLManagerBentoDashboard.tsx`, `NFLManagerView.tsx`, `PaymentsPanel.tsx`,
+> `poolRoster.ts`), which is precisely why the frontend rebuild recorded above was
+> required. "No backend deploy" is not "no deploy".
+>
+> The fifth `src/**` path, `poolRoster.test.ts`, is loaded only by Vitest and has
+> no production importer, so Vite never emits it — it is the live example of the
+> warning above. Counting `src/**` PATHS and counting EMITTED files are different
+> numbers, and only the second one predicts the bundle hash.
+>
+> Dashboard, for the next time a `src/**` change lands:
 > <http://72.60.68.7:8000/project/ycoooow0g4c08ogso404k8o4/environment/ogs0cg0gg0kcgkgc8sg4c8g4/application/ics4kkww0c8oo0gw4wkg8w4o/deployment>
 > → **Redeploy**.
 >
