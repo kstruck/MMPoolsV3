@@ -64,20 +64,27 @@
 > functions deploy along with it. **Do NOT deploy functions or rules for
 > frontend-only work.**
 >
-> Check it against the MERGE COMMIT, not against `origin/main`:
+> Check it against the MERGE COMMIT:
 >
 > ```
 > git diff --name-only <sha>^ <sha> -- functions/ shared/ firestore.rules firestore.indexes.json
 > ```
 >
-> ⚠️ **`origin/main...HEAD` is the trap here, and it is a different trap from the
-> two-dot one in CLAUDE.md §2c.** Once the PR is merged, `origin/main` CONTAINS
-> it, so that diff compares only whatever landed afterwards and returns empty **no
-> matter what the PR changed**. It is a valid scope check while the branch is
-> unmerged and a vacuous one the moment it lands — which is exactly when the next
-> session reads this box. For `6676580` the merge-commit form returns empty, and
-> `git show --name-only --format= 6676580` lists nine files, none of them
-> deploy-relevant.
+> That form works from `main`, which is where a later session actually stands. Do
+> **not** reach for `origin/main...HEAD` to re-check a MERGED PR: from a branch cut
+> off post-merge `main` it compares only what landed afterwards and reports empty
+> whatever the PR did. (It is not vacuous everywhere — this repo squash-merges, so
+> the original PR branch never becomes an ancestor of `main` and the three-dot diff
+> still lists that PR's files *from the branch itself*. But merging deletes the
+> branch, so that is rarely the position you are in.) Three-dot remains the right
+> scope check for an **open** PR, exactly as CLAUDE.md §2c says.
+>
+> For `6676580` the merge-commit form returns empty, and
+> `git show --name-only --format= 6676580` lists nine files: three docs, five
+> under `src/`, one under `tests/`. **None of them is relevant to the FUNCTIONS or
+> RULES queues** — but five of them are emitted `src/**` code, which is precisely
+> why the frontend rebuild recorded above was required. "No backend deploy" is not
+> "no deploy".
 >
 > Dashboard, for the next time a `src/**` change lands:
 > <http://72.60.68.7:8000/project/ycoooow0g4c08ogso404k8o4/environment/ogs0cg0gg0kcgkgc8sg4c8g4/application/ics4kkww0c8oo0gw4wkg8w4o/deployment>
