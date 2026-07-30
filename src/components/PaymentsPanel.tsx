@@ -3,6 +3,7 @@ import { DollarSign, CheckCircle2, AlertCircle, Receipt, History } from 'lucide-
 import type { Pool, User } from '../types';
 import { subscribeToPaymentLedger, type PaymentLedgerEvent } from '../services/paymentService';
 import { formatDeadline } from '../utils/formatTime';
+import { rosterPotStats } from '../utils/poolRoster';
 import { Badge } from './ui';
 
 interface PaymentsPanelProps {
@@ -70,49 +71,10 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
 
     // Pot: prefer the Member Record roster (everyone who joined) so the count and expected
     // dues are right even before members submit entries; fall back to entries pre-backfill.
-    // Mirrors shared/memberRecord.ts memberDues: collected = paid base fees +
-    // rebuyPaid — an owed rebuy is EXPECTED money, not collected money (codex r1
-    // on P3: the old maths booked every rebuy as collected the moment it
-    // happened, which is defect D12 wearing a UI hat).
-    const pot = useMemo(() => {
-        const realParticipants = ((castPool.participantIds || []) as string[]).filter(id => id && id !== 'guest');
-        const memberCount = Math.max(members.length, realParticipants.length, entries.length);
-        if (members.length > 0) {
-            const entryByUid = new Map(entries.map((e: any) => [e.ownerUid || e.id, e]));
-            let expected = 0, collected = 0, paid = 0;
-            for (const m of members) {
-                const fee = m.feeOwed ?? entryFee; // ADR 0005: seeded owner carries 0
-                // Un-stamped legacy rebuys fall back to entry evidence (codex r3);
-                // a stamped value — including 0 — is trusted as-is.
-                const rebuyOwed = typeof m.rebuyOwed === 'number'
-                    ? m.rebuyOwed
-                    : ((entryByUid.get(m.uid) as any)?.rebuysUsed ?? 0) * rebuyCost;
-                expected += fee + rebuyOwed;
-                if (m.paidStatus === 'PAID') { collected += fee; paid++; }
-                collected += m.rebuyPaid ?? 0;
-            }
-            // Participants who joined but have no Member Record yet still owe the
-            // fee — and their entry's rebuys (codex r4: a partially backfilled
-            // pool dropped unmatched entries' rebuy dues from Expected).
-            expected += Math.max(0, memberCount - members.length) * entryFee;
-            const memberUids = new Set(members.map((m: any) => m.uid));
-            for (const e of entries as any[]) {
-                const uid = e.ownerUid || e.id;
-                if (!memberUids.has(uid)) expected += (e.rebuysUsed ?? 0) * rebuyCost;
-            }
-            return { paidCount: paid, unpaidCount: Math.max(0, memberCount - paid), collected, expected };
-        }
-        // Pre-backfill fallback: entries carry no settlement state, so rebuys
-        // count toward expected only.
-        const paid = entries.filter((e: any) => e.paidStatus === 'PAID').length;
-        const totalRebuys = entries.reduce((sum, e) => sum + (e.rebuysUsed ?? 0), 0);
-        return {
-            paidCount: paid,
-            unpaidCount: Math.max(0, memberCount - paid),
-            collected: paid * entryFee,
-            expected: memberCount * entryFee + totalRebuys * rebuyCost,
-        };
-    }, [members, entries, castPool.participantIds, entryFee, rebuyCost]);
+    // The maths moved to utils/poolRoster (unchanged, comments included) so the
+    // commissioner Buy-In Ledger answers from the same place this panel does —
+    // it used to count entries only and reported $0 on a pool with members.
+    const pot = useMemo(() => rosterPotStats({ pool, members, entries }), [pool, members, entries]);
 
     return (
         <div className="space-y-6">

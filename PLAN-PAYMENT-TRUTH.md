@@ -353,6 +353,102 @@ callers are all BRACKET or SuperAdmin paths.
 
 ---
 
+## 6b. P5 — the READER side of D13 (added 2026-07-30)
+
+⚖️ **Money surface, so plan-gated. Kevin ruled on 2026-07-28 that this belongs
+here rather than in a new `PLAN-*.md`**, because it is the other half of a defect
+this plan already names.
+
+### What was still wrong after P1–P4
+
+P1 fixed the **writer**: every payment write now goes through `setPaidStatus`,
+which makes the Member Record truth and mirrors the display fields onto the entry.
+§4 item 2 above records why the mirror was required — *"the ledger UI is
+entry-backed"* — and treats that as a constraint to preserve.
+
+It was a constraint worth removing instead. Because the mirror only fires
+`if (entrySnap.exists)`, an entry-backed **reader** cannot see a member who never
+submitted an entry, and there is no write that can fix that. Observed live by
+Kevin on 2026-07-29: on a pool whose members held Member Records but no entry
+documents, the Buy-In Ledger card and the Advanced Payment Ledger modal both
+reported `$0` projected, `$0` collected, `0%` clearing rate and *"no members
+matching filter criteria"* — while the Member Roster panel **on the same page**
+listed those members correctly, because it reads Member Records.
+
+Two figures on that card were independently wrong, and neither needed an empty
+roster to be wrong:
+
+* The entry fee defaulted to `entryFee || 20`, so a pool with no fee projected a
+  pot of $20 per head that nobody owed.
+* Clearing Rate divided paid members by **entry holders**, so a pool where one of
+  four members had paid and only that member had an entry reported **100%**.
+
+### What shipped
+
+There were already **three** independent derivations of this data — the roster
+merge in `NFLManagerView`, the dues maths in `PaymentsPanel` (hardened over four
+codex rounds under P3), and the Bento card's own entries-only version. Adding a
+fourth was the wrong move; the disagreement *was* the multiplicity, the same
+one-definition defect as #315, #319 and HANDOFF item 11.
+
+So the first two moved into `src/utils/poolRoster.ts` unchanged, comments
+included, and all three surfaces now read from there:
+
+| Export | What it is | Readers |
+|---|---|---|
+| `buildPoolRoster` | participantIds + Member Records + entries merged into one row per member, Member Record winning on `paidStatus` and on the payment detail | `NFLManagerView` roster panel, Bento card, Bento modal |
+| `rosterPotStats` | `{ memberCount, paidCount, unpaidCount, collected, expected }` — the P3 dues maths verbatim | `PaymentsPanel` pot, Bento card, Bento modal |
+| `outstandingDue` / `clearingRate` | derived, clamped at 0 and divide-by-zero-safe | Bento card, Bento modal |
+
+`shared/memberRecord.ts` was deliberately **not** touched. Its `MemberRecord`
+interface still omits `paymentMethod` and `paymentNote` even though
+`setPaidStatus` writes both onto the record — a real inaccuracy, but `shared/` is
+compiled into `functions/` by the predeploy hook, so declaring two optional fields
+there would have owed a full functions deploy for a change with no runtime effect.
+Fold it into the next PR that touches `functions/`, together with the now-obsolete
+comment in `setPaidStatus.ts` that still justifies the mirror by the reader being
+entry-backed.
+
+### Evidence
+
+`src/utils/poolRoster.test.ts` — 23 cases covering the entry-less member, the
+unset fee, a stamped `feeOwed: 0`, owed-vs-settled rebuys, the un-stamped
+`rebuyOwed` fallback and its stamped-zero counterpart, partially backfilled pools,
+the pre-backfill path, the guest sentinel, the uid union and both clamps.
+
+`tests/admin-surface-invariants.test.ts` — wiring invariants plus the T3 fake-card
+guard extended to the commissioner bento (it had only ever covered the super-admin
+one, which is why the same defect class survived there).
+
+**38 mutations applied across the two files. 37 killed on the first attempt; one
+SURVIVED and the guard was strengthened until it did not** — see round 4 below,
+because that near-miss is the most useful thing in this section. The killed set
+includes reinstating `entryFee || 20`, making the pot ignore Member Records,
+dropping the `members` prop, forking `PaymentsPanel`'s maths back off, reverting
+the head count to `Math.max`, putting the raw kickoff back in place of the
+enforced lock, removing the weekly-lock type gate, and dropping an entry-only
+member's payment from Collected.
+
+### Review log — P5
+
+| Round | Reviewer | Findings |
+|---|---|---|
+| 1 | codex | **3 findings, all P2, all VALID and all absorbed. None rejected.** (a) **The replacement deadline was wrong too.** Removing the hardcoded sixteen-hour countdown, the first draft showed the first KICKOFF and labelled it the lock. Picks close `lockBufferMinutes` earlier (default 5; Survivor/Margin allow 5/30/60) and a hard-lock pool's deadline is frozen per week, so commissioners would have read a cutoff up to an hour late — a fabricated deadline replaced by a differently-wrong one. Worse, `weekDeadline` and `effectiveBufferMinutesForWeek` already existed and are what `WeekChecklist` (the MEMBER-facing surface) uses, so the hand-rolled `Math.min` was a fourth definition inside a PR whose whole point was collapsing definitions. Now delegates to both. (b) **The green all-clear could contradict the card's own Outstanding Due tile.** Base dues and rebuy dues settle independently under P3, so every member can be `PAID` while rebuy dollars are owed — and the unpaid LIST is empty in precisely that case, since those members' base dues really are paid. Gating on the list meant "All buy-ins cleared!" could sit above a positive balance. Now gated on `outstandingDue(pot) === 0`, with a distinct state that names the rebuy debt and points at the control that settles it. (c) **The head count undercounted a person evidenced only by an entry.** `Math.max(members.length, participantIds.length, entries.length)` is the roster size only when the sets nest; where an entry exists for a uid in neither `members` nor `participantIds`, the max is short AND `memberCount - members.length` is 0, so that person's base fee vanished from `expected` while `buildPoolRoster` still listed them — the card disagreeing with itself, which is the exact failure this section exists to end. Now a uid UNION shared with `buildPoolRoster`, and record-less people are walked per-uid rather than counted by difference. **Inherited, not introduced:** (c) came verbatim from `PaymentsPanel`, so the member-facing pot had it too and is fixed by the same change. |
+| 2 | codex | **2 findings, both VALID, both absorbed, and both on ROUND 1's OWN FIXES rather than the original defect.** (a) **P1, and a regression r1 introduced.** r1(c) started charging a person evidenced only by an entry — but never read their `entry.paidStatus`, while `buildPoolRoster` renders that same person's row as `PAID`. So the card could show a PAID row and simultaneously understate Total Collected and Clearing Rate and overstate Outstanding Due. The old entries-backed ledger DID count that payment, so this was a regression, not an omission. The record-less loop now reads the entry for payment as well as for dues, and the guard asserts the totals and the rendered row read the same field. (b) **P2: one week deadline is only TRUE for weekly-hard-lock pools.** Default `NFL_PICKEM` is `PER_GAME` — `submitNFLPicksInternal` checks each picked game's own lock, so later games stay editable long after the first closes, and `weekLockOverrides` can push an individual week later still. That per-game/override model lives in `functions/src/lib/effectiveLock.ts`, which is **not** shared with the client, so no honest single line can be rendered for those pools from this card. Gated on `usesWeeklyHardLock` — the same predicate the server uses — so Survivor/Margin get the label and everything else gets nothing. **Showing nothing beats showing a deadline that is not enforced,** and building a fifth client-side lock model to fill the gap on a submission-health card is not worth it seven days out. Recorded rather than done. |
+| 3 | codex | **CLEAN.** Self-review of the diff afterwards found one real thing codex had not: the roster this card renders deliberately falls back to `participantIds` and entries, so it can list someone `setPaidStatus` rejects with `not-found` — a reachability the entries-backed version did not have for participantIds-only rows — and both handlers hardcoded their error copy, one of them blaming *"Insufficient permissions or network loss"*. That sends whoever reads it to debug the wrong thing entirely. Routed through `getUserMessage`. Also renamed `editingEntryId`, which had held a member UID since the repoint, and replaced a hardcoded `false` for the current paid state with the row's own value. |
+| 4 | codex | **1 finding, P3, VALID and absorbed — on round 3's fix.** `getUserMessage` resolves the transport CODE (`functions/not-found`) *before* it looks at the message, and `setPaidStatus` uses `not-found` for BOTH "Pool not found" and "Member is not on this pool's roster" — so round 3's fix still rendered the roster case as *"that pool or entry couldn't be found"*, about a pool plainly on the commissioner's screen. Disambiguated by the client's own `hasMember` rather than by pattern-matching the server's prose, which would break silently the day that sentence is reworded; it only EXPLAINS an error that already happened and never pre-blocks the write. **The durable fix is a domain prefix on the server error** — `getUserMessage` already resolves `/^[A-Z_]{4,}:/` ahead of the code — but that is a `functions/` change and this PR is frontend-only. Owed to the next PR that touches `functions/`, alongside the two undeclared `MemberRecord` fields and the stale mirror comment. **⚠️ The guard written for this finding did NOT hold on the first attempt.** It pinned the plumbing — the parameter, both call sites, the arity — every one of which survives reverting the body to a bare `getUserMessage(err, fallback)`. The mutation caught it; reading it did not. It now pins the BRANCH: `hasMember` must actually select between `getUserMessage` and a distinct message naming the missing roster record, and a mutation collapsing both sides of the ternary fails it. This is the fourth time in this repo a test has looked like it guarded and did not. |
+| 5 | codex | **1 finding, P2, VALID and absorbed — plus a follow-on it did not name.** "Unpaid" on this card was a payment STATUS, not a DEBT. A seeded owner carries `feeOwed: 0` (ADR 0005 — hosting is not playing) with `paidStatus: 'UNPAID'`, and on a FREE pool every member does. So the unpaid queue listed people who owed nothing, offered them a meaningless "Mark Paid", and kept the card from ever reaching its all-clear — beside its own tiles reading Expected $0 and Outstanding Due $0. Clearing Rate had the same defect from the other end, reporting 0% on a free pool. Fixed with `memberOutstanding` (one row's real debt: base dues plus unsettled rebuy dues) and a `clearedCount` counted off the SAME rows the card renders, so the list and the percentage cannot disagree with each other. **The follow-on, found by self-review after the fix:** a debt-filtered list CONTAINS rebuy-only debtors, who are `paidStatus: 'PAID'` — and the row's button called `togglePayment` with their current state, so clicking "Mark Paid" on them would have set them **UNPAID**. Those rows now name the debt and offer no action, since rebuy settlement is a different callable mode (`settleRebuys`) living on the member roster below. That same change made **round 1's separate "base cleared, rebuy outstanding" empty state unreachable**, so it was deleted rather than left standing as a branch that looks like a safeguard and can never run — and the guard was rewritten to assert its absence. |
+
+
+### The mirror stays
+
+Nothing here makes `setPaidStatus`'s entry mirror removable. `reconcilePaymentTruth`
+depends on the two stores converging, and BRACKET pools' entry doc genuinely is
+their payment store (§7). Only the *justification* recorded in §4 item 2 is out of
+date.
+
+---
+
 ## 7. Explicitly out of scope
 
 - **Props payment state (D11).** Props has no payment path at all. Separate

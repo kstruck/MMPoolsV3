@@ -29,6 +29,238 @@ describe('T3 — no fake dashboard cards', () => {
   });
 });
 
+/**
+ * T3 extended to the COMMISSIONER bento (2026-07-29).
+ *
+ * The T3 guard only ever covered the super-admin bento, which is why the same
+ * defect class survived untouched on the pool-manager one: a mock player name
+ * from DevDashboardPreview was the top-player fallback and seeded the banter
+ * feed with "<name> is currently leading, but historically has collapsed in
+ * Week 13" — on pools where no week had ever been played. Alongside it were an
+ * invented operations log with hardcoded relative timestamps, an unconditional
+ * "deadline in 16 hours", and two commissioner buttons that fired a toast
+ * claiming work had started and called nothing at all.
+ *
+ * These are string checks against the SOURCE on purpose: every one of these
+ * strings was a literal in the file, so a literal is what fails if one returns.
+ */
+describe('T3 — no fabricated data on the commissioner bento', () => {
+  const bento = read('src/components/NFLPoolDashboard/NFLManagerBentoDashboard.tsx');
+
+  // Guard the guard: a renamed/moved file would make every not.toContain below
+  // vacuously pass on an empty-ish string.
+  it('read the commissioner bento source', () => {
+    expect(bento).toContain('NFLManagerBentoDashboard');
+    expect(bento.length).toBeGreaterThan(5000);
+  });
+
+  it.each([
+    // Mock roster name leaked from DevDashboardPreview.tsx.
+    'Sarah K.',
+    // Invented commissioner analysis about a season that has not happened.
+    'historically has collapsed in Week 13',
+    // A countdown that was true of no pool.
+    'Deadline approaches in 16 hours',
+    // Buttons that reported starting work they never started.
+    'Initiating ESPN Sync score recalculation',
+    'Toggling locks status',
+    // Fabricated audit-trail entries with hardcoded relative times.
+    'Commissioner finalized standings for Week',
+    'automated schedule synchronization with ESPN APIs',
+    '10 mins ago',
+    '1 hour ago',
+    '2 hours ago',
+    // Claimed a moderation capability that does not exist.
+    'AI Moderation ACTIVE',
+  ])('fabricated string %j is gone', (s) => {
+    expect(bento).not.toContain(s);
+  });
+
+  // The mock name must also stay out of the shared roster helper the card now
+  // reads, and out of the manager view that renders it.
+  it.each([
+    'src/utils/poolRoster.ts',
+    'src/components/NFLPoolDashboard/NFLManagerView.tsx',
+  ])('%s carries no mock roster name', (p) => {
+    expect(read(p)).not.toContain('Sarah K.');
+  });
+});
+
+/**
+ * The commissioner money card reads ROSTER truth, not entry documents.
+ *
+ * HANDOFF items 1 and 7: every figure on the Buy-In Ledger and in the Advanced
+ * Payment Ledger modal was `entries`-derived, so a pool whose members held
+ * Member Records but no entry documents showed $0 / 0% / "no members" beside a
+ * Member Roster panel on the SAME page that listed them correctly. Root cause is
+ * the half of D13 that P1 could not reach: setPaidStatus mirrors display fields
+ * onto the entry only when the entry exists.
+ *
+ * Behaviour lives in src/utils/poolRoster.test.ts; this pins the WIRING, which
+ * is the part a future edit can quietly undo.
+ */
+describe('commissioner Buy-In Ledger is roster-backed, not entry-backed', () => {
+  const bento = read('src/components/NFLPoolDashboard/NFLManagerBentoDashboard.tsx');
+
+  it('takes Member Records as a prop and feeds them to the shared helpers', () => {
+    expect(bento).toMatch(/members:\s*any\[\]/);
+    expect(bento).toContain("from '../../utils/poolRoster'");
+    expect(bento).toContain('rosterPotStats({ pool, members, entries })');
+    expect(bento).toContain('buildPoolRoster({ pool, members, entries })');
+  });
+
+  it('the manager view actually passes Member Records down', () => {
+    expect(read('src/components/NFLPoolDashboard/NFLManagerView.tsx')).toMatch(
+      /<NFLManagerBentoDashboard[\s\S]{0,400}?members=\{members\}/,
+    );
+  });
+
+  it('no entry-derived money figure survives on the card', () => {
+    // The specific expressions that produced the $0 report. Matching the
+    // expressions rather than the words keeps this from tripping on prose.
+    expect(bento).not.toMatch(/entries\.filter\([^)]*paidStatus/);
+    expect(bento).not.toMatch(/entryFee\s*\|\|\s*20/);
+    expect(bento).not.toContain('ledgerStats');
+  });
+
+  // codex r1 on this PR. Three findings, three wirings that a later edit could
+  // undo without any behaviour test noticing, because each is about which
+  // FUNCTION the card calls.
+  it('shows the deadline the SERVER enforces, not the first kickoff', () => {
+    // Picks close lockBufferMinutes before kickoff (default 5; Survivor/Margin
+    // allow 5/30/60) and a hard-lock pool's deadline is frozen per week. A
+    // kickoff-based label is a fabricated deadline wearing a real timestamp.
+    expect(bento).toContain('effectiveBufferMinutesForWeek');
+    expect(bento).toContain('weekDeadline(weeklyGames, buffer)');
+    // The same pair WeekChecklist uses, which is what members read — the two
+    // surfaces must not state different deadlines.
+    const checklist = read('src/components/NFLPoolDashboard/WeekChecklist.tsx');
+    expect(checklist).toContain('effectiveBufferMinutesForWeek');
+    expect(checklist).toContain('weekDeadline(');
+    // And no hand-rolled min-of-kickoffs, which is what the first fix did.
+    expect(bento).not.toMatch(/Math\.min\(\.\.\.[\w.]*times/);
+  });
+
+  it('claims ONE week deadline only for pools that actually have one', () => {
+    // codex r2: default NFL_PICKEM is PER_GAME — submitNFLPicksInternal checks
+    // each picked game's own lock, so later games stay editable after the first
+    // closes, and weekLockOverrides can push a week's lock later still. That
+    // model lives in functions/src/lib/effectiveLock.ts and is not shared with
+    // the client, so no honest single line can be rendered for those pools.
+    // usesWeeklyHardLock is the same predicate the server uses.
+    expect(bento).toContain('usesWeeklyHardLock(castPool.type)');
+    // The gate must come BEFORE the deadline is computed, or it gates nothing.
+    const gate = bento.indexOf('usesWeeklyHardLock(castPool.type)');
+    const compute = bento.indexOf('weekDeadline(weeklyGames, buffer)');
+    expect(gate).toBeGreaterThan(-1);
+    expect(compute).toBeGreaterThan(gate);
+  });
+
+  it('the roster’s money totals and its rendered rows read the same field', () => {
+    // codex r2: a person evidenced only by an entry renders PAID off the entry
+    // (buildPoolRoster), so the totals must read the entry too. Charging them in
+    // `expected` while ignoring their payment showed a PAID row beside an
+    // understated Collected — and the old entries-backed ledger DID count it.
+    const util = read('src/utils/poolRoster.ts');
+    const loop = util.slice(util.indexOf('for (const uid of uids)'));
+    expect(loop).toContain("e?.paidStatus === 'PAID'");
+    expect(loop).toContain('collected += entryFee');
+    expect(loop).toContain('paid++');
+  });
+
+  it('never claims the ledger is clear while dues are outstanding', () => {
+    // codex r1 found the green all-clear could sit above a positive Outstanding
+    // Due: base and rebuy dues settle independently (P3), so every member can be
+    // PAID while rebuy dollars are owed, and a paid-STATUS list is empty in
+    // exactly that case. codex r5 then found the same list wrongly contained
+    // zero-debt members (a seeded owner's feeOwed is 0; a free pool's is 0 for
+    // everyone). Filtering the list by DEBT fixes both at once — and makes r1's
+    // separate empty state UNREACHABLE, so it is gone rather than left as a
+    // branch that looks like a safeguard and can never run.
+    expect(bento).toContain('memberOutstanding(r, rates) > 0');
+    // The all-clear is reached only when that debt-filtered list is empty.
+    const allClear = bento.indexOf('All buy-ins cleared!');
+    const listGate = bento.indexOf('dashboardUnpaidPlayers.length > 0');
+    expect(allClear).toBeGreaterThan(-1);
+    expect(listGate).toBeGreaterThan(-1);
+    expect(listGate).toBeLessThan(allClear);
+    // The dead branch must NOT come back; behaviour is covered by
+    // src/utils/poolRoster.test.ts's cleared/outstanding cases.
+    expect(bento).not.toContain('outstandingDue(pot) > 0');
+  });
+
+  it('never offers "Mark Paid" to someone whose base dues are already paid', () => {
+    // codex r5 follow-on, found by self-review: once the list is debt-filtered it
+    // contains rebuy-only debtors, who ARE PaidStatus PAID. togglePayment would
+    // flip them to UNPAID — the exact opposite of what clicking "Mark Paid"
+    // means. Rebuy settlement is a different callable mode (settleRebuys) and
+    // lives on the member roster below.
+    expect(bento).toContain('const baseDuesPaid = ');
+    expect(bento).toMatch(/baseDuesPaid\s*\?/);
+    // The toggle is now unconditionally a mark-PAID (never a flip), so a PAID row
+    // reaching it could not un-pay anyone even if the branch were removed.
+    expect(bento).toContain('togglePayment(player.uid, false, player.hasMember)');
+    expect(bento).not.toMatch(/togglePayment\(player\.uid,\s*player\.paidStatus/);
+  });
+
+  it('the head count comes from the roster UID union, not a max of sizes', () => {
+    const util = read('src/utils/poolRoster.ts');
+    expect(util).toContain('rosterUids(');
+    expect(util).toContain('const memberCount = uids.size');
+    // The undercounting expression must be gone — with it, a person evidenced
+    // only by an entry was listed on the card but charged nothing.
+    expect(util).not.toMatch(/Math\.max\(\s*memberList\.length/);
+    expect(util).not.toMatch(/memberCount\s*-\s*memberList\.length/);
+  });
+
+  it('explains a missing Member Record instead of reporting a missing pool', () => {
+    // codex r4. setPaidStatus uses `not-found` for BOTH "Pool not found" and
+    // "Member is not on this pool's roster", and getUserMessage resolves the
+    // transport CODE before the message — so the roster case rendered as "that
+    // pool or entry couldn't be found", about a pool plainly on screen. The
+    // roster deliberately falls back to participantIds/entries, so this row is
+    // reachable. Disambiguated by the client's own `hasMember`, NOT by matching
+    // the server's prose, which would break the day it is reworded.
+    expect(bento).toContain('const paymentError =');
+    expect(bento).toMatch(/paymentError\([^)]*hasMember/);
+    // Both write paths must use it — one of the two is easy to miss.
+    expect(bento.match(/paymentError\(err, hasMember/g) ?? []).toHaveLength(2);
+    // ...and both call sites must actually pass the row's flag through.
+    expect(bento).toContain('togglePayment(player.uid, false, player.hasMember)');
+    expect(bento).toContain('saveDetailedPayment(rowUid, player.hasMember)');
+
+    // And the decision must not be made by reading the server's sentence. Scoped
+    // to the FUNCTION BODY, not the file: the comment above it necessarily quotes
+    // that sentence to explain the bug, and a file-wide check fails on the
+    // explanation of its own defect — the same trap the fabricated-string guard
+    // above already sprang once.
+    const body = bento.slice(
+      bento.indexOf('const paymentError ='),
+      bento.indexOf('const togglePayment ='),
+    );
+    expect(body.length).toBeGreaterThan(50);
+    expect(body).not.toContain('.message');
+    expect(body).not.toMatch(/\.test\(|\.includes\(|\.match\(/);
+
+    // The assertions above pin the PLUMBING, and plumbing alone is not the fix:
+    // reverting the body to a bare `getUserMessage(err, fallback)` left every one
+    // of them true, because the parameter, both call sites and the arity all
+    // survive. Caught by mutation, not by reading. So pin the BRANCH — hasMember
+    // must actually select between getUserMessage and a distinct message that
+    // names the missing roster record.
+    expect(body).toMatch(/hasMember\s*\n?\s*\?/);
+    expect(body).toMatch(/\?\s*getUserMessage\(/);
+    expect(body).toMatch(/:\s*'[^']{40,}'/);
+    expect(body.toLowerCase()).toContain('roster record');
+  });
+
+  it('the member-facing pot and the commissioner ledger share ONE definition', () => {
+    // Two readers of the same money must not drift; that drift is what let the
+    // roster panel and the ledger card disagree on the same page.
+    expect(read('src/components/PaymentsPanel.tsx')).toContain('rosterPotStats({ pool, members, entries })');
+  });
+});
+
 describe('T7 — Operations tab is wired', () => {
   const admin = read('src/components/SuperAdmin.tsx');
   it('imports OperationsPanel', () => {

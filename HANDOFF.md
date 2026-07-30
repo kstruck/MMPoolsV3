@@ -1,4 +1,4 @@
-# HANDOFF — Session entry point (updated 2026-07-29: Sentry delivery PROVEN in prod for the first time; /admin/:id no longer dead-ends on NFL pools; a FRONTEND rebuild is owed)
+# HANDOFF — Session entry point (updated 2026-07-30: the commissioner Buy-In Ledger reads ROSTER truth and the fabricated cards are gone; a FRONTEND rebuild is owed for that)
 
 > ## ✅ STOP POINT 2026-07-28 — #313–#317 SHIPPED; functions, rules and frontend all current
 >
@@ -31,8 +31,16 @@
 > below). Checking all three mattered: patching two of three would have looked
 > identical from the homepage.
 >
-> ⚠️ **FRONTEND: a rebuild is OWED AGAIN for the AdminRoute fix**, which changes
-> `src/**`. **FUNCTIONS and RULES stay EMPTY — do NOT deploy either.**
+> ✅ **The AdminRoute fix (#321) is MERGED AND LIVE.** The rebuild it owed was
+> done 2026-07-29; the live bundle moved `index-DYJ4N7zt.js` →
+> **`index-D1wLGiMy.js`**, read straight off the prod HTML. Kevin then confirmed
+> in the browser that the cog opens the NFL commissioner surface and Back works.
+>
+> ⚠️ **FRONTEND: a rebuild is OWED for the Bento truth pass (PR A, 2026-07-30)**,
+> which changes `src/**`. **FUNCTIONS and RULES stay EMPTY — do NOT deploy
+> either.** That PR touches `src/` and `tests/` only; it deliberately does not
+> touch `shared/`, which is compiled into functions and would have pulled a
+> functions deploy along with it.
 > Dashboard:
 > <http://72.60.68.7:8000/project/ycoooow0g4c08ogso404k8o4/environment/ogs0cg0gg0kcgkgc8sg4c8g4/application/ics4kkww0c8oo0gw4wkg8w4o/deployment>
 > → **Redeploy**.
@@ -61,14 +69,55 @@
 > **Item 2 is CLOSED (#319, merged `31d1b8c` and deployed)**; 1, 3 and 4 are
 > open. Items 5–10 below came from Kevin's 2026-07-29 walkthrough.
 >
-> 1. **The Bento Buy-In Ledger is blind to members with no entry.** Every figure
->    on that card is `entries`-derived (`NFLManagerBentoDashboard.tsx:174-181`),
->    so a pool whose members have Member Records but no entry documents shows
->    `$0` projected/collected and "No members matching filter criteria" — while
->    the Member Roster panel on the SAME page reads Member Records and shows them
->    correctly. This is the half of D13 that P1 could not reach:
->    `setPaidStatus.ts:162` mirrors display fields onto the entry only
->    `if (entrySnap.exists)`. Fix is to point the ledger at Member Records.
+> 1. ✅ **CLOSED 2026-07-30 — the Buy-In Ledger reads ROSTER truth.** Every figure
+>    on that card was `entries`-derived, so a pool whose members have Member
+>    Records but no entry documents showed `$0` projected/collected and "No
+>    members matching filter criteria" — while the Member Roster panel on the SAME
+>    page read Member Records and showed them correctly. This was the half of D13
+>    that P1 could not reach: `setPaidStatus` mirrors display fields onto the entry
+>    only `if (entrySnap.exists)`, so an entry-backed reader cannot see a member
+>    who never submitted one.
+>
+>    Fixed by extracting the roster merge and the dues maths into
+>    `src/utils/poolRoster.ts` — `buildPoolRoster` and `rosterPotStats` — and
+>    pointing **three** surfaces at them: the Bento card, the Advanced Payment
+>    Ledger modal (item 7) and `PaymentsPanel`'s member-facing pot, which is where
+>    the codex-hardened dues maths came FROM. Nothing was re-derived; a third
+>    definition is what caused the disagreement. Grep the symbols, not line
+>    numbers.
+>
+>    Two further fabrications fell out of the same card: the fee defaulted to
+>    `entryFee || 20`, so a free pool projected a pot nobody owed, and Clearing
+>    Rate divided by entry holders rather than by everyone who joined — 100% on a
+>    pool where one of four members had paid. Guarded by
+>    `src/utils/poolRoster.test.ts` (29 cases) plus wiring invariants in
+>    `tests/admin-surface-invariants.test.ts`; **38 mutations applied across the
+>    two. 37 killed on the first attempt; one SURVIVED — a guard that pinned the
+>    plumbing of a fix without pinning that the fix CHANGED anything — and was
+>    strengthened until it did not. The mutation caught it; reading it did not.**
+>
+>    **codex ran six rounds and found seven more, all valid, all absorbed,
+>    none rejected** — full detail in `PLAN-PAYMENT-TRUTH` §6b's review log.
+>    Rounds 2, 4 and 5 each found defects in the PREVIOUS round's fix, which is
+>    the pattern CLAUDE.md §2c predicts and the reason a clean round 1 is not the
+>    review. Two are worth knowing here because they
+>    are about the FIX, not the original defect: the replacement pick deadline
+>    showed the first kickoff rather than the lock the server enforces
+>    (`lockBufferMinutes` earlier, up to an hour on Survivor/Margin), and the green
+>    "all buy-ins cleared" state could sit directly above a positive Outstanding
+>    Due, because base dues and rebuy dues settle independently under P3 and the
+>    unpaid list is empty in exactly that case. The third — a head count taken as
+>    `Math.max` of three source sizes rather than their union — was **inherited
+>    verbatim from `PaymentsPanel`**, so the member-facing pot had it too and is
+>    fixed by the same change.
+>
+>    ⚠️ **One stale comment is knowingly left behind:** `functions/src/setPaidStatus.ts`
+>    still explains the entry mirror as REQUIRED because "the Bento ledger UI is
+>    entry-backed". It no longer is. The mirror itself is still correct and still
+>    wanted (`reconcilePaymentTruth` depends on the two stores converging), but the
+>    stated reason is obsolete. Not fixed here because `functions/` is deployed
+>    separately and a comment-only edit there would have owed a full functions
+>    deploy. Fold it into the next PR that touches `functions/`.
 > 2. ✅ **CLOSED 2026-07-29 — the seasonType filter now has ONE definition.**
 >    Manager surfaces filtered `g.week === week` alone while member surfaces also
 >    required the pool's season type, so on a pool holding a week-1 game of the
@@ -144,16 +193,19 @@
 >    pool is being treated as unknown. That is every NFL pool, on the
 >    commissioner's primary navigation. `ManagerDashboard.tsx:713,785` route the
 >    same way. Small fix, disproportionate reach.
-> 6. **The Buy-In Ledger chart is clipped by a NEGATIVE left margin.**
->    `NFLManagerBentoDashboard.tsx:418` sets
->    `margin={{ top: 2, right: 10, left: -25, bottom: 2 }}` on a
->    `layout="vertical"` BarChart, which drags the category labels
->    ("Collected"/"Pending") off the left edge. **Distinct from item 1** — that is
->    the empty data, this is the layout. Both are on the same card.
-> 7. **The Full Ledger modal is empty for the same reason as the card**, so
->    item 1's scope is wider than recorded: the "Advanced Payment Ledger" modal's
->    four tiles (Total Projected / Collected / Outstanding Due / Clearing Rate)
->    all read `$0`/`0%` from the same `entries`-derived source.
+> 6. ✅ **CLOSED 2026-07-30 — the chart's NEGATIVE left margin is gone.** It set
+>    `left: -25` on a `layout="vertical"` BarChart, where the Y axis IS the label
+>    column, so the category labels were dragged off the left edge. Now `left: 4`
+>    with an explicit `YAxis width={68}` — without the explicit width recharts
+>    falls back to its 60px default and re-crops the same labels, so the margin
+>    alone was not the whole fix. **Was distinct from item 1** — that was the empty
+>    data, this was the layout. Both were on the same card.
+> 7. ✅ **CLOSED 2026-07-30 with item 1** — the "Advanced Payment Ledger" modal's
+>    four tiles (Total Projected / Collected / Outstanding Due / Clearing Rate) and
+>    its member table now read the same roster helpers as the card. Its empty state
+>    also distinguishes "nobody has joined" from "nothing matches your filter";
+>    it used to report the filter wording for both, which read as a filter problem
+>    on pools that had members.
 > 8. **The manager "AI Commissioner Chat" contains no AI.**
 >    `handleSendBanter` (`NFLManagerBentoDashboard.tsx:220-233`) prepends a
 >    hardcoded prefix to the typed text and pushes it into local React state — no
@@ -172,16 +224,43 @@
 >    enforced server-side in the callable against a stored counter, and the rules
 >    must forbid direct client writes to the banter collection; a client-side
 >    limit is decoration and is bypassed by writing to Firestore directly.
-> 9. **Fabricated data is rendered as commissioner analysis.**
->    `NFLManagerBentoDashboard.tsx:126,135` hardcode `'Sarah K.'` as the
->    top-player fallback, and `:140` seeds the feed with *"Sarah K. is currently
->    leading, but historically has collapsed in Week 13."* — on a one-player pool
->    where no week has ever been played. `Sarah K.` is mock data from
->    `DevDashboardPreview.tsx:131` that leaked into production code. Same class as
->    the T3 "no fake dashboard cards" invariant in
->    `tests/admin-surface-invariants.test.ts`, which does not cover this file.
->    🔨 **KEVIN'S RULING 2026-07-29: remove it** — delete the seed and the
->    fallback, show an honest empty state.
+> 9. ✅ **CLOSED 2026-07-30 — the fabricated commissioner analysis is gone.** The
+>    top-player fallback hardcoded a mock roster name from
+>    `DevDashboardPreview.tsx` and used it to seed the banter feed with a scouting
+>    report about a late-season collapse — on a one-player pool where no week had
+>    ever been played. Per Kevin's ruling the seed and the fallback are deleted and
+>    the feed opens on an honest empty state that also says posts are not saved.
+>
+>    **The T3 "no fake dashboard cards" invariant now covers this file.** It only
+>    ever read `SuperAdminBentoDashboard.tsx`, which is precisely why the same
+>    defect class survived untouched on the commissioner one. The new
+>    `T3 — no fabricated data on the commissioner bento` block asserts eleven
+>    removed literals absent from the source, and it carries a guard-the-guard
+>    assertion so a rename cannot make it pass vacuously.
+>
+>    ⚠️ **Extending that guard immediately found three more fabrications on the
+>    same card, all now removed** (they were not in the original five reports):
+>
+>    * **Two commissioner buttons that did nothing.** "Recalculate Scores" popped
+>      a toast announcing an ESPN score recalculation had begun and called
+>      NOTHING; "Toggle Locks" did the same for locks. The real control ("Score &
+>      Recap Week N") is further down the same page. This was the most dangerous
+>      of the set: seven days from the HOF game, a commissioner clicking the decoy
+>      would have been told scores were recalculating when nothing had happened.
+>    * **An invented audit trail.** The "League operations log" rendered hardcoded
+>      relative timestamps against a standings finalization and an ESPN schedule
+>      sync, neither of which had run on the pool. The card carried nothing real,
+>      and the genuine equivalent already exists and is already reachable — the
+>      Payments tab renders the append-only `pools/{id}/payments` ledger with real
+>      timestamps, for the commissioner too — so the card was REMOVED rather than
+>      rebuilt against a second reader of the same data.
+>    * **A hardcoded sixteen-hour pick deadline**, rendered unconditionally on
+>      every pool whether or not the week held a game. It now shows the real first
+>      kickoff of the displayed week, through `formatDeadline`, and renders nothing
+>      when the week has no games.
+>
+>    Also corrected: the banter card's footer claimed an active AI moderation
+>    capability. There is none (item 8); the label now says the panel is a draft.
 > 10. ❌ **RETRACTED 2026-07-29 — this finding was NOT REAL.** It claimed
 >    `ManagerDashboard.tsx:786` built its target with backslashes
 >    (`` `\pool\${pool.id}` ``). It does not, and it never has:
@@ -206,10 +285,25 @@
 >    `isNflSeasonType` predicate. Same one-definition defect as #315 and #319, in
 >    a file #315 had already touched. **FIXED 2026-07-29** — it now delegates.
 >
-> **Items 6, 7, 9 and the duplicate-save item 3 are all on
-> `NFLManagerBentoDashboard`/`NFLManagerView` and should be absorbed into the
-> tabbed-split PR rather than fixed four separate times.** Item 8 waits on its
-> plan.
+> **Items 1, 6, 7 and 9 all shipped together on 2026-07-30** as the Bento truth +
+> honesty pass, since they were all on `NFLManagerBentoDashboard`. **Item 3 (the
+> five duplicate `SaveSettingsControl`s) is still open** and belongs to the tabbed
+> commissioner split, which is the change that removes the reason they exist.
+> Item 8 waits on `PLAN-BANTER-PANEL`.
+>
+> ### NEW, found 2026-07-30 while fixing the ledger — NOT fixed
+>
+> 12. **The Submission Health card is blind the same way the ledger was.**
+>    `submissionStats` and `unsubmittedPlayers` on
+>    `NFLManagerBentoDashboard` are still `entries`-derived, so a member who
+>    joined and has no entry document is counted in NEITHER the total nor the
+>    pending list. A pool with members but no entries reports "0 of 0 participants
+>    have locked in" at **100%**, which reads as perfect submission health on a
+>    pool where nobody has picked anything. Same root cause as item 1 and the same
+>    fix shape — point it at `buildPoolRoster`, which already returns `hasEntry`
+>    and the entry itself. Deliberately left out of the 2026-07-30 PR to keep that
+>    change to the money surfaces Kevin scoped; it is a display defect, not a
+>    data-integrity one, and the nudge list it feeds can only under-report.
 >
 > ### Standing, unrelated to this deploy
 >
