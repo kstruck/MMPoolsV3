@@ -75,9 +75,12 @@
 > off post-merge `main` it compares only what landed afterwards and reports empty
 > whatever the PR did. (It is not vacuous everywhere — this repo squash-merges, so
 > the original PR branch never becomes an ancestor of `main` and the three-dot diff
-> still lists that PR's files *from the branch itself*. But merging deletes the
-> branch, so that is rarely the position you are in.) Three-dot remains the right
-> scope check for an **open** PR, exactly as CLAUDE.md §2c says.
+> still lists that PR's files *from the branch itself* — verified on
+> `claude/bento-truth` after #322 merged. Whether that branch is still THERE
+> depends on repo settings: `gh pr merge --delete-branch` did not remove
+> `origin/claude/bento-truth`, and the merged branches for #319/#320/#321 are all
+> still on the remote too.) Three-dot remains the right scope check for an **open**
+> PR, exactly as CLAUDE.md §2c says.
 >
 > For `6676580` the merge-commit form returns empty, and
 > `git show --name-only --format= 6676580` lists nine files: three docs, five
