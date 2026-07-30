@@ -232,11 +232,17 @@ reading a missing signal as a good one.
 ### 2. Pull the full report
 
 ```bash
-gh pr view <N> --json reviews -q '.reviews[] | {author: .author.login, state, body}'
-gh api --paginate repos/kstruck/MMPoolsV3/pulls/<N>/comments \
-  -q '.[] | {author: .user.login, path, line, body}'
-gh pr view <N> --json comments -q '.comments[] | {author: .author.login, body}'
+R=repos/kstruck/MMPoolsV3
+gh api --paginate $R/pulls/<N>/reviews   -q '.[] | {author: .user.login, state, body}'
+gh api --paginate $R/pulls/<N>/comments  -q '.[] | {author: .user.login, path, line, body}'
+gh api --paginate $R/issues/<N>/comments -q '.[] | {author: .user.login, body}'
 ```
+
+**All three are paginated REST, matching the watcher.** Two of them were
+`gh pr view --json`, which is GraphQL and returns a first page only — so on a PR
+with more than a page of reviews or issue comments this step would omit the very
+report the paginated watcher had just detected, and the validity pass would close
+the gate having never seen it.
 
 **Keep the author on every line, and validity-call only qodo's.** The inline
 command used to project `{path, line, body}` with no author, so on a PR that also

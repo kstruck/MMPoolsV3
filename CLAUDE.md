@@ -43,10 +43,18 @@ nothing but a "your trial has ended" notice.
 one of them can be empty, so a report is not absent until all three are:
 
 ```
-gh pr view <n> --json comments                          # numbered findings
-gh api repos/kstruck/MMPoolsV3/pulls/<n>/comments       # inline detail
-gh api repos/kstruck/MMPoolsV3/pulls/<n>/reviews        # review-surface report
+gh api --paginate repos/kstruck/MMPoolsV3/issues/<n>/comments   # summary / zero-findings report
+gh api --paginate repos/kstruck/MMPoolsV3/pulls/<n>/comments    # inline findings
+gh api --paginate repos/kstruck/MMPoolsV3/pulls/<n>/reviews     # review-surface report
 ```
+
+⚠️ **`--paginate`, and REST rather than `gh pr view --json`, on all three.**
+`gh pr view --json` is GraphQL and returns a first page only; the REST endpoints
+return 30 per page. On a PR with more than a page of comments or reviews, either
+shortcut can come back empty **after qodo has posted** — and this section says an
+empty result means the report is absent, which would let the mandatory gate be
+called clean with no review at all. `.claude/skills/mmp-qodo-cycle/SKILL.md` has
+the full watcher; prefer it over running these by hand.
 
 **Absorb or reject each finding with written evidence.** A rejection is a
 legitimate outcome and needs reasoning **on the PR**, not silence. qodo marks
