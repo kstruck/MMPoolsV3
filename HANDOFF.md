@@ -1,4 +1,4 @@
-# HANDOFF — Session entry point (updated 2026-07-30: the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, and ALL THREE DEPLOY QUEUES ARE EMPTY)
+# HANDOFF — Session entry point (updated 2026-07-30: the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and ALL THREE DEPLOY QUEUES ARE EMPTY)
 
 > ## ✅ STOP POINT 2026-07-28 — #313–#317 SHIPPED; functions, rules and frontend all current
 >
@@ -39,6 +39,13 @@
 > ✅ **The Bento truth pass (#322, merged `6676580`) is REBUILT AND VERIFIED
 > LIVE.** The rebuild was triggered 2026-07-30 and the live bundle moved
 > `index-D1wLGiMy.js` → **`index-C31xivRN.js`**, read straight off the prod HTML.
+>
+> ✅ **The tabbed commissioner split (#324, merged `245f3d4`) is REBUILT AND
+> VERIFIED LIVE** — `index-C31xivRN.js` → **`index-CR5oJEHh.js`**, same check.
+> ⚠️ **Its APPEARANCE is unverified**: nobody has clicked the four sections in a
+> browser. Structure is pinned by 36 invariants and 12 mutations, and control
+> placement is asserted by source offset, but a pure layout change deserves one
+> human look. See `MORNING-2026-07-30.md` task 1b.
 >
 > ⚠️ **A moved bundle hash proves the rebuild shipped; an UNMOVED one does not
 > disprove it.** The rule "the hash must change for a `src/**` change" is the
@@ -195,11 +202,18 @@
 >    Pools created through the wizard can legitimately omit the field
 >    (`buildNFLPayload.test.ts` asserts it), so the affected population is
 >    plausibly non-zero — **unverified in prod, no census was run.**
-> 3. **Five `SaveSettingsControl` instances** in `NFLManagerView.tsx` (703, 818,
->    841, 934, 941), all calling the same `handleSaveSettings`. Harmless —
->    deliberate placement per the comment at `:32` — but it reads as a bug, and
->    it exists because the commissioner page is far too long. A tabbed split
->    (Overview / Members & Payments / Settings / Scoring) is agreed with Kevin.
+> 3. ✅ **CLOSED 2026-07-30 (#324) — one save control, and the page is split into
+>    four sections.** There were five `SaveSettingsControl` instances, all calling
+>    the same `handleSaveSettings`. Harmless and deliberate per the component's own
+>    docblock, but they read as a bug, and they existed only because the page was
+>    one ~870-line scroll that left the save button nowhere near whatever you had
+>    just edited. The tabbed split (Overview / Members & Payments / Scoring /
+>    Settings) removes the reason rather than the control: four in-section copies
+>    are gone and the one at the foot of Settings remains. The three-column grid
+>    that made the roster share a row with the scoring console is dissolved too.
+>    Guarded by `tests/nfl-surface-invariants.test.ts`, which pins by source
+>    OFFSET that each control sits inside the section claiming it — a moved block
+>    landing in no branch compiles, lints and renders nothing.
 > 4. **NO UI RENDERS `system/heartbeats`.** Every scheduled job's liveness and
 >    verdict is written there (`lib/heartbeat.ts:46,84`), and the only way to
 >    read it is the Firebase console. The SuperAdmin **Overview** tab's "Ops
@@ -340,10 +354,9 @@
 >    a file #315 had already touched. **FIXED 2026-07-29** — it now delegates.
 >
 > **Items 1, 6, 7 and 9 all shipped together on 2026-07-30** as the Bento truth +
-> honesty pass, since they were all on `NFLManagerBentoDashboard`. **Item 3 (the
-> five duplicate `SaveSettingsControl`s) is still open** and belongs to the tabbed
-> commissioner split, which is the change that removes the reason they exist.
-> Item 8 waits on `PLAN-BANTER-PANEL`.
+> honesty pass, since they were all on `NFLManagerBentoDashboard`; **item 3
+> followed the same day** as the tabbed split (#324). Of the walkthrough findings
+> only **item 8** remains, and it waits on `PLAN-BANTER-PANEL`.
 >
 > ### NEW, found 2026-07-30 while fixing the ledger — NOT fixed
 >
