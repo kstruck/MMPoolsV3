@@ -12,6 +12,7 @@ import { NFLManagerBentoDashboard } from './NFLManagerBentoDashboard';
 import { RecordPayoutsCard } from './RecordPayoutsCard';
 import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
+import { gamesForPoolWeek } from '../../utils/nflPending';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
 
 /**
@@ -159,7 +160,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   }, [confidenceMode]);
 
   // --- Weekly Games ---
-  const weeklyGames = useMemo(() => games.filter(g => g.week === week), [games, week]);
+  const weeklyGames = useMemo(() => gamesForPoolWeek(games, castPool, week), [games, castPool, week]);
   const finalGamesCount = useMemo(
     () => weeklyGames.filter(g => g.status === 'FINAL' || g.status === 'CANCELLED').length,
     [weeklyGames]
@@ -486,12 +487,12 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // Teams playing in the proxy target week (for survivor/margin proxy picks)
   const proxyWeekTeams = useMemo(() => {
     const teams = new Set<string>();
-    games.filter(g => g.week === proxyWeek).forEach(g => {
+    gamesForPoolWeek(games, castPool, proxyWeek).forEach(g => {
       if (g.homeTeam?.abbreviation) teams.add(g.homeTeam.abbreviation);
       if (g.awayTeam?.abbreviation) teams.add(g.awayTeam.abbreviation);
     });
     return [...teams].sort();
-  }, [games, proxyWeek]);
+  }, [games, castPool, proxyWeek]);
 
   const branding = castPool.branding || {};
   const primaryAccent = branding.secondaryColor || '#6366f1';

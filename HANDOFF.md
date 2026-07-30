@@ -1,4 +1,4 @@
-# HANDOFF — Session entry point (updated 2026-07-28: five PRs shipped and deployed; BOTH queues empty; SMS reminders are live for the first time)
+# HANDOFF — Session entry point (updated 2026-07-29: the seasonType filter has ONE definition; a FRONTEND rebuild is owed again)
 
 > ## ✅ STOP POINT 2026-07-28 — #313–#317 SHIPPED; functions, rules and frontend all current
 >
@@ -18,11 +18,15 @@
 >
 > **Rules did not change in any of the five**, so they remain ≡ this tag.
 >
-> ✅ **FRONTEND: the owed rebuild is DONE.** Coolify rebuilt 2026-07-28; the live
-> bundle moved from `index-Na2D7cdu.js` to **`index-gn5gQtFU.js`**, verified in
-> the browser with cache disabled. That clears both the #297/#298 dependency-bump
-> debt and #313/#315's frontend changes. **BOTH DEPLOY QUEUES ARE EMPTY.**
-> Dashboard, for next time:
+> ⚠️ **FRONTEND: a rebuild is OWED again, as of 2026-07-29.** The 2026-07-28
+> rebuild did land — the live bundle moved from `index-Na2D7cdu.js` to
+> **`index-gn5gQtFU.js`**, verified in the browser with cache disabled, clearing
+> both the #297/#298 dependency-bump debt and #313/#315's frontend changes — and
+> both queues WERE empty at `0a705c0`. The seasonType-filter PR below then changed
+> frontend source only, so **FUNCTIONS and RULES stay EMPTY and the FRONTEND queue
+> is NOT empty**: nothing that fix touches reaches a member or a commissioner
+> until Coolify rebuilds.
+> Dashboard:
 > <http://72.60.68.7:8000/project/ycoooow0g4c08ogso404k8o4/environment/ogs0cg0gg0kcgkgc8sg4c8g4/application/ics4kkww0c8oo0gw4wkg8w4o/deployment>
 > → **Redeploy**.
 >
@@ -45,9 +49,9 @@
 >
 > ### KNOWN OPEN, found while verifying this deploy (2026-07-28)
 >
-> Three display/consistency defects, none caused by these five PRs, all on the
-> commissioner surface. None is a data-integrity problem — the authoritative
-> stores are correct in every case.
+> Four display/consistency defects, none caused by these five PRs. None is a
+> data-integrity problem — the authoritative stores are correct in every case.
+> **Item 2 is CLOSED**; 1, 3 and 4 are open.
 >
 > 1. **The Bento Buy-In Ledger is blind to members with no entry.** Every figure
 >    on that card is `entries`-derived (`NFLManagerBentoDashboard.tsx:174-181`),
@@ -57,16 +61,29 @@
 >    correctly. This is the half of D13 that P1 could not reach:
 >    `setPaidStatus.ts:162` mirrors display fields onto the entry only
 >    `if (entrySnap.exists)`. Fix is to point the ledger at Member Records.
-> 2. **Manager surfaces do not apply the seasonType filter that member surfaces
->    do.** `NFLManagerView.tsx:162` and `NFLManagerBentoDashboard.tsx:147` filter
->    `g.week === week` alone; `WeekChecklist.tsx:49` and
->    `NFLPoolDashboard.tsx:156` also require
->    `Number(g.seasonType) === Number(pool.seasonType)`. On a pool holding a
->    week-1 game of the other season type, the manager counts it and the member
->    checklist does not — observed live as "Total Matchups: 1" next to a `W1 —`
->    (no-games) chip and a "Week 2 picks not in yet" banner. Not only cosmetic:
->    the manager's `allGamesFinal` gate for Score & Recap
->    (`NFLManagerView.tsx:164`) reads the unfiltered set.
+> 2. ✅ **CLOSED 2026-07-29 — the seasonType filter now has ONE definition.**
+>    Manager surfaces filtered `g.week === week` alone while member surfaces also
+>    required the pool's season type, so on a pool holding a week-1 game of the
+>    other season type the manager counted it and the member checklist did not —
+>    observed live as "Total Matchups: 1" beside a `W1 —` (no-games) chip and a
+>    "Week 2 picks not in yet" banner. Not only cosmetic: the manager's
+>    `isWeekFullyFinal` gate for Score & Recap counted the unfiltered set.
+>    `src/utils/nflPending.ts` now holds the only two definitions —
+>    `gamesForPoolWeek` (8 call sites) and `poolSeasonType` (10) — and every
+>    manager, member and service surface delegates to them. Grep the symbols
+>    rather than trusting a line number.
+>
+>    **The sweep found a second, worse bug in the surfaces that were "correct".**
+>    `seasonType` is OPTIONAL on a pool and omitting it means REGULAR season
+>    (`shared/schemas/nfl.ts`, `shared/testPool.ts`), but every member-side copy
+>    read it as bare `Number(pool.seasonType)` — which is `NaN` when unset, and
+>    `NaN` matches no game. Such a pool rendered with **no schedule at all**: no
+>    games to pick, `seasonOpenTime` null so the rules-edit lock never engaged,
+>    and `subscribeToSiteConsensus` queried on `NaN`. The shared helper applies
+>    the documented `|| 2` default, so those pools now behave as regular season.
+>    Pools created through the wizard can legitimately omit the field
+>    (`buildNFLPayload.test.ts` asserts it), so the affected population is
+>    plausibly non-zero — **unverified in prod, no census was run.**
 > 3. **Five `SaveSettingsControl` instances** in `NFLManagerView.tsx` (703, 818,
 >    841, 934, 941), all calling the same `handleSaveSettings`. Harmless —
 >    deliberate placement per the comment at `:32` — but it reads as a bug, and

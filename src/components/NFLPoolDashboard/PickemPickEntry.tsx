@@ -7,6 +7,7 @@ import { useToast } from '../ui/Toast';
 import { getUserMessage, isLockError } from '../../utils/errorMessages';
 import { now as serverNow } from '../../utils/serverClock';
 import { formatTimeWithZone } from '../../utils/formatTime';
+import { poolSeasonType } from '../../utils/nflPending';
 import { loadDraft, saveDraft, clearDraft } from '../../utils/draftStore';
 import type { User, Pool, NFLGame } from '../../types';
 
@@ -248,7 +249,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
             <CheckCircle2 size={18} aria-hidden="true" />
             <span>Week {week} picks submitted at {formatTimeWithZone(submittedAt)}. You can change unlocked picks and resubmit until kickoff.</span>
           </div>
-          {onGoToWeek && week < ((Number(castPool.seasonType) === 1) ? 4 : 18) && (
+          {onGoToWeek && week < (poolSeasonType(castPool) === 1 ? 4 : 18) && (
             <Button
               variant="secondary"
               size="sm"

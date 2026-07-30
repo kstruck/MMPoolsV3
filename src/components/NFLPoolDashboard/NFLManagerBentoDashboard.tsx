@@ -32,6 +32,7 @@ import {
   YAxis,
   Tooltip
 } from 'recharts';
+import { gamesForPoolWeek } from '../../utils/nflPending';
 
 interface NFLManagerBentoDashboardProps {
   pool: Pool;
@@ -144,7 +145,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   // Derived unsubmitted players list.
   // Pick'em: unsubmitted = at least one current-week game without a pick (picks keyed by gameId).
   // Survivor/Margin: unsubmitted = no pick stored under the current week number.
-  const weeklyGames = useMemo(() => _games.filter(g => g.week === week), [_games, week]);
+  const weeklyGames = useMemo(() => gamesForPoolWeek(_games, castPool, week), [_games, castPool, week]);
   const unsubmittedPlayers = useMemo(() => {
     const list = entries.filter(e => {
       const picks = e.picks || {};

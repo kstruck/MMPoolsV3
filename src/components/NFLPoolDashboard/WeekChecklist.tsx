@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { AlertTriangle, ArrowRight, Check, X, Square, Dot, Minus } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
-import { getWeekStatus, weekDeadline, type WeekStatus } from '../../utils/nflPending';
+import { gamesForPoolWeek, getWeekStatus, poolSeasonType, weekDeadline, type WeekStatus } from '../../utils/nflPending';
 import { formatDeadline } from '../../utils/formatTime';
 import { now as serverNow } from '../../utils/serverClock';
 import { Button } from '../ui';
@@ -42,18 +42,18 @@ const CHIP_MARKS: Record<WeekStatus, React.ReactNode> = {
  */
 export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games, selectedWeek, onSelectWeek, onPickNow }) => {
     const castPool = pool as any;
-    const seasonType = Number(castPool.seasonType);
+    const seasonType = poolSeasonType(castPool);
     const totalWeeks = seasonType === 1 ? 4 : 18;
     const weeks = useMemo(() => {
         return Array.from({ length: totalWeeks }, (_, i) => i + 1).map(week => {
-            const weekGames = games.filter(g => g.week === week && Number(g.seasonType) === seasonType);
+            const weekGames = gamesForPoolWeek(games, castPool, week);
             // Per week, because a hard-lock pool's deadline is frozen per week — the
             // checklist must show the deadline the server actually enforces.
             const lockBufferMinutes = effectiveBufferMinutesForWeek(castPool, week, weekGames.map(g => g.startTime));
             const status = getWeekStatus(pool.type, entry, weekGames, week, lockBufferMinutes);
             return { week, status, deadline: weekDeadline(weekGames, lockBufferMinutes) };
         });
-    }, [games, entry, pool.type, seasonType, totalWeeks, castPool]);
+    }, [games, entry, pool.type, totalWeeks, castPool]);
 
     // The nearest upcoming week the user hasn't finished — that's the one to nag about
     const nextDue = useMemo(() => {

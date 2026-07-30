@@ -18,6 +18,7 @@ import { AICommissioner } from '../AICommissioner';
 import { useToast } from '../ui/Toast';
 import { Button } from '../ui';
 import { now as serverNow } from '../../utils/serverClock';
+import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes, resolveHardWeekLock, frozenHardLockFor } from '@shared/weeklyHardLock';
 import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
@@ -38,6 +39,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   onOpenAuth
 }) => {
   const castPool = pool as any;
+  const seasonType = poolSeasonType(castPool);
   const toast = useToast();
 
   // Tab lives in the URL so the browser Back button steps through tabs (and refresh
@@ -58,7 +60,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // Estimate current NFL Week based on date (standard season calculations)
   const getEstimatedNFLWeek = (): number => {
     const now = Date.now();
-    const isPre = Number(castPool.seasonType) === 1;
+    const isPre = seasonType === 1;
 
     if (isPre) {
       const preseasonStart = new Date('2026-08-06T00:00:00').getTime(); // HOF Weekend kickoff
@@ -75,7 +77,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     }
   };
 
-  const currentEstWeek = useMemo(() => getEstimatedNFLWeek(), [castPool.seasonType]);
+  const currentEstWeek = useMemo(() => getEstimatedNFLWeek(), [seasonType]);
   // Selected week also rides in the URL (?week=) so refresh/Back restore the drilldown.
   // Week changes replace (not push) so scrubbing weeks doesn't spam browser history.
   const weekParam = searchParams.get('week');
@@ -153,16 +155,17 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 
   // Filter games for the currently selected week and seasonType
   const weeklyGames = useMemo(() => {
-    const filtered = games.filter(g => g.week === selectedWeek && Number(g.seasonType) === Number(castPool.seasonType));
+    const filtered = gamesForPoolWeek(games, castPool, selectedWeek);
     console.log("[NFLPoolDashboard] weeklyGames filter ran:", {
       selectedWeek,
-      poolSeasonType: castPool.seasonType,
+      poolSeasonTypeRaw: castPool.seasonType, // undefined here means regular season, not "missing"
+      poolSeasonType: seasonType,
       totalGamesCount: games.length,
       filteredGamesCount: filtered.length,
       filteredGames: filtered.map(g => ({ id: g.id, week: g.week, seasonType: g.seasonType }))
     });
     return filtered;
-  }, [games, selectedWeek, castPool.seasonType]);
+  }, [games, selectedWeek, castPool, seasonType]);
 
   // Retrieve user's personal entry
   const myEntry = useMemo(() => {
@@ -214,10 +217,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 
   // Season opener — the first kickoff of the whole season. Rules edits lock here.
   const seasonOpenTime = useMemo(() => {
-    const seasonGames = games.filter(g => Number(g.seasonType) === Number(castPool.seasonType));
+    const seasonGames = games.filter(g => Number(g.seasonType) === seasonType);
     if (seasonGames.length === 0) return null;
     return Math.min(...seasonGames.map(g => g.startTime));
-  }, [games, castPool.seasonType]);
+  }, [games, seasonType]);
 
   // Share handler
   const handleShare = () => {
@@ -288,9 +291,9 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                 onChange={e => setSelectedWeek(parseInt(e.target.value))}
                 className="bg-transparent focus:outline-none font-body text-sm text-[color:var(--text)] font-bold cursor-pointer"
               >
-                {Array.from({ length: Number(castPool.seasonType) === 1 ? 4 : 18 }, (_, i) => i + 1).map(w => (
+                {Array.from({ length: seasonType === 1 ? 4 : 18 }, (_, i) => i + 1).map(w => (
                   <option key={w} value={w} className="bg-card text-[color:var(--text)]">
-                    {Number(castPool.seasonType) === 1
+                    {seasonType === 1
                       ? w === 1
                         ? 'HOF Weekend'
                         : `Preseason Week ${w - 1}`
