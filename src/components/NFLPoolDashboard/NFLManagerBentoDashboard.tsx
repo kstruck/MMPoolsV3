@@ -31,7 +31,7 @@ import {
 } from 'recharts';
 import { gamesForPoolWeek, weekDeadline } from '../../utils/nflPending';
 import { effectiveBufferMinutesForWeek, usesWeeklyHardLock } from '@shared/weeklyHardLock';
-import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate } from '../../utils/poolRoster';
+import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate, duesRates, memberOutstanding } from '../../utils/poolRoster';
 import { formatDeadline } from '../../utils/formatTime';
 
 interface NFLManagerBentoDashboardProps {
@@ -206,7 +206,18 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   // alone AND defaulted a missing entryFee to 20, so a real pool could report
   // both "$0 collected of $0" and a $20-per-head pot that was never owed.
   const pot = useMemo(() => rosterPotStats({ pool, members, entries }), [pool, members, entries]);
-  const unpaidRoster = useMemo(() => roster.filter(r => r.paidStatus !== 'PAID'), [roster]);
+
+  // Filtered by DEBT, not by paid status (codex r5). A seeded owner carries
+  // `feeOwed: 0` because hosting is not playing, and on a FREE pool every member
+  // does — all of them `paidStatus: 'UNPAID'` while owing nothing. A status-only
+  // filter listed them here with a meaningless "Mark Paid" button and stopped the
+  // card ever reaching its all-clear, on a card whose own tiles read Expected $0
+  // and Outstanding Due $0.
+  const rates = useMemo(() => duesRates(pool), [pool]);
+  const unpaidRoster = useMemo(
+    () => roster.filter(r => memberOutstanding(r, rates) > 0),
+    [roster, rates],
+  );
 
   // Unpaid members shown on the summary card (MAX 10)
   const dashboardUnpaidPlayers = useMemo(() => unpaidRoster.slice(0, 10), [unpaidRoster]);
@@ -461,57 +472,66 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
           {/* Members list limited to 10 UNPAID players */}
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-1">Unpaid Members (<span className="num">{unpaidRoster.length}</span>)</span>
+              <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-1">Members Still Owing (<span className="num">{unpaidRoster.length}</span>)</span>
               <span className="font-display font-bold text-[8px] text-faint uppercase tracking-[0.08em]">Showing Max 10</span>
             </div>
 
             {dashboardUnpaidPlayers.length > 0 ? (
-              dashboardUnpaidPlayers.map((player) => (
-                <div
-                  key={player.uid}
-                  className="flex justify-between items-center p-3 rounded-lg border border-line bg-page hover:bg-surface transition-all duration-150"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-md font-display font-bold text-xs flex items-center justify-center bg-navy-800 text-white">
-                      {player.displayName.substring(0, 2).toUpperCase()}
-                    </div>
-                    <div>
-                      <span className="font-display font-bold text-xs text-[color:var(--text)] block uppercase leading-none mb-1">
-                        {player.displayName}
-                      </span>
-                      <span className="font-body font-semibold text-[9px] text-faint">{player.email || 'No email registered'}</span>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => togglePayment(player.uid, player.paidStatus === 'PAID', player.hasMember)}
-                    disabled={togglingId === player.uid}
-                    className="flex items-center gap-2 bg-navy-800 hover:bg-navy-700 text-white px-3.5 py-1.5 rounded-md text-[10px] font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px"
+              dashboardUnpaidPlayers.map((player) => {
+                // Base dues PAID but still on this list means the debt is REBUY
+                // dues, which settle independently (P3). "Mark Paid" would toggle
+                // them to UNPAID — the opposite of what a commissioner clicking it
+                // wants — and rebuy settlement is a different callable mode
+                // (settleRebuys) that lives on the member roster below. So the row
+                // names the debt and offers no misleading action.
+                //
+                // This branch is why codex r1's separate "base cleared, rebuy
+                // outstanding" empty state is gone: once the list is filtered by
+                // DEBT rather than paid status (codex r5), rebuy-only debtors
+                // appear IN the list, and that empty state became unreachable. A
+                // branch that cannot be reached is not a safeguard.
+                const owes = memberOutstanding(player, rates);
+                const baseDuesPaid = player.paidStatus === 'PAID';
+                return (
+                  <div
+                    key={player.uid}
+                    className="flex justify-between items-center p-3 rounded-lg border border-line bg-page hover:bg-surface transition-all duration-150"
                   >
-                    {togglingId === player.uid ? 'Saving...' : 'Mark Paid'}
-                  </button>
-                </div>
-              ))
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-md font-display font-bold text-xs flex items-center justify-center bg-navy-800 text-white">
+                        {player.displayName.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <span className="font-display font-bold text-xs text-[color:var(--text)] block uppercase leading-none mb-1">
+                          {player.displayName}
+                        </span>
+                        <span className="font-body font-semibold text-[9px] text-faint">
+                          {player.email || 'No email registered'} · <span className="num">${owes}</span> due
+                        </span>
+                      </div>
+                    </div>
+
+                    {baseDuesPaid ? (
+                      <span className="font-display font-bold text-[9px] uppercase tracking-[0.08em] text-gold-700 dark:text-gold-400 bg-gold-400/10 border border-gold-500/40 px-2.5 py-1.5 rounded-md text-center leading-tight">
+                        Rebuy dues<br />settle below
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => togglePayment(player.uid, false, player.hasMember)}
+                        disabled={togglingId === player.uid}
+                        className="flex items-center gap-2 bg-navy-800 hover:bg-navy-700 text-white px-3.5 py-1.5 rounded-md text-[10px] font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px"
+                      >
+                        {togglingId === player.uid ? 'Saving...' : 'Mark Paid'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })
             ) : pot.memberCount === 0 ? (
               // An empty roster is NOT "all buy-ins cleared" — the old card showed
               // the green all-clear on a pool nobody had joined.
               <div className="text-muted font-display font-bold text-xs uppercase text-center py-6 bg-page border border-line rounded-lg">
                 No members have joined yet.
-              </div>
-            ) : outstandingDue(pot) > 0 ? (
-              // codex r1: base dues and REBUY dues settle independently (P3), so
-              // every member can be PAID while rebuy dollars are still owed. The
-              // all-clear was gated on the unpaid LIST being empty, which made the
-              // card contradict its own Outstanding Due tile — green "all cleared"
-              // above a positive balance. The unpaid list cannot show these members
-              // (their base dues really are paid), so the honest thing is to name
-              // the debt and point at the control that settles it.
-              <div className="text-gold-700 dark:text-gold-400 font-display font-bold text-xs uppercase text-center py-6 bg-gold-400/10 border border-gold-500/40 rounded-lg flex flex-col items-center gap-1">
-                <AlertCircle size={20} />
-                <span>Base buy-ins all cleared</span>
-                <span className="font-body normal-case font-semibold text-[11px] text-muted">
-                  <span className="num">${outstandingDue(pot)}</span> still outstanding in rebuy dues — settle it on the member roster below.
-                </span>
               </div>
             ) : (
               <div className="text-[#0F7B4A] font-display font-bold text-xs uppercase text-center py-6 bg-[#E4F5EC] border border-[#BEE7D0] rounded-lg flex flex-col items-center gap-1">

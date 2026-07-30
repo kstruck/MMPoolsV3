@@ -162,10 +162,57 @@ export interface PotStats {
   memberCount: number;
   paidCount: number;
   unpaidCount: number;
+  /**
+   * Members who OWE NOTHING — base dues covered (or zero) and no rebuy debt.
+   *
+   * Distinct from `paidCount` on purpose (codex r5). A seeded owner carries
+   * `feeOwed: 0` with `paidStatus: 'UNPAID'`, and on a free pool EVERY member
+   * does, so a paid-status count reports 0 cleared while Expected and
+   * Outstanding are both $0. Conversely a member whose base dues are PAID can
+   * still owe a rebuy (P3), so `paidCount` overstates clearance there.
+   */
+  clearedCount: number;
   /** Base dues actually marked PAID, plus settled rebuy dollars. */
   collected: number;
   /** Base dues owed by everyone who joined, plus rebuy dues owed. */
   expected: number;
+}
+
+/** Fee inputs read off a pool, in one place so callers cannot disagree. */
+export interface DuesRates {
+  entryFee: number;
+  rebuyCost: number;
+}
+
+export function duesRates(pool: any): DuesRates {
+  const settings = pool?.settings || {};
+  // `?? 0`, never `|| 20`: a free pool has no entry fee, and inventing one
+  // reports money that was never owed. The Bento ledger defaulted to 20.
+  const entryFee: number = settings.entryFee ?? 0;
+  return { entryFee, rebuyCost: settings.rebuyCost ?? entryFee };
+}
+
+/**
+ * What ONE roster row still owes — base dues plus unsettled rebuy dues.
+ *
+ * codex r5: "unpaid" is not a payment STATUS on this card, it is a DEBT. A
+ * seeded owner (`feeOwed: 0`, hosting is not playing) and every member of a free
+ * pool carry `paidStatus: 'UNPAID'` while owing nothing, so a status-only filter
+ * put them in the Buy-In Ledger's unpaid queue with a meaningless "Mark Paid"
+ * button, and kept the card from ever reaching its all-clear even with Expected
+ * and Outstanding Due both $0.
+ *
+ * Pure. Never negative — an overpaid rebuy is not a credit against base dues.
+ */
+export function memberOutstanding(row: RosterRow, rates: DuesRates): number {
+  const fee = row.feeOwed ?? rates.entryFee;
+  const base = row.paidStatus === 'PAID' ? 0 : fee;
+  // Un-stamped legacy rebuys fall back to entry evidence, same rule as the pot.
+  const rebuyOwed =
+    typeof row.rebuyOwed === 'number'
+      ? row.rebuyOwed
+      : (row.rebuysUsed ?? 0) * rates.rebuyCost;
+  return Math.max(0, base) + Math.max(0, rebuyOwed - (row.rebuyPaid ?? 0));
 }
 
 /**
@@ -181,11 +228,7 @@ export interface PotStats {
  * Pure.
  */
 export function rosterPotStats({ pool, members, entries }: RosterInputs): PotStats {
-  const settings = pool?.settings || {};
-  // `?? 0`, never `|| 20`: a free pool has no entry fee, and inventing one
-  // reports money that was never owed. The Bento ledger defaulted to 20.
-  const entryFee: number = settings.entryFee ?? 0;
-  const rebuyCost: number = settings.rebuyCost ?? entryFee;
+  const { entryFee, rebuyCost } = duesRates(pool);
   const memberList = members || [];
   const entryList = entries || [];
 
@@ -236,7 +279,14 @@ export function rosterPotStats({ pool, members, entries }: RosterInputs): PotSta
         paid++;
       }
     }
-    return { memberCount, paidCount: paid, unpaidCount: Math.max(0, memberCount - paid), collected, expected };
+    return {
+      memberCount,
+      paidCount: paid,
+      unpaidCount: Math.max(0, memberCount - paid),
+      clearedCount: clearedCountFor({ pool, members, entries }),
+      collected,
+      expected,
+    };
   }
 
   // Pre-backfill fallback: entries carry no settlement state, so rebuys count
@@ -247,14 +297,32 @@ export function rosterPotStats({ pool, members, entries }: RosterInputs): PotSta
     memberCount,
     paidCount: paid,
     unpaidCount: Math.max(0, memberCount - paid),
+    clearedCount: clearedCountFor({ pool, members, entries }),
     collected: paid * entryFee,
     expected: memberCount * entryFee + totalRebuys * rebuyCost,
   };
 }
 
+/**
+ * Members owing nothing, counted off the SAME rows the card renders rather than
+ * re-derived — so "Unpaid Members (N)" and Clearing Rate can never disagree with
+ * the list sitting under them.
+ */
+function clearedCountFor(inputs: RosterInputs): number {
+  const rates = duesRates(inputs.pool);
+  return buildPoolRoster(inputs).filter((r) => memberOutstanding(r, rates) === 0).length;
+}
+
 /** Dues still owed. Never negative — an overpaid rebuy must not read as a credit. */
 export const outstandingDue = (pot: PotStats): number => Math.max(0, pot.expected - pot.collected);
 
-/** Share of the roster whose base dues are marked PAID, 0-100, integer. */
+/**
+ * Share of the roster that OWES NOTHING, 0-100, integer.
+ *
+ * codex r5: this counted paid STATUS, so a free pool — and any pool's seeded
+ * owner, who carries `feeOwed: 0` — read 0% cleared beside Outstanding Due of
+ * $0. On a pool where everyone owes the same fee the two definitions agree; they
+ * diverge exactly where the status is not the debt.
+ */
 export const clearingRate = (pot: PotStats): number =>
-  pot.memberCount > 0 ? Math.round((pot.paidCount / pot.memberCount) * 100) : 0;
+  pot.memberCount > 0 ? Math.round((pot.clearedCount / pot.memberCount) * 100) : 0;

@@ -169,18 +169,38 @@ describe('commissioner Buy-In Ledger is roster-backed, not entry-backed', () => 
   });
 
   it('never claims the ledger is clear while dues are outstanding', () => {
-    // Base dues and rebuy dues settle independently (P3), so every member can be
-    // PAID while rebuy dollars are still owed — and the unpaid LIST is empty in
-    // exactly that case. Gating the green all-clear on the list made the card
-    // contradict its own Outstanding Due tile.
-    expect(bento).toContain('outstandingDue(pot) > 0');
+    // codex r1 found the green all-clear could sit above a positive Outstanding
+    // Due: base and rebuy dues settle independently (P3), so every member can be
+    // PAID while rebuy dollars are owed, and a paid-STATUS list is empty in
+    // exactly that case. codex r5 then found the same list wrongly contained
+    // zero-debt members (a seeded owner's feeOwed is 0; a free pool's is 0 for
+    // everyone). Filtering the list by DEBT fixes both at once — and makes r1's
+    // separate empty state UNREACHABLE, so it is gone rather than left as a
+    // branch that looks like a safeguard and can never run.
+    expect(bento).toContain('memberOutstanding(r, rates) > 0');
+    // The all-clear is reached only when that debt-filtered list is empty.
     const allClear = bento.indexOf('All buy-ins cleared!');
-    const gate = bento.indexOf('outstandingDue(pot) > 0');
+    const listGate = bento.indexOf('dashboardUnpaidPlayers.length > 0');
     expect(allClear).toBeGreaterThan(-1);
-    expect(gate).toBeGreaterThan(-1);
-    // The gate must be evaluated BEFORE the all-clear branch, or it cannot
-    // suppress it.
-    expect(gate).toBeLessThan(allClear);
+    expect(listGate).toBeGreaterThan(-1);
+    expect(listGate).toBeLessThan(allClear);
+    // The dead branch must NOT come back; behaviour is covered by
+    // src/utils/poolRoster.test.ts's cleared/outstanding cases.
+    expect(bento).not.toContain('outstandingDue(pot) > 0');
+  });
+
+  it('never offers "Mark Paid" to someone whose base dues are already paid', () => {
+    // codex r5 follow-on, found by self-review: once the list is debt-filtered it
+    // contains rebuy-only debtors, who ARE PaidStatus PAID. togglePayment would
+    // flip them to UNPAID — the exact opposite of what clicking "Mark Paid"
+    // means. Rebuy settlement is a different callable mode (settleRebuys) and
+    // lives on the member roster below.
+    expect(bento).toContain('const baseDuesPaid = ');
+    expect(bento).toMatch(/baseDuesPaid\s*\?/);
+    // The toggle is now unconditionally a mark-PAID (never a flip), so a PAID row
+    // reaching it could not un-pay anyone even if the branch were removed.
+    expect(bento).toContain('togglePayment(player.uid, false, player.hasMember)');
+    expect(bento).not.toMatch(/togglePayment\(player\.uid,\s*player\.paidStatus/);
   });
 
   it('the head count comes from the roster UID union, not a max of sizes', () => {
@@ -206,7 +226,7 @@ describe('commissioner Buy-In Ledger is roster-backed, not entry-backed', () => 
     // Both write paths must use it — one of the two is easy to miss.
     expect(bento.match(/paymentError\(err, hasMember/g) ?? []).toHaveLength(2);
     // ...and both call sites must actually pass the row's flag through.
-    expect(bento).toContain('togglePayment(player.uid, player.paidStatus === \'PAID\', player.hasMember)');
+    expect(bento).toContain('togglePayment(player.uid, false, player.hasMember)');
     expect(bento).toContain('saveDetailedPayment(rowUid, player.hasMember)');
 
     // And the decision must not be made by reading the server's sentence. Scoped

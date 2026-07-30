@@ -90,12 +90,17 @@
 >    `entryFee || 20`, so a free pool projected a pot nobody owed, and Clearing
 >    Rate divided by entry holders rather than by everyone who joined — 100% on a
 >    pool where one of four members had paid. Guarded by
->    `src/utils/poolRoster.test.ts` (23 cases) plus wiring invariants in
->    `tests/admin-surface-invariants.test.ts`; **23 mutations applied across the
->    two, all 23 killed.**
+>    `src/utils/poolRoster.test.ts` (29 cases) plus wiring invariants in
+>    `tests/admin-surface-invariants.test.ts`; **38 mutations applied across the
+>    two. 37 killed on the first attempt; one SURVIVED — a guard that pinned the
+>    plumbing of a fix without pinning that the fix CHANGED anything — and was
+>    strengthened until it did not. The mutation caught it; reading it did not.**
 >
->    **codex found three more, all valid, all absorbed** — full detail in
->    `PLAN-PAYMENT-TRUTH` §6b's review log. Two are worth knowing here because they
+>    **codex ran six rounds and found seven more, all valid, all absorbed,
+>    none rejected** — full detail in `PLAN-PAYMENT-TRUTH` §6b's review log.
+>    Rounds 2, 4 and 5 each found defects in the PREVIOUS round's fix, which is
+>    the pattern CLAUDE.md §2c predicts and the reason a clean round 1 is not the
+>    review. Two are worth knowing here because they
 >    are about the FIX, not the original defect: the replacement pick deadline
 >    showed the first kickoff rather than the lock the server enforces
 >    (`lockBufferMinutes` earlier, up to an hour on Survivor/Margin), and the green

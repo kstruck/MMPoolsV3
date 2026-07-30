@@ -4,6 +4,8 @@ import {
   rosterPotStats,
   outstandingDue,
   clearingRate,
+  duesRates,
+  memberOutstanding,
   type RosterInputs,
 } from './poolRoster';
 
@@ -345,15 +347,76 @@ describe('rosterPotStats', () => {
     expect(pot.expected).toBe(20);
   });
 
+  it('a FREE pool is 100% cleared, not 0% (codex r5)', () => {
+    // Nobody is marked PAID because nobody owes anything. A paid-STATUS clearing
+    // rate reported 0% beside Expected $0 and Outstanding Due $0.
+    const args = inputs({
+      pool: pool({ settings: {}, participantIds: ['a', 'b'] }),
+      members: [
+        { uid: 'a', paidStatus: 'UNPAID' },
+        { uid: 'b', paidStatus: 'UNPAID' },
+      ],
+    });
+    const pot = rosterPotStats(args);
+    expect(pot.expected).toBe(0);
+    expect(outstandingDue(pot)).toBe(0);
+    expect(pot.paidCount).toBe(0);
+    expect(pot.clearedCount).toBe(2);
+    expect(clearingRate(pot)).toBe(100);
+    // ...and nobody belongs in a "still owing" queue.
+    const rates = duesRates(args.pool);
+    expect(buildPoolRoster(args).filter(r => memberOutstanding(r, rates) > 0)).toEqual([]);
+  });
+
+  it('a seeded owner with feeOwed 0 is cleared even though UNPAID (codex r5)', () => {
+    const args = inputs({
+      pool: pool({ participantIds: ['owner', 'm2'] }),
+      members: [
+        { uid: 'owner', paidStatus: 'UNPAID', feeOwed: 0 },
+        { uid: 'm2', paidStatus: 'PAID' },
+      ],
+    });
+    const pot = rosterPotStats(args);
+    expect(pot.clearedCount).toBe(2);
+    expect(clearingRate(pot)).toBe(100);
+    expect(outstandingDue(pot)).toBe(0);
+    const rates = duesRates(args.pool);
+    expect(buildPoolRoster(args).filter(r => memberOutstanding(r, rates) > 0)).toEqual([]);
+  });
+
+  it('a PAID member who still owes a rebuy is NOT cleared (codex r5)', () => {
+    // The other direction: paid status overstates clearance when rebuy dues are
+    // outstanding, because base and rebuy dues settle independently (P3).
+    const args = inputs({
+      pool: pool({ participantIds: ['a'] }),
+      members: [{ uid: 'a', paidStatus: 'PAID', rebuyOwed: 15, rebuyPaid: 0 }],
+    });
+    const pot = rosterPotStats(args);
+    expect(pot.paidCount).toBe(1);
+    expect(pot.clearedCount).toBe(0);
+    expect(clearingRate(pot)).toBe(0);
+    expect(outstandingDue(pot)).toBe(15);
+    const rates = duesRates(args.pool);
+    expect(buildPoolRoster(args).filter(r => memberOutstanding(r, rates) > 0)).toHaveLength(1);
+  });
+
+  it('memberOutstanding never returns a credit for an overpaid rebuy', () => {
+    const rates = { entryFee: 20, rebuyCost: 5 };
+    expect(memberOutstanding(
+      { uid: 'a', paidStatus: 'PAID', hasMember: true, hasEntry: false, isOwner: false, rebuyOwed: 10, rebuyPaid: 40 },
+      rates,
+    )).toBe(0);
+  });
+
   it('an empty pool is $0 / 0%, not a divide-by-zero', () => {
     const pot = rosterPotStats(inputs({ pool: pool({ participantIds: [] }) }));
-    expect(pot).toEqual({ memberCount: 0, paidCount: 0, unpaidCount: 0, collected: 0, expected: 0 });
+    expect(pot).toEqual({ memberCount: 0, paidCount: 0, unpaidCount: 0, clearedCount: 0, collected: 0, expected: 0 });
     expect(clearingRate(pot)).toBe(0);
     expect(outstandingDue(pot)).toBe(0);
   });
 
   it('outstanding never goes negative when collected exceeds expected', () => {
-    expect(outstandingDue({ memberCount: 1, paidCount: 1, unpaidCount: 0, collected: 50, expected: 20 })).toBe(0);
+    expect(outstandingDue({ memberCount: 1, paidCount: 1, unpaidCount: 0, clearedCount: 1, collected: 50, expected: 20 })).toBe(0);
   });
 
   it('clearing rate is paid over everyone who joined, not over entry holders', () => {
