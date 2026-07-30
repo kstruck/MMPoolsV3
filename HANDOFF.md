@@ -82,9 +82,15 @@
 > For `6676580` the merge-commit form returns empty, and
 > `git show --name-only --format= 6676580` lists nine files: three docs, five
 > under `src/`, one under `tests/`. **None of them is relevant to the FUNCTIONS or
-> RULES queues** — but five of them are emitted `src/**` code, which is precisely
-> why the frontend rebuild recorded above was required. "No backend deploy" is not
-> "no deploy".
+> RULES queues** — but **four** of them are EMITTED `src/**` code
+> (`NFLManagerBentoDashboard.tsx`, `NFLManagerView.tsx`, `PaymentsPanel.tsx`,
+> `poolRoster.ts`), which is precisely why the frontend rebuild recorded above was
+> required. "No backend deploy" is not "no deploy".
+>
+> The fifth `src/**` path, `poolRoster.test.ts`, is loaded only by Vitest and has
+> no production importer, so Vite never emits it — it is the live example of the
+> warning above. Counting `src/**` PATHS and counting EMITTED files are different
+> numbers, and only the second one predicts the bundle hash.
 >
 > Dashboard, for the next time a `src/**` change lands:
 > <http://72.60.68.7:8000/project/ycoooow0g4c08ogso404k8o4/environment/ogs0cg0gg0kcgkgc8sg4c8g4/application/ics4kkww0c8oo0gw4wkg8w4o/deployment>
