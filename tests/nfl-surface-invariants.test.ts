@@ -69,3 +69,116 @@ describe('one definition — no NFL surface re-derives the season-type rule', ()
     }
   });
 });
+
+/**
+ * The commissioner surface is SPLIT INTO FOUR SECTIONS, and every one of them
+ * still renders.
+ *
+ * `NFLManagerView` was one ~870-line scroll. That length was not a cosmetic
+ * problem: it is the whole reason the same `SaveSettingsControl` was repeated
+ * five times (HANDOFF item 3 — harmless and deliberate, but it reads as a bug),
+ * and it is why the roster and the scoring console shared a three-column grid
+ * that made both cramped.
+ *
+ * The split moved existing JSX blocks under `commishTab` conditionals without
+ * rewriting them. That is a mechanical change, and the failure mode of a
+ * mechanical change is a block ending up in NO branch — it compiles, it lints,
+ * it renders nothing, and nobody notices until a commissioner goes looking for a
+ * control on game night. These greps pin that each section is reachable from the
+ * nav and that the controls people depend on are still inside one.
+ */
+describe('commissioner tabs — every section is reachable and nothing was dropped', () => {
+  const view = readFileSync(
+    resolve(root, 'src/components/NFLPoolDashboard/NFLManagerView.tsx'),
+    'utf8',
+  );
+
+  // Guard the guard: a moved or renamed file must fail loudly rather than make
+  // every assertion below vacuously true.
+  it('read the manager view source', () => {
+    expect(view).toContain('NFLManagerView');
+    expect(view.length).toBeGreaterThan(20000);
+  });
+
+  const TABS = ['overview', 'members', 'scoring', 'settings'];
+
+  it.each(TABS)('tab %s is declared in the nav', (id) => {
+    expect(view).toContain(`id: '${id}'`);
+  });
+
+  it.each(TABS)('tab %s actually gates a render block', (id) => {
+    expect(view).toContain(`commishTab === '${id}'`);
+  });
+
+  it('the nav renders every declared tab, not a hardcoded subset', () => {
+    expect(view).toContain('COMMISH_TABS.map');
+    const declared = [...view.matchAll(/\{ id: '(\w+)', label:/g)].map((m) => m[1]);
+    expect(declared.sort()).toEqual([...TABS].sort());
+  });
+
+  it('each control lives inside the section that claims it', () => {
+    // Offsets, not mere presence: a block that fell outside every conditional
+    // still "contains" its markup. Each control must sit after its own tab gate
+    // and before the next one opens.
+    const at = (needle: string) => {
+      const i = view.indexOf(needle);
+      expect(i, `missing from the manager view: ${needle}`).toBeGreaterThan(-1);
+      return i;
+    };
+    const overview = at("commishTab === 'overview'");
+    const settings = at("commishTab === 'settings'");
+    const scoring = at("commishTab === 'scoring'");
+    const members = at("commishTab === 'members'");
+
+    // Overview owns the bento and the payouts card.
+    expect(at('<NFLManagerBentoDashboard')).toBeGreaterThan(overview);
+    expect(at('<RecordPayoutsCard')).toBeGreaterThan(overview);
+    expect(at('<NFLManagerBentoDashboard')).toBeLessThan(settings);
+
+    // Anchored on the JSX USE SITE, not the handler name: every handler is
+    // declared near the top of the component, so `handleScoreWeek` alone matches
+    // its definition and would compare the wrong offset — which is exactly what
+    // the first draft of this test did, and it failed for that reason rather
+    // than because anything was misplaced.
+
+    // Scoring owns Score & Recap — the control the whole season runs through.
+    expect(at('onClick={handleScoreWeek}')).toBeGreaterThan(scoring);
+    expect(at('onClick={handleScoreWeek}')).toBeLessThan(members);
+
+    // Members owns the roster and its per-row reminder control.
+    expect(at('handleRemindOne(row.uid')).toBeGreaterThan(members);
+
+    // Settings owns the exceptions block, which is the second 'settings' gate.
+    expect(view.lastIndexOf("commishTab === 'settings'"))
+      .toBeLessThan(at('onClick={handleCancelPool}'));
+  });
+
+  it('the five duplicate save controls are down to one', () => {
+    const saves = view.match(/<SaveSettingsControl\s/g) ?? [];
+    expect(saves).toHaveLength(1);
+    // ...and it is still wired to the one shared handler, not a new save path.
+    expect(view).toContain('<SaveSettingsControl onSave={handleSaveSettings}');
+  });
+
+  it('the feedback alert sits OUTSIDE the tab groups', () => {
+    // A save started on Settings must still report its result if the tab changed
+    // underneath it, so the alert must precede the first tab gate.
+    //
+    // EXISTENCE FIRST, then position. The first draft asserted only
+    // `indexOf('{feedback && (') < indexOf(gate)`, which a mutation deleting the
+    // block passes trivially — indexOf returns -1 and -1 is less than anything.
+    // Caught by mutation, not by reading it. Same hole as the guard in
+    // admin-surface-invariants that pinned plumbing without pinning behaviour.
+    const alert = view.indexOf('{feedback && (');
+    expect(alert, 'the feedback alert is gone entirely').toBeGreaterThan(-1);
+    expect(alert).toBeLessThan(view.indexOf("commishTab === 'overview'"));
+    // ...and it must appear exactly once — the old copy sat between the payouts
+    // card and the control-room header, inside what is now the Overview group.
+    expect(view.match(/\{feedback && \(/g) ?? []).toHaveLength(1);
+  });
+
+  it('the three-column grid that squeezed the roster is gone', () => {
+    expect(view).not.toContain('lg:col-span-2');
+    expect(view).not.toContain('grid-cols-1 lg:grid-cols-3');
+  });
+});
