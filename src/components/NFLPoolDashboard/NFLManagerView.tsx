@@ -26,15 +26,21 @@ import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHa
  *
  * MODULE SCOPE, not nested inside NFLManagerView (codex r1). Declared inside, it
  * is a NEW component type on every parent state render, so React unmounts and
- * remounts all five buttons on every keystroke in the form — which loses keyboard
- * focus right after a save, the exact moment this feature exists to make legible.
- * It also trips `react-hooks/static-components` five times.
+ * remounts the button on every keystroke in the form — which loses keyboard focus
+ * right after a save, the exact moment this feature exists to make legible. It
+ * also trips `react-hooks/static-components`.
  *
- * ONE handler, not five. Every section submits the SAME payload through
- * `handleSaveSettings`; this is a placement change, not a new save path. Do not
- * "improve" it by having each section send only its own fields — the callable
- * merges per key, so a partial payload looks identical and quietly changes what a
- * save means.
+ * ONE handler, and now ONE instance. There used to be five, repeated per section
+ * because the commissioner page was a single ~870-line scroll and the save button
+ * was otherwise nowhere near whatever you had just edited. HANDOFF item 3 records
+ * that they were harmless and deliberate but read as a bug. The tabbed split
+ * removes the reason they existed, so the four in-section copies are gone and the
+ * one at the foot of Settings remains.
+ *
+ * Every section still submits the SAME payload through `handleSaveSettings`. Do
+ * not "improve" that by having each section send only its own fields — the
+ * callable merges per key, so a partial payload looks identical and quietly
+ * changes what a save means.
  */
 const SaveSettingsControl: React.FC<{ onSave: () => void; isSaving: boolean; justSaved: boolean }> = ({
   onSave, isSaving, justSaved,
@@ -52,6 +58,22 @@ const SaveSettingsControl: React.FC<{ onSave: () => void; isSaving: boolean; jus
     </button>
   </div>
 );
+
+/**
+ * The commissioner surface's four sections.
+ *
+ * Deliberately NOT the eight-tab SuperAdmin set — that one is pinned by
+ * `tests/admin-surface-invariants.test.ts` against CONTEXT.md and has nothing to
+ * do with this page.
+ */
+type CommishTab = 'overview' | 'members' | 'settings' | 'scoring';
+
+const COMMISH_TABS: { id: CommishTab; label: string; hint: string }[] = [
+  { id: 'overview', label: 'Overview', hint: 'Submission health, buy-in ledger, payouts' },
+  { id: 'members', label: 'Members & Payments', hint: 'Roster, paid status, reminders' },
+  { id: 'scoring', label: 'Scoring', hint: 'Score and recap the week' },
+  { id: 'settings', label: 'Settings', hint: 'Pool rules, deadlines, exceptions' },
+];
 
 interface NFLManagerViewProps {
   pool: Pool;
@@ -73,6 +95,15 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   onSelectTab = () => {}
 }) => {
   const toast = useToast();
+  // Which commissioner section is showing. The page was ~870 lines of JSX in one
+  // scroll, which is why the same Save control had to be repeated five times —
+  // the button was simply too far from whatever you had just edited. Splitting it
+  // removes the reason those duplicates existed rather than deleting a control
+  // people rely on. Local state on purpose: `activeTab` already rides in the URL
+  // for the pool page (see AdminRoute's redirect to `?tab=manager`), and adding a
+  // second URL-backed tab would give this surface two sources of truth.
+  const [commishTab, setCommishTab] = useState<CommishTab>('overview');
+
   const [isScoring, setIsScoring] = useState(false);
   const [isSavingPayment, setIsSavingPayment] = useState<string | null>(null);
   const [remindingUid, setRemindingUid] = useState<string | null>(null);
@@ -490,7 +521,52 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
-      
+
+      {/* Feedback Alert — OUTSIDE the tab groups on purpose: a save started on
+          Settings must still report its result if the tab changed underneath it. */}
+      {feedback && (
+        <div className={`p-4 rounded-lg font-body text-xs font-bold flex gap-2 items-center ${
+          feedback.type === 'success'
+            ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
+            : 'bg-brandred-600/10 border border-brandred-600/25 text-brandred-600'
+        }`}>
+          {feedback.type === 'success' ? <CheckCircle size={18} /> : <XCircle size={18} />}
+          {feedback.message}
+        </div>
+      )}
+
+      {/* Section nav.
+          Plain navigation buttons, NOT role="tablist"/role="tab" (codex r1). That
+          ARIA pattern is a PROMISE of behaviour the browser does not supply: once
+          a control is exposed as a WAI-ARIA tab, a keyboard user expects
+          Arrow/Home/End to move between tabs under a roving tabindex, and expects
+          each panel to be an associated `role="tabpanel"`. None of that comes
+          free, and half of it is worse than none — a screen reader announces a
+          tablist and then the arrow keys do nothing.
+          As ordinary buttons in a <nav>, Tab and Enter already work correctly and
+          `aria-current` announces which section you are in. If the roving-focus
+          pattern is ever wanted, implement it whole rather than re-adding the
+          roles. */}
+      <nav className="bg-card border border-line shadow-card rounded-xl p-2 flex flex-wrap gap-1.5" aria-label="Commissioner sections">
+        {COMMISH_TABS.map(t => (
+          <button
+            key={t.id}
+            type="button"
+            aria-current={commishTab === t.id ? 'page' : undefined}
+            title={t.hint}
+            onClick={() => setCommishTab(t.id)}
+            className={`min-h-[44px] px-4 rounded-lg font-display font-bold uppercase text-[11px] tracking-[0.08em] transition-all duration-150 cursor-pointer ${
+              commishTab === t.id
+                ? 'bg-navy-800 text-white shadow-card'
+                : 'text-muted hover:text-[color:var(--text)] hover:bg-page'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
+      {commishTab === 'overview' && (<>
       {/* Premium Bento Overview Dashboard */}
       <NFLManagerBentoDashboard
         pool={pool}
@@ -504,18 +580,6 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
       {/* Record Payouts (ADR 0005 Phase 4) — renders only once the pool is finalized */}
       <RecordPayoutsCard pool={pool} entries={entries} />
-
-      {/* Feedback Alert */}
-      {feedback && (
-        <div className={`p-4 rounded-lg font-body text-xs font-bold flex gap-2 items-center ${
-          feedback.type === 'success'
-            ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
-            : 'bg-brandred-600/10 border border-brandred-600/25 text-brandred-600'
-        }`}>
-          {feedback.type === 'success' ? <CheckCircle size={18} /> : <XCircle size={18} />}
-          {feedback.message}
-        </div>
-      )}
 
       {/* Control Room Header */}
       <div className="bg-card border border-line shadow-card rounded-xl p-6 relative overflow-hidden">
@@ -536,6 +600,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         </div>
       </div>
 
+      </>)}
+
+      {commishTab === 'settings' && (<>
       {/* ═══════════════════════════════════════════
            SECTION: POOL SETTINGS EDITOR
       ═══════════════════════════════════════════ */}
@@ -693,7 +760,6 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 </select>
               </div>
             </div>
-            <SaveSettingsControl onSave={handleSaveSettings} isSaving={isSavingSettings} justSaved={justSavedAt !== null} />
           </div>
 
           {/* ── Pick'em Rules ── */}
@@ -808,7 +874,6 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   </div>
                 </div>
               </div>
-              <SaveSettingsControl onSave={handleSaveSettings} isSaving={isSavingSettings} justSaved={justSavedAt !== null} />
             </div>
           )}
 
@@ -831,7 +896,6 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   All picks for the week lock at this deadline — before any game starts — and cannot be changed afterward.
                 </p>
               </div>
-              <SaveSettingsControl onSave={handleSaveSettings} isSaving={isSavingSettings} justSaved={justSavedAt !== null} />
             </div>
           )}
 
@@ -924,23 +988,25 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <option value="HYBRID">Hybrid (Season-End + Weekly)</option>
                 </select>
               </div>
-              <SaveSettingsControl onSave={handleSaveSettings} isSaving={isSavingSettings} justSaved={justSavedAt !== null} />
             </div>
           )}
 
           {/* ── Save Button ──
-              Kept at the bottom as well as in each section: removing it would
-              break the muscle memory of anyone who already knows this screen. */}
+              The ONLY one now. It used to be repeated in each section as well,
+              because this was one section of a single very long scroll; Settings
+              is its own tab, so the foot of the tab is never far away. */}
           <SaveSettingsControl onSave={handleSaveSettings} isSaving={isSavingSettings} justSaved={justSavedAt !== null} />
         </div>
       </div>
+      </>)}
 
       {/* ═══════════════════════════════════════════
-           SECTION: WEEKLY SCORING + ROSTER
+           SECTION: WEEKLY SCORING
+           Was the left third of a 3-column grid shared with the roster. Each
+           owns a tab now, so the grid is gone and both are full width.
       ═══════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Weekly Scoring Console */}
-        <div className="lg:col-span-1 space-y-6">
+      {commishTab === 'scoring' && (
+        <div className="space-y-6">
           <div className="bg-card border border-line shadow-card rounded-xl p-6 space-y-5">
             <h4 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted flex items-center gap-2">
               <Activity size={14} className="text-navy-700 dark:text-gold-400" /> Week {week} Scoring Feed
@@ -978,8 +1044,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           </div>
         </div>
 
-        {/* Participant Roster + Payment Tracker */}
-        <div className="lg:col-span-2 space-y-6">
+      )}
+
+      {/* ═══════════════════════════════════════════
+           SECTION: MEMBERS & PAYMENTS
+      ═══════════════════════════════════════════ */}
+      {commishTab === 'members' && (
+        <div className="space-y-6">
           <div className="bg-card border border-line shadow-card rounded-xl overflow-hidden">
             <div className="p-5 border-b border-line bg-surface space-y-3">
               <div className="flex justify-between items-center">
@@ -1149,14 +1220,15 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* ═══════════════════════════════════════════
+      {commishTab === 'settings' && (
+      /* ═══════════════════════════════════════════
            SECTION: COMMISSIONER EXCEPTIONS
            Sanctioned tools for the messy real-world cases (member in
            hospital, mis-set deadline, dead pool) — every action is
            audited and members are notified.
-      ═══════════════════════════════════════════ */}
+      ═══════════════════════════════════════════ */
       <div className="bg-card border border-gold-500/40 shadow-card rounded-xl overflow-hidden">
         <button
           onClick={() => setExceptionsOpen(o => !o)}
@@ -1354,6 +1426,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };
