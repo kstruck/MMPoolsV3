@@ -30,7 +30,7 @@ import {
   Tooltip
 } from 'recharts';
 import { gamesForPoolWeek, weekDeadline } from '../../utils/nflPending';
-import { effectiveBufferMinutesForWeek } from '@shared/weeklyHardLock';
+import { effectiveBufferMinutesForWeek, usesWeeklyHardLock } from '@shared/weeklyHardLock';
 import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate } from '../../utils/poolRoster';
 import { formatDeadline } from '../../utils/formatTime';
 
@@ -196,19 +196,33 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     });
   }, [roster, ledgerSearch, ledgerFilter]);
 
-  // The deadline the SERVER actually enforces for this week. It used to render a
-  // hardcoded sixteen-hour countdown unconditionally, on every pool, whether or
-  // not the week held a single game.
+  // The deadline the SERVER actually enforces for this week — and ONLY for pool
+  // types that genuinely have one. It used to render a hardcoded sixteen-hour
+  // countdown unconditionally, on every pool, whether or not the week held a
+  // single game.
   //
-  // codex r1: the first version of this fix showed the first KICKOFF and called
-  // it the lock. Picks close `lockBufferMinutes` BEFORE kickoff (default 5;
-  // Survivor/Margin allow 5/30/60) and a hard-lock pool's deadline is frozen per
-  // week — so a kickoff-based label hands the commissioner a cutoff up to an hour
-  // late. Replacing a fabricated deadline with a differently-wrong one is not a
-  // fix. These are the same two helpers WeekChecklist uses, which is the surface
-  // MEMBERS read, so the commissioner and the members cannot be shown two
-  // different deadlines.
+  // Two codex rounds went into this, both on the FIX rather than the original
+  // defect, and the second is why there is a type gate here at all:
+  //
+  //   r1 — the first version showed the first KICKOFF and called it the lock.
+  //   Picks close `lockBufferMinutes` BEFORE kickoff (default 5; Survivor/Margin
+  //   allow 5/30/60) and a hard-lock pool's deadline is frozen per week, so a
+  //   kickoff label hands the commissioner a cutoff up to an hour late. Fixed by
+  //   delegating to the same two helpers WeekChecklist uses — the surface MEMBERS
+  //   read — so the two cannot state different deadlines.
+  //
+  //   r2 — a single week deadline is only TRUE for weekly-hard-lock pools. Default
+  //   Pick'em is PER_GAME: `submitNFLPicksInternal` checks each picked game's own
+  //   lock, so later games stay editable long after the first one closes, and
+  //   `weekLockOverrides` can push an individual week's lock later still. That
+  //   per-game/override model lives in `functions/src/lib/effectiveLock.ts`, which
+  //   is not shared with the client, so there is no honest way to render one line
+  //   for those pools from here. `usesWeeklyHardLock` (which IS shared) is the
+  //   exact predicate the server uses to decide a pool has one week deadline, so
+  //   the label renders for those pools and nothing at all for the rest.
+  //   Showing nothing beats showing a deadline that is not enforced.
   const weekLockTime = useMemo(() => {
+    if (!usesWeeklyHardLock(castPool.type)) return null;
     const buffer = effectiveBufferMinutesForWeek(castPool, week, weeklyGames.map(g => g.startTime));
     return weekDeadline(weeklyGames, buffer);
   }, [castPool, week, weeklyGames]);

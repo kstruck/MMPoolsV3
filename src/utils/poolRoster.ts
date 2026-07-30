@@ -219,10 +219,22 @@ export function rosterPotStats({ pool, members, entries }: RosterInputs): PotSta
     // unmatched entries' rebuy dues from Expected). Walked per-uid rather than as
     // a count difference, so a person evidenced only by an entry is charged
     // instead of vanishing (codex r1 on this PR).
+    //
+    // Their PAYMENT is read off the entry, because that is what `buildPoolRoster`
+    // reads for the row it renders (codex r2 on this PR): charging them in
+    // `expected` while ignoring `entry.paidStatus` made the card show a PAID row
+    // and simultaneously understate Collected and Clearing Rate and overstate
+    // Outstanding Due. The old entries-backed ledger did count that payment, so
+    // omitting it would have been a regression, not merely an omission.
     const memberUids = new Set(memberList.map((m: any) => m.uid));
     for (const uid of uids) {
       if (memberUids.has(uid)) continue;
-      expected += entryFee + ((entryByUid.get(uid) as any)?.rebuysUsed ?? 0) * rebuyCost;
+      const e: any = entryByUid.get(uid);
+      expected += entryFee + (e?.rebuysUsed ?? 0) * rebuyCost;
+      if (e?.paidStatus === 'PAID') {
+        collected += entryFee;
+        paid++;
+      }
     }
     return { memberCount, paidCount: paid, unpaidCount: Math.max(0, memberCount - paid), collected, expected };
   }

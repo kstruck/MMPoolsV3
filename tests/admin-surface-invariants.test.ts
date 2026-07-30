@@ -141,6 +141,33 @@ describe('commissioner Buy-In Ledger is roster-backed, not entry-backed', () => 
     expect(bento).not.toMatch(/Math\.min\(\.\.\.[\w.]*times/);
   });
 
+  it('claims ONE week deadline only for pools that actually have one', () => {
+    // codex r2: default NFL_PICKEM is PER_GAME — submitNFLPicksInternal checks
+    // each picked game's own lock, so later games stay editable after the first
+    // closes, and weekLockOverrides can push a week's lock later still. That
+    // model lives in functions/src/lib/effectiveLock.ts and is not shared with
+    // the client, so no honest single line can be rendered for those pools.
+    // usesWeeklyHardLock is the same predicate the server uses.
+    expect(bento).toContain('usesWeeklyHardLock(castPool.type)');
+    // The gate must come BEFORE the deadline is computed, or it gates nothing.
+    const gate = bento.indexOf('usesWeeklyHardLock(castPool.type)');
+    const compute = bento.indexOf('weekDeadline(weeklyGames, buffer)');
+    expect(gate).toBeGreaterThan(-1);
+    expect(compute).toBeGreaterThan(gate);
+  });
+
+  it('the roster’s money totals and its rendered rows read the same field', () => {
+    // codex r2: a person evidenced only by an entry renders PAID off the entry
+    // (buildPoolRoster), so the totals must read the entry too. Charging them in
+    // `expected` while ignoring their payment showed a PAID row beside an
+    // understated Collected — and the old entries-backed ledger DID count it.
+    const util = read('src/utils/poolRoster.ts');
+    const loop = util.slice(util.indexOf('for (const uid of uids)'));
+    expect(loop).toContain("e?.paidStatus === 'PAID'");
+    expect(loop).toContain('collected += entryFee');
+    expect(loop).toContain('paid++');
+  });
+
   it('never claims the ledger is clear while dues are outstanding', () => {
     // Base dues and rebuy dues settle independently (P3), so every member can be
     // PAID while rebuy dollars are still owed — and the unpaid LIST is empty in

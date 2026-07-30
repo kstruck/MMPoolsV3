@@ -286,6 +286,41 @@ describe('rosterPotStats', () => {
     expect(pot.memberCount).toBe(buildPoolRoster(args).length);
   });
 
+  it('an entry-only person who is PAID is counted as paid (codex r2)', () => {
+    // buildPoolRoster renders this person's row as PAID off the entry, so the
+    // totals must agree. Charging them in `expected` while ignoring their
+    // payment showed a PAID row beside an understated Collected — and the old
+    // entries-backed ledger DID count it, so dropping it was a regression.
+    const args = inputs({
+      pool: pool({ participantIds: ['a'] }),
+      members: [{ uid: 'a', paidStatus: 'UNPAID' }],
+      entries: [{ id: 'c', ownerUid: 'c', paidStatus: 'PAID' }],
+    });
+    const pot = rosterPotStats(args);
+    expect(pot.memberCount).toBe(2);
+    expect(pot.expected).toBe(40);
+    expect(pot.collected).toBe(20);
+    expect(pot.paidCount).toBe(1);
+    expect(pot.unpaidCount).toBe(1);
+    expect(clearingRate(pot)).toBe(50);
+    expect(outstandingDue(pot)).toBe(20);
+    // The row really does render PAID — that is why the totals had to change.
+    expect(buildPoolRoster(args).find(r => r.uid === 'c')!.paidStatus).toBe('PAID');
+  });
+
+  it('an entry-only person who is UNPAID is not counted as paid', () => {
+    const pot = rosterPotStats(
+      inputs({
+        pool: pool({ participantIds: ['a'] }),
+        members: [{ uid: 'a', paidStatus: 'PAID' }],
+        entries: [{ id: 'c', ownerUid: 'c', paidStatus: 'UNPAID' }],
+      }),
+    );
+    expect(pot.paidCount).toBe(1);
+    expect(pot.collected).toBe(20);
+    expect(pot.expected).toBe(40);
+  });
+
   it('an entry-only person’s rebuy dues are charged too (codex r1)', () => {
     const pot = rosterPotStats(
       inputs({
