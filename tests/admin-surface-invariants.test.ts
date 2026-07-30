@@ -193,6 +193,47 @@ describe('commissioner Buy-In Ledger is roster-backed, not entry-backed', () => 
     expect(util).not.toMatch(/memberCount\s*-\s*memberList\.length/);
   });
 
+  it('explains a missing Member Record instead of reporting a missing pool', () => {
+    // codex r4. setPaidStatus uses `not-found` for BOTH "Pool not found" and
+    // "Member is not on this pool's roster", and getUserMessage resolves the
+    // transport CODE before the message — so the roster case rendered as "that
+    // pool or entry couldn't be found", about a pool plainly on screen. The
+    // roster deliberately falls back to participantIds/entries, so this row is
+    // reachable. Disambiguated by the client's own `hasMember`, NOT by matching
+    // the server's prose, which would break the day it is reworded.
+    expect(bento).toContain('const paymentError =');
+    expect(bento).toMatch(/paymentError\([^)]*hasMember/);
+    // Both write paths must use it — one of the two is easy to miss.
+    expect(bento.match(/paymentError\(err, hasMember/g) ?? []).toHaveLength(2);
+    // ...and both call sites must actually pass the row's flag through.
+    expect(bento).toContain('togglePayment(player.uid, player.paidStatus === \'PAID\', player.hasMember)');
+    expect(bento).toContain('saveDetailedPayment(rowUid, player.hasMember)');
+
+    // And the decision must not be made by reading the server's sentence. Scoped
+    // to the FUNCTION BODY, not the file: the comment above it necessarily quotes
+    // that sentence to explain the bug, and a file-wide check fails on the
+    // explanation of its own defect — the same trap the fabricated-string guard
+    // above already sprang once.
+    const body = bento.slice(
+      bento.indexOf('const paymentError ='),
+      bento.indexOf('const togglePayment ='),
+    );
+    expect(body.length).toBeGreaterThan(50);
+    expect(body).not.toContain('.message');
+    expect(body).not.toMatch(/\.test\(|\.includes\(|\.match\(/);
+
+    // The assertions above pin the PLUMBING, and plumbing alone is not the fix:
+    // reverting the body to a bare `getUserMessage(err, fallback)` left every one
+    // of them true, because the parameter, both call sites and the arity all
+    // survive. Caught by mutation, not by reading. So pin the BRANCH — hasMember
+    // must actually select between getUserMessage and a distinct message that
+    // names the missing roster record.
+    expect(body).toMatch(/hasMember\s*\n?\s*\?/);
+    expect(body).toMatch(/\?\s*getUserMessage\(/);
+    expect(body).toMatch(/:\s*'[^']{40,}'/);
+    expect(body.toLowerCase()).toContain('roster record');
+  });
+
   it('the member-facing pot and the commissioner ledger share ONE definition', () => {
     // Two readers of the same money must not drift; that drift is what let the
     // roster panel and the ledger card disagree on the same page.

@@ -99,27 +99,49 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   // indirection is needed: an entry-derived row could not name a member who has
   // no entry, which is exactly why this card showed "no members".
   //
-  // Both handlers report the SERVER's reason via getUserMessage instead of a
-  // hardcoded string. That matters more now than it did: `setPaidStatus` throws
-  // `not-found` ("Member is not on this pool's roster") when no Member Record
-  // exists, and the roster this card renders deliberately falls back to
-  // participantIds and entries, so it can list someone the write path will
-  // reject. The P4 backfill makes that rare — 152 records present, 0 to create on
-  // its last prod dry run — but the old copy blamed permissions or the network
-  // for it, which is the wrong thing to go debug.
-  const togglePayment = async (uid: string, currentPaid: boolean) => {
+  // Both handlers report the SERVER's reason instead of a hardcoded string. That
+  // matters more now than it did: `setPaidStatus` throws `not-found` ("Member is
+  // not on this pool's roster") when no Member Record exists, and the roster this
+  // card renders deliberately falls back to participantIds and entries, so it can
+  // list someone the write path will reject. The P4 backfill makes that rare —
+  // 152 records present, 0 to create on its last prod dry run — but the old copy
+  // blamed permissions or the network for it, which is the wrong thing to debug.
+  //
+  // codex r4: routing that case through getUserMessage alone was NOT enough.
+  // `setPaidStatus` uses `not-found` for BOTH "Pool not found" and "Member is not
+  // on this pool's roster", and getUserMessage matches the transport CODE
+  // (`functions/not-found`) before it ever looks at the message — so the roster
+  // case still rendered as "that pool or entry couldn't be found", sending the
+  // commissioner to look for a missing pool that is plainly on their screen.
+  //
+  // Disambiguated by what the CLIENT already knows — `hasMember` on the roster
+  // row — rather than by pattern-matching the server's prose, which would break
+  // silently the day that sentence is reworded. This only EXPLAINS an error that
+  // already happened; it never pre-blocks the write, so a record created since
+  // the last snapshot still goes through.
+  //
+  // The durable fix is a domain prefix on the server error (getUserMessage
+  // already resolves `/^[A-Z_]{4,}:/` ahead of the code), but that is a
+  // functions/ change and this PR is frontend-only. Recorded in
+  // PLAN-PAYMENT-TRUTH §6b for the next PR that touches functions/.
+  const paymentError = (err: unknown, hasMember: boolean, fallback: string): string =>
+    hasMember
+      ? getUserMessage(err, fallback)
+      : 'This person has no roster record yet, so their payment cannot be set here. Have them rejoin the pool, or run the Member Record backfill from the SuperAdmin Operations tab.';
+
+  const togglePayment = async (uid: string, currentPaid: boolean, hasMember: boolean) => {
     setTogglingId(uid);
     try {
       await dbService.setPaidStatus(pool.id, uid, !currentPaid);
     } catch (err) {
       console.error("Failed to update payment status:", err);
-      toast.error(getUserMessage(err, 'Failed to update payment status. Please try again.'));
+      toast.error(paymentError(err, hasMember, 'Failed to update payment status. Please try again.'));
     } finally {
       setTogglingId(null);
     }
   };
 
-  const saveDetailedPayment = async (uid: string) => {
+  const saveDetailedPayment = async (uid: string, hasMember: boolean) => {
     setSavingLedgerId(uid);
     try {
       const timestamp = editDate ? new Date(editDate).getTime() : Date.now();
@@ -135,7 +157,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
       setEditingUid(null);
     } catch (err) {
       console.error("Failed to update detailed payment:", err);
-      toast.error(getUserMessage(err, 'Failed to save the payment details. Please try again.'));
+      toast.error(paymentError(err, hasMember, 'Failed to save the payment details. Please try again.'));
     } finally {
       setSavingLedgerId(null);
     }
@@ -462,7 +484,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                   </div>
 
                   <button
-                    onClick={() => togglePayment(player.uid, player.paidStatus === 'PAID')}
+                    onClick={() => togglePayment(player.uid, player.paidStatus === 'PAID', player.hasMember)}
                     disabled={togglingId === player.uid}
                     className="flex items-center gap-2 bg-navy-800 hover:bg-navy-700 text-white px-3.5 py-1.5 rounded-md text-[10px] font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px"
                   >
@@ -782,7 +804,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                             {isEditing ? (
                               <div className="flex justify-end gap-1.5">
                                 <button
-                                  onClick={() => saveDetailedPayment(rowUid)}
+                                  onClick={() => saveDetailedPayment(rowUid, player.hasMember)}
                                   disabled={savingLedgerId === rowUid}
                                   className="p-1 bg-navy-800 text-white hover:bg-navy-700 rounded-sm transition-all duration-150 disabled:opacity-50"
                                 >
