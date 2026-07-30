@@ -1,19 +1,22 @@
 ---
 name: mmp-qodo-cycle
 description: >
-  DORMANT — Kevin removed the qodo check entirely on 2026-07-25 (CLAUDE.md
-  §2b). Do NOT load this skill and do NOT check qodo on a PR. It is kept only
-  so the absorption loop is recoverable if Kevin restores qodo; if he does,
-  it covers watching the PR, pulling ALL three comment surfaces, making a
-  validity call on every finding BEFORE fixing, rerunning the full gate set,
-  and reporting a per-finding verdict table. codex (CLAUDE.md §2c) is the
-  only reviewer in the meantime.
+  LIVE again as of 2026-07-30 — Kevin's qodo subscription is active and he
+  asked for the check on every PR (CLAUDE.md §2b). Load this when a qodo
+  report lands on a PR you authored: it covers watching the PR, pulling ALL
+  three comment surfaces (any one can be empty, so a report is not absent
+  until all three are), making a validity call on every finding BEFORE
+  fixing, rerunning the full gate set, and reporting a per-finding verdict
+  table. Runs ALONGSIDE codex (CLAUDE.md §2c), not instead of it.
 ---
 
 # mmp-qodo-cycle — absorb a qodo.ai PR review autonomously
 
-> 🛑 **DORMANT as of 2026-07-25.** Kevin removed the qodo check until further
-> notice. Nothing below runs unless he restores it. See CLAUDE.md §2b.
+> ✅ **LIVE as of 2026-07-30.** Kevin's subscription is active again and he asked
+> for the check on every PR. This skill was DORMANT from 2026-07-25 while the
+> trial was lapsed; that pause is over and everything below applies. It runs
+> ALONGSIDE codex, not instead of it — see CLAUDE.md §2b for the joint stopping
+> rule.
 
 Repo: `D:\march-melee-pools`. qodo.ai reviews PRs on this GitHub repo
 (kstruck/MMPoolsV3; 14-day trial started 2026-07-10). Standing authorization

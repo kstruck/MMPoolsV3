@@ -26,43 +26,21 @@ Each skill carries a "When NOT to use this skill" routing table to its
 siblings and provenance/re-verify commands — trust the commands over the
 prose if they disagree; skills are point-in-time snapshots.
 
-## 2b. qodo — DO NOT CHECK (Kevin, 2026-07-25 ET)
+## 2b. qodo — CHECK IT ON EVERY PR (Kevin, 2026-07-30 ET)
 
 <!-- Dates in this repo are ET (#259). Commits from a late-evening session stamp
      the PREVIOUS day in local MT (-0600) — e.g. 07-24 22:24 MT is 07-25 00:24 ET.
      A git date one day behind a doc date is expected, not a defect. -->
 
+✅ **RESTORED 2026-07-30. Kevin's subscription is active again: "Please add that
+check for every PR going forward."** This section previously said DO NOT CHECK
+and every word of that is now revoked — the 2026-07-25 removal, the "pure
+overhead" reasoning, and the instruction not to mention qodo in a PR body or a
+report. It was removed only because the trial had lapsed and the bot posted
+nothing but a "your trial has ended" notice.
 
-🛑 **Kevin removed the qodo check until further notice.** Do not poll it, do not
-check its surfaces, do not mention it in a PR body or in a report to Kevin. It
-has been billing-blocked since 2026-07-21 and posts only a "your trial has
-ended" notice; checking it is pure overhead. Every prior instruction in this
-section to wait for, poll, or report on qodo is **revoked** — including the
-3-minute poll and the check-once-then-proceed fallback that replaced it.
-
-`gh pr checks <n>` (CI) is still required and still gates. That is unrelated to
-qodo.
-
-**§2c (codex) is qodo's temporary replacement** (Kevin, 2026-07-25) and the only
-reviewer — which makes it the only second opinion. Run it on every PR, with
-judgement **up to 10 rounds** (Kevin, 2026-07-27 — it was 5; past 10 needs his
-sign-off and a stated reason). Weigh its findings on evidence rather than deferring to them, and
-**self-review the diff yourself** — a clean codex round is not proof, especially
-on a small diff where it may return clean on round 1.
-
-<details>
-<summary>If Kevin restores qodo, this is what made it worth checking</summary>
-
-Its **defect** findings on this repo were 17/17 valid and caught things
-code-reading did not: a live production spread-unlock bug (#235), a `RangeError`
-on corrupt feed data (#231), and a vulnerable `brace-expansion` in `functions/`
-that a root-only fix missed and CI's root-scoped audit could never catch (#240).
-Its **style/compliance** findings were 7/7 rejected as miscalibrated to this
-camelCase TypeScript repo (snake_case ×3, import order, `:any` counts,
-dependency placement).
-
-A single report spreads across **three** surfaces and any one can be empty, so a
-report is not absent until all three are:
+**Run it on every PR.** A single report spreads across **three** surfaces and any
+one of them can be empty, so a report is not absent until all three are:
 
 ```
 gh pr view <n> --json comments                          # numbered findings
@@ -70,10 +48,45 @@ gh api repos/kstruck/MMPoolsV3/pulls/<n>/comments       # inline detail
 gh api repos/kstruck/MMPoolsV3/pulls/<n>/reviews        # review-surface report
 ```
 
-Absorb or reject each finding with written evidence — a rejection needs
-reasoning on the PR, not silence. qodo marks absorbed findings `✓ Resolved`, and
-that is the confirmation, not your own belief that you addressed them.
-</details>
+**Absorb or reject each finding with written evidence.** A rejection is a
+legitimate outcome and needs reasoning **on the PR**, not silence. qodo marks
+absorbed findings `✓ Resolved`, and that mark is the confirmation — not your own
+belief that you addressed it.
+
+### Calibration — what its findings were actually worth here
+
+Judge on evidence, but this is the prior. Over its previous run on this repo:
+
+- **Defect findings: 17/17 valid**, and they caught things code-reading did not —
+  a live production spread-unlock bug (#235), a `RangeError` on corrupt feed data
+  (#231), and a vulnerable `brace-expansion` in `functions/` that a root-only fix
+  missed and CI's root-scoped audit could never catch (#240).
+- **Style/compliance findings: 7/7 rejected** as miscalibrated to this camelCase
+  TypeScript repo (snake_case ×3, import order, `:any` counts, dependency
+  placement).
+
+So: take its defect findings seriously, and expect to reject its style ones with
+a one-line reason.
+
+### How qodo and codex divide the work (Kevin's ruling, 2026-07-30)
+
+**Both run on every PR.** qodo costs nothing per run — it is a subscription —
+while each `codex exec review` is a paid API call, so the round budget is spent
+on codex, not qodo.
+
+**The stopping rule is joint.** Stop when **qodo is clean AND a codex round is
+clean AND your own read of the diff agrees**. Two independent reviewers coming
+back clean is stronger evidence than one doing so, so when qodo is also clean you
+should reach that bar in **fewer codex rounds** than the §2c cap allows — spend
+the cap only when the reviewers disagree, when findings keep landing, or on a
+plan-gated change. The cap is a ceiling, never a target.
+
+`gh pr checks <n>` (CI) is required and gates independently of both.
+
+`.claude/skills/mmp-qodo-cycle/SKILL.md` carries the absorption loop — watch the
+PR, pull all three surfaces, make a validity call on every finding BEFORE fixing,
+rerun the full gate set, report a per-finding verdict table. It was marked DORMANT
+on 2026-07-25 and is **live again**.
 
 ## 2c. Cross-model review is REQUIRED before opening a PR
 
