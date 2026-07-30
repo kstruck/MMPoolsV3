@@ -182,3 +182,48 @@ describe('commissioner tabs — every section is reachable and nothing was dropp
     expect(view).not.toContain('grid-cols-1 lg:grid-cols-3');
   });
 });
+
+/**
+ * The section nav must not CLAIM the WAI-ARIA tab pattern (codex r1 on the split).
+ *
+ * `role="tablist"` / `role="tab"` is a promise of behaviour the browser does not
+ * supply: a keyboard user is then entitled to Arrow/Home/End under a roving
+ * tabindex, and each section is entitled to be an associated `role="tabpanel"`.
+ * Announcing a tablist and then ignoring the arrow keys is worse for a screen
+ * reader user than plain buttons, which already work with Tab and Enter.
+ */
+describe('commissioner nav — no half-implemented ARIA tab pattern', () => {
+  const view = readFileSync(
+    resolve(root, 'src/components/NFLPoolDashboard/NFLManagerView.tsx'),
+    'utf8',
+  );
+
+  it('uses a nav with aria-current, not tablist/tab roles', () => {
+    expect(view).toContain('aria-label="Commissioner sections"');
+    expect(view).toContain("aria-current={commishTab === t.id ? 'page' : undefined}");
+  });
+
+  // Asserted against CODE, with comments stripped. The comment above the nav has
+  // to name the roles it is refusing in order to explain the decision, and a
+  // whole-file `not.toContain` fails on that explanation — which happened three
+  // separate times tonight across two test files. A guard that forbids
+  // documenting its own reason is a guard people delete.
+  const code = view
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+  it('the comment stripper actually removed the explanation', () => {
+    // Guard the guard: if this stops working, the assertions below either fail
+    // spuriously or (worse) pass against text nobody checked.
+    expect(view).toContain('role="tablist"');   // present, in the comment
+    expect(code).not.toContain('role="tablist"'); // absent from the code
+    expect(code).toContain('aria-label="Commissioner sections"'); // code survived
+  });
+
+  it.each(['role="tablist"', 'role="tab"', 'role="tabpanel"', 'aria-selected'])(
+    'the markup does not claim %s',
+    (attr) => {
+      expect(code).not.toContain(attr);
+    },
+  );
+});

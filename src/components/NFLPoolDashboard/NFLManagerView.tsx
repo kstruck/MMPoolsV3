@@ -535,13 +535,24 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         </div>
       )}
 
-      {/* Section nav */}
-      <div className="bg-card border border-line shadow-card rounded-xl p-2 flex flex-wrap gap-1.5" role="tablist" aria-label="Commissioner sections">
+      {/* Section nav.
+          Plain navigation buttons, NOT role="tablist"/role="tab" (codex r1). That
+          ARIA pattern is a PROMISE of behaviour the browser does not supply: once
+          a control is exposed as a WAI-ARIA tab, a keyboard user expects
+          Arrow/Home/End to move between tabs under a roving tabindex, and expects
+          each panel to be an associated `role="tabpanel"`. None of that comes
+          free, and half of it is worse than none — a screen reader announces a
+          tablist and then the arrow keys do nothing.
+          As ordinary buttons in a <nav>, Tab and Enter already work correctly and
+          `aria-current` announces which section you are in. If the roving-focus
+          pattern is ever wanted, implement it whole rather than re-adding the
+          roles. */}
+      <nav className="bg-card border border-line shadow-card rounded-xl p-2 flex flex-wrap gap-1.5" aria-label="Commissioner sections">
         {COMMISH_TABS.map(t => (
           <button
             key={t.id}
-            role="tab"
-            aria-selected={commishTab === t.id}
+            type="button"
+            aria-current={commishTab === t.id ? 'page' : undefined}
             title={t.hint}
             onClick={() => setCommishTab(t.id)}
             className={`min-h-[44px] px-4 rounded-lg font-display font-bold uppercase text-[11px] tracking-[0.08em] transition-all duration-150 cursor-pointer ${
@@ -553,7 +564,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
             {t.label}
           </button>
         ))}
-      </div>
+      </nav>
 
       {commishTab === 'overview' && (<>
       {/* Premium Bento Overview Dashboard */}
