@@ -239,9 +239,10 @@ separately.
 past 10, ask Kevin with a reason** (CLAUDE.md §2c, his 2026-07-27 ruling — it was
 5). Stop on EVIDENCE — a clean round your own read of the diff agrees with — not
 on the counter. If you do stop with findings still open, name them in the PR body
-as unresolved and say plainly that the PR carries them. **Do NOT check qodo** —
-removed 2026-07-25 (§2b). Self-review the diff yourself; codex is the only other
-reviewer.
+as unresolved and say plainly that the PR carries them. **CHECK QODO TOO — it was
+RESTORED 2026-07-30** (§2b); this line used to say "Do NOT check qodo", which held
+only while the trial had lapsed. Self-review the diff yourself as well: codex,
+qodo and your own read are three opinions, and stopping needs all three.
 
 Classification: **plan-gated (scoring)**. The gate is already satisfied —
 PLAN-REALTIME-SCORING.md is written, 31-round reviewed, and approved.

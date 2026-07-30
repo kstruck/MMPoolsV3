@@ -52,12 +52,18 @@ tradeoffs), REJECT with reasons and end the cycle — do not chase the tail.
 > background watcher below are **LIVE**, and a single empty pass is **not** a
 > clean result.
 >
-> ⚠️ **Do not count comments — look for FINDINGS.** Per the observed behaviour
-> directly above, qodo posts a *"Qodo is busy working"* placeholder issue comment
-> **first**. A watcher that exits as soon as `comments + reviews > 0` therefore
-> stops on the placeholder, before the summary and before the inline findings
-> exist, and reports a false clean. Poll until the **inline** comment endpoint
-> (`/pulls/<N>/comments`) is non-empty or the window expires.
+> ⚠️ **Do not count activity — look for a QODO RESULT.** Per the observed
+> behaviour directly above, qodo posts a *"Qodo is busy working"* placeholder issue
+> comment **first**. A watcher that exits as soon as `comments + reviews > 0`
+> therefore stops on the placeholder, before the summary and before the inline
+> findings exist, and reports a false clean.
+>
+> A valid result is any of these, **authored by qodo**: inline findings on
+> `/pulls/<N>/comments`, a review with a non-empty body, **or** an issue comment
+> that is neither the placeholder nor a billing/paused notice — that last one is
+> how a genuine *zero-findings* report arrives, so excluding it would block a PR
+> that qodo had actually cleared. The watcher in §1 encodes exactly this; poll on
+> all three surfaces, not on the inline endpoint alone.
 
 ### 1. Watch for the report
 
@@ -91,7 +97,7 @@ for i in $(seq 1 12); do
         -q "[.reviews[] | select(.author.login | startswith(\"$Q\")) | select(.body != \"\")] | length")
   # A CLEAN summary can land as an issue comment — count it, but never the placeholder
   C=$(gh pr view <N> --json comments \
-        -q "[.comments[] | select(.author.login | startswith(\"$Q\")) | select(.body | test(\"busy working\"; \"i\") | not)] | length")
+        -q "[.comments[] | select(.author.login | startswith(\"$Q\")) | select(.body | test(\"busy working|trial has ended|reviews are paused|quota|billing\"; \"i\") | not)] | length")
   [ "${R:-0}" -gt 0 ] || [ "${S:-0}" -gt 0 ] || [ "${C:-0}" -gt 0 ] && { echo "QODO REPORTED"; exit 0; }
   sleep 45
 done; echo TIMEOUT
@@ -110,6 +116,15 @@ done; echo TIMEOUT
    qodo summary that reports **no findings**, which is exactly the clean result
    the stopping rule needs. So issue comments count — with the placeholder
    excluded by content.
+3. **A billing failure is NOT a report.** When the trial lapsed in July 2026 qodo
+   posted *"Qodo reviews are paused because your trial has ended"* — authored by
+   qodo, and not matching "busy working". A filter that only excluded the
+   placeholder would count that as a clean review and let the joint gate pass with
+   no review at all, which is the exact failure that made the check worthless the
+   first time. The content filter therefore also rejects `trial has ended`,
+   `reviews are paused`, `quota` and `billing`. **If the only qodo comment on a PR
+   is one of those, the check has FAILED, not passed — tell Kevin, because it means
+   the subscription needs attention.**
 
 **TIMEOUT is not clean.** If the window expires with nothing, say so explicitly —
 "qodo did not report within N minutes" — rather than treating silence as a pass.
