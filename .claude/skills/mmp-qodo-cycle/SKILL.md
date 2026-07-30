@@ -114,7 +114,8 @@ matters if you filter output from §2's review query.
 
 ```bash
 QB='qodo-code-review[bot]'    # REST — the watcher is all REST, so this is the only one it needs
-NOISE='busy working|trial has ended|reviews are paused|quota|billing'
+# Matched against the comment's HEADING (first ~120 chars), never the whole body.
+NOISE='Qodo is busy working|trial has ended|reviews are paused|exceeded your'
 
 # SET THIS IMMEDIATELY BEFORE the push you want reviewed:
 #   SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -130,7 +131,7 @@ inline() { gh api --paginate $R/pulls/<N>/comments \
 reviewbody() { gh api --paginate $R/pulls/<N>/reviews \
     -q ".[] | select(.user.login == \"$QB\") | select(.body != \"\") | select(.submitted_at > \"$SINCE\") | .id" | wc -l; }
 summary() { gh api --paginate $R/issues/<N>/comments \
-    -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | select(.body | test(\"$NOISE\"; \"i\") | not) | .id" | wc -l; }
+    -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | select(.body[0:200] | test(\"$NOISE\"; \"i\") | not) | .id" | wc -l; }
 
 # PHASE 1 — detect any qodo artifact. Deliberately 4 min, NOT 9: the settle phase
 # below needs its 180s floor plus quiet polls, and the background tool is capped
@@ -196,6 +197,23 @@ draft of this very file — do not "simplify" any of them back out.**
    qodo summary that reports **no findings**, which is exactly the clean result
    the stopping rule needs. So issue comments count — with the placeholder
    excluded by content.
+3b. **Match the HEADING, not the body — found by RUNNING this, not by review.**
+   The first real use of this watcher (PR #326) reported zero while qodo had
+   already posted its summary. Cause: the noise list contained the bare words
+   `quota` and `billing`, and qodo's *"PR Summary by Qodo"* comment for that PR
+   quoted the word "billing" — because the PR was **about** billing. A content
+   filter over the whole body therefore discards a genuine report whenever the PR
+   happens to discuss the same subject as the failure notices.
+
+   The distinguishing signal is the `<h3>` heading, which is the first thing in
+   every qodo comment. So the patterns are now specific phrases rather than bare
+   words, and they are matched against `.body[0:200]` only. Verified against
+   #326's actual comments: the placeholder is excluded, the summary is counted.
+
+   Generalise it: **a filter keyed on words that can legitimately appear in the
+   content it is filtering will eventually eat a real result.** Anchor to
+   structure.
+
 3. **A billing failure is NOT a report.** When the trial lapsed in July 2026 qodo
    posted *"Qodo reviews are paused because your trial has ended"* — authored by
    qodo, and not matching "busy working". A filter that only excluded the
