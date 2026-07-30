@@ -77,17 +77,25 @@ on codex, not qodo.
 **The stopping rule is joint.** Stop when **qodo is clean AND a codex round is
 clean AND your own read of the diff agrees**.
 
+⚠️ **ORDER MATTERS: codex runs BEFORE the PR, qodo runs ON it.** So any code you
+write to close a qodo finding is code codex has never seen. **Re-run codex on the
+final diff before calling the gate satisfied** — §2c's "new code written to close a
+finding earns its own round" does not stop applying because the finding came from
+the other reviewer.
+
 ⚠️ **"qodo is clean" means qodo has REPORTED and every finding it raised is fixed
 or rejected with written reasoning — NOT that a fresh qodo pass came back empty.**
 qodo was observed **not** re-reviewing after a fix push on the same PR, so gating
 on a second clean pass is unsatisfiable and would deadlock this rule on exactly
 the PRs where it found something real. Its `✓ Resolved` marks are the
 confirmation. Re-arming its watcher after a fix is fine; *waiting* on it is not,
-and a timeout is "qodo did not re-review", never "qodo is clean". Two independent reviewers coming
-back clean is stronger evidence than one doing so, so when qodo is also clean you
-should reach that bar in **fewer codex rounds** than the §2c cap allows — spend
-the cap only when the reviewers disagree, when findings keep landing, or on a
-plan-gated change. The cap is a ceiling, never a target.
+and a timeout is "qodo did not re-review", never "qodo is clean".
+
+**Spend fewer codex rounds.** Two independent reviewers coming back clean is
+stronger evidence than one doing so, so when qodo is also clean you should reach
+the bar in **fewer codex rounds** than the §2c cap allows — spend the cap only
+when the reviewers disagree, when findings keep landing, or on a plan-gated
+change. The cap is a ceiling, never a target.
 
 `gh pr checks <n>` (CI) is required and gates independently of both.
 

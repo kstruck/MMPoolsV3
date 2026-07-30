@@ -121,14 +121,22 @@ done
 [ "$SEEN" = 1 ] || { echo TIMEOUT; exit 0; }
 
 # PHASE 2 — SETTLE. qodo posts its summary BEFORE its inline findings (§0), so
-# exiting on first sight yields a partial report. Wait for the inline count to
-# hold steady across 3 consecutive polls before declaring the report complete.
+# exiting on first sight yields a partial report. Two conditions, BOTH required:
+#   * a minimum FLOOR of wall-clock since the first artifact, so a slow first
+#     finding cannot be mistaken for "no findings"; and
+#   * the inline count holding steady across consecutive polls.
+FLOOR=180          # seconds; never conclude "0 findings" faster than this
+STABLE_NEEDED=4    # consecutive unchanged polls at 30s = 2 min of quiet
+START=$SECONDS
 PREV=-1; STABLE=0
-for i in $(seq 1 20); do
+for i in $(seq 1 30); do
   NOW=$(inline)
   if [ "$NOW" = "$PREV" ]; then STABLE=$((STABLE+1)); else STABLE=0; fi
-  [ "$STABLE" -ge 2 ] && { echo "QODO REPORTED — $NOW inline finding(s)"; exit 0; }
-  PREV=$NOW; sleep 20
+  PREV=$NOW
+  if [ "$STABLE" -ge "$STABLE_NEEDED" ] && [ $((SECONDS-START)) -ge "$FLOOR" ]; then
+    echo "QODO REPORTED — $NOW inline finding(s)"; exit 0
+  fi
+  sleep 30
 done
 echo "QODO REPORTED — count still moving after settle window, treat as PARTIAL"
 ```
@@ -140,9 +148,17 @@ draft of this very file — do not "simplify" any of them back out.**
    order: placeholder → summary issue comment → inline findings. A single-phase
    watcher exits the moment the summary appears, so §2 then fetches a report whose
    findings do not exist yet, and the mandatory gate is satisfied by a partial
-   review. Phase 1 detects that qodo is posting; phase 2 waits for the inline
-   count to hold steady across consecutive polls before calling it complete. A
-   genuine zero-findings summary still completes — the count simply settles at 0.
+   review. Phase 1 detects that qodo is posting; phase 2 settles.
+
+   **Settle needs BOTH a time floor and count stability.** Stability alone is not
+   enough: an earlier draft used two unchanged polls at 20s, so if qodo's first
+   inline finding arrived more than 40 seconds after its summary, all three polls
+   saw zero, and the watcher declared a clean review on a PR that was about to
+   receive findings. Since the documented order puts findings *after* the summary,
+   "0 so far" is the expected reading early on and means nothing. Hence `FLOOR` —
+   never conclude zero faster than three minutes — on top of four consecutive
+   quiet polls. A genuine zero-findings summary still completes; it just costs
+   three minutes of wall-clock to say so, which is the right trade for a gate.
 
 1. **Author, matched EXACTLY.** An earlier version counted *every* inline comment
    and non-empty review body regardless of who wrote them, so a human comment
@@ -261,6 +277,25 @@ Cycle ends when: every finding is fixed or rejected with reasoning, OR every
 remaining one is INVALID / below the severity stop rule, OR 5 rounds (MAX_ROUNDS
 convention) — whichever first. Deadlock ≠ silence: if stopping with open disputed
 findings, say so.
+
+🛑 **FIXING A QODO FINDING RE-OPENS THE CODEX GATE. Re-run codex on the final
+diff before you call the joint gate satisfied.**
+
+The codex pass happens BEFORE the PR is opened; qodo reviews the PR after. So any
+code written to close a qodo finding is code codex has **never seen**, and
+stopping on "qodo marked it ✓ Resolved" would ship it reviewed by exactly one
+model. CLAUDE.md §2c is explicit that new code written to close a finding earns
+its own round — that rule does not stop applying because the finding came from the
+other reviewer.
+
+This is not hypothetical on this repo: on 2026-07-30, rounds 2, 4 and 5 of #322
+each found a defect **in the previous round's fix**, and this very file went seven
+codex rounds where every round after the first holed the fix before it.
+
+So the joint gate closes only when: **qodo's findings are all resolved AND a codex
+round on the FINAL diff is clean AND your own read agrees.** If the qodo fix was a
+one-word doc change and you judge a re-run wasteful, that is a defensible call —
+but say so explicitly in the PR body rather than leaving it unstated.
 
 ### 6. Notify Kevin
 
