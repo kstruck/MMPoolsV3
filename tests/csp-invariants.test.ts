@@ -76,11 +76,20 @@ describe('CSP — connect-src permits every origin the app actually calls', () =
     expect(connectSrc).toContain(host);
   });
 
-  it('still refuses an arbitrary third-party origin', () => {
-    // Guards the opposite failure: a fix that widened connect-src to a wildcard.
-    expect(connectSrc).not.toContain("'unsafe-eval'");
-    expect(connectSrc.split(/\s+/)).not.toContain('*');
-    expect(connectSrc).not.toContain('https://*;');
+  // The opposite failure to guard: someone "fixes" a blocked request by opening
+  // connect-src instead of naming the host. Each of these is a token that would
+  // permit an arbitrary origin.
+  const BLANKET = ['*', 'https:', 'http:', 'https://*', "'unsafe-eval'", 'data:'];
+
+  it('permits no blanket origin token', () => {
+    expect(connectSrc.split(/\s+/).filter(t => BLANKET.includes(t))).toEqual([]);
+  });
+
+  it('the blanket check is reachable — a widened value fails it', () => {
+    // Without this, `permits no blanket origin token` would pass just as happily
+    // against a value the check cannot see, and look identical while doing so.
+    const widened = "'self' https://*.googleapis.com https:";
+    expect(widened.split(/\s+/).filter(t => BLANKET.includes(t))).toEqual(['https:']);
   });
 
   it('the grep actually matches — the pre-fix value fails the Sentry assertion', () => {
