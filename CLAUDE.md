@@ -191,19 +191,23 @@ unresolved on #311, and resolving them turned out to need six more rounds — th
 new code written to close a finding has never been reviewed, so it earns its own
 round. Codex runs are paid, so do not burn rounds on trivial diffs.
 
-**The stopping rule is evidence, not the counter**: stop when a round comes back
-clean AND your own read of the diff agrees. If you stop with findings still open,
-write them into the PR body as named, unresolved findings, say plainly that the
-PR carries them, and let Kevin decide. Never report a PR as done while silently
-holding findings.
+**The stopping rule is evidence, not the counter**: stop when a codex round comes
+back clean **AND qodo is clean** (§2b — restored 2026-07-30, and it is required,
+not optional) **AND your own read of the diff agrees**. All three, not two. If you
+stop with findings still open, write them into the PR body as named, unresolved
+findings, say plainly that the PR carries them, and let Kevin decide. Never report
+a PR as done while silently holding findings.
 
 Measured over the 2026-07-21 run (before the cap): #245 took 4 rounds / 11
 findings, #248 took 9 rounds, #250 took 4 rounds / 15 findings. The pattern is
 worth knowing in advance — **round 1 finds defects in the code, and rounds 2+
 find defects in the fixes**, including in the guards written to prove the fixes.
 Three separate times it holed a test that looked like it guarded and did not. So
-do not treat a clean round 1 as the review: **self-review the diff yourself**,
-which is now the only other reviewer there is (§2b).
+do not treat a clean round 1 as the review: **self-review the diff yourself**.
+That is a third opinion now rather than the only other one — qodo was restored
+2026-07-30 (§2b) — and it still earns its keep: on 2026-07-30 codex came back
+clean on #322 round 3 and self-review immediately found a reachable error path
+with copy that blamed the wrong subsystem.
 
 A rejection is a legitimate outcome and must be written down with reasoning. Of
 those 30 findings, 3 were rejected: two would have made a monitor cry wolf

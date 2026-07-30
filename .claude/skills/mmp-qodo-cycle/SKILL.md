@@ -44,16 +44,20 @@ tradeoffs), REJECT with reasons and end the cycle — do not chase the tail.
 - It did NOT re-review after a fix push on the same PR (observed once; the
   #157-159 "rounds" were separate PRs).
 
-> 🛑 **QODO IS BILLING-BLOCKED — 2026-07-22. DO NOT WAIT AT ALL.**
+> ✅ **BILLING RESTORED — 2026-07-30. Wait for the report.**
 >
-> qodo posted "Qodo reviews are paused because your trial has ended" on #253 and
-> returned ZERO findings on all four PRs opened overnight 07-21/22, across all
-> three surfaces. **The ~10-minute window and the background watcher below are
-> SUSPENDED.** Check the three surfaces ONCE, in a single pass, and move on.
+> The 2026-07-22 "DO NOT WAIT AT ALL" override is gone. It applied while the
+> trial had lapsed and qodo posted only "Qodo reviews are paused because your
+> trial has ended". Kevin's subscription is active again, so the window and the
+> background watcher below are **LIVE**, and a single empty pass is **not** a
+> clean result.
 >
-> This matches CLAUDE.md §2b, which is authoritative. Everything below describes
-> how to absorb a report IF one appears; none of it justifies waiting for one.
-> Kevin will say when billing is restored.
+> ⚠️ **Do not count comments — look for FINDINGS.** Per the observed behaviour
+> directly above, qodo posts a *"Qodo is busy working"* placeholder issue comment
+> **first**. A watcher that exits as soon as `comments + reviews > 0` therefore
+> stops on the placeholder, before the summary and before the inline findings
+> exist, and reports a false clean. Poll until the **inline** comment endpoint
+> (`/pulls/<N>/comments`) is non-empty or the window expires.
 
 ### 1. Watch for the report
 
@@ -66,18 +70,30 @@ gh pr view <N> --json comments,reviews -q '(.comments | length) + (.reviews | le
 gh api repos/kstruck/MMPoolsV3/pulls/<N>/comments -q 'length'   # inline findings
 ```
 
-Background watcher — **SUSPENDED while qodo is billing-blocked; kept for when
-it is restored.** (Bash run_in_background; harness re-invokes on exit; note tool
-timeout caps ~10 min — re-arm on wake if still empty):
+Background watcher — **LIVE again as of 2026-07-30.** (Bash run_in_background;
+harness re-invokes on exit; note tool timeout caps ~10 min — re-arm on wake if
+still empty):
 
 ```bash
 for i in $(seq 1 12); do
-  C=$(gh pr view <N> --json comments,reviews -q '(.comments|length)+(.reviews|length)')
   R=$(gh api repos/kstruck/MMPoolsV3/pulls/<N>/comments -q 'length')
-  [ "${C:-0}" -gt 0 ] || [ "${R:-0}" -gt 0 ] && { echo "QODO POSTED"; exit 0; }
+  S=$(gh pr view <N> --json reviews -q '[.reviews[] | select(.body != "")] | length')
+  [ "${R:-0}" -gt 0 ] || [ "${S:-0}" -gt 0 ] && { echo "QODO FINDINGS POSTED"; exit 0; }
   sleep 45
 done; echo TIMEOUT
 ```
+
+⚠️ **It waits on FINDINGS, not on activity.** An earlier version exited on
+`comments + reviews > 0`, which the placeholder alone satisfies — qodo posts
+*"Qodo is busy working"* as an issue comment before it has reviewed anything, so
+that watcher returned "posted" seconds in and the cycle recorded a clean review
+that had never happened. This one polls the INLINE findings endpoint and
+non-empty review bodies, and ignores issue comments entirely.
+
+**TIMEOUT is not clean.** If the window expires with nothing, say so explicitly —
+"qodo did not report within N minutes" — rather than treating silence as a pass.
+Silence and approval look identical, and this repo has been bitten three times by
+reading a missing signal as a good one.
 
 ### 2. Pull the full report
 
@@ -122,9 +138,9 @@ go green (`gh pr checks <N>`).
 
 ### 5. Repeat until dry
 
-**While qodo is billing-blocked (2026-07-22) there is no round 2** — it is not
-reviewing at all, so do NOT re-arm the watcher; the cycle ends after the single
-check in step 1. The rest of this step applies only once billing is restored.
+**Round 2 is back on** (billing restored 2026-07-30). The 2026-07-22 override
+that ended the cycle after one check is gone; re-arm the watcher after a fix
+push, exactly as described below.
 
 qodo re-reviews on push (incremental). Re-arm the watcher. Cycle ends when:
 a round produces zero findings, OR every remaining finding is INVALID /
