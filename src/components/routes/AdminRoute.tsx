@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { Navigate, useNavigate, useParams } from 'react-router';
 
 import { Header } from '../Header';
 import { Footer } from '../Footer';
@@ -12,6 +12,7 @@ import { BracketPoolDashboard } from '../BracketPoolDashboard/BracketPoolDashboa
 import { dbService } from '../../services/dbService';
 import { useToast } from '../ui/Toast';
 import type { User, Pool, GameState, PropsPool, PlayoffPool, BracketPool } from '../../types';
+import { isNflSeasonType, type PoolType } from '@shared/poolTypes';
 
 interface AdminRouteProps {
     user: User | null;
@@ -82,7 +83,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
 
     const openShare = (poolId: string) => {
         const identifier = (currentPool.type === 'BRACKET' ? currentPool.slug : (currentPool as any).urlSlug) || poolId;
-        const url = `${window.location.origin} /pool/${identifier} `;
+        const url = `${window.location.origin}/pool/${identifier}`;
         setShareUrl(url);
         setShowShareModal(true);
     };
@@ -140,8 +141,21 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
         );
     }
 
+    // NFL season pools (PICKEM/SURVIVOR/MARGIN) have no admin panel of their own —
+    // their commissioner surface is the `manager` TAB of the pool dashboard, and the
+    // active tab deliberately lives in the URL so Back steps through tabs. Mounting
+    // a second copy here would give that tab two URLs and no place to store state,
+    // so redirect instead. This sits BELOW the ownership guard above, so it grants
+    // no access the guard did not already allow; PoolRoute then computes `isManager`
+    // itself and NFLPoolDashboard renders the tab only when it is true.
+    if (isNflSeasonType(currentPool.type as PoolType)) {
+        return <Navigate to={`/pool/${currentPool.id}?tab=manager`} replace />;
+    }
+
     if (currentPool.type && currentPool.type !== 'SQUARES') {
-        // Fallback for unknown types
+        // Unreachable for any member of POOL_TYPES — every one of the seven is
+        // handled above. Kept for a type persisted by an older build, and asserted
+        // unreachable by tests/admin-route-invariants.test.ts.
         return <div className="text-[color:var(--text)] p-20 text-center font-body font-bold">Admin panel is only available for SQUARES pools. Use the appropriate admin interface for this pool type.</div>;
     }
 
