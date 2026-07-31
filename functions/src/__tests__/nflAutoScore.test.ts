@@ -59,12 +59,31 @@ const survivor = (settings: Record<string, unknown> = {}) => ({
 });
 
 describe('isTerminalGame', () => {
-  it('counts FINAL and CANCELLED as concluded, nothing else', () => {
-    expect(isTerminalGame({ status: 'FINAL' })).toBe(true);
+  const scored = { home: 24, away: 20 };
+
+  it('counts a SCORED final and CANCELLED as concluded, nothing else', () => {
+    expect(isTerminalGame({ status: 'FINAL', scores: scored })).toBe(true);
     // CANCELLED is graded (VOID / net 0 / survive) so it is as settled as a final.
     expect(isTerminalGame({ status: 'CANCELLED' })).toBe(true);
-    expect(isTerminalGame({ status: 'IN_PROGRESS' })).toBe(false);
+    expect(isTerminalGame({ status: 'IN_PROGRESS', scores: scored })).toBe(false);
     expect(isTerminalGame({ status: 'SCHEDULED' })).toBe(false);
+  });
+
+  it('does NOT count a FINAL the feed reported no scores for (NFL7-3)', () => {
+    // The importer omits `scores` entirely on a payload carrying a score for
+    // neither competitor (nflSchedule.ts:267-271). Treating that as concluded is
+    // what let a partial feed grade a fabricated 0-0 and finalize a season.
+    expect(isTerminalGame({ status: 'FINAL' })).toBe(false);
+    expect(isTerminalGame({ status: 'FINAL', scores: undefined })).toBe(false);
+    // Half a payload is still not a payload.
+    expect(isTerminalGame({ status: 'FINAL', scores: { home: 24 } as never })).toBe(false);
+    expect(isTerminalGame({ status: 'FINAL', scores: { away: 20 } as never })).toBe(false);
+    // A genuine 0-0 IS reported, and must still count.
+    expect(isTerminalGame({ status: 'FINAL', scores: { home: 0, away: 0 } })).toBe(true);
+  });
+
+  it('still counts CANCELLED with no scores — a cancelled game has none by definition', () => {
+    expect(isTerminalGame({ status: 'CANCELLED', scores: undefined })).toBe(true);
   });
 });
 

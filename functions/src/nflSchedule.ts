@@ -547,10 +547,23 @@ export async function syncScoresWindow(
     // arrives already terminal is a transition. A nonterminal → nonterminal move
     // (SCHEDULED → IN_PROGRESS) is NOT: it changes no grade, and it is every live
     // game on every 5-minute run.
+    //  - scoreless FINAL → FINAL WITH SCORES (NFL7-3): `isTerminalGame` no
+    //    longer counts a FINAL the feed reported no scores for, so the moment
+    //    the scores arrive is the moment the game really becomes terminal — and
+    //    the STATUS did not change across it. Keying only on the status
+    //    transition would miss it entirely, and beyond the 24h window nothing
+    //    else would ever make that slate a candidate again.
     const firstTerminal = freshGames.some(g => {
-      const prev = existingById.get(g.id)?.status ?? 'SCHEDULED';
-      if (prev === g.status) return false;
-      return isTerminalGame(g) || isTerminalGame({ status: prev });
+      const prev = existingById.get(g.id);
+      const prevStatus = prev?.status ?? 'SCHEDULED';
+      const prevTerminal = prev ? isTerminalGame(prev) : false;
+      const nowTerminal = isTerminalGame(g);
+      // A game with no stored doc counts as arriving from SCHEDULED. Nothing
+      // moved at all → not a transition. Note both halves are needed: the status
+      // can move between two terminal states (CANCELLED ⇄ FINAL) and the
+      // terminal-ness can move without the status (the scores case above).
+      if (prevStatus === g.status && prevTerminal === nowTerminal) return false;
+      return nowTerminal || prevTerminal;
     });
 
     const batch = db.batch();

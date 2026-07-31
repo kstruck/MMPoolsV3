@@ -10,6 +10,48 @@ import {
 } from './nflPoolTypes';
 
 // ============================================================================
+// Feed-integrity predicates — what the scorer is allowed to treat as played
+// ============================================================================
+
+/**
+ * Did the feed actually deliver BOTH scores for this game?
+ *
+ * `nflSchedule.ts:267-271` emits no `scores` object at all when the payload
+ * carries a score for neither competitor, deliberately, so that "ESPN dropped
+ * the field" stays distinguishable from "the team scored zero" — otherwise
+ * `detectStatCorrections` would page a false 21-17 → 0-0 correction. Nothing
+ * downstream repeated that distinction: every engine below reads
+ * `game.scores?.home ?? 0`, which collapses the two cases back together and
+ * grades a broken payload as a real 0-0.
+ *
+ * That is defect NFL7-3/NFL7-4 from the chaos drill. A 0-0 is a PUSH for every
+ * Pick'em entry, a TIE for Survivor — and a tie is a strike, so at
+ * `maxStrikes: 0` a dropped field ELIMINATES the member who picked correctly.
+ *
+ * A **one-sided** drop is deliberately NOT detectable here and is not claimed
+ * to be: the importer emits both values when EITHER competitor has a score, so
+ * the missing side is already written as a real `0`. Fixing that belongs in the
+ * importer (PLAN-NFL7-CHAOS-FIXES §3.1, residual R4).
+ */
+export function hasReportedScores(g: Pick<NFLGame, 'scores'>): boolean {
+  return Number.isFinite(g.scores?.home) && Number.isFinite(g.scores?.away);
+}
+
+/**
+ * Was there nothing to play this week — every game of a non-empty slate
+ * cancelled?
+ *
+ * `games.length > 0` is load-bearing, not defensive noise. An EMPTY slate means
+ * "the scorer has no data", which is a reason to wait; an all-cancelled slate
+ * means "there was nothing to play", which is a reason to excuse. Collapsing
+ * those two is defect NFL7-5 wearing a different hat, so the empty case
+ * deliberately answers `false` here and is handled by `isWeekComplete`.
+ */
+export function isVoidWeek(games: Pick<NFLGame, 'status'>[]): boolean {
+  return games.length > 0 && games.every(g => g.status === 'CANCELLED');
+}
+
+// ============================================================================
 // Pick'em Scoring Logic
 // ============================================================================
 
@@ -56,6 +98,10 @@ export function gradePickemGames(
 
   for (const game of games) {
     if (game.status !== 'FINAL' && game.status !== 'CANCELLED') continue;
+    // A FINAL the feed reported no scores for is not a played game (NFL7-3).
+    // Not redundant with `isTerminalGame`: a PROVISIONAL pass hands the engines
+    // the full slate, so without this the broken game is still graded mid-week.
+    if (game.status === 'FINAL' && !hasReportedScores(game)) continue;
 
     const pick = entry.picks[game.id];
     if (!pick) continue; // Unpicked game
@@ -192,8 +238,20 @@ export function evaluateSurvivorWeek(
 
   const pick = entry.picks[week];
 
-  // Auto-Strike for non-submission after games conclude
+  // Auto-Strike for non-submission after games conclude — unless there was
+  // nothing to submit. The penalty exists to punish not showing up FOR A GAME;
+  // on a week where every game was cancelled there was no legal pick to make
+  // (defect NFL7-1).
+  //
+  // Deliberately NOT routed through checkAutoSurviveExemption, which is the
+  // machinery that looks like it should cover this: that helper is gated on
+  // `autoSurviveExemptionEnabled`, a commissioner setting that can be turned
+  // OFF, and a week nobody could play must not strike anybody however the pool
+  // is configured. It also could not fire here anyway — it requires
+  // `teamsPlaying.size > 0`, and a fully-cancelled slate contributes no teams,
+  // which is precisely why this defect survived.
   if (!pick) {
+    if (isVoidWeek(gamesInWeek)) return { survived: true, strikeLogged: false };
     return { survived: false, strikeLogged: true };
   }
 
@@ -213,6 +271,14 @@ export function evaluateSurvivorWeek(
 
   if (game.status !== 'FINAL') {
     return { survived: true, strikeLogged: false }; // Still active, skip for now
+  }
+
+  // A FINAL with no reported scores would read 0-0, i.e. a TIE — and a tie is a
+  // strike, so a field ESPN dropped would eliminate this member at
+  // `maxStrikes: 0` (NFL7-4). Treat it as still active: waiting is always safe,
+  // and the run after the scores arrive grades it properly.
+  if (!hasReportedScores(game)) {
+    return { survived: true, strikeLogged: false };
   }
 
   const homeScore = game.scores?.home ?? 0;
@@ -316,6 +382,13 @@ export function scoreMarginWeek(
 
   if (game.status === 'CANCELLED') {
     return 0; // Cancelled game
+  }
+
+  // Scoreless FINAL: not ready, same as an unplayed game (NFL7-3). `null` rather
+  // than 0 matters — 0 is a real margin that would be written into weeklyScores
+  // and the season total.
+  if (!hasReportedScores(game)) {
+    return null;
   }
 
   const homeScore = game.scores?.home ?? 0;
@@ -507,7 +580,10 @@ export function gradeSurvivorWeekGame(
   );
   if (!game) return null;
   if (game.status === 'CANCELLED') return { gameId: game.id, pick, result: 'VOID' };
-  if (game.status !== 'FINAL') return null;
+  // Scoreless FINAL: nothing to record yet (NFL7-3). Without this the per-pick
+  // record would read SURVIVED off a payload that reported no scores, which is a
+  // published claim about a game nobody played.
+  if (game.status !== 'FINAL' || !hasReportedScores(game)) return null;
   return { gameId: game.id, pick, result: struckThisWeek ? 'STRUCK' : 'SURVIVED' };
 }
 
@@ -525,7 +601,11 @@ export function gradeMarginWeekGame(
     g => g.homeTeam.abbreviation === pick || g.awayTeam.abbreviation === pick
   );
   if (!game || (game.status !== 'FINAL' && game.status !== 'CANCELLED')) return null;
-  const net = scoreMarginWeek(pick, games) ?? 0;
+  // Mirrors scoreMarginWeek exactly, which is the contract this function's
+  // docstring claims: a null from it means "not ready", and `?? 0` would turn a
+  // scoreless FINAL into a recorded net of 0 (NFL7-3).
+  const net = scoreMarginWeek(pick, games);
+  if (net === null) return null;
   return { gameId: game.id, pick, net };
 }
 

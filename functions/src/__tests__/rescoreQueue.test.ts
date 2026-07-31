@@ -279,8 +279,13 @@ describe('lockedSpreadChanged — the manual line edit detectStatCorrections can
 describe('nextWithheldLockAt — the reminder for a reveal held behind an override', () => {
   const HOUR = 60 * 60 * 1000;
   const KICK = 1_000_000_000_000;
+  // `scores` is part of the fixture, not decoration: `isTerminalGame` counts a
+  // FINAL only once the feed has reported both scores (NFL7-3), so a scoreless
+  // FINAL here would be non-terminal and every "withheld terminal game" case
+  // below would vacuously return null.
   const game = (over: Partial<NFLGame> = {}): NFLGame => ({
     id: 'g1', status: 'FINAL', startTime: KICK, week: 1, season: '2026', seasonType: 1,
+    scores: { home: 24, away: 20 },
     homeTeam: { abbreviation: 'AAA' }, awayTeam: { abbreviation: 'BBB' }, ...over,
   } as unknown as NFLGame);
   // `weekLockOverrides` holds an ABSOLUTE epoch-ms deadline, not a duration —
