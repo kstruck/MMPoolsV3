@@ -7,11 +7,7 @@
     // reported here too.
     "extends": "./tsconfig.json",
     "compilerOptions": {
-        "noEmit": true,
-        // Tests import their subjects from src/, so the emit-layout pin the build
-        // needs would flag every test file as outside rootDir. Nothing is emitted
-        // here, so drop it.
-        "rootDir": "."
+        "noEmit": true
     },
     "include": [
         "src"
@@ -22,7 +18,9 @@
     // fixtureMatrix imports the repo-root src/utils/ scenario runner, i.e. outside
     // functions/ entirely. vitest compiles it itself (vitest.emulator.config.ts);
     // tsc has never seen it, and pulling it in would drag repo-root sources into
-    // this program under the wrong compilerOptions.
+    // this program — a TS6059 under the `rootDir: "src"` inherited from the base.
+    // Excluded here for the same reason it was excluded from the build config
+    // before this file existed (c313b27).
     "exclude": [
         "src/__tests__/emulator/fixtureMatrix.emulator.test.ts"
     ]
