@@ -1,8 +1,29 @@
-# HANDOFF — Session entry point (updated 2026-07-30: App Check took production down and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and ALL THREE DEPLOY QUEUES ARE EMPTY)
+# HANDOFF — Session entry point (updated 2026-07-31: functions AND frontend deployed from `efea033`; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and ALL THREE DEPLOY QUEUES ARE EMPTY)
 
-> ## ✅ STOP POINT 2026-07-28 — #313–#317 SHIPPED; functions, rules and frontend all current
+> ## ✅ STOP POINT 2026-07-28, **UPDATED 2026-07-31** — everything through #329 shipped AND deployed
 >
-> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `0a705c0`.**
+> ⚠️ The 2026-07-28 date is the ORIGINAL snapshot; the deploy facts immediately
+> below were refreshed on **2026-07-31** and are current. Read the dates on
+> individual claims rather than the heading.
+>
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `efea033`.**
+> **Rules remain ≡ `0a705c0`** — unchanged by every merge since.
+>
+> Deployed 2026-07-31 for #329, which changed `shared/memberRecord.ts` (compiled
+> into functions) plus `lib/memberRecord.ts`, `nflPools.ts` and `poolExceptions.ts`.
+> **Evidence:** a first full-fleet run reported every function
+> `Successful update operation` and ended `✔ Deploy complete!`; a SECOND full-fleet
+> run reported **173 functions all `Skipped (No changes detected)`**, zero updates,
+> and ended `✔ Deploy complete!` — that all-Skipped run is the positive evidence.
+>
+> ✅ **Frontend rebuilt the same day**: live bundle moved `index-CR5oJEHh.js` →
+> **`index-Db6JwMWs.js`**, read off the prod HTML. **`index-Db6JwMWs.js` is the
+> current live hash. ALL THREE QUEUES EMPTY.**
+>
+> 🕐 **Not to be confused with the three App Check rebuilds earlier the same day**
+> (04:54 / 05:12 / 05:17 UTC, all at `fe3d7c3`), across which the hash did NOT
+> move and prod stayed on `index-CR5oJEHh.js`. Two different events on 2026-07-31
+> with opposite hash behaviour; PICKUP §0 carries the table.
 > Five PRs merged and deployed the same morning: #313 (payment fallback removal +
 > the post-commit projection fix), #314 (reminder delivery outcomes), #315 (one
 > definition of the sim-pool rule), #316 and #317 (docs).
@@ -1662,7 +1683,7 @@ Remaining optional items (SLO objects, cosmetic chunk-splitting) listed in the
 
 - Deploy: `npm --prefix functions ci` first (NOT `install` — it rewrites the lockfile and dirties the tree the deploy packages), then `npx firebase deploy --only functions:… --project gridiron-gamble-uzuqo`. Functions before rules. Frontend = Coolify — **manual trigger only**, pushing to `main` does NOT auto-deploy it (corrects a stale claim that lived here; matches CLAUDE.md + the mmp-deploy-and-operate skill).
 - Emulator tests need Java on PATH: `JAVA_HOME=/c/Program Files/Eclipse Adoptium/jdk-21.0.11.10-hotspot`; run `npm --prefix functions run test:emulator`. Unit: `npm --prefix functions test` (410 tests; emulator suite 39).
-- **PR review = `codex exec review --base origin/main`, judgement up to 10 rounds; past 10 ask Kevin with a reason** (CLAUDE.md §2c, his 2026-07-27 ruling — it was 5). **qodo is OFF** — Kevin removed the check on 2026-07-25 (§2b); codex is its temporary replacement. Validate every finding before fixing; a rejection needs written reasoning on the PR.
+- **PR review = `codex exec review --base origin/main`, judgement up to 10 rounds; past 10 ask Kevin with a reason** (CLAUDE.md §2c, his 2026-07-27 ruling — it was 5). ⚠️ **qodo is ON — this line's "qodo is OFF" was true only while the trial had lapsed.** Kevin ruled 2026-07-31: *"Qodo is now active and must be used."* Check all three of its surfaces on every PR, alongside codex; the stopping rule is JOINT. PR #326 makes this canonical across CLAUDE.md §2b and the skill and is still open — until it merges, follow the ruling rather than §2b, and do not flip the canonical sources piecemeal. Validate every finding before fixing; a rejection needs written reasoning on the PR.
 - Untracked strays at root: `PLAN-LOOPS.md`, `PLAN-SECURITY-OBSERVABILITY*.md` (copies of branch-committed files). Harmless; don't commit blindly.
 
 ## Do NOT re-do

@@ -5,7 +5,10 @@
 > Read `PICKUP-PRESEASON-PILOT.md` §0 first, then `HANDOFF.md`'s STOP POINT box.
 > The target is the Hall of Fame game, 2026-08-06. Deploy and prod-data
 > mutations are Kevin's; code, tests and PRs are yours. Follow CLAUDE.md §2b
-> (qodo is OFF — do not check it) and §2c (`codex exec review --base
+> (⚠️ **that section says qodo is OFF — it is STALE. Kevin ruled 2026-07-31
+> "Qodo is now active and must be used", so CHECK QODO on every PR. PR #326
+> makes it canonical and is still open; until it merges, follow the ruling, not
+> §2b**) and §2c (`codex exec review --base
 > origin/main`; use judgement up to 10 rounds per artifact, and ask Kevin with a
 > reason before going past 10). Tell me what you plan to do before you do it.
 
@@ -63,10 +66,49 @@ the `updatePoolSettings` callable and was smoke-tested in prod.)
 WARNING — that warning is the SAFE state.** Setting the variable in Coolify was
 followed by the site rendering nothing (permanent spinner, confirmed from two
 machines on two networks); deleting the variable and redeploying restored it.
-⚠️ **WHEN it happened is not pinned down** — the incident report places its two
-rebuilds right after #321, but §4 above attributes those same two bundle-hash
-moves to #322 and #324, each verified at the time. Do not reason about this
-incident from bundle hashes until the Coolify deployment history is read.
+✅ **WHEN it happened is now PINNED DOWN** (Coolify deployment history, read
+2026-07-31). **Three** manual rebuilds ran on 2026-07-31 — 04:54:22, 05:12:58 and
+05:16:59 UTC — **all three at commit `fe3d7c3`**, i.e. the same commit with no
+code change between them. That is the add-and-roll-back signature, and it is
+AFTER #325, not after #321. The incident report's "two rebuilds after #321" was
+wrong on both count and position, and §4 above is correct: the
+`D1wLGiMy → C31xivRN → CR5oJEHh` moves were #322 and #324, on 2026-07-30.
+
+⚠️ **Across those three rebuilds specifically, the bundle hash did NOT move** —
+prod stayed on `index-CR5oJEHh.js` from before 04:54 UTC until after 05:17 UTC,
+which is what #324 produced (`fe3d7c3` is docs-only on top of it, so it emits an
+identical bundle).
+
+🕐 **Do not confuse this with the LATER rebuild the same day.** Two separate
+things happened on 2026-07-31 and the hash behaved differently in each:
+
+| When (UTC) | What | Bundle |
+|---|---|---|
+| 04:54, 05:12, 05:17 | the three App Check rebuilds, all at `fe3d7c3` | **unchanged**, `index-CR5oJEHh.js` |
+| later that day | the #329 rebuild, at `efea033` | **moved** → `index-Db6JwMWs.js` (the current live hash) |
+
+**`index-Db6JwMWs.js` is the current live bundle.** The "hash did not move" claim
+above is scoped to the three App-Check rebuilds only — it is not a statement
+about the day. Written out because this runbook uses hash movement as positive
+evidence for a rebuild, so an unqualified "it did not move" is the kind of
+sentence that gets used to condemn a good deploy.
+
+📌 **UNVERIFIED (inference, not measurement).** That the hash held across those
+three rebuilds is *consistent with* the reCAPTCHA key never reaching the bundle,
+which is what the missing Dockerfile `ARG` predicts. It is **not** proof: nobody
+diffed the served JS, and a rebuild can change what is served without changing
+the emitted filename (nginx config, headers, a cached or half-built image).
+
+⚠️ **The CSP mechanism is NOT eliminated — it is conditional on the build path.**
+It is ruled out *only if* Coolify builds the tracked `Dockerfile`. That is
+precisely one of the open candidates: a custom or out-of-band build path, or a
+mismatched cached image, would let the site key reach the app despite the tracked
+Dockerfile having no `ARG`, and the CSP story would then be live again. **Verify
+the build method (or diff the served JS) before eliminating anything.** Root
+cause is OPEN.
+
+One lead worth pulling: the 05:12:58 run finished in **21 seconds**, far too
+fast for a real image build, yet is recorded `Success`.
 
 ⚠️ **The correlation is solid. The CAUSE IS OPEN — do not repeat the first
 explanation as fact.** That explanation (CSP blocks the reCAPTCHA script → App
@@ -110,7 +152,11 @@ closed the banned-commissioner authz gap in prod; Kevin's two rulings landed —
 (#260). See HANDOFF's STOP POINT box.
 
 **qodo is OFF** — Kevin removed the check entirely on 2026-07-25 (CLAUDE.md
-§2b). codex is the only reviewer.
+§2b). codex is the only reviewer. ⚠️ **Kevin ruled 2026-07-31 that qodo is
+active again and must be used**, but the canonical sources (CLAUDE.md §2b and
+`mmp-qodo-cycle`) still say otherwise — **PR #326 changes all of them together**
+and is open. Until it merges, this line and those sources agree; afterwards they
+agree the other way. Do not flip them piecemeal.
 
 The overnight-of-2026-07-22 effort took on four product items Kevin queued —
 profile header/footer, SuperAdmin Overview stats, a filterable Stats tab, and a
@@ -285,10 +331,15 @@ state. Concretely:
 
 ## 2. Live state (verified 2026-07-28)
 
-> ✅ **FUNCTIONS, RULES and FRONTEND are ALL current at the SHA tagged below
-> (#313–#317). Every queue is empty.** Functions deployed twice, the second run
+> ⚠️ **HISTORICAL (2026-07-28 state). The live bundle is now
+> `index-Db6JwMWs.js`** — see §0 and the tagged claim below, which are current.
+> This block is kept for the deploy-ritual evidence it records, not for its
+> bundle hash.
+>
+> ✅ **FUNCTIONS, RULES and FRONTEND were ALL current at that time
+> (#313–#317). Every queue was empty.** Functions deployed twice, the second run
 > all-`Skipped`; rules unchanged by all five; Coolify rebuilt and the bundle
-> verified in the browser as `index-gn5gQtFU.js`.
+> verified in the browser as `index-gn5gQtFU.js` **(superseded)**.
 >
 > (Historical, 2026-07-25: both queues were empty through #279, with the frontend
 > rebuilt on Coolify on the same commit, SHA checked against
@@ -305,13 +356,16 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `0a705c0`.**
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `efea033`.**
+Rules remain ≡ `0a705c0`, unchanged by every merge since. Frontend rebuilt
+2026-07-31: `index-CR5oJEHh.js` → **`index-Db6JwMWs.js`**. All three queues empty.
 (#313–#317 deployed as the FULL FLEET, twice: the first run reported every
 function `Successful update operation` — expected, because
 `npm --prefix functions ci` moved every bundle hash — and the second reported
 every function `Skipped (No changes detected)`. That all-Skipped run is the
-evidence. Rules unchanged by all five, so they remain ≡ this tag. FRONTEND also
-current: Coolify rebuilt, bundle `index-gn5gQtFU.js`.
+evidence. Rules unchanged by all five, so they remain ≡ this tag. FRONTEND at
+that time: Coolify rebuilt, bundle `index-gn5gQtFU.js` — ⚠️ **superseded; the
+live bundle is now `index-Db6JwMWs.js` (§0)**.
 Prior claim: <!-- deploy-state:ignore --> `main` @ `d3d2b0d` —)
 (#311 / G1 PR-B2 deployed as the FULL FLEET, twice; rules unchanged.
 Prior claim: <!-- deploy-state:ignore --> `main` @ `6b7e439` —)
@@ -328,9 +382,11 @@ runtime file changed in between (diff-verified), so the fleet ≡ the tag.
 Previous states: <!-- deploy-state:ignore --> `main` @ `8a55b84` (#279) on
 <!-- deploy-state:ignore --> `main` @ `49c12a9` (#261/#262/#265).
 
-✅ **The FRONTEND is current with this claim.** Coolify rebuilt on 2026-07-28 and
-the live bundle is `index-gn5gQtFU.js`, verified in the browser with cache
-disabled. That single rebuild cleared both the #297/#298 dependency-bump debt
+✅ **The FRONTEND was current with this claim on 2026-07-28.** Coolify rebuilt
+that day and the live bundle was `index-gn5gQtFU.js`, verified in the browser
+with cache disabled. ⚠️ **Superseded — the live bundle is now
+`index-Db6JwMWs.js`** (§0); this paragraph records that rebuild, not the current
+state. That single rebuild cleared both the #297/#298 dependency-bump debt
 (root `package.json` runtime deps — the trigger §4's own queue table names) and
 #313/#315's frontend changes. See HANDOFF's STOP POINT box and §0.
 (Historical: Coolify rebuilt twice on 2026-07-27 to bundle `index-CYTPq50I.js`,
@@ -682,5 +738,6 @@ floating promise from another test file can trip. Re-run before investigating.
 - **`codex exec review --base origin/main` reviews PRs — run it before opening
   one; judgement up to 10 rounds, Kevin's sign-off with a reason past 10**
   (CLAUDE.md §2c, his 2026-07-27 ruling). It is qodo's temporary replacement;
-  **qodo is OFF, do not check it** (§2b). Judge each finding on evidence and
+  **qodo is OFF, do not check it** (§2b) — see the note in §0 on PR #326, which
+  reverses this everywhere at once. Judge each finding on evidence and
   reply either way — a rejection needs written reasoning on the PR.
