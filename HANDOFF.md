@@ -6,15 +6,33 @@
 > below were refreshed on **2026-07-31** and are current. Read the dates on
 > individual claims rather than the heading.
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `efea033`.**
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `bca457c`.**
 > **Rules remain ≡ `0a705c0`** — unchanged by every merge since.
 >
-> Deployed 2026-07-31 for #329, which changed `shared/memberRecord.ts` (compiled
-> into functions) plus `lib/memberRecord.ts`, `nflPools.ts` and `poolExceptions.ts`.
-> **Evidence:** a first full-fleet run reported every function
-> `Successful update operation` and ended `✔ Deploy complete!`; a SECOND full-fleet
-> run reported **173 functions all `Skipped (No changes detected)`**, zero updates,
-> and ended `✔ Deploy complete!` — that all-Skipped run is the positive evidence.
+> Deployed 2026-08-01 for **#333**, the NFL-7 chaos-drill fixes, which changed
+> `nflScoringEngine.ts`, `lib/weekCompletion.ts`, `nflPools.ts`, `nflSchedule.ts`,
+> `nflFinalize.ts` and `feedReplay.ts`. **`shared/` was deliberately NOT touched**,
+> so rules are unaffected and stay ≡ the tag above.
+> **Evidence:** a first full-fleet run reported **173 functions
+> `Successful update operation`** and ended `✔ Deploy complete!`; a SECOND
+> full-fleet run reported **173 functions all `Skipped (No changes detected)`**,
+> zero updates, and ended `✔ Deploy complete!` — that all-Skipped run is the
+> positive evidence.
+>
+> ✅ **NO frontend rebuild is owed.** Neither #332 nor #333 touches `src/**`
+> (verified with `git diff --name-only <sha>^ <sha> -- src/` on both merge
+> commits, both empty), so the live bundle stays **`index-Db6JwMWs.js`**.
+> **ALL THREE QUEUES EMPTY.**
+>
+> 📌 **A production fact established 2026-08-01 and worth keeping:** `nfl_games`
+> filtered `status == FINAL` returns **zero documents** — the 2026 season has not
+> started, and every stored game is `SCHEDULED`. That is what resolved the one
+> open finding on #333 (legacy scoreless-FINAL documents cannot exist if no FINAL
+> documents exist). It stops being true the moment the HOF game ends.
+>
+> ⚠️ **Superseded below:** the #329 deploy-state text that used to sit here has
+> been replaced. #329 shipped and was deployed on 2026-07-31; its evidence was the
+> same all-Skipped shape. It is no longer the current deploy state.
 >
 > ✅ **Frontend rebuilt the same day**: live bundle moved `index-CR5oJEHh.js` →
 > **`index-Db6JwMWs.js`**, read off the prod HTML. **`index-Db6JwMWs.js` is the
