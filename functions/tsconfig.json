@@ -4,6 +4,11 @@
         "noImplicitReturns": true,
         "noUnusedLocals": false,
         "outDir": "lib",
+        // Pins the emit layout to lib/<same-shape-as-src>/. Without it tsc infers
+        // rootDir from the common ancestor of the inputs, so one import reaching
+        // outside src/ silently relocates index.js to lib/functions/src/index.js
+        // and breaks `main` on the deployed function. Now it is a compile error.
+        "rootDir": "src",
         "sourceMap": true,
         "strict": true,
         "skipLibCheck": true,
@@ -15,7 +20,14 @@
     "include": [
         "src"
     ],
+    // This is the DEPLOY build config: `npm run build` emits from it and
+    // firebase.json's predeploy runs that, so anything compiled here ships to
+    // Cloud Functions. Tests have no runtime purpose there — they were 2.5 MiB
+    // of the 6.8 MiB upload — so they are excluded from emit entirely.
+    // They are still type-checked: `npm run typecheck` uses tsconfig.test.json,
+    // which is this file plus src/__tests__. Keep that the gate; excluding tests
+    // HERE must never mean losing type coverage on them.
     "exclude": [
-        "src/__tests__/emulator/fixtureMatrix.emulator.test.ts"
+        "src/__tests__"
     ]
 }
