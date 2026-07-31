@@ -249,8 +249,13 @@ draft of this very file — do not "simplify" any of them back out.**
    exits `QODO REPORTED` at once — so it can never distinguish a genuine
    re-review from the artifacts of the first one, and the "record a timeout as
    *qodo did not re-review*" instruction below becomes unreachable. Stamp
-   `SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)` **before** the push and the watcher
-   counts only what arrives after it.
+   `SINCE=$(date -u -d '1 second ago' +%Y-%m-%dT%H:%M:%SZ)` **before** the push
+   and the watcher counts only what arrives after it. ⚠️ Use the SAME one-second
+   backoff as §1, not a bare `date -u`: the predicates compare with strict `>`
+   and GitHub timestamps are whole seconds, so a stamp taken in the second qodo
+   posts EXCLUDES that artifact and the gate reports `TIMEOUT` on a PR qodo did
+   review. That is the identical boundary race qodo itself found in the first
+   version of this file — do not reintroduce it on the re-arm path.
 5. **Paginated REST on ALL THREE surfaces.** Two separate holes, the second
    introduced by the fix for the first. (i) The REST inline-comment endpoint
    returns 30 per page, so on a PR with 30+ inline comments an unpaginated read
@@ -301,8 +306,13 @@ For each finding: read the actual code at the cited site; classify —
 - **VALID**: reproducible defect or broken invariant → fix.
 - **VALID-BUT-DEFERRED**: real, out of the PR's bounded scope → log it in the
   PR reply + (if standing) spawn/note a follow-up; do not scope-creep the PR.
-- **INVALID**: cite the line(s) proving why; rejection with evidence goes in
-  the notification and (optionally) a PR reply. Never weaken a test or
+- **INVALID**: cite the line(s) proving why. **The rejection, with its evidence,
+  MUST be written on the PR** — not only in the run notification. ⚠️ This used to
+  say a PR reply was *optional*, which contradicted the completion condition
+  below ("every finding is either fixed or rejected with written reasoning on the
+  PR") and let the loop mark a PR clean with no audit trail for exactly the
+  findings a human would most want to second-guess. A rejection nobody can read
+  is indistinguishable from a finding that was ignored. Never weaken a test or
   assertion to satisfy a finding (clobber-guard rule).
 
 ### 4. Fix + gates (every round, no skipping)
