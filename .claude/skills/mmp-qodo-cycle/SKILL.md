@@ -257,9 +257,19 @@ draft of this very file — do not "simplify" any of them back out.**
    happens to discuss the same subject as the failure notices.
 
    The distinguishing signal is the `<h3>` heading, which is the first thing in
-   every qodo comment. So the patterns are now specific phrases rather than bare
-   words, and they are matched against `.body[0:200]` only. Verified against
-   #326's actual comments: the placeholder is excluded, the summary is counted.
+   every qodo comment. `summary()` therefore EXTRACTS that heading with
+   `capture("<h3>(?<h>[^<]*)</h3>")` and tests `NOISE` against **the heading
+   alone** — not `.body[0:200]`, and not the whole body. An earlier draft used the
+   200-character prefix, which is still a content filter and still eats a real
+   report whenever the prose near the top happens to discuss the same subject.
+   `NOISE` is correspondingly specific phrases, not bare words:
+   `Qodo is busy working|trial has ended|reviews are paused|exceeded your` — note
+   it deliberately does NOT contain `billing` or `quota`.
+
+   Verified against #326's real comments through `gh`'s jq engine: the headings
+   present are `Qodo is busy working`, `PR Summary by Qodo` and
+   `Code Review by Qodo`, so the placeholder is excluded and both real artifacts
+   are counted.
 
    Generalise it: **a filter keyed on words that can legitimately appear in the
    content it is filtering will eventually eat a real result.** Anchor to
