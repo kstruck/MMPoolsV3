@@ -5,7 +5,10 @@
 > Read `PICKUP-PRESEASON-PILOT.md` §0 first, then `HANDOFF.md`'s STOP POINT box.
 > The target is the Hall of Fame game, 2026-08-06. Deploy and prod-data
 > mutations are Kevin's; code, tests and PRs are yours. Follow CLAUDE.md §2b
-> (qodo is OFF — do not check it) and §2c (`codex exec review --base
+> (⚠️ **that section says qodo is OFF — it is STALE. Kevin ruled 2026-07-31
+> "Qodo is now active and must be used", so CHECK QODO on every PR. PR #326
+> makes it canonical and is still open; until it merges, follow the ruling, not
+> §2b**) and §2c (`codex exec review --base
 > origin/main`; use judgement up to 10 rounds per artifact, and ask Kevin with a
 > reason before going past 10). Tell me what you plan to do before you do it.
 
