@@ -341,7 +341,7 @@ describe('NFL-7 (c) — the only game of the week is CANCELLED', () => {
   }, 60000);
 
   /**
-   * DEFECT NFL7-1 — report-only, per the it.fails() convention used by
+   * DEFECT NFL7-1 — FIXED by PLAN-NFL7-CHAOS-FIXES §3.2. Was report-only per the it.fails() convention of
    * `goldenArc` and `poolPot`. The body asserts the behaviour the pilot needs;
    * it currently throws, and when the fix lands this flips to "expected failure
    * passed" and must be promoted to a plain it().
@@ -357,7 +357,7 @@ describe('NFL-7 (c) — the only game of the week is CANCELLED', () => {
    * HOF blast radius: one game IS the week, so a cancellation eliminates every
    * non-submitter in the pool on night one, with `maxStrikes: 0`.
    */
-  it.fails('Survivor: a NON-SUBMITTER is not struck for a week whose only game was cancelled', async () => {
+  it('Survivor: a NON-SUBMITTER is not struck for a week whose only game was cancelled', async () => {
     const poolId = 'p-cancel-survivor-nopick';
     await seedPool(poolId, 'NFL_SURVIVOR', SURVIVOR);
     await seedEntry(poolId, 'frank', {
@@ -387,7 +387,7 @@ describe('NFL-7 (c) — the only game of the week is CANCELLED', () => {
    * the -14 no-submission penalty is inline in `nflPools.ts:1271`, not in the
    * engine, so fixing the Survivor side alone would leave this standing.
    */
-  it.fails('Margin: a NON-SUBMITTER is not charged -14 for a game that was never played', async () => {
+  it('Margin: a NON-SUBMITTER is not charged -14 for a game that was never played', async () => {
     const poolId = 'p-cancel-margin-nopick';
     await seedPool(poolId, 'NFL_MARGIN', {});
     await seedEntry(poolId, 'hank', { picks: {}, weeklyScores: {}, seasonTotal: 0, negativeBurden: 0 });
@@ -416,7 +416,7 @@ describe('NFL-7 (d) — a partial or garbage feed payload', () => {
   beforeEach(async () => { await wipe(); });
 
   /**
-   * DEFECT NFL7-3 — report-only.
+   * DEFECT NFL7-3 — FIXED by PLAN-NFL7-CHAOS-FIXES §3.1.
    *
    * The importer goes out of its way to make "ESPN dropped the field" and "the
    * team scored zero" distinguishable: it emits NO `scores` object at all when
@@ -431,7 +431,7 @@ describe('NFL-7 (d) — a partial or garbage feed payload', () => {
    * the real scores arrive they are a "correction" to a settled pool rather than
    * the first score of an unsettled one.
    */
-  it.fails('Pick’em: a FINAL game with NO scores object is not graded as a 0-0 tie', async () => {
+  it('Pick’em: a FINAL game with NO scores object is not graded as a 0-0 tie', async () => {
     await seedGame({ scores: undefined });
     const poolId = 'p-partial-pickem';
     await seedPool(poolId, 'NFL_PICKEM', PICKEM);
@@ -450,7 +450,7 @@ describe('NFL-7 (d) — a partial or garbage feed payload', () => {
    * feed happened to drop — and it eliminates the member who picked correctly
    * just as readily as the one who did not.
    */
-  it.fails('Survivor: a FINAL game with NO scores object does not strike the member who picked it', async () => {
+  it('Survivor: a FINAL game with NO scores object does not strike the member who picked it', async () => {
     await seedGame({ scores: undefined });
     const poolId = 'p-partial-survivor';
     await seedPool(poolId, 'NFL_SURVIVOR', SURVIVOR);
@@ -480,7 +480,7 @@ describe('NFL-7 (d) — a partial or garbage feed payload', () => {
   }, 60000);
 
   /**
-   * DEFECT NFL7-5 — report-only, and LATENT rather than live.
+   * DEFECT NFL7-5 — FIXED by PLAN-NFL7-CHAOS-FIXES §3.3. LATENT rather than live.
    *
    * `isWeekComplete` is `games.every(...)`, which is vacuously TRUE for an empty
    * array: an empty slate reads as a fully-concluded week. Every caller today
@@ -493,7 +493,7 @@ describe('NFL-7 (d) — a partial or garbage feed payload', () => {
    * `scoredWeeks`, writes a recap and finalizes a season on a slate it could not
    * read. On the HOF week that is the whole pilot settled off a failed fetch.
    */
-  it.fails('an EMPTY slate never completes a week or finalizes a season', async () => {
+  it('an EMPTY slate never completes a week or finalizes a season', async () => {
     await seedGame();
     const poolId = 'p-empty-slate';
     await seedPool(poolId, 'NFL_PICKEM', PICKEM);
