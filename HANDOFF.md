@@ -394,6 +394,36 @@
 >    email registered", matching the other two member lists on the card, and added
 >    to the T3 no-fabricated-data invariant.
 >
+>    ⚠️ **The first version of this fix OVER-CORRECTED, and cross-model review
+>    caught it.** Pool creation seeds the owner's Member Record with
+>    `hasPlayableEntry: false` (`nflPools.ts:154-161`) because hosting is not
+>    playing — `ensureMemberRecord` gives such a MANAGER `feeOwed: 0`. Counting
+>    that host as an outstanding pick means a pool where every actual player has
+>    submitted can **never reach 100%**: a permanently-wrong readiness number in
+>    place of an intermittently-wrong one. Now excluded by `isPlayingMember`,
+>    applied to the pending list AND the denominator. The discriminator is
+>    `isOwner && !hasEntry`, **not** `hasPlayableEntry`, because that flag is
+>    never persisted to any document — it is an input to the fee maths only
+>    (`lib/memberRecord.ts:61-63`), so no client can read it.
+>
+> 13. **`sendManualReminder` cannot reach a member who has never submitted, and
+>    said nothing about it.** It resolves targets from the ENTRIES collection
+>    (`functions/src/manualReminders.ts:66-72`), so an entry-less member's uid
+>    filters to nothing and the callable returns `sent: 0, skipped: 0` **without
+>    erroring** — which the Bento card rendered as "Sent 0 reminder(s), 0 skipped"
+>    in a *success* toast. Third instance of the same class in this codebase after
+>    #314's unbound `COURIER_AUTH_TOKEN` and the zero-counter reminder heartbeat:
+>    an absent error read as a pass.
+>
+>    **Partly fixed 2026-07-31, frontend only.** A zero-send now reports as an
+>    error naming the reason, and the button on an entry-less row reads "Not
+>    Started" and is disabled. **The durable fix is still OPEN**: resolve reminder
+>    targets from Member Records (or user docs) rather than entries, so the
+>    commissioner can actually chase the people least likely to have picked. That
+>    is a `functions/` change and owes a functions deploy — fold it into the next
+>    PR that touches `functions/`, alongside the stale `setPaidStatus` comment
+>    already queued there.
+>
 > ### ⛔⛔ APP CHECK TOOK PRODUCTION DOWN ON 2026-07-30. DO NOT "FIX" THE WARNING.
 >
 > **`VITE_RECAPTCHA_SITE_KEY` is absent from the Coolify build environment, so
