@@ -15,8 +15,13 @@ import { assessSeasonCompleteness, STALLED_GAME_AFTER_MS, type CompletenessGame 
 const NOW = 1_800_000_000_000;
 const HOUR = 3_600_000;
 
+// `scores` is part of the default fixture because "concluded" is no longer a
+// status test: a FINAL the feed reported no scores for is not a played game
+// (NFL7-3), so a scoreless FINAL here would be UNfinished and every happy-path
+// case below would be asserting the wrong thing.
 const g = (id: string, over: Partial<CompletenessGame> = {}): CompletenessGame => ({
-  id, week: 1, status: 'FINAL', startTime: NOW - 48 * HOUR, ...over,
+  id, week: 1, status: 'FINAL', startTime: NOW - 48 * HOUR,
+  scores: { home: 27, away: 24 }, ...over,
 });
 
 const allScored = { '1': true, '2': true };
@@ -140,5 +145,42 @@ describe('assessSeasonCompleteness — malformed docs', () => {
     const r = assessSeasonCompleteness([g('a', { week: undefined }), g('b', { week: 2 })], { '1': true }, NOW);
     expect(r.unscoredWeeks).toEqual([2]);
     expect(r.reason).toBe('weeks not scored: 2');
+  });
+});
+
+/**
+ * The finalization half of NFL7-3, and the reason it needed its own fix.
+ *
+ * `assessSeasonCompleteness` carried a THIRD independent copy of the "is this
+ * game concluded" rule — after `isTerminalGame` and the three engine graders —
+ * and it is the copy that decides whether `maybeFinalizeNFLPool` writes
+ * `finalizedAt` and season history. While it tested only `status`, finalization
+ * applied a LOOSER rule than the scorer: the scorer would refuse to grade a
+ * scoreless FINAL, and finalization would settle the season containing it
+ * anyway. Found by codex r4, after three earlier rounds on the same defect.
+ */
+describe('assessSeasonCompleteness — a scoreless FINAL is not a concluded game', () => {
+  it('does NOT complete a season whose game is FINAL with no reported scores', () => {
+    const r = assessSeasonCompleteness([g('partial', { scores: undefined })], { '1': true }, NOW);
+    expect(r.complete).toBe(false);
+    expect(r.unfinishedGameIds).toEqual(['partial']);
+  });
+
+  it('does not complete on half a payload either', () => {
+    const r = assessSeasonCompleteness(
+      [g('half', { scores: { home: 27 } })], { '1': true }, NOW);
+    expect(r.complete).toBe(false);
+  });
+
+  it('completes once the scores arrive, and on a genuine 0-0', () => {
+    expect(assessSeasonCompleteness([g('done')], { '1': true }, NOW).complete).toBe(true);
+    // A real 0-0 is a reported result and must not be mistaken for a missing one.
+    expect(assessSeasonCompleteness(
+      [g('nil', { scores: { home: 0, away: 0 } })], { '1': true }, NOW).complete).toBe(true);
+  });
+
+  it('still completes on a CANCELLED game, which has no scores by definition', () => {
+    expect(assessSeasonCompleteness(
+      [g('void', { status: 'CANCELLED', scores: undefined })], { '1': true }, NOW).complete).toBe(true);
   });
 });

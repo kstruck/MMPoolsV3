@@ -39,7 +39,8 @@ import {
   gradeSurvivorWeekGame,
   gradeMarginWeekGame,
   buildStandingsRows,
-  poolUsesSpreads
+  poolUsesSpreads,
+  isVoidWeek
 } from './nflScoringEngine';
 import { maybeFinalizeNFLPool } from './nflFinalize';
 import {
@@ -1265,7 +1266,27 @@ async function scoreWeekPass(
 
       if (pick) {
         const res = scoreMarginWeek(pick, games);
-        weekScore = res ?? 0;
+        // `null` means NOT READY — an unplayed game, or a FINAL the feed
+        // reported no scores for (NFL7-3). `?? 0` would write a fabricated 0
+        // into weeklyScores and the season total.
+        //
+        // ⚠️ UNREACHABLE BY CONSTRUCTION, and said out loud rather than left to
+        // look tested. Its mutation SURVIVES: `weeklyPickReady` above already
+        // drops a made pick whose game is not terminal, and a non-provisional
+        // pass requires `isWeekComplete`, which now requires every game to be
+        // terminal — so `res` cannot be null here today. It is kept as the local
+        // restatement of the contract `scoreMarginWeek` documents, because the
+        // thing standing between this line and a fabricated 0 is a guard in a
+        // different function that a refactor could narrow. No test pins it; the
+        // tested guards are `weeklyPickReady` and `scoreMarginWeek` itself.
+        if (res === null) continue;
+        weekScore = res;
+      } else if (isVoidWeek(games)) {
+        // Nothing to submit: every game of the week was cancelled (NFL7-2). The
+        // -14 punishes not showing up for a game, and there was none. 0 is also
+        // what a member who DID pick a cancelled game receives, so the two cases
+        // agree rather than diverging.
+        weekScore = 0;
       } else {
         // Auto-Strike / Non-submission in Margin counts as -14 (standard heavy burden penalty)
         weekScore = -14;

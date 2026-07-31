@@ -6,7 +6,7 @@ import { detectStatCorrections } from './lib/feedSnapshot';
 import { captureFeedSnapshot, pruneExpiredSnapshots, readSnapshotGate, reportStatCorrections } from './feedSnapshotStore';
 import { opsCourierAuthToken } from './lib/opsAlertDispatcher';
 import { withHeartbeat, configReadFailedVerdict } from './lib/heartbeat';
-import { isTerminalGame } from './lib/weekCompletion';
+import { isTerminalGame } from './lib/weekCompletion';import { hasReportedScores } from './nflScoringEngine';
 import { RESCORE_QUEUE, rescoreEventDoc } from './lib/rescoreQueue';
 import type { Firestore } from 'firebase-admin/firestore';
 import { validated } from "./lib/validated";
@@ -47,6 +47,68 @@ export function mapEspnGameStatus(
   if (state === 'post') return 'FINAL';
   if (state === 'in') return 'IN_PROGRESS';
   return 'SCHEDULED';
+}
+
+/**
+ * Did this game cross into — or out of — a terminal state on this sync?
+ *
+ * The `terminal` rescore-queue trigger: the slate is enqueued for later
+ * reconciliation when any of its games did. Extracted from `syncScoresWindow`
+ * and exported so it can be unit-tested; it was inline, and a mutation removing
+ * half of it survived the entire suite.
+ *
+ * `prev === undefined` means no stored doc, which counts as arriving from
+ * SCHEDULED — so a game that arrives already terminal IS a transition.
+ *
+ * BOTH halves of the "nothing moved" test are required:
+ *  - the STATUS can move between two terminal states (`CANCELLED ⇄ FINAL`),
+ *    which `detectStatCorrections` also ignores because it only compares games
+ *    that were already FINAL — a pool finalized on the void would keep it;
+ *  - the TERMINAL-NESS can move without the status, which is new: a scoreless
+ *    `FINAL` is not terminal (NFL7-3), so a game becomes terminal the moment its
+ *    scores arrive, and across that moment the status stays `FINAL`. Keying only
+ *    on the status would miss it, and beyond the 24h live window nothing else
+ *    would ever make that slate a candidate again.
+ *
+ * A nonterminal → nonterminal move (`SCHEDULED → IN_PROGRESS`) is deliberately
+ * NOT a transition: it changes no grade, and it is every live game on every
+ * 5-minute run.
+ */
+export function isTerminalTransition(
+  prev: Pick<NFLGame, 'status' | 'scores'> | undefined,
+  next: Pick<NFLGame, 'status' | 'scores'>,
+): boolean {
+  const prevStatus = prev?.status ?? 'SCHEDULED';
+  const prevTerminal = prev ? isTerminalGame(prev) : false;
+  const nowTerminal = isTerminalGame(next);
+  if (prevStatus === next.status && prevTerminal === nowTerminal) return false;
+  return nowTerminal || prevTerminal;
+}
+
+/**
+ * The `scoresMissing` marker for a game about to be written to `nfl_games`.
+ *
+ * A `FINAL` the feed reported no scores for is not scoreable (NFL7-3) and does
+ * not recover on its own: the score-sync window query bounds on `startTime`, so
+ * once the game ages past the lookback nothing asks ESPN about it again. This
+ * flag is the second door into that window, so it has to be set by EVERY write
+ * path — `syncScoresWindow`, `importNFLSeason` and `replayFeedSnapshot` all write
+ * the same `parseScoreboardResponse` output, and a marker set by only one of them
+ * leaves the other two able to create a permanently stranded game (codex r2).
+ *
+ * `existing` is the stored doc where the caller has it. It matters because every
+ * write is `merge: true`: a fresh payload that omits `scores` does NOT erase
+ * stored ones, so judging the fresh payload alone would re-flag a game that is
+ * already fine. Callers without it (bulk import, replay) pass nothing and get the
+ * conservative answer — at worst one extra slate fetch, which the next sync
+ * clears, because erring toward re-fetching is the safe direction here.
+ */
+export function scoresMissingMarker(
+  fresh: Pick<NFLGame, 'status' | 'scores'>,
+  existing?: Pick<NFLGame, 'scores'>,
+): boolean {
+  const merged = fresh.scores ?? existing?.scores;
+  return fresh.status === 'FINAL' && !hasReportedScores({ scores: merged });
 }
 
 /**
@@ -327,6 +389,10 @@ export async function importNFLSeason(
     const batch = db.batch();
     for (const game of games) {
       const cleanedGame = JSON.parse(JSON.stringify(game));
+      // Bulk import writes the same parseScoreboardResponse output as the sync,
+      // so it can create a scoreless FINAL too — and without the marker that game
+      // is outside BOTH doors and never refreshed again (codex r2).
+      cleanedGame.scoresMissing = scoresMissingMarker(game);
       const gameRef = db.collection('nfl_games').doc(cleanedGame.id);
       batch.set(gameRef, cleanedGame, { merge: true });
       importedCount++;
@@ -398,6 +464,15 @@ export interface ScoreSyncResult {
    */
   snapshotFailures: number;
   /**
+   * Games written this run as `FINAL` with no reported scores (NFL7-3). These
+   * block their pool's week from completing and cannot be scored, and both this
+   * job and the auto-scorer otherwise resolve cleanly through the condition —
+   * which is precisely the "resolves successfully while nothing works" shape the
+   * heartbeat exists to surface. Counted so the run is reported DEGRADED rather
+   * than silently green.
+   */
+  scorelessFinals: number;
+  /**
    * Slates where a detected stat correction could not be REPORTED. Both sinks
    * behind reportStatCorrections swallow their own failures, so a correction
    * could be found and then dropped — leaving pools finalized on stale scores
@@ -438,6 +513,7 @@ export async function syncScoresWindow(
   const fetchSlate = opts.fetchSlate ?? fetchNFLWeekScheduleWithRaw;
   const empty: ScoreSyncResult = {
     slates: 0, gamesWritten: 0, corrections: 0, slatesNotReconciled: 0, snapshotFailures: 0,
+    scorelessFinals: 0,
     correctionReportFailures: 0,
   };
 
@@ -449,9 +525,12 @@ export async function syncScoresWindow(
     .where('startTime', '<=', now + 2 * 60 * 60 * 1000)
     .get();
 
-  if (activeGamesSnap.empty) {
-    return empty;
-  }
+  // NOTE: there is deliberately no `activeGamesSnap.empty` early return here any
+  // more. One used to sit at this point, and it would have skipped the
+  // scoreless-FINAL door below — which is the exact case that door exists for: a
+  // game stranded PAST the lookback, with nothing else in the window to keep the
+  // run alive. Emptiness is decided once, on `weeksToSync`, after BOTH sources
+  // have contributed. Found by an existing test, not by reading.
 
   // Group active games by season and week to batch API requests
   const weeksToSync = new Map<string, { week: number; season: string; seasonType: 1 | 2 | 3 }>();
@@ -466,6 +545,64 @@ export async function syncScoresWindow(
     }
   });
 
+  // SECOND DOOR: games left FINAL with no reported scores, at ANY startTime.
+  //
+  // The window query above bounds on `startTime`, so a scoreless FINAL older than
+  // the lookback drops out of every refresh path — and because it is not terminal
+  // (NFL7-3) the pool never finalizes, with nothing left that would ever ask the
+  // feed again. That is a permanent stall, not a wait. The marker is written by
+  // the score-sync write path below, so a slate re-enters the window on the
+  // strength of the defect itself and leaves it the moment the scores land.
+  //
+  // Cheap by construction: the flag is only ever true for a genuinely broken
+  // payload, so this query returns nothing on a healthy day.
+  //
+  // BOUNDED (qodo). A prolonged feed outage or a bad backfill could mark many
+  // games, and an unbounded read would grow both the Firestore read size and the
+  // number of ESPN slate fetches on every 5-minute run — a scheduler timeout is a
+  // worse outcome than a slow recovery. The cap is on GAMES, and games collapse
+  // into slates, so one bad week costs one fetch however many of its games are
+  // marked; 200 games is more than ten full NFL weeks entirely broken at once.
+  //
+  // Deliberately NOT paginated, and the log message says so rather than implying
+  // otherwise (codex r7). Without an ordering there is no cursor to carry, and
+  // adding one means a composite index — which is the single failure mode that
+  // has bitten this repo hardest (A5 and the finalize sweep both died silently on
+  // a missing index). Hitting this cap is an operator event, not a slow path, so
+  // the honest design is a hard ceiling plus a log that admits it is one.
+  const SCORELESS_SCAN_LIMIT = 200;
+  const scorelessSnap = await db.collection('nfl_games')
+    .where('scoresMissing', '==', true)
+    .limit(SCORELESS_SCAN_LIMIT)
+    .get();
+  if (scorelessSnap.size === SCORELESS_SCAN_LIMIT) {
+    console.warn(
+      `[nflSchedule] scoreless-FINAL scan hit its ${SCORELESS_SCAN_LIMIT}-game cap. ` +
+      'Games beyond the cap are NOT being examined, and they will NOT be picked up ' +
+      'by a later run on their own: the query has no cursor and no ordering, so ' +
+      'every run returns the same prefix, and the prefix only advances as those ' +
+      'games are resolved. This needs a human. A cap this deep means something is ' +
+      'systematically wrong with the feed, not one broken game.',
+    );
+  }
+  /** Marked game ids per slate key — used below to notice one the refresh never returned. */
+  const markedBySlate = new Map<string, string[]>();
+  scorelessSnap.forEach(doc => {
+    const data = doc.data() as NFLGame;
+    const key = `${data.season}_${data.seasonType}_${data.week}`;
+    if (!weeksToSync.has(key)) {
+      weeksToSync.set(key, { week: data.week, season: data.season, seasonType: data.seasonType });
+    }
+    markedBySlate.set(key, [...(markedBySlate.get(key) ?? []), doc.id]);
+  });
+  if (scorelessSnap.size > 0) {
+    console.warn(
+      `[nflSchedule] ${scorelessSnap.size} game(s) are FINAL with no reported scores and ` +
+      `cannot be scored: ${scorelessSnap.docs.map(d => d.id).slice(0, 10).join(', ')}. ` +
+      'Their slates are being re-fetched; pools on them stay unfinalized until the feed delivers.',
+    );
+  }
+
   if (weeksToSync.size === 0) {
     return empty;
   }
@@ -476,6 +613,8 @@ export async function syncScoresWindow(
   // game that was already FINAL changes. Gate read once per run, not per slate.
   const snapshotGate = await readSnapshotGate(db);
   let gamesWritten = 0;
+  /** Game ids written this run as FINAL with no reported scores — see the marker below. */
+  const scorelessFinals: string[] = [];
   let correctionCount = 0;
   let slatesNotReconciled = 0;
   let snapshotFailures = 0;
@@ -507,11 +646,6 @@ export async function syncScoresWindow(
     // point; the snapshot is only the evidence attached to it.
     if (!(await reportStatCorrections(db, slateKey, corrections))) correctionReportFailures++;
     correctionCount += corrections.length;
-
-    if (dryRun) {
-      console.log(`[nflSchedule] DRY RUN — would write ${freshGames.length} game(s) for ${slateKey.season}/${slateKey.seasonType}/wk${slateKey.week}; ${corrections.length} correction(s) detected.`);
-      continue;
-    }
 
     // Existing docs for the WHOLE slate, not just the ones inside the time
     // window. ESPN returns the entire week, and every one of those games gets
@@ -547,11 +681,48 @@ export async function syncScoresWindow(
     // arrives already terminal is a transition. A nonterminal → nonterminal move
     // (SCHEDULED → IN_PROGRESS) is NOT: it changes no grade, and it is every live
     // game on every 5-minute run.
-    const firstTerminal = freshGames.some(g => {
-      const prev = existingById.get(g.id)?.status ?? 'SCHEDULED';
-      if (prev === g.status) return false;
-      return isTerminalGame(g) || isTerminalGame({ status: prev });
-    });
+    //  - scoreless FINAL → FINAL WITH SCORES (NFL7-3): `isTerminalGame` no
+    //    longer counts a FINAL the feed reported no scores for, so the moment
+    //    the scores arrive is the moment the game really becomes terminal — and
+    //    the STATUS did not change across it.
+    //
+    // Measured against the MERGED game, not the raw payload (codex r3). Every
+    // write is `merge: true`, so a payload that omits `scores` leaves the stored
+    // ones in place — but the raw payload on its own reads as a scoreless FINAL,
+    // i.e. NON-terminal, so comparing it to a stored terminal game looks like a
+    // terminal → nonterminal transition and would enqueue a `terminal` rescore
+    // on EVERY sync for as long as the feed kept omitting them. One merged view,
+    // used for both this test and the marker below, is what keeps the two from
+    // disagreeing about what is about to be persisted.
+    const mergedById = new Map<string, NFLGame>(freshGames.map(g => [
+      g.id,
+      { ...g, scores: g.scores ?? existingById.get(g.id)?.scores } as NFLGame,
+    ]));
+    const firstTerminal = freshGames.some(g =>
+      isTerminalTransition(existingById.get(g.id), mergedById.get(g.id)!));
+
+    // Counted BEFORE the dry-run early-out below. A dry run that re-fetches an
+    // already-stranded game, gets another scoreless FINAL, and then reports a
+    // healthy run would make the monitoring worthless in exactly the situation
+    // it exists for — and the deep sweep runs dry by default (codex r3).
+    for (const g of freshGames) {
+      if (scoresMissingMarker(mergedById.get(g.id)!)) scorelessFinals.push(g.id);
+    }
+    // A marked game that the refresh did NOT return at all (codex r4). The slate
+    // came back non-empty, so `slatesNotReconciled` stays 0, and the loop above
+    // only sees what WAS returned — so the marked doc keeps its flag, keeps being
+    // retried forever, and the heartbeat reports a healthy run while the pool is
+    // still blocked. The absence is the signal here, and an absent error is not
+    // evidence of success.
+    const marked = markedBySlate.get(`${slateKey.season}_${slateKey.seasonType}_${slateKey.week}`) ?? [];
+    for (const id of marked) {
+      if (!mergedById.has(id)) scorelessFinals.push(id);
+    }
+
+    if (dryRun) {
+      console.log(`[nflSchedule] DRY RUN — would write ${freshGames.length} game(s) for ${slateKey.season}/${slateKey.seasonType}/wk${slateKey.week}; ${corrections.length} correction(s) detected.`);
+      continue;
+    }
 
     const batch = db.batch();
     for (const freshGame of freshGames) {
@@ -582,6 +753,23 @@ export async function syncScoresWindow(
       }
 
       const cleanedGame = JSON.parse(JSON.stringify(freshGame));
+
+      // A FINAL the feed reported no scores for is not scoreable (NFL7-3), and
+      // it is not self-healing either: the week-selection query above bounds on
+      // `startTime`, so once the game is older than the lookback its slate is
+      // never re-fetched and the scores are never asked for again. The pool
+      // would sit unfinalized forever with nothing left to repair it.
+      //
+      // So it is MARKED, durably, and the marker is a second door into the sync
+      // window (see `scoresMissing` in the selection above). Computed against the
+      // MERGED result rather than the fresh payload: `merge: true` preserves a
+      // stored `scores` when the new payload omits it, so testing `freshGame`
+      // alone would re-flag a game that already has scores on every run.
+      // Same merged view the transition test used above, so the marker and the
+      // enqueue decision can never disagree about what is being persisted. The
+      // count was taken there too, before the dry-run early-out.
+      cleanedGame.scoresMissing = scoresMissingMarker(mergedById.get(freshGame.id)!);
+
       batch.set(gameRef, cleanedGame, { merge: true });
     }
 
@@ -616,6 +804,7 @@ export async function syncScoresWindow(
   return {
     slates: weeksToSync.size, gamesWritten, corrections: correctionCount,
     slatesNotReconciled, snapshotFailures, correctionReportFailures,
+    scorelessFinals: scorelessFinals.length,
   };
 }
 
@@ -637,11 +826,15 @@ export function scoreSyncHeartbeat(r: ScoreSyncResult): {
     slates: r.slates, gamesWritten: r.gamesWritten, corrections: r.corrections,
     slatesNotReconciled: r.slatesNotReconciled, snapshotFailures: r.snapshotFailures,
     correctionReportFailures: r.correctionReportFailures,
+    scorelessFinals: r.scorelessFinals,
   };
   const degraded: string[] = [];
   if (r.slatesNotReconciled > 0) degraded.push(`${r.slatesNotReconciled} slate(s) returned no games`);
   if (r.snapshotFailures > 0) degraded.push(`${r.snapshotFailures} snapshot write(s) failed`);
   if (r.correctionReportFailures > 0) degraded.push(`${r.correctionReportFailures} stat-correction report(s) undelivered`);
+  // Not a failure of THIS job — the feed is what is broken — but it blocks
+  // scoring and finalization, so a green heartbeat here would be a lie.
+  if (r.scorelessFinals > 0) degraded.push(`${r.scorelessFinals} game(s) FINAL with no reported scores — cannot be scored`);
   return degraded.length > 0
     ? { ok: false, error: degraded.join('; '), detail }
     : { ok: true, detail };

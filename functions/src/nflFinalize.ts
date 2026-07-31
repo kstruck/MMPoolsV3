@@ -10,6 +10,7 @@ import type { NFLPickemEntry, SurvivorEntry, MarginEntry } from "./nflPoolTypes"
 import { withHeartbeat, configReadFailedVerdict } from "./lib/heartbeat";
 import { fencedWrite, withScoringLease, type ScoringFence } from "./lib/scoringLease";
 import { isVoidedPool } from "./lib/autoScoreDecisions";
+import { isTerminalGame } from "./lib/weekCompletion";
 
 /**
  * Season Finalization (ADR 0005 decision 2 / PLAN-PLAYER-PROFILES Phase 3).
@@ -44,6 +45,13 @@ export interface CompletenessGame {
   week?: number;
   status?: string;
   startTime?: number;
+  /**
+   * Needed because "concluded" is not a status test any more: a FINAL the feed
+   * reported no scores for is not a played game (NFL7-3). Without this field
+   * finalization would apply a LOOSER rule than the scorer and settle a season
+   * on a game the scorer refused to grade (codex r4).
+   */
+  scores?: { home?: number; away?: number } | null;
 }
 
 export interface Completeness {
@@ -97,7 +105,11 @@ export function assessSeasonCompleteness(
   const unfinished: CompletenessGame[] = [];
   const unscoredWeeks = new Set<number>();
   for (const g of games) {
-    if (g.status !== 'FINAL' && g.status !== 'CANCELLED') unfinished.push(g);
+    // ONE definition of concluded, shared with the scorer. This was a third
+    // independent copy of the status test, and it was the one that decided
+    // whether to write `finalizedAt` and season history — so a scoreless FINAL
+    // left ungraded by the scorer could still be finalized here.
+    if (!isTerminalGame(g)) unfinished.push(g);
     // A doc with a missing/garbage week must not put NaN into the unscored set —
     // it would render as "weeks not scored: NaN" and block finalization forever
     // on a data defect nobody can act on. Skip it; the game itself still gates

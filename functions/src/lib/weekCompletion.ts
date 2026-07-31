@@ -7,14 +7,28 @@
 // unit-testable without an emulator.
 
 import { effectiveLockSettings, isGameLocked as isGameLockedAt } from './effectiveLock';
+import { hasReportedScores } from '../nflScoringEngine';
 import type { NFLGame } from '../nflPoolTypes';
 
 /**
  * Is this game concluded? CANCELLED counts — the engines grade it (VOID / net 0 /
  * survive), so it is as settled as a FINAL for scoring purposes.
+ *
+ * A `FINAL` counts only once the feed has actually reported both scores
+ * (defect NFL7-3/NFL7-4). A scoreless FINAL is a broken payload, not a played
+ * game, and treating it as concluded is what let a partial feed mark the week
+ * complete, write the recap and FINALIZE a one-game preseason season on a result
+ * nobody played. Staying non-terminal makes the week incomplete, so the scorer
+ * simply waits and self-heals on the run after the scores arrive.
+ *
+ * CANCELLED is deliberately unconditional: a cancelled game has no scores BY
+ * DEFINITION, and that is not missing data.
  */
-export function isTerminalGame(g: Pick<NFLGame, 'status'>): boolean {
-  return g.status === 'FINAL' || g.status === 'CANCELLED';
+export function isTerminalGame(
+  g: { status?: string | null; scores?: { home?: number; away?: number } | null },
+): boolean {
+  if (g.status === 'CANCELLED') return true;
+  return g.status === 'FINAL' && hasReportedScores(g);
 }
 
 /**
@@ -39,7 +53,13 @@ export function isWeekComplete(
   now: number,
 ): boolean {
   const lockSettings = effectiveLockSettings(pool?.settings as never, pool?.type);
-  return games.every(g =>
+  // `games.length > 0` first: `every` is vacuously TRUE for an empty array, so
+  // without it an empty slate reads as a fully-concluded week and the caller
+  // derives `provisional: false` — stamping `scoredWeeks`, writing the recap and
+  // finalizing a season off a slate it could not read (defect NFL7-5). Latent
+  // rather than live — every caller today guards `games.length` itself — but the
+  // failure would be silent and total, and the guard is one term.
+  return games.length > 0 && games.every(g =>
     isTerminalGame(g) && isGameLockedAt(now, g.startTime, week, lockSettings),
   );
 }

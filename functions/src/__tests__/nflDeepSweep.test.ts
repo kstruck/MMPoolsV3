@@ -49,8 +49,14 @@ function fakeDb() {
       wheres.push([field, op, value]);
       return query;
     },
+    // The scoreless-FINAL recovery query is bounded (qodo), so the stand-in has
+    // to accept `.limit()` — without it the second query throws and this file's
+    // lookback assertions fail for a reason that has nothing to do with lookback.
+    limit() {
+      return query;
+    },
     async get() {
-      return { empty: true, docs: [], forEach: () => undefined };
+      return { empty: true, size: 0, docs: [], forEach: () => undefined };
     },
   };
   const db = { collection: () => query } as unknown as Firestore;
@@ -74,6 +80,7 @@ describe('syncScoresWindow — the lookback is what it queries', () => {
     expect(result).toEqual({
       slates: 0, gamesWritten: 0, corrections: 0,
       slatesNotReconciled: 0, snapshotFailures: 0, correctionReportFailures: 0,
+      scorelessFinals: 0,
     });
   });
 
@@ -106,16 +113,30 @@ function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: nu
     exists: stored[id] !== undefined,
     data: () => stored[id],
   });
-  const inWindow = Object.keys(stored).filter(
-    (id) => stored[id].startTime >= now - lookbackMs && stored[id].startTime <= now + 2 * 60 * 60 * 1000,
-  );
-  const query: any = {
-    where: () => query,
+  /**
+   * `where()` used to ignore its arguments entirely and every query returned the
+   * time-windowed set. That was harmless while there was ONE query — and became
+   * actively misleading the moment `syncScoresWindow` grew a second one
+   * (`scoresMissing == true`, the door that un-strands a scoreless FINAL past the
+   * lookback): the fake would answer it with the in-window docs, so the test
+   * would pass without the door existing. Constraints are applied for real now.
+   */
+  const makeQuery = (constraints: Array<[string, string, any]>, cap?: number): any => ({
+    where: (field: string, op: string, value: any) => makeQuery([...constraints, [field, op, value]], cap),
+    limit: (n: number) => makeQuery(constraints, n),
     async get() {
-      const docs = inWindow.map(docOf);
-      return { empty: docs.length === 0, docs, forEach: (f: any) => docs.forEach(f) };
+      const ids = Object.keys(stored).filter((id) => constraints.every(([field, op, value]) => {
+        const actual = (stored[id] as Record<string, unknown>)[field];
+        if (op === '>=') return typeof actual === 'number' && actual >= value;
+        if (op === '<=') return typeof actual === 'number' && actual <= value;
+        if (op === '==') return actual === value;
+        throw new Error(`fakeDb: unsupported operator ${op}`);
+      }));
+      const docs = (cap === undefined ? ids : ids.slice(0, cap)).map(docOf);
+      return { empty: docs.length === 0, size: docs.length, docs, forEach: (f: any) => docs.forEach(f) };
     },
-  };
+  });
+  const query = makeQuery([]);
   const db = {
     collection: (name: string) => ({
       ...query,
@@ -245,11 +266,180 @@ describe('syncScoresWindow — an unreconciled slate is counted, however it fail
     const { db } = fakeDbWithDocs(oneStoredGame, NOW, HOT_WINDOW_LOOKBACK_MS);
     const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
       fetchSlate: async () => ({
+        // `scores` is required for this to be a HEALTHY final: a FINAL the feed
+        // reported no scores for is now a degraded run (NFL7-3), which is what
+        // this fixture accidentally was.
+        games: [espnGame({
+          id: 'espn_thu', startTime: NOW - 20 * HOUR, status: 'FINAL',
+          scores: { home: 27, away: 24 },
+        })] as any,
+        raw: { ok: true },
+      }),
+    });
+    expect(r.slatesNotReconciled).toBe(0);
+    expect(r.scorelessFinals).toBe(0);
+    expect(scoreSyncHeartbeat(r).ok).toBe(true);
+  });
+
+  it('COUNTS a FINAL the feed reported no scores for, and marks the doc', async () => {
+    // The condition is invisible everywhere else: the fetch succeeded, the slate
+    // reconciled, the game was written. Only this counter says the game cannot be
+    // scored — and `scoresMissing` on the doc is what keeps its slate in the sync
+    // window after it ages past the lookback, which is the difference between
+    // waiting and being stranded.
+    const { db, writes } = fakeDbWithDocs(oneStoredGame, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
         games: [espnGame({ id: 'espn_thu', startTime: NOW - 20 * HOUR, status: 'FINAL' })] as any,
         raw: { ok: true },
       }),
     });
     expect(r.slatesNotReconciled).toBe(0);
+    expect(r.scorelessFinals).toBe(1);
+    expect(scoreSyncHeartbeat(r).ok).toBe(false);
+    expect(scoreSyncHeartbeat(r).error).toContain('FINAL with no reported scores');
+    expect(writes.some((w: any) => w?.data?.scoresMissing === true)).toBe(true);
+  });
+
+  it('re-syncs a scoreless FINAL that has aged OUT of the lookback window', async () => {
+    // The stall codex found, and the reason `scoresMissing` is persisted at all.
+    //
+    // The window query bounds on startTime, so this game — 40h old, well past the
+    // 24h lookback — is invisible to it. It is also not terminal (no scores), so
+    // its pool never finalizes. Without the second door nothing would ever ask
+    // ESPN about it again and the pool would sit unfinalized forever, with no
+    // failure anywhere to notice.
+    const stranded = {
+      espn_old: {
+        id: 'espn_old', season: '2026', seasonType: 1, week: 1,
+        startTime: NOW - 40 * HOUR, status: 'FINAL', scoresMissing: true,
+      },
+    };
+    const { db, writes } = fakeDbWithDocs(stranded, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        // This run is the one where ESPN finally delivers.
+        games: [espnGame({
+          id: 'espn_old', startTime: NOW - 40 * HOUR, status: 'FINAL',
+          scores: { home: 27, away: 24 },
+        })] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    // The slate was fetched at all — that is the whole point.
+    expect(r.slates).toBe(1);
+    expect(r.slatesNotReconciled).toBe(0);
+    // ...and the marker is CLEARED by the same write, so the door closes behind
+    // it rather than re-fetching this slate on every run forever.
+    const write = writes.find((w: any) => w.id === 'espn_old');
+    expect(write?.data?.scoresMissing).toBe(false);
+    expect(r.scorelessFinals).toBe(0);
+    expect(scoreSyncHeartbeat(r).ok).toBe(true);
+  });
+
+  it('does not re-enqueue a rescore when the feed temporarily drops scores it already delivered', async () => {
+    // codex r3. Every write is merge:true, so a payload that omits `scores`
+    // leaves the stored ones in place — but the RAW payload reads as a scoreless
+    // FINAL, i.e. non-terminal. Comparing that to a stored terminal game looks
+    // like a terminal → nonterminal transition, and would enqueue a `terminal`
+    // rescore on every 5-minute sync for as long as ESPN kept omitting them,
+    // repeatedly rescoring an already-finalized pool.
+    const stored = {
+      espn_thu: {
+        id: 'espn_thu', season: '2026', seasonType: 1, week: 1,
+        startTime: NOW - 20 * HOUR, status: 'FINAL', scores: { home: 27, away: 24 },
+      },
+    };
+    const { db, writes, enqueued } = fakeDbWithDocs(stored, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        // Same status, scores dropped from THIS payload only.
+        games: [espnGame({ id: 'espn_thu', startTime: NOW - 20 * HOUR, status: 'FINAL' })] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(enqueued.filter((e: any) => e.reason === 'terminal')).toHaveLength(0);
+    // ...and the game is not flagged either: the merged result still has scores.
+    expect(writes.find((w: any) => w.id === 'espn_thu')?.data?.scoresMissing).toBe(false);
+    expect(r.scorelessFinals).toBe(0);
+    expect(scoreSyncHeartbeat(r).ok).toBe(true);
+  });
+
+  it('a DRY RUN still reports a scoreless FINAL, while writing nothing', async () => {
+    // codex r3. The deep sweep runs dry by DEFAULT, so a dry run that re-fetches
+    // an already-stranded game, gets another scoreless FINAL and then reports a
+    // healthy run makes the monitoring worthless in exactly the case it exists
+    // for.
+    const stranded = {
+      espn_old: {
+        id: 'espn_old', season: '2026', seasonType: 1, week: 1,
+        startTime: NOW - 40 * HOUR, status: 'FINAL', scoresMissing: true,
+      },
+    };
+    const { db, writes, enqueued } = fakeDbWithDocs(stranded, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      dryRun: true,
+      fetchSlate: async () => ({
+        games: [espnGame({ id: 'espn_old', startTime: NOW - 40 * HOUR, status: 'FINAL' })] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(r.scorelessFinals).toBe(1);
+    expect(scoreSyncHeartbeat(r).ok).toBe(false);
+    // A dry run is still a dry run.
+    expect(writes).toHaveLength(0);
+    expect(enqueued).toHaveLength(0);
+  });
+
+  it('stays degraded when the refresh does not return the marked game at all', async () => {
+    // codex r4. The slate came back NON-empty, so slatesNotReconciled stays 0,
+    // and the counting loop only sees what was returned — so a marked game the
+    // feed simply omits keeps its flag, is retried forever, and the heartbeat
+    // reports healthy while the pool is still blocked. The ABSENCE is the signal,
+    // and an absent error is not evidence of success.
+    const stranded = {
+      espn_old: {
+        id: 'espn_old', season: '2026', seasonType: 1, week: 1,
+        startTime: NOW - 40 * HOUR, status: 'FINAL', scoresMissing: true,
+      },
+    };
+    const { db } = fakeDbWithDocs(stranded, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        // A different game of the same slate came back; the marked one did not.
+        games: [espnGame({
+          id: 'espn_other', startTime: NOW - 40 * HOUR, status: 'FINAL',
+          scores: { home: 20, away: 17 },
+        })] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(r.slatesNotReconciled).toBe(0);
+    expect(r.scorelessFinals).toBe(1);
+    expect(scoreSyncHeartbeat(r).ok).toBe(false);
+  });
+
+  it('does not open the second door for a game that has scores', async () => {
+    // The negative: `scoresMissing` is false, the game is outside the window, so
+    // there is nothing to sync and the run is a clean no-op. Without this the
+    // test above would pass against a query that simply returned everything.
+    const settled = {
+      espn_done: {
+        id: 'espn_done', season: '2026', seasonType: 1, week: 1,
+        startTime: NOW - 40 * HOUR, status: 'FINAL',
+        scores: { home: 27, away: 24 }, scoresMissing: false,
+      },
+    };
+    const { db } = fakeDbWithDocs(settled, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => { throw new Error('must not fetch — nothing is owed'); },
+    });
+    expect(r.slates).toBe(0);
+    expect(r.gamesWritten).toBe(0);
     expect(scoreSyncHeartbeat(r).ok).toBe(true);
   });
 });
@@ -383,6 +573,7 @@ describe('scoreSyncHeartbeat — not throwing is not the same as healthy', () =>
   const clean = {
     slates: 2, gamesWritten: 16, corrections: 0,
     slatesNotReconciled: 0, snapshotFailures: 0, correctionReportFailures: 0,
+    scorelessFinals: 0,
   };
 
   it('reports ok on a clean run', () => {
@@ -414,10 +605,21 @@ describe('scoreSyncHeartbeat — not throwing is not the same as healthy', () =>
     expect(v.error).toContain('1 stat-correction report(s) undelivered');
   });
 
+  it('reports NOT ok when the feed left a game FINAL with no scores (NFL7-3)', () => {
+    // Not a failure of the sync itself - the FEED is what is broken - but the
+    // game cannot be scored and its pool cannot finalize, so a green heartbeat
+    // here would be a lie. This is the operator's signal for the condition.
+    const v = scoreSyncHeartbeat({ ...clean, scorelessFinals: 1 });
+    expect(v.ok).toBe(false);
+    expect(v.error).toContain('1 game(s) FINAL with no reported scores');
+    expect(v.detail.scorelessFinals).toBe(1);
+  });
+
   it('always carries the counts as detail, so a degraded run is diagnosable', () => {
     expect(scoreSyncHeartbeat({ ...clean, slatesNotReconciled: 1 }).detail).toEqual({
       slates: 2, gamesWritten: 16, corrections: 0,
       slatesNotReconciled: 1, snapshotFailures: 0, correctionReportFailures: 0,
+      scorelessFinals: 0,
     });
   });
 
