@@ -383,10 +383,21 @@
 >
 >    The rule now lives in `src/utils/poolRoster.ts` as `unsubmittedRoster`,
 >    extracted rather than left inline so it could be unit-tested — #322 shipped a
->    plumbing-only guard on this card that survived mutation. Six cases in
->    `poolRoster.test.ts`; three mutations killed, and a fourth **survived and
->    exposed dead code** (`weeklyGameIds.length > 0 &&`, unreachable because
->    `[].every()` is `true`), now deleted.
+>    plumbing-only guard on this card that survived mutation.
+>
+>    **Test counts, measured 2026-07-31** (date-stamped per `mmp-docs-and-writing`;
+>    a bare number here reads as current forever, and qodo caught the first version
+>    of this paragraph stating counts with no date — they were also already stale):
+>    `src/utils/poolRoster.test.ts` **39**, `functions/.../memberRecord.plan.test.ts`
+>    **13**, `functions/.../emulator/proxyPickLatch.emulator.test.ts` **5**,
+>    `tests/admin-surface-invariants.test.ts` **84**.
+>
+>    **Mutation testing, 2026-07-31: 16 applied, 15 killed, 1 survived.** The
+>    survivor was the result: `weeklyGameIds.length > 0 &&` could never change an
+>    answer (`[].every()` is `true`), so it was dead code carried over from the
+>    inline version, found by mutation rather than by reading, and deleted. ⚠️ Three
+>    of the killed mutations targeted a host-exemption predicate that Kevin's
+>    2026-07-31 ruling later removed, so those no longer correspond to live guards.
 >
 >    Also removed with it: the pending list rendered a **hardcoded placeholder
 >    email address** for every member with none on file, shown as if it were
