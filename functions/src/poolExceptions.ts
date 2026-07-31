@@ -420,7 +420,16 @@ export const proxyPick = validated(
         // Placed after both branches so it covers PICKEM and SURVIVOR/MARGIN, and
         // only on the success path — every failure above throws out of the
         // transaction before reaching here.
-        ensureMemberRecord(transaction, db, pool.id, targetUid, {
+        //
+        // ⚠️ ONLY UPDATES AN EXISTING RECORD — it must never CREATE one. codex r3
+        // caught the first version doing so: `planMembershipWrite`'s create branch
+        // seeds `paidStatus: 'UNPAID'`, and this callable has no payment context to
+        // seed it correctly. On a legacy member with a PAID entry and no Member
+        // Record, that minted an UNPAID record which `buildPoolRoster` then PREFERS
+        // over the entry — silently marking a paid member unpaid and adding their
+        // fee back to outstanding dues. Advancing a latch must not be able to move
+        // money. Creating the record stays with the join/submit paths that know.
+        if (existingMember) ensureMemberRecord(transaction, db, pool.id, targetUid, {
             userName: existingMember?.userName || existingEntry?.userName as string || targetName,
             role: existingMember?.role ?? (pool.ownerId === targetUid ? 'MANAGER' : 'PARTICIPANT'),
             poolType: type,

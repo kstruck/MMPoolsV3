@@ -77,3 +77,55 @@ describe('proxyPick advances the playable-entry latch', () => {
         expect(member.userName).toBe('Dana');
     }, 30000);
 });
+
+/**
+ * A proxy pick must never MINT a Member Record.
+ *
+ * codex r3 on this change. `planMembershipWrite`'s create branch seeds
+ * `paidStatus: 'UNPAID'`, and `proxyPick` has no payment context to seed it
+ * correctly. On a legacy member with a PAID entry and no Member Record, the
+ * first version of the latch fix minted an UNPAID record — and `buildPoolRoster`
+ * PREFERS the Member Record over the entry, so the commissioner's next dashboard
+ * snapshot marked a paid member unpaid and added their fee back to outstanding
+ * dues.
+ *
+ * Advancing a latch must not be able to move money.
+ */
+describe('proxyPick never mints a Member Record', () => {
+    const POOL2 = 'pool-proxy-legacy';
+    const LEGACY = 'legacy-entry-only';
+
+    beforeAll(async () => {
+        await db.collection('pools').doc(POOL2).set({
+            name: 'Legacy proxy', type: 'NFL_PICKEM', league: 'NFL',
+            season: SEASON, seasonType: 1,
+            ownerId: 'commish-1', participantIds: ['commish-1', LEGACY],
+            status: 'OPEN', billing: { status: 'free' },
+            settings: { entryFee: 25, lockMode: 'PER_GAME', pickMode: 'STRAIGHT', confidenceMode: false },
+        });
+        // Legacy shape: a PAID entry and NO Member Record.
+        await db.collection('pools').doc(POOL2).collection('entries').doc(LEGACY).set({
+            id: LEGACY, poolId: POOL2, ownerUid: LEGACY, userName: 'Pat',
+            picks: {}, totalScore: 0, paidStatus: 'PAID',
+        });
+        await db.collection('users').doc(LEGACY).set({ name: 'Pat' });
+    }, 30000);
+
+    it('leaves the paid legacy member with NO Member Record rather than an UNPAID one', async () => {
+        await wProxy({
+            data: { poolId: POOL2, targetUid: LEGACY, week: 1, picks: { [GAME]: 'ARI' }, reason: 'Called their pick in over the phone' },
+            auth: COMMISH,
+        } as never);
+
+        // The pick landed...
+        const entry = (await db.collection('pools').doc(POOL2).collection('entries').doc(LEGACY).get()).data()!;
+        expect(entry.picks?.[GAME]).toBe('ARI');
+        // ...and the entry's PAID status is untouched.
+        expect(entry.paidStatus).toBe('PAID');
+
+        // ...and no UNPAID record was minted over the top of it. This is the
+        // assertion that fails if the `if (existingMember)` guard is removed.
+        const member = await db.collection('pools').doc(POOL2).collection('members').doc(LEGACY).get();
+        expect(member.exists).toBe(false);
+    }, 30000);
+});
