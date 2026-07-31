@@ -387,6 +387,35 @@ describe('syncScoresWindow — an unreconciled slate is counted, however it fail
     expect(enqueued).toHaveLength(0);
   });
 
+  it('stays degraded when the refresh does not return the marked game at all', async () => {
+    // codex r4. The slate came back NON-empty, so slatesNotReconciled stays 0,
+    // and the counting loop only sees what was returned — so a marked game the
+    // feed simply omits keeps its flag, is retried forever, and the heartbeat
+    // reports healthy while the pool is still blocked. The ABSENCE is the signal,
+    // and an absent error is not evidence of success.
+    const stranded = {
+      espn_old: {
+        id: 'espn_old', season: '2026', seasonType: 1, week: 1,
+        startTime: NOW - 40 * HOUR, status: 'FINAL', scoresMissing: true,
+      },
+    };
+    const { db } = fakeDbWithDocs(stranded, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        // A different game of the same slate came back; the marked one did not.
+        games: [espnGame({
+          id: 'espn_other', startTime: NOW - 40 * HOUR, status: 'FINAL',
+          scores: { home: 20, away: 17 },
+        })] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(r.slatesNotReconciled).toBe(0);
+    expect(r.scorelessFinals).toBe(1);
+    expect(scoreSyncHeartbeat(r).ok).toBe(false);
+  });
+
   it('does not open the second door for a game that has scores', async () => {
     // The negative: `scoresMissing` is false, the game is outside the window, so
     // there is nothing to sync and the run is a clean no-op. Without this the

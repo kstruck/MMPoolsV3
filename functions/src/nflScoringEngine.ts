@@ -33,7 +33,9 @@ import {
  * the missing side is already written as a real `0`. Fixing that belongs in the
  * importer (PLAN-NFL7-CHAOS-FIXES §3.1, residual R4).
  */
-export function hasReportedScores(g: Pick<NFLGame, 'scores'>): boolean {
+export function hasReportedScores(
+  g: { scores?: { home?: number; away?: number } | null },
+): boolean {
   return Number.isFinite(g.scores?.home) && Number.isFinite(g.scores?.away);
 }
 

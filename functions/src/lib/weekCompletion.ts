@@ -24,7 +24,9 @@ import type { NFLGame } from '../nflPoolTypes';
  * CANCELLED is deliberately unconditional: a cancelled game has no scores BY
  * DEFINITION, and that is not missing data.
  */
-export function isTerminalGame(g: Pick<NFLGame, 'status' | 'scores'>): boolean {
+export function isTerminalGame(
+  g: { status?: string | null; scores?: { home?: number; away?: number } | null },
+): boolean {
   if (g.status === 'CANCELLED') return true;
   return g.status === 'FINAL' && hasReportedScores(g);
 }

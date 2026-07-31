@@ -559,12 +559,15 @@ export async function syncScoresWindow(
   const scorelessSnap = await db.collection('nfl_games')
     .where('scoresMissing', '==', true)
     .get();
+  /** Marked game ids per slate key — used below to notice one the refresh never returned. */
+  const markedBySlate = new Map<string, string[]>();
   scorelessSnap.forEach(doc => {
     const data = doc.data() as NFLGame;
     const key = `${data.season}_${data.seasonType}_${data.week}`;
     if (!weeksToSync.has(key)) {
       weeksToSync.set(key, { week: data.week, season: data.season, seasonType: data.seasonType });
     }
+    markedBySlate.set(key, [...(markedBySlate.get(key) ?? []), doc.id]);
   });
   if (scorelessSnap.size > 0) {
     console.warn(
@@ -678,6 +681,16 @@ export async function syncScoresWindow(
     // it exists for — and the deep sweep runs dry by default (codex r3).
     for (const g of freshGames) {
       if (scoresMissingMarker(mergedById.get(g.id)!)) scorelessFinals.push(g.id);
+    }
+    // A marked game that the refresh did NOT return at all (codex r4). The slate
+    // came back non-empty, so `slatesNotReconciled` stays 0, and the loop above
+    // only sees what WAS returned — so the marked doc keeps its flag, keeps being
+    // retried forever, and the heartbeat reports a healthy run while the pool is
+    // still blocked. The absence is the signal here, and an absent error is not
+    // evidence of success.
+    const marked = markedBySlate.get(`${slateKey.season}_${slateKey.seasonType}_${slateKey.week}`) ?? [];
+    for (const id of marked) {
+      if (!mergedById.has(id)) scorelessFinals.push(id);
     }
 
     if (dryRun) {
