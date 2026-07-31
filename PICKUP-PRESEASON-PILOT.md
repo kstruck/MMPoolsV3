@@ -359,13 +359,15 @@ state. Concretely:
 
 **Functions are deployed from <!-- deploy-state:current --> `main` @ `68d121b`.**
 Rules remain ≡ `0a705c0`, unchanged by every merge since. Frontend still
-`index-Db6JwMWs.js` — #332 and #333 touch no `src/**`, so **no rebuild is owed**.
-All three queues empty.
-(Deployed 2026-07-31 in the EVENING ET for #333, the NFL-7 chaos-drill fixes —
-a second, separate deploy from `efea033` earlier the same day. Full fleet twice:
-173 `Successful update operation`, then 173 `Skipped (No changes detected)` —
-that all-Skipped run is the evidence. `shared/` deliberately untouched, so rules
-are unaffected.)
+`index-Db6JwMWs.js` — #332, #333 and #334 touch no `src/**`, so **no rebuild is
+owed**. All three queues empty.
+(Deployed 2026-07-31 in the EVENING ET for **#334**, which stopped shipping the
+113-file test suite to Cloud Functions — **the packaged upload went 2.33 MB →
+1.55 MB**. Full fleet twice: 173 `Successful update operation`, then 173
+`Skipped (No changes detected)` — that all-Skipped run is the evidence.
+`shared/` untouched, so rules are unaffected. This was the THIRD functions
+deploy that day: `efea033` (#329) earlier, `bca457c` (#333) at ~17:10 ET with
+the same all-Skipped evidence, then this one at ~17:45 ET.)
 (#313–#317 deployed as the FULL FLEET, twice: the first run reported every
 function `Successful update operation` — expected, because
 `npm --prefix functions ci` moved every bundle hash — and the second reported

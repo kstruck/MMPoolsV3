@@ -39,7 +39,7 @@
 > open finding on #333 (legacy scoreless-FINAL documents cannot exist if no FINAL
 > documents exist). It stops being true the moment the HOF game ends.
 >
-> ⚠️ **TWO deploys happened on 2026-07-31 — do not conflate them.** `efea033`
+> ⚠️ **THREE deploys happened on 2026-07-31 — do not conflate them.** `efea033`
 > (#329, the member-record change) went out earlier in the day and carried a
 > frontend rebuild to `index-Db6JwMWs.js`. `bca457c` (#333) went out that evening
 > and is FUNCTIONS ONLY — it touches no `src/**`, so the bundle did not move and
