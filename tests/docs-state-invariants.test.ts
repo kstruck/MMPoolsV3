@@ -610,11 +610,16 @@ describe('operator docs state the right Hall of Fame date', () => {
  * WHY THIS EXISTS. On 2026-07-30 someone set `VITE_RECAPTCHA_SITE_KEY` in the
  * Coolify environment to turn App Check on. Production rendered nothing —
  * permanent spinner, confirmed from two independent machines and networks —
- * until the variable was deleted and the site redeployed. The mechanism is
- * entirely client-side: the key flips `src/firebase.ts` onto the initialize
- * branch, `ReCaptchaEnterpriseProvider` loads a script that `nginx.conf`'s
- * `script-src` does not allow, the App Check token never resolves, and the
- * Firestore SDK — which blocks its first request on that token — goes offline.
+ * until the variable was deleted and the site redeployed.
+ *
+ * THAT CORRELATION IS ALL THAT IS ESTABLISHED. The first write-up proposed a
+ * mechanism (key flips `src/firebase.ts` onto the initialize branch →
+ * `ReCaptchaEnterpriseProvider` loads a script `nginx.conf`'s `script-src` does
+ * not allow → the App Check token never resolves → the Firestore SDK, which
+ * blocks its first request on that token, goes offline). Cross-model review
+ * holed it the same hour: the tracked Dockerfile declares no build `ARG` for
+ * this key, so it has no known path into the Vite bundle. **Root cause is OPEN.**
+ * HANDOFF's STOP POINT box is the record; do not restate the mechanism as fact.
  *
  * It looked safe because every callable runs App Check in `monitor` mode. That
  * is a TRUE fact supporting a FALSE conclusion: server-side leniency cannot
@@ -631,7 +636,8 @@ describe('operator docs state the right Hall of Fame date', () => {
  *
  * This is deliberately NOT a guard on `appCheck: "enforce"` in functions. Moving
  * callables to enforce is legitimate future work; setting the client site key
- * while the three faults stand is not.
+ * while the four recorded faults stand — and while the cause of the outage is
+ * unknown — is not.
  */
 describe('App Check stays off, and the outage stays documented', () => {
   /** Phrasings that count as "this doc tells you not to set the key". */

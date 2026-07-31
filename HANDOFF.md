@@ -472,8 +472,31 @@
 > `monitor`, zero `enforce`, and 26 bare `onCall` sites with no App Check option),
 > and Firestore itself is plainly not enforcing — an enforcing Firestore with no
 > registered app would reject every read, and the site works. Treat the 2026-07-06
-> attestation as **superseded and UNVERIFIED**; the skills that carried it now say
-> so. Nobody has read the console App Check page in this session.
+> attestation as **superseded and UNVERIFIED**. Nobody has read the console App
+> Check page in this session.
+>
+> The skills that carried that attestation were corrected in the same PR:
+> `mmp-architecture-contract`, `mmp-build-and-env`, `mmp-change-control`,
+> `mmp-config-and-flags`, `mmp-debugging-playbook`, `mmp-deploy-and-operate`,
+> `mmp-diagnostics-and-tooling`, `mmp-docs-and-writing`, `mmp-failure-archaeology`
+> and `mmp-superadmin-surface` — **ten**, plus `PRESEASON-READINESS-CHECKLIST`
+> (G3), `PICKUP`, and `PHASE0-DEPLOY-CHECKLIST` Step 4, which told an operator to
+> confirm App Check enforcement on the strength of three separately false
+> premises and is now marked VOID.
+>
+> ⚠️ **An earlier draft of this paragraph asserted the sweep was complete when it
+> was not**, naming eight skills while `mmp-docs-and-writing` and
+> `mmp-superadmin-surface` still reported enforcement as done — and the latter
+> still listed "re-enable `enforceAppCheck` on logClientError" as open work. codex
+> caught it as a P1. Recorded because the failure is instructive: the sweep step
+> was performed, its own completeness was then asserted from memory rather than
+> re-grepped, and a claim of thoroughness is exactly the kind that nobody
+> re-checks. If you extend this record, **re-run the grep and count** rather than
+> trusting this list:
+>
+> ```
+> Get-ChildItem .claude\skills,*.md -Recurse -Filter *.md | Select-String -Pattern 'App Check (is )?ENFORCED'
+> ```
 >
 > ### Historical: the 2026-07-27 stop point (superseded by the box above)
 >

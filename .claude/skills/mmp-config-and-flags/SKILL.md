@@ -260,7 +260,7 @@ before the next 08:00 UTC run, no deploy needed.
 | `syncGameStatus`, `syncNFLScoresJob`, `scheduledBracketSync`, `checkPlayoffScores`, `runReminders`, `enforceBillingStatus`, `aggregateRevenueDaily`, `scheduledHealthCheck` | NONE | No | Score/comms/billing schedulers run unconditionally. Pause = Cloud Scheduler console or function delete. |
 | `backfillPools` (callable, SUPER_ADMIN) | Caller-gated only | NO dry-run, NOT idempotent (double-counts stats on re-run) | Violates discipline rule (a); do not run casually — see mmp-change-control before touching. |
 | Stripe mock sandbox | Implicit: presence of `STRIPE_SECRET_KEY` | n/a | See §2 — absence of the secret IS the switch. |
-| `logClientError` | `enforceAppCheck: false` (`logClientError.ts:35`) | n/a | Function-level App Check enforcement is OFF with a TODO; console-level enforcement is the active layer. |
+| `logClientError` | `enforceAppCheck: false` (`logClientError.ts:35`) | n/a | Function-level App Check enforcement is OFF with a TODO. ⚠️ **This row used to add "console-level enforcement is the active layer" — CORRECTED 2026-07-30: there is no active layer.** 98 `validated()` callables are `monitor`, zero `enforce`, 26 bare `onCall` sites carry no option, and the client never initializes App Check in prod. Do NOT flip this TODO; see §1.4. |
 
 Non-negotiable discipline rule (canonical home: mmp-change-control): NO new
 prod-data-mutating job or sweep ships without (1) a `system/config`-style
@@ -283,10 +283,14 @@ audit output reviewed BEFORE enabling. `autoClosePools` is the template.
   `ReCaptchaEnterpriseProvider(VITE_RECAPTCHA_SITE_KEY)` ONLY if the env var is
   present at build time; dev mode sets `FIREBASE_APPCHECK_DEBUG_TOKEN = true`.
   ⛔ **The env var is deliberately absent in prod and MUST STAY absent.** Setting
-  it on 2026-07-30 took the site down: CSP blocks the reCAPTCHA script, the App
-  Check token never resolves, and the Firestore SDK — which waits on that token
-  before its first request — times out after ~10s and goes offline, so nothing
-  renders. Rolled back by deleting the variable.
+  it on 2026-07-30 was followed by the site rendering nothing; deleting the
+  variable and redeploying restored it. ⚠️ **That is the OBSERVATION. The
+  MECHANISM is unproven** — the first write-up blamed CSP blocking the reCAPTCHA
+  script (token never resolves → Firestore SDK waits on it → goes offline), but
+  §1.4 shows the tracked Dockerfile has no build `ARG` for this key, so it has no
+  known path into the bundle. Root cause is OPEN. Do not chase the CSP story
+  during a live incident without first confirming the CSP refusal is actually in
+  the browser console.
   **The reverse of the old advice here is the true one:** before any frontend
   build you intend to ship, confirm the key does **not** reach the build.
   App Check is enforced NOWHERE — 98 `monitor` declarations, zero `enforce`
