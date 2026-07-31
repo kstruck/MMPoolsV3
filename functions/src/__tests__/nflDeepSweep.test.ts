@@ -331,6 +331,62 @@ describe('syncScoresWindow — an unreconciled slate is counted, however it fail
     expect(scoreSyncHeartbeat(r).ok).toBe(true);
   });
 
+  it('does not re-enqueue a rescore when the feed temporarily drops scores it already delivered', async () => {
+    // codex r3. Every write is merge:true, so a payload that omits `scores`
+    // leaves the stored ones in place — but the RAW payload reads as a scoreless
+    // FINAL, i.e. non-terminal. Comparing that to a stored terminal game looks
+    // like a terminal → nonterminal transition, and would enqueue a `terminal`
+    // rescore on every 5-minute sync for as long as ESPN kept omitting them,
+    // repeatedly rescoring an already-finalized pool.
+    const stored = {
+      espn_thu: {
+        id: 'espn_thu', season: '2026', seasonType: 1, week: 1,
+        startTime: NOW - 20 * HOUR, status: 'FINAL', scores: { home: 27, away: 24 },
+      },
+    };
+    const { db, writes, enqueued } = fakeDbWithDocs(stored, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        // Same status, scores dropped from THIS payload only.
+        games: [espnGame({ id: 'espn_thu', startTime: NOW - 20 * HOUR, status: 'FINAL' })] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(enqueued.filter((e: any) => e.reason === 'terminal')).toHaveLength(0);
+    // ...and the game is not flagged either: the merged result still has scores.
+    expect(writes.find((w: any) => w.id === 'espn_thu')?.data?.scoresMissing).toBe(false);
+    expect(r.scorelessFinals).toBe(0);
+    expect(scoreSyncHeartbeat(r).ok).toBe(true);
+  });
+
+  it('a DRY RUN still reports a scoreless FINAL, while writing nothing', async () => {
+    // codex r3. The deep sweep runs dry by DEFAULT, so a dry run that re-fetches
+    // an already-stranded game, gets another scoreless FINAL and then reports a
+    // healthy run makes the monitoring worthless in exactly the case it exists
+    // for.
+    const stranded = {
+      espn_old: {
+        id: 'espn_old', season: '2026', seasonType: 1, week: 1,
+        startTime: NOW - 40 * HOUR, status: 'FINAL', scoresMissing: true,
+      },
+    };
+    const { db, writes, enqueued } = fakeDbWithDocs(stranded, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      dryRun: true,
+      fetchSlate: async () => ({
+        games: [espnGame({ id: 'espn_old', startTime: NOW - 40 * HOUR, status: 'FINAL' })] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(r.scorelessFinals).toBe(1);
+    expect(scoreSyncHeartbeat(r).ok).toBe(false);
+    // A dry run is still a dry run.
+    expect(writes).toHaveLength(0);
+    expect(enqueued).toHaveLength(0);
+  });
+
   it('does not open the second door for a game that has scores', async () => {
     // The negative: `scoresMissing` is false, the game is outside the window, so
     // there is nothing to sync and the run is a clean no-op. Without this the

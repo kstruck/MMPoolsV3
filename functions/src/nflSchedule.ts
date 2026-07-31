@@ -618,11 +618,6 @@ export async function syncScoresWindow(
     if (!(await reportStatCorrections(db, slateKey, corrections))) correctionReportFailures++;
     correctionCount += corrections.length;
 
-    if (dryRun) {
-      console.log(`[nflSchedule] DRY RUN — would write ${freshGames.length} game(s) for ${slateKey.season}/${slateKey.seasonType}/wk${slateKey.week}; ${corrections.length} correction(s) detected.`);
-      continue;
-    }
-
     // Existing docs for the WHOLE slate, not just the ones inside the time
     // window. ESPN returns the entire week, and every one of those games gets
     // written below — but a game later in the week can already carry a spread
@@ -661,8 +656,34 @@ export async function syncScoresWindow(
     //    longer counts a FINAL the feed reported no scores for, so the moment
     //    the scores arrive is the moment the game really becomes terminal — and
     //    the STATUS did not change across it.
+    //
+    // Measured against the MERGED game, not the raw payload (codex r3). Every
+    // write is `merge: true`, so a payload that omits `scores` leaves the stored
+    // ones in place — but the raw payload on its own reads as a scoreless FINAL,
+    // i.e. NON-terminal, so comparing it to a stored terminal game looks like a
+    // terminal → nonterminal transition and would enqueue a `terminal` rescore
+    // on EVERY sync for as long as the feed kept omitting them. One merged view,
+    // used for both this test and the marker below, is what keeps the two from
+    // disagreeing about what is about to be persisted.
+    const mergedById = new Map<string, NFLGame>(freshGames.map(g => [
+      g.id,
+      { ...g, scores: g.scores ?? existingById.get(g.id)?.scores } as NFLGame,
+    ]));
     const firstTerminal = freshGames.some(g =>
-      isTerminalTransition(existingById.get(g.id), g));
+      isTerminalTransition(existingById.get(g.id), mergedById.get(g.id)!));
+
+    // Counted BEFORE the dry-run early-out below. A dry run that re-fetches an
+    // already-stranded game, gets another scoreless FINAL, and then reports a
+    // healthy run would make the monitoring worthless in exactly the situation
+    // it exists for — and the deep sweep runs dry by default (codex r3).
+    for (const g of freshGames) {
+      if (scoresMissingMarker(mergedById.get(g.id)!)) scorelessFinals.push(g.id);
+    }
+
+    if (dryRun) {
+      console.log(`[nflSchedule] DRY RUN — would write ${freshGames.length} game(s) for ${slateKey.season}/${slateKey.seasonType}/wk${slateKey.week}; ${corrections.length} correction(s) detected.`);
+      continue;
+    }
 
     const batch = db.batch();
     for (const freshGame of freshGames) {
@@ -705,10 +726,10 @@ export async function syncScoresWindow(
       // MERGED result rather than the fresh payload: `merge: true` preserves a
       // stored `scores` when the new payload omits it, so testing `freshGame`
       // alone would re-flag a game that already has scores on every run.
-      cleanedGame.scoresMissing = scoresMissingMarker(freshGame, existingData);
-      if (cleanedGame.scoresMissing) {
-        scorelessFinals.push(freshGame.id);
-      }
+      // Same merged view the transition test used above, so the marker and the
+      // enqueue decision can never disagree about what is being persisted. The
+      // count was taken there too, before the dry-run early-out.
+      cleanedGame.scoresMissing = scoresMissingMarker(mergedById.get(freshGame.id)!);
 
       batch.set(gameRef, cleanedGame, { merge: true });
     }
