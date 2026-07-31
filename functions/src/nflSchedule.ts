@@ -50,6 +50,42 @@ export function mapEspnGameStatus(
 }
 
 /**
+ * Did this game cross into — or out of — a terminal state on this sync?
+ *
+ * The `terminal` rescore-queue trigger: the slate is enqueued for later
+ * reconciliation when any of its games did. Extracted from `syncScoresWindow`
+ * and exported so it can be unit-tested; it was inline, and a mutation removing
+ * half of it survived the entire suite.
+ *
+ * `prev === undefined` means no stored doc, which counts as arriving from
+ * SCHEDULED — so a game that arrives already terminal IS a transition.
+ *
+ * BOTH halves of the "nothing moved" test are required:
+ *  - the STATUS can move between two terminal states (`CANCELLED ⇄ FINAL`),
+ *    which `detectStatCorrections` also ignores because it only compares games
+ *    that were already FINAL — a pool finalized on the void would keep it;
+ *  - the TERMINAL-NESS can move without the status, which is new: a scoreless
+ *    `FINAL` is not terminal (NFL7-3), so a game becomes terminal the moment its
+ *    scores arrive, and across that moment the status stays `FINAL`. Keying only
+ *    on the status would miss it, and beyond the 24h live window nothing else
+ *    would ever make that slate a candidate again.
+ *
+ * A nonterminal → nonterminal move (`SCHEDULED → IN_PROGRESS`) is deliberately
+ * NOT a transition: it changes no grade, and it is every live game on every
+ * 5-minute run.
+ */
+export function isTerminalTransition(
+  prev: Pick<NFLGame, 'status' | 'scores'> | undefined,
+  next: Pick<NFLGame, 'status' | 'scores'>,
+): boolean {
+  const prevStatus = prev?.status ?? 'SCHEDULED';
+  const prevTerminal = prev ? isTerminalGame(prev) : false;
+  const nowTerminal = isTerminalGame(next);
+  if (prevStatus === next.status && prevTerminal === nowTerminal) return false;
+  return nowTerminal || prevTerminal;
+}
+
+/**
  * Resolve the scoreboard URL for a week. Prefers an explicit date range taken
  * from ESPN's own calendar, because the naive week/season/seasontype form
  * silently falls back to the PRIOR season during the off-season. Extracted from
@@ -550,21 +586,9 @@ export async function syncScoresWindow(
     //  - scoreless FINAL → FINAL WITH SCORES (NFL7-3): `isTerminalGame` no
     //    longer counts a FINAL the feed reported no scores for, so the moment
     //    the scores arrive is the moment the game really becomes terminal — and
-    //    the STATUS did not change across it. Keying only on the status
-    //    transition would miss it entirely, and beyond the 24h window nothing
-    //    else would ever make that slate a candidate again.
-    const firstTerminal = freshGames.some(g => {
-      const prev = existingById.get(g.id);
-      const prevStatus = prev?.status ?? 'SCHEDULED';
-      const prevTerminal = prev ? isTerminalGame(prev) : false;
-      const nowTerminal = isTerminalGame(g);
-      // A game with no stored doc counts as arriving from SCHEDULED. Nothing
-      // moved at all → not a transition. Note both halves are needed: the status
-      // can move between two terminal states (CANCELLED ⇄ FINAL) and the
-      // terminal-ness can move without the status (the scores case above).
-      if (prevStatus === g.status && prevTerminal === nowTerminal) return false;
-      return nowTerminal || prevTerminal;
-    });
+    //    the STATUS did not change across it.
+    const firstTerminal = freshGames.some(g =>
+      isTerminalTransition(existingById.get(g.id), g));
 
     const batch = db.batch();
     for (const freshGame of freshGames) {
