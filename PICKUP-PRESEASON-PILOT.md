@@ -357,7 +357,7 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `bca457c`.**
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `68d121b`.**
 Rules remain ≡ `0a705c0`, unchanged by every merge since. Frontend still
 `index-Db6JwMWs.js` — #332 and #333 touch no `src/**`, so **no rebuild is owed**.
 All three queues empty.

@@ -1,16 +1,24 @@
-# HANDOFF — Session entry point (updated 2026-07-31 evening: functions deployed from `bca457c` — the NFL-7 chaos-drill scoring fixes; the frontend is unchanged at `index-Db6JwMWs.js`; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and ALL THREE DEPLOY QUEUES ARE EMPTY)
+# HANDOFF — Session entry point (updated 2026-07-31 evening: functions deployed from `68d121b` — #334 stopped shipping the test suite to Cloud Functions, 2.33 MB → 1.55 MB, on top of #333's NFL-7 chaos-drill scoring fixes; the frontend is unchanged at `index-Db6JwMWs.js`; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and ALL THREE DEPLOY QUEUES ARE EMPTY)
 
-> ## ✅ STOP POINT 2026-07-28, **UPDATED 2026-07-31 evening** — everything through #333 shipped AND deployed
+> ## ✅ STOP POINT 2026-07-28, **UPDATED 2026-07-31 evening** — everything through #334 shipped AND deployed
 >
 > ⚠️ The 2026-07-28 date is the ORIGINAL snapshot; the deploy facts immediately
 > below were refreshed on **2026-07-31** and are current. Read the dates on
 > individual claims rather than the heading.
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `bca457c`.**
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `68d121b`.**
 > **Rules remain ≡ `0a705c0`** — unchanged by every merge since.
 >
-> Deployed **2026-07-31 in the evening ET** (~17:10) for **#333**, the NFL-7
-> chaos-drill fixes, which changed
+> ⬆️ **Deployed AGAIN 2026-07-31 at ~17:45 ET for #334**, which stopped shipping
+> the 113-file test suite to Cloud Functions (`firebase.json` ignore + tsconfig
+> excludes). **Measured effect: the uploaded package went 2.33 MB → 1.55 MB**, a
+> third smaller. Evidence: 173 `Successful update operation`, then a second run
+> of 173 all `Skipped (No changes detected)`, zero updates, `✔ Deploy complete!`.
+> `shared/`, `firestore.rules` and `src/**` all untouched by #334, so rules and
+> frontend are unaffected.
+>
+> The deploy immediately before it was **2026-07-31 ~17:10 ET** for **#333**, the
+> NFL-7 chaos-drill fixes, which changed
 > `nflScoringEngine.ts`, `lib/weekCompletion.ts`, `nflPools.ts`, `nflSchedule.ts`,
 > `nflFinalize.ts` and `feedReplay.ts`. **`shared/` was deliberately NOT touched**,
 > so rules are unaffected and stay ≡ the tag above.
@@ -35,7 +43,9 @@
 > (#329, the member-record change) went out earlier in the day and carried a
 > frontend rebuild to `index-Db6JwMWs.js`. `bca457c` (#333) went out that evening
 > and is FUNCTIONS ONLY — it touches no `src/**`, so the bundle did not move and
-> was not supposed to. `bca457c` is the current deploy state; `efea033` is history.
+> was not supposed to. **`68d121b` (#334) went out ~35 minutes after that, also
+> functions-only, and IS the current deploy state** — `bca457c` and `efea033` are
+> both history now. THREE functions deploys happened on 2026-07-31.
 >
 > ✅ **Frontend rebuilt the same day**: live bundle moved `index-CR5oJEHh.js` →
 > **`index-Db6JwMWs.js`**, read off the prod HTML. **`index-Db6JwMWs.js` is the
