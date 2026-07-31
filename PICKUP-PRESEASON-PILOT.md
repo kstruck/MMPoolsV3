@@ -5,9 +5,12 @@
 > Read `PICKUP-PRESEASON-PILOT.md` §0 first, then `HANDOFF.md`'s STOP POINT box.
 > The target is the Hall of Fame game, 2026-08-06. Deploy and prod-data
 > mutations are Kevin's; code, tests and PRs are yours. Follow CLAUDE.md §2b
-> (qodo is OFF — do not check it) and §2c (`codex exec review --base
+> (**qodo is ON — Kevin, 2026-07-31: "Qodo is now active and must be used."**
+> Check all three of its surfaces on every PR) and §2c (`codex exec review --base
 > origin/main`; use judgement up to 10 rounds per artifact, and ask Kevin with a
-> reason before going past 10). Tell me what you plan to do before you do it.
+> reason before going past 10). The stopping rule is JOINT: qodo clean AND a codex
+> round clean AND your own read of the diff agrees. Tell me what you plan to do
+> before you do it.
 
 Written 2026-07-21. **The target is the Hall of Fame game, 2026-08-06** (Thu,
 8:00pm ET, CAR at ARI) — that is the clock, set by Kevin on 2026-07-21. The
@@ -63,10 +66,21 @@ the `updatePoolSettings` callable and was smoke-tested in prod.)
 WARNING — that warning is the SAFE state.** Setting the variable in Coolify was
 followed by the site rendering nothing (permanent spinner, confirmed from two
 machines on two networks); deleting the variable and redeploying restored it.
-⚠️ **WHEN it happened is not pinned down** — the incident report places its two
-rebuilds right after #321, but §4 above attributes those same two bundle-hash
-moves to #322 and #324, each verified at the time. Do not reason about this
-incident from bundle hashes until the Coolify deployment history is read.
+✅ **WHEN it happened is now PINNED DOWN** (Coolify deployment history, read
+2026-07-31). **Three** manual rebuilds ran on 2026-07-31 — 04:54:22, 05:12:58 and
+05:16:59 UTC — **all three at commit `fe3d7c3`**, i.e. the same commit with no
+code change between them. That is the add-and-roll-back signature, and it is
+AFTER #325, not after #321. The incident report's "two rebuilds after #321" was
+wrong on both count and position, and §4 above is correct: the
+`D1wLGiMy → C31xivRN → CR5oJEHh` moves were #322 and #324, on 2026-07-30.
+
+⚠️ **The bundle hash did NOT move across any of those three rebuilds** — prod
+stayed on `index-CR5oJEHh.js`, which is what #324 produced (`fe3d7c3` is a
+docs-only commit on top of it, so it emits an identical bundle). **That is direct
+evidence the reCAPTCHA key never reached the bundle**, exactly as the missing
+Dockerfile `ARG` predicts. Whatever took the site down, it was not a changed
+bundle. One lead worth pulling: the 05:12:58 run finished in **21 seconds**,
+far too fast for a real image build, yet is recorded `Success`.
 
 ⚠️ **The correlation is solid. The CAUSE IS OPEN — do not repeat the first
 explanation as fact.** That explanation (CSP blocks the reCAPTCHA script → App
@@ -109,8 +123,12 @@ closed the banned-commissioner authz gap in prod; Kevin's two rulings landed —
 **timezones pinned to ET** (#259) and the **PLAN gate scoped to blast radius**
 (#260). See HANDOFF's STOP POINT box.
 
-**qodo is OFF** — Kevin removed the check entirely on 2026-07-25 (CLAUDE.md
-§2b). codex is the only reviewer.
+✅ **qodo is ON.** Kevin, 2026-07-31: *"Qodo is now active and must be used."*
+That supersedes the 2026-07-25 removal (which was only ever because the trial had
+lapsed) **and** the "qodo is OFF" line in the overnight prompt of 2026-07-30.
+Both reviewers run on every PR; the stopping rule is JOINT — qodo clean AND a
+codex round clean AND your own read of the diff agrees. PR #326 encodes the
+process and is open, carrying one named unresolved finding.
 
 The overnight-of-2026-07-22 effort took on four product items Kevin queued —
 profile header/footer, SuperAdmin Overview stats, a filterable Stats tab, and a
@@ -305,7 +323,9 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `0a705c0`.**
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `efea033`.**
+Rules remain ≡ `0a705c0`, unchanged by every merge since. Frontend rebuilt
+2026-07-31: `index-CR5oJEHh.js` → **`index-Db6JwMWs.js`**. All three queues empty.
 (#313–#317 deployed as the FULL FLEET, twice: the first run reported every
 function `Successful update operation` — expected, because
 `npm --prefix functions ci` moved every bundle hash — and the second reported
@@ -681,6 +701,9 @@ floating promise from another test file can trip. Re-run before investigating.
   `functions/src/lib/heartbeat.ts` does this; use it for any new job.
 - **`codex exec review --base origin/main` reviews PRs — run it before opening
   one; judgement up to 10 rounds, Kevin's sign-off with a reason past 10**
-  (CLAUDE.md §2c, his 2026-07-27 ruling). It is qodo's temporary replacement;
-  **qodo is OFF, do not check it** (§2b). Judge each finding on evidence and
-  reply either way — a rejection needs written reasoning on the PR.
+  (CLAUDE.md §2c, his 2026-07-27 ruling). ✅ **qodo runs ALONGSIDE it on every
+  PR** — Kevin, 2026-07-31: *"Qodo is now active and must be used."* It was
+  codex's counterpart, not its replacement; the "qodo is OFF" line here was true
+  only while the trial had lapsed. Judge each finding on evidence and reply either
+  way — a rejection needs written reasoning **on the PR**, not only in your run
+  notes.

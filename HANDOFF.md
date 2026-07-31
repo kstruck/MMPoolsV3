@@ -2,7 +2,18 @@
 
 > ## ✅ STOP POINT 2026-07-28 — #313–#317 SHIPPED; functions, rules and frontend all current
 >
-> **Functions + rules are deployed from <!-- deploy-state:current --> `main` @ `0a705c0`.**
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `efea033`.**
+> **Rules remain ≡ `0a705c0`** — unchanged by every merge since.
+>
+> Deployed 2026-07-31 for #329, which changed `shared/memberRecord.ts` (compiled
+> into functions) plus `lib/memberRecord.ts`, `nflPools.ts` and `poolExceptions.ts`.
+> **Evidence:** a first full-fleet run reported every function
+> `Successful update operation` and ended `✔ Deploy complete!`; a SECOND full-fleet
+> run reported **173 functions all `Skipped (No changes detected)`**, zero updates,
+> and ended `✔ Deploy complete!` — that all-Skipped run is the positive evidence.
+>
+> ✅ **Frontend rebuilt the same day**: live bundle moved `index-CR5oJEHh.js` →
+> **`index-Db6JwMWs.js`**, read off the prod HTML. **ALL THREE QUEUES EMPTY.**
 > Five PRs merged and deployed the same morning: #313 (payment fallback removal +
 > the post-commit projection fix), #314 (reminder delivery outcomes), #315 (one
 > definition of the sim-pool rule), #316 and #317 (docs).
