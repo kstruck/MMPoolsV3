@@ -330,7 +330,7 @@ state. Concretely:
 
 ---
 
-## 2. Live state (verified 2026-07-28)
+## 2. Live state (deploy state verified 2026-07-31 evening ET)
 
 > ⚠️ **HISTORICAL (2026-07-28 state). The live bundle is now
 > `index-Db6JwMWs.js`** — see §0 and the tagged claim below, which are current.
@@ -357,9 +357,15 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `efea033`.**
-Rules remain ≡ `0a705c0`, unchanged by every merge since. Frontend rebuilt
-2026-07-31: `index-CR5oJEHh.js` → **`index-Db6JwMWs.js`**. All three queues empty.
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `bca457c`.**
+Rules remain ≡ `0a705c0`, unchanged by every merge since. Frontend still
+`index-Db6JwMWs.js` — #332 and #333 touch no `src/**`, so **no rebuild is owed**.
+All three queues empty.
+(Deployed 2026-07-31 in the EVENING ET for #333, the NFL-7 chaos-drill fixes —
+a second, separate deploy from `efea033` earlier the same day. Full fleet twice:
+173 `Successful update operation`, then 173 `Skipped (No changes detected)` —
+that all-Skipped run is the evidence. `shared/` deliberately untouched, so rules
+are unaffected.)
 (#313–#317 deployed as the FULL FLEET, twice: the first run reported every
 function `Successful update operation` — expected, because
 `npm --prefix functions ci` moved every bundle hash — and the second reported
