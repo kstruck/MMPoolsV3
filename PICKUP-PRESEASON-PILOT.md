@@ -90,14 +90,19 @@ about the day. Written out because this runbook uses hash movement as positive
 evidence for a rebuild, so an unqualified "it did not move" is the kind of
 sentence that gets used to condemn a good deploy.
 
-📌 **UNVERIFIED (inference, not measurement):** that the hash held across those
+📌 **UNVERIFIED (inference, not measurement).** That the hash held across those
 three rebuilds is *consistent with* the reCAPTCHA key never reaching the bundle,
-which is what the missing Dockerfile `ARG` predicts — and it means the outage
-cannot be explained by changed bundle CONTENT. It is **not** proof: nobody
+which is what the missing Dockerfile `ARG` predicts. It is **not** proof: nobody
 diffed the served JS, and a rebuild can change what is served without changing
-the emitted hash (nginx config, headers, a half-built image). Treat the CSP
-mechanism as ruled out; treat "the key never reached the bundle" as strongly
-supported but unproven, and **the root cause as OPEN**.
+the emitted filename (nginx config, headers, a cached or half-built image).
+
+⚠️ **The CSP mechanism is NOT eliminated — it is conditional on the build path.**
+It is ruled out *only if* Coolify builds the tracked `Dockerfile`. That is
+precisely one of the open candidates: a custom or out-of-band build path, or a
+mismatched cached image, would let the site key reach the app despite the tracked
+Dockerfile having no `ARG`, and the CSP story would then be live again. **Verify
+the build method (or diff the served JS) before eliminating anything.** Root
+cause is OPEN.
 
 One lead worth pulling: the 05:12:58 run finished in **21 seconds**, far too
 fast for a real image build, yet is recorded `Success`.
@@ -323,10 +328,15 @@ state. Concretely:
 
 ## 2. Live state (verified 2026-07-28)
 
-> ✅ **FUNCTIONS, RULES and FRONTEND are ALL current at the SHA tagged below
-> (#313–#317). Every queue is empty.** Functions deployed twice, the second run
+> ⚠️ **HISTORICAL (2026-07-28 state). The live bundle is now
+> `index-Db6JwMWs.js`** — see §0 and the tagged claim below, which are current.
+> This block is kept for the deploy-ritual evidence it records, not for its
+> bundle hash.
+>
+> ✅ **FUNCTIONS, RULES and FRONTEND were ALL current at that time
+> (#313–#317). Every queue was empty.** Functions deployed twice, the second run
 > all-`Skipped`; rules unchanged by all five; Coolify rebuilt and the bundle
-> verified in the browser as `index-gn5gQtFU.js`.
+> verified in the browser as `index-gn5gQtFU.js` **(superseded)**.
 >
 > (Historical, 2026-07-25: both queues were empty through #279, with the frontend
 > rebuilt on Coolify on the same commit, SHA checked against
@@ -350,8 +360,9 @@ Rules remain ≡ `0a705c0`, unchanged by every merge since. Frontend rebuilt
 function `Successful update operation` — expected, because
 `npm --prefix functions ci` moved every bundle hash — and the second reported
 every function `Skipped (No changes detected)`. That all-Skipped run is the
-evidence. Rules unchanged by all five, so they remain ≡ this tag. FRONTEND also
-current: Coolify rebuilt, bundle `index-gn5gQtFU.js`.
+evidence. Rules unchanged by all five, so they remain ≡ this tag. FRONTEND at
+that time: Coolify rebuilt, bundle `index-gn5gQtFU.js` — ⚠️ **superseded; the
+live bundle is now `index-Db6JwMWs.js` (§0)**.
 Prior claim: <!-- deploy-state:ignore --> `main` @ `d3d2b0d` —)
 (#311 / G1 PR-B2 deployed as the FULL FLEET, twice; rules unchanged.
 Prior claim: <!-- deploy-state:ignore --> `main` @ `6b7e439` —)
@@ -368,9 +379,11 @@ runtime file changed in between (diff-verified), so the fleet ≡ the tag.
 Previous states: <!-- deploy-state:ignore --> `main` @ `8a55b84` (#279) on
 <!-- deploy-state:ignore --> `main` @ `49c12a9` (#261/#262/#265).
 
-✅ **The FRONTEND is current with this claim.** Coolify rebuilt on 2026-07-28 and
-the live bundle is `index-gn5gQtFU.js`, verified in the browser with cache
-disabled. That single rebuild cleared both the #297/#298 dependency-bump debt
+✅ **The FRONTEND was current with this claim on 2026-07-28.** Coolify rebuilt
+that day and the live bundle was `index-gn5gQtFU.js`, verified in the browser
+with cache disabled. ⚠️ **Superseded — the live bundle is now
+`index-Db6JwMWs.js`** (§0); this paragraph records that rebuild, not the current
+state. That single rebuild cleared both the #297/#298 dependency-bump debt
 (root `package.json` runtime deps — the trigger §4's own queue table names) and
 #313/#315's frontend changes. See HANDOFF's STOP POINT box and §0.
 (Historical: Coolify rebuilt twice on 2026-07-27 to bundle `index-CYTPq50I.js`,
