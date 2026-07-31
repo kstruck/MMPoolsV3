@@ -129,3 +129,59 @@ describe('proxyPick never mints a Member Record', () => {
         expect(member.exists).toBe(false);
     }, 30000);
 });
+
+/**
+ * An EMPTY proxy payload must not latch play, and must not charge the manager.
+ *
+ * codex r4. `proxyPickSchema.picks` is a bare `z.record()` with only a max-50
+ * refinement, so `picks: {}` is accepted and the Pick'em validation loop
+ * iterates nothing. The latch fix would then mark the target as having a
+ * playable entry for a call that committed no selection — and because
+ * `planMembershipWrite` derives `feeOwed` from that same fact, a SEEDED MANAGER
+ * would be upgraded from owing 0 to owing the full entry fee for a pick nobody
+ * made.
+ */
+describe('an empty proxy payload does not latch play or move dues', () => {
+    const POOL3 = 'pool-proxy-empty';
+    const HOST = 'commish-1';
+
+    beforeAll(async () => {
+        await db.collection('pools').doc(POOL3).set({
+            name: 'Empty proxy', type: 'NFL_PICKEM', league: 'NFL',
+            season: SEASON, seasonType: 1,
+            ownerId: HOST, participantIds: [HOST],
+            status: 'OPEN', billing: { status: 'free' },
+            settings: { entryFee: 25, lockMode: 'PER_GAME', pickMode: 'STRAIGHT', confidenceMode: false },
+        });
+        // The seeded host: hosting is not playing, so dues start at 0.
+        await db.collection('pools').doc(POOL3).collection('members').doc(HOST).set({
+            uid: HOST, poolId: POOL3, userName: 'Commish', role: 'MANAGER',
+            paidStatus: 'UNPAID', feeOwed: 0, feeOwedSource: 'LIVE', hasPlayableEntry: false,
+        });
+        await db.collection('users').doc(HOST).set({ name: 'Commish' });
+    }, 30000);
+
+    it('leaves the latch FALSE and dues at 0 after a proxy call with no picks', async () => {
+        await wProxy({
+            data: { poolId: POOL3, targetUid: HOST, week: 1, picks: {}, reason: 'Empty payload should be inert' },
+            auth: COMMISH,
+        } as never);
+
+        const member = (await db.collection('pools').doc(POOL3).collection('members').doc(HOST).get()).data()!;
+        expect(member.hasPlayableEntry).toBe(false);
+        // The money assertion: hosting is still not playing.
+        expect(member.feeOwed).toBe(0);
+    }, 30000);
+
+    it('still latches and charges once a REAL pick is proxied in', async () => {
+        await wProxy({
+            data: { poolId: POOL3, targetUid: HOST, week: 1, picks: { [GAME]: 'CAR' }, reason: 'Host phoned their pick in' },
+            auth: COMMISH,
+        } as never);
+
+        const member = (await db.collection('pools').doc(POOL3).collection('members').doc(HOST).get()).data()!;
+        expect(member.hasPlayableEntry).toBe(true);
+        // Now they ARE playing, so the seeded 0 upgrades to the entry fee.
+        expect(member.feeOwed).toBe(25);
+    }, 30000);
+});

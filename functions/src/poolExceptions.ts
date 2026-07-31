@@ -305,6 +305,8 @@ export const proxyPick = validated(
         // playable-entry latch below.
         const memberSnap = await transaction.get(membersCol(db, pool.id).doc(targetUid));
         const existingMember = memberSnap.exists ? (memberSnap.data() as MemberRecord) : null;
+        // Did this call actually commit a selection? Only then may the latch move.
+        let committedPick = false;
 
         if (type === "NFL_PICKEM") {
             const settings = pool.settings || {};
@@ -331,6 +333,16 @@ export const proxyPick = validated(
                     }
                 }
             }
+
+            // codex r4: `proxyPickSchema`'s `picks` is a bare `z.record()` with only
+            // a max-50 refinement, so `picks: {}` is ACCEPTED and the validation
+            // loop above iterates nothing. Without this the latch would advance on
+            // a call that committed no selection at all — and for a seeded manager
+            // that also upgrades `feeOwed` from 0 to the entry fee, charging them
+            // for a pick nobody made. Narrowed here rather than by tightening the
+            // schema: rejecting empty payloads changes this callable's contract for
+            // every existing caller, which is a bigger blast radius than the bug.
+            committedPick = Object.keys(picks as Record<string, string>).length > 0;
 
             transaction.set(entryRef, {
                 id: targetUid,
@@ -398,6 +410,10 @@ export const proxyPick = validated(
                 throw new HttpsError("failed-precondition", `GAME_LOCKED: The game for ${teamPicked} has already locked. Extend the deadline first if an exception is warranted.`);
             }
 
+            // Survivor/Margin cannot reach here without a team: the guard above
+            // throws on a missing selection.
+            committedPick = true;
+
             const oldUsed = usedTeams.filter((t: string) => t !== oldPick);
             transaction.set(entryRef, {
                 ...entry,
@@ -429,7 +445,7 @@ export const proxyPick = validated(
         // over the entry — silently marking a paid member unpaid and adding their
         // fee back to outstanding dues. Advancing a latch must not be able to move
         // money. Creating the record stays with the join/submit paths that know.
-        if (existingMember) ensureMemberRecord(transaction, db, pool.id, targetUid, {
+        if (existingMember && committedPick) ensureMemberRecord(transaction, db, pool.id, targetUid, {
             userName: existingMember?.userName || existingEntry?.userName as string || targetName,
             role: existingMember?.role ?? (pool.ownerId === targetUid ? 'MANAGER' : 'PARTICIPANT'),
             poolType: type,
