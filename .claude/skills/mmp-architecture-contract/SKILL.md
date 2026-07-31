@@ -65,7 +65,14 @@ Firestore  <-->  Cloud Functions v2 (functions/src/)   - Trigger Email extension
   section 6).
 - App Check: ReCaptcha Enterprise, initialized in `src/firebase.ts:24-32` only
   if `VITE_RECAPTCHA_SITE_KEY` is set (warns loudly in prod if missing).
-  Owner-attested as of 2026-07-06: App Check is ENFORCED in the Firebase console.
+  ⛔ **The key is deliberately absent in prod and setting it takes the site
+  down** (2026-07-30 incident — CSP blocks the reCAPTCHA script, the token never
+  resolves, the Firestore SDK waits on it and goes offline). The loud warning is
+  the SAFE state. App Check is enforced NOWHERE in code: `lib/validated.ts:94-97`
+  defaults to `"monitor"` and 98/98 callables declare `monitor`, zero `enforce`.
+  The 2026-07-06 owner attestation that it is ENFORCED in the Firebase console is
+  **superseded and UNVERIFIED** — the incident report says the web app was never
+  registered there. See HANDOFF's STOP POINT box.
 
 ### Deploy topology — the part everyone gets wrong
 

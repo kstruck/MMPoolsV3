@@ -1,4 +1,4 @@
-# HANDOFF — Session entry point (updated 2026-07-30: the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and ALL THREE DEPLOY QUEUES ARE EMPTY)
+# HANDOFF — Session entry point (updated 2026-07-30: App Check took production down and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and ALL THREE DEPLOY QUEUES ARE EMPTY)
 
 > ## ✅ STOP POINT 2026-07-28 — #313–#317 SHIPPED; functions, rules and frontend all current
 >
@@ -372,15 +372,69 @@
 >    change to the money surfaces Kevin scoped; it is a display defect, not a
 >    data-integrity one, and the nudge list it feeds can only under-report.
 >
-> ### Standing, unrelated to this deploy
+> ### ⛔⛔ APP CHECK TOOK PRODUCTION DOWN ON 2026-07-30. DO NOT "FIX" THE WARNING.
 >
-> **App Check is inert in prod.** `VITE_RECAPTCHA_SITE_KEY` is absent from the
-> Coolify build environment, so `src/firebase.ts:24-32` never initializes App
-> Check and every prod bundle logs `⚠️ SECURITY: App Check is NOT active`.
-> Nothing breaks because the callables run App Check in `monitor` mode — they log
-> attestation state and do not reject on it. Long-standing, documented in
-> `mmp-build-and-env`; recorded here because it was re-observed on 2026-07-28 and
-> should not be re-diagnosed a fourth time.
+> **`VITE_RECAPTCHA_SITE_KEY` is absent from the Coolify build environment, so
+> `src/firebase.ts:25` skips App Check and every prod bundle logs
+> `⚠️ SECURITY: App Check is NOT active`. THAT WARNING IS THE CORRECT AND SAFE
+> STATE. LEAVE IT.**
+>
+> **What happened.** Setting that env var in Coolify and rebuilding took the site
+> down: it hung on a spinner and rendered nothing. Confirmed from two independent
+> machines on two networks, so it was not one browser's cache. Rolled back by
+> DELETING the variable and redeploying. Two Coolify rebuilds therefore happened
+> after #321 with no code change between them — a bundle hash moving without a
+> merge is expected here, not drift.
+>
+> **Mechanism, end to end.** Setting the key flips `src/firebase.ts:25` from the
+> skip branch to the initialize branch. The provider then loads
+> `https://www.google.com/recaptcha/enterprise.js`; `nginx.conf`'s `script-src`
+> lists no Google reCAPTCHA host, so the browser refuses the script; the App Check
+> token never resolves; and the Firestore SDK — which waits on that token before
+> issuing its first request — times out after ~10s and goes offline. Nothing
+> renders because nothing was ever fetched.
+>
+> **Server-side `monitor` mode does NOT save you, and believing it did is what
+> made this look safe.** It is true that App Check is `monitor` on every callable
+> — verified, not assumed: `functions/src/lib/validated.ts:94` defaults to
+> `"monitor"`, `:97` sets `enforceAppCheck: appCheck === "enforce"`, and
+> `grep -rho 'appCheck: .[a-z]*.' functions/src` returns **98 occurrences, all
+> `monitor`, zero `enforce`**. But that governs whether the SERVER rejects a
+> tokenless call. This failure is entirely CLIENT-SIDE and happens before any
+> request leaves the browser. A server-side allowance cannot rescue a client that
+> never gets far enough to make a request. The previous version of this block drew
+> exactly the wrong inference from a true fact, and that inference is now deleted.
+>
+> **Three faults, ALL STILL UNFIXED. Re-enabling App Check needs all three.**
+>
+> 1. **CSP is missing the reCAPTCHA hosts.** Verified in `nginx.conf` at the byte
+>    level: all three `Content-Security-Policy` headers (lines 33, 52, 82 — `/`,
+>    `/pool/:id`, `/join/:id`) omit `https://www.google.com/recaptcha/` and
+>    `https://www.gstatic.com/recaptcha/` from `script-src`, and
+>    `https://www.google.com/recaptcha/` from `frame-src`. Same class as #320's
+>    Sentry gap, in the same file, in a directive nobody checked while fixing
+>    `connect-src`. **Inert while the env var is unset** — it may be fixed
+>    opportunistically by a PR already editing the CSP, but fixing it does NOT
+>    make it safe to set the key, because faults 2 and 3 remain.
+> 2. **Wrong reCAPTCHA product.** `src/firebase.ts:27` constructs a
+>    `ReCaptchaEnterpriseProvider`, which requires a reCAPTCHA **Enterprise** key
+>    from Google Cloud. The key that was created is reCAPTCHA **v3**. Different
+>    products; incompatible even with the CSP fixed.
+> 3. **The web app was never registered in the Firebase console's App Check
+>    section.** Required regardless of key type.
+>
+> **Re-enabling App Check is a scoped project, not a warning to clear.** Do not
+> set `VITE_RECAPTCHA_SITE_KEY`; do not tell Kevin the warning is safe to clear;
+> do not schedule it before the pilot.
+>
+> ⚠️ **A contradicted claim, flagged rather than silently rewritten.** Several
+> skills carry an owner attestation dated 2026-07-06 that "App Check is ENFORCED
+> in the Firebase console". Fault 3 above says the app was never registered, which
+> cannot both be true. The code is unambiguous (98/98 `monitor`), and Firestore
+> itself is plainly not enforcing — an enforcing Firestore with no registered app
+> would reject every read, and the site works. Treat the 2026-07-06 attestation as
+> **superseded and UNVERIFIED**; the skills that carried it now say so. Nobody has
+> read the console App Check page in this session.
 >
 > ### Historical: the 2026-07-27 stop point (superseded by the box above)
 >

@@ -48,7 +48,7 @@ Referenced in `src/` but NOT present in `.env` (as of 2026-07-06):
 
 | Name | Consumed by | Notes |
 |---|---|---|
-| `VITE_RECAPTCHA_SITE_KEY` | `src/firebase.ts:24` | App Check (ReCaptcha Enterprise). If absent at build time, App Check is silently not initialized and prod logs a console warning (`src/firebase.ts:30-32`). See §5 App Check. |
+| `VITE_RECAPTCHA_SITE_KEY` | `src/firebase.ts:24` | ⛔ **Absent ON PURPOSE — setting it took prod down 2026-07-30.** App Check is then silently not initialized and prod logs a console warning (`src/firebase.ts:30-32`); that warning is the SAFE state. See §1.4 and §5. |
 | `VITE_API_KEY` | `src/components/AdminPanel.tsx:222` | Gemini key for an AdminPanel feature. NOT in `.env`, but IS a prod Dockerfile build arg (`Dockerfile:14`, ENV at `:22`) — see §1.4. |
 | `VITE_USE_FIREBASE_EMULATOR` | `src/firebase.ts:41` | e2e only; set in `.env.e2e`, never in `.env`/prod |
 
@@ -82,14 +82,26 @@ Coolify holds ITS OWN copies of these values in the dashboard — they are NOT
 read from the repo `.env`. Changing `.env` locally does nothing for prod www;
 sync Coolify build args manually, then trigger a manual Coolify deploy.
 
-OPEN QUESTION (UNVERIFIED, as of 2026-07-06): `VITE_RECAPTCHA_SITE_KEY` is NOT
-a Dockerfile ARG, yet App Check is ENFORCED in the Firebase console (owner
-ground truth). How the prod www bundle obtains the reCAPTCHA site key is not
-determinable from the repo. Verify by: (a) checking Coolify build args in the
-dashboard, and (b) searching the served prod bundle for `ReCaptchaEnterprise`
-init. If the prod bundle really lacks the key while enforcement is on,
-callables from www clients would be rejected — treat any "unauthenticated /
-app-check" error wave as this until disproven (see mmp-debugging-playbook).
+✅ **ANSWERED 2026-07-30, the hard way. The old open question asked how the prod
+bundle obtains the reCAPTCHA site key. It does not obtain it, and that is
+correct.** `VITE_RECAPTCHA_SITE_KEY` is absent from the Coolify environment on
+purpose. Someone SET it, Coolify rebuilt, and **production went down** — blank
+page, permanent spinner, confirmed from two independent machines and networks —
+until the variable was deleted and the site redeployed. ⛔ **Do not set it. Do
+not re-open this as a question to resolve by experiment.**
+
+The old question's premise was also wrong: App Check is **not** enforced.
+`functions/src/lib/validated.ts:94-97` defaults every callable to `"monitor"`
+and only sets `enforceAppCheck` for `"enforce"`, and there are **98 `monitor`
+declarations and zero `enforce`** across `functions/src`. Firestore is plainly
+not enforcing either — an enforcing Firestore with no registered app would
+reject every read, and the site works. The 2026-07-06 "ENFORCED in the console"
+owner attestation is **superseded and UNVERIFIED**; the incident report says the
+web app was never registered in the console's App Check section at all.
+
+Mechanism and the three faults that must ALL be fixed before this is reconsidered
+(CSP hosts, Enterprise-vs-v3 key, app never registered): HANDOFF's STOP POINT
+box. It is not pilot work.
 
 Note: `VITE_API_KEY` is absent from the root `.env` but present in both the
 Dockerfile and `src/components/AdminPanel.tsx:222` — when syncing Coolify build
@@ -249,10 +261,17 @@ audit output reviewed BEFORE enabling. `autoClosePools` is the template.
 - App Check (`src/firebase.ts:18-32`): initialized with
   `ReCaptchaEnterpriseProvider(VITE_RECAPTCHA_SITE_KEY)` ONLY if the env var is
   present at build time; dev mode sets `FIREBASE_APPCHECK_DEBUG_TOKEN = true`.
-  ENFORCED in the Firebase console as of 2026-07-06 (owner ground truth) —
-  meaning a client bundle built WITHOUT the site key produces users whose
-  callable/Firestore traffic can be rejected. Before any frontend build you
-  intend to ship, confirm the key reaches the build (see §1.4 open question).
+  ⛔ **The env var is deliberately absent in prod and MUST STAY absent.** Setting
+  it on 2026-07-30 took the site down: CSP blocks the reCAPTCHA script, the App
+  Check token never resolves, and the Firestore SDK — which waits on that token
+  before its first request — times out after ~10s and goes offline, so nothing
+  renders. Rolled back by deleting the variable.
+  **The reverse of the old advice here is the true one:** before any frontend
+  build you intend to ship, confirm the key does **not** reach the build.
+  App Check is enforced NOWHERE — 98 `monitor` declarations, zero `enforce`
+  (`functions/src/lib/validated.ts:94-97`) — so a bundle without the key costs
+  nothing. The 2026-07-06 "ENFORCED in the console" attestation is superseded
+  and UNVERIFIED; see §1.4.
 - Firestore client cache: persistent multi-tab in prod, in-memory under
   `VITE_USE_FIREBASE_EMULATOR` (`src/firebase.ts:41-46`) — a config-driven
   behavioral fork that matters for e2e determinism (mmp-validation-and-qa).
@@ -404,6 +423,8 @@ Every table above drifts. Re-verify from repo root `D:\march-melee-pools`
 
 Date-stamped volatile facts to re-confirm on next major session:
 autoClosePools LIVE (2026-07-06), Stripe TEST secret rotation PENDING
-(2026-07-06), `POOLS_OPEN = false` (2026-07-06), App Check ENFORCED in console
-(2026-07-06), the §1.4 reCAPTCHA-key-in-Coolify open question, and the §7
-split-brain still open.
+(2026-07-06), `POOLS_OPEN = false` (2026-07-06), and the §7 split-brain still
+open. **Two entries were RESOLVED on 2026-07-30 and are no longer volatile:**
+the §1.4 reCAPTCHA-key-in-Coolify open question (answered — the key is absent on
+purpose and setting it takes prod down), and "App Check ENFORCED in console"
+(superseded and UNVERIFIED — 98/98 callables are `monitor`).

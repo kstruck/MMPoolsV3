@@ -58,6 +58,20 @@ Dashboard URL in HANDOFF's STOP POINT box for next time.
 (Historical: the 2026-07-25 rebuild carried #279's `NFLManagerView` cutover onto
 the `updatePoolSettings` callable and was smoke-tested in prod.)
 
+⛔ **APP CHECK TOOK PRODUCTION DOWN ON 2026-07-30 AND WAS ROLLED BACK. DO NOT SET
+`VITE_RECAPTCHA_SITE_KEY`, AND DO NOT "FIX" THE `App Check is NOT active`
+WARNING — that warning is the SAFE state.** Setting the variable in Coolify made
+the site render nothing (permanent spinner, confirmed from two machines on two
+networks); it was rolled back by deleting the variable and redeploying, which is
+why two rebuilds happened after #321 with no code change between them. Server-side
+`monitor` mode does not protect you — the failure is client-side before any
+request leaves the browser. Three faults must ALL be fixed first (CSP is missing
+the reCAPTCHA hosts; `src/firebase.ts:27` wants an **Enterprise** key and the one
+that exists is **v3**; the web app was never registered in the console). Full
+mechanism in HANDOFF's STOP POINT box; guarded by
+`tests/docs-state-invariants.test.ts`. `PRESEASON-READINESS-CHECKLIST` item G3 is
+now CLOSED as accepted risk — do not reopen it before the pilot.
+
 ⚠️ **NEW IN PROD: `runReminders` can send SMS for the first time.** #314 bound
 `COURIER_AUTH_TOKEN` to it; the job had never bound the secret, so every SMS
 reminder it tried to send had silently not been sent for the life of the job.

@@ -603,3 +603,116 @@ describe('operator docs state the right Hall of Fame date', () => {
     });
   });
 });
+
+/**
+ * App Check must stay OFF, and the reason must stay written down.
+ *
+ * WHY THIS EXISTS. On 2026-07-30 someone set `VITE_RECAPTCHA_SITE_KEY` in the
+ * Coolify environment to turn App Check on. Production rendered nothing —
+ * permanent spinner, confirmed from two independent machines and networks —
+ * until the variable was deleted and the site redeployed. The mechanism is
+ * entirely client-side: the key flips `src/firebase.ts` onto the initialize
+ * branch, `ReCaptchaEnterpriseProvider` loads a script that `nginx.conf`'s
+ * `script-src` does not allow, the App Check token never resolves, and the
+ * Firestore SDK — which blocks its first request on that token — goes offline.
+ *
+ * It looked safe because every callable runs App Check in `monitor` mode. That
+ * is a TRUE fact supporting a FALSE conclusion: server-side leniency cannot
+ * rescue a client that fails before it issues a request.
+ *
+ * Two things can quietly undo this, and each gets an assertion:
+ *
+ *   1. Somebody "cleans up" the conditional in `src/firebase.ts` so App Check
+ *      initializes unconditionally. That reintroduces the outage in CODE, where
+ *      no env var is needed to trigger it.
+ *   2. Somebody trims the incident out of HANDOFF. The warning is the only
+ *      defence against the env var being set again, because a Coolify variable
+ *      is not something a test can reach.
+ *
+ * This is deliberately NOT a guard on `appCheck: "enforce"` in functions. Moving
+ * callables to enforce is legitimate future work; setting the client site key
+ * while the three faults stand is not.
+ */
+describe('App Check stays off, and the outage stays documented', () => {
+  /** Phrasings that count as "this doc tells you not to set the key". */
+  const DO_NOT_SET_PHRASES = [
+    'DO NOT SET',
+    'do not set',
+    'Do not set',
+    'MUST STAY absent',
+    'must stay absent',
+    'took production down',
+    'took prod down',
+  ];
+
+  /**
+   * Which of the two required signals a doc is missing. Returns [] when the doc
+   * both names the variable AND says not to set it — a doc that names it with
+   * no warning is worse than one that never mentions it, because a reader
+   * searching for the variable finds a neutral hit.
+   */
+  function appCheckWarningGapsIn(text: string): string[] {
+    const gaps: string[] = [];
+    if (!text.includes('VITE_RECAPTCHA_SITE_KEY')) gaps.push('names-the-variable');
+    if (!DO_NOT_SET_PHRASES.some((p) => text.includes(p))) gaps.push('says-do-not-set');
+    return gaps;
+  }
+
+  describe('the real files', () => {
+    it('src/firebase.ts initializes App Check ONLY behind the site-key conditional', () => {
+      const src = fs.readFileSync(path.join(REPO_ROOT, 'src', 'firebase.ts'), 'utf8');
+
+      // Exactly one call site. Two would mean one of them escaped the guard.
+      const callSites = src.split('initializeAppCheck(').length - 1;
+      expect(callSites).toBe(1);
+
+      // The guard itself must still be there...
+      const guardAt = src.indexOf('if (recaptchaSiteKey)');
+      expect(guardAt).toBeGreaterThan(-1);
+
+      // ...and the call must come after it, not before.
+      expect(src.indexOf('initializeAppCheck(')).toBeGreaterThan(guardAt);
+
+      // And the non-DEV branch must still warn rather than fall silent, because
+      // that warning is how an operator confirms the SAFE state is in effect.
+      expect(src).toContain('App Check is NOT active');
+    });
+
+    it('HANDOFF.md carries the do-not-set warning', () => {
+      const handoff = fs.readFileSync(path.join(REPO_ROOT, 'HANDOFF.md'), 'utf8');
+      expect(appCheckWarningGapsIn(handoff)).toEqual([]);
+    });
+  });
+
+  /**
+   * Guard the guard. A matcher that cannot report a gap is not a matcher, and
+   * this repo has shipped three assertions that passed with the defect present.
+   */
+  describe('the gap detector actually detects gaps', () => {
+    it('flags a doc that mentions neither', () => {
+      expect(appCheckWarningGapsIn('nothing about attestation here'))
+        .toEqual(['names-the-variable', 'says-do-not-set']);
+    });
+
+    it('flags a doc that names the variable with NO warning — the dangerous case', () => {
+      expect(appCheckWarningGapsIn('Supply VITE_RECAPTCHA_SITE_KEY for prod-like builds.'))
+        .toEqual(['says-do-not-set']);
+    });
+
+    it('flags a warning that never names the variable', () => {
+      expect(appCheckWarningGapsIn('Do not set the App Check key.'))
+        .toEqual(['names-the-variable']);
+    });
+
+    it('accepts a doc carrying both', () => {
+      expect(appCheckWarningGapsIn('⛔ DO NOT SET VITE_RECAPTCHA_SITE_KEY in prod.'))
+        .toEqual([]);
+    });
+
+    it('accepts every phrasing in the allow-list, so a reword does not silently pass', () => {
+      for (const phrase of DO_NOT_SET_PHRASES) {
+        expect(appCheckWarningGapsIn(`VITE_RECAPTCHA_SITE_KEY — ${phrase}`)).toEqual([]);
+      }
+    });
+  });
+});
