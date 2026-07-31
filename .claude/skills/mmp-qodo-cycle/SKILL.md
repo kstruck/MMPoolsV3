@@ -183,8 +183,21 @@ for i in $(seq 1 10); do
   fi
   sleep 30
 done
-echo "QODO REPORTED — count still moving after settle window, treat as PARTIAL"
+echo "QODO PARTIAL — count still moving after the settle window; DO NOT run the joint gate on this set. Re-arm and settle again before absorbing."
 ```
+
+⚠️ **`QODO PARTIAL` IS NOT A PASS.** The watcher has exactly two success
+verdicts and only ONE of them may feed §2: `QODO REPORTED` means the count
+settled and the report is complete; `QODO PARTIAL` means qodo was still posting
+when the window closed. Absorbing a PARTIAL set satisfies the joint gate against
+findings qodo had not finished writing — the gate then certifies a review that
+never completed, which is worse than no gate. On PARTIAL: re-arm (§ re-arm
+command, with its one-second backoff) and settle again; only `QODO REPORTED`
+unlocks the absorption flow.
+
+This mattered only once the settle window was bounded to fit the runtime cap
+(codex r11) — before that the tool was killed before it could print PARTIAL at
+all, so the branch was unreachable and the hazard was hidden rather than absent.
 
 ⚠️ **Six things this watcher's shape is for. Every one of them broke an earlier
 draft of this very file — do not "simplify" any of them back out.**
