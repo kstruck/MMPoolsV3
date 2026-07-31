@@ -180,7 +180,11 @@ export function buildPoolRoster({ pool, members, entries }: RosterInputs): Roste
  *   - SURVIVOR / MARGIN    -> pending if no pick stored under the week number
  *
  * A pick'em week with NO games yields nobody pending among entry holders: there
- * is nothing to pick, so calling them delinquent would be wrong.
+ * is nothing to pick, so calling them delinquent would be wrong. That falls out
+ * of `[].every()` being `true` — an explicit `weeklyGameIds.length > 0 &&`
+ * guard was carried over from the inline version and **deleted as dead code**:
+ * it survived mutation testing precisely because it can never change an answer.
+ * The behaviour it looked like it protected is real and is pinned by a test.
  */
 export function unsubmittedRoster(
   roster: RosterRow[],
@@ -191,7 +195,7 @@ export function unsubmittedRoster(
     if (!r.hasEntry) return true;
     const picks = r.entry?.picks || {};
     if (poolType === 'NFL_PICKEM') {
-      return weeklyGameIds.length > 0 && !weeklyGameIds.every((id) => !!picks[id]);
+      return !weeklyGameIds.every((id) => !!picks[id]);
     }
     return !picks[week];
   });
