@@ -261,6 +261,16 @@ describe('NFL-7 (b) — the only game of the week is postponed', () => {
     expect(verdict.stalledGameIds).toEqual([GID]);
     expect(verdict.reason).toMatch(/STALLED/);
 
+    // The week-completeness half, pinned on the TERMINAL check specifically.
+    // In the moved-startTime case above the week is incomplete for a second,
+    // independent reason — the new kickoff has not passed, so the game is not
+    // lock-closed either — and that assertion therefore survives a mutation that
+    // makes SCHEDULED count as concluded. Here the kickoff is 13h in the PAST, so
+    // the lock IS closed and `isTerminalGame` is the only thing left holding the
+    // week open. Mutation-verified: without this line, teaching `isTerminalGame`
+    // to accept SCHEDULED leaves the whole drill green.
+    expect(isWeekComplete(await poolDoc(poolId), 1, await loadSlate(), Date.now())).toBe(false);
+
     // And the pool really is left alone by the scheduled path.
     await autoScoreOnce(db, Date.now(), { dryRun: false });
     expect((await poolDoc(poolId)).finalizedAt).toBeUndefined();
