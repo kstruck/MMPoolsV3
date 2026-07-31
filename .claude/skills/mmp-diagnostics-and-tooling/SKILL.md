@@ -347,7 +347,7 @@ Two integrity caveats:
 2. Code-level `enforceAppCheck` is `false` in `logClientError.ts:35`, with a
    comment saying App Check isn't operational. **That comment is CORRECT and the
    note that used to sit here calling it stale was not.** App Check is off
-   platform-wide: 98/98 callables declare `appCheck: "monitor"` and zero declare
+   platform-wide: 98 `validated()` callables declare `appCheck: "monitor"` and zero declare
    `enforce` (`lib/validated.ts:94-97`), and the client never initializes it in
    prod because `VITE_RECAPTCHA_SITE_KEY` is deliberately absent. The 2026-07-06
    "enforced at the console/product level" attestation is superseded and
@@ -416,7 +416,7 @@ All file:line references verified 2026-07-06 on branch `fix/superadmin-phase0-co
 
 Volatile facts embedded above, mostly date-stamped 2026-07-06 with corrections added
 2026-07-12: adminHealth deployed; autoClosePools LIVE past dry-run; ~~App Check enforced~~
-**(CORRECTED 2026-07-30 — App Check is enforced NOWHERE; 98/98 callables are `monitor`)**
+**(CORRECTED 2026-07-30 — App Check is enforced NOWHERE; 98 `validated()` callables are `monitor`, zero `enforce`, plus 26 bare `onCall` sites with no App Check option)**
 in console while `logClientError` code flag stays false; sim- rules exception is now
 REMOVED (was open, closed 2026-07-11 — do not trust the "still open" phrasing
 elsewhere in this file without checking the correction notes); NFL pools have never

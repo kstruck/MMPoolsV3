@@ -195,16 +195,25 @@ config/console act with a verification step. Suggested order as listed.
   machines and networks — until the variable was deleted and the site redeployed.
   ⛔ **Do not attempt this again before the pilot.** The warning
   `⚠️ SECURITY: App Check is NOT active` in the prod console is the SAFE state.
-  The accepted risk, stated plainly: App Check is enforced **nowhere** — 98/98
-  callables declare `appCheck: "monitor"`, zero `enforce` — so the unauthenticated
-  callables remain scriptable from outside the app by anyone holding the public
-  Firebase config. That was already true all season; this decision does not add
-  risk, it records that it is not being removed before 08-06.
-  Turning it on later needs **three** fixes, none of which is a console click:
+  ⚠️ **The set→dead, delete→alive correlation is solid; the CAUSAL STORY is not**
+  — cross-model review showed the tracked `Dockerfile` has no build arg for that
+  variable, so it has no known path into the bundle. That makes this a decision
+  taken on an unexplained production kill, which is a *stronger* reason to defer,
+  not a weaker one. HANDOFF's STOP POINT box carries the open question and the
+  three candidate explanations.
+  The accepted risk, stated plainly: App Check is enforced **nowhere** — 98
+  `validated()` callables declare `appCheck: "monitor"` and zero declare
+  `enforce`, plus 26 bare `onCall` sites that pass no App Check option at all —
+  so the unauthenticated callables remain scriptable from outside the app by
+  anyone holding the public Firebase config. That was already true all season;
+  this decision does not add risk, it records that it is not being removed before
+  08-06.
+  Turning it on later needs **four** fixes, none of which is a console click:
   `nginx.conf` CSP is missing the reCAPTCHA hosts; `src/firebase.ts:27` wants a
-  reCAPTCHA **Enterprise** key while the key that exists is **v3**; and the web
-  app was never registered in the Firebase console's App Check section. Mechanism
-  and full detail in HANDOFF's STOP POINT box. (`logClientError`'s
+  reCAPTCHA **Enterprise** key while the key that exists is **v3**; the web app
+  was never registered in the Firebase console's App Check section; and the
+  `Dockerfile` declares no build arg for the key, so the build cannot receive it.
+  Full detail in HANDOFF's STOP POINT box. (`logClientError`'s
   `enforceAppCheck: false` from #142 stays off and is now consistent with
   everything else rather than an outlier.)
 - ☐ **G4 · No load/limits check for game-day traffic.** Sunday load hardening

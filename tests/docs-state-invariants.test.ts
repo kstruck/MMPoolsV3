@@ -658,20 +658,49 @@ describe('App Check stays off, and the outage stays documented', () => {
     return gaps;
   }
 
+  /**
+   * Where the `if (recaptchaSiteKey)` block starts and ends, by brace matching.
+   * Returns null when the conditional is absent.
+   *
+   * Offset ORDER is not containment. The first version of this guard asserted
+   * only that `initializeAppCheck(` appeared after `if (recaptchaSiteKey)`, and
+   * cross-model review pointed out the obvious hole: leave an empty conditional
+   * in place and move the call just below it, and every assertion still passes
+   * while App Check initializes with no key — the exact outage the guard exists
+   * to prevent. Brace-match instead.
+   */
+  function siteKeyBlockRange(src: string): { start: number; end: number } | null {
+    const head = src.indexOf('if (recaptchaSiteKey)');
+    if (head === -1) return null;
+    const open = src.indexOf('{', head);
+    if (open === -1) return null;
+    let depth = 0;
+    for (let i = open; i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}') {
+        depth--;
+        if (depth === 0) return { start: open, end: i };
+      }
+    }
+    return null; // unbalanced — treat as no block rather than guess
+  }
+
   describe('the real files', () => {
-    it('src/firebase.ts initializes App Check ONLY behind the site-key conditional', () => {
+    it('src/firebase.ts initializes App Check ONLY inside the site-key conditional', () => {
       const src = fs.readFileSync(path.join(REPO_ROOT, 'src', 'firebase.ts'), 'utf8');
 
       // Exactly one call site. Two would mean one of them escaped the guard.
       const callSites = src.split('initializeAppCheck(').length - 1;
       expect(callSites).toBe(1);
 
-      // The guard itself must still be there...
-      const guardAt = src.indexOf('if (recaptchaSiteKey)');
-      expect(guardAt).toBeGreaterThan(-1);
+      // The guard itself must still be there, with a matched block.
+      const block = siteKeyBlockRange(src);
+      expect(block).not.toBeNull();
 
-      // ...and the call must come after it, not before.
-      expect(src.indexOf('initializeAppCheck(')).toBeGreaterThan(guardAt);
+      // And the call must sit INSIDE that block — not merely after it.
+      const callAt = src.indexOf('initializeAppCheck(');
+      expect(callAt).toBeGreaterThan(block!.start);
+      expect(callAt).toBeLessThan(block!.end);
 
       // And the non-DEV branch must still warn rather than fall silent, because
       // that warning is how an operator confirms the SAFE state is in effect.
@@ -713,6 +742,60 @@ describe('App Check stays off, and the outage stays documented', () => {
       for (const phrase of DO_NOT_SET_PHRASES) {
         expect(appCheckWarningGapsIn(`VITE_RECAPTCHA_SITE_KEY — ${phrase}`)).toEqual([]);
       }
+    });
+  });
+
+  /**
+   * Guard the containment check specifically, with the refactor codex described.
+   * A brace matcher that says "inside" for something outside is worse than none.
+   */
+  describe('the containment check is containment, not ordering', () => {
+    const NL = String.fromCharCode(10);
+    const inside = [
+      'const k = e.KEY;',
+      'if (recaptchaSiteKey) {',
+      '    initializeAppCheck(app, {});',
+      '}',
+    ].join(NL);
+    const emptiedAndMovedOut = [
+      'const k = e.KEY;',
+      'if (recaptchaSiteKey) {',
+      '}',
+      'initializeAppCheck(app, {});',
+    ].join(NL);
+
+    function callIsInsideBlock(src: string): boolean {
+      const block = siteKeyBlockRange(src);
+      if (!block) return false;
+      const callAt = src.indexOf('initializeAppCheck(');
+      return callAt > block.start && callAt < block.end;
+    }
+
+    it('accepts the call inside the block', () => {
+      expect(callIsInsideBlock(inside)).toBe(true);
+    });
+
+    it('REJECTS an emptied block with the call moved just below it', () => {
+      // This is the exact shape the ordering-only version of this guard passed.
+      expect(callIsInsideBlock(emptiedAndMovedOut)).toBe(false);
+    });
+
+    it('rejects a source with no conditional at all', () => {
+      expect(callIsInsideBlock(`initializeAppCheck(app, {});`)).toBe(false);
+    });
+
+    it('brace-matches through nested blocks rather than stopping at the first }', () => {
+      const nested = [
+        'if (recaptchaSiteKey) {',
+        '  if (x) { y(); }',
+        '  initializeAppCheck(app, {});',
+        '}',
+      ].join(NL);
+      expect(callIsInsideBlock(nested)).toBe(true);
+    });
+
+    it('treats an unbalanced block as no block rather than guessing', () => {
+      expect(siteKeyBlockRange('if (recaptchaSiteKey) { initializeAppCheck(')).toBeNull();
     });
   });
 });

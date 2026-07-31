@@ -49,7 +49,7 @@ Referenced in `src/` but NOT present in `.env` (as of 2026-07-06):
 | Name | Consumed by | Notes |
 |---|---|---|
 | `VITE_RECAPTCHA_SITE_KEY` | `src/firebase.ts:24` | ⛔ **Absent ON PURPOSE — setting it took prod down 2026-07-30.** App Check is then silently not initialized and prod logs a console warning (`src/firebase.ts:30-32`); that warning is the SAFE state. See §1.4 and §5. |
-| `VITE_API_KEY` | `src/components/AdminPanel.tsx:222` | Gemini key for an AdminPanel feature. NOT in `.env`, but IS a prod Dockerfile build arg (`Dockerfile:14`, ENV at `:22`) — see §1.4. |
+| `VITE_API_KEY` | `src/components/AdminPanel.tsx:222` | Gemini key for an AdminPanel feature. ⚠️ **No longer a Dockerfile build arg** — it was REMOVED (`Dockerfile:13-14` records why: the only client reader was dead code and a Gemini key must never ship in a public bundle). This row previously said it was one; corrected 2026-07-30. See §1.4. |
 | `VITE_USE_FIREBASE_EMULATOR` | `src/firebase.ts:41` | e2e only; set in `.env.e2e`, never in `.env`/prod |
 
 Vite built-ins also used: `import.meta.env.DEV` (`src/firebase.ts`,
@@ -75,12 +75,25 @@ regression; flag it.
 
 ### 1.4 Coolify build args (prod www frontend)
 
-The prod www Dockerfile (`Dockerfile:14-28`) declares exactly seven build args,
-mirrored to ENV for the Vite build: `VITE_API_KEY` (`Dockerfile:14`, read by
-`src/components/AdminPanel.tsx:222`) plus the six `VITE_FIREBASE_*` names above.
+⚠️ **CORRECTED 2026-07-30 — this section said SEVEN build args including
+`VITE_API_KEY`. It is SIX, and `VITE_API_KEY` is gone.** The tracked Dockerfile
+declares `ARG` at `:15-20` and mirrors to `ENV` at `:22-27`, and every one is a
+`VITE_FIREBASE_*` name. `Dockerfile:13-14` is now a comment recording that
+`VITE_API_KEY` (a Gemini key) was **removed** because its only client reader was
+dead code and a Gemini key must never ship in a public bundle. Re-read
+`Dockerfile:15-27` rather than trusting this paragraph; it was stale for weeks
+and the staleness mattered (see below).
+
 Coolify holds ITS OWN copies of these values in the dashboard — they are NOT
 read from the repo `.env`. Changing `.env` locally does nothing for prod www;
 sync Coolify build args manually, then trigger a manual Coolify deploy.
+
+**A build arg is the ONLY way a `VITE_*` value reaches the bundle.** Vite inlines
+`import.meta.env.X` at build time, `.dockerignore` excludes `.env`, and
+`Dockerfile:30` runs `npm run build:static` inside the build stage. A Coolify
+variable with no matching `ARG` line is invisible to the build, and a *runtime*
+variable cannot change an already-built static bundle at all. Check this before
+believing any story about a `VITE_*` value taking effect in prod.
 
 ✅ **ANSWERED 2026-07-30, the hard way. The old open question asked how the prod
 bundle obtains the reCAPTCHA site key. It does not obtain it, and that is
@@ -99,9 +112,14 @@ reject every read, and the site works. The 2026-07-06 "ENFORCED in the console"
 owner attestation is **superseded and UNVERIFIED**; the incident report says the
 web app was never registered in the console's App Check section at all.
 
-Mechanism and the three faults that must ALL be fixed before this is reconsidered
-(CSP hosts, Enterprise-vs-v3 key, app never registered): HANDOFF's STOP POINT
-box. It is not pilot work.
+⚠️ **The set→dead, delete→alive correlation is solid; the CAUSAL STORY is not.**
+The first write-up blamed CSP blocking the reCAPTCHA script, but the build-arg
+paragraph above rules that out on the tracked Dockerfile — the key has no known
+path into the bundle, so the branch it was supposed to flip cannot have flipped.
+**WHY the site died is an OPEN QUESTION**, and an unexplained way to kill prod is
+worse than an understood one. Four faults block re-enabling regardless (CSP
+hosts, Enterprise-vs-v3 key, app never registered, no Dockerfile `ARG`):
+HANDOFF's STOP POINT box. It is not pilot work.
 
 Note: `VITE_API_KEY` is absent from the root `.env` but present in both the
 Dockerfile and `src/components/AdminPanel.tsx:222` — when syncing Coolify build
@@ -427,4 +445,4 @@ autoClosePools LIVE (2026-07-06), Stripe TEST secret rotation PENDING
 open. **Two entries were RESOLVED on 2026-07-30 and are no longer volatile:**
 the §1.4 reCAPTCHA-key-in-Coolify open question (answered — the key is absent on
 purpose and setting it takes prod down), and "App Check ENFORCED in console"
-(superseded and UNVERIFIED — 98/98 callables are `monitor`).
+(superseded and UNVERIFIED — 98 `validated()` callables are `monitor`, zero `enforce`, plus 26 bare `onCall` sites with no App Check option).
