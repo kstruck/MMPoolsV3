@@ -49,8 +49,14 @@ function fakeDb() {
       wheres.push([field, op, value]);
       return query;
     },
+    // The scoreless-FINAL recovery query is bounded (qodo), so the stand-in has
+    // to accept `.limit()` — without it the second query throws and this file's
+    // lookback assertions fail for a reason that has nothing to do with lookback.
+    limit() {
+      return query;
+    },
     async get() {
-      return { empty: true, docs: [], forEach: () => undefined };
+      return { empty: true, size: 0, docs: [], forEach: () => undefined };
     },
   };
   const db = { collection: () => query } as unknown as Firestore;
@@ -115,8 +121,9 @@ function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: nu
    * lookback): the fake would answer it with the in-window docs, so the test
    * would pass without the door existing. Constraints are applied for real now.
    */
-  const makeQuery = (constraints: Array<[string, string, any]>): any => ({
-    where: (field: string, op: string, value: any) => makeQuery([...constraints, [field, op, value]]),
+  const makeQuery = (constraints: Array<[string, string, any]>, cap?: number): any => ({
+    where: (field: string, op: string, value: any) => makeQuery([...constraints, [field, op, value]], cap),
+    limit: (n: number) => makeQuery(constraints, n),
     async get() {
       const ids = Object.keys(stored).filter((id) => constraints.every(([field, op, value]) => {
         const actual = (stored[id] as Record<string, unknown>)[field];
@@ -125,7 +132,7 @@ function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: nu
         if (op === '==') return actual === value;
         throw new Error(`fakeDb: unsupported operator ${op}`);
       }));
-      const docs = ids.map(docOf);
+      const docs = (cap === undefined ? ids : ids.slice(0, cap)).map(docOf);
       return { empty: docs.length === 0, size: docs.length, docs, forEach: (f: any) => docs.forEach(f) };
     },
   });

@@ -86,6 +86,24 @@ Because Margin pools often result in similar total scores, a strict 5-level casc
 3. **Cancelled Games:** If a game is cancelled post-lock in Confidence mode, the points assigned to that game are lost (score=0). They are not re-assigned.
 4. **End of Week Auto-Strikes:** Survivor auto-strikes are applied by the scoring engine **only after the final game of the NFL week (MNF) concludes**. Applying them earlier would prematurely eliminate players who might want to pay for a rebuy before the next week starts.
 5. **Two Monday Night Football Games:** For closest-to-the-pin MNF tiebreakers, when there are two MNF games, the total score of **both** games combined is used as the target.
+6. **A week where EVERY game was cancelled — no no-show penalty.** The Survivor
+   auto-strike and the Margin −14 exist to punish not showing up *for a game*.
+   When every game of the week is `CANCELLED` there was no legal pick to make, so
+   a member who never submitted is **not** struck and **not** charged −14; the
+   Margin week nets 0, which is what a member who *did* pick a cancelled game
+   already receives. This is a property of the slate, not a pool setting — it
+   applies even when `autoSurviveExemptionEnabled` is turned off. It is only
+   reachable on a one-game week (the Hall of Fame opener); any other week leaves
+   other teams to pick.
+7. **A `FINAL` game the feed reported no scores for is NOT scored.** ESPN
+   occasionally returns a game as final with no score payload at all. The importer
+   deliberately stores no `scores` field in that case, and the scorer treats such
+   a game as **not concluded**: nothing is graded, the week does not complete, no
+   recap is written and the season is not finalized. Waiting is the intended
+   outcome — grading it would publish a fabricated 0-0, which reads as a PUSH for
+   every Pick'em entry and as a TIE for Survivor, and a tie is a strike. The game
+   is marked so its slate keeps being re-fetched, and the condition is reported as
+   a DEGRADED score-sync heartbeat until the feed delivers.
 
 ---
 

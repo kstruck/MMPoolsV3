@@ -556,9 +556,28 @@ export async function syncScoresWindow(
   //
   // Cheap by construction: the flag is only ever true for a genuinely broken
   // payload, so this query returns nothing on a healthy day.
+  //
+  // BOUNDED (qodo). A prolonged feed outage or a bad backfill could mark many
+  // games, and an unbounded read would grow both the Firestore read size and the
+  // number of ESPN slate fetches on every 5-minute run — a scheduler timeout is a
+  // worse outcome than a slow recovery. The cap is on GAMES, and games collapse
+  // into slates, so one bad week costs one fetch however many of its games are
+  // marked. Anything dropped is LOGGED rather than silently truncated: a cap that
+  // reads as "covered everything" is how a partial sweep gets mistaken for a
+  // complete one.
+  const SCORELESS_SCAN_LIMIT = 200;
   const scorelessSnap = await db.collection('nfl_games')
     .where('scoresMissing', '==', true)
+    .limit(SCORELESS_SCAN_LIMIT)
     .get();
+  if (scorelessSnap.size === SCORELESS_SCAN_LIMIT) {
+    console.warn(
+      `[nflSchedule] scoreless-FINAL scan hit its ${SCORELESS_SCAN_LIMIT}-game cap; ` +
+      'more may be marked than were examined this run. They are not lost — the next ' +
+      'run picks up what this one did not reach — but a cap this deep means something ' +
+      'is systematically wrong with the feed, not one broken game.',
+    );
+  }
   /** Marked game ids per slate key — used below to notice one the refresh never returned. */
   const markedBySlate = new Map<string, string[]>();
   scorelessSnap.forEach(doc => {
