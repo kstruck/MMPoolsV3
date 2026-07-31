@@ -416,10 +416,13 @@ describe('HOF dress rehearsal — a preseason pool must not see the regular-seas
     }, 30000);
 
     it('REJECTS a pick on the regular-season game — it is not in this pool’s week', async () => {
+        // Pinned to the specific message. A bare `.rejects.toThrow()` would also
+        // pass on a typo in this test's own payload, which is the failure mode
+        // that makes a guard look like it guards when it does not.
         await expect(wSubmit({
             data: { poolId, runId, subjectUid: IVY, week: 2, picks: { [`sim-${runId}-g2`]: 'KC' } },
             auth: superAdmin,
-        } as never)).rejects.toThrow();
+        } as never)).rejects.toThrow(/not found/i);
     }, 30000);
 
     it('scores ONLY the preseason game — a correct preseason pick is the whole score', async () => {
@@ -451,11 +454,52 @@ describe('HOF dress rehearsal — a preseason pool must not see the regular-seas
         await wScore({ data: { poolId, week: 2 }, auth: superAdmin } as never);
 
         const ivy = (await db.collection('pools').doc(poolId).collection('entries').doc(IVY).get()).data()!;
-        // 1 for the correct preseason pick. If the regular-season game leaked in,
-        // the unpicked KC/BUF game would be visible to the scorer as an unmade
-        // pick and the maximum possible would be 2, not 1.
         expect(ivy.totalScore).toBe(1);
-        expect(ivy.maxPossibleScore === undefined || ivy.maxPossibleScore === 1).toBe(true);
+
+        // The DISCRIMINATING assertion, and the reason totalScore alone is not
+        // enough: `weeklyResults[week].games` is built over the pool's gradable
+        // slate (`gradePickemGames`), so it holds one entry per game the scorer
+        // considered part of this week. If the regular-season KC/BUF game leaked
+        // in, this map would have TWO keys — and `totalScore` would still be 1,
+        // because an unmade pick scores nothing. A leak is invisible in the score
+        // and visible here.
+        const graded = ivy.weeklyResults?.['2']?.games ?? {};
+        expect(Object.keys(graded)).toEqual([`sim-${runId}-g1`]);
+    }, 60000);
+
+    /**
+     * THE SCORER'S FILTER, ISOLATED — and why the test above does not cover it.
+     *
+     * `nflPools.ts` holds TWO independent `seasonType` filters: one on the
+     * SUBMIT path (:367) and one on the SCORER (:1492). Deleting both fails the
+     * test above. Deleting **only the scorer's** does not — mutation-tested, it
+     * stayed green — because `gradePickemGames` skips games the entry never
+     * picked (`if (!pick) continue`), and submit's own filter had already made
+     * a regular-season pick impossible. So a leak confined to the scorer is
+     * invisible in every entry field: the extra game is simply never graded.
+     *
+     * It would still be wrong. The scorer's slate is what decides whether a
+     * week is fully final and what "N of M games" reads, so a preseason week 2
+     * pulling in 16 regular-season games would misreport completeness even
+     * though nobody's score moved.
+     *
+     * To reach that boundary the pick is written DIRECTLY onto the entry,
+     * bypassing submit. That is deliberate: it is the only way to ask the
+     * scorer, on its own, which slate it thinks it is scoring.
+     */
+    it('the SCORER’s own seasonType filter holds, tested independently of submit’s', async () => {
+        const entryRef = db.collection('pools').doc(poolId).collection('entries').doc(IVY);
+        // A pick on the REGULAR-season game, planted past the submit path.
+        await entryRef.update({ [`picks.sim-${runId}-g2`]: 'KC' });
+
+        await db.collection('pools').doc(poolId).update({ scoredWeeks: {} });
+        await wScore({ data: { poolId, week: 2 }, auth: superAdmin } as never);
+
+        const ivy = (await entryRef.get()).data()!;
+        // KC won 31-10. If the scorer's slate included the regular-season game,
+        // this planted pick would grade correct and the score would be 2.
+        expect(ivy.totalScore).toBe(1);
+        expect(Object.keys(ivy.weeklyResults?.['2']?.games ?? {})).toEqual([`sim-${runId}-g1`]);
     }, 60000);
 
     it('cleans up', async () => {
