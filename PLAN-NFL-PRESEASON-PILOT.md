@@ -176,10 +176,16 @@ Plus the two prod-gated sub-steps carved out of A6 and A7 above.
 ## 4. Autonomy rules for this run
 
 - **You MAY**: create branches/worktrees, write code+tests, run all gates, run and
-  absorb `codex exec review --base origin/main` (up to 10 rounds, CLAUDE.md §2c), open
-  PRs. **Do NOT check qodo** — the check was removed 2026-07-25 (§2b); codex is its
-  temporary replacement. Merging is Kevin's call now, not a post-review-window
-  self-merge: there is no second reviewer left to constitute a review window.
+  absorb `codex exec review --base origin/main` (up to 10 rounds, CLAUDE.md §2c)
+  **and qodo on the PR — RESTORED 2026-07-30** (§2b; this line used to say "Do NOT
+  check qodo", true only while the trial had lapsed), open PRs. **Merging: DEFAULTS TO KEVIN'S CALL.** The original
+  reasoning for that — "no second reviewer left to constitute a review window" —
+  no longer holds now qodo is back, but ⚠️ **a second reviewer is not a grant of
+  merge authority**, and an unattended session must not infer one from this
+  section. Self-merge ONLY when Kevin has explicitly delegated it for the current
+  session; absent that, open the PR and stop. (codex r13 on the restore PR: the
+  first version of this line deleted the Kevin-only default outright and left the
+  authority to be inferred.)
 - **You MUST STOP and log to TOMORROW-TASKS.md (don't guess)** if: an item requires a
   prod-data mutation or GCP/Firebase console action (A6's arm + import, deploy);
   a change would touch `firestore.rules` write/read paths; a design choice in A5 is

@@ -76,10 +76,13 @@ config/console act with a verification step. Suggested order as listed.
   prod probe (needs a probe user + credentials), or accept A3a-only coverage.
   My read: A3a + the chaos drill covers the risk for preseason; decide before
   regular season, not before HOF. *Source: TOMORROW-TASKS NFL-2.*
-- ☑ **K15 · qodo: CLOSED 2026-07-25** — Kevin retired the check entirely. CLAUDE.md
-  §2b now forbids checking it; codex (§2c — judgement up to 10 rounds, Kevin's
-  sign-off with a reason past 10, per his 2026-07-27 ruling) is its temporary
-  replacement. Restore path kept in a collapsed block in §2b.
+- ☑ **K15 · qodo: REOPENED then CLOSED AGAIN 2026-07-30** — Kevin retired the
+  check on 2026-07-25 while the trial had lapsed, and **restored it on 2026-07-30
+  when his subscription came back**: "add that check for every PR going forward."
+  CLAUDE.md §2b now REQUIRES it, alongside codex (§2c — judgement up to 10 rounds,
+  Kevin's sign-off with a reason past 10). Both run on every PR; the stopping rule
+  is joint. Closed in the sense that the policy is settled, not that the check is
+  off.
 - ☐ **K16 · NotebookLM sync habit:** add the repo/DECISION-LOG.md as a source in
   the MarchMeleePools notebook; re-sync after significant merges (no API — it's
   a 1-minute manual act).

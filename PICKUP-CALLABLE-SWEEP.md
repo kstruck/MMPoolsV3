@@ -122,7 +122,7 @@ For each: import `withCorrelationId` from `../utils/correlationId` (adjust depth
 ## Workflow conventions (follow exactly)
 
 - **Branch + worktree per chunk**, off latest `origin/main`: `git checkout -b <name> origin/main` (main is checked out by the primary worktree, so branch off `origin/main`, don't `git checkout main`). Run `node functions/scripts/copy-shared.mjs` + `npm --prefix functions install` in a fresh worktree before building (the copy-shared step is why root tests fail with "cannot find module ../shared/schemas/quote" on a fresh checkout).
-- **One PR per chunk.** Run `codex exec review --base origin/main` BEFORE opening it (CLAUDE.md §2c — **judgement up to 10 rounds; past 10 ask Kevin with a reason**, and stop on evidence rather than on the counter). **Validity-call each finding before fixing**; fix real ones, reject false ones with written reasoning on the PR. Then push and let CI run. **Do NOT check qodo** — the check was removed 2026-07-25 (CLAUDE.md §2b); codex is its temporary replacement.
+- **One PR per chunk, TWO reviewers.** Run `codex exec review --base origin/main` BEFORE opening it (CLAUDE.md §2c — **judgement up to 10 rounds; past 10 ask Kevin with a reason**, and stop on evidence rather than on the counter), **and check qodo on the PR itself — RESTORED 2026-07-30** (CLAUDE.md §2b; this line previously said "Do NOT check qodo", which applied only while the trial had lapsed). **Validity-call each finding before fixing**; fix real ones, reject false ones with written reasoning on the PR. Then push and let CI run. Stop when qodo is clean AND a codex round is clean AND your own read of the diff agrees — qodo costs nothing per run and codex is billed per call, so the round budget is spent on codex.
 - **CI `security-audit` runs `npm audit --audit-level=high` at the REPO ROOT.** A functions-only dep change can pass locally and fail that gate — check root too.
 - Commit messages: end with `Co-Authored-By: Claude <noreply@anthropic.com>`. PR bodies: end with the Claude Code footer.
 - **VERIFY A MERGE LANDED before assuming anything downstream** — `gh pr view <N> --json state` == `MERGED` AND `git log origin/main` shows the merge commit.
@@ -130,7 +130,7 @@ For each: import `withCorrelationId` from `../utils/correlationId` (adjust depth
 ## Overnight-autonomy expectations (Kevin is away)
 
 - Keep working through chunks without per-chunk approval (standing grant — see auto-memory `overnight-autonomy-protocol`). Sweep A first, then Sweep B batches until done or blocked.
-- **You MAY:** open PRs, push branches, run all gates, run + absorb codex reviews, iterate.
+- **You MAY:** open PRs, push branches, run all gates, run + absorb **codex AND qodo** reviews, iterate.
 - **You MUST STOP and leave a note (don't guess) if:** a callable's real client payload is ambiguous and grepping the FE doesn't resolve it (guessing a `.strict()` schema can break prod calls — flag it, skip that one, keep going on the rest); a gate goes red and the fix isn't obvious; a change would touch `firestore.rules` write-paths (that's a *different* parked effort with its own risk profile — note it, don't fold it in here).
 - Before ending the stretch, **leave a morning takeover doc**: fold status into HANDOFF.md + update this file (which SWEEP-LATER callables are done, which remain, any skipped-and-why, next concrete batch). Commit SHAs for everything pushed.
 
