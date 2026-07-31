@@ -406,18 +406,48 @@
 >    never persisted to any document — it is an input to the fee maths only
 >    (`lib/memberRecord.ts:61-63`), so no client can read it.
 >
->    🔴 **This PR ships with one KNOWN, ACCEPTED limitation** (codex r3, resolved
->    as a deferral, not a fix). An owner who intends to PLAY but has not submitted
->    their first picks looks exactly like an owner who is only hosting — both are
->    on `participantIds` with no entry — so they are excluded, and a pool can read
->    100% while the commissioner personally has not picked. Not a regression: the
->    entries-derived version could not see that owner either. Exposure is one
->    person, and it is the person reading the card, who knows whether they picked;
->    the defect fixed here hid OTHER members, which they cannot know.
->    **Durable fix:** persist `hasPlayableEntry` onto the Member Record in
->    `ensureMemberRecord` — it is computed there and thrown away — backfill it,
->    and key `isPlayingMember` on it. `functions/` change **plus a prod backfill**,
->    so it is Kevin's to schedule and it is not pilot-week work.
+>    ✅ **The limitation codex raised is CLOSED by Kevin's ruling 2026-07-31:
+>    assume every pool manager is also playing, 99% of the time.**
+>
+>    The first version of this fix exempted `isOwner && !hasEntry`, which let a
+>    pool read 100% while the commissioner personally had not picked — a host who
+>    intends to play but has not submitted is indistinguishable from a host-only
+>    commissioner. **Persisting `hasPlayableEntry` does not fix that on its own**:
+>    the flag means "has committed an entry", a synonym for `hasEntry` the client
+>    already had. Settling the prior is what fixes it. The exemption is gone, so
+>    an entry-less manager is a genuine outstanding pick and the card reaches
+>    100% when they submit.
+>
+>    ⚠️ **The DUES rule is untouched.** A manager still owes nothing until they
+>    commit an entry (`feeOwed` stays 0). Money liability and pick liability are
+>    different questions, and conflating them is what produced a wrong answer in
+>    both directions.
+>
+>    **`hasPlayableEntry` is now PERSISTED** on the Member Record
+>    (`shared/memberRecord.ts`) as a one-way latch — `false` at create, upgraded
+>    to `true` on first submit, never lowered. It used to be computed in
+>    `planMembershipWrite` and thrown away, so nothing could ask a Member Record
+>    "has this person ever entered?" without also joining the entries collection.
+>    The dangerous direction is DOWN: `ensureMemberRecord` is touched on every
+>    re-join (`nflPools.ts:238`) with the fact omitted, and a naive
+>    `!!facts.hasPlayableEntry` on the update branch would un-submit those
+>    members. Mutation-tested in both directions.
+>
+>    ⚠️ **`undefined` means UNKNOWN, not `false`** — every record written before
+>    2026-07-31 lacks the field. **NO BACKFILL IS NEEDED**: readers fall back to
+>    entry evidence and `ensureMemberRecord` heals records on touch. Nothing keys
+>    on the latch today; it is carried so an explicit host "I'm not playing"
+>    opt-out has a durable field when one exists.
+>
+>    ✅ **A hypothesised fee defect was CHECKED AND DISPROVED rather than
+>    written down.** The reasoning was that a MANAGER touch omitting
+>    `hasPlayableEntry` would compute `liableFee` as 0 and heal a record to owe
+>    nothing. It cannot happen on any current call site: the two join-touch paths
+>    hardcode `role: 'PARTICIPANT'` (`nflPools.ts:238,271`), the submit path
+>    passes `true` (`:633`), creation passes `false` explicitly (`:156`), and
+>    `poolCreation.ts:166` passes no `entryFee` at all. Recorded because *not*
+>    finding a bug is also a result, and because the previous version of this file
+>    shipped a plausible-sounding mechanism that turned out to be impossible.
 >
 > 13. **`sendManualReminder` cannot reach a member who has never submitted, and
 >    said nothing about it.** It resolves targets from the ENTRIES collection
