@@ -360,17 +360,39 @@
 >
 > ### NEW, found 2026-07-30 while fixing the ledger — NOT fixed
 >
-> 12. **The Submission Health card is blind the same way the ledger was.**
->    `submissionStats` and `unsubmittedPlayers` on
->    `NFLManagerBentoDashboard` are still `entries`-derived, so a member who
->    joined and has no entry document is counted in NEITHER the total nor the
->    pending list. A pool with members but no entries reports "0 of 0 participants
->    have locked in" at **100%**, which reads as perfect submission health on a
->    pool where nobody has picked anything. Same root cause as item 1 and the same
->    fix shape — point it at `buildPoolRoster`, which already returns `hasEntry`
->    and the entry itself. Deliberately left out of the 2026-07-30 PR to keep that
->    change to the money surfaces Kevin scoped; it is a display defect, not a
->    data-integrity one, and the nudge list it feeds can only under-report.
+> 12. ✅ **CLOSED 2026-07-31 — Submission Health reads ROSTER truth.**
+>    `submissionStats` and `unsubmittedPlayers` on `NFLManagerBentoDashboard`
+>    were the last surface on that card still `entries`-derived, so a member who
+>    joined and has no entry document was counted in NEITHER the total nor the
+>    pending list. Readiness was computed over a SUBSET of the pool. Same root
+>    cause as item 1 — `setPaidStatus.ts:162` mirrors onto the entry only
+>    `if (entrySnap.exists)` — and the same fix: `buildPoolRoster`.
+>
+>    ⚠️ **This item's own description was wrong about the symptom, and the truth
+>    is worse.** It claimed a pool with members but no entries reports "0 of 0" at
+>    **100%**. It does not: `percentage` is guarded `total > 0 ? … : 0`, so that
+>    pool showed **0%** — alarming, but not misleading. The real 100% case was
+>    never described: **any pool where every entry holder has submitted and other
+>    members have not.** One submitted entry beside three joined-but-unpicked
+>    members read "1 of 1 — 100%". On kickoff night that tells a commissioner
+>    everyone is in while three quarters of the room is not, and leaves the nudge
+>    list empty. The original note also called the nudge list able "only to
+>    under-report", which is true and was the reason this was deprioritised —
+>    under-reporting *pending* is exactly what makes the percentage over-report
+>    *ready*.
+>
+>    The rule now lives in `src/utils/poolRoster.ts` as `unsubmittedRoster`,
+>    extracted rather than left inline so it could be unit-tested — #322 shipped a
+>    plumbing-only guard on this card that survived mutation. Six cases in
+>    `poolRoster.test.ts`; three mutations killed, and a fourth **survived and
+>    exposed dead code** (`weeklyGameIds.length > 0 &&`, unreachable because
+>    `[].every()` is `true`), now deleted.
+>
+>    Also removed with it: the pending list rendered a **hardcoded placeholder
+>    email address** for every member with none on file, shown as if it were
+>    theirs, on the list a commissioner uses to chase people for picks. Now "No
+>    email registered", matching the other two member lists on the card, and added
+>    to the T3 no-fabricated-data invariant.
 >
 > ### ⛔⛔ APP CHECK TOOK PRODUCTION DOWN ON 2026-07-30. DO NOT "FIX" THE WARNING.
 >
