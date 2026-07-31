@@ -142,12 +142,28 @@ SINCE="${SINCE:-1970-01-01T00:00:00Z}"
 # the first page, so on a busy PR a qodo summary or review body past that cap is
 # invisible and every predicate stays 0 while qodo has in fact reported.
 R="repos/kstruck/MMPoolsV3"
-inline() { gh api --paginate $R/pulls/<N>/comments \
-    -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | .id" | wc -l; }
-reviewbody() { gh api --paginate $R/pulls/<N>/reviews \
-    -q ".[] | select(.user.login == \"$QB\") | select(.body != \"\") | select(.submitted_at > \"$SINCE\") | .id" | wc -l; }
-summary() { gh api --paginate $R/issues/<N>/comments \
-    -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | select(.body[0:200] | test(\"$NOISE\"; \"i\") | not) | .id" | wc -l; }
+
+# FAIL CLOSED. Piping `gh api` straight into `wc -l` discards its exit status --
+# `wc` succeeds on empty input -- so a transient API failure became "0 findings",
+# and phase 2 could settle at zero and emit QODO REPORTED without ever having
+# read the comments. That verdict UNLOCKS the gate, so a network blip would
+# certify an unread review. Silence read as success is this repo's single most
+# repeated defect (#314's unbound token, the zero-counter heartbeat, the 13-day
+# Sentry outage). Each helper echoes ERR on failure; `guard` makes any ERR fatal.
+_count() { local out; out=$(gh api --paginate "$@") || { echo ERR; return; }; printf '%s\n' "$out" | grep -c . ; }
+guard() { case "$*" in *ERR*) echo "QODO WATCH FAILED -- API error, verdict UNKNOWN. Do NOT treat as clean."; exit 1;; esac; }
+
+inline() { _count $R/pulls/<N>/comments \
+    -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | .id"; }
+reviewbody() { _count $R/pulls/<N>/reviews \
+    -q ".[] | select(.user.login == \"$QB\") | select(.body != \"\") | select(.submitted_at > \"$SINCE\") | .id"; }
+# NOISE matches the <h3> HEADING ONLY, not the first 200 body characters. qodo's
+# real report opens `<h3>PR Summary by Qodo</h3>`; a body-prefix match discards
+# that genuine report whenever the PR is ABOUT billing or paused reviews -- and
+# this PR is about exactly that. Anchor on the heading and the content cannot
+# eat its own report.
+summary() { _count $R/issues/<N>/comments \
+    -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | select((.body | capture(\"<h3>(?<h>[^<]*)</h3>\").h // \"\") | test(\"$NOISE\"; \"i\") | not) | .id"; }
 
 # PHASE 1 — detect any qodo artifact. Deliberately 4 min, NOT 9: the settle phase
 # below needs its 180s floor plus quiet polls, and the background tool is capped
@@ -155,7 +171,8 @@ summary() { gh api --paginate $R/issues/<N>/comments \
 # watcher gets killed after qodo has posted but before it reports.
 SEEN=0
 for i in $(seq 1 8); do
-  [ "$(inline)" -gt 0 ] || [ "$(reviewbody)" -gt 0 ] || [ "$(summary)" -gt 0 ] && { SEEN=1; break; }
+  I=$(inline); RB=$(reviewbody); S=$(summary); guard "$I" "$RB" "$S"
+  [ "$I" -gt 0 ] || [ "$RB" -gt 0 ] || [ "$S" -gt 0 ] && { SEEN=1; break; }
   sleep 30
 done
 [ "$SEEN" = 1 ] || { echo TIMEOUT; exit 0; }
@@ -175,7 +192,7 @@ PREV=-1; STABLE=0
 # the promised "4 min detect + ~5 min settle" budget was never actually enforced.
 # FLOOR (3 min) and STABLE_NEEDED (2 min of quiet) both fit inside this window.
 for i in $(seq 1 10); do
-  NOW=$(inline)
+  NOW=$(inline); guard "$NOW" "" ""
   if [ "$NOW" = "$PREV" ]; then STABLE=$((STABLE+1)); else STABLE=0; fi
   PREV=$NOW
   if [ "$STABLE" -ge "$STABLE_NEEDED" ] && [ $((SECONDS-START)) -ge "$FLOOR" ]; then
