@@ -223,6 +223,24 @@ export function unsubmittedRoster(
  * to no document, so no client can read it. `isOwner && !hasEntry` describes the
  * same population — the seeded host who has not entered. The moment a host DOES
  * submit, `hasEntry` is true and they are graded like anyone else.
+ *
+ * 🔴 **KNOWN LIMITATION, stated rather than hidden** (codex r3 on this change).
+ * An owner who INTENDS to play but has not submitted their first picks yet is
+ * indistinguishable from an owner who is only hosting: both are on
+ * `participantIds` with no entry document. This predicate excludes them, so a
+ * pool can read 100% while the commissioner personally has not picked.
+ *
+ * Accepted, with reasons: it is **not a regression** — the entries-derived
+ * version this replaced could not see that owner either — the exposure is one
+ * person, and that person is the commissioner reading the card, who knows
+ * whether they have picked. The defect being fixed here hid OTHER members from
+ * them, which they cannot know.
+ *
+ * The durable fix is to persist play intent: write `hasPlayableEntry` onto the
+ * Member Record in `ensureMemberRecord` (it is computed there already and then
+ * thrown away), backfill it, and key this predicate on it. That is a
+ * `functions/` change plus a prod backfill, so it is NOT frontend work and NOT
+ * pilot-week work. Tracked in HANDOFF item 12.
  */
 export function isPlayingMember(r: RosterRow): boolean {
   return !(r.isOwner && !r.hasEntry);

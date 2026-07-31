@@ -406,6 +406,19 @@
 >    never persisted to any document — it is an input to the fee maths only
 >    (`lib/memberRecord.ts:61-63`), so no client can read it.
 >
+>    🔴 **This PR ships with one KNOWN, ACCEPTED limitation** (codex r3, resolved
+>    as a deferral, not a fix). An owner who intends to PLAY but has not submitted
+>    their first picks looks exactly like an owner who is only hosting — both are
+>    on `participantIds` with no entry — so they are excluded, and a pool can read
+>    100% while the commissioner personally has not picked. Not a regression: the
+>    entries-derived version could not see that owner either. Exposure is one
+>    person, and it is the person reading the card, who knows whether they picked;
+>    the defect fixed here hid OTHER members, which they cannot know.
+>    **Durable fix:** persist `hasPlayableEntry` onto the Member Record in
+>    `ensureMemberRecord` — it is computed there and thrown away — backfill it,
+>    and key `isPlayingMember` on it. `functions/` change **plus a prod backfill**,
+>    so it is Kevin's to schedule and it is not pilot-week work.
+>
 > 13. **`sendManualReminder` cannot reach a member who has never submitted, and
 >    said nothing about it.** It resolves targets from the ENTRIES collection
 >    (`functions/src/manualReminders.ts:66-72`), so an entry-less member's uid
