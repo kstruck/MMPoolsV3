@@ -382,9 +382,21 @@
 > **What happened.** Setting that env var in Coolify and rebuilding took the site
 > down: it hung on a spinner and rendered nothing. Confirmed from two independent
 > machines on two networks, so it was not one browser's cache. Rolled back by
-> DELETING the variable and redeploying. Two Coolify rebuilds therefore happened
-> after #321 with no code change between them — a bundle hash moving without a
-> merge is expected here, not drift.
+> DELETING the variable and redeploying.
+>
+> ⚠️ **WHEN this happened is NOT pinned down, and two accounts of the bundle
+> hashes conflict.** The incident report describes the add and the rollback as
+> two Coolify rebuilds *after #321* with no code change between them, which would
+> make them the `index-D1wLGiMy.js` → `index-C31xivRN.js` → `index-CR5oJEHh.js`
+> transitions. But this same document (lines 41 and 44) attributes those two
+> transitions to the **#322** and **#324** rebuilds, each verified against the
+> prod HTML at the time. Both attributions cannot be right about the same two
+> hashes. Most likely the incident sits somewhere else in the sequence and its
+> rebuilds were never recorded — but that is a guess, and it is written here as a
+> guess. **Do not use "a bundle hash moved without a merge" as evidence about this
+> incident in either direction until Kevin reads the Coolify deployment history;
+> the morning task list has that step.** Found by self-review after codex round 4
+> came back clean, which is the reason a clean round is not the end of the review.
 >
 > ### What is OBSERVED, and what is only HYPOTHESIS — they are not the same here
 >
@@ -448,9 +460,12 @@
 > 2. **Wrong reCAPTCHA product.** `src/firebase.ts:27` constructs a
 >    `ReCaptchaEnterpriseProvider`, which requires a reCAPTCHA **Enterprise** key
 >    from Google Cloud. The key that was created is reCAPTCHA **v3**. Different
->    products; incompatible even with the CSP fixed.
+>    products; incompatible even with the CSP fixed. *(The provider is verified in
+>    the repo; **which key was created is Kevin-attested** — no console was read.)*
 > 3. **The web app was never registered in the Firebase console's App Check
->    section.** Required regardless of key type.
+>    section.** Required regardless of key type. *(**Kevin-attested**, not
+>    repo-verifiable, and it contradicts the 2026-07-06 attestation below — one of
+>    the two is wrong.)*
 > 4. **The build cannot receive the key.** `Dockerfile:15-27` declares `ARG`/`ENV`
 >    for six variables and none of them is `VITE_RECAPTCHA_SITE_KEY`, and
 >    `.dockerignore` excludes `.env`, so nothing puts it in front of

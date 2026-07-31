@@ -62,8 +62,11 @@ the `updatePoolSettings` callable and was smoke-tested in prod.)
 `VITE_RECAPTCHA_SITE_KEY`, AND DO NOT "FIX" THE `App Check is NOT active`
 WARNING — that warning is the SAFE state.** Setting the variable in Coolify was
 followed by the site rendering nothing (permanent spinner, confirmed from two
-machines on two networks); deleting the variable and redeploying restored it,
-which is why two rebuilds happened after #321 with no code change between them.
+machines on two networks); deleting the variable and redeploying restored it.
+⚠️ **WHEN it happened is not pinned down** — the incident report places its two
+rebuilds right after #321, but §4 above attributes those same two bundle-hash
+moves to #322 and #324, each verified at the time. Do not reason about this
+incident from bundle hashes until the Coolify deployment history is read.
 
 ⚠️ **The correlation is solid. The CAUSE IS OPEN — do not repeat the first
 explanation as fact.** That explanation (CSP blocks the reCAPTCHA script → App
