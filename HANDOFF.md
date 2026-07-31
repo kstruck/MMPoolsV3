@@ -1,4 +1,4 @@
-# HANDOFF — Session entry point (updated 2026-07-31: functions AND frontend deployed from `efea033`; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and ALL THREE DEPLOY QUEUES ARE EMPTY)
+# HANDOFF — Session entry point (updated 2026-07-31 evening: functions deployed from `bca457c` — the NFL-7 chaos-drill scoring fixes; the frontend is unchanged at `index-Db6JwMWs.js`; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and ALL THREE DEPLOY QUEUES ARE EMPTY)
 
 > ## ✅ STOP POINT 2026-07-28, **UPDATED 2026-07-31** — everything through #329 shipped AND deployed
 >
@@ -9,7 +9,8 @@
 > **Functions are deployed from <!-- deploy-state:current --> `main` @ `bca457c`.**
 > **Rules remain ≡ `0a705c0`** — unchanged by every merge since.
 >
-> Deployed 2026-08-01 for **#333**, the NFL-7 chaos-drill fixes, which changed
+> Deployed **2026-07-31 in the evening ET** (~17:10) for **#333**, the NFL-7
+> chaos-drill fixes, which changed
 > `nflScoringEngine.ts`, `lib/weekCompletion.ts`, `nflPools.ts`, `nflSchedule.ts`,
 > `nflFinalize.ts` and `feedReplay.ts`. **`shared/` was deliberately NOT touched**,
 > so rules are unaffected and stay ≡ the tag above.
@@ -24,15 +25,17 @@
 > commits, both empty), so the live bundle stays **`index-Db6JwMWs.js`**.
 > **ALL THREE QUEUES EMPTY.**
 >
-> 📌 **A production fact established 2026-08-01 and worth keeping:** `nfl_games`
+> 📌 **A production fact established 2026-07-31 and worth keeping:** `nfl_games`
 > filtered `status == FINAL` returns **zero documents** — the 2026 season has not
 > started, and every stored game is `SCHEDULED`. That is what resolved the one
 > open finding on #333 (legacy scoreless-FINAL documents cannot exist if no FINAL
 > documents exist). It stops being true the moment the HOF game ends.
 >
-> ⚠️ **Superseded below:** the #329 deploy-state text that used to sit here has
-> been replaced. #329 shipped and was deployed on 2026-07-31; its evidence was the
-> same all-Skipped shape. It is no longer the current deploy state.
+> ⚠️ **TWO deploys happened on 2026-07-31 — do not conflate them.** `efea033`
+> (#329, the member-record change) went out earlier in the day and carried a
+> frontend rebuild to `index-Db6JwMWs.js`. `bca457c` (#333) went out that evening
+> and is FUNCTIONS ONLY — it touches no `src/**`, so the bundle did not move and
+> was not supposed to. `bca457c` is the current deploy state; `efea033` is history.
 >
 > ✅ **Frontend rebuilt the same day**: live bundle moved `index-CR5oJEHh.js` →
 > **`index-Db6JwMWs.js`**, read off the prod HTML. **`index-Db6JwMWs.js` is the

@@ -361,7 +361,8 @@ state. Concretely:
 Rules remain ≡ `0a705c0`, unchanged by every merge since. Frontend still
 `index-Db6JwMWs.js` — #332 and #333 touch no `src/**`, so **no rebuild is owed**.
 All three queues empty.
-(Deployed 2026-08-01 for #333, the NFL-7 chaos-drill fixes. Full fleet twice:
+(Deployed 2026-07-31 in the EVENING ET for #333, the NFL-7 chaos-drill fixes —
+a second, separate deploy from `efea033` earlier the same day. Full fleet twice:
 173 `Successful update operation`, then 173 `Skipped (No changes detected)` —
 that all-Skipped run is the evidence. `shared/` deliberately untouched, so rules
 are unaffected.)
