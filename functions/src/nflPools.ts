@@ -1268,10 +1268,17 @@ async function scoreWeekPass(
         const res = scoreMarginWeek(pick, games);
         // `null` means NOT READY — an unplayed game, or a FINAL the feed
         // reported no scores for (NFL7-3). `?? 0` would write a fabricated 0
-        // into weeklyScores and the season total. On a complete pass this cannot
-        // fire (the week is only complete when every game is terminal, which now
-        // requires reported scores), but that is a three-step inference and this
-        // is one line.
+        // into weeklyScores and the season total.
+        //
+        // ⚠️ UNREACHABLE BY CONSTRUCTION, and said out loud rather than left to
+        // look tested. Its mutation SURVIVES: `weeklyPickReady` above already
+        // drops a made pick whose game is not terminal, and a non-provisional
+        // pass requires `isWeekComplete`, which now requires every game to be
+        // terminal — so `res` cannot be null here today. It is kept as the local
+        // restatement of the contract `scoreMarginWeek` documents, because the
+        // thing standing between this line and a fabricated 0 is a guard in a
+        // different function that a refactor could narrow. No test pins it; the
+        // tested guards are `weeklyPickReady` and `scoreMarginWeek` itself.
         if (res === null) continue;
         weekScore = res;
       } else if (isVoidWeek(games)) {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  hasReportedScores, isVoidWeek, gradePickemGames, gradeSurvivorWeekGame,
+  hasReportedScores, isVoidWeek, gradePickemGames, gradeSurvivorWeekGame, evaluateSurvivorWeek,
   gradeMarginWeekGame, scoreMarginWeek,
 } from '../nflScoringEngine';
 import { isTerminalTransition } from '../nflSchedule';
@@ -117,6 +117,46 @@ describe('gradeSurvivorWeekGame — no per-pick record off a scoreless FINAL', (
   it('still records VOID for a cancelled game', () => {
     expect(gradeSurvivorWeekGame(entry, 1, [scoreless({ status: 'CANCELLED' })], false))
       .toMatchObject({ result: 'VOID' });
+  });
+});
+
+/**
+ * `evaluateSurvivorWeek` is reached from `computeSurvivorWeekUpdate`, and in the
+ * scorer that path sits behind `weeklyPickReady` (nflPools.ts:1211), which
+ * already drops a non-terminal game. So the drill cannot reach these two guards:
+ * mutation-tested, deleting either leaves the whole chaos drill green because the
+ * entry is skipped one layer earlier. They are pinned HERE, on the exported
+ * function, which is the level at which they are reachable — `simOracle.ts` also
+ * reimplements this contract and cites it by name.
+ */
+describe('evaluateSurvivorWeek — the two feed-integrity guards, at the engine level', () => {
+  const pool = { settings: { maxStrikes: 0, pickLosersMode: false } } as never;
+  const entry = (pick?: string) => ({ picks: pick ? { 1: pick } : {} } as unknown as SurvivorEntry);
+
+  it('strikes the member whose team genuinely lost, and spares the winner', () => {
+    // CAR 24, ARI 20.
+    expect(evaluateSurvivorWeek(entry('CAR'), 1, [game()], pool)).toEqual({ survived: true, strikeLogged: false });
+    expect(evaluateSurvivorWeek(entry('ARI'), 1, [game()], pool)).toEqual({ survived: false, strikeLogged: true });
+  });
+
+  it('does NOT strike on a scoreless FINAL — 0-0 would read as a tie, and a tie strikes', () => {
+    expect(evaluateSurvivorWeek(entry('CAR'), 1, [scoreless()], pool))
+      .toEqual({ survived: true, strikeLogged: false });
+  });
+
+  it('does NOT auto-strike a non-submitter when every game of the week was cancelled', () => {
+    expect(evaluateSurvivorWeek(entry(), 1, [scoreless({ status: 'CANCELLED' })], pool))
+      .toEqual({ survived: true, strikeLogged: false });
+  });
+
+  it('DOES auto-strike a non-submitter when a game was actually playable', () => {
+    // The other side of the void-week rule: it must excuse a cancelled week
+    // without quietly waiving the no-show penalty in general.
+    expect(evaluateSurvivorWeek(entry(), 1, [game()], pool))
+      .toEqual({ survived: false, strikeLogged: true });
+    // ...including a week where only SOME games were cancelled.
+    expect(evaluateSurvivorWeek(entry(), 1, [game(), scoreless({ id: 'g2', status: 'CANCELLED' })], pool))
+      .toEqual({ survived: false, strikeLogged: true });
   });
 });
 
