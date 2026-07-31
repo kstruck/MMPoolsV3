@@ -272,6 +272,13 @@ export async function joinNFLPoolInternal(
       {
         userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true,
         entryFee: Number(poolData.settings?.entryFee ?? 0),
+        // hasPlayableEntry is deliberately OMITTED. An earlier version of this
+        // stamped `false` here on the reasoning that a brand-new joiner has no
+        // entry — but codex pointed out this branch is selected only because the
+        // uid is absent from `participantIds`, which is NOT the same as being new.
+        // A legacy entry-only user rejoining lands here, and because the latch is
+        // one-way, a durable `false` for them could never be corrected by any
+        // later non-submit touch. Omitting it preserves the documented UNKNOWN.
       },
       memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
   });

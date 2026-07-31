@@ -72,8 +72,31 @@ describe('T3 — no fabricated data on the commissioner bento', () => {
     '2 hours ago',
     // Claimed a moderation capability that does not exist.
     'AI Moderation ACTIVE',
+    // A fabricated CONTACT DETAIL, which is the worst of the set: it was
+    // rendered as the member's address on the very list a commissioner uses to
+    // chase people for picks, so the card invited you to act on it.
+    'user@example.com',
   ])('fabricated string %j is gone', (s) => {
     expect(bento).not.toContain(s);
+  });
+
+  /**
+   * EVERY derivation on this card is roster-derived. Twice now the same defect
+   * has shipped here from the same cause: a `useMemo` reading the `entries`
+   * prop, which cannot see a member who joined and never submitted. #322 fixed
+   * the money figures that way; the Submission Health card was still doing it
+   * and reported "1 of 1 — 100%" on a pool where three members had not picked.
+   *
+   * `entries` is still a PROP and is still handed to `buildPoolRoster` /
+   * `rosterPotStats` — that is the one legitimate use. What must not come back
+   * is a reader that walks the array itself, which is what `entries.` catches
+   * (`entries.length`, `entries.filter(...)`, `entries.map(...)`).
+   */
+  it('derives nothing from the raw entries array — every reader goes through the roster', () => {
+    // Guard the guard: the legitimate uses must actually be present, or this
+    // would pass on a card that no longer receives entries at all.
+    expect(bento).toContain('buildPoolRoster({ pool, members, entries })');
+    expect(bento).not.toContain('entries.');
   });
 
   // The mock name must also stay out of the shared roster helper the card now

@@ -28,6 +28,25 @@ export interface MemberRecord {
   // edits (OPEN phase only) cascade-update fee-liable records so this never drifts.
   feeOwed?: number;
   feeOwedSource?: 'LIVE' | 'BACKFILL_ESTIMATE';
+  /**
+   * Has this uid ever committed a playable Entry in this pool?
+   *
+   * A ONE-WAY LATCH: `false` at create, upgraded to `true` on first submit, and
+   * never lowered. A member cannot un-submit, and losing membership deletes the
+   * record outright (`present: false`), so there is no case that clears it.
+   *
+   * It was previously computed inside `planMembershipWrite` and THROWN AWAY —
+   * only its effect on `feeOwed` survived, so nothing could ask the Member
+   * Record "has this person ever entered?" without also joining the entries
+   * collection. Persisted 2026-07-31 so roster surfaces can answer from one
+   * store, and so the fee stamping is auditable after the fact.
+   *
+   * ⚠️ ABSENT on every record written before that date. Readers MUST treat
+   * `undefined` as "unknown", not as `false`, and fall back to entry evidence.
+   * `ensureMemberRecord` heals records on touch, so the field fills in over
+   * time without a backfill.
+   */
+  hasPlayableEntry?: boolean;
 }
 
 export interface RosterSummary {

@@ -31,7 +31,7 @@ import {
 } from 'recharts';
 import { gamesForPoolWeek, weekDeadline } from '../../utils/nflPending';
 import { effectiveBufferMinutesForWeek, usesWeeklyHardLock } from '@shared/weeklyHardLock';
-import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate, duesRates, memberOutstanding } from '../../utils/poolRoster';
+import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate, duesRates, memberOutstanding, unsubmittedRoster } from '../../utils/poolRoster';
 import { formatDeadline } from '../../utils/formatTime';
 
 interface NFLManagerBentoDashboardProps {
@@ -172,34 +172,52 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     [pool, members, entries],
   );
 
-  // Derived unsubmitted players list.
-  // Pick'em: unsubmitted = at least one current-week game without a pick (picks keyed by gameId).
-  // Survivor/Margin: unsubmitted = no pick stored under the current week number.
+  // Derived unsubmitted players list — ROSTER-derived, not entries-derived.
+  //
+  // This was the last surface on this card still reading `entries` alone, and it
+  // is the same defect #322 fixed for the money figures: a member who joined but
+  // has never submitted has a Member Record and NO entry document, so an
+  // entries-derived reader cannot see them. They appeared in neither the total
+  // nor the pending list, and readiness was computed over a SUBSET of the pool —
+  // so one submitted entry beside three joined-but-unpicked members read
+  // "1 of 1 — 100%". A commissioner checking pick readiness on kickoff night was
+  // told everyone was in while three quarters of the room was not.
+  //
+  // The rule itself lives in utils/poolRoster (`unsubmittedRoster`) so it can be
+  // unit-tested; see the note there on why it is not inline.
   const weeklyGames = useMemo(() => gamesForPoolWeek(_games, castPool, week), [_games, castPool, week]);
-  const unsubmittedPlayers = useMemo(() => {
-    const list = entries.filter(e => {
-      const picks = e.picks || {};
-      if (pool.type === 'NFL_PICKEM') {
-        return weeklyGames.length > 0 && !weeklyGames.every(g => !!picks[g.id]);
-      }
-      return !picks[week];
-    });
-    return list.map(e => ({
-      id: e.id,
-      uid: e.ownerUid || e.id,
-      name: e.userName || e.ownerName || 'User ' + e.id.substring(0, 4),
-      email: e.email || 'user@example.com'
-    }));
-  }, [entries, week, pool.type, weeklyGames]);
+  const unsubmittedPlayers = useMemo(
+    () => unsubmittedRoster(roster, {
+      poolType: pool.type,
+      week,
+      weeklyGameIds: weeklyGames.map(g => g.id),
+    }).map(r => ({
+      id: r.entry?.id || r.uid,
+      uid: r.uid,
+      // `roster` rows carry the card's own displayName fallback; the helper is
+      // typed on the bare RosterRow, so re-apply it rather than widen the type.
+      name: r.userName || 'Member',
+      email: r.email || '',
+      // The nudge callable resolves its targets from the ENTRIES collection
+      // (functions/src/manualReminders.ts:66-72), so it cannot reach a member
+      // who has never submitted — exactly the rows this fix made visible.
+      hasEntry: r.hasEntry,
+    })),
+    [roster, week, pool.type, weeklyGames],
+  );
 
-  // 1. Calculations for Pick submissions status
+  // 1. Calculations for Pick submissions status — denominator is the ROSTER.
+  // Everyone on it is expected to pick, the commissioner included (Kevin's
+  // ruling 2026-07-31: managers play ~99% of the time). Numerator and
+  // denominator therefore run over the same set, which is the property that
+  // stops this card contradicting itself.
   const submissionStats = useMemo(() => {
-    const total = entries.length;
+    const total = roster.length;
     const pendingCount = unsubmittedPlayers.length;
     const submitted = total - pendingCount;
     const percentage = total > 0 ? Math.round((submitted / total) * 100) : 0;
     return { total, submitted, pendingCount, percentage };
-  }, [entries, unsubmittedPlayers]);
+  }, [roster, unsubmittedPlayers]);
 
   // Financial Ledger calculations — roster-derived, so a member who joined but
   // has not submitted an entry is counted. This card previously read `entries`
@@ -274,7 +292,21 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     setIsNudging(player.uid);
     try {
       const { sent, skipped } = await dbService.sendManualReminder(pool.id, [player.uid], 'PICKS');
-      toast.success(`Sent ${sent} reminder(s), ${skipped} skipped (recently reminded)`);
+      // A zero-send is NOT a success. `sendManualReminder` resolves its targets
+      // from the entries collection, so a member who has never submitted matches
+      // nothing and the call returns `sent: 0, skipped: 0` without erroring —
+      // and the old copy reported that as "Sent 0 reminder(s)" in a SUCCESS
+      // toast. An absent error is not evidence that anything happened; this
+      // codebase has been bitten by that three times (#314's unbound
+      // COURIER_AUTH_TOKEN, the zero-counter reminder heartbeat, the 13-day
+      // Sentry outage).
+      if (sent === 0 && skipped === 0) {
+        toast.error(
+          `No reminder could be sent to ${player.name}. Reminders reach members who have started an entry; this member has not.`,
+        );
+      } else {
+        toast.success(`Sent ${sent} reminder(s), ${skipped} skipped (recently reminded)`);
+      }
     } catch (err) {
       console.error('Failed to send pick reminder:', err);
       toast.error(getUserMessage(err));
@@ -391,16 +423,31 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                     </div>
                     <div>
                       <span className="font-display font-bold text-xs text-[color:var(--text)] block uppercase leading-none">{player.name}</span>
-                      <span className="font-body font-semibold text-[9px] text-faint">{player.email}</span>
+                      {/* This used to render a hardcoded placeholder address for
+                          every member with none on file — a fabricated contact
+                          detail shown as if it were real, on the list a
+                          commissioner uses to chase people for picks.
+                          codex r2: the first replacement said "No email
+                          registered", which asserts a fact this client cannot
+                          know. `email` on a roster row comes only from the ENTRY
+                          document; Member Records carry none, and the reminder
+                          backend resolves `users/{uid}.email` server-side. So a
+                          perfectly registered member who simply has no entry yet
+                          — exactly the rows this card newly surfaces — would be
+                          labelled unregistered. Say what is true of THIS view. */}
+                      <span className="font-body font-semibold text-[9px] text-faint">{player.email || 'Email not shown here'}</span>
                     </div>
                   </div>
 
                   <button
                     onClick={() => handleNudge(player)}
-                    disabled={isNudging !== null}
+                    disabled={isNudging !== null || !player.hasEntry}
+                    title={player.hasEntry
+                      ? undefined
+                      : 'Reminders reach members who have started an entry. This member has not, so there is nothing to remind against yet.'}
                     className="min-h-[44px] bg-gold-400/10 border border-gold-500/40 hover:bg-gold-400/20 text-gold-600 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 rounded-md transition-all duration-150 hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isNudging === player.uid ? 'Sending...' : 'Nudge Email'}
+                    {isNudging === player.uid ? 'Sending...' : player.hasEntry ? 'Nudge Email' : 'Not Started'}
                   </button>
                 </div>
               ))
@@ -506,7 +553,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                           {player.displayName}
                         </span>
                         <span className="font-body font-semibold text-[9px] text-faint">
-                          {player.email || 'No email registered'} · <span className="num">${owes}</span> due
+                          {player.email || 'Email not shown here'} · <span className="num">${owes}</span> due
                         </span>
                       </div>
                     </div>
@@ -749,7 +796,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                           {/* Name / Email */}
                           <td className="py-3 px-2">
                             <span className="font-display font-bold text-[color:var(--text)] block uppercase">{player.displayName}</span>
-                            <span className="font-body text-[9px] text-faint">{player.email || 'No email registered'}</span>
+                            <span className="font-body text-[9px] text-faint">{player.email || 'Email not shown here'}</span>
                           </td>
 
                           {/* Status */}

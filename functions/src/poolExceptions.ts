@@ -16,6 +16,8 @@ import {
     closePoolSchema,
 } from "./schemas/poolExceptions";
 import { usesWeeklyHardLock, normalizeLockBufferMinutes, ensureHardLockFreezeForPoolDoc } from "./lib/effectiveLock";
+import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
+import type { MemberRecord } from "./shared/memberRecord";
 import {
     assertNoScoringInProgress,
     retryWhileScoring,
@@ -298,6 +300,13 @@ export const proxyPick = validated(
         await assertNoScoringInProgress(transaction, poolRef, now);
         const entrySnap = await transaction.get(entryRef);
         const existingEntry = entrySnap.exists ? entrySnap.data() : null;
+        // Read the Member Record HERE, with the other reads: Firestore forbids a
+        // read after a write in a transaction, and this one exists to advance the
+        // playable-entry latch below.
+        const memberSnap = await transaction.get(membersCol(db, pool.id).doc(targetUid));
+        const existingMember = memberSnap.exists ? (memberSnap.data() as MemberRecord) : null;
+        // Did this call actually commit a selection? Only then may the latch move.
+        let committedPick = false;
 
         if (type === "NFL_PICKEM") {
             const settings = pool.settings || {};
@@ -324,6 +333,16 @@ export const proxyPick = validated(
                     }
                 }
             }
+
+            // codex r4: `proxyPickSchema`'s `picks` is a bare `z.record()` with only
+            // a max-50 refinement, so `picks: {}` is ACCEPTED and the validation
+            // loop above iterates nothing. Without this the latch would advance on
+            // a call that committed no selection at all — and for a seeded manager
+            // that also upgrades `feeOwed` from 0 to the entry fee, charging them
+            // for a pick nobody made. Narrowed here rather than by tightening the
+            // schema: rejecting empty payloads changes this callable's contract for
+            // every existing caller, which is a bigger blast radius than the bug.
+            committedPick = Object.keys(picks as Record<string, string>).length > 0;
 
             transaction.set(entryRef, {
                 id: targetUid,
@@ -391,6 +410,10 @@ export const proxyPick = validated(
                 throw new HttpsError("failed-precondition", `GAME_LOCKED: The game for ${teamPicked} has already locked. Extend the deadline first if an exception is warranted.`);
             }
 
+            // Survivor/Margin cannot reach here without a team: the guard above
+            // throws on a missing selection.
+            committedPick = true;
+
             const oldUsed = usedTeams.filter((t: string) => t !== oldPick);
             transaction.set(entryRef, {
                 ...entry,
@@ -402,6 +425,34 @@ export const proxyPick = validated(
                 [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
             }, { merge: true });
         }
+
+        // A proxy pick IS a committed entry, so it must advance the playable-entry
+        // latch — this callable writes entries/{uid} directly and, before
+        // 2026-07-31, never touched the Member Record at all. Found by codex
+        // reviewing the change that first persisted that latch: without this, a
+        // member whose only entry arrived by proxy would be recorded as never
+        // having entered, and would also keep a MANAGER's dues at 0 forever.
+        //
+        // Placed after both branches so it covers PICKEM and SURVIVOR/MARGIN, and
+        // only on the success path — every failure above throws out of the
+        // transaction before reaching here.
+        //
+        // ⚠️ ONLY UPDATES AN EXISTING RECORD — it must never CREATE one. codex r3
+        // caught the first version doing so: `planMembershipWrite`'s create branch
+        // seeds `paidStatus: 'UNPAID'`, and this callable has no payment context to
+        // seed it correctly. On a legacy member with a PAID entry and no Member
+        // Record, that minted an UNPAID record which `buildPoolRoster` then PREFERS
+        // over the entry — silently marking a paid member unpaid and adding their
+        // fee back to outstanding dues. Advancing a latch must not be able to move
+        // money. Creating the record stays with the join/submit paths that know.
+        if (existingMember && committedPick) ensureMemberRecord(transaction, db, pool.id, targetUid, {
+            userName: existingMember?.userName || existingEntry?.userName as string || targetName,
+            role: existingMember?.role ?? (pool.ownerId === targetUid ? 'MANAGER' : 'PARTICIPANT'),
+            poolType: type,
+            present: true,
+            entryFee: Number(pool.settings?.entryFee ?? 0),
+            hasPlayableEntry: true,
+        }, existingMember, now);
     }));
 
     await writeAuditEvent({

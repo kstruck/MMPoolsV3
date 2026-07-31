@@ -23,6 +23,11 @@ export interface MembershipFacts {
   // ADR 0005 Phase 4 — base-dues stamping. entryFee is the pool's fee at write
   // time; hasPlayableEntry marks that the uid has committed an Entry (used to
   // start owner liability — a seeded MANAGER owes 0 until they actually play).
+  //
+  // As of 2026-07-31 hasPlayableEntry is also PERSISTED onto the record as a
+  // one-way latch (see `MemberRecord.hasPlayableEntry`). Callers that are not
+  // reporting a submit leave it `undefined`; that means "no new information",
+  // never "false", on an existing record.
   entryFee?: number;
   hasPlayableEntry?: boolean;
 }
@@ -70,6 +75,20 @@ export function planMembershipWrite(
       data.feeOwed = liableFee;
       data.feeOwedSource = 'LIVE';
     }
+    // Persist the play latch ONLY when the caller actually established the fact.
+    //
+    // codex r1 on this change: stamping `!!facts.hasPlayableEntry` here was wrong
+    // on the backfill-on-touch path. `joinNFLPoolInternal` (nflPools.ts:238)
+    // reaches this CREATE branch for someone who is ALREADY a participant but has
+    // no Member Record — a legacy pool — and that person may well already have an
+    // entry. Coercing `undefined` to `false` there turns an unknown fact into a
+    // durable "never entered", which is exactly what this field must never mean.
+    //
+    // Absent is the honest value when the caller does not know. Readers fall back
+    // to entry evidence, and the latch fills in on the next submit.
+    if (facts.hasPlayableEntry !== undefined) {
+      data.hasPlayableEntry = facts.hasPlayableEntry;
+    }
     return { participant: 'add', member: { op: 'set', data, merge: false } };
   }
   // Update: merge identity/units only; preserve paidStatus + claim. feeOwed is
@@ -79,6 +98,14 @@ export function planMembershipWrite(
   if (liableFee !== undefined && (existing.feeOwed === undefined || (existing.feeOwed === 0 && liableFee > 0))) {
     data.feeOwed = liableFee;
     data.feeOwedSource = 'LIVE';
+  }
+  // The latch only ever goes UP. Join/backfill touches pass `undefined`, and
+  // writing `!!undefined` here would clear the flag on a member who has already
+  // submitted — the join path at nflPools.ts:238 touches existing records on
+  // every re-join, so that would not be a rare case. It also heals records
+  // written before the field existed, without a backfill.
+  if (facts.hasPlayableEntry === true && existing.hasPlayableEntry !== true) {
+    data.hasPlayableEntry = true;
   }
   return { participant: 'add', member: { op: 'set', data, merge: true } };
 }

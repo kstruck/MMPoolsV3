@@ -32,4 +32,75 @@ describe('planMembershipWrite', () => {
     if (plan.participant !== 'add') throw new Error('expected add');
     expect(plan.member.data.unitsOwned).toBe(6);
   });
+
+  /**
+   * hasPlayableEntry is persisted as a ONE-WAY LATCH (2026-07-31). It used to be
+   * computed here and thrown away — only its effect on feeOwed survived — so
+   * nothing could ask a Member Record "has this person ever entered?" without
+   * also joining the entries collection.
+   *
+   * The dangerous direction is DOWN. `ensureMemberRecord` is called on every
+   * re-join touch (nflPools.ts:238) with the fact left undefined; a naive
+   * `!!facts.hasPlayableEntry` on the update branch would clear the flag for
+   * anyone who had already submitted.
+   */
+  describe('hasPlayableEntry latch', () => {
+    const facts = (over: Record<string, unknown> = {}) =>
+      ({ userName: 'U', role: 'PARTICIPANT', poolType: 'NFL_PICKEM', present: true, ...over } as never);
+    const dataOf = (plan: ReturnType<typeof planMembershipWrite>) => {
+      if (plan.participant !== 'add') throw new Error('expected add');
+      return plan.member.data;
+    };
+
+    it('leaves the latch ABSENT on a create where the caller stated nothing', () => {
+      // codex r1: the backfill-on-touch path (nflPools.ts:238) reaches the CREATE
+      // branch for an existing participant with no Member Record, and that person
+      // may already have an entry. Coercing undefined to false there records a
+      // durable 'never entered' for someone who has. Absent = UNKNOWN.
+      expect(dataOf(planMembershipWrite('p1', 'u1', facts(), null, NOW)).hasPlayableEntry).toBeUndefined();
+    });
+
+    it('stamps FALSE on a create where the caller DID state it (a brand-new join)', () => {
+      expect(dataOf(planMembershipWrite('p1', 'u1', facts({ hasPlayableEntry: false }), null, NOW)).hasPlayableEntry).toBe(false);
+    });
+
+    it('stamps FALSE for the seeded MANAGER — hosting is not playing at t=0', () => {
+      const d = dataOf(planMembershipWrite('p1', 'own', facts({ role: 'MANAGER', entryFee: 20, hasPlayableEntry: false }), null, NOW));
+      expect(d.hasPlayableEntry).toBe(false);
+      expect(d.feeOwed).toBe(0);
+    });
+
+    it('stamps TRUE when the create IS the submit', () => {
+      expect(dataOf(planMembershipWrite('p1', 'u1', facts({ hasPlayableEntry: true }), null, NOW)).hasPlayableEntry).toBe(true);
+    });
+
+    it('UPGRADES false -> true on first submit', () => {
+      const existing: MemberRecord = { uid: 'u1', poolId: 'p1', userName: 'U', paidStatus: 'UNPAID', hasPlayableEntry: false };
+      expect(dataOf(planMembershipWrite('p1', 'u1', facts({ hasPlayableEntry: true }), existing, NOW)).hasPlayableEntry).toBe(true);
+    });
+
+    it('NEVER lowers true -> false when a join touch omits the fact', () => {
+      // The regression that matters: re-joining must not un-submit you.
+      const existing: MemberRecord = { uid: 'u1', poolId: 'p1', userName: 'U', paidStatus: 'PAID', hasPlayableEntry: true };
+      expect(dataOf(planMembershipWrite('p1', 'u1', facts(), existing, NOW)).hasPlayableEntry).toBeUndefined();
+    });
+
+    it('writes nothing when the latch is already true and the fact repeats it', () => {
+      // Idempotent: a re-submit must not churn the field.
+      const existing: MemberRecord = { uid: 'u1', poolId: 'p1', userName: 'U', paidStatus: 'PAID', hasPlayableEntry: true };
+      expect(dataOf(planMembershipWrite('p1', 'u1', facts({ hasPlayableEntry: true }), existing, NOW)).hasPlayableEntry).toBeUndefined();
+    });
+
+    it('heals a pre-2026-07-31 record that has no field at all, on first submit', () => {
+      const existing: MemberRecord = { uid: 'u1', poolId: 'p1', userName: 'U', paidStatus: 'UNPAID' };
+      expect(dataOf(planMembershipWrite('p1', 'u1', facts({ hasPlayableEntry: true }), existing, NOW)).hasPlayableEntry).toBe(true);
+    });
+
+    it('leaves a pre-2026-07-31 record ALONE on a non-submit touch', () => {
+      // Absent must stay absent rather than being stamped false, or a member who
+      // has already played would be recorded as never having played.
+      const existing: MemberRecord = { uid: 'u1', poolId: 'p1', userName: 'U', paidStatus: 'UNPAID' };
+      expect(dataOf(planMembershipWrite('p1', 'u1', facts(), existing, NOW)).hasPlayableEntry).toBeUndefined();
+    });
+  });
 });

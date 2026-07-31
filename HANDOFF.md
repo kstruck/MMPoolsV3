@@ -360,17 +360,129 @@
 >
 > ### NEW, found 2026-07-30 while fixing the ledger — NOT fixed
 >
-> 12. **The Submission Health card is blind the same way the ledger was.**
->    `submissionStats` and `unsubmittedPlayers` on
->    `NFLManagerBentoDashboard` are still `entries`-derived, so a member who
->    joined and has no entry document is counted in NEITHER the total nor the
->    pending list. A pool with members but no entries reports "0 of 0 participants
->    have locked in" at **100%**, which reads as perfect submission health on a
->    pool where nobody has picked anything. Same root cause as item 1 and the same
->    fix shape — point it at `buildPoolRoster`, which already returns `hasEntry`
->    and the entry itself. Deliberately left out of the 2026-07-30 PR to keep that
->    change to the money surfaces Kevin scoped; it is a display defect, not a
->    data-integrity one, and the nudge list it feeds can only under-report.
+> 12. ✅ **CLOSED 2026-07-31 — Submission Health reads ROSTER truth.**
+>    `submissionStats` and `unsubmittedPlayers` on `NFLManagerBentoDashboard`
+>    were the last surface on that card still `entries`-derived, so a member who
+>    joined and has no entry document was counted in NEITHER the total nor the
+>    pending list. Readiness was computed over a SUBSET of the pool. Same root
+>    cause as item 1 — `setPaidStatus.ts:162` mirrors onto the entry only
+>    `if (entrySnap.exists)` — and the same fix: `buildPoolRoster`.
+>
+>    ⚠️ **This item's own description was wrong about the symptom, and the truth
+>    is worse.** It claimed a pool with members but no entries reports "0 of 0" at
+>    **100%**. It does not: `percentage` is guarded `total > 0 ? … : 0`, so that
+>    pool showed **0%** — alarming, but not misleading. The real 100% case was
+>    never described: **any pool where every entry holder has submitted and other
+>    members have not.** One submitted entry beside three joined-but-unpicked
+>    members read "1 of 1 — 100%". On kickoff night that tells a commissioner
+>    everyone is in while three quarters of the room is not, and leaves the nudge
+>    list empty. The original note also called the nudge list able "only to
+>    under-report", which is true and was the reason this was deprioritised —
+>    under-reporting *pending* is exactly what makes the percentage over-report
+>    *ready*.
+>
+>    The rule now lives in `src/utils/poolRoster.ts` as `unsubmittedRoster`,
+>    extracted rather than left inline so it could be unit-tested — #322 shipped a
+>    plumbing-only guard on this card that survived mutation.
+>
+>    **Test counts, measured 2026-07-31** (date-stamped per `mmp-docs-and-writing`;
+>    a bare number here reads as current forever, and qodo caught the first version
+>    of this paragraph stating counts with no date — they were also already stale):
+>    `src/utils/poolRoster.test.ts` **39**, `functions/.../memberRecord.plan.test.ts`
+>    **13**, `functions/.../emulator/proxyPickLatch.emulator.test.ts` **5**,
+>    `tests/admin-surface-invariants.test.ts` **84**.
+>
+>    **Mutation testing, 2026-07-31: 16 applied, 15 killed, 1 survived.** The
+>    survivor was the result: `weeklyGameIds.length > 0 &&` could never change an
+>    answer (`[].every()` is `true`), so it was dead code carried over from the
+>    inline version, found by mutation rather than by reading, and deleted. ⚠️ Three
+>    of the killed mutations targeted a host-exemption predicate that Kevin's
+>    2026-07-31 ruling later removed, so those no longer correspond to live guards.
+>
+>    Also removed with it: the pending list rendered a **hardcoded placeholder
+>    email address** for every member with none on file, shown as if it were
+>    theirs, on the list a commissioner uses to chase people for picks. Now "No
+>    email registered", matching the other two member lists on the card, and added
+>    to the T3 no-fabricated-data invariant.
+>
+>    ⚠️ **The first version of this fix OVER-CORRECTED, and cross-model review
+>    caught it.** Pool creation seeds the owner's Member Record with
+>    `hasPlayableEntry: false` (`nflPools.ts:154-161`) because hosting is not
+>    playing — `ensureMemberRecord` gives such a MANAGER `feeOwed: 0`. Counting
+>    that host as an outstanding pick means a pool where every actual player has
+>    submitted can **never reach 100%**: a permanently-wrong readiness number in
+>    place of an intermittently-wrong one. Now excluded by `isPlayingMember`,
+>    applied to the pending list AND the denominator. The discriminator is
+>    `isOwner && !hasEntry`, **not** `hasPlayableEntry`, because that flag is
+>    never persisted to any document — it is an input to the fee maths only
+>    (`lib/memberRecord.ts:61-63`), so no client can read it.
+>
+>    ✅ **The limitation codex raised is CLOSED by Kevin's ruling 2026-07-31:
+>    assume every pool manager is also playing, 99% of the time.**
+>
+>    The first version of this fix exempted `isOwner && !hasEntry`, which let a
+>    pool read 100% while the commissioner personally had not picked — a host who
+>    intends to play but has not submitted is indistinguishable from a host-only
+>    commissioner. **Persisting `hasPlayableEntry` does not fix that on its own**:
+>    the flag means "has committed an entry", a synonym for `hasEntry` the client
+>    already had. Settling the prior is what fixes it. The exemption is gone, so
+>    an entry-less manager is a genuine outstanding pick and the card reaches
+>    100% when they submit.
+>
+>    ⚠️ **The DUES rule is untouched.** A manager still owes nothing until they
+>    commit an entry (`feeOwed` stays 0). Money liability and pick liability are
+>    different questions, and conflating them is what produced a wrong answer in
+>    both directions.
+>
+>    **`hasPlayableEntry` is now PERSISTED** on the Member Record
+>    (`shared/memberRecord.ts`) as a one-way latch — `false` at create, upgraded
+>    to `true` on first submit, never lowered. It used to be computed in
+>    `planMembershipWrite` and thrown away, so nothing could ask a Member Record
+>    "has this person ever entered?" without also joining the entries collection.
+>    The dangerous direction is DOWN: `ensureMemberRecord` is touched on every
+>    re-join (`nflPools.ts:238`) with the fact omitted, and a naive
+>    `!!facts.hasPlayableEntry` on the update branch would un-submit those
+>    members. Mutation-tested in both directions.
+>
+>    ⚠️ **`undefined` means UNKNOWN, not `false`** — every record written before
+>    2026-07-31 lacks the field. **NO BACKFILL IS NEEDED**: readers fall back to
+>    entry evidence and `ensureMemberRecord` heals records on touch. The plan
+>    stamps the latch **only when the caller established the fact**; codex caught
+>    the first version coercing `undefined` to `false` on the backfill-on-touch
+>    path (`nflPools.ts:238`), which reaches the CREATE branch for a legacy
+>    participant who may *already* have an entry and would have recorded a durable
+>    "never entered" for them. The brand-new-join site states `false` explicitly,
+>    because that caller genuinely knows. Nothing keys
+>    on the latch today; it is carried so an explicit host "I'm not playing"
+>    opt-out has a durable field when one exists.
+>
+>    ✅ **A hypothesised fee defect was CHECKED AND DISPROVED rather than
+>    written down.** The reasoning was that a MANAGER touch omitting
+>    `hasPlayableEntry` would compute `liableFee` as 0 and heal a record to owe
+>    nothing. It cannot happen on any current call site: the two join-touch paths
+>    hardcode `role: 'PARTICIPANT'` (`nflPools.ts:238,271`), the submit path
+>    passes `true` (`:633`), creation passes `false` explicitly (`:156`), and
+>    `poolCreation.ts:166` passes no `entryFee` at all. Recorded because *not*
+>    finding a bug is also a result, and because the previous version of this file
+>    shipped a plausible-sounding mechanism that turned out to be impossible.
+>
+> 13. **`sendManualReminder` cannot reach a member who has never submitted, and
+>    said nothing about it.** It resolves targets from the ENTRIES collection
+>    (`functions/src/manualReminders.ts:66-72`), so an entry-less member's uid
+>    filters to nothing and the callable returns `sent: 0, skipped: 0` **without
+>    erroring** — which the Bento card rendered as "Sent 0 reminder(s), 0 skipped"
+>    in a *success* toast. Third instance of the same class in this codebase after
+>    #314's unbound `COURIER_AUTH_TOKEN` and the zero-counter reminder heartbeat:
+>    an absent error read as a pass.
+>
+>    **Partly fixed 2026-07-31, frontend only.** A zero-send now reports as an
+>    error naming the reason, and the button on an entry-less row reads "Not
+>    Started" and is disabled. **The durable fix is still OPEN**: resolve reminder
+>    targets from Member Records (or user docs) rather than entries, so the
+>    commissioner can actually chase the people least likely to have picked. That
+>    is a `functions/` change and owes a functions deploy — fold it into the next
+>    PR that touches `functions/`, alongside the stale `setPaidStatus` comment
+>    already queued there.
 >
 > ### ⛔⛔ APP CHECK TOOK PRODUCTION DOWN ON 2026-07-30. DO NOT "FIX" THE WARNING.
 >

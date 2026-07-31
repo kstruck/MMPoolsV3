@@ -58,6 +58,20 @@ export interface RosterRow {
   status?: string;
   strikesUsed?: number;
   seasonTotal?: number;
+  /**
+   * The Member Record's persisted play latch (`shared/memberRecord.ts`), set
+   * one-way false -> true on first submit.
+   *
+   * ⚠️ `undefined` means UNKNOWN, not false. The field did not exist before
+   * 2026-07-31, so every record written earlier lacks it and heals only when
+   * `ensureMemberRecord` next touches it. Never treat absence as "has not
+   * entered" — use `hasEntry` for that.
+   *
+   * Nothing keys on this today: it cannot separate "will play, hasn't yet" from
+   * "never will". It is carried so an explicit host opt-out has a durable field
+   * to key on when one exists.
+   */
+  hasPlayableEntry?: boolean;
   isOwner: boolean;
 }
 
@@ -122,6 +136,7 @@ export function buildPoolRoster({ pool, members, entries }: RosterInputs): Roste
       memberPaymentMethod: m.paymentMethod,
       memberPaidAt: m.paidAt,
       memberPaymentNote: m.paymentNote,
+      hasPlayableEntry: m.hasPlayableEntry,
     });
   }
   for (const e of entries || []) {
@@ -156,6 +171,74 @@ export function buildPoolRoster({ pool, members, entries }: RosterInputs): Roste
     isOwner: !!ownerId && r.uid === ownerId,
   }));
 }
+
+/**
+ * Who has NOT submitted for a week, over the whole roster.
+ *
+ * WHY THIS IS A FUNCTION AND NOT AN INLINE `useMemo`. It used to be inline on
+ * the commissioner Bento card and it filtered `entries`, so a member who joined
+ * and never submitted — Member Record, no entry document — was in neither the
+ * pending list nor the denominator. The card reported readiness over a SUBSET
+ * of the pool: one submitted entry beside three joined-but-unpicked members
+ * read "1 of 1 — 100%". Same root cause as the Buy-In Ledger defect (#322,
+ * D13 P1): `setPaidStatus` mirrors onto the entry only `if (entrySnap.exists)`,
+ * so nothing entry-backed can see an entry-less member.
+ *
+ * Extracted so the rule can be tested directly. The previous fix on this card
+ * shipped a guard that pinned the plumbing without pinning that the fix CHANGED
+ * anything, and it survived mutation; a pure function does not have that
+ * problem.
+ *
+ * Completeness rules, unchanged from the inline version:
+ *   - no entry at all      -> pending, every pool type
+ *   - NFL_PICKEM           -> pending if ANY game in the week has no pick
+ *   - SURVIVOR / MARGIN    -> pending if no pick stored under the week number
+ *
+ * 🔨 **KEVIN'S RULING 2026-07-31: assume the pool manager is also playing, 99%
+ * of the time.** So EVERYONE on the roster is expected to pick, the
+ * commissioner included, and an entry-less manager is a genuine outstanding
+ * pick rather than someone to exempt.
+ *
+ * An earlier version of this function excluded `isOwner && !hasEntry`, because
+ * pool creation seeds the owner with `hasPlayableEntry: false` so that hosting
+ * is not playing for DUES purposes (`ensureMemberRecord` gives such a MANAGER
+ * `feeOwed: 0`). Codex showed the cost: a host who intends to play but has not
+ * picked yet is indistinguishable from a host-only commissioner, so the
+ * exemption let a pool read 100% while the commissioner personally had not
+ * picked. Kevin's ruling settles the prior instead of guessing.
+ *
+ * **The dues rule is untouched.** A manager still owes nothing until they
+ * commit an entry. Money liability and pick liability are different questions,
+ * and conflating them produced a wrong answer in both directions.
+ *
+ * The genuinely host-only commissioner is the 1%: they sit in the pending list
+ * until they pick. `hasPlayableEntry` is now persisted on the Member Record
+ * (a one-way latch) and carried on `RosterRow`, so a future "I'm not playing"
+ * opt-out has a durable field to key on — but no data available today can tell
+ * "will play, hasn't yet" from "never will", so nothing is excluded on it.
+ *
+ * A pick'em week with NO games yields nobody pending among entry holders: there
+ * is nothing to pick, so calling them delinquent would be wrong. That falls out
+ * of `[].every()` being `true` — an explicit `weeklyGameIds.length > 0 &&`
+ * guard was carried over from the inline version and **deleted as dead code**:
+ * it survived mutation testing precisely because it can never change an answer.
+ * The behaviour it looked like it protected is real and is pinned by a test.
+ */
+export function unsubmittedRoster(
+  roster: RosterRow[],
+  opts: { poolType?: string; week: number; weeklyGameIds: string[] },
+): RosterRow[] {
+  const { poolType, week, weeklyGameIds } = opts;
+  return roster.filter((r) => {
+    if (!r.hasEntry) return true;
+    const picks = r.entry?.picks || {};
+    if (poolType === 'NFL_PICKEM') {
+      return !weeklyGameIds.every((id) => !!picks[id]);
+    }
+    return !picks[week];
+  });
+}
+
 
 export interface PotStats {
   /** Everyone who joined, however they are evidenced. */
