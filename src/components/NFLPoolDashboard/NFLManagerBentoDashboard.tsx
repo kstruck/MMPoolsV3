@@ -31,7 +31,7 @@ import {
 } from 'recharts';
 import { gamesForPoolWeek, weekDeadline } from '../../utils/nflPending';
 import { effectiveBufferMinutesForWeek, usesWeeklyHardLock } from '@shared/weeklyHardLock';
-import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate, duesRates, memberOutstanding, unsubmittedRoster, isPlayingMember } from '../../utils/poolRoster';
+import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate, duesRates, memberOutstanding, unsubmittedRoster } from '../../utils/poolRoster';
 import { formatDeadline } from '../../utils/formatTime';
 
 interface NFLManagerBentoDashboardProps {
@@ -206,14 +206,13 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     [roster, week, pool.type, weeklyGames],
   );
 
-  // 1. Calculations for Pick submissions status — denominator is the ROSTER,
-  // minus anyone not expected to play. A commissioner who runs the pool without
-  // entering it is seeded onto the roster owing nothing (`hasPlayableEntry:
-  // false`), so counting them here would make the pool unable to reach 100% —
-  // see `isPlayingMember`. Numerator and denominator must use the SAME filter or
-  // the card contradicts itself.
+  // 1. Calculations for Pick submissions status — denominator is the ROSTER.
+  // Everyone on it is expected to pick, the commissioner included (Kevin's
+  // ruling 2026-07-31: managers play ~99% of the time). Numerator and
+  // denominator therefore run over the same set, which is the property that
+  // stops this card contradicting itself.
   const submissionStats = useMemo(() => {
-    const total = roster.filter(isPlayingMember).length;
+    const total = roster.length;
     const pendingCount = unsubmittedPlayers.length;
     const submitted = total - pendingCount;
     const percentage = total > 0 ? Math.round((submitted / total) * 100) : 0;

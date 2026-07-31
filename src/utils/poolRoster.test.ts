@@ -7,7 +7,6 @@ import {
   duesRates,
   memberOutstanding,
   unsubmittedRoster,
-  isPlayingMember,
   type RosterInputs,
 } from './poolRoster';
 
@@ -524,61 +523,76 @@ describe('unsubmittedRoster', () => {
 });
 
 /**
- * HOSTING IS NOT PLAYING — codex found this in the roster fix above, which
- * over-corrected: it replaced "100% while most have not picked" with a pool
- * that could never reach 100%, because the seeded commissioner sat in the
- * pending list forever. Pool creation seeds the owner with
- * `hasPlayableEntry: false` for exactly this reason
- * (functions/src/nflPools.ts:154-161).
+ * KEVIN'S RULING 2026-07-31: assume the pool manager is also playing, 99% of
+ * the time. So the commissioner is expected to pick like anyone else, and an
+ * entry-less manager is a genuine outstanding pick.
+ *
+ * An earlier version of `unsubmittedRoster` exempted `isOwner && !hasEntry`,
+ * which let a pool read 100% while the commissioner personally had not picked.
+ * These pin the ruling so the exemption cannot creep back in.
  */
-describe('isPlayingMember — the non-playing host', () => {
+describe('the pool manager is a player too', () => {
   const PICKEM = { poolType: 'NFL_PICKEM', week: 1, weeklyGameIds: ['g1'] };
 
-  const rosterOf = () =>
-    buildPoolRoster(
+  it('counts an entry-less MANAGER as pending, like any other member', () => {
+    const roster = buildPoolRoster(
       inputs({
         pool: pool({ ownerId: 'owner', participantIds: ['owner', 'm2'] }),
         members: [
-          { uid: 'owner', userName: 'Commish' },
+          { uid: 'owner', userName: 'Commish', hasPlayableEntry: false },
           { uid: 'm2', userName: 'Dana' },
         ],
         entries: [{ id: 'm2', ownerUid: 'm2', picks: { g1: 'CAR' } }],
       }),
     );
-
-  it('does NOT count a host who never entered as an outstanding pick', () => {
-    // Dana has picked; the host is not playing. The pool IS fully submitted.
-    expect(unsubmittedRoster(rosterOf(), PICKEM)).toEqual([]);
+    // Dana has picked; the commissioner has not. The pool is NOT fully in.
+    expect(unsubmittedRoster(roster, PICKEM).map((r) => r.uid)).toEqual(['owner']);
   });
 
-  it('the host STOPS being exempt the moment they submit an entry', () => {
+  it('reaches empty once the manager submits too', () => {
     const roster = buildPoolRoster(
       inputs({
         pool: pool({ ownerId: 'owner', participantIds: ['owner', 'm2'] }),
-        members: [{ uid: 'owner', userName: 'Commish' }, { uid: 'm2', userName: 'Dana' }],
+        members: [
+          { uid: 'owner', userName: 'Commish', hasPlayableEntry: true },
+          { uid: 'm2', userName: 'Dana' },
+        ],
         entries: [
-          { id: 'owner', ownerUid: 'owner', picks: {} }, // entered, but has NOT picked
+          { id: 'owner', ownerUid: 'owner', picks: { g1: 'ARI' } },
           { id: 'm2', ownerUid: 'm2', picks: { g1: 'CAR' } },
         ],
       }),
     );
-    expect(unsubmittedRoster(roster, PICKEM).map((r) => r.uid)).toEqual(['owner']);
+    expect(unsubmittedRoster(roster, PICKEM)).toEqual([]);
   });
 
-  it('a NON-owner with no entry is still pending — the exemption is the host alone', () => {
+  it('carries the persisted hasPlayableEntry latch through, and leaves it UNDEFINED when absent', () => {
     const roster = buildPoolRoster(
       inputs({
         pool: pool({ ownerId: 'owner', participantIds: ['owner', 'm2', 'm3'] }),
-        members: [{ uid: 'owner' }, { uid: 'm2' }, { uid: 'm3' }],
-        entries: [{ id: 'm2', ownerUid: 'm2', picks: { g1: 'CAR' } }],
+        members: [
+          { uid: 'owner', hasPlayableEntry: true },
+          { uid: 'm2', hasPlayableEntry: false },
+          { uid: 'm3' }, // pre-2026-07-31 record: field absent
+        ],
       }),
     );
-    expect(unsubmittedRoster(roster, PICKEM).map((r) => r.uid)).toEqual(['m3']);
+    const by = (uid: string) => roster.find((r) => r.uid === uid)!;
+    expect(by('owner').hasPlayableEntry).toBe(true);
+    expect(by('m2').hasPlayableEntry).toBe(false);
+    // UNKNOWN, not false. Absence must never be read as "has not entered".
+    expect(by('m3').hasPlayableEntry).toBeUndefined();
   });
 
-  it('classifies each row directly', () => {
-    const rows = rosterOf();
-    expect(isPlayingMember(rows.find((r) => r.uid === 'owner')!)).toBe(false);
-    expect(isPlayingMember(rows.find((r) => r.uid === 'm2')!)).toBe(true);
+  it('does NOT exempt anyone on the latch — a false latch is still pending', () => {
+    // The latch is carried for a future explicit opt-out; it must not quietly
+    // become an exemption, which is the defect this ruling replaced.
+    const roster = buildPoolRoster(
+      inputs({
+        pool: pool({ ownerId: 'owner', participantIds: ['owner'] }),
+        members: [{ uid: 'owner', hasPlayableEntry: false }],
+      }),
+    );
+    expect(unsubmittedRoster(roster, PICKEM).map((r) => r.uid)).toEqual(['owner']);
   });
 });

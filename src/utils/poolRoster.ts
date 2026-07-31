@@ -58,6 +58,20 @@ export interface RosterRow {
   status?: string;
   strikesUsed?: number;
   seasonTotal?: number;
+  /**
+   * The Member Record's persisted play latch (`shared/memberRecord.ts`), set
+   * one-way false -> true on first submit.
+   *
+   * ⚠️ `undefined` means UNKNOWN, not false. The field did not exist before
+   * 2026-07-31, so every record written earlier lacks it and heals only when
+   * `ensureMemberRecord` next touches it. Never treat absence as "has not
+   * entered" — use `hasEntry` for that.
+   *
+   * Nothing keys on this today: it cannot separate "will play, hasn't yet" from
+   * "never will". It is carried so an explicit host opt-out has a durable field
+   * to key on when one exists.
+   */
+  hasPlayableEntry?: boolean;
   isOwner: boolean;
 }
 
@@ -122,6 +136,7 @@ export function buildPoolRoster({ pool, members, entries }: RosterInputs): Roste
       memberPaymentMethod: m.paymentMethod,
       memberPaidAt: m.paidAt,
       memberPaymentNote: m.paymentNote,
+      hasPlayableEntry: m.hasPlayableEntry,
     });
   }
   for (const e of entries || []) {
@@ -179,6 +194,29 @@ export function buildPoolRoster({ pool, members, entries }: RosterInputs): Roste
  *   - NFL_PICKEM           -> pending if ANY game in the week has no pick
  *   - SURVIVOR / MARGIN    -> pending if no pick stored under the week number
  *
+ * 🔨 **KEVIN'S RULING 2026-07-31: assume the pool manager is also playing, 99%
+ * of the time.** So EVERYONE on the roster is expected to pick, the
+ * commissioner included, and an entry-less manager is a genuine outstanding
+ * pick rather than someone to exempt.
+ *
+ * An earlier version of this function excluded `isOwner && !hasEntry`, because
+ * pool creation seeds the owner with `hasPlayableEntry: false` so that hosting
+ * is not playing for DUES purposes (`ensureMemberRecord` gives such a MANAGER
+ * `feeOwed: 0`). Codex showed the cost: a host who intends to play but has not
+ * picked yet is indistinguishable from a host-only commissioner, so the
+ * exemption let a pool read 100% while the commissioner personally had not
+ * picked. Kevin's ruling settles the prior instead of guessing.
+ *
+ * **The dues rule is untouched.** A manager still owes nothing until they
+ * commit an entry. Money liability and pick liability are different questions,
+ * and conflating them produced a wrong answer in both directions.
+ *
+ * The genuinely host-only commissioner is the 1%: they sit in the pending list
+ * until they pick. `hasPlayableEntry` is now persisted on the Member Record
+ * (a one-way latch) and carried on `RosterRow`, so a future "I'm not playing"
+ * opt-out has a durable field to key on — but no data available today can tell
+ * "will play, hasn't yet" from "never will", so nothing is excluded on it.
+ *
  * A pick'em week with NO games yields nobody pending among entry holders: there
  * is nothing to pick, so calling them delinquent would be wrong. That falls out
  * of `[].every()` being `true` — an explicit `weeklyGameIds.length > 0 &&`
@@ -191,7 +229,7 @@ export function unsubmittedRoster(
   opts: { poolType?: string; week: number; weeklyGameIds: string[] },
 ): RosterRow[] {
   const { poolType, week, weeklyGameIds } = opts;
-  return roster.filter(isPlayingMember).filter((r) => {
+  return roster.filter((r) => {
     if (!r.hasEntry) return true;
     const picks = r.entry?.picks || {};
     if (poolType === 'NFL_PICKEM') {
@@ -201,50 +239,6 @@ export function unsubmittedRoster(
   });
 }
 
-/**
- * Is this roster row someone we expect to submit picks?
- *
- * HOSTING IS NOT PLAYING. Pool creation seeds the owner's Member Record at t=0
- * with `hasPlayableEntry: false` (`functions/src/nflPools.ts:154-161`, ADR
- * 0003/0005) precisely so a commissioner who runs a pool without entering it
- * owes nothing — `ensureMemberRecord` gives a MANAGER with no playable entry a
- * `feeOwed` of 0. The same person must not be counted as an outstanding pick.
- *
- * Without this, the roster fix over-corrects: it replaces "100% while three
- * quarters have not picked" with a pool that can NEVER reach 100%, because the
- * non-playing host sits in the pending list forever. A permanently-wrong
- * readiness number is not an improvement on an intermittently-wrong one.
- *
- * Found by cross-model review of the roster fix, not by writing it.
- *
- * ⚠️ The discriminator is `isOwner && !hasEntry`, NOT the `hasPlayableEntry`
- * flag, because **that flag is never persisted**: it is an input to
- * `ensureMemberRecord`'s fee maths (`lib/memberRecord.ts:61-63`) and is written
- * to no document, so no client can read it. `isOwner && !hasEntry` describes the
- * same population — the seeded host who has not entered. The moment a host DOES
- * submit, `hasEntry` is true and they are graded like anyone else.
- *
- * 🔴 **KNOWN LIMITATION, stated rather than hidden** (codex r3 on this change).
- * An owner who INTENDS to play but has not submitted their first picks yet is
- * indistinguishable from an owner who is only hosting: both are on
- * `participantIds` with no entry document. This predicate excludes them, so a
- * pool can read 100% while the commissioner personally has not picked.
- *
- * Accepted, with reasons: it is **not a regression** — the entries-derived
- * version this replaced could not see that owner either — the exposure is one
- * person, and that person is the commissioner reading the card, who knows
- * whether they have picked. The defect being fixed here hid OTHER members from
- * them, which they cannot know.
- *
- * The durable fix is to persist play intent: write `hasPlayableEntry` onto the
- * Member Record in `ensureMemberRecord` (it is computed there already and then
- * thrown away), backfill it, and key this predicate on it. That is a
- * `functions/` change plus a prod backfill, so it is NOT frontend work and NOT
- * pilot-week work. Tracked in HANDOFF item 12.
- */
-export function isPlayingMember(r: RosterRow): boolean {
-  return !(r.isOwner && !r.hasEntry);
-}
 
 export interface PotStats {
   /** Everyone who joined, however they are evidenced. */
