@@ -6,6 +6,7 @@ import {
   clearingRate,
   duesRates,
   memberOutstanding,
+  unsubmittedRoster,
   type RosterInputs,
 } from './poolRoster';
 
@@ -435,5 +436,88 @@ describe('rosterPotStats', () => {
       }),
     );
     expect(clearingRate(pot)).toBe(25);
+  });
+});
+
+/**
+ * Submission Health — HANDOFF item 12. Every case below was verified to FAIL
+ * against the entries-derived version this replaced.
+ */
+describe('unsubmittedRoster', () => {
+  const PICKEM = { poolType: 'NFL_PICKEM', week: 1, weeklyGameIds: ['g1', 'g2'] };
+
+  it('counts a member with NO entry as pending — the whole point (HANDOFF item 12)', () => {
+    const roster = buildPoolRoster(
+      inputs({
+        pool: pool({ participantIds: ['owner', 'm2', 'm3'] }),
+        members: [
+          { uid: 'owner', userName: 'Commish' },
+          { uid: 'm2', userName: 'Dana' },
+          { uid: 'm3', userName: 'Eli' },
+        ],
+        entries: [{ id: 'owner', ownerUid: 'owner', picks: { g1: 'KC', g2: 'SF' } }],
+      }),
+    );
+    // The defect, stated as an assertion: three joined, one submitted. The
+    // entries-derived reader saw a one-person pool and reported 1 of 1 = 100%.
+    expect(roster).toHaveLength(3);
+    expect(unsubmittedRoster(roster, PICKEM).map((r) => r.uid).sort()).toEqual(['m2', 'm3']);
+  });
+
+  it('counts a PARTIAL pick sheet as pending — one of two games picked is not submitted', () => {
+    const roster = buildPoolRoster(
+      inputs({
+        pool: pool({ participantIds: ['owner'] }),
+        members: [{ uid: 'owner', userName: 'Commish' }],
+        entries: [{ id: 'owner', ownerUid: 'owner', picks: { g1: 'KC' } }],
+      }),
+    );
+    expect(unsubmittedRoster(roster, PICKEM).map((r) => r.uid)).toEqual(['owner']);
+  });
+
+  it('counts a COMPLETE pick sheet as submitted', () => {
+    const roster = buildPoolRoster(
+      inputs({
+        pool: pool({ participantIds: ['owner'] }),
+        members: [{ uid: 'owner', userName: 'Commish' }],
+        entries: [{ id: 'owner', ownerUid: 'owner', picks: { g1: 'KC', g2: 'SF' } }],
+      }),
+    );
+    expect(unsubmittedRoster(roster, PICKEM)).toEqual([]);
+  });
+
+  it('reports NOBODY pending on a pick’em week with no games — there is nothing to pick', () => {
+    const roster = buildPoolRoster(
+      inputs({
+        pool: pool({ participantIds: ['owner', 'm2'] }),
+        members: [{ uid: 'owner' }, { uid: 'm2' }],
+        entries: [{ id: 'owner', ownerUid: 'owner', picks: {} }],
+      }),
+    );
+    // 'm2' still has no entry at all, so they remain pending; 'owner' does not
+    // become delinquent for failing to pick games that do not exist.
+    expect(unsubmittedRoster(roster, { ...PICKEM, weeklyGameIds: [] }).map((r) => r.uid)).toEqual(['m2']);
+  });
+
+  it('keys SURVIVOR and MARGIN off the WEEK NUMBER, not game ids', () => {
+    const roster = buildPoolRoster(
+      inputs({
+        pool: pool({ participantIds: ['a', 'b'] }),
+        members: [{ uid: 'a' }, { uid: 'b' }],
+        entries: [
+          { id: 'a', ownerUid: 'a', picks: { 1: 'CAR' } },
+          { id: 'b', ownerUid: 'b', picks: { 2: 'ARI' } }, // picked a DIFFERENT week
+        ],
+      }),
+    );
+    for (const poolType of ['NFL_SURVIVOR', 'NFL_MARGIN']) {
+      expect(
+        unsubmittedRoster(roster, { poolType, week: 1, weeklyGameIds: ['g1'] }).map((r) => r.uid),
+      ).toEqual(['b']);
+    }
+  });
+
+  it('an empty pool has nobody pending rather than throwing', () => {
+    expect(unsubmittedRoster([], PICKEM)).toEqual([]);
   });
 });

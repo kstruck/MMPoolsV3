@@ -31,7 +31,7 @@ import {
 } from 'recharts';
 import { gamesForPoolWeek, weekDeadline } from '../../utils/nflPending';
 import { effectiveBufferMinutesForWeek, usesWeeklyHardLock } from '@shared/weeklyHardLock';
-import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate, duesRates, memberOutstanding } from '../../utils/poolRoster';
+import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate, duesRates, memberOutstanding, unsubmittedRoster } from '../../utils/poolRoster';
 import { formatDeadline } from '../../utils/formatTime';
 
 interface NFLManagerBentoDashboardProps {
@@ -172,34 +172,44 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     [pool, members, entries],
   );
 
-  // Derived unsubmitted players list.
-  // Pick'em: unsubmitted = at least one current-week game without a pick (picks keyed by gameId).
-  // Survivor/Margin: unsubmitted = no pick stored under the current week number.
+  // Derived unsubmitted players list — ROSTER-derived, not entries-derived.
+  //
+  // This was the last surface on this card still reading `entries` alone, and it
+  // is the same defect #322 fixed for the money figures: a member who joined but
+  // has never submitted has a Member Record and NO entry document, so an
+  // entries-derived reader cannot see them. They appeared in neither the total
+  // nor the pending list, and readiness was computed over a SUBSET of the pool —
+  // so one submitted entry beside three joined-but-unpicked members read
+  // "1 of 1 — 100%". A commissioner checking pick readiness on kickoff night was
+  // told everyone was in while three quarters of the room was not.
+  //
+  // The rule itself lives in utils/poolRoster (`unsubmittedRoster`) so it can be
+  // unit-tested; see the note there on why it is not inline.
   const weeklyGames = useMemo(() => gamesForPoolWeek(_games, castPool, week), [_games, castPool, week]);
-  const unsubmittedPlayers = useMemo(() => {
-    const list = entries.filter(e => {
-      const picks = e.picks || {};
-      if (pool.type === 'NFL_PICKEM') {
-        return weeklyGames.length > 0 && !weeklyGames.every(g => !!picks[g.id]);
-      }
-      return !picks[week];
-    });
-    return list.map(e => ({
-      id: e.id,
-      uid: e.ownerUid || e.id,
-      name: e.userName || e.ownerName || 'User ' + e.id.substring(0, 4),
-      email: e.email || 'user@example.com'
-    }));
-  }, [entries, week, pool.type, weeklyGames]);
+  const unsubmittedPlayers = useMemo(
+    () => unsubmittedRoster(roster, {
+      poolType: pool.type,
+      week,
+      weeklyGameIds: weeklyGames.map(g => g.id),
+    }).map(r => ({
+      id: r.entry?.id || r.uid,
+      uid: r.uid,
+      // `roster` rows carry the card's own displayName fallback; the helper is
+      // typed on the bare RosterRow, so re-apply it rather than widen the type.
+      name: r.userName || 'Member',
+      email: r.email || '',
+    })),
+    [roster, week, pool.type, weeklyGames],
+  );
 
-  // 1. Calculations for Pick submissions status
+  // 1. Calculations for Pick submissions status — denominator is the ROSTER.
   const submissionStats = useMemo(() => {
-    const total = entries.length;
+    const total = roster.length;
     const pendingCount = unsubmittedPlayers.length;
     const submitted = total - pendingCount;
     const percentage = total > 0 ? Math.round((submitted / total) * 100) : 0;
     return { total, submitted, pendingCount, percentage };
-  }, [entries, unsubmittedPlayers]);
+  }, [roster, unsubmittedPlayers]);
 
   // Financial Ledger calculations — roster-derived, so a member who joined but
   // has not submitted an entry is counted. This card previously read `entries`
@@ -391,7 +401,13 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                     </div>
                     <div>
                       <span className="font-display font-bold text-xs text-[color:var(--text)] block uppercase leading-none">{player.name}</span>
-                      <span className="font-body font-semibold text-[9px] text-faint">{player.email}</span>
+                      {/* Honest fallback, matching the other two member lists on this
+                          card. This used to render a hardcoded placeholder
+                          address for every member with none on file — a
+                          fabricated contact detail shown as if it were real, on
+                          the list a commissioner uses to chase people for
+                          picks. */}
+                      <span className="font-body font-semibold text-[9px] text-faint">{player.email || 'No email registered'}</span>
                     </div>
                   </div>
 

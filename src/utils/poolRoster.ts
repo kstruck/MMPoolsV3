@@ -157,6 +157,46 @@ export function buildPoolRoster({ pool, members, entries }: RosterInputs): Roste
   }));
 }
 
+/**
+ * Who has NOT submitted for a week, over the whole roster.
+ *
+ * WHY THIS IS A FUNCTION AND NOT AN INLINE `useMemo`. It used to be inline on
+ * the commissioner Bento card and it filtered `entries`, so a member who joined
+ * and never submitted — Member Record, no entry document — was in neither the
+ * pending list nor the denominator. The card reported readiness over a SUBSET
+ * of the pool: one submitted entry beside three joined-but-unpicked members
+ * read "1 of 1 — 100%". Same root cause as the Buy-In Ledger defect (#322,
+ * D13 P1): `setPaidStatus` mirrors onto the entry only `if (entrySnap.exists)`,
+ * so nothing entry-backed can see an entry-less member.
+ *
+ * Extracted so the rule can be tested directly. The previous fix on this card
+ * shipped a guard that pinned the plumbing without pinning that the fix CHANGED
+ * anything, and it survived mutation; a pure function does not have that
+ * problem.
+ *
+ * Completeness rules, unchanged from the inline version:
+ *   - no entry at all      -> pending, every pool type
+ *   - NFL_PICKEM           -> pending if ANY game in the week has no pick
+ *   - SURVIVOR / MARGIN    -> pending if no pick stored under the week number
+ *
+ * A pick'em week with NO games yields nobody pending among entry holders: there
+ * is nothing to pick, so calling them delinquent would be wrong.
+ */
+export function unsubmittedRoster(
+  roster: RosterRow[],
+  opts: { poolType?: string; week: number; weeklyGameIds: string[] },
+): RosterRow[] {
+  const { poolType, week, weeklyGameIds } = opts;
+  return roster.filter((r) => {
+    if (!r.hasEntry) return true;
+    const picks = r.entry?.picks || {};
+    if (poolType === 'NFL_PICKEM') {
+      return weeklyGameIds.length > 0 && !weeklyGameIds.every((id) => !!picks[id]);
+    }
+    return !picks[week];
+  });
+}
+
 export interface PotStats {
   /** Everyone who joined, however they are evidenced. */
   memberCount: number;

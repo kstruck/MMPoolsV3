@@ -72,6 +72,10 @@ describe('T3 — no fabricated data on the commissioner bento', () => {
     '2 hours ago',
     // Claimed a moderation capability that does not exist.
     'AI Moderation ACTIVE',
+    // A fabricated CONTACT DETAIL, which is the worst of the set: it was
+    // rendered as the member's address on the very list a commissioner uses to
+    // chase people for picks, so the card invited you to act on it.
+    'user@example.com',
   ])('fabricated string %j is gone', (s) => {
     expect(bento).not.toContain(s);
   });
