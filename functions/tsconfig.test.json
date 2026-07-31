@@ -1,0 +1,27 @@
+{
+    // Type-check-only config: tsconfig.json (the deploy build) PLUS src/__tests__,
+    // which that file excludes so test output never reaches Cloud Functions.
+    // `npm run typecheck` runs this one, so the tests keep the type coverage they
+    // had before the exclusion — it is a strict superset of the build's file set
+    // with identical compilerOptions, so every error the build would report is
+    // reported here too.
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "noEmit": true
+    },
+    "include": [
+        "src"
+    ],
+    // `exclude` replaces rather than merges, so the build's exclusion of
+    // src/__tests__ is deliberately NOT inherited — that is the point of this file.
+    //
+    // fixtureMatrix imports the repo-root src/utils/ scenario runner, i.e. outside
+    // functions/ entirely. vitest compiles it itself (vitest.emulator.config.ts);
+    // tsc has never seen it, and pulling it in would drag repo-root sources into
+    // this program — a TS6059 under the `rootDir: "src"` inherited from the base.
+    // Excluded here for the same reason it was excluded from the build config
+    // before this file existed (c313b27).
+    "exclude": [
+        "src/__tests__/emulator/fixtureMatrix.emulator.test.ts"
+    ]
+}
