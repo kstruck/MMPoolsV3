@@ -52,8 +52,16 @@ describe('planMembershipWrite', () => {
       return plan.member.data;
     };
 
-    it('stamps FALSE on a create that is not a submit (creation and join paths)', () => {
-      expect(dataOf(planMembershipWrite('p1', 'u1', facts(), null, NOW)).hasPlayableEntry).toBe(false);
+    it('leaves the latch ABSENT on a create where the caller stated nothing', () => {
+      // codex r1: the backfill-on-touch path (nflPools.ts:238) reaches the CREATE
+      // branch for an existing participant with no Member Record, and that person
+      // may already have an entry. Coercing undefined to false there records a
+      // durable 'never entered' for someone who has. Absent = UNKNOWN.
+      expect(dataOf(planMembershipWrite('p1', 'u1', facts(), null, NOW)).hasPlayableEntry).toBeUndefined();
+    });
+
+    it('stamps FALSE on a create where the caller DID state it (a brand-new join)', () => {
+      expect(dataOf(planMembershipWrite('p1', 'u1', facts({ hasPlayableEntry: false }), null, NOW)).hasPlayableEntry).toBe(false);
     });
 
     it('stamps FALSE for the seeded MANAGER — hosting is not playing at t=0', () => {

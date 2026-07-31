@@ -435,7 +435,13 @@
 >
 >    ⚠️ **`undefined` means UNKNOWN, not `false`** — every record written before
 >    2026-07-31 lacks the field. **NO BACKFILL IS NEEDED**: readers fall back to
->    entry evidence and `ensureMemberRecord` heals records on touch. Nothing keys
+>    entry evidence and `ensureMemberRecord` heals records on touch. The plan
+>    stamps the latch **only when the caller established the fact**; codex caught
+>    the first version coercing `undefined` to `false` on the backfill-on-touch
+>    path (`nflPools.ts:238`), which reaches the CREATE branch for a legacy
+>    participant who may *already* have an entry and would have recorded a durable
+>    "never entered" for them. The brand-new-join site states `false` explicitly,
+>    because that caller genuinely knows. Nothing keys
 >    on the latch today; it is carried so an explicit host "I'm not playing"
 >    opt-out has a durable field when one exists.
 >

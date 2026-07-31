@@ -272,6 +272,10 @@ export async function joinNFLPoolInternal(
       {
         userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true,
         entryFee: Number(poolData.settings?.entryFee ?? 0),
+        // A brand-new joiner definitionally has no entry yet, so this caller
+        // KNOWS the fact and may state it. The backfill-on-touch path above
+        // deliberately does not: an existing participant may already have one.
+        hasPlayableEntry: false,
       },
       memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
   });

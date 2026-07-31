@@ -75,9 +75,20 @@ export function planMembershipWrite(
       data.feeOwed = liableFee;
       data.feeOwedSource = 'LIVE';
     }
-    // Persist the play latch. `!!` on purpose: creation and join paths pass
-    // `undefined`, and on a FIRST write that genuinely means "has not entered".
-    data.hasPlayableEntry = !!facts.hasPlayableEntry;
+    // Persist the play latch ONLY when the caller actually established the fact.
+    //
+    // codex r1 on this change: stamping `!!facts.hasPlayableEntry` here was wrong
+    // on the backfill-on-touch path. `joinNFLPoolInternal` (nflPools.ts:238)
+    // reaches this CREATE branch for someone who is ALREADY a participant but has
+    // no Member Record — a legacy pool — and that person may well already have an
+    // entry. Coercing `undefined` to `false` there turns an unknown fact into a
+    // durable "never entered", which is exactly what this field must never mean.
+    //
+    // Absent is the honest value when the caller does not know. Readers fall back
+    // to entry evidence, and the latch fills in on the next submit.
+    if (facts.hasPlayableEntry !== undefined) {
+      data.hasPlayableEntry = facts.hasPlayableEntry;
+    }
     return { participant: 'add', member: { op: 'set', data, merge: false } };
   }
   // Update: merge identity/units only; preserve paidStatus + claim. feeOwed is
