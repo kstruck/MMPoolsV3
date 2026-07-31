@@ -16,6 +16,8 @@ import {
     closePoolSchema,
 } from "./schemas/poolExceptions";
 import { usesWeeklyHardLock, normalizeLockBufferMinutes, ensureHardLockFreezeForPoolDoc } from "./lib/effectiveLock";
+import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
+import type { MemberRecord } from "./shared/memberRecord";
 import {
     assertNoScoringInProgress,
     retryWhileScoring,
@@ -298,6 +300,11 @@ export const proxyPick = validated(
         await assertNoScoringInProgress(transaction, poolRef, now);
         const entrySnap = await transaction.get(entryRef);
         const existingEntry = entrySnap.exists ? entrySnap.data() : null;
+        // Read the Member Record HERE, with the other reads: Firestore forbids a
+        // read after a write in a transaction, and this one exists to advance the
+        // playable-entry latch below.
+        const memberSnap = await transaction.get(membersCol(db, pool.id).doc(targetUid));
+        const existingMember = memberSnap.exists ? (memberSnap.data() as MemberRecord) : null;
 
         if (type === "NFL_PICKEM") {
             const settings = pool.settings || {};
@@ -402,6 +409,25 @@ export const proxyPick = validated(
                 [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
             }, { merge: true });
         }
+
+        // A proxy pick IS a committed entry, so it must advance the playable-entry
+        // latch — this callable writes entries/{uid} directly and, before
+        // 2026-07-31, never touched the Member Record at all. Found by codex
+        // reviewing the change that first persisted that latch: without this, a
+        // member whose only entry arrived by proxy would be recorded as never
+        // having entered, and would also keep a MANAGER's dues at 0 forever.
+        //
+        // Placed after both branches so it covers PICKEM and SURVIVOR/MARGIN, and
+        // only on the success path — every failure above throws out of the
+        // transaction before reaching here.
+        ensureMemberRecord(transaction, db, pool.id, targetUid, {
+            userName: existingMember?.userName || existingEntry?.userName as string || targetName,
+            role: existingMember?.role ?? (pool.ownerId === targetUid ? 'MANAGER' : 'PARTICIPANT'),
+            poolType: type,
+            present: true,
+            entryFee: Number(pool.settings?.entryFee ?? 0),
+            hasPlayableEntry: true,
+        }, existingMember, now);
     }));
 
     await writeAuditEvent({

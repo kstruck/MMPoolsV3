@@ -423,13 +423,19 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                     </div>
                     <div>
                       <span className="font-display font-bold text-xs text-[color:var(--text)] block uppercase leading-none">{player.name}</span>
-                      {/* Honest fallback, matching the other two member lists on this
-                          card. This used to render a hardcoded placeholder
-                          address for every member with none on file — a
-                          fabricated contact detail shown as if it were real, on
-                          the list a commissioner uses to chase people for
-                          picks. */}
-                      <span className="font-body font-semibold text-[9px] text-faint">{player.email || 'No email registered'}</span>
+                      {/* This used to render a hardcoded placeholder address for
+                          every member with none on file — a fabricated contact
+                          detail shown as if it were real, on the list a
+                          commissioner uses to chase people for picks.
+                          codex r2: the first replacement said "No email
+                          registered", which asserts a fact this client cannot
+                          know. `email` on a roster row comes only from the ENTRY
+                          document; Member Records carry none, and the reminder
+                          backend resolves `users/{uid}.email` server-side. So a
+                          perfectly registered member who simply has no entry yet
+                          — exactly the rows this card newly surfaces — would be
+                          labelled unregistered. Say what is true of THIS view. */}
+                      <span className="font-body font-semibold text-[9px] text-faint">{player.email || 'Email not shown here'}</span>
                     </div>
                   </div>
 
@@ -547,7 +553,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                           {player.displayName}
                         </span>
                         <span className="font-body font-semibold text-[9px] text-faint">
-                          {player.email || 'No email registered'} · <span className="num">${owes}</span> due
+                          {player.email || 'Email not shown here'} · <span className="num">${owes}</span> due
                         </span>
                       </div>
                     </div>
@@ -790,7 +796,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                           {/* Name / Email */}
                           <td className="py-3 px-2">
                             <span className="font-display font-bold text-[color:var(--text)] block uppercase">{player.displayName}</span>
-                            <span className="font-body text-[9px] text-faint">{player.email || 'No email registered'}</span>
+                            <span className="font-body text-[9px] text-faint">{player.email || 'Email not shown here'}</span>
                           </td>
 
                           {/* Status */}
