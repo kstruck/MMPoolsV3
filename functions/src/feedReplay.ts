@@ -5,7 +5,7 @@ import { writeAdminAudit } from "./lib/adminAudit";
 import { replayFeedSnapshotSchema } from "./schemas/feedReplay";
 import { decodeSnapshot } from "./lib/feedSnapshot";
 import { FEED_SNAPSHOTS } from "./feedSnapshotStore";
-import { parseScoreboardResponse } from "./nflSchedule";
+import { parseScoreboardResponse, scoresMissingMarker } from "./nflSchedule";
 import { buildReplayPlan } from "./lib/feedReplayDiff";
 import type { NFLGame } from "./types";
 
@@ -165,7 +165,15 @@ async function runReplay(
 
         const batch = db.batch();
         for (const g of plan.writes) {
-            batch.set(db.collection("nfl_games").doc(g.id), JSON.parse(JSON.stringify(g)), { merge: true });
+            // Same reason as the importer: a replayed snapshot can carry a
+            // scoreless FINAL, and without the marker nothing would ever
+            // re-fetch that slate (codex r2). The stored doc is already in hand
+            // here, so this gets the precise answer rather than the conservative
+            // one — a replay that omits scores the live doc already has must not
+            // flag a game that is fine.
+            const replayed = JSON.parse(JSON.stringify(g));
+            replayed.scoresMissing = scoresMissingMarker(g, currentById.get(g.id));
+            batch.set(db.collection("nfl_games").doc(g.id), replayed, { merge: true });
         }
         await batch.commit();
 

@@ -86,6 +86,32 @@ export function isTerminalTransition(
 }
 
 /**
+ * The `scoresMissing` marker for a game about to be written to `nfl_games`.
+ *
+ * A `FINAL` the feed reported no scores for is not scoreable (NFL7-3) and does
+ * not recover on its own: the score-sync window query bounds on `startTime`, so
+ * once the game ages past the lookback nothing asks ESPN about it again. This
+ * flag is the second door into that window, so it has to be set by EVERY write
+ * path — `syncScoresWindow`, `importNFLSeason` and `replayFeedSnapshot` all write
+ * the same `parseScoreboardResponse` output, and a marker set by only one of them
+ * leaves the other two able to create a permanently stranded game (codex r2).
+ *
+ * `existing` is the stored doc where the caller has it. It matters because every
+ * write is `merge: true`: a fresh payload that omits `scores` does NOT erase
+ * stored ones, so judging the fresh payload alone would re-flag a game that is
+ * already fine. Callers without it (bulk import, replay) pass nothing and get the
+ * conservative answer — at worst one extra slate fetch, which the next sync
+ * clears, because erring toward re-fetching is the safe direction here.
+ */
+export function scoresMissingMarker(
+  fresh: Pick<NFLGame, 'status' | 'scores'>,
+  existing?: Pick<NFLGame, 'scores'>,
+): boolean {
+  const merged = fresh.scores ?? existing?.scores;
+  return fresh.status === 'FINAL' && !hasReportedScores({ scores: merged });
+}
+
+/**
  * Resolve the scoreboard URL for a week. Prefers an explicit date range taken
  * from ESPN's own calendar, because the naive week/season/seasontype form
  * silently falls back to the PRIOR season during the off-season. Extracted from
@@ -363,6 +389,10 @@ export async function importNFLSeason(
     const batch = db.batch();
     for (const game of games) {
       const cleanedGame = JSON.parse(JSON.stringify(game));
+      // Bulk import writes the same parseScoreboardResponse output as the sync,
+      // so it can create a scoreless FINAL too — and without the marker that game
+      // is outside BOTH doors and never refreshed again (codex r2).
+      cleanedGame.scoresMissing = scoresMissingMarker(game);
       const gameRef = db.collection('nfl_games').doc(cleanedGame.id);
       batch.set(gameRef, cleanedGame, { merge: true });
       importedCount++;
@@ -675,9 +705,7 @@ export async function syncScoresWindow(
       // MERGED result rather than the fresh payload: `merge: true` preserves a
       // stored `scores` when the new payload omits it, so testing `freshGame`
       // alone would re-flag a game that already has scores on every run.
-      const mergedScores = freshGame.scores ?? existingData?.scores;
-      cleanedGame.scoresMissing =
-        freshGame.status === 'FINAL' && !hasReportedScores({ scores: mergedScores });
+      cleanedGame.scoresMissing = scoresMissingMarker(freshGame, existingData);
       if (cleanedGame.scoresMissing) {
         scorelessFinals.push(freshGame.id);
       }

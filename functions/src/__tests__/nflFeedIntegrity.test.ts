@@ -3,7 +3,7 @@ import {
   hasReportedScores, isVoidWeek, gradePickemGames, gradeSurvivorWeekGame, evaluateSurvivorWeek,
   gradeMarginWeekGame, scoreMarginWeek,
 } from '../nflScoringEngine';
-import { isTerminalTransition } from '../nflSchedule';
+import { isTerminalTransition, scoresMissingMarker } from '../nflSchedule';
 import type { NFLGame, NFLPickemEntry, NFLPickemPool, SurvivorEntry } from '../nflPoolTypes';
 
 /**
@@ -178,6 +178,43 @@ describe('Margin — "not ready" must stay null and never collapse to 0', () => 
     expect(gradeMarginWeekGame('CAR', [scoreless()])).toBeNull();
     expect(gradeMarginWeekGame('CAR', [game()])).toMatchObject({ net: 4 });
     expect(gradeMarginWeekGame('CAR', [scoreless({ status: 'CANCELLED' })])).toMatchObject({ net: 0 });
+  });
+});
+
+/**
+ * The marker is what keeps a scoreless FINAL reachable after it ages past the
+ * score-sync lookback. It is only useful if EVERY write path sets it —
+ * `syncScoresWindow`, `importNFLSeason` and `replayFeedSnapshot` all write the
+ * same `parseScoreboardResponse` output, and a marker set by one of them leaves
+ * the other two able to strand a game permanently (codex r2).
+ */
+describe('scoresMissingMarker — set on every write path, cleared when the scores land', () => {
+  it('flags a FINAL with no reported scores', () => {
+    expect(scoresMissingMarker({ status: 'FINAL' })).toBe(true);
+    expect(scoresMissingMarker({ status: 'FINAL', scores: { home: 3 } as never })).toBe(true);
+  });
+
+  it('does not flag anything that is not a scoreless FINAL', () => {
+    expect(scoresMissingMarker({ status: 'FINAL', scores: { home: 20, away: 24 } })).toBe(false);
+    expect(scoresMissingMarker({ status: 'FINAL', scores: { home: 0, away: 0 } })).toBe(false);
+    expect(scoresMissingMarker({ status: 'SCHEDULED' })).toBe(false);
+    expect(scoresMissingMarker({ status: 'IN_PROGRESS' })).toBe(false);
+    // A cancelled game has no scores by definition and is scoreable as VOID.
+    expect(scoresMissingMarker({ status: 'CANCELLED' })).toBe(false);
+  });
+
+  it('judges the MERGED result, so a payload that omits scores the doc already has is not flagged', () => {
+    // Every write is `merge: true`, so stored scores survive a payload that
+    // omits them. Judging the fresh payload alone would re-flag a healthy game
+    // on every sync and re-fetch its slate forever.
+    expect(scoresMissingMarker({ status: 'FINAL' }, { scores: { home: 20, away: 24 } })).toBe(false);
+  });
+
+  it('is conservative when the caller has no stored doc', () => {
+    // Bulk import and replay-without-context. At worst this costs one extra
+    // slate fetch, which the next sync clears — erring toward re-fetching is the
+    // safe direction, because the alternative is a permanently stranded game.
+    expect(scoresMissingMarker({ status: 'FINAL' }, undefined)).toBe(true);
   });
 });
 
