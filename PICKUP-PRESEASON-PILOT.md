@@ -71,13 +71,36 @@ AFTER #325, not after #321. The incident report's "two rebuilds after #321" was
 wrong on both count and position, and §4 above is correct: the
 `D1wLGiMy → C31xivRN → CR5oJEHh` moves were #322 and #324, on 2026-07-30.
 
-⚠️ **The bundle hash did NOT move across any of those three rebuilds** — prod
-stayed on `index-CR5oJEHh.js`, which is what #324 produced (`fe3d7c3` is a
-docs-only commit on top of it, so it emits an identical bundle). **That is direct
-evidence the reCAPTCHA key never reached the bundle**, exactly as the missing
-Dockerfile `ARG` predicts. Whatever took the site down, it was not a changed
-bundle. One lead worth pulling: the 05:12:58 run finished in **21 seconds**,
-far too fast for a real image build, yet is recorded `Success`.
+⚠️ **Across those three rebuilds specifically, the bundle hash did NOT move** —
+prod stayed on `index-CR5oJEHh.js` from before 04:54 UTC until after 05:17 UTC,
+which is what #324 produced (`fe3d7c3` is docs-only on top of it, so it emits an
+identical bundle).
+
+🕐 **Do not confuse this with the LATER rebuild the same day.** Two separate
+things happened on 2026-07-31 and the hash behaved differently in each:
+
+| When (UTC) | What | Bundle |
+|---|---|---|
+| 04:54, 05:12, 05:17 | the three App Check rebuilds, all at `fe3d7c3` | **unchanged**, `index-CR5oJEHh.js` |
+| later that day | the #329 rebuild, at `efea033` | **moved** → `index-Db6JwMWs.js` (the current live hash) |
+
+**`index-Db6JwMWs.js` is the current live bundle.** The "hash did not move" claim
+above is scoped to the three App-Check rebuilds only — it is not a statement
+about the day. Written out because this runbook uses hash movement as positive
+evidence for a rebuild, so an unqualified "it did not move" is the kind of
+sentence that gets used to condemn a good deploy.
+
+📌 **UNVERIFIED (inference, not measurement):** that the hash held across those
+three rebuilds is *consistent with* the reCAPTCHA key never reaching the bundle,
+which is what the missing Dockerfile `ARG` predicts — and it means the outage
+cannot be explained by changed bundle CONTENT. It is **not** proof: nobody
+diffed the served JS, and a rebuild can change what is served without changing
+the emitted hash (nginx config, headers, a half-built image). Treat the CSP
+mechanism as ruled out; treat "the key never reached the bundle" as strongly
+supported but unproven, and **the root cause as OPEN**.
+
+One lead worth pulling: the 05:12:58 run finished in **21 seconds**, far too
+fast for a real image build, yet is recorded `Success`.
 
 ⚠️ **The correlation is solid. The CAUSE IS OPEN — do not repeat the first
 explanation as fact.** That explanation (CSP blocks the reCAPTCHA script → App
