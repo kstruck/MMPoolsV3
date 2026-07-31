@@ -11,11 +11,13 @@ import ts from 'typescript';
  * `npm --prefix functions run build` (tsc) first. So both the TypeScript sources
  * and everything tsc emits into `lib/` reach production.
  *
- * Before 2026-07-31 that included every test: `functions/tsconfig.json` had
- * `include: ["src"]` with a single file excluded, so all 113 `src/__tests__/**`
- * suites compiled into `lib/__tests__/`. Measured with firebase-tools' own
- * `readdirRecursive` and the real ignore list: 331 of 898 uploaded files and
- * 2.47 of 6.83 MiB were tests, with no runtime purpose.
+ * Before 2026-07-31 that included the tests: `functions/tsconfig.json` had
+ * `include: ["src"]` with exactly one file excluded, so 112 of the 113 files
+ * under `src/__tests__/` — the `*.emulator.test.ts` suites among them — compiled
+ * into `lib/__tests__/`, and all 113 `.ts` sources were uploaded besides.
+ * Measured with firebase-tools' own `readdirRecursive` and the real ignore list:
+ * 331 of 898 uploaded files and 2.47 of 6.83 MiB were tests, with no runtime
+ * purpose.
  *
  * Two mechanisms keep them out now, and they cover different holes — neither is
  * redundant:
