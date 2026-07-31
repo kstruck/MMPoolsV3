@@ -169,7 +169,12 @@ FLOOR=180          # seconds; never conclude "0 findings" faster than this
 STABLE_NEEDED=4    # consecutive unchanged polls at 30s = 2 min of quiet
 START=$SECONDS
 PREV=-1; STABLE=0
-for i in $(seq 1 30); do
+# 10 polls x 30s = 5 min. NOT 30 (=15 min): detection is capped at 4 min, and a
+# 15-min settle put the worst case at 19 min against a ~10-min background-tool
+# cap — so the tool was killed before it could print the PARTIAL line below, and
+# the promised "4 min detect + ~5 min settle" budget was never actually enforced.
+# FLOOR (3 min) and STABLE_NEEDED (2 min of quiet) both fit inside this window.
+for i in $(seq 1 10); do
   NOW=$(inline)
   if [ "$NOW" = "$PREV" ]; then STABLE=$((STABLE+1)); else STABLE=0; fi
   PREV=$NOW
