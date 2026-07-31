@@ -31,7 +31,7 @@ import {
 } from 'recharts';
 import { gamesForPoolWeek, weekDeadline } from '../../utils/nflPending';
 import { effectiveBufferMinutesForWeek, usesWeeklyHardLock } from '@shared/weeklyHardLock';
-import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate, duesRates, memberOutstanding, unsubmittedRoster } from '../../utils/poolRoster';
+import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate, duesRates, memberOutstanding, unsubmittedRoster, isPlayingMember } from '../../utils/poolRoster';
 import { formatDeadline } from '../../utils/formatTime';
 
 interface NFLManagerBentoDashboardProps {
@@ -198,13 +198,22 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
       // typed on the bare RosterRow, so re-apply it rather than widen the type.
       name: r.userName || 'Member',
       email: r.email || '',
+      // The nudge callable resolves its targets from the ENTRIES collection
+      // (functions/src/manualReminders.ts:66-72), so it cannot reach a member
+      // who has never submitted — exactly the rows this fix made visible.
+      hasEntry: r.hasEntry,
     })),
     [roster, week, pool.type, weeklyGames],
   );
 
-  // 1. Calculations for Pick submissions status — denominator is the ROSTER.
+  // 1. Calculations for Pick submissions status — denominator is the ROSTER,
+  // minus anyone not expected to play. A commissioner who runs the pool without
+  // entering it is seeded onto the roster owing nothing (`hasPlayableEntry:
+  // false`), so counting them here would make the pool unable to reach 100% —
+  // see `isPlayingMember`. Numerator and denominator must use the SAME filter or
+  // the card contradicts itself.
   const submissionStats = useMemo(() => {
-    const total = roster.length;
+    const total = roster.filter(isPlayingMember).length;
     const pendingCount = unsubmittedPlayers.length;
     const submitted = total - pendingCount;
     const percentage = total > 0 ? Math.round((submitted / total) * 100) : 0;
@@ -284,7 +293,21 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     setIsNudging(player.uid);
     try {
       const { sent, skipped } = await dbService.sendManualReminder(pool.id, [player.uid], 'PICKS');
-      toast.success(`Sent ${sent} reminder(s), ${skipped} skipped (recently reminded)`);
+      // A zero-send is NOT a success. `sendManualReminder` resolves its targets
+      // from the entries collection, so a member who has never submitted matches
+      // nothing and the call returns `sent: 0, skipped: 0` without erroring —
+      // and the old copy reported that as "Sent 0 reminder(s)" in a SUCCESS
+      // toast. An absent error is not evidence that anything happened; this
+      // codebase has been bitten by that three times (#314's unbound
+      // COURIER_AUTH_TOKEN, the zero-counter reminder heartbeat, the 13-day
+      // Sentry outage).
+      if (sent === 0 && skipped === 0) {
+        toast.error(
+          `No reminder could be sent to ${player.name}. Reminders reach members who have started an entry; this member has not.`,
+        );
+      } else {
+        toast.success(`Sent ${sent} reminder(s), ${skipped} skipped (recently reminded)`);
+      }
     } catch (err) {
       console.error('Failed to send pick reminder:', err);
       toast.error(getUserMessage(err));
@@ -413,10 +436,13 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
                   <button
                     onClick={() => handleNudge(player)}
-                    disabled={isNudging !== null}
+                    disabled={isNudging !== null || !player.hasEntry}
+                    title={player.hasEntry
+                      ? undefined
+                      : 'Reminders reach members who have started an entry. This member has not, so there is nothing to remind against yet.'}
                     className="min-h-[44px] bg-gold-400/10 border border-gold-500/40 hover:bg-gold-400/20 text-gold-600 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 rounded-md transition-all duration-150 hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isNudging === player.uid ? 'Sending...' : 'Nudge Email'}
+                    {isNudging === player.uid ? 'Sending...' : player.hasEntry ? 'Nudge Email' : 'Not Started'}
                   </button>
                 </div>
               ))

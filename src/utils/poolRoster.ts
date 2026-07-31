@@ -191,7 +191,7 @@ export function unsubmittedRoster(
   opts: { poolType?: string; week: number; weeklyGameIds: string[] },
 ): RosterRow[] {
   const { poolType, week, weeklyGameIds } = opts;
-  return roster.filter((r) => {
+  return roster.filter(isPlayingMember).filter((r) => {
     if (!r.hasEntry) return true;
     const picks = r.entry?.picks || {};
     if (poolType === 'NFL_PICKEM') {
@@ -199,6 +199,33 @@ export function unsubmittedRoster(
     }
     return !picks[week];
   });
+}
+
+/**
+ * Is this roster row someone we expect to submit picks?
+ *
+ * HOSTING IS NOT PLAYING. Pool creation seeds the owner's Member Record at t=0
+ * with `hasPlayableEntry: false` (`functions/src/nflPools.ts:154-161`, ADR
+ * 0003/0005) precisely so a commissioner who runs a pool without entering it
+ * owes nothing — `ensureMemberRecord` gives a MANAGER with no playable entry a
+ * `feeOwed` of 0. The same person must not be counted as an outstanding pick.
+ *
+ * Without this, the roster fix over-corrects: it replaces "100% while three
+ * quarters have not picked" with a pool that can NEVER reach 100%, because the
+ * non-playing host sits in the pending list forever. A permanently-wrong
+ * readiness number is not an improvement on an intermittently-wrong one.
+ *
+ * Found by cross-model review of the roster fix, not by writing it.
+ *
+ * ⚠️ The discriminator is `isOwner && !hasEntry`, NOT the `hasPlayableEntry`
+ * flag, because **that flag is never persisted**: it is an input to
+ * `ensureMemberRecord`'s fee maths (`lib/memberRecord.ts:61-63`) and is written
+ * to no document, so no client can read it. `isOwner && !hasEntry` describes the
+ * same population — the seeded host who has not entered. The moment a host DOES
+ * submit, `hasEntry` is true and they are graded like anyone else.
+ */
+export function isPlayingMember(r: RosterRow): boolean {
+  return !(r.isOwner && !r.hasEntry);
 }
 
 export interface PotStats {

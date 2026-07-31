@@ -7,6 +7,7 @@ import {
   duesRates,
   memberOutstanding,
   unsubmittedRoster,
+  isPlayingMember,
   type RosterInputs,
 } from './poolRoster';
 
@@ -519,5 +520,65 @@ describe('unsubmittedRoster', () => {
 
   it('an empty pool has nobody pending rather than throwing', () => {
     expect(unsubmittedRoster([], PICKEM)).toEqual([]);
+  });
+});
+
+/**
+ * HOSTING IS NOT PLAYING — codex found this in the roster fix above, which
+ * over-corrected: it replaced "100% while most have not picked" with a pool
+ * that could never reach 100%, because the seeded commissioner sat in the
+ * pending list forever. Pool creation seeds the owner with
+ * `hasPlayableEntry: false` for exactly this reason
+ * (functions/src/nflPools.ts:154-161).
+ */
+describe('isPlayingMember — the non-playing host', () => {
+  const PICKEM = { poolType: 'NFL_PICKEM', week: 1, weeklyGameIds: ['g1'] };
+
+  const rosterOf = () =>
+    buildPoolRoster(
+      inputs({
+        pool: pool({ ownerId: 'owner', participantIds: ['owner', 'm2'] }),
+        members: [
+          { uid: 'owner', userName: 'Commish' },
+          { uid: 'm2', userName: 'Dana' },
+        ],
+        entries: [{ id: 'm2', ownerUid: 'm2', picks: { g1: 'CAR' } }],
+      }),
+    );
+
+  it('does NOT count a host who never entered as an outstanding pick', () => {
+    // Dana has picked; the host is not playing. The pool IS fully submitted.
+    expect(unsubmittedRoster(rosterOf(), PICKEM)).toEqual([]);
+  });
+
+  it('the host STOPS being exempt the moment they submit an entry', () => {
+    const roster = buildPoolRoster(
+      inputs({
+        pool: pool({ ownerId: 'owner', participantIds: ['owner', 'm2'] }),
+        members: [{ uid: 'owner', userName: 'Commish' }, { uid: 'm2', userName: 'Dana' }],
+        entries: [
+          { id: 'owner', ownerUid: 'owner', picks: {} }, // entered, but has NOT picked
+          { id: 'm2', ownerUid: 'm2', picks: { g1: 'CAR' } },
+        ],
+      }),
+    );
+    expect(unsubmittedRoster(roster, PICKEM).map((r) => r.uid)).toEqual(['owner']);
+  });
+
+  it('a NON-owner with no entry is still pending — the exemption is the host alone', () => {
+    const roster = buildPoolRoster(
+      inputs({
+        pool: pool({ ownerId: 'owner', participantIds: ['owner', 'm2', 'm3'] }),
+        members: [{ uid: 'owner' }, { uid: 'm2' }, { uid: 'm3' }],
+        entries: [{ id: 'm2', ownerUid: 'm2', picks: { g1: 'CAR' } }],
+      }),
+    );
+    expect(unsubmittedRoster(roster, PICKEM).map((r) => r.uid)).toEqual(['m3']);
+  });
+
+  it('classifies each row directly', () => {
+    const rows = rosterOf();
+    expect(isPlayingMember(rows.find((r) => r.uid === 'owner')!)).toBe(false);
+    expect(isPlayingMember(rows.find((r) => r.uid === 'm2')!)).toBe(true);
   });
 });
