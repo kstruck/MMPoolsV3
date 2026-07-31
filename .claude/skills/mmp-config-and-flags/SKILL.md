@@ -49,7 +49,7 @@ Referenced in `src/` but NOT present in `.env` (as of 2026-07-06):
 | Name | Consumed by | Notes |
 |---|---|---|
 | `VITE_RECAPTCHA_SITE_KEY` | `src/firebase.ts:24` | ⛔ **Absent ON PURPOSE — setting it took prod down 2026-07-30.** App Check is then silently not initialized and prod logs a console warning (`src/firebase.ts:30-32`); that warning is the SAFE state. See §1.4 and §5. |
-| `VITE_API_KEY` | `src/components/AdminPanel.tsx:222` | Gemini key for an AdminPanel feature. ⚠️ **No longer a Dockerfile build arg** — it was REMOVED (`Dockerfile:13-14` records why: the only client reader was dead code and a Gemini key must never ship in a public bundle). This row previously said it was one; corrected 2026-07-30. See §1.4. |
+| ~~`VITE_API_KEY`~~ | **nothing — zero readers** | ⛔ **GONE. Do not reintroduce it, in `.env`, in the Dockerfile, or in Coolify.** It was a Gemini key. `grep -rn VITE_API_KEY src/` returns **nothing**, and the Dockerfile declares no `ARG` for it — `Dockerfile:13-14` records the removal and the reason: the only client reader was dead code, and a Gemini key must never ship in a public bundle, where anyone can read it out of the JS. This row previously named `src/components/AdminPanel.tsx:222` as its consumer and called it a live build arg; both were stale, and §1.4 additionally told operators to sync it into Coolify. All three corrected 2026-07-30. |
 | `VITE_USE_FIREBASE_EMULATOR` | `src/firebase.ts:41` | e2e only; set in `.env.e2e`, never in `.env`/prod |
 
 Vite built-ins also used: `import.meta.env.DEV` (`src/firebase.ts`,
@@ -121,9 +121,12 @@ worse than an understood one. Four faults block re-enabling regardless (CSP
 hosts, Enterprise-vs-v3 key, app never registered, no Dockerfile `ARG`):
 HANDOFF's STOP POINT box. It is not pilot work.
 
-Note: `VITE_API_KEY` is absent from the root `.env` but present in both the
-Dockerfile and `src/components/AdminPanel.tsx:222` — when syncing Coolify build
-args, include it or the AdminPanel feature that reads it silently breaks.
+⛔ **A note that used to sit here said to include `VITE_API_KEY` when syncing
+Coolify build args "or the AdminPanel feature that reads it silently breaks".
+DELETED 2026-07-30 — following it would have put a Gemini key into the public
+JS bundle for no benefit.** There is no such feature: `grep -rn VITE_API_KEY src/`
+returns nothing, and the Dockerfile declares no `ARG` for it. Six build args, all
+`VITE_FIREBASE_*`. Server-side AI uses Secret Manager.
 
 ## 2. Functions runtime secrets (Google Secret Manager)
 
