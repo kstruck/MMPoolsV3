@@ -44,6 +44,9 @@ const GID = 'hof-g1';
 const AWAY = 'CAR';
 const HOME = 'ARI';
 
+/** Every member uid this file seeds. `wipe()` clears season history for all of them. */
+const MEMBERS = ['alice', 'bob', 'erin', 'frank', 'gina', 'hank'] as const;
+
 async function wipe() {
   for (const col of ['nfl_games', 'pools', RESCORE_QUEUE]) {
     const snap = await db.collection(col).get();
@@ -56,8 +59,10 @@ async function wipe() {
     }));
   }
   // Season history is written by finalization and read back by the convergence
-  // case, so it has to be cleared between tests too.
-  for (const uid of ['alice', 'bob', 'erin', 'frank', 'gina', 'hank']) {
+  // case, so it has to be cleared between tests too. Driven off MEMBERS rather
+  // than an inline list: a test that introduces a new member and forgets to add
+  // it here would inherit a champion from the previous test and pass on it.
+  for (const uid of MEMBERS) {
     const s = await db.collection('users').doc(uid).collection('seasonHistory').get();
     await Promise.all(s.docs.map(d => d.ref.delete()));
   }
@@ -251,8 +256,14 @@ describe('NFL-7 (b) — the only game of the week is postponed', () => {
     // happened. On a 16-game week this is one blocked pool among many; on the HOF
     // week it is the entire pilot sitting unfinalized, so an operator has to be
     // able to tell "waiting for tonight" from "waiting forever".
+    // Only `startTime` moves here: this describe's beforeEach already seeded the
+    // game SCHEDULED, which is the state a postponement leaves behind. Spelled
+    // out because `seedGame()`'s own default is FINAL, and a reader (or a
+    // reviewer) landing on this line alone will assume the default applies —
+    // codex round 1 did exactly that and filed it as a P1.
     const startTime = Date.now() - 13 * HOUR;
     await db.collection('nfl_games').doc(GID).update({ startTime });
+    expect((await loadSlate())[0].status).toBe('SCHEDULED');
 
     const verdict = assessSeasonCompleteness(
       [{ id: GID, week: 1, status: 'SCHEDULED', startTime }], {}, Date.now(),
