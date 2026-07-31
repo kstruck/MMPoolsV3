@@ -344,12 +344,15 @@ distinguishes client vs server entries).
 Two integrity caveats:
 1. The callable **never throws to the caller** and errorHandler swallows its own
    failures — a quiet `system_logs` does NOT prove a healthy client. Cross-check §1.
-2. Code-level `enforceAppCheck` is `false` in `logClientError.ts:35` with a stale
-   comment claiming App Check isn't operational. As of 2026-07-06 App Check IS
-   enforced at the console/product level (owner-confirmed), but this callable still
-   does not verify App Check tokens itself. If you read that comment, do not conclude
-   App Check is off platform-wide — the comment predates the console enforcement.
-   Flipping the flag is a code change → `mmp-change-control`.
+2. Code-level `enforceAppCheck` is `false` in `logClientError.ts:35`, with a
+   comment saying App Check isn't operational. **That comment is CORRECT and the
+   note that used to sit here calling it stale was not.** App Check is off
+   platform-wide: 98 `validated()` callables declare `appCheck: "monitor"` and zero declare
+   `enforce` (`lib/validated.ts:94-97`), and the client never initializes it in
+   prod because `VITE_RECAPTCHA_SITE_KEY` is deliberately absent. The 2026-07-06
+   "enforced at the console/product level" attestation is superseded and
+   UNVERIFIED. ⛔ Do not flip this flag and do not set the site key — setting it
+   took prod down on 2026-07-30 (HANDOFF's STOP POINT box).
 
 ---
 
@@ -412,7 +415,8 @@ All file:line references verified 2026-07-06 on branch `fix/superadmin-phase0-co
 | Kill-switch/dry-run state of autoClosePools | Firestore console → `system/config` → `autoClose` (owner-stated LIVE past dry-run as of 2026-07-06) |
 
 Volatile facts embedded above, mostly date-stamped 2026-07-06 with corrections added
-2026-07-12: adminHealth deployed; autoClosePools LIVE past dry-run; App Check enforced
+2026-07-12: adminHealth deployed; autoClosePools LIVE past dry-run; ~~App Check enforced~~
+**(CORRECTED 2026-07-30 — App Check is enforced NOWHERE; 98 `validated()` callables are `monitor`, zero `enforce`, plus 26 bare `onCall` sites with no App Check option)**
 in console while `logClientError` code flag stays false; sim- rules exception is now
 REMOVED (was open, closed 2026-07-11 — do not trust the "still open" phrasing
 elsewhere in this file without checking the correction notes); NFL pools have never

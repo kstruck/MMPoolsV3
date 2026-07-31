@@ -40,10 +40,22 @@ Do these ONLY after Step 1 confirms the new frontend is serving. The earlier "Op
 - After this, server-side search matches **name OR email**. (The instant client-side Members filter already worked without this.)
 - Firestore auto-creates the single-field index on `searchName` — no config needed.
 
-### Step 4 — Confirm App Check is enforced (or client error logging drops)
-`logClientError` sets `enforceAppCheck: true`. The web app initializes App Check (ReCaptcha Enterprise, `src/firebase.ts:26`).
-- [ ] In Firebase console → App Check: confirm the **web app is registered and enforcing**.
-- If App Check is NOT fully configured in prod, client errors will be **rejected** (silently lost). Fix: finish App Check config, **or** temporarily set `enforceAppCheck: false` in `functions/src/logClientError.ts` and redeploy that one function, then re-enable once App Check is set up.
+### ~~Step 4 — Confirm App Check is enforced~~ — ⛔ **VOID. DO NOT PERFORM. (2026-07-30)**
+Every premise of this step is now false, and following it would push toward the
+change that preceded a production outage.
+- `logClientError` does **not** set `enforceAppCheck: true` — `logClientError.ts:35`
+  sets it to `false`, and has since `beac092` / PR #142.
+- The web app does **not** initialize App Check in prod: `VITE_RECAPTCHA_SITE_KEY`
+  is deliberately absent, and `Dockerfile:15-27` declares no build `ARG` for it.
+- Nothing enforces App Check anywhere: 98 `validated()` callables are `monitor`
+  with zero `enforce`, plus 26 bare `onCall` sites with no App Check option.
+- Client errors are therefore **not** being rejected; `logClientError` accepts
+  them, which is the intended behaviour for pre-auth crash telemetry.
+
+⛔ **Do not "finish App Check config" and do not set the site key.** See HANDOFF's
+STOP POINT box for the outage, the four blocking faults, and the open root-cause
+question. `PRESEASON-READINESS-CHECKLIST` G3 records the decision (out for the
+season, accepted risk).
 
 ### Step 5 — Rotate the plaintext Stripe TEST secret (your action — I can't)
 `functions/.env` (lines 1–2) has a commented-but-real-format Stripe **test** secret key + webhook secret in cleartext. Even commented + gitignored:

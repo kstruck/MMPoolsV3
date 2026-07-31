@@ -58,7 +58,9 @@ incident where merges silently reverted merged work (Section 4).
    functions deployed (`logClientError`, `scheduledHealthCheck`, `getAdminHealthSnapshot`,
    `adminInitTournament`, `syncBracketTournament`, `onUserCreated`, `syncAllUsers`,
    `searchUsersByEmail`); tightened `firestore.rules` deployed AFTER functions;
-   `searchName` backfill (Force Sync) run; App Check ENFORCED in the Firebase console.
+   `searchName` backfill (Force Sync) run. (This item also claimed App Check was
+   ENFORCED in the Firebase console — **that claim is superseded and UNVERIFIED as
+   of 2026-07-30**; see §5.3. Everything else in this item still stands.)
    Any doc/plan describing these as "pending deploy" describes a pre-2026-07-06 state.
 3. **True test counts (executed 2026-07-06 on main):** root `vitest run` = **216 passed,
    23 files**; functions suite = **96 passed, 8 files** (312 total).
@@ -283,9 +285,44 @@ merged in PR #139 (`53d9872`) and **deployed** (Section 0.2).
   Deploy-order rule born here: **functions BEFORE rules** or telemetry silently drops.
 - FOLLOW-UP INCIDENT (post-#139): `enforceAppCheck:true` rejected client errors before
   App Check was fully live → `beac092` / PR #142 set `enforceAppCheck:false` with a
-  re-enable TODO (`functions/src/logClientError.ts:33-35`). Owner confirms App Check is
-  now ENFORCED in the console (2026-07-06) — **re-enabling `enforceAppCheck` on
-  logClientError is OPEN** (small, deliberate follow-up; verify console first).
+  re-enable TODO (`functions/src/logClientError.ts:33-35`).
+- **SECOND FOLLOW-UP INCIDENT, 2026-07-30 — App Check took the whole site down.**
+  The "re-enable it, App Check is enforced now" thread above was acting on an
+  attestation that was never true. Someone set `VITE_RECAPTCHA_SITE_KEY` in the
+  Coolify environment to turn App Check on; the rebuild shipped a bundle that
+  rendered **nothing** — permanent spinner, confirmed from two independent
+  machines and networks — until the variable was deleted and the site redeployed.
+  PROPOSED MECHANISM (**HYPOTHESIS — holed, see below**): the key flips
+  `src/firebase.ts:25` to the initialize branch; `ReCaptchaEnterpriseProvider`
+  loads `https://www.google.com/recaptcha/enterprise.js`; `nginx.conf`'s
+  `script-src` lists no Google reCAPTCHA host so the browser refuses it; the App
+  Check token never resolves; the Firestore SDK blocks its first request on that
+  token and goes offline after ~10s.
+  ⚠️ **ROOT CAUSE IS OPEN.** codex, reviewing the write-up of this very incident
+  within the hour, pointed out that `Dockerfile:15-27` declares `ARG`/`ENV` for
+  six variables and none is `VITE_RECAPTCHA_SITE_KEY`, `.dockerignore` excludes
+  `.env`, and Vite bakes values in at `npm run build:static` (`Dockerfile:30`).
+  If Coolify builds the tracked Dockerfile, that key never reached the bundle and
+  the branch never flipped. Candidates, none checked: Coolify does not build the
+  tracked Dockerfile; an `ARG` was added and reverted out-of-band; or the variable
+  was coincidental and something else in those two rebuilds killed the site.
+  **LESSON 1 — the reusable one.** The change looked safe because every callable
+  runs App Check in `monitor` mode: a TRUE fact from which a FALSE conclusion was
+  drawn. Server-side leniency cannot rescue a client that fails before it issues
+  a request. Ask which SIDE of the wire a permissive setting lives on before
+  treating it as a safety net. Same shape as the #320 Sentry CSP gap and, before
+  that, the functions-before-rules rule above: a transport-layer denial no
+  application-layer allowance can see.
+  **LESSON 2 — the one this file exists for.** The first write-up of THIS entry
+  stated the mechanism as fact and shipped it to eight documents in one pass. It
+  was a plausible story that fit the symptom, reached for instead of checking the
+  build path — the same failure as the retracted backslash-URL finding (HANDOFF
+  item 10). Correlation was strong (set → dead, delete → alive) and correlation
+  was the only thing actually established. **When recording an incident, mark the
+  observation and the mechanism separately.** The instruction "do not set this"
+  survives being wrong about why; a mechanism asserted as fact does not.
+  ⛔ Do not re-enable. Four faults remain (CSP hosts, Enterprise-vs-v3 key, app
+  never registered, no Dockerfile `ARG`) — HANDOFF's STOP POINT box.
 
 ### 5.4 CLOSED lifecycle state invisible
 - ROOT CAUSE: `getPoolLifecycleState` (`src/utils/poolSport.ts`) collapsed
@@ -436,7 +473,12 @@ merged in PR #139 (`53d9872`) and **deployed** (Section 0.2).
    (`nflFinalizeSweepJob`) exists but does not score weeks or lock spreads — does not
    close this item.
 6. Stripe TEST secret rotation (`functions/.env:1-2`) — PENDING (Kevin) (re-verify still pending).
-7. Re-enable `enforceAppCheck` on `logClientError` now App Check is enforced — OPEN.
+7. ~~Re-enable `enforceAppCheck` on `logClientError`~~ — **WITHDRAWN 2026-07-30. Do
+   not do this.** Its premise ("App Check is enforced") was never true: 98
+   `validated()` callables are `monitor` with zero `enforce`, plus 26 bare
+   `onCall` sites carrying no App Check option at all. Acting on that premise
+   from the client side coincided with prod going down; see §5.3's second
+   follow-up incident.
 8. Test Suite parked bugs (bracketSimulator 0-entries, props +1, playoff winner, UPSET) — OPEN.
 9. Coolify env misconfig (`VITE_FIREBASE_STORAGE_BUCKET`/`AUTH_DOMAIN` malformed) — OPEN
    (checklist Step 6; harmless until Storage is used).

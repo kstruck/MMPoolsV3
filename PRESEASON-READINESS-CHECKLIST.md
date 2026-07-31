@@ -188,11 +188,34 @@ config/console act with a verification step. Suggested order as listed.
   ever received a T-36h/T-4h email. Cheap test: K6's test pool with Kevin as a
   member, watch the `mail` collection + inbox at T-36h of week 1. (E2 makes
   failures *visible*; this verifies the happy path exists at all.)
-- ☐ **G3 · App Check was disabled and never revisited** — enforcement on
-  `logClientError` was turned OFF in #142 "until App Check is live" (2026-07-07)
-  and nothing tracks turning it on. Decide: in or out for the season. If out,
-  write it down as accepted risk; if in, it needs lead time (device attestation
-  rollout breaks clients if rushed).
+- ☑ **G3 · App Check — DECIDED 2026-07-30: OUT for the season, accepted risk.**
+  The decision was forced rather than deliberated. Someone set
+  `VITE_RECAPTCHA_SITE_KEY` in Coolify to turn App Check on, and **production
+  went down** — blank page, permanent spinner, confirmed from two independent
+  machines and networks — until the variable was deleted and the site redeployed.
+  ⛔ **Do not attempt this again before the pilot.** The warning
+  `⚠️ SECURITY: App Check is NOT active` in the prod console is the SAFE state.
+  ⚠️ **The set→dead, delete→alive correlation is solid; the CAUSAL STORY is not**
+  — cross-model review showed the tracked `Dockerfile` has no build arg for that
+  variable, so it has no known path into the bundle. That makes this a decision
+  taken on an unexplained production kill, which is a *stronger* reason to defer,
+  not a weaker one. HANDOFF's STOP POINT box carries the open question and the
+  three candidate explanations.
+  The accepted risk, stated plainly: App Check is enforced **nowhere** — 98
+  `validated()` callables declare `appCheck: "monitor"` and zero declare
+  `enforce`, plus 26 bare `onCall` sites that pass no App Check option at all —
+  so the unauthenticated callables remain scriptable from outside the app by
+  anyone holding the public Firebase config. That was already true all season;
+  this decision does not add risk, it records that it is not being removed before
+  08-06.
+  Turning it on later needs **four** fixes, none of which is a console click:
+  `nginx.conf` CSP is missing the reCAPTCHA hosts; `src/firebase.ts:27` wants a
+  reCAPTCHA **Enterprise** key while the key that exists is **v3**; the web app
+  was never registered in the Firebase console's App Check section; and the
+  `Dockerfile` declares no build arg for the key, so the build cannot receive it.
+  Full detail in HANDOFF's STOP POINT box. (`logClientError`'s
+  `enforceAppCheck: false` from #142 stays off and is now consistent with
+  everything else rather than an outlier.)
 - ☐ **G4 · No load/limits check for game-day traffic.** Sunday load hardening
   exists from #101/aa67025, but nobody has stated expected preseason
   concurrency vs Firestore/functions quotas. Probably fine for a 10-commissioner
@@ -211,7 +234,7 @@ config/console act with a verification step. Suggested order as listed.
 |---|---|
 | **Now – Jul 26** | K1 start (watch dry-run reports) · K11 PITR click · K12 census · K13 sign-offs · K16 NotebookLM source · E1 begins after K12/K13 |
 | **Jul 27 – Jul 30** | K1 arm · K2 watch→arm · K3 check Tuesday 07-28 · K5 doc cleanup · K6 create test pools · G2 reminder test rides on K6 · K8 recruit begins · E1 continues, E2 · **E6 settings-save UX** (small, frontend-only — land it before K6 so the test pools are created against the fixed screen) |
-| **Jul 31 – Aug 4** | K4 spreads for HOF/wk1 · K7 pricing published · K9 messaging check · G3 App Check decision · G4 sizing paragraph · E1 finishes → Kevin Recalculate |
+| **Jul 31 – Aug 4** | K4 spreads for HOF/wk1 · K7 pricing published · K9 messaging check · ~~G3 App Check decision~~ **(CLOSED 2026-07-30 — decided OUT, see §6 G3; do NOT reopen it this week)** · G4 sizing paragraph · E1 finishes → Kevin Recalculate |
 | **Aug 6 (HOF)** | First live preseason game. Watch: heartbeats, lock tripwire, score sync. |
 | **Aug 7–9** | **G1: score + finalize the HOF week** (manual clicks) · verify finalize sweep report |
 | **Week of Aug 10** | K10 chaos drill during the 08-13 slate · G5 restore drill · K14 A3b decision for regular season |

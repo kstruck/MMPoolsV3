@@ -48,8 +48,8 @@ Referenced in `src/` but NOT present in `.env` (as of 2026-07-06):
 
 | Name | Consumed by | Notes |
 |---|---|---|
-| `VITE_RECAPTCHA_SITE_KEY` | `src/firebase.ts:24` | App Check (ReCaptcha Enterprise). If absent at build time, App Check is silently not initialized and prod logs a console warning (`src/firebase.ts:30-32`). See §5 App Check. |
-| `VITE_API_KEY` | `src/components/AdminPanel.tsx:222` | Gemini key for an AdminPanel feature. NOT in `.env`, but IS a prod Dockerfile build arg (`Dockerfile:14`, ENV at `:22`) — see §1.4. |
+| `VITE_RECAPTCHA_SITE_KEY` | `src/firebase.ts:24` | ⛔ **Absent ON PURPOSE — setting it took prod down 2026-07-30.** App Check is then silently not initialized and prod logs a console warning (`src/firebase.ts:30-32`); that warning is the SAFE state. See §1.4 and §5. |
+| ~~`VITE_API_KEY`~~ | **nothing — zero readers** | ⛔ **GONE. Do not reintroduce it, in `.env`, in the Dockerfile, or in Coolify.** It was a Gemini key. `grep -rn VITE_API_KEY src/` returns **nothing**, and the Dockerfile declares no `ARG` for it — `Dockerfile:13-14` records the removal and the reason: the only client reader was dead code, and a Gemini key must never ship in a public bundle, where anyone can read it out of the JS. This row previously named `src/components/AdminPanel.tsx:222` as its consumer and called it a live build arg; both were stale, and §1.4 additionally told operators to sync it into Coolify. All three corrected 2026-07-30. |
 | `VITE_USE_FIREBASE_EMULATOR` | `src/firebase.ts:41` | e2e only; set in `.env.e2e`, never in `.env`/prod |
 
 Vite built-ins also used: `import.meta.env.DEV` (`src/firebase.ts`,
@@ -75,25 +75,58 @@ regression; flag it.
 
 ### 1.4 Coolify build args (prod www frontend)
 
-The prod www Dockerfile (`Dockerfile:14-28`) declares exactly seven build args,
-mirrored to ENV for the Vite build: `VITE_API_KEY` (`Dockerfile:14`, read by
-`src/components/AdminPanel.tsx:222`) plus the six `VITE_FIREBASE_*` names above.
+⚠️ **CORRECTED 2026-07-30 — this section said SEVEN build args including
+`VITE_API_KEY`. It is SIX, and `VITE_API_KEY` is gone.** The tracked Dockerfile
+declares `ARG` at `:15-20` and mirrors to `ENV` at `:22-27`, and every one is a
+`VITE_FIREBASE_*` name. `Dockerfile:13-14` is now a comment recording that
+`VITE_API_KEY` (a Gemini key) was **removed** because its only client reader was
+dead code and a Gemini key must never ship in a public bundle. Re-read
+`Dockerfile:15-27` rather than trusting this paragraph; it was stale for weeks
+and the staleness mattered (see below).
+
 Coolify holds ITS OWN copies of these values in the dashboard — they are NOT
 read from the repo `.env`. Changing `.env` locally does nothing for prod www;
 sync Coolify build args manually, then trigger a manual Coolify deploy.
 
-OPEN QUESTION (UNVERIFIED, as of 2026-07-06): `VITE_RECAPTCHA_SITE_KEY` is NOT
-a Dockerfile ARG, yet App Check is ENFORCED in the Firebase console (owner
-ground truth). How the prod www bundle obtains the reCAPTCHA site key is not
-determinable from the repo. Verify by: (a) checking Coolify build args in the
-dashboard, and (b) searching the served prod bundle for `ReCaptchaEnterprise`
-init. If the prod bundle really lacks the key while enforcement is on,
-callables from www clients would be rejected — treat any "unauthenticated /
-app-check" error wave as this until disproven (see mmp-debugging-playbook).
+**A build arg is the ONLY way a `VITE_*` value reaches the bundle.** Vite inlines
+`import.meta.env.X` at build time, `.dockerignore` excludes `.env`, and
+`Dockerfile:30` runs `npm run build:static` inside the build stage. A Coolify
+variable with no matching `ARG` line is invisible to the build, and a *runtime*
+variable cannot change an already-built static bundle at all. Check this before
+believing any story about a `VITE_*` value taking effect in prod.
 
-Note: `VITE_API_KEY` is absent from the root `.env` but present in both the
-Dockerfile and `src/components/AdminPanel.tsx:222` — when syncing Coolify build
-args, include it or the AdminPanel feature that reads it silently breaks.
+✅ **ANSWERED 2026-07-30, the hard way. The old open question asked how the prod
+bundle obtains the reCAPTCHA site key. It does not obtain it, and that is
+correct.** `VITE_RECAPTCHA_SITE_KEY` is absent from the Coolify environment on
+purpose. Someone SET it, Coolify rebuilt, and **production went down** — blank
+page, permanent spinner, confirmed from two independent machines and networks —
+until the variable was deleted and the site redeployed. ⛔ **Do not set it. Do
+not re-open this as a question to resolve by experiment.**
+
+The old question's premise was also wrong: App Check is **not** enforced.
+`functions/src/lib/validated.ts:94-97` defaults every callable to `"monitor"`
+and only sets `enforceAppCheck` for `"enforce"`, and there are **98 `monitor`
+declarations and zero `enforce`** across `functions/src`. Firestore is plainly
+not enforcing either — an enforcing Firestore with no registered app would
+reject every read, and the site works. The 2026-07-06 "ENFORCED in the console"
+owner attestation is **superseded and UNVERIFIED**; the incident report says the
+web app was never registered in the console's App Check section at all.
+
+⚠️ **The set→dead, delete→alive correlation is solid; the CAUSAL STORY is not.**
+The first write-up blamed CSP blocking the reCAPTCHA script, but the build-arg
+paragraph above rules that out on the tracked Dockerfile — the key has no known
+path into the bundle, so the branch it was supposed to flip cannot have flipped.
+**WHY the site died is an OPEN QUESTION**, and an unexplained way to kill prod is
+worse than an understood one. Four faults block re-enabling regardless (CSP
+hosts, Enterprise-vs-v3 key, app never registered, no Dockerfile `ARG`):
+HANDOFF's STOP POINT box. It is not pilot work.
+
+⛔ **A note that used to sit here said to include `VITE_API_KEY` when syncing
+Coolify build args "or the AdminPanel feature that reads it silently breaks".
+DELETED 2026-07-30 — following it would have put a Gemini key into the public
+JS bundle for no benefit.** There is no such feature: `grep -rn VITE_API_KEY src/`
+returns nothing, and the Dockerfile declares no `ARG` for it. Six build args, all
+`VITE_FIREBASE_*`. Server-side AI uses Secret Manager.
 
 ## 2. Functions runtime secrets (Google Secret Manager)
 
@@ -227,7 +260,7 @@ before the next 08:00 UTC run, no deploy needed.
 | `syncGameStatus`, `syncNFLScoresJob`, `scheduledBracketSync`, `checkPlayoffScores`, `runReminders`, `enforceBillingStatus`, `aggregateRevenueDaily`, `scheduledHealthCheck` | NONE | No | Score/comms/billing schedulers run unconditionally. Pause = Cloud Scheduler console or function delete. |
 | `backfillPools` (callable, SUPER_ADMIN) | Caller-gated only | NO dry-run, NOT idempotent (double-counts stats on re-run) | Violates discipline rule (a); do not run casually — see mmp-change-control before touching. |
 | Stripe mock sandbox | Implicit: presence of `STRIPE_SECRET_KEY` | n/a | See §2 — absence of the secret IS the switch. |
-| `logClientError` | `enforceAppCheck: false` (`logClientError.ts:35`) | n/a | Function-level App Check enforcement is OFF with a TODO; console-level enforcement is the active layer. |
+| `logClientError` | `enforceAppCheck: false` (`logClientError.ts:35`) | n/a | Function-level App Check enforcement is OFF with a TODO. ⚠️ **This row used to add "console-level enforcement is the active layer" — CORRECTED 2026-07-30: there is no active layer.** 98 `validated()` callables are `monitor`, zero `enforce`, 26 bare `onCall` sites carry no option, and the client never initializes App Check in prod. Do NOT flip this TODO; see §1.4. |
 
 Non-negotiable discipline rule (canonical home: mmp-change-control): NO new
 prod-data-mutating job or sweep ships without (1) a `system/config`-style
@@ -249,10 +282,21 @@ audit output reviewed BEFORE enabling. `autoClosePools` is the template.
 - App Check (`src/firebase.ts:18-32`): initialized with
   `ReCaptchaEnterpriseProvider(VITE_RECAPTCHA_SITE_KEY)` ONLY if the env var is
   present at build time; dev mode sets `FIREBASE_APPCHECK_DEBUG_TOKEN = true`.
-  ENFORCED in the Firebase console as of 2026-07-06 (owner ground truth) —
-  meaning a client bundle built WITHOUT the site key produces users whose
-  callable/Firestore traffic can be rejected. Before any frontend build you
-  intend to ship, confirm the key reaches the build (see §1.4 open question).
+  ⛔ **The env var is deliberately absent in prod and MUST STAY absent.** Setting
+  it on 2026-07-30 was followed by the site rendering nothing; deleting the
+  variable and redeploying restored it. ⚠️ **That is the OBSERVATION. The
+  MECHANISM is unproven** — the first write-up blamed CSP blocking the reCAPTCHA
+  script (token never resolves → Firestore SDK waits on it → goes offline), but
+  §1.4 shows the tracked Dockerfile has no build `ARG` for this key, so it has no
+  known path into the bundle. Root cause is OPEN. Do not chase the CSP story
+  during a live incident without first confirming the CSP refusal is actually in
+  the browser console.
+  **The reverse of the old advice here is the true one:** before any frontend
+  build you intend to ship, confirm the key does **not** reach the build.
+  App Check is enforced NOWHERE — 98 `monitor` declarations, zero `enforce`
+  (`functions/src/lib/validated.ts:94-97`) — so a bundle without the key costs
+  nothing. The 2026-07-06 "ENFORCED in the console" attestation is superseded
+  and UNVERIFIED; see §1.4.
 - Firestore client cache: persistent multi-tab in prod, in-memory under
   `VITE_USE_FIREBASE_EMULATOR` (`src/firebase.ts:41-46`) — a config-driven
   behavioral fork that matters for e2e determinism (mmp-validation-and-qa).
@@ -404,6 +448,8 @@ Every table above drifts. Re-verify from repo root `D:\march-melee-pools`
 
 Date-stamped volatile facts to re-confirm on next major session:
 autoClosePools LIVE (2026-07-06), Stripe TEST secret rotation PENDING
-(2026-07-06), `POOLS_OPEN = false` (2026-07-06), App Check ENFORCED in console
-(2026-07-06), the §1.4 reCAPTCHA-key-in-Coolify open question, and the §7
-split-brain still open.
+(2026-07-06), `POOLS_OPEN = false` (2026-07-06), and the §7 split-brain still
+open. **Two entries were RESOLVED on 2026-07-30 and are no longer volatile:**
+the §1.4 reCAPTCHA-key-in-Coolify open question (answered — the key is absent on
+purpose and setting it takes prod down), and "App Check ENFORCED in console"
+(superseded and UNVERIFIED — 98 `validated()` callables are `monitor`, zero `enforce`, plus 26 bare `onCall` sites with no App Check option).
