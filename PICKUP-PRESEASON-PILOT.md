@@ -5,12 +5,9 @@
 > Read `PICKUP-PRESEASON-PILOT.md` §0 first, then `HANDOFF.md`'s STOP POINT box.
 > The target is the Hall of Fame game, 2026-08-06. Deploy and prod-data
 > mutations are Kevin's; code, tests and PRs are yours. Follow CLAUDE.md §2b
-> (**qodo is ON — Kevin, 2026-07-31: "Qodo is now active and must be used."**
-> Check all three of its surfaces on every PR) and §2c (`codex exec review --base
+> (qodo is OFF — do not check it) and §2c (`codex exec review --base
 > origin/main`; use judgement up to 10 rounds per artifact, and ask Kevin with a
-> reason before going past 10). The stopping rule is JOINT: qodo clean AND a codex
-> round clean AND your own read of the diff agrees. Tell me what you plan to do
-> before you do it.
+> reason before going past 10). Tell me what you plan to do before you do it.
 
 Written 2026-07-21. **The target is the Hall of Fame game, 2026-08-06** (Thu,
 8:00pm ET, CAR at ARI) — that is the clock, set by Kevin on 2026-07-21. The
@@ -123,12 +120,12 @@ closed the banned-commissioner authz gap in prod; Kevin's two rulings landed —
 **timezones pinned to ET** (#259) and the **PLAN gate scoped to blast radius**
 (#260). See HANDOFF's STOP POINT box.
 
-✅ **qodo is ON.** Kevin, 2026-07-31: *"Qodo is now active and must be used."*
-That supersedes the 2026-07-25 removal (which was only ever because the trial had
-lapsed) **and** the "qodo is OFF" line in the overnight prompt of 2026-07-30.
-Both reviewers run on every PR; the stopping rule is JOINT — qodo clean AND a
-codex round clean AND your own read of the diff agrees. PR #326 encodes the
-process and is open, carrying one named unresolved finding.
+**qodo is OFF** — Kevin removed the check entirely on 2026-07-25 (CLAUDE.md
+§2b). codex is the only reviewer. ⚠️ **Kevin ruled 2026-07-31 that qodo is
+active again and must be used**, but the canonical sources (CLAUDE.md §2b and
+`mmp-qodo-cycle`) still say otherwise — **PR #326 changes all of them together**
+and is open. Until it merges, this line and those sources agree; afterwards they
+agree the other way. Do not flip them piecemeal.
 
 The overnight-of-2026-07-22 effort took on four product items Kevin queued —
 profile header/footer, SuperAdmin Overview stats, a filterable Stats tab, and a
@@ -701,9 +698,7 @@ floating promise from another test file can trip. Re-run before investigating.
   `functions/src/lib/heartbeat.ts` does this; use it for any new job.
 - **`codex exec review --base origin/main` reviews PRs — run it before opening
   one; judgement up to 10 rounds, Kevin's sign-off with a reason past 10**
-  (CLAUDE.md §2c, his 2026-07-27 ruling). ✅ **qodo runs ALONGSIDE it on every
-  PR** — Kevin, 2026-07-31: *"Qodo is now active and must be used."* It was
-  codex's counterpart, not its replacement; the "qodo is OFF" line here was true
-  only while the trial had lapsed. Judge each finding on evidence and reply either
-  way — a rejection needs written reasoning **on the PR**, not only in your run
-  notes.
+  (CLAUDE.md §2c, his 2026-07-27 ruling). It is qodo's temporary replacement;
+  **qodo is OFF, do not check it** (§2b) — see the note in §0 on PR #326, which
+  reverses this everywhere at once. Judge each finding on evidence and
+  reply either way — a rejection needs written reasoning on the PR.
