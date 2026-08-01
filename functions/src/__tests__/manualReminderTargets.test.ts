@@ -415,6 +415,21 @@ describe("outstandingDuesByUid", () => {
         expect(out.get("m")).toBe(40);
     });
 
+    it("deducts a legacy rebuyPaid exactly ONCE", () => {
+        // qodo: memberDues already nets rebuyPaid into `collected`, so the
+        // legacy fallback must not subtract it again. Two rebuys at $20 with
+        // $20 already paid leaves $20 owing, not $0 — and $0 would have marked
+        // them owesNothing and skipped a reminder for money genuinely due.
+        const out = outstandingDuesByUid(
+            { ...pool, settings: { entryFee: 50, rebuyCost: 20 } },
+            [{ id: "m", paidStatus: "PAID", feeOwed: 50, rebuyPaid: 20 }],
+            new Set(["m"]),
+            new Map([["m", 2]]),
+        );
+
+        expect(out.get("m")).toBe(20);
+    });
+
     it("does not double-count rebuys once rebuyOwed IS stamped", () => {
         const out = outstandingDuesByUid(
             { ...pool, settings: { entryFee: 50, rebuyCost: 20 } },

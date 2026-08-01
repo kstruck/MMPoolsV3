@@ -159,7 +159,12 @@ export function outstandingDuesByUid(
         if (rec.rebuyOwed === undefined) {
             const rebuysUsed = rebuysUsedByUid.get(rec.id) ?? 0;
             const rebuyCost = pool.settings?.rebuyCost ?? pool.settings?.entryFee ?? 0;
-            owed += rebuysUsed * rebuyCost - (rec.rebuyPaid ?? 0);
+            // NOT `- rebuyPaid`: memberDues already added rebuyPaid to
+            // `collected` unconditionally, so `expected - collected` above has
+            // netted it once. Subtracting again understated the debt and could
+            // zero it out, marking a member who still owes rebuy money as
+            // owesNothing and silently skipping their reminder. (qodo)
+            owed += rebuysUsed * rebuyCost;
         }
         out.set(rec.id, owed);
     }
