@@ -99,7 +99,16 @@ In the claim branch, before writing, the caller must be a **provable member**:
 |---|---|
 | A Member Record already exists | Only server join/create paths create them (`allow create: if false`) |
 | `uid ∈ pool.participantIds` | The pool doc's `allow update` requires `isPoolManager()`, so an arbitrary user cannot add themselves |
-| An entry exists at `entries/{uid}` | Entries are created only through join/submit callables, which enforce their own join rules |
+| An entry owned by the caller exists | Entries are created only through join/submit callables, which enforce their own join rules |
+
+⚠️ **The entry check must be BOTH `entries/{uid}` AND a `where('ownerUid','==',uid)`
+query, not either alone** (codex round 1, verified). NFL entry docs are keyed by
+the uid; `createBracketEntry` (`functions/src/bracketEntries.ts:86`) uses an
+auto-generated id and records the member in `ownerUid` instead. A doc-id-only
+check finds nothing for any bracket entry, so D1's "heal legacy members" promise
+would have been empty for a whole pool type while reading as if it were covered.
+A query-only check is also insufficient: NFL entries do not all carry `ownerUid`,
+which is why `manualReminders.ts` reads `entry.ownerUid || doc.id`.
 
 Any one suffices. None → `permission-denied`.
 
@@ -122,9 +131,15 @@ record — stays closed.
 
 ### Ordering
 
-The membership read and the claim write go in **one transaction**. Read-then-write
-outside a transaction would let a `voidMemberRecord` land in between, resurrecting
-a removed member's record — the precise class of bug this PR is about.
+The membership read and the claim write go in **one transaction**, and **every
+piece of evidence is read with `tx.get` inside it** — including the pool document,
+which the callable already loaded earlier for the owner check.
+
+Reusing that earlier `poolSnap` would defeat the transaction entirely (codex
+round 1, P1): a `voidMemberRecord` landing after the snapshot would not be
+observed, and the caller's record would be resurrected from a stale
+`participantIds`. That is the same class of bug this PR exists to close, so the
+guard must not be built on a read taken before the guard begins.
 
 ---
 
@@ -160,7 +175,7 @@ scope, deliberately: this PR should be reviewable as one rule.
 | Risk | Assessment |
 |---|---|
 | A legitimate member is refused | Mitigated by D1's three-way evidence. The residual case is a member with **no record, not in `participantIds`, and no entry** — which is indistinguishable from a non-member using every signal the system has. |
-| Extra reads on a hot path | One pool read (already loaded) plus at most one entry read. The claim path is a manual member action, not a scoring path. |
+| Extra reads on a hot path | A transactional pool **re-read** (it is NOT reused from the earlier fetch — see §4), the member doc, and the entry evidence. The claim path is a manual member action, not a scoring path. |
 | The transaction changes write semantics | The write is the same `set(..., {merge: true})` on the same ref; only the guard is added. |
 | **Rules gap this does NOT close** | `participantIds` is missing from `protectedFieldsUnchanged()` in `firestore.rules`, so a manager can add arbitrary UIDs to their own pool. That is a separate ticket (raised on #338) and is **not** fixed here — it would be a second authorization change in one PR. |
 
@@ -193,7 +208,12 @@ is worth its own ticket but does not gate this.
 
 | Item | Status |
 |---|---|
-| Plan | ✅ this document |
-| Sweep | ✅ `PLAN-SETPAIDSTATUS-MEMBERSHIP-SWEEPS.md` |
-| Review log | ✅ `PLAN-SETPAIDSTATUS-MEMBERSHIP-REVIEW-LOG.md` |
-| Implementation | pending sign-off |
+| Plan | ✅ this document (revised after review round 1) |
+| Sweep | ✅ `PLAN-SETPAIDSTATUS-MEMBERSHIP-SWEEPS.md` (revised after review round 1) |
+| Review log | 🔄 IN PROGRESS — `PLAN-SETPAIDSTATUS-MEMBERSHIP-REVIEW-LOG.md`, round 1 recorded (4 findings, all accepted) |
+| Implementation | not started — gated on a clean review round |
+
+⚠️ This table is a status claim about a PLAN-GATED authorization change. Do not
+mark a row ✅ before the artifact exists: round 1 caught this row asserting a
+completed review log while the file was absent, which would have falsely
+satisfied the very gate it records.

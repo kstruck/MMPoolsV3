@@ -10,13 +10,24 @@ others?
 
 ## Method
 
+**TWO commands are required, and the second is what makes the conclusion
+reproducible.** Direct references find the collection; they do NOT find code
+that writes through the `ensureMemberRecord` / `reconcileMembership` helpers,
+because those call sites mention neither `membersCol` nor `collection('members')`.
+
 ```
 grep -rn "membersCol(\|collection('members')\|collection(\"members\")" functions/src --include=*.ts | grep -v __tests__
+grep -rn "ensureMemberRecord(\|reconcileMembership(" functions/src --include=*.ts | grep -v __tests__
 ```
 
 Run 2026-08-01 against `origin/main` @ `cae9c27`. Every hit is classified below;
 read-only hits are listed so the list is provably complete rather than filtered
 to the interesting ones.
+
+⚠️ Recorded because round 1 caught it: the first version of this document stated
+only the first command, while row 20 and `poolExceptions.ts:448` are outputs of
+the second. A sweep whose stated method cannot reproduce its own table is worth
+less than no sweep, because it looks like evidence.
 
 ## Results — 20 hits, 6 write paths
 
