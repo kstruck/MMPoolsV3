@@ -7,7 +7,7 @@ import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { NotificationLog, User } from "./types";
 import type { MemberRecord } from "./shared/memberRecord";
-import { resolveReminderTargets, outstandingDuesByUid } from "./lib/reminderTargets";
+import { resolveReminderTargets, outstandingDuesByUid, rebuyPortionByUid } from "./lib/reminderTargets";
 
 type ReminderKind = "PICKS" | "PAYMENT";
 
@@ -82,6 +82,22 @@ export const sendManualReminder = validated(
         poolRef.collection("entries").get(),
     ]);
 
+    // Hoisted: the same liability map answers the owes-anything gate below AND
+    // (with rebuyPortionByUid) which debt the email should name.
+    const entryRebuys = new Map(entriesSnap.docs.map((d) => [
+        (d.data().ownerUid as string) || d.id,
+        (d.data().rebuysUsed as number) ?? 0,
+    ]));
+    const memberRecs = membersSnap.docs.map((d) => ({ id: d.id, ...(d.data() as MemberRecord) }));
+    const outstandingByUid = kind === "PAYMENT"
+        ? outstandingDuesByUid(
+            pool,
+            memberRecs,
+            new Set(entriesSnap.docs.map((d) => (d.data().ownerUid as string) || d.id)),
+            entryRebuys,
+        )
+        : undefined;
+
     const targetList = resolveReminderTargets(
         membersSnap.docs.map((d) => ({ id: d.id, userName: (d.data() as Partial<MemberRecord>).userName })),
         entriesSnap.docs.map((d) => {
@@ -95,24 +111,20 @@ export const sendManualReminder = validated(
         }),
         targetUids,
         Array.isArray(pool.participantIds) ? (pool.participantIds as string[]) : [],
-        kind === "PAYMENT"
-            ? outstandingDuesByUid(
-                pool,
-                membersSnap.docs.map((d) => ({ id: d.id, ...(d.data() as MemberRecord) })),
-                new Set(entriesSnap.docs.map((d) => (d.data().ownerUid as string) || d.id)),
-                new Map(entriesSnap.docs.map((d) => [
-                    (d.data().ownerUid as string) || d.id,
-                    (d.data().rebuysUsed as number) ?? 0,
-                ])),
-            )
-            : undefined,
+        outstandingByUid,
     );
 
     const poolName = pool.name || "Your pool";
     const deepLink = `${BASE_URL}/pool/${poolId}`;
-    const subject = kind === "PICKS"
-        ? `Reminder: Your Week picks are due — ${poolName}`
-        : `Reminder: Entry payment due — ${poolName}`;
+
+    // A PAYMENT reminder's debt type varies BY MEMBER, so the subject cannot be
+    // computed once for the whole send. A Survivor member who paid their entry
+    // fee and still owes rebuys was previously told "Entry payment due" about a
+    // fee they had already paid — the reminder named the wrong debt, which is
+    // the same class of error as reporting a skip as a success.
+    const rebuyOwedByUid = kind === "PAYMENT"
+        ? rebuyPortionByUid(pool, memberRecs, entryRebuys)
+        : new Map<string, number>();
 
     // 4-hour rate-limit bucket shared across a pool+target+kind
     const timeBucket = Math.floor(Date.now() / FOUR_HOURS_MS);
@@ -168,20 +180,65 @@ export const sendManualReminder = validated(
         }
 
         const displayName = target.displayName || "there";
-        const body = kind === "PICKS"
-            ? `
+
+        // Rebuy-only: this member's ENTIRE remaining balance is rebuy dues, so
+        // naming the entry fee would assert something false about money they
+        // already paid. A member who owes both is told about both rather than
+        // getting two emails — the 4h dedupe key is per pool+member+kind, so a
+        // second send would be suppressed anyway and they would hear only half.
+        const rebuyOwed = rebuyOwedByUid.get(targetUid) ?? 0;
+        const totalOwed = outstandingByUid?.get(targetUid);
+        const rebuyOnly = kind === "PAYMENT"
+            && rebuyOwed > 0
+            && totalOwed !== undefined
+            && rebuyOwed >= totalOwed;
+        const owesBoth = kind === "PAYMENT" && rebuyOwed > 0 && !rebuyOnly;
+
+        const payInstructions = pool.settings?.paymentInstructions
+            ? `<p><strong>How to pay:</strong> ${escapeHtml(pool.settings.paymentInstructions)}</p>`
+            : "";
+
+        let subject: string;
+        let heading: string;
+        let body: string;
+
+        if (kind === "PICKS") {
+            subject = `Reminder: Your Week picks are due — ${poolName}`;
+            heading = "Picks Reminder";
+            body = `
                 <p>Hi ${escapeHtml(displayName)},</p>
                 <p>Your commissioner sent a friendly reminder: your picks for <strong>${escapeHtml(poolName)}</strong> haven't been submitted yet this week.</p>
                 <p>Get them in before kickoff — unsubmitted picks lock automatically.</p>
-            `
-            : `
+            `;
+        } else if (rebuyOnly) {
+            subject = `Reminder: Rebuy payment due — ${poolName}`;
+            heading = "Rebuy Payment Reminder";
+            body = `
+                <p>Hi ${escapeHtml(displayName)},</p>
+                <p>Your commissioner sent a friendly reminder: your <strong>rebuy</strong> for <strong>${escapeHtml(poolName)}</strong> is still due.</p>
+                <p>This is not your entry fee — that is settled. A rebuy is charged separately when you buy back in after being eliminated.</p>
+                ${payInstructions}
+            `;
+        } else if (owesBoth) {
+            subject = `Reminder: Entry and rebuy payment due — ${poolName}`;
+            heading = "Payment Reminder";
+            body = `
+                <p>Hi ${escapeHtml(displayName)},</p>
+                <p>Your commissioner sent a friendly reminder: your <strong>entry fee and rebuy</strong> for <strong>${escapeHtml(poolName)}</strong> are still due.</p>
+                ${payInstructions}
+            `;
+        } else {
+            subject = `Reminder: Entry payment due — ${poolName}`;
+            heading = "Payment Reminder";
+            body = `
                 <p>Hi ${escapeHtml(displayName)},</p>
                 <p>Your commissioner sent a friendly reminder: your entry payment for <strong>${escapeHtml(poolName)}</strong> is still due.</p>
-                ${pool.settings?.paymentInstructions ? `<p><strong>How to pay:</strong> ${escapeHtml(pool.settings.paymentInstructions)}</p>` : ""}
+                ${payInstructions}
             `;
+        }
 
         const html = renderEmailHtml(
-            kind === "PICKS" ? "Picks Reminder" : "Payment Reminder",
+            heading,
             body,
             deepLink,
             "Open Pool"

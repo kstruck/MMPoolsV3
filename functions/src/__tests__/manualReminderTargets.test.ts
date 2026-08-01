@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveReminderTargets, outstandingDuesByUid } from "../lib/reminderTargets";
+import { resolveReminderTargets, outstandingDuesByUid, rebuyPortionByUid } from "../lib/reminderTargets";
 
 // The defect this guards: `sendManualReminder` used to resolve its targets from
 // the ENTRIES collection alone, so a member who had never submitted an entry
@@ -518,5 +518,57 @@ describe("outstandingDuesByUid", () => {
         const out = outstandingDuesByUid(pool, [], new Set());
 
         expect(out.has("anyone")).toBe(false);
+    });
+});
+
+// Kevin, 2026-08-01: "Create a new email to reference the rebuy, not the
+// original entry fee." A Survivor member who paid their entry and still owes
+// rebuys was being told "Entry payment due" about money they had already paid.
+// rebuyPortionByUid is what lets the sender tell the two debts apart.
+describe("rebuyPortionByUid", () => {
+    const pool = { settings: { entryFee: 50, rebuyCost: 20 } };
+
+    it("reports the stamped rebuy balance", () => {
+        const out = rebuyPortionByUid(pool, [{ id: "m", rebuyOwed: 40, rebuyPaid: 20 }]);
+
+        expect(out.get("m")).toBe(20);
+    });
+
+    it("falls back to entry rebuysUsed when rebuyOwed was never stamped", () => {
+        const out = rebuyPortionByUid(pool, [{ id: "m" }], new Map([["m", 2]]));
+
+        expect(out.get("m")).toBe(40);
+    });
+
+    it("uses the SAME legacy fallback as outstandingDuesByUid", () => {
+        // The two must not disagree about how much of a debt is rebuy, or the
+        // email names a different debt than the one that selected the member.
+        const members = [{ id: "m", paidStatus: "PAID" as const, feeOwed: 50 }];
+        const rebuys = new Map([["m", 2]]);
+        const total = outstandingDuesByUid(pool, members, new Set(["m"]), rebuys).get("m");
+        const rebuy = rebuyPortionByUid(pool, members, rebuys).get("m");
+
+        expect(rebuy).toBe(40);
+        expect(total).toBe(40);
+        // Entry settled, so the whole balance is rebuy — the rebuy-only email.
+        expect(rebuy).toBeGreaterThanOrEqual(total!);
+    });
+
+    it("never reports a negative balance when overpaid", () => {
+        const out = rebuyPortionByUid(pool, [{ id: "m", rebuyOwed: 20, rebuyPaid: 50 }]);
+
+        expect(out.get("m")).toBe(0);
+    });
+
+    it("reports zero for a member with no rebuys", () => {
+        const out = rebuyPortionByUid(pool, [{ id: "m", feeOwed: 50 }]);
+
+        expect(out.get("m")).toBe(0);
+    });
+
+    it("prefers the stamp over entry evidence when both exist", () => {
+        const out = rebuyPortionByUid(pool, [{ id: "m", rebuyOwed: 20 }], new Map([["m", 5]]));
+
+        expect(out.get("m")).toBe(20);
     });
 });

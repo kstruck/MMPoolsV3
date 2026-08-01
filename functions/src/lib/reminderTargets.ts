@@ -219,3 +219,31 @@ export function outstandingDuesByUid(
     }
     return out;
 }
+
+/**
+ * The REBUY portion of a member's outstanding dues, keyed by uid.
+ *
+ * Companion to `outstandingDuesByUid`, deliberately separate rather than folded
+ * into its value type: that map is the owes-anything gate and is asserted on by
+ * a lot of tests, and widening it to an object would churn all of them to answer
+ * a question only the email copy asks.
+ *
+ * Uses the SAME legacy fallback as `outstandingDuesByUid` — an unstamped
+ * `rebuyOwed` falls back to the entry's `rebuysUsed x rebuyCost` — so the two
+ * cannot disagree about how much of a debt is rebuy.
+ */
+export function rebuyPortionByUid(
+    pool: { settings?: { entryFee?: number; rebuyCost?: number } },
+    members: Array<Partial<MemberRecord> & { id: string }>,
+    rebuysUsedByUid: Map<string, number> = new Map(),
+): Map<string, number> {
+    const rebuyCost = pool.settings?.rebuyCost ?? pool.settings?.entryFee ?? 0;
+    const out = new Map<string, number>();
+    for (const rec of members) {
+        const owed = rec.rebuyOwed !== undefined
+            ? rec.rebuyOwed
+            : (rebuysUsedByUid.get(rec.id) ?? 0) * rebuyCost;
+        out.set(rec.id, Math.max(0, owed - (rec.rebuyPaid ?? 0)));
+    }
+    return out;
+}
