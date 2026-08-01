@@ -97,15 +97,38 @@ It found a defect ten codex rounds and my own reads missed: **`rebuyPaid` was de
 
 ## 3. If you merge #338 — the deploy
 
-**Do NOT run these from `D:\march-melee-pools`** — that checkout has no root `node_modules`, which is why `npx firebase` failed for you earlier. Use the worktree.
-
 PowerShell 5.1. One command per block, no `&&`.
 
-### Step 1 — go to the worktree and get current
+### Step 0 — pick a directory that has the Firebase CLI
+
+`npx firebase` failed for you earlier in `D:\march-melee-pools` for one specific
+reason: **that checkout has no root `node_modules`**, so npx could not find the
+CLI. It is not that the main checkout is wrong to deploy from.
+
+Either fix works.
+
+**(a) Use the main checkout** — install once and it works there permanently:
 
 ```powershell
-Set-Location D:\march-melee-pools\.claude\worktrees\vet-youtube-video-ff1d27
+Set-Location D:\march-melee-pools
 ```
+
+```powershell
+npm ci
+```
+
+**(b) Use a worktree that already has it.** LIST them rather than trusting a path
+written here — worktrees get pruned, and this doc will outlive them:
+
+```powershell
+git -C D:\march-melee-pools worktree list
+```
+
+Then `Set-Location` to the one you pick.
+
+### Step 1 — get current
+
+Run every command below from the directory you chose in step 0.
 
 ```powershell
 git fetch origin
@@ -116,7 +139,21 @@ git checkout -b deploy-338 origin/main
 ```
 
 **You should see:** `Switched to a new branch 'deploy-338'`.
-**If it says the branch exists:** use a different name, e.g. `deploy-338b`. Never `-B`.
+**If it says the branch exists:** use a different name, e.g. `deploy-338b`.
+Never `-B` — it force-resets an existing branch and silently discards its commits.
+
+### Step 1a — the tree must be CLEAN before you deploy
+
+```powershell
+git status --short
+```
+
+**You should see NOTHING.** Empty output is the pass.
+
+⚠️ **If anything is listed, stop and tell me.** `git checkout -b` CARRIES
+compatible uncommitted changes along onto the new branch rather than discarding
+them, and `firebase deploy` packages the WORKING TREE, not the commit. A dirty
+tree means shipping something other than what CI reviewed.
 
 ### Step 1b — CONFIRM #338 IS ACTUALLY IN `origin/main` FIRST
 
