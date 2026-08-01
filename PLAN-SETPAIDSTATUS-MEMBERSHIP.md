@@ -116,14 +116,13 @@ maintains it:
 
 So `participantIds` is the system's own cross-type membership representation,
 and the per-shape entry archaeology was re-deriving it badly. The resolver is
-now **three checks on data already read inside the transaction, with no extra
+now **two checks on data already read inside the transaction, with no extra
 query at all**:
 
 | # | Evidence | Why it is trustworthy |
 |---|---|---|
 | 1 | A **canonical** Member Record exists | See below — mere existence is NOT enough |
 | 2 | `uid ∈ pool.participantIds`, **excluding the `"guest"` sentinel** | Requires `isPoolManager()` to write, so no self-add |
-| 3 | `pool.squares[*].reservedByUid === uid` | Same pool doc, no extra read — covers the guest→claim path |
 
 ### 1 is "canonical", not "exists" — this is the round 3 P1
 
@@ -152,13 +151,28 @@ roster, so this is consistency with an existing rule rather than a new one — a
 `resolveReminderTargets` in #338 excludes it too. Three places now agree that
 `guest` is never a person; the guard must not be the one that disagrees.
 
-### 3 exists because `participantIds` has one gap
+### Squares claimed-ownership was evidence 3 and was REMOVED in round 5
 
-`claimMySquares` (`squarePrivate.ts`) does not write `participantIds`. A square
-reserved anonymously adds the **`"guest"`** sentinel (`squares.ts:115`), so a
-user who later claims that square is not listed. Their ownership lives in
-`pool.squares[*].reservedByUid`, which is on the pool document the transaction
-already reads.
+`claimMySquares` does not write `participantIds`, so a user who claims a
+guest-reserved square is not listed. Draft 4 therefore accepted
+`pool.squares[*].reservedByUid === uid` as evidence, since it is on the pool
+document the transaction already reads.
+
+**That signal is attacker-settable, and the plan verified it rather than
+assuming.** `firestore.rules:63` is `allow get: if true` — the pool document,
+including every `squares[*].guestDeviceKey`, is readable by **anyone with the
+pool id**. `claimMySquares` (`functions/src/participant.ts:113-125`) matches on
+that key and stamps `reservedByUid: uid` for the caller whenever the square is
+not already owned. So a stranger can read a key off a public document, claim an
+unclaimed guest square, and thereby manufacture the exact evidence this guard
+would have trusted.
+
+**Removed.** A membership guard must not rest on a value the caller can cause to
+be written. The residual cost is that a guest-claim Squares user with no Member
+Record and no `participantIds` entry cannot self-report — the same shape of
+exclusion as Props, and the same answer: fix it where membership is recorded
+(`claimMySquares` should write `participantIds`), not by widening an
+authorization predicate.
 
 ### Props are EXCLUDED, deliberately and on the record
 
@@ -262,6 +276,7 @@ scope, deliberately: this PR should be reviewable as one rule.
 | Extra reads on a hot path | Two transactional reads — the pool doc and the member doc. **No entry query at all** after the round-3 collapse. The claim path is a manual member action, not a scoring path. |
 | Records forged before this fix | Handled: evidence 1 requires the server-seeded stamp, so a claim-only document is treated as absent (§4). Without that, the fix would ratify existing exploits. |
 | Props buyers refused | Accepted and documented (§4). `propBets.ts` puts them on no roster; the inconsistency is real but belongs in its own ticket. |
+| Guest-claim Squares users refused | Accepted (§4, round 5). Their ownership signal is attacker-settable, so it cannot be membership evidence. `claimMySquares` should write `participantIds` — own ticket. |
 | The transaction changes write semantics | The write is the same `set(..., {merge: true})` on the same ref; only the guard is added. |
 | **Rules gap this does NOT close** | `participantIds` is missing from `protectedFieldsUnchanged()` in `firestore.rules`, so a manager can add arbitrary UIDs to their own pool. That is a separate ticket (raised on #338) and is **not** fixed here — it would be a second authorization change in one PR. |
 
@@ -279,6 +294,25 @@ is worth its own ticket but does not gate this.
   ones and refuses to treat old ones as evidence, but does not delete them. A
   sweep would be a prod-data mutation and takes Rule 1's kill-switch/dry-run
   gate, so it is its own change.
+- **`claimMySquares` guest-key ownership** — see below. Found by review round 5,
+  NOT fixed here.
+
+### 🔴 A pre-existing vulnerability found while reviewing this plan
+
+Independent of this change, and worth Kevin's attention on its own:
+
+`firestore.rules:63` makes every pool document world-readable (`allow get: if
+true`) — deliberately, for guest access by link. That document carries
+`squares[*].guestDeviceKey`. `claimMySquares` (`functions/src/participant.ts`)
+authenticates a claim **solely** by matching that key, and assigns
+`reservedByUid` to the caller for any square not already owned.
+
+So anyone who can open a Squares pool link can read the guest keys on it and
+claim the unclaimed guest squares as their own. A guest who reserved and paid
+out of band, and has not yet claimed, can have their squares taken.
+
+Not fixed here: it is a separate authorization change on a money-adjacent path
+and takes its own plan gate. Flagged rather than folded in.
 - The commissioner branch (D4).
 - Rebuy settlement, projections refresh, and the payment ledger — untouched.
 - #338 itself, which merges after this.
@@ -300,9 +334,9 @@ is worth its own ticket but does not gate this.
 
 | Item | Status |
 |---|---|
-| Plan | ✅ this document (rewritten after round 3 — the rule got SMALLER — and hardened in round 4) |
+| Plan | ✅ this document — the rule SHRANK twice under review (4 evidence sources → 3 → 2) |
 | Sweep | ✅ `PLAN-SETPAIDSTATUS-MEMBERSHIP-SWEEPS.md` (rewritten after round 4 to match its own commands) |
-| Review log | 🔄 IN PROGRESS — rounds 1–4 recorded, 13 findings, all accepted |
+| Review log | 🔄 IN PROGRESS — rounds 1–5 recorded, 14 findings, all accepted |
 | Implementation | not started — gated on a clean review round |
 
 ⚠️ This table is a status claim about a PLAN-GATED authorization change. Do not

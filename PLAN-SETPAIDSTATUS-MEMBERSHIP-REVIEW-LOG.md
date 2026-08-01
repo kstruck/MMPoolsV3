@@ -276,4 +276,43 @@ was previously only in the review log.
 
 ## Round 5 — codex (plan + sweep, after round 4 fixes)
 
+**VERDICT: REVISE.** 1 finding, P1. **Accepted — the rule shrank again, from
+three evidence sources to two.**
+
+### 14. (P1) Do not trust claimed-square ownership as membership proof
+
+> For any Squares pool with an unclaimed guest reservation, this preserves a
+> route for a stranger to mint a Member Record: `guestDeviceKey` is readable from
+> the public pool document, `claimMySquares` accepts that value and stamps
+> `reservedByUid` for the caller, and this predicate then authorizes their claim
+> write. Remove this evidence until the guest-claim proof is secured.
+
+**Accepted, and verified end to end before accepting** — this is a three-step
+chain and each step was checked:
+
+1. `firestore.rules:63` — `allow get: if true`. The pool document is
+   world-readable by design, for guest access by link.
+2. That document carries `squares[*].guestDeviceKey` (`squares.ts:106`).
+3. `participant.ts:113-125` — `claimMySquares` matches on that key alone and
+   stamps `reservedByUid: uid` for any square not already owned.
+
+So the caller can **cause** evidence 3 to exist. I added it in round 4 reasoning
+only about read cost — it is on a document already in the transaction — and never
+asked who can write it. That is the same mistake #338 round 9 caught with
+`participantIds`, one round after I had written that lesson down in this very
+plan.
+
+**Plan changed:** evidence 3 removed. The rule is now two checks: a canonical
+Member Record, or `participantIds` minus the `guest` sentinel.
+
+**And a finding beyond this plan:** steps 1–3 are a live vulnerability regardless
+of this change — anyone with a Squares pool link can read the guest keys and
+claim unclaimed guest squares as their own, taking squares from a guest who
+reserved and paid out of band. Recorded in §7 for Kevin. Not fixed here: separate
+authorization change, money-adjacent, its own plan gate.
+
+---
+
+## Round 6 — codex (plan + sweep, after round 5 fixes)
+
 Pending.
