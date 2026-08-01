@@ -3,10 +3,67 @@
 **Classification: PLAN-GATED — authorization** (CLAUDE.md §4 / `mmp-change-control`
 §1). It changes who may write to `pools/{poolId}/members/{uid}`.
 
-**Status:** awaiting review rounds, then Kevin's sign-off.
+**Status: ⛔ BLOCKED ON A PREREQUISITE, and on Kevin's decision. NOT ready to
+implement.** Nine review rounds established that this change cannot be made
+trustworthy on its own — see §0.
 **Trigger:** codex round 10 on [#338](https://github.com/kstruck/MMPoolsV3/pull/338).
 **Kevin's decision, 2026-08-01:** *"Fix `setPaidStatus` first in its own
 plan-gated PR (verify membership before the claim write), then merge this."*
+
+---
+
+## 0. ⛔ READ THIS FIRST — the review found a prerequisite
+
+**Nine adversarial rounds, 20 findings, all accepted. The plan is sound; the
+conclusion is that it must not ship first.**
+
+The guard rests on two pieces of membership evidence. Round 9 showed **both are
+launderable from a signal an attacker can set**, through a chain that is worth
+reading in full because no single link is a bug on its own:
+
+1. `firestore.rules:63` — `allow get: if true`. Every pool document is
+   world-readable, deliberately, for guest access by link.
+2. That document carries `squares[*].guestDeviceKey` (`squares.ts:106`).
+3. `claimMySquares` (`participant.ts:113-125`) authenticates a claim by that key
+   **alone** and stamps `reservedByUid: uid` on any unclaimed square.
+4. `backfillMemberRecords.ts:47` reads `squares[*].reservedByUid` and writes a
+   **`joinedAt`-stamped** Member Record — evidence 1.
+5. `fixParticipantIds` (`poolOps.ts`) unions the same uid into `participantIds` —
+   evidence 2.
+
+So a stranger with a pool link can claim a guest square, and **the next time an
+operator runs either repair job, that claim is promoted into exactly the
+membership evidence this plan trusts.** Round 5 removed `reservedByUid` as direct
+evidence; steps 4–5 put it back in through the side door.
+
+**This is not a flaw in the guard — it is a flaw underneath it.** No membership
+predicate built on Member Records or `participantIds` can be sound while an
+unauthenticated-ish signal can be promoted into both.
+
+### What that means for sequencing
+
+| Order | Outcome |
+|---|---|
+| This PR first | Ships a guard that reads as authoritative and is launderable. Worse than today, because it would be *believed*. |
+| **Secure `claimMySquares` first, then this, then #338** | Each layer rests on something trustworthy. **Recommended.** |
+
+`claimMySquares` needs a real ownership proof rather than a public key — and it is
+worth fixing regardless of this plan, because as it stands **anyone with a Squares
+pool link can take the unclaimed guest squares of someone who reserved and paid out
+of band** (round 5).
+
+### Kevin's decision
+
+1. **Secure `claimMySquares` first** (own plan-gated PR), then this, then #338.
+   Three PRs, five days to the pilot. ← my recommendation
+2. **Narrow the repair jobs** instead — stop `backfillMemberRecords` and
+   `fixParticipantIds` promoting guest-claimed squares. Smaller, but leaves the
+   squares-theft vulnerability live.
+3. **Accept and proceed**, documenting the laundering path as a known residual.
+   Fastest; ships a guard that can be defeated by anyone who reads this document.
+
+**No code has been written.** That is the plan gate working as intended: the cost
+of nine review rounds was a document, not a deploy.
 
 ---
 
@@ -416,6 +473,7 @@ and takes its own plan gate. Flagged rather than folded in.
 | Review log | 🔄 IN PROGRESS — rounds 1–7 recorded, 17 findings, all accepted |
 | **#338 canonical filter (§4a)** | ⛔ REQUIRED before #338 merges — without it neither PR closes the exposure |
 | Kevin sign-off (Rule 3 step 5) | ⛔ **NOT GIVEN** — implementation is gated on it |
+| **`claimMySquares` prerequisite (§0)** | ⛔ **BLOCKING** — evidence 1 and 2 are launderable until it is secured |
 | Implementation | not started — gated on a clean review round |
 
 ⚠️ This table is a status claim about a PLAN-GATED authorization change. Do not

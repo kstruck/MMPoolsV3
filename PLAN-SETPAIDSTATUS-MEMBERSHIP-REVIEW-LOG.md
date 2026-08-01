@@ -460,4 +460,65 @@ assertion. `npm test` on the rebased #338 must show both prefixes covered.
 
 ## Round 9 — codex (plan + sweep, after round 8 fixes)
 
-Pending.
+**VERDICT: REVISE.** 1 finding, P1. **Accepted — and it changes the plan's status
+from "ready after sign-off" to "blocked on a prerequisite".**
+
+### 20. (P1) Prevent guest-square claims from becoming membership evidence
+
+> When a public guest key is abused and an operator later runs either repair job,
+> the exact signal this plan rejected re-enters both evidence branches:
+> `backfillMemberRecords` reads `squares[*].reservedByUid` and writes a `joinedAt`
+> Member Record, while `fixParticipantIds` unions the same UID into
+> `participantIds`. The claimant then passes Evidence 1 or 2 even though it
+> manufactured ownership through `claimMySquares`.
+
+**Accepted, verified, and it is the finding that ends this cycle.**
+`backfillMemberRecords.ts:47` reads `s?.reservedByUid`; `fixParticipantIds` is a
+live export (`index.ts:21`, `poolOps.ts`).
+
+Round 5 removed `reservedByUid` as direct evidence because the caller can cause it
+to be written. I then treated that hole as closed. It is not: the repair jobs
+**promote** that same signal into a `joinedAt`-stamped Member Record and into
+`participantIds` — the two things this plan does trust. The side door was left
+open by the same round that shut the front one.
+
+The generalisation is the useful part: **the guard cannot be made sound at its own
+level.** Any predicate built on Member Records or `participantIds` is only as
+trustworthy as the weakest path that can write them, and `claimMySquares` is
+currently a path anyone with a pool link can drive.
+
+**Plan changed:** new **§0** at the top — status changed to BLOCKED, the five-step
+laundering chain written out, three options put to Kevin with a recommendation
+(secure `claimMySquares` first). No implementation.
+
+---
+
+## Resolution status
+
+**CONVERGED ON A PREREQUISITE — not deadlocked, and not approved.**
+
+**9 rounds, 20 findings, 20 accepted, 0 rejected.** Round-by-round count:
+4 → 3 → 3 → 3 → 1 → 1 → 2 → 2 → 1. The trend is real convergence: the early rounds
+found holes in the *rule*, the late ones found holes *underneath* it.
+
+What the loop actually bought, given not one line of production code was written:
+
+- The rule **shrank twice** — four evidence sources → three → two — because
+  sweeping `participantIds` writers showed the system already had a cross-type
+  membership set (round 3).
+- It caught the fix **ratifying the exploit it exists to close** (round 3, P1:
+  forged records used as proof of membership).
+- It caught the fix **not achieving its stated purpose** — this PR alone does not
+  unblock #338, because `resolveReminderTargets` reads every members document
+  regardless of fields (round 7, P1).
+- It caught a **wrong ✅ in the sweep** (round 8) — worse than a missing row,
+  because everything downstream cites it.
+- It surfaced **two pre-existing vulnerabilities** unrelated to the original
+  finding: guest-square theft via a public key, and a rebuy path with no
+  membership gate.
+- It ended by showing the change has a **prerequisite** (round 9).
+
+Three of those would have shipped silently. That is the argument for the plan gate
+existing, stated in evidence rather than principle.
+
+**Next step: Kevin's decision on §0, not implementation.**
