@@ -54,7 +54,7 @@ every line is listed.
 | 11 | `migrations/reconcilePaymentTruth.ts:257` | **WRITE** | ✅ SUPER_ADMIN migration |
 | 12 | `nflPools.ts:232` | read (in tx) | n/a |
 | 13 | `nflPools.ts:447` | read (in tx) | n/a |
-| 14 | `nflPools.ts:722` rebuy | **WRITE** | ✅ requires an existing entry + deadline checks |
+| 14 | `nflPools.ts:722` rebuy | **WRITE** | ⚠️ **NOT a membership check** — see below |
 | 15 | `poolExceptions.ts:306` | read (in tx) | n/a |
 | 16 | `poolOps.ts:477` | read | n/a |
 | 17 | **`setPaidStatus.ts:25`** (→ the write at `:30`) | **WRITE** | 🔴 **NO — this is the defect** |
@@ -101,6 +101,38 @@ Two consequences for the plan:
    update` clause permits exactly the two claim fields on an existing document.
    The rules already say what the callable should have said; callables bypass
    rules, which is why the gap survived.
+
+## ⚠️ Row 14 correction — the rebuy path verifies an ENTRY, not membership (round 8)
+
+The first version of this table marked `executeSurvivorRebuyInternal` "✅ requires
+an existing entry + deadline checks" and counted it as verified. **An entry is not
+membership**, and the distinction matters because this path writes a Member Record
+with `joinedAt` — the very stamp the plan uses to tell a canonical record from a
+forged one.
+
+Verified: `assertNFLPickMembership` is defined at `nflPools.ts:316` and called at
+`nflPools.ts:363` — the pick-submission path — and **nowhere else**.
+`executeSurvivorRebuyInternal` (`:691`) does not call it. Its gates are: an entry
+exists, the pool is Survivor, the rebuy deadline has not passed, and
+`maxRebuys` is not exceeded.
+
+**Consequence for the plan:** a canonical stamp is *necessary* but not *sufficient*
+proof of current membership. A legacy Survivor entry created before the
+pick-submission membership gate existed, whose owner is not in `participantIds`,
+could be rebought and thereby acquire a `joinedAt`-stamped Member Record that both
+evidence 1 and #338's canonical filter would trust.
+
+**Assessed exploitability: low, and bounded to legacy data.** Reaching this path
+requires an entry to already exist in the pool, and entry creation today passes the
+membership gate — so only entries predating that gate qualify, which belong to
+people who did join at the time. There is no path for a stranger to create the
+entry that this exploit needs.
+
+**Not fixed here.** Adding a membership gate to the rebuy path is a change to who
+may write a playable entry mutation — an authorization change on a money-adjacent
+path, which needs its own plan under Rule 3. Recorded as a ticket in `PLAN` §7
+rather than folded into this one. The sweep's job was to find it and classify it
+honestly; it is listed here so the next change does not re-derive it.
 
 ## Sweep 2 — who writes `participantIds` (added round 3)
 

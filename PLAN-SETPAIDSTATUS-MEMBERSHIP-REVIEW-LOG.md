@@ -403,4 +403,61 @@ merge time.
 
 ## Round 8 — codex (plan + sweep, after round 7 fixes)
 
+**VERDICT: REVISE.** 2 findings — 1 P1, 1 P2. **Both accepted.**
+
+### 18. (P1) Validate rebuy records against current membership
+
+> This classifies the Survivor rebuy writer as membership-verified solely because
+> an entry exists, but `executeSurvivorRebuyInternal` never calls
+> `assertNFLPickMembership` and creates a Member Record with `joinedAt` when
+> absent. A legacy unauthorized Survivor entry, once eliminated and before the
+> rebuy deadline, can therefore become a record trusted by both evidence 1 and
+> #338's proposed canonical filter despite its UID not being in `participantIds`.
+
+**Accepted, and it corrects the SWEEP, which is the more serious half.** Verified:
+`assertNFLPickMembership` is defined at `nflPools.ts:316` and called only at `:363`
+(pick submission); `executeSurvivorRebuyInternal` at `:691` does not call it.
+
+My sweep row 14 said "✅ requires an existing entry + deadline checks" and counted
+that as verified. **An entry is not membership** — and the sweep is the document
+whose entire purpose is to be the trustworthy enumeration. A wrong ✅ there is worse
+than a missing row, because everything downstream cites it.
+
+The substantive consequence: a canonical `joinedAt` stamp is **necessary but not
+sufficient** proof of current membership, which weakens (without invalidating) both
+evidence 1 and §4a's filter.
+
+**Assessed rather than hand-waved:** reaching that path needs an entry to already
+exist, and entry creation today passes the membership gate, so only pre-gate legacy
+entries qualify — belonging to people who did join at the time. **No path lets a
+stranger create the entry the exploit needs.** Low, bounded, legacy-only.
+
+**Not fixed here:** adding a membership gate to the rebuy path is an authorization
+change on a money-adjacent path and needs its own plan. Sweep row 14 corrected to
+⚠️ with the full assessment; ticket recorded in §7.
+
+### 19. (P2) Retain #338's server-prefix assertion after rebase
+
+> With the declared merge order, this branch still lacks #338's
+> `MEMBER_NOT_ON_ROSTER:` throws, while #338's existing contract test statically
+> requires those two source literals. Creating the combined test here would fail
+> before #338 merges; dropping #338's test after rebase instead leaves the server
+> half of that prefix untested.
+
+**Accepted — round 7's resolution was unimplementable.** I decided this PR would
+create the file covering both prefixes, without checking that the test asserts the
+`MEMBER_NOT_ON_ROSTER:` literal is present in `setPaidStatus.ts` **source**. That
+literal only exists on #338's branch, so the combined test would fail here. And the
+alternative I wrote — #338 drops its copy after rebase — would leave the server half
+of that contract untested, which is precisely what the file exists to prevent.
+
+**Plan changed:** the split now follows the code. This PR's test covers
+`NOT_A_POOL_MEMBER` only; the rebased #338 **adds** its cases to the now-existing
+file (a modify, not an add — no add/add conflict) and keeps its server-source
+assertion. `npm test` on the rebased #338 must show both prefixes covered.
+
+---
+
+## Round 9 — codex (plan + sweep, after round 8 fixes)
+
 Pending.

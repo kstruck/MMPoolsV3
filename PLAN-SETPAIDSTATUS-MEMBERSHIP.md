@@ -304,11 +304,25 @@ same path and produce an **add/add conflict** — the failure mode being a
 resolution that keeps one prefix and silently drops the other, in a file whose
 whole job is to prove both halves of a contract are wired.
 
-**Resolution, decided here so it is not improvised at merge time:** this PR
-creates the file covering **both** prefixes. After it merges, #338 is rebased
-onto `main` and its own copy of the file is dropped in favour of the merged one,
-with `npm test` re-run to prove both prefix cases still pass. Coherent, because
-both prefixes are thrown by `setPaidStatus`.
+**Resolution, corrected in round 8.** The obvious plan — have this PR create the
+file covering *both* prefixes — **does not compile as a test**: `MEMBER_NOT_ON_ROSTER:`
+is thrown only on #338's branch, and the contract test asserts the literal is
+present in `setPaidStatus.ts` **source**. A combined test here would fail on this
+branch, because the server half it checks does not exist yet.
+
+So the split follows the code:
+
+1. **This PR** creates `tests/error-domain-prefix-contract.test.ts` covering
+   `NOT_A_POOL_MEMBER` only — both halves of which exist on this branch.
+2. **#338 is then rebased** onto `main` and **adds** its `MEMBER_NOT_ON_ROSTER`
+   cases to that now-existing file. That is a modify, not an add, so there is no
+   add/add conflict, and **#338 keeps its server-source assertion** rather than
+   dropping it.
+3. `npm test` on the rebased #338 must show **both** prefixes covered.
+
+The failure mode being avoided is specific: a resolution that keeps one prefix and
+silently drops the other, in the one file whose purpose is to prove both halves of
+a cross-boundary contract are wired.
 
 **D4 — The authoritative (commissioner) branch is NOT changed.**
 It already requires owner/manager/SUPER_ADMIN and, in both transactions, throws
@@ -345,6 +359,13 @@ is worth its own ticket but does not gate this.
   gate, so it is its own change.
 - **`claimMySquares` guest-key ownership** — see below. Found by review round 5,
   NOT fixed here.
+- **`executeSurvivorRebuyInternal` has no membership gate** — found by review
+  round 8, verified: `assertNFLPickMembership` is called only from the
+  pick-submission path (`nflPools.ts:363`), never from the rebuy path (`:691`),
+  which nonetheless writes a `joinedAt`-stamped Member Record. A canonical stamp
+  is therefore necessary but not sufficient proof of current membership. Bounded
+  to legacy pre-gate entries and not reachable by a stranger (full assessment in
+  the sweep). Its own authorization change, its own plan.
 
 ### 🔴 A pre-existing vulnerability found while reviewing this plan
 
@@ -394,6 +415,7 @@ and takes its own plan gate. Flagged rather than folded in.
 | Sweep | ✅ `PLAN-SETPAIDSTATUS-MEMBERSHIP-SWEEPS.md` (rewritten after round 4 to match its own commands) |
 | Review log | 🔄 IN PROGRESS — rounds 1–7 recorded, 17 findings, all accepted |
 | **#338 canonical filter (§4a)** | ⛔ REQUIRED before #338 merges — without it neither PR closes the exposure |
+| Kevin sign-off (Rule 3 step 5) | ⛔ **NOT GIVEN** — implementation is gated on it |
 | Implementation | not started — gated on a clean review round |
 
 ⚠️ This table is a status claim about a PLAN-GATED authorization change. Do not
