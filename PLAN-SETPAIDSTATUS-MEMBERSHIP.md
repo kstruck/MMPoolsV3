@@ -187,7 +187,12 @@ deliberately keeps buyers off it would be this authorization fix quietly making
 a product decision. **It is a real inconsistency in `propBets.ts` and deserves
 its own ticket** — but the fix belongs there, not in a membership guard.
 
-Any one of 1–3 suffices. None → `permission-denied`.
+Either of 1–2 suffices. None → `permission-denied`.
+
+⚠️ **There is no third check.** Draft 4 had one (claimed-square ownership) and
+round 5 removed it as attacker-settable. Any reader — or implementer — who
+reintroduces a squares-ownership branch is restoring the exact authorization
+route this plan rejected.
 
 ### On using `participantIds` here, given #338 removed it
 
@@ -272,7 +277,7 @@ scope, deliberately: this PR should be reviewable as one rule.
 
 | Risk | Assessment |
 |---|---|
-| A legitimate member is refused | Mitigated by D1's three-way evidence. The residual case is a member with **no record, not in `participantIds`, and no entry** — which is indistinguishable from a non-member using every signal the system has. |
+| A legitimate member is refused | Mitigated by D1's two evidence sources. The residual case is a member with **no canonical record and no `participantIds` entry** — which, for every pool type whose join path writes `participantIds` (all of them: sweep 2), is indistinguishable from a non-member using every trustworthy signal the system has. The two known exceptions, Props and guest-claim Squares, are named in §4 and §7. |
 | Extra reads on a hot path | Two transactional reads — the pool doc and the member doc. **No entry query at all** after the round-3 collapse. The claim path is a manual member action, not a scoring path. |
 | Records forged before this fix | Handled: evidence 1 requires the server-seeded stamp, so a claim-only document is treated as absent (§4). Without that, the fix would ratify existing exploits. |
 | Props buyers refused | Accepted and documented (§4). `propBets.ts` puts them on no roster; the inconsistency is real but belongs in its own ticket. |
@@ -321,8 +326,15 @@ and takes its own plan gate. Flagged rather than folded in.
 
 ## 8. Verification
 
-1. Unit tests for the membership predicate: each of the three evidence paths
-   admits; the no-evidence case is refused; a stranger cannot mint a record.
+1. Unit tests for the membership predicate:
+   - a canonical Member Record admits;
+   - a **claim-only** record (the forged shape: only `memberReportedPaid` /
+     `memberReportedAt`) is REFUSED — this is the round-3 P1 and the test that
+     proves the fix does not ratify the exploit;
+   - `participantIds` membership admits;
+   - the literal `"guest"` sentinel is REFUSED;
+   - no evidence at all is refused;
+   - a deleted pool is refused even when a canonical record survives it.
 2. **Mutation-test every guard** — deleting the check, and each evidence branch
    individually, must fail the suite.
 3. Full gate set: functions build + test, `tsc -b`, root test, lint, emulator.

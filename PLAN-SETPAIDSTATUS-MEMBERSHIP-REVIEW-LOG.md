@@ -315,4 +315,35 @@ authorization change, money-adjacent, its own plan gate.
 
 ## Round 6 — codex (plan + sweep, after round 5 fixes)
 
+**VERDICT: REVISE.** 1 finding, P2. **Accepted.**
+
+### 15. (P2) Replace the stale three-evidence references
+
+> The final rule contains only a canonical Member Record and non-`guest`
+> `participantIds`; §4 explicitly removed the claimed-squares branch. Leaving this
+> as `1–3` (and the corresponding "three-way" and "three evidence paths"
+> requirements) directs implementation and tests toward a nonexistent third path;
+> restoring the former squares-ownership path would reintroduce the
+> attacker-settable authorization route rejected in round 5.
+
+**Accepted.** Round 5 removed evidence 3 from the table and wrote the reasoning,
+and left three downstream sentences still counting to three — including **§8's
+verification requirement**, which told the implementer to write a test for "each
+of the three evidence paths". An implementer following §8 would have gone looking
+for the third path and found round 4's squares branch sitting in the git history
+with a rationale attached.
+
+This is the same heading-lags-content defect that appeared seven times across
+this session's docs PRs, and it is more dangerous here: in a plan-of-record for
+an **authorization** change, the stale sentence is an instruction.
+
+**Plan changed:** all three references corrected; §4 gains an explicit "there is
+no third check" warning naming what its reintroduction would restore; and §8's
+test list is now enumerated case by case rather than counted, so it cannot drift
+against the rule again.
+
+---
+
+## Round 7 — codex (plan + sweep, after round 6 fixes)
+
 Pending.
