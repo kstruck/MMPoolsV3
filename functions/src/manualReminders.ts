@@ -186,13 +186,21 @@ export const sendManualReminder = validated(
         // already paid. A member who owes both is told about both rather than
         // getting two emails — the 4h dedupe key is per pool+member+kind, so a
         // second send would be suppressed anyway and they would hear only half.
+        // Both debt maps are built from MEMBER RECORDS. A member represented only
+        // by an entry - a partially backfilled pool - is absent from both, so the
+        // split between entry fee and rebuy is UNKNOWN for them. Saying "Entry
+        // payment due" would assert a specific debt the sender cannot see, which
+        // is the exact failure this change exists to fix, one case along.
+        const classifiable = rebuyOwedByUid.has(targetUid);
         const rebuyOwed = rebuyOwedByUid.get(targetUid) ?? 0;
         const totalOwed = outstandingByUid?.get(targetUid);
         const rebuyOnly = kind === "PAYMENT"
+            && classifiable
             && rebuyOwed > 0
             && totalOwed !== undefined
             && rebuyOwed >= totalOwed;
-        const owesBoth = kind === "PAYMENT" && rebuyOwed > 0 && !rebuyOnly;
+        const owesBoth = kind === "PAYMENT" && classifiable && rebuyOwed > 0 && !rebuyOnly;
+        const unclassified = kind === "PAYMENT" && !classifiable;
 
         const payInstructions = pool.settings?.paymentInstructions
             ? `<p><strong>How to pay:</strong> ${escapeHtml(pool.settings.paymentInstructions)}</p>`
@@ -225,6 +233,14 @@ export const sendManualReminder = validated(
             body = `
                 <p>Hi ${escapeHtml(displayName)},</p>
                 <p>Your commissioner sent a friendly reminder: your <strong>entry fee and rebuy</strong> for <strong>${escapeHtml(poolName)}</strong> are still due.</p>
+                ${payInstructions}
+            `;
+        } else if (unclassified) {
+            subject = `Reminder: Payment due — ${poolName}`;
+            heading = "Payment Reminder";
+            body = `
+                <p>Hi ${escapeHtml(displayName)},</p>
+                <p>Your commissioner sent a friendly reminder: you have an outstanding balance for <strong>${escapeHtml(poolName)}</strong>.</p>
                 ${payInstructions}
             `;
         } else {

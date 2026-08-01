@@ -34,7 +34,10 @@ const DOMAIN_PREFIX_MESSAGES: Record<string, string> = {
     // on the roster". Without this prefix the second renders as "that pool or
     // entry couldn't be found" — about a pool plainly on the commissioner's
     // screen. See PLAN-PAYMENT-TRUTH §6b round 4.
-    MEMBER_NOT_ON_ROSTER: "That member is no longer on this pool's roster, so their payment status cannot be changed. Refresh the roster to see the current members.",
+    // Thrown by BOTH setPaidStatus modes - the paid mark and rebuy settlement -
+    // so the copy must not name one of them. It said "payment status" while the
+    // rebuy control routes through it too.
+    MEMBER_NOT_ON_ROSTER: "That member is no longer on this pool's roster, so their payment details cannot be changed. Refresh the roster to see the current members.",
 };
 
 const AUTH_MESSAGES: Record<string, string> = {
