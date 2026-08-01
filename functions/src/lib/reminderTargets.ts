@@ -140,6 +140,15 @@ export function outstandingDuesByUid(
     );
 
     const out = new Map<string, number>();
+
+    // A pre-backfill pool can carry `participantIds: [ownerId]` with NO member
+    // document and no entry. Such a host is absent from `members`, so without
+    // this they fall through as "unknown liability" and get chased. Seed them
+    // at zero first; a real member record below overwrites this.
+    for (const host of hostUids) {
+        if (!entryUids.has(host)) out.set(host, 0);
+    }
+
     for (const rec of members) {
         const m = { ...rec, uid: rec.id } as MemberRecord;
 
@@ -179,6 +188,23 @@ export function outstandingDuesByUid(
             // zero it out, marking a member who still owes rebuy money as
             // owesNothing and silently skipping their reminder. (qodo)
             owed += rebuysUsed * rebuyCost;
+
+            // Price drift. REBUY_DUE ledger events retain the amount actually
+            // charged, and setPaidStatus prefers them for exactly this reason;
+            // this path deliberately does not read them (a subcollection query
+            // per member, on a whole-roster click). So if the commissioner has
+            // since set rebuyCost to 0, a real debt would compute as 0 and the
+            // member would be marked owesNothing, suppressing a valid reminder.
+            //
+            // Rebuys were taken, so the debt is UNKNOWN rather than zero. This
+            // file already has a meaning for unknown — ABSENT from the map — so
+            // the member is left out rather than given a sentinel value. They
+            // stay eligible for a reminder and the settlement path computes the
+            // real figure from the ledger.
+            if (rebuysUsed > 0 && owed <= 0) {
+                out.delete(rec.id);
+                continue;
+            }
         }
         out.set(rec.id, owed);
     }

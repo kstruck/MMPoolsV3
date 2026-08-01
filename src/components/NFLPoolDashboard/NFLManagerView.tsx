@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Settings, DollarSign, CheckCircle, XCircle, Users, Activity,
   Play, Edit3, Save, Lock, Unlock, AlertTriangle, ShieldCheck, BellRing,
@@ -232,10 +232,22 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // maths uses, including the legacy un-stamped rebuy fallback, so the button
   // and the callable agree on who owes.
   const rates = useMemo(() => duesRates(pool), [pool]);
-  const unpaidCount = useMemo(
-    () => roster.filter(r => memberOutstanding(r, rates) > 0).length,
-    [roster, rates],
+
+  // Hosting is not playing (ADR 0005), and a pre-backfill pool can list its
+  // commissioner in participantIds with no member record and no entry — a row
+  // memberOutstanding scores at a full entry fee. The callable exempts them, so
+  // without the same rule here the button offers a send the backend refuses.
+  // All three owner fields, because poolOps and the backfill disagree on which
+  // takes precedence.
+  const hostUids = useMemo(() => new Set(
+    [(pool as any)?.createdByUid, (pool as any)?.ownerId, (pool as any)?.managerUid].filter(Boolean),
+  ), [pool]);
+  const owesMoney = useCallback(
+    (r: { uid: string; hasEntry: boolean }) =>
+      hostUids.has(r.uid) && !r.hasEntry ? false : memberOutstanding(r as any, rates) > 0,
+    [hostUids, rates],
   );
+  const unpaidCount = useMemo(() => roster.filter(owesMoney).length, [roster, owesMoney]);
 
   // --- Handlers ---
   const handleRemindOne = async (uid: string, kind: 'PICKS' | 'PAYMENT') => {
@@ -261,7 +273,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const handleRemindBulk = async (kind: 'PICKS' | 'PAYMENT') => {
     const targets = (kind === 'PICKS'
       ? roster.filter(r => !r.picked)
-      : roster.filter(r => memberOutstanding(r, rates) > 0)
+      : roster.filter(owesMoney)
     ).map(r => r.uid);
     if (targets.length === 0) {
       toast.info(kind === 'PICKS' ? 'Everyone has picked this week.' : 'Everyone has paid.');
@@ -1227,9 +1239,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                           disabled={
                             remindingUid !== null ||
                             bulkReminding !== null ||
-                            (row.picked && memberOutstanding(row, rates) <= 0)
+                            (row.picked && !owesMoney(row))
                           }
-                          title={!row.picked ? 'Email a picks reminder' : memberOutstanding(row, rates) > 0 ? 'Email a payment reminder' : 'Picked and settled — nothing to remind'}
+                          title={!row.picked ? 'Email a picks reminder' : owesMoney(row) ? 'Email a payment reminder' : 'Picked and settled — nothing to remind'}
                           className="min-h-[44px] inline-flex items-center gap-1.5 px-3 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-navy-800 text-white hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 hover:-translate-y-px cursor-pointer"
                         >
                           <BellRing size={10} />

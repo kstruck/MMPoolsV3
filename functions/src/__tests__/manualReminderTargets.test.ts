@@ -479,6 +479,36 @@ describe("outstandingDuesByUid", () => {
         expect(out.get("m")).toBe(0);
     });
 
+    it("exempts a host with NO member record and no entry", () => {
+        // A pre-backfill pool can carry participantIds: [ownerId] with no member
+        // document at all. Absent from `members`, such a host would fall through
+        // as unknown liability and be chased. (codex r8)
+        const out = outstandingDuesByUid(pool, [], new Set());
+
+        expect(out.get("host")).toBe(0);
+    });
+
+    it("does NOT exempt a record-less host who has an entry", () => {
+        const out = outstandingDuesByUid(pool, [], new Set(["host"]));
+
+        expect(out.has("host")).toBe(false);
+    });
+
+    it("treats legacy rebuy debt as UNKNOWN when rebuyCost has drifted to 0", () => {
+        // REBUY_DUE events keep the amount actually charged; this path does not
+        // read them. If the commissioner later sets rebuyCost to 0, a real debt
+        // would compute as 0 and suppress a valid reminder. Rebuys were taken,
+        // so the answer is unknown — absent from the map — not zero. (codex r8)
+        const out = outstandingDuesByUid(
+            { type: "NFL_SURVIVOR", settings: { entryFee: 0, rebuyCost: 0 } },
+            [{ id: "m", paidStatus: "PAID", feeOwed: 0 }],
+            new Set(["m"]),
+            new Map([["m", 2]]),
+        );
+
+        expect(out.has("m")).toBe(false);
+    });
+
     it("omits members it was not given — absent means unknown, not zero", () => {
         const out = outstandingDuesByUid(pool, [], new Set());
 
