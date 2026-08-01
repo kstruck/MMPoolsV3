@@ -93,37 +93,74 @@ for records that predate the roster model.
 
 ### The rule
 
-In the claim branch, before writing, the caller must be a **provable member**:
+In the claim branch, before writing, the caller must be a **provable member**.
 
-| Evidence | Why it is trustworthy |
+**Rounds 1–3 rewrote this section three times, and the third rewrite made it
+smaller.** Each round found another pool type whose ownership the resolver did
+not understand — Bracket (auto-id + `ownerUid`), Playoff (embedded `pool.entries`
+map with `userId`), Squares, Props. The reflex was to add a check per shape. That
+reflex was wrong: it produced a resolver that had to enumerate every pool type's
+ownership representation and be re-audited whenever a type is added.
+
+**A sweep of who writes `participantIds` collapsed it.** Every join path already
+maintains it:
+
+| Writer | Path |
 |---|---|
-| A Member Record already exists | Only server join/create paths create them (`allow create: if false`) |
-| `uid ∈ pool.participantIds` | The pool doc's `allow update` requires `isPoolManager()`, so an arbitrary user cannot add themselves |
-| An entry owned by the caller exists | Entries are created only through join/submit callables, which enforce their own join rules |
+| `bracketEntries.ts:107`, `bracketPools.ts:284` | Bracket |
+| `nflPools.ts:258` | NFL |
+| `playoffPools.ts:219` | Playoff |
+| `squares.ts:115` | Squares reserve |
+| `poolOps.ts:661` | commissioner add |
+| `lib/memberRecord.ts:166` | `reconcileMembership` |
 
-⚠️ **The entry check must be BOTH `entries/{uid}` AND a `where('ownerUid','==',uid)`
-query, not either alone** (codex round 1, verified). NFL entry docs are keyed by
-the uid; `createBracketEntry` (`functions/src/bracketEntries.ts:86`) uses an
-auto-generated id and records the member in `ownerUid` instead. A doc-id-only
-check finds nothing for any bracket entry, so D1's "heal legacy members" promise
-would have been empty for a whole pool type while reading as if it were covered.
-A query-only check is also insufficient: NFL entries do not all carry `ownerUid`,
-which is why `manualReminders.ts` reads `entry.ownerUid || doc.id`.
+So `participantIds` is the system's own cross-type membership representation,
+and the per-shape entry archaeology was re-deriving it badly. The resolver is
+now **three checks on data already read inside the transaction, with no extra
+query at all**:
 
-The `ownerUid` query takes **`.limit(1)`** (codex round 2). The guard needs
-existence, not the set; Bracket pools may be configured `maxEntriesPerUser: -1`,
-where a bare query pulls every entry the caller owns into a transactional read
-for no benefit.
+| # | Evidence | Why it is trustworthy |
+|---|---|---|
+| 1 | A **canonical** Member Record exists | See below — mere existence is NOT enough |
+| 2 | `uid ∈ pool.participantIds` | Requires `isPoolManager()` to write, so no self-add |
+| 3 | `pool.squares[*].reservedByUid === uid` | Same pool doc, no extra read — covers the guest→claim path |
 
-⚠️ **A FOURTH shape exists: Playoff pools have no `entries` subcollection at
-all** (codex round 2, verified). `playoffPools.ts:114` iterates an **embedded
-`pool.entries` map** whose values carry `userId` (`:182`, `:201`). A legacy
-Playoff member with no Member Record and no `participantIds` entry is invisible
-to every check above, so the embedded map is checked too. This callable is not
-restricted by pool type, so "heal legacy members" has to mean every type or say
-which ones it excludes.
+### 1 is "canonical", not "exists" — this is the round 3 P1
 
-Any one suffices. None → `permission-denied`.
+A Member Record's mere existence cannot prove membership, because **the
+vulnerable claim path is itself a way to create one**. Anyone who already
+exploited the bug would have their forged record accepted as proof, stay on the
+roster, and keep receiving #338's reminders — the fix would ratify the exploit.
+
+The discriminator is what the record carries. `planMembershipWrite`
+(`lib/memberRecord.ts:55-73`) seeds a first write with `uid`, `poolId`,
+`userName`, `paidStatus` and **`joinedAt`**. The vulnerable claim writes exactly
+two fields: `memberReportedPaid` and `memberReportedAt`. So a record counts as
+evidence only when it carries the server-seeded stamp; a claim-only document
+does not, and is treated as absent.
+
+### 3 exists because `participantIds` has one gap
+
+`claimMySquares` (`squarePrivate.ts`) does not write `participantIds`. A square
+reserved anonymously adds the **`"guest"`** sentinel (`squares.ts:115`), so a
+user who later claims that square is not listed. Their ownership lives in
+`pool.squares[*].reservedByUid`, which is on the pool document the transaction
+already reads.
+
+### Props are EXCLUDED, deliberately and on the record
+
+`propBets.ts` writes `participantIds` **zero** times and creates no Member
+Record; a prop-card buyer is represented only by `propCards/{autoId}.userId`.
+They are therefore not on the roster by the system's own definition, and this
+guard will refuse their self-report.
+
+That is the correct outcome here rather than a gap to paper over: `setPaidStatus`
+writes to the **roster**, and inventing roster membership for a pool type that
+deliberately keeps buyers off it would be this authorization fix quietly making
+a product decision. **It is a real inconsistency in `propBets.ts` and deserves
+its own ticket** — but the fix belongs there, not in a membership guard.
+
+Any one of 1–3 suffices. None → `permission-denied`.
 
 ### On using `participantIds` here, given #338 removed it
 
@@ -158,12 +195,21 @@ guard must not be built on a read taken before the guard begins.
 
 ## 5. Key decisions and tradeoffs
 
-**D1 — Heal legacy members rather than hard-requiring an existing record.**
-The strictest fix is "the record must already exist". It is one line and closes
-the hole completely. Rejected because a legacy member of a pre-backfill pool
-whose record was never created would be told they are not a member, which is
-false and unactionable for them. The `participantIds`/entry evidence keeps them
-working. Accepted cost: slightly more code and one more read.
+**D1 — Heal legacy members, but via `participantIds`, not per-type archaeology.**
+The strictest fix is "the record must already exist". Rejected: a legacy member
+of a pre-backfill pool would be told they are not a member, which is false and
+unactionable for them.
+
+The first three drafts healed them by learning each pool type's entry shape.
+Rounds 1–3 found a missing shape every single time, which is the signal that the
+approach was wrong rather than incomplete. `participantIds` is the system's own
+cross-type membership set and is written by every join path, so it does the same
+job in one check — and a **new pool type inherits the guard for free**, instead
+of silently falling through it until someone notices.
+
+Accepted cost: the one `participantIds` gap (guest-claimed squares) needs its own
+check, and Props are excluded on the record. Both are named in §4 rather than
+discovered later.
 
 **D2 — `permission-denied`, not silent success.**
 Returning `{ success: true }` without writing would hide a real
@@ -192,7 +238,9 @@ scope, deliberately: this PR should be reviewable as one rule.
 | Risk | Assessment |
 |---|---|
 | A legitimate member is refused | Mitigated by D1's three-way evidence. The residual case is a member with **no record, not in `participantIds`, and no entry** — which is indistinguishable from a non-member using every signal the system has. |
-| Extra reads on a hot path | A transactional pool **re-read** (it is NOT reused from the earlier fetch — see §4), the member doc, and the entry evidence. The claim path is a manual member action, not a scoring path. |
+| Extra reads on a hot path | Two transactional reads — the pool doc and the member doc. **No entry query at all** after the round-3 collapse. The claim path is a manual member action, not a scoring path. |
+| Records forged before this fix | Handled: evidence 1 requires the server-seeded stamp, so a claim-only document is treated as absent (§4). Without that, the fix would ratify existing exploits. |
+| Props buyers refused | Accepted and documented (§4). `propBets.ts` puts them on no roster; the inconsistency is real but belongs in its own ticket. |
 | The transaction changes write semantics | The write is the same `set(..., {merge: true})` on the same ref; only the guard is added. |
 | **Rules gap this does NOT close** | `participantIds` is missing from `protectedFieldsUnchanged()` in `firestore.rules`, so a manager can add arbitrary UIDs to their own pool. That is a separate ticket (raised on #338) and is **not** fixed here — it would be a second authorization change in one PR. |
 
@@ -204,6 +252,12 @@ is worth its own ticket but does not gate this.
 ## 7. Out of scope
 
 - The `protectedFieldsUnchanged()` / `participantIds` rules gap — own ticket.
+- **`propBets.ts` not writing `participantIds` or a Member Record** — a real
+  inconsistency found by review round 3, own ticket (§4).
+- **Cleaning up any records already forged via this bug** — the guard stops new
+  ones and refuses to treat old ones as evidence, but does not delete them. A
+  sweep would be a prod-data mutation and takes Rule 1's kill-switch/dry-run
+  gate, so it is its own change.
 - The commissioner branch (D4).
 - Rebuy settlement, projections refresh, and the payment ledger — untouched.
 - #338 itself, which merges after this.
@@ -225,9 +279,9 @@ is worth its own ticket but does not gate this.
 
 | Item | Status |
 |---|---|
-| Plan | ✅ this document (revised after review rounds 1–2) |
-| Sweep | ✅ `PLAN-SETPAIDSTATUS-MEMBERSHIP-SWEEPS.md` (revised after review round 1) |
-| Review log | 🔄 IN PROGRESS — rounds 1–2 recorded, 7 findings, all accepted |
+| Plan | ✅ this document (rewritten after review round 3 — the rule got SMALLER) |
+| Sweep | ✅ `PLAN-SETPAIDSTATUS-MEMBERSHIP-SWEEPS.md` (revised after round 1) |
+| Review log | 🔄 IN PROGRESS — rounds 1–3 recorded, 10 findings, all accepted |
 | Implementation | not started — gated on a clean review round |
 
 ⚠️ This table is a status claim about a PLAN-GATED authorization change. Do not

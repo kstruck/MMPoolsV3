@@ -143,4 +143,76 @@ sees. D3 would have shipped as pure ceremony.
 
 ## Round 3 — codex (plan + sweep, after round 2 fixes)
 
+**VERDICT: REVISE.** 3 findings — 1 P1, 2 P2. **All 3 accepted, and together
+they caused the design to be rewritten smaller rather than extended.**
+
+### 8. (P1) Do not trust records created by the vulnerable claim path
+
+> For Member Records minted before this fix, this predicate treats the exact
+> forged document created by the current `set(..., { merge: true })` claim branch
+> as proof of membership. Those users therefore remain on the roster and will
+> still be eligible for the reminder targeting that motivated this PR. Require
+> independent membership evidence (or a cleanup/canonical-record check).
+
+**Accepted. This is the best finding of the cycle** — the plan would have shipped
+a fix that ratified the exploit it exists to close. Every draft treated "a Member
+Record exists" as proof of membership while the whole premise of the PR is that
+the claim path can create one.
+
+Verified discriminator: `planMembershipWrite` (`lib/memberRecord.ts:55-73`) seeds
+a first write with `uid`, `poolId`, `userName`, `paidStatus` and `joinedAt`; the
+vulnerable claim writes exactly `memberReportedPaid` and `memberReportedAt`. A
+claim-only document is therefore distinguishable and is treated as absent.
+
+**Plan changed:** §4 evidence 1 is now a **canonical** record, not any record,
+with the field-level reasoning. §6 gains a risk row. §7 records that cleaning up
+already-forged records is a prod-data mutation under Rule 1 and its own change.
+
+### 9. (P2) Recognize claimed Squares ownership as membership
+
+> A user who reserves as a guest and then calls `claimMySquares` is represented
+> by `squares[*].reservedByUid`, but that flow neither adds their UID to
+> `participantIds` nor creates a Member Record. With no entry document, every
+> listed predicate fails and a legitimate Squares member is denied.
+
+**Accepted, verified.** `squares.ts:115` adds the literal `"guest"` sentinel for
+an anonymous reserve, and `squarePrivate.ts` (`claimMySquares`) never writes
+`participantIds`. Cheap to cover: `pool.squares[*].reservedByUid` is on the pool
+document the transaction already reads, so it costs no extra query.
+
+### 10. (P2) Include Prop-card ownership in the membership resolver
+
+> The all-types promise still misses Props: `purchasePropCard` creates auto-ID
+> documents in `propCards` with `userId`, without writing `participantIds` or a
+> Member Record.
+
+**Accepted as a finding; the resolution is an explicit EXCLUSION, not a fourth
+check.** Verified: `propBets.ts` contains zero `participantIds` writes and
+creates no Member Record. A prop-card buyer is not on the roster by the system's
+own definition.
+
+`setPaidStatus` writes to the roster. Teaching this guard to invent roster
+membership for a pool type that deliberately keeps buyers off it would be an
+authorization fix quietly making a product decision. The inconsistency is real
+and is now an out-of-scope ticket (§7) against `propBets.ts`, where it belongs.
+
+### What rounds 1–3 actually established
+
+Three rounds, four missing pool-type shapes (Bracket, Playoff, Squares, Props).
+Adding a fifth check was the obvious move and the wrong one. Sweeping **who
+writes `participantIds`** showed the system already has a cross-type membership
+set maintained by every join path, so the resolver collapsed from per-type entry
+archaeology to **three checks on data already in the transaction, with no extra
+query**. A new pool type now inherits the guard instead of silently falling
+through it.
+
+The rule got smaller on round 3 than it was on round 1. That is the outcome to
+want from a review loop, and it only happened because the reviewer kept finding
+the *same shape* of hole — which is the signal to change approach, not to patch
+again.
+
+---
+
+## Round 4 — codex (plan + sweep, after round 3 rewrite)
+
 Pending.
