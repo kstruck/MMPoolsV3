@@ -359,6 +359,23 @@ describe("outstandingDuesByUid", () => {
         expect(out.get("host")).toBe(0);
     });
 
+    it.each(["createdByUid", "managerUid"])(
+        "exempts a legacy host identified only by %s",
+        (field) => {
+            // poolOps resolves createdByUid || ownerId || managerUid; the
+            // backfill resolves ownerId || createdByUid || managerUid. An
+            // ownerId-only check here charged a legacy commissioner the pool fee
+            // and emailed them a false payment-due reminder. (codex r7)
+            const out = outstandingDuesByUid(
+                { type: "NFL_PICKEM", settings: { entryFee: 50 }, [field]: "host" },
+                [{ id: "host", paidStatus: "UNPAID" }],
+                new Set(),
+            );
+
+            expect(out.get("host")).toBe(0);
+        },
+    );
+
     it("still charges a legacy owner who DID play", () => {
         // Entry evidence is what distinguishes them; without it the fallback
         // would let a playing commissioner off their own entry fee.

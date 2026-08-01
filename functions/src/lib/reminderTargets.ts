@@ -112,6 +112,8 @@ export function resolveReminderTargets(
 export function outstandingDuesByUid(
     pool: {
         ownerId?: string;
+        createdByUid?: string;
+        managerUid?: string;
         type?: string;
         costPerSquare?: number;
         settings?: { entryFee?: number; costPerSquare?: number; rebuyCost?: number };
@@ -125,6 +127,18 @@ export function outstandingDuesByUid(
         entryFee: pool.settings?.entryFee ?? 0,
         costPerSquare: pool.costPerSquare ?? pool.settings?.costPerSquare,
     };
+    // Any of the three owner fields identifies the host. poolOps resolves
+    // `createdByUid || ownerId || managerUid` and backfillMemberRecords resolves
+    // `ownerId || createdByUid || managerUid` — the two disagree on precedence,
+    // so a single-field check here would miss a legacy pool that stores its
+    // commissioner in one of the others and charge them the pool fee. Erring
+    // toward exemption is the safe direction: the cost is not chasing someone
+    // named as the pool's manager, versus emailing a commissioner a demand for
+    // money they never owed.
+    const hostUids = new Set(
+        [pool.createdByUid, pool.ownerId, pool.managerUid].filter((u): u is string => !!u),
+    );
+
     const out = new Map<string, number>();
     for (const rec of members) {
         const m = { ...rec, uid: rec.id } as MemberRecord;
@@ -136,7 +150,7 @@ export function outstandingDuesByUid(
         // Entry evidence settles it: owner, no entry, no stamp => owes nothing
         // beyond rebuy dues, which are stamped separately and still count.
         const unstamped = rec.feeOwed === undefined;
-        const hostOnly = rec.id === pool.ownerId && !entryUids.has(rec.id);
+        const hostOnly = hostUids.has(rec.id) && !entryUids.has(rec.id);
         if (unstamped && hostOnly) {
             out.set(rec.id, (rec.rebuyOwed ?? 0) - (rec.rebuyPaid ?? 0));
             continue;
