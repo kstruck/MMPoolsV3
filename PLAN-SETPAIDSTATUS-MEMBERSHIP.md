@@ -122,7 +122,7 @@ query at all**:
 | # | Evidence | Why it is trustworthy |
 |---|---|---|
 | 1 | A **canonical** Member Record exists | See below — mere existence is NOT enough |
-| 2 | `uid ∈ pool.participantIds` | Requires `isPoolManager()` to write, so no self-add |
+| 2 | `uid ∈ pool.participantIds`, **excluding the `"guest"` sentinel** | Requires `isPoolManager()` to write, so no self-add |
 | 3 | `pool.squares[*].reservedByUid === uid` | Same pool doc, no extra read — covers the guest→claim path |
 
 ### 1 is "canonical", not "exists" — this is the round 3 P1
@@ -138,6 +138,19 @@ The discriminator is what the record carries. `planMembershipWrite`
 two fields: `memberReportedPaid` and `memberReportedAt`. So a record counts as
 evidence only when it carries the server-seeded stamp; a claim-only document
 does not, and is treated as absent.
+
+### Why evidence 2 must exclude `"guest"`
+
+`squares.ts:115` inserts the **literal string `"guest"`** into `participantIds`
+for an anonymous reservation — it is a sentinel, not a person. A membership test
+that accepts any array element would therefore admit an authenticated account
+whose Firebase UID is the string `guest` into **every pool containing a single
+anonymous square reservation** (codex round 4).
+
+`src/utils/poolRoster.ts` already excludes the same sentinel when building the
+roster, so this is consistency with an existing rule rather than a new one — and
+`resolveReminderTargets` in #338 excludes it too. Three places now agree that
+`guest` is never a person; the guard must not be the one that disagrees.
 
 ### 3 exists because `participantIds` has one gap
 
@@ -190,6 +203,14 @@ round 1, P1): a `voidMemberRecord` landing after the snapshot would not be
 observed, and the caller's record would be resurrected from a stale
 `participantIds`. That is the same class of bug this PR exists to close, so the
 guard must not be built on a read taken before the guard begins.
+
+**The transactional pool read must also confirm the pool still EXISTS** (codex
+round 4). Deleting a Firestore document does **not** delete its subcollections,
+so `pools/{id}/members/*` survives its pool. If the pool is deleted between the
+callable's opening `poolSnap` check and this transaction, a surviving canonical
+member record would satisfy evidence 1 and the claim write would recreate an
+orphaned member document under a pool that no longer exists. The transaction
+therefore re-checks existence before evaluating any evidence.
 
 ---
 
@@ -279,9 +300,9 @@ is worth its own ticket but does not gate this.
 
 | Item | Status |
 |---|---|
-| Plan | ✅ this document (rewritten after review round 3 — the rule got SMALLER) |
-| Sweep | ✅ `PLAN-SETPAIDSTATUS-MEMBERSHIP-SWEEPS.md` (revised after round 1) |
-| Review log | 🔄 IN PROGRESS — rounds 1–3 recorded, 10 findings, all accepted |
+| Plan | ✅ this document (rewritten after round 3 — the rule got SMALLER — and hardened in round 4) |
+| Sweep | ✅ `PLAN-SETPAIDSTATUS-MEMBERSHIP-SWEEPS.md` (rewritten after round 4 to match its own commands) |
+| Review log | 🔄 IN PROGRESS — rounds 1–4 recorded, 13 findings, all accepted |
 | Implementation | not started — gated on a clean review round |
 
 ⚠️ This table is a status claim about a PLAN-GATED authorization change. Do not

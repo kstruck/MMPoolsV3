@@ -29,14 +29,22 @@ only the first command, while row 20 and `poolExceptions.ts:448` are outputs of
 the second. A sweep whose stated method cannot reproduce its own table is worth
 less than no sweep, because it looks like evidence.
 
-## Results — 20 hits, 6 write paths
+## Results — 28 lines total (20 + 8), classified individually
+
+⚠️ **Round 4 rewrote this section.** The previous version reported "20 hits",
+collapsed the six helper call sites into a single row, and omitted the two helper
+*definitions* — so the table could not be reproduced from the commands above,
+which is the one property a sweep must have. Both commands are re-run below and
+every line is listed.
+
+### Command 1 — direct collection references (20 lines)
 
 | # | Site | Read/Write | Membership verified? |
 |---|---|---|---|
 | 1 | `lib/memberRecord.ts:113` `membersCol()` | helper | n/a — returns the collection ref |
-| 2 | `lib/memberRecord.ts:134` `ensureMemberRecord` | **WRITE** | ✅ by construction — see below |
+| 2 | `lib/memberRecord.ts:134` (inside `ensureMemberRecord`) | **WRITE** | ✅ via its call sites — command 2 |
 | 3 | `lib/memberRecord.ts:141` `voidMemberRecord` | **WRITE (delete)** | ✅ removal, not creation |
-| 4 | `lib/memberRecord.ts:158` `reconcileMembership` | **WRITE** | ✅ by construction — see below |
+| 4 | `lib/memberRecord.ts:158` (inside `reconcileMembership`) | **WRITE** | ✅ via its call sites — command 2 |
 | 5 | `lib/memberRecord.ts:172` `memberRecordExists` | read | n/a |
 | 6 | `lib/rosterSummary.ts:39` | read | n/a |
 | 7 | `migrations/backfillMemberRecords.ts:175` | **WRITE** | ✅ SUPER_ADMIN migration, dry-run gated |
@@ -49,25 +57,33 @@ less than no sweep, because it looks like evidence.
 | 14 | `nflPools.ts:722` rebuy | **WRITE** | ✅ requires an existing entry + deadline checks |
 | 15 | `poolExceptions.ts:306` | read (in tx) | n/a |
 | 16 | `poolOps.ts:477` | read | n/a |
-| 17 | **`setPaidStatus.ts:25` → `:30`** | **WRITE** | 🔴 **NO — this is the defect** |
+| 17 | **`setPaidStatus.ts:25`** (→ the write at `:30`) | **WRITE** | 🔴 **NO — this is the defect** |
 | 18 | `statsTrigger.ts:66` | read | n/a |
 | 19 | `userProfile.ts:26` | read | n/a |
-| 20 | `nflPools.ts:157/239/272/641`, `lib/poolCreation.ts:166` | **WRITE** via #2 | ✅ — the join/create/submit paths |
+| 20 | `lib/memberRecord.ts:114` (body of `membersCol`) | helper | n/a |
 
-## Why the `ensureMemberRecord` call sites are safe "by construction"
+### Command 2 — helper definitions and call sites (8 lines)
 
-Every one of the five is inside the transaction of an operation that *is* the
-act of joining or playing, so membership is established by the same code path
-that writes the record:
+| # | Site | Kind | Membership verified? |
+|---|---|---|---|
+| 21 | `lib/memberRecord.ts:123` `export function ensureMemberRecord(` | definition | n/a — see call sites |
+| 22 | `lib/memberRecord.ts:148` `export function reconcileMembership(` | definition | n/a — see call sites |
+| 23 | `lib/poolCreation.ts:166` | call site | ✅ pool creation — seeds the **owner's** record at t=0 |
+| 24 | `nflPools.ts:157` | call site | ✅ NFL pool creation — owner seed |
+| 25 | `nflPools.ts:239` | call site | ✅ join, after the join's own eligibility checks |
+| 26 | `nflPools.ts:272` | call site | ✅ join, participant seed with `feeOwed` stamped |
+| 27 | `nflPools.ts:641` | call site | ✅ entry submit — the submitter is playing |
+| 28 | `poolExceptions.ts:448` | call site | ✅ guarded `if (existingMember && committedPick)` — cannot create |
 
-| Call site | Operation |
-|---|---|
-| `lib/poolCreation.ts:166` | pool creation — seeds the **owner's** record at t=0 |
-| `nflPools.ts:157` | NFL pool creation — same, owner seed |
-| `nflPools.ts:239` | join — after the join's own eligibility checks |
-| `nflPools.ts:272` | join — participant seed with `feeOwed` stamped |
-| `nflPools.ts:641` | entry submit — the submitter is playing |
-| `poolExceptions.ts:448` | commissioner exception, and note the guard: `if (existingMember && committedPick)` — it will not create |
+The two commands have **no overlapping lines**: call sites mention neither
+`membersCol` nor `collection('members')`, which is exactly why command 2 is
+required.
+
+## Why the helper call sites are safe "by construction"
+
+Rows 23–28 are each inside the transaction of an operation that *is* the act of
+joining or playing, so membership is established by the same code path that
+writes the record.
 
 ## Conclusion
 
@@ -85,6 +101,35 @@ Two consequences for the plan:
    update` clause permits exactly the two claim fields on an existing document.
    The rules already say what the callable should have said; callables bypass
    rules, which is why the gap survived.
+
+## Sweep 2 — who writes `participantIds` (added round 3)
+
+This second sweep is what collapsed the plan's membership rule from per-pool-type
+entry archaeology to a single cross-type check.
+
+```
+grep -rn "participantIds" functions/src --include=*.ts | grep -v __tests__ | grep -i "arrayUnion\|arrayRemove"
+```
+
+| Writer | Pool type / path |
+|---|---|
+| `bracketEntries.ts:107` | Bracket entry create |
+| `bracketPools.ts:284` | Bracket join |
+| `nflPools.ts:258` | NFL join |
+| `playoffPools.ts:219` | Playoff join |
+| `squares.ts:115` | Squares reserve — ⚠️ inserts the literal `"guest"` when anonymous |
+| `poolOps.ts:661` | commissioner add |
+| `lib/memberRecord.ts:140,162` | `voidMemberRecord` / `reconcileMembership` (removal) |
+| `lib/memberRecord.ts:166` | `reconcileMembership` (add) |
+
+**Two conclusions the plan depends on:**
+
+1. **Every join path maintains `participantIds`**, so it is the system's own
+   cross-type membership set. A membership guard built on it inherits future pool
+   types automatically.
+2. **`propBets.ts` writes it ZERO times** (`grep -c` = 0) and creates no Member
+   Record, so prop-card buyers are on no roster. That is why the plan excludes
+   Props explicitly rather than silently missing them.
 
 ## What this sweep does NOT cover
 

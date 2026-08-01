@@ -215,4 +215,65 @@ again.
 
 ## Round 4 — codex (plan + sweep, after round 3 rewrite)
 
+**VERDICT: REVISE.** 3 findings, all P2. **All 3 accepted.** The round-3 rewrite
+held — no finding re-opened it — and these are narrower, which is the convergence
+signal.
+
+### 11. (P2) Reject the `guest` sentinel as a participant UID
+
+> Anonymous Squares reservations insert the literal `"guest"` into
+> `participantIds`, while evidence #2 accepts any UID in that array. If an
+> authenticated account is issued the valid Firebase UID `guest`, it can pass the
+> predicate for every pool containing a guest reservation and mint a Member
+> Record without joining.
+
+**Accepted.** `squares.ts:115` does exactly that. The irony is that #338 removed
+`participantIds` as a target source partly over trust, and I reintroduced it here
+having read the same line — `poolRoster.ts` and `resolveReminderTargets` both
+already exclude `guest`, so the guard would have been the only place disagreeing
+that `guest` is not a person.
+
+**Plan changed:** evidence 2 excludes the sentinel, with the three-way
+consistency noted.
+
+### 12. (P2) Revalidate that the pool exists inside the transaction
+
+> If a pool is deleted after the initial non-transactional `poolSnap` check but
+> before this transaction, Firestore leaves its `members` subcollection intact. A
+> surviving canonical member record can then satisfy evidence #1 and the claim
+> write recreates an orphaned member document under the deleted pool.
+
+**Accepted.** Deleting a Firestore document does not delete its subcollections —
+so the members collection outlives its pool, and evidence 1 would still be
+satisfiable. Round 1 moved the pool read inside the transaction; this is the
+other half of the same point, which round 1 did not make: the transactional read
+must be checked for **existence**, not merely used for `participantIds`.
+
+**Plan changed:** §4 requires the transactional snapshot to exist before any
+evidence is evaluated.
+
+### 13. (P2) Make the sweep results match its commands
+
+> These commands currently produce 28 matching lines: 20 direct collection
+> references and 8 helper-definition/call-site matches, with no exact-line
+> overlap. The table reports 20 hits, collapses several helper calls into one row,
+> and omits the two helper definitions, so its claimed complete classification and
+> the resulting "only unguarded path" conclusion cannot be reproduced.
+
+**Accepted, and this is round 1 finding 3 recurring in a new form** — which is
+worth saying plainly. Round 1 caught the sweep stating one command while using
+two; I added the second command and still left the *results* summarised rather
+than enumerated. Both times the defect was the same: a sweep that reads as
+evidence but cannot be re-derived from its own stated method.
+
+Re-ran both commands: 20 and 8 lines, no overlap. **Sweep rewritten** as two
+tables enumerating all 28 lines individually, including the two helper
+definitions and each of the six call sites. Sweep 2 (`participantIds` writers)
+is also now written down, since the round-3 design collapse depends on it and it
+was previously only in the review log.
+
+---
+
+## Round 5 — codex (plan + sweep, after round 4 fixes)
+
 Pending.
