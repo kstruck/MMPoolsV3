@@ -118,6 +118,21 @@ git checkout -b deploy-338 origin/main
 **You should see:** `Switched to a new branch 'deploy-338'`.
 **If it says the branch exists:** use a different name, e.g. `deploy-338b`. Never `-B`.
 
+### Step 1b — CONFIRM #338 IS ACTUALLY IN `origin/main` FIRST
+
+```powershell
+git log --oneline -3 origin/main
+```
+
+**You should see** a commit mentioning the reminder targets / #338 at or near the top.
+
+⚠️ **Do not skip this.** If #338 has not merged, everything below still runs
+happily and the second deploy reports **every function skipped** — because the
+deployed code already matches. This runbook calls an all-Skipped run positive
+evidence, so it would read as a clean deploy of code that was never deployed.
+The all-Skipped check only proves anything once you know WHICH commit you are
+deploying.
+
 ### Step 2 — install and build
 
 ```powershell
@@ -157,7 +172,14 @@ npx firebase deploy --only functions --project gridiron-gamble-uzuqo
 curl.exe -sSL https://www.marchmeleepools.com/ | Select-String -Pattern 'index-[A-Za-z0-9_-]+\.js'
 ```
 
-**You should see** a hash that is **NOT** `index-Db6JwMWs.js`. If it has not moved, the rebuild did not take.
+**You should see** a hash that is **NOT** `index-Db6JwMWs.js`.
+
+⚠️ **An unchanged hash is INCONCLUSIVE, not proof of failure.** Vite can emit a
+byte-identical bundle when a `src/**` change is tree-shaken away or affects only
+code paths that do not ship. This exact ambiguity is what made the App Check
+timeline so hard to pin down — three rebuilds ran and the hash never moved. If
+the hash is unchanged, **read the Coolify deployment log** and confirm the build
+ran against the right commit, rather than concluding the deploy failed.
 
 ---
 
