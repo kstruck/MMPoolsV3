@@ -78,7 +78,7 @@ export const setPaidStatus = validated(
     await db.runTransaction(async (tx) => {
       const entryRef = poolRef.collection('entries').doc(memberUid);
       const [snap, entrySnap] = await Promise.all([tx.get(mRef), tx.get(entryRef)]);
-      if (!snap.exists) throw new HttpsError("not-found", "Member is not on this pool's roster.");
+      if (!snap.exists) throw new HttpsError("not-found", "MEMBER_NOT_ON_ROSTER: Member is not on this pool's roster.");
       const m: any = snap.data();
       // LEGACY FALLBACK (codex r2): survivor pools have existed since
       // 2026-05-25 but the rebuyOwed writer only since 2026-07-08 (1bb7e89),
@@ -144,16 +144,18 @@ export const setPaidStatus = validated(
   const entryFee: number | undefined = pool.settings?.entryFee;
   let memberName: string | undefined;
   // Member Record mutation + ledger append + entry-doc mirror in ONE transaction
-  // (ADR 0003 item 5; PLAN-PAYMENT-TRUTH P1). The mirror is REQUIRED, not
-  // cosmetic: the Bento ledger UI is entry-backed (ledgerStats counts
-  // entry.paidStatus and the table renders entry paymentMethod/paidAt/
-  // paymentNote), so repointing that panel here without mirroring would blank
-  // its table and freeze the collected/remaining figures. Mirroring in the same
-  // transaction makes the two stores agree by construction, which is what turns
-  // P2's reconciliation into a one-off for historical data.
+  // (ADR 0003 item 5; PLAN-PAYMENT-TRUTH P1).
+  //
+  // ⚠️ The reason given here USED to be that the Bento ledger UI reads entry
+  // docs. That stopped being true in #322, which repointed that panel onto the
+  // Member Record. The mirror is still kept, but for a different and weaker
+  // reason: other surfaces and exports still read `entry.paidStatus`, and
+  // letting the two stores disagree is what P2's reconciliation existed to
+  // clean up. Mirroring in the same transaction keeps them equal by
+  // construction. Do not cite the Bento ledger as the justification again.
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(mRef);
-    if (!snap.exists) throw new HttpsError("not-found", "Member is not on this pool's roster.");
+    if (!snap.exists) throw new HttpsError("not-found", "MEMBER_NOT_ON_ROSTER: Member is not on this pool's roster.");
     // NFL entry docs are keyed by uid (nflPools), so the member's entry — when
     // they have one — lives at entries/{memberUid}. Members without an entry
     // (e.g. the commissioner, or joined-not-yet-picked) simply have no doc to

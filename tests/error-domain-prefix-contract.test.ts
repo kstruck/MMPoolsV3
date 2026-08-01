@@ -56,5 +56,47 @@ describe('NOT_A_POOL_MEMBER domain prefix', () => {
         });
 
         expect(msg).toMatch(/you don't have permission to do that/i);
+
+describe('MEMBER_NOT_ON_ROSTER domain prefix', () => {
+    it('is thrown by EVERY roster-missing path in setPaidStatus', () => {
+        // Two throw sites: the member-self-report transaction and the
+        // commissioner transaction. Both are reachable from the UI, so a prefix
+        // on only one produces a message that changes depending on who clicked.
+        const rosterThrows = setPaidStatusSrc.match(
+            /throw new HttpsError\("not-found", "[^"]*roster[^"]*"\)/g,
+        );
+
+        expect(rosterThrows, 'no roster not-found throw found — did the wording change?')
+            .not.toBeNull();
+        expect(rosterThrows!.length).toBe(2);
+        for (const t of rosterThrows!) {
+            expect(t).toContain('MEMBER_NOT_ON_ROSTER:');
+        }
+    });
+
+    it('resolves to roster-specific copy on the client', () => {
+        const msg = getUserMessage({
+            code: 'functions/not-found',
+            message: 'MEMBER_NOT_ON_ROSTER: Member is not on this pool\'s roster.',
+        });
+
+        expect(msg).toMatch(/roster/i);
+        // The bug being prevented: falling through to the transport-code copy.
+        expect(msg).not.toMatch(/that pool or entry couldn't be found/i);
+    });
+
+    it('still uses the generic not-found copy for a genuinely missing pool', () => {
+        // setPaidStatus throws a BARE not-found for "Pool not found." — that one
+        // must keep the generic message, otherwise the prefix bought nothing.
+        const msg = getUserMessage({
+            code: 'functions/not-found',
+            message: 'Pool not found.',
+        });
+
+        expect(msg).toMatch(/that pool or entry couldn't be found/i);
+    });
+
+    it('keeps the pool-not-found throw UNprefixed', () => {
+        expect(setPaidStatusSrc).toContain('throw new HttpsError("not-found", "Pool not found.")');
     });
 });

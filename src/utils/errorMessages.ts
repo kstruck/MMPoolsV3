@@ -30,6 +30,11 @@ const DOMAIN_PREFIX_MESSAGES: Record<string, string> = {
     // token in front of a message nobody sees, and the half that is easy to
     // forget is this one.
     NOT_A_POOL_MEMBER: "You're not listed as a member of this pool, so a payment can't be reported against it. If you joined and this looks wrong, ask the commissioner to add you to the roster.",
+    // setPaidStatus throws `not-found` for BOTH "pool missing" and "member not
+    // on the roster". Without this prefix the second renders as "that pool or
+    // entry couldn't be found" — about a pool plainly on the commissioner's
+    // screen. See PLAN-PAYMENT-TRUTH §6b round 4.
+    MEMBER_NOT_ON_ROSTER: "That member is no longer on this pool's roster, so their payment status cannot be changed. Refresh the roster to see the current members.",
 };
 
 const AUTH_MESSAGES: Record<string, string> = {

@@ -6,10 +6,8 @@ import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { NotificationLog, User } from "./types";
-
-// Commissioner-initiated ("nudge") reminders for NFL pools (pick'em / survivor / margin).
-// Scheduler-driven reminders live in reminders.ts; this callable lets a pool
-// owner/manager email specific members (or everyone) on demand.
+import type { MemberRecord } from "./shared/memberRecord";
+import { resolveReminderTargets, outstandingDuesByUid } from "./lib/reminderTargets";
 
 type ReminderKind = "PICKS" | "PAYMENT";
 
@@ -63,13 +61,52 @@ export const sendManualReminder = validated(
     const pool = { id: poolSnap.id, ...poolSnap.data() } as any;
     assertPoolOwnerOrSuperAdmin(pool, uid, request.auth!.token.role as string | undefined);
 
-    // 4. Resolve target entries (entry doc id == owner uid for NFL pools)
-    const entriesSnap = await poolRef.collection("entries").get();
-    let entryDocs = entriesSnap.docs;
-    if (targetUids && targetUids.length > 0) {
-        const targetSet = new Set(targetUids);
-        entryDocs = entryDocs.filter((d) => targetSet.has((d.data().ownerUid as string) || d.id));
-    }
+    // 4. Resolve targets from the ROSTER, not the entries collection.
+    //
+    // This used to read entries alone, which made the feature unable to reach
+    // the one person it exists for: a member who has never submitted matched no
+    // entry, so the call returned `sent: 0, skipped: 0` and nothing was sent.
+    // The Member Record (pools/{poolId}/members/{uid}) is the membership truth
+    // per ADR 0003; entry existence is a fact ABOUT a member, not the roster.
+    //
+    // Entries are still read and UNIONed in rather than used as an either/or
+    // fallback. Two states need that: pools written before Member Records
+    // existed, and pools only partly covered by `backfillMemberRecords` — in a
+    // partly-covered pool a "members exist, so ignore entries" branch would
+    // silently drop the members who still have only an entry.
+    //
+    // A voided membership DELETES the record (`voidMemberRecord`), so a present
+    // doc is a current member and needs no further filtering.
+    const [membersSnap, entriesSnap] = await Promise.all([
+        poolRef.collection("members").get(),
+        poolRef.collection("entries").get(),
+    ]);
+
+    const targetList = resolveReminderTargets(
+        membersSnap.docs.map((d) => ({ id: d.id, userName: (d.data() as Partial<MemberRecord>).userName })),
+        entriesSnap.docs.map((d) => {
+            const entry = d.data();
+            return {
+                id: d.id,
+                ownerUid: entry.ownerUid as string | undefined,
+                userName: entry.userName as string | undefined,
+                ownerName: entry.ownerName as string | undefined,
+            };
+        }),
+        targetUids,
+        Array.isArray(pool.participantIds) ? (pool.participantIds as string[]) : [],
+        kind === "PAYMENT"
+            ? outstandingDuesByUid(
+                pool,
+                membersSnap.docs.map((d) => ({ id: d.id, ...(d.data() as MemberRecord) })),
+                new Set(entriesSnap.docs.map((d) => (d.data().ownerUid as string) || d.id)),
+                new Map(entriesSnap.docs.map((d) => [
+                    (d.data().ownerUid as string) || d.id,
+                    (d.data().rebuysUsed as number) ?? 0,
+                ])),
+            )
+            : undefined,
+    );
 
     const poolName = pool.name || "Your pool";
     const deepLink = `${BASE_URL}/pool/${poolId}`;
@@ -82,13 +119,27 @@ export const sendManualReminder = validated(
 
     let sent = 0;
     let skipped = 0;
-    const seenUids = new Set<string>();
+    // `skipped` alone cannot be explained by the caller: it mixes "no email on
+    // the profile" with "already reminded inside the 4h window". The UI was
+    // reporting every skip as the second, which is a guess presented as a fact.
+    let skippedNoEmail = 0;
+    let skippedRateLimited = 0;
+    let skippedNoBalance = 0;
 
-    for (const doc of entryDocs) {
-        const entry = doc.data();
-        const targetUid = (entry.ownerUid as string) || doc.id;
-        if (seenUids.has(targetUid)) continue; // one email per member
-        seenUids.add(targetUid);
+    // The Map is keyed by uid, so one email per member is structural — the
+    // explicit seen-set the entries loop needed is gone.
+    for (const target of targetList) {
+        const targetUid = target.uid;
+
+        // Owes nothing — a "payment due" email would be a false chase. Counted,
+        // never silently dropped: an empty result is reported by the UI as "not
+        // on this pool's roster", which would be a wrong and alarming thing to
+        // tell a commissioner about a member who is plainly there.
+        if (target.owesNothing) {
+            skipped++;
+            skippedNoBalance++;
+            continue;
+        }
 
         // Resolve email from the user profile (same approach as the bracket
         // reminder path in reminders.ts: entry.ownerUid -> users/{uid}.email)
@@ -96,6 +147,7 @@ export const sendManualReminder = validated(
         const email = userDoc.exists ? (userDoc.data() as User).email : undefined;
         if (!email) {
             skipped++;
+            skippedNoEmail++;
             continue;
         }
 
@@ -111,10 +163,11 @@ export const sendManualReminder = validated(
         });
         if (!created) {
             skipped++;
+            skippedRateLimited++;
             continue;
         }
 
-        const displayName = entry.userName || entry.ownerName || "there";
+        const displayName = target.displayName || "there";
         const body = kind === "PICKS"
             ? `
                 <p>Hi ${escapeHtml(displayName)},</p>
@@ -137,6 +190,6 @@ export const sendManualReminder = validated(
         sent++;
     }
 
-    return { sent, skipped };
+    return { sent, skipped, skippedNoEmail, skippedRateLimited, skippedNoBalance };
     },
 );

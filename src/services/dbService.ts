@@ -1470,9 +1470,12 @@ export const dbService = {
     },
 
     /** Commissioner nudge: email specific members (or all entries when targetUids is omitted) a picks/payment reminder. */
-    sendManualReminder: async (poolId: string, targetUids: string[] | undefined, kind: 'PICKS' | 'PAYMENT'): Promise<{ sent: number; skipped: number }> => {
+    sendManualReminder: async (poolId: string, targetUids: string[] | undefined, kind: 'PICKS' | 'PAYMENT'): Promise<{ sent: number; skipped: number; skippedNoEmail?: number; skippedRateLimited?: number; skippedNoBalance?: number }> => {
         try {
-            const sendManualReminderFn = httpsCallable<{ poolId: string; targetUids?: string[]; kind: 'PICKS' | 'PAYMENT' }, { sent: number; skipped: number }>(functions, 'sendManualReminder');
+            // skippedNoEmail/skippedRateLimited are OPTIONAL: deployed functions older
+            // than this change return neither, and the UI must not read `undefined`
+            // as `0` and then assert a cause it was never told.
+            const sendManualReminderFn = httpsCallable<{ poolId: string; targetUids?: string[]; kind: 'PICKS' | 'PAYMENT' }, { sent: number; skipped: number; skippedNoEmail?: number; skippedRateLimited?: number; skippedNoBalance?: number }>(functions, 'sendManualReminder');
             const result = await sendManualReminderFn({ poolId, targetUids, kind });
             return result.data;
         } catch (error) {

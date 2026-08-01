@@ -231,8 +231,15 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const handleRemindOne = async (uid: string, kind: 'PICKS' | 'PAYMENT') => {
     setRemindingUid(uid);
     try {
-      const { sent, skipped } = await dbService.sendManualReminder(pool.id, [uid], kind);
-      toast.success(`Sent ${sent} reminder(s), ${skipped} skipped (recently reminded)`);
+      const { sent, skipped, skippedNoEmail, skippedNoBalance } = await dbService.sendManualReminder(pool.id, [uid], kind);
+      // "skipped (recently reminded)" asserted a cause the client was never
+      // told; a no-email skip reported as a success is the same class of lie
+      // this file's payment surfaces were cleaned of in #322.
+      if (sent > 0) toast.success('Reminder sent.');
+      else if (skippedNoEmail && skippedNoEmail > 0) toast.error('No reminder sent — there is no email address on that account.');
+      else if (skippedNoBalance && skippedNoBalance > 0) toast.info('No reminder sent — that member owes nothing.');
+      else if (skipped > 0) toast.info('No reminder sent — they were reminded recently, or have no email on file.');
+      else toast.error("No reminder sent — that member was not found on this pool's roster.");
     } catch (err) {
       logger.error('Failed to send manual reminder:', err);
       toast.error(getUserMessage(err));
@@ -252,8 +259,10 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     }
     setBulkReminding(kind);
     try {
-      const { sent, skipped } = await dbService.sendManualReminder(pool.id, targets, kind);
-      toast.success(`Sent ${sent} reminder(s), ${skipped} skipped (recently reminded)`);
+      const { sent, skipped, skippedNoEmail } = await dbService.sendManualReminder(pool.id, targets, kind);
+      const noEmail = skippedNoEmail && skippedNoEmail > 0 ? `, ${skippedNoEmail} with no email on file` : '';
+      if (sent > 0) toast.success(`Sent ${sent} reminder(s), ${skipped} skipped${noEmail}.`);
+      else toast.info(`No reminders sent — ${skipped} skipped${noEmail}.`);
     } catch (err) {
       logger.error('Failed to send bulk reminders:', err);
       toast.error(getUserMessage(err));
@@ -308,7 +317,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       await dbService.setPaidStatus(pool.id, uid, nextPaid);
     } catch (err: any) {
       logger.error(`Failed to set paid status for ${uid}:`, err);
-      setFeedback({ type: 'error', message: err?.message || 'Failed to update payment status.' });
+      // getUserMessage, not err.message: setPaidStatus now throws a
+      // MEMBER_NOT_ON_ROSTER: domain prefix, and raw err.message would render
+      // that machine token to the commissioner. The Bento payment card already
+      // routes this way.
+      setFeedback({ type: 'error', message: getUserMessage(err, 'Failed to update payment status.') });
     } finally {
       setIsSavingPayment(null);
     }
@@ -324,7 +337,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       await dbService.settleRebuys(pool.id, uid, settle);
     } catch (err: any) {
       logger.error(`Failed to settle rebuys for ${uid}:`, err);
-      setFeedback({ type: 'error', message: err?.message || 'Rebuy settlement failed.' });
+      setFeedback({ type: 'error', message: getUserMessage(err, 'Rebuy settlement failed.') });
     } finally {
       setIsSavingPayment(null);
     }
