@@ -346,4 +346,61 @@ against the rule again.
 
 ## Round 7 — codex (plan + sweep, after round 6 fixes)
 
+**VERDICT: REVISE.** 2 findings — 1 P1, 1 P2. **Both accepted. The P1 is the most
+consequential finding of the cycle: it says this PR does not achieve its own
+stated purpose.**
+
+### 16. (P1) Keep preexisting forged records out of reminder targets
+
+> When a non-member exploited the existing claim path before this fix, their
+> claim-only Member Record remains in Firestore; rejecting a later claim does not
+> remove or canonicalize it. After #338 merges, `resolveReminderTargets` accepts
+> every `members` document regardless of its fields and resolves that UID's
+> email, so these records can still receive PICK or PAYMENT reminders. The plan
+> marks this risk handled while leaving cleanup out of scope.
+
+**Accepted, and it invalidates the plan's central claim.** §6 said the forged-record
+risk was "Handled" by evidence 1. Evidence 1 only refuses to *use* a forged record
+as proof for a **future** claim; it neither deletes the record nor stops anything
+else reading it. `resolveReminderTargets` reads the whole `members` collection and
+does not look at fields, so an already-forged record keeps receiving reminders.
+
+The purpose of this PR is to unblock #338 by closing that exposure. As written it
+would have merged, been reported as closing it, and left it open for exactly the
+accounts that had already exploited the bug — the worst version of this outcome,
+because the PR body would have said otherwise.
+
+**Plan changed:** new **§4a** requires `resolveReminderTargets` to accept only
+**canonical** Member Records, using the same `joinedAt` discriminator. That is a
+change to **#338's branch**, so the sequencing is now stated explicitly: "merge
+this, then merge #338" is NOT sufficient — #338 must carry the canonical filter
+before it merges. §6's risk row is corrected from "Handled" to "PARTLY handled
+here, and the rest is a required change to #338".
+
+Why the filter rather than a cleanup migration: it needs no production-data write,
+so it avoids Rule 1's kill-switch/dry-run gate and takes effect on deploy. A
+cleanup sweep remains worth doing and stays out of scope.
+
+### 17. (P2) Avoid an add/add conflict with #338's prefix contract test
+
+> Because this plan requires this PR to merge before #338, adding
+> `tests/error-domain-prefix-contract.test.ts` here will collide with #338, whose
+> still-open branch already adds that same new file for `MEMBER_NOT_ON_ROSTER`.
+> The subsequent merge will be an add/add conflict across the shared client
+> mapping and test contract, with a real risk of resolving away one prefix.
+
+**Accepted.** The file does not exist on `main`; both branches would add it. The
+dangerous part is not the conflict but its likely resolution: keeping one prefix
+and dropping the other, in the one file whose purpose is to prove both halves of
+a cross-boundary contract are wired. It would fail silently and look tidy.
+
+**Plan changed:** D3 records the resolution in advance — this PR creates the file
+covering **both** prefixes, then #338 is rebased onto `main`, drops its copy, and
+`npm test` re-run proves both cases pass. Decided now rather than improvised at
+merge time.
+
+---
+
+## Round 8 — codex (plan + sweep, after round 7 fixes)
+
 Pending.

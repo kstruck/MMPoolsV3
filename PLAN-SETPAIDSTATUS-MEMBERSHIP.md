@@ -174,6 +174,37 @@ exclusion as Props, and the same answer: fix it where membership is recorded
 (`claimMySquares` should write `participantIds`), not by widening an
 authorization predicate.
 
+### §4a — #338 MUST apply the same canonical filter. This PR alone does not unblock it.
+
+**Round 7, P1 — the most consequential finding of this cycle, because it says
+the stated purpose of this PR is not achieved by this PR.**
+
+Refusing a *future* forged claim does nothing about a record already forged. Such
+a record sits in `pools/{poolId}/members/{uid}` with only `memberReportedPaid`
+and `memberReportedAt`, and #338's `resolveReminderTargets` accepts **every**
+document in that collection and resolves its uid to an email. So after both PRs
+merge, a non-member who exploited the bug before today still receives that pool's
+pick and payment reminders — which is exactly the exposure that blocked #338.
+
+**Required, and it is a change to #338's branch, not this one:**
+`resolveReminderTargets` must treat a Member Record as a roster target only when
+it is **canonical** — carrying the server-seeded stamp (`joinedAt`, per
+`planMembershipWrite`) — using the same discriminator as evidence 1 here.
+
+Two properties make this the right fix rather than a cleanup migration:
+
+- It needs **no production-data write**, so it avoids Rule 1's kill-switch and
+  dry-run gate entirely, and it takes effect the moment the code deploys.
+- It is *fail-closed on the reminder side*: a forged record stops being a target
+  even though the document still exists.
+
+A cleanup sweep to delete forged records is still worth doing eventually, and
+stays out of scope (§7) because it is a prod-data mutation under Rule 1.
+
+**Sequencing consequence:** "merge this, then merge #338" is NOT sufficient on
+its own. #338 must carry the canonical filter before it merges, or the exposure
+survives both PRs.
+
 ### Props are EXCLUDED, deliberately and on the record
 
 `propBets.ts` writes `participantIds` **zero** times and creates no Member
@@ -266,6 +297,19 @@ all — it just puts a machine token in front of a message nobody sees. The clie
 mapping and a contract test in `tests/error-domain-prefix-contract.test.ts` are
 part of this change, not a follow-up.
 
+⚠️ **File-collision hazard with #338 (round 7).** `tests/error-domain-prefix-contract.test.ts`
+does not exist on `main`; **#338's open branch already adds it** for
+`MEMBER_NOT_ON_ROSTER`. Since this PR merges first, both branches would add the
+same path and produce an **add/add conflict** — the failure mode being a
+resolution that keeps one prefix and silently drops the other, in a file whose
+whole job is to prove both halves of a contract are wired.
+
+**Resolution, decided here so it is not improvised at merge time:** this PR
+creates the file covering **both** prefixes. After it merges, #338 is rebased
+onto `main` and its own copy of the file is dropped in favour of the merged one,
+with `npm test` re-run to prove both prefix cases still pass. Coherent, because
+both prefixes are thrown by `setPaidStatus`.
+
 **D4 — The authoritative (commissioner) branch is NOT changed.**
 It already requires owner/manager/SUPER_ADMIN and, in both transactions, throws
 `MEMBER_NOT_ON_ROSTER` when the record is absent. It never creates. Out of
@@ -279,7 +323,7 @@ scope, deliberately: this PR should be reviewable as one rule.
 |---|---|
 | A legitimate member is refused | Mitigated by D1's two evidence sources. The residual case is a member with **no canonical record and no `participantIds` entry** — which, for every pool type whose join path writes `participantIds` (all of them: sweep 2), is indistinguishable from a non-member using every trustworthy signal the system has. The two known exceptions, Props and guest-claim Squares, are named in §4 and §7. |
 | Extra reads on a hot path | Two transactional reads — the pool doc and the member doc. **No entry query at all** after the round-3 collapse. The claim path is a manual member action, not a scoring path. |
-| Records forged before this fix | Handled: evidence 1 requires the server-seeded stamp, so a claim-only document is treated as absent (§4). Without that, the fix would ratify existing exploits. |
+| Records forged before this fix | **PARTLY handled here, and the rest is a REQUIRED change to #338 — see §4a.** Evidence 1 refuses to treat a claim-only document as proof for a *future* claim, but it does not delete the record, and `resolveReminderTargets` accepts every `members` document regardless of its fields. Without §4a, this PR would NOT close the exposure it exists to close. |
 | Props buyers refused | Accepted and documented (§4). `propBets.ts` puts them on no roster; the inconsistency is real but belongs in its own ticket. |
 | Guest-claim Squares users refused | Accepted (§4, round 5). Their ownership signal is attacker-settable, so it cannot be membership evidence. `claimMySquares` should write `participantIds` — own ticket. |
 | The transaction changes write semantics | The write is the same `set(..., {merge: true})` on the same ref; only the guard is added. |
@@ -348,7 +392,8 @@ and takes its own plan gate. Flagged rather than folded in.
 |---|---|
 | Plan | ✅ this document — the rule SHRANK twice under review (4 evidence sources → 3 → 2) |
 | Sweep | ✅ `PLAN-SETPAIDSTATUS-MEMBERSHIP-SWEEPS.md` (rewritten after round 4 to match its own commands) |
-| Review log | 🔄 IN PROGRESS — rounds 1–5 recorded, 14 findings, all accepted |
+| Review log | 🔄 IN PROGRESS — rounds 1–7 recorded, 17 findings, all accepted |
+| **#338 canonical filter (§4a)** | ⛔ REQUIRED before #338 merges — without it neither PR closes the exposure |
 | Implementation | not started — gated on a clean review round |
 
 ⚠️ This table is a status claim about a PLAN-GATED authorization change. Do not
