@@ -200,7 +200,11 @@ export const sendManualReminder = validated(
             && totalOwed !== undefined
             && rebuyOwed >= totalOwed;
         const owesBoth = kind === "PAYMENT" && classifiable && rebuyOwed > 0 && !rebuyOnly;
-        const unclassified = kind === "PAYMENT" && !classifiable;
+        // Also unclassified when the TOTAL is missing: outstandingDuesByUid
+        // deliberately deletes a legacy rebuy record whose derived balance is
+        // <= 0 (price drift), meaning "unknown, stay eligible". classifiable can
+        // still be true there, which would have named the entry fee.
+        const unclassified = kind === "PAYMENT" && (!classifiable || totalOwed === undefined);
 
         const payInstructions = pool.settings?.paymentInstructions
             ? `<p><strong>How to pay:</strong> ${escapeHtml(pool.settings.paymentInstructions)}</p>`

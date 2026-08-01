@@ -202,6 +202,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
       // (functions/src/manualReminders.ts:66-72), so it cannot reach a member
       // who has never submitted — exactly the rows this fix made visible.
       hasEntry: r.hasEntry,
+      hasMember: r.hasMember,
     })),
     [roster, week, pool.type, weeklyGames],
   );
@@ -448,10 +449,17 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
                   <button
                     onClick={() => handleNudge(player)}
-                    disabled={isNudging !== null}
-                    title={player.hasEntry
-                      ? undefined
-                      : 'This member has not started an entry — nudging them is exactly the point.'}
+                    // A row present ONLY in participantIds has neither a Member
+                    // Record nor an entry, and the resolver deliberately rejects
+                    // that uid (participantIds is client-writable). Enabling the
+                    // button there guarantees a 0/0 response reported as "not on
+                    // this roster" — re-creating the dead button #329 removed.
+                    disabled={isNudging !== null || (!player.hasMember && !player.hasEntry)}
+                    title={!player.hasMember && !player.hasEntry
+                      ? 'This member is on the roster list only, with no member record or entry, so there is nothing to remind against yet.'
+                      : player.hasEntry
+                        ? undefined
+                        : 'This member has not started an entry — nudging them is exactly the point.'}
                     className="min-h-[44px] bg-gold-400/10 border border-gold-500/40 hover:bg-gold-400/20 text-gold-600 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 rounded-md transition-all duration-150 hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {/* The label still distinguishes the two states — a
