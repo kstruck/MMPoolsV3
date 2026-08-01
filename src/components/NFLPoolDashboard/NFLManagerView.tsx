@@ -242,9 +242,23 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const hostUids = useMemo(() => new Set(
     [(pool as any)?.createdByUid, (pool as any)?.ownerId, (pool as any)?.managerUid].filter(Boolean),
   ), [pool]);
+  // Mirrors the callable's rules EXACTLY. Where these two disagree the UI either
+  // offers a send the backend refuses, or hides one it would have made:
+  //
+  //  - the host exemption applies ONLY to an UNSTAMPED host (`feeOwed`
+  //    undefined) with no entry. A host who played carries a stamped feeOwed and
+  //    genuinely owes it; exempting them unconditionally hid a real debt.
+  //  - a legacy rebuy with `rebuysUsed > 0` whose computed balance is 0 is
+  //    UNKNOWN, not settled — `rebuyCost` may have since been set to 0. The
+  //    callable keeps them eligible, so this must too, or the backend's
+  //    price-drift safeguard is unreachable from this screen.
   const owesMoney = useCallback(
-    (r: { uid: string; hasEntry: boolean }) =>
-      hostUids.has(r.uid) && !r.hasEntry ? false : memberOutstanding(r as any, rates) > 0,
+    (r: { uid: string; hasEntry: boolean; feeOwed?: number; rebuyOwed?: number; rebuysUsed?: number }) => {
+      const unstampedHost = hostUids.has(r.uid) && !r.hasEntry && r.feeOwed === undefined;
+      if (unstampedHost) return false;
+      if (memberOutstanding(r as any, rates) > 0) return true;
+      return r.rebuyOwed === undefined && (r.rebuysUsed ?? 0) > 0;
+    },
     [hostUids, rates],
   );
   const unpaidCount = useMemo(() => roster.filter(owesMoney).length, [roster, owesMoney]);
