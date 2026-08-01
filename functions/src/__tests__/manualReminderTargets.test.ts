@@ -181,13 +181,18 @@ describe("resolveReminderTargets", () => {
     // sent: 0, skipped: 0 — the exact defect this change exists to fix, one
     // source along.
     describe("participantIds as a roster source", () => {
-        it("reaches a member present ONLY in participantIds", () => {
-            const targets = resolveReminderTargets([], [], undefined, ["only-participant"]);
+        it("REFUSES a uid present only in participantIds", () => {
+            // participantIds is client-writable — firestore.rules protects
+            // 'participants' but not 'participantIds' — so a pool manager could
+            // append any Firebase UID and use this callable to email them.
+            // Member Records and entries are server-written and are the
+            // authorization boundary. (codex r9, P1)
+            const targets = resolveReminderTargets([], [], undefined, ["injected-uid"]);
 
-            expect(targets).toEqual([{ uid: "only-participant" }]);
+            expect(targets).toEqual([]);
         });
 
-        it("lets a Member Record supply the name for a participantIds uid", () => {
+        it("still reaches a uid that ALSO has a Member Record", () => {
             const targets = resolveReminderTargets(
                 [{ id: "u1", userName: "Ada" }],
                 [],
@@ -198,7 +203,7 @@ describe("resolveReminderTargets", () => {
             expect(targets).toEqual([{ uid: "u1", displayName: "Ada" }]);
         });
 
-        it("lets an entry supply the name for a participantIds uid", () => {
+        it("still reaches a uid that ALSO has an entry", () => {
             const targets = resolveReminderTargets(
                 [],
                 [{ id: "u1", ownerUid: "u1", userName: "Bo" }],

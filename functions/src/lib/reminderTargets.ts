@@ -38,16 +38,25 @@ export function resolveReminderTargets(
 ): ReminderTarget[] {
     const targets = new Map<string, ReminderTarget>();
 
-    // THREE sources, matching `src/utils/poolRoster.ts` exactly. The client's
-    // roster unions participantIds + members + entries, so anything narrower
-    // here lists a member in the UI that the callable then refuses to email —
-    // which is the same defect this change exists to fix, one source along.
+    // ⛔ participantIds is deliberately NOT a target source, even though the
+    // client's buildPoolRoster unions it. It is CLIENT-WRITABLE: firestore.rules
+    // `protectedFieldsUnchanged()` protects 'participants' but not
+    // 'participantIds', so a pool manager can append any Firebase UID they know
+    // while the pool is editable. Using it here would make this callable an
+    // arbitrary-email primitive — the manager appends a uid, the callable
+    // resolves users/{uid}.email and sends them mail from the platform.
     //
-    // participantIds carries no name; members and entries fill that in below.
-    // 'guest' is the unclaimed-square sentinel, never a person (poolRoster.ts).
-    for (const uid of participantIds) {
-        if (uid && uid !== 'guest') targets.set(uid, { uid });
-    }
+    // Member Records and entries are both written only by server callables, so
+    // they are the authorization boundary. The entries-only version was safe by
+    // accident; this is safe on purpose.
+    //
+    // The cost is a real one and worth naming: a member present ONLY in
+    // participantIds is listed by the roster UI and cannot be emailed, which is
+    // the disagreement codex flagged in round 1. It is accepted rather than
+    // fixed here because the alternative is to trust a client-writable field.
+    // The durable fix is to add 'participantIds' to protectedFieldsUnchanged(),
+    // which is a rules change and its own PR.
+    void participantIds;
 
     // Plain set, not a merge: participantIds entries above carry no name, so
     // there is never a name here to preserve. A merge branch was written first
