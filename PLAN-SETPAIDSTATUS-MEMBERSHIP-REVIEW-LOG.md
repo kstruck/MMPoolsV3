@@ -87,4 +87,60 @@ numbers, so the row cannot be true before the rounds are real.
 
 ## Round 2 — codex (plan + sweep, after round 1 fixes)
 
+**VERDICT: REVISE.** 3 findings, all P2. **All 3 accepted.** Round 1's fixes all
+held; every finding here is new ground, and two of them are the same shape as
+round 1 finding 2 — *the legacy-healing promise not actually reaching a pool
+type*.
+
+### 5. (P2) Cover every legacy membership representation
+
+> A record-less legacy Playoff member with a missing `participantIds` entry will
+> still be rejected: `submitPlayoffPicks` stores ownership in the embedded
+> `pool.entries` map as `userId`, not in `entries/{uid}` or an `ownerUid`
+> subcollection query. Since D1 promises to heal legacy members and this callable
+> is not restricted to NFL/Bracket pools, make the resolver type-aware.
+
+**Accepted, verified before accepting.** `playoffPools.ts:114` iterates
+`Object.entries(pool.entries || {})` and `:182`/`:201` show `userId` carried
+inside those values — Playoff pools have no `entries` subcollection at all.
+
+Worth noting how this was missed twice: round 1 corrected the entry check from
+one shape to two, and I treated "two shapes" as "all shapes". The real lesson is
+that **this callable accepts any pool type**, so any membership resolver has to
+enumerate the types or state which it excludes. Guessing the set from the two I
+had already looked at is what produced both misses.
+
+**Plan changed:** §4 adds the embedded-map shape as a fourth evidence source,
+with the reasoning above.
+
+### 6. (P2) Limit the ownerUid membership query
+
+> For Bracket pools configured with unlimited entries (`maxEntriesPerUser: -1`),
+> a bare `where('ownerUid', '==', uid)` query returns every entry the caller owns
+> even though the guard only needs existence. This can turn a self-report into an
+> unbounded transactional read; add `limit(1)`.
+
+**Accepted.** The guard tests existence, so the query should say so.
+
+**Plan changed:** §4 specifies `.limit(1)` and a non-empty test.
+
+### 7. (P2) Register the new domain error prefix
+
+> The mapping added by #338 contains `MEMBER_NOT_ON_ROSTER`, not
+> `NOT_A_POOL_MEMBER`; `getUserMessage` matches domain prefixes by exact key, so
+> this new error will fall through to the generic `permission-denied` copy.
+
+**Accepted, and it invalidates D3 as written.** I specified the prefix and
+described the UX benefit as though the prefix were the mechanism. It is not:
+`errorMessages.ts:56` matches `DOMAIN_PREFIX_MESSAGES` by exact key, so an
+unregistered prefix produces the generic copy **plus** a machine token nobody
+sees. D3 would have shipped as pure ceremony.
+
+**Plan changed:** D3 now includes the client mapping and a case in
+`tests/error-domain-prefix-contract.test.ts` as part of this change.
+
+---
+
+## Round 3 — codex (plan + sweep, after round 2 fixes)
+
 Pending.

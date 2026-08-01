@@ -110,6 +110,19 @@ would have been empty for a whole pool type while reading as if it were covered.
 A query-only check is also insufficient: NFL entries do not all carry `ownerUid`,
 which is why `manualReminders.ts` reads `entry.ownerUid || doc.id`.
 
+The `ownerUid` query takes **`.limit(1)`** (codex round 2). The guard needs
+existence, not the set; Bracket pools may be configured `maxEntriesPerUser: -1`,
+where a bare query pulls every entry the caller owns into a transactional read
+for no benefit.
+
+⚠️ **A FOURTH shape exists: Playoff pools have no `entries` subcollection at
+all** (codex round 2, verified). `playoffPools.ts:114` iterates an **embedded
+`pool.entries` map** whose values carry `userId` (`:182`, `:201`). A legacy
+Playoff member with no Member Record and no `participantIds` entry is invisible
+to every check above, so the embedded map is checked too. This callable is not
+restricted by pool type, so "heal legacy members" has to mean every type or say
+which ones it excludes.
+
 Any one suffices. None → `permission-denied`.
 
 ### On using `participantIds` here, given #338 removed it
@@ -157,11 +170,15 @@ Returning `{ success: true }` without writing would hide a real
 misconfiguration. It also repeats the `sent: 0, skipped: 0` mistake #338 exists
 to fix — an operation reporting success while doing nothing.
 
-**D3 — A domain-prefixed error.**
-`NOT_A_POOL_MEMBER:`, matching the `MEMBER_NOT_ON_ROSTER:` prefix added in #338
-and resolved by `getUserMessage`. Without it the client renders the generic
-"insufficient permissions" copy, which points a confused user at the wrong
-problem.
+**D3 — A domain-prefixed error, AND the client mapping to go with it.**
+`NOT_A_POOL_MEMBER:`, alongside the `MEMBER_NOT_ON_ROSTER:` prefix added in #338.
+
+⚠️ **The prefix alone does nothing** (codex round 2). `getUserMessage` matches
+`DOMAIN_PREFIX_MESSAGES` by **exact key**, so an unregistered prefix falls
+through to the generic `permission-denied` copy and D3 delivers no UX benefit at
+all — it just puts a machine token in front of a message nobody sees. The client
+mapping and a contract test in `tests/error-domain-prefix-contract.test.ts` are
+part of this change, not a follow-up.
 
 **D4 — The authoritative (commissioner) branch is NOT changed.**
 It already requires owner/manager/SUPER_ADMIN and, in both transactions, throws
@@ -208,9 +225,9 @@ is worth its own ticket but does not gate this.
 
 | Item | Status |
 |---|---|
-| Plan | ✅ this document (revised after review round 1) |
+| Plan | ✅ this document (revised after review rounds 1–2) |
 | Sweep | ✅ `PLAN-SETPAIDSTATUS-MEMBERSHIP-SWEEPS.md` (revised after review round 1) |
-| Review log | 🔄 IN PROGRESS — `PLAN-SETPAIDSTATUS-MEMBERSHIP-REVIEW-LOG.md`, round 1 recorded (4 findings, all accepted) |
+| Review log | 🔄 IN PROGRESS — rounds 1–2 recorded, 7 findings, all accepted |
 | Implementation | not started — gated on a clean review round |
 
 ⚠️ This table is a status claim about a PLAN-GATED authorization change. Do not
