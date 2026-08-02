@@ -58,16 +58,30 @@ describe('setPaidStatus claim branch — membership guard wiring', () => {
     it('re-reads the pool INSIDE the transaction rather than reusing poolSnap', () => {
         expect(claimCode).toMatch(/tx\.get\(poolRef\)/);
         expect(claimCode).toMatch(/tx\.get\(mRef\)/);
-        // `pool` / `poolSnap` are the stale outer reads. The guard must not
-        // consult either.
+        // POSITIVE pin on the argument, not just a blacklist of the stale name.
+        // Mutation testing: swapping in the outer `pool` survived a
+        // `not.toMatch(/isProvableMember\(\s*pool\s*,/)` as soon as anything sat
+        // between the identifier and the comma. Naming the required source
+        // cannot be dodged that way.
+        expect(claimCode).toMatch(/isProvableMember\(\s*freshPoolSnap\.data\(\)/);
+        // `poolSnap` is the stale outer read. (`\b` does not match inside
+        // `freshPoolSnap` — the capital P breaks the word.)
         expect(claimCode).not.toMatch(/\bpoolSnap\b/);
-        expect(claimCode).not.toMatch(/isProvableMember\(\s*pool\s*,/);
     });
 
-    it('re-checks that the pool still EXISTS', () => {
+    it('re-checks that the POOL still exists, transactionally', () => {
         // Subcollections outlive their parent document, so a canonical member
         // record can satisfy evidence 1 under a deleted pool.
-        expect(claimCode).toMatch(/if \(!\w+\.exists\)/);
+        //
+        // Named snapshot, not `/!\w+\.exists/`: the loose form is satisfied by
+        // any existence check in the branch — a future `!memberSnap.exists`
+        // would keep it green with the pool check gone.
+        //
+        // This is the ONLY coverage of the transactional half. The emulator's
+        // deleted-pool test hits the callable's opening `poolSnap.exists`
+        // instead — verified by mutation: deleting this line left that test
+        // green.
+        expect(claimCode).toMatch(/if \(!freshPoolSnap\.exists\)/);
     });
 
     it('has NO third evidence branch — square ownership stays out', () => {

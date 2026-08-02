@@ -398,8 +398,17 @@ describe('setPaidStatus claim — the membership guard', () => {
   it('REFUSES when the pool is gone but its members subcollection survives', async () => {
     await seedGuardPool();
     // Deleting a Firestore document does NOT delete its subcollections, so a
-    // canonical record outlives its pool. Without the existence re-check the
-    // claim would recreate an orphan under a pool that no longer exists.
+    // canonical record outlives its pool — and evidence 1 would happily admit
+    // its owner, recreating an orphan under a pool that no longer exists.
+    //
+    // ⚠️ This exercises the callable's OPENING `poolSnap.exists` check, which
+    // pre-dates this guard. Mutation testing proved that: deleting the
+    // TRANSACTIONAL re-check left this test green, because the outer one throws
+    // first. The race the transactional check exists for — a delete landing
+    // BETWEEN the opening read and the transaction — cannot be staged from
+    // outside the callable, so it is pinned by a source invariant instead
+    // (tests/setpaidstatus-membership-guard.test.ts). Kept here anyway: it is
+    // the reachable half of the same rule.
     await db.collection('pools').doc(poolId).delete();
     expect((await memberDoc('pg_legacy')).exists).toBe(true);
 
