@@ -6,6 +6,12 @@ runbook. Nothing in this document is an action.
 
 **4 days to the HOF game (Thu 2026-08-06, 8:00pm ET, CAR at ARI).**
 
+⚠️ **`MORNING-2026-08-02.md` (no `-OVERNIGHT`) is SUPERSEDED by this file.** It
+was written earlier the same day and still says `4713eba` is deployed and that
+#338 and #340 are open — all three untrue now. Same date, two files, and the
+shorter name is the one a session reaches for first, so it now carries a banner
+pointing here.
+
 ---
 
 ## 0. State — verified, not remembered
@@ -46,10 +52,12 @@ and not being served:
 before I touched it. Coolify reported `Deployment is Finished`, healthcheck
 `"healthy"` on attempt 1 of 10, `Rolling update completed.`
 
-**Verified from outside**, which is the evidence that counts:
+**Verified from outside**, which is the evidence that counts. If you want to
+re-check it yourself — **PowerShell 5.1 form**, since plain `curl` there is
+`Invoke-WebRequest` and rejects `-sSL`, and `grep` does not exist:
 
-```bash
-curl -sSL https://www.marchmeleepools.com/ | grep -o 'index-[A-Za-z0-9_-]*\.js'
+```powershell
+(curl.exe -sSL https://www.marchmeleepools.com/ | Select-String -Pattern 'index-[A-Za-z0-9_-]+\.js' -AllMatches).Matches.Value | Select-Object -First 1
 ```
 
 `index-Bv2FV3GO.js` → **`index-DlH8liQe.js`**. I polled it across the deploy, so
@@ -254,10 +262,14 @@ STATE — VERIFY, DO NOT TRUST:
 
 origin/main was 22adb90 (plus the docs PR #346). Functions deployed from 22adb90
 (evidence: third run, 173 all "Skipped"). Rules ≡ 0a705c0. Bundle
-index-DlH8liQe.js. ALL THREE QUEUES EMPTY unless a merge since changed
-functions/, shared/, firestore.rules, firestore.indexes.json or src/ — those are
-the real deploy inputs; there is no root `rules/` directory, and a rules or index
-change hiding behind a wrong path name is an ACL left undeployed. Baselines at 22adb90: functions 1295, root
+index-DlH8liQe.js. ALL THREE QUEUES EMPTY unless a merge since touched a deploy
+input. The COMPLETE set, because a wrong path name here is a change left
+undeployed:
+  functions deploy -> functions/, shared/
+  rules deploy     -> firestore.rules, firestore.indexes.json  (no root rules/ dir)
+  Coolify rebuild  -> src/, nginx.conf, Dockerfile, package.json, package-lock.json
+An nginx.conf change does NOT move the bundle hash, so verify that class by
+curling the response headers instead (PICKUP §4). Baselines at 22adb90: functions 1295, root
 523, emulator 306. Coolify dashboard URL: grep -n "72.60.68.7" HANDOFF.md
 
 ⛔ Dependabot #299–#304: do NOT merge, all six rejected with evidence.
