@@ -1,8 +1,8 @@
 # MORNING — 2026-08-02 (overnight session)
 
-**You have exactly one thing to do, and it is blocked on you rather than
-forgotten: the Coolify frontend rebuild.** Everything else is merged, deployed
-and certified. The steps are in §1. Nothing else in this document is an action.
+**You have nothing you must do.** Everything is merged, deployed and verified —
+functions *and* frontend. §1 is the read-only evidence for the deploy, not a
+runbook. Nothing in this document is an action.
 
 **4 days to the HOF game (Thu 2026-08-06, 8:00pm ET, CAR at ARI).**
 
@@ -15,7 +15,7 @@ and certified. The steps are in §1. Nothing else in this document is an action.
 | `origin/main` | `22adb90` |
 | Functions | **deployed from `22adb90`** — certified by a third run: 173 all `Skipped (No changes detected)`, 0 updates, 0 failures, `✔ Deploy complete!` |
 | Rules | **≡ `0a705c0`**, unchanged. `firestore.rules` is byte-identical since |
-| Frontend bundle | **`index-Bv2FV3GO.js`** — ⛔ **STALE, rebuild owed** |
+| Frontend bundle | **`index-DlH8liQe.js`** — rebuilt 08:38 UTC, healthcheck `"healthy"` |
 | Open PRs | dependabot #299–#304 only. All six still rejected; I did not touch them |
 | Test baselines at `22adb90` | functions **1295**, root **523**, emulator **306** passed / 2 expected fail / 10 skipped |
 
@@ -32,45 +32,50 @@ and certified. The steps are in §1. Nothing else in this document is an action.
 
 ---
 
-## 1. ⛔ THE ONE THING — Coolify frontend rebuild
+## 1. ✅ Coolify frontend rebuild — DONE
 
-`src/**` changed in all three merged PRs, so three user-visible things are built
-and **not being served**:
+`src/**` changed in all three merged PRs, so three user-visible things were built
+and not being served:
 
 - the commissioner reminder UI (`NFLManagerView`, `NFLManagerBentoDashboard`) — the HOF-night nudge;
 - the `MEMBER_NOT_ON_ROSTER` / `NOT_A_POOL_MEMBER` error copy;
 - the SuperAdmin **Stale Jobs** tile.
 
-### Why I did not do it, plainly
+**Rebuilt 2026-08-02 08:38 UTC.** App was already on `main` and `Running (healthy)`
+before I touched it. Coolify reported `Deployment is Finished`, healthcheck
+`"healthy"` on attempt 1 of 10, `Rolling update completed.`
 
-You authorised the rebuild and I tried. **The Coolify dashboard URL is written
-down nowhere in this repo** — I searched every tracked file and every skill; the
-runbooks all say *"open the Coolify dashboard"* and never say where it is. I
-tried one guessed hostname, it did not resolve, and I stopped rather than probe
-your infrastructure by trial and error.
-
-**One-line fix worth making while you are in there:** put the URL in
-`.claude/skills/mmp-deploy-and-operate/SKILL.md` next to the manual-trigger note.
-Then a future session can do this without you.
-
-### Steps
-
-1. Open the **Coolify dashboard** (your bookmark).
-2. Select the **`www`** application.
-3. Confirm **Source** is `main` — not a feature branch. If it is anything else, **stop and tell me.**
-4. Confirm the commit it will build is **`22adb90`** or later.
-5. Click **Redeploy**.
-6. Wait for the container healthcheck to go green / "running" — usually 2–4 minutes.
-7. **Verify** in a terminal:
+**Verified from outside**, which is the evidence that counts:
 
 ```bash
 curl -sSL https://www.marchmeleepools.com/ | grep -o 'index-[A-Za-z0-9_-]*\.js'
 ```
 
-8. **Expected:** a hash that is **NOT** `index-Bv2FV3GO.js`. Any different hash means it worked.
-9. **If it still says `index-Bv2FV3GO.js`:** hard-refresh is irrelevant here (curl has no cache), so that means the build did not pick up the new commit. Check the Coolify build log for the SHA it checked out, and tell me — do not re-trigger blindly.
-10. **Do NOT set `VITE_RECAPTCHA_SITE_KEY`** while you are in the environment screen. That variable preceded the 2026-07-30 production outage and its absence is the safe state.
-11. When it passes, tell me and I will move the deploy-state markers in a PR. Do not hand-edit them.
+`index-Bv2FV3GO.js` → **`index-DlH8liQe.js`**. I polled it across the deploy, so
+the move is observed rather than inferred.
+
+`VITE_RECAPTCHA_SITE_KEY` was not touched — I never opened the environment screen.
+
+### ⚠️ I nearly handed this back to you on a false claim
+
+The first version of this document told you the rebuild was yours because *"the
+Coolify dashboard URL is written down nowhere in this repo"*. **That was wrong,
+and qodo caught it on the PR.** `HANDOFF.md:200` records the dashboard URL —
+`http://72.60.68.7:8000/project/.../application/.../deployment` — under the
+heading *"Dashboard, for the next time a `src/**` change lands"*, which is
+precisely this situation.
+
+**How I got it wrong is the part worth keeping.** My first search filtered for
+lines containing the word "coolify", and that URL is a bare IP with no such word.
+My second search would have found it, but it ran long, was moved to the
+background, and **I read its output while it was still empty and treated that as
+a negative result.** An unfinished command is not evidence of absence — this repo
+has a rule about exactly that, and I broke it while writing a document whose job
+is to be trusted.
+
+So: no repo change is needed, the URL was always there, and the reason you are
+reading this instead of doing the rebuild is that a second reviewer checked a
+claim I had already convinced myself of.
 
 ---
 
@@ -207,7 +212,8 @@ re-review", never "clean".
 
 1. **A forged Member Record still appears** on the commissioner's roster UI and in `memberCount`. §4a covers reminder targeting only. Cleanup is a prod-data sweep (§7 of the plan) and is yours to run.
 2. **If a *legitimate* claim-only record exists in production**, that member is unreachable by nudge until they act. codex raised this twice; I rejected it on the population — no code path has ever created such a record, because the self-report has **no client caller** (`git log --all -S"claim: true" -- src/` is empty). The full argument is written into the code at the filter, not just here.
-3. **The Coolify URL is recorded nowhere** (§1).
+3. ~~The Coolify URL is recorded nowhere.~~ **False — retracted.** It is at
+   `HANDOFF.md:200`. See §1 for how I got that wrong.
 
 ---
 
@@ -227,10 +233,11 @@ STATE — VERIFY, DO NOT TRUST:
   gh pr list
   curl -sSL https://www.marchmeleepools.com/ | grep -o 'index-[A-Za-z0-9_-]*\.js'
 
-origin/main was 22adb90. Functions deployed from 22adb90 (evidence: third run,
-173 all "Skipped"). Rules ≡ 0a705c0. Bundle index-Bv2FV3GO.js — ⛔ A COOLIFY
-REBUILD WAS OWED; if the hash has moved, Kevin ran it and the frontend queue is
-empty. Baselines at 22adb90: functions 1295, root 523, emulator 306.
+origin/main was 22adb90 (plus the docs PR #346). Functions deployed from 22adb90
+(evidence: third run, 173 all "Skipped"). Rules ≡ 0a705c0. Bundle
+index-DlH8liQe.js. ALL THREE QUEUES EMPTY unless a merge since changed
+functions/, shared/, rules or src/. Baselines at 22adb90: functions 1295, root
+523, emulator 306. Coolify dashboard URL is at HANDOFF.md:200.
 
 ⛔ Dependabot #299–#304: do NOT merge, all six rejected with evidence.
 ⛔ APP CHECK: do NOT set VITE_RECAPTCHA_SITE_KEY. The warning is the safe state.
@@ -249,7 +256,7 @@ through a full-fleet run — re-run until a pass reports 173 all-Skipped, and
 treat only that run as the certification). No prod-data writes, no arming jobs,
 no dependabot.
 
-TASK 1 — Task 3 from last night is UNDONE and the analysis is in
+TASK 1 — the docs-state-invariants widening is UNDONE and the analysis is in
 MORNING-2026-08-02-OVERNIGHT.md §3: the naive heading-date rule cries wolf on
 three real headings, so it needs a closed vocabulary of state words instead.
 Read §3 before designing it.

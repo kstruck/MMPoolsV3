@@ -1,6 +1,6 @@
-# HANDOFF — Session entry point (updated 2026-08-02 overnight: functions deployed from `22adb90` — the setPaidStatus membership hole is CLOSED (#344) and forged Member Records can no longer be emailed (#338); the SuperAdmin card finally renders the heartbeat verdicts (#345); ⚠️ **A COOLIFY REBUILD IS OWED** — `src/**` changed in all three and the live bundle is still `index-Bv2FV3GO.js`; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; FUNCTIONS + RULES QUEUES EMPTY, FRONTEND QUEUE IS NOT)
+# HANDOFF — Session entry point (updated 2026-08-02 overnight: functions deployed from `22adb90` — the setPaidStatus membership hole is CLOSED (#344) and forged Member Records can no longer be emailed (#338); the SuperAdmin card finally renders the heartbeat verdicts (#345); the frontend was rebuilt for them, `index-Bv2FV3GO.js` → **`index-DlH8liQe.js`**; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; ALL THREE DEPLOY QUEUES ARE EMPTY)
 
-> ## ⚠️ STOP POINT **2026-08-02 (overnight)** — everything through #345 shipped AND deployed (functions); FRONTEND REBUILD OWED
+> ## ✅ STOP POINT **2026-08-02 (overnight)** — everything through #345 shipped AND deployed, frontend included
 >
 > The heading date is the date of the facts immediately below. It is REPLACED
 > on every deploy rather than annotated, because a note added above a stale
@@ -11,8 +11,11 @@
 > **Rules remain ≡ `0a705c0`** — `firestore.rules` is byte-identical since, so no
 > rules deploy is owed. (`shared/memberRecord.ts` DID change; nothing generates
 > `firestore.rules` from `shared/`, so that does not imply one.)
-> ⛔ **The live bundle is `index-Bv2FV3GO.js` and a Coolify rebuild IS OWED** —
-> `src/**` changed in #344, #338 and #345.
+> ✅ **Frontend rebuilt 2026-08-02 08:38 UTC** for the `src/**` changes in #344,
+> #338 and #345: live bundle moved `index-Bv2FV3GO.js` →
+> **`index-DlH8liQe.js`**, read off the prod HTML. Coolify reported
+> `Deployment is Finished`, healthcheck `"healthy"`, `Rolling update completed.`
+> **ALL THREE QUEUES EMPTY.**
 >
 > ⬆️ **Deployed 2026-08-02 overnight for #344 + #338 + #345.** Evidence: two
 > runs were needed because Cloud Functions returned HTTP 429 (`Per project

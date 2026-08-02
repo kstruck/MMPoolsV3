@@ -410,7 +410,7 @@ watcher if you like — it costs nothing but wall-clock — but record TIMEOUT a
 push or ordinary — produced **no** re-review. Two of those PRs sat silent for
 20+ minutes. Then:
 
-```
+```bash
 gh pr ready <N> --undo    # → draft
 gh pr ready <N>           # → ready for review
 ```

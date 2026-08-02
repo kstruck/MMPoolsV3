@@ -363,10 +363,11 @@ state. Concretely:
 Rules remain ≡ `0a705c0` — `firestore.rules` is byte-identical since, so no rules
 deploy is owed. (`shared/memberRecord.ts` changed; nothing generates
 `firestore.rules` from `shared/`, so that does not imply one.)
-⛔ **A COOLIFY REBUILD IS OWED.** The live bundle is still **`index-Bv2FV3GO.js`**
-and `src/**` changed in #344, #338 and #345 — the commissioner reminder UI, the
-`MEMBER_NOT_ON_ROSTER` copy and the SuperAdmin stale-job tile are all built but
-NOT served. **FUNCTIONS + RULES QUEUES EMPTY; THE FRONTEND QUEUE IS NOT.**
+✅ **Frontend rebuilt 2026-08-02 08:38 UTC** for the `src/**` changes in #344,
+#338 and #345 — the commissioner reminder UI, the `MEMBER_NOT_ON_ROSTER` copy and
+the SuperAdmin stale-job tile. Live bundle moved `index-Bv2FV3GO.js` →
+**`index-DlH8liQe.js`**, read off the prod HTML; Coolify reported
+`Deployment is Finished`, healthcheck `"healthy"`. **ALL THREE QUEUES EMPTY.**
 (Deployed 2026-08-02 overnight for **#344 + #338 + #345**. Cloud Functions
 returned HTTP 429 `Per project mutation requests` partway through each first
 pass; the retry finished them. The certification is the THIRD run: 173 all
@@ -375,7 +376,7 @@ pass; the retry finished them. The certification is the THIRD run: 173 all
 (HISTORICAL — the deploy before it. 2026-08-01 for **#341**, the repair-job
 narrowing: 173 `Successful update operation`, then 173 all-Skipped. Its frontend
 rebuild moved `index-Db6JwMWs.js` → `index-Bv2FV3GO.js`, which is the hash still
-live today — see the owed rebuild above.)
+live until tonight's rebuild superseded it.)
 
 (HISTORICAL — the deploy before it. Deployed 2026-07-31 in the EVENING ET for **#334**, which stopped shipping the
 113-file test suite to Cloud Functions — **the packaged upload went 2.33 MB →
