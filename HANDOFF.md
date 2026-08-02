@@ -1,12 +1,12 @@
-# HANDOFF — Session entry point (updated 2026-07-31 evening: functions deployed from `68d121b` — #334 stopped shipping the test suite to Cloud Functions, 2.33 MB → 1.55 MB, on top of #333's NFL-7 chaos-drill scoring fixes; the frontend is unchanged at `index-Db6JwMWs.js`; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and ALL THREE DEPLOY QUEUES ARE EMPTY)
+# HANDOFF — Session entry point (updated 2026-07-31 evening: functions deployed from `4713eba` — #341 stopped the repair jobs laundering guest-square claims into roster membership; ⚠️ a Coolify rebuild IS owed (OperationsPanel.tsx changed); the frontend is unchanged at `index-Db6JwMWs.js`; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and ALL THREE DEPLOY QUEUES ARE EMPTY)
 
-> ## ✅ STOP POINT 2026-07-28, **UPDATED 2026-07-31 evening** — everything through #334 shipped AND deployed
+> ## ✅ STOP POINT 2026-07-28, **UPDATED 2026-08-01** — everything through #341 shipped AND deployed (functions); FRONTEND REBUILD OWED
 >
 > ⚠️ The 2026-07-28 date is the ORIGINAL snapshot; the deploy facts immediately
 > below were refreshed on **2026-07-31** and are current. Read the dates on
 > individual claims rather than the heading.
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `68d121b`.**
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `4713eba`.**
 > **Rules remain ≡ `0a705c0`** — unchanged by every merge since.
 >
 > ⬆️ **Deployed AGAIN 2026-07-31 at ~17:45 ET for #334**, which stopped shipping

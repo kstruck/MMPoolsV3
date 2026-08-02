@@ -357,10 +357,11 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `68d121b`.**
-Rules remain ≡ `0a705c0`, unchanged by every merge since. Frontend still
-`index-Db6JwMWs.js` — #332, #333 and #334 touch no `src/**`, so **no rebuild is
-owed**. All three queues empty.
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `4713eba`.**
+Rules remain ≡ `0a705c0`, unchanged by every merge since.
+⚠️ **A FRONTEND REBUILD IS OWED**: #341 changed `OperationsPanel.tsx`, so the
+live bundle is still `index-Db6JwMWs.js` and does not yet carry the
+`squaresSkipped` counter in the Run Log. Functions and rules queues are empty.
 (Deployed 2026-07-31 in the EVENING ET for **#334**, which stopped shipping the
 113-file test suite to Cloud Functions — **the packaged upload went 2.33 MB →
 1.55 MB**. Full fleet twice: 173 `Successful update operation`, then 173
