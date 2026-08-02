@@ -359,14 +359,23 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `4713eba`.**
-Rules remain ≡ `0a705c0`, unchanged by every merge since.
-✅ **Frontend rebuilt 2026-08-01 for #341** (`OperationsPanel.tsx`): live bundle
-moved `index-Db6JwMWs.js` → **`index-Bv2FV3GO.js`**, verified off the prod HTML.
-**ALL THREE QUEUES EMPTY.**
-(Deployed 2026-08-01 for **#341**, the repair-job narrowing: 173
-`Successful update operation`, then 173 `Skipped (No changes detected)` — that
-all-Skipped run is the evidence. `shared/` untouched, so rules are unaffected.)
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `22adb90`.**
+Rules remain ≡ `0a705c0` — `firestore.rules` is byte-identical since, so no rules
+deploy is owed. (`shared/memberRecord.ts` changed; nothing generates
+`firestore.rules` from `shared/`, so that does not imply one.)
+⛔ **A COOLIFY REBUILD IS OWED.** The live bundle is still **`index-Bv2FV3GO.js`**
+and `src/**` changed in #344, #338 and #345 — the commissioner reminder UI, the
+`MEMBER_NOT_ON_ROSTER` copy and the SuperAdmin stale-job tile are all built but
+NOT served. **FUNCTIONS + RULES QUEUES EMPTY; THE FRONTEND QUEUE IS NOT.**
+(Deployed 2026-08-02 overnight for **#344 + #338 + #345**. Cloud Functions
+returned HTTP 429 `Per project mutation requests` partway through each first
+pass; the retry finished them. The certification is the THIRD run: 173 all
+`Skipped (No changes detected)`, 0 updates, 0 failures, `✔ Deploy complete!`.)
+
+(HISTORICAL — the deploy before it. 2026-08-01 for **#341**, the repair-job
+narrowing: 173 `Successful update operation`, then 173 all-Skipped. Its frontend
+rebuild moved `index-Db6JwMWs.js` → `index-Bv2FV3GO.js`, which is the hash still
+live today — see the owed rebuild above.)
 
 (HISTORICAL — the deploy before it. Deployed 2026-07-31 in the EVENING ET for **#334**, which stopped shipping the
 113-file test suite to Cloud Functions — **the packaged upload went 2.33 MB →

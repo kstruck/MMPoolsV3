@@ -404,6 +404,40 @@ The observation is from a single PR, so it may not hold universally. Re-arm the
 watcher if you like — it costs nothing but wall-clock — but record TIMEOUT as
 "qodo did not re-review", never as "qodo is clean".
 
+### ✅ 2026-08-02 — you CAN make it re-review: toggle draft → ready
+
+**Measured three times in one session, on #338, #345 and #343.** A push — force
+push or ordinary — produced **no** re-review. Two of those PRs sat silent for
+20+ minutes. Then:
+
+```
+gh pr ready <N> --undo    # → draft
+gh pr ready <N>           # → ready for review
+```
+
+qodo posted a fresh review **within 90 seconds** every time, stamped at the
+current head commit, with its resolved findings marked `✓ Resolved`.
+
+This follows from the trigger already recorded at the top of this file — qodo
+SKIPS DRAFT PRs, so marking one ready is what fires it — but the consequence had
+not been drawn: **the same transition re-fires it on a PR that is already open.**
+
+**Why this matters more than convenience.** #338 was rebased onto a new `main`
+and gained a substantial new change (the §4a canonical filter). Without a
+re-review, the only qodo evidence available was a report on the *pre-rebase*
+diff, and merging on it would have meant calling the mandatory gate satisfied
+using a review of code that was no longer in the PR. The toggle turned an
+unsatisfiable gate into a satisfied one.
+
+⚠️ **This does not soften the rule above.** Do the toggle, watch, and if it still
+does not report, that is still a TIMEOUT and still "qodo did not re-review" —
+never "clean". The per-finding resolution bar is unchanged. What changed is that
+you should now *try* the toggle before recording a timeout, because a timeout you
+could have avoided is a weaker gate for no reason.
+
+⚠️ **Draft state is visible to anyone watching the PR**, and a PR in draft cannot
+be merged. Toggle it back immediately — both commands in one step, as above.
+
 Cycle ends when: every finding is fixed or rejected with reasoning, OR every
 remaining one is INVALID / below the severity stop rule, OR 5 rounds (MAX_ROUNDS
 convention) — whichever first. Deadlock ≠ silence: if stopping with open disputed

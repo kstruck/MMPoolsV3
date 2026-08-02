@@ -1,13 +1,29 @@
-# HANDOFF — Session entry point (updated 2026-08-01: functions deployed from `4713eba` — #341 stopped the repair jobs laundering guest-square claims into roster membership; the frontend was rebuilt for it, `index-Db6JwMWs.js` → **`index-Bv2FV3GO.js`**; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and ALL THREE DEPLOY QUEUES ARE EMPTY)
+# HANDOFF — Session entry point (updated 2026-08-02 overnight: functions deployed from `22adb90` — the setPaidStatus membership hole is CLOSED (#344) and forged Member Records can no longer be emailed (#338); the SuperAdmin card finally renders the heartbeat verdicts (#345); ⚠️ **A COOLIFY REBUILD IS OWED** — `src/**` changed in all three and the live bundle is still `index-Bv2FV3GO.js`; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; FUNCTIONS + RULES QUEUES EMPTY, FRONTEND QUEUE IS NOT)
 
-> ## ✅ STOP POINT 2026-07-28, **UPDATED 2026-08-01** — everything through #341 shipped AND deployed, frontend included
+> ## ⚠️ STOP POINT **2026-08-02 (overnight)** — everything through #345 shipped AND deployed (functions); FRONTEND REBUILD OWED
 >
-> ⚠️ The 2026-07-28 date is the ORIGINAL snapshot; the deploy facts immediately
-> below were refreshed on **2026-08-01** and are current. Read the dates on
-> individual claims rather than the heading.
+> The heading date is the date of the facts immediately below. It is REPLACED
+> on every deploy rather than annotated, because a note added above a stale
+> claim leaves two live-looking claims and the reader takes whichever they
+> reach first — the lesson #343 recorded and this box kept re-learning.
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `4713eba`.**
-> **Rules remain ≡ `0a705c0`** — unchanged by every merge since.
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `22adb90`.**
+> **Rules remain ≡ `0a705c0`** — `firestore.rules` is byte-identical since, so no
+> rules deploy is owed. (`shared/memberRecord.ts` DID change; nothing generates
+> `firestore.rules` from `shared/`, so that does not imply one.)
+> ⛔ **The live bundle is `index-Bv2FV3GO.js` and a Coolify rebuild IS OWED** —
+> `src/**` changed in #344, #338 and #345.
+>
+> ⬆️ **Deployed 2026-08-02 overnight for #344 + #338 + #345.** Evidence: two
+> runs were needed because Cloud Functions returned HTTP 429 (`Per project
+> mutation requests per minute per region`) partway through each first pass —
+> the retry completed them. The certification is the THIRD run: **173 all
+> `Skipped (No changes detected)`, 0 updates, 0 failures, `✔ Deploy complete!`**.
+> That quota 429 is normal for a full-fleet deploy here and is not a failure;
+> what would be a failure is stopping after a partial run and calling it done.
+>
+> ⬇️ **EVERYTHING BELOW THIS LINE IS THE HISTORICAL DEPLOY RECORD.** `22adb90`
+> above is the current state.
 >
 > ⬆️ **Deployed 2026-08-01 for #341**, which stopped the repair jobs
 > (`fixParticipantIds`, `backfillMemberRecords`) promoting a guest-square claim
@@ -17,7 +33,8 @@
 > unaffected. **`src/components/admin/OperationsPanel.tsx` changed, so a Coolify
 > rebuild was owed and Kevin ran it 2026-08-01** — live bundle moved
 > `index-Db6JwMWs.js` → **`index-Bv2FV3GO.js`**, read off the prod HTML. The Run
-> Log now shows `squaresSkipped`. **ALL THREE QUEUES EMPTY.**
+> Log now shows `squaresSkipped`. (All three queues were empty at that point;
+> the frontend queue is NOT empty now — see the current claim above.)
 >
 > ⬇️ **EVERYTHING BELOW THIS LINE IS THE HISTORICAL DEPLOY RECORD**, kept for
 > provenance. `4713eba` above is the current state.
