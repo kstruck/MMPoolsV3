@@ -449,9 +449,20 @@ the opposite direction.
 So on the TOGGLE path, filter on **`updated_at`** (`submitted_at` for the reviews
 endpoint has no in-place equivalent, so it stays as is):
 
+Redefine §1's `summary()` — do NOT hand-roll it. The obvious one-liner drops two
+protections the helper already has: the `NOISE` heading filter (so the
+`Qodo is busy working` placeholder is counted as the re-review) and
+`_count`/`guard`'s fail-CLOSED behaviour (a bare `gh api | grep -c` reports an
+API failure as `0`, i.e. silence read as "nothing yet").
+
 ```bash
-gh api --paginate $R/issues/<N>/comments   -q ".[] | select(.user.login == \"$QB\") | select(.updated_at > \"$SINCE\") | .id" | grep -c .
+# TOGGLE PATH: identical to §1's summary() except updated_at replaces created_at.
+summary() { _count $R/issues/<N>/comments \
+    -q ".[] | select(.user.login == \"$QB\") | select(.updated_at > \"$SINCE\") | select((.body | capture(\"<h3>(?<h>[^<]*)</h3>\").h // \"\") | test(\"$NOISE\"; \"i\") | not) | .id"; }
+# inline() keeps created_at: PR review comments are posted, not revised in place.
 ```
+
+and keep the `guard "$I" "$RB" "$S"` calls exactly as §1 has them.
 
 Two more things that pass measured on #346 and will bite a naive watcher:
  - qodo posts a **`Qodo is busy working`** placeholder FIRST. Counting it as an
