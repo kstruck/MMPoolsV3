@@ -46,7 +46,8 @@
 > paragraph below is the state as of #333/#334 and is kept for the deploy record.
 > ✅ **NO frontend rebuild was owed then.** Neither #332 nor #333 touches `src/**`
 > (verified with `git diff --name-only <sha>^ <sha> -- src/` on both merge
-> commits, both empty), so the live bundle stays **`index-Db6JwMWs.js`**.
+> commits, both empty), so the live bundle stayed `index-Db6JwMWs.js` AT THAT
+> TIME. ⚠️ HISTORICAL — it is now **`index-Bv2FV3GO.js`** (#341 rebuild, top of box).
 > **ALL THREE QUEUES EMPTY.**
 >
 > 📌 **A production fact established 2026-07-31 and worth keeping:** `nfl_games`
@@ -68,7 +69,8 @@
 > place that fact is written down.
 >
 > ✅ **Frontend rebuilt the same day**: live bundle moved `index-CR5oJEHh.js` →
-> **`index-Db6JwMWs.js`**, read off the prod HTML. **`index-Db6JwMWs.js` is the
+> **`index-Db6JwMWs.js`**, read off the prod HTML. **That was the live hash THEN;
+> it is now `index-Bv2FV3GO.js` — see the top of this box.** `index-Db6JwMWs.js` was the
 > current live hash. ALL THREE QUEUES EMPTY.**
 >
 > 🕐 **Not to be confused with the three App Check rebuilds earlier the same day**
