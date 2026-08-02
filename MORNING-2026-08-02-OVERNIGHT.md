@@ -266,18 +266,22 @@ STATE — VERIFY, DO NOT TRUST:
 origin/main was 22adb90 (plus the docs PR #346). Functions deployed from 22adb90
 (evidence: third run, 173 all "Skipped"). Rules ≡ 0a705c0. Bundle
 index-DlH8liQe.js. ALL THREE QUEUES EMPTY unless a merge since touched a deploy
-input. The COMPLETE set — verified against vite.config.ts, Dockerfile and
-package.json, because a wrong path name here is a change left undeployed:
+input:
   functions  -> functions/**, shared/**
   rules      -> firestore.rules            (--only firestore:rules)
   indexes    -> firestore.indexes.json     (--only firestore:indexes, SEPARATE
                 from rules — deploying rules does NOT create an index)
-  Coolify    -> src/**, shared/**, public/**, index.html, vite.config.ts,
-                scripts/prerender.ts, nginx.conf, Dockerfile,
-                package.json, package-lock.json
-shared/** is in TWO lists: vite.config.ts aliases @shared to it, and Dockerfile
-does `COPY . .` then `npm run build:static` (which also runs prerender). So a
-shared/ change owes a functions deploy AND a rebuild.
+  Coolify    -> DEFAULT YES. Dockerfile:10 is `COPY . .` and :30 runs
+                build:static, so the frontend image is built from the WHOLE
+                REPO. Do not use an allow-list here: I tried, codex holed it
+                three times running (shared/**, public/**, index.html,
+                scripts/prerender.ts, then tailwind.config.js and
+                postcss.config.js), and the next omission is only a matter of
+                which file someone edits next.
+                The RULE instead: a merge owes a rebuild unless everything it
+                touched is under functions/, firestore.*, docs, or tests.
+                shared/** owes BOTH a functions deploy and a rebuild —
+                vite.config.ts aliases @shared to it.
 An nginx.conf change does NOT move the bundle hash, so verify that class by
 curling the response headers instead (PICKUP §4). Baselines at 22adb90: functions 1295, root
 523 (MEASURED at 22adb90 twice - #345's branch said 518 because it was cut before
