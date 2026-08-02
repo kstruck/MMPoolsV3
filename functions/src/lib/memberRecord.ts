@@ -131,10 +131,18 @@ const GUEST_SENTINEL = 'guest';
  * rejected.
  *
  * Callers pass plain data, not snapshots, so the rule is unit-testable.
+ *
+ * Both parameters are raw document data (`Record<string, unknown>`), not narrow
+ * shapes: this is an authorization predicate and it must accept — and refuse —
+ * a document carrying NONE of the fields it looks for. A
+ * `{ joinedAt?: unknown }` parameter made the forged-record case
+ * (`{ memberReportedPaid, memberReportedAt }`) a TS2559 compile error, i.e. the
+ * type declared the most important input impossible. It is not; it is the one
+ * this guard exists for. (codex r1)
  */
 export function isProvableMember(
-  pool: { participantIds?: unknown } | undefined,
-  memberRecord: { joinedAt?: unknown } | undefined,
+  pool: Record<string, unknown> | undefined,
+  memberRecord: Record<string, unknown> | undefined,
   uid: string,
 ): boolean {
   // The sentinel is not an account. Rejected up front rather than only inside
