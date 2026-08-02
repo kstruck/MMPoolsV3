@@ -511,9 +511,16 @@ and takes its own plan gate. Flagged rather than folded in.
 | Sweep | ✅ `PLAN-SETPAIDSTATUS-MEMBERSHIP-SWEEPS.md` (rewritten after round 4 to match its own commands) |
 | Review log | 🔄 IN PROGRESS — rounds 1–7 recorded, 17 findings, all accepted |
 | **#338 canonical filter (§4a)** | ⛔ REQUIRED before #338 merges — without it neither PR closes the exposure |
-| Kevin sign-off (Rule 3 step 5) | ⛔ **NOT GIVEN** — implementation is gated on it |
+| Kevin sign-off (Rule 3 step 5) | ✅ **GIVEN 2026-08-02** — *"#340's prerequisite is now satisfied: implement the setPaidStatus membership guard — TWO checks only… No third check."* |
 | **`claimMySquares` prerequisite (§0)** | ✅ **RESOLVED** via option 2 — the repair jobs no longer launder square ownership into either evidence branch. The underlying squares-theft hole stays open by decision. |
-| Implementation | not started — gated on a clean review round |
+| Implementation | ✅ `isProvableMember` (`functions/src/lib/memberRecord.ts`) + the transactional guard in `setPaidStatus.ts`, `NOT_A_POOL_MEMBER` client mapping, and the §8 test matrix (predicate units, emulator behaviour, source invariants for the ordering and the absent third check) |
+
+⚠️ **#340 was CLOSED as superseded, not merged.** Its branch carried the round-9
+version of these documents; the newer copies — including §0's option-2
+resolution — reached `main` inside [#341](https://github.com/kstruck/MMPoolsV3/pull/341)
+(`4713eba`), which is also where option 2 was implemented. `git diff` from that
+branch to `main` is +44/−5 on this file and empty on the other two, so nothing
+on it was lost.
 
 ⚠️ This table is a status claim about a PLAN-GATED authorization change. Do not
 mark a row ✅ before the artifact exists: round 1 caught this row asserting a

@@ -310,6 +310,116 @@ describe('setPaidStatus — detail fields + entry mirror (P1)', () => {
 });
 
 /**
+ * PLAN-SETPAIDSTATUS-MEMBERSHIP. The claim branch's `set(..., {merge:true})`
+ * CREATES the Member Record when absent, and a Member Record is roster truth
+ * (ADR 0003) — so before this guard any authenticated user could mint
+ * themselves onto any pool's roster, its memberCount, its dues figures and
+ * (via #338) its reminder emails.
+ *
+ * The evidence matrix is unit-tested on the pure predicate
+ * (`memberRecord.plan.test.ts`); these tests prove the callable actually CALLS
+ * it, refuses without writing, and still admits real members.
+ */
+describe('setPaidStatus claim — the membership guard', () => {
+  const poolId = 'pg_pool';
+
+  async function seedGuardPool(extra: Record<string, unknown> = {}) {
+    await db.collection('pools').doc(poolId).set({
+      id: poolId, type: 'NFL_PICKEM', name: 'Guard Pool', ownerId: 'pg_boss',
+      participantIds: ['pg_boss', 'pg_listed'], status: 'OPEN',
+      settings: { entryFee: 25 },
+      ...extra,
+    });
+    // A canonical record: server-seeded joinedAt, and deliberately NOT in
+    // participantIds, so it can only pass on evidence 1.
+    await db.collection('pools').doc(poolId).collection('members').doc('pg_legacy').set({
+      uid: 'pg_legacy', poolId, userName: 'Legacy', role: 'PARTICIPANT',
+      paidStatus: 'UNPAID', joinedAt: Date.now(),
+    });
+  }
+
+  const memberDoc = (uid: string) =>
+    db.collection('pools').doc(poolId).collection('members').doc(uid).get();
+
+  it('REFUSES a stranger and creates NO document', async () => {
+    await seedGuardPool();
+    await expect(wrappedSetPaid({
+      data: { poolId, memberUid: 'pg_stranger', claim: true },
+      auth: { uid: 'pg_stranger', token: {} },
+    } as never)).rejects.toThrow(/NOT_A_POOL_MEMBER/);
+
+    // The whole point: the refusal must not leave the document it was minting.
+    expect((await memberDoc('pg_stranger')).exists).toBe(false);
+  });
+
+  it('REFUSES a forged claim-only record — the fix does not ratify the exploit', async () => {
+    await seedGuardPool();
+    // Exactly what the vulnerable path wrote before this guard existed.
+    await db.collection('pools').doc(poolId).collection('members').doc('pg_forged').set({
+      memberReportedPaid: true, memberReportedAt: Date.now(),
+    });
+
+    await expect(wrappedSetPaid({
+      data: { poolId, memberUid: 'pg_forged', claim: true },
+      auth: { uid: 'pg_forged', token: {} },
+    } as never)).rejects.toThrow(/NOT_A_POOL_MEMBER/);
+  });
+
+  it('ADMITS a canonical Member Record that is absent from participantIds', async () => {
+    await seedGuardPool();
+    await wrappedSetPaid({
+      data: { poolId, memberUid: 'pg_legacy', claim: true },
+      auth: { uid: 'pg_legacy', token: {} },
+    } as never);
+    expect((await memberDoc('pg_legacy')).data()!.memberReportedPaid).toBe(true);
+  });
+
+  it('ADMITS a participantIds member with no record, and CREATES it', async () => {
+    await seedGuardPool();
+    expect((await memberDoc('pg_listed')).exists).toBe(false);
+    await wrappedSetPaid({
+      data: { poolId, memberUid: 'pg_listed', claim: true },
+      auth: { uid: 'pg_listed', token: {} },
+    } as never);
+    // Creation on claim is retained deliberately — a manager-listed participant
+    // with no record yet is a real state, and refusing them would be the
+    // false-negative D1 rejects.
+    expect((await memberDoc('pg_listed')).data()!.memberReportedPaid).toBe(true);
+  });
+
+  it('REFUSES the "guest" sentinel even though it is in participantIds', async () => {
+    await seedGuardPool({ participantIds: ['pg_boss', 'guest'] });
+    await expect(wrappedSetPaid({
+      data: { poolId, memberUid: 'guest', claim: true },
+      auth: { uid: 'guest', token: {} },
+    } as never)).rejects.toThrow(/NOT_A_POOL_MEMBER/);
+  });
+
+  it('REFUSES when the pool is gone but its members subcollection survives', async () => {
+    await seedGuardPool();
+    // Deleting a Firestore document does NOT delete its subcollections, so a
+    // canonical record outlives its pool — and evidence 1 would happily admit
+    // its owner, recreating an orphan under a pool that no longer exists.
+    //
+    // ⚠️ This exercises the callable's OPENING `poolSnap.exists` check, which
+    // pre-dates this guard. Mutation testing proved that: deleting the
+    // TRANSACTIONAL re-check left this test green, because the outer one throws
+    // first. The race the transactional check exists for — a delete landing
+    // BETWEEN the opening read and the transaction — cannot be staged from
+    // outside the callable, so it is pinned by a source invariant instead
+    // (tests/setpaidstatus-membership-guard.test.ts). Kept here anyway: it is
+    // the reachable half of the same rule.
+    await db.collection('pools').doc(poolId).delete();
+    expect((await memberDoc('pg_legacy')).exists).toBe(true);
+
+    await expect(wrappedSetPaid({
+      data: { poolId, memberUid: 'pg_legacy', claim: true },
+      auth: { uid: 'pg_legacy', token: {} },
+    } as never)).rejects.toThrow(/Pool not found/);
+  });
+});
+
+/**
  * PLAN-PAYMENT-TRUTH P3 (Q2 = option B): the rebuy-paid control — the writer
  * `rebuyPaid` never had. A rebuy is dues OWED ("$X due to the commissioner",
  * SurvivorPickEntry copy), settled out of band and INDEPENDENTLY of base dues.
