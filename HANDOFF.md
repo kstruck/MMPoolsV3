@@ -41,9 +41,12 @@
 > zero updates, and ended `✔ Deploy complete!` — that all-Skipped run is the
 > positive evidence.
 >
-> ⚠️ **SUPERSEDED 2026-08-01 — A FRONTEND REBUILD IS NOW OWED.** #341 changed
-> `OperationsPanel.tsx`, so the Run Log does not yet show `squaresSkipped`. The
-> paragraph below is the state as of #333/#334 and is kept for the deploy record.
+> ✅ **The #341 rebuild is DONE** (Kevin, 2026-08-01) — the Run Log shows
+> `squaresSkipped` and the bundle moved to `index-Bv2FV3GO.js`. An earlier
+> revision of this box warned that rebuild was owed; it no longer is.
+>
+> ⬇️ **HISTORICAL from here — the state as of #333/#334**, kept for the deploy
+> record.
 > ✅ **NO frontend rebuild was owed then.** Neither #332 nor #333 touches `src/**`
 > (verified with `git diff --name-only <sha>^ <sha> -- src/` on both merge
 > commits, both empty), so the live bundle stayed `index-Db6JwMWs.js` AT THAT
