@@ -439,6 +439,28 @@ any new counter must do the same.
 qodo posted a fresh review **within 90 seconds** every time, stamped at the
 current head commit, with its resolved findings marked `✓ Resolved`.
 
+🔴 **AND IT UPDATES THE EXISTING COMMENT IN PLACE — `created_at` DOES NOT MOVE.**
+Measured on #346: the re-review arrived as `updated_at 09:11:55Z` on a comment
+whose `created_at` was `08:35:48Z`. A watcher filtering `select(.created_at >
+$SINCE)` therefore sees **nothing** and reports TIMEOUT on a PR qodo has just
+re-reviewed — the same false-negative the `$SINCE` rule exists to prevent, from
+the opposite direction.
+
+So on the TOGGLE path, filter on **`updated_at`** (`submitted_at` for the reviews
+endpoint has no in-place equivalent, so it stays as is):
+
+```bash
+gh api --paginate $R/issues/<N>/comments   -q ".[] | select(.user.login == \"$QB\") | select(.updated_at > \"$SINCE\") | .id" | grep -c .
+```
+
+Two more things that pass measured on #346 and will bite a naive watcher:
+ - qodo posts a **`Qodo is busy working`** placeholder FIRST. Counting it as an
+   artifact settles the watcher on an empty review — the `NOISE` heading filter
+   in §1 exists for this; do not drop it from an ad-hoc watcher.
+ - the real report then lands, and can be REVISED again minutes later. On #346
+   the first body said `Bugs (0)` and the revision said `Bugs (3)` with four new
+   findings. **Settle on `updated_at` holding steady, not on first sight.**
+
 This follows from the trigger already recorded at the top of this file — qodo
 SKIPS DRAFT PRs, so marking one ready is what fires it — but the consequence had
 not been drawn: **the same transition re-fires it on a PR that is already open.**

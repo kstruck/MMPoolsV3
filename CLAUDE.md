@@ -111,6 +111,13 @@ gh pr ready <N> --undo
 gh pr ready <N>
 ```
 
+⚠️ **qodo UPDATES its review comment in place — `created_at` does not move.**
+Measured on #346: the re-review was `updated_at` 09:11:55Z on a comment created
+08:35:48Z. Filter on `updated_at`, or the watcher reports TIMEOUT on a PR qodo has
+just re-reviewed. It also posts a `Qodo is busy working` placeholder first, and
+can REVISE the report minutes later — on #346 `Bugs (0)` became `Bugs (3)`. Settle
+on the timestamp holding steady, never on first sight.
+
 This matters most exactly where the gate is weakest: a rebased PR whose only qodo
 evidence is a review of code no longer in it. *Waiting* on a re-review is still
 not allowed, and a timeout AFTER the toggle is still "qodo did not re-review",

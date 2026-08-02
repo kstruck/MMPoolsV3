@@ -335,8 +335,9 @@ state. Concretely:
 
 ## 2. Live state (deploy state verified 2026-08-02)
 
-> ⚠️ **HISTORICAL (2026-07-28 state). The live bundle is `index-DlH8liQe.js`**
-> — see the tagged claim below, which is the current one.
+> ⚠️ **HISTORICAL — this block records the 2026-07-28 state.** Its bundle hash is
+> long superseded; for the CURRENT live bundle see the tagged claim below, which
+> is the only place this file states it.
 > This block is kept for the deploy-ritual evidence it records, not for its
 > bundle hash.
 >

@@ -19,12 +19,12 @@ pointing here.
 | Thing | State |
 |---|---|
 | Deployed application source | `22adb90` — this is what functions and the frontend were built from |
-| `origin/main` tip | moved past `22adb90` after the docs merges (`befa54b`, then this PR). **Docs-only commits do not change what is deployed** — check with `git diff --name-only 22adb90..origin/main` before assuming a deploy is owed |
+| `origin/main` tip | moved past `22adb90` after the docs merges (`befa54b`, then this PR). **Docs-only commits do not change what is deployed** — `git fetch origin` FIRST (the remote-tracking ref goes stale and every check below is then wrong), then `git diff --name-only 22adb90..origin/main` before assuming a deploy is owed |
 | Functions | **deployed from `22adb90`** — certified by a third run: 173 all `Skipped (No changes detected)`, 0 updates, 0 failures, `✔ Deploy complete!` |
 | Rules | **≡ `0a705c0`**, unchanged. `firestore.rules` is byte-identical since |
 | Frontend bundle | **`index-DlH8liQe.js`** — rebuilt 08:38 UTC, healthcheck `"healthy"` |
 | Open PRs | dependabot #299–#304 only. All six still rejected; I did not touch them |
-| Test baselines at `22adb90` | functions **1295**, root **523**, emulator **306** passed / 2 expected fail / 10 skipped |
+| Test baselines at `22adb90` | measured **2026-08-02**: functions **1295**, root **523**, emulator **306** passed / 2 expected fail / 10 skipped |
 
 ### Merged overnight
 
@@ -69,10 +69,15 @@ the move is observed rather than inferred.
 
 The first version of this document told you the rebuild was yours because *"the
 Coolify dashboard URL is written down nowhere in this repo"*. **That was wrong,
-and qodo caught it on the PR.** `HANDOFF.md` records the dashboard URL —
-`http://72.60.68.7:8000/project/.../application/.../deployment` — under the
-heading *"Dashboard, for the next time a `src/**` change lands"*, which is
-precisely this situation.
+and qodo caught it on the PR.** `HANDOFF.md` records the dashboard URL under the
+heading *"Dashboard, for the next time a `src/**` change lands"* — precisely this
+situation. **The URL is deliberately NOT repeated here** (qodo, security): this
+repo is public, and a production-management endpoint spread across two files is
+one more place to miss on a rotation or a redaction. One home, and a pointer:
+
+```bash
+grep -n "Dashboard, for the next time" HANDOFF.md
+```
 
 **How I got it wrong is the part worth keeping.** My first search filtered for
 lines containing the word "coolify", and that URL is a bare IP with no such word.
@@ -239,7 +244,7 @@ re-review", never "clean".
    same PR:
 
    ```bash
-   grep -n "72.60.68.7" HANDOFF.md
+   grep -n "Dashboard, for the next time" HANDOFF.md
    ```
 
 ---
@@ -256,6 +261,7 @@ READ FIRST: CLAUDE.md, HANDOFF.md STOP POINT box, PICKUP-PRESEASON-PILOT.md §0,
 and MORNING-2026-08-02-OVERNIGHT.md.
 
 STATE — VERIFY, DO NOT TRUST:
+  git fetch origin          # FIRST - origin/main is a stale local ref otherwise
   git log --oneline -3 origin/main
   gh pr list
   # bash (agent):
@@ -289,9 +295,10 @@ input:
                 vite.config.ts aliases @shared to it.
 An nginx.conf change does NOT move the bundle hash, so verify that class by
 curling the response headers instead (PICKUP §4). Baselines at 22adb90: functions 1295, root
-523 (MEASURED at 22adb90 twice - #345's branch said 518 because it was cut before
-#338 landed; do not "correct" it back), emulator 306. Coolify dashboard URL:
-grep -n "72.60.68.7" HANDOFF.md
+523 (all three MEASURED 2026-08-02 at 22adb90; root measured twice - #345's
+branch said 518 because it was cut before #338 landed, so do not "correct" it
+back), emulator 306. Coolify dashboard URL:
+grep -n "Dashboard, for the next time" HANDOFF.md
 
 ⛔ Dependabot #299–#304: do NOT merge, all six rejected with evidence.
 ⛔ APP CHECK: do NOT set VITE_RECAPTCHA_SITE_KEY. The warning is the safe state.
