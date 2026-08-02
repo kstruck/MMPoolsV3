@@ -206,6 +206,23 @@ export const claimByCode = validated(
         });
 
         if (updated) {
+            // ⛔ Deliberately does NOT write participantIds.
+            //
+            // A previous revision of this change added it, on the reasoning that
+            // claimByCode is the "vetted" cross-device flow. It is not vetted at
+            // all: `createClaimCode` above is `auth: "public"` and accepts a
+            // caller-supplied `guestDeviceKey`, and that key is readable from the
+            // world-readable pool document. So a stranger can mint a code for
+            // someone else's unclaimed guest square and redeem it here — writing
+            // participantIds would have laundered that straight into membership,
+            // restoring the exact escalation this change removes from the repair
+            // jobs. (codex r3)
+            //
+            // The consequence is honest and unavoidable while `guestDeviceKey` is
+            // public: the system CANNOT distinguish a legitimate guest-square
+            // claimant from an attacker, because both present the same readable
+            // key. Neither becomes a roster member. The root fix is the hash
+            // migration in SECURITY-CLAIM-SQUARES.md.
             t.update(poolRef, { squares: newSquares });
             // Increment uses
             t.update(claimDoc.ref, {

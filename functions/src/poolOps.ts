@@ -625,12 +625,20 @@ export const fixParticipantIds = validated(
         const pool = doc.data();
         const participantIds = new Set<string>();
 
-        // 1. Squares Pools
-        if (pool.squares && Array.isArray(pool.squares)) {
-            pool.squares.forEach((sq: any) => {
-                if (sq.reservedByUid) participantIds.add(sq.reservedByUid);
-            });
-        }
+        // 1. Squares pools are DELIBERATELY not scanned here.
+        //
+        // Square ownership is not a membership signal. `claimMySquares` sets
+        // `reservedByUid` on proof of a `guestDeviceKey` that is readable from
+        // the world-readable pool document (`firestore.rules` `allow get: if
+        // true`) - the known, accepted-through-the-pilot finding in
+        // SECURITY-CLAIM-SQUARES.md. Unioning it into `participantIds` turned
+        // this repair job into a privilege escalation: the claimant lands in the
+        // array that `setPaidStatus` and reminder targeting treat as membership.
+        //
+        // Removing it costs nothing legitimate. `reserveSquare` already adds an
+        // authenticated reserver to `participantIds` at reserve time, so the only
+        // uids this block ever ADDED were ones reserveSquare had not - which is
+        // the guest-claim path.
 
         // 2. Playoff Pools (Legacy entries map)
         if (pool.entries && typeof pool.entries === 'object') {

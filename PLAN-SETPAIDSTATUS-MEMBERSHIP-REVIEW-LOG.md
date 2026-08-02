@@ -1,0 +1,524 @@
+# REVIEW LOG — `PLAN-SETPAIDSTATUS-MEMBERSHIP.md`
+
+Rule 3 step 2. Verbatim findings per round, with severity and an accept/reject
+response. Reviewer: `codex exec review --base origin/main` (OpenAI), per
+CLAUDE.md §2c. Cap is 10 rounds; stop on evidence, not the counter.
+
+---
+
+## Round 1 — codex (plan + sweep, before any implementation)
+
+**VERDICT: REVISE.** 4 findings — 1 P1, 3 P2. **All 4 accepted.**
+
+### 1. (P1) Re-read pool membership inside the transaction
+
+> `setPaidStatus` currently fetches `poolSnap` before claim handling. Treating
+> that as the "already loaded" read invites using an out-of-transaction
+> `participantIds` value; if `voidMemberRecord` removes the caller after that
+> snapshot, the transaction will not observe the pool update and can recreate
+> their Member Record. Require `tx.get(poolRef)` and evaluate all membership
+> evidence from transaction reads before writing.
+
+**Accepted.** This is the plan's own §4 argument turned against it: I required a
+transaction so a concurrent `voidMemberRecord` could not slip in, then in §6
+described the pool read as "already loaded", which is precisely the stale read
+that defeats it. A pre-transaction `participantIds` snapshot would let a removed
+member resurrect their record — the exact bug the transaction exists to stop.
+
+**Plan changed:** §4 now states that **all** membership evidence is read via
+`tx.get` inside the transaction, and §6's cost row is corrected to say the pool
+is re-read rather than reused.
+
+### 2. (P2) Query entry ownership instead of document ID
+
+> This entry check rejects legitimate legacy Bracket members when their Member
+> Record and `participantIds` entry are absent: `createBracketEntry` creates a
+> random entry document ID and stores the member in `ownerUid`, not
+> `entries/{uid}`. The fallback therefore does not deliver D1's promise for that
+> pool type; use an `ownerUid == uid` query or a type-aware membership resolver
+> and test that legacy shape.
+
+**Accepted, and verified before accepting.** `functions/src/bracketEntries.ts:86`
+is `poolRef.collection("entries").doc()` — an auto-generated id — with
+`ownerUid: uid` set at `:92`. An `entries/{uid}` check finds nothing for any
+bracket entry, so D1's "heal legacy members" promise would have been empty for
+an entire pool type while reading as though it were covered.
+
+**Plan changed:** the entry evidence is now **both** `entries/{uid}` (the NFL
+shape, where the doc id is the uid) **and** a `where('ownerUid','==',uid)`
+query (the bracket shape). Both, not either: NFL entry docs are keyed by uid and
+do not all carry `ownerUid` — `manualReminders.ts` reads
+`entry.ownerUid || doc.id` precisely because of that.
+
+### 3. (P2) Include helper call sites in the deterministic sweep
+
+> The stated command cannot establish a complete writer list because callers of
+> `ensureMemberRecord` and `reconcileMembership` do not contain `membersCol` or
+> `collection('members')`; `poolExceptions.ts:448` is already listed below
+> despite not being an output of this command. Add explicit searches for those
+> helper call sites so the one-site conclusion remains reproducible.
+
+**Accepted, and it is the most serious of the three P2s** despite the severity,
+because it attacks the sweep's *reproducibility* — the one property a sweep
+exists to have. I ran a second grep for helper call sites and wrote its results
+into the table without writing the command down, so the document claimed a
+completeness its stated method could not produce. Row 20 and
+`poolExceptions.ts:448` are both outputs of a command that was not there.
+
+**Sweep changed:** both commands are now recorded, with a note that the helper
+search is what makes the "only one site" conclusion reproducible.
+
+### 4. (P2) Do not mark the required review log complete before it exists
+
+> No `PLAN-SETPAIDSTATUS-MEMBERSHIP-REVIEW-LOG.md` is added or present in the
+> worktree, while the plan itself says review rounds are still pending. Marking
+> this required PLAN-GATED artifact complete can falsely satisfy the
+> repository's plan→review-log→sweep gate.
+
+**Accepted.** The status table marked the review log ✅ while this file did not
+exist. That is a status claim ahead of the artifact, in a table whose entire job
+is to say which gate steps are done — and the gate it would have falsely
+satisfied is the authorization gate.
+
+**Plan changed:** §9 marks the review log as in-progress and now cites round
+numbers, so the row cannot be true before the rounds are real.
+
+---
+
+## Round 2 — codex (plan + sweep, after round 1 fixes)
+
+**VERDICT: REVISE.** 3 findings, all P2. **All 3 accepted.** Round 1's fixes all
+held; every finding here is new ground, and two of them are the same shape as
+round 1 finding 2 — *the legacy-healing promise not actually reaching a pool
+type*.
+
+### 5. (P2) Cover every legacy membership representation
+
+> A record-less legacy Playoff member with a missing `participantIds` entry will
+> still be rejected: `submitPlayoffPicks` stores ownership in the embedded
+> `pool.entries` map as `userId`, not in `entries/{uid}` or an `ownerUid`
+> subcollection query. Since D1 promises to heal legacy members and this callable
+> is not restricted to NFL/Bracket pools, make the resolver type-aware.
+
+**Accepted, verified before accepting.** `playoffPools.ts:114` iterates
+`Object.entries(pool.entries || {})` and `:182`/`:201` show `userId` carried
+inside those values — Playoff pools have no `entries` subcollection at all.
+
+Worth noting how this was missed twice: round 1 corrected the entry check from
+one shape to two, and I treated "two shapes" as "all shapes". The real lesson is
+that **this callable accepts any pool type**, so any membership resolver has to
+enumerate the types or state which it excludes. Guessing the set from the two I
+had already looked at is what produced both misses.
+
+**Plan changed:** §4 adds the embedded-map shape as a fourth evidence source,
+with the reasoning above.
+
+### 6. (P2) Limit the ownerUid membership query
+
+> For Bracket pools configured with unlimited entries (`maxEntriesPerUser: -1`),
+> a bare `where('ownerUid', '==', uid)` query returns every entry the caller owns
+> even though the guard only needs existence. This can turn a self-report into an
+> unbounded transactional read; add `limit(1)`.
+
+**Accepted.** The guard tests existence, so the query should say so.
+
+**Plan changed:** §4 specifies `.limit(1)` and a non-empty test.
+
+### 7. (P2) Register the new domain error prefix
+
+> The mapping added by #338 contains `MEMBER_NOT_ON_ROSTER`, not
+> `NOT_A_POOL_MEMBER`; `getUserMessage` matches domain prefixes by exact key, so
+> this new error will fall through to the generic `permission-denied` copy.
+
+**Accepted, and it invalidates D3 as written.** I specified the prefix and
+described the UX benefit as though the prefix were the mechanism. It is not:
+`errorMessages.ts:56` matches `DOMAIN_PREFIX_MESSAGES` by exact key, so an
+unregistered prefix produces the generic copy **plus** a machine token nobody
+sees. D3 would have shipped as pure ceremony.
+
+**Plan changed:** D3 now includes the client mapping and a case in
+`tests/error-domain-prefix-contract.test.ts` as part of this change.
+
+---
+
+## Round 3 — codex (plan + sweep, after round 2 fixes)
+
+**VERDICT: REVISE.** 3 findings — 1 P1, 2 P2. **All 3 accepted, and together
+they caused the design to be rewritten smaller rather than extended.**
+
+### 8. (P1) Do not trust records created by the vulnerable claim path
+
+> For Member Records minted before this fix, this predicate treats the exact
+> forged document created by the current `set(..., { merge: true })` claim branch
+> as proof of membership. Those users therefore remain on the roster and will
+> still be eligible for the reminder targeting that motivated this PR. Require
+> independent membership evidence (or a cleanup/canonical-record check).
+
+**Accepted. This is the best finding of the cycle** — the plan would have shipped
+a fix that ratified the exploit it exists to close. Every draft treated "a Member
+Record exists" as proof of membership while the whole premise of the PR is that
+the claim path can create one.
+
+Verified discriminator: `planMembershipWrite` (`lib/memberRecord.ts:55-73`) seeds
+a first write with `uid`, `poolId`, `userName`, `paidStatus` and `joinedAt`; the
+vulnerable claim writes exactly `memberReportedPaid` and `memberReportedAt`. A
+claim-only document is therefore distinguishable and is treated as absent.
+
+**Plan changed:** §4 evidence 1 is now a **canonical** record, not any record,
+with the field-level reasoning. §6 gains a risk row. §7 records that cleaning up
+already-forged records is a prod-data mutation under Rule 1 and its own change.
+
+### 9. (P2) Recognize claimed Squares ownership as membership
+
+> A user who reserves as a guest and then calls `claimMySquares` is represented
+> by `squares[*].reservedByUid`, but that flow neither adds their UID to
+> `participantIds` nor creates a Member Record. With no entry document, every
+> listed predicate fails and a legitimate Squares member is denied.
+
+**Accepted, verified.** `squares.ts:115` adds the literal `"guest"` sentinel for
+an anonymous reserve, and `squarePrivate.ts` (`claimMySquares`) never writes
+`participantIds`. Cheap to cover: `pool.squares[*].reservedByUid` is on the pool
+document the transaction already reads, so it costs no extra query.
+
+### 10. (P2) Include Prop-card ownership in the membership resolver
+
+> The all-types promise still misses Props: `purchasePropCard` creates auto-ID
+> documents in `propCards` with `userId`, without writing `participantIds` or a
+> Member Record.
+
+**Accepted as a finding; the resolution is an explicit EXCLUSION, not a fourth
+check.** Verified: `propBets.ts` contains zero `participantIds` writes and
+creates no Member Record. A prop-card buyer is not on the roster by the system's
+own definition.
+
+`setPaidStatus` writes to the roster. Teaching this guard to invent roster
+membership for a pool type that deliberately keeps buyers off it would be an
+authorization fix quietly making a product decision. The inconsistency is real
+and is now an out-of-scope ticket (§7) against `propBets.ts`, where it belongs.
+
+### What rounds 1–3 actually established
+
+Three rounds, four missing pool-type shapes (Bracket, Playoff, Squares, Props).
+Adding a fifth check was the obvious move and the wrong one. Sweeping **who
+writes `participantIds`** showed the system already has a cross-type membership
+set maintained by every join path, so the resolver collapsed from per-type entry
+archaeology to **three checks on data already in the transaction, with no extra
+query**. A new pool type now inherits the guard instead of silently falling
+through it.
+
+The rule got smaller on round 3 than it was on round 1. That is the outcome to
+want from a review loop, and it only happened because the reviewer kept finding
+the *same shape* of hole — which is the signal to change approach, not to patch
+again.
+
+---
+
+## Round 4 — codex (plan + sweep, after round 3 rewrite)
+
+**VERDICT: REVISE.** 3 findings, all P2. **All 3 accepted.** The round-3 rewrite
+held — no finding re-opened it — and these are narrower, which is the convergence
+signal.
+
+### 11. (P2) Reject the `guest` sentinel as a participant UID
+
+> Anonymous Squares reservations insert the literal `"guest"` into
+> `participantIds`, while evidence #2 accepts any UID in that array. If an
+> authenticated account is issued the valid Firebase UID `guest`, it can pass the
+> predicate for every pool containing a guest reservation and mint a Member
+> Record without joining.
+
+**Accepted.** `squares.ts:115` does exactly that. The irony is that #338 removed
+`participantIds` as a target source partly over trust, and I reintroduced it here
+having read the same line — `poolRoster.ts` and `resolveReminderTargets` both
+already exclude `guest`, so the guard would have been the only place disagreeing
+that `guest` is not a person.
+
+**Plan changed:** evidence 2 excludes the sentinel, with the three-way
+consistency noted.
+
+### 12. (P2) Revalidate that the pool exists inside the transaction
+
+> If a pool is deleted after the initial non-transactional `poolSnap` check but
+> before this transaction, Firestore leaves its `members` subcollection intact. A
+> surviving canonical member record can then satisfy evidence #1 and the claim
+> write recreates an orphaned member document under the deleted pool.
+
+**Accepted.** Deleting a Firestore document does not delete its subcollections —
+so the members collection outlives its pool, and evidence 1 would still be
+satisfiable. Round 1 moved the pool read inside the transaction; this is the
+other half of the same point, which round 1 did not make: the transactional read
+must be checked for **existence**, not merely used for `participantIds`.
+
+**Plan changed:** §4 requires the transactional snapshot to exist before any
+evidence is evaluated.
+
+### 13. (P2) Make the sweep results match its commands
+
+> These commands currently produce 28 matching lines: 20 direct collection
+> references and 8 helper-definition/call-site matches, with no exact-line
+> overlap. The table reports 20 hits, collapses several helper calls into one row,
+> and omits the two helper definitions, so its claimed complete classification and
+> the resulting "only unguarded path" conclusion cannot be reproduced.
+
+**Accepted, and this is round 1 finding 3 recurring in a new form** — which is
+worth saying plainly. Round 1 caught the sweep stating one command while using
+two; I added the second command and still left the *results* summarised rather
+than enumerated. Both times the defect was the same: a sweep that reads as
+evidence but cannot be re-derived from its own stated method.
+
+Re-ran both commands: 20 and 8 lines, no overlap. **Sweep rewritten** as two
+tables enumerating all 28 lines individually, including the two helper
+definitions and each of the six call sites. Sweep 2 (`participantIds` writers)
+is also now written down, since the round-3 design collapse depends on it and it
+was previously only in the review log.
+
+---
+
+## Round 5 — codex (plan + sweep, after round 4 fixes)
+
+**VERDICT: REVISE.** 1 finding, P1. **Accepted — the rule shrank again, from
+three evidence sources to two.**
+
+### 14. (P1) Do not trust claimed-square ownership as membership proof
+
+> For any Squares pool with an unclaimed guest reservation, this preserves a
+> route for a stranger to mint a Member Record: `guestDeviceKey` is readable from
+> the public pool document, `claimMySquares` accepts that value and stamps
+> `reservedByUid` for the caller, and this predicate then authorizes their claim
+> write. Remove this evidence until the guest-claim proof is secured.
+
+**Accepted, and verified end to end before accepting** — this is a three-step
+chain and each step was checked:
+
+1. `firestore.rules:63` — `allow get: if true`. The pool document is
+   world-readable by design, for guest access by link.
+2. That document carries `squares[*].guestDeviceKey` (`squares.ts:106`).
+3. `participant.ts:113-125` — `claimMySquares` matches on that key alone and
+   stamps `reservedByUid: uid` for any square not already owned.
+
+So the caller can **cause** evidence 3 to exist. I added it in round 4 reasoning
+only about read cost — it is on a document already in the transaction — and never
+asked who can write it. That is the same mistake #338 round 9 caught with
+`participantIds`, one round after I had written that lesson down in this very
+plan.
+
+**Plan changed:** evidence 3 removed. The rule is now two checks: a canonical
+Member Record, or `participantIds` minus the `guest` sentinel.
+
+**And a finding beyond this plan:** steps 1–3 are a live vulnerability regardless
+of this change — anyone with a Squares pool link can read the guest keys and
+claim unclaimed guest squares as their own, taking squares from a guest who
+reserved and paid out of band. Recorded in §7 for Kevin. Not fixed here: separate
+authorization change, money-adjacent, its own plan gate.
+
+---
+
+## Round 6 — codex (plan + sweep, after round 5 fixes)
+
+**VERDICT: REVISE.** 1 finding, P2. **Accepted.**
+
+### 15. (P2) Replace the stale three-evidence references
+
+> The final rule contains only a canonical Member Record and non-`guest`
+> `participantIds`; §4 explicitly removed the claimed-squares branch. Leaving this
+> as `1–3` (and the corresponding "three-way" and "three evidence paths"
+> requirements) directs implementation and tests toward a nonexistent third path;
+> restoring the former squares-ownership path would reintroduce the
+> attacker-settable authorization route rejected in round 5.
+
+**Accepted.** Round 5 removed evidence 3 from the table and wrote the reasoning,
+and left three downstream sentences still counting to three — including **§8's
+verification requirement**, which told the implementer to write a test for "each
+of the three evidence paths". An implementer following §8 would have gone looking
+for the third path and found round 4's squares branch sitting in the git history
+with a rationale attached.
+
+This is the same heading-lags-content defect that appeared seven times across
+this session's docs PRs, and it is more dangerous here: in a plan-of-record for
+an **authorization** change, the stale sentence is an instruction.
+
+**Plan changed:** all three references corrected; §4 gains an explicit "there is
+no third check" warning naming what its reintroduction would restore; and §8's
+test list is now enumerated case by case rather than counted, so it cannot drift
+against the rule again.
+
+---
+
+## Round 7 — codex (plan + sweep, after round 6 fixes)
+
+**VERDICT: REVISE.** 2 findings — 1 P1, 1 P2. **Both accepted. The P1 is the most
+consequential finding of the cycle: it says this PR does not achieve its own
+stated purpose.**
+
+### 16. (P1) Keep preexisting forged records out of reminder targets
+
+> When a non-member exploited the existing claim path before this fix, their
+> claim-only Member Record remains in Firestore; rejecting a later claim does not
+> remove or canonicalize it. After #338 merges, `resolveReminderTargets` accepts
+> every `members` document regardless of its fields and resolves that UID's
+> email, so these records can still receive PICK or PAYMENT reminders. The plan
+> marks this risk handled while leaving cleanup out of scope.
+
+**Accepted, and it invalidates the plan's central claim.** §6 said the forged-record
+risk was "Handled" by evidence 1. Evidence 1 only refuses to *use* a forged record
+as proof for a **future** claim; it neither deletes the record nor stops anything
+else reading it. `resolveReminderTargets` reads the whole `members` collection and
+does not look at fields, so an already-forged record keeps receiving reminders.
+
+The purpose of this PR is to unblock #338 by closing that exposure. As written it
+would have merged, been reported as closing it, and left it open for exactly the
+accounts that had already exploited the bug — the worst version of this outcome,
+because the PR body would have said otherwise.
+
+**Plan changed:** new **§4a** requires `resolveReminderTargets` to accept only
+**canonical** Member Records, using the same `joinedAt` discriminator. That is a
+change to **#338's branch**, so the sequencing is now stated explicitly: "merge
+this, then merge #338" is NOT sufficient — #338 must carry the canonical filter
+before it merges. §6's risk row is corrected from "Handled" to "PARTLY handled
+here, and the rest is a required change to #338".
+
+Why the filter rather than a cleanup migration: it needs no production-data write,
+so it avoids Rule 1's kill-switch/dry-run gate and takes effect on deploy. A
+cleanup sweep remains worth doing and stays out of scope.
+
+### 17. (P2) Avoid an add/add conflict with #338's prefix contract test
+
+> Because this plan requires this PR to merge before #338, adding
+> `tests/error-domain-prefix-contract.test.ts` here will collide with #338, whose
+> still-open branch already adds that same new file for `MEMBER_NOT_ON_ROSTER`.
+> The subsequent merge will be an add/add conflict across the shared client
+> mapping and test contract, with a real risk of resolving away one prefix.
+
+**Accepted.** The file does not exist on `main`; both branches would add it. The
+dangerous part is not the conflict but its likely resolution: keeping one prefix
+and dropping the other, in the one file whose purpose is to prove both halves of
+a cross-boundary contract are wired. It would fail silently and look tidy.
+
+**Plan changed:** D3 records the resolution in advance — this PR creates the file
+covering **both** prefixes, then #338 is rebased onto `main`, drops its copy, and
+`npm test` re-run proves both cases pass. Decided now rather than improvised at
+merge time.
+
+---
+
+## Round 8 — codex (plan + sweep, after round 7 fixes)
+
+**VERDICT: REVISE.** 2 findings — 1 P1, 1 P2. **Both accepted.**
+
+### 18. (P1) Validate rebuy records against current membership
+
+> This classifies the Survivor rebuy writer as membership-verified solely because
+> an entry exists, but `executeSurvivorRebuyInternal` never calls
+> `assertNFLPickMembership` and creates a Member Record with `joinedAt` when
+> absent. A legacy unauthorized Survivor entry, once eliminated and before the
+> rebuy deadline, can therefore become a record trusted by both evidence 1 and
+> #338's proposed canonical filter despite its UID not being in `participantIds`.
+
+**Accepted, and it corrects the SWEEP, which is the more serious half.** Verified:
+`assertNFLPickMembership` is defined at `nflPools.ts:316` and called only at `:363`
+(pick submission); `executeSurvivorRebuyInternal` at `:691` does not call it.
+
+My sweep row 14 said "✅ requires an existing entry + deadline checks" and counted
+that as verified. **An entry is not membership** — and the sweep is the document
+whose entire purpose is to be the trustworthy enumeration. A wrong ✅ there is worse
+than a missing row, because everything downstream cites it.
+
+The substantive consequence: a canonical `joinedAt` stamp is **necessary but not
+sufficient** proof of current membership, which weakens (without invalidating) both
+evidence 1 and §4a's filter.
+
+**Assessed rather than hand-waved:** reaching that path needs an entry to already
+exist, and entry creation today passes the membership gate, so only pre-gate legacy
+entries qualify — belonging to people who did join at the time. **No path lets a
+stranger create the entry the exploit needs.** Low, bounded, legacy-only.
+
+**Not fixed here:** adding a membership gate to the rebuy path is an authorization
+change on a money-adjacent path and needs its own plan. Sweep row 14 corrected to
+⚠️ with the full assessment; ticket recorded in §7.
+
+### 19. (P2) Retain #338's server-prefix assertion after rebase
+
+> With the declared merge order, this branch still lacks #338's
+> `MEMBER_NOT_ON_ROSTER:` throws, while #338's existing contract test statically
+> requires those two source literals. Creating the combined test here would fail
+> before #338 merges; dropping #338's test after rebase instead leaves the server
+> half of that prefix untested.
+
+**Accepted — round 7's resolution was unimplementable.** I decided this PR would
+create the file covering both prefixes, without checking that the test asserts the
+`MEMBER_NOT_ON_ROSTER:` literal is present in `setPaidStatus.ts` **source**. That
+literal only exists on #338's branch, so the combined test would fail here. And the
+alternative I wrote — #338 drops its copy after rebase — would leave the server half
+of that contract untested, which is precisely what the file exists to prevent.
+
+**Plan changed:** the split now follows the code. This PR's test covers
+`NOT_A_POOL_MEMBER` only; the rebased #338 **adds** its cases to the now-existing
+file (a modify, not an add — no add/add conflict) and keeps its server-source
+assertion. `npm test` on the rebased #338 must show both prefixes covered.
+
+---
+
+## Round 9 — codex (plan + sweep, after round 8 fixes)
+
+**VERDICT: REVISE.** 1 finding, P1. **Accepted — and it changes the plan's status
+from "ready after sign-off" to "blocked on a prerequisite".**
+
+### 20. (P1) Prevent guest-square claims from becoming membership evidence
+
+> When a public guest key is abused and an operator later runs either repair job,
+> the exact signal this plan rejected re-enters both evidence branches:
+> `backfillMemberRecords` reads `squares[*].reservedByUid` and writes a `joinedAt`
+> Member Record, while `fixParticipantIds` unions the same UID into
+> `participantIds`. The claimant then passes Evidence 1 or 2 even though it
+> manufactured ownership through `claimMySquares`.
+
+**Accepted, verified, and it is the finding that ends this cycle.**
+`backfillMemberRecords.ts:47` reads `s?.reservedByUid`; `fixParticipantIds` is a
+live export (`index.ts:21`, `poolOps.ts`).
+
+Round 5 removed `reservedByUid` as direct evidence because the caller can cause it
+to be written. I then treated that hole as closed. It is not: the repair jobs
+**promote** that same signal into a `joinedAt`-stamped Member Record and into
+`participantIds` — the two things this plan does trust. The side door was left
+open by the same round that shut the front one.
+
+The generalisation is the useful part: **the guard cannot be made sound at its own
+level.** Any predicate built on Member Records or `participantIds` is only as
+trustworthy as the weakest path that can write them, and `claimMySquares` is
+currently a path anyone with a pool link can drive.
+
+**Plan changed:** new **§0** at the top — status changed to BLOCKED, the five-step
+laundering chain written out, three options put to Kevin with a recommendation
+(secure `claimMySquares` first). No implementation.
+
+---
+
+## Resolution status
+
+**CONVERGED ON A PREREQUISITE — not deadlocked, and not approved.**
+
+**9 rounds, 20 findings, 20 accepted, 0 rejected.** Round-by-round count:
+4 → 3 → 3 → 3 → 1 → 1 → 2 → 2 → 1. The trend is real convergence: the early rounds
+found holes in the *rule*, the late ones found holes *underneath* it.
+
+What the loop actually bought, given not one line of production code was written:
+
+- The rule **shrank twice** — four evidence sources → three → two — because
+  sweeping `participantIds` writers showed the system already had a cross-type
+  membership set (round 3).
+- It caught the fix **ratifying the exploit it exists to close** (round 3, P1:
+  forged records used as proof of membership).
+- It caught the fix **not achieving its stated purpose** — this PR alone does not
+  unblock #338, because `resolveReminderTargets` reads every members document
+  regardless of fields (round 7, P1).
+- It caught a **wrong ✅ in the sweep** (round 8) — worse than a missing row,
+  because everything downstream cites it.
+- It surfaced **two pre-existing vulnerabilities** unrelated to the original
+  finding: guest-square theft via a public key, and a rebuy path with no
+  membership gate.
+- It ended by showing the change has a **prerequisite** (round 9).
+
+Three of those would have shipped silently. That is the argument for the plan gate
+existing, stated in evidence rather than principle.
+
+**Next step: Kevin's decision on §0, not implementation.**
