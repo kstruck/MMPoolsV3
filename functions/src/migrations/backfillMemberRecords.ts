@@ -117,7 +117,12 @@ async function collectMembers(db: Firestore, poolId: string, pool: any): Promise
   applySquareUnits(
     squaresDerivedNames,
     (uid) => members.has(uid),
-    (uid, name) => add(uid, { userName: name }),
+    // Only when the participants doc actually carries a name. `add` spreads its
+    // source over the existing record, so `{ userName: undefined }` WIPES a good
+    // name — and moving this after the entries read (which the gate required)
+    // is what made squares the last writer. qodo caught it; the reorder created
+    // it.
+    (uid, name) => { if (name) add(uid, { userName: name }); },
   );
   applySquareUnits(
     unitsByUid,

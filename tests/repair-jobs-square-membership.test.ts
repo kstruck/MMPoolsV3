@@ -86,6 +86,13 @@ describe('repair jobs do not promote square ownership to membership', () => {
             expect(src).toMatch(/new Set\(\s*\[\.\.\.squaresDerivedNames\.keys\(\), \.\.\.unitsByUid\.keys\(\)\]/);
         });
 
+        it('does not let a nameless squares doc wipe a real userName', () => {
+            // The gate moved the participants read AFTER entries, making squares
+            // the last writer. `add` spreads, so an undefined name would clobber
+            // one entries had supplied.
+            expect(src).toMatch(/if \(name\) add\(uid, \{ userName: name \}\)/);
+        });
+
         it('records WHY the gate exists', () => {
             expect(src).toMatch(/SECURITY-CLAIM-SQUARES\.md/);
         });

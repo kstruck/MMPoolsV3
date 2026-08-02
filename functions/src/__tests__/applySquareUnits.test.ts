@@ -96,6 +96,23 @@ describe("applySquareUnits is generic over the enrichment it gates", () => {
         expect(applied).toEqual([["real", "Ada"]]);
     });
 
+    it("lets the caller drop an undefined value rather than wiping a good one", () => {
+        // qodo: the migration's `add` SPREADS its source over the existing
+        // record, so `{ userName: undefined }` wipes a name that entries had
+        // already supplied. Gating the enrichment moved it after the entries
+        // read, which made squares the last writer — so the callback must be
+        // free to skip. This pins that the seam passes the value through
+        // untouched and leaves that judgement to the caller.
+        const applied: Array<[string, string | undefined]> = [];
+        applySquareUnits(
+            new Map<string, string | undefined>([["a", undefined], ["b", "Bo"]]),
+            () => true,
+            (uid, name) => { if (name) applied.push([uid, name]); },
+        );
+
+        expect(applied).toEqual([["b", "Bo"]]);
+    });
+
     it("carries an undefined value through without inventing one", () => {
         const applied: Array<[string, string | undefined]> = [];
         applySquareUnits(
