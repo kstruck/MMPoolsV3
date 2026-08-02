@@ -410,9 +410,18 @@ watcher if you like — it costs nothing but wall-clock — but record TIMEOUT a
 push or ordinary — produced **no** re-review. Two of those PRs sat silent for
 20+ minutes. Then:
 
+⚠️ **Baseline the surface counts BEFORE the toggle, not after.** If you reuse a
+`SINCE`/watermark from an earlier arm, the PRE-FIX review artifacts still satisfy
+it and the watcher reports "qodo reported" the instant it starts — handing you the
+old review as if it were the fresh one, which is the failure this whole section
+exists to prevent. Order: count all three surfaces → toggle → watch for the count
+to EXCEED that baseline → settle.
+
 ```bash
+BASE=$(( $(gh api --paginate repos/kstruck/MMPoolsV3/issues/<N>/comments             --jq '[.[]|select(.user.login|test("qodo";"i"))|select(.body|test("busy working")|not)]|length')        + $(gh api --paginate repos/kstruck/MMPoolsV3/pulls/<N>/comments  --jq '[.[]|select(.user.login|test("qodo";"i"))]|length')        + $(gh api --paginate repos/kstruck/MMPoolsV3/pulls/<N>/reviews   --jq '[.[]|select(.user.login|test("qodo";"i"))]|length') ))
 gh pr ready <N> --undo    # → draft
 gh pr ready <N>           # → ready for review
+# then watch until the total EXCEEDS $BASE and stops moving
 ```
 
 qodo posted a fresh review **within 90 seconds** every time, stamped at the

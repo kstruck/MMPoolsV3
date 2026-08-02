@@ -279,7 +279,10 @@ input:
                 postcss.config.js), and the next omission is only a matter of
                 which file someone edits next.
                 The RULE instead: a merge owes a rebuild unless everything it
-                touched is under functions/, firestore.*, docs, or tests.
+                touched is under functions/, firestore.*, .claude/**,
+                .github/**, docs (*.md), or tests/ — the no-deploy paths
+                PICKUP §4 already defines. (This PR is itself an example:
+                it edits .claude/skills/ and owes no rebuild.)
                 shared/** owes BOTH a functions deploy and a rebuild —
                 vite.config.ts aliases @shared to it.
 An nginx.conf change does NOT move the bundle hash, so verify that class by
