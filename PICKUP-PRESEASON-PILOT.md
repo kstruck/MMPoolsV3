@@ -359,9 +359,9 @@ state. Concretely:
 
 **Functions are deployed from <!-- deploy-state:current --> `main` @ `4713eba`.**
 Rules remain ≡ `0a705c0`, unchanged by every merge since.
-⚠️ **A FRONTEND REBUILD IS OWED**: #341 changed `OperationsPanel.tsx`, so the
-live bundle is still `index-Db6JwMWs.js` and does not yet carry the
-`squaresSkipped` counter in the Run Log. Functions and rules queues are empty.
+✅ **Frontend rebuilt 2026-08-01 for #341** (`OperationsPanel.tsx`): live bundle
+moved `index-Db6JwMWs.js` → **`index-Bv2FV3GO.js`**, verified off the prod HTML.
+**ALL THREE QUEUES EMPTY.**
 (Deployed 2026-08-01 for **#341**, the repair-job narrowing: 173
 `Successful update operation`, then 173 `Skipped (No changes detected)` — that
 all-Skipped run is the evidence. `shared/` untouched, so rules are unaffected.)

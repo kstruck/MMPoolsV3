@@ -1,6 +1,6 @@
-# HANDOFF — Session entry point (updated 2026-08-01: functions deployed from `4713eba` — #341 stopped the repair jobs laundering guest-square claims into roster membership; ⚠️ a Coolify rebuild IS owed (OperationsPanel.tsx changed); the frontend is unchanged at `index-Db6JwMWs.js`; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and the FUNCTIONS + RULES QUEUES ARE EMPTY — the FRONTEND QUEUE IS NOT: a Coolify rebuild is owed for #341)
+# HANDOFF — Session entry point (updated 2026-08-01: functions deployed from `4713eba` — #341 stopped the repair jobs laundering guest-square claims into roster membership; the frontend was rebuilt for it, `index-Db6JwMWs.js` → **`index-Bv2FV3GO.js`**; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and ALL THREE DEPLOY QUEUES ARE EMPTY)
 
-> ## ✅ STOP POINT 2026-07-28, **UPDATED 2026-08-01** — everything through #341 shipped AND deployed (functions); FRONTEND REBUILD OWED
+> ## ✅ STOP POINT 2026-07-28, **UPDATED 2026-08-01** — everything through #341 shipped AND deployed, frontend included
 >
 > ⚠️ The 2026-07-28 date is the ORIGINAL snapshot; the deploy facts immediately
 > below were refreshed on **2026-08-01** and are current. Read the dates on
@@ -14,9 +14,10 @@
 > into roster membership. Evidence: 173 `Successful update operation`, then a
 > second run of 173 all `Skipped (No changes detected)`, zero updates,
 > `✔ Deploy complete!`. `shared/` and `firestore.rules` untouched, so rules are
-> unaffected — but **`src/components/admin/OperationsPanel.tsx` CHANGED, so a
-> Coolify rebuild IS owed** and the Run Log will not show `squaresSkipped` until
-> it runs.
+> unaffected. **`src/components/admin/OperationsPanel.tsx` changed, so a Coolify
+> rebuild was owed and Kevin ran it 2026-08-01** — live bundle moved
+> `index-Db6JwMWs.js` → **`index-Bv2FV3GO.js`**, read off the prod HTML. The Run
+> Log now shows `squaresSkipped`. **ALL THREE QUEUES EMPTY.**
 >
 > ⬇️ **EVERYTHING BELOW THIS LINE IS THE HISTORICAL DEPLOY RECORD**, kept for
 > provenance. `4713eba` above is the current state.
