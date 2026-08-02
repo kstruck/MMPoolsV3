@@ -99,10 +99,42 @@ export function resolveReminderTargets(
         // scope (§7).
         //
         // Cost, named rather than discovered later: a member whose record has no
-        // `joinedAt` and who has no entry is dropped. Every server path that
-        // CREATES a record stamps `joinedAt`, so the only documents this can
-        // reach are forgeries — and anyone with an entry is still unioned in
-        // below, which is where the pre-#338 resolver found them anyway.
+        // `joinedAt` and who has no entry is dropped.
+        //
+        // codex raised twice (r3, r4) that a LEGITIMATE participant who
+        // self-reported before this rollout would carry the same claim-only
+        // shape and be silently unreachable — and that heal-on-touch cannot
+        // save them, since a nudge targets exactly the members who are not
+        // acting. Real reasoning; REJECTED on the population, with evidence:
+        //
+        //  1. Every server path that CREATES a Member Record stamps `joinedAt`
+        //     — planMembershipWrite, poolCreation, bracketPools, the NFL join
+        //     and rebuy paths, backfillMemberRecords.
+        //  2. The client CAN write the two claim fields directly
+        //     (firestore.rules:407) but only via `update`, and
+        //     `allow create: if false` — so that path cannot bring a document
+        //     into existence, only add claim fields to a canonical one.
+        //  3. So the only writer that can produce a claim-only document is the
+        //     setPaidStatus claim branch, and it has never had a caller:
+        //     `git log --all -S"claim: true" -- src/` is EMPTY, and
+        //     `memberReportedPaid` has never appeared in `src/` outside
+        //     comments. There is no UI for the self-report.
+        //
+        // A legitimate claim-only record therefore requires a real participant
+        // to have invoked the callable directly, outside the app. The residual
+        // is stated rather than closed: if such a record does exist in
+        // production, the member is unreachable by nudge until they act, and
+        // the complete fix is a backfill — a Rule 1 prod-data mutation, already
+        // scoped out in PLAN-SETPAIDSTATUS-MEMBERSHIP §7, and Kevin's to run.
+        //
+        // The rescue codex proposed — accept a claim-only record when the uid is
+        // in `participantIds` — was NOT taken. It re-admits the manager-writable
+        // field this resolver deliberately excluded in round 1, on a
+        // money-adjacent path, four days before the pilot. That is an
+        // authorization change and takes its own plan gate.
+        //
+        // Anyone with an entry is still unioned in below, which is where the
+        // pre-#338 resolver found them anyway.
         if (!isCanonicalMemberRecord(m)) continue;
         targets.set(m.id, { uid: m.id, displayName: m.userName });
     }
