@@ -61,7 +61,7 @@ the move is observed rather than inferred.
 
 The first version of this document told you the rebuild was yours because *"the
 Coolify dashboard URL is written down nowhere in this repo"*. **That was wrong,
-and qodo caught it on the PR.** `HANDOFF.md:200` records the dashboard URL —
+and qodo caught it on the PR.** `HANDOFF.md` records the dashboard URL —
 `http://72.60.68.7:8000/project/.../application/.../deployment` — under the
 heading *"Dashboard, for the next time a `src/**` change lands"*, which is
 precisely this situation.
@@ -223,8 +223,16 @@ re-review", never "clean".
 
 1. **A forged Member Record still appears** on the commissioner's roster UI and in `memberCount`. §4a covers reminder targeting only. Cleanup is a prod-data sweep (§7 of the plan) and is yours to run.
 2. **If a *legitimate* claim-only record exists in production**, that member is unreachable by nudge until they act. codex raised this twice; I rejected it on the population — no code path has ever created such a record, because the self-report has **no client caller** (`git log --all -S"claim: true" -- src/` is empty). The full argument is written into the code at the filter, not just here.
-3. ~~The Coolify URL is recorded nowhere.~~ **False — retracted.** It is at
-   `HANDOFF.md:200`. See §1 for how I got that wrong.
+3. ~~The Coolify URL is recorded nowhere.~~ **False — retracted.** It is in
+   `HANDOFF.md`. See §1 for how I got that wrong.
+
+   ⚠️ Find it by SEARCHING, not by line number — codex caught me writing
+   `HANDOFF.md:200` and the anchor had already rotted by two edits within this
+   same PR:
+
+   ```bash
+   grep -n "72.60.68.7" HANDOFF.md
+   ```
 
 ---
 
@@ -247,8 +255,10 @@ STATE — VERIFY, DO NOT TRUST:
 origin/main was 22adb90 (plus the docs PR #346). Functions deployed from 22adb90
 (evidence: third run, 173 all "Skipped"). Rules ≡ 0a705c0. Bundle
 index-DlH8liQe.js. ALL THREE QUEUES EMPTY unless a merge since changed
-functions/, shared/, rules or src/. Baselines at 22adb90: functions 1295, root
-523, emulator 306. Coolify dashboard URL is at HANDOFF.md:200.
+functions/, shared/, firestore.rules, firestore.indexes.json or src/ — those are
+the real deploy inputs; there is no root `rules/` directory, and a rules or index
+change hiding behind a wrong path name is an ACL left undeployed. Baselines at 22adb90: functions 1295, root
+523, emulator 306. Coolify dashboard URL: grep -n "72.60.68.7" HANDOFF.md
 
 ⛔ Dependabot #299–#304: do NOT merge, all six rejected with evidence.
 ⛔ APP CHECK: do NOT set VITE_RECAPTCHA_SITE_KEY. The warning is the safe state.
