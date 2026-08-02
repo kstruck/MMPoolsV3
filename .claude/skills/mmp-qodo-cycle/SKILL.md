@@ -410,19 +410,31 @@ watcher if you like — it costs nothing but wall-clock — but record TIMEOUT a
 push or ordinary — produced **no** re-review. Two of those PRs sat silent for
 20+ minutes. Then:
 
-⚠️ **Baseline the surface counts BEFORE the toggle, not after.** If you reuse a
-`SINCE`/watermark from an earlier arm, the PRE-FIX review artifacts still satisfy
-it and the watcher reports "qodo reported" the instant it starts — handing you the
-old review as if it were the fresh one, which is the failure this whole section
-exists to prevent. Order: count all three surfaces → toggle → watch for the count
-to EXCEED that baseline → settle.
+⚠️ **Move `SINCE` FORWARD before the toggle, not after.** Reuse the `SINCE` from
+an earlier arm and the watcher's `select(.created_at > $SINCE)` still admits the
+PRE-FIX artifacts — so it prints `QODO REPORTED` the instant it starts and hands
+you the OLD review as if it were the fresh one. That is this section's failure
+mode wearing a success message.
+
+The §1 watcher needs no change: it is timestamp-driven, so setting `SINCE` to now
+is the whole fix. Order is **`SINCE` → toggle → arm**:
 
 ```bash
-BASE=$(( $(gh api --paginate repos/kstruck/MMPoolsV3/issues/<N>/comments             --jq '[.[]|select(.user.login|test("qodo";"i"))|select(.body|test("busy working")|not)]|length')        + $(gh api --paginate repos/kstruck/MMPoolsV3/pulls/<N>/comments  --jq '[.[]|select(.user.login|test("qodo";"i"))]|length')        + $(gh api --paginate repos/kstruck/MMPoolsV3/pulls/<N>/reviews   --jq '[.[]|select(.user.login|test("qodo";"i"))]|length') ))
+SINCE=$(date -u -d '1 second ago' +%Y-%m-%dT%H:%M:%SZ)   # backoff, as on re-arm
 gh pr ready <N> --undo    # → draft
 gh pr ready <N>           # → ready for review
-# then watch until the total EXCEEDS $BASE and stops moving
+# now arm the §1 watcher unchanged, with that SINCE
 ```
+
+⚠️ **Do NOT reach for a count-based baseline instead.** The obvious version —
+`gh api --paginate ... --jq '[...] | length'` — is broken: with `--paginate`,
+`--jq` runs **per page**, so it emits one count per page. Measured on #338 with
+`per_page=1`: `1 1 0 0 0 1 0` instead of `3`. That feeds `1
+1
+0...` into shell
+arithmetic and fails on exactly the multi-page PRs CLAUDE.md §2b insists on
+paginating. `_count` above avoids it by selecting `.id` and piping to `grep -c .`;
+any new counter must do the same.
 
 qodo posted a fresh review **within 90 seconds** every time, stamped at the
 current head commit, with its resolved findings marked `✓ Resolved`.

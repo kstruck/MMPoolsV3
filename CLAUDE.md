@@ -101,10 +101,12 @@ confirmation.
 ⚠️ **You CAN make it re-review, and you MUST try before recording a timeout**
 (added 2026-08-02, measured on #338, #345 and #343): a push does not trigger it,
 but toggling the PR draft → ready does, within ~90 seconds and stamped at the
-current head. Baseline the three surface counts FIRST, then toggle, then watch —
-otherwise the pre-fix artifacts satisfy the watcher instantly.
+current head. Move the watcher's `SINCE` forward FIRST, then toggle, then arm —
+otherwise the pre-fix artifacts satisfy the watcher instantly and it hands you the
+old review as a fresh one.
 
 ```bash
+SINCE=$(date -u -d '1 second ago' +%Y-%m-%dT%H:%M:%SZ)
 gh pr ready <N> --undo
 gh pr ready <N>
 ```
