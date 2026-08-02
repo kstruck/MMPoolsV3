@@ -6,10 +6,8 @@ import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { NotificationLog, User } from "./types";
-
-// Commissioner-initiated ("nudge") reminders for NFL pools (pick'em / survivor / margin).
-// Scheduler-driven reminders live in reminders.ts; this callable lets a pool
-// owner/manager email specific members (or everyone) on demand.
+import type { MemberRecord } from "./shared/memberRecord";
+import { resolveReminderTargets, outstandingDuesByUid, rebuyPortionByUid } from "./lib/reminderTargets";
 
 type ReminderKind = "PICKS" | "PAYMENT";
 
@@ -63,32 +61,115 @@ export const sendManualReminder = validated(
     const pool = { id: poolSnap.id, ...poolSnap.data() } as any;
     assertPoolOwnerOrSuperAdmin(pool, uid, request.auth!.token.role as string | undefined);
 
-    // 4. Resolve target entries (entry doc id == owner uid for NFL pools)
-    const entriesSnap = await poolRef.collection("entries").get();
-    let entryDocs = entriesSnap.docs;
-    if (targetUids && targetUids.length > 0) {
-        const targetSet = new Set(targetUids);
-        entryDocs = entryDocs.filter((d) => targetSet.has((d.data().ownerUid as string) || d.id));
-    }
+    // 4. Resolve targets from the ROSTER, not the entries collection.
+    //
+    // This used to read entries alone, which made the feature unable to reach
+    // the one person it exists for: a member who has never submitted matched no
+    // entry, so the call returned `sent: 0, skipped: 0` and nothing was sent.
+    // The Member Record (pools/{poolId}/members/{uid}) is the membership truth
+    // per ADR 0003; entry existence is a fact ABOUT a member, not the roster.
+    //
+    // Entries are still read and UNIONed in rather than used as an either/or
+    // fallback. Two states need that: pools written before Member Records
+    // existed, and pools only partly covered by `backfillMemberRecords` — in a
+    // partly-covered pool a "members exist, so ignore entries" branch would
+    // silently drop the members who still have only an entry.
+    //
+    // A voided membership DELETES the record (`voidMemberRecord`), so a present
+    // doc is a current member — but presence alone is NOT enough. Until
+    // 2026-08-02 the setPaidStatus claim branch could create one for any
+    // authenticated caller (#344), and those documents still exist. The
+    // canonical filter in `resolveReminderTargets` is what refuses them; do not
+    // read this read as "everything here is a member".
+    const [membersSnap, entriesSnap] = await Promise.all([
+        poolRef.collection("members").get(),
+        poolRef.collection("entries").get(),
+    ]);
+
+    // Hoisted: the same liability map answers the owes-anything gate below AND
+    // (with rebuyPortionByUid) which debt the email should name.
+    const entryRebuys = new Map(entriesSnap.docs.map((d) => [
+        (d.data().ownerUid as string) || d.id,
+        (d.data().rebuysUsed as number) ?? 0,
+    ]));
+    // `joinedAt` is restated rather than left to the spread: it is OPTIONAL on
+    // MemberRecord but REQUIRED by resolveReminderTargets, which is what makes a
+    // discriminator-dropping projection a compile error rather than a silent
+    // outage (codex).
+    const memberRecs = membersSnap.docs.map((d) => {
+        const data = d.data() as MemberRecord;
+        return { id: d.id, ...data, joinedAt: data.joinedAt };
+    });
+    const outstandingByUid = kind === "PAYMENT"
+        ? outstandingDuesByUid(
+            pool,
+            memberRecs,
+            new Set(entriesSnap.docs.map((d) => (d.data().ownerUid as string) || d.id)),
+            entryRebuys,
+        )
+        : undefined;
+
+    const targetList = resolveReminderTargets(
+        // The WHOLE record, not a {id, userName} projection. The projection was
+        // here first and it silently dropped `joinedAt` — the discriminator the
+        // §4a canonical filter reads — so every roster-only member arrived
+        // looking forged and only people with an entry survived the union. That
+        // is precisely the defect this PR exists to fix, reintroduced by a
+        // convenience mapping (codex). `resolveReminderTargets` now REQUIRES
+        // `joinedAt`, so a projection like that no longer compiles.
+        memberRecs,
+        entriesSnap.docs.map((d) => {
+            const entry = d.data();
+            return {
+                id: d.id,
+                ownerUid: entry.ownerUid as string | undefined,
+                userName: entry.userName as string | undefined,
+                ownerName: entry.ownerName as string | undefined,
+            };
+        }),
+        targetUids,
+        Array.isArray(pool.participantIds) ? (pool.participantIds as string[]) : [],
+        outstandingByUid,
+    );
 
     const poolName = pool.name || "Your pool";
     const deepLink = `${BASE_URL}/pool/${poolId}`;
-    const subject = kind === "PICKS"
-        ? `Reminder: Your Week picks are due — ${poolName}`
-        : `Reminder: Entry payment due — ${poolName}`;
+
+    // A PAYMENT reminder's debt type varies BY MEMBER, so the subject cannot be
+    // computed once for the whole send. A Survivor member who paid their entry
+    // fee and still owes rebuys was previously told "Entry payment due" about a
+    // fee they had already paid — the reminder named the wrong debt, which is
+    // the same class of error as reporting a skip as a success.
+    const rebuyOwedByUid = kind === "PAYMENT"
+        ? rebuyPortionByUid(pool, memberRecs, entryRebuys)
+        : new Map<string, number>();
 
     // 4-hour rate-limit bucket shared across a pool+target+kind
     const timeBucket = Math.floor(Date.now() / FOUR_HOURS_MS);
 
     let sent = 0;
     let skipped = 0;
-    const seenUids = new Set<string>();
+    // `skipped` alone cannot be explained by the caller: it mixes "no email on
+    // the profile" with "already reminded inside the 4h window". The UI was
+    // reporting every skip as the second, which is a guess presented as a fact.
+    let skippedNoEmail = 0;
+    let skippedRateLimited = 0;
+    let skippedNoBalance = 0;
 
-    for (const doc of entryDocs) {
-        const entry = doc.data();
-        const targetUid = (entry.ownerUid as string) || doc.id;
-        if (seenUids.has(targetUid)) continue; // one email per member
-        seenUids.add(targetUid);
+    // The Map is keyed by uid, so one email per member is structural — the
+    // explicit seen-set the entries loop needed is gone.
+    for (const target of targetList) {
+        const targetUid = target.uid;
+
+        // Owes nothing — a "payment due" email would be a false chase. Counted,
+        // never silently dropped: an empty result is reported by the UI as "not
+        // on this pool's roster", which would be a wrong and alarming thing to
+        // tell a commissioner about a member who is plainly there.
+        if (target.owesNothing) {
+            skipped++;
+            skippedNoBalance++;
+            continue;
+        }
 
         // Resolve email from the user profile (same approach as the bracket
         // reminder path in reminders.ts: entry.ownerUid -> users/{uid}.email)
@@ -96,6 +177,7 @@ export const sendManualReminder = validated(
         const email = userDoc.exists ? (userDoc.data() as User).email : undefined;
         if (!email) {
             skipped++;
+            skippedNoEmail++;
             continue;
         }
 
@@ -111,24 +193,90 @@ export const sendManualReminder = validated(
         });
         if (!created) {
             skipped++;
+            skippedRateLimited++;
             continue;
         }
 
-        const displayName = entry.userName || entry.ownerName || "there";
-        const body = kind === "PICKS"
-            ? `
+        const displayName = target.displayName || "there";
+
+        // Rebuy-only: this member's ENTIRE remaining balance is rebuy dues, so
+        // naming the entry fee would assert something false about money they
+        // already paid. A member who owes both is told about both rather than
+        // getting two emails — the 4h dedupe key is per pool+member+kind, so a
+        // second send would be suppressed anyway and they would hear only half.
+        // Both debt maps are built from MEMBER RECORDS. A member represented only
+        // by an entry - a partially backfilled pool - is absent from both, so the
+        // split between entry fee and rebuy is UNKNOWN for them. Saying "Entry
+        // payment due" would assert a specific debt the sender cannot see, which
+        // is the exact failure this change exists to fix, one case along.
+        const classifiable = rebuyOwedByUid.has(targetUid);
+        const rebuyOwed = rebuyOwedByUid.get(targetUid) ?? 0;
+        const totalOwed = outstandingByUid?.get(targetUid);
+        const rebuyOnly = kind === "PAYMENT"
+            && classifiable
+            && rebuyOwed > 0
+            && totalOwed !== undefined
+            && rebuyOwed >= totalOwed;
+        const owesBoth = kind === "PAYMENT" && classifiable && rebuyOwed > 0 && !rebuyOnly;
+        // Also unclassified when the TOTAL is missing: outstandingDuesByUid
+        // deliberately deletes a legacy rebuy record whose derived balance is
+        // <= 0 (price drift), meaning "unknown, stay eligible". classifiable can
+        // still be true there, which would have named the entry fee.
+        const unclassified = kind === "PAYMENT" && (!classifiable || totalOwed === undefined);
+
+        const payInstructions = pool.settings?.paymentInstructions
+            ? `<p><strong>How to pay:</strong> ${escapeHtml(pool.settings.paymentInstructions)}</p>`
+            : "";
+
+        let subject: string;
+        let heading: string;
+        let body: string;
+
+        if (kind === "PICKS") {
+            subject = `Reminder: Your Week picks are due — ${poolName}`;
+            heading = "Picks Reminder";
+            body = `
                 <p>Hi ${escapeHtml(displayName)},</p>
                 <p>Your commissioner sent a friendly reminder: your picks for <strong>${escapeHtml(poolName)}</strong> haven't been submitted yet this week.</p>
                 <p>Get them in before kickoff — unsubmitted picks lock automatically.</p>
-            `
-            : `
+            `;
+        } else if (rebuyOnly) {
+            subject = `Reminder: Rebuy payment due — ${poolName}`;
+            heading = "Rebuy Payment Reminder";
+            body = `
+                <p>Hi ${escapeHtml(displayName)},</p>
+                <p>Your commissioner sent a friendly reminder: your <strong>rebuy</strong> for <strong>${escapeHtml(poolName)}</strong> is still due.</p>
+                <p>This is not your entry fee — that is settled. A rebuy is charged separately when you buy back in after being eliminated.</p>
+                ${payInstructions}
+            `;
+        } else if (owesBoth) {
+            subject = `Reminder: Entry and rebuy payment due — ${poolName}`;
+            heading = "Payment Reminder";
+            body = `
+                <p>Hi ${escapeHtml(displayName)},</p>
+                <p>Your commissioner sent a friendly reminder: your <strong>entry fee and rebuy</strong> for <strong>${escapeHtml(poolName)}</strong> are still due.</p>
+                ${payInstructions}
+            `;
+        } else if (unclassified) {
+            subject = `Reminder: Payment due — ${poolName}`;
+            heading = "Payment Reminder";
+            body = `
+                <p>Hi ${escapeHtml(displayName)},</p>
+                <p>Your commissioner sent a friendly reminder: you have an outstanding balance for <strong>${escapeHtml(poolName)}</strong>.</p>
+                ${payInstructions}
+            `;
+        } else {
+            subject = `Reminder: Entry payment due — ${poolName}`;
+            heading = "Payment Reminder";
+            body = `
                 <p>Hi ${escapeHtml(displayName)},</p>
                 <p>Your commissioner sent a friendly reminder: your entry payment for <strong>${escapeHtml(poolName)}</strong> is still due.</p>
-                ${pool.settings?.paymentInstructions ? `<p><strong>How to pay:</strong> ${escapeHtml(pool.settings.paymentInstructions)}</p>` : ""}
+                ${payInstructions}
             `;
+        }
 
         const html = renderEmailHtml(
-            kind === "PICKS" ? "Picks Reminder" : "Payment Reminder",
+            heading,
             body,
             deepLink,
             "Open Pool"
@@ -137,6 +285,6 @@ export const sendManualReminder = validated(
         sent++;
     }
 
-    return { sent, skipped };
+    return { sent, skipped, skippedNoEmail, skippedRateLimited, skippedNoBalance };
     },
 );

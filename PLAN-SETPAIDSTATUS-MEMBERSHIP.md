@@ -510,7 +510,7 @@ and takes its own plan gate. Flagged rather than folded in.
 | Plan | ✅ this document — the rule SHRANK twice under review (4 evidence sources → 3 → 2) |
 | Sweep | ✅ `PLAN-SETPAIDSTATUS-MEMBERSHIP-SWEEPS.md` (rewritten after round 4 to match its own commands) |
 | Review log | 🔄 IN PROGRESS — rounds 1–7 recorded, 17 findings, all accepted |
-| **#338 canonical filter (§4a)** | ⛔ REQUIRED before #338 merges — without it neither PR closes the exposure |
+| **#338 canonical filter (§4a)** | ✅ implemented on #338's rebased branch — `isCanonicalMemberRecord` in `shared/memberRecord.ts`, used by BOTH doors so they cannot drift. The claim path also stamps a non-canonical record canonical on touch, so the guard and the filter cannot disagree about the same person. |
 | Kevin sign-off (Rule 3 step 5) | ✅ **GIVEN 2026-08-02** — *"#340's prerequisite is now satisfied: implement the setPaidStatus membership guard — TWO checks only… No third check."* |
 | **`claimMySquares` prerequisite (§0)** | ✅ **RESOLVED** via option 2 — the repair jobs no longer launder square ownership into either evidence branch. The underlying squares-theft hole stays open by decision. |
 | Implementation | ✅ `isProvableMember` (`functions/src/lib/memberRecord.ts`) + the transactional guard in `setPaidStatus.ts`, `NOT_A_POOL_MEMBER` client mapping, and the §8 test matrix (predicate units, emulator behaviour, source invariants for the ordering and the absent third check) |

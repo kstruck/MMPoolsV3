@@ -384,7 +384,74 @@ describe('setPaidStatus claim — the membership guard', () => {
     // Creation on claim is retained deliberately — a manager-listed participant
     // with no record yet is a real state, and refusing them would be the
     // false-negative D1 rejects.
-    expect((await memberDoc('pg_listed')).data()!.memberReportedPaid).toBe(true);
+    const created = (await memberDoc('pg_listed')).data()!;
+    expect(created.memberReportedPaid).toBe(true);
+    // ...and the created record is CANONICAL (codex P2 on #338). Without the
+    // stamp, the record this very call wrote would be indistinguishable from a
+    // forgery, and `resolveReminderTargets` would drop the member from every
+    // nudge — the guard admitting them and the filter refusing them, about the
+    // same person, in the same feature.
+    expect(created.joinedAt).toEqual(expect.any(Number));
+    expect(created.paidStatus).toBe('UNPAID');
+    expect(created.uid).toBe('pg_listed');
+    expect(created.poolId).toBe(poolId);
+  });
+
+  it('does NOT restamp joinedAt on an existing record', async () => {
+    // The stamp is a seed, not an update. Re-reporting must not look like a
+    // fresh join, and it must never touch a commissioner-owned field.
+    await seedGuardPool();
+    const before = (await memberDoc('pg_legacy')).data()!;
+
+    await wrappedSetPaid({
+      data: { poolId, memberUid: 'pg_legacy', claim: true },
+      auth: { uid: 'pg_legacy', token: {} },
+    } as never);
+
+    const after = (await memberDoc('pg_legacy')).data()!;
+    expect(after.joinedAt).toBe(before.joinedAt);
+    expect(after.paidStatus).toBe(before.paidStatus);
+    expect(after.userName).toBe('Legacy');
+  });
+
+  it('HEALS a legitimate claim-only record left by the pre-rollout callable', async () => {
+    // codex r3. A genuine participant who self-reported BEFORE this rollout
+    // already has a claim-only document, so a create-only seed would never
+    // reach them and the §4a filter would exclude them from every nudge
+    // permanently. `pg_listed` is in participantIds, so the guard admits them
+    // and the stamp must land on the EXISTING document.
+    await seedGuardPool();
+    await db.collection('pools').doc(poolId).collection('members').doc('pg_listed').set({
+      memberReportedPaid: false, memberReportedAt: 1,
+    });
+
+    await wrappedSetPaid({
+      data: { poolId, memberUid: 'pg_listed', claim: true },
+      auth: { uid: 'pg_listed', token: {} },
+    } as never);
+
+    expect((await memberDoc('pg_listed')).data()!.joinedAt).toEqual(expect.any(Number));
+  });
+
+  it('does NOT reset a commissioner-set PAID while healing', async () => {
+    // `reconcilePaymentTruth` can promote a claim-only document to PAID from a
+    // paid entry, so a non-canonical record may already carry a
+    // commissioner-owned PAID. Seeding `paidStatus: UNPAID` on the heal path
+    // would let a member reset their own payment status by self-reporting —
+    // a member-triggered write to the one field they may never set.
+    await seedGuardPool();
+    await db.collection('pools').doc(poolId).collection('members').doc('pg_listed').set({
+      memberReportedPaid: false, memberReportedAt: 1, paidStatus: 'PAID', paidBy: 'pg_boss',
+    });
+
+    await wrappedSetPaid({
+      data: { poolId, memberUid: 'pg_listed', claim: true },
+      auth: { uid: 'pg_listed', token: {} },
+    } as never);
+
+    const after = (await memberDoc('pg_listed')).data()!;
+    expect(after.paidStatus).toBe('PAID');
+    expect(after.joinedAt).toEqual(expect.any(Number));
   });
 
   it('REFUSES the "guest" sentinel even though it is in participantIds', async () => {

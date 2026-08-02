@@ -202,6 +202,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
       // (functions/src/manualReminders.ts:66-72), so it cannot reach a member
       // who has never submitted — exactly the rows this fix made visible.
       hasEntry: r.hasEntry,
+      hasMember: r.hasMember,
     })),
     [roster, week, pool.type, weeklyGames],
   );
@@ -291,21 +292,28 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   const handleNudge = async (player: { uid: string; name: string }) => {
     setIsNudging(player.uid);
     try {
-      const { sent, skipped } = await dbService.sendManualReminder(pool.id, [player.uid], 'PICKS');
-      // A zero-send is NOT a success. `sendManualReminder` resolves its targets
-      // from the entries collection, so a member who has never submitted matches
-      // nothing and the call returns `sent: 0, skipped: 0` without erroring —
-      // and the old copy reported that as "Sent 0 reminder(s)" in a SUCCESS
-      // toast. An absent error is not evidence that anything happened; this
-      // codebase has been bitten by that three times (#314's unbound
-      // COURIER_AUTH_TOKEN, the zero-counter reminder heartbeat, the 13-day
-      // Sentry outage).
-      if (sent === 0 && skipped === 0) {
-        toast.error(
-          `No reminder could be sent to ${player.name}. Reminders reach members who have started an entry; this member has not.`,
-        );
+      const { sent, skipped, skippedNoEmail, skippedRateLimited } = await dbService.sendManualReminder(pool.id, [player.uid], 'PICKS');
+      // A zero-send is NOT a success. The backend now resolves targets from the
+      // ROSTER, so a member who has never submitted IS reachable — that was the
+      // whole point of the change. But zero-send is still possible (no email on
+      // the user profile, or the uid is not on the roster at all), and it still
+      // returns `sent: 0, skipped: 0` without erroring. An absent error is not
+      // evidence that anything happened; this codebase has been bitten by that
+      // three times (#314's unbound COURIER_AUTH_TOKEN, the zero-counter
+      // reminder heartbeat, the 13-day Sentry outage). So the guard stays; only
+      // the explanation changes, because the old one now names the wrong cause.
+      if (sent > 0) {
+        toast.success(`Reminder sent to ${player.name}.`);
+      } else if (skippedNoEmail && skippedNoEmail > 0) {
+        toast.error(`No reminder sent to ${player.name} — there is no email address on their account.`);
+      } else if (skippedRateLimited && skippedRateLimited > 0) {
+        toast.info(`${player.name} was reminded within the last 4 hours, so this one was not resent.`);
+      } else if (skipped > 0) {
+        // An older deployed function returns `skipped` with no breakdown. Say
+        // what is known and no more — naming one cause here would be a guess.
+        toast.info(`No reminder sent to ${player.name}. Either they were reminded recently or they have no email on file.`);
       } else {
-        toast.success(`Sent ${sent} reminder(s), ${skipped} skipped (recently reminded)`);
+        toast.error(`No reminder could be sent to ${player.name} — they were not found on this pool's roster.`);
       }
     } catch (err) {
       console.error('Failed to send pick reminder:', err);
@@ -441,13 +449,24 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
                   <button
                     onClick={() => handleNudge(player)}
-                    disabled={isNudging !== null || !player.hasEntry}
-                    title={player.hasEntry
-                      ? undefined
-                      : 'Reminders reach members who have started an entry. This member has not, so there is nothing to remind against yet.'}
+                    // A row present ONLY in participantIds has neither a Member
+                    // Record nor an entry, and the resolver deliberately rejects
+                    // that uid (participantIds is client-writable). Enabling the
+                    // button there guarantees a 0/0 response reported as "not on
+                    // this roster" — re-creating the dead button #329 removed.
+                    disabled={isNudging !== null || (!player.hasMember && !player.hasEntry)}
+                    title={!player.hasMember && !player.hasEntry
+                      ? 'This member is on the roster list only, with no member record or entry, so there is nothing to remind against yet.'
+                      : player.hasEntry
+                        ? undefined
+                        : 'This member has not started an entry — nudging them is exactly the point.'}
                     className="min-h-[44px] bg-gold-400/10 border border-gold-500/40 hover:bg-gold-400/20 text-gold-600 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 rounded-md transition-all duration-150 hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isNudging === player.uid ? 'Sending...' : player.hasEntry ? 'Nudge Email' : 'Not Started'}
+                    {/* The label still distinguishes the two states — a
+                        commissioner wants to know who has not started — but the
+                        button is no longer disabled for them, because the
+                        backend can now reach a member with no entry. */}
+                    {isNudging === player.uid ? 'Sending...' : player.hasEntry ? 'Nudge Email' : 'Nudge — Not Started'}
                   </button>
                 </div>
               ))

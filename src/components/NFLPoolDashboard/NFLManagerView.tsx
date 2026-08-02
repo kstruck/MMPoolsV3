@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Settings, DollarSign, CheckCircle, XCircle, Users, Activity,
   Play, Edit3, Save, Lock, Unlock, AlertTriangle, ShieldCheck, BellRing,
@@ -13,7 +13,7 @@ import { RecordPayoutsCard } from './RecordPayoutsCard';
 import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek } from '../../utils/nflPending';
-import { buildPoolRoster } from '../../utils/poolRoster';
+import { buildPoolRoster, memberOutstanding, duesRates } from '../../utils/poolRoster';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
 
 /**
@@ -225,14 +225,57 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   }, [members, entries, pool, weeklyGames, week, type, user]);
 
   const unpickedCount = useMemo(() => roster.filter(r => !r.picked).length, [roster]);
-  const unpaidCount = useMemo(() => roster.filter(r => r.paidStatus !== 'PAID').length, [roster]);
+  // Outstanding BALANCE, not paidStatus. A Survivor member can have paid their
+  // base entry fee and still owe rebuys; selecting on paidStatus !== 'PAID'
+  // could never reach them, which made the backend's rebuy-due handling
+  // unreachable from this screen. memberOutstanding is the same rule the pot
+  // maths uses, including the legacy un-stamped rebuy fallback, so the button
+  // and the callable agree on who owes.
+  const rates = useMemo(() => duesRates(pool), [pool]);
+
+  // Hosting is not playing (ADR 0005), and a pre-backfill pool can list its
+  // commissioner in participantIds with no member record and no entry — a row
+  // memberOutstanding scores at a full entry fee. The callable exempts them, so
+  // without the same rule here the button offers a send the backend refuses.
+  // All three owner fields, because poolOps and the backfill disagree on which
+  // takes precedence.
+  const hostUids = useMemo(() => new Set(
+    [(pool as any)?.createdByUid, (pool as any)?.ownerId, (pool as any)?.managerUid].filter(Boolean),
+  ), [pool]);
+  // Mirrors the callable's rules EXACTLY. Where these two disagree the UI either
+  // offers a send the backend refuses, or hides one it would have made:
+  //
+  //  - the host exemption applies ONLY to an UNSTAMPED host (`feeOwed`
+  //    undefined) with no entry. A host who played carries a stamped feeOwed and
+  //    genuinely owes it; exempting them unconditionally hid a real debt.
+  //  - a legacy rebuy with `rebuysUsed > 0` whose computed balance is 0 is
+  //    UNKNOWN, not settled — `rebuyCost` may have since been set to 0. The
+  //    callable keeps them eligible, so this must too, or the backend's
+  //    price-drift safeguard is unreachable from this screen.
+  const owesMoney = useCallback(
+    (r: { uid: string; hasEntry: boolean; feeOwed?: number; rebuyOwed?: number; rebuysUsed?: number }) => {
+      const unstampedHost = hostUids.has(r.uid) && !r.hasEntry && r.feeOwed === undefined;
+      if (unstampedHost) return false;
+      if (memberOutstanding(r as any, rates) > 0) return true;
+      return r.rebuyOwed === undefined && (r.rebuysUsed ?? 0) > 0;
+    },
+    [hostUids, rates],
+  );
+  const unpaidCount = useMemo(() => roster.filter(owesMoney).length, [roster, owesMoney]);
 
   // --- Handlers ---
   const handleRemindOne = async (uid: string, kind: 'PICKS' | 'PAYMENT') => {
     setRemindingUid(uid);
     try {
-      const { sent, skipped } = await dbService.sendManualReminder(pool.id, [uid], kind);
-      toast.success(`Sent ${sent} reminder(s), ${skipped} skipped (recently reminded)`);
+      const { sent, skipped, skippedNoEmail, skippedNoBalance } = await dbService.sendManualReminder(pool.id, [uid], kind);
+      // "skipped (recently reminded)" asserted a cause the client was never
+      // told; a no-email skip reported as a success is the same class of lie
+      // this file's payment surfaces were cleaned of in #322.
+      if (sent > 0) toast.success('Reminder sent.');
+      else if (skippedNoEmail && skippedNoEmail > 0) toast.error('No reminder sent — there is no email address on that account.');
+      else if (skippedNoBalance && skippedNoBalance > 0) toast.info('No reminder sent — that member owes nothing.');
+      else if (skipped > 0) toast.info('No reminder sent — they were reminded recently, or have no email on file.');
+      else toast.error("No reminder sent — that member was not found on this pool's roster.");
     } catch (err) {
       logger.error('Failed to send manual reminder:', err);
       toast.error(getUserMessage(err));
@@ -244,7 +287,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const handleRemindBulk = async (kind: 'PICKS' | 'PAYMENT') => {
     const targets = (kind === 'PICKS'
       ? roster.filter(r => !r.picked)
-      : roster.filter(r => r.paidStatus !== 'PAID')
+      : roster.filter(owesMoney)
     ).map(r => r.uid);
     if (targets.length === 0) {
       toast.info(kind === 'PICKS' ? 'Everyone has picked this week.' : 'Everyone has paid.');
@@ -252,8 +295,10 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     }
     setBulkReminding(kind);
     try {
-      const { sent, skipped } = await dbService.sendManualReminder(pool.id, targets, kind);
-      toast.success(`Sent ${sent} reminder(s), ${skipped} skipped (recently reminded)`);
+      const { sent, skipped, skippedNoEmail } = await dbService.sendManualReminder(pool.id, targets, kind);
+      const noEmail = skippedNoEmail && skippedNoEmail > 0 ? `, ${skippedNoEmail} with no email on file` : '';
+      if (sent > 0) toast.success(`Sent ${sent} reminder(s), ${skipped} skipped${noEmail}.`);
+      else toast.info(`No reminders sent — ${skipped} skipped${noEmail}.`);
     } catch (err) {
       logger.error('Failed to send bulk reminders:', err);
       toast.error(getUserMessage(err));
@@ -308,7 +353,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       await dbService.setPaidStatus(pool.id, uid, nextPaid);
     } catch (err: any) {
       logger.error(`Failed to set paid status for ${uid}:`, err);
-      setFeedback({ type: 'error', message: err?.message || 'Failed to update payment status.' });
+      // getUserMessage, not err.message: setPaidStatus now throws a
+      // MEMBER_NOT_ON_ROSTER: domain prefix, and raw err.message would render
+      // that machine token to the commissioner. The Bento payment card already
+      // routes this way.
+      setFeedback({ type: 'error', message: getUserMessage(err, 'Failed to update payment status.') });
     } finally {
       setIsSavingPayment(null);
     }
@@ -324,7 +373,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       await dbService.settleRebuys(pool.id, uid, settle);
     } catch (err: any) {
       logger.error(`Failed to settle rebuys for ${uid}:`, err);
-      setFeedback({ type: 'error', message: err?.message || 'Rebuy settlement failed.' });
+      setFeedback({ type: 'error', message: getUserMessage(err, 'Rebuy settlement failed.') });
     } finally {
       setIsSavingPayment(null);
     }
@@ -1204,9 +1253,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                           disabled={
                             remindingUid !== null ||
                             bulkReminding !== null ||
-                            (row.picked && row.paidStatus === 'PAID')
+                            (row.picked && !owesMoney(row))
                           }
-                          title={!row.picked ? 'Email a picks reminder' : row.paidStatus !== 'PAID' ? 'Email a payment reminder' : 'Picked and paid — nothing to remind'}
+                          title={!row.picked ? 'Email a picks reminder' : owesMoney(row) ? 'Email a payment reminder' : 'Picked and settled — nothing to remind'}
                           className="min-h-[44px] inline-flex items-center gap-1.5 px-3 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-navy-800 text-white hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 hover:-translate-y-px cursor-pointer"
                         >
                           <BellRing size={10} />

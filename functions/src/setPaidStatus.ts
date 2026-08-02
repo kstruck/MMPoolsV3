@@ -7,6 +7,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
 import { setPaidStatusSchema } from "./schemas/participantOps";
 import { isProvableMember, membersCol } from "./lib/memberRecord";
+import { isCanonicalMemberRecord } from "./shared/memberRecord";
 import { refreshProjectionsBestEffort } from "./lib/refreshProjections";
 
 export const setPaidStatus = validated(
@@ -53,7 +54,47 @@ export const setPaidStatus = validated(
       if (!isProvableMember(freshPoolSnap.data(), memberSnap.data(), uid)) {
         throw new HttpsError("permission-denied", "NOT_A_POOL_MEMBER: You are not a member of this pool.");
       }
-      tx.set(mRef, { memberReportedPaid: !!claim, memberReportedAt: Date.now() }, { merge: true });
+      const now = Date.now();
+      const existing = memberSnap.data();
+      // Stamp the record CANONICAL whenever it is not already (codex P2, twice).
+      //
+      // Without this the two halves of this fix contradict each other about the
+      // same person. In a legacy or partially-backfilled pool a uid can be in
+      // `participantIds` with no Member Record; the guard above admits their
+      // self-report on exactly that evidence, and the record it writes — claim
+      // fields only — is precisely the shape `resolveReminderTargets` calls a
+      // forgery. That member would be dropped from every nudge, having just
+      // been told by the same feature that they are a member.
+      //
+      // The condition is "not canonical", NOT "does not exist" (codex r3): a
+      // genuine participant who self-reported BEFORE this rollout already has a
+      // claim-only document, so a create-only seed would never reach them and
+      // they would be excluded permanently. Heal on touch, the same way
+      // `ensureMemberRecord` heals `feeOwed` and `hasPlayableEntry`.
+      //
+      // Safe because it is unreachable without passing the guard, and a
+      // NON-canonical record cannot pass on evidence 1 — so the only way here is
+      // manager-written `participantIds`, and #341 cut the repair-job route that
+      // laundered guest square claims into it.
+      //
+      // Deliberately NOT `planMembershipWrite`: it seeds `feeOwed` from the
+      // pool's entry fee, and a member-triggered path must not write money.
+      const seed: Record<string, unknown> = {};
+      if (!isCanonicalMemberRecord(existing)) {
+        seed.uid = uid;
+        seed.poolId = poolId;
+        seed.joinedAt = now;
+        const tokenName = request.auth!.token?.name;
+        if (typeof tokenName === 'string' && tokenName && !existing?.userName) {
+          seed.userName = tokenName;
+        }
+        // paidStatus ONLY on create. `reconcilePaymentTruth` can promote a
+        // claim-only document to PAID from a paid entry, so an existing
+        // non-canonical record may already carry a commissioner-owned PAID that
+        // this member-triggered path must never reset to UNPAID.
+        if (!memberSnap.exists) seed.paidStatus = 'UNPAID';
+      }
+      tx.set(mRef, { ...seed, memberReportedPaid: !!claim, memberReportedAt: now }, { merge: true });
     });
     return { success: true, mode: 'claim' as const };
   }
@@ -78,7 +119,7 @@ export const setPaidStatus = validated(
     await db.runTransaction(async (tx) => {
       const entryRef = poolRef.collection('entries').doc(memberUid);
       const [snap, entrySnap] = await Promise.all([tx.get(mRef), tx.get(entryRef)]);
-      if (!snap.exists) throw new HttpsError("not-found", "Member is not on this pool's roster.");
+      if (!snap.exists) throw new HttpsError("not-found", "MEMBER_NOT_ON_ROSTER: Member is not on this pool's roster.");
       const m: any = snap.data();
       // LEGACY FALLBACK (codex r2): survivor pools have existed since
       // 2026-05-25 but the rebuyOwed writer only since 2026-07-08 (1bb7e89),
@@ -144,16 +185,18 @@ export const setPaidStatus = validated(
   const entryFee: number | undefined = pool.settings?.entryFee;
   let memberName: string | undefined;
   // Member Record mutation + ledger append + entry-doc mirror in ONE transaction
-  // (ADR 0003 item 5; PLAN-PAYMENT-TRUTH P1). The mirror is REQUIRED, not
-  // cosmetic: the Bento ledger UI is entry-backed (ledgerStats counts
-  // entry.paidStatus and the table renders entry paymentMethod/paidAt/
-  // paymentNote), so repointing that panel here without mirroring would blank
-  // its table and freeze the collected/remaining figures. Mirroring in the same
-  // transaction makes the two stores agree by construction, which is what turns
-  // P2's reconciliation into a one-off for historical data.
+  // (ADR 0003 item 5; PLAN-PAYMENT-TRUTH P1).
+  //
+  // ⚠️ The reason given here USED to be that the Bento ledger UI reads entry
+  // docs. That stopped being true in #322, which repointed that panel onto the
+  // Member Record. The mirror is still kept, but for a different and weaker
+  // reason: other surfaces and exports still read `entry.paidStatus`, and
+  // letting the two stores disagree is what P2's reconciliation existed to
+  // clean up. Mirroring in the same transaction keeps them equal by
+  // construction. Do not cite the Bento ledger as the justification again.
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(mRef);
-    if (!snap.exists) throw new HttpsError("not-found", "Member is not on this pool's roster.");
+    if (!snap.exists) throw new HttpsError("not-found", "MEMBER_NOT_ON_ROSTER: Member is not on this pool's roster.");
     // NFL entry docs are keyed by uid (nflPools), so the member's entry — when
     // they have one — lives at entries/{memberUid}. Members without an entry
     // (e.g. the commissioner, or joined-not-yet-picked) simply have no doc to
