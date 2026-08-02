@@ -5,7 +5,7 @@
 // billing.ts, which calls admin.firestore() at module load and throws without an
 // initialised app. Same reason lib/weekCompletion.ts is separate from the scorer.
 
-import { memberDues } from "../shared/memberRecord";
+import { isCanonicalMemberRecord, memberDues } from "../shared/memberRecord";
 import type { MemberRecord } from "../shared/memberRecord";
 
 export interface ReminderTarget {
@@ -28,9 +28,17 @@ export interface ReminderTarget {
  * whole path would test the mock more than the rule.
  *
  * Callers pass plain shapes, not snapshots, deliberately.
+ *
+ * `members` is "a Member Record document plus its id", with `joinedAt` widened
+ * to `unknown`. Two reasons, both learned the hard way on #344:
+ *  - a narrow `{ id; userName? }` made it a COMPILE ERROR to write the forged
+ *    shape the §4a filter exists to refuse, i.e. the type declared the most
+ *    important input impossible;
+ *  - `joinedAt` is not reliably a number — `backfillMemberRecords` stamps
+ *    `pool.createdAt`, which on a legacy pool may be a Firestore Timestamp.
  */
 export function resolveReminderTargets(
-    members: Array<{ id: string; userName?: string }>,
+    members: Array<Omit<Partial<MemberRecord>, 'joinedAt'> & { id: string; joinedAt?: unknown }>,
     entries: Array<{ id: string; ownerUid?: string; userName?: string; ownerName?: string }>,
     targetUids?: string[],
     participantIds: string[] = [],
@@ -65,6 +73,29 @@ export function resolveReminderTargets(
     // point in the order. Deleted rather than guarded.
     for (const m of members) {
         if (!m.id || m.id === 'guest') continue;
+        // ⛔ CANONICAL records only (PLAN-SETPAIDSTATUS-MEMBERSHIP §4a).
+        //
+        // Until 2026-08-02 the `setPaidStatus` claim branch would CREATE
+        // `pools/{anyPool}/members/{caller}` for any authenticated caller (#344).
+        // #344 shuts that door, but it does not delete the documents already
+        // minted — and this resolver used to accept EVERY document in the
+        // collection and resolve its uid to an email address.
+        //
+        // So without this line, a non-member who exploited the bug before today
+        // still receives that pool's pick and payment reminders, which is the
+        // exact exposure this PR exists to close. Neither PR closes it alone.
+        //
+        // Fail-CLOSED on the reminder side, and it needs no production write —
+        // the forged document keeps existing, it just stops being a target. A
+        // cleanup sweep is a prod-data mutation under Rule 1 and stays out of
+        // scope (§7).
+        //
+        // Cost, named rather than discovered later: a member whose record has no
+        // `joinedAt` and who has no entry is dropped. Every server path that
+        // CREATES a record stamps `joinedAt`, so the only documents this can
+        // reach are forgeries — and anyone with an entry is still unioned in
+        // below, which is where the pre-#338 resolver found them anyway.
+        if (!isCanonicalMemberRecord(m)) continue;
         targets.set(m.id, { uid: m.id, displayName: m.userName });
     }
 

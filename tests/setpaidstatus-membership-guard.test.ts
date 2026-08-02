@@ -84,6 +84,25 @@ describe('setPaidStatus claim branch — membership guard wiring', () => {
         expect(claimCode).toMatch(/if \(!freshPoolSnap\.exists\)/);
     });
 
+    it('uses the SHARED canonical discriminator, not a local copy', () => {
+        // #344 shuts the door on NEW forgeries; #338's resolveReminderTargets
+        // filter stops OLD ones being emailed (§4a). They only work as a pair,
+        // so the two must agree on what "canonical" means — a second inlined
+        // `joinedAt !== undefined` in either file is how that drifts.
+        const lib = readFileSync(
+            resolve(__dirname, '..', 'functions/src/lib/memberRecord.ts'), 'utf8',
+        );
+        const targets = readFileSync(
+            resolve(__dirname, '..', 'functions/src/lib/reminderTargets.ts'), 'utf8',
+        );
+
+        expect(lib).toContain('isCanonicalMemberRecord(');
+        expect(targets).toContain('isCanonicalMemberRecord(');
+        // Both must import it from shared/, not define their own.
+        expect(lib).not.toMatch(/export function isCanonicalMemberRecord/);
+        expect(targets).not.toMatch(/export function isCanonicalMemberRecord/);
+    });
+
     it('has NO third evidence branch — square ownership stays out', () => {
         // Round 5. `claimMySquares` stamps `reservedByUid` on proof of a
         // guestDeviceKey readable from the world-readable pool document, so the

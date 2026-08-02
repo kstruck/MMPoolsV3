@@ -9,11 +9,17 @@ import { resolveReminderTargets, outstandingDuesByUid, rebuyPortionByUid } from 
 // The rule is now: the roster is the truth, entries are UNIONed in for pools
 // written before Member Records existed (and for partially backfilled pools).
 
+// Every Member Record fixture below carries `joinedAt` because every SERVER
+// path that creates one stamps it. A record WITHOUT it is the forged shape the
+// pre-2026-08-02 setPaidStatus claim bug minted (#344), and §4a's filter
+// refuses it — see the dedicated describe block at the end of this file.
+const JOINED = 1_700_000_000_000;
+
 describe("resolveReminderTargets", () => {
     describe("the defect itself", () => {
         it("reaches a member who has NEVER submitted an entry", () => {
             const targets = resolveReminderTargets(
-                [{ id: "never-submitted", userName: "Dana" }],
+                [{ joinedAt: JOINED, id: "never-submitted", userName: "Dana" }],
                 [], // no entries at all — this is the HOF-night case
             );
 
@@ -23,8 +29,8 @@ describe("resolveReminderTargets", () => {
         it("reaches the non-submitters in a pool where others HAVE submitted", () => {
             const targets = resolveReminderTargets(
                 [
-                    { id: "submitted", userName: "Ada" },
-                    { id: "not-yet", userName: "Bo" },
+                    { joinedAt: JOINED, id: "submitted", userName: "Ada" },
+                    { joinedAt: JOINED, id: "not-yet", userName: "Bo" },
                 ],
                 [{ id: "submitted", ownerUid: "submitted", userName: "Ada" }],
             );
@@ -49,7 +55,7 @@ describe("resolveReminderTargets", () => {
         // everyone still represented only by an entry.
         it("keeps entry-only members in a PARTIALLY backfilled pool", () => {
             const targets = resolveReminderTargets(
-                [{ id: "has-record", userName: "Ada" }],
+                [{ joinedAt: JOINED, id: "has-record", userName: "Ada" }],
                 [{ id: "entry-only", ownerUid: "entry-only", userName: "Bo" }],
             );
 
@@ -75,7 +81,7 @@ describe("resolveReminderTargets", () => {
     describe("one email per member", () => {
         it("does not duplicate a member who also has an entry", () => {
             const targets = resolveReminderTargets(
-                [{ id: "both", userName: "Ada" }],
+                [{ joinedAt: JOINED, id: "both", userName: "Ada" }],
                 [{ id: "both", ownerUid: "both", userName: "Ada" }],
             );
 
@@ -84,7 +90,7 @@ describe("resolveReminderTargets", () => {
 
         it("does not duplicate a member with MULTIPLE entries", () => {
             const targets = resolveReminderTargets(
-                [{ id: "multi", userName: "Ada" }],
+                [{ joinedAt: JOINED, id: "multi", userName: "Ada" }],
                 [
                     { id: "entry-a", ownerUid: "multi" },
                     { id: "entry-b", ownerUid: "multi" },
@@ -99,7 +105,7 @@ describe("resolveReminderTargets", () => {
     describe("display name resolution", () => {
         it("prefers the Member Record name over the entry name", () => {
             const targets = resolveReminderTargets(
-                [{ id: "u1", userName: "Roster Name" }],
+                [{ joinedAt: JOINED, id: "u1", userName: "Roster Name" }],
                 [{ id: "u1", ownerUid: "u1", userName: "Stale Entry Name" }],
             );
 
@@ -108,7 +114,7 @@ describe("resolveReminderTargets", () => {
 
         it("falls back to the entry name when the Member Record has none", () => {
             const targets = resolveReminderTargets(
-                [{ id: "u1" }],
+                [{ joinedAt: JOINED, id: "u1" }],
                 [{ id: "u1", ownerUid: "u1", userName: "Entry Name" }],
             );
 
@@ -123,7 +129,7 @@ describe("resolveReminderTargets", () => {
 
         it("leaves displayName undefined when nothing carries a name", () => {
             // The caller substitutes "there"; this function must not invent one.
-            const targets = resolveReminderTargets([{ id: "u1" }], []);
+            const targets = resolveReminderTargets([{ joinedAt: JOINED, id: "u1" }], []);
 
             expect(targets[0].displayName).toBeUndefined();
         });
@@ -133,9 +139,9 @@ describe("resolveReminderTargets", () => {
         it("narrows to the requested uids", () => {
             const targets = resolveReminderTargets(
                 [
-                    { id: "a", userName: "Ada" },
-                    { id: "b", userName: "Bo" },
-                    { id: "c", userName: "Cyd" },
+                    { joinedAt: JOINED, id: "a", userName: "Ada" },
+                    { joinedAt: JOINED, id: "b", userName: "Bo" },
+                    { joinedAt: JOINED, id: "c", userName: "Cyd" },
                 ],
                 [],
                 ["b"],
@@ -147,8 +153,8 @@ describe("resolveReminderTargets", () => {
         it("can single out a member who has no entry — the Nudge button's case", () => {
             const targets = resolveReminderTargets(
                 [
-                    { id: "submitted", userName: "Ada" },
-                    { id: "not-yet", userName: "Bo" },
+                    { joinedAt: JOINED, id: "submitted", userName: "Ada" },
+                    { joinedAt: JOINED, id: "not-yet", userName: "Bo" },
                 ],
                 [{ id: "submitted", ownerUid: "submitted" }],
                 ["not-yet"],
@@ -160,7 +166,7 @@ describe("resolveReminderTargets", () => {
         it("returns nothing when the requested uid is on neither list", () => {
             // Must NOT fabricate a target from the uid the caller asked for —
             // that would email whatever users/{uid} happens to exist.
-            const targets = resolveReminderTargets([{ id: "a" }], [], ["stranger"]);
+            const targets = resolveReminderTargets([{ joinedAt: JOINED, id: "a" }], [], ["stranger"]);
 
             expect(targets).toEqual([]);
         });
@@ -168,7 +174,7 @@ describe("resolveReminderTargets", () => {
         it("treats an EMPTY targetUids array as 'everyone', not 'nobody'", () => {
             // The callable's schema allows an absent or empty list; both mean
             // the whole roster. A `.length > 0` check is load-bearing here.
-            const targets = resolveReminderTargets([{ id: "a" }, { id: "b" }], [], []);
+            const targets = resolveReminderTargets([{ joinedAt: JOINED, id: "a" }, { joinedAt: JOINED, id: "b" }], [], []);
 
             expect(targets).toHaveLength(2);
         });
@@ -194,7 +200,7 @@ describe("resolveReminderTargets", () => {
 
         it("still reaches a uid that ALSO has a Member Record", () => {
             const targets = resolveReminderTargets(
-                [{ id: "u1", userName: "Ada" }],
+                [{ joinedAt: JOINED, id: "u1", userName: "Ada" }],
                 [],
                 undefined,
                 ["u1"],
@@ -216,7 +222,7 @@ describe("resolveReminderTargets", () => {
 
         it("does not duplicate a uid present in all three sources", () => {
             const targets = resolveReminderTargets(
-                [{ id: "u1", userName: "Ada" }],
+                [{ joinedAt: JOINED, id: "u1", userName: "Ada" }],
                 [{ id: "u1", ownerUid: "u1" }],
                 undefined,
                 ["u1"],
@@ -230,7 +236,7 @@ describe("resolveReminderTargets", () => {
             // 'guest' is not a person (src/utils/poolRoster.ts). Emailing it
             // would mean resolving users/guest, whatever that happens to be.
             const targets = resolveReminderTargets(
-                [{ id: "guest" }],
+                [{ joinedAt: JOINED, id: "guest" }],
                 [{ id: "guest", ownerUid: "guest" }],
                 undefined,
                 ["guest", ""],
@@ -248,7 +254,7 @@ describe("resolveReminderTargets", () => {
     describe("PAYMENT reminders and zero liability", () => {
         it("drops a member whose outstanding dues are zero", () => {
             const targets = resolveReminderTargets(
-                [{ id: "host", userName: "Commish" }],
+                [{ joinedAt: JOINED, id: "host", userName: "Commish" }],
                 [],
                 undefined,
                 ["host"],
@@ -260,7 +266,7 @@ describe("resolveReminderTargets", () => {
 
         it("keeps a member who actually owes", () => {
             const targets = resolveReminderTargets(
-                [{ id: "debtor", userName: "Ada" }],
+                [{ joinedAt: JOINED, id: "debtor", userName: "Ada" }],
                 [],
                 undefined,
                 [],
@@ -272,7 +278,7 @@ describe("resolveReminderTargets", () => {
 
         it("drops an OVERPAID member (negative outstanding)", () => {
             const targets = resolveReminderTargets(
-                [{ id: "overpaid" }],
+                [{ joinedAt: JOINED, id: "overpaid" }],
                 [],
                 undefined,
                 [],
@@ -303,7 +309,7 @@ describe("resolveReminderTargets", () => {
 
         it("does not filter at all when no map is passed (PICKS)", () => {
             // A PICKS reminder must reach a paid-up member who has not picked.
-            const targets = resolveReminderTargets([{ id: "paid-up" }], [], undefined, []);
+            const targets = resolveReminderTargets([{ joinedAt: JOINED, id: "paid-up" }], [], undefined, []);
 
             expect(targets.map((t) => t.uid)).toEqual(["paid-up"]);
         });
@@ -312,7 +318,7 @@ describe("resolveReminderTargets", () => {
             // Nudging one member by uid must not bypass the zero-liability rule,
             // or the single-row Remind button re-opens what the bulk one closed.
             const targets = resolveReminderTargets(
-                [{ id: "host" }],
+                [{ joinedAt: JOINED, id: "host" }],
                 [],
                 ["host"],
                 [],
@@ -323,7 +329,7 @@ describe("resolveReminderTargets", () => {
         });
 
         it("leaves owesNothing UNSET for a member who owes", () => {
-            const targets = resolveReminderTargets([{ id: "d" }], [], undefined, [], new Map([["d", 5]]));
+            const targets = resolveReminderTargets([{ joinedAt: JOINED, id: "d" }], [], undefined, [], new Map([["d", 5]]));
 
             expect(targets[0].owesNothing).toBeUndefined();
         });
@@ -333,7 +339,7 @@ describe("resolveReminderTargets", () => {
         // a wrong and alarming thing to say about a member plainly on screen.
         it("FLAGS rather than removes, so the caller can tell it apart from 'not on the roster'", () => {
             const targets = resolveReminderTargets(
-                [{ id: "host", userName: "Commish" }],
+                [{ joinedAt: JOINED, id: "host", userName: "Commish" }],
                 [],
                 ["host"],
                 [],
@@ -347,6 +353,77 @@ describe("resolveReminderTargets", () => {
 
     it("returns an empty list for a pool with no members and no entries", () => {
         expect(resolveReminderTargets([], [])).toEqual([]);
+    });
+
+    /**
+     * PLAN-SETPAIDSTATUS-MEMBERSHIP §4a — round 7's P1, and the reason #344
+     * alone does not close the exposure that blocked this PR.
+     *
+     * #344 stops setPaidStatus MINTING a Member Record for a non-member. It does
+     * not delete the ones already minted, and this resolver used to turn every
+     * document in the members collection into an email address.
+     */
+    describe("forged Member Records are not reminder targets (§4a)", () => {
+        // Exactly what the vulnerable claim branch wrote: the two self-report
+        // fields and nothing else. No joinedAt, because no client path can set it.
+        const FORGED = { id: "forger", memberReportedPaid: true, memberReportedAt: JOINED };
+
+        it("REFUSES a claim-only record — the forged shape", () => {
+            expect(resolveReminderTargets([FORGED], [])).toEqual([]);
+        });
+
+        it("still reaches the real members of a pool that also holds a forgery", () => {
+            // The filter must be surgical. Dropping the whole roster because one
+            // document is bad would be a worse outage than the exposure.
+            const targets = resolveReminderTargets(
+                [FORGED, { joinedAt: JOINED, id: "real", userName: "Ada" }],
+                [],
+            );
+
+            expect(targets).toEqual([{ uid: "real", displayName: "Ada" }]);
+        });
+
+        it("KEEPS a forger's uid when they also hold an entry", () => {
+            // An entry is server-written and means they actually played, so this
+            // is not a forgery-shaped case at all — it is a legacy member whose
+            // record predates the roster model. The entries union, which is what
+            // the pre-#338 resolver used, still reaches them.
+            const targets = resolveReminderTargets(
+                [FORGED],
+                [{ id: "forger", ownerUid: "forger", userName: "Legit After All" }],
+            );
+
+            expect(targets).toEqual([{ uid: "forger", displayName: "Legit After All" }]);
+        });
+
+        it("does not let a forged record supply a display NAME either", () => {
+            // The record is skipped before `targets.set`, so the entry is the
+            // first writer and owns the name. A filter placed after the set —
+            // or one that only removed the uid from the final list — would leak
+            // an attacker-chosen string into the email greeting.
+            const targets = resolveReminderTargets(
+                [{ id: "u1", userName: "Attacker Chosen", memberReportedPaid: true }],
+                [{ id: "u1", ownerUid: "u1", userName: "Real Name" }],
+            );
+
+            expect(targets).toEqual([{ uid: "u1", displayName: "Real Name" }]);
+        });
+
+        it("treats an explicitly null joinedAt as absent", () => {
+            expect(resolveReminderTargets([{ id: "u1", joinedAt: null }], [])).toEqual([]);
+        });
+
+        it("accepts a NON-NUMERIC joinedAt — backfill stamps pool.createdAt", () => {
+            // backfillMemberRecords writes `pool.createdAt || Date.now()`, and a
+            // legacy createdAt may be a Firestore Timestamp. A `typeof number`
+            // discriminator would silently stop emailing every backfilled member.
+            const targets = resolveReminderTargets(
+                [{ id: "u1", userName: "Ada", joinedAt: { seconds: 1 } }],
+                [],
+            );
+
+            expect(targets).toEqual([{ uid: "u1", displayName: "Ada" }]);
+        });
     });
 });
 

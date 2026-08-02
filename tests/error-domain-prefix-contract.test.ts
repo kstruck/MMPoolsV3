@@ -56,6 +56,8 @@ describe('NOT_A_POOL_MEMBER domain prefix', () => {
         });
 
         expect(msg).toMatch(/you don't have permission to do that/i);
+    });
+});
 
 describe('MEMBER_NOT_ON_ROSTER domain prefix', () => {
     it('is thrown by EVERY roster-missing path in setPaidStatus', () => {

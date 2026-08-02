@@ -69,6 +69,38 @@ export interface CommissionerAggregate {
   updatedAt?: number;
 }
 
+/**
+ * Was this Member Record written by a SERVER join path, or could a client have
+ * conjured it?
+ *
+ * The discriminator is `joinedAt`. Every path that CREATES a record stamps it
+ * (`planMembershipWrite`, `poolCreation`, `bracketPools`, the NFL join and rebuy
+ * paths, `backfillMemberRecords`), and no client path can write it: firestore.rules
+ * says `allow create, delete: if false` on this collection and restricts `update`
+ * to `memberReportedPaid`/`memberReportedAt`.
+ *
+ * Those two fields are exactly what the pre-2026-08-02 `setPaidStatus` claim bug
+ * wrote when it created a record for a non-member (#344). So a document carrying
+ * ONLY them is a forgery, and every surface that treats a Member Record as roster
+ * truth must be able to tell the difference — otherwise fixing the write path
+ * leaves the records it already minted in force.
+ *
+ * PRESENCE, not `typeof === 'number'`: `backfillMemberRecords` stamps
+ * `pool.createdAt || Date.now()`, and a legacy `createdAt` may be a Firestore
+ * Timestamp. A type check there would reject real backfilled members.
+ *
+ * Lives here rather than in either caller so the two cannot drift: this is the
+ * same predicate `isProvableMember` uses to admit a self-report and
+ * `resolveReminderTargets` uses to admit a reminder target. If they ever
+ * disagreed, one of the two doors would be open.
+ */
+export function isCanonicalMemberRecord(
+  record: { joinedAt?: unknown } | undefined | null,
+): boolean {
+  const joinedAt = record?.joinedAt;
+  return joinedAt !== undefined && joinedAt !== null;
+}
+
 export interface DuesInputs {
   poolType: string;
   entryFee: number;

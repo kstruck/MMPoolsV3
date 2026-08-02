@@ -76,7 +76,11 @@ export const sendManualReminder = validated(
     // silently drop the members who still have only an entry.
     //
     // A voided membership DELETES the record (`voidMemberRecord`), so a present
-    // doc is a current member and needs no further filtering.
+    // doc is a current member — but presence alone is NOT enough. Until
+    // 2026-08-02 the setPaidStatus claim branch could create one for any
+    // authenticated caller (#344), and those documents still exist. The
+    // canonical filter in `resolveReminderTargets` is what refuses them; do not
+    // read this read as "everything here is a member".
     const [membersSnap, entriesSnap] = await Promise.all([
         poolRef.collection("members").get(),
         poolRef.collection("entries").get(),

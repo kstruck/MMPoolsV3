@@ -8,7 +8,7 @@
 // merged AFTER the Test Suite NFL wave, so this file does not modify those hot paths.
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { ROSTER_SCHEMA_VERSION, type MemberRecord } from "../shared/memberRecord";
+import { ROSTER_SCHEMA_VERSION, isCanonicalMemberRecord, type MemberRecord } from "../shared/memberRecord";
 
 export type Firestore = admin.firestore.Firestore;
 export type Transaction = admin.firestore.Transaction;
@@ -153,19 +153,13 @@ export function isProvableMember(
 
   // Evidence 1 — a CANONICAL Member Record. Mere existence proves nothing,
   // because the claim path this guard protects is itself a way to create one:
-  // accepting existence would ratify a record forged before the fix. The
-  // discriminator is the server-seeded `joinedAt` stamp, which every creation
-  // path writes (planMembershipWrite, poolCreation, bracketPools, nflPools join
-  // + rebuy, backfillMemberRecords) and which no client path can set — the
-  // vulnerable claim writes only `memberReportedPaid`/`memberReportedAt`, and
-  // firestore.rules says `allow create, delete: if false` on this collection
-  // with `update` restricted to those same two fields.
+  // accepting existence would ratify a record forged before the fix.
   //
-  // PRESENCE, not `typeof === 'number'`: backfillMemberRecords stamps
-  // `pool.createdAt || Date.now()`, and a legacy `createdAt` may be a Firestore
-  // Timestamp. A type check there would refuse real backfilled members.
-  const joinedAt = memberRecord?.joinedAt;
-  if (joinedAt !== undefined && joinedAt !== null) return true;
+  // The discriminator lives in `shared/memberRecord.ts` because
+  // `resolveReminderTargets` needs exactly the same one (§4a) — this guard shuts
+  // the door on NEW forgeries, that filter stops OLD ones being emailed, and if
+  // the two ever disagreed one of the doors would be open.
+  if (isCanonicalMemberRecord(memberRecord)) return true;
 
   // Evidence 2 — the pool's own cross-type membership set. Every join path
   // writes it, and writing it needs `isPoolManager()`, so no self-add. A manager
