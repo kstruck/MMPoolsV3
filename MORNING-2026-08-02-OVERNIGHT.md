@@ -12,7 +12,8 @@ runbook. Nothing in this document is an action.
 
 | Thing | State |
 |---|---|
-| `origin/main` | `22adb90` |
+| Deployed application source | `22adb90` — this is what functions and the frontend were built from |
+| `origin/main` tip | moved past `22adb90` after the docs merges (`befa54b`, then this PR). **Docs-only commits do not change what is deployed** — check with `git diff --name-only 22adb90..origin/main` before assuming a deploy is owed |
 | Functions | **deployed from `22adb90`** — certified by a third run: 173 all `Skipped (No changes detected)`, 0 updates, 0 failures, `✔ Deploy complete!` |
 | Rules | **≡ `0a705c0`**, unchanged. `firestore.rules` is byte-identical since |
 | Frontend bundle | **`index-DlH8liQe.js`** — rebuilt 08:38 UTC, healthcheck `"healthy"` |

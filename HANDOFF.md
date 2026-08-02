@@ -36,11 +36,15 @@
 > unaffected. **`src/components/admin/OperationsPanel.tsx` changed, so a Coolify
 > rebuild was owed and Kevin ran it 2026-08-01** — live bundle moved
 > `index-Db6JwMWs.js` → **`index-Bv2FV3GO.js`**, read off the prod HTML. The Run
-> Log now shows `squaresSkipped`. (All three queues were empty at that point;
-> the frontend queue is NOT empty now — see the current claim above.)
+> Log now shows `squaresSkipped`. (All three queues were empty at that point too.
+> `index-Bv2FV3GO.js` was superseded by the 2026-08-02 rebuild above; this
+> paragraph makes NO claim about the current queue state.)
 >
-> ⬇️ **EVERYTHING BELOW THIS LINE IS THE HISTORICAL DEPLOY RECORD**, kept for
-> provenance. `4713eba` above is the current state.
+> ⬇️ **STILL HISTORICAL** — this was the boundary marker written on 2026-08-01,
+> kept for provenance. ⚠️ It used to say "`4713eba` above is the current state",
+> which stopped being true on 2026-08-02. **The only current-state claim in this
+> file is the tagged one at the top of the box (`22adb90`)**; every deployed-SHA
+> line below here is history.
 >
 > ⬆️ **Deployed 2026-07-31 at ~17:45 ET for #334**, which stopped shipping
 > the 113-file test suite to Cloud Functions (`firebase.json` ignore + tsconfig

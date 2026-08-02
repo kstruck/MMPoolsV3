@@ -332,7 +332,7 @@ state. Concretely:
 
 ---
 
-## 2. Live state (deploy state verified 2026-08-01)
+## 2. Live state (deploy state verified 2026-08-02)
 
 > ⚠️ **HISTORICAL (2026-07-28 state). The live bundle is now
 > `index-Bv2FV3GO.js`** — see the tagged claim below, which is current.
