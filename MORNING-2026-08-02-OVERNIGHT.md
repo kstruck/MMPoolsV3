@@ -267,7 +267,9 @@ origin/main was 22adb90 (plus the docs PR #346). Functions deployed from 22adb90
 (evidence: third run, 173 all "Skipped"). Rules ≡ 0a705c0. Bundle
 index-DlH8liQe.js. ALL THREE QUEUES EMPTY unless a merge since touched a deploy
 input:
-  functions  -> functions/**, shared/**
+  functions  -> functions/**, shared/**, firebase.json (it carries the
+                functions `ignore`/`predeploy` config — #334 was exactly
+                that, a firebase.json-only change that altered the upload)
   rules      -> firestore.rules            (--only firestore:rules)
   indexes    -> firestore.indexes.json     (--only firestore:indexes, SEPARATE
                 from rules — deploying rules does NOT create an index)
@@ -298,8 +300,13 @@ grep -n "72.60.68.7" HANDOFF.md
 ⛔ system/config.nflAutoScore + statsRecompute UNSET = disabled. Leave them.
 
 QODO IS ON — check all three surfaces on every PR. If a push does not trigger a
-re-review, toggle draft→ready (gh pr ready N --undo; gh pr ready N); it fires
-within ~90s. A timeout after that is "qodo did not review", never "clean".
+re-review, advance the watcher's SINCE FIRST and then toggle draft→ready:
+  SINCE=$(date -u -d '1 second ago' +%Y-%m-%dT%H:%M:%SZ)
+  gh pr ready N --undo
+  gh pr ready N
+It fires within ~90s. Without the SINCE line the watcher accepts the PRE-FIX
+review and reports it as the fresh one. A timeout after that is "qodo did not
+review", never "clean".
 
 AUTONOMY: merge your own PRs when 7/7 CI + codex clean + qodo resolved + your
 read agrees; a PR carrying an unresolved finding is Kevin's. Deploy functions
