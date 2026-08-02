@@ -65,7 +65,14 @@ describe('staleJobs reaches the operator', () => {
         // An empty array is a positive signal; `undefined` means the deployed
         // functions predate the field. Rendering 0 for both would fake an
         // all-clear — the exact thing this card exists to stop.
-        expect(client).toMatch(/opsHealth\.staleJobs === undefined \? '—'/);
+        // The word, not an em dash (qodo): unavailable data must SAY it is
+        // unavailable. A dash reads as a formatting placeholder — a
+        // plausible-looking substitute for a value, which is the one thing a
+        // monitoring surface must never render.
+        expect(client).toContain('>Unknown<');
+        expect(client).not.toMatch(/staleJobs === undefined \? '—'/);
+        // ...and the reason is stated in the detail list, not left as a shrug.
+        expect(client).toContain('job liveness unknown');
     });
 });
 

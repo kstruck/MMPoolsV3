@@ -381,19 +381,36 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
                   </span>
                 </div>
                 {/* An EMPTY staleJobs array is a positive signal — the fleet
-                    reported in. `undefined` is not: it means these functions
-                    predate the field, and showing "0" for that would be the
-                    all-clear this card exists to stop faking. */}
+                    reported in. `undefined` is not: either the heartbeat read
+                    failed or these functions predate the field. Showing "0" for
+                    that would be the all-clear this card exists to stop faking.
+
+                    The word "Unknown", not an em dash (qodo): a dash reads as a
+                    harmless formatting placeholder, and unavailable data must
+                    say it is unavailable rather than look like a value. */}
                 <div className={`p-3 rounded-xl border ${staleJobs.length > 0 ? 'border-[#F2D6B0] bg-[#FBEEDD]' : 'border-line bg-surface'}`}>
                   <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.12em] block mb-1">Stale Jobs</span>
-                  <span className={`text-xl font-display font-bold num leading-none ${staleJobs.length > 0 ? 'text-[#B4530A]' : 'text-[color:var(--text)]'}`}>
-                    {opsHealth.staleJobs === undefined ? '—' : staleJobs.length}
-                  </span>
+                  {opsHealth.staleJobs === undefined ? (
+                    <span className="text-sm font-display font-bold text-muted leading-none">Unknown</span>
+                  ) : (
+                    <span className={`text-xl font-display font-bold num leading-none ${staleJobs.length > 0 ? 'text-[#B4530A]' : 'text-[color:var(--text)]'}`}>
+                      {staleJobs.length}
+                    </span>
+                  )}
                 </div>
               </div>
 
-              {(opsHealth.openAlerts.sample.length > 0 || opsHealth.failedWebhooks.sample.length > 0 || staleJobs.length > 0) && (
+              {(opsHealth.openAlerts.sample.length > 0 || opsHealth.failedWebhooks.sample.length > 0 || staleJobs.length > 0 || opsHealth.staleJobs === undefined) && (
                 <div className="space-y-1.5">
+                  {/* Say WHY it is unknown, in the same list as the other
+                      verdicts. A tile reading "Unknown" with nothing under it
+                      is a shrug; the operator needs to know a read failed. */}
+                  {opsHealth.staleJobs === undefined && (
+                    <div className="text-[10px] text-muted font-body flex items-center gap-1.5">
+                      <AlertTriangle size={10} className="text-[#B4530A] shrink-0" />
+                      <span className="truncate">job liveness unknown — the heartbeat document could not be read</span>
+                    </div>
+                  )}
                   {opsHealth.openAlerts.sample.slice(0, 3).map((a) => (
                     <div key={a.id} className="text-[10px] text-muted font-body flex items-center gap-1.5">
                       <AlertTriangle size={10} className="text-[#B4530A] shrink-0" />
