@@ -46,9 +46,10 @@ describe('NOT_A_POOL_MEMBER domain prefix', () => {
     });
 
     it('leaves the self-report ownership refusal on the GENERIC copy', () => {
-        // "Members can only report their own payment." is deliberately
-        // unprefixed — it is not reachable from the UI (the client always sends
-        // the caller's own uid), so giving it bespoke copy would be dead text.
+        // "Members can only report their own payment." stays unprefixed: the
+        // prefix mechanism costs a registry entry each, and this one only fires
+        // for a caller hand-crafting a request for someone else's uid — there
+        // is no UI that can produce it by accident.
         const msg = getUserMessage({
             code: 'functions/permission-denied',
             message: 'Members can only report their own payment.',

@@ -158,8 +158,8 @@ export function isProvableMember(
   // path writes (planMembershipWrite, poolCreation, bracketPools, nflPools join
   // + rebuy, backfillMemberRecords) and which no client path can set — the
   // vulnerable claim writes only `memberReportedPaid`/`memberReportedAt`, and
-  // firestore.rules allows `create: never` plus an update restricted to those
-  // same two fields.
+  // firestore.rules says `allow create, delete: if false` on this collection
+  // with `update` restricted to those same two fields.
   //
   // PRESENCE, not `typeof === 'number'`: backfillMemberRecords stamps
   // `pool.createdAt || Date.now()`, and a legacy `createdAt` may be a Firestore

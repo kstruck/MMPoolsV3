@@ -22,6 +22,13 @@ const DOMAIN_PREFIX_MESSAGES: Record<string, string> = {
     // prove is a member. Without this entry the prefix falls through to the
     // generic permission-denied copy ("contact your pool commissioner"), which
     // tells a legacy member nothing about what is actually wrong.
+    //
+    // ⚠️ NOT reachable from today's UI: nothing in `src/` sends `claim` to
+    // setPaidStatus or reads `memberReportedPaid` — the self-report is a
+    // server-side capability with no front end yet. Wired here anyway, per
+    // PLAN-SETPAIDSTATUS-MEMBERSHIP D3: an unregistered prefix is a machine
+    // token in front of a message nobody sees, and the half that is easy to
+    // forget is this one.
     NOT_A_POOL_MEMBER: "You're not listed as a member of this pool, so a payment can't be reported against it. If you joined and this looks wrong, ask the commissioner to add you to the roster.",
 };
 
