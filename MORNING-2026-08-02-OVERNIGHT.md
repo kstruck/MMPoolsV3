@@ -258,19 +258,31 @@ and MORNING-2026-08-02-OVERNIGHT.md.
 STATE — VERIFY, DO NOT TRUST:
   git log --oneline -3 origin/main
   gh pr list
+  # bash (agent):
   curl -sSL https://www.marchmeleepools.com/ | grep -o 'index-[A-Za-z0-9_-]*\.js'
+  # PowerShell 5.1 (Kevin) - plain `curl` is Invoke-WebRequest and rejects -sSL:
+  (curl.exe -sSL https://www.marchmeleepools.com/ | Select-String -Pattern 'index-[A-Za-z0-9_-]+\.js' -AllMatches).Matches.Value | Select-Object -First 1
 
 origin/main was 22adb90 (plus the docs PR #346). Functions deployed from 22adb90
 (evidence: third run, 173 all "Skipped"). Rules ≡ 0a705c0. Bundle
 index-DlH8liQe.js. ALL THREE QUEUES EMPTY unless a merge since touched a deploy
-input. The COMPLETE set, because a wrong path name here is a change left
-undeployed:
-  functions deploy -> functions/, shared/
-  rules deploy     -> firestore.rules, firestore.indexes.json  (no root rules/ dir)
-  Coolify rebuild  -> src/, nginx.conf, Dockerfile, package.json, package-lock.json
+input. The COMPLETE set — verified against vite.config.ts, Dockerfile and
+package.json, because a wrong path name here is a change left undeployed:
+  functions  -> functions/**, shared/**
+  rules      -> firestore.rules            (--only firestore:rules)
+  indexes    -> firestore.indexes.json     (--only firestore:indexes, SEPARATE
+                from rules — deploying rules does NOT create an index)
+  Coolify    -> src/**, shared/**, public/**, index.html, vite.config.ts,
+                scripts/prerender.ts, nginx.conf, Dockerfile,
+                package.json, package-lock.json
+shared/** is in TWO lists: vite.config.ts aliases @shared to it, and Dockerfile
+does `COPY . .` then `npm run build:static` (which also runs prerender). So a
+shared/ change owes a functions deploy AND a rebuild.
 An nginx.conf change does NOT move the bundle hash, so verify that class by
 curling the response headers instead (PICKUP §4). Baselines at 22adb90: functions 1295, root
-523, emulator 306. Coolify dashboard URL: grep -n "72.60.68.7" HANDOFF.md
+523 (MEASURED at 22adb90 twice - #345's branch said 518 because it was cut before
+#338 landed; do not "correct" it back), emulator 306. Coolify dashboard URL:
+grep -n "72.60.68.7" HANDOFF.md
 
 ⛔ Dependabot #299–#304: do NOT merge, all six rejected with evidence.
 ⛔ APP CHECK: do NOT set VITE_RECAPTCHA_SITE_KEY. The warning is the safe state.
