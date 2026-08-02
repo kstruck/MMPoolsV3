@@ -53,7 +53,34 @@ export const setPaidStatus = validated(
       if (!isProvableMember(freshPoolSnap.data(), memberSnap.data(), uid)) {
         throw new HttpsError("permission-denied", "NOT_A_POOL_MEMBER: You are not a member of this pool.");
       }
-      tx.set(mRef, { memberReportedPaid: !!claim, memberReportedAt: Date.now() }, { merge: true });
+      const now = Date.now();
+      // When the claim CREATES the record, stamp it canonical (codex P2 on
+      // #338). Otherwise the two halves of this fix contradict each other on
+      // the same person: the guard above just proved a legacy `participantIds`
+      // member IS a member, and the record it then wrote — claim fields only —
+      // is exactly the shape `resolveReminderTargets` calls a forgery, so that
+      // member would never be nudged again. `backfillMemberRecords` would have
+      // written the same stamp; this is heal-on-touch, not a new join path.
+      //
+      // Safe because it is unreachable without passing the guard, and the guard
+      // takes only manager-written evidence — #341 cut the repair-job route that
+      // laundered square claims into `participantIds`.
+      //
+      // Deliberately NOT `planMembershipWrite`: that seeds `feeOwed` from the
+      // pool's entry fee, and a member-triggered path must not write a money
+      // field. Identity and the join stamp only.
+      const seedIfNew = memberSnap.exists
+        ? {}
+        : {
+            uid,
+            poolId,
+            joinedAt: now,
+            paidStatus: 'UNPAID' as const,
+            ...(typeof request.auth!.token?.name === 'string' && request.auth!.token.name
+              ? { userName: request.auth!.token.name }
+              : {}),
+          };
+      tx.set(mRef, { ...seedIfNew, memberReportedPaid: !!claim, memberReportedAt: now }, { merge: true });
     });
     return { success: true, mode: 'claim' as const };
   }

@@ -384,7 +384,34 @@ describe('setPaidStatus claim — the membership guard', () => {
     // Creation on claim is retained deliberately — a manager-listed participant
     // with no record yet is a real state, and refusing them would be the
     // false-negative D1 rejects.
-    expect((await memberDoc('pg_listed')).data()!.memberReportedPaid).toBe(true);
+    const created = (await memberDoc('pg_listed')).data()!;
+    expect(created.memberReportedPaid).toBe(true);
+    // ...and the created record is CANONICAL (codex P2 on #338). Without the
+    // stamp, the record this very call wrote would be indistinguishable from a
+    // forgery, and `resolveReminderTargets` would drop the member from every
+    // nudge — the guard admitting them and the filter refusing them, about the
+    // same person, in the same feature.
+    expect(created.joinedAt).toEqual(expect.any(Number));
+    expect(created.paidStatus).toBe('UNPAID');
+    expect(created.uid).toBe('pg_listed');
+    expect(created.poolId).toBe(poolId);
+  });
+
+  it('does NOT restamp joinedAt on an existing record', async () => {
+    // The stamp is a seed, not an update. Re-reporting must not look like a
+    // fresh join, and it must never touch a commissioner-owned field.
+    await seedGuardPool();
+    const before = (await memberDoc('pg_legacy')).data()!;
+
+    await wrappedSetPaid({
+      data: { poolId, memberUid: 'pg_legacy', claim: true },
+      auth: { uid: 'pg_legacy', token: {} },
+    } as never);
+
+    const after = (await memberDoc('pg_legacy')).data()!;
+    expect(after.joinedAt).toBe(before.joinedAt);
+    expect(after.paidStatus).toBe(before.paidStatus);
+    expect(after.userName).toBe('Legacy');
   });
 
   it('REFUSES the "guest" sentinel even though it is in participantIds', async () => {

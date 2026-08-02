@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 import { sendManualReminder } from '../../manualReminders';
+import { setPaidStatus } from '../../setPaidStatus';
 
 /**
  * End-to-end coverage for the commissioner "nudge", through the real callable.
@@ -20,6 +21,7 @@ import { sendManualReminder } from '../../manualReminders';
 const test = ftest();
 const db = admin.firestore();
 const wrappedReminder = test.wrap(sendManualReminder);
+const wrappedSetPaid = test.wrap(setPaidStatus);
 
 const POOL = 'mr_pool';
 const BOSS = { uid: 'mr_boss', token: {} };
@@ -121,6 +123,29 @@ describe('sendManualReminder — who actually gets the email', () => {
     await wrappedReminder({ data: { poolId: POOL, kind: 'PICKS' }, auth: BOSS } as never);
 
     expect(await mailedTo()).toEqual(['mr_entry@example.com', 'mr_never@example.com']);
+  });
+
+  it('still nudges a legacy member whose ONLY record came from their own claim', async () => {
+    // codex P2 on this PR, end to end. `mr_legacy` is in participantIds with no
+    // Member Record and no entry — a legacy/partially-backfilled pool. The
+    // membership guard admits their self-report on that evidence, and the record
+    // it writes is the ONLY one they have. If that write is not stamped canonical,
+    // this filter calls it a forgery and the member is silently unreachable —
+    // the guard and the filter disagreeing about the same person.
+    await seedPool();
+    await seedUser('mr_legacy', 'Legacy Claimer');
+    await db.collection('pools').doc(POOL).update({
+      participantIds: ['mr_boss', 'mr_never', 'mr_entry', 'mr_legacy'],
+    });
+
+    await wrappedSetPaid({
+      data: { poolId: POOL, memberUid: 'mr_legacy', claim: true },
+      auth: { uid: 'mr_legacy', token: { name: 'Legacy Claimer' } },
+    } as never);
+
+    await wrappedReminder({ data: { poolId: POOL, kind: 'PICKS' }, auth: BOSS } as never);
+
+    expect(await mailedTo()).toContain('mr_legacy@example.com');
   });
 
   it('refuses to single out a forger by uid', async () => {
