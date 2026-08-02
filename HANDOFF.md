@@ -1,15 +1,27 @@
-# HANDOFF — Session entry point (updated 2026-07-31 evening: functions deployed from `68d121b` — #334 stopped shipping the test suite to Cloud Functions, 2.33 MB → 1.55 MB, on top of #333's NFL-7 chaos-drill scoring fixes; the frontend is unchanged at `index-Db6JwMWs.js`; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and ALL THREE DEPLOY QUEUES ARE EMPTY)
+# HANDOFF — Session entry point (updated 2026-08-01: functions deployed from `4713eba` — #341 stopped the repair jobs laundering guest-square claims into roster membership; ⚠️ a Coolify rebuild IS owed (OperationsPanel.tsx changed); the frontend is unchanged at `index-Db6JwMWs.js`; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and the FUNCTIONS + RULES QUEUES ARE EMPTY — the FRONTEND QUEUE IS NOT: a Coolify rebuild is owed for #341)
 
-> ## ✅ STOP POINT 2026-07-28, **UPDATED 2026-07-31 evening** — everything through #334 shipped AND deployed
+> ## ✅ STOP POINT 2026-07-28, **UPDATED 2026-08-01** — everything through #341 shipped AND deployed (functions); FRONTEND REBUILD OWED
 >
 > ⚠️ The 2026-07-28 date is the ORIGINAL snapshot; the deploy facts immediately
-> below were refreshed on **2026-07-31** and are current. Read the dates on
+> below were refreshed on **2026-08-01** and are current. Read the dates on
 > individual claims rather than the heading.
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `68d121b`.**
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `4713eba`.**
 > **Rules remain ≡ `0a705c0`** — unchanged by every merge since.
 >
-> ⬆️ **Deployed AGAIN 2026-07-31 at ~17:45 ET for #334**, which stopped shipping
+> ⬆️ **Deployed 2026-08-01 for #341**, which stopped the repair jobs
+> (`fixParticipantIds`, `backfillMemberRecords`) promoting a guest-square claim
+> into roster membership. Evidence: 173 `Successful update operation`, then a
+> second run of 173 all `Skipped (No changes detected)`, zero updates,
+> `✔ Deploy complete!`. `shared/` and `firestore.rules` untouched, so rules are
+> unaffected — but **`src/components/admin/OperationsPanel.tsx` CHANGED, so a
+> Coolify rebuild IS owed** and the Run Log will not show `squaresSkipped` until
+> it runs.
+>
+> ⬇️ **EVERYTHING BELOW THIS LINE IS THE HISTORICAL DEPLOY RECORD**, kept for
+> provenance. `4713eba` above is the current state.
+>
+> ⬆️ **Deployed 2026-07-31 at ~17:45 ET for #334**, which stopped shipping
 > the 113-file test suite to Cloud Functions (`firebase.json` ignore + tsconfig
 > excludes). **Measured effect: the uploaded package went 2.33 MB → 1.55 MB**, a
 > third smaller. Evidence: 173 `Successful update operation`, then a second run
@@ -28,7 +40,10 @@
 > zero updates, and ended `✔ Deploy complete!` — that all-Skipped run is the
 > positive evidence.
 >
-> ✅ **NO frontend rebuild is owed.** Neither #332 nor #333 touches `src/**`
+> ⚠️ **SUPERSEDED 2026-08-01 — A FRONTEND REBUILD IS NOW OWED.** #341 changed
+> `OperationsPanel.tsx`, so the Run Log does not yet show `squaresSkipped`. The
+> paragraph below is the state as of #333/#334 and is kept for the deploy record.
+> ✅ **NO frontend rebuild was owed then.** Neither #332 nor #333 touches `src/**`
 > (verified with `git diff --name-only <sha>^ <sha> -- src/` on both merge
 > commits, both empty), so the live bundle stays **`index-Db6JwMWs.js`**.
 > **ALL THREE QUEUES EMPTY.**
@@ -46,6 +61,10 @@
 > was not supposed to. **`68d121b` (#334) went out ~35 minutes after that, also
 > functions-only, and IS the current deploy state** — `bca457c` and `efea033` are
 > both history now. THREE functions deploys happened on 2026-07-31.
+>
+> ⚠️ **All of that is now HISTORY too.** `4713eba` (#341) went out on 2026-08-01
+> and is the current deploy state — see the tagged claim above, which is the only
+> place that fact is written down.
 >
 > ✅ **Frontend rebuilt the same day**: live bundle moved `index-CR5oJEHh.js` →
 > **`index-Db6JwMWs.js`**, read off the prod HTML. **`index-Db6JwMWs.js` is the
