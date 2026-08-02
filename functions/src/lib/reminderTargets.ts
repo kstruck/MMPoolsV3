@@ -36,9 +36,17 @@ export interface ReminderTarget {
  *    important input impossible;
  *  - `joinedAt` is not reliably a number — `backfillMemberRecords` stamps
  *    `pool.createdAt`, which on a legacy pool may be a Firestore Timestamp.
+ *
+ * ⚠️ `joinedAt` is REQUIRED, not optional, and `undefined` must be passed
+ * explicitly. This is the guard, not a style choice: the caller originally
+ * projected each snapshot to `{ id, userName }`, which dropped the
+ * discriminator, made every genuine roster-only member look forged, and
+ * reinstated the exact bug this PR fixes — while every unit test here kept
+ * passing, because they call this function directly (codex). Optional would let
+ * that projection compile again. It cannot now.
  */
 export function resolveReminderTargets(
-    members: Array<Omit<Partial<MemberRecord>, 'joinedAt'> & { id: string; joinedAt?: unknown }>,
+    members: Array<Omit<Partial<MemberRecord>, 'joinedAt'> & { id: string; joinedAt: unknown }>,
     entries: Array<{ id: string; ownerUid?: string; userName?: string; ownerName?: string }>,
     targetUids?: string[],
     participantIds: string[] = [],

@@ -92,7 +92,14 @@ export const sendManualReminder = validated(
         (d.data().ownerUid as string) || d.id,
         (d.data().rebuysUsed as number) ?? 0,
     ]));
-    const memberRecs = membersSnap.docs.map((d) => ({ id: d.id, ...(d.data() as MemberRecord) }));
+    // `joinedAt` is restated rather than left to the spread: it is OPTIONAL on
+    // MemberRecord but REQUIRED by resolveReminderTargets, which is what makes a
+    // discriminator-dropping projection a compile error rather than a silent
+    // outage (codex).
+    const memberRecs = membersSnap.docs.map((d) => {
+        const data = d.data() as MemberRecord;
+        return { id: d.id, ...data, joinedAt: data.joinedAt };
+    });
     const outstandingByUid = kind === "PAYMENT"
         ? outstandingDuesByUid(
             pool,
@@ -103,7 +110,14 @@ export const sendManualReminder = validated(
         : undefined;
 
     const targetList = resolveReminderTargets(
-        membersSnap.docs.map((d) => ({ id: d.id, userName: (d.data() as Partial<MemberRecord>).userName })),
+        // The WHOLE record, not a {id, userName} projection. The projection was
+        // here first and it silently dropped `joinedAt` — the discriminator the
+        // §4a canonical filter reads — so every roster-only member arrived
+        // looking forged and only people with an entry survived the union. That
+        // is precisely the defect this PR exists to fix, reintroduced by a
+        // convenience mapping (codex). `resolveReminderTargets` now REQUIRES
+        // `joinedAt`, so a projection like that no longer compiles.
+        memberRecs,
         entriesSnap.docs.map((d) => {
             const entry = d.data();
             return {

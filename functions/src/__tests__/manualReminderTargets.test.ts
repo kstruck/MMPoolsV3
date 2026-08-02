@@ -366,7 +366,13 @@ describe("resolveReminderTargets", () => {
     describe("forged Member Records are not reminder targets (§4a)", () => {
         // Exactly what the vulnerable claim branch wrote: the two self-report
         // fields and nothing else. No joinedAt, because no client path can set it.
-        const FORGED = { id: "forger", memberReportedPaid: true, memberReportedAt: JOINED };
+        // `joinedAt: undefined` is stated EXPLICITLY because the parameter requires
+        // the key. That is the point: the absence is the forgery, and the type
+        // now forces every caller — production included — to say so out loud.
+        const FORGED = {
+            id: "forger", joinedAt: undefined,
+            memberReportedPaid: true, memberReportedAt: JOINED,
+        };
 
         it("REFUSES a claim-only record — the forged shape", () => {
             expect(resolveReminderTargets([FORGED], [])).toEqual([]);
@@ -410,7 +416,7 @@ describe("resolveReminderTargets", () => {
             // simply the smaller one. What this test pins is the OUTCOME: a
             // non-canonical record contributes no name.
             const targets = resolveReminderTargets(
-                [{ id: "u1", userName: "Attacker Chosen", memberReportedPaid: true }],
+                [{ id: "u1", joinedAt: undefined, userName: "Attacker Chosen", memberReportedPaid: true }],
                 [{ id: "u1", ownerUid: "u1", userName: "Real Name" }],
             );
 
