@@ -74,7 +74,8 @@
 > ✅ **NO frontend rebuild was owed then.** Neither #332 nor #333 touches `src/**`
 > (verified with `git diff --name-only <sha>^ <sha> -- src/` on both merge
 > commits, both empty), so the live bundle stayed `index-Db6JwMWs.js` AT THAT
-> TIME. ⚠️ HISTORICAL — it is now **`index-Bv2FV3GO.js`** (#341 rebuild, top of box).
+> TIME. ⚠️ HISTORICAL — superseded twice since; the live bundle is
+> **`index-DlH8liQe.js`** (top of box).
 > **ALL THREE QUEUES EMPTY.**
 >
 > 📌 **A production fact established 2026-07-31 and worth keeping:** `nfl_games`
@@ -88,17 +89,19 @@
 > frontend rebuild to `index-Db6JwMWs.js`. `bca457c` (#333) went out that evening
 > and is FUNCTIONS ONLY — it touches no `src/**`, so the bundle did not move and
 > was not supposed to. **`68d121b` (#334) went out ~35 minutes after that, also
-> functions-only, and IS the current deploy state** — `bca457c` and `efea033` are
+> functions-only, and WAS the deploy state on 2026-07-31** — `bca457c` and `efea033` are
 > both history now. THREE functions deploys happened on 2026-07-31.
 >
-> ⚠️ **All of that is now HISTORY too.** `4713eba` (#341) went out on 2026-08-01
-> and is the current deploy state — see the tagged claim above, which is the only
+> ⚠️ **All of that is HISTORY too.** `4713eba` (#341) went out on 2026-08-01 and
+> was the deploy state that day; it was superseded on 2026-08-02 by `22adb90` —
+> see the tagged claim at the top of this box, which is the only
 > place that fact is written down.
 >
 > ✅ **Frontend rebuilt the same day**: live bundle moved `index-CR5oJEHh.js` →
-> **`index-Db6JwMWs.js`**, read off the prod HTML. **That was the live hash THEN;
-> it is now `index-Bv2FV3GO.js` — see the top of this box.** `index-Db6JwMWs.js` was the
-> current live hash. ALL THREE QUEUES EMPTY.**
+> **`index-Db6JwMWs.js`**, read off the prod HTML — the live hash THEN. It has
+> moved twice since (`index-Bv2FV3GO.js` on 2026-08-01, `index-DlH8liQe.js` on
+> 2026-08-02); **the current one is at the top of this box**, and so is the
+> current queue state.
 >
 > 🕐 **Not to be confused with the three App Check rebuilds earlier the same day**
 > (04:54 / 05:12 / 05:17 UTC, all at `fe3d7c3`), across which the hash did NOT
