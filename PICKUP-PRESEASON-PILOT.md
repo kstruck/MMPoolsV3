@@ -362,7 +362,11 @@ Rules remain ≡ `0a705c0`, unchanged by every merge since.
 ⚠️ **A FRONTEND REBUILD IS OWED**: #341 changed `OperationsPanel.tsx`, so the
 live bundle is still `index-Db6JwMWs.js` and does not yet carry the
 `squaresSkipped` counter in the Run Log. Functions and rules queues are empty.
-(Deployed 2026-07-31 in the EVENING ET for **#334**, which stopped shipping the
+(Deployed 2026-08-01 for **#341**, the repair-job narrowing: 173
+`Successful update operation`, then 173 `Skipped (No changes detected)` — that
+all-Skipped run is the evidence. `shared/` untouched, so rules are unaffected.)
+
+(HISTORICAL — the deploy before it. Deployed 2026-07-31 in the EVENING ET for **#334**, which stopped shipping the
 113-file test suite to Cloud Functions — **the packaged upload went 2.33 MB →
 1.55 MB**. Full fleet twice: 173 `Successful update operation`, then 173
 `Skipped (No changes detected)` — that all-Skipped run is the evidence.

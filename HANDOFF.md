@@ -28,7 +28,10 @@
 > zero updates, and ended `✔ Deploy complete!` — that all-Skipped run is the
 > positive evidence.
 >
-> ✅ **NO frontend rebuild is owed.** Neither #332 nor #333 touches `src/**`
+> ⚠️ **SUPERSEDED 2026-08-01 — A FRONTEND REBUILD IS NOW OWED.** #341 changed
+> `OperationsPanel.tsx`, so the Run Log does not yet show `squaresSkipped`. The
+> paragraph below is the state as of #333/#334 and is kept for the deploy record.
+> ✅ **NO frontend rebuild was owed then.** Neither #332 nor #333 touches `src/**`
 > (verified with `git diff --name-only <sha>^ <sha> -- src/` on both merge
 > commits, both empty), so the live bundle stays **`index-Db6JwMWs.js`**.
 > **ALL THREE QUEUES EMPTY.**
@@ -46,6 +49,10 @@
 > was not supposed to. **`68d121b` (#334) went out ~35 minutes after that, also
 > functions-only, and IS the current deploy state** — `bca457c` and `efea033` are
 > both history now. THREE functions deploys happened on 2026-07-31.
+>
+> ⚠️ **All of that is now HISTORY too.** `4713eba` (#341) went out on 2026-08-01
+> and is the current deploy state — see the tagged claim above, which is the only
+> place that fact is written down.
 >
 > ✅ **Frontend rebuilt the same day**: live bundle moved `index-CR5oJEHh.js` →
 > **`index-Db6JwMWs.js`**, read off the prod HTML. **`index-Db6JwMWs.js` is the
