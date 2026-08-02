@@ -1,13 +1,32 @@
-# HANDOFF — Session entry point (updated 2026-08-01: functions deployed from `4713eba` — #341 stopped the repair jobs laundering guest-square claims into roster membership; the frontend was rebuilt for it, `index-Db6JwMWs.js` → **`index-Bv2FV3GO.js`**; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; the commissioner Buy-In Ledger reads ROSTER truth, the fabricated cards are gone, the manager page is split into four sections, and ALL THREE DEPLOY QUEUES ARE EMPTY)
+# HANDOFF — Session entry point (updated 2026-08-02 overnight: functions deployed from `22adb90` — the setPaidStatus membership hole is CLOSED (#344) and forged Member Records can no longer be emailed (#338); the SuperAdmin card finally renders the heartbeat verdicts (#345); the frontend was rebuilt for them, `index-Bv2FV3GO.js` → **`index-DlH8liQe.js`**; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; ALL THREE DEPLOY QUEUES ARE EMPTY)
 
-> ## ✅ STOP POINT 2026-07-28, **UPDATED 2026-08-01** — everything through #341 shipped AND deployed, frontend included
+> ## ✅ STOP POINT **2026-08-02 (overnight)** — everything through #345 shipped AND deployed, frontend included
 >
-> ⚠️ The 2026-07-28 date is the ORIGINAL snapshot; the deploy facts immediately
-> below were refreshed on **2026-08-01** and are current. Read the dates on
-> individual claims rather than the heading.
+> The heading date is the date of the facts immediately below. It is REPLACED
+> on every deploy rather than annotated, because a note added above a stale
+> claim leaves two live-looking claims and the reader takes whichever they
+> reach first — the lesson #343 recorded and this box kept re-learning.
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `4713eba`.**
-> **Rules remain ≡ `0a705c0`** — unchanged by every merge since.
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `22adb90`.**
+> **Rules remain ≡ `0a705c0`** — `firestore.rules` is byte-identical since, so no
+> rules deploy is owed. (`shared/memberRecord.ts` DID change; nothing generates
+> `firestore.rules` from `shared/`, so that does not imply one.)
+> ✅ **Frontend rebuilt 2026-08-02 08:38 UTC** for the `src/**` changes in #344,
+> #338 and #345: live bundle moved `index-Bv2FV3GO.js` →
+> **`index-DlH8liQe.js`**, read off the prod HTML. Coolify reported
+> `Deployment is Finished`, healthcheck `"healthy"`, `Rolling update completed.`
+> **ALL THREE QUEUES EMPTY.**
+>
+> ⬆️ **Deployed 2026-08-02 overnight for #344 + #338 + #345.** Evidence: two
+> runs were needed because Cloud Functions returned HTTP 429 (`Per project
+> mutation requests per minute per region`) partway through each first pass —
+> the retry completed them. The certification is the THIRD run: **173 all
+> `Skipped (No changes detected)`, 0 updates, 0 failures, `✔ Deploy complete!`**.
+> That quota 429 is normal for a full-fleet deploy here and is not a failure;
+> what would be a failure is stopping after a partial run and calling it done.
+>
+> ⬇️ **EVERYTHING BELOW THIS LINE IS THE HISTORICAL DEPLOY RECORD.** `22adb90`
+> above is the current state.
 >
 > ⬆️ **Deployed 2026-08-01 for #341**, which stopped the repair jobs
 > (`fixParticipantIds`, `backfillMemberRecords`) promoting a guest-square claim
@@ -17,10 +36,15 @@
 > unaffected. **`src/components/admin/OperationsPanel.tsx` changed, so a Coolify
 > rebuild was owed and Kevin ran it 2026-08-01** — live bundle moved
 > `index-Db6JwMWs.js` → **`index-Bv2FV3GO.js`**, read off the prod HTML. The Run
-> Log now shows `squaresSkipped`. **ALL THREE QUEUES EMPTY.**
+> Log now shows `squaresSkipped`. (All three queues were empty at that point too.
+> `index-Bv2FV3GO.js` was superseded by the 2026-08-02 rebuild above; this
+> paragraph makes NO claim about the current queue state.)
 >
-> ⬇️ **EVERYTHING BELOW THIS LINE IS THE HISTORICAL DEPLOY RECORD**, kept for
-> provenance. `4713eba` above is the current state.
+> ⬇️ **STILL HISTORICAL** — this was the boundary marker written on 2026-08-01,
+> kept for provenance. ⚠️ It used to say "`4713eba` above is the current state",
+> which stopped being true on 2026-08-02. **The only current-state claim in this
+> file is the tagged one at the top of the box (`22adb90`)**; every deployed-SHA
+> line below here is history.
 >
 > ⬆️ **Deployed 2026-07-31 at ~17:45 ET for #334**, which stopped shipping
 > the 113-file test suite to Cloud Functions (`firebase.json` ignore + tsconfig
@@ -50,7 +74,8 @@
 > ✅ **NO frontend rebuild was owed then.** Neither #332 nor #333 touches `src/**`
 > (verified with `git diff --name-only <sha>^ <sha> -- src/` on both merge
 > commits, both empty), so the live bundle stayed `index-Db6JwMWs.js` AT THAT
-> TIME. ⚠️ HISTORICAL — it is now **`index-Bv2FV3GO.js`** (#341 rebuild, top of box).
+> TIME. ⚠️ HISTORICAL — superseded twice since; the live bundle is
+> **`index-DlH8liQe.js`** (top of box).
 > **ALL THREE QUEUES EMPTY.**
 >
 > 📌 **A production fact established 2026-07-31 and worth keeping:** `nfl_games`
@@ -64,17 +89,19 @@
 > frontend rebuild to `index-Db6JwMWs.js`. `bca457c` (#333) went out that evening
 > and is FUNCTIONS ONLY — it touches no `src/**`, so the bundle did not move and
 > was not supposed to. **`68d121b` (#334) went out ~35 minutes after that, also
-> functions-only, and IS the current deploy state** — `bca457c` and `efea033` are
+> functions-only, and WAS the deploy state on 2026-07-31** — `bca457c` and `efea033` are
 > both history now. THREE functions deploys happened on 2026-07-31.
 >
-> ⚠️ **All of that is now HISTORY too.** `4713eba` (#341) went out on 2026-08-01
-> and is the current deploy state — see the tagged claim above, which is the only
+> ⚠️ **All of that is HISTORY too.** `4713eba` (#341) went out on 2026-08-01 and
+> was the deploy state that day; it was superseded on 2026-08-02 by `22adb90` —
+> see the tagged claim at the top of this box, which is the only
 > place that fact is written down.
 >
 > ✅ **Frontend rebuilt the same day**: live bundle moved `index-CR5oJEHh.js` →
-> **`index-Db6JwMWs.js`**, read off the prod HTML. **That was the live hash THEN;
-> it is now `index-Bv2FV3GO.js` — see the top of this box.** `index-Db6JwMWs.js` was the
-> current live hash. ALL THREE QUEUES EMPTY.**
+> **`index-Db6JwMWs.js`**, read off the prod HTML — the live hash THEN. It has
+> moved twice since (`index-Bv2FV3GO.js` on 2026-08-01, `index-DlH8liQe.js` on
+> 2026-08-02); **the current one is at the top of this box**, and so is the
+> current queue state.
 >
 > 🕐 **Not to be confused with the three App Check rebuilds earlier the same day**
 > (04:54 / 05:12 / 05:17 UTC, all at `fe3d7c3`), across which the hash did NOT

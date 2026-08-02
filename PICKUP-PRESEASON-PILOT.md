@@ -87,9 +87,10 @@ things happened on 2026-07-31 and the hash behaved differently in each:
 | 04:54, 05:12, 05:17 | the three App Check rebuilds, all at `fe3d7c3` | **unchanged**, `index-CR5oJEHh.js` |
 | later that day | the #329 rebuild, at `efea033` | **moved** → `index-Db6JwMWs.js` (the live hash *then*) |
 
-⚠️ **SUPERSEDED: the current live bundle is `index-Bv2FV3GO.js`** (#341 rebuild,
-2026-08-01 — see §2). `index-Db6JwMWs.js` was current when this section was
-written and the sentence below is scoped to that day. The "hash did not move" claim
+⚠️ **SUPERSEDED TWICE. The live bundle is `index-DlH8liQe.js`** (§2): the #341
+rebuild moved it to `index-Bv2FV3GO.js` on 2026-08-01, and the #344/#338/#345
+rebuild moved it again on 2026-08-02. `index-Db6JwMWs.js` was live when this
+section was written and the sentence below is scoped to that day. The "hash did not move" claim
 above is scoped to the three App-Check rebuilds only — it is not a statement
 about the day. Written out because this runbook uses hash movement as positive
 evidence for a rebuild, so an unqualified "it did not move" is the kind of
@@ -332,10 +333,11 @@ state. Concretely:
 
 ---
 
-## 2. Live state (deploy state verified 2026-08-01)
+## 2. Live state (deploy state verified 2026-08-02)
 
-> ⚠️ **HISTORICAL (2026-07-28 state). The live bundle is now
-> `index-Bv2FV3GO.js`** — see the tagged claim below, which is current.
+> ⚠️ **HISTORICAL — this block records the 2026-07-28 state.** Its bundle hash is
+> long superseded; for the CURRENT live bundle see the tagged claim below, which
+> is the only place this file states it.
 > This block is kept for the deploy-ritual evidence it records, not for its
 > bundle hash.
 >
@@ -359,14 +361,24 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `4713eba`.**
-Rules remain ≡ `0a705c0`, unchanged by every merge since.
-✅ **Frontend rebuilt 2026-08-01 for #341** (`OperationsPanel.tsx`): live bundle
-moved `index-Db6JwMWs.js` → **`index-Bv2FV3GO.js`**, verified off the prod HTML.
-**ALL THREE QUEUES EMPTY.**
-(Deployed 2026-08-01 for **#341**, the repair-job narrowing: 173
-`Successful update operation`, then 173 `Skipped (No changes detected)` — that
-all-Skipped run is the evidence. `shared/` untouched, so rules are unaffected.)
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `22adb90`.**
+Rules remain ≡ `0a705c0` — `firestore.rules` is byte-identical since, so no rules
+deploy is owed. (`shared/memberRecord.ts` changed; nothing generates
+`firestore.rules` from `shared/`, so that does not imply one.)
+✅ **Frontend rebuilt 2026-08-02 08:38 UTC** for the `src/**` changes in #344,
+#338 and #345 — the commissioner reminder UI, the `MEMBER_NOT_ON_ROSTER` copy and
+the SuperAdmin stale-job tile. Live bundle moved `index-Bv2FV3GO.js` →
+**`index-DlH8liQe.js`**, read off the prod HTML; Coolify reported
+`Deployment is Finished`, healthcheck `"healthy"`. **ALL THREE QUEUES EMPTY.**
+(Deployed 2026-08-02 overnight for **#344 + #338 + #345**. Cloud Functions
+returned HTTP 429 `Per project mutation requests` partway through each first
+pass; the retry finished them. The certification is the THIRD run: 173 all
+`Skipped (No changes detected)`, 0 updates, 0 failures, `✔ Deploy complete!`.)
+
+(HISTORICAL — the deploy before it. 2026-08-01 for **#341**, the repair-job
+narrowing: 173 `Successful update operation`, then 173 all-Skipped. Its frontend
+rebuild moved `index-Db6JwMWs.js` → `index-Bv2FV3GO.js`, which is the hash still
+live until tonight's rebuild superseded it.)
 
 (HISTORICAL — the deploy before it. Deployed 2026-07-31 in the EVENING ET for **#334**, which stopped shipping the
 113-file test suite to Cloud Functions — **the packaged upload went 2.33 MB →
@@ -381,7 +393,7 @@ function `Successful update operation` — expected, because
 every function `Skipped (No changes detected)`. That all-Skipped run is the
 evidence. Rules unchanged by all five, so they remain ≡ this tag. FRONTEND at
 that time: Coolify rebuilt, bundle `index-gn5gQtFU.js` — ⚠️ **superseded; the
-live bundle is now `index-Bv2FV3GO.js` (§2)**.
+live bundle is `index-DlH8liQe.js` (§2)**.
 Prior claim: <!-- deploy-state:ignore --> `main` @ `d3d2b0d` —)
 (#311 / G1 PR-B2 deployed as the FULL FLEET, twice; rules unchanged.
 Prior claim: <!-- deploy-state:ignore --> `main` @ `6b7e439` —)
@@ -400,8 +412,8 @@ Previous states: <!-- deploy-state:ignore --> `main` @ `8a55b84` (#279) on
 
 ✅ **The FRONTEND was current with this claim on 2026-07-28.** Coolify rebuilt
 that day and the live bundle was `index-gn5gQtFU.js`, verified in the browser
-with cache disabled. ⚠️ **Superseded — the live bundle is now
-`index-Bv2FV3GO.js`** (§2); this paragraph records an older rebuild, not the current
+with cache disabled. ⚠️ **Superseded — the live bundle is
+`index-DlH8liQe.js`** (§2); this paragraph records an older rebuild, not the current
 state. That single rebuild cleared both the #297/#298 dependency-bump debt
 (root `package.json` runtime deps — the trigger §4's own queue table names) and
 #313/#315's frontend changes. See HANDOFF's STOP POINT box and §0.

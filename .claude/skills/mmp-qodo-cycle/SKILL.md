@@ -404,6 +404,94 @@ The observation is from a single PR, so it may not hold universally. Re-arm the
 watcher if you like — it costs nothing but wall-clock — but record TIMEOUT as
 "qodo did not re-review", never as "qodo is clean".
 
+### ✅ 2026-08-02 — you CAN make it re-review: toggle draft → ready
+
+**Measured three times in one session, on #338, #345 and #343.** A push — force
+push or ordinary — produced **no** re-review. Two of those PRs sat silent for
+20+ minutes. Then:
+
+⚠️ **Move `SINCE` FORWARD before the toggle, not after.** Reuse the `SINCE` from
+an earlier arm and the watcher's `select(.created_at > $SINCE)` still admits the
+PRE-FIX artifacts — so it prints `QODO REPORTED` the instant it starts and hands
+you the OLD review as if it were the fresh one. That is this section's failure
+mode wearing a success message.
+
+The §1 watcher needs no change: it is timestamp-driven, so setting `SINCE` to now
+is the whole fix. Order is **`SINCE` → toggle → arm**:
+
+```bash
+SINCE=$(date -u -d '1 second ago' +%Y-%m-%dT%H:%M:%SZ)   # backoff, as on re-arm
+gh pr ready <N> --undo    # → draft
+gh pr ready <N>           # → ready for review
+# now arm the §1 watcher unchanged, with that SINCE
+```
+
+⚠️ **Do NOT reach for a count-based baseline instead.** The obvious version —
+`gh api --paginate ... --jq '[...] | length'` — is broken: with `--paginate`,
+`--jq` runs **per page**, so it emits one count per page. Measured on #338 with
+`per_page=1`: `1 1 0 0 0 1 0` instead of `3`. That feeds `1
+1
+0...` into shell
+arithmetic and fails on exactly the multi-page PRs CLAUDE.md §2b insists on
+paginating. `_count` above avoids it by selecting `.id` and piping to `grep -c .`;
+any new counter must do the same.
+
+qodo posted a fresh review **within 90 seconds** every time, stamped at the
+current head commit, with its resolved findings marked `✓ Resolved`.
+
+🔴 **AND IT UPDATES THE EXISTING COMMENT IN PLACE — `created_at` DOES NOT MOVE.**
+Measured on #346: the re-review arrived as `updated_at 09:11:55Z` on a comment
+whose `created_at` was `08:35:48Z`. A watcher filtering `select(.created_at >
+$SINCE)` therefore sees **nothing** and reports TIMEOUT on a PR qodo has just
+re-reviewed — the same false-negative the `$SINCE` rule exists to prevent, from
+the opposite direction.
+
+So on the TOGGLE path, filter on **`updated_at`** (`submitted_at` for the reviews
+endpoint has no in-place equivalent, so it stays as is):
+
+Redefine §1's `summary()` — do NOT hand-roll it. The obvious one-liner drops two
+protections the helper already has: the `NOISE` heading filter (so the
+`Qodo is busy working` placeholder is counted as the re-review) and
+`_count`/`guard`'s fail-CLOSED behaviour (a bare `gh api | grep -c` reports an
+API failure as `0`, i.e. silence read as "nothing yet").
+
+```bash
+# TOGGLE PATH: identical to §1's summary() except updated_at replaces created_at.
+summary() { _count $R/issues/<N>/comments \
+    -q ".[] | select(.user.login == \"$QB\") | select(.updated_at > \"$SINCE\") | select((.body | capture(\"<h3>(?<h>[^<]*)</h3>\").h // \"\") | test(\"$NOISE\"; \"i\") | not) | .id"; }
+# inline() keeps created_at: PR review comments are posted, not revised in place.
+```
+
+and keep the `guard "$I" "$RB" "$S"` calls exactly as §1 has them.
+
+Two more things that pass measured on #346 and will bite a naive watcher:
+ - qodo posts a **`Qodo is busy working`** placeholder FIRST. Counting it as an
+   artifact settles the watcher on an empty review — the `NOISE` heading filter
+   in §1 exists for this; do not drop it from an ad-hoc watcher.
+ - the real report then lands, and can be REVISED again minutes later. On #346
+   the first body said `Bugs (0)` and the revision said `Bugs (3)` with four new
+   findings. **Settle on `updated_at` holding steady, not on first sight.**
+
+This follows from the trigger already recorded at the top of this file — qodo
+SKIPS DRAFT PRs, so marking one ready is what fires it — but the consequence had
+not been drawn: **the same transition re-fires it on a PR that is already open.**
+
+**Why this matters more than convenience.** #338 was rebased onto a new `main`
+and gained a substantial new change (the §4a canonical filter). Without a
+re-review, the only qodo evidence available was a report on the *pre-rebase*
+diff, and merging on it would have meant calling the mandatory gate satisfied
+using a review of code that was no longer in the PR. The toggle turned an
+unsatisfiable gate into a satisfied one.
+
+⚠️ **This does not soften the rule above.** Do the toggle, watch, and if it still
+does not report, that is still a TIMEOUT and still "qodo did not re-review" —
+never "clean". The per-finding resolution bar is unchanged. What changed is that
+you should now *try* the toggle before recording a timeout, because a timeout you
+could have avoided is a weaker gate for no reason.
+
+⚠️ **Draft state is visible to anyone watching the PR**, and a PR in draft cannot
+be merged. Toggle it back immediately — both commands in one step, as above.
+
 Cycle ends when: every finding is fixed or rejected with reasoning, OR every
 remaining one is INVALID / below the severity stop rule, OR 5 rounds (MAX_ROUNDS
 convention) — whichever first. Deadlock ≠ silence: if stopping with open disputed

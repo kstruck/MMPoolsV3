@@ -96,8 +96,32 @@ or rejected with written reasoning — NOT that a fresh qodo pass came back empt
 qodo was observed **not** re-reviewing after a fix push on the same PR, so gating
 on a second clean pass is unsatisfiable and would deadlock this rule on exactly
 the PRs where it found something real. Its `✓ Resolved` marks are the
-confirmation. Re-arming its watcher after a fix is fine; *waiting* on it is not,
-and a timeout is "qodo did not re-review", never "qodo is clean".
+confirmation.
+
+⚠️ **You CAN make it re-review, and you MUST try before recording a timeout**
+(added 2026-08-02, measured on #338, #345 and #343): a push does not trigger it,
+but toggling the PR draft → ready does, within ~90 seconds and stamped at the
+current head. Move the watcher's `SINCE` forward FIRST, then toggle, then arm —
+otherwise the pre-fix artifacts satisfy the watcher instantly and it hands you the
+old review as a fresh one.
+
+```bash
+SINCE=$(date -u -d '1 second ago' +%Y-%m-%dT%H:%M:%SZ)
+gh pr ready <N> --undo
+gh pr ready <N>
+```
+
+⚠️ **qodo UPDATES its review comment in place — `created_at` does not move.**
+Measured on #346: the re-review was `updated_at` 09:11:55Z on a comment created
+08:35:48Z. Filter on `updated_at`, or the watcher reports TIMEOUT on a PR qodo has
+just re-reviewed. It also posts a `Qodo is busy working` placeholder first, and
+can REVISE the report minutes later — on #346 `Bugs (0)` became `Bugs (3)`. Settle
+on the timestamp holding steady, never on first sight.
+
+This matters most exactly where the gate is weakest: a rebased PR whose only qodo
+evidence is a review of code no longer in it. *Waiting* on a re-review is still
+not allowed, and a timeout AFTER the toggle is still "qodo did not re-review",
+never "qodo is clean". Full procedure in `.claude/skills/mmp-qodo-cycle`.
 
 **Spend fewer codex rounds.** Two independent reviewers coming back clean is
 stronger evidence than one doing so, so when qodo is also clean you should reach
