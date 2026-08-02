@@ -330,7 +330,7 @@ state. Concretely:
 
 ---
 
-## 2. Live state (deploy state verified 2026-07-31 evening ET)
+## 2. Live state (deploy state verified 2026-08-01)
 
 > ⚠️ **HISTORICAL (2026-07-28 state). The live bundle is now
 > `index-Db6JwMWs.js`** — see §0 and the tagged claim below, which are current.
