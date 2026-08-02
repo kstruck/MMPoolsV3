@@ -23,7 +23,28 @@ interface PoolMemberSource {
 }
 
 /** Collect every real member uid for a pool from all per-type sources. */
-async function collectMembers(db: Firestore, poolId: string, pool: any): Promise<{ members: Map<string, PoolMemberSource>; guestSkipped: number }> {
+/**
+ * Apply per-square unit counts, gated on the uid already being a member.
+ *
+ * Extracted as a pure function purely so the RULE is testable: the enclosing
+ * migration reads Firestore and cannot be unit tested without a double, and this
+ * gate is an authorization boundary — it decides whether an unverified square
+ * claim becomes roster truth. Returns how many uids were skipped.
+ */
+export function applySquareUnits<T>(
+  bySquareOwner: Map<string, T>,
+  isMember: (uid: string) => boolean,
+  apply: (uid: string, value: T) => void,
+): number {
+  let skipped = 0;
+  for (const [uid, value] of bySquareOwner) {
+    if (!isMember(uid)) { skipped++; continue; }
+    apply(uid, value);
+  }
+  return skipped;
+}
+
+async function collectMembers(db: Firestore, poolId: string, pool: any): Promise<{ members: Map<string, PoolMemberSource>; guestSkipped: number; squaresSkipped: number }> {
   const members = new Map<string, PoolMemberSource>();
   let guestSkipped = 0;
   const add = (uid: any, src: Partial<PoolMemberSource>) => {
@@ -37,17 +58,27 @@ async function collectMembers(db: Firestore, poolId: string, pool: any): Promise
   // participantIds[]
   for (const uid of (pool.participantIds || [])) add(uid, { role: uid === ownerUid ? 'MANAGER' : 'PARTICIPANT' });
 
-  // Squares: participants subcollection + per-square units
+  // Squares: participants subcollection is a membership signal; per-square
+  // ownership is NOT. The units are applied at the very end of this function,
+  // and only to uids some OTHER signal already established — see the comment
+  // beside that loop for why.
+  const unitsByUid = new Map<string, number>();
+  const squaresDerivedNames = new Map<string, string | undefined>();
   if (pool.type === 'SQUARES') {
+    // ⚠️ The `participants` subcollection is SQUARES-DERIVED and carries exactly
+    // the same trust problem as the squares themselves. `syncParticipantIndices`
+    // (participant.ts) is a pool-write trigger that creates
+    // `participants/{uid}` from `s.reservedByUid || s.paidByUid` — so a
+    // `claimMySquares` claim materialises one automatically. Reading it as a
+    // membership signal would launder the claim one hop further along, which is
+    // exactly what this change exists to stop. Enrichment only, same as units.
     const partSnap = await db.collection('pools').doc(poolId).collection('participants').get();
-    for (const d of partSnap.docs) add(d.id, { userName: d.data()?.name });
+    for (const d of partSnap.docs) squaresDerivedNames.set(d.id, d.data()?.name);
     const squares: any[] = Array.isArray(pool.squares) ? pool.squares : [];
-    const unitsByUid = new Map<string, number>();
     for (const s of squares) {
       const u = s?.reservedByUid;
       if (u && u !== 'guest') unitsByUid.set(u, (unitsByUid.get(u) || 0) + 1);
     }
-    for (const [uid, units] of unitsByUid) add(uid, { unitsOwned: units });
   }
 
   // entries subcollection (NFL season, bracket, playoff-as-subcol) → ownerUid + paidStatus
@@ -65,7 +96,48 @@ async function collectMembers(db: Firestore, poolId: string, pool: any): Promise
   // Props: propCards[] carry the only membership signal
   for (const c of (pool.propCards || [])) add(c?.ownerUid || c?.userId || c?.uid, { userName: c?.userName, paidStatus: c?.paidStatus });
 
-  return { members, guestSkipped };
+  // Square ownership ENRICHES a member; it never INTRODUCES one.
+  //
+  // `squares[].reservedByUid` is settable by `claimMySquares`, which proves
+  // ownership with a `guestDeviceKey` read straight off the world-readable pool
+  // document (`firestore.rules` `allow get: if true`) — the known finding in
+  // SECURITY-CLAIM-SQUARES.md. Minting a Member Record from it would promote
+  // that unverified signal into roster truth, and a Member Record is what
+  // `setPaidStatus` and the reminder targeting trust.
+  //
+  // Nothing legitimate is lost: `reserveSquare` already adds an authenticated
+  // reserver to `participantIds` (squares.ts), so a real member is introduced by
+  // that signal and merely gains `unitsOwned` here. The uids this now skips are
+  // the ones `reserveSquare` never listed — which is the guest-claim path.
+  //
+  // Applied LAST on purpose: entries, playoff and props are read after squares,
+  // so gating inside the squares block would have dropped units for a member
+  // established by one of those instead.
+  // Names first, then units — both enrichment-only, both gated identically.
+  applySquareUnits(
+    squaresDerivedNames,
+    (uid) => members.has(uid),
+    (uid, name) => add(uid, { userName: name }),
+  );
+  applySquareUnits(
+    unitsByUid,
+    (uid) => members.has(uid),
+    (uid, units) => add(uid, { unitsOwned: units }),
+  );
+
+  // Count DISTINCT skipped uids across BOTH gated sources.
+  //
+  // Returning only the units count under-reported: a `participants/{uid}` index
+  // can outlive its square (releaseSquares clears the square,
+  // syncParticipantIndices leaves the index behind), so that candidate is
+  // rejected while `unitsByUid` is empty — and the run would report zero skips
+  // having silently stopped promoting a source it used to. Counting the union,
+  // deduped, is what makes the number mean "candidates this run refused".
+  const squaresSkipped = new Set(
+    [...squaresDerivedNames.keys(), ...unitsByUid.keys()].filter((uid) => !members.has(uid)),
+  ).size;
+
+  return { members, guestSkipped, squaresSkipped };
 }
 
 export const backfillMemberRecords = validated(
@@ -122,6 +194,11 @@ export const backfillMemberRecords = validated(
     membersCreated: 0,
     membersAlreadyPresent: 0,
     guestSkipped: 0,
+    /** Square owners NOT promoted to members because no other signal listed
+     *  them. Reported so the narrowing is visible in the dry run rather than a
+     *  silent truncation - a non-zero count here in a SQUARES pool is worth a
+     *  look, since it may be a guest-claimed square. */
+    squaresSkipped: 0,
     participantIdsWithoutMember: 0,
     poolsFlipped: 0,
     failures: [] as { poolId: string; error: string }[],
@@ -166,8 +243,9 @@ export const backfillMemberRecords = validated(
     }
     report.poolsScanned++;
     try {
-      const { members, guestSkipped } = await collectMembers(db, poolId, pool);
+      const { members, guestSkipped, squaresSkipped } = await collectMembers(db, poolId, pool);
       report.guestSkipped += guestSkipped;
+      report.squaresSkipped += squaresSkipped;
       let createdThisPool = 0;
       const userCache = new Map<string, string>();
 

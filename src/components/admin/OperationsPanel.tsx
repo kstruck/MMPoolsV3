@@ -95,7 +95,7 @@ const runBackfill = async (dryRun: boolean, includeFinished = false) => {
   // very different amount of work. 25 is the handler's own default page size and
   // matches backfillProfileData, the other migration that does per-member work.
   const limit = includeFinished ? 25 : 100;
-  const agg = { ok: true, dryRun, includeFinished, poolsScanned: 0, finishedPoolsSkipped: 0, testPoolsSkipped: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, resumedFrom: parked?.cursor ?? null, resumeFrom: null as string | null, error: null as string | null, failures: [] as any[] };
+  const agg = { ok: true, dryRun, includeFinished, poolsScanned: 0, finishedPoolsSkipped: 0, testPoolsSkipped: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, squaresSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, resumedFrom: parked?.cursor ?? null, resumeFrom: null as string | null, error: null as string | null, failures: [] as any[] };
 
   // Carry the earlier pages' counters into this run (codex r5). Parking only the
   // cursor meant a resumed run started from zero and could finish ok:true while
@@ -128,6 +128,11 @@ const runBackfill = async (dryRun: boolean, includeFinished = false) => {
     agg.membersCreated += r.membersCreated || 0;
     agg.membersAlreadyPresent += r.membersAlreadyPresent || 0;
     agg.guestSkipped += r.guestSkipped || 0;
+    // Square-derived candidates the backfill REFUSED to promote to membership.
+    // Without this the counter never reaches the Run Log and the narrowing is
+    // invisible to the operator — which is the silent-truncation failure the
+    // counter exists to prevent. Paged runs aggregate like every other field.
+    agg.squaresSkipped += r.squaresSkipped || 0;
     agg.participantIdsWithoutMember += r.participantIdsWithoutMember || 0;
     agg.poolsFlipped += r.poolsFlipped || 0;
     agg.testPoolsSkipped += r.testPoolsSkipped || 0;
