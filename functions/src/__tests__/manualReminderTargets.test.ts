@@ -397,10 +397,18 @@ describe("resolveReminderTargets", () => {
         });
 
         it("does not let a forged record supply a display NAME either", () => {
-            // The record is skipped before `targets.set`, so the entry is the
-            // first writer and owns the name. A filter placed after the set —
-            // or one that only removed the uid from the final list — would leak
-            // an attacker-chosen string into the email greeting.
+            // A forged record carries an attacker-chosen `userName`, and the
+            // entries loop only fills a BLANK name — so if a skipped record
+            // could still seed the map, the greeting would carry that string.
+            //
+            // ⚠️ Mutation testing: this does NOT pin the filter's PLACEMENT.
+            // Moving it after `targets.set` (as a `targets.delete`) left all 79
+            // tests green, because the entries loop runs afterwards either way.
+            // Following this repo's own precedent a few lines up — a merge
+            // branch that "could not be made to fail" was deleted rather than
+            // guarded — the two forms are equivalent here and `continue` is
+            // simply the smaller one. What this test pins is the OUTCOME: a
+            // non-canonical record contributes no name.
             const targets = resolveReminderTargets(
                 [{ id: "u1", userName: "Attacker Chosen", memberReportedPaid: true }],
                 [{ id: "u1", ownerUid: "u1", userName: "Real Name" }],
