@@ -6,7 +6,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
 import { setPaidStatusSchema } from "./schemas/participantOps";
-import { membersCol } from "./lib/memberRecord";
+import { isProvableMember, membersCol } from "./lib/memberRecord";
 import { refreshProjectionsBestEffort } from "./lib/refreshProjections";
 
 export const setPaidStatus = validated(
@@ -27,7 +27,34 @@ export const setPaidStatus = validated(
   // --- Member self-report claim: own record only, claim fields only ---
   if (claim !== undefined) {
     if (memberUid !== uid) throw new HttpsError("permission-denied", "Members can only report their own payment.");
-    await mRef.set({ memberReportedPaid: !!claim, memberReportedAt: Date.now() }, { merge: true });
+    // PLAN-SETPAIDSTATUS-MEMBERSHIP. `set(..., { merge: true })` CREATES the
+    // document when absent, and a Member Record is roster truth (ADR 0003) — so
+    // with only the self-check above, any authenticated user could mint
+    // `pools/{anyPool}/members/{their-uid}` and land on that pool's roster,
+    // memberCount, dues figures and reminder targets.
+    //
+    // firestore.rules already encodes the correct policy beside this collection
+    // (`allow create: if false`; update restricted to the same two claim fields
+    // on an EXISTING doc). A callable runs with admin credentials and bypasses
+    // rules, so this is not a new policy — it is the one path that never had one.
+    //
+    // Every piece of evidence is read with `tx.get` INSIDE the transaction,
+    // including the pool document `poolSnap` already holds. Reusing that
+    // snapshot would defeat the transaction: a `voidMemberRecord` landing after
+    // it would go unobserved and the record would be resurrected from a stale
+    // `participantIds` — the same class of bug this guard exists to close.
+    await db.runTransaction(async (tx) => {
+      const [freshPoolSnap, memberSnap] = await Promise.all([tx.get(poolRef), tx.get(mRef)]);
+      // Deleting a pool does NOT delete its subcollections, so `members/*`
+      // outlives its pool. Without this re-check, a pool deleted between the
+      // opening read and this transaction would still admit a surviving
+      // canonical record and the claim would recreate an orphan under it.
+      if (!freshPoolSnap.exists) throw new HttpsError("not-found", "Pool not found.");
+      if (!isProvableMember(freshPoolSnap.data(), memberSnap.data(), uid)) {
+        throw new HttpsError("permission-denied", "NOT_A_POOL_MEMBER: You are not a member of this pool.");
+      }
+      tx.set(mRef, { memberReportedPaid: !!claim, memberReportedAt: Date.now() }, { merge: true });
+    });
     return { success: true, mode: 'claim' as const };
   }
 

@@ -18,6 +18,11 @@ const DOMAIN_PREFIX_MESSAGES: Record<string, string> = {
     ELIMINATED: "You've been eliminated from this pool, so new picks can't be submitted.",
     NOT_ELIMINATED: 'A rebuy is only available after elimination.',
     HARD_WEEKLY_LOCK: 'Survivor and Margin pools use a fixed weekly deadline before the first kickoff, so a week cannot be reopened once it locks. The Pick Deadline setting controls how early picks close for weeks that have not locked yet.',
+    // setPaidStatus refuses a payment self-report from someone the pool cannot
+    // prove is a member. Without this entry the prefix falls through to the
+    // generic permission-denied copy ("contact your pool commissioner"), which
+    // tells a legacy member nothing about what is actually wrong.
+    NOT_A_POOL_MEMBER: "You're not listed as a member of this pool, so a payment can't be reported against it. If you joined and this looks wrong, ask the commissioner to add you to the roster.",
 };
 
 const AUTH_MESSAGES: Record<string, string> = {

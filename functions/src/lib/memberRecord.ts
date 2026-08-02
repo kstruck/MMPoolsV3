@@ -110,6 +110,62 @@ export function planMembershipWrite(
   return { participant: 'add', member: { op: 'set', data, merge: true } };
 }
 
+/**
+ * The literal string squares.ts inserts into `participantIds` for an anonymous
+ * reservation. It is a sentinel, never a person — `src/utils/poolRoster.ts` and
+ * `lib/reminderTargets.ts` both exclude it, and a membership predicate must not
+ * be the one place that disagrees.
+ */
+const GUEST_SENTINEL = 'guest';
+
+/**
+ * Is `uid` a PROVABLE member of this pool? Two checks, both on data the caller
+ * has already read — no extra query. See PLAN-SETPAIDSTATUS-MEMBERSHIP §4.
+ *
+ * ⚠️ There is no third check. Draft 4 accepted claimed-square ownership
+ * (`pool.squares[*].reservedByUid === uid`) and review round 5 removed it as
+ * ATTACKER-SETTABLE: `firestore.rules` makes every pool document world-readable,
+ * so anyone with the pool id can read a `guestDeviceKey` off it and have
+ * `claimMySquares` stamp `reservedByUid` for them. Reintroducing a
+ * squares-ownership branch here restores the exact authorization route the plan
+ * rejected.
+ *
+ * Callers pass plain data, not snapshots, so the rule is unit-testable.
+ */
+export function isProvableMember(
+  pool: { participantIds?: unknown } | undefined,
+  memberRecord: { joinedAt?: unknown } | undefined,
+  uid: string,
+): boolean {
+  // The sentinel is not an account. Rejected up front rather than only inside
+  // the participantIds check: an authenticated user whose Firebase uid is the
+  // literal string `guest` would otherwise be admitted to every pool holding a
+  // single anonymous square reservation.
+  if (!uid || uid === GUEST_SENTINEL) return false;
+
+  // Evidence 1 — a CANONICAL Member Record. Mere existence proves nothing,
+  // because the claim path this guard protects is itself a way to create one:
+  // accepting existence would ratify a record forged before the fix. The
+  // discriminator is the server-seeded `joinedAt` stamp, which every creation
+  // path writes (planMembershipWrite, poolCreation, bracketPools, nflPools join
+  // + rebuy, backfillMemberRecords) and which no client path can set — the
+  // vulnerable claim writes only `memberReportedPaid`/`memberReportedAt`, and
+  // firestore.rules allows `create: never` plus an update restricted to those
+  // same two fields.
+  //
+  // PRESENCE, not `typeof === 'number'`: backfillMemberRecords stamps
+  // `pool.createdAt || Date.now()`, and a legacy `createdAt` may be a Firestore
+  // Timestamp. A type check there would refuse real backfilled members.
+  const joinedAt = memberRecord?.joinedAt;
+  if (joinedAt !== undefined && joinedAt !== null) return true;
+
+  // Evidence 2 — the pool's own cross-type membership set. Every join path
+  // writes it, and writing it needs `isPoolManager()`, so no self-add. A manager
+  // listing someone as a participant IS membership.
+  const ids = pool?.participantIds;
+  return Array.isArray(ids) && ids.includes(uid);
+}
+
 export function membersCol(db: Firestore, poolId: string) {
   return db.collection('pools').doc(poolId).collection('members');
 }

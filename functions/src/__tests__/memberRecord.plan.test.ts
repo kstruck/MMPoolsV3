@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planMembershipWrite } from '../lib/memberRecord';
+import { isProvableMember, planMembershipWrite } from '../lib/memberRecord';
 import type { MemberRecord } from '../shared/memberRecord';
 
 const NOW = 1_700_000_000_000;
@@ -102,5 +102,68 @@ describe('planMembershipWrite', () => {
       const existing: MemberRecord = { uid: 'u1', poolId: 'p1', userName: 'U', paidStatus: 'UNPAID' };
       expect(dataOf(planMembershipWrite('p1', 'u1', facts(), existing, NOW)).hasPlayableEntry).toBeUndefined();
     });
+  });
+});
+
+/**
+ * PLAN-SETPAIDSTATUS-MEMBERSHIP §4. Two checks, and the plan is emphatic that
+ * there is no third: draft 4 accepted claimed-square ownership and round 5
+ * removed it as attacker-settable.
+ */
+describe('isProvableMember', () => {
+  const CANONICAL = { joinedAt: NOW };
+
+  it('admits a CANONICAL Member Record even with no participantIds entry', () => {
+    // The legacy member this heals: on the roster since before participantIds
+    // was maintained everywhere.
+    expect(isProvableMember({ participantIds: [] }, CANONICAL, 'u1')).toBe(true);
+  });
+
+  it('REFUSES a claim-only record — the forged shape', () => {
+    // The round-3 P1. The vulnerable claim path writes exactly these two
+    // fields, so treating mere existence as proof would let the fix ratify the
+    // exploit: the forger stays on the roster and keeps receiving reminders.
+    const forged = { memberReportedPaid: true, memberReportedAt: NOW };
+    expect(isProvableMember({ participantIds: [] }, forged, 'u1')).toBe(false);
+  });
+
+  it('accepts a non-numeric joinedAt — backfill stamps pool.createdAt', () => {
+    // backfillMemberRecords writes `pool.createdAt || Date.now()`, and a legacy
+    // createdAt may be a Firestore Timestamp. A `typeof === number` check here
+    // would refuse real backfilled members.
+    expect(isProvableMember({ participantIds: [] }, { joinedAt: { seconds: 1 } }, 'u1')).toBe(true);
+  });
+
+  it('admits membership from participantIds with no record at all', () => {
+    expect(isProvableMember({ participantIds: ['u1'] }, undefined, 'u1')).toBe(true);
+  });
+
+  it('REFUSES the literal "guest" sentinel', () => {
+    // squares.ts inserts the string `guest` for an anonymous reservation. A
+    // membership test that accepts any array element would admit an account
+    // whose uid IS `guest` into every pool holding one anonymous square.
+    expect(isProvableMember({ participantIds: ['guest'] }, undefined, 'guest')).toBe(false);
+    // ...and it stays refused even holding a canonical record.
+    expect(isProvableMember({ participantIds: ['guest'] }, CANONICAL, 'guest')).toBe(false);
+  });
+
+  it('REFUSES a stranger with no evidence at all', () => {
+    expect(isProvableMember({ participantIds: ['someone-else'] }, undefined, 'u1')).toBe(false);
+    expect(isProvableMember(undefined, undefined, 'u1')).toBe(false);
+    expect(isProvableMember({}, undefined, 'u1')).toBe(false);
+  });
+
+  it('REFUSES when participantIds is not an array', () => {
+    // Defensive: a malformed pool document must not throw out of an
+    // authorization predicate, and must not admit.
+    expect(isProvableMember({ participantIds: 'u1' as unknown }, undefined, 'u1')).toBe(false);
+  });
+
+  it('does NOT accept claimed-square ownership (the removed third check)', () => {
+    // Round 5: `claimMySquares` stamps reservedByUid on proof of a
+    // guestDeviceKey readable from the world-readable pool document, so this
+    // signal is attacker-settable. Anyone reintroducing it fails here.
+    const poolWithClaimedSquare = { participantIds: [], squares: [{ reservedByUid: 'u1' }] };
+    expect(isProvableMember(poolWithClaimedSquare, undefined, 'u1')).toBe(false);
   });
 });
