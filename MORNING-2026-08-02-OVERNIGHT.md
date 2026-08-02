@@ -157,6 +157,16 @@ inside is a legitimate later note. This repo has twice written down that an
 invariant which cries wolf gets ignored and then the real one is missed — so
 shipping this rule would have been worse than shipping nothing.
 
+**A live example landed in this very PR.** codex found that I had updated the
+content of PICKUP §2 to 2026-08-02 while leaving its heading reading *"Live
+state (deploy state verified 2026-08-01)"*. That is the pattern, committed by
+me, in the PR explaining why the naive test for it does not work — and it is
+the shape the narrow rule should catch: **a heading that both names a state
+(`Live state`, `deploy state verified`) and carries a date, above content
+carrying a newer one.** Headings that merely record *when something was found*
+have no state word and would be exempt, which is what kills the three false
+positives above.
+
 **The real target is narrower:** a heading that asserts a *current state*
 (`OWED`, `PENDING`, `BLOCKED`) sitting above content that says the opposite. That
 needs a closed vocabulary of state words and a same-subject test, and it is a
