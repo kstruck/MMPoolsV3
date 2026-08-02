@@ -414,6 +414,46 @@ describe('setPaidStatus claim — the membership guard', () => {
     expect(after.userName).toBe('Legacy');
   });
 
+  it('HEALS a legitimate claim-only record left by the pre-rollout callable', async () => {
+    // codex r3. A genuine participant who self-reported BEFORE this rollout
+    // already has a claim-only document, so a create-only seed would never
+    // reach them and the §4a filter would exclude them from every nudge
+    // permanently. `pg_listed` is in participantIds, so the guard admits them
+    // and the stamp must land on the EXISTING document.
+    await seedGuardPool();
+    await db.collection('pools').doc(poolId).collection('members').doc('pg_listed').set({
+      memberReportedPaid: false, memberReportedAt: 1,
+    });
+
+    await wrappedSetPaid({
+      data: { poolId, memberUid: 'pg_listed', claim: true },
+      auth: { uid: 'pg_listed', token: {} },
+    } as never);
+
+    expect((await memberDoc('pg_listed')).data()!.joinedAt).toEqual(expect.any(Number));
+  });
+
+  it('does NOT reset a commissioner-set PAID while healing', async () => {
+    // `reconcilePaymentTruth` can promote a claim-only document to PAID from a
+    // paid entry, so a non-canonical record may already carry a
+    // commissioner-owned PAID. Seeding `paidStatus: UNPAID` on the heal path
+    // would let a member reset their own payment status by self-reporting —
+    // a member-triggered write to the one field they may never set.
+    await seedGuardPool();
+    await db.collection('pools').doc(poolId).collection('members').doc('pg_listed').set({
+      memberReportedPaid: false, memberReportedAt: 1, paidStatus: 'PAID', paidBy: 'pg_boss',
+    });
+
+    await wrappedSetPaid({
+      data: { poolId, memberUid: 'pg_listed', claim: true },
+      auth: { uid: 'pg_listed', token: {} },
+    } as never);
+
+    const after = (await memberDoc('pg_listed')).data()!;
+    expect(after.paidStatus).toBe('PAID');
+    expect(after.joinedAt).toEqual(expect.any(Number));
+  });
+
   it('REFUSES the "guest" sentinel even though it is in participantIds', async () => {
     await seedGuardPool({ participantIds: ['pg_boss', 'guest'] });
     await expect(wrappedSetPaid({

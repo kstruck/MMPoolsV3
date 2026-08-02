@@ -7,6 +7,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
 import { setPaidStatusSchema } from "./schemas/participantOps";
 import { isProvableMember, membersCol } from "./lib/memberRecord";
+import { isCanonicalMemberRecord } from "./shared/memberRecord";
 import { refreshProjectionsBestEffort } from "./lib/refreshProjections";
 
 export const setPaidStatus = validated(
@@ -54,33 +55,46 @@ export const setPaidStatus = validated(
         throw new HttpsError("permission-denied", "NOT_A_POOL_MEMBER: You are not a member of this pool.");
       }
       const now = Date.now();
-      // When the claim CREATES the record, stamp it canonical (codex P2 on
-      // #338). Otherwise the two halves of this fix contradict each other on
-      // the same person: the guard above just proved a legacy `participantIds`
-      // member IS a member, and the record it then wrote — claim fields only —
-      // is exactly the shape `resolveReminderTargets` calls a forgery, so that
-      // member would never be nudged again. `backfillMemberRecords` would have
-      // written the same stamp; this is heal-on-touch, not a new join path.
+      const existing = memberSnap.data();
+      // Stamp the record CANONICAL whenever it is not already (codex P2, twice).
       //
-      // Safe because it is unreachable without passing the guard, and the guard
-      // takes only manager-written evidence — #341 cut the repair-job route that
-      // laundered square claims into `participantIds`.
+      // Without this the two halves of this fix contradict each other about the
+      // same person. In a legacy or partially-backfilled pool a uid can be in
+      // `participantIds` with no Member Record; the guard above admits their
+      // self-report on exactly that evidence, and the record it writes — claim
+      // fields only — is precisely the shape `resolveReminderTargets` calls a
+      // forgery. That member would be dropped from every nudge, having just
+      // been told by the same feature that they are a member.
       //
-      // Deliberately NOT `planMembershipWrite`: that seeds `feeOwed` from the
-      // pool's entry fee, and a member-triggered path must not write a money
-      // field. Identity and the join stamp only.
-      const seedIfNew = memberSnap.exists
-        ? {}
-        : {
-            uid,
-            poolId,
-            joinedAt: now,
-            paidStatus: 'UNPAID' as const,
-            ...(typeof request.auth!.token?.name === 'string' && request.auth!.token.name
-              ? { userName: request.auth!.token.name }
-              : {}),
-          };
-      tx.set(mRef, { ...seedIfNew, memberReportedPaid: !!claim, memberReportedAt: now }, { merge: true });
+      // The condition is "not canonical", NOT "does not exist" (codex r3): a
+      // genuine participant who self-reported BEFORE this rollout already has a
+      // claim-only document, so a create-only seed would never reach them and
+      // they would be excluded permanently. Heal on touch, the same way
+      // `ensureMemberRecord` heals `feeOwed` and `hasPlayableEntry`.
+      //
+      // Safe because it is unreachable without passing the guard, and a
+      // NON-canonical record cannot pass on evidence 1 — so the only way here is
+      // manager-written `participantIds`, and #341 cut the repair-job route that
+      // laundered guest square claims into it.
+      //
+      // Deliberately NOT `planMembershipWrite`: it seeds `feeOwed` from the
+      // pool's entry fee, and a member-triggered path must not write money.
+      const seed: Record<string, unknown> = {};
+      if (!isCanonicalMemberRecord(existing)) {
+        seed.uid = uid;
+        seed.poolId = poolId;
+        seed.joinedAt = now;
+        const tokenName = request.auth!.token?.name;
+        if (typeof tokenName === 'string' && tokenName && !existing?.userName) {
+          seed.userName = tokenName;
+        }
+        // paidStatus ONLY on create. `reconcilePaymentTruth` can promote a
+        // claim-only document to PAID from a paid entry, so an existing
+        // non-canonical record may already carry a commissioner-owned PAID that
+        // this member-triggered path must never reset to UNPAID.
+        if (!memberSnap.exists) seed.paidStatus = 'UNPAID';
+      }
+      tx.set(mRef, { ...seed, memberReportedPaid: !!claim, memberReportedAt: now }, { merge: true });
     });
     return { success: true, mode: 'claim' as const };
   }
