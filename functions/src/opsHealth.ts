@@ -43,8 +43,12 @@ export interface OpsHealthSummary {
      * silently non-functional (A5 snapshots, nflFinalizeSweepJob — the latter
      * for ten days). An empty array here is a POSITIVE signal; previously there
      * was no signal at all.
+     *
+     * ABSENT when the heartbeat document could not be read — "liveness unknown",
+     * which is a third state and not the same as "nothing is stale". See the
+     * catch below; the client renders absent as an em dash rather than a count.
      */
-    staleJobs: StaleJob[];
+    staleJobs?: StaleJob[];
 }
 
 export async function computeOpsHealthSummary(
@@ -62,12 +66,21 @@ export async function computeOpsHealthSummary(
         ]);
 
     // Heartbeats live in one doc, so this is a single extra read.
-    let heartbeats: Record<string, JobHeartbeat | undefined> = {};
+    //
+    // `null` means the read FAILED — liveness unknown. Distinct from `{}`, which
+    // means the document is genuinely empty and every job really has never run.
+    // Before this distinction existed, a transient read failure fell back to `{}`
+    // and `findStaleJobs` duly reported the ENTIRE fleet as `never-ran` — the
+    // log line said "liveness unknown" while the payload said "everything is
+    // dead". Harmless while nothing rendered it; a false all-hands incident the
+    // moment something did (codex).
+    let heartbeats: Record<string, JobHeartbeat | undefined> | null = {};
     try {
         heartbeats = ((await db.doc(HEARTBEAT_DOC).get()).data() ?? {}) as Record<string, JobHeartbeat | undefined>;
     } catch (e) {
         // Fail loud in logs but do not break the whole health card.
         console.error("[opsHealth] heartbeat read failed; job liveness unknown:", e);
+        heartbeats = null;
     }
 
     return {
@@ -96,7 +109,11 @@ export async function computeOpsHealthSummary(
                 };
             }),
         },
-        staleJobs: findStaleJobs(heartbeats, SCHEDULED_JOB_EXPECTATIONS, Date.now()),
+        // Omitted entirely when the read failed, so the client shows "unknown"
+        // rather than a fabricated verdict about every job.
+        ...(heartbeats === null
+            ? {}
+            : { staleJobs: findStaleJobs(heartbeats, SCHEDULED_JOB_EXPECTATIONS, Date.now()) }),
     };
 }
 

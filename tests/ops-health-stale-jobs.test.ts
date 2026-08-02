@@ -25,8 +25,18 @@ describe('staleJobs reaches the operator', () => {
         // If this half goes, the client renders an empty list forever and looks
         // healthy. Pin the field on the interface AND the value on the return —
         // a declared-but-never-populated field is the same silence.
-        expect(server).toMatch(/staleJobs:\s*StaleJob\[\]/);
+        expect(server).toMatch(/staleJobs\?:\s*StaleJob\[\]/);
         expect(server).toMatch(/staleJobs:\s*findStaleJobs\(/);
+    });
+
+    it('OMITS it when the heartbeat read failed, rather than guessing', () => {
+        // codex: on a read failure the fallback used to be `{}`, and
+        // findStaleJobs duly reported the ENTIRE fleet as `never-ran` — the log
+        // line said "liveness unknown" while the payload said "everything is
+        // dead". Harmless while nothing rendered it; a false all-hands incident
+        // the moment something did.
+        expect(server).toContain('heartbeats = null;');
+        expect(server).toMatch(/heartbeats === null[\s\S]{0,40}\{\}/);
     });
 
     it('the client declares it on the response type', () => {
