@@ -24,6 +24,7 @@ import { getUserMessage } from '../utils/errorMessages';
 import { dbService } from '../services/dbService';
 import { Badge } from './ui';
 import { withCorrelationId } from '../utils/correlationId';
+import { STALE_REASON_LABEL, formatJobAge, type StaleJobReason } from '../utils/opsHealthFormat';
 
 interface HealthCheck {
   label: string;
@@ -55,11 +56,34 @@ interface FailedWebhookSample {
   attemptCount?: number;
   lastFailedAt: number | null;
 }
+/**
+ * A scheduled job that looks dead. Mirrors `StaleJob` in
+ * `functions/src/lib/heartbeat.ts`.
+ */
+interface StaleJob {
+  jobName: string;
+  reason: StaleJobReason;
+  /** Minutes since the last completed run; null when it has never run. */
+  ageMinutes: number | null;
+  error?: string;
+}
 interface OpsHealthSummary {
   at: number;
   openAlerts: { count: number; sample: OpsAlertSample[] };
   failedWebhooks: { count: number; sample: FailedWebhookSample[] };
+  /**
+   * `getOpsHealthSummary` has ALWAYS returned this (opsHealth.ts) — this
+   * interface simply omitted it, so the field arrived over the wire and was
+   * dropped on the floor. The verdicts existed; nothing rendered them.
+   *
+   * OPTIONAL on purpose: the client can be newer than the deployed functions,
+   * and the deploy order here is functions-then-frontend, so a rebuilt frontend
+   * pointed at older functions must degrade rather than crash.
+   */
+  staleJobs?: StaleJob[];
 }
+
+
 
 // Optional — set VITE_SENTRY_ORG_URL (e.g. https://myorg.sentry.io/issues/) once
 // Kevin has a project slug to link to. Undefined = the deep-link is hidden
@@ -323,7 +347,9 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
           {/* Ops Health (PLAN #12) — alerts the platform already emits, not a
               new monitoring source. Sentry's own dashboard stays the
               real-time errors/replay/perf pane; this is a deep-link out to it. */}
-          {opsHealth && (
+          {opsHealth && (() => {
+            const staleJobs = opsHealth.staleJobs ?? [];
+            return (
             <div className="mt-6 pt-5 border-t border-line">
               <div className="flex justify-between items-center mb-3">
                 <h4 className="text-[10px] font-display font-bold text-muted uppercase tracking-[0.16em] flex items-center gap-1.5">
@@ -341,7 +367,7 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="grid grid-cols-3 gap-3 mb-3">
                 <div className={`p-3 rounded-xl border ${opsHealth.openAlerts.count > 0 ? 'border-[#F2D6B0] bg-[#FBEEDD]' : 'border-line bg-surface'}`}>
                   <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.12em] block mb-1">Open Alerts</span>
                   <span className={`text-xl font-display font-bold num leading-none ${opsHealth.openAlerts.count > 0 ? 'text-[#B4530A]' : 'text-[color:var(--text)]'}`}>
@@ -354,10 +380,37 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
                     {opsHealth.failedWebhooks.count}
                   </span>
                 </div>
+                {/* An EMPTY staleJobs array is a positive signal — the fleet
+                    reported in. `undefined` is not: either the heartbeat read
+                    failed or these functions predate the field. Showing "0" for
+                    that would be the all-clear this card exists to stop faking.
+
+                    The word "Unknown", not an em dash (qodo): a dash reads as a
+                    harmless formatting placeholder, and unavailable data must
+                    say it is unavailable rather than look like a value. */}
+                <div className={`p-3 rounded-xl border ${staleJobs.length > 0 ? 'border-[#F2D6B0] bg-[#FBEEDD]' : 'border-line bg-surface'}`}>
+                  <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.12em] block mb-1">Stale Jobs</span>
+                  {opsHealth.staleJobs === undefined ? (
+                    <span className="text-sm font-display font-bold text-muted leading-none">Unknown</span>
+                  ) : (
+                    <span className={`text-xl font-display font-bold num leading-none ${staleJobs.length > 0 ? 'text-[#B4530A]' : 'text-[color:var(--text)]'}`}>
+                      {staleJobs.length}
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {(opsHealth.openAlerts.sample.length > 0 || opsHealth.failedWebhooks.sample.length > 0) && (
+              {(opsHealth.openAlerts.sample.length > 0 || opsHealth.failedWebhooks.sample.length > 0 || staleJobs.length > 0 || opsHealth.staleJobs === undefined) && (
                 <div className="space-y-1.5">
+                  {/* Say WHY it is unknown, in the same list as the other
+                      verdicts. A tile reading "Unknown" with nothing under it
+                      is a shrug; the operator needs to know a read failed. */}
+                  {opsHealth.staleJobs === undefined && (
+                    <div className="text-[10px] text-muted font-body flex items-center gap-1.5">
+                      <AlertTriangle size={10} className="text-[#B4530A] shrink-0" />
+                      <span className="truncate">job liveness unknown — the heartbeat document could not be read</span>
+                    </div>
+                  )}
                   {opsHealth.openAlerts.sample.slice(0, 3).map((a) => (
                     <div key={a.id} className="text-[10px] text-muted font-body flex items-center gap-1.5">
                       <AlertTriangle size={10} className="text-[#B4530A] shrink-0" />
@@ -370,10 +423,25 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
                       <span className="truncate">webhook {w.eventType ?? w.id} — {w.attemptCount ?? '?'} attempt(s)</span>
                     </div>
                   ))}
+                  {/* Every stale job is listed, not a slice: the count above is
+                      the summary, and a truncated list under it reads as the
+                      whole story. The fleet is ~20 jobs, so the worst case is
+                      short and means everything is on fire anyway. */}
+                  {staleJobs.map((j) => (
+                    <div key={j.jobName} className="text-[10px] text-muted font-body flex items-center gap-1.5">
+                      <AlertTriangle size={10} className="text-[#B4530A] shrink-0" />
+                      <span className="truncate">
+                        {j.jobName} — {STALE_REASON_LABEL[j.reason] ?? j.reason}
+                        {j.reason !== 'never-ran' && ` ${formatJobAge(j.ageMinutes)} ago`}
+                        {j.error ? ` — ${j.error}` : ''}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
         </div>
 
         <div className="mt-8 pt-4 border-t border-line flex justify-between items-center text-[10px] text-faint font-display font-bold uppercase tracking-[0.08em]">
