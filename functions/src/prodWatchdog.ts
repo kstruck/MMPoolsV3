@@ -27,8 +27,22 @@ import { isSimPool, isExplicitlyMarkedTestPool } from "./shared/testPool";
 /** Rolling window. One day is what "since I last looked" means in practice. */
 export const WATCHDOG_WINDOW_HOURS = 24;
 
-/** Per-signal read cap. Truncation is REPORTED, never silent — see WatchdogSignal. */
+/** Per-signal REPORTED cap. Truncation is surfaced, never silent — see WatchdogSignal. */
 export const WATCHDOG_SIGNAL_CAP = 50;
+
+/**
+ * Rows a signal may READ before it reports the cap, when some of them will be
+ * discarded (test pools, non-client log rows) before they can be reported.
+ *
+ * Filtering happens after the read — an equality + range query needs a composite
+ * index and this file's constraint is not to add one — so with a single cap the
+ * discards eat the budget. A Test Suite run can mint dozens of sim pools inside
+ * one window; at 50 reads they crowd out the one real pool the operator needs to
+ * see, and the card says "nothing happened" on the day a real pool was created.
+ * 5× is the headroom for that. Beyond it, `truncated` is set and the count reads
+ * as a floor, which is the honest answer rather than a wrong one.
+ */
+export const WATCHDOG_RAW_READ_CAP = WATCHDOG_SIGNAL_CAP * 5;
 
 export type WatchdogEventKind =
     | "POOL_CREATED"
@@ -115,25 +129,33 @@ export function toMillis(v: unknown): number | null {
  * row in every "last 24h" report until its timestamp finally arrived. It is
  * excluded now and appears in the window its stamp actually names.
  *
- * No orderBy: the implicit order of a range query is by that field ascending, so
- * a truncated read keeps the OLDEST rows in the window rather than the newest.
- * Within a 24h window every row is recent either way, and `truncated` says so
- * out loud. Adding orderBy(field,'desc') would fix the cut but is one more index
- * assumption for a case the cap makes rare.
+ * No orderBy on the QUERY (one less index assumption); the merged rows are
+ * sorted newest-first in code before the cap is applied. That ordering is not
+ * cosmetic: the two legs arrive numeric-first, so slicing the raw union would
+ * cut by STORAGE TYPE — 50 numeric signups would discard every Timestamp-backed
+ * one no matter how recent it was.
+ *
+ * `keep` runs BEFORE the cap, against a larger raw budget, so rows that will be
+ * discarded (test pools, non-client log rows) cannot crowd out reportable ones.
  */
 async function windowDocs(
     query: admin.firestore.Query,
     field: string,
     sinceMs: number,
     nowMs: number,
-    cap: number
+    cap: number,
+    opts: {
+        keep?: (row: { id: string; at: number; data: admin.firestore.DocumentData }) => boolean;
+        rawCap?: number;
+    } = {}
 ): Promise<{ rows: Array<{ id: string; at: number; data: admin.firestore.DocumentData }>; truncated: boolean }> {
+    const rawCap = opts.rawCap ?? cap;
     const [numeric, stamped] = await Promise.all([
-        query.where(field, ">=", sinceMs).where(field, "<=", nowMs).limit(cap + 1).get(),
+        query.where(field, ">=", sinceMs).where(field, "<=", nowMs).limit(rawCap + 1).get(),
         query
             .where(field, ">=", Timestamp.fromMillis(sinceMs))
             .where(field, "<=", Timestamp.fromMillis(nowMs))
-            .limit(cap + 1)
+            .limit(rawCap + 1)
             .get(),
     ]);
 
@@ -148,12 +170,13 @@ async function windowDocs(
         byId.set(doc.id, { id: doc.id, at, data: doc.data() });
     }
 
-    // Truncation is decided AFTER the merge, not per leg. Each leg can come back
-    // under its own cap while the union sits over it (25 numeric + 30 Timestamp
-    // signups is 55 rows through two 51-row reads), and the slice below would
-    // then drop five events while the signal reported an exact count of 50.
-    const rows = [...byId.values()];
-    const truncated = numeric.size > cap || stamped.size > cap || rows.length > cap;
+    // Truncation is decided AFTER the merge and AFTER `keep`, not per leg. Each
+    // leg can come back under its own budget while the union sits over the cap
+    // (25 numeric + 30 Timestamp signups is 55 rows through two reads), and the
+    // slice below would then drop five events while the signal reported an exact
+    // count of 50.
+    const rows = [...byId.values()].filter((r) => opts.keep?.(r) ?? true).sort((a, b) => b.at - a.at);
+    const truncated = numeric.size > rawCap || stamped.size > rawCap || rows.length > cap;
     return { rows: rows.slice(0, cap), truncated };
 }
 
@@ -210,17 +233,30 @@ export async function computeWatchdogReport(
         }),
 
         signal("pools", async () => {
-            const { rows, truncated } = await windowDocs(db.collection("pools"), "createdAt", sinceMs, nowMs, cap);
-            // Sim-harness and hand-labelled test pools are noise. PRESEASON IS NOT
-            // EXCLUDED, deliberately: shared/testPool.ts's full isTestPool() counts
-            // NFL seasonType 1 as a test pool for STATS purposes, but preseason is
-            // exactly the 2026-08-06 pilot this card exists to watch. Same carve-out,
-            // and same reasoning, as the Member Record backfill (PLAN-PAYMENT-TRUTH
-            // P4) which uses isExplicitlyMarkedTestPool for this reason.
-            const real = rows.filter((r) => !isSimPool(r.data, r.id) && !isExplicitlyMarkedTestPool(r.data));
+            // Sim-harness and hand-labelled test pools are noise, and they are
+            // dropped BEFORE the cap (against the larger raw budget) — a Test Suite
+            // run that mints 50 sim pools must not be able to hide the one real
+            // pool created the same day.
+            //
+            // PRESEASON IS NOT EXCLUDED, deliberately: shared/testPool.ts's full
+            // isTestPool() counts NFL seasonType 1 as a test pool for STATS
+            // purposes, but preseason is exactly the 2026-08-06 pilot this card
+            // exists to watch. Same carve-out, and same reasoning, as the Member
+            // Record backfill (PLAN-PAYMENT-TRUTH P4).
+            const { rows, truncated } = await windowDocs(
+                db.collection("pools"),
+                "createdAt",
+                sinceMs,
+                nowMs,
+                cap,
+                {
+                    keep: (r) => !isSimPool(r.data, r.id) && !isExplicitlyMarkedTestPool(r.data),
+                    rawCap: WATCHDOG_RAW_READ_CAP,
+                }
+            );
             return {
                 truncated,
-                events: real.map((r) => ({
+                events: rows.map((r) => ({
                     kind: "POOL_CREATED" as const,
                     at: r.at,
                     label: `${r.data.name || "(unnamed pool)"} created${r.data.type ? ` — ${r.data.type}` : ""}`,
@@ -250,17 +286,25 @@ export async function computeWatchdogReport(
             // `timestamp` is the server-stamped numeric field logClientError writes;
             // its `createdAt` is a serverTimestamp on the same doc. Either works —
             // windowDocs handles both types — and `timestamp` is the one every row has.
-            const { rows, truncated } = await windowDocs(db.collection("system_logs"), "timestamp", sinceMs, nowMs, cap);
             // system_logs is NOT a client-error collection. scoreUpdates.ts writes
             // routine SYNC_GAME_STATUS progress rows into it (five sites) with a
             // serverTimestamp and no `source`, so counting every row here would
             // light the Client Errors tile up during a perfectly healthy score
             // sync — and push real client errors out past the cap while doing it.
-            // logClientError is the only writer that stamps source: "client".
-            const clientRows = rows.filter((r) => r.data.source === "client");
+            // logClientError is the only writer that stamps source: "client", and
+            // the filter runs against the larger raw budget for the same reason
+            // the pool filter does.
+            const { rows, truncated } = await windowDocs(
+                db.collection("system_logs"),
+                "timestamp",
+                sinceMs,
+                nowMs,
+                cap,
+                { keep: (r) => r.data.source === "client", rawCap: WATCHDOG_RAW_READ_CAP }
+            );
             return {
                 truncated,
-                events: clientRows.map((r) => ({
+                events: rows.map((r) => ({
                     kind: "CLIENT_ERROR" as const,
                     at: r.at,
                     label: `${r.data.severity ?? "medium"}: ${r.data.message ?? "(no message)"}`,

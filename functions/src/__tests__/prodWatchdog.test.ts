@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Timestamp } from "firebase-admin/firestore";
-import { computeWatchdogReport, WATCHDOG_SIGNAL_CAP } from "../prodWatchdog";
+import { computeWatchdogReport, WATCHDOG_SIGNAL_CAP, WATCHDOG_RAW_READ_CAP } from "../prodWatchdog";
 
 /**
  * The watchdog's only non-trivial logic is the mixed-type time window, so the
@@ -147,6 +147,44 @@ describe("computeWatchdogReport — pools", () => {
         expect(report.signals.newPools.count).toBe(1);
         expect(report.events[0].label).toContain("HOF Pickem");
         expect(report.events[0].href).toBe("/pool/p1");
+    });
+});
+
+describe("computeWatchdogReport — the cap cuts by time, not by storage type or noise", () => {
+    it("keeps a NEWER Timestamp signup over older numeric ones when capped", async () => {
+        // The two legs arrive numeric-first. Slicing the raw union would discard
+        // every Timestamp-backed row no matter how recent — a cut by storage type
+        // wearing a time cut's clothes.
+        const olderNumeric = Array.from({ length: WATCHDOG_SIGNAL_CAP }, (_, i) => ({
+            id: `n${i}`,
+            data: { name: `N${i}`, createdAt: NOW - 10 * HOUR },
+        }));
+        const report = await computeWatchdogReport(
+            fakeDb({
+                users: [...olderNumeric, { id: "fresh", data: { name: "Freshest", createdAt: Timestamp.fromMillis(NOW - HOUR) } }],
+            }),
+            NOW
+        );
+        expect(report.signals.newUsers.truncated).toBe(true);
+        expect(report.events[0].label).toContain("Freshest");
+    });
+
+    it("a burst of sim pools cannot hide a real pool behind the cap", async () => {
+        // A Test Suite run mints sim pools in bulk. They are filtered AFTER the
+        // read (an equality+range query would need a composite index), so with a
+        // single budget they eat it and the card claims nothing happened on the
+        // day a real pool was created.
+        const simPools = Array.from({ length: WATCHDOG_SIGNAL_CAP + 10 }, (_, i) => ({
+            id: `sim-${i}`,
+            data: { name: `Sim ${i}`, simRunId: "run-1", createdAt: NOW - 2 * HOUR },
+        }));
+        const report = await computeWatchdogReport(
+            fakeDb({ pools: [...simPools, { id: "real", data: { name: "Real Pool", createdAt: NOW - 3 * HOUR } }] }),
+            NOW
+        );
+        expect(report.signals.newPools.count).toBe(1);
+        expect(report.events[0].label).toContain("Real Pool");
+        expect(WATCHDOG_RAW_READ_CAP).toBeGreaterThan(WATCHDOG_SIGNAL_CAP);
     });
 });
 
