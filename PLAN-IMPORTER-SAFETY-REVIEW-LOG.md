@@ -74,3 +74,45 @@ All three accepted. Sweep 3 sharpened plan item 1.6 beyond what the finding
 asked: Survivor/Margin picks key on week + team id, so only Pick'em entries
 are strandable by a game-id re-key — the refusal guard needs to consider
 exactly those.
+
+## Round 3 — codex exec review --base origin/main
+
+VERDICT: REVISE. 4 findings (3 P1, 1 P2), **all 4 accepted**. One structural
+change absorbs most of them: a default live run is now UPSERT-ONLY, and stale
+deletion moved behind an explicit per-call `purgeStale: true` reviewed against
+a dry-run report. Summary:
+
+1. (Critical) **parsed==raw only detects parser loss** — a syntactically
+   valid feed the upstream truncated (15 of 16 events, all parsing) passes
+   the completeness check and the subtraction purges the missing game. No
+   automatic signal distinguishes "re-keyed" from "truncated". Fix: the
+   upsert-only restructure in 1.1 — deleting stored games is always an
+   operator decision, never inferred.
+2. (Critical) **Week identity was a residual risk, not a runtime check** —
+   if ESPN's positional calendar mapping drifts, the parser stamps the
+   requested week onto a coherent WRONG week's events (it stamps from
+   arguments by design — `feedSnapshot.test.ts:165`) and a purge would
+   delete the real slate. Fix: 1.2 gains a runtime week-identity assertion —
+   every parsed kickoff must fall inside the calendar-resolved date range
+   the code already fetches; calendar unavailable (naive-URL fallback) =
+   refuse the live replacement. (The draft fix was a payload self-declared
+   week field; no captured fixture in the repo proves that field exists, so
+   the check was built from the date range instead.)
+3. (Critical) **The 1.6 reference scan ran after the writes** — a refusal
+   discovered at delete time leaves the re-keyed duplicate already written:
+   two live fixtures for one game. Fix: 1.1 reordered — ALL preconditions,
+   including the stale-id reference scan, run before any mutation commits.
+4. (High) **Same-id lock preservation has a re-key hole** — the replacement
+   id has no existing doc to preserve from while the OLD locked doc is the
+   one being purged, leaving the slate `SPREADS_NOT_LOCKED`. Fix: 1.5 — a
+   purge must carry the locked spread onto the matched replacement (same
+   teams + kickoff) or refuse that week's purge.
+
+### Claude's response
+
+All four accepted. Consequential edits beyond the findings: 2.1's `success`
+definition was rewritten (its "verifiably empty-from-feed" success state
+contradicted 1.2 as amended), the result shape gained
+`staleIds/purged/refused`, and the ESPN-calendar-drift risk item was
+rewritten from "residual scoped damage" to "guarded at runtime, fails
+closed".

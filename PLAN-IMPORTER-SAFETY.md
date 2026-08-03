@@ -121,15 +121,23 @@ Phase order is safety-first: gate the destructive path before improving it.
 
 ### Phase 1 — Scope the delete to what was actually fetched (Critical, medium)
 
-1.1 **Fetch first, WRITE second, delete LAST, per week.** Reorder: fetch all
-    requested weeks; for each week whose fetch passed the 1.2 integrity check,
-    first write the fetched games (`merge: true` keeps the existing id-keyed
-    overwrite semantics, subject to 1.5), and only after the writes commit,
-    delete that week's stale docs (`.where('week','==',week)` added to the
-    query) whose ids do not appear in the fetched set. Write-before-delete
-    means a failure at ANY point leaves the week no worse than before the run
-    — the delete-then-fail window closes structurally (ordering per codex r1
-    #1). The implementing PR must include a test that an injected commit
+1.1 **Per week: check EVERYTHING, then write, then (only if explicitly asked)
+    purge.** The pipeline for each requested week: fetch; run ALL
+    preconditions — the 1.2 integrity and week-identity checks, the 1.6
+    reference scan over the computed stale-id set, the 1.3 caps — **before
+    any mutation commits** (checks-before-writes per codex r3 #3: a refusal
+    discovered after the upserts would leave a re-keyed duplicate fixture
+    live); if every check passes, write the fetched games (`merge: true`
+    keeps the id-keyed overwrite semantics, subject to 1.5); stale docs
+    (`.where('week','==',week)` added to the query, ids absent from the
+    fetched set) are deleted LAST, and **only when the call carries an
+    explicit `purgeStale: true`** — a default live run is upsert-only and
+    deletes nothing (restructured per codex r3 #1: no automatic signal can
+    distinguish "ESPN re-keyed this game" from "ESPN's response was
+    truncated", so removing stored games is always an operator decision made
+    against a dry-run report). Write-before-delete means a failure at ANY
+    point leaves the week no worse than before the run (ordering per codex
+    r1 #1). The implementing PR must include a test that an injected commit
     failure preserves the prior slate. A week whose fetch failed is not
     touched at all.
 1.2 **A usable slate, not just a 200 response, gates the delete.**
@@ -148,7 +156,21 @@ Phase order is safety-first: gate the destructive path before improving it.
     - the parsed set is non-empty;
     - **fail-closed slate completeness**: every event in the raw payload
       parsed successfully (parsed count == raw event count), so a partially
-      malformed feed can never present a subset as the whole week;
+      malformed feed can never present a subset as the whole week. This
+      detects PARSER loss only — it cannot detect a syntactically valid feed
+      the upstream truncated (codex r3 #1), which is why stale deletion is
+      never automatic (1.1's `purgeStale` flag);
+    - **week identity**: every parsed game's kickoff falls inside the
+      calendar-resolved date range for the requested week — the range
+      `resolveScoreboardUrl` already fetches from ESPN's own calendar
+      (`nflSchedule.ts:115-160`). The parser deliberately stamps the
+      REQUESTED week onto whatever events arrive
+      (`nflSchedule.ts:252-265` and the test at
+      `__tests__/feedSnapshot.test.ts:165`), so if ESPN's positional
+      calendar mapping drifts, a coherent WRONG week would otherwise be
+      stamped as the requested one and its purge would delete the real slate
+      (codex r3 #2). When the calendar lookup itself failed (the naive-URL
+      fallback), this check cannot run — refuse the live replacement;
     - the would-delete set is small (bounded by the 1.3 cap) — a delete list
       larger than a handful of ids on one week is a mis-scope signal, not a
       cleanup.
@@ -163,29 +185,39 @@ Phase order is safety-first: gate the destructive path before improving it.
     (`nflSchedule.ts:976-985`) (broadened per codex r1 #6).
 1.4 **A cleanup failure aborts that week loudly** instead of the current
     catch-warn-continue (`nflSchedule.ts:378-380`).
-1.5 **Preserve locked spreads on re-import.** The parser emits every game
-    with `spread: { value, locked: false }` (`nflSchedule.ts:342`), so the
-    `merge: true` write would silently UNLOCK a locked ATS slate and block
-    pick submission behind `SPREADS_NOT_LOCKED` — the exact bug class #235
-    fixed in the sync path, which now retains `spread.locked`
-    (`nflSchedule.ts:746-750`). The importer write must apply the same
-    preservation (codex r1 #4).
+1.5 **Preserve locked spreads on re-import — including across a re-key.**
+    The parser emits every game with `spread: { value, locked: false }`
+    (`nflSchedule.ts:342`), so the `merge: true` write would silently UNLOCK
+    a locked ATS slate and block pick submission behind `SPREADS_NOT_LOCKED`
+    — the exact bug class #235 fixed in the sync path, which now retains
+    `spread.locked` (`nflSchedule.ts:746-750`). The importer write must apply
+    the same preservation (codex r1 #4). The same-id lookup has a hole the
+    sync path never faces (codex r3 #4): on a purge-and-replace re-key, the
+    NEW id has no existing doc to preserve from, and the OLD locked doc is
+    the one being purged. A `purgeStale` run must therefore match each
+    to-be-purged locked game against its replacement (same teams + kickoff,
+    different id) and carry the locked spread value onto it — or refuse that
+    week's purge.
 1.6 **A stored id that is referenced by picks is never deleted blind.**
     Pick'em scoring reads `entry.picks[game.id]`
     (`functions/src/nflScoringEngine.ts:108`), so deleting a game id that
     entries reference — ESPN re-keying an event is the motivating case —
-    strands those picks ungradable. Before deleting any fetched-missing id,
-    check for referencing entries in pools on that slate; if any exist, the
-    live run REFUSES that week and reports the ids, leaving reference
-    migration as an explicit operator decision (codex r1 #3). No automatic
+    strands those picks ungradable. The stale-id set and its reference scan
+    are computed BEFORE any write commits (1.1's ordering — codex r3 #3);
+    if any stale id is referenced, the run REFUSES that week before touching
+    it and reports the ids, leaving reference migration as an explicit
+    operator decision (codex r1 #3). Only Pick'em entries key picks by game
+    id (see Sweep 3) — Survivor/Margin are structurally immune. No automatic
     pick migration in this plan.
 
 ### Phase 2 — Truthful completeness reporting (High, small)
 
 2.1 **Return per-week outcomes.** Result shape gains
-    `weeks: { week, fetched, deleted, written, failed }[]` and `success` is
-    true only when every requested week either imported or was verifiably
-    empty-from-feed. The callable surfaces the same shape.
+    `weeks: { week, fetched, written, staleIds, purged, refused, failed }[]`
+    and `success` is true only when every requested week imported (or was
+    skipped under the explicit empty-week flag of 1.2) — a refused or failed
+    week forces `success: false`. "Verifiably empty-from-feed" is not a
+    success state; 1.2 forbids inferring it.
 2.2 **Audit event says what actually happened.** Severity `WARNING` when any
     week failed; message names the failed weeks, not just the total count
     (`nflSchedule.ts:404-410`).
@@ -228,11 +260,13 @@ Phase order is safety-first: gate the destructive path before improving it.
   season's per-week counts first) is a prod-data action — Kevin's call, run
   dry first, per the standing rule. Nothing in this plan performs it.
 - **ESPN calendar drift.** `resolveScoreboardUrl` (`nflSchedule.ts:115-160`)
-  maps `weeks[i]` to calendar entries positionally; if ESPN renumbers preseason
-  weeks (HOF week = importer preseason week 1 — see
-  `PICKUP-PRESEASON-PILOT.md`), a scoped delete scoped to the WRONG week is
-  still scoped damage, vastly smaller than today's, but the mapping deserves a
-  test in the implementing PR.
+  maps `weeks[i]` to calendar entries positionally (HOF week = importer
+  preseason week 1 — see `PICKUP-PRESEASON-PILOT.md`). This is guarded at
+  RUNTIME by 1.2's week-identity check, which fails closed when the calendar
+  lookup is unavailable (codex r3 #2 — a build-time test of today's mapping
+  proves nothing about the mapping on import day). Residual: a drifted
+  mapping still wastes an operator's time on refused runs; that is the
+  intended failure mode.
 - **The importing PR must mutation-test the gate.** Per the standing rule:
   every guard added here gets a mutant that proves the test would catch its
   removal (e.g. delete the `dryRun` check, expect the dry-run test to fail).
