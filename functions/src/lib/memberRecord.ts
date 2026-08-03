@@ -120,7 +120,7 @@ export function planMembershipWrite(
  * firebase-admin. Re-implementing the two-evidence rule client-side is exactly
  * the drift `isCanonicalMemberRecord` was hoisted to shared/ to prevent.
  */
-export { isProvableMember, GUEST_SENTINEL } from "../shared/memberRecord";
+export { isProvableMember } from "../shared/memberRecord";
 
 export function membersCol(db: Firestore, poolId: string) {
   return db.collection('pools').doc(poolId).collection('members');
