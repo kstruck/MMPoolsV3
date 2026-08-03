@@ -552,14 +552,33 @@ function headingLevel(line: string): number {
  * several MENTIONS a nearby keyword binds to, with no rule available. Here the
  * question is well-posed — a state claim is `<state word> … <its date>` — and
  * the answer is positional and exact rather than a window.
+ *
+ * ⚠️ NEAREST, not "the first one after". codex round 3: "first after" is itself
+ * defeated when the claim date PRECEDES the phrase and an unrelated one follows
+ * — `## 2026-08-01 live state — HOF game 2026-08-13` selected the game date and
+ * masked the staleness all over again. Nearest-on-either-side is the first rule
+ * in this sequence that handles all four orderings, and each of them has a
+ * fixture below.
  */
 export function claimDateIn(text: string, vocabulary: RegExp): string | null {
-  const all = text.match(ANY_DATE);
-  if (!all) return null;
+  const dates = [...text.matchAll(ANY_DATE)];
+  if (!dates.length) return null;
   const state = vocabulary.exec(text);
-  if (!state) return all[0];
-  const after = text.slice(state.index).match(ANY_DATE);
-  return after ? after[0] : all[0];
+  if (!state) return dates[0][0];
+
+  const from = state.index!;
+  const to = from + state[0].length;
+  // Gap in characters between this date and the state phrase, either side.
+  const distance = (m: RegExpMatchArray): number => {
+    const start = m.index!;
+    const end = start + m[0].length;
+    if (end <= from) return from - end;   // date sits before the phrase
+    if (start >= to) return start - to;   // date sits after the phrase
+    return 0;                             // overlapping
+  };
+  // Ties go to the EARLIER occurrence in the string, which for the common
+  // "<state phrase> <date>" form is the date that follows it.
+  return dates.reduce((best, m) => (distance(m) < distance(best) ? m : best))[0];
 }
 
 /** The date a HEADING's state claim carries. */
@@ -787,6 +806,16 @@ describe('a dated state heading is not older than its own section', () => {
       expect(staleStateHeadings(doc)).toHaveLength(1);
     });
 
+    it('still fires when a trailing state phrase is followed by a future date (codex r3 P2)', () => {
+      const doc = [
+        '## 2026-08-01 live state — HOF game 2026-08-13',
+        'Deployed 2026-08-02.',
+      ].join(NL);
+      const hits = staleStateHeadings(doc);
+      expect(hits).toHaveLength(1);
+      expect(hits[0]).toMatchObject({ headingDate: '2026-08-01', contentDate: '2026-08-02' });
+    });
+
     it('does NOT fire on an unrelated future date sharing a status line (codex r2 P2)', () => {
       // The mirror of the heading-side bug. The deploy state matches the
       // heading exactly; only the game date is later, and it is not a state
@@ -830,8 +859,14 @@ describe('a dated state heading is not older than its own section', () => {
       it('ignores a parenthetical older date that follows the claim date', () => {
         expect(headingClaimDate('## STOP POINT 2026-08-02 (overnight of 2026-08-01)')).toBe('2026-08-02');
       });
-      it('falls back to the first date when the state word comes after it', () => {
+      it('takes the date BEFORE the state word when that is the nearer one', () => {
         expect(headingClaimDate('## 2026-08-01 live state')).toBe('2026-08-01');
+      });
+      it('takes the nearer PRECEDING date over a further following one (codex r3 P2)', () => {
+        // "first date after the phrase" picked the game date here and masked
+        // the staleness — the same hole as round 1, one ordering along.
+        expect(headingClaimDate('## 2026-08-01 live state — HOF game 2026-08-13'))
+          .toBe('2026-08-01');
       });
       it('returns null when the heading carries no date at all', () => {
         expect(headingClaimDate('## Live state')).toBeNull();
