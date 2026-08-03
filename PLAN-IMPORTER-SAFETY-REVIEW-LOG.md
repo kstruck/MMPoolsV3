@@ -116,3 +116,39 @@ contradicted 1.2 as amended), the result shape gained
 `staleIds/purged/refused`, and the ESPN-calendar-drift risk item was
 rewritten from "residual scoped damage" to "guarded at runtime, fails
 closed".
+
+## Round 4 — codex exec review --base origin/main
+
+VERDICT: REVISE. 4 findings (3 P1, 1 P2), **all 4 accepted**. Summary:
+
+1. (Critical) **Purge replacement was not atomic** — write commit followed by
+   a failed delete commit leaves both the old and re-keyed fixture live, and
+   week queries score the matchup twice. Fix: 1.1 — a `purgeStale` week
+   commits writes AND deletes in one `WriteBatch` (≤16 games each way, far
+   under the 500-op limit; if combined ops ever exceeded it, refuse rather
+   than split).
+2. (Critical) **parsed == raw-event count rejects a VALID boundary response**
+   — the PR #219 season guard intentionally filters a neighboring season's
+   opener out of a calendar-range payload (`nflSchedule.ts:252-265`), and
+   counting that filtered event as parse loss fails the completeness check
+   on a documented-correct response. Fix: 1.2 compares parsed count against
+   ELIGIBLE events (those passing `eventMatchesSeason`,
+   `nflSchedule.ts:227-232`); any eligible event failing to parse refuses.
+3. (Critical) **Re-importing a scored week left standings stale** — the
+   importer overwrites the doc, so the next sync sees no transition and
+   never enqueues rescoring. Fix: new 1.7 — reuse the sync path's
+   prior-state diff and same-batch rescore handoff
+   (`nflSchedule.ts:776-790`, `lib/rescoreQueue.ts`); arming the queue's
+   consumer remains Kevin's, enqueueing is inert until then.
+4. (High) **`purgeStale` and the empty-week override would be rejected by
+   the strict schema** — `z.strictObject` refuses unlisted fields before the
+   handler runs. Fix: new 1.8 — every new control is added to the schema,
+   service types, and UI contract together, optional with safe-when-absent
+   defaults.
+
+### Claude's response
+
+All four accepted; no rejections. Round trajectory is narrowing as expected:
+r1 core data-loss mechanics, r2 governance layers, r3 identity/ordering
+edges, r4 interaction with adjacent subsystems (scoring queue, schema
+envelope).

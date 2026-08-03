@@ -135,11 +135,17 @@ Phase order is safety-first: gate the destructive path before improving it.
     deletes nothing (restructured per codex r3 #1: no automatic signal can
     distinguish "ESPN re-keyed this game" from "ESPN's response was
     truncated", so removing stored games is always an operator decision made
-    against a dry-run report). Write-before-delete means a failure at ANY
-    point leaves the week no worse than before the run (ordering per codex
-    r1 #1). The implementing PR must include a test that an injected commit
-    failure preserves the prior slate. A week whose fetch failed is not
-    touched at all.
+    against a dry-run report). A `purgeStale` week commits its writes and
+    deletes in ONE atomic `WriteBatch` — an NFL week is ≤16 games each way,
+    far under Firestore's 500-op batch limit, and if a week's combined ops
+    ever exceeded it the run refuses rather than splitting (codex r4 #1:
+    a write commit followed by a failed delete commit leaves both the old
+    and re-keyed fixture live, and week queries would score the matchup
+    twice). Upsert-only runs keep plain write-before-nothing ordering — a
+    failure at ANY point leaves the week no worse than before the run
+    (codex r1 #1). The implementing PR must include a test that an injected
+    commit failure preserves the prior slate. A week whose fetch failed is
+    not touched at all.
 1.2 **A usable slate, not just a 200 response, gates the delete.**
     `fetchNFLWeekSchedule`'s catch-all `[]` return (`nflSchedule.ts:182-185`)
     erases the failed/empty distinction, and a non-null `raw`
@@ -154,12 +160,19 @@ Phase order is safety-first: gate the destructive path before improving it.
     game as "stale"):
     - the fetch succeeded (non-null raw);
     - the parsed set is non-empty;
-    - **fail-closed slate completeness**: every event in the raw payload
-      parsed successfully (parsed count == raw event count), so a partially
-      malformed feed can never present a subset as the whole week. This
-      detects PARSER loss only — it cannot detect a syntactically valid feed
-      the upstream truncated (codex r3 #1), which is why stale deletion is
-      never automatic (1.1's `purgeStale` flag);
+    - **fail-closed slate completeness**: every ELIGIBLE event in the raw
+      payload parsed successfully — eligible meaning it passes the same
+      season/seasonType filter the parser applies (`eventMatchesSeason`,
+      `nflSchedule.ts:227-232`, the PR #219 guard). The comparison is
+      parsed count == eligible-event count, NOT raw-event count: a calendar
+      date range is documented to legitimately include a neighboring
+      season's opener (the regular-season opener caught by the preseason
+      week-3 range — `nflSchedule.ts:252-265`), and counting that
+      correctly-filtered event as a parse loss would reject a valid
+      response (codex r4 #2). Any eligible event that fails to parse =
+      refuse. This detects PARSER loss only — it cannot detect a
+      syntactically valid feed the upstream truncated (codex r3 #1), which
+      is why stale deletion is never automatic (1.1's `purgeStale` flag);
     - **week identity**: every parsed game's kickoff falls inside the
       calendar-resolved date range for the requested week — the range
       `resolveScoreboardUrl` already fetches from ESPN's own calendar
@@ -209,6 +222,25 @@ Phase order is safety-first: gate the destructive path before improving it.
     operator decision (codex r1 #3). Only Pick'em entries key picks by game
     id (see Sweep 3) — Survivor/Margin are structurally immune. No automatic
     pick migration in this plan.
+1.7 **A score-bearing import enqueues rescoring the way the sync path does.**
+    The importer writes ESPN statuses and scores, so re-importing an
+    already-scored week can correct a final or flip a game terminal — and
+    because the importer overwrites the document, the NEXT sync sees no
+    transition and pool standings stay stale (codex r4 #3). The sync path
+    already solves this: it diffs prior state and rides the rescore handoff
+    IN the same batch as the game writes
+    (`nflSchedule.ts:776-790`, `lib/rescoreQueue.ts`). The importer must
+    reuse that same prior-state comparison and enqueue mechanism for any
+    write that changes a score-relevant field on a previously-stored game.
+    (The queue's CONSUMER staying armed or not remains Kevin's — enqueueing
+    is inert until the rescore path is armed, same as for the sync path.)
+1.8 **Every new control rides through the strict schema.**
+    `importNFLScheduleSchema` is `z.strictObject` — an unlisted field
+    REJECTS the request before the handler runs (codex r4 #4). The
+    implementing PR adds `dryRun`, `purgeStale`, and the 1.2 empty-week
+    override as named optional fields with safe-when-absent defaults, in
+    the schema, the service-layer types, and the SuperAdmin UI contract
+    together.
 
 ### Phase 2 — Truthful completeness reporting (High, small)
 
