@@ -26,12 +26,20 @@ const pool = (over: any = {}) => ({
   ...over,
 });
 
-const inputs = (over: Partial<RosterInputs>): RosterInputs => ({
-  pool: pool(),
-  members: [],
-  entries: [],
-  ...over,
-});
+/**
+ * Every member fixture is CANONICAL by default — `joinedAt` stamped, as every
+ * server join path stamps it (`planMembershipWrite`).
+ *
+ * Defaulted here rather than repeated on ~30 fixtures, because the alternative
+ * is that one fixture quietly omits it and the test then asserts the behaviour
+ * of a FORGED record while reading as if it were about a real member. A test
+ * that wants the forged shape opts out explicitly with `joinedAt: undefined`,
+ * which the spread order below honours.
+ */
+const inputs = (over: Partial<RosterInputs>): RosterInputs => {
+  const base: RosterInputs = { pool: pool(), members: [], entries: [], ...over };
+  return { ...base, members: base.members.map((m) => ({ joinedAt: 1, ...m })) };
+};
 
 describe('buildPoolRoster', () => {
   it('lists a member who has a Member Record but NO entry (the D13 blind spot)', () => {
@@ -437,6 +445,94 @@ describe('rosterPotStats', () => {
     );
     expect(clearingRate(pot)).toBe(25);
   });
+});
+
+/**
+ * A forged Member Record must not reach ANY roster surface.
+ *
+ * Before #344, `setPaidStatus`'s claim branch would CREATE
+ * `pools/{anyPool}/members/{caller}` for any authenticated caller, writing only
+ * `memberReportedPaid` / `memberReportedAt`. #344 shut that door and #338 stopped
+ * such a record being a reminder target — but this module still put it on the
+ * commissioner's roster list, in `memberCount`, and in the dues totals, so a
+ * stranger who self-added before #344 landed still appeared on that pool.
+ *
+ * The forged shape below is the real one: the two claim fields, no `joinedAt`,
+ * and — decisively — NO `participantIds` entry and NO entry document, because
+ * the exploit wrote only the member doc.
+ */
+describe('forged Member Records (the #344 shape) are not roster truth', () => {
+  const FORGED = { uid: 'stranger', memberReportedPaid: true, memberReportedAt: 123, joinedAt: undefined };
+
+  it('does not list a forged record on the commissioner roster', () => {
+    const rows = buildPoolRoster(
+      inputs({
+        pool: pool({ participantIds: ['owner'] }),
+        members: [{ uid: 'owner', userName: 'Commish', paidStatus: 'UNPAID' }, FORGED],
+      }),
+    );
+    expect(rows.map((r) => r.uid)).toEqual(['owner']);
+  });
+
+  it('does not count a forged record in memberCount, and does not charge it dues', () => {
+    const args = inputs({
+      pool: pool({ participantIds: ['owner'] }),
+      members: [{ uid: 'owner', userName: 'Commish', paidStatus: 'UNPAID' }, FORGED],
+    });
+    const pot = rosterPotStats(args);
+    expect(pot.memberCount).toBe(1);
+    // The head count and the rendered roster must agree — the invariant this
+    // module already holds for every other source.
+    expect(pot.memberCount).toBe(buildPoolRoster(args).length);
+    // One member at the $20 pool fee. A forged record counted here inflated
+    // Expected by a whole entry fee for someone who owes nothing to anyone.
+    expect(pot.expected).toBe(20);
+    expect(pot.unpaidCount).toBe(1);
+  });
+
+  it('a forged record does not put a stranger in the unsubmitted-picks list', () => {
+    const roster = buildPoolRoster(
+      inputs({
+        pool: pool({ participantIds: ['owner'] }),
+        members: [{ uid: 'owner', userName: 'Commish', paidStatus: 'UNPAID' }, FORGED],
+        entries: [{ id: 'owner', ownerUid: 'owner', picks: { g1: 'A', g2: 'B' } }],
+      }),
+    );
+    expect(unsubmittedRoster(roster, { poolType: 'NFL_PICKEM', week: 1, weeklyGameIds: ['g1', 'g2'] })).toEqual([]);
+  });
+
+  it('a pool whose ONLY member record is forged reads as empty, not as one member', () => {
+    const args = inputs({ pool: pool({ participantIds: [] }), members: [FORGED] });
+    expect(buildPoolRoster(args)).toEqual([]);
+    expect(rosterPotStats(args).memberCount).toBe(0);
+    expect(rosterPotStats(args).expected).toBe(0);
+  });
+
+  /**
+   * The genuine-member half of the rule, and the one that decides whether this
+   * filter is safe to ship. A real member is evidenced by `participantIds` (every
+   * server join path writes it — `reconcileMembership`) or by an entry, so even a
+   * record that somehow lacked the stamp still yields a row and is still charged.
+   * A forged record has neither, which is the whole reason it can be told apart.
+   */
+  it('an un-stamped record for a REAL participant still yields a charged roster row', () => {
+    const args = inputs({
+      pool: pool({ participantIds: ['owner', 'legacy'] }),
+      members: [
+        { uid: 'owner', userName: 'Commish', paidStatus: 'UNPAID' },
+        { uid: 'legacy', userName: 'Legacy', paidStatus: 'UNPAID', joinedAt: undefined },
+      ],
+    });
+    expect(buildPoolRoster(args).map((r) => r.uid).sort()).toEqual(['legacy', 'owner']);
+    const pot = rosterPotStats(args);
+    expect(pot.memberCount).toBe(2);
+    expect(pot.expected).toBe(40);
+  });
+
+  // The SOURCE invariant that protects this filter from a projecting caller
+  // lives with the other two doors' invariants, in
+  // `tests/setpaidstatus-membership-guard.test.ts` — one home for the rule that
+  // all three readers share a discriminator.
 });
 
 /**

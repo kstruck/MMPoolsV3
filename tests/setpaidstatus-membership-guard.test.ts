@@ -86,21 +86,85 @@ describe('setPaidStatus claim branch — membership guard wiring', () => {
 
     it('uses the SHARED canonical discriminator, not a local copy', () => {
         // #344 shuts the door on NEW forgeries; #338's resolveReminderTargets
-        // filter stops OLD ones being emailed (§4a). They only work as a pair,
-        // so the two must agree on what "canonical" means — a second inlined
-        // `joinedAt !== undefined` in either file is how that drifts.
+        // filter stops OLD ones being emailed (§4a); the client roster builder
+        // stops them being COUNTED and RENDERED (§4b). They only work as a set,
+        // so all three must agree on what "canonical" means — a second inlined
+        // `joinedAt !== undefined` in any of them is how that drifts.
         const lib = readFileSync(
             resolve(__dirname, '..', 'functions/src/lib/memberRecord.ts'), 'utf8',
         );
         const targets = readFileSync(
             resolve(__dirname, '..', 'functions/src/lib/reminderTargets.ts'), 'utf8',
         );
+        const roster = readFileSync(
+            resolve(__dirname, '..', 'src/utils/poolRoster.ts'), 'utf8',
+        );
 
         expect(lib).toContain('isCanonicalMemberRecord(');
         expect(targets).toContain('isCanonicalMemberRecord(');
-        // Both must import it from shared/, not define their own.
+        expect(roster).toContain('isCanonicalMemberRecord(');
+        // All three must import it from shared/, not define their own.
         expect(lib).not.toMatch(/export function isCanonicalMemberRecord/);
         expect(targets).not.toMatch(/export function isCanonicalMemberRecord/);
+        expect(roster).not.toMatch(/export function isCanonicalMemberRecord/);
+    });
+
+    it('the client roster builder applies the filter to EVERY member reader', () => {
+        // `buildPoolRoster` (the rendered roster), `rosterUids` (memberCount) and
+        // `rosterPotStats` (the dues totals) each walk the members collection.
+        // Filtering only the first would leave a forged record out of the list
+        // while still counting it — the head count and the roster disagreeing is
+        // the exact defect this module's `rosterUids` comment already describes.
+        //
+        // Asserted as "no reader iterates raw members" rather than by counting
+        // `canonicalMembers(` call sites, which a future reader could satisfy by
+        // calling it and discarding the result.
+        const roster = readFileSync(
+            resolve(__dirname, '..', 'src/utils/poolRoster.ts'), 'utf8',
+        );
+        const code = roster
+            .split(/\r?\n/)
+            .filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*'))
+            .join('\n');
+
+        // Anchor: the helper must exist under this name, or every assertion
+        // below is checking the absence of something that was merely renamed.
+        expect(code).toMatch(/const canonicalMembers = /);
+        // The three readers, by the shape each used before this change.
+        expect(code).not.toMatch(/for \(const m of members \|\| \[\]\)/);
+        expect(code).not.toMatch(/const memberList = members \|\| \[\]/);
+        expect(code).toMatch(/for \(const m of canonicalMembers\(members\)\)[\s\S]*for \(const m of canonicalMembers\(members\)\)/);
+        expect(code).toMatch(/const memberList = canonicalMembers\(members\)/);
+    });
+
+    it('the client member loader delivers whole documents, so joinedAt reaches the filter', () => {
+        // ⚠️ The weakest link in the client half, and it is not hypothetical.
+        //
+        // `RosterInputs.members` is `any[]`, so nothing in the type system stops
+        // a caller PROJECTING member documents to a narrower shape. That would
+        // strip `joinedAt`, make every genuine member look forged, and empty the
+        // roster outright — precisely the regression codex found on #338, where
+        // `sendManualReminder` projected snapshots to `{ id, userName }` one
+        // commit AFTER the filter landed, while all 79 unit tests stayed green
+        // because they called the pure function directly.
+        //
+        // #338 could close that with a required parameter type. `any[]` swallows
+        // any type written here, so the LOADER is pinned instead.
+        const db = readFileSync(
+            resolve(__dirname, '..', 'src/services/dbService.ts'), 'utf8',
+        );
+        const start = db.indexOf('subscribeToPoolMembers:');
+        // Anchor first: a rename must fail here, not silently pass an assertion
+        // scoped to an empty slice.
+        expect(start).toBeGreaterThan(-1);
+        const body = db.slice(start, db.indexOf('},', start));
+        // Comments stripped — one mentioning `...d.data()` must not satisfy an
+        // assertion about what the code does.
+        const bodyCode = body
+            .split(/\r?\n/)
+            .filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*'))
+            .join('\n');
+        expect(bodyCode).toContain('...d.data()');
     });
 
     it('has NO third evidence branch — square ownership stays out', () => {

@@ -26,6 +26,8 @@
 // `shared/memberRecord.ts` `memberDues`, and no caller of this file is a
 // SQUARES surface. Keep it that way rather than growing a second unit model.
 
+import { isCanonicalMemberRecord } from '@shared/memberRecord';
+
 export interface RosterInputs {
   /** The pool doc. Only `participantIds`, `ownerId` and `settings` are read. */
   pool: any;
@@ -79,6 +81,44 @@ export interface RosterRow {
 const uidOf = (entry: any): string => entry?.ownerUid || entry?.id;
 
 /**
+ * Member Records this file will treat as roster truth — CANONICAL ones only.
+ *
+ * Until 2026-08-02 `setPaidStatus`'s claim branch would CREATE
+ * `pools/{anyPool}/members/{caller}` for any authenticated caller (#344), and a
+ * Member Record is roster truth. #344 shut that door and #338 stopped a forged
+ * record being a REMINDER target, but neither deletes the documents already
+ * minted — and this file still put every one of them on the commissioner's
+ * roster list, in `memberCount`, and in the dues totals. A stranger who
+ * self-added before #344 landed therefore still appeared on that pool's roster.
+ *
+ * The discriminator is deliberately NOT redefined here. `isCanonicalMemberRecord`
+ * in `shared/memberRecord.ts` is the same predicate `isProvableMember` uses to
+ * admit a self-report and `resolveReminderTargets` uses to admit a reminder
+ * target; a third copy is how the three doors would drift apart, and two of them
+ * exist because the first fix left the other open.
+ *
+ * ⚠️ This filter is only as good as the data reaching it. `subscribeToPoolMembers`
+ * spreads the whole document (`{ uid: d.id, ...d.data() }`), so `joinedAt`
+ * survives to here. A caller that PROJECTS members to a narrower shape would
+ * strip the discriminator and make every genuine member look forged — the exact
+ * regression codex found on #338's `sendManualReminder`. `RosterInputs.members`
+ * is `any[]`, so the type system cannot catch that; a source invariant in
+ * `poolRoster.test.ts` does.
+ *
+ * A legitimate member is never lost to this. Every server path that creates a
+ * record stamps `joinedAt` (`planMembershipWrite`), and both writers that create
+ * one also add the uid to `participantIds` (`reconcileMembership`) or leave an
+ * entry — so even an un-stamped genuine record still yields a roster row from
+ * those sources, charged at the pool fee. A forged record has neither, which is
+ * precisely why it disappears and a real member does not.
+ */
+const canonicalMembers = (members: any[] | undefined): any[] =>
+  // Called explicitly rather than point-free: `filter` passes (value, index,
+  // array), so a point-free predicate silently receives two extra arguments and
+  // any future signature change lands on them unnoticed.
+  (members || []).filter((m) => isCanonicalMemberRecord(m));
+
+/**
  * Every uid that counts as a person on this pool, from all three evidence
  * sources. 'guest' is the unclaimed-square sentinel, never a person.
  *
@@ -97,7 +137,7 @@ function rosterUids({ pool, members, entries }: RosterInputs): Set<string> {
     if (uid && uid !== 'guest') uids.add(uid);
   };
   for (const uid of (pool?.participantIds || [])) add(uid);
-  for (const m of members || []) add(m?.uid);
+  for (const m of canonicalMembers(members)) add(m?.uid);
   for (const e of entries || []) add(uidOf(e));
   return uids;
 }
@@ -125,7 +165,7 @@ export function buildPoolRoster({ pool, members, entries }: RosterInputs): Roste
     byUid.set(uid, { ...(byUid.get(uid) || { uid }), ...patch, uid });
   };
   for (const uid of (pool?.participantIds || [])) put(uid, {});
-  for (const m of members || []) {
+  for (const m of canonicalMembers(members)) {
     put(m.uid, {
       userName: m.userName,
       memberPaid: m.paidStatus,
@@ -312,7 +352,7 @@ export function memberOutstanding(row: RosterRow, rates: DuesRates): number {
  */
 export function rosterPotStats({ pool, members, entries }: RosterInputs): PotStats {
   const { entryFee, rebuyCost } = duesRates(pool);
-  const memberList = members || [];
+  const memberList = canonicalMembers(members);
   const entryList = entries || [];
 
   // Same set buildPoolRoster produces rows from, so the head count and the roster
