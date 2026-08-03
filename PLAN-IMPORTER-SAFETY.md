@@ -80,24 +80,14 @@ Sub-findings folded into phases below:
   Firestore batches cap at 500 operations. A full regular-season slate is ~272
   docs today, so it fits, but nothing guards the margin.
 
-### Sweep — every DELETE path against `nfl_games` (2026-08-03)
+### Sweeps
 
-Ran `grep -rn "collection('nfl_games')" functions/src --include="*.ts"`
-(30 non-test sites; most are reads) and cross-checked each hit's file for
-`.delete(`. Deleters, exhaustively:
-
-| Site | Operation | In scope? |
-|---|---|---|
-| `nflSchedule.ts:364-375` (`importNFLSeason` cleanup) | batch **delete**, season-wide | **YES — the defect** |
-| `simHarness.ts:433-436` | batch delete, but the query is pinned to `simSeason(runId)` — synthetic sim seasons only | No — cannot match a real season |
-
-Writers (all `merge: true` or sim-scoped, no deletes): the importer's own
-write (`nflSchedule.ts:396-400`), the sync/deep-sweep path
-(`nflSchedule.ts:662-729`, reviewed under PLAN-NFL7 / realtime-scoring),
-`replayFeedSnapshot` (`feedReplay.ts:176`), `simHarness.ts:287` (sim ids),
-and `migrations/backfillProfileData.ts:73`.
-
-The importer is the only deleter that can touch a REAL season's documents.
+The deterministic enumerations feeding this plan (every `nfl_games` delete
+and write site, every `spread.locked` writer, every pick-reference reader)
+live in `PLAN-IMPORTER-SAFETY-SWEEPS.md` (moved to the standalone artifact
+per codex r2 #3). Headline result: **the importer is the only deleter that
+can touch a REAL season's documents**, and it is the only `nfl_games` writer
+with no locked-spread preservation.
 
 ## Approach
 
@@ -120,6 +110,14 @@ Phase order is safety-first: gate the destructive path before improving it.
     The schema note that optional-field defaults are load-bearing
     (`schemas/nflSchedule.ts:17-20`) stays true: `dryRun` is added as another
     optional field whose absence means the SAFE value.
+0.2 **Kill-switch config gate: `system/config.nflImport.enabled`.** A live run
+    (`dryRun: false`) refuses unless the flag reads exactly `true`; a config
+    read FAILURE also refuses (fail-closed, the `configReadFailedVerdict`
+    shape the scheduled jobs already use — `nflSchedule.ts:1005-1015`). Dry
+    runs are permitted regardless — they mutate nothing. Added per codex r2
+    #2: rule 1 requires both layers, and the flag is the global halt lever an
+    incident responder can flip without racing a SUPER_ADMIN's click
+    (see Key decisions).
 
 ### Phase 1 — Scope the delete to what was actually fetched (Critical, medium)
 
@@ -141,10 +139,22 @@ Phase order is safety-first: gate the destructive path before improving it.
     arrived — `parseScoreboardResponse` also returns `[]` for malformed
     payloads and when the PR #219 season guard filters every event (the
     wrong-season fallback shape documented at `nflSchedule.ts:443-458`).
-    Deletion for a week therefore requires: fetch succeeded AND the parsed
-    set is non-empty (broadened per codex r1 #2). A genuinely game-less week
-    ("delete everything, feed says empty") is never inferred — it needs an
-    explicit per-call operator flag, and a dry run first like everything else.
+    Deletion for a week therefore requires ALL of (broadened per codex r1 #2
+    and r2 #1 — a non-empty parse is still not a usable slate, because the
+    parser drops malformed events individually and one surviving event would
+    pass a non-empty check while the subtraction deletes every other stored
+    game as "stale"):
+    - the fetch succeeded (non-null raw);
+    - the parsed set is non-empty;
+    - **fail-closed slate completeness**: every event in the raw payload
+      parsed successfully (parsed count == raw event count), so a partially
+      malformed feed can never present a subset as the whole week;
+    - the would-delete set is small (bounded by the 1.3 cap) — a delete list
+      larger than a handful of ids on one week is a mis-scope signal, not a
+      cleanup.
+    A genuinely game-less week ("delete everything, feed says empty") is
+    never inferred — it needs an explicit per-call operator flag, and a dry
+    run first like everything else.
 1.3 **Cap TOTAL mutations per run, and chunk deletes at ≤400 ops per batch.**
     The chunking removes the unguarded 500-op ceiling; the run-level cap
     (deletes + writes, checked BEFORE the first live mutation, failing with an
@@ -189,12 +199,15 @@ Phase order is safety-first: gate the destructive path before improving it.
 
 ## Key decisions & tradeoffs
 
-- **Dry-run-by-default over a `system/config` kill-switch.** The importer is a
-  manual SUPER_ADMIN callable, not a scheduled job — there is a human present
-  on every invocation, so the explicit `dryRun:false` handshake is the right
-  gate and a config document would be a second thing to forget. The
-  `autoClosePools` config gate exists because nobody is present when a
-  schedule fires; that rationale does not transfer.
+- **Dry-run-by-default AND a `system/config` kill-switch — both layers.** The
+  first draft rejected the config gate on "a human is present" grounds; codex
+  r2 #2 is right that rule 1 (`mmp-change-control`) requires both, and the
+  config gate is what lets an incident responder halt live imports globally
+  without racing a SUPER_ADMIN's click. Phase 0 therefore also adds
+  `system/config.nflImport.enabled` — default OFF/absent = live runs refused
+  (dry runs still permitted, they mutate nothing). Kevin flips it once when
+  the implementing PR deploys; the flag is a halt lever, not a per-run
+  ceremony.
 - **Per-week scoped delete over delete-nothing.** The cleanup exists for a
   real reason (purging orphaned ids when ESPN re-keys an event — the doc
   comment at `nflSchedule.ts:362` and the season-lookup-key note in

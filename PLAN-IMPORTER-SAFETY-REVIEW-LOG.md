@@ -43,3 +43,34 @@ acceptance). Summary:
 
 All six accepted and folded into the plan text (each item cites its finding).
 No rejections this round.
+
+## Round 2 — codex exec review --base origin/main
+
+VERDICT: REVISE. 3 findings (2 P1, 1 P2), **all 3 accepted**. Summary:
+
+1. (Critical) **A non-empty parse is still not a usable slate** —
+   `parseScoreboardResponse` drops malformed events INDIVIDUALLY, so one
+   surviving event passes 1.2's non-empty check while the fetched-id
+   subtraction deletes every other stored game as "stale". Fix: 1.2 now
+   requires fail-closed completeness (parsed count == raw event count) plus
+   the 1.3 bound on the would-delete set.
+2. (Critical) **The config kill-switch was wrongly rejected** — the draft
+   substituted the `dryRun:false` handshake for rule 1's required runtime
+   gate, leaving no global halt lever during an incident. Fix: new 0.2 —
+   `system/config.nflImport.enabled`, default OFF/absent = live runs refused,
+   config read failure also refuses; Key decisions rewritten from "rejected"
+   to "both layers".
+3. (High) **The sweep belonged in the standalone artifact** — the
+   change-control gate is plan → review log → sweep, and the inline two-row
+   table was not the enumeration the gate asks for. Fix:
+   `PLAN-IMPORTER-SAFETY-SWEEPS.md` added with three sweeps (all 30
+   `nfl_games` sites classified; all `spread.locked` writers; all
+   `picks[` readers keyed by what they index on), each ending in the result
+   it feeds; the plan's inline section is now a pointer.
+
+### Claude's response
+
+All three accepted. Sweep 3 sharpened plan item 1.6 beyond what the finding
+asked: Survivor/Margin picks key on week + team id, so only Pick'em entries
+are strandable by a game-id re-key — the refusal guard needs to consider
+exactly those.
