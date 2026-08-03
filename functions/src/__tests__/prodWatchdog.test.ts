@@ -36,7 +36,12 @@ function cmp(a: unknown, b: unknown): number {
     return r !== 0 ? r : value(a) - value(b);
 }
 
-function fakeQuery(rows: Row[], filters: Array<(r: Row) => boolean> = [], cap = Infinity) {
+function fakeQuery(
+    rows: Row[],
+    filters: Array<(r: Row) => boolean> = [],
+    cap = Infinity,
+    order: { field: string; dir: "asc" | "desc" } | null = null
+) {
     const self = {
         where(field: string, op: ">=" | "<=", operand: unknown) {
             const next = (r: Row) => {
@@ -44,15 +49,24 @@ function fakeQuery(rows: Row[], filters: Array<(r: Row) => boolean> = [], cap = 
                 if (v === undefined) return false;
                 return op === ">=" ? cmp(v, operand) >= 0 : cmp(v, operand) <= 0;
             };
-            return fakeQuery(rows, [...filters, next], cap);
+            return fakeQuery(rows, [...filters, next], cap, order);
+        },
+        orderBy(field: string, dir: "asc" | "desc" = "asc") {
+            return fakeQuery(rows, filters, cap, { field, dir });
         },
         limit(n: number) {
-            return fakeQuery(rows, filters, n);
+            return fakeQuery(rows, filters, n, order);
         },
         async get() {
-            // Implicit order of a range query is by the ranged field ascending;
-            // the helper documents that it relies on this for truncation.
-            const matched = rows.filter((r) => filters.every((f) => f(r))).slice(0, cap);
+            // ORDER IS APPLIED BEFORE LIMIT, as Firestore does — that sequencing is
+            // the whole point of the descending order on the query: a limit over the
+            // default ascending order would keep the STALEST rows.
+            const ordered = rows.filter((r) => filters.every((f) => f(r)));
+            if (order) {
+                const sign = order.dir === "desc" ? -1 : 1;
+                ordered.sort((a, b) => sign * cmp(a.data[order.field], b.data[order.field]));
+            }
+            const matched = ordered.slice(0, cap);
             return {
                 size: matched.length,
                 docs: matched.map((r) => ({
@@ -73,6 +87,7 @@ function fakeDb(collections: Record<string, Row[]>, throws: string[] = []) {
             if (throws.includes(name)) {
                 const boom = {
                     where: () => boom,
+                    orderBy: () => boom,
                     limit: () => boom,
                     get: async () => {
                         throw new Error(`${name} is down`);
@@ -167,6 +182,23 @@ describe("computeWatchdogReport — the cap cuts by time, not by storage type or
         );
         expect(report.signals.newUsers.truncated).toBe(true);
         expect(report.events[0].label).toContain("Freshest");
+    });
+
+    it("keeps the NEWEST rows when a single leg overflows its read budget", async () => {
+        // The read budget is spent before any in-memory sort can run, so the query
+        // itself must order descending. Firestore's default ascending order would
+        // hand back the stalest rows in the window and the report would be a day
+        // out of date on exactly the busy day it matters.
+        const rows: Row[] = Array.from({ length: WATCHDOG_SIGNAL_CAP + 20 }, (_, i) => ({
+            id: `u${i}`,
+            // Oldest first in insertion order — index 0 is 23h old, the last is newest.
+            data: { name: `U${i}`, createdAt: NOW - (23 - i * 0.1) * HOUR },
+        }));
+        const report = await computeWatchdogReport(fakeDb({ users: rows }), NOW);
+        expect(report.signals.newUsers.truncated).toBe(true);
+        expect(report.events[0].label).toContain(`U${rows.length - 1}`);
+        // The oldest row must NOT have survived the cut.
+        expect(report.events.some((e) => e.label.includes("U0 "))).toBe(false);
     });
 
     it("a burst of sim pools cannot hide a real pool behind the cap", async () => {

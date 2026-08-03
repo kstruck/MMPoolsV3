@@ -142,6 +142,7 @@ export const ProductionWatchdogCard: React.FC = () => {
 
   const s = report?.signals;
   const revenue = s?.charges.revenue;
+  const deadSignals = s ? Object.values(s).filter((sig) => sig.count === undefined).length : 0;
 
   return (
     <div className="bg-card border border-line rounded-3xl p-6 shadow-card relative overflow-hidden transition-all duration-150 hover:shadow-card-hover xl:col-span-2">
@@ -189,8 +190,15 @@ export const ProductionWatchdogCard: React.FC = () => {
           </div>
 
           {report.events.length === 0 ? (
+            // "Nothing happened" is a CLAIM, and it is only ours to make when every
+            // signal was actually readable. With a dead signal the honest statement
+            // is that the readable ones were quiet and the rest is unknown —
+            // otherwise the card hands the operator an all-clear over a collection
+            // it never managed to read, while a tile right above says "unavailable".
             <div className="text-[11px] text-muted font-body">
-              Nothing happened in the last {report.windowHours} hours.
+              {deadSignals === 0
+                ? `Nothing happened in the last ${report.windowHours} hours.`
+                : `No activity in the readable signals over the last ${report.windowHours} hours — ${deadSignals} signal${deadSignals > 1 ? 's' : ''} could not be read, so activity there is unknown.`}
             </div>
           ) : (
             <div className="space-y-1.5">

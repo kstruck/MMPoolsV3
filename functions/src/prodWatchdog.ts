@@ -129,11 +129,17 @@ export function toMillis(v: unknown): number | null {
  * row in every "last 24h" report until its timestamp finally arrived. It is
  * excluded now and appears in the window its stamp actually names.
  *
- * No orderBy on the QUERY (one less index assumption); the merged rows are
- * sorted newest-first in code before the cap is applied. That ordering is not
- * cosmetic: the two legs arrive numeric-first, so slicing the raw union would
- * cut by STORAGE TYPE — 50 numeric signups would discard every Timestamp-backed
- * one no matter how recent it was.
+ * NEWEST-FIRST IN BOTH PLACES, and it has to be both. Each leg orders by the
+ * ranged field DESCENDING so that a leg with more rows than its budget drops the
+ * OLDEST — a limit applied to Firestore's default ascending order would keep the
+ * stalest rows on exactly the busy day the card matters, and no amount of
+ * in-memory sorting afterwards can recover a row that was never read. The merged
+ * union is then re-sorted in code because the two legs arrive numeric-first, so
+ * slicing the raw union would cut by STORAGE TYPE — 50 numeric signups would
+ * discard every Timestamp-backed one no matter how recent it was.
+ *
+ * orderBy on the SAME field as the range needs no composite index: Firestore
+ * maintains ascending AND descending single-field indexes automatically.
  *
  * `keep` runs BEFORE the cap, against a larger raw budget, so rows that will be
  * discarded (test pools, non-client log rows) cannot crowd out reportable ones.
@@ -151,10 +157,16 @@ async function windowDocs(
 ): Promise<{ rows: Array<{ id: string; at: number; data: admin.firestore.DocumentData }>; truncated: boolean }> {
     const rawCap = opts.rawCap ?? cap;
     const [numeric, stamped] = await Promise.all([
-        query.where(field, ">=", sinceMs).where(field, "<=", nowMs).limit(rawCap + 1).get(),
+        query
+            .where(field, ">=", sinceMs)
+            .where(field, "<=", nowMs)
+            .orderBy(field, "desc")
+            .limit(rawCap + 1)
+            .get(),
         query
             .where(field, ">=", Timestamp.fromMillis(sinceMs))
             .where(field, "<=", Timestamp.fromMillis(nowMs))
+            .orderBy(field, "desc")
             .limit(rawCap + 1)
             .get(),
     ]);
