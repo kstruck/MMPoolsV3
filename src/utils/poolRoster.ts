@@ -102,8 +102,9 @@ const uidOf = (entry: any): string => entry?.ownerUid || entry?.id;
  * survives to here. A caller that PROJECTS members to a narrower shape would
  * strip the discriminator and make every genuine member look forged — the exact
  * regression codex found on #338's `sendManualReminder`. `RosterInputs.members`
- * is `any[]`, so the type system cannot catch that; a source invariant in
- * `poolRoster.test.ts` does.
+ * is `any[]`, so the type system cannot catch that; the source invariant in
+ * `tests/setpaidstatus-membership-guard.test.ts` does — it sits with the other
+ * two doors' invariants rather than here, so the three-reader rule has one home.
  *
  * A legitimate member is never lost to this. Every server path that creates a
  * record stamps `joinedAt` (`planMembershipWrite`), and both writers that create
