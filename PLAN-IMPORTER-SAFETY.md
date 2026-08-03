@@ -194,7 +194,12 @@ Phase order is safety-first: gate the destructive path before improving it.
       belonging to a different slate. A `purgeStale` week additionally
       requires every eligible event to carry PRESENT and exactly-matching
       `season` + `seasonType` metadata — fail-closed for destruction,
-      tolerant for upserts; This detects PARSER loss only — it cannot detect a
+      tolerant for upserts. It also requires every eligible event to carry
+      a PRESENT and UNIQUE source id (codex r8 #1): the parser constructs
+      `espn_${event.id}` with no uniqueness or presence validation
+      (`nflSchedule.ts:276`), so a missing or duplicated `event.id`
+      collapses the fetched-id set without failing the parsed-count check —
+      and the stale-id subtraction would then purge real games; This detects PARSER loss only — it cannot detect a
       syntactically valid feed the upstream truncated (codex r3 #1), which
       is why stale deletion is never automatic (1.1's `purgeStale` flag);
     - **week identity**: every parsed game's kickoff falls inside the
@@ -271,7 +276,13 @@ Phase order is safety-first: gate the destructive path before improving it.
       leaves a gap where a pick commits after the scan saw nothing);
     - **an expiring, owner-tokened lease** — a crash after acquisition must
       not block the slate forever; expired leases read as inactive, and
-      only the owning run clears its own lease (codex r7 #2);
+      only the owning run clears its own lease (codex r7 #2). Expiry cuts
+      both ways (codex r8 #2): a purge that OUTLIVES its lease must not
+      commit — picks resumed the moment the lease read as inactive — so the
+      purge transaction re-reads its own lease INSIDE the delete
+      transaction and aborts if it is expired or no longer owned. Pick
+      windows and purge windows are thereby disjoint: an unexpired lease
+      refuses picks, an expired lease refuses the purge;
     - **checked INSIDE every pick-writing transaction, alongside
       revalidation that the picked game ids still exist** (codex r6 #2):
       `submitNFLPicksInternal` loads the slate BEFORE opening its entry
@@ -287,16 +298,33 @@ Phase order is safety-first: gate the destructive path before improving it.
     the in-flight-before-gate interleaving on BOTH write paths. Only Pick'em entries key picks by
     game id (see Sweep 3) — Survivor/Margin are structurally immune. No
     automatic pick migration in this plan.
-1.7 **A score-bearing import enqueues rescoring the way the sync path does.**
+1.7 **A score-bearing import enqueues rescoring the way the sync path does —
+    and refuses what the queue cannot reconcile.**
     The importer writes ESPN statuses and scores, so re-importing an
     already-scored week can correct a final or flip a game terminal — and
     because the importer overwrites the document, the NEXT sync sees no
     transition and pool standings stay stale (codex r4 #3). The sync path
-    already solves this: it diffs prior state and rides the rescore handoff
-    IN the same batch as the game writes
+    already solves this for same-id changes: it diffs prior state and rides
+    the rescore handoff IN the same batch as the game writes
     (`nflSchedule.ts:776-790`, `lib/rescoreQueue.ts`). The importer must
     reuse that same prior-state comparison and enqueue mechanism for any
     write that changes a score-relevant field on a previously-stored game.
+    Two holes in plain reuse, both closed here (codex r8 #3 and #4):
+    - `detectStatCorrections` and `isTerminalTransition` walk fresh SAME-ID
+      games (`lib/feedSnapshot.ts:87`, `nflSchedule.ts:77`), so a purge
+      that REMOVES a previously-final game, or re-keys it to a nonterminal
+      replacement, produces no event and leaves Margin/Survivor standings
+      resting on a deleted result. A `purgeStale` run must compute its own
+      removal/re-key diff and enqueue the reconciliation event in the same
+      transaction as the delete.
+    - Enqueueing is not reconciliation for Survivor: `survivorAllowedForGroup`
+      (`lib/rescoreQueue.ts:255`) defers correction events once the week —
+      or a later week — is scored/published, so the queue would hold the
+      event forever while standings stay wrong. A live import that would
+      change score-relevant fields on a week already scored for an affected
+      Survivor pool REFUSES that week; reset-and-replay is explicitly out
+      of scope (see Out of scope) and its absence is a refusal, not a
+      deferral.
     (The queue's CONSUMER staying armed or not remains Kevin's — enqueueing
     is inert until the rescore path is armed, same as for the sync path.)
 1.8 **Every new control rides through the strict schema.**
@@ -378,3 +406,7 @@ Phase order is safety-first: gate the destructive path before improving it.
 - **Backups/PITR** — `PLAN-BACKUPS-PHASE3.md`. Backups would soften defect 2
   but do not replace fixing it.
 - **`replayFeedSnapshot`** — merge-only, separate review (A5).
+- **Survivor reset-and-replay** — repairing a scored Survivor week whose
+  underlying games changed is a standings-rebuild capability that does not
+  exist; 1.7 REFUSES such imports rather than pretending the queue handles
+  them. If it is ever needed, it is its own plan.

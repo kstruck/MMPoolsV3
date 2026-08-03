@@ -248,3 +248,37 @@ All four accepted. r7 attacked the seams BETWEEN the safety mechanisms
 (UI ↔ default, gate ↔ scan, gate ↔ second write path, upsert ↔ lock rule)
 rather than the mechanisms themselves — the expected shape when the core is
 converging.
+
+## Round 8 — codex exec review --base origin/main
+
+VERDICT: REVISE. 4 findings (4 P1), **all 4 accepted** (id construction,
+`survivorAllowedForGroup`, and the same-id-only diff helpers verified against
+source). Summary:
+
+1. (Critical) **Missing/duplicate source ids collapse the fetched-id set** —
+   the parser builds `espn_${event.id}` with no presence or uniqueness
+   validation (`nflSchedule.ts:276`), so the parsed-count check passes while
+   the stale subtraction purges real games. Fix: 1.2 — a purge requires a
+   present, unique source id on every eligible event.
+2. (Critical) **A purge outliving its lease commits into resumed picks** —
+   owner-only clearing does not fence an in-flight owner. Fix: 1.6 — the
+   purge transaction re-reads its own lease INSIDE the delete transaction
+   and aborts if expired or no longer owned; pick and purge windows become
+   disjoint.
+3. (Critical) **Removal/re-key is invisible to the reused sync diff** —
+   `detectStatCorrections` / `isTerminalTransition` walk fresh SAME-ID games
+   (`lib/feedSnapshot.ts:87`, `nflSchedule.ts:77`); purging a final game or
+   re-keying it to a nonterminal replacement produces no rescore event. Fix:
+   1.7 — a purge computes its own removal/re-key diff and enqueues the
+   reconciliation event in the same transaction as the delete.
+4. (Critical) **Survivor's queue defers scored-week corrections forever** —
+   `survivorAllowedForGroup` (`lib/rescoreQueue.ts:255`) rejects correction
+   events once the week or a later week is scored/published, so enqueueing
+   is not reconciliation there. Fix: 1.7 — a live import that would change
+   score-relevant fields on a week already scored for an affected Survivor
+   pool REFUSES that week; Survivor reset-and-replay added to Out of scope
+   as its own future plan.
+
+### Claude's response
+
+All four accepted; no rejections.
