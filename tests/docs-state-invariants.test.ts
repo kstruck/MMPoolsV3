@@ -531,6 +531,37 @@ function headingLevel(line: string): number {
   return s.length - s.replace(/^#+/, '').length;
 }
 
+/**
+ * The date a heading's STATE CLAIM carries — the first date at or after the
+ * state word, falling back to the first date in the heading when the state word
+ * trails it ("## 2026-08-01 live state").
+ *
+ * ⚠️ NEITHER `min` NOR `max` OVER THE WHOLE HEADING WORKS, and both were tried.
+ *
+ *   - `max` (the first version) is defeated by an unrelated LATER date in the
+ *     heading: `## State as of 2026-08-01 — 2026-08-13 slate` selects the slate
+ *     date, so a body line saying `deployed 2026-08-02` is not newer than it and
+ *     the stale as-of claim passes silently. **codex found this** — the guard
+ *     looking like it guards while not, which is the class this file exists for.
+ *   - `min` is defeated the other way: `## STOP POINT 2026-08-02 (overnight of
+ *     2026-08-01)` is a claim about 08-02, and taking the parenthetical makes the
+ *     heading fire on its own content.
+ *
+ * Anchoring to the state word resolves both, and it is not the proximity
+ * guessing the deploy-SHA guard above rejects: that rejection is about which of
+ * several MENTIONS a nearby keyword binds to, with no rule available. Here the
+ * question is well-posed — a state claim is `<state word> … <its date>` — and
+ * the answer is positional and exact rather than a window.
+ */
+export function headingClaimDate(heading: string): string | null {
+  const state = HEADING_STATE.exec(heading);
+  const all = heading.match(ANY_DATE);
+  if (!all) return null;
+  if (!state) return all[0];
+  const after = heading.slice(state.index).match(ANY_DATE);
+  return after ? after[0] : all[0];
+}
+
 export interface StaleStateHeading {
   line: number;
   heading: string;
@@ -557,12 +588,8 @@ export function staleStateHeadings(text: string): StaleStateHeading[] {
     if (HISTORICAL.test(heading)) continue;
     if (STATE_HEADING_EXEMPT.test(heading)) continue;
 
-    const headingDates = heading.match(ANY_DATE);
-    if (!headingDates) continue;
-    // The NEWEST date in the heading: "2026-08-02 (overnight of 2026-08-01)"
-    // is a claim about 08-02, and taking the older one would fire on its own
-    // parenthetical.
-    const headingDate = headingDates.slice().sort().pop()!;
+    const headingDate = headingClaimDate(heading);
+    if (!headingDate) continue;
 
     for (let j = i + 1; j < lines.length; j++) {
       const nextLevel = headingLevel(lines[j]);
@@ -714,7 +741,7 @@ describe('a dated state heading is not older than its own section', () => {
       expect(staleStateHeadings(doc)).toHaveLength(1);
     });
 
-    it('reads the NEWEST date in the heading, not the first', () => {
+    it('reads the date the STATE CLAIM carries, not the oldest in the heading', () => {
       // "2026-08-02 (overnight of 2026-08-01)" is a claim about 08-02; taking
       // the parenthetical would make the heading fire on itself.
       const doc = [
@@ -722,6 +749,38 @@ describe('a dated state heading is not older than its own section', () => {
         'Deployed 2026-08-02.',
       ].join(NL);
       expect(staleStateHeadings(doc)).toEqual([]);
+    });
+
+    it('is NOT fooled by an unrelated future date in the heading (codex r1 P2)', () => {
+      // `max` over the heading selected the slate date, so nothing in the
+      // section could ever be "newer" and the stale as-of claim passed.
+      const doc = [
+        '## State as of 2026-08-01 — 2026-08-13 slate',
+        'Frontend deployed 2026-08-02.',
+      ].join(NL);
+      const hits = staleStateHeadings(doc);
+      expect(hits).toHaveLength(1);
+      expect(hits[0]).toMatchObject({ headingDate: '2026-08-01', contentDate: '2026-08-02' });
+    });
+
+    it('falls back to the first date when the state word TRAILS it', () => {
+      const doc = ['## 2026-08-01 live state', 'Deployed 2026-08-02.'].join(NL);
+      expect(staleStateHeadings(doc)).toHaveLength(1);
+    });
+
+    describe('headingClaimDate picks the claim date, not an extreme', () => {
+      it('takes the date after the state word', () => {
+        expect(headingClaimDate('## State as of 2026-08-01 — 2026-08-13 slate')).toBe('2026-08-01');
+      });
+      it('ignores a parenthetical older date that follows the claim date', () => {
+        expect(headingClaimDate('## STOP POINT 2026-08-02 (overnight of 2026-08-01)')).toBe('2026-08-02');
+      });
+      it('falls back to the first date when the state word comes after it', () => {
+        expect(headingClaimDate('## 2026-08-01 live state')).toBe('2026-08-01');
+      });
+      it('returns null when the heading carries no date at all', () => {
+        expect(headingClaimDate('## Live state')).toBeNull();
+      });
     });
 
     it('sees a heading inside a blockquote, which is how HANDOFF writes its box', () => {
