@@ -447,6 +447,460 @@ describe('the scanner sees what the docs actually contain', () => {
 });
 
 /**
+ * A dated heading that ASSERTS A STATE must not sit above content that has
+ * moved past it.
+ *
+ * THE INSTANCE. `PICKUP §2` read *"Live state (deploy state verified
+ * 2026-08-01)"* above content that had just been updated to 2026-08-02 — found
+ * by codex, in the very PR that was explaining why the obvious test for this
+ * does not work. The heading is what a hurried reader takes as the answer.
+ *
+ * ⚠️ WHY THE OBVIOUS RULE IS NOT THIS RULE. *"A heading's date must not be
+ * older than the newest date in its section"* was measured against these docs
+ * (MORNING-2026-08-02-OVERNIGHT §3) and **cries wolf on three real headings** —
+ * `KNOWN OPEN, found while verifying this deploy (2026-07-28)`,
+ * `Pool Manager surface defects — Kevin's walkthrough 2026-07-29`, and
+ * `NEW, found 2026-07-30 while fixing the ledger`. All three record WHEN
+ * SOMETHING WAS FOUND, and a later note inside is perfectly legitimate.
+ *
+ * Re-measured while building this, it also fires on `PICKUP §0` because that
+ * section mentions **2026-08-13**, the first 16-game slate — a FUTURE deadline,
+ * not a record of anything that happened. That is a second, independent source
+ * of false alarms in the naive rule.
+ *
+ * This repo has twice written down that an invariant which cries wolf gets
+ * ignored, and then the real one is missed. So the rule is narrowed on BOTH
+ * sides, and each narrowing is what kills one class of false positive:
+ *
+ *   1. the HEADING must assert a state, from a CLOSED vocabulary. Headings that
+ *      merely date a discovery carry no state word and are exempt — this is
+ *      what kills the three above;
+ *   2. the CONTENT date must sit on a line that ALSO carries a state word, so
+ *      the two are talking about the same kind of fact. A future deadline, a
+ *      meeting date or a game date is not a state record — this is what kills
+ *      PICKUP §0.
+ *
+ * MEASURED, not asserted: this fires **zero** times on the corpus as it stands,
+ * and fires exactly once — on the right heading, citing the right line — when
+ * run against `PICKUP-PRESEASON-PILOT.md` as it was at `3cfd968^`, the real
+ * defect above. Both facts are pinned by tests below.
+ *
+ * KNOWN LIMIT, chosen: this compares DATES, not claims. A heading saying
+ * "queue EMPTY" above content listing owed work still passes, for the same
+ * reason the SHA guard does not compare queue prose — free text has no
+ * canonical form and a fuzzy matcher is how you get the cry-wolf failure this
+ * whole design is avoiding.
+ */
+
+/** Heading words that assert a CURRENT state. Closed, deliberately small. */
+const HEADING_STATE =
+  /(live state|deploy state|current state|state as of|\bOWED\b|\bPENDING\b|\bBLOCKED\b|stop point)/i;
+
+/**
+ * Content words that record the same KIND of fact — a deploy/readiness state.
+ *
+ * Wider than the heading set on purpose: a heading names the topic ("Live
+ * state"), while the body reports the event ("Frontend rebuilt 2026-08-02").
+ * The real instance is caught by `rebuilt`, so this list is load-bearing rather
+ * than decorative.
+ */
+const BODY_STATE =
+  /(deployed|redeployed|rebuilt|deploy state|live state|queue|\bOWED\b|\bPENDING\b|\bBLOCKED\b)/i;
+
+/**
+ * A heading or body line that SAYS it is history is not a live claim.
+ *
+ * This is not the "magic word" pattern the deploy-SHA guard above rejects. That
+ * rejection is about which of several MENTIONS ON A LINE a nearby keyword binds
+ * to — there is no such ambiguity here, because the unit being judged is the
+ * whole line and the word is the author stating what that line is. Eleven
+ * historical `STOP POINT` headings in HANDOFF already say this in exactly these
+ * words.
+ */
+const HISTORICAL = /(historical|superseded)/i;
+
+/** Explicit escape hatch, same contract as the tags above: same line, before. */
+const STATE_HEADING_EXEMPT = /<!--\s*docs-state:ignore\s*-->/i;
+
+const ANY_DATE = /20\d\d-\d\d-\d\d/g;
+
+/** `## `, `### ` … at the start of a line, tolerating blockquote markers. */
+function headingLevel(line: string): number {
+  const s = line.replace(/^[>\s]*/, '');
+  if (!s.startsWith('#')) return 0;
+  return s.length - s.replace(/^#+/, '').length;
+}
+
+export interface StaleStateHeading {
+  line: number;
+  heading: string;
+  headingDate: string;
+  /** The newer date found in the section, and the line that carried it. */
+  contentDate: string;
+  contentLine: string;
+}
+
+/**
+ * Headings in one document that assert a dated state contradicted by their own
+ * section. Pure and text-only, so it can be pinned against fixtures.
+ */
+export function staleStateHeadings(text: string): StaleStateHeading[] {
+  const lines = text.split(/\r?\n/);
+  const out: StaleStateHeading[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const level = headingLevel(raw);
+    if (!level) continue;
+    const heading = raw.replace(/^[>\s]*/, '').trim();
+    if (!HEADING_STATE.test(heading)) continue;
+    if (HISTORICAL.test(heading)) continue;
+    if (STATE_HEADING_EXEMPT.test(heading)) continue;
+
+    const headingDates = heading.match(ANY_DATE);
+    if (!headingDates) continue;
+    // The NEWEST date in the heading: "2026-08-02 (overnight of 2026-08-01)"
+    // is a claim about 08-02, and taking the older one would fire on its own
+    // parenthetical.
+    const headingDate = headingDates.slice().sort().pop()!;
+
+    for (let j = i + 1; j < lines.length; j++) {
+      const nextLevel = headingLevel(lines[j]);
+      if (nextLevel > 0 && nextLevel <= level) break; // next sibling/parent section
+      const body = lines[j];
+      if (!BODY_STATE.test(body)) continue;
+      if (HISTORICAL.test(body)) continue;
+      for (const d of body.match(ANY_DATE) || []) {
+        if (d > headingDate) {
+          out.push({
+            line: i + 1,
+            heading,
+            headingDate,
+            contentDate: d,
+            contentLine: body.trim(),
+          });
+          j = lines.length; // one report per heading is enough to act on
+          break;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+describe('a dated state heading is not older than its own section', () => {
+  it('no operator doc carries a state heading its content has moved past', () => {
+    const offenders: string[] = [];
+    for (const file of operatorMarkdownFiles()) {
+      const rel = path.relative(REPO_ROOT, file).split(path.sep).join('/');
+      for (const h of staleStateHeadings(fs.readFileSync(file, 'utf8'))) {
+        offenders.push(
+          `${rel}:${h.line} heading says ${h.headingDate} — "${h.heading}" — but ` +
+            `its section says ${h.contentDate}: "${h.contentLine}"`,
+        );
+      }
+    }
+    expect(
+      offenders,
+      'A heading that both names a STATE and carries a date is what a hurried ' +
+        'reader takes as the answer, so it must not lag its own section. ' +
+        'REPLACE the heading date (never stack a note under it — two live-looking ' +
+        'claims and the reader takes whichever they reach first); or mark the ' +
+        'heading historical/superseded if it is a record rather than a live ' +
+        'claim; or tag it <!-- docs-state:ignore -->.\n  ' +
+        offenders.join('\n  '),
+    ).toEqual([]);
+  });
+
+  /**
+   * Fixtures, because the live docs are (correctly) clean — a guard whose only
+   * subject is a passing corpus proves nothing about whether it can fail.
+   */
+  describe('the stale-heading scanner, on fixtures', () => {
+    const NL = String.fromCharCode(10);
+
+    it('FIRES on the real defect: a live-state heading lagging its content', () => {
+      // The exact shape of PICKUP §2 at 3cfd968^.
+      const doc = [
+        '## 2. Live state (deploy state verified 2026-08-01)',
+        '',
+        '✅ **Frontend rebuilt 2026-08-02 08:38 UTC** for the `src/**` changes.',
+      ].join(NL);
+      const hits = staleStateHeadings(doc);
+      expect(hits).toHaveLength(1);
+      expect(hits[0]).toMatchObject({
+        line: 1, headingDate: '2026-08-01', contentDate: '2026-08-02',
+      });
+    });
+
+    it('does NOT fire on a heading that merely dates a DISCOVERY', () => {
+      // The three real headings the naive rule cried wolf on. No state word.
+      for (const heading of [
+        '### KNOWN OPEN, found while verifying this deploy (2026-07-28)',
+        "### Pool Manager surface defects — Kevin's walkthrough 2026-07-29",
+        '### NEW, found 2026-07-30 while fixing the ledger',
+      ]) {
+        expect(
+          staleStateHeadings([heading, '', 'Deployed 2026-08-02, all good.'].join(NL)),
+          `${heading} must not fire — it records WHEN something was found`,
+        ).toEqual([]);
+      }
+    });
+
+    it('does NOT fire on a FUTURE deadline mentioned in the section', () => {
+      // PICKUP §0: a slate date is not a record of anything that happened, and
+      // this is the second false-positive class the body vocabulary kills.
+      const doc = [
+        '## 0. State as of 2026-07-30',
+        '',
+        'The first 16-game preseason slate follows on 2026-08-13.',
+      ].join(NL);
+      expect(staleStateHeadings(doc)).toEqual([]);
+    });
+
+    it('does not fire when the newer date is on a line with no state word', () => {
+      const doc = ['## Live state 2026-08-01', '', 'Kevin replied 2026-08-02.'].join(NL);
+      expect(staleStateHeadings(doc)).toEqual([]);
+    });
+
+    it('exempts a heading that says it is historical or superseded', () => {
+      for (const heading of [
+        '## ✅ STOP POINT 2026-07-24 — #265 deployed (SUPERSEDED by the box above)',
+        '### Historical: DEPLOY STATE 2026-07-21',
+      ]) {
+        expect(staleStateHeadings([heading, '', 'Deployed 2026-08-02.'].join(NL))).toEqual([]);
+      }
+    });
+
+    it('ignores a HISTORICAL note inside a live section', () => {
+      // A history line legitimately carries a newer date than the heading it
+      // sits under; it is not the section making a stale claim.
+      const doc = [
+        '## Live state 2026-08-01',
+        '',
+        '> HISTORICAL — superseded by the 2026-08-02 rebuild.',
+      ].join(NL);
+      expect(staleStateHeadings(doc)).toEqual([]);
+    });
+
+    it('honours the explicit ignore tag', () => {
+      const doc = [
+        '## Live state 2026-08-01 <!-- docs-state:ignore -->',
+        '',
+        'Deployed 2026-08-02.',
+      ].join(NL);
+      expect(staleStateHeadings(doc)).toEqual([]);
+    });
+
+    it('stops at the next sibling heading rather than swallowing the whole file', () => {
+      // Without the level check, EVERY later section's dates would be attributed
+      // to the first state heading in the file — which is how a guard starts
+      // crying wolf on documents nobody touched.
+      const doc = [
+        '## Live state 2026-08-01',
+        'All quiet.',
+        '## Something else',
+        'Deployed 2026-08-02.',
+      ].join(NL);
+      expect(staleStateHeadings(doc)).toEqual([]);
+    });
+
+    it('does NOT stop at a DEEPER subheading inside the section', () => {
+      const doc = [
+        '## Live state 2026-08-01',
+        '### Detail',
+        'Deployed 2026-08-02.',
+      ].join(NL);
+      expect(staleStateHeadings(doc)).toHaveLength(1);
+    });
+
+    it('reads the NEWEST date in the heading, not the first', () => {
+      // "2026-08-02 (overnight of 2026-08-01)" is a claim about 08-02; taking
+      // the parenthetical would make the heading fire on itself.
+      const doc = [
+        '## STOP POINT 2026-08-02 (overnight of 2026-08-01)',
+        'Deployed 2026-08-02.',
+      ].join(NL);
+      expect(staleStateHeadings(doc)).toEqual([]);
+    });
+
+    it('sees a heading inside a blockquote, which is how HANDOFF writes its box', () => {
+      const doc = ['> ## STOP POINT 2026-08-01', '> Deployed 2026-08-02.'].join(NL);
+      expect(staleStateHeadings(doc)).toHaveLength(1);
+    });
+
+    it('tolerates CRLF, which is what these files actually are on disk', () => {
+      const CRLF = String.fromCharCode(13) + String.fromCharCode(10);
+      const doc = ['## Live state 2026-08-01', 'Deployed 2026-08-02.'].join(CRLF);
+      expect(staleStateHeadings(doc)).toHaveLength(1);
+    });
+  });
+});
+
+/**
+ * Two MORNING docs for the same date must say so, in the first thing you read.
+ *
+ * THE INCIDENT (Kevin, 2026-08-03): *"Two same-date morning docs already cost me
+ * a morning of reading stale state."* `MORNING-2026-08-02.md` and
+ * `MORNING-2026-08-02-OVERNIGHT.md` both existed and the shorter name is the one
+ * a reader reaches for first — it was the superseded one.
+ *
+ * No existing guard catches this. The deploy-SHA guard above only compares the
+ * two authoritative entry points, and a MORNING doc is neither.
+ *
+ * THE RULE, deliberately weak in one specific way: **at least one** file in a
+ * same-date group must name a sibling and state the relationship, within its
+ * first ten lines. Not every file, because requiring the EARLIER doc to
+ * announce a successor written days later means editing history to add a
+ * forward reference — and measured against the four same-date groups already in
+ * this repo, the later doc is the one that consistently carries the pointer.
+ *
+ * The relationship vocabulary is closed and includes `continues`, not only
+ * `supersedes`, because two of the real pairs are genuine CONTINUATIONS —
+ * `MORNING-2026-07-25-PART2.md` opens *"Continues MORNING-2026-07-25.md"*.
+ * Forcing the word "superseded" onto those would require writing something
+ * false to satisfy a test, which is a worse failure than the one being guarded.
+ */
+const MORNING_DOC = /^MORNING-(\d{4}-\d{2}-\d{2})(.*)\.md$/;
+const CROSS_REF = /(supersede[sd]?|superseding|continues|replaces)/i;
+const HEAD_LINES = 10;
+
+/** Same-date MORNING groups where no file points at a sibling up top. */
+export function unlinkedMorningGroups(
+  files: string[],
+  headOf: (file: string) => string,
+): string[][] {
+  const groups = new Map<string, string[]>();
+  for (const f of files) {
+    const m = MORNING_DOC.exec(f);
+    if (!m) continue;
+    const list = groups.get(m[1]) || [];
+    list.push(f);
+    groups.set(m[1], list);
+  }
+
+  const bad: string[][] = [];
+  for (const [, group] of groups) {
+    if (group.length < 2) continue;
+    const linked = group.some((f) => {
+      const head = headOf(f).split(/\r?\n/).slice(0, HEAD_LINES).join('\n');
+      // BOTH: naming a sibling without a relationship word leaves the reader
+      // knowing another file exists but not which one to trust.
+      return CROSS_REF.test(head) && group.some((o) => o !== f && head.includes(o));
+    });
+    if (!linked) bad.push(group.slice().sort());
+  }
+  return bad;
+}
+
+describe('same-date MORNING docs point at each other', () => {
+  it('every same-date MORNING group names a sibling in its first ten lines', () => {
+    const files = fs.readdirSync(REPO_ROOT).filter((f) => MORNING_DOC.test(f));
+    // The guard must have subjects, or it passes vacuously forever.
+    expect(files.length, 'no MORNING-*.md files found — this guard is inert').toBeGreaterThan(0);
+
+    const bad = unlinkedMorningGroups(files, (f) =>
+      fs.readFileSync(path.join(REPO_ROOT, f), 'utf8'),
+    );
+    expect(
+      bad.map((g) => g.join(' + ')),
+      `Two MORNING docs share a date and neither names the other in its first ` +
+        `${HEAD_LINES} lines. The shorter name is the one a reader reaches for ` +
+        'first, so the stale one gets read as current — this cost Kevin a ' +
+        'morning on 2026-08-02. Add a banner to the LATER doc naming the other ' +
+        'and saying whether it supersedes or continues it.',
+    ).toEqual([]);
+  });
+
+  describe('the MORNING-group scanner, on fixtures', () => {
+    const NL = String.fromCharCode(10);
+    const head = (body: string) => () => body;
+
+    it('flags a same-date pair with no cross-reference', () => {
+      expect(
+        unlinkedMorningGroups(['MORNING-2026-08-02.md', 'MORNING-2026-08-02-OVERNIGHT.md'], head('# Morning')),
+      ).toEqual([['MORNING-2026-08-02-OVERNIGHT.md', 'MORNING-2026-08-02.md']]);
+    });
+
+    it('accepts a pair where ONE file names the other and says superseded', () => {
+      const files = ['MORNING-2026-08-02.md', 'MORNING-2026-08-02-OVERNIGHT.md'];
+      const bodies: Record<string, string> = {
+        'MORNING-2026-08-02-OVERNIGHT.md':
+          `# Morning${NL}${NL}MORNING-2026-08-02.md is SUPERSEDED by this file.`,
+        'MORNING-2026-08-02.md': '# Morning',
+      };
+      expect(unlinkedMorningGroups(files, (f) => bodies[f])).toEqual([]);
+    });
+
+    it('accepts "continues", because two real pairs are continuations not replacements', () => {
+      const files = ['MORNING-2026-07-25.md', 'MORNING-2026-07-25-PART2.md'];
+      const bodies: Record<string, string> = {
+        'MORNING-2026-07-25-PART2.md': `# Part 2${NL}Continues MORNING-2026-07-25.md.`,
+        'MORNING-2026-07-25.md': '# Morning',
+      };
+      expect(unlinkedMorningGroups(files, (f) => bodies[f])).toEqual([]);
+    });
+
+    it('REJECTS a relationship word with no sibling named', () => {
+      // "This supersedes the earlier doc" does not tell you WHICH file, which is
+      // the whole problem — the reader still cannot find the current one.
+      const files = ['MORNING-2026-08-02.md', 'MORNING-2026-08-02-OVERNIGHT.md'];
+      const bodies: Record<string, string> = {
+        'MORNING-2026-08-02-OVERNIGHT.md': '# Morning — this supersedes the earlier doc.',
+        'MORNING-2026-08-02.md': '# Morning',
+      };
+      expect(unlinkedMorningGroups(files, (f) => bodies[f])).toHaveLength(1);
+    });
+
+    it('REJECTS a sibling named with no relationship word', () => {
+      const files = ['MORNING-2026-08-02.md', 'MORNING-2026-08-02-OVERNIGHT.md'];
+      const bodies: Record<string, string> = {
+        'MORNING-2026-08-02-OVERNIGHT.md': '# See also MORNING-2026-08-02.md.',
+        'MORNING-2026-08-02.md': '# Morning',
+      };
+      expect(unlinkedMorningGroups(files, (f) => bodies[f])).toHaveLength(1);
+    });
+
+    it('does NOT count a cross-reference below the tenth line', () => {
+      const files = ['MORNING-2026-08-02.md', 'MORNING-2026-08-02-OVERNIGHT.md'];
+      const buried = [...Array(12).fill('filler'), 'MORNING-2026-08-02.md is superseded.'].join(NL);
+      const bodies: Record<string, string> = {
+        'MORNING-2026-08-02-OVERNIGHT.md': buried,
+        'MORNING-2026-08-02.md': '# Morning',
+      };
+      expect(unlinkedMorningGroups(files, (f) => bodies[f])).toHaveLength(1);
+    });
+
+    it('ignores a date with only one doc', () => {
+      expect(unlinkedMorningGroups(['MORNING-2026-07-27.md'], head('# Morning'))).toEqual([]);
+    });
+
+    it('groups by DATE, so different dates never pair up', () => {
+      expect(
+        unlinkedMorningGroups(['MORNING-2026-07-27.md', 'MORNING-2026-07-28.md'], head('# x')),
+      ).toEqual([]);
+    });
+
+    it('flags a group of three when none of them cross-reference', () => {
+      const files = [
+        'MORNING-2026-08-02.md', 'MORNING-2026-08-02-LATE.md', 'MORNING-2026-08-02-OVERNIGHT.md',
+      ];
+      expect(unlinkedMorningGroups(files, head('# x'))[0]).toHaveLength(3);
+    });
+
+    it('tolerates CRLF when slicing the first ten lines', () => {
+      const CR = String.fromCharCode(13) + String.fromCharCode(10);
+      const files = ['MORNING-2026-08-02.md', 'MORNING-2026-08-02-OVERNIGHT.md'];
+      const bodies: Record<string, string> = {
+        'MORNING-2026-08-02-OVERNIGHT.md': `# Morning${CR}MORNING-2026-08-02.md is superseded.`,
+        'MORNING-2026-08-02.md': '# Morning',
+      };
+      expect(unlinkedMorningGroups(files, (f) => bodies[f])).toEqual([]);
+    });
+  });
+});
+
+/**
  * The Hall of Fame game is 2026-08-06, and every operator doc said 2026-08-07.
  *
  * WHY. ESPN reports its kickoff as `2026-08-07T00:00Z` — 8:00pm ET is midnight

@@ -1,5 +1,11 @@
 # 🌅 MORNING TAKEOVER — 2026-07-26 (overnight run of 2026-07-25)
 
+> ⚠️ **Two handoff docs exist for 2026-07-26.** This file was written later
+> (committed 2026-07-26) and **supersedes** `MORNING-2026-07-26.md`, which was
+> committed the previous evening and already carries its own superseded banner.
+> Banner added 2026-08-03 — both files are history now; this note exists so
+> whichever one you open first tells you the other is there.
+
 **Six PRs open. Nothing merged, nothing deployed, no prod data touched.**
 
 Read §1, then do §2 in order. The rest is reference.

@@ -2,10 +2,11 @@
 
 **HOF game: 2026-08-06 (Thu, 8:00pm ET = `2026-08-07T00:00Z`), CAR at ARI. Five days.**
 
-> This is the SECOND handoff doc for 2026-08-01. `MORNING-2026-08-01.md` covers
-> the chaos drill and the two deploys that followed it, and everything in it is
-> done. This one covers the work after you asked me to merge dependabot and
-> start Tasks 2 and 3.
+> This is the SECOND handoff doc for 2026-08-01, and it **continues**
+> `MORNING-2026-08-01.md` rather than replacing it: that file covers the chaos
+> drill and the two deploys that followed it, and everything in it is done. This
+> one covers the work after you asked me to merge dependabot and start Tasks 2
+> and 3.
 
 ## 0. TL;DR
 
