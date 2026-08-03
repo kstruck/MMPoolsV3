@@ -201,10 +201,26 @@ STABLE_NEEDED=4    # consecutive unchanged polls at 30s = 2 min of quiet
 # re-arm — run 1 prints PARTIAL, run 2 starts with the clock already ~5 minutes
 # in and can legitimately settle. It is also the more correct clock: what matters
 # is how long qodo has been quiet, not how long this shell has been awake.
-FIRST=$(gh api --paginate $R/issues/<N>/comments \
-  -q ".[] | select(.user.login == \"$QB\") | .created_at" | head -1)
-[ -n "$FIRST" ] || FIRST=$(gh api --paginate $R/pulls/<N>/comments \
-  -q ".[] | select(.user.login == \"$QB\") | .created_at" | head -1)
+# FILTERED BY $SINCE, and covering ALL THREE surfaces. Both halves are load-bearing:
+#
+#   * WITHOUT the $SINCE filter, a re-arm on a PR that already carries an OLD qodo
+#     artifact anchors the floor to that historical timestamp. elapsed() is then
+#     already past 480s on the first poll, four quiet polls emit QODO REPORTED,
+#     and the delayed inline findings of the CURRENT review land afterwards —
+#     which is precisely the false-clear this floor was raised to prevent,
+#     reintroduced through the re-review path (the toggle in CLAUDE.md §2b).
+#   * WITHOUT the reviews endpoint, a report that arrives ONLY as a review body —
+#     a valid result per phase 1 — leaves FIRST empty, every arming falls back to
+#     a fresh process clock, and the watcher returns PARTIAL forever.
+#
+# Earliest across the three, so the floor starts at qodo's first sign of life.
+FIRST=$( { gh api --paginate $R/issues/<N>/comments \
+      -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | .created_at";
+    gh api --paginate $R/pulls/<N>/comments \
+      -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | .created_at";
+    gh api --paginate $R/pulls/<N>/reviews \
+      -q ".[] | select(.user.login == \"$QB\") | select(.body != \"\") | select(.submitted_at > \"$SINCE\") | .submitted_at";
+  } | sort | head -1)
 # No parseable first artifact -> fall back to this process's clock. Never treat
 # an unparseable timestamp as "floor already met"; that is the failure the floor
 # exists to stop. On that fallback a single 5-minute arming CANNOT reach an
