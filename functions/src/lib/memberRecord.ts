@@ -8,7 +8,7 @@
 // merged AFTER the Test Suite NFL wave, so this file does not modify those hot paths.
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { ROSTER_SCHEMA_VERSION, isCanonicalMemberRecord, type MemberRecord } from "../shared/memberRecord";
+import { ROSTER_SCHEMA_VERSION, type MemberRecord } from "../shared/memberRecord";
 
 export type Firestore = admin.firestore.Firestore;
 export type Transaction = admin.firestore.Transaction;
@@ -111,62 +111,16 @@ export function planMembershipWrite(
 }
 
 /**
- * The literal string squares.ts inserts into `participantIds` for an anonymous
- * reservation. It is a sentinel, never a person — `src/utils/poolRoster.ts` and
- * `lib/reminderTargets.ts` both exclude it, and a membership predicate must not
- * be the one place that disagrees.
+ * `isProvableMember` MOVED to `shared/memberRecord.ts` and is re-exported here
+ * so existing functions-side importers are unchanged.
+ *
+ * It moved because a THIRD door needs the same answer: the commissioner roster
+ * (`src/utils/poolRoster.ts`) must decide whether a non-canonical Member Record
+ * is roster truth, and `src/` cannot import this file — it pulls in
+ * firebase-admin. Re-implementing the two-evidence rule client-side is exactly
+ * the drift `isCanonicalMemberRecord` was hoisted to shared/ to prevent.
  */
-const GUEST_SENTINEL = 'guest';
-
-/**
- * Is `uid` a PROVABLE member of this pool? Two checks, both on data the caller
- * has already read — no extra query. See PLAN-SETPAIDSTATUS-MEMBERSHIP §4.
- *
- * ⚠️ There is no third check. Draft 4 accepted claimed-square ownership
- * (`pool.squares[*].reservedByUid === uid`) and review round 5 removed it as
- * ATTACKER-SETTABLE: `firestore.rules` makes every pool document world-readable,
- * so anyone with the pool id can read a `guestDeviceKey` off it and have
- * `claimMySquares` stamp `reservedByUid` for them. Reintroducing a
- * squares-ownership branch here restores the exact authorization route the plan
- * rejected.
- *
- * Callers pass plain data, not snapshots, so the rule is unit-testable.
- *
- * Both parameters are raw document data (`Record<string, unknown>`), not narrow
- * shapes: this is an authorization predicate and it must accept — and refuse —
- * a document carrying NONE of the fields it looks for. A
- * `{ joinedAt?: unknown }` parameter made the forged-record case
- * (`{ memberReportedPaid, memberReportedAt }`) a TS2559 compile error, i.e. the
- * type declared the most important input impossible. It is not; it is the one
- * this guard exists for. (codex r1)
- */
-export function isProvableMember(
-  pool: Record<string, unknown> | undefined,
-  memberRecord: Record<string, unknown> | undefined,
-  uid: string,
-): boolean {
-  // The sentinel is not an account. Rejected up front rather than only inside
-  // the participantIds check: an authenticated user whose Firebase uid is the
-  // literal string `guest` would otherwise be admitted to every pool holding a
-  // single anonymous square reservation.
-  if (!uid || uid === GUEST_SENTINEL) return false;
-
-  // Evidence 1 — a CANONICAL Member Record. Mere existence proves nothing,
-  // because the claim path this guard protects is itself a way to create one:
-  // accepting existence would ratify a record forged before the fix.
-  //
-  // The discriminator lives in `shared/memberRecord.ts` because
-  // `resolveReminderTargets` needs exactly the same one (§4a) — this guard shuts
-  // the door on NEW forgeries, that filter stops OLD ones being emailed, and if
-  // the two ever disagreed one of the doors would be open.
-  if (isCanonicalMemberRecord(memberRecord)) return true;
-
-  // Evidence 2 — the pool's own cross-type membership set. Every join path
-  // writes it, and writing it needs `isPoolManager()`, so no self-add. A manager
-  // listing someone as a participant IS membership.
-  const ids = pool?.participantIds;
-  return Array.isArray(ids) && ids.includes(uid);
-}
+export { isProvableMember, GUEST_SENTINEL } from "../shared/memberRecord";
 
 export function membersCol(db: Firestore, poolId: string) {
   return db.collection('pools').doc(poolId).collection('members');

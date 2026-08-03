@@ -510,23 +510,54 @@ describe('forged Member Records (the #344 shape) are not roster truth', () => {
 
   /**
    * The genuine-member half of the rule, and the one that decides whether this
-   * filter is safe to ship. A real member is evidenced by `participantIds` (every
-   * server join path writes it — `reconcileMembership`) or by an entry, so even a
-   * record that somehow lacked the stamp still yields a row and is still charged.
-   * A forged record has neither, which is the whole reason it can be told apart.
+   * filter is safe to ship. CODEX ROUND 1, P1: filtering on the canonical stamp
+   * ALONE also discards a real participant's un-stamped record — and those exist
+   * carrying real money state, because `setPaidStatus`'s commissioner branch
+   * merges `paidStatus: 'PAID'` without stamping `joinedAt`, and
+   * `reconcilePaymentTruth` promotes claim-only documents to PAID from a paid
+   * entry.
+   *
+   * The failure that caused was silent and expensive: the commissioner marks
+   * someone PAID, the roster keeps showing UNPAID, and `collected` loses the fee.
+   *
+   * `participantIds` is what separates them — every server join path writes it,
+   * and the #344 exploit wrote only the member document.
    */
-  it('an un-stamped record for a REAL participant still yields a charged roster row', () => {
+  it('keeps the PAYMENT state of an un-stamped record for a real participant (codex r1 P1)', () => {
     const args = inputs({
       pool: pool({ participantIds: ['owner', 'legacy'] }),
       members: [
         { uid: 'owner', userName: 'Commish', paidStatus: 'UNPAID' },
-        { uid: 'legacy', userName: 'Legacy', paidStatus: 'UNPAID', joinedAt: undefined },
+        // Marked PAID by the commissioner; never stamped canonical.
+        { uid: 'legacy', userName: 'Legacy', paidStatus: 'PAID', joinedAt: undefined },
       ],
     });
-    expect(buildPoolRoster(args).map((r) => r.uid).sort()).toEqual(['legacy', 'owner']);
+    const legacy = buildPoolRoster(args).find((r) => r.uid === 'legacy')!;
+    expect(legacy.hasMember).toBe(true);
+    expect(legacy.userName).toBe('Legacy');
+    // The assertion that fails if the canonical-only filter comes back: an
+    // entry-less member whose record is discarded reads UNPAID off no entry.
+    expect(legacy.paidStatus).toBe('PAID');
+
     const pot = rosterPotStats(args);
     expect(pot.memberCount).toBe(2);
     expect(pot.expected).toBe(40);
+    // Their $20 must still be counted as collected.
+    expect(pot.collected).toBe(20);
+    expect(pot.paidCount).toBe(1);
+  });
+
+  it('an un-stamped record for a real participant keeps its fee and rebuy stamps', () => {
+    const args = inputs({
+      pool: pool({ participantIds: ['legacy'], settings: { entryFee: 20, rebuyCost: 5 } }),
+      members: [
+        { uid: 'legacy', paidStatus: 'UNPAID', feeOwed: 0, rebuyOwed: 10, rebuyPaid: 10, joinedAt: undefined },
+      ],
+    });
+    // feeOwed: 0 (a seeded host) plus a fully settled rebuy = owes nothing.
+    // Discarding the record would charge them the full $20 pool fee instead.
+    expect(rosterPotStats(args).expected).toBe(10);
+    expect(rosterPotStats(args).clearedCount).toBe(1);
   });
 
   // The SOURCE invariant that protects this filter from a projecting caller

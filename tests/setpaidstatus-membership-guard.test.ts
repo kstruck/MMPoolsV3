@@ -84,12 +84,12 @@ describe('setPaidStatus claim branch — membership guard wiring', () => {
         expect(claimCode).toMatch(/if \(!freshPoolSnap\.exists\)/);
     });
 
-    it('uses the SHARED canonical discriminator, not a local copy', () => {
+    it('all three doors share ONE definition of each predicate', () => {
         // #344 shuts the door on NEW forgeries; #338's resolveReminderTargets
         // filter stops OLD ones being emailed (§4a); the client roster builder
         // stops them being COUNTED and RENDERED (§4b). They only work as a set,
-        // so all three must agree on what "canonical" means — a second inlined
-        // `joinedAt !== undefined` in any of them is how that drifts.
+        // so a second inlined `joinedAt !== undefined`, or a hand-rolled copy of
+        // the two-evidence rule, is how one of them ends up open.
         const lib = readFileSync(
             resolve(__dirname, '..', 'functions/src/lib/memberRecord.ts'), 'utf8',
         );
@@ -99,14 +99,31 @@ describe('setPaidStatus claim branch — membership guard wiring', () => {
         const roster = readFileSync(
             resolve(__dirname, '..', 'src/utils/poolRoster.ts'), 'utf8',
         );
+        const shared = readFileSync(
+            resolve(__dirname, '..', 'shared/memberRecord.ts'), 'utf8',
+        );
 
-        expect(lib).toContain('isCanonicalMemberRecord(');
+        // shared/ is the ONE home for both predicates.
+        expect(shared).toMatch(/export function isCanonicalMemberRecord/);
+        expect(shared).toMatch(/export function isProvableMember/);
+        // The reminder filter uses the canonical half directly — `participantIds`
+        // is manager-writable and #338 refuses it as an email-target source.
         expect(targets).toContain('isCanonicalMemberRecord(');
-        expect(roster).toContain('isCanonicalMemberRecord(');
-        // All three must import it from shared/, not define their own.
-        expect(lib).not.toMatch(/export function isCanonicalMemberRecord/);
-        expect(targets).not.toMatch(/export function isCanonicalMemberRecord/);
-        expect(roster).not.toMatch(/export function isCanonicalMemberRecord/);
+        // The ROSTER uses the two-evidence predicate, not the canonical half
+        // alone: codex r1 showed that dropping a real participant's un-stamped
+        // record hides the commissioner's own PAID mark.
+        expect(roster).toContain('isProvableMember(');
+
+        // Nobody redefines either one. `isProvableMember` MOVED to shared/ so the
+        // client roster could reach it (src/ cannot import firebase-admin), so
+        // functions-side must RE-EXPORT it, never redeclare it.
+        for (const src of [lib, targets, roster]) {
+            expect(src).not.toMatch(/export function isCanonicalMemberRecord/);
+            expect(src).not.toMatch(/export function isProvableMember/);
+        }
+        expect(lib).toMatch(/export \{[^}]*isProvableMember[^}]*\} from ["']\.\.\/shared\/memberRecord["']/);
+        // And the client must not re-derive the second evidence branch inline.
+        expect(roster).not.toMatch(/participantIds[^\n]*\.includes\(/);
     });
 
     it('the client roster builder applies the filter to EVERY member reader', () => {
@@ -117,7 +134,7 @@ describe('setPaidStatus claim branch — membership guard wiring', () => {
         // the exact defect this module's `rosterUids` comment already describes.
         //
         // Asserted as "no reader iterates raw members" rather than by counting
-        // `canonicalMembers(` call sites, which a future reader could satisfy by
+        // `provableMembers(` call sites, which a future reader could satisfy by
         // calling it and discarding the result.
         const roster = readFileSync(
             resolve(__dirname, '..', 'src/utils/poolRoster.ts'), 'utf8',
@@ -129,12 +146,14 @@ describe('setPaidStatus claim branch — membership guard wiring', () => {
 
         // Anchor: the helper must exist under this name, or every assertion
         // below is checking the absence of something that was merely renamed.
-        expect(code).toMatch(/const canonicalMembers = /);
+        expect(code).toMatch(/const provableMembers = /);
         // The three readers, by the shape each used before this change.
         expect(code).not.toMatch(/for \(const m of members \|\| \[\]\)/);
         expect(code).not.toMatch(/const memberList = members \|\| \[\]/);
-        expect(code).toMatch(/for \(const m of canonicalMembers\(members\)\)[\s\S]*for \(const m of canonicalMembers\(members\)\)/);
-        expect(code).toMatch(/const memberList = canonicalMembers\(members\)/);
+        expect(code).toMatch(
+            /for \(const m of provableMembers\(pool, members\)\)[\s\S]*for \(const m of provableMembers\(pool, members\)\)/,
+        );
+        expect(code).toMatch(/const memberList = provableMembers\(pool, members\)/);
     });
 
     it('the client member loader delivers whole documents, so joinedAt reaches the filter', () => {
