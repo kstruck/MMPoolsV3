@@ -87,12 +87,12 @@ things happened on 2026-07-31 and the hash behaved differently in each:
 | 04:54, 05:12, 05:17 | the three App Check rebuilds, all at `fe3d7c3` | **unchanged**, `index-CR5oJEHh.js` |
 | later that day | the #329 rebuild, at `efea033` | **moved** → `index-Db6JwMWs.js` (the live hash *then*) |
 
-⚠️ **SUPERSEDED TWICE. The live bundle is `index-DlH8liQe.js`** (§2): the #341
-rebuild moved it to `index-Bv2FV3GO.js` on 2026-08-01, and the #344/#338/#345
-rebuild moved it again on 2026-08-02. `index-Db6JwMWs.js` was live when this
-section was written and the sentence below is scoped to that day. The "hash did not move" claim
-above is scoped to the three App-Check rebuilds only — it is not a statement
-about the day. Written out because this runbook uses hash movement as positive
+⚠️ **SUPERSEDED. The live bundle is the one named in §2**, which is the only
+place this file states it — repeating the hash here is what made this line wrong
+three rebuilds running. `index-Db6JwMWs.js` was live when this section was
+written, and the sentence below is scoped to that day. The "hash did not move"
+claim above is scoped to the three App-Check rebuilds only — it is not a
+statement about the day. Written out because this runbook uses hash movement as positive
 evidence for a rebuild, so an unqualified "it did not move" is the kind of
 sentence that gets used to condemn a good deploy.
 
@@ -400,7 +400,7 @@ function `Successful update operation` — expected, because
 every function `Skipped (No changes detected)`. That all-Skipped run is the
 evidence. Rules unchanged by all five, so they remain ≡ this tag. FRONTEND at
 that time: Coolify rebuilt, bundle `index-gn5gQtFU.js` — ⚠️ **superseded; the
-live bundle is `index-DlH8liQe.js` (§2)**.
+live bundle is the one named in §2**.
 Prior claim: <!-- deploy-state:ignore --> `main` @ `d3d2b0d` —)
 (#311 / G1 PR-B2 deployed as the FULL FLEET, twice; rules unchanged.
 Prior claim: <!-- deploy-state:ignore --> `main` @ `6b7e439` —)
@@ -419,9 +419,8 @@ Previous states: <!-- deploy-state:ignore --> `main` @ `8a55b84` (#279) on
 
 ✅ **The FRONTEND was current with this claim on 2026-07-28.** Coolify rebuilt
 that day and the live bundle was `index-gn5gQtFU.js`, verified in the browser
-with cache disabled. ⚠️ **Superseded — the live bundle is
-`index-DlH8liQe.js`** (§2); this paragraph records an older rebuild, not the current
-state. That single rebuild cleared both the #297/#298 dependency-bump debt
+with cache disabled. ⚠️ **Superseded — the live bundle is the one named in §2**;
+this paragraph records an older rebuild, not the current state. That single rebuild cleared both the #297/#298 dependency-bump debt
 (root `package.json` runtime deps — the trigger §4's own queue table names) and
 #313/#315's frontend changes. See HANDOFF's STOP POINT box and §0.
 (Historical: Coolify rebuilt twice on 2026-07-27 to bundle `index-CYTPq50I.js`,

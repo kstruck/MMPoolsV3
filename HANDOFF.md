@@ -91,8 +91,10 @@
 > ✅ **NO frontend rebuild was owed then.** Neither #332 nor #333 touches `src/**`
 > (verified with `git diff --name-only <sha>^ <sha> -- src/` on both merge
 > commits, both empty), so the live bundle stayed `index-Db6JwMWs.js` AT THAT
-> TIME. ⚠️ HISTORICAL — superseded twice since; the live bundle is
-> **`index-DlH8liQe.js`** (top of box).
+> TIME. ⚠️ HISTORICAL — superseded several times since. **The live bundle is
+> named ONCE in this file, at the top of this box**; it is not repeated here,
+> because a hash copied into a history paragraph is stale at the next rebuild and
+> this file has now had that exact rot four times.
 > **ALL THREE QUEUES EMPTY.**
 >
 > 📌 **A production fact established 2026-07-31 and worth keeping:** `nfl_games`
@@ -116,9 +118,9 @@
 >
 > ✅ **Frontend rebuilt the same day**: live bundle moved `index-CR5oJEHh.js` →
 > **`index-Db6JwMWs.js`**, read off the prod HTML — the live hash THEN. It has
-> moved twice since (`index-Bv2FV3GO.js` on 2026-08-01, `index-DlH8liQe.js` on
-> 2026-08-02); **the current one is at the top of this box**, and so is the
-> current queue state.
+> moved several times since; **the current one is at the top of this box**, and
+> so is the current queue state. The intermediate hashes are deliberately not
+> listed — enumerating them is what kept going stale.
 >
 > 🕐 **Not to be confused with the three App Check rebuilds earlier the same day**
 > (04:54 / 05:12 / 05:17 UTC, all at `fe3d7c3`), across which the hash did NOT
