@@ -152,3 +152,31 @@ All four accepted; no rejections. Round trajectory is narrowing as expected:
 r1 core data-loss mechanics, r2 governance layers, r3 identity/ordering
 edges, r4 interaction with adjacent subsystems (scoring queue, schema
 envelope).
+
+## Round 5 — codex exec review --base origin/main
+
+VERDICT: REVISE. 3 findings (2 P1, 1 P2), **all 3 accepted**. Summary:
+
+1. (Critical) **A pick submitted between the reference scan and the purge
+   commit gets stranded** — a new entry doc is not a doc the transaction
+   read, so it raises no conflict; the scan alone cannot serialize
+   submissions. Fix: 1.6 — a `purgeStale` run sets a short-lived
+   slate-scoped import gate the pick-submission validation checks
+   (retryable refusal), cleared on commit or failure.
+2. (Critical) **Read-then-batch lock preservation loses a concurrent lock**
+   — `lockNFLSpreadsJob` committing between the importer's read and its
+   batch commit gets silently reopened. Fix: 1.1/1.5 — purge weeks commit in
+   ONE transaction that re-reads the games; upsert-only runs OMIT `spread`
+   from the merge payload for existing ids (spread updates on existing games
+   belong to the sync path and lock job). Invariant stated: no import write
+   may transition `spread.locked` true→false.
+3. (High) **1.3's ≤400-op delete chunking contradicted 1.1's atomicity** —
+   chunking a purge recreates the partial-replacement failure. Fix: 1.3 —
+   no chunking path exists; a purge that cannot fit the single transaction
+   refuses outright. (Caught the plan contradicting itself as drafted.)
+
+### Claude's response
+
+All three accepted. r5 is the concurrency round — every finding is a race or
+an internal contradiction, none is a new data-loss primitive; the core design
+(dry-run default, upsert-only live, explicit gated purge) survived unchanged.

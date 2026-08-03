@@ -136,11 +136,15 @@ Phase order is safety-first: gate the destructive path before improving it.
     distinguish "ESPN re-keyed this game" from "ESPN's response was
     truncated", so removing stored games is always an operator decision made
     against a dry-run report). A `purgeStale` week commits its writes and
-    deletes in ONE atomic `WriteBatch` — an NFL week is ≤16 games each way,
-    far under Firestore's 500-op batch limit, and if a week's combined ops
-    ever exceeded it the run refuses rather than splitting (codex r4 #1:
-    a write commit followed by a failed delete commit leaves both the old
-    and re-keyed fixture live, and week queries would score the matchup
+    deletes in ONE atomic Firestore TRANSACTION — not a read-then-batch
+    (codex r5 #2): the transaction re-reads the existing game docs so the
+    1.5 lock preservation is computed against current state, and any
+    concurrent write to a read doc (e.g. `lockNFLSpreadsJob` locking a
+    spread mid-import) forces a retry instead of silently reopening the
+    line. An NFL week is ≤16 games each way, far under the 500-op
+    transaction limit; a week whose combined ops would exceed it REFUSES —
+    never splits (codex r4 #1, r5 #3: a partial purge leaves the old and
+    re-keyed fixture both live, and week queries would score the matchup
     twice). Upsert-only runs keep plain write-before-nothing ordering — a
     failure at ANY point leaves the week no worse than before the run
     (codex r1 #1). The implementing PR must include a test that an injected
@@ -190,12 +194,16 @@ Phase order is safety-first: gate the destructive path before improving it.
     A genuinely game-less week ("delete everything, feed says empty") is
     never inferred — it needs an explicit per-call operator flag, and a dry
     run first like everything else.
-1.3 **Cap TOTAL mutations per run, and chunk deletes at ≤400 ops per batch.**
-    The chunking removes the unguarded 500-op ceiling; the run-level cap
-    (deletes + writes, checked BEFORE the first live mutation, failing with an
-    overflow report) bounds the blast radius of a mis-scoped query the way
-    `MAX_SPREAD_LOCKS_PER_RUN` does for the spread job
-    (`nflSchedule.ts:976-985`) (broadened per codex r1 #6).
+1.3 **Cap TOTAL mutations per run; a purge NEVER splits across commits.**
+    The run-level cap (deletes + writes, checked BEFORE the first live
+    mutation, failing with an overflow report) bounds the blast radius of a
+    mis-scoped query the way `MAX_SPREAD_LOCKS_PER_RUN` does for the spread
+    job (`nflSchedule.ts:976-985`) (broadened per codex r1 #6). There is no
+    delete-chunking path: a `purgeStale` week that cannot fit its writes and
+    deletes in the single 1.1 transaction refuses outright — chunking a
+    purge is exactly the partial-replacement failure 1.1 exists to prevent
+    (codex r5 #3, which caught this item contradicting 1.1 as drafted).
+    Upsert-only runs may batch writes freely; re-running them is idempotent.
 1.4 **A cleanup failure aborts that week loudly** instead of the current
     catch-warn-continue (`nflSchedule.ts:378-380`).
 1.5 **Preserve locked spreads on re-import — including across a re-key.**
@@ -204,7 +212,16 @@ Phase order is safety-first: gate the destructive path before improving it.
     a locked ATS slate and block pick submission behind `SPREADS_NOT_LOCKED`
     — the exact bug class #235 fixed in the sync path, which now retains
     `spread.locked` (`nflSchedule.ts:746-750`). The importer write must apply
-    the same preservation (codex r1 #4). The same-id lookup has a hole the
+    the same preservation (codex r1 #4), and preservation computed by a
+    plain read-then-batch is not preservation — a lock that
+    `lockNFLSpreadsJob` commits between the read and the batch commit gets
+    silently reopened (codex r5 #2). The invariant is: **no import write may
+    transition `spread.locked` true→false.** Purge runs get this from the
+    1.1 transaction (the games are re-read inside it); upsert-only runs
+    satisfy it by OMITTING the `spread` field from the merge payload for
+    ids that already exist — spread updates on existing games belong to the
+    sync path and the lock job, not the importer. The same-id
+    lookup also has a hole the
     sync path never faces (codex r3 #4): on a purge-and-replace re-key, the
     NEW id has no existing doc to preserve from, and the OLD locked doc is
     the one being purged. A `purgeStale` run must therefore match each
@@ -219,9 +236,16 @@ Phase order is safety-first: gate the destructive path before improving it.
     are computed BEFORE any write commits (1.1's ordering — codex r3 #3);
     if any stale id is referenced, the run REFUSES that week before touching
     it and reports the ids, leaving reference migration as an explicit
-    operator decision (codex r1 #3). Only Pick'em entries key picks by game
-    id (see Sweep 3) — Survivor/Margin are structurally immune. No automatic
-    pick migration in this plan.
+    operator decision (codex r1 #3). The scan alone cannot serialize against
+    a pick SUBMITTED between scan and commit — a new entry doc is not a doc
+    the purge transaction read, so it raises no conflict (codex r5 #1). A
+    `purgeStale` run therefore sets a short-lived slate-scoped import gate
+    (a `system/` doc) that the pick-submission validation path checks and
+    refuses against with a retryable error, cleared when the purge commits
+    or fails; purges are rare, operator-triggered, and seconds long, so the
+    member-visible window is negligible. Only Pick'em entries key picks by
+    game id (see Sweep 3) — Survivor/Margin are structurally immune. No
+    automatic pick migration in this plan.
 1.7 **A score-bearing import enqueues rescoring the way the sync path does.**
     The importer writes ESPN statuses and scores, so re-importing an
     already-scored week can correct a final or flip a game terminal — and
