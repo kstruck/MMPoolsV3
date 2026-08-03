@@ -58,10 +58,12 @@
 > paragraph makes NO claim about the current queue state.)
 >
 > ⬇️ **STILL HISTORICAL** — this was the boundary marker written on 2026-08-01,
-> kept for provenance. ⚠️ It used to say "`4713eba` above is the current state",
-> which stopped being true on 2026-08-02. **The only current-state claim in this
-> file is the tagged one at the top of the box (`22adb90`)**; every deployed-SHA
-> line below here is history.
+> kept for provenance. ⚠️ It has now named a stale SHA twice: it said "`4713eba`
+> above is the current state" until 2026-08-02, then "`22adb90`" until
+> 2026-08-03. **The only current-state claim in this file is the one tagged
+> `<!-- deploy-state:current -->` at the top of this box, and this line no longer
+> repeats its value** — that repetition is exactly what kept going stale. Every
+> deployed-SHA line below here is history.
 >
 > ⬆️ **Deployed 2026-07-31 at ~17:45 ET for #334**, which stopped shipping
 > the 113-file test suite to Cloud Functions (`firebase.json` ignore + tsconfig
