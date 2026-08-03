@@ -3,10 +3,18 @@
 **Classification: PLAN-GATED — authorization** (CLAUDE.md §4 / `mmp-change-control`
 §1). It changes who may write to `pools/{poolId}/members/{uid}`.
 
-**Status: prerequisite RESOLVED (option 2, Kevin 2026-08-01). The membership
-guard itself is still unimplemented and awaits sign-off.** Nine review rounds
+**Status: SHIPPED. Prerequisite resolved (option 2, Kevin 2026-08-01); Kevin's
+sign-off given 2026-08-02; the guard merged as
+[#344](https://github.com/kstruck/MMPoolsV3/pull/344) and the §4a reminder filter
+as [#338](https://github.com/kstruck/MMPoolsV3/pull/338), both deployed from
+`22adb90`. The §4b roster/count filter followed 2026-08-02.** Nine review rounds
 established that this change could not be made trustworthy on its own; §0 records
-what was done about that.
+what was done about that. Per-item state is in §9 — this line is REPLACED on each
+change rather than annotated, so there is only ever one live status claim.
+
+⚠️ This line previously read *"The membership guard itself is still unimplemented
+and awaits sign-off"*, which stopped being true on 2026-08-02 and was corrected
+on 2026-08-03. Nothing else above §9 asserts implementation state.
 **Trigger:** codex round 10 on [#338](https://github.com/kstruck/MMPoolsV3/pull/338).
 **Kevin's decision, 2026-08-01:** *"Fix `setPaidStatus` first in its own
 plan-gated PR (verify membership before the claim write), then merge this."*
@@ -301,6 +309,48 @@ stays out of scope (§7) because it is a prod-data mutation under Rule 1.
 its own. #338 must carry the canonical filter before it merges, or the exposure
 survives both PRs.
 
+### §4b — there was a THIRD door, and #344 + #338 left it open
+
+Added 2026-08-02, after both merged. §4a closed reminder *targeting* and stopped
+there, so a forged Member Record was still **counted and rendered**: the
+commissioner's roster list, `memberCount`, and the dues totals all read
+`pools/{id}/members` through `src/utils/poolRoster.ts`, which accepted every
+document in the collection. A stranger who self-added before #344 landed
+therefore still appeared on that pool's roster.
+
+Three readers in that file walk the collection — `buildPoolRoster` (the rendered
+list), `rosterUids` (`memberCount`) and `rosterPotStats` (the dues maths) — so
+filtering one would have left the head count disagreeing with the list.
+
+**The predicate is `isProvableMember`, not `isCanonicalMemberRecord`**, and that
+distinction was found by codex round 1 rather than by design. Filtering on the
+canonical stamp alone ALSO discards a real participant's un-stamped record — and
+those exist carrying real money state, because the commissioner branch of
+`setPaidStatus` merges `paidStatus: 'PAID'` **without** stamping `joinedAt`, and
+`reconcilePaymentTruth` promotes claim-only documents to PAID from a paid entry.
+The cost would have been a commissioner marking someone paid while the roster
+kept reporting UNPAID and `collected` silently lost the fee: **hiding payment
+truth in order to hide a forgery.** Evidence 2 separates the two cleanly — the
+#344 exploit wrote only the member document, so a forged record is in neither
+`participantIds` nor `entries`.
+
+Consequently `isProvableMember` **moved to `shared/memberRecord.ts`** (re-exported
+from `functions/src/lib/memberRecord.ts`, so functions-side importers are
+unchanged): `src/` cannot import that file because it pulls in `firebase-admin`,
+and re-deriving the two-evidence rule client-side is the drift that hoisting
+`isCanonicalMemberRecord` to `shared/` existed to prevent. A source invariant
+fails if any of the four files redeclares either predicate.
+
+**This door is deliberately LOOSER than §4a's**, which is not an inconsistency:
+#338 refuses `participantIds` as a reminder-target source because it is
+manager-writable, and trusting it there makes the callable an arbitrary-email
+primitive. Nothing on the roster path sends anything — the consequence is a row
+on the manager's own roster and a fee in their own dues total, and a manager
+listing someone as a participant IS membership by this system's definition.
+
+Still code-only, still no production write. **The forged documents remain in
+Firestore**; cleaning them up is the §7 prod-data sweep and is unchanged by this.
+
 ### Props are EXCLUDED, deliberately and on the record
 
 `propBets.ts` writes `participantIds` **zero** times and creates no Member
@@ -511,6 +561,7 @@ and takes its own plan gate. Flagged rather than folded in.
 | Sweep | ✅ `PLAN-SETPAIDSTATUS-MEMBERSHIP-SWEEPS.md` (rewritten after round 4 to match its own commands) |
 | Review log | 🔄 IN PROGRESS — rounds 1–7 recorded, 17 findings, all accepted |
 | **#338 canonical filter (§4a)** | ✅ implemented on #338's rebased branch — `isCanonicalMemberRecord` in `shared/memberRecord.ts`, used by BOTH doors so they cannot drift. The claim path also stamps a non-canonical record canonical on touch, so the guard and the filter cannot disagree about the same person. |
+| **Roster/count filter (§4b)** | ✅ implemented 2026-08-02 — `src/utils/poolRoster.ts` filters all three member readers through `isProvableMember`, which MOVED to `shared/memberRecord.ts` for the purpose. Codex r1 P1 corrected a canonical-only first cut that would have hidden the commissioner's own PAID mark on un-stamped records. |
 | Kevin sign-off (Rule 3 step 5) | ✅ **GIVEN 2026-08-02** — *"#340's prerequisite is now satisfied: implement the setPaidStatus membership guard — TWO checks only… No third check."* |
 | **`claimMySquares` prerequisite (§0)** | ✅ **RESOLVED** via option 2 — the repair jobs no longer launder square ownership into either evidence branch. The underlying squares-theft hole stays open by decision. |
 | Implementation | ✅ `isProvableMember` (`functions/src/lib/memberRecord.ts`) + the transactional guard in `setPaidStatus.ts`, `NOT_A_POOL_MEMBER` client mapping, and the §8 test matrix (predicate units, emulator behaviour, source invariants for the ordering and the absent third check) |

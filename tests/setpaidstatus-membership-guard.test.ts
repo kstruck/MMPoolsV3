@@ -84,23 +84,106 @@ describe('setPaidStatus claim branch — membership guard wiring', () => {
         expect(claimCode).toMatch(/if \(!freshPoolSnap\.exists\)/);
     });
 
-    it('uses the SHARED canonical discriminator, not a local copy', () => {
+    it('all three doors share ONE definition of each predicate', () => {
         // #344 shuts the door on NEW forgeries; #338's resolveReminderTargets
-        // filter stops OLD ones being emailed (§4a). They only work as a pair,
-        // so the two must agree on what "canonical" means — a second inlined
-        // `joinedAt !== undefined` in either file is how that drifts.
+        // filter stops OLD ones being emailed (§4a); the client roster builder
+        // stops them being COUNTED and RENDERED (§4b). They only work as a set,
+        // so a second inlined `joinedAt !== undefined`, or a hand-rolled copy of
+        // the two-evidence rule, is how one of them ends up open.
         const lib = readFileSync(
             resolve(__dirname, '..', 'functions/src/lib/memberRecord.ts'), 'utf8',
         );
         const targets = readFileSync(
             resolve(__dirname, '..', 'functions/src/lib/reminderTargets.ts'), 'utf8',
         );
+        const roster = readFileSync(
+            resolve(__dirname, '..', 'src/utils/poolRoster.ts'), 'utf8',
+        );
+        const shared = readFileSync(
+            resolve(__dirname, '..', 'shared/memberRecord.ts'), 'utf8',
+        );
 
-        expect(lib).toContain('isCanonicalMemberRecord(');
+        // shared/ is the ONE home for both predicates.
+        expect(shared).toMatch(/export function isCanonicalMemberRecord/);
+        expect(shared).toMatch(/export function isProvableMember/);
+        // The reminder filter uses the canonical half directly — `participantIds`
+        // is manager-writable and #338 refuses it as an email-target source.
         expect(targets).toContain('isCanonicalMemberRecord(');
-        // Both must import it from shared/, not define their own.
-        expect(lib).not.toMatch(/export function isCanonicalMemberRecord/);
-        expect(targets).not.toMatch(/export function isCanonicalMemberRecord/);
+        // The ROSTER uses the two-evidence predicate, not the canonical half
+        // alone: codex r1 showed that dropping a real participant's un-stamped
+        // record hides the commissioner's own PAID mark.
+        expect(roster).toContain('isProvableMember(');
+
+        // Nobody redefines either one. `isProvableMember` MOVED to shared/ so the
+        // client roster could reach it (src/ cannot import firebase-admin), so
+        // functions-side must RE-EXPORT it, never redeclare it.
+        for (const src of [lib, targets, roster]) {
+            expect(src).not.toMatch(/export function isCanonicalMemberRecord/);
+            expect(src).not.toMatch(/export function isProvableMember/);
+        }
+        expect(lib).toMatch(/export \{[^}]*isProvableMember[^}]*\} from ["']\.\.\/shared\/memberRecord["']/);
+        // And the client must not re-derive the second evidence branch inline.
+        expect(roster).not.toMatch(/participantIds[^\n]*\.includes\(/);
+    });
+
+    it('the client roster builder applies the filter to EVERY member reader', () => {
+        // `buildPoolRoster` (the rendered roster), `rosterUids` (memberCount) and
+        // `rosterPotStats` (the dues totals) each walk the members collection.
+        // Filtering only the first would leave a forged record out of the list
+        // while still counting it — the head count and the roster disagreeing is
+        // the exact defect this module's `rosterUids` comment already describes.
+        //
+        // Asserted as "no reader iterates raw members" rather than by counting
+        // `provableMembers(` call sites, which a future reader could satisfy by
+        // calling it and discarding the result.
+        const roster = readFileSync(
+            resolve(__dirname, '..', 'src/utils/poolRoster.ts'), 'utf8',
+        );
+        const code = roster
+            .split(/\r?\n/)
+            .filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*'))
+            .join('\n');
+
+        // Anchor: the helper must exist under this name, or every assertion
+        // below is checking the absence of something that was merely renamed.
+        expect(code).toMatch(/const provableMembers = /);
+        // The three readers, by the shape each used before this change.
+        expect(code).not.toMatch(/for \(const m of members \|\| \[\]\)/);
+        expect(code).not.toMatch(/const memberList = members \|\| \[\]/);
+        expect(code).toMatch(
+            /for \(const m of provableMembers\(pool, members\)\)[\s\S]*for \(const m of provableMembers\(pool, members\)\)/,
+        );
+        expect(code).toMatch(/const memberList = provableMembers\(pool, members\)/);
+    });
+
+    it('the client member loader delivers whole documents, so joinedAt reaches the filter', () => {
+        // ⚠️ The weakest link in the client half, and it is not hypothetical.
+        //
+        // `RosterInputs.members` is `any[]`, so nothing in the type system stops
+        // a caller PROJECTING member documents to a narrower shape. That would
+        // strip `joinedAt`, make every genuine member look forged, and empty the
+        // roster outright — precisely the regression codex found on #338, where
+        // `sendManualReminder` projected snapshots to `{ id, userName }` one
+        // commit AFTER the filter landed, while all 79 unit tests stayed green
+        // because they called the pure function directly.
+        //
+        // #338 could close that with a required parameter type. `any[]` swallows
+        // any type written here, so the LOADER is pinned instead.
+        const db = readFileSync(
+            resolve(__dirname, '..', 'src/services/dbService.ts'), 'utf8',
+        );
+        const start = db.indexOf('subscribeToPoolMembers:');
+        // Anchor first: a rename must fail here, not silently pass an assertion
+        // scoped to an empty slice.
+        expect(start).toBeGreaterThan(-1);
+        const body = db.slice(start, db.indexOf('},', start));
+        // Comments stripped — one mentioning `...d.data()` must not satisfy an
+        // assertion about what the code does.
+        const bodyCode = body
+            .split(/\r?\n/)
+            .filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*'))
+            .join('\n');
+        expect(bodyCode).toContain('...d.data()');
     });
 
     it('has NO third evidence branch — square ownership stays out', () => {

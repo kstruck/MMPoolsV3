@@ -55,6 +55,14 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
     const paymentInstructions: string = castPool.settings?.paymentInstructions || '';
 
     const myEntry = useMemo(() => entries.find(e => e.ownerUid === user.id) ?? null, [entries, user.id]);
+    // Deliberately NOT filtered through `canonicalMembers` (utils/poolRoster),
+    // which is the one other reader of this collection. That filter keeps a
+    // forged Member Record (#344) off the COMMISSIONER's roster and out of
+    // memberCount — surfaces where a stranger is visible to other people. This
+    // lookup is keyed on `user.id`, so the only record it can ever return is the
+    // caller's own; a forger seeing their own forgery exposes nothing and moves
+    // no money. Filtering it would instead tell them they owe the entry fee for
+    // a pool they never joined, which is a worse answer, not a safer one.
     const myMember = useMemo(() => members.find(m => m.uid === user.id) ?? null, [members, user.id]);
     const isPaid = (myMember?.paidStatus ?? myEntry?.paidStatus) === 'PAID';
     const myRebuys: number = myEntry?.rebuysUsed ?? 0;

@@ -26,6 +26,8 @@
 // `shared/memberRecord.ts` `memberDues`, and no caller of this file is a
 // SQUARES surface. Keep it that way rather than growing a second unit model.
 
+import { isProvableMember } from '@shared/memberRecord';
+
 export interface RosterInputs {
   /** The pool doc. Only `participantIds`, `ownerId` and `settings` are read. */
   pool: any;
@@ -79,6 +81,63 @@ export interface RosterRow {
 const uidOf = (entry: any): string => entry?.ownerUid || entry?.id;
 
 /**
+ * Member Records this file will treat as roster truth.
+ *
+ * Until 2026-08-02 `setPaidStatus`'s claim branch would CREATE
+ * `pools/{anyPool}/members/{caller}` for any authenticated caller (#344), and a
+ * Member Record is roster truth. #344 shut that door and #338 stopped a forged
+ * record being a REMINDER target, but neither deletes the documents already
+ * minted — and this file still put every one of them on the commissioner's
+ * roster list, in `memberCount`, and in the dues totals. A stranger who
+ * self-added before #344 landed therefore still appeared on that pool's roster.
+ *
+ * ⚠️ THE TEST IS `isProvableMember`, NOT `isCanonicalMemberRecord`, and the
+ * difference is the whole correctness argument. Codex round 1 on this change:
+ * filtering on the canonical stamp ALONE also discards a genuine participant's
+ * record when it happens to be un-stamped — and such records demonstrably exist
+ * and carry real money state. `setPaidStatus`'s commissioner branch merges
+ * `paidStatus: 'PAID'` WITHOUT stamping `joinedAt`, and its own comments record
+ * that `reconcilePaymentTruth` promotes claim-only documents to PAID from a paid
+ * entry. Dropping those means a commissioner marks someone paid and the roster
+ * keeps saying UNPAID while `collected` loses the fee — hiding payment truth to
+ * hide a forgery.
+ *
+ * The second evidence source separates them cleanly: a real participant is in
+ * `participantIds` (every server join path writes it, and writing it requires
+ * `isPoolManager()`), while the #344 exploit wrote ONLY the member document. So
+ * the forged record still vanishes and the genuine un-stamped one keeps all of
+ * its payment state.
+ *
+ * Neither predicate is redefined here. `isProvableMember` in
+ * `shared/memberRecord.ts` is the same one `setPaidStatus` uses to admit a
+ * self-report; `resolveReminderTargets` uses the canonical half directly, on
+ * purpose — see the note below. A local copy is how the doors drift apart, and
+ * two of them exist because the first fix left another open.
+ *
+ * ⚠️ WHY THIS IS DELIBERATELY LOOSER THAN THE REMINDER FILTER. #338 refuses
+ * `participantIds` as a reminder-target source because it is MANAGER-WRITABLE,
+ * which would make that callable an arbitrary-email primitive — a manager
+ * appends any UID they know and the platform mails that person. Nothing here
+ * sends anything: the consequence is a row on the manager's own roster and a fee
+ * in their own dues total. A manager listing someone as a participant IS
+ * membership by this system's definition; a manager mailing a stranger is not.
+ *
+ * ⚠️ This filter is only as good as the data reaching it. `subscribeToPoolMembers`
+ * spreads the whole document (`{ uid: d.id, ...d.data() }`), so `joinedAt`
+ * survives to here. A caller that PROJECTS members to a narrower shape would
+ * strip the discriminator and make every genuine member look forged — the exact
+ * regression codex found on #338's `sendManualReminder`. `RosterInputs.members`
+ * is `any[]`, so the type system cannot catch that; the source invariant in
+ * `tests/setpaidstatus-membership-guard.test.ts` does — it sits with the other
+ * two doors' invariants rather than here, so the three-reader rule has one home.
+ */
+const provableMembers = (pool: any, members: any[] | undefined): any[] =>
+  // Called explicitly rather than point-free: `filter` passes (value, index,
+  // array), so a point-free predicate silently receives two extra arguments and
+  // any future signature change lands on them unnoticed.
+  (members || []).filter((m) => isProvableMember(pool, m, m?.uid));
+
+/**
  * Every uid that counts as a person on this pool, from all three evidence
  * sources. 'guest' is the unclaimed-square sentinel, never a person.
  *
@@ -97,7 +156,7 @@ function rosterUids({ pool, members, entries }: RosterInputs): Set<string> {
     if (uid && uid !== 'guest') uids.add(uid);
   };
   for (const uid of (pool?.participantIds || [])) add(uid);
-  for (const m of members || []) add(m?.uid);
+  for (const m of provableMembers(pool, members)) add(m?.uid);
   for (const e of entries || []) add(uidOf(e));
   return uids;
 }
@@ -125,7 +184,7 @@ export function buildPoolRoster({ pool, members, entries }: RosterInputs): Roste
     byUid.set(uid, { ...(byUid.get(uid) || { uid }), ...patch, uid });
   };
   for (const uid of (pool?.participantIds || [])) put(uid, {});
-  for (const m of members || []) {
+  for (const m of provableMembers(pool, members)) {
     put(m.uid, {
       userName: m.userName,
       memberPaid: m.paidStatus,
@@ -312,7 +371,7 @@ export function memberOutstanding(row: RosterRow, rates: DuesRates): number {
  */
 export function rosterPotStats({ pool, members, entries }: RosterInputs): PotStats {
   const { entryFee, rebuyCost } = duesRates(pool);
-  const memberList = members || [];
+  const memberList = provableMembers(pool, members);
   const entryList = entries || [];
 
   // Same set buildPoolRoster produces rows from, so the head count and the roster
