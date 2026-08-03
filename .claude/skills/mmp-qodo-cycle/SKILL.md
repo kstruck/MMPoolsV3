@@ -221,10 +221,18 @@ STABLE_NEEDED=4    # consecutive unchanged polls at 30s = 2 min of quiet
 #     already past 480s when the substantive review begins, and two quiet minutes
 #     end the settle before the inline findings land. Same heading match,
 #     same reason.
+#   * ON `updated_at`, NOT `created_at`, FOR COMMENTS. qodo edits its review
+#     comment IN PLACE on the toggle re-review path (§ re-arm, measured on #346),
+#     so created_at does not move. A created_at anchor is empty on exactly that
+#     path — phase 1 detects the re-review, FIRST does not, the process-clock
+#     fallback cannot reach the floor in one arming, and the watcher returns
+#     PARTIAL forever on a PR qodo has just re-reviewed. `.updated_at // .created_at`
+#     is correct on BOTH paths (they are equal on a fresh comment), so there is one
+#     expression to keep in sync rather than a first-review and a re-review variant.
 FIRST=$( { gh api --paginate $R/issues/<N>/comments \
-      -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | select((.body | capture(\"<h3>(?<h>[^<]*)</h3>\").h // \"\") | test(\"$NOISE\"; \"i\") | not) | .created_at";
+      -q ".[] | select(.user.login == \"$QB\") | select((.updated_at // .created_at) > \"$SINCE\") | select((.body | capture(\"<h3>(?<h>[^<]*)</h3>\").h // \"\") | test(\"$NOISE\"; \"i\") | not) | (.updated_at // .created_at)";
     gh api --paginate $R/pulls/<N>/comments \
-      -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | .created_at";
+      -q ".[] | select(.user.login == \"$QB\") | select((.updated_at // .created_at) > \"$SINCE\") | (.updated_at // .created_at)";
     gh api --paginate $R/pulls/<N>/reviews \
       -q ".[] | select(.user.login == \"$QB\") | select(.body != \"\") | select(.submitted_at > \"$SINCE\") | .submitted_at";
   } | sort | head -1)
