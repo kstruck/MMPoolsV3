@@ -1,32 +1,49 @@
-# HANDOFF — Session entry point (updated 2026-08-02 overnight: functions deployed from `22adb90` — the setPaidStatus membership hole is CLOSED (#344) and forged Member Records can no longer be emailed (#338); the SuperAdmin card finally renders the heartbeat verdicts (#345); the frontend was rebuilt for them, `index-Bv2FV3GO.js` → **`index-DlH8liQe.js`**; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; ALL THREE DEPLOY QUEUES ARE EMPTY)
+# HANDOFF — Session entry point (updated 2026-08-03: functions deployed from `0f548bf` — a forged Member Record no longer shows on the commissioner roster or in memberCount (#347), and prod was measured to hold ZERO of them; the frontend was rebuilt for it; the docs-state guard now catches a dated state heading its own section has moved past (#349, tests+docs only — merged, no deploy owed); the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; ALL THREE DEPLOY QUEUES ARE EMPTY. **The live bundle hash is stated once, in the STOP POINT box below — deliberately not repeated here, because a copy in this title is what went stale three rebuilds running.**)
 
-> ## ✅ STOP POINT **2026-08-02 (overnight)** — everything through #345 shipped AND deployed, frontend included
+> ## ✅ STOP POINT **2026-08-03** — #347 shipped AND deployed (frontend included); #349 merged, tests+docs only, no deploy owed
 >
 > The heading date is the date of the facts immediately below. It is REPLACED
 > on every deploy rather than annotated, because a note added above a stale
 > claim leaves two live-looking claims and the reader takes whichever they
 > reach first — the lesson #343 recorded and this box kept re-learning.
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `22adb90`.**
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `0f548bf`.**
 > **Rules remain ≡ `0a705c0`** — `firestore.rules` is byte-identical since, so no
-> rules deploy is owed. (`shared/memberRecord.ts` DID change; nothing generates
-> `firestore.rules` from `shared/`, so that does not imply one.)
-> ✅ **Frontend rebuilt 2026-08-02 08:38 UTC** for the `src/**` changes in #344,
-> #338 and #345: live bundle moved `index-Bv2FV3GO.js` →
-> **`index-DlH8liQe.js`**, read off the prod HTML. Coolify reported
-> `Deployment is Finished`, healthcheck `"healthy"`, `Rolling update completed.`
-> **ALL THREE QUEUES EMPTY.**
+> rules deploy is owed. (`shared/memberRecord.ts` DID change in #347; nothing
+> generates `firestore.rules` from `shared/`, so that does not imply one.)
+> ✅ **Frontend rebuilt 2026-08-03 04:01 UTC** for #347's `src/**` changes: live
+> bundle moved `index-DlH8liQe.js` → **`index-H9HjG31q.js`**, read off the prod
+> HTML. Coolify reported `Finished`, app `Running (healthy)`.
+> **ALL THREE QUEUES EMPTY.** (#349 is tests + docs only and owes nothing.)
 >
-> ⬆️ **Deployed 2026-08-02 overnight for #344 + #338 + #345.** Evidence: two
-> runs were needed because Cloud Functions returned HTTP 429 (`Per project
-> mutation requests per minute per region`) partway through each first pass —
-> the retry completed them. The certification is the THIRD run: **173 all
-> `Skipped (No changes detected)`, 0 updates, 0 failures, `✔ Deploy complete!`**.
-> That quota 429 is normal for a full-fleet deploy here and is not a failure;
-> what would be a failure is stopping after a partial run and calling it done.
+> ⬆️ **Deployed 2026-08-03 for #347.** Evidence: the certification is the FOURTH
+> run — **173 all `Skipped (No changes detected)`, 0 updates, 0 failures,
+> `✔ Deploy complete!`**. Runs 1–3 each hit HTTP 429 (`Per project mutation
+> requests per minute per region`) partway through; run 3 completed the fleet
+> (153 skipped + 20 updated) but was NOT the certification because it still
+> reported updates. That quota 429 is normal for a full-fleet deploy here and is
+> not a failure; what would be a failure is stopping after a partial run and
+> calling it done.
 >
-> ⬇️ **EVERYTHING BELOW THIS LINE IS THE HISTORICAL DEPLOY RECORD.** `22adb90`
+> 📊 **Measured 2026-08-03, read-only from the Firebase console: ZERO forged
+> Member Records exist in production.** All **156** Member Records across every
+> pool carry `joinedAt` (collection-group query on `members`, limit 1000 so
+> nothing was truncated, all 156 enumerated across four pages). The
+> `memberReportedPaid` / `memberReportedAt` fields do not appear anywhere in that
+> result set. **So the PLAN-SETPAIDSTATUS-MEMBERSHIP §7 cleanup sweep has nothing
+> to clean and does not need running.** #347 remains worth having as the guard
+> against a record that is forged in future.
+>
+> ⬇️ **EVERYTHING BELOW THIS LINE IS THE HISTORICAL DEPLOY RECORD.** `0f548bf`
 > above is the current state.
+>
+> ⬆️ **Deployed 2026-08-02 overnight for #344 + #338 + #345**, from `22adb90`.
+> Evidence: two runs were needed because Cloud Functions returned HTTP 429
+> partway through each first pass — the retry completed them. The certification
+> was the THIRD run: 173 all `Skipped (No changes detected)`, 0 updates, 0
+> failures, `✔ Deploy complete!`. The frontend was rebuilt for it,
+> `index-Bv2FV3GO.js` → `index-DlH8liQe.js`; **both of those are superseded by
+> the current bundle at the top of this box.**
 >
 > ⬆️ **Deployed 2026-08-01 for #341**, which stopped the repair jobs
 > (`fixParticipantIds`, `backfillMemberRecords`) promoting a guest-square claim
@@ -41,10 +58,12 @@
 > paragraph makes NO claim about the current queue state.)
 >
 > ⬇️ **STILL HISTORICAL** — this was the boundary marker written on 2026-08-01,
-> kept for provenance. ⚠️ It used to say "`4713eba` above is the current state",
-> which stopped being true on 2026-08-02. **The only current-state claim in this
-> file is the tagged one at the top of the box (`22adb90`)**; every deployed-SHA
-> line below here is history.
+> kept for provenance. ⚠️ It has now named a stale SHA twice: it said "`4713eba`
+> above is the current state" until 2026-08-02, then "`22adb90`" until
+> 2026-08-03. **The only current-state claim in this file is the one tagged
+> `<!-- deploy-state:current -->` at the top of this box, and this line no longer
+> repeats its value** — that repetition is exactly what kept going stale. Every
+> deployed-SHA line below here is history.
 >
 > ⬆️ **Deployed 2026-07-31 at ~17:45 ET for #334**, which stopped shipping
 > the 113-file test suite to Cloud Functions (`firebase.json` ignore + tsconfig
@@ -74,8 +93,10 @@
 > ✅ **NO frontend rebuild was owed then.** Neither #332 nor #333 touches `src/**`
 > (verified with `git diff --name-only <sha>^ <sha> -- src/` on both merge
 > commits, both empty), so the live bundle stayed `index-Db6JwMWs.js` AT THAT
-> TIME. ⚠️ HISTORICAL — superseded twice since; the live bundle is
-> **`index-DlH8liQe.js`** (top of box).
+> TIME. ⚠️ HISTORICAL — superseded several times since. **The live bundle is
+> named ONCE in this file, at the top of this box**; it is not repeated here,
+> because a hash copied into a history paragraph is stale at the next rebuild and
+> this file has now had that exact rot four times.
 > **ALL THREE QUEUES EMPTY.**
 >
 > 📌 **A production fact established 2026-07-31 and worth keeping:** `nfl_games`
@@ -99,9 +120,9 @@
 >
 > ✅ **Frontend rebuilt the same day**: live bundle moved `index-CR5oJEHh.js` →
 > **`index-Db6JwMWs.js`**, read off the prod HTML — the live hash THEN. It has
-> moved twice since (`index-Bv2FV3GO.js` on 2026-08-01, `index-DlH8liQe.js` on
-> 2026-08-02); **the current one is at the top of this box**, and so is the
-> current queue state.
+> moved several times since; **the current one is at the top of this box**, and
+> so is the current queue state. The intermediate hashes are deliberately not
+> listed — enumerating them is what kept going stale.
 >
 > 🕐 **Not to be confused with the three App Check rebuilds earlier the same day**
 > (04:54 / 05:12 / 05:17 UTC, all at `fe3d7c3`), across which the hash did NOT

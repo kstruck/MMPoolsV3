@@ -87,12 +87,12 @@ things happened on 2026-07-31 and the hash behaved differently in each:
 | 04:54, 05:12, 05:17 | the three App Check rebuilds, all at `fe3d7c3` | **unchanged**, `index-CR5oJEHh.js` |
 | later that day | the #329 rebuild, at `efea033` | **moved** → `index-Db6JwMWs.js` (the live hash *then*) |
 
-⚠️ **SUPERSEDED TWICE. The live bundle is `index-DlH8liQe.js`** (§2): the #341
-rebuild moved it to `index-Bv2FV3GO.js` on 2026-08-01, and the #344/#338/#345
-rebuild moved it again on 2026-08-02. `index-Db6JwMWs.js` was live when this
-section was written and the sentence below is scoped to that day. The "hash did not move" claim
-above is scoped to the three App-Check rebuilds only — it is not a statement
-about the day. Written out because this runbook uses hash movement as positive
+⚠️ **SUPERSEDED. The live bundle is the one named in §2**, which is the only
+place this file states it — repeating the hash here is what made this line wrong
+three rebuilds running. `index-Db6JwMWs.js` was live when this section was
+written, and the sentence below is scoped to that day. The "hash did not move"
+claim above is scoped to the three App-Check rebuilds only — it is not a
+statement about the day. Written out because this runbook uses hash movement as positive
 evidence for a rebuild, so an unqualified "it did not move" is the kind of
 sentence that gets used to condemn a good deploy.
 
@@ -333,7 +333,7 @@ state. Concretely:
 
 ---
 
-## 2. Live state (deploy state verified 2026-08-02)
+## 2. Live state (deploy state verified 2026-08-03)
 
 > ⚠️ **HISTORICAL — this block records the 2026-07-28 state.** Its bundle hash is
 > long superseded; for the CURRENT live bundle see the tagged claim below, which
@@ -361,19 +361,26 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `22adb90`.**
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `0f548bf`.**
 Rules remain ≡ `0a705c0` — `firestore.rules` is byte-identical since, so no rules
-deploy is owed. (`shared/memberRecord.ts` changed; nothing generates
+deploy is owed. (`shared/memberRecord.ts` changed in #347; nothing generates
 `firestore.rules` from `shared/`, so that does not imply one.)
-✅ **Frontend rebuilt 2026-08-02 08:38 UTC** for the `src/**` changes in #344,
-#338 and #345 — the commissioner reminder UI, the `MEMBER_NOT_ON_ROSTER` copy and
-the SuperAdmin stale-job tile. Live bundle moved `index-Bv2FV3GO.js` →
-**`index-DlH8liQe.js`**, read off the prod HTML; Coolify reported
-`Deployment is Finished`, healthcheck `"healthy"`. **ALL THREE QUEUES EMPTY.**
-(Deployed 2026-08-02 overnight for **#344 + #338 + #345**. Cloud Functions
-returned HTTP 429 `Per project mutation requests` partway through each first
-pass; the retry finished them. The certification is the THIRD run: 173 all
-`Skipped (No changes detected)`, 0 updates, 0 failures, `✔ Deploy complete!`.)
+✅ **Frontend rebuilt 2026-08-03 04:01 UTC** for #347's `src/**` changes — the
+commissioner roster, `memberCount` and the dues totals now exclude a forged
+Member Record. Live bundle moved `index-DlH8liQe.js` →
+**`index-H9HjG31q.js`**, read off the prod HTML; Coolify reported `Finished`,
+app `Running (healthy)`. **ALL THREE QUEUES EMPTY.** (#349 is tests + docs only
+and owes nothing.)
+(Deployed 2026-08-03 for **#347**. Cloud Functions returned HTTP 429
+`Per project mutation requests` partway through runs 1–3; run 3 completed the
+fleet but still reported 20 updates, so it was not the certification. The
+certification is the FOURTH run: 173 all `Skipped (No changes detected)`, 0
+updates, 0 failures, `✔ Deploy complete!`.)
+
+📊 **Measured 2026-08-03, read-only: production holds ZERO forged Member
+Records.** All **156** of them carry `joinedAt`. The
+PLAN-SETPAIDSTATUS-MEMBERSHIP §7 cleanup sweep therefore has nothing to clean.
+Method and caveats are in HANDOFF's STOP POINT box.
 
 (HISTORICAL — the deploy before it. 2026-08-01 for **#341**, the repair-job
 narrowing: 173 `Successful update operation`, then 173 all-Skipped. Its frontend
@@ -393,7 +400,7 @@ function `Successful update operation` — expected, because
 every function `Skipped (No changes detected)`. That all-Skipped run is the
 evidence. Rules unchanged by all five, so they remain ≡ this tag. FRONTEND at
 that time: Coolify rebuilt, bundle `index-gn5gQtFU.js` — ⚠️ **superseded; the
-live bundle is `index-DlH8liQe.js` (§2)**.
+live bundle is the one named in §2**.
 Prior claim: <!-- deploy-state:ignore --> `main` @ `d3d2b0d` —)
 (#311 / G1 PR-B2 deployed as the FULL FLEET, twice; rules unchanged.
 Prior claim: <!-- deploy-state:ignore --> `main` @ `6b7e439` —)
@@ -412,9 +419,8 @@ Previous states: <!-- deploy-state:ignore --> `main` @ `8a55b84` (#279) on
 
 ✅ **The FRONTEND was current with this claim on 2026-07-28.** Coolify rebuilt
 that day and the live bundle was `index-gn5gQtFU.js`, verified in the browser
-with cache disabled. ⚠️ **Superseded — the live bundle is
-`index-DlH8liQe.js`** (§2); this paragraph records an older rebuild, not the current
-state. That single rebuild cleared both the #297/#298 dependency-bump debt
+with cache disabled. ⚠️ **Superseded — the live bundle is the one named in §2**;
+this paragraph records an older rebuild, not the current state. That single rebuild cleared both the #297/#298 dependency-bump debt
 (root `package.json` runtime deps — the trigger §4's own queue table names) and
 #313/#315's frontend changes. See HANDOFF's STOP POINT box and §0.
 (Historical: Coolify rebuilt twice on 2026-07-27 to bundle `index-CYTPq50I.js`,
