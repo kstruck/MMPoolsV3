@@ -519,6 +519,26 @@ const BODY_STATE =
  */
 const HISTORICAL = /(historical|superseded)/i;
 
+/**
+ * A BODY line is exempt only when it is ANNOUNCING ITSELF as history — the
+ * marker leads the line, after any blockquote/bullet/emphasis markup.
+ *
+ * ⚠️ NOT the same test the heading uses, deliberately. A heading is a label for
+ * its whole section, so the word anywhere in it describes the section (eleven
+ * real HANDOFF headings carry it in a trailing parenthetical:
+ * `## STOP POINT 2026-07-24 — … (SUPERSEDED by the box above)`). A body line is
+ * a sentence, and the same substring test there discarded genuine CURRENT
+ * updates whose subordinate clause happened to mention the word —
+ * `Frontend deployed 2026-08-02; the prior build is superseded` is a NEW state
+ * claim, and skipping it let a stale `Live state 2026-08-01` heading pass
+ * (codex r4). Leading position is the difference between "this line is history"
+ * and "this line mentions history".
+ */
+export function isHistoricalNote(line: string): boolean {
+  const stripped = line.replace(/^[>\s]*/, '').replace(/^[-*+]\s+/, '').replace(/^[*_`~⚠️✅⛔🔴()\s]*/u, '');
+  return HISTORICAL.test(stripped.slice(0, 20));
+}
+
 /** Explicit escape hatch, same contract as the tags above: same line, before. */
 const STATE_HEADING_EXEMPT = /<!--\s*docs-state:ignore\s*-->/i;
 
@@ -635,7 +655,7 @@ export function staleStateHeadings(text: string): StaleStateHeading[] {
       if (nextLevel > 0 && nextLevel <= level) break; // next sibling/parent section
       const body = lines[j];
       if (!BODY_STATE.test(body)) continue;
-      if (HISTORICAL.test(body)) continue;
+      if (isHistoricalNote(body)) continue;
       // The ONE date this line's state claim carries — not every date on it.
       const d = bodyClaimDate(body);
       if (d && d > headingDate) {
@@ -735,6 +755,28 @@ describe('a dated state heading is not older than its own section', () => {
       ]) {
         expect(staleStateHeadings([heading, '', 'Deployed 2026-08-02.'].join(NL))).toEqual([]);
       }
+    });
+
+    it('does NOT skip a CURRENT update whose clause merely mentions superseding (codex r4)', () => {
+      // A blanket substring skip discarded this line, so the stale heading
+      // passed — the guard silently declining to look at the one line that
+      // proved it wrong.
+      const doc = [
+        '## Live state 2026-08-01',
+        'Frontend deployed 2026-08-02; the prior build is superseded.',
+      ].join(NL);
+      expect(staleStateHeadings(doc)).toHaveLength(1);
+    });
+
+    describe('isHistoricalNote distinguishes being history from mentioning it', () => {
+      it('exempts a line that leads with the marker', () => {
+        expect(isHistoricalNote('> ⚠️ **HISTORICAL — this block records the 2026-07-28 state.**')).toBe(true);
+        expect(isHistoricalNote('Superseded by the 2026-08-02 rebuild.')).toBe(true);
+        expect(isHistoricalNote('- historical: deployed 2026-07-30')).toBe(true);
+      });
+      it('does NOT exempt a line that merely mentions it later on', () => {
+        expect(isHistoricalNote('Frontend deployed 2026-08-02; the prior build is superseded.')).toBe(false);
+      });
     });
 
     it('ignores a HISTORICAL note inside a live section', () => {
@@ -932,10 +974,16 @@ export function unlinkedMorningGroups(
   for (const [, group] of groups) {
     if (group.length < 2) continue;
     const linked = group.some((f) => {
-      const head = headOf(f).split(/\r?\n/).slice(0, HEAD_LINES).join('\n');
-      // BOTH: naming a sibling without a relationship word leaves the reader
-      // knowing another file exists but not which one to trust.
-      return CROSS_REF.test(head) && group.some((o) => o !== f && head.includes(o));
+      const headLines = headOf(f).split(/\r?\n/).slice(0, HEAD_LINES);
+      // BOTH, ON THE SAME LINE. Testing the two independently over the whole
+      // header passed on `See MORNING-x.md` plus an unrelated
+      // `This section continues below` — a sibling named and a relationship word
+      // present, stating no relationship between the two documents (codex r4).
+      // Same binding contract the tags above use: an association has to be
+      // written, not inferred from co-occurrence in a region.
+      return headLines.some(
+        (line) => CROSS_REF.test(line) && group.some((o) => o !== f && line.includes(o)),
+      );
     });
     if (!linked) bad.push(group.slice().sort());
   }
@@ -1005,6 +1053,18 @@ describe('same-date MORNING docs point at each other', () => {
       const files = ['MORNING-2026-08-02.md', 'MORNING-2026-08-02-OVERNIGHT.md'];
       const bodies: Record<string, string> = {
         'MORNING-2026-08-02-OVERNIGHT.md': '# See also MORNING-2026-08-02.md.',
+        'MORNING-2026-08-02.md': '# Morning',
+      };
+      expect(unlinkedMorningGroups(files, (f) => bodies[f])).toHaveLength(1);
+    });
+
+    it('REJECTS a sibling and a relationship word on DIFFERENT lines (codex r4)', () => {
+      // Both signals present in the header, associating nothing. Testing them
+      // independently over the whole header passed this.
+      const files = ['MORNING-2026-08-02.md', 'MORNING-2026-08-02-OVERNIGHT.md'];
+      const bodies: Record<string, string> = {
+        'MORNING-2026-08-02-OVERNIGHT.md':
+          `# See MORNING-2026-08-02.md${NL}${NL}This section continues below.`,
         'MORNING-2026-08-02.md': '# Morning',
       };
       expect(unlinkedMorningGroups(files, (f) => bodies[f])).toHaveLength(1);

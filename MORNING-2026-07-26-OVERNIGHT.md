@@ -2,9 +2,9 @@
 
 > ⚠️ **Two handoff docs exist for 2026-07-26.** This file was written later
 > (committed 2026-07-26) and **supersedes** `MORNING-2026-07-26.md`, which was
-> committed the previous evening and already carries its own superseded banner.
-> Banner added 2026-08-03 — both files are history now; this note exists so
-> whichever one you open first tells you the other is there.
+> committed the previous evening. Banner added 2026-08-03; both files are history
+> now. The matching pointer was added to that file at the same time, so either
+> one you open names the other.
 
 **Six PRs open. Nothing merged, nothing deployed, no prod data touched.**
 
