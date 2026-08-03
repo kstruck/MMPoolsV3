@@ -180,3 +180,35 @@ VERDICT: REVISE. 3 findings (2 P1, 1 P2), **all 3 accepted**. Summary:
 All three accepted. r5 is the concurrency round — every finding is a race or
 an internal contradiction, none is a new data-loss primitive; the core design
 (dry-run default, upsert-only live, explicit gated purge) survived unchanged.
+
+## Round 6 — codex exec review --base origin/main
+
+VERDICT: REVISE. 3 findings (3 P1), **all 3 accepted** (each verified against
+source before acceptance). Summary:
+
+1. (Critical) **`eventMatchesSeason` is fail-open on absent metadata** —
+   verified (`nflSchedule.ts:232` guards only when `s.type` is present), so
+   a payload that LOST its season metadata counts every event eligible and
+   can pass the kickoff-range check while belonging to a different slate.
+   Fix: 1.2 — a purge additionally requires present, exactly-matching
+   `season`+`seasonType` on every eligible event; fail-closed for
+   destruction, tolerant for upserts (sync behavior unchanged).
+2. (Critical) **In-flight-before-gate submission race** — verified:
+   `submitNFLPicksInternal` loads the slate BEFORE opening its entry
+   transaction (`nflPools.ts:373-377`), so a request pausing across the
+   whole gate window commits a purged id after the gate clears. Fix: 1.6 —
+   gate check plus picked-game-id revalidation INSIDE the submission
+   transaction, with a test for exactly that interleaving.
+3. (Critical) **Teams+kickoff matching reverses a home-relative line** —
+   verified: `spread.value` is home-relative (`nflSchedule.ts:296-303`), so
+   carrying a lock across a home/away swap (a venue correction) flips its
+   meaning and misgrades ATS. Fix: 1.5 — exact home/away identity required;
+   a flip never carries the lock silently, refuse and let the operator
+   relock.
+
+### Claude's response
+
+All three accepted. The gate mechanism from r5 #1 needed r6 #2's refinement
+one round later — the review log records this on purpose: a guard added to
+close a finding earns its own review (CLAUDE.md §2c), and this is what that
+looks like when it works.

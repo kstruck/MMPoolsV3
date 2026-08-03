@@ -174,7 +174,15 @@ Phase order is safety-first: gate the destructive path before improving it.
       week-3 range — `nflSchedule.ts:252-265`), and counting that
       correctly-filtered event as a parse loss would reject a valid
       response (codex r4 #2). Any eligible event that fails to parse =
-      refuse. This detects PARSER loss only — it cannot detect a
+      refuse. One asymmetry (codex r6 #1): `eventMatchesSeason` is
+      deliberately FAIL-OPEN when an event carries no season metadata —
+      right for a non-destructive sync, wrong as a purge precondition,
+      because a payload that lost its season metadata would have every
+      event counted eligible and could pass the kickoff-range check while
+      belonging to a different slate. A `purgeStale` week additionally
+      requires every eligible event to carry PRESENT and exactly-matching
+      `season` + `seasonType` metadata — fail-closed for destruction,
+      tolerant for upserts; This detects PARSER loss only — it cannot detect a
       syntactically valid feed the upstream truncated (codex r3 #1), which
       is why stale deletion is never automatic (1.1's `purgeStale` flag);
     - **week identity**: every parsed game's kickoff falls inside the
@@ -227,7 +235,13 @@ Phase order is safety-first: gate the destructive path before improving it.
     the one being purged. A `purgeStale` run must therefore match each
     to-be-purged locked game against its replacement (same teams + kickoff,
     different id) and carry the locked spread value onto it — or refuse that
-    week's purge.
+    week's purge. Matching is by exact HOME/AWAY identity, not "same teams"
+    (codex r6 #3): `spread.value` is stored relative to the home team
+    (`nflSchedule.ts:296-303`), so carrying a line across a home/away swap
+    — a venue correction is the same game to a teams+kickoff matcher —
+    reverses its meaning and misgrades every ATS pick. A home/away flip
+    (same-id or re-keyed) never carries the lock silently: refuse, and let
+    the operator relock deliberately.
 1.6 **A stored id that is referenced by picks is never deleted blind.**
     Pick'em scoring reads `entry.picks[game.id]`
     (`functions/src/nflScoringEngine.ts:108`), so deleting a game id that
@@ -243,7 +257,13 @@ Phase order is safety-first: gate the destructive path before improving it.
     (a `system/` doc) that the pick-submission validation path checks and
     refuses against with a retryable error, cleared when the purge commits
     or fails; purges are rare, operator-triggered, and seconds long, so the
-    member-visible window is negligible. Only Pick'em entries key picks by
+    member-visible window is negligible. The gate check must happen INSIDE
+    the submission's own transaction, alongside a revalidation that the
+    picked game ids still exist (codex r6 #2): `submitNFLPicksInternal`
+    loads the slate BEFORE opening its entry transaction
+    (`nflPools.ts:372-379`), so a request that paused across the entire
+    gate window would otherwise commit a purged id after the gate cleared.
+    The implementing PR tests exactly that interleaving. Only Pick'em entries key picks by
     game id (see Sweep 3) — Survivor/Margin are structurally immune. No
     automatic pick migration in this plan.
 1.7 **A score-bearing import enqueues rescoring the way the sync path does.**
