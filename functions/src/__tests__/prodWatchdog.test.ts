@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Timestamp } from "firebase-admin/firestore";
 import { computeWatchdogReport, WATCHDOG_SIGNAL_CAP, WATCHDOG_RAW_READ_CAP } from "../prodWatchdog";
+import { getProdWatchdogSchema } from "../schemas/prodWatchdog";
 
 /**
  * The watchdog's only non-trivial logic is the mixed-type time window, so the
@@ -353,5 +354,22 @@ describe("computeWatchdogReport — assembly", () => {
         expect(report.windowHours).toBe(24);
         expect(report.sinceMs).toBe(NOW - 24 * HOUR);
         expect(report.at).toBe(NOW);
+    });
+});
+
+describe("getProdWatchdogSchema — a no-input callable must accept no input", () => {
+    it("accepts null, which is what a zero-arg httpsCallable(fn)() actually sends", () => {
+        // The failure this pins is invisible from the call site: `httpsCallable(fn)()`
+        // looks like it sends nothing and in fact sends null, which a bare
+        // z.object({}).strict() rejects with invalid-argument before the handler
+        // runs. Shipped twice in this repo (syncMyClaims, then #180).
+        expect(getProdWatchdogSchema.safeParse(null).success).toBe(true);
+        expect(getProdWatchdogSchema.safeParse(undefined).success).toBe(true);
+        expect(getProdWatchdogSchema.safeParse({}).success).toBe(true);
+    });
+
+    it("still rejects unknown fields", () => {
+        // Accepting null must not be bought by loosening the trust boundary.
+        expect(getProdWatchdogSchema.safeParse({ windowHours: 999 }).success).toBe(false);
     });
 });
