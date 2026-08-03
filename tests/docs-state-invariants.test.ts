@@ -535,7 +535,14 @@ const HISTORICAL = /(historical|superseded)/i;
  * and "this line mentions history".
  */
 export function isHistoricalNote(line: string): boolean {
-  const stripped = line.replace(/^[>\s]*/, '').replace(/^[-*+]\s+/, '').replace(/^[*_`~⚠️✅⛔🔴()\s]*/u, '');
+  // Strip EVERYTHING before the first letter or digit — blockquote markers,
+  // bullets, emphasis, emoji. Written as "not a letter or number" rather than a
+  // list of the decorations actually seen, because the list was both incomplete
+  // and, with `⚠️` in it, a lint ERROR: that glyph is a multi-code-point
+  // sequence and ESLint's no-misleading-character-class rejects it inside a
+  // character class (codex r5 — my own lint run printed "1 error" and I read
+  // past it).
+  const stripped = line.replace(/^[^\p{L}\p{N}]+/u, '');
   return HISTORICAL.test(stripped.slice(0, 20));
 }
 
@@ -650,9 +657,25 @@ export function staleStateHeadings(text: string): StaleStateHeading[] {
     const headingDate = headingClaimDate(heading);
     if (!headingDate) continue;
 
+    // Depth of a HISTORICAL subsection we are currently inside, if any. A child
+    // heading marked historical labels everything under it, and its ordinary
+    // state lines do not each repeat the marker — so without this, a live
+    // section holding a `### Historical: rebuild log` is reported stale on that
+    // log's own dates. A false alarm, which is the direction that gets an
+    // invariant ignored (codex r5).
+    let historicalDepth: number | null = null;
+
     for (let j = i + 1; j < lines.length; j++) {
       const nextLevel = headingLevel(lines[j]);
       if (nextLevel > 0 && nextLevel <= level) break; // next sibling/parent section
+      if (nextLevel > 0) {
+        // Leaving the historical subsection when a heading at its depth or
+        // shallower arrives; entering one when the child heading says so.
+        if (historicalDepth !== null && nextLevel <= historicalDepth) historicalDepth = null;
+        if (historicalDepth === null && HISTORICAL.test(lines[j])) historicalDepth = nextLevel;
+        continue;
+      }
+      if (historicalDepth !== null) continue;
       const body = lines[j];
       if (!BODY_STATE.test(body)) continue;
       if (isHistoricalNote(body)) continue;
@@ -810,6 +833,32 @@ describe('a dated state heading is not older than its own section', () => {
         'Deployed 2026-08-02.',
       ].join(NL);
       expect(staleStateHeadings(doc)).toEqual([]);
+    });
+
+    it('skips a HISTORICAL child SECTION, not just marked lines (codex r5)', () => {
+      // The child heading labels everything under it; its log lines do not each
+      // repeat the marker. Scanning them reports the live parent stale on a
+      // history log's dates.
+      const doc = [
+        '## Live state 2026-08-01',
+        '### Historical: rebuild log',
+        'Frontend deployed 2026-08-02.',
+      ].join(NL);
+      expect(staleStateHeadings(doc)).toEqual([]);
+    });
+
+    it('resumes scanning after the historical child section ends', () => {
+      // The exemption must be scoped, not sticky — otherwise one historical
+      // subsection silently disables the rest of the section.
+      const doc = [
+        '## Live state 2026-08-01',
+        '### Historical: rebuild log',
+        'Frontend deployed 2026-07-30.',
+        '### Current',
+        'Frontend deployed 2026-08-02.',
+      ].join(NL);
+      expect(staleStateHeadings(doc)).toHaveLength(1);
+      expect(staleStateHeadings(doc)[0].contentDate).toBe('2026-08-02');
     });
 
     it('does NOT stop at a DEEPER subheading inside the section', () => {
