@@ -553,14 +553,34 @@ function headingLevel(line: string): number {
  * question is well-posed — a state claim is `<state word> … <its date>` — and
  * the answer is positional and exact rather than a window.
  */
-export function headingClaimDate(heading: string): string | null {
-  const state = HEADING_STATE.exec(heading);
-  const all = heading.match(ANY_DATE);
+export function claimDateIn(text: string, vocabulary: RegExp): string | null {
+  const all = text.match(ANY_DATE);
   if (!all) return null;
+  const state = vocabulary.exec(text);
   if (!state) return all[0];
-  const after = heading.slice(state.index).match(ANY_DATE);
+  const after = text.slice(state.index).match(ANY_DATE);
   return after ? after[0] : all[0];
 }
+
+/** The date a HEADING's state claim carries. */
+export const headingClaimDate = (heading: string): string | null =>
+  claimDateIn(heading, HEADING_STATE);
+
+/**
+ * The date a BODY line's state claim carries.
+ *
+ * ⚠️ SAME RULE AS THE HEADING, and it must be — codex round 2 found the exact
+ * mirror image of its round 1 finding here. Taking EVERY date on the line meant
+ * `Frontend deployed 2026-08-02; HOF game 2026-08-13` reported the section stale
+ * on the GAME date, under a heading whose deploy state was perfectly current.
+ *
+ * That is a FALSE ALARM, which for this guard is the expensive direction: an
+ * invariant that cries wolf gets ignored, and then the real one is missed. Both
+ * sides therefore anchor to their state word through one function, so the two
+ * cannot drift into disagreeing about what a dated claim is.
+ */
+export const bodyClaimDate = (body: string): string | null =>
+  claimDateIn(body, BODY_STATE);
 
 export interface StaleStateHeading {
   line: number;
@@ -597,18 +617,17 @@ export function staleStateHeadings(text: string): StaleStateHeading[] {
       const body = lines[j];
       if (!BODY_STATE.test(body)) continue;
       if (HISTORICAL.test(body)) continue;
-      for (const d of body.match(ANY_DATE) || []) {
-        if (d > headingDate) {
-          out.push({
-            line: i + 1,
-            heading,
-            headingDate,
-            contentDate: d,
-            contentLine: body.trim(),
-          });
-          j = lines.length; // one report per heading is enough to act on
-          break;
-        }
+      // The ONE date this line's state claim carries — not every date on it.
+      const d = bodyClaimDate(body);
+      if (d && d > headingDate) {
+        out.push({
+          line: i + 1,
+          heading,
+          headingDate,
+          contentDate: d,
+          contentLine: body.trim(),
+        });
+        break; // one report per heading is enough to act on
       }
     }
   }
@@ -766,6 +785,42 @@ describe('a dated state heading is not older than its own section', () => {
     it('falls back to the first date when the state word TRAILS it', () => {
       const doc = ['## 2026-08-01 live state', 'Deployed 2026-08-02.'].join(NL);
       expect(staleStateHeadings(doc)).toHaveLength(1);
+    });
+
+    it('does NOT fire on an unrelated future date sharing a status line (codex r2 P2)', () => {
+      // The mirror of the heading-side bug. The deploy state matches the
+      // heading exactly; only the game date is later, and it is not a state
+      // record. Firing here would be a false alarm, which is the direction that
+      // gets an invariant ignored.
+      const doc = [
+        '## Live state 2026-08-02',
+        'Frontend deployed 2026-08-02; HOF game 2026-08-13.',
+      ].join(NL);
+      expect(staleStateHeadings(doc)).toEqual([]);
+    });
+
+    it('still fires when the STATE date on that line is genuinely newer', () => {
+      // The same line shape, but the deploy really did move past the heading —
+      // proving the fix above narrowed the rule rather than disabling it.
+      const doc = [
+        '## Live state 2026-08-01',
+        'Frontend deployed 2026-08-02; HOF game 2026-08-13.',
+      ].join(NL);
+      expect(staleStateHeadings(doc)).toHaveLength(1);
+      expect(staleStateHeadings(doc)[0].contentDate).toBe('2026-08-02');
+    });
+
+    describe('bodyClaimDate anchors the same way the heading does', () => {
+      it('takes the date after the state word, not the latest on the line', () => {
+        expect(bodyClaimDate('Frontend deployed 2026-08-02; HOF game 2026-08-13.'))
+          .toBe('2026-08-02');
+      });
+      it('falls back to the first date when the state word trails it', () => {
+        expect(bodyClaimDate('2026-08-02 — frontend rebuilt.')).toBe('2026-08-02');
+      });
+      it('returns null on a line with no date', () => {
+        expect(bodyClaimDate('Frontend deployed.')).toBeNull();
+      });
     });
 
     describe('headingClaimDate picks the claim date, not an extreme', () => {
