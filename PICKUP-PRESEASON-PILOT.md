@@ -333,7 +333,7 @@ state. Concretely:
 
 ---
 
-## 2. Live state (deploy state verified 2026-08-02)
+## 2. Live state (deploy state verified 2026-08-03)
 
 > ⚠️ **HISTORICAL — this block records the 2026-07-28 state.** Its bundle hash is
 > long superseded; for the CURRENT live bundle see the tagged claim below, which
@@ -361,19 +361,26 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `22adb90`.**
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `0f548bf`.**
 Rules remain ≡ `0a705c0` — `firestore.rules` is byte-identical since, so no rules
-deploy is owed. (`shared/memberRecord.ts` changed; nothing generates
+deploy is owed. (`shared/memberRecord.ts` changed in #347; nothing generates
 `firestore.rules` from `shared/`, so that does not imply one.)
-✅ **Frontend rebuilt 2026-08-02 08:38 UTC** for the `src/**` changes in #344,
-#338 and #345 — the commissioner reminder UI, the `MEMBER_NOT_ON_ROSTER` copy and
-the SuperAdmin stale-job tile. Live bundle moved `index-Bv2FV3GO.js` →
-**`index-DlH8liQe.js`**, read off the prod HTML; Coolify reported
-`Deployment is Finished`, healthcheck `"healthy"`. **ALL THREE QUEUES EMPTY.**
-(Deployed 2026-08-02 overnight for **#344 + #338 + #345**. Cloud Functions
-returned HTTP 429 `Per project mutation requests` partway through each first
-pass; the retry finished them. The certification is the THIRD run: 173 all
-`Skipped (No changes detected)`, 0 updates, 0 failures, `✔ Deploy complete!`.)
+✅ **Frontend rebuilt 2026-08-03 04:01 UTC** for #347's `src/**` changes — the
+commissioner roster, `memberCount` and the dues totals now exclude a forged
+Member Record. Live bundle moved `index-DlH8liQe.js` →
+**`index-H9HjG31q.js`**, read off the prod HTML; Coolify reported `Finished`,
+app `Running (healthy)`. **ALL THREE QUEUES EMPTY.** (#349 is tests + docs only
+and owes nothing.)
+(Deployed 2026-08-03 for **#347**. Cloud Functions returned HTTP 429
+`Per project mutation requests` partway through runs 1–3; run 3 completed the
+fleet but still reported 20 updates, so it was not the certification. The
+certification is the FOURTH run: 173 all `Skipped (No changes detected)`, 0
+updates, 0 failures, `✔ Deploy complete!`.)
+
+📊 **Measured 2026-08-03, read-only: production holds ZERO forged Member
+Records.** All **156** of them carry `joinedAt`. The
+PLAN-SETPAIDSTATUS-MEMBERSHIP §7 cleanup sweep therefore has nothing to clean.
+Method and caveats are in HANDOFF's STOP POINT box.
 
 (HISTORICAL — the deploy before it. 2026-08-01 for **#341**, the repair-job
 narrowing: 173 `Successful update operation`, then 173 all-Skipped. Its frontend
