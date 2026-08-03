@@ -106,7 +106,12 @@ Phase order is safety-first: gate the destructive path before improving it.
     (broadened per codex r1 #5). Live deletion requires an explicit
     `dryRun: false`. This intentionally changes behavior for the existing
     SuperAdmin UI caller (it will start dry-running until it passes the flag) —
-    that is the fail-safe direction, and the UI update ships in the same PR.
+    that is the fail-safe direction. The Phase-0 UI change makes the import
+    button DRY-RUN-ONLY: no UI path can send `dryRun: false` until Phase 3
+    ships the report-then-confirm flow (codex r7 #1 — a one-click UI passing
+    `dryRun: false` would neutralize the safe default the moment
+    `nflImport.enabled` flips on; until Phase 3, a live run is a deliberate
+    out-of-UI invocation by the operator).
     The schema note that optional-field defaults are load-bearing
     (`schemas/nflSchedule.ts:17-20`) stays true: `dryRun` is added as another
     optional field whose absence means the SAFE value.
@@ -147,9 +152,16 @@ Phase order is safety-first: gate the destructive path before improving it.
     re-keyed fixture both live, and week queries would score the matchup
     twice). Upsert-only runs keep plain write-before-nothing ordering — a
     failure at ANY point leaves the week no worse than before the run
-    (codex r1 #1). The implementing PR must include a test that an injected
-    commit failure preserves the prior slate. A week whose fetch failed is
-    not touched at all.
+    (codex r1 #1). An upsert-only run REFUSES a week containing a re-keyed
+    game — an incoming id with no existing doc whose exact home/away +
+    kickoff matches a stored doc under a DIFFERENT id (codex r7 #4):
+    upserting the replacement would create a duplicate fixture carrying the
+    parser's `locked: false` while the old locked doc remains, and ATS
+    submission blocks on any unlocked game in the week, so the "safe"
+    upsert would take the whole slate down. A re-key is only resolvable
+    through the reviewed `purgeStale` path. The implementing PR must
+    include a test that an injected commit failure preserves the prior
+    slate. A week whose fetch failed is not touched at all.
 1.2 **A usable slate, not just a 200 response, gates the delete.**
     `fetchNFLWeekSchedule`'s catch-all `[]` return (`nflSchedule.ts:182-185`)
     erases the failed/empty distinction, and a non-null `raw`
@@ -251,19 +263,28 @@ Phase order is safety-first: gate the destructive path before improving it.
     if any stale id is referenced, the run REFUSES that week before touching
     it and reports the ids, leaving reference migration as an explicit
     operator decision (codex r1 #3). The scan alone cannot serialize against
-    a pick SUBMITTED between scan and commit — a new entry doc is not a doc
-    the purge transaction read, so it raises no conflict (codex r5 #1). A
-    `purgeStale` run therefore sets a short-lived slate-scoped import gate
-    (a `system/` doc) that the pick-submission validation path checks and
-    refuses against with a retryable error, cleared when the purge commits
-    or fails; purges are rare, operator-triggered, and seconds long, so the
-    member-visible window is negligible. The gate check must happen INSIDE
-    the submission's own transaction, alongside a revalidation that the
-    picked game ids still exist (codex r6 #2): `submitNFLPicksInternal`
-    loads the slate BEFORE opening its entry transaction
-    (`nflPools.ts:372-379`), so a request that paused across the entire
-    gate window would otherwise commit a purged id after the gate cleared.
-    The implementing PR tests exactly that interleaving. Only Pick'em entries key picks by
+    a pick SUBMITTED concurrently — a new entry doc is not a doc the purge
+    transaction read, so it raises no conflict (codex r5 #1). A `purgeStale`
+    run therefore takes a slate-scoped import gate (a `system/` doc), with
+    three properties the first two drafts lacked:
+    - **acquired BEFORE the reference scan** (codex r7 #2 — scan-then-gate
+      leaves a gap where a pick commits after the scan saw nothing);
+    - **an expiring, owner-tokened lease** — a crash after acquisition must
+      not block the slate forever; expired leases read as inactive, and
+      only the owning run clears its own lease (codex r7 #2);
+    - **checked INSIDE every pick-writing transaction, alongside
+      revalidation that the picked game ids still exist** (codex r6 #2):
+      `submitNFLPicksInternal` loads the slate BEFORE opening its entry
+      transaction (`nflPools.ts:373-377`), so a request pausing across the
+      entire gate window would otherwise commit a purged id after the gate
+      cleared. "Every pick-writing transaction" is TWO paths, not one:
+      `proxyPick` writes `entry.picks[gameId]` in its own transaction
+      without going through `submitNFLPicksInternal`
+      (`poolExceptions.ts:316-345`) and needs the same gate check and
+      revalidation (codex r7 #3; Sweep 3 lists the writers).
+    Purges are rare, operator-triggered, and seconds long, so the
+    member-visible refusal window is negligible. The implementing PR tests
+    the in-flight-before-gate interleaving on BOTH write paths. Only Pick'em entries key picks by
     game id (see Sweep 3) — Survivor/Margin are structurally immune. No
     automatic pick migration in this plan.
 1.7 **A score-bearing import enqueues rescoring the way the sync path does.**

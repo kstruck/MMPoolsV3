@@ -212,3 +212,39 @@ All three accepted. The gate mechanism from r5 #1 needed r6 #2's refinement
 one round later — the review log records this on purpose: a guard added to
 close a finding earns its own review (CLAUDE.md §2c), and this is what that
 looks like when it works.
+
+## Round 7 — codex exec review --base origin/main
+
+VERDICT: REVISE. 4 findings (4 P1), **all 4 accepted** (proxyPick claim
+verified against source). Summary:
+
+1. (Critical) **Phase 0's UI update could neutralize the safe default** — a
+   one-click UI passing `dryRun: false` defeats dry-run-by-default the
+   moment the config gate flips on, and Phase 3's report-then-confirm
+   arrives later. Fix: 0.1 — the Phase-0 UI is DRY-RUN-ONLY; no UI path can
+   send a live run until Phase 3 ships.
+2. (Critical) **Scan-then-gate leaves a stranding gap, and a crashed run
+   could gate a slate forever** — Fix: 1.6 — the gate is acquired BEFORE
+   the reference scan and is an expiring, owner-tokened lease; expired
+   leases read as inactive, only the owner clears its own.
+3. (Critical) **`proxyPick` bypasses the gated submission path** — verified:
+   it writes `entry.picks[gameId]` in its own transaction
+   (`poolExceptions.ts:316-345`) without touching
+   `submitNFLPicksInternal`. Fix: 1.6 — the gate check + id revalidation is
+   required in EVERY pick-writing transaction (two paths; Sweep 3 now lists
+   the writers), and the interleaving test runs on both.
+4. (Critical) **A re-keyed game breaks the "safe" upsert too** — the
+   replacement id has no existing doc, so lock-preservation-by-omission
+   does not apply: the upsert writes a duplicate `locked: false` fixture
+   while the old locked doc remains, and ATS submission blocks on any
+   unlocked game — the whole slate goes down. Fix: 1.1 — an upsert-only
+   run REFUSES a week containing a re-key (new id whose exact home/away +
+   kickoff matches a stored doc under a different id); re-keys are only
+   resolvable through the reviewed `purgeStale` path.
+
+### Claude's response
+
+All four accepted. r7 attacked the seams BETWEEN the safety mechanisms
+(UI ↔ default, gate ↔ scan, gate ↔ second write path, upsert ↔ lock rule)
+rather than the mechanisms themselves — the expected shape when the core is
+converging.

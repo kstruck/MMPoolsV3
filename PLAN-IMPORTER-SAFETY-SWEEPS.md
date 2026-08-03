@@ -53,6 +53,14 @@ grep -v __tests__` → 3 code sites (+1 comment):
 > **Result: 1.6's refuse-and-report guard must consider Pick'em entries on
 > the affected slate; Survivor/Margin entries are structurally immune.**
 
+Pick WRITERS (the paths 1.6's import gate must be checked in — found by
+tracing `picks[...] =` assignments and entry `set/update` sites, not just
+readers): `submitNFLPicksInternal` (`nflPools.ts`, slate loaded at
+`:373-377` before its transaction) and `proxyPick`
+(`poolExceptions.ts:316-345`, writes `entry.picks[gameId]` in its own
+transaction without calling `submitNFLPicksInternal`). Two paths, both
+gated, per codex r7 #3.
+
 ## HARD DEPENDENCY carried into the implementing PR
 
 **Mutation-test every guard added from these sweeps and ANCHOR the mutant**
