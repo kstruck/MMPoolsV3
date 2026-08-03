@@ -282,3 +282,28 @@ source). Summary:
 ### Claude's response
 
 All four accepted; no rejections.
+
+## Round 9 — codex exec review --base origin/main
+
+VERDICT: REVISE. 3 findings (3 P1), **all 3 accepted**. Summary:
+
+1. (Critical) **The Survivor precondition raced the scorer** — the 1.6 gate
+   blocks pick writers, not scoring, so a scorer publishing the week between
+   the check and the import commit invalidates it silently. Fix: 1.7 — the
+   commit re-checks affected pools' scored/published state under the same
+   per-pool scoring fence the submission path respects (the
+   `retryWhileScoring` lease, `nflPools.ts:367-370`).
+2. (Critical) **A re-key that also flexes the kickoff evaded the duplicate
+   guard** — matching home/away + kickoff misses ESPN correcting both at
+   once. Fix: 1.1 — the matcher is same-week same-home/away pair under a
+   different id, kickoff matching or not; an NFL matchup occurs at most
+   once per week, so that shape is always a re-key.
+3. (Critical) **Enqueueing to a disarmed consumer recreates the stale
+   standings** — the queue event sits inert until an operator arms the
+   consumer. Fix: 1.7 — a live import changing score-relevant fields on an
+   already-scored week requires the rescore consumer to be live at run
+   time, else that week refuses; unscored weeks unaffected.
+
+### Claude's response
+
+All three accepted; no rejections.

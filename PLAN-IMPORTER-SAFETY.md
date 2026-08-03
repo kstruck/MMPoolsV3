@@ -153,8 +153,12 @@ Phase order is safety-first: gate the destructive path before improving it.
     twice). Upsert-only runs keep plain write-before-nothing ordering — a
     failure at ANY point leaves the week no worse than before the run
     (codex r1 #1). An upsert-only run REFUSES a week containing a re-keyed
-    game — an incoming id with no existing doc whose exact home/away +
-    kickoff matches a stored doc under a DIFFERENT id (codex r7 #4):
+    game — an incoming id with no existing doc whose exact home/away pair
+    matches a stored doc under a DIFFERENT id **in the same week, kickoff
+    matching or not** (codex r7 #4; widened per codex r9 #2 — ESPN can
+    re-key and flex the kickoff in the same correction, and an NFL matchup
+    occurs at most once per week, so a same-week same-home/away pair under
+    two ids is always a re-key, never two games):
     upserting the replacement would create a duplicate fixture carrying the
     parser's `locked: false` while the old locked doc remains, and ATS
     submission blocks on any unlocked game in the week, so the "safe"
@@ -324,9 +328,22 @@ Phase order is safety-first: gate the destructive path before improving it.
       change score-relevant fields on a week already scored for an affected
       Survivor pool REFUSES that week; reset-and-replay is explicitly out
       of scope (see Out of scope) and its absence is a refusal, not a
-      deferral.
-    (The queue's CONSUMER staying armed or not remains Kevin's — enqueueing
-    is inert until the rescore path is armed, same as for the sync path.)
+      deferral. This precondition must be SERIALIZED with scoring
+      (codex r9 #1): the import gate of 1.6 blocks pick writers, not the
+      scorer, so a scorer publishing the week between the check and the
+      import commit would invalidate it silently. The commit re-checks the
+      affected pools' scored/published state under the same per-pool
+      scoring fence the submission path already respects (the
+      `retryWhileScoring` lease — `nflPools.ts:367-370`), so the
+      interleaving conflicts instead of slipping through.
+    And one operational precondition (codex r9 #3): enqueueing to a
+    DISARMED queue is deferral dressed as reconciliation. A live import
+    that changes score-relevant fields on an ALREADY-SCORED week requires
+    the rescore consumer to be live (config check at run time); otherwise
+    that week refuses. Unscored weeks are unaffected — there are no
+    standings to go stale. (Arming the consumer remains Kevin's; this rule
+    makes the importer honest about it rather than parking corrections in
+    a queue nothing drains.)
 1.8 **Every new control rides through the strict schema.**
     `importNFLScheduleSchema` is `z.strictObject` — an unlisted field
     REJECTS the request before the handler runs (codex r4 #4). The
