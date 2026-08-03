@@ -90,6 +90,9 @@ export { logClientError } from "./logClientError";
 export { getAdminHealthSnapshot, scheduledHealthCheck } from "./adminHealth";
 export { readiness } from "./readiness";
 export { getOpsHealthSummary } from "./opsHealth";
+// Production Watchdog — user-activity digest (opsHealth's sibling: that one
+// watches the machinery, this one watches the people).
+export { getProdWatchdog } from "./prodWatchdog";
 export { webhookDurabilitySweep } from "./webhookDurabilitySweep";
 
 // --- REVENUE AGGREGATES (platform revenue from billingCharges → admin_stats/revenue) ---
