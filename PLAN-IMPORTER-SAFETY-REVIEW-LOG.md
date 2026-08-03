@@ -307,3 +307,54 @@ VERDICT: REVISE. 3 findings (3 P1), **all 3 accepted**. Summary:
 ### Claude's response
 
 All three accepted; no rejections.
+
+## Round 10 — codex exec review --base origin/main
+
+VERDICT: REVISE. 3 findings (3 P1), **all 3 accepted** (the scoring-lease
+mechanics verified: `retryWhileScoring` sits behind
+`assertNoScoringInProgress` and never holds the lease;
+`acquireScoringLease`/`withScoringLease` in `lib/scoringLease.ts` are what
+the scorer actually takes). Summary:
+
+1. (Critical) **Scheduled game writers can resurrect a purged doc** — an
+   in-flight `syncScoresWindow`/deep-sweep pass that fetched the pre-re-key
+   id before the purge commits AFTER it; Firestore cannot conflict a
+   transaction with a later write. Fix: 1.6 — the slate gate is observed by
+   every `nfl_games` writer (sync, deep sweep, `replayFeedSnapshot`), not
+   just pick writers, with the interleaving tested.
+2. (Critical) **r9 #1's re-check was not serialization** — a scorer that
+   read the old slate before the import commit can acquire its lease and
+   publish stale results after. Fix: 1.7 — the importer ACQUIRES each
+   affected pool's actual scoring lease
+   (`acquireScoringLease`/`withScoringLease`, `lib/scoringLease.ts`) for
+   the duration, verifies ownership in the same commit, refuses the week
+   if a lease cannot be held.
+3. (Critical) **The kill-switch flip was tied to the wrong phase** —
+   enabling `nflImport.enabled` on a Phase-0-only release gates the
+   UNCHANGED season-wide delete. Fix: Key decisions — the flag stays OFF
+   until Phase 1's scoped atomic implementation is deployed.
+
+### Claude's response
+
+All three accepted and folded in.
+
+## Resolution — CAP REACHED AT 10 ROUNDS; ALL FINDINGS ABSORBED; NOT CODEX-APPROVED
+
+10 rounds, **37 findings total (6+3+4+4+3+3+4+4+3+3), 37 accepted /
+0 rejected.** No round came
+back clean, so this is NOT "CONVERGED" and the log does not claim it. What
+the trajectory shows instead: rounds 1–4 attacked the core design and forced
+one structural change (upsert-only default, purge behind an explicit
+reviewed flag); rounds 5–10 attacked concurrency seams between the safety
+mechanisms and adjacent subsystems, each round refining the previous round's
+own fixes — including twice catching the plan contradicting itself (r5 #3)
+and catching a prior round's fix being insufficient (r10 #2 vs r9 #1).
+
+Round 10's three absorptions have NOT been re-reviewed by codex —
+CLAUDE.md §2c caps judgement at 10 rounds per artifact and going past it is
+Kevin's call, made with a reason. The reason to consider rounds 11+: the
+finding rate never reached zero. The reason not to: this is a PLAN — every
+mechanism it specifies gets its own codex cycle when the implementing PR is
+written, so unreviewed plan prose is caught again before it becomes deployed
+code, and the qodo pass on the PR is a second independent reviewer on this
+same text. Kevin decides; the PR body states this status plainly.

@@ -278,6 +278,14 @@ Phase order is safety-first: gate the destructive path before improving it.
     three properties the first two drafts lacked:
     - **acquired BEFORE the reference scan** (codex r7 #2 — scan-then-gate
       leaves a gap where a pick commits after the scan saw nothing);
+    - **observed by every `nfl_games` writer, not just pick writers**
+      (codex r10 #1): an in-flight `syncScoresWindow` or deep-sweep pass
+      that fetched the pre-re-key ESPN id before the purge can commit AFTER
+      it — Firestore cannot conflict a transaction with a write that
+      happens after it commits — recreating the deleted stale doc and the
+      duplicate fixture. The scheduled sync, deep sweep, and
+      `replayFeedSnapshot` check the slate gate before writing a gated
+      slate, and the implementing PR tests that interleaving;
     - **an expiring, owner-tokened lease** — a crash after acquisition must
       not block the slate forever; expired leases read as inactive, and
       only the owning run clears its own lease (codex r7 #2). Expiry cuts
@@ -329,13 +337,16 @@ Phase order is safety-first: gate the destructive path before improving it.
       Survivor pool REFUSES that week; reset-and-replay is explicitly out
       of scope (see Out of scope) and its absence is a refusal, not a
       deferral. This precondition must be SERIALIZED with scoring
-      (codex r9 #1): the import gate of 1.6 blocks pick writers, not the
-      scorer, so a scorer publishing the week between the check and the
-      import commit would invalidate it silently. The commit re-checks the
-      affected pools' scored/published state under the same per-pool
-      scoring fence the submission path already respects (the
-      `retryWhileScoring` lease — `nflPools.ts:367-370`), so the
-      interleaving conflicts instead of slipping through.
+      (codex r9 #1), and a RE-CHECK is not serialization (codex r10 #2):
+      `retryWhileScoring` only retries entry transactions behind
+      `assertNoScoringInProgress` — it never holds the lease — so a scorer
+      that read the old slate before the import commit can acquire its
+      lease and publish stale results after the import lands. The importer
+      must ACQUIRE (and renew for the duration) each affected pool's actual
+      scoring lease — the same `acquireScoringLease`/`withScoringLease`
+      mechanism the scorer uses (`lib/scoringLease.ts`) — before a
+      score-changing import, verify ownership in the same commit, and
+      refuse the week if any lease cannot be held.
     And one operational precondition (codex r9 #3): enqueueing to a
     DISARMED queue is deferral dressed as reconciliation. A live import
     that changes score-relevant fields on an ALREADY-SCORED week requires
@@ -379,9 +390,13 @@ Phase order is safety-first: gate the destructive path before improving it.
   config gate is what lets an incident responder halt live imports globally
   without racing a SUPER_ADMIN's click. Phase 0 therefore also adds
   `system/config.nflImport.enabled` — default OFF/absent = live runs refused
-  (dry runs still permitted, they mutate nothing). Kevin flips it once when
-  the implementing PR deploys; the flag is a halt lever, not a per-run
-  ceremony.
+  (dry runs still permitted, they mutate nothing). The flag is a halt lever,
+  not a per-run ceremony — and it stays OFF until **Phase 1 is deployed**,
+  not merely Phase 0 (codex r10 #3): Phase 0 alone gates the UNCHANGED
+  season-wide delete, so enabling the flag on a Phase-0-only release would
+  let an out-of-UI `dryRun: false` call pass both new gates and still
+  execute today's defect. Kevin flips it once, after Phase 1's scoped
+  atomic implementation and its tests are live.
 - **Per-week scoped delete over delete-nothing.** The cleanup exists for a
   real reason (purging orphaned ids when ESPN re-keys an event — the doc
   comment at `nflSchedule.ts:362` and the season-lookup-key note in
