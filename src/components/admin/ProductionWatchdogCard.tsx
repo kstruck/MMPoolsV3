@@ -53,17 +53,33 @@ const KIND_ICON: Record<WatchdogEventKind, React.ComponentType<{ size?: number; 
 /** Events shown at once. The counts above the list are the full picture. */
 const VISIBLE_EVENTS = 12;
 
-const Tile: React.FC<{ label: string; signal: WatchdogSignal; value?: string; alert?: boolean }> = ({
-  label,
-  signal,
-  value,
-  alert,
-}) => {
+/**
+ * `kind` decides what truncation MEANS, and the two are not the same claim.
+ * A capped COUNT is a genuine lower bound — the real number is at least this.
+ * A capped MONEY total is not: `billingCharges` rows can be negative (refunds,
+ * disputes), so an unread row can pull the true net DOWN. Marking it "≥" would
+ * assert the opposite of what the data supports, so an amount says "partial".
+ */
+const Tile: React.FC<{
+  label: string;
+  signal: WatchdogSignal;
+  value?: string;
+  kind?: 'count' | 'amount';
+  alert?: boolean;
+}> = ({ label, signal, value, kind = 'count', alert }) => {
   const unavailable = signal.count === undefined;
+  const partialAmount = signal.truncated && kind === 'amount';
   return (
     <div
       className={`p-3 rounded-xl border ${alert && !unavailable ? 'border-[#F2D6B0] bg-[#FBEEDD]' : 'border-line bg-surface'}`}
-      title={signal.unavailable ?? (signal.truncated ? 'Capped — the real number is at least this' : undefined)}
+      title={
+        signal.unavailable ??
+        (signal.truncated
+          ? partialAmount
+            ? 'Capped — this is a partial total and the real net may be higher OR lower'
+            : 'Capped — the real number is at least this'
+          : undefined)
+      }
     >
       <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.12em] block mb-1">{label}</span>
       {unavailable ? (
@@ -72,8 +88,9 @@ const Tile: React.FC<{ label: string; signal: WatchdogSignal; value?: string; al
         <span
           className={`text-xl font-display font-bold num leading-none ${alert ? 'text-[#B4530A]' : 'text-[color:var(--text)]'}`}
         >
-          {signal.truncated ? '≥' : ''}
+          {signal.truncated && !partialAmount ? '≥' : ''}
           {value ?? signal.count}
+          {partialAmount && <span className="text-[9px] font-display font-bold text-muted ml-1">partial</span>}
         </span>
       )}
     </div>
@@ -165,6 +182,7 @@ export const ProductionWatchdogCard: React.FC = () => {
             <Tile
               label="Charges"
               signal={s.charges}
+              kind="amount"
               value={revenue === undefined ? undefined : `$${revenue.toFixed(2)}`}
             />
             <Tile label="Client Errors" signal={s.clientErrors} alert={(s.clientErrors.count ?? 0) > 0} />

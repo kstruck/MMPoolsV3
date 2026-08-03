@@ -170,6 +170,53 @@ describe("computeWatchdogReport — money", () => {
     });
 });
 
+describe("computeWatchdogReport — client errors", () => {
+    it("counts only rows logClientError wrote, not routine backend log rows", async () => {
+        // scoreUpdates.ts writes SYNC_GAME_STATUS progress rows into system_logs
+        // (five sites) with a serverTimestamp and no `source`. Counting those as
+        // client errors lights the alert tile during a healthy score sync and
+        // pushes real errors past the cap.
+        const report = await computeWatchdogReport(
+            fakeDb({
+                system_logs: [
+                    { id: "c", data: { source: "client", severity: "high", message: "boom", timestamp: NOW - HOUR } },
+                    {
+                        id: "sync",
+                        data: {
+                            type: "SYNC_GAME_STATUS",
+                            status: "success",
+                            timestamp: Timestamp.fromMillis(NOW - HOUR),
+                        },
+                    },
+                ],
+            }),
+            NOW
+        );
+        expect(report.signals.clientErrors.count).toBe(1);
+        expect(report.events).toHaveLength(1);
+        expect(report.events[0].label).toContain("boom");
+    });
+});
+
+describe("computeWatchdogReport — the window has an upper bound too", () => {
+    it("excludes a future-dated row from a clock-skewed client", async () => {
+        // authService.ts stamps createdAt from the USER'S clock. With only a lower
+        // bound, one skewed machine's row rides along in every 24h report until
+        // its timestamp finally arrives.
+        const report = await computeWatchdogReport(
+            fakeDb({
+                users: [
+                    { id: "future", data: { name: "Skewed", createdAt: NOW + 7 * 24 * HOUR } },
+                    { id: "ok", data: { name: "Fine", createdAt: NOW - HOUR } },
+                ],
+            }),
+            NOW
+        );
+        expect(report.signals.newUsers.count).toBe(1);
+        expect(report.events[0].label).toContain("Fine");
+    });
+});
+
 describe("computeWatchdogReport — failure and truncation are reported, never faked", () => {
     it("an unreadable collection yields `unavailable`, not a zero count", async () => {
         const report = await computeWatchdogReport(
@@ -183,6 +230,30 @@ describe("computeWatchdogReport — failure and truncation are reported, never f
         expect(report.signals.charges.revenue).toBeUndefined();
         // One dead signal does not blank the others.
         expect(report.signals.newUsers.count).toBe(1);
+    });
+
+    it("flags truncation when the two type legs are each under the cap but their union is not", async () => {
+        // 30 numeric + 30 Timestamp signups: neither leg trips its own 51-row
+        // read, but 60 rows go through a 50-row slice. Deciding truncation per
+        // leg reports an exact count of 50 while dropping ten events.
+        const half = Math.ceil(WATCHDOG_SIGNAL_CAP * 0.6);
+        const report = await computeWatchdogReport(
+            fakeDb({
+                users: [
+                    ...Array.from({ length: half }, (_, i) => ({
+                        id: `n${i}`,
+                        data: { name: `N${i}`, createdAt: NOW - HOUR },
+                    })),
+                    ...Array.from({ length: half }, (_, i) => ({
+                        id: `t${i}`,
+                        data: { name: `T${i}`, createdAt: Timestamp.fromMillis(NOW - HOUR) },
+                    })),
+                ],
+            }),
+            NOW
+        );
+        expect(report.signals.newUsers.truncated).toBe(true);
+        expect(report.signals.newUsers.count).toBe(WATCHDOG_SIGNAL_CAP);
     });
 
     it("flags truncation when a signal hits the cap", async () => {
@@ -202,7 +273,9 @@ describe("computeWatchdogReport — assembly", () => {
             fakeDb({
                 users: [{ id: "u", data: { name: "U", createdAt: NOW - 3 * HOUR } }],
                 pools: [{ id: "p", data: { name: "P", createdAt: NOW - HOUR } }],
-                system_logs: [{ id: "e", data: { message: "boom", severity: "high", timestamp: NOW - 2 * HOUR } }],
+                system_logs: [
+                    { id: "e", data: { source: "client", message: "boom", severity: "high", timestamp: NOW - 2 * HOUR } },
+                ],
             }),
             NOW
         );

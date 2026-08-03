@@ -100,13 +100,20 @@ export function toMillis(v: unknown): number | null {
  * silently drops half the collection's writers, and a watchdog that silently
  * misses signups is worse than no watchdog.
  *
- *   - numeric leg: bounded ABOVE by MAX_SAFE_INTEGER so it stays numbers-only,
- *     which also means the two legs cannot return the same document.
- *   - timestamp leg: unbounded above; junk of a later type (string, array) would
- *     be included by type ordering but is dropped by the toMillis() filter below.
+ *   - numeric leg: both bounds are numbers, so it stays numbers-only — which is
+ *     also why the two legs can never return the same document.
+ *   - timestamp leg: both bounds are Timestamps, so it stays timestamps-only.
+ *     Junk of another type (string, array) is excluded by the same bounds, and
+ *     anything that slips through is dropped by the toMillis() filter below.
  *
  * Both are single-field ranges, so neither needs a composite index (same
  * constraint opsHealth.ts works under).
+ *
+ * BOTH ENDS ARE BOUNDED. An upper bound of `nowMs` is not tidiness: the client
+ * signup path stamps `Date.now()` from the USER'S clock, so one skewed machine
+ * writes a row dated next week, and a lower-bound-only window would carry that
+ * row in every "last 24h" report until its timestamp finally arrived. It is
+ * excluded now and appears in the window its stamp actually names.
  *
  * No orderBy: the implicit order of a range query is by that field ascending, so
  * a truncated read keeps the OLDEST rows in the window rather than the newest.
@@ -118,21 +125,36 @@ async function windowDocs(
     query: admin.firestore.Query,
     field: string,
     sinceMs: number,
+    nowMs: number,
     cap: number
 ): Promise<{ rows: Array<{ id: string; at: number; data: admin.firestore.DocumentData }>; truncated: boolean }> {
     const [numeric, stamped] = await Promise.all([
-        query.where(field, ">=", sinceMs).where(field, "<=", Number.MAX_SAFE_INTEGER).limit(cap + 1).get(),
-        query.where(field, ">=", Timestamp.fromMillis(sinceMs)).limit(cap + 1).get(),
+        query.where(field, ">=", sinceMs).where(field, "<=", nowMs).limit(cap + 1).get(),
+        query
+            .where(field, ">=", Timestamp.fromMillis(sinceMs))
+            .where(field, "<=", Timestamp.fromMillis(nowMs))
+            .limit(cap + 1)
+            .get(),
     ]);
 
-    const truncated = numeric.size > cap || stamped.size > cap;
+    // The range check here is a BACKSTOP — the query bounds above already do it.
+    // It stays because the whole point of this helper is that field types are not
+    // what they look like, and a value the bounds let through for a type reason
+    // must not reach the report on the strength of the query alone.
     const byId = new Map<string, { id: string; at: number; data: admin.firestore.DocumentData }>();
     for (const doc of [...numeric.docs, ...stamped.docs]) {
         const at = toMillis(doc.get(field));
-        if (at === null || at < sinceMs) continue;
+        if (at === null || at < sinceMs || at > nowMs) continue;
         byId.set(doc.id, { id: doc.id, at, data: doc.data() });
     }
-    return { rows: [...byId.values()].slice(0, cap), truncated };
+
+    // Truncation is decided AFTER the merge, not per leg. Each leg can come back
+    // under its own cap while the union sits over it (25 numeric + 30 Timestamp
+    // signups is 55 rows through two 51-row reads), and the slice below would
+    // then drop five events while the signal reported an exact count of 50.
+    const rows = [...byId.values()];
+    const truncated = numeric.size > cap || stamped.size > cap || rows.length > cap;
+    return { rows: rows.slice(0, cap), truncated };
 }
 
 /**
@@ -176,7 +198,7 @@ export async function computeWatchdogReport(
 
     const [users, pools, charges, errors] = await Promise.all([
         signal("users", async () => {
-            const { rows, truncated } = await windowDocs(db.collection("users"), "createdAt", sinceMs, cap);
+            const { rows, truncated } = await windowDocs(db.collection("users"), "createdAt", sinceMs, nowMs, cap);
             return {
                 truncated,
                 events: rows.map((r) => ({
@@ -188,7 +210,7 @@ export async function computeWatchdogReport(
         }),
 
         signal("pools", async () => {
-            const { rows, truncated } = await windowDocs(db.collection("pools"), "createdAt", sinceMs, cap);
+            const { rows, truncated } = await windowDocs(db.collection("pools"), "createdAt", sinceMs, nowMs, cap);
             // Sim-harness and hand-labelled test pools are noise. PRESEASON IS NOT
             // EXCLUDED, deliberately: shared/testPool.ts's full isTestPool() counts
             // NFL seasonType 1 as a test pool for STATS purposes, but preseason is
@@ -208,7 +230,7 @@ export async function computeWatchdogReport(
         }),
 
         signal("charges", async () => {
-            const { rows, truncated } = await windowDocs(db.collection("billingCharges"), "at", sinceMs, cap);
+            const { rows, truncated } = await windowDocs(db.collection("billingCharges"), "at", sinceMs, nowMs, cap);
             chargeTotal = rows.reduce(
                 (sum, r) => sum + (typeof r.data.amount === "number" && Number.isFinite(r.data.amount) ? r.data.amount : 0),
                 0
@@ -228,10 +250,17 @@ export async function computeWatchdogReport(
             // `timestamp` is the server-stamped numeric field logClientError writes;
             // its `createdAt` is a serverTimestamp on the same doc. Either works —
             // windowDocs handles both types — and `timestamp` is the one every row has.
-            const { rows, truncated } = await windowDocs(db.collection("system_logs"), "timestamp", sinceMs, cap);
+            const { rows, truncated } = await windowDocs(db.collection("system_logs"), "timestamp", sinceMs, nowMs, cap);
+            // system_logs is NOT a client-error collection. scoreUpdates.ts writes
+            // routine SYNC_GAME_STATUS progress rows into it (five sites) with a
+            // serverTimestamp and no `source`, so counting every row here would
+            // light the Client Errors tile up during a perfectly healthy score
+            // sync — and push real client errors out past the cap while doing it.
+            // logClientError is the only writer that stamps source: "client".
+            const clientRows = rows.filter((r) => r.data.source === "client");
             return {
                 truncated,
-                events: rows.map((r) => ({
+                events: clientRows.map((r) => ({
                     kind: "CLIENT_ERROR" as const,
                     at: r.at,
                     label: `${r.data.severity ?? "medium"}: ${r.data.message ?? "(no message)"}`,
