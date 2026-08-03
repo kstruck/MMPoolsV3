@@ -143,6 +143,21 @@ export const ProductionWatchdogCard: React.FC = () => {
   const s = report?.signals;
   const revenue = s?.charges.revenue;
   const deadSignals = s ? Object.values(s).filter((sig) => sig.count === undefined).length : 0;
+  /**
+   * A capped read can come back with ZERO reportable rows — 250 sim pools ahead
+   * of one real one, and the real pool never reaches the filter. Every read
+   * succeeded, so `deadSignals` is 0, yet the window is not known to be quiet.
+   * Truncation is therefore a reason to withhold the all-clear in its own right.
+   */
+  const truncatedSignals = s ? Object.values(s).filter((sig) => sig.truncated).length : 0;
+  const emptyStateReason = [
+    deadSignals > 0 ? `${deadSignals} signal${deadSignals > 1 ? 's' : ''} could not be read` : null,
+    truncatedSignals > 0
+      ? `${truncatedSignals} signal${truncatedSignals > 1 ? 's' : ''} hit the read cap`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' and ');
 
   return (
     <div className="bg-card border border-line rounded-3xl p-6 shadow-card relative overflow-hidden transition-all duration-150 hover:shadow-card-hover xl:col-span-2">
@@ -191,14 +206,14 @@ export const ProductionWatchdogCard: React.FC = () => {
 
           {report.events.length === 0 ? (
             // "Nothing happened" is a CLAIM, and it is only ours to make when every
-            // signal was actually readable. With a dead signal the honest statement
-            // is that the readable ones were quiet and the rest is unknown —
-            // otherwise the card hands the operator an all-clear over a collection
-            // it never managed to read, while a tile right above says "unavailable".
+            // signal was both readable AND read in full. A dead signal is an
+            // all-clear over data nobody read; a capped one is an all-clear over
+            // data that was read past. Either way the honest statement is that the
+            // window is not known to be quiet.
             <div className="text-[11px] text-muted font-body">
-              {deadSignals === 0
+              {emptyStateReason === ''
                 ? `Nothing happened in the last ${report.windowHours} hours.`
-                : `No activity in the readable signals over the last ${report.windowHours} hours — ${deadSignals} signal${deadSignals > 1 ? 's' : ''} could not be read, so activity there is unknown.`}
+                : `No activity shown for the last ${report.windowHours} hours, but ${emptyStateReason} — the window is not known to be quiet.`}
             </div>
           ) : (
             <div className="space-y-1.5">

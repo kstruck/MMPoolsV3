@@ -601,3 +601,44 @@ describe('8-tab consolidation — the canonical Super-Admin Dashboard tabs', () 
     expect(orphans).toEqual([]);
   });
 });
+
+/**
+ * Production Watchdog — the card must never hand the operator an all-clear it
+ * cannot support.
+ *
+ * Three separate review rounds landed on the same defect class here: a signal
+ * whose read FAILED rendered as 0, a capped money total rendered as a lower
+ * bound it is not, and an empty event list rendered as "nothing happened" while
+ * a tile above it said "unavailable". They are string checks against the source
+ * for the same reason the T3 guards above are: each of these was a literal in
+ * the file, so a literal is what fails if one comes back.
+ */
+describe('Production Watchdog — no unsupported all-clear', () => {
+  const card = read('src/components/admin/ProductionWatchdogCard.tsx');
+
+  it('the card is still wired into the Overview bento', () => {
+    // Guard the guard: a renamed or unmounted card would make every check below
+    // pass against a file nobody renders.
+    expect(read('src/components/SuperAdminBentoDashboard.tsx')).toContain('<ProductionWatchdogCard />');
+    expect(card).toContain('getProdWatchdog');
+  });
+
+  it('a failed read renders as unavailable, never as a count', () => {
+    expect(card).toContain('unavailable');
+    expect(card).toMatch(/signal\.count === undefined/);
+  });
+
+  it('"nothing happened" is gated on every signal being readable AND uncapped', () => {
+    // The claim may only appear in the branch guarded by emptyStateReason.
+    expect(card).toMatch(/emptyStateReason === ''\s*\n?\s*\?\s*`Nothing happened/);
+    expect(card).toMatch(/sig\.count === undefined/);
+    expect(card).toMatch(/sig\.truncated/);
+  });
+
+  it('a capped money total is never labelled as a lower bound', () => {
+    // billingCharges rows can be negative (refunds), so "≥$X" asserts the
+    // opposite of what a partial sum supports.
+    expect(card).toContain("kind === 'amount'");
+    expect(card).toContain('partial');
+  });
+});
