@@ -203,7 +203,8 @@ Phase order is safety-first: gate the destructive path before improving it.
       `espn_${event.id}` with no uniqueness or presence validation
       (`nflSchedule.ts:276`), so a missing or duplicated `event.id`
       collapses the fetched-id set without failing the parsed-count check —
-      and the stale-id subtraction would then purge real games; This detects PARSER loss only — it cannot detect a
+      and the stale-id subtraction would then purge real games. All of
+      this detects PARSER-side loss only — no check here can detect a
       syntactically valid feed the upstream truncated (codex r3 #1), which
       is why stale deletion is never automatic (1.1's `purgeStale` flag);
     - **week identity**: every parsed game's kickoff falls inside the
