@@ -109,7 +109,11 @@ Phase order is safety-first: gate the destructive path before improving it.
 0.1 **Add `dryRun` defaulting to TRUE to `importNFLSchedule` /
     `importNFLSeason`.** A dry run performs the fetches, computes what would be
     deleted and written per week, and returns the full report (phase 2 shape)
-    without touching Firestore. Live deletion requires an explicit
+    with **zero mutations to `nfl_games`** — stated that way, not "without
+    touching Firestore", because computing the would-delete set requires
+    READING the existing docs, and both dry and live runs persist an
+    actor-attributed audit record so the operator review has durable evidence
+    (broadened per codex r1 #5). Live deletion requires an explicit
     `dryRun: false`. This intentionally changes behavior for the existing
     SuperAdmin UI caller (it will start dry-running until it passes the flag) —
     that is the fail-safe direction, and the UI update ships in the same PR.
@@ -119,23 +123,52 @@ Phase order is safety-first: gate the destructive path before improving it.
 
 ### Phase 1 — Scope the delete to what was actually fetched (Critical, medium)
 
-1.1 **Fetch first, delete after, per week.** Reorder: fetch all requested
-    weeks; for each week whose fetch SUCCEEDED, delete only that week's
-    existing docs (`.where('week','==',week)` added to the query) whose ids do
-    not appear in the fetched set, then write the fetched games (`merge: true`
-    keeps the existing id-keyed overwrite semantics). A week whose fetch
-    failed is not touched at all — defect 2 becomes structurally impossible,
-    not just less likely.
-1.2 **Distinguish "fetch failed" from "week is genuinely empty".**
+1.1 **Fetch first, WRITE second, delete LAST, per week.** Reorder: fetch all
+    requested weeks; for each week whose fetch passed the 1.2 integrity check,
+    first write the fetched games (`merge: true` keeps the existing id-keyed
+    overwrite semantics, subject to 1.5), and only after the writes commit,
+    delete that week's stale docs (`.where('week','==',week)` added to the
+    query) whose ids do not appear in the fetched set. Write-before-delete
+    means a failure at ANY point leaves the week no worse than before the run
+    — the delete-then-fail window closes structurally (ordering per codex r1
+    #1). The implementing PR must include a test that an injected commit
+    failure preserves the prior slate. A week whose fetch failed is not
+    touched at all.
+1.2 **A usable slate, not just a 200 response, gates the delete.**
     `fetchNFLWeekSchedule`'s catch-all `[]` return (`nflSchedule.ts:182-185`)
-    erases that distinction, and 1.1's "succeeded" needs it. Use a result that
-    carries failure explicitly (the `fetchNFLWeekScheduleWithRaw` shape already
-    distinguishes via `raw: null` — `nflSchedule.ts:193-206`) rather than
-    inferring from emptiness.
-1.3 **Chunk deletes at ≤400 ops per batch** while touching the code —
-    removes the unguarded 500 ceiling for free.
+    erases the failed/empty distinction, and a non-null `raw`
+    (`fetchNFLWeekScheduleWithRaw`, `nflSchedule.ts:193-206`) only proves JSON
+    arrived — `parseScoreboardResponse` also returns `[]` for malformed
+    payloads and when the PR #219 season guard filters every event (the
+    wrong-season fallback shape documented at `nflSchedule.ts:443-458`).
+    Deletion for a week therefore requires: fetch succeeded AND the parsed
+    set is non-empty (broadened per codex r1 #2). A genuinely game-less week
+    ("delete everything, feed says empty") is never inferred — it needs an
+    explicit per-call operator flag, and a dry run first like everything else.
+1.3 **Cap TOTAL mutations per run, and chunk deletes at ≤400 ops per batch.**
+    The chunking removes the unguarded 500-op ceiling; the run-level cap
+    (deletes + writes, checked BEFORE the first live mutation, failing with an
+    overflow report) bounds the blast radius of a mis-scoped query the way
+    `MAX_SPREAD_LOCKS_PER_RUN` does for the spread job
+    (`nflSchedule.ts:976-985`) (broadened per codex r1 #6).
 1.4 **A cleanup failure aborts that week loudly** instead of the current
     catch-warn-continue (`nflSchedule.ts:378-380`).
+1.5 **Preserve locked spreads on re-import.** The parser emits every game
+    with `spread: { value, locked: false }` (`nflSchedule.ts:342`), so the
+    `merge: true` write would silently UNLOCK a locked ATS slate and block
+    pick submission behind `SPREADS_NOT_LOCKED` — the exact bug class #235
+    fixed in the sync path, which now retains `spread.locked`
+    (`nflSchedule.ts:746-750`). The importer write must apply the same
+    preservation (codex r1 #4).
+1.6 **A stored id that is referenced by picks is never deleted blind.**
+    Pick'em scoring reads `entry.picks[game.id]`
+    (`functions/src/nflScoringEngine.ts:108`), so deleting a game id that
+    entries reference — ESPN re-keying an event is the motivating case —
+    strands those picks ungradable. Before deleting any fetched-missing id,
+    check for referencing entries in pools on that slate; if any exist, the
+    live run REFUSES that week and reports the ids, leaving reference
+    migration as an explicit operator decision (codex r1 #3). No automatic
+    pick migration in this plan.
 
 ### Phase 2 — Truthful completeness reporting (High, small)
 
@@ -170,6 +203,10 @@ Phase order is safety-first: gate the destructive path before improving it.
   the purpose and removes the blast radius.
 - **No schema-required changes.** All new fields optional with safe defaults,
   per the load-bearing-defaults note already in the schema file.
+- **Refuse-and-report over automatic pick migration (1.6).** Migrating
+  `entry.picks` keys across an ESPN re-key touches scoring data for live
+  entries — a bigger blast radius than the importer itself. Rejected here;
+  if a real re-key ever strands picks, that migration gets its own plan.
 
 ## Risks / open questions
 
