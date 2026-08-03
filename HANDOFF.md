@@ -1,6 +1,6 @@
-# HANDOFF — Session entry point (updated 2026-08-03: functions deployed from `0f548bf` — a forged Member Record no longer shows on the commissioner roster or in memberCount (#347), and prod was measured to hold ZERO of them; the docs-state guard now catches a dated state heading its own section has moved past (#349); the frontend was rebuilt, `index-DlH8liQe.js` → **`index-H9HjG31q.js`**; the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; ALL THREE DEPLOY QUEUES ARE EMPTY)
+# HANDOFF — Session entry point (updated 2026-08-03: functions deployed from `0f548bf` — a forged Member Record no longer shows on the commissioner roster or in memberCount (#347), and prod was measured to hold ZERO of them; the frontend was rebuilt for it; the docs-state guard now catches a dated state heading its own section has moved past (#349, tests+docs only — merged, no deploy owed); the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; ALL THREE DEPLOY QUEUES ARE EMPTY. **The live bundle hash is stated once, in the STOP POINT box below — deliberately not repeated here, because a copy in this title is what went stale three rebuilds running.**)
 
-> ## ✅ STOP POINT **2026-08-03** — everything through #349 shipped AND deployed, frontend included
+> ## ✅ STOP POINT **2026-08-03** — #347 shipped AND deployed (frontend included); #349 merged, tests+docs only, no deploy owed
 >
 > The heading date is the date of the facts immediately below. It is REPLACED
 > on every deploy rather than annotated, because a note added above a stale
