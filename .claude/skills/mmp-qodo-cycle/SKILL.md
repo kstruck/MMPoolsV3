@@ -214,8 +214,15 @@ STABLE_NEEDED=4    # consecutive unchanged polls at 30s = 2 min of quiet
 #     a fresh process clock, and the watcher returns PARTIAL forever.
 #
 # Earliest across the three, so the floor starts at qodo's first sign of life.
+#   * WITHOUT the NOISE predicate on the issues leg, the "Qodo is busy working"
+#     PLACEHOLDER becomes FIRST. summary() already excludes it precisely because
+#     it is not a report — but as a floor anchor it is worse than useless: if the
+#     placeholder precedes the real summary by more than the floor, elapsed() is
+#     already past 480s when the substantive review begins, and two quiet minutes
+#     end the settle before the inline findings land. Same heading match,
+#     same reason.
 FIRST=$( { gh api --paginate $R/issues/<N>/comments \
-      -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | .created_at";
+      -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | select((.body | capture(\"<h3>(?<h>[^<]*)</h3>\").h // \"\") | test(\"$NOISE\"; \"i\") | not) | .created_at";
     gh api --paginate $R/pulls/<N>/comments \
       -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | .created_at";
     gh api --paginate $R/pulls/<N>/reviews \
