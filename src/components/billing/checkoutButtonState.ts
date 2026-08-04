@@ -50,8 +50,13 @@ export interface CheckoutButtonInputs {
     hasAppliedCoupon: boolean;
     useCredit: boolean;
     hasUnlimitedPass: boolean;
-    /** Other pools of this owner already active on the free tier. */
-    activeFreePoolsCount: number;
+    /**
+     * Other pools of this owner already active on the free tier, or `null` while
+     * that query has not answered. `null` is not 0: the server enforces a
+     * one-active-free-pool limit, so offering free activation before the answer
+     * arrives produces a button that fails.
+     */
+    activeFreePoolsCount: number | null;
 }
 
 /**
@@ -65,6 +70,7 @@ export type CheckoutButtonKind =
     | 'no-pool'
     | 'price-pending'
     | 'price-unavailable'
+    | 'free-limit-pending'
     | 'free-limit-reached'
     | 'nothing-due'
     | 'free-allocation'
@@ -92,16 +98,22 @@ export function checkoutButtonState(i: CheckoutButtonInputs): CheckoutButtonStat
 
     const coveredByEntitlement = i.useCredit || i.hasUnlimitedPass;
     const serverPricedFree = i.freeTierEligible && !coveredByEntitlement;
+    const freePoolsUsed = i.activeFreePoolsCount;
 
-    // Priced free, but the commissioner has already spent their free allocation.
-    // Mirrors the server's own check, which throws failed-precondition here.
-    if (serverPricedFree && i.activeFreePoolsCount > 0) {
-        return { kind: 'free-limit-reached', disabled: true, label: 'Free Limit Reached (Upgrade Needed)', muted: true };
+    if (serverPricedFree) {
+        // Priced free, but we do not yet know whether the allocation is spent.
+        if (freePoolsUsed === null) {
+            return { kind: 'free-limit-pending', disabled: true, label: 'Checking Eligibility…', muted: true };
+        }
+        // Already spent. Mirrors the server, which throws failed-precondition.
+        if (freePoolsUsed > 0) {
+            return { kind: 'free-limit-reached', disabled: true, label: 'Free Limit Reached (Upgrade Needed)', muted: true };
+        }
     }
 
     // Priced free with the allocation still available: this is a real checkout,
     // and it is the case the old inline `total <= 0 && …` clause swallowed.
-    const isFreeAllocation = serverPricedFree && i.activeFreePoolsCount === 0;
+    const isFreeAllocation = serverPricedFree && freePoolsUsed === 0;
 
     // The original $0 guard, unchanged except that the free allocation is now
     // carved out of it. It still blocks a meaningless $0 checkout that is not

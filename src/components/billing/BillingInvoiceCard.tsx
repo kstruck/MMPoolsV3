@@ -127,6 +127,10 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     const [quoteRetry, setQuoteRetry] = useState(0);
 
     const retryQuote = () => {
+        // Drop the loaded-quote stamp too. Keeping it would let a cached quote
+        // for these same inputs read as `ready` while the retry is still in
+        // flight — the stale-price hole one door over (codex round 3 [P1]).
+        setQuoteFor(null);
         setQuoteFailedFor(null);
         setQuoteRetry((n) => n + 1);
     };
@@ -181,7 +185,11 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         }
     }, []);
     const [managerProfile, setManagerProfile] = useState<any>(null);
-    const [activeFreePoolsCount, setActiveFreePoolsCount] = useState(0);
+    // `null` = the owner's active-free-pool query has not answered yet. It is
+    // NOT 0: starting at 0 offered free activation to an owner who already has
+    // an active free pool, and the server then rejects the checkout
+    // (codex round 3 [P2]).
+    const [activeFreePoolsCount, setActiveFreePoolsCount] = useState<number | null>(null);
     const [useCredit, setUseCredit] = useState(false);
     const [activePaymentTab, setActivePaymentTab] = useState<'single' | 'bundle'>('single');
 
@@ -310,6 +318,10 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                 // empty, but it is NOT stamped for these inputs, so checkout
                 // stays blocked until a matching quote arrives.
                 setQuoteFailedFor(key);
+                // If the quote on screen was stamped for THESE inputs, a failed
+                // refresh means we can no longer vouch for it. Un-stamp it so
+                // the state is `unavailable` rather than a confident `ready`.
+                setQuoteFor((prev) => (prev === key ? null : prev));
                 if (couponInput.trim()) {
                     setCouponError(err?.message || 'Error validating coupon. Please try again.');
                 }

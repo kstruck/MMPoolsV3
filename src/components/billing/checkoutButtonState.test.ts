@@ -90,6 +90,24 @@ describe('checkoutButtonState — the free-allocation dead end', () => {
         expect(s.disabled).toBe(true);
     });
 
+    it('free activation waits for the free-pool-limit query instead of assuming zero', () => {
+        // codex round 3 [P2]: the count started at 0 and was filled in
+        // asynchronously, so an owner who already had an active free pool was
+        // offered activation the server would reject.
+        const s = checkoutButtonState({ ...freeAllocation, activeFreePoolsCount: null });
+        expect(s.disabled).toBe(true);
+        expect(s.label).toBe('Checking Eligibility…');
+        expect(s.muted).toBe(true);
+    });
+
+    it('an unloaded free-pool count does NOT block a paid upgrade', () => {
+        // The count is only relevant to the free path; gating the paid button on
+        // it would trade one dead end for another.
+        const s = checkoutButtonState({ ...priced, activeFreePoolsCount: null });
+        expect(s.disabled).toBe(false);
+        expect(s.label).toBe('Upgrade Pool to Premium');
+    });
+
     it('an already-active free pool still blocks a second one', () => {
         const s = checkoutButtonState({ ...freeAllocation, activeFreePoolsCount: 1 });
         expect(s.disabled).toBe(true);

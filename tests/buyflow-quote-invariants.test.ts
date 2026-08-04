@@ -95,6 +95,18 @@ describe('BillingInvoiceCard delegates the button rule instead of inlining it', 
         expect(card).toContain('onClick={retryQuote}');
         // The retry nonce must actually be a dependency of the fetch effect.
         expect(card).toMatch(/couponInput, quoteRetry\]\);/);
+        // codex round 3 [P1]: the retry must also drop the loaded-quote stamp,
+        // or a cached quote for these inputs reads as `ready` mid-retry.
+        expect(card).toMatch(/const retryQuote = \(\) => \{\n(?:.*\n)*?\s*setQuoteFor\(null\);/);
+    });
+
+    it('a failed refresh un-stamps a quote that was stamped for those inputs', () => {
+        expect(card).toContain('setQuoteFor((prev) => (prev === key ? null : prev))');
+    });
+
+    it('the free-pool count starts UNLOADED, not zero', () => {
+        // codex round 3 [P2].
+        expect(card).toContain('useState<number | null>(null)');
     });
 
     it('free-tier eligibility is taken from the server quote, not inferred', () => {

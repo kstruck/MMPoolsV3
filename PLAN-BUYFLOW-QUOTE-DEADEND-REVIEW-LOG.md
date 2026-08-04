@@ -128,6 +128,55 @@ perform` (asserts the label contains neither "retry" nor "try again" while
 disabled) and a wiring invariant that pins `quoteRetry` as an actual dependency
 of the fetch effect — without that, the handler could exist and change nothing.
 
+## codex round 3 — 2 findings, both ABSORBED
+
+### 3/1 [P1] "Keep checkout blocked while a retry is in flight" — ABSORBED, with a note on the scenario
+
+> Clearing `quoteFailedFor` immediately can restore `priceState` to `ready` from
+> an old `quoteFor` value before the retry returns. This occurs when a user has
+> previously loaded inputs A, switches away and back to A, the refresh fails,
+> and presses Try Again […]
+
+**The named scenario cannot occur as written**, and saying so matters because the
+fix would otherwise look like it closes something it does not. In that trace
+`quoteFor === 'A'` and the current key is `A`, so `priceState` is already
+`ready`; the notice card — and with it the Try Again control — never renders, so
+there is nothing to press.
+
+**The hole it points at is real, one step earlier.** With `quoteFor === A` and a
+failed refresh for A, `priceState` stayed `ready` on the strength of a quote we
+had just failed to re-confirm. That is a confident render backed by stale data,
+which is the property this change exists to remove.
+
+**Fix, both directions.** A failed fetch now un-stamps a quote taken for the same
+inputs — `setQuoteFor(prev => prev === key ? null : prev)` — so the state becomes
+`unavailable` and the retry control appears. And `retryQuote` clears `quoteFor`
+as well as `quoteFailedFor`, so the window during the retry is `pending` rather
+than `ready`. Guarded by two invariants.
+
+### 3/2 [P2] "Wait for the free-pool-limit query before enabling activation" — ABSORBED, valid
+
+> `activeFreePoolsCount` starts at `0` and is only updated asynchronously by the
+> Firestore listener. Consequently, an owner who already has an active free pool
+> can receive a free quote and click the newly enabled activation button before
+> that listener's first snapshot; the server then rejects the checkout.
+
+**Verified and correct.** `useState(0)` conflated "no free pools" with "we have
+not asked yet", which is the identical unknown-vs-zero conflation as the quote
+itself. The window is small but the failure is a rejected checkout on the money
+path, and the newly-enabled button is what makes it reachable.
+
+**Fix.** The count is `number | null`, `null` until the listener answers, and a
+free-tier quote with a `null` count yields a disabled `Checking Eligibility…`.
+Two guards: the `null` case disables the FREE path, and — the one that matters
+for not trading one dead end for another — a `null` count does **not** disable a
+paid upgrade, which never consults the limit.
+
+**One case deliberately left as `0`:** signed-out. That branch sets the count to
+0 because a signed-out visitor genuinely owns no active pools; checkout requires
+auth server-side regardless, and `Checking Eligibility…` would be the wrong copy
+for it. Pre-existing behaviour, unchanged.
+
 ## qodo — pending (PR not yet opened)
 
 ## self-review — pending
