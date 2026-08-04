@@ -36,6 +36,12 @@ export const onSystemConfigWritten = onDocumentWrittenWithAuthContext(
         // string at 200 — the record would cut off mid-payload (codex r6).
         // Split, each side of that worst case is ~130 chars and survives.
         const metadata: Record<string, unknown> = {};
+        // The COMPLETE key list rides first: capMetadata adds entries in
+        // insertion order until its 1KB budget, so a write that changes many
+        // maps at once (deleting system/config changes every job gate) can
+        // drop later .from/.to detail — but which keys changed is never lost
+        // (codex r7). 30 keys of ~15 chars is ~500 bytes, inside budget.
+        metadata.changedKeys = keys.join(',').slice(0, 500);
         for (const k of keys) {
             const narrowed = narrowChange(changed[k]);
             metadata[`${k}.from`] = JSON.stringify(redactConfigValue(narrowed.from));
