@@ -25,6 +25,7 @@ import { dbService } from '../services/dbService';
 import { Badge } from './ui';
 import { withCorrelationId } from '../utils/correlationId';
 import { STALE_REASON_LABEL, formatJobAge, type StaleJobReason } from '../utils/opsHealthFormat';
+import { ProductionWatchdogCard } from './admin/ProductionWatchdogCard';
 
 interface HealthCheck {
   label: string;
@@ -455,6 +456,10 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
           )}
         </div>
       </div>
+
+      {/* 3. Production Watchdog — what real users did in the last 24h. Full width
+          under the two vitals cards: it is a list, not a metric. */}
+      <ProductionWatchdogCard />
 
     </div>
   );

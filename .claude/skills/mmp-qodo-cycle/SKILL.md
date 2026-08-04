@@ -182,20 +182,82 @@ done
 #   * a minimum FLOOR of wall-clock since the first artifact, so a slow first
 #     finding cannot be mistaken for "no findings"; and
 #   * the inline count holding steady across consecutive polls.
-FLOOR=180          # seconds; never conclude "0 findings" faster than this
+# ⚠️ MEASURED ON #348, 2026-08-03: the summary landed 04:20:15Z and the inline
+# findings 04:26:37Z — SIX MINUTES AND TWENTY SECONDS later. At FLOOR=180 the
+# watcher printed "QODO REPORTED — 0 inline finding(s)" and the session reported
+# a clean qodo pass on a PR that was about to receive two findings, one of them a
+# real correctness bug. Both settle conditions were satisfied and both were
+# wrong: quiet is what the gap between the two posts LOOKS like.
+# The floor now exceeds that observed gap. Raise it again if a longer one is ever
+# measured; do not lower it because a run felt slow.
+FLOOR=480          # seconds; never conclude "0 findings" faster than this
 STABLE_NEEDED=4    # consecutive unchanged polls at 30s = 2 min of quiet
+
+# THE FLOOR IS MEASURED FROM QODO'S FIRST POST, NOT FROM THIS PROCESS START.
+# It has to be, now that it exceeds one run: the settle loop below is 5 minutes
+# and the whole background run is capped near 10, so a floor of 8 minutes could
+# never be satisfied inside a single arming and every run would print PARTIAL
+# forever. Anchoring on the artifact's own timestamp makes the floor survive a
+# re-arm — run 1 prints PARTIAL, run 2 starts with the clock already ~5 minutes
+# in and can legitimately settle. It is also the more correct clock: what matters
+# is how long qodo has been quiet, not how long this shell has been awake.
+# FILTERED BY $SINCE, and covering ALL THREE surfaces. Both halves are load-bearing:
+#
+#   * WITHOUT the $SINCE filter, a re-arm on a PR that already carries an OLD qodo
+#     artifact anchors the floor to that historical timestamp. elapsed() is then
+#     already past 480s on the first poll, four quiet polls emit QODO REPORTED,
+#     and the delayed inline findings of the CURRENT review land afterwards —
+#     which is precisely the false-clear this floor was raised to prevent,
+#     reintroduced through the re-review path (the toggle in CLAUDE.md §2b).
+#   * WITHOUT the reviews endpoint, a report that arrives ONLY as a review body —
+#     a valid result per phase 1 — leaves FIRST empty, every arming falls back to
+#     a fresh process clock, and the watcher returns PARTIAL forever.
+#
+# Earliest across the three, so the floor starts at qodo's first sign of life.
+#   * WITHOUT the NOISE predicate on the issues leg, the "Qodo is busy working"
+#     PLACEHOLDER becomes FIRST. summary() already excludes it precisely because
+#     it is not a report — but as a floor anchor it is worse than useless: if the
+#     placeholder precedes the real summary by more than the floor, elapsed() is
+#     already past 480s when the substantive review begins, and two quiet minutes
+#     end the settle before the inline findings land. Same heading match,
+#     same reason.
+#   * ON `updated_at`, NOT `created_at`, FOR COMMENTS. qodo edits its review
+#     comment IN PLACE on the toggle re-review path (§ re-arm, measured on #346),
+#     so created_at does not move. A created_at anchor is empty on exactly that
+#     path — phase 1 detects the re-review, FIRST does not, the process-clock
+#     fallback cannot reach the floor in one arming, and the watcher returns
+#     PARTIAL forever on a PR qodo has just re-reviewed. `.updated_at // .created_at`
+#     is correct on BOTH paths (they are equal on a fresh comment), so there is one
+#     expression to keep in sync rather than a first-review and a re-review variant.
+FIRST=$( { gh api --paginate $R/issues/<N>/comments \
+      -q ".[] | select(.user.login == \"$QB\") | select((.updated_at // .created_at) > \"$SINCE\") | select((.body | capture(\"<h3>(?<h>[^<]*)</h3>\").h // \"\") | test(\"$NOISE\"; \"i\") | not) | (.updated_at // .created_at)";
+    gh api --paginate $R/pulls/<N>/comments \
+      -q ".[] | select(.user.login == \"$QB\") | select((.updated_at // .created_at) > \"$SINCE\") | (.updated_at // .created_at)";
+    gh api --paginate $R/pulls/<N>/reviews \
+      -q ".[] | select(.user.login == \"$QB\") | select(.body != \"\") | select(.submitted_at > \"$SINCE\") | .submitted_at";
+  } | sort | head -1)
+# No parseable first artifact -> fall back to this process's clock. Never treat
+# an unparseable timestamp as "floor already met"; that is the failure the floor
+# exists to stop. On that fallback a single 5-minute arming CANNOT reach an
+# 8-minute floor, so the run prints PARTIAL and re-arming prints PARTIAL again.
+# That is fail-CLOSED and correct — a repeating PARTIAL means "the timestamp
+# fetch is broken, fix it", never "qodo is clean, proceed".
+FIRST_EPOCH=$(date -u -d "$FIRST" +%s 2>/dev/null || echo "")
+elapsed() {
+  if [ -n "$FIRST_EPOCH" ]; then echo $(( $(date -u +%s) - FIRST_EPOCH ));
+  else echo $((SECONDS - START)); fi
+}
 START=$SECONDS
 PREV=-1; STABLE=0
-# 10 polls x 30s = 5 min. NOT 30 (=15 min): detection is capped at 4 min, and a
-# 15-min settle put the worst case at 19 min against a ~10-min background-tool
-# cap — so the tool was killed before it could print the PARTIAL line below, and
-# the promised "4 min detect + ~5 min settle" budget was never actually enforced.
-# FLOOR (3 min) and STABLE_NEEDED (2 min of quiet) both fit inside this window.
+# 10 polls x 30s = 5 min per arming. NOT 30 (=15 min): a 15-min settle put the
+# worst case past the ~10-min background-tool cap, so the tool was killed before
+# it could print the PARTIAL line below and the branch was unreachable. Multiple
+# armings are how the 8-minute floor is reached; that is what `elapsed()` is for.
 for i in $(seq 1 10); do
   NOW=$(inline); guard "$NOW" "" ""
   if [ "$NOW" = "$PREV" ]; then STABLE=$((STABLE+1)); else STABLE=0; fi
   PREV=$NOW
-  if [ "$STABLE" -ge "$STABLE_NEEDED" ] && [ $((SECONDS-START)) -ge "$FLOOR" ]; then
+  if [ "$STABLE" -ge "$STABLE_NEEDED" ] && [ "$(elapsed)" -ge "$FLOOR" ]; then
     echo "QODO REPORTED — $NOW inline finding(s)"; exit 0
   fi
   sleep 30
