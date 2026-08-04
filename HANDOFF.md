@@ -27,8 +27,10 @@
 > full-fleet deploy here shows.
 >
 > 📊 **The 45-scenario NFL E2E suite ran against PRODUCTION on 2026-08-04 and
-> passed 45/45** (real guarded callables, sim-namespaced data, zero residue
-> after: 0 sim pools, 0 sim games, verified by query). The first attempt failed
+> passed 45/45** (real guarded callables, sim-namespaced data; zero DATA
+> residue after — 0 sim pools, 0 sim games, verified by query — though the
+> blocked FIRST attempt left 45 inert `RUNNING` manifests in `simRuns`, which
+> `sweepSimRuns` will age out; MORNING doc §4). The first attempt failed
 > 45/45 against the pool-creation kill-switch; three NFL flags were temporarily
 > enabled via the SuperAdmin UI and restored to `false` after, verified by
 > read-back — #363 exists so no future run needs that. Full detail:
