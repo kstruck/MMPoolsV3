@@ -59,7 +59,7 @@ npx firebase deploy --only firestore:indexes --project gridiron-gamble-uzuqo
 | `--only firestore:rules` | Deploys `firestore.rules` only | `firebase.json:17-20` |
 
 Notes and traps:
-- `npm run deploy:backend` (root package.json) runs `firebase deploy --only functions,firestore:rules` in ONE command — it works (npm scripts resolve the local `firebase` binary) but it does not let you sequence functions-before-rules deliberately, and omits `--project`. Prefer the explicit two-step ritual above.
+- `npm run deploy:backend` (root package.json) runs `firebase deploy --only functions,firestore:rules,firestore:indexes` in ONE command — it works (npm scripts resolve the local `firebase` binary) but it does not let you sequence functions-before-rules deliberately, and omits `--project`. Prefer the explicit two-step ritual above. ⚠️ `firestore:indexes` was added to that script on 2026-08-04; before then it shipped functions and rules only, so declared indexes were silently never created (this is how `enforceBillingStatus` ran its whole life without its two composite indexes).
 - A scheduled function's Cloud Scheduler job is created automatically on first deploy of that function (observed with `scheduledHealthCheck`).
 - Deleting an export then deploying prompts the CLI to confirm deleting the prod function. Do not blind-confirm; check what it wants to delete.
 

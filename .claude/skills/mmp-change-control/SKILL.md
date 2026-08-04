@@ -198,9 +198,15 @@ mutation code must prove itself in report-only mode against real data first.
    apply to prod www (nginx serves it).
 
 CAUTION: `package.json` has `deploy:backend` = `firebase deploy --only
-functions,firestore:rules` (single command). Prefer the two explicit commands
-above so the functions-before-rules ordering is under your control, and
-because the script assumes a resolvable `firebase` (use `npx`).
+functions,firestore:rules,firestore:indexes` (single command). Prefer the two
+explicit commands above so the functions-before-rules ordering is under your
+control, and because the script assumes a resolvable `firebase` (use `npx`).
+
+⚠️ `firestore:indexes` was ADDED to that script on 2026-08-04. It used to name
+only `functions,firestore:rules`, so a release run through it declared indexes
+in `firestore.indexes.json` and never created them — which is how
+`enforceBillingStatus` could carry two missing composite indexes while looking
+deployed. Found by codex reviewing the index fix, not by reading the script.
 
 **Why.** Two independent failure modes actually happened: (a) skipping the
 functions install produced TS2307 build failures mid-deploy; (b) the
