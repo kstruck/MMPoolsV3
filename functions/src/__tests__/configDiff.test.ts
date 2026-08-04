@@ -110,3 +110,16 @@ describe('qodo #362 hardening', () => {
         expect(({} as Record<string, unknown>).enabled).toBeUndefined();
     });
 });
+
+describe('bulk-flip payload budget (codex r6)', () => {
+    it('a 7-flag bulk flip serializes under 200 chars PER SIDE after narrowing', () => {
+        const off = {
+            SQUARES: false, BRACKET: false, NFL_PLAYOFFS: false, PROPS: false,
+            NFL_PICKEM: false, NFL_SURVIVOR: false, NFL_MARGIN: false,
+        };
+        const on = Object.fromEntries(Object.keys(off).map(k => [k, true]));
+        const narrowed = narrowChange({ from: off, to: on });
+        expect(JSON.stringify(redactConfigValue(narrowed.from)).length).toBeLessThan(200);
+        expect(JSON.stringify(redactConfigValue(narrowed.to)).length).toBeLessThan(200);
+    });
+});

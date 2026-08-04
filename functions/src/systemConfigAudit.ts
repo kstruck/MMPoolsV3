@@ -31,15 +31,16 @@ export const onSystemConfigWritten = onDocumentWrittenWithAuthContext(
         // the email/SMS recipients nested inside would ride into the immutable
         // audit doc as plain text (codex r1 #2). Booleans and numbers — the
         // actual kill-switch record — survive redaction untouched.
-        const metadata = Object.fromEntries(
-            keys.map((k) => {
-                const narrowed = narrowChange(changed[k]);
-                return [k, JSON.stringify({
-                    from: redactConfigValue(narrowed.from),
-                    to: redactConfigValue(narrowed.to),
-                })];
-            }),
-        );
+        // from and to ride as SEPARATE metadata keys: a single {from,to} JSON
+        // for a bulk 7-flag flip is ~262 chars and capMetadata truncates any
+        // string at 200 — the record would cut off mid-payload (codex r6).
+        // Split, each side of that worst case is ~130 chars and survives.
+        const metadata: Record<string, unknown> = {};
+        for (const k of keys) {
+            const narrowed = narrowChange(changed[k]);
+            metadata[`${k}.from`] = JSON.stringify(redactConfigValue(narrowed.from));
+            metadata[`${k}.to`] = JSON.stringify(redactConfigValue(narrowed.to));
+        }
 
         const written = await writeAdminAudit({
             actorUid: event.authId ?? "unknown",
