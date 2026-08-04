@@ -11,6 +11,7 @@ export { confirmPayment } from './confirmPayment';
 export { purchasePropCard, gradeProp, updatePropCard } from './propBets';
 export { syncGameStatus, fixPoolScores, simulateGameUpdate } from "./scoreUpdates";
 export { onWinnerUpdate, onAIRequest, onWeeklyRecapCreated } from "./aiCommissioner";
+export { onSystemConfigWritten } from "./systemConfigAudit";
 export { onUserCreated, syncAllUsers } from "./userSync";
 export { deleteUserAccount, sendAdminPasswordReset, sendSecuritySMSAlert, testSmsHttp, searchUsersByEmail, sendUserEmail } from "./userManagement";
 export { runReminders, onWinnerComputed } from "./reminders";
