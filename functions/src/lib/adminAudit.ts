@@ -63,10 +63,29 @@ export function capMetadata(
  * sweep, an alert path — needs to know the record was lost, or "audited" and
  * "silently didn't" stay indistinguishable. Callers that don't care may ignore it.
  */
-export async function writeAdminAudit(entry: AdminAuditEntry): Promise<boolean> {
+export async function writeAdminAudit(
+  entry: AdminAuditEntry,
+  opts?: {
+    /**
+     * Deterministic document id. Triggers are delivered at-least-once, so an
+     * auto-id `.add()` from a retried event appends an indistinguishable
+     * duplicate record; passing the Firestore event id makes the retry a
+     * no-op overwrite of the same doc (codex, systemConfigAudit r1).
+     */
+    id?: string;
+  }
+): Promise<boolean> {
   try {
     const db = admin.firestore();
-    await db.collection("admin_audit").add({
+    const coll = db.collection("admin_audit");
+    const ref = opts?.id ? coll.doc(opts.id) : coll.doc();
+    // Deterministic ids exist for at-least-once retries; create() makes the
+    // retry a no-op instead of a set() that re-stamps `at` and shifts the
+    // entry's position in the at-ordered log (qodo #362 r1 #3). The
+    // ALREADY_EXISTS catch below treats a duplicate as success — the record
+    // the caller wanted is there.
+    const write = opts?.id ? ref.create.bind(ref) : ref.set.bind(ref);
+    await write({
       actorUid: entry.actorUid,
       actorEmail: entry.actorEmail ?? null,
       action: entry.action,
@@ -79,6 +98,11 @@ export async function writeAdminAudit(entry: AdminAuditEntry): Promise<boolean> 
     });
     return true;
   } catch (e) {
+    if (opts?.id && (e as { code?: number }).code === 6) {
+      // ALREADY_EXISTS on a deterministic id: a retry found the first
+      // attempt's record already in place. That IS success.
+      return true;
+    }
     console.error("[adminAudit] write failed (non-fatal):", e);
     return false;
   }
