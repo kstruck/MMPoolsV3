@@ -33,7 +33,7 @@ export const SuperAdminNFLSpreads: React.FC = () => {
       setGames(fetchedGames);
       
       if (fetchedGames.length === 0) {
-        setMessage({ type: 'error', text: `No games found for ${season} Week ${week}. Import schedule first.` });
+        setMessage({ type: 'error', text: `No games found for ${season} ${nflWeekLabel(seasonType, week)}. Import schedule first.` });
       }
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message });

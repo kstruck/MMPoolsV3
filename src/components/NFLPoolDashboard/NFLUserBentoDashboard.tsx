@@ -367,10 +367,10 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     for (let w = 1; w <= Math.max(selectedWeek, 1); w++) {
       const alive = entries.filter(e => !e.eliminatedWeek || e.eliminatedWeek > w).length;
       const strikes = entries.reduce((s, e) => s + ((e.strikeWeeks || []).filter((sw: number) => sw <= w).length), 0);
-      history.push({ week: `Wk ${w}`, alive, strikes });
+      history.push({ week: nflWeekChip(seasonType, w), alive, strikes });
     }
     return history;
-  }, [entries, selectedWeek]);
+  }, [entries, selectedWeek, seasonType]);
 
   // Real pick accuracy from persisted results (no mock). Empty (0/0) until games are scored.
   const pickAccuracyRatio = useMemo(() => {
