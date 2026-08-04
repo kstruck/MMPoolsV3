@@ -200,7 +200,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
       clearDraft(draftKey);
       dirtyRef.current = false;
       setSubmittedAt(serverNow());
-      toast.success(`Week ${week} picks submitted!`);
+      toast.success(`${nflWeekLabel(poolSeasonType(pool), week)} picks submitted!`);
     } catch (err: any) {
       logger.error('Failed to submit pick sheet:', err);
       const message = getUserMessage(err, 'Your picks were NOT saved. Please try again.');
@@ -257,7 +257,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
               onClick={() => onGoToWeek(week + 1)}
               className="shrink-0 num"
             >
-              Pick Week {week + 1} <ArrowRight size={14} aria-hidden="true" />
+              Pick {nflWeekLabel(poolSeasonType(pool), week + 1)} <ArrowRight size={14} aria-hidden="true" />
             </Button>
           )}
         </div>

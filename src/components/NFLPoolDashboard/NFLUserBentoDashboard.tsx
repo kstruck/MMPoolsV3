@@ -953,7 +953,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                           const val = payload[0].value as number;
                           return (
                             <div className="bg-card border border-line p-2 rounded-xl text-[10px] font-display font-bold text-[color:var(--text)] shadow-panel">
-                              <p className="uppercase text-muted mb-0.5 num">Week {payload[0].payload.week}</p>
+                              <p className="uppercase text-muted mb-0.5 num">{nflWeekLabel(seasonType, payload[0].payload.week)}</p>
                               <p className={`num ${val >= 0 ? "text-gold-600 dark:text-gold-400" : "text-brandred-600 dark:text-brandred-500"}`}>
                                 {val >= 0 ? `+${val} Net` : `${val} Net`}
                               </p>
