@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { db } from '../../firebase';
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { RefreshCw, Save, Lock, Unlock, AlertCircle } from 'lucide-react';
@@ -143,8 +144,8 @@ export const SuperAdminNFLSpreads: React.FC = () => {
             onChange={(e) => setWeek(parseInt(e.target.value))}
             className="w-full rounded-md border-[1.5px] border-line bg-page px-4 py-2.5 text-[color:var(--text)] font-bold text-sm cursor-pointer transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
           >
-            {Array.from({ length: 18 }, (_, i) => i + 1).map(w => (
-              <option key={w} value={w}>Week {w}</option>
+            {Array.from({ length: seasonType === 1 ? 4 : 18 }, (_, i) => i + 1).map(w => (
+              <option key={w} value={w}>{nflWeekLabel(seasonType, w)}</option>
             ))}
           </select>
         </div>

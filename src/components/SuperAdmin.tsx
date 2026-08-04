@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { nflWeekLabel } from '../utils/nflWeekLabel';
 import { CANONICAL_ROLES, normalizeRole, roleBadge } from '../utils/roles';
 import { ConfirmActionModal } from './admin/ConfirmActionModal';
 import React, { useState, useEffect, useMemo } from 'react';
@@ -4325,8 +4326,8 @@ export const SuperAdmin: React.FC = () => {
                                     onChange={(e) => setSelectedNflWeek(parseInt(e.target.value))}
                                     className="w-full bg-card border border-line rounded-xl px-4 py-2.5 font-body text-[color:var(--text)] font-bold text-sm focus:outline-none focus:border-navy-600"
                                 >
-                                    {Array.from({ length: 18 }, (_, i) => i + 1).map(w => (
-                                        <option key={w} value={w}>Week {w}</option>
+                                    {Array.from({ length: nflSeasonType === 1 ? 4 : 18 }, (_, i) => i + 1).map(w => (
+                                        <option key={w} value={w}>{nflWeekLabel(nflSeasonType, w)}</option>
                                     ))}
                                 </select>
                             </div>
