@@ -423,7 +423,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       avatar: (e.userName || 'U').substring(0, 2).toUpperCase(),
       highlight: e.ownerUid === user?.id
     }));
-  }, [entries, _pool.type, selectedWeek, user]);
+  }, [entries, _pool.type, selectedWeek, user, seasonType]);
 
   const userStats = useMemo(() => {
     if (!myEntry) {
