@@ -191,9 +191,27 @@ is what this plan proposes.
 * **Changing any transition rule, duration, or email copy.** Gate only.
 * **Touching `settings/billing_config`.** The trial/grace durations and their
   fail-open-to-defaults behaviour stay exactly as they are.
-* **A SuperAdmin UI for the new flag.** `system/config` is already editable from
-  the SuperAdmin System tab, and #362 put an audit trail on writes to it. A
-  bespoke panel is not needed to arm one job.
+* **A SuperAdmin UI for the new flag.** ⚠️ **An earlier draft of this line said
+  `system/config` "is already editable from the SuperAdmin System tab". That is
+  FALSE and codex caught it.** The System tab writes exactly three things —
+  `maintenanceMode` (`src/components/SuperAdmin.tsx:2994`), `autoClose` (`:3045`)
+  and `poolTypeFlags` (`:3083`). Nothing else in `system/config` has a control,
+  which is why the NFL gates in `MORNING-2026-08-04.md` §B2 are armed from the
+  Firebase console.
+
+  So arming `billingEnforce` means **editing
+  `system/config` → `billingEnforce` in the Firestore console** at
+  <https://console.firebase.google.com/project/gridiron-gamble-uzuqo/firestore/data/~2Fsystem~2Fconfig>,
+  editing the map's fields **in place** rather than replacing the map (§4 step 4
+  explains why replacing it disables the job). #362's `onSystemConfigWritten` is
+  a document trigger, so a console edit lands in the Admin Audit Log the same as
+  a UI one — that is what makes the console route acceptable rather than a hole
+  in the audit trail.
+
+  A toggle is still not in scope for THIS change, but it is the obvious
+  follow-up: it would sit beside the existing `autoClose` control, which is the
+  identical `{enabled, dryRun}` shape, and the same follow-up would cover the
+  three NFL gates.
 * **Deleting or pausing the Cloud Scheduler job as an alternative.** It works,
   but it leaves no record in `system/config`, no heartbeat, and nothing for the
   Ops Health card to report — which is how a job silently stops doing its work
