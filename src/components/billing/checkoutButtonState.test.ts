@@ -9,17 +9,18 @@ import { checkoutButtonState, type CheckoutButtonInputs } from './checkoutButton
  * brand red with `button.disabled === true`. Nobody could self-activate a free
  * pool.
  *
- * The case immediately after it is what keeps the fix safe rather than merely
- * permissive: the SAME inputs with no loaded quote must stay disabled, because
- * a failed `getPoolQuote` is exactly what produced those zeroes.
+ * The cases immediately after it are what keep the fix safe rather than merely
+ * permissive: the SAME inputs with no matching quote must stay disabled,
+ * because a failed or stale `getPoolQuote` is exactly what produced those
+ * zeroes.
  */
 
-// A quote HAS loaded and priced the pool at $0. Nothing else is in play.
+// A quote for the CURRENT inputs has loaded and the server called it free-tier.
 const freeAllocation: CheckoutButtonInputs = {
     isCheckoutLoading: false,
     hasPoolId: true,
-    priceUnknown: false,
-    basePrice: 0,
+    priceState: 'ready',
+    freeTierEligible: true,
     subtotal: 0,
     total: 0,
     hasAppliedCoupon: false,
@@ -30,31 +31,54 @@ const freeAllocation: CheckoutButtonInputs = {
 
 const priced: CheckoutButtonInputs = {
     ...freeAllocation,
-    basePrice: 29,
+    freeTierEligible: false,
     subtotal: 29,
     total: 29,
 };
 
 describe('checkoutButtonState — the free-allocation dead end', () => {
-    it('a $0 / no-coupon / no-credit pool with a loaded quote is ENABLED and offers activation', () => {
+    it('a $0 / no-coupon / no-credit pool with a matching quote is ENABLED and offers activation', () => {
         const s = checkoutButtonState(freeAllocation);
         expect(s.disabled).toBe(false);
         expect(s.label).toBe('Activate Pool (Free Allocation)');
         expect(s.muted).toBe(false);
     });
 
-    it('the SAME inputs with no loaded quote are DISABLED — a failed quote is not a free pool', () => {
-        const s = checkoutButtonState({ ...freeAllocation, priceUnknown: true });
+    it('the SAME inputs with a FAILED quote are DISABLED — a failed quote is not a free pool', () => {
+        const s = checkoutButtonState({ ...freeAllocation, priceState: 'unavailable' });
         expect(s.disabled).toBe(true);
         expect(s.label).toBe('Pricing Unavailable — Retry');
         expect(s.muted).toBe(true);
     });
 
-    it('priceUnknown beats every other state, including a priced pool', () => {
-        expect(checkoutButtonState({ ...priced, priceUnknown: true }).disabled).toBe(true);
-        expect(
-            checkoutButtonState({ ...freeAllocation, priceUnknown: true, hasUnlimitedPass: true }).disabled
-        ).toBe(true);
+    it('the SAME inputs with a STALE/in-flight quote are DISABLED and say so', () => {
+        // The dangerous shape codex round 1 found: a quote from EARLIER inputs
+        // is still on screen while the checkout payload has already moved on.
+        const s = checkoutButtonState({ ...freeAllocation, priceState: 'pending' });
+        expect(s.disabled).toBe(true);
+        expect(s.label).toBe('Updating Pricing…');
+        expect(s.muted).toBe(true);
+    });
+
+    it('a non-ready price beats every other state, including a priced pool and an unlimited pass', () => {
+        for (const priceState of ['pending', 'unavailable'] as const) {
+            expect(checkoutButtonState({ ...priced, priceState }).disabled).toBe(true);
+            expect(
+                checkoutButtonState({ ...freeAllocation, priceState, hasUnlimitedPass: true }).disabled
+            ).toBe(true);
+            expect(
+                checkoutButtonState({ ...freeAllocation, priceState, useCredit: true }).disabled
+            ).toBe(true);
+        }
+    });
+
+    it('free-tier eligibility comes from the server flag, not from zero totals', () => {
+        // `subtotal` has `pricePaid` subtracted client-side, so zeroes here do
+        // NOT mean the server would accept a $0 activation.
+        const zeroedByPreviousPayment = { ...priced, subtotal: 0, total: 0, freeTierEligible: false };
+        const s = checkoutButtonState(zeroedByPreviousPayment);
+        expect(s.label).not.toBe('Activate Pool (Free Allocation)');
+        expect(s.disabled).toBe(true);
     });
 
     it('an already-active free pool still blocks a second one', () => {
@@ -102,7 +126,6 @@ describe('checkoutButtonState — states that must not regress', () => {
     });
 
     it('a pool already covered by previous payments owes nothing and says so', () => {
-        // basePrice > 0 but pricePaid has driven subtotal to 0 upstream.
         const s = checkoutButtonState({ ...priced, subtotal: 0, total: 0 });
         expect(s.disabled).toBe(true);
         expect(s.label).toBe('Nothing Due');
@@ -113,7 +136,8 @@ describe('checkoutButtonState — states that must not regress', () => {
         const inputs: CheckoutButtonInputs[] = [
             freeAllocation,
             priced,
-            { ...freeAllocation, priceUnknown: true },
+            { ...freeAllocation, priceState: 'unavailable' },
+            { ...freeAllocation, priceState: 'pending' },
             { ...freeAllocation, activeFreePoolsCount: 1 },
             { ...priced, hasPoolId: false },
             { ...priced, subtotal: 0, total: 0 },

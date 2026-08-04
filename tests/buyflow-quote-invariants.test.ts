@@ -66,6 +66,30 @@ describe('BillingInvoiceCard delegates the button rule instead of inlining it', 
         // Both money lines must consult priceUnknown before printing FREE.
         expect(card).toContain("{priceUnknown ? '—' : basePrice === 0 ? 'FREE'");
         expect(card).toContain("{priceUnknown ? '—' : total === 0 ? 'FREE'");
-        expect(card).toContain('const priceUnknown = !quote;');
+    });
+
+    it('a quote is only usable for the inputs it was fetched for', () => {
+        // codex round 1 [P1]: "has any quote ever loaded" is not the same as
+        // "this quote prices what is on screen". A stale quote kept the button
+        // live while the checkout payload had already changed.
+        expect(card).toContain('const quoteKey = JSON.stringify(');
+        expect(card).toContain("quoteFor === quoteKey ? 'ready'");
+        expect(card).toContain("quoteFailedFor === quoteKey ? 'unavailable' : 'pending'");
+        expect(card).toContain('setQuoteFor(key)');
+        expect(card).toContain('setQuoteFailedFor(key)');
+    });
+
+    it('the free-pool-limit warning keys off the same decision as the button', () => {
+        // Two derivations of "is this pool free-limited" is how the warning and
+        // the button came to disagree. The card must not re-derive it, and must
+        // not match on the label string either.
+        expect(card).toContain("buttonState.kind === 'free-limit-reached'");
+        expect(card).not.toMatch(/basePrice === 0 && subtotal === 0/);
+    });
+
+    it('free-tier eligibility is taken from the server quote, not inferred', () => {
+        // codex round 1 [P1]: the client used to infer "free" from zeroes, and
+        // `subtotal` has pricePaid subtracted from it client-side.
+        expect(card).toContain('freeTierEligible: !!quote?.freeTierEligible');
     });
 });

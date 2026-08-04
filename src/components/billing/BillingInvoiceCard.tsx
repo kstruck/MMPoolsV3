@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import type { BillingConfig } from '../../types';
 import type { PoolQuote, PoolQuoteInput, AddonSelection } from '@shared/schemas/quote';
-import { checkoutButtonState } from './checkoutButtonState';
+import { checkoutButtonState, type PriceState } from './checkoutButtonState';
 
 // Lightweight applied-coupon shape derived from the server quote's couponState
 // (the full `coupons` doc is no longer read on the client — ADR-0002).
@@ -116,6 +116,11 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     // Server-computed quote (single price authority). All money numbers below are
     // derived from this — the client performs NO price math.
     const [quote, setQuote] = useState<PoolQuote | null>(null);
+    // Which input set `quote` prices, and which one last failed to price. Both
+    // hold a `quoteKey` string (see below) — comparing them against the CURRENT
+    // key is what stops a stale quote from keeping the checkout button live.
+    const [quoteFor, setQuoteFor] = useState<string | null>(null);
+    const [quoteFailedFor, setQuoteFailedFor] = useState<string | null>(null);
 
     // Local addon selection states for the Setup Wizard (Included in trial!)
     const [localAi, setLocalAi] = useState(hasAiCommissioner);
@@ -234,6 +239,16 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         customBranding: !!localBranding,
     };
 
+    // Identity of the inputs a quote prices. A quote is only usable for the
+    // inputs it was fetched for; `quoteFor`/`quoteFailedFor` below are compared
+    // against this, never against "has any quote ever loaded".
+    const quoteKey = JSON.stringify({
+        poolType: poolType.toUpperCase(),
+        estimatedPlayers: Number(estimatedPlayers) || 0,
+        addons: selectedAddons,
+        couponCode: couponInput.trim().toUpperCase(),
+    });
+
     // Fetch the authoritative server quote whenever inputs change (debounced).
     // getPoolQuote validates the coupon AND itemizes the price — the client does
     // no price math and no direct `coupons` query.
@@ -241,6 +256,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         let cancelled = false;
         // Only the seven server pool formats are priceable; skip unknowns.
         const normalizedType = poolType.toUpperCase();
+        const key = quoteKey;
         const t = setTimeout(async () => {
             setIsValidatingCoupon(!!couponInput.trim());
             try {
@@ -252,6 +268,11 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                 });
                 if (cancelled) return;
                 setQuote(q);
+                // Stamp WHICH inputs this quote priced. Without it a stale quote
+                // from earlier inputs keeps the button live while the checkout
+                // payload has already moved on — a $0 label over a paid session.
+                setQuoteFor(key);
+                setQuoteFailedFor(null);
 
                 // Reflect coupon state from the server response.
                 if (couponInput.trim()) {
@@ -276,7 +297,10 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
             } catch (err: any) {
                 if (cancelled) return;
                 console.error('[BillingInvoiceCard] Quote error:', err);
-                // Leave the last good quote in place; only surface coupon errors.
+                // The last good quote stays on screen so the card does not flash
+                // empty, but it is NOT stamped for these inputs, so checkout
+                // stays blocked until a matching quote arrives.
+                setQuoteFailedFor(key);
                 if (couponInput.trim()) {
                     setCouponError(err?.message || 'Error validating coupon. Please try again.');
                 }
@@ -336,16 +360,21 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     const standardTotal = Math.max(0, subtotal - discount);
     const total = (hasUnlimitedPass || (useCredit && (freePoolsAvailable > 0 || !!eligibleCredit))) ? 0 : standardTotal;
 
-    // No quote has EVER loaded for these inputs. Every figure above is a `?? 0`
-    // fallback, not a price — before PLAN-BUYFLOW-QUOTE-DEADEND this state was
-    // indistinguishable from a genuinely free pool and rendered as FREE.
-    const priceUnknown = !quote;
+    // Does a quote describe what is on screen RIGHT NOW? Before
+    // PLAN-BUYFLOW-QUOTE-DEADEND there was no such question: the figures above
+    // are all `?? 0` fallbacks, so "no price" and "free" were the same render.
+    const priceState: PriceState =
+        quoteFor === quoteKey ? 'ready' : quoteFailedFor === quoteKey ? 'unavailable' : 'pending';
+
+    // Only claim the numbers are wrong once a request for them has actually
+    // failed; during the debounce the last quote is still on screen.
+    const priceUnknown = !quote || priceState === 'unavailable';
 
     const buttonState = checkoutButtonState({
         isCheckoutLoading,
         hasPoolId: !!poolId,
-        priceUnknown,
-        basePrice,
+        priceState,
+        freeTierEligible: !!quote?.freeTierEligible,
         subtotal,
         total,
         hasAppliedCoupon: !!appliedCoupon,
@@ -543,8 +572,10 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         </div>
                     )}
 
-                    {/* 1 Free Pool Limit Warning */}
-                    {basePrice === 0 && subtotal === 0 && !useCredit && !hasUnlimitedPass && activeFreePoolsCount > 0 && (
+                    {/* 1 Free Pool Limit Warning — same condition as the button's
+                        "Free Limit Reached" state, read off the server quote so the
+                        warning and the button can never disagree. */}
+                    {buttonState.kind === 'free-limit-reached' && (
                         <div className="bg-[#FCEEED] border border-brandred-500/30 rounded-xl p-4 flex gap-3 items-start animate-in fade-in duration-300">
                             <AlertTriangle className="text-brandred-600 shrink-0 mt-0.5" size={20} />
                             <div className="text-xs space-y-1">
