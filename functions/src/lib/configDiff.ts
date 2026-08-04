@@ -51,15 +51,20 @@ export function redactConfigValue(v: unknown): unknown {
 }
 
 /**
- * JSON identity with one repair: JSON.stringify renders NaN and ±Infinity as
- * "null", so a NaN->null console edit compared by plain JSON reads as
- * unchanged and the audit stays silent (codex r5). Non-finite numbers are
- * tagged before serialization so they compare as themselves.
+ * JSON with one repair: JSON.stringify renders NaN and ±Infinity as "null",
+ * which both silences NaN->null diffs (codex r5) and writes a misleading
+ * "null" into the persisted record (codex r8). Non-finite numbers are tagged
+ * so they compare — and READ — as themselves. Exported for the trigger's
+ * metadata serialization; fingerprint() is the comparison alias.
  */
-function fingerprint(v: unknown): string {
+export function auditStringify(v: unknown): string {
     return JSON.stringify(v, (_k, x) =>
         typeof x === 'number' && !Number.isFinite(x) ? `[num:${String(x)}]` : x,
     ) ?? 'undefined';
+}
+
+function fingerprint(v: unknown): string {
+    return auditStringify(v);
 }
 
 export function diffTopLevel(

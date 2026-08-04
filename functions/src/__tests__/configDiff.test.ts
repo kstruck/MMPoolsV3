@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ABSENT, diffTopLevel, narrowChange, redactConfigValue } from '../lib/configDiff';
+import { ABSENT, auditStringify, diffTopLevel, narrowChange, redactConfigValue } from '../lib/configDiff';
 
 describe('diffTopLevel', () => {
     it('identical docs produce an EMPTY diff — the trigger must write nothing', () => {
@@ -121,5 +121,13 @@ describe('bulk-flip payload budget (codex r6)', () => {
         const narrowed = narrowChange({ from: off, to: on });
         expect(JSON.stringify(redactConfigValue(narrowed.from)).length).toBeLessThan(200);
         expect(JSON.stringify(redactConfigValue(narrowed.to)).length).toBeLessThan(200);
+    });
+});
+
+describe('auditStringify (codex r8)', () => {
+    it('non-finite numbers serialize as tagged strings, not "null"', () => {
+        expect(auditStringify(NaN)).toBe('"[num:NaN]"');
+        expect(auditStringify({ x: Infinity })).toBe('{"x":"[num:Infinity]"}');
+        expect(auditStringify(null)).toBe('null');
     });
 });

@@ -1,7 +1,7 @@
 import * as logger from "firebase-functions/logger";
 import { onDocumentWrittenWithAuthContext } from "firebase-functions/v2/firestore";
 import { writeAdminAudit, capMetadata } from "./lib/adminAudit";
-import { diffTopLevel, narrowChange, redactConfigValue } from "./lib/configDiff";
+import { auditStringify, diffTopLevel, narrowChange, redactConfigValue } from "./lib/configDiff";
 
 /**
  * Audit trail for system/config — the doc that carries every kill-switch,
@@ -44,8 +44,8 @@ export const onSystemConfigWritten = onDocumentWrittenWithAuthContext(
         metadata.changedKeys = keys.join(',').slice(0, 500);
         for (const k of keys) {
             const narrowed = narrowChange(changed[k]);
-            metadata[`${k}.from`] = JSON.stringify(redactConfigValue(narrowed.from));
-            metadata[`${k}.to`] = JSON.stringify(redactConfigValue(narrowed.to));
+            metadata[`${k}.from`] = auditStringify(redactConfigValue(narrowed.from));
+            metadata[`${k}.to`] = auditStringify(redactConfigValue(narrowed.to));
         }
 
         const written = await writeAdminAudit({
