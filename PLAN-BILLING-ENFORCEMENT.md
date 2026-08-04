@@ -239,11 +239,14 @@ is what this plan proposes.
   fail-open-to-defaults behaviour stay exactly as they are.
 * **A SuperAdmin UI for the new flag.** ⚠️ **An earlier draft of this line said
   `system/config` "is already editable from the SuperAdmin System tab". That is
-  FALSE and codex caught it.** The System tab writes exactly three things —
-  `maintenanceMode` (`src/components/SuperAdmin.tsx:2994`), `autoClose` (`:3045`)
-  and `poolTypeFlags` (`:3083`). Nothing else in `system/config` has a control,
-  which is why the NFL gates in `MORNING-2026-08-04.md` §B2 are armed from the
-  Firebase console.
+  FALSE and codex caught it.** The tab writes a small, hardcoded subset — one
+  control per key, no generic editor: `enableBracketPools`
+  (`src/components/SuperAdmin.tsx:2980`), `maintenanceMode` (`:3002`),
+  `tickerDurationSec` (`:3027`), `autoClose` (`:3045`) and `poolTypeFlags`
+  (`:3083`). **`billingEnforce` would not be among them**, which is why the NFL
+  gates in `MORNING-2026-08-04.md` §B2 are armed from the Firebase console.
+  (An intermediate draft said "exactly three things" and was wrong about the
+  list — qodo caught that one. The negative claim is what carries the argument.)
 
   So arming `billingEnforce` means **editing
   `system/config` → `billingEnforce` in the Firestore console** at
