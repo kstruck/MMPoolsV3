@@ -60,16 +60,44 @@ const hasIndex = (collection: string, fields: string[], scope = 'COLLECTION') =>
 describe('enforceBillingStatus has the composite indexes its queries require', () => {
     const billing = read('functions/src/billing.ts');
 
+    // qodo [P-Bug] flagged the first version as over-brittle: it required double
+    // quotes and the literal identifier `now`, so switching to single quotes or
+    // inlining `Date.now()` would fail CI on a change that cannot affect which
+    // index is needed. Valid — those are cosmetic, and a guard that fires on
+    // cosmetics trains people to edit the guard rather than think.
+    //
+    // What is pinned is exactly what DETERMINES the index: the field path and
+    // the operator. The comparison operand is matched as "anything up to the
+    // closing paren" — a query is still caught if it changes field or operator,
+    // which is the only way the index requirement can move.
+    const whereClause = (field: string, op: string) =>
+        new RegExp(`\\.where\\(\\s*['"]${field.replace('.', '\\.')}['"]\\s*,\\s*['"]${op}['"]\\s*,[^)]*\\)`);
+
     it('still runs the trial → grace_period query on those two fields', () => {
         // Guard-the-guard. If this query changes shape, the index assertion
         // below is pinning a stale pair and must be updated with it.
-        expect(billing).toMatch(/\.where\(\s*"billing\.status",\s*"==",\s*"trial"\s*\)/);
-        expect(billing).toMatch(/\.where\(\s*"billing\.trialEndsAt",\s*"<",\s*now\s*\)/);
+        expect(billing).toMatch(whereClause('billing.status', '=='));
+        expect(billing).toMatch(whereClause('billing.trialEndsAt', '<'));
     });
 
     it('still runs the grace_period → locked query on those two fields', () => {
-        expect(billing).toMatch(/\.where\(\s*"billing\.status",\s*"==",\s*"grace_period"\s*\)/);
-        expect(billing).toMatch(/\.where\(\s*"billing\.gracePeriodEndsAt",\s*"<",\s*now\s*\)/);
+        expect(billing).toMatch(whereClause('billing.status', '=='));
+        expect(billing).toMatch(whereClause('billing.gracePeriodEndsAt', '<'));
+    });
+
+    it('the status values the two phases key on are both still present', () => {
+        // whereClause deliberately ignores the operand, so the trial /
+        // grace_period literals would otherwise go unpinned — and swapping them
+        // silently inverts which pools each phase moves.
+        expect(billing).toMatch(/['"]trial['"]/);
+        expect(billing).toMatch(/['"]grace_period['"]/);
+    });
+
+    it('whereClause does not match a different field or operator', () => {
+        // Without this the relaxation above could have gone too far and matched
+        // anything shaped like a .where() call.
+        expect(billing).not.toMatch(whereClause('billing.status', '<'));
+        expect(billing).not.toMatch(whereClause('billing.nonexistent', '=='));
     });
 
     it('indexes the trial → grace_period query', () => {
@@ -120,6 +148,25 @@ describe('a declared index has a deploy path that actually ships it', () => {
         // Guard against "fixing" the above by replacing the script wholesale.
         expect(pkg.scripts['deploy:backend']).toContain('functions');
         expect(pkg.scripts['deploy:backend']).toContain('firestore:rules');
+    });
+
+    it('deploy:backend pins the project', () => {
+        // qodo [P-Bug] on PR #365: adding firestore:indexes to this script made
+        // an unpinned --project materially riskier than it was, because an index
+        // deploy RECONCILES prod against the file and can DELETE indexes. Without
+        // the pin that reconciliation targets whichever project the operator last
+        // selected. The pin is part of the index change, not tidying.
+        expect(pkg.scripts['deploy:backend']).toContain('--project gridiron-gamble-uzuqo');
+    });
+
+    it('every deploy script uses npx, not a bare firebase', () => {
+        // Repo-wide convention (mmp-change-control Rule 2 step 1): there is no
+        // global Firebase CLI on the target machine, and a bare invocation is
+        // how version drift gets in.
+        for (const [name, cmd] of Object.entries(pkg.scripts as Record<string, string>)) {
+            if (!cmd.includes('firebase')) continue;
+            expect(cmd, `script "${name}" invokes firebase without npx`).toMatch(/npx firebase/);
+        }
     });
 });
 

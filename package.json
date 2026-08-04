@@ -15,8 +15,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "deploy:backend": "firebase deploy --only functions,firestore:rules,firestore:indexes",
-    "deploy:hosting": "npm run build:static && firebase deploy --only hosting",
+    "deploy:backend": "npx firebase deploy --only functions,firestore:rules,firestore:indexes --project gridiron-gamble-uzuqo",
+    "deploy:hosting": "npm run build:static && npx firebase deploy --only hosting",
     "prepare": "husky"
   },
   "dependencies": {

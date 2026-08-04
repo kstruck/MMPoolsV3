@@ -208,6 +208,16 @@ mutation code must prove itself in report-only mode against real data first.
    surface that no documented command deploys is a surface that does not get
    deployed. Found by codex reviewing the fix for that job.
 
+   **VERIFIED 2026-08-04, and re-checkable — do not take it on trust:**
+   ```powershell
+   git log -S 'billing.trialEndsAt' -- firestore.indexes.json   # no commits = never declared
+   ```
+   The live half was read off `/super-admin` → Overview → Ops Health, which
+   showed `STALE JOBS: 1 — enforceBillingStatus — failing — 9 FAILED_PRECONDITION`
+   as the only stale job. (qodo asked for these claims to be marked UNVERIFIED;
+   they are the opposite — verified — so the evidence is cited here instead, which
+   is what makes the label unnecessary.)
+
    ⚠️ **Read the prompt before confirming.** `--only firestore:indexes`
    reconciles prod against the file, so an index that exists in prod but NOT in
    `firestore.indexes.json` — e.g. one created by clicking the console link in a
@@ -218,10 +228,15 @@ mutation code must prove itself in report-only mode against real data first.
    manual Coolify action by Kevin. `firebase.json` hosting rewrites do not
    apply to prod www (nginx serves it).
 
-CAUTION: `package.json` has `deploy:backend` = `firebase deploy --only
-functions,firestore:rules,firestore:indexes` (single command). Prefer the two
-explicit commands above so the functions-before-rules ordering is under your
-control, and because the script assumes a resolvable `firebase` (use `npx`).
+CAUTION: `package.json` has `deploy:backend` = `npx firebase deploy --only
+functions,firestore:rules,firestore:indexes --project gridiron-gamble-uzuqo`
+(single command). Prefer the two explicit commands above so the
+functions-before-rules ordering is under your control.
+
+The `npx` and the `--project` pin were both added 2026-08-04 (qodo, PR #365).
+`--project` matters more than it looks now that the script deploys indexes: an
+index deploy RECONCILES prod against the file, so an unpinned run can delete
+indexes in whichever project happened to be active.
 
 ⚠️ `firestore:indexes` was ADDED to that script on 2026-08-04. It used to name
 only `functions,firestore:rules`, so a release run through it declared indexes
