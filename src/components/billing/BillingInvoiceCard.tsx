@@ -121,6 +121,15 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     // key is what stops a stale quote from keeping the checkout button live.
     const [quoteFor, setQuoteFor] = useState<string | null>(null);
     const [quoteFailedFor, setQuoteFailedFor] = useState<string | null>(null);
+    // Bumped by the "Try Again" control. Without it a transient quote failure
+    // is permanent for that input set: the effect only re-runs when a priced
+    // input changes, so a recovered service would still show no price.
+    const [quoteRetry, setQuoteRetry] = useState(0);
+
+    const retryQuote = () => {
+        setQuoteFailedFor(null);
+        setQuoteRetry((n) => n + 1);
+    };
 
     // Local addon selection states for the Setup Wizard (Included in trial!)
     const [localAi, setLocalAi] = useState(hasAiCommissioner);
@@ -313,7 +322,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
             clearTimeout(t);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [poolType, estimatedPlayers, localAi, localSim, localBranding, localSms, couponInput]);
+    }, [poolType, estimatedPlayers, localAi, localSim, localBranding, localSms, couponInput, quoteRetry]);
 
     // --- Derived display values, ALL sourced from the server quote ---
     const basePrice = quote?.basePrice ?? 0;
@@ -636,15 +645,25 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         </div>
                     )}
 
-                    {/* Price could not be fetched — say so instead of showing $0. */}
-                    {priceUnknown && (
+                    {/* Price could not be fetched — say so instead of showing $0,
+                        and carry the ONLY retry affordance. The checkout button is
+                        disabled in this state, so it must not promise a retry it
+                        cannot perform. */}
+                    {priceState === 'unavailable' && (
                         <div className="bg-[#FCEEED] border border-brandred-500/30 rounded-xl p-4 flex gap-3 items-start">
                             <AlertTriangle className="text-brandred-600 shrink-0 mt-0.5" size={20} />
-                            <div className="text-xs space-y-1">
+                            <div className="text-xs space-y-1.5">
                                 <strong className="text-brandred-600 font-bold">Pricing unavailable</strong>
                                 <p className="text-[color:var(--text)] leading-relaxed">
-                                    We could not load hosting pricing for this pool. The amounts below are not a quote. Reload the page to try again — nothing has been charged.
+                                    We could not load hosting pricing for this pool. The amounts below are not a quote — nothing has been charged.
                                 </p>
+                                <button
+                                    type="button"
+                                    onClick={retryQuote}
+                                    className="font-display font-bold uppercase tracking-[0.08em] text-[10px] px-3 py-1.5 rounded-lg bg-brandred-600 hover:bg-brandred-500 text-white transition-colors"
+                                >
+                                    Try Again
+                                </button>
                             </div>
                         </div>
                     )}

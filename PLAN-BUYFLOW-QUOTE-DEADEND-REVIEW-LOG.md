@@ -98,7 +98,35 @@ the first time the wording changes.
 
 ---
 
-## codex round 2 — pending
+## codex round 2 — 1 finding, [P1], ABSORBED
+
+### 2/1 [P1] "Provide an actual retry path for unavailable pricing" — ABSORBED, valid
+
+> When a quote request fails, this state permanently disables checkout, but no
+> action re-runs `getPoolQuote`; the button is disabled and its "Retry" label is
+> not interactive. […] pricing remains unavailable even once the service has
+> recovered unless the user changes a priced input or reloads the page, leaving
+> the purchase flow dead-ended.
+
+**Verified and correct, and it is the same defect class as the original bug** —
+a control whose text promises an action it cannot perform. Round 1's fix
+introduced it while closing round 1's finding, which is the pattern CLAUDE.md
+§2c predicts (rounds 2+ find defects in the fixes).
+
+Two things were wrong: the fetch effect's dependency list contains only priced
+inputs, so nothing re-runs it for the same inputs; and the disabled button's
+label read `Pricing Unavailable — Retry`.
+
+**Fix.** A `quoteRetry` nonce is added to the effect's dependencies and bumped
+by a real, enabled **Try Again** control inside the red notice card, which also
+clears `quoteFailedFor` so the state returns to `pending` while the retry is in
+flight. The checkout button's label drops the word "Retry" — it is disabled in
+that state, and the retry belongs on a control that is not.
+
+Guarded by `the disabled price-failure label does NOT promise a retry it cannot
+perform` (asserts the label contains neither "retry" nor "try again" while
+disabled) and a wiring invariant that pins `quoteRetry` as an actual dependency
+of the fetch effect — without that, the handler could exist and change nothing.
 
 ## qodo — pending (PR not yet opened)
 

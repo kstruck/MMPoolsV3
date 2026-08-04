@@ -47,8 +47,17 @@ describe('checkoutButtonState — the free-allocation dead end', () => {
     it('the SAME inputs with a FAILED quote are DISABLED — a failed quote is not a free pool', () => {
         const s = checkoutButtonState({ ...freeAllocation, priceState: 'unavailable' });
         expect(s.disabled).toBe(true);
-        expect(s.label).toBe('Pricing Unavailable — Retry');
+        expect(s.label).toBe('Pricing Unavailable');
         expect(s.muted).toBe(true);
+    });
+
+    it('the disabled price-failure label does NOT promise a retry it cannot perform', () => {
+        // codex round 2 [P1]: the label said "Retry" on a disabled button. The
+        // retry lives on its own enabled control in the notice card.
+        const s = checkoutButtonState({ ...freeAllocation, priceState: 'unavailable' });
+        expect(s.disabled).toBe(true);
+        expect(s.label.toLowerCase()).not.toContain('retry');
+        expect(s.label.toLowerCase()).not.toContain('try again');
     });
 
     it('the SAME inputs with a STALE/in-flight quote are DISABLED and say so', () => {

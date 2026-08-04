@@ -23,6 +23,11 @@
  * `pending` and `unavailable` both block checkout. They differ only in what the
  * button says, because "we are still working" and "this did not work" are not
  * the same message and a spinner that never resolves is its own bug report.
+ *
+ * The `unavailable` LABEL deliberately does not say "retry": this button is
+ * disabled in that state, and a disabled control promising an action is the
+ * same look-clickable-but-dead defect this whole change is about. The retry
+ * lives on its own enabled control in the notice card above.
  */
 export type PriceState = 'ready' | 'pending' | 'unavailable';
 
@@ -82,7 +87,7 @@ export function checkoutButtonState(i: CheckoutButtonInputs): CheckoutButtonStat
     if (i.priceState !== 'ready') {
         return i.priceState === 'pending'
             ? { kind: 'price-pending', disabled: true, label: 'Updating Pricing…', muted: true }
-            : { kind: 'price-unavailable', disabled: true, label: 'Pricing Unavailable — Retry', muted: true };
+            : { kind: 'price-unavailable', disabled: true, label: 'Pricing Unavailable', muted: true };
     }
 
     const coveredByEntitlement = i.useCredit || i.hasUnlimitedPass;

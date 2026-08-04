@@ -87,6 +87,16 @@ describe('BillingInvoiceCard delegates the button rule instead of inlining it', 
         expect(card).not.toMatch(/basePrice === 0 && subtotal === 0/);
     });
 
+    it('a failed quote has a real retry, not just a label', () => {
+        // codex round 2 [P1]: a transient failure was permanent for that input
+        // set, because the fetch effect only re-runs when a priced input moves.
+        expect(card).toContain('const retryQuote = ()');
+        expect(card).toContain('setQuoteRetry((n) => n + 1)');
+        expect(card).toContain('onClick={retryQuote}');
+        // The retry nonce must actually be a dependency of the fetch effect.
+        expect(card).toMatch(/couponInput, quoteRetry\]\);/);
+    });
+
     it('free-tier eligibility is taken from the server quote, not inferred', () => {
         // codex round 1 [P1]: the client used to infer "free" from zeroes, and
         // `subtotal` has pricePaid subtracted from it client-side.
