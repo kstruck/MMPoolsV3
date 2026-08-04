@@ -123,8 +123,27 @@ the operator has: *what would happen tonight?*
   written back, an email cannot be unsent. Every `sendEmail` call must sit
   behind the same gate as the `update`, not behind a separate one.
 * Write the counts to `admin_audit` the way `nflFinalizeSweepJob`'s dry-run does,
-  so the report survives past the Cloud Logging retention window and is readable
-  from the SuperAdmin surface rather than the console.
+  so the report survives past the Cloud Logging retention window.
+
+  ⚠️ **It will NOT be readable from the SuperAdmin surface, and an earlier draft
+  of this line claimed it would be.** `AdminAuditViewer` renders five columns —
+  When, Actor, Action, Target, Status (`src/components/admin/AdminAuditViewer.tsx:58-62`)
+  — and nothing from the record's `metadata`. So the candidate list, the counts
+  and the email-resolution outcomes land in Firestore and are invisible in the
+  app. Third instance in this document set of a claim about a UI control that
+  does not exist; codex found all three.
+
+  Two honest options, and the plan does not pick for you:
+  **(a)** keep the implementation `functions/`-only and send the operator to the
+  Firestore console (`admin_audit`, filtered by action) to read the dry-run
+  report — consistent with how the NFL gates are armed today; or
+  **(b)** add a metadata expander to `AdminAuditViewer`, which is a small
+  `src/` change but pulls a Coolify rebuild into a functions-only plan and is
+  worth doing on its own rather than smuggled in here.
+
+  **Whichever is chosen must be settled BEFORE the gate ships**, because §4
+  step 3 — "read the report" — is the step the whole sequence exists for, and a
+  report nobody can find is the same as no dry run at all.
 * Return the same heartbeat verdict shape as today so
   `billingEnforceVerdict` keeps grading it.
 
