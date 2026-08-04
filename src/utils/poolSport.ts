@@ -194,6 +194,24 @@ export function getPoolLockTime(pool: LockTimeReadable): number | null {
   }
 }
 
+/**
+ * Why a pool's deadline cell reads the way it does. `per-week` and `unset` both
+ * come back as `null` from getPoolLockTime but mean opposite things to an admin:
+ * an NFL season pool is working as designed, while any other type without a
+ * deadline has simply never had one configured (a bracket is created with
+ * `lockAt: 0`). Rendering both as one placeholder hid the second.
+ */
+export type PoolLockTimeState =
+  | { kind: 'at'; at: number }
+  | { kind: 'per-week' }
+  | { kind: 'unset' };
+
+export function getPoolLockTimeState(pool: LockTimeReadable): PoolLockTimeState {
+  const at = getPoolLockTime(pool);
+  if (at !== null) return { kind: 'at', at };
+  return isNFLSeasonPoolType(pool.type) ? { kind: 'per-week' } : { kind: 'unset' };
+}
+
 /** Minimal shape needed to render a pool's matchup label across all types. */
 export interface MatchupReadable {
   type?: string;

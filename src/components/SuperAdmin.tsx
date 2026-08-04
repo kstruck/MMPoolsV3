@@ -12,7 +12,7 @@ import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
 import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw, Wrench, Ticket, Megaphone, Globe, PartyPopper, Mail, KeyRound } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
-import { getPoolSport, getPoolLifecycleState, formatPoolMatchup, getPoolEntrySummary, formatEntryCount, getPoolLockTime, isNFLSeasonPoolType, isSquaresPoolType } from '../utils/poolSport';
+import { getPoolSport, getPoolLifecycleState, formatPoolMatchup, getPoolEntrySummary, formatEntryCount, getPoolLockTimeState, isNFLSeasonPoolType, isSquaresPoolType } from '../utils/poolSport';
 import type { EntryCountable, LockTimeReadable } from '../utils/poolSport';
 import { ErrorBoundary } from './ErrorBoundary';
 import { POOL_TYPES, resolvePoolTypeFlags } from '../utils/featureFlags';
@@ -1448,7 +1448,12 @@ export const SuperAdmin: React.FC = () => {
                                                         ? Math.min(100, Math.round((entrySummary.count / entrySummary.capacity) * 100))
                                                         : null;
                                                     const filledDisplay = formatEntryCount(entrySummary);
-                                                    const lockTime = getPoolLockTime(pool as unknown as LockTimeReadable);
+                                                    const lockState = getPoolLockTimeState(pool as unknown as LockTimeReadable);
+                                                    const lock = lockState.kind === 'at'
+                                                        ? { text: new Date(lockState.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), title: undefined }
+                                                        : lockState.kind === 'per-week'
+                                                            ? { text: 'n/a', title: 'Season-long pool — picks lock per game and per week, not pool-wide' }
+                                                            : { text: 'not set', title: 'No lock or start time is configured on this pool' };
 
                                                     return (
                                                         <tr key={pool.id} className="hover:bg-surface transition-colors">
@@ -1485,13 +1490,8 @@ export const SuperAdmin: React.FC = () => {
                                                                 {createdAt}
                                                             </td>
                                                             <td className="p-4 font-bold font-body text-sm">{matchUp}</td>
-                                                            <td
-                                                                className="p-4 text-xs text-muted font-mono num"
-                                                                title={lockTime === null && isNFLSeasonPoolType(pool.type) ? 'Season-long pool — picks lock per game/week, not pool-wide' : undefined}
-                                                            >
-                                                                {lockTime === null
-                                                                    ? '—'
-                                                                    : new Date(lockTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                            <td className="p-4 text-xs text-muted font-mono num" title={lock.title}>
+                                                                {lock.text}
                                                             </td>
                                                             <td className="p-4 text-muted font-body text-sm max-w-[150px] truncate" title={contact}>{contact}</td>
                                                             <td className="p-4">

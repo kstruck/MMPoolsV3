@@ -6,6 +6,7 @@ import {
   getPoolEntrySummary,
   formatEntryCount,
   getPoolLockTime,
+  getPoolLockTimeState,
   isNFLSeasonPoolType,
   isSquaresPoolType,
 } from '../src/utils/poolSport';
@@ -174,6 +175,30 @@ describe('getPoolLockTime', () => {
     expect(getPoolLockTime({ type: 'NFL_PLAYOFFS', lockDate: 0 })).toBeNull();
     expect(getPoolLockTime({ type: 'PROPS', lockDate: 0 })).toBeNull();
     expect(getPoolLockTime({ type: 'BRACKET', lockAt: '1970-01-01T00:00:00.000Z' })).toBeNull();
+  });
+});
+
+describe('getPoolLockTimeState', () => {
+  it('separates "never has one" from "nobody set one" — both were one em-dash', () => {
+    // A bracket created with lockAt: 0 has an unconfigured deadline, which is
+    // an admin's problem to fix; an NFL season pool is working as designed.
+    // Rendering both identically hid the first.
+    expect(getPoolLockTimeState({ type: 'NFL_SURVIVOR' })).toEqual({ kind: 'per-week' });
+    expect(getPoolLockTimeState({ type: 'BRACKET', lockAt: 0 })).toEqual({ kind: 'unset' });
+    expect(getPoolLockTimeState({ type: 'SQUARES', scores: {} })).toEqual({ kind: 'unset' });
+    expect(getPoolLockTimeState({ type: 'PROPS' })).toEqual({ kind: 'unset' });
+  });
+
+  it('carries the timestamp through when there is one', () => {
+    const at = Date.parse('2026-09-10T00:20:00.000Z');
+    expect(getPoolLockTimeState({ type: 'BRACKET', lockAt: at })).toEqual({ kind: 'at', at });
+  });
+
+  it('stays per-week for an NFL season pool even if a stray lockAt is present', () => {
+    // lockPool writes isLocked on these types; nothing writes a meaningful
+    // pool-wide deadline, so a value here is not one to display.
+    expect(getPoolLockTimeState({ type: 'NFL_PICKEM', lockAt: 1_780_000_000_000 }))
+      .toEqual({ kind: 'per-week' });
   });
 });
 
