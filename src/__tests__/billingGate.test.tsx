@@ -247,6 +247,39 @@ describe('BillingGate — active state, hosting-fees-paid banner', () => {
     expect(screen.getByText(/pool credit or promotion/i)).toBeTruthy();
   });
 
+  it('does NOT invent a payment story when the AMOUNT is missing', () => {
+    // A coerced 0 would send the copy down the "pool credit or promotion"
+    // branch and assert a specific payment method from the absence of data.
+    // A legacy record can carry a paid tier with no amount (qodo finding 5).
+    const billing = activeBilling();
+    delete (billing as Partial<PoolBilling>).pricePaid;
+
+    render(
+      <BillingGate pool={createPool(billing)} isCommissioner={true}>
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.getByText(/hosting fees paid/i)).toBeTruthy();
+    expect(screen.getByText('This pool is fully activated. Nothing further is due.')).toBeTruthy();
+    expect(screen.queryByText(/pool credit or promotion/i)).toBeNull();
+    expect(screen.queryByText(/\$/)).toBeNull();
+  });
+
+  it('treats a non-numeric pricePaid as missing, not as zero', () => {
+    const billing = activeBilling();
+    (billing as unknown as Record<string, unknown>).pricePaid = 'NaN';
+
+    render(
+      <BillingGate pool={createPool(billing)} isCommissioner={true}>
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.queryByText(/pool credit or promotion/i)).toBeNull();
+    expect(screen.getByText('This pool is fully activated. Nothing further is due.')).toBeTruthy();
+  });
+
   it('does NOT claim fees were paid when the tier is MISSING', () => {
     // `tier` is required by the TypeScript type but not by Firestore, so a
     // legacy pool can lack it. A `!== 'free_tier'` check would pass on

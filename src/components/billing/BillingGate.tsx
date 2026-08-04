@@ -83,7 +83,19 @@ export const BillingGate: React.FC<BillingGateProps> = ({
       return <>{children}</>;
     }
 
-    const pricePaid = typeof billing.pricePaid === 'number' ? billing.pricePaid : 0;
+    // THREE-WAY, not two. Coercing a missing/corrupt `pricePaid` to 0 sends the
+    // copy down the "pool credit or promotion" branch, which asserts a specific
+    // payment STORY on a money surface from the absence of data. A legacy
+    // record can carry a paid tier with no amount; the honest answer there is
+    // to say the pool is settled and say nothing about how.
+    const rawPaid = billing.pricePaid;
+    const paidAmount = typeof rawPaid === 'number' && Number.isFinite(rawPaid) ? rawPaid : null;
+    const subline =
+      paidAmount !== null && paidAmount > 0
+        ? `This pool is fully activated — $${paidAmount.toFixed(2)} paid. Nothing further is due.`
+        : paidAmount === 0
+          ? 'This pool is fully activated with a pool credit or promotion. Nothing further is due.'
+          : 'This pool is fully activated. Nothing further is due.';
 
     return (
       <>
@@ -140,9 +152,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
                 fontWeight: 700,
               }}
             >
-              {pricePaid > 0
-                ? `This pool is fully activated — $${pricePaid.toFixed(2)} paid. Nothing further is due.`
-                : 'This pool is fully activated with a pool credit or promotion. Nothing further is due.'}
+              {subline}
             </p>
           </div>
         </motion.div>
