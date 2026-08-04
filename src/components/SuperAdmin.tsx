@@ -12,7 +12,8 @@ import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
 import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw, Wrench, Ticket, Megaphone, Globe, PartyPopper, Mail, KeyRound } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
-import { getPoolSport, getPoolLifecycleState, formatPoolMatchup } from '../utils/poolSport';
+import { getPoolSport, getPoolLifecycleState, formatPoolMatchup, getPoolEntrySummary, getPoolLockTime, isNFLSeasonPoolType } from '../utils/poolSport';
+import type { EntryCountable, LockTimeReadable } from '../utils/poolSport';
 import { ErrorBoundary } from './ErrorBoundary';
 import { POOL_TYPES, resolvePoolTypeFlags } from '../utils/featureFlags';
 import { db } from '../firebase';
@@ -1421,10 +1422,10 @@ export const SuperAdmin: React.FC = () => {
                                                 <tr>
                                                     <th className="p-4 font-bold tracking-wider">Pool Name</th>
                                                     <th className="p-4 font-bold tracking-wider">Created</th>
-                                                    <th className="p-4 font-bold tracking-wider">Matchup</th>
-                                                    <th className="p-4 font-bold tracking-wider">Game Time</th>
+                                                    <th className="p-4 font-bold tracking-wider">Type / Matchup</th>
+                                                    <th className="p-4 font-bold tracking-wider">Starts / Locks</th>
                                                     <th className="p-4 font-bold tracking-wider">Owner</th>
-                                                    <th className="p-4 font-bold tracking-wider">Filled</th>
+                                                    <th className="p-4 font-bold tracking-wider">Entries</th>
                                                     <th className="p-4 font-bold tracking-wider">Actions</th>
                                                 </tr>
                                             </thead>
@@ -1442,25 +1443,14 @@ export const SuperAdmin: React.FC = () => {
                                                     const ownerId = isBracket ? poolLike.managerUid as string : poolLike.ownerId as string;
                                                     const contact = users.find(u => u.id === ownerId)?.email || (isBracket ? 'N/A' : (pool as GameState).contactEmail);
 
-                                                    let filledPct = 0;
-                                                    let filledDisplay = '';
-                                                    if (isBracket) {
-                                                        const bp = pool as unknown as PoolLike;
-                                                        const bpSettings = bp.settings as unknown as PoolLike;
-                                                        const max = bpSettings.maxEntriesTotal === -1 ? 100 : (bpSettings.maxEntriesTotal as number);
-                                                        filledPct = bpSettings.maxEntriesTotal === -1 ? 0 : Math.round(((bp.entryCount as number || 0) / max) * 100);
-                                                        filledDisplay = `${bp.entryCount || 0} Entries`;
-                                                    } else if (pool.type === 'PROPS' || pool.type === 'NFL_PLAYOFFS') {
-                                                        const pp = pool as unknown as PoolLike;
-                                                        const entryCount = pool.type === 'PROPS' ? (pp.entryCount || 0) : (pp.entries ? Object.keys(pp.entries as unknown as Record<string, unknown>).length : 0);
-                                                        filledPct = 0;
-                                                        filledDisplay = `${entryCount} Entries`;
-                                                    } else {
-                                                        const sp = pool as GameState;
-                                                        const filledCount = sp.squares?.filter(s => s.owner).length || 0;
-                                                        filledPct = filledCount;
-                                                        filledDisplay = `${100 - filledCount} Left`;
-                                                    }
+                                                    const entrySummary = getPoolEntrySummary(pool as unknown as EntryCountable);
+                                                    const filledPct = entrySummary.capacity
+                                                        ? Math.min(100, Math.round((entrySummary.count / entrySummary.capacity) * 100))
+                                                        : null;
+                                                    const filledDisplay = entrySummary.capacity
+                                                        ? `${entrySummary.count}/${entrySummary.capacity} ${entrySummary.unit}`
+                                                        : `${entrySummary.count} ${entrySummary.unit}`;
+                                                    const lockTime = getPoolLockTime(pool as unknown as LockTimeReadable);
 
                                                     return (
                                                         <tr key={pool.id} className="hover:bg-surface transition-colors">
@@ -1497,25 +1487,18 @@ export const SuperAdmin: React.FC = () => {
                                                                 {createdAt}
                                                             </td>
                                                             <td className="p-4 font-bold font-body text-sm">{matchUp}</td>
-                                                            <td className="p-4 text-xs text-muted font-mono num">
-                                                                {(() => {
-                                                                    if (pool.type === 'BRACKET') {
-                                                                        const lockAt = (pool as unknown as PoolLike).lockAt as string | undefined;
-                                                                        return lockAt ? new Date(lockAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD';
-                                                                    } else if (pool.type === 'NFL_PLAYOFFS') {
-                                                                        const lockDate = (pool as unknown as PoolLike).lockDate as string | undefined;
-                                                                        return lockDate ? new Date(lockDate).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD';
-                                                                    } else if (pool.type === 'SQUARES' && (pool as GameState).scores?.startTime) {
-                                                                        return new Date((pool as GameState).scores.startTime!).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-                                                                    } else {
-                                                                        return 'TBD';
-                                                                    }
-                                                                })()}
+                                                            <td
+                                                                className="p-4 text-xs text-muted font-mono num"
+                                                                title={lockTime === null && isNFLSeasonPoolType(pool.type) ? 'Season-long pool — picks lock per game/week, not pool-wide' : undefined}
+                                                            >
+                                                                {lockTime === null
+                                                                    ? '—'
+                                                                    : new Date(lockTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                             </td>
                                                             <td className="p-4 text-muted font-body text-sm max-w-[150px] truncate" title={contact}>{contact}</td>
                                                             <td className="p-4">
                                                                 <div className="flex items-center gap-2">
-                                                                    {(pool.type === 'SQUARES' || isBracket) && (
+                                                                    {filledPct !== null && (
                                                                         <div className="w-16 h-2 bg-line rounded-full overflow-hidden">
                                                                             <div className="h-full bg-gold-foil rounded-full" style={{ width: `${filledPct}%` }}></div>
                                                                         </div>
@@ -1525,16 +1508,23 @@ export const SuperAdmin: React.FC = () => {
                                                             </td>
                                                             <td className="p-4 flex gap-2 flex-wrap">
                                                                 <button onClick={() => navigate(`/admin/${pool.id}`)} className="text-navy-700 dark:text-gold-400 hover:bg-navy-600/10 text-xs font-display font-bold uppercase tracking-[0.05em] border border-navy-600/40 px-2 py-1 rounded transition-colors">Manage</button>
-                                                                {!isBracket && (
+                                                                {/* Sim and Fix drive `pool.scores` / fixPoolScores, which only SQUARES
+                                                                    pools have. They used to render for every non-BRACKET row, so on an
+                                                                    NFL or PROPS pool Sim threw on `pool.scores.current` and Fix ran the
+                                                                    wrong scorer (NFL scores through scoreNFLWeek). */}
+                                                                {pool.type === 'SQUARES' && (
                                                                     <button onClick={() => handleRunSim(pool as GameState)} className="text-gold-700 dark:text-gold-400 hover:bg-gold-500/10 text-xs font-display font-bold uppercase tracking-[0.05em] border border-gold-500/40 px-2 py-1 rounded transition-colors">Sim</button>
                                                                 )}
-                                                                {!isBracket && (
+                                                                {pool.type === 'SQUARES' && (
                                                                     <button onClick={() => handleFixScores(pool as GameState)} className="text-gold-700 dark:text-gold-400 hover:bg-gold-500/10 text-xs font-display font-bold uppercase tracking-[0.05em] border border-gold-500/40 px-2 py-1 rounded flex items-center gap-1 transition-colors">
                                                                         <Settings size={12} /> Fix
                                                                     </button>
                                                                 )}
-                                                                {/* Close/Lock Button */}
-                                                                {!(pool as unknown as PoolLike).isLocked && !((pool as unknown as PoolLike).lockAt && (pool as unknown as PoolLike).status === 'LOCKED') && (
+                                                                {/* Close/Lock Button. Hidden for NFL season pools: lockPool sets
+                                                                    `isLocked` on them but no NFL path reads it (joins and picks gate on
+                                                                    per-game/per-week GAME_LOCKED/WEEK_LOCKED), so the only effect was an
+                                                                    admin LOCKED badge on a pool the server still accepts entries for. */}
+                                                                {!isNFLSeasonPoolType(pool.type) && !(pool as unknown as PoolLike).isLocked && !((pool as unknown as PoolLike).lockAt && (pool as unknown as PoolLike).status === 'LOCKED') && (
                                                                     <button
                                                                         onClick={async (e) => {
                                                                             e.stopPropagation();
@@ -3796,22 +3786,20 @@ export const SuperAdmin: React.FC = () => {
                                                     </div>
 
                                                     <div className="grid grid-cols-2 gap-2 text-sm text-muted mb-4 bg-surface border border-line p-3 rounded-lg">
+                                                        {/* Counted through getPoolEntrySummary so this card can't repeat the
+                                                            pool-list bug where NFL season pools read an `entryCount` no server
+                                                            path maintains and always showed 0. */}
+                                                        {(() => {
+                                                            const summary = getPoolEntrySummary(pool as unknown as EntryCountable);
+                                                            const label = summary.unit.charAt(0).toUpperCase() + summary.unit.slice(1);
+                                                            return (
+                                                                <div>{label}: <span className="text-[color:var(--text)] font-mono num">{summary.capacity ? `${summary.count}/${summary.capacity}` : summary.count}</span></div>
+                                                            );
+                                                        })()}
                                                         {isBracket ? (
-                                                            <>
-                                                                <div>Entries: <span className="text-[color:var(--text)] font-mono num">{(pool as unknown as PoolLike).entryCount as number || 0}</span></div>
-                                                                <div>Status: <span className={(pool as unknown as PoolLike).status === 'LOCKED' ? "text-brandred-500 font-bold" : "text-gold-600 dark:text-gold-400 font-bold"}>{(pool as unknown as PoolLike).status as string || 'OPEN'}</span></div>
-                                                            </>
+                                                            <div>Status: <span className={(pool as unknown as PoolLike).status === 'LOCKED' ? "text-brandred-500 font-bold" : "text-gold-600 dark:text-gold-400 font-bold"}>{(pool as unknown as PoolLike).status as string || 'OPEN'}</span></div>
                                                         ) : (
-                                                            <>
-                                                                {/* SQUARES pools carry `.squares`; NFL season + PROPS pools do not
-                                                                    — guard so a non-squares pool can't crash the card. */}
-                                                                {pool.type === 'SQUARES' ? (
-                                                                    <div>Squares: <span className="text-[color:var(--text)] font-mono num">{((pool as GameState).squares ?? []).filter(s => s.owner).length}/100</span></div>
-                                                                ) : (
-                                                                    <div>Entries: <span className="text-[color:var(--text)] font-mono num">{(pool as unknown as PoolLike).entryCount as number || 0}</span></div>
-                                                                )}
-                                                                <div>Status: <span className={(pool as GameState).isLocked ? "text-brandred-500 font-bold" : "text-gold-600 dark:text-gold-400 font-bold"}>{(pool as GameState).isLocked ? 'LOCKED' : 'OPEN'}</span></div>
-                                                            </>
+                                                            <div>Status: <span className={(pool as GameState).isLocked ? "text-brandred-500 font-bold" : "text-gold-600 dark:text-gold-400 font-bold"}>{(pool as GameState).isLocked ? 'LOCKED' : 'OPEN'}</span></div>
                                                         )}
                                                     </div>
 

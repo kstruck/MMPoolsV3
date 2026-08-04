@@ -33,12 +33,121 @@ export function getPoolSport(pool: SportClassifiable): string {
   if (pool.type === 'BRACKET') return 'March Madness';
   if (pool.type === 'NFL_PLAYOFFS') return 'NFL Playoffs';
   if (pool.type === 'PROPS') return 'Props Pool';
-  if ((NFL_SEASON_TYPES as readonly string[]).includes(pool.type ?? '')) return 'NFL Football';
+  if (isNFLSeasonPoolType(pool.type)) return 'NFL Football';
   // SQUARES and any legacy type: bucket by league.
   return getLeagueDisplayName(pool.league);
 }
 
+/**
+ * String-safe form of `isNflSeasonType` from @shared/poolTypes, which narrows to
+ * the PoolType union and so can't take a `string | undefined` straight off a
+ * Firestore doc.
+ */
+export function isNFLSeasonPoolType(type: string | undefined): boolean {
+  return (NFL_SEASON_TYPES as readonly string[]).includes(type ?? '');
+}
+
 export type PoolLifecycleState = 'open' | 'locked' | 'live' | 'final' | 'closed';
+
+/** What a pool's "how full is it" number actually counts, per type. */
+export interface PoolEntrySummary {
+  count: number;
+  /** null when the type has no pool-wide ceiling (or it is set to unlimited). */
+  capacity: number | null;
+  /** Noun for `count`, so the UI never labels players as squares or vice versa. */
+  unit: 'squares' | 'entries' | 'players';
+}
+
+/** Minimal shape needed to count entries/players across all pool types. */
+export interface EntryCountable {
+  type?: string;
+  squares?: { owner?: string | null }[];
+  entryCount?: number;
+  entries?: Record<string, unknown>;
+  participantIds?: string[];
+  settings?: { maxEntriesTotal?: number };
+}
+
+/**
+ * How full a pool is, in the unit that type actually uses. Every pool type
+ * tracks participation in a different field, and the admin list used to run the
+ * SQUARES branch for anything that wasn't BRACKET/PROPS/NFL_PLAYOFFS — so NFL
+ * season pools counted a `squares` array they do not have and every one of them
+ * reported "100 Left".
+ *
+ * NFL season pools have no maintained `entryCount` (only BRACKET and PROPS
+ * increment it server-side), and their entries live in a subcollection the admin
+ * list does not read. `participantIds` is the pool-doc membership list those
+ * paths do maintain, so the honest count is players, not entries.
+ */
+export function getPoolEntrySummary(pool: EntryCountable): PoolEntrySummary {
+  if (pool.type === 'BRACKET') {
+    const max = pool.settings?.maxEntriesTotal;
+    return {
+      count: pool.entryCount ?? 0,
+      capacity: typeof max === 'number' && max > 0 ? max : null,
+      unit: 'entries',
+    };
+  }
+  if (pool.type === 'PROPS') {
+    return { count: pool.entryCount ?? 0, capacity: null, unit: 'entries' };
+  }
+  if (pool.type === 'NFL_PLAYOFFS') {
+    // The `entries` map on the pool doc is authoritative here; `entryCount` is
+    // declared on the type but no server path maintains it for playoff pools.
+    return { count: Object.keys(pool.entries ?? {}).length, capacity: null, unit: 'entries' };
+  }
+  if (isNFLSeasonPoolType(pool.type)) {
+    return { count: pool.participantIds?.length ?? 0, capacity: null, unit: 'players' };
+  }
+  // SQUARES and any legacy type: a 10x10 grid.
+  return {
+    count: (pool.squares ?? []).filter(s => s.owner).length,
+    capacity: 100,
+    unit: 'squares',
+  };
+}
+
+/** Minimal shape needed to read a pool's lock/start time across all types. */
+export interface LockTimeReadable {
+  type?: string;
+  lockAt?: number | string;
+  lockDate?: number | string;
+  scores?: { startTime?: string | number };
+}
+
+function toEpochMs(value: number | string | undefined | null): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return null;
+}
+
+/**
+ * Epoch-ms lock/start time for a pool, or null when the type has none.
+ *
+ * NFL season pools deliberately return null: they lock per game or per week off
+ * the NFL schedule (GAME_LOCKED / WEEK_LOCKED in functions/src/nflPools.ts),
+ * never at one pool-wide timestamp. Fields are typed `number` but older docs
+ * carry ISO strings, so both are accepted.
+ */
+export function getPoolLockTime(pool: LockTimeReadable): number | null {
+  switch (pool.type) {
+    case 'BRACKET':
+      return toEpochMs(pool.lockAt);
+    case 'NFL_PLAYOFFS':
+    case 'PROPS':
+      return toEpochMs(pool.lockDate);
+    case 'NFL_PICKEM':
+    case 'NFL_SURVIVOR':
+    case 'NFL_MARGIN':
+      return null;
+    default:
+      return toEpochMs(pool.scores?.startTime);
+  }
+}
 
 /** Minimal shape needed to render a pool's matchup label across all types. */
 export interface MatchupReadable {

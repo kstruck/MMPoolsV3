@@ -3,6 +3,9 @@ import {
   getPoolSport,
   getLeagueDisplayName,
   getPoolLifecycleState,
+  getPoolEntrySummary,
+  getPoolLockTime,
+  isNFLSeasonPoolType,
 } from '../src/utils/poolSport';
 
 describe('getPoolSport', () => {
@@ -49,5 +52,91 @@ describe('getPoolLifecycleState', () => {
 
   it('defaults a freshly-created NFL pool (status OPEN, no terminal transition yet) to open', () => {
     expect(getPoolLifecycleState({ type: 'NFL_SURVIVOR', status: 'OPEN' })).toBe('open');
+  });
+});
+
+describe('getPoolEntrySummary', () => {
+  it('counts NFL season pools by participantIds, in players — the admin-list bug', () => {
+    // These used to fall through to the SQUARES branch, count a `squares` array
+    // they do not have, and report "100 Left" on every NFL pool in the list.
+    for (const type of ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN']) {
+      expect(getPoolEntrySummary({ type, participantIds: ['a', 'b', 'c'] })).toEqual({
+        count: 3,
+        capacity: null,
+        unit: 'players',
+      });
+    }
+  });
+
+  it('does not read `squares` or a capacity for a non-squares pool', () => {
+    const nfl = getPoolEntrySummary({ type: 'NFL_PICKEM', participantIds: [] });
+    expect(nfl.count).toBe(0);
+    expect(nfl.capacity).toBeNull();
+    expect(nfl.unit).not.toBe('squares');
+  });
+
+  it('counts SQUARES by owned squares out of 100', () => {
+    const squares = Array.from({ length: 100 }, (_, i) => ({ owner: i < 42 ? 'Kevin' : null }));
+    expect(getPoolEntrySummary({ type: 'SQUARES', squares })).toEqual({
+      count: 42,
+      capacity: 100,
+      unit: 'squares',
+    });
+  });
+
+  it('counts BRACKET by entryCount and honors the unlimited sentinel', () => {
+    expect(getPoolEntrySummary({ type: 'BRACKET', entryCount: 7, settings: { maxEntriesTotal: 50 } }))
+      .toEqual({ count: 7, capacity: 50, unit: 'entries' });
+    // -1 means unlimited: no ceiling, so no progress bar.
+    expect(getPoolEntrySummary({ type: 'BRACKET', entryCount: 7, settings: { maxEntriesTotal: -1 } }).capacity)
+      .toBeNull();
+    expect(getPoolEntrySummary({ type: 'BRACKET' })).toEqual({ count: 0, capacity: null, unit: 'entries' });
+  });
+
+  it('counts PROPS by entryCount and NFL_PLAYOFFS by its entries map', () => {
+    expect(getPoolEntrySummary({ type: 'PROPS', entryCount: 4 }))
+      .toEqual({ count: 4, capacity: null, unit: 'entries' });
+    expect(getPoolEntrySummary({ type: 'NFL_PLAYOFFS', entries: { u1: {}, u2: {} }, entryCount: 0 }))
+      .toEqual({ count: 2, capacity: null, unit: 'entries' });
+  });
+
+  it('treats an unknown/legacy type as squares without crashing on a missing grid', () => {
+    expect(getPoolEntrySummary({ type: undefined })).toEqual({ count: 0, capacity: 100, unit: 'squares' });
+  });
+});
+
+describe('getPoolLockTime', () => {
+  const ISO = '2026-09-10T00:20:00.000Z';
+  const EPOCH = Date.parse(ISO);
+
+  it('returns null for NFL season pools — they lock per game/week, not pool-wide', () => {
+    expect(getPoolLockTime({ type: 'NFL_PICKEM' })).toBeNull();
+    expect(getPoolLockTime({ type: 'NFL_SURVIVOR' })).toBeNull();
+    expect(getPoolLockTime({ type: 'NFL_MARGIN' })).toBeNull();
+  });
+
+  it('reads the right field per type', () => {
+    expect(getPoolLockTime({ type: 'BRACKET', lockAt: EPOCH })).toBe(EPOCH);
+    expect(getPoolLockTime({ type: 'NFL_PLAYOFFS', lockDate: EPOCH })).toBe(EPOCH);
+    expect(getPoolLockTime({ type: 'PROPS', lockDate: EPOCH })).toBe(EPOCH);
+    expect(getPoolLockTime({ type: 'SQUARES', scores: { startTime: ISO } })).toBe(EPOCH);
+  });
+
+  it('accepts legacy ISO strings where the type declares a number', () => {
+    expect(getPoolLockTime({ type: 'BRACKET', lockAt: ISO })).toBe(EPOCH);
+  });
+
+  it('returns null rather than NaN when the field is missing or unparseable', () => {
+    expect(getPoolLockTime({ type: 'BRACKET' })).toBeNull();
+    expect(getPoolLockTime({ type: 'SQUARES', scores: {} })).toBeNull();
+    expect(getPoolLockTime({ type: 'BRACKET', lockAt: 'not a date' })).toBeNull();
+  });
+});
+
+describe('isNFLSeasonPoolType', () => {
+  it('accepts a raw string off a Firestore doc', () => {
+    expect(isNFLSeasonPoolType('NFL_SURVIVOR')).toBe(true);
+    expect(isNFLSeasonPoolType('NFL_PLAYOFFS')).toBe(false);
+    expect(isNFLSeasonPoolType(undefined)).toBe(false);
   });
 });
