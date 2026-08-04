@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router';
 import { Trophy, Heart, ShieldAlert } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
 import { RankChip } from '../ui';
+import { nflWeekLabel } from '../../utils/nflWeekLabel';
+import { poolSeasonType } from '../../utils/nflPending';
 
 interface NFLStandingsProps {
   pool: Pool;
@@ -137,7 +139,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                 {/* Custom Pool Columns */}
                 {type === 'NFL_PICKEM' && (
                   <>
-                    <th className={`${TH} text-center`}>Week {week} Pick</th>
+                    <th className={`${TH} text-center`}>{nflWeekLabel(poolSeasonType(pool), week)} Pick</th>
                     <th className={`${TH} text-center`}>MNF Score</th>
                     <th className={`${TH} text-right w-24`}>Total Points</th>
                   </>
@@ -148,13 +150,13 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                     <th className={`${TH} text-center`}>Status</th>
                     <th className={`${TH} text-center`}>Strikes</th>
                     <th className={`${TH} text-center`}>Rebuys</th>
-                    <th className={`${TH} text-center`}>Week {week} Pick</th>
+                    <th className={`${TH} text-center`}>{nflWeekLabel(poolSeasonType(pool), week)} Pick</th>
                   </>
                 )}
 
                 {type === 'NFL_MARGIN' && (
                   <>
-                    <th className={`${TH} text-center`}>Week {week} Pick</th>
+                    <th className={`${TH} text-center`}>{nflWeekLabel(poolSeasonType(pool), week)} Pick</th>
                     <th className={`${TH} text-center`}>Negative Burden</th>
                     <th className={`${TH} text-center`}>Win Wks</th>
                     <th className={`${TH} text-center`}>Best Wk</th>

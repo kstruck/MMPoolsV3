@@ -4,6 +4,8 @@ import { useNavigate, useLocation } from 'react-router';
 import type { User, GameState, Winner, Pool, PlayoffPool, BracketPool, SystemSettings, PoolType, NFLGame } from '../types';
 import { isNFLSeasonPool, getMyNFLEntry, subscribeToSeasonGames, computePendingStatus, type PoolPendingStatus } from '../services/nflStatusService';
 import { formatDeadline } from '../utils/formatTime';
+import { nflWeekLabel } from '../utils/nflWeekLabel';
+import { poolSeasonType } from '../utils/nflPending';
 import { isSuperAdmin } from '../utils/auth';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
@@ -784,7 +786,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                                     {pendingByPool[pool.id] && (
                                                         <div className="flex items-center gap-1 mt-1.5 bg-brandred-600/10 border border-brandred-600/40 text-brandred-600 text-[10px] font-display font-bold px-2 py-0.5 rounded-full w-fit">
                                                             <AlertTriangle size={10} aria-hidden="true" />
-                                                            Week {pendingByPool[pool.id].dueWeek} picks due · {formatDeadline(pendingByPool[pool.id].deadline)}
+                                                            {nflWeekLabel(poolSeasonType(pool), pendingByPool[pool.id].dueWeek)} picks due · {formatDeadline(pendingByPool[pool.id].deadline)}
                                                         </div>
                                                     )}
                                                     {(pool as GameState).scores?.startTime && (

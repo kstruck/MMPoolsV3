@@ -8,6 +8,8 @@ import { getUserMessage } from '../../utils/errorMessages';
 import { now as serverNow } from '../../utils/serverClock';
 import { formatTimeWithZone } from '../../utils/formatTime';
 import type { User, Pool, NFLGame } from '../../types';
+import { poolSeasonType } from '../../utils/nflPending';
+import { nflWeekLabel } from '../../utils/nflWeekLabel';
 
 interface SurvivorPickEntryProps {
   pool: Pool;
@@ -130,7 +132,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
       message: (
         <>
           <p>This restores your ALIVE status and adds <strong>${rebuyCost}</strong> to what you owe the commissioner.</p>
-          <p className="mt-2 text-muted num">Rebuys used: {(entry?.rebuysUsed ?? 0)} of {maxRebuys}. Available through Week {rebuyDeadlineWeek}.</p>
+          <p className="mt-2 text-muted num">Rebuys used: {(entry?.rebuysUsed ?? 0)} of {maxRebuys}. Available through {rebuyDeadlineWeek >= 1 ? nflWeekLabel(poolSeasonType(pool), rebuyDeadlineWeek) : 'season start'}.</p>
         </>
       ),
       confirmLabel: `Rebuy — $${rebuyCost}`,
@@ -238,7 +240,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
       {submittedAt && !error && (
         <div role="status" className="bg-gold-400/10 border border-gold-500/40 text-gold-700 dark:text-gold-400 p-4 rounded-lg text-xs font-body font-bold num flex gap-2 items-center">
           <CheckCircle2 size={18} aria-hidden="true" />
-          Week {week} pick ({selectedTeam}) submitted at {formatTimeWithZone(submittedAt)}. You can change it until the game locks.
+          {nflWeekLabel(poolSeasonType(pool), week)} pick ({selectedTeam}) submitted at {formatTimeWithZone(submittedAt)}. You can change it until the game locks.
         </div>
       )}
 
@@ -263,7 +265,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
       <div className="space-y-4">
         {games.length === 0 ? (
           <div className="bg-card p-8 border border-line rounded-xl text-center">
-            <p className="text-muted font-body font-bold num">No NFL matchups scheduled for Week {week}.</p>
+            <p className="text-muted font-body font-bold num">No NFL matchups scheduled for {nflWeekLabel(poolSeasonType(pool), week)}.</p>
           </div>
         ) : (
           games.map(game => {

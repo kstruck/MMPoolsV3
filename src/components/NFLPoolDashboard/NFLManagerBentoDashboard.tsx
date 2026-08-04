@@ -29,7 +29,8 @@ import {
   YAxis,
   Tooltip
 } from 'recharts';
-import { gamesForPoolWeek, weekDeadline } from '../../utils/nflPending';
+import { gamesForPoolWeek, weekDeadline, poolSeasonType } from '../../utils/nflPending';
+import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { effectiveBufferMinutesForWeek, usesWeeklyHardLock } from '@shared/weeklyHardLock';
 import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate, duesRates, memberOutstanding, unsubmittedRoster } from '../../utils/poolRoster';
 import { formatDeadline } from '../../utils/formatTime';
@@ -373,7 +374,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
           <div className="flex justify-between items-center mb-6">
             <div>
               <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Submission Health</h3>
-              <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint mt-0.5">Week {week} Pick Completion Rate</p>
+              <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint mt-0.5">{nflWeekLabel(poolSeasonType(pool), week)} Pick Completion Rate</p>
             </div>
             <Badge status="live" className="text-[10px]">
               Live Tracker
@@ -413,7 +414,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
               </p>
               {weekLockTime !== null && (
                 <span className="font-display font-bold text-[10px] text-gold-600 dark:text-gold-400 uppercase tracking-[0.08em] flex items-center gap-1.5">
-                  <AlertCircle size={12} /> Week {week} picks lock {formatDeadline(weekLockTime)}
+                  <AlertCircle size={12} /> {nflWeekLabel(poolSeasonType(pool), week)} picks lock {formatDeadline(weekLockTime)}
                 </span>
               )}
             </div>

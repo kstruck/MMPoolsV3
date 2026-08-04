@@ -4,6 +4,8 @@ import { BillingGate } from '../billing';
 import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { User, Pool, NFLGame, WeeklyRecap } from '../../types';
+import { nflWeekLabel } from '../../utils/nflWeekLabel';
+import { CountdownTo } from '../common/CountdownTo';
 
 // Lazy load or import sub-views (we will create them next!)
 import { PickemPickEntry } from './PickemPickEntry';
@@ -293,11 +295,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
               >
                 {Array.from({ length: seasonType === 1 ? 4 : 18 }, (_, i) => i + 1).map(w => (
                   <option key={w} value={w} className="bg-card text-[color:var(--text)]">
-                    {seasonType === 1
-                      ? w === 1
-                        ? 'HOF Weekend'
-                        : `Preseason Week ${w - 1}`
-                      : `Week ${w}`}
+                    {nflWeekLabel(seasonType, w)}
                   </option>
                 ))}
               </select>
@@ -494,7 +492,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                       <div className="space-y-6">
                         <div className="bg-card border border-line rounded-xl p-6 shadow-card">
                           <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-4">
-                            Week {selectedWeek} Lock Status
+                            {nflWeekLabel(seasonType, selectedWeek)} Lock Status
                           </h3>
 
                           <div className="space-y-4">
@@ -528,6 +526,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                                 <span className="text-gold-600 dark:text-gold-400 num font-bold text-sm">
                                   {new Date(weekLock.deadline).toLocaleString()}
                                 </span>
+                                <CountdownTo deadline={weekLock.deadline} onExpire={() => setLockTick(t => t + 1)} />
                               </div>
                             )}
                           </div>
@@ -574,7 +573,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                       <div key={recap.id} className="bg-card border border-line rounded-xl p-6 shadow-card space-y-4">
                         <div className="flex justify-between items-center border-b border-line pb-3">
                           <h4 className="font-display font-bold uppercase text-lg text-[color:var(--text)] flex items-center gap-2">
-                            <Trophy size={18} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> Week {recap.week} Recap Summary
+                            <Trophy size={18} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> {nflWeekLabel(seasonType, recap.week)} Recap Summary
                           </h4>
                           <span className="text-[11px] text-muted font-bold num">
                             {new Date(recap.createdAt).toLocaleDateString()}

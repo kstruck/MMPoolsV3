@@ -12,7 +12,8 @@ import { NFLManagerBentoDashboard } from './NFLManagerBentoDashboard';
 import { RecordPayoutsCard } from './RecordPayoutsCard';
 import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
-import { gamesForPoolWeek } from '../../utils/nflPending';
+import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
+import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { buildPoolRoster, memberOutstanding, duesRates } from '../../utils/poolRoster';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
 
@@ -309,7 +310,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
   const handleScoreWeek = async () => {
     const ok = await toast.confirm({
-      title: `Score Week ${week}?`,
+      title: `Score ${nflWeekLabel(poolSeasonType(pool), week)}?`,
       message: 'This will lock results and generate a recap.',
       confirmLabel: 'Score Week',
       danger: true
@@ -319,7 +320,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     setFeedback(null);
     try {
       const res = await dbService.scoreNFLWeek(pool.id, week);
-      setFeedback({ type: 'success', message: res.message || `Week ${week} scored and locked!` });
+      setFeedback({ type: 'success', message: res.message || `${nflWeekLabel(poolSeasonType(pool), week)} scored and locked!` });
     } catch (err: any) {
       logger.error(`Failed to score week ${week}:`, err);
       setFeedback({ type: 'error', message: err.message || 'Scoring failed. Ensure all games are final.' });
@@ -471,7 +472,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       return;
     }
     const ok = await toast.confirm({
-      title: `Extend Week ${week} deadline?`,
+      title: `Extend ${nflWeekLabel(poolSeasonType(pool), week)} deadline?`,
       message: `The pick deadline moves ${extendMinutes} minute(s) past the normal lock and every member is emailed the new time. Reason: "${extendReason.trim()}"`,
       confirmLabel: 'Extend Deadline'
     });
@@ -505,14 +506,14 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     const targetEntry = entries.find(e => targetUidOf(e) === proxyTargetUid);
     const ok = await toast.confirm({
       title: 'Submit pick on their behalf?',
-      message: `Week ${proxyWeek}: ${proxyTeam} for ${targetEntry?.userName || 'this member'}. This is recorded in the pool audit log with your name and reason.`,
+      message: `${nflWeekLabel(poolSeasonType(pool), Number(proxyWeek))}: ${proxyTeam} for ${targetEntry?.userName || 'this member'}. This is recorded in the pool audit log with your name and reason.`,
       confirmLabel: 'Submit Proxy Pick'
     });
     if (!ok) return;
     setIsProxying(true);
     try {
       await dbService.proxyPick(pool.id, proxyWeek, proxyTargetUid, { [proxyWeek]: proxyTeam }, proxyReason.trim());
-      toast.success(`Proxy pick saved: ${proxyTeam} (Week ${proxyWeek}) for ${targetEntry?.userName || 'member'}.`);
+      toast.success(`Proxy pick saved: ${proxyTeam} (${nflWeekLabel(poolSeasonType(pool), Number(proxyWeek))}) for ${targetEntry?.userName || 'member'}.`);
       setProxyTeam('');
       setProxyReason('');
     } catch (err) {
@@ -1058,7 +1059,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         <div className="space-y-6">
           <div className="bg-card border border-line shadow-card rounded-xl p-6 space-y-5">
             <h4 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted flex items-center gap-2">
-              <Activity size={14} className="text-navy-700 dark:text-gold-400" /> Week {week} Scoring Feed
+              <Activity size={14} className="text-navy-700 dark:text-gold-400" /> {nflWeekLabel(poolSeasonType(pool), week)} Scoring Feed
             </h4>
 
             <div className="space-y-4">
@@ -1081,7 +1082,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 className="w-full bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-3.5 px-4 rounded-lg flex items-center justify-center gap-2 shadow-red-cta transition-all duration-150 hover:-translate-y-px cursor-pointer"
               >
                 <Play size={14} className={isScoring ? 'animate-spin' : ''} />
-                {isScoring ? 'Calculating...' : `Score & Recap Week ${week}`}
+                {isScoring ? 'Calculating...' : `Score & Recap ${nflWeekLabel(poolSeasonType(pool), week)}`}
               </button>
 
               {!isWeekFullyFinal && (
@@ -1145,7 +1146,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     {type === 'NFL_MARGIN' && (
                       <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-right">Margin Score</th>
                     )}
-                    <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-center">Wk {week} Picks</th>
+                    <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-center">{nflWeekChip(poolSeasonType(pool), week)} Picks</th>
                     <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-right w-36">Payment</th>
                     <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-right w-32">Remind</th>
                   </tr>
@@ -1315,7 +1316,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
             <div className="bg-page border border-line rounded-lg p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <Clock size={14} className="text-navy-700 dark:text-gold-400" />
-                <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Extend Week {week} Deadline</p>
+                <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Extend {nflWeekLabel(poolSeasonType(pool), week)} Deadline</p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>

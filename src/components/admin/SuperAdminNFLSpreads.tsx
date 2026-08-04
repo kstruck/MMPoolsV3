@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { db } from '../../firebase';
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { RefreshCw, Save, Lock, Unlock, AlertCircle } from 'lucide-react';
@@ -32,7 +33,7 @@ export const SuperAdminNFLSpreads: React.FC = () => {
       setGames(fetchedGames);
       
       if (fetchedGames.length === 0) {
-        setMessage({ type: 'error', text: `No games found for ${season} Week ${week}. Import schedule first.` });
+        setMessage({ type: 'error', text: `No games found for ${season} ${nflWeekLabel(seasonType, week)}. Import schedule first.` });
       }
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message });
@@ -128,7 +129,12 @@ export const SuperAdminNFLSpreads: React.FC = () => {
           <label className="text-[10px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] block mb-2">Type</label>
           <select
             value={seasonType}
-            onChange={(e) => setSeasonType(parseInt(e.target.value))}
+            onChange={(e) => {
+              const st = parseInt(e.target.value);
+              setSeasonType(st);
+              // Keep state inside the shrunken preseason option list (codex r5).
+              if (st === 1 && week > 4) setWeek(1);
+            }}
             className="w-full rounded-md border-[1.5px] border-line bg-page px-4 py-2.5 text-[color:var(--text)] font-bold text-sm cursor-pointer transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
           >
             <option value={1}>Preseason</option>
@@ -143,8 +149,8 @@ export const SuperAdminNFLSpreads: React.FC = () => {
             onChange={(e) => setWeek(parseInt(e.target.value))}
             className="w-full rounded-md border-[1.5px] border-line bg-page px-4 py-2.5 text-[color:var(--text)] font-bold text-sm cursor-pointer transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
           >
-            {Array.from({ length: 18 }, (_, i) => i + 1).map(w => (
-              <option key={w} value={w}>Week {w}</option>
+            {Array.from({ length: seasonType === 1 ? 4 : 18 }, (_, i) => i + 1).map(w => (
+              <option key={w} value={w}>{nflWeekLabel(seasonType, w)}</option>
             ))}
           </select>
         </div>

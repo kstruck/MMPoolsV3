@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { AlertTriangle, ArrowRight, Check, X, Square, Dot, Minus } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
 import { gamesForPoolWeek, getWeekStatus, poolSeasonType, weekDeadline, type WeekStatus } from '../../utils/nflPending';
+import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { formatDeadline } from '../../utils/formatTime';
 import { now as serverNow } from '../../utils/serverClock';
 import { Button } from '../ui';
@@ -71,7 +72,7 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
                     <div className="flex items-center gap-2 flex-1">
                         <AlertTriangle size={16} className="text-gold-600 dark:text-gold-400 shrink-0" aria-hidden="true" />
                         <span className="font-display font-bold uppercase tracking-[0.05em] text-[13px] text-gold-700 dark:text-gold-300">
-                            Week {nextDue.week} picks not in yet — locks {formatDeadline(nextDue.deadline!)}
+                            {nflWeekLabel(poolSeasonType(castPool), nextDue.week)} picks not in yet — locks {formatDeadline(nextDue.deadline!)}
                         </span>
                     </div>
                     <Button
@@ -89,11 +90,11 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
                     <button
                         key={week}
                         onClick={() => onSelectWeek(week)}
-                        aria-label={`Week ${week}: ${status === 'complete' || status === 'locked-complete' ? 'picks submitted' : status === 'due' ? 'picks needed' : status === 'missed' ? 'missed' : status === 'no-games' ? 'no games' : 'upcoming'}`}
+                        aria-label={`${nflWeekLabel(poolSeasonType(castPool), week)}: ${status === 'complete' || status === 'locked-complete' ? 'picks submitted' : status === 'due' ? 'picks needed' : status === 'missed' ? 'missed' : status === 'no-games' ? 'no games' : 'upcoming'}`}
                         aria-current={week === selectedWeek ? 'true' : undefined}
                         className={`shrink-0 min-w-[52px] px-2 py-1.5 rounded-md border inline-flex items-center justify-center gap-1 font-display font-bold uppercase text-[11px] tracking-[0.05em] num transition-all duration-150 ${CHIP_STYLES[status]} ${week === selectedWeek ? 'ring-2 ring-navy-600 dark:ring-gold-500' : 'hover:-translate-y-px'}`}
                     >
-                        W{week} {CHIP_MARKS[status]}
+                        {nflWeekChip(poolSeasonType(castPool), week)} {CHIP_MARKS[status]}
                     </button>
                 ))}
             </div>
