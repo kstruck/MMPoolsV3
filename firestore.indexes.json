@@ -221,6 +221,34 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "pools",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "billing.status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "billing.trialEndsAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "pools",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "billing.status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "billing.gracePeriodEndsAt",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
