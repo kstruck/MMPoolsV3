@@ -4,8 +4,10 @@ import { now as serverNow, syncServerClock } from '../../utils/serverClock';
 /**
  * Compact live countdown to a deadline, on the server-synced clock (the same
  * one BracketCountdown ticks on, so a skewed local clock cannot show a week
- * open after it locked). Renders nothing once the deadline passes — the
- * surrounding card already flips to its locked state.
+ * open after it locked). Once the deadline passes it renders a LOCKED line
+ * rather than nothing: the parent's isWeekLocked re-evaluates on a 30s tick,
+ * and an empty card under a stale "Picks are Open" header would contradict
+ * reality for up to that long (codex r1).
  */
 export const CountdownTo: React.FC<{ deadline: number }> = ({ deadline }) => {
     const [now, setNow] = useState(() => serverNow());
@@ -17,7 +19,15 @@ export const CountdownTo: React.FC<{ deadline: number }> = ({ deadline }) => {
     }, []);
 
     const diff = deadline - now;
-    if (diff <= 0) return null;
+    if (diff <= 0) {
+        return (
+            <div className="flex items-center justify-center mt-1" role="timer" aria-label="Picks locked">
+                <span className="text-[11px] font-display font-bold uppercase tracking-[0.08em] text-brandred-600">
+                    Locked
+                </span>
+            </div>
+        );
+    }
 
     const days = Math.floor(diff / 86_400_000);
     const hours = Math.floor((diff % 86_400_000) / 3_600_000);
