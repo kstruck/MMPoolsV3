@@ -391,6 +391,22 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     // failed; during the debounce the last quote is still on screen.
     const priceUnknown = !quote || priceState === 'unavailable';
 
+    /**
+     * EVERY quote-derived money line goes through this. Fixing only the base
+     * and total rows left the add-on rows and the discount row printing
+     * `+$0.00` beside a "Pricing unavailable" notice — a quote failure leaking
+     * a $0 through a different line, which is the very thing this change
+     * exists to stop (qodo finding 6 on #367).
+     *
+     * `pricePaid` is a PROP, not quote-derived, so its row is deliberately not
+     * routed through here — it is real whether or not a quote loaded.
+     */
+    const money = (n: number, opts?: { free?: boolean; sign?: '+' | '-' }) => {
+        if (priceUnknown) return '—';
+        if (opts?.free && n === 0) return 'FREE';
+        return `${opts?.sign ?? ''}$${n.toFixed(2)}`;
+    };
+
     const buttonState = checkoutButtonState({
         isCheckoutLoading,
         hasPoolId: !!poolId,
@@ -497,7 +513,11 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                     </h3>
                     <p className="text-xs text-muted mt-1">Itemized pricing based on monetization rules</p>
                 </div>
-                {basePrice === 0 && estimatedPlayers <= config.freePlayerThreshold && (
+                {/* The SERVER's free-tier verdict, and only when a quote for the
+                    current inputs actually loaded. `basePrice === 0` was true on
+                    every failed quote, so this badge claimed "Free Pool Exempt"
+                    on paid pools (qodo finding 6 on #367). */}
+                {priceState === 'ready' && quote?.freeTierEligible && (
                     <span className="bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A] text-[10px] font-display font-bold uppercase tracking-[0.08em] px-2.5 py-1 rounded-full flex items-center gap-1">
                         <Sparkles size={10} /> Free Pool Exempt
                     </span>
@@ -685,7 +705,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         <div className="flex justify-between items-center text-[color:var(--text)]">
                             <span>Base Hosting fee (<span className="num">{estimatedPlayers}</span> estimated players)</span>
                             <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                {priceUnknown ? '—' : basePrice === 0 ? 'FREE' : `$${basePrice.toFixed(2)}`}
+                                {money(basePrice, { free: true })}
                             </span>
                         </div>
 
@@ -693,7 +713,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                             <div className="flex justify-between items-center text-muted text-xs">
                                 <span className="flex items-center gap-1.5"><Sparkles size={11} className="text-gold-500" /> AI Trash-Talk Commissioner Addon</span>
                                 <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                    +${aiCost.toFixed(2)} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
+                                    {money(aiCost, { sign: '+' })} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
                                 </span>
                             </div>
                         )}
@@ -701,7 +721,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                             <div className="flex justify-between items-center text-muted text-xs">
                                 <span className="flex items-center gap-1.5"><Sparkles size={11} className="text-gold-500" /> What-If Standings Simulator</span>
                                 <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                    +${simCost.toFixed(2)} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
+                                    {money(simCost, { sign: '+' })} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
                                 </span>
                             </div>
                         )}
@@ -709,7 +729,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                             <div className="flex justify-between items-center text-muted text-xs">
                                 <span className="flex items-center gap-1.5"><Sparkles size={11} className="text-gold-500" /> Premium Custom Branding & Covers</span>
                                 <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                    +${brandingCost.toFixed(2)} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
+                                    {money(brandingCost, { sign: '+' })} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
                                 </span>
                             </div>
                         )}
@@ -717,7 +737,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                             <div className="flex justify-between items-center text-muted text-xs">
                                 <span className="flex items-center gap-1.5"><Sparkles size={11} className="text-gold-500" /> SMS Notifications Addon</span>
                                 <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                    +${smsCost.toFixed(2)} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
+                                    {money(smsCost, { sign: '+' })} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
                                 </span>
                             </div>
                         )}
@@ -732,14 +752,14 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         {appliedCoupon && (
                             <div className="flex justify-between items-center text-[#0F7B4A] text-xs border-t border-dashed border-line pt-2">
                                 <span>Discount Code applied ({appliedCoupon.code})</span>
-                                <span className="font-mono num">-${discount.toFixed(2)}</span>
+                                <span className="font-mono num">{money(discount, { sign: '-' })}</span>
                             </div>
                         )}
 
                         <div className="flex justify-between items-center border-t border-line pt-3 mt-1 text-[color:var(--text)] font-bold">
                             <span className="text-base font-display uppercase tracking-[0.05em]">Upgrade Premium Total</span>
                             <span className="text-lg font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                {priceUnknown ? '—' : total === 0 ? 'FREE' : `$${total.toFixed(2)}`}
+                                {money(total, { free: true })}
                             </span>
                         </div>
 

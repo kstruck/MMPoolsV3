@@ -62,10 +62,32 @@ describe('BillingInvoiceCard delegates the button rule instead of inlining it', 
         expect(card).not.toMatch(/total <= 0 && \(!appliedCoupon/);
     });
 
-    it('does not render a bare $0 while the price is unknown', () => {
-        // Both money lines must consult priceUnknown before printing FREE.
-        expect(card).toContain("{priceUnknown ? '—' : basePrice === 0 ? 'FREE'");
-        expect(card).toContain("{priceUnknown ? '—' : total === 0 ? 'FREE'");
+    it('does not render a bare $0 on ANY quote-derived money line', () => {
+        // qodo finding 6: fixing only base + total left the add-on rows and the
+        // discount row printing `+$0.00` beside the "Pricing unavailable"
+        // notice. One formatter, and nothing quote-derived may bypass it.
+        expect(card).toContain('const money = (n: number');
+        expect(card).toContain("if (priceUnknown) return '—';");
+        for (const line of [
+            'money(basePrice, { free: true })',
+            'money(total, { free: true })',
+            "money(aiCost, { sign: '+' })",
+            "money(simCost, { sign: '+' })",
+            "money(brandingCost, { sign: '+' })",
+            "money(smsCost, { sign: '+' })",
+            "money(discount, { sign: '-' })",
+        ]) {
+            expect(card).toContain(line);
+        }
+        // No quote-derived amount may still be formatted inline.
+        expect(card).not.toMatch(/\$\{(basePrice|total|aiCost|simCost|brandingCost|smsCost|discount)\.toFixed/);
+    });
+
+    it('the Free Pool Exempt badge needs a LOADED quote and the server flag', () => {
+        // It keyed on `basePrice === 0`, which was true on every failed quote —
+        // so it claimed "Free Pool Exempt" on paid pools (qodo finding 6).
+        expect(card).toContain("priceState === 'ready' && quote?.freeTierEligible &&");
+        expect(card).not.toMatch(/basePrice === 0 && estimatedPlayers <=/);
     });
 
     it('a quote is only usable for the inputs it was fetched for', () => {

@@ -35,7 +35,7 @@ first version of the guard was named after the property it did not have.
 |---|---|---|
 | `ready` | `quoteFor === quoteKey` | proceeds to the normal rules |
 | `pending` | debouncing or in flight for these inputs | disabled, `Updating Pricing…` |
-| `unavailable` | the request for these inputs failed | disabled, `Pricing Unavailable — Retry` |
+| `unavailable` | the request for these inputs failed | disabled, `Pricing Unavailable — Retry` ⚠️ **superseded in round 2 below — the shipped label is `Pricing Unavailable`, with the retry on its own control** |
 
 `pending` and `unavailable` are kept distinct deliberately: collapsing them
 would report a transient 300 ms debounce as an error, and an error that appears
@@ -177,6 +177,67 @@ paid upgrade, which never consults the limit.
 auth server-side regardless, and `Checking Eligibility…` would be the wrong copy
 for it. Pre-existing behaviour, unchanged.
 
-## qodo — pending (PR not yet opened)
+## qodo on PR #367 — 2 inline findings, both ABSORBED
 
-## self-review — pending
+Watcher armed per `mmp-qodo-cycle`; first run returned `QODO PARTIAL`, re-armed
+and the second returned `QODO REPORTED — 2 inline finding(s)`. All three
+surfaces pulled with `--paginate` REST: 2 issue comments (the placeholder and
+the summary), 2 inline comments, 0 reviews.
+
+### qodo 5 — "`pricing unavailable — retry` mismatch" — ABSORBED, valid
+
+> `PLAN-BUYFLOW-QUOTE-DEADEND-REVIEW-LOG.md` states the `unavailable` button
+> label is `Pricing Unavailable — Retry`, but the implemented button label is
+> `Pricing Unavailable` (with retry handled elsewhere).
+
+**Correct.** The round-1 table stated what round 1 shipped, and round 2's entry
+below it records the change — but a reader reaching the table first takes it as
+current, which is precisely the two-live-looking-claims rot HANDOFF's STOP POINT
+box has repeatedly had to fix. The table row now carries the supersession inline
+rather than relying on the reader continuing to the next section.
+
+### qodo 6 — "Unknown pricing shows addon $0" — ABSORBED, valid, and the sharpest finding of the set
+
+> `BillingInvoiceCard` hides base/total with `priceUnknown`, but add-on line
+> items (and the "Free Pool Exempt" badge) still derive from `quote?.… ?? 0`, so
+> a missing/failed quote can still display $0.00/"FREE" signals alongside the
+> "Pricing unavailable" notice.
+
+**Verified and correct**, and it is this PR's own stated goal missed on the lines
+nobody looked at. Base and total were fixed because they were the two lines
+observed on production; the four add-on rows and the discount row kept printing
+`+$0.00` next to a notice saying there is no price. Neither codex nor
+self-review caught it across four rounds — a good argument for the joint gate.
+
+Worse, and not in the original report: the **"Free Pool Exempt" badge** keyed on
+`basePrice === 0 && estimatedPlayers <= config.freePlayerThreshold`. `basePrice`
+is `quote?.basePrice ?? 0`, so on **every** failed quote that badge asserted a
+paid pool was free-tier exempt. That is a fabricated claim on a money surface —
+the class the T3 no-fabricated-data invariant exists for.
+
+**Fix.** One `money(n, {free, sign})` formatter that returns `—` whenever
+`priceUnknown`, applied to all seven quote-derived amounts; the badge now
+requires `priceState === 'ready' && quote?.freeTierEligible`, the server's own
+verdict. `pricePaid`'s row is deliberately NOT routed through the formatter — it
+is a prop, real whether or not a quote loaded, and blanking it would be a new
+lie in the other direction.
+
+Guarded by two invariants: every one of the seven amounts must go through
+`money`, **no quote-derived amount may still be formatted inline** (a negative
+assertion, so a new money line added later fails the guard rather than silently
+bypassing it), and the badge must consult both the load state and the server
+flag.
+
+## self-review — 1 finding, fixed at the time
+
+Recorded because it was not a reviewer's: the "Active Free Pool Limit Reached"
+warning card re-derived the free-limit condition inline and could disagree with
+the button directly beneath it. Both now read one `buttonState.kind`
+discriminant. Detail in the codex 1/2 entry above.
+
+## Joint stopping rule (CLAUDE.md §2b/§2c)
+
+Satisfied on: **qodo REPORTED and both findings absorbed**, **codex round 5 clean
+on the final diff** (round 4 was clean on the pre-qodo diff; the qodo fixes were
+new code codex had never seen, so they earned their own round), **and a
+self-read of the diff agrees**. Five codex rounds against a ceiling of ten.
