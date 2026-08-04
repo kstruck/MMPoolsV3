@@ -12,7 +12,7 @@ import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
 import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw, Wrench, Ticket, Megaphone, Globe, PartyPopper, Mail, KeyRound } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
-import { getPoolSport, getPoolLifecycleState, formatPoolMatchup, getPoolEntrySummary, getPoolLockTime, isNFLSeasonPoolType } from '../utils/poolSport';
+import { getPoolSport, getPoolLifecycleState, formatPoolMatchup, getPoolEntrySummary, formatEntryCount, getPoolLockTime, isNFLSeasonPoolType } from '../utils/poolSport';
 import type { EntryCountable, LockTimeReadable } from '../utils/poolSport';
 import { ErrorBoundary } from './ErrorBoundary';
 import { POOL_TYPES, resolvePoolTypeFlags } from '../utils/featureFlags';
@@ -1447,9 +1447,7 @@ export const SuperAdmin: React.FC = () => {
                                                     const filledPct = entrySummary.capacity
                                                         ? Math.min(100, Math.round((entrySummary.count / entrySummary.capacity) * 100))
                                                         : null;
-                                                    const filledDisplay = entrySummary.capacity
-                                                        ? `${entrySummary.count}/${entrySummary.capacity} ${entrySummary.unit}`
-                                                        : `${entrySummary.count} ${entrySummary.unit}`;
+                                                    const filledDisplay = formatEntryCount(entrySummary);
                                                     const lockTime = getPoolLockTime(pool as unknown as LockTimeReadable);
 
                                                     return (

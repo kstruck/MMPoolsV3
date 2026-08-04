@@ -4,6 +4,7 @@ import {
   getLeagueDisplayName,
   getPoolLifecycleState,
   getPoolEntrySummary,
+  formatEntryCount,
   getPoolLockTime,
   isNFLSeasonPoolType,
 } from '../src/utils/poolSport';
@@ -102,6 +103,24 @@ describe('getPoolEntrySummary', () => {
 
   it('treats an unknown/legacy type as squares without crashing on a missing grid', () => {
     expect(getPoolEntrySummary({ type: undefined })).toEqual({ count: 0, capacity: 100, unit: 'squares' });
+  });
+});
+
+describe('formatEntryCount', () => {
+  it('singularizes an uncapped count of one — a fresh NFL pool has exactly its owner', () => {
+    expect(formatEntryCount({ count: 1, capacity: null, unit: 'players' })).toBe('1 player');
+    expect(formatEntryCount({ count: 1, capacity: null, unit: 'entries' })).toBe('1 entry');
+    expect(formatEntryCount({ count: 1, capacity: null, unit: 'squares' })).toBe('1 square');
+  });
+
+  it('pluralizes every other uncapped count', () => {
+    expect(formatEntryCount({ count: 0, capacity: null, unit: 'players' })).toBe('0 players');
+    expect(formatEntryCount({ count: 6, capacity: null, unit: 'entries' })).toBe('6 entries');
+  });
+
+  it('keeps the plural unit alongside a capacity', () => {
+    expect(formatEntryCount({ count: 1, capacity: 100, unit: 'squares' })).toBe('1/100 squares');
+    expect(formatEntryCount({ count: 42, capacity: 100, unit: 'squares' })).toBe('42/100 squares');
   });
 });
 

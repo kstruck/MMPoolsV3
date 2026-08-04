@@ -108,6 +108,22 @@ export function getPoolEntrySummary(pool: EntryCountable): PoolEntrySummary {
   };
 }
 
+const UNIT_SINGULAR: Record<PoolEntrySummary['unit'], string> = {
+  squares: 'square',
+  entries: 'entry',
+  players: 'player',
+};
+
+/**
+ * Display string for a pool's entry summary, e.g. "42/100 squares", "1 player".
+ * A capacity is always a plural count, so only the uncapped form singularizes.
+ */
+export function formatEntryCount(summary: PoolEntrySummary): string {
+  if (summary.capacity !== null) return `${summary.count}/${summary.capacity} ${summary.unit}`;
+  const unit = summary.count === 1 ? UNIT_SINGULAR[summary.unit] : summary.unit;
+  return `${summary.count} ${unit}`;
+}
+
 /** Minimal shape needed to read a pool's lock/start time across all types. */
 export interface LockTimeReadable {
   type?: string;
