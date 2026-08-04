@@ -192,8 +192,29 @@ mutation code must prove itself in report-only mode against real data first.
    ```powershell
    npx firebase deploy --only functions:logClientError,functions:scheduledHealthCheck --project gridiron-gamble-uzuqo
    ```
-4. Project is always `gridiron-gamble-uzuqo`.
-5. The www frontend does NOT deploy via Firebase. See Section 6 — it is a
+4. **If the change touched `firestore.indexes.json`, deploy indexes too — it is
+   a THIRD surface and neither command above ships it:**
+   ```powershell
+   npx firebase deploy --only firestore:indexes --project gridiron-gamble-uzuqo
+   ```
+   Ordering is free: index deploys are independent of the functions-before-rules
+   constraint in step 3, so run it whenever in the sequence.
+
+   ⚠️ **This step was MISSING from this ritual until 2026-08-04**, and the cost
+   is on record: `enforceBillingStatus` shipped with two composite queries whose
+   indexes were declared nowhere, threw
+   `9 FAILED_PRECONDITION: The query requires an index` every night for its
+   entire life, and never moved a single expired trial to grace period. A
+   surface that no documented command deploys is a surface that does not get
+   deployed. Found by codex reviewing the fix for that job.
+
+   ⚠️ **Read the prompt before confirming.** `--only firestore:indexes`
+   reconciles prod against the file, so an index that exists in prod but NOT in
+   `firestore.indexes.json` — e.g. one created by clicking the console link in a
+   `FAILED_PRECONDITION` error — is offered for DELETION. Deleting an index that
+   a live query depends on breaks that query immediately.
+5. Project is always `gridiron-gamble-uzuqo`.
+6. The www frontend does NOT deploy via Firebase. See Section 6 — it is a
    manual Coolify action by Kevin. `firebase.json` hosting rewrites do not
    apply to prod www (nginx serves it).
 

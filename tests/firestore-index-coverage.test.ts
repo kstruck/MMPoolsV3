@@ -37,11 +37,22 @@ type IndexDef = { collectionGroup: string; queryScope: string; fields: { fieldPa
 
 const indexes: IndexDef[] = JSON.parse(read('firestore.indexes.json')).indexes;
 
-/** True when an index exists on `collection` whose leading fields are exactly `fields`, in order. */
-const hasIndex = (collection: string, fields: string[]) =>
+/**
+ * True when an index exists on `collection`, at `scope`, whose leading fields
+ * are exactly `fields`, in order.
+ *
+ * `scope` is not cosmetic and defaults to the strict answer. codex round 3 [P3]:
+ * every query pinned below is built with `db.collection("pools")` /
+ * `db.collection("nfl_games")`, which a COLLECTION_GROUP index does not serve.
+ * Without this check, flipping one of these entries to COLLECTION_GROUP would
+ * leave the guard green while the job went back to throwing FAILED_PRECONDITION
+ * — the precise failure this file exists to catch.
+ */
+const hasIndex = (collection: string, fields: string[], scope = 'COLLECTION') =>
     indexes.some(
         (idx) =>
             idx.collectionGroup === collection &&
+            idx.queryScope === scope &&
             idx.fields.length >= fields.length &&
             fields.every((f, i) => idx.fields[i]?.fieldPath === f),
     );
@@ -124,5 +135,13 @@ describe('hasIndex itself discriminates', () => {
         // pools(type, scoredThroughWeek) exists; the reverse does not, and
         // Firestore would not serve a query needing it.
         expect(hasIndex('pools', ['scoredThroughWeek', 'type'])).toBe(false);
+    });
+
+    it('is scope-sensitive — a COLLECTION_GROUP index does not serve a collection query', () => {
+        // The repo has a real COLLECTION_GROUP index on `entries`, so this
+        // asserts against live config rather than a hypothetical: it is found at
+        // its true scope and NOT found at COLLECTION.
+        expect(hasIndex('entries', ['ownerUid', 'score'], 'COLLECTION_GROUP')).toBe(true);
+        expect(hasIndex('entries', ['ownerUid', 'score'])).toBe(false);
     });
 });
