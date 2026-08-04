@@ -78,8 +78,15 @@ export const createNFLPool = validated(
     if (!type || !['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'].includes(type)) {
       throw new HttpsError('invalid-argument', 'Invalid or missing pool type.');
     }
+    // Sim harness trust anchor, computed EARLY: the kill-switch bypass keys on
+    // the same STAMPED simRunId the harness callables authorize against - never
+    // on transient payload fields a handler might drop (codex r1,
+    // PLAN-SIM-CREATION-BYPASS). simRunIdForCreate fails closed for non-admins
+    // and malformed run ids.
+    const claimRole = request.auth!.token.role as string | undefined;
+    const simRunId = simRunIdForCreate((request.data || {}) as Record<string, any>, claimRole);
     // Feature-flag + maintenance guard (server-authoritative).
-    await assertPoolCreationAllowed(type);
+    await assertPoolCreationAllowed(type, { simBypass: simRunId !== undefined });
     if (!name || !season) {
       throw new HttpsError('invalid-argument', 'Missing required fields: name, season.');
     }
@@ -87,7 +94,6 @@ export const createNFLPool = validated(
     // Shared validation gate + ban check (poolType already narrowed above).
     const poolType: PoolType = isPoolType(type) ? type : 'NFL_PICKEM';
     validateCreateInput(poolType, data);
-    const claimRole = request.auth!.token.role as string | undefined;
     assertNotBanned(claimRole, undefined);
 
     const poolRef = db.collection('pools').doc();
@@ -124,8 +130,8 @@ export const createNFLPool = validated(
       billing: billingForLaunch(launchMode, billingConfig.trialDays, now),
     };
 
-    // Sim harness trust anchor (stripped from clients; SUPER_ADMIN-only stamp).
-    const simRunId = simRunIdForCreate((request.data || {}) as Record<string, any>, claimRole);
+    // Sim harness trust anchor (stripped from clients; SUPER_ADMIN-only stamp,
+    // computed above the creation guard).
     if (simRunId) newPool.simRunId = simRunId;
     assertSeasonNotForgedSim(newPool.season, simRunId);
 

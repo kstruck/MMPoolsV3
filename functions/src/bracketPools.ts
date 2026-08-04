@@ -38,7 +38,11 @@ export const createBracketPool = onCall(async (request) => {
         throw new HttpsError("invalid-argument", "Missing required fields.");
     }
 
-    // Feature-flag + maintenance guard (server-authoritative).
+    // Feature-flag + maintenance guard (server-authoritative). NO sim bypass
+    // here on purpose: bracket sims ride the createPool callable (which stamps
+    // the simRunId trust anchor); this handler persists no sim marker, so a
+    // bypass here would mint a REAL unmarked pool past the kill-switch
+    // (codex r1, PLAN-SIM-CREATION-BYPASS).
     await assertPoolCreationAllowed("BRACKET");
 
     // Shared validation gate + ban check.

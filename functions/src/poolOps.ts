@@ -253,8 +253,13 @@ export const createPool = validated(
 
         const isSquaresPool = !data.type || data.type === 'SQUARES';
 
+        // Sim harness trust anchor, computed EARLY: the kill-switch bypass keys
+        // on the STAMPED simRunId (codex r1, PLAN-SIM-CREATION-BYPASS) - input
+        // is the pre-strip payload, simRunId honored only per claimRole.
+        const claimRole = request.auth!.token.role as string | undefined;
+        const simRunId = simRunIdForCreate(input, claimRole);
         // Feature-flag + maintenance guard (server-authoritative).
-        await assertPoolCreationAllowed(data.type || 'SQUARES');
+        await assertPoolCreationAllowed(data.type || 'SQUARES', { simBypass: simRunId !== undefined });
 
         if (isSquaresPool && data.costPerSquare === undefined) {
             throw new HttpsError('invalid-argument', 'Missing required field: costPerSquare');
@@ -269,7 +274,6 @@ export const createPool = validated(
         const poolType: PoolType = rawType;
         validateCreateInput(poolType, data);
 
-        const claimRole = request.auth!.token.role as string | undefined;
         assertNotBanned(claimRole, undefined);
 
         const poolsRef = db.collection('pools');
@@ -303,8 +307,7 @@ export const createPool = validated(
             billing: billingForLaunch(launchMode, billingConfig.trialDays, now.toMillis()),
         };
 
-        // input is the pre-strip payload — simRunId is privileged and only honored per claimRole.
-        const simRunId = simRunIdForCreate(input, claimRole);
+        // simRunId computed above the creation guard; stamped here.
         if (simRunId) newPool.simRunId = simRunId;
         assertSeasonNotForgedSim(newPool.season, simRunId);
 

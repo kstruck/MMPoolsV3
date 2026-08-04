@@ -21,8 +21,17 @@ async function loadConfig(): Promise<FlagConfig | null> {
 /**
  * Guard for pool-CREATION callables: rejects when the platform is in
  * maintenance mode or the specific pool type is disabled.
+ *
+ * `opts.simBypass` - computed at the call site as "simRunIdForCreate stamped
+ * a run id", i.e. a server-verified SUPER_ADMIN with a well-formed sim run id
+ * that WILL be persisted on the pool doc - skips ONLY the pool-type-flag
+ * check (PLAN-SIM-CREATION-BYPASS). Maintenance mode is checked first and
+ * unconditionally — it means "no writes", and a bypass never crosses it.
  */
-export async function assertPoolCreationAllowed(type: string): Promise<void> {
+export async function assertPoolCreationAllowed(
+  type: string,
+  opts?: { simBypass?: boolean }
+): Promise<void> {
   const cfg = await loadConfig();
   if (isMaintenanceMode(cfg)) {
     throw new HttpsError(
@@ -30,6 +39,7 @@ export async function assertPoolCreationAllowed(type: string): Promise<void> {
       "The platform is in maintenance mode; new pools are temporarily disabled."
     );
   }
+  if (opts?.simBypass === true) return;
   if (!isPoolTypeEnabled(cfg, type)) {
     throw new HttpsError(
       "failed-precondition",
