@@ -49,3 +49,25 @@ export function diffTopLevel(
     }
     return changed;
 }
+
+/**
+ * Narrow an object-to-object change to only the sub-keys that differ, one
+ * level deep. A whole-map from/to for poolTypeFlags serializes past
+ * capMetadata's 200-char string truncation and can cut the changed flag out
+ * of its own audit line (codex r2); after narrowing, the record carries
+ * exactly the flags that moved. Non-object changes pass through untouched.
+ */
+export function narrowChange(change: ConfigKeyChange): ConfigKeyChange {
+    const { from, to } = change;
+    const isPlainObj = (x: unknown): x is Record<string, unknown> =>
+        x !== null && typeof x === 'object' && !Array.isArray(x);
+    if (!isPlainObj(from) || !isPlainObj(to)) return change;
+    const sub = diffTopLevel(from, to);
+    const narrowedFrom: Record<string, unknown> = {};
+    const narrowedTo: Record<string, unknown> = {};
+    for (const k of Object.keys(sub)) {
+        narrowedFrom[k] = sub[k].from;
+        narrowedTo[k] = sub[k].to;
+    }
+    return { from: narrowedFrom, to: narrowedTo };
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { diffTopLevel, redactConfigValue } from '../lib/configDiff';
+import { diffTopLevel, narrowChange, redactConfigValue } from '../lib/configDiff';
 
 describe('diffTopLevel', () => {
     it('identical docs produce an EMPTY diff — the trigger must write nothing', () => {
@@ -52,5 +52,19 @@ describe('redactConfigValue', () => {
     it('objects recurse per key, arrays report length only', () => {
         expect(redactConfigValue({ enabled: true, notifyEmail: 'a@b.c', sms: ['+1555'] }))
             .toEqual({ enabled: true, notifyEmail: '[string]', sms: '[array:1]' });
+    });
+});
+
+describe('narrowChange', () => {
+    it('object change narrows to the flags that moved — a 7-flag map fits the 200-char cap', () => {
+        const all = { SQUARES: false, BRACKET: false, NFL_PLAYOFFS: false, PROPS: false, NFL_PICKEM: false, NFL_SURVIVOR: false, NFL_MARGIN: false };
+        const out = narrowChange({ from: all, to: { ...all, NFL_PICKEM: true } });
+        expect(out).toEqual({ from: { NFL_PICKEM: false }, to: { NFL_PICKEM: true } });
+        expect(JSON.stringify(out).length).toBeLessThan(200);
+    });
+
+    it('non-object changes pass through untouched', () => {
+        expect(narrowChange({ from: null, to: true })).toEqual({ from: null, to: true });
+        expect(narrowChange({ from: 60, to: 90 })).toEqual({ from: 60, to: 90 });
     });
 });
