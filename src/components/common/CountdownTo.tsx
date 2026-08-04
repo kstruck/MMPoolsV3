@@ -27,7 +27,9 @@ export const CountdownTo: React.FC<{ deadline: number; onExpire?: () => void }> 
     // updates (qodo #358 bug 1).
     const expired = deadline - now <= 0;
     const onExpireRef = useRef(onExpire);
-    onExpireRef.current = onExpire;
+    useEffect(() => {
+        onExpireRef.current = onExpire;
+    }, [onExpire]);
     const firedRef = useRef(false);
     useEffect(() => {
         if (expired && !firedRef.current) {
