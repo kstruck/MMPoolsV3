@@ -1,41 +1,50 @@
-# HANDOFF — Session entry point (updated 2026-08-03: functions deployed from `0f548bf` — a forged Member Record no longer shows on the commissioner roster or in memberCount (#347), and prod was measured to hold ZERO of them; the frontend was rebuilt for it; the docs-state guard now catches a dated state heading its own section has moved past (#349, tests+docs only — merged, no deploy owed); the pool manager counts as a player; App Check took production down on 07-30 and was rolled back — do NOT set `VITE_RECAPTCHA_SITE_KEY`; ALL THREE DEPLOY QUEUES ARE EMPTY. **The live bundle hash is stated once, in the STOP POINT box below — deliberately not repeated here, because a copy in this title is what went stale three rebuilds running.**)
+# HANDOFF — Session entry point (updated 2026-08-04: functions deployed from `1105392` — the E2E suite is green 45/45 against prod, one week label everywhere (the Survivor "Preseason Week 1"≠"Week 2" trap is fixed), system/config writes now leave an audit trail, sim runs bypass the launch kill-switch, and the security-audit gate is unblocked; ⚠️ a Coolify REBUILD IS OWED for #358+#359+#360+#348's frontend changes; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.**)
 
-> ## ✅ STOP POINT **2026-08-03** — #347 shipped AND deployed (frontend included); #349 merged, tests+docs only, no deploy owed
+> ## ✅ STOP POINT **2026-08-04** — E2E 45/45 green; #358/#360/#362/#363 + Kevin's #348/#359 merged; functions deployed and certified; ⚠️ COOLIFY REBUILD OWED
 >
 > The heading date is the date of the facts immediately below. It is REPLACED
 > on every deploy rather than annotated, because a note added above a stale
 > claim leaves two live-looking claims and the reader takes whichever they
 > reach first — the lesson #343 recorded and this box kept re-learning.
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `0f548bf`.**
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `1105392`.**
 > **Rules remain ≡ `0a705c0`** — `firestore.rules` is byte-identical since, so no
-> rules deploy is owed. (`shared/memberRecord.ts` DID change in #347; nothing
-> generates `firestore.rules` from `shared/`, so that does not imply one.)
-> ✅ **Frontend rebuilt 2026-08-03 04:01 UTC** for #347's `src/**` changes: live
-> bundle moved `index-DlH8liQe.js` → **`index-H9HjG31q.js`**, read off the prod
-> HTML. Coolify reported `Finished`, app `Running (healthy)`.
-> **ALL THREE QUEUES EMPTY.** (#349 is tests + docs only and owes nothing.)
+> rules deploy is owed. Indexes untouched.
+> ⚠️ **The FRONTEND REBUILD IS OWED and is Kevin's click** — #358 (week labels +
+> lock countdown), #359 (pool-list squares count), #348 (watchdog UI) touched
+> `src/**`, and #360 moved the root lockfile. The live bundle is still
+> **`index-H9HjG31q.js`** (the 2026-08-03 build) until the Coolify trigger runs.
+> Queues: functions EMPTY (certified below), rules EMPTY, indexes EMPTY,
+> **Coolify OWED**.
 >
-> ⬆️ **Deployed 2026-08-03 for #347.** Evidence: the certification is the FOURTH
-> run — **173 all `Skipped (No changes detected)`, 0 updates, 0 failures,
-> `✔ Deploy complete!`**. Runs 1–3 each hit HTTP 429 (`Per project mutation
-> requests per minute per region`) partway through; run 3 completed the fleet
-> (153 skipped + 20 updated) but was NOT the certification because it still
-> reported updates. That quota 429 is normal for a full-fleet deploy here and is
-> not a failure; what would be a failure is stopping after a partial run and
-> calling it done.
+> ⬆️ **Deployed 2026-08-04 ~07:15 UTC for #360 (functions lockfile) + #362
+> (system/config audit trigger) + #348 (getProdWatchdog) + #363 (sim creation
+> bypass).** Evidence: the certification is the THIRD run — **175 all `Skipped
+> (No changes detected)`, 0 updates, `✔ Deploy complete!`** (fleet grew 173 →
+> **175**: `onSystemConfigWritten` + `getProdWatchdog`). Run 1 ended after 144
+> updates with no completion line; run 2 completed the fleet (155 skipped + 20
+> updated). The partial-then-retry shape is the same quota behaviour every
+> full-fleet deploy here shows.
 >
-> 📊 **Measured 2026-08-03, read-only from the Firebase console: ZERO forged
-> Member Records exist in production.** All **156** Member Records across every
-> pool carry `joinedAt` (collection-group query on `members`, limit 1000 so
-> nothing was truncated, all 156 enumerated across four pages). The
-> `memberReportedPaid` / `memberReportedAt` fields do not appear anywhere in that
-> result set. **So the PLAN-SETPAIDSTATUS-MEMBERSHIP §7 cleanup sweep has nothing
-> to clean and does not need running.** #347 remains worth having as the guard
-> against a record that is forged in future.
+> 📊 **The 45-scenario NFL E2E suite ran against PRODUCTION on 2026-08-04 and
+> passed 45/45** (real guarded callables, sim-namespaced data; zero DATA
+> residue after — 0 sim pools, 0 sim games, verified by query — though the
+> blocked FIRST attempt left 45 inert `RUNNING` manifests in `simRuns`, which
+> `sweepSimRuns` will age out; MORNING doc §4). The first attempt failed
+> 45/45 against the pool-creation kill-switch; three NFL flags were temporarily
+> enabled via the SuperAdmin UI and restored to `false` after, verified by
+> read-back — #363 exists so no future run needs that. Full detail:
+> `MORNING-2026-08-04.md`.
 >
-> ⬇️ **EVERYTHING BELOW THIS LINE IS THE HISTORICAL DEPLOY RECORD.** `0f548bf`
+> ⬇️ **EVERYTHING BELOW THIS LINE IS THE HISTORICAL DEPLOY RECORD.** `1105392`
 > above is the current state.
+>
+> ⬆️ **Deployed 2026-08-03 for #347** (certification was the fourth run, 173
+> all-Skipped; the frontend was rebuilt the same day,
+> `index-DlH8liQe.js` → `index-H9HjG31q.js`). 📊 Measured 2026-08-03: ZERO
+> forged Member Records in production — all 156 carry `joinedAt`, so the
+> PLAN-SETPAIDSTATUS-MEMBERSHIP §7 sweep has nothing to clean and does not need
+> running. #347 remains the guard against future forgeries.
 >
 > ⬆️ **Deployed 2026-08-02 overnight for #344 + #338 + #345**, from `22adb90`.
 > Evidence: two runs were needed because Cloud Functions returned HTTP 429
