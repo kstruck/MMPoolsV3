@@ -230,6 +230,23 @@ describe('BillingGate — active state, hosting-fees-paid banner', () => {
     expect(screen.queryByText('$0.00 paid')).toBeNull();
   });
 
+  it('does NOT claim fees were paid when the tier is MISSING', () => {
+    // `tier` is required by the TypeScript type but not by Firestore, so a
+    // legacy pool can lack it. A `!== 'free_tier'` check would pass on
+    // `undefined` and assert payment on no evidence. Unknown is not paid.
+    const billing = activeBilling();
+    delete (billing as Partial<PoolBilling>).tier;
+
+    render(
+      <BillingGate pool={createPool(billing)} isCommissioner={true}>
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.getByTestId('child-content')).toBeTruthy();
+    expect(screen.queryByText(/hosting fees paid/i)).toBeNull();
+  });
+
   it('never offers an upgrade CTA on an active pool', () => {
     render(
       <BillingGate pool={createPool(activeBilling())} isCommissioner={true}>

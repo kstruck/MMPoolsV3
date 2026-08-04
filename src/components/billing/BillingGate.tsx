@@ -68,7 +68,13 @@ export const BillingGate: React.FC<BillingGateProps> = ({
   // "nothing was paid". The sub-line then distinguishes cash from credit so
   // neither case has to be papered over.
   if (status === 'active') {
-    if (!isCommissioner || billing.tier === 'free_tier') {
+    // An ALLOW-LIST, not `!== 'free_tier'`. `tier` is required by the type but
+    // not by Firestore, and a legacy pool with the field missing would satisfy
+    // a not-equals check and get told its fees were paid on no evidence at all.
+    // Unknown is not paid — the same fail-closed rule the buy-flow card had to
+    // learn about unknown-vs-zero prices.
+    const paidTier = billing.tier === 'standard_tier' || billing.tier === 'premium_tier';
+    if (!isCommissioner || !paidTier) {
       return <>{children}</>;
     }
 
