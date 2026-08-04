@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "dev:e2e": "vite --mode e2e --port 5199 --strictPort",
@@ -72,6 +75,6 @@
     "uuid": ">=11.1.1",
     "qs": ">=6.15.2",
     "websocket-driver": ">=0.7.5",
-    "brace-expansion": ">=5.0.9"
+    "brace-expansion": "^5.0.9"
   }
 }
