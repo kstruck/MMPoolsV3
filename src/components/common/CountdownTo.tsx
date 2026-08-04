@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { now as serverNow, syncServerClock } from '../../utils/serverClock';
 
 /**
@@ -18,13 +18,23 @@ export const CountdownTo: React.FC<{ deadline: number; onExpire?: () => void }> 
         return () => clearInterval(interval);
     }, []);
 
-    // Fire once when the deadline passes so the parent can re-evaluate its own
+    // Fire ONCE when the deadline passes so the parent can re-evaluate its own
     // lock state immediately instead of on its slower tick — otherwise the pick
     // form stays enabled under a "Locked" countdown for up to 30s (codex r3).
+    // One-shot via ref, and the callback rides in a ref too: an inline
+    // `onExpire={() => ...}` changes identity every render, and an effect
+    // depending on it would re-fire while expired, looping parent state
+    // updates (qodo #358 bug 1).
     const expired = deadline - now <= 0;
+    const onExpireRef = useRef(onExpire);
+    onExpireRef.current = onExpire;
+    const firedRef = useRef(false);
     useEffect(() => {
-        if (expired) onExpire?.();
-    }, [expired, onExpire]);
+        if (expired && !firedRef.current) {
+            firedRef.current = true;
+            onExpireRef.current?.();
+        }
+    }, [expired]);
 
     const diff = deadline - now;
     if (diff <= 0) {

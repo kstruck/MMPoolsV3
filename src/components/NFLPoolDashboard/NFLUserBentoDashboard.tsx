@@ -227,7 +227,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       ? new Date(Math.min(...wkGames.map(g => g.startTime))).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
       : nflWeekLabel(seasonType, wk);
     return { week: wk, label };
-  }, [_pool.type, castPool, _games]);
+  }, [_pool.type, castPool, _games, seasonType]);
 
   // Selected focus game rides in the URL (?game=) so a click updates the top panel and
   // Back/refresh restore it. Defaults to the live game, else the next kickoff.
@@ -402,7 +402,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       { subject: 'Standing %', User: myStanding, Average: 50 },
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myEntry, _pool.type, entries, userRank, selectedWeek]);
+  }, [myEntry, _pool.type, entries, userRank, selectedWeek, seasonType]);
 
   const displayedMembers = useMemo(() => {
     if (entries.length === 0) return [];
