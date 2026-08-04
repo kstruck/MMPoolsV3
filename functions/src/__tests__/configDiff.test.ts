@@ -98,6 +98,12 @@ describe('qodo #362 hardening', () => {
         expect(out[20]).toBe('[+5 more]');
     });
 
+    it('NaN vs null is a CHANGE — JSON aliases both to "null" and would silence the audit (codex r5)', () => {
+        const out = diffTopLevel({ scoreTickerSpeed: NaN }, { scoreTickerSpeed: null });
+        expect(Object.keys(out)).toEqual(['scoreTickerSpeed']);
+        expect(diffTopLevel({ x: Infinity }, { x: Infinity })).toEqual({});
+    });
+
     it('__proto__ as a config key diffs like any other key', () => {
         const out = diffTopLevel({}, JSON.parse('{"__proto__": {"enabled": true}}'));
         expect(Object.keys(out)).toEqual(['__proto__']);

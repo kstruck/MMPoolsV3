@@ -50,6 +50,18 @@ export function redactConfigValue(v: unknown): unknown {
     return '[value]';
 }
 
+/**
+ * JSON identity with one repair: JSON.stringify renders NaN and ±Infinity as
+ * "null", so a NaN->null console edit compared by plain JSON reads as
+ * unchanged and the audit stays silent (codex r5). Non-finite numbers are
+ * tagged before serialization so they compare as themselves.
+ */
+function fingerprint(v: unknown): string {
+    return JSON.stringify(v, (_k, x) =>
+        typeof x === 'number' && !Number.isFinite(x) ? `[num:${String(x)}]` : x,
+    ) ?? 'undefined';
+}
+
 export function diffTopLevel(
     before: Record<string, unknown>,
     after: Record<string, unknown>,
@@ -69,7 +81,7 @@ export function diffTopLevel(
             changed[key] = { from: inB ? before[key] : ABSENT, to: inA ? after[key] : ABSENT };
             continue;
         }
-        if (inB && JSON.stringify(before[key]) !== JSON.stringify(after[key])) {
+        if (inB && fingerprint(before[key]) !== fingerprint(after[key])) {
             changed[key] = { from: before[key], to: after[key] };
         }
     }
