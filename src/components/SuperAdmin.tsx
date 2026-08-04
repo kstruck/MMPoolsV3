@@ -4294,7 +4294,14 @@ export const SuperAdmin: React.FC = () => {
                                 <label className="text-[10px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-2">Season Type</label>
                                 <select
                                     value={nflSeasonType}
-                                    onChange={(e) => setNflSeasonType(parseInt(e.target.value))}
+                                    onChange={(e) => {
+                                        const st = parseInt(e.target.value);
+                                        setNflSeasonType(st);
+                                        // Preseason has 4 importer weeks; a stale week 5-18 in state
+                                        // would import a nonexistent slate AFTER the season-wide
+                                        // delete (codex r5 P1) — clamp with the option list.
+                                        if (st === 1 && selectedNflWeek > 4) setSelectedNflWeek(1);
+                                    }}
                                     className="w-full bg-card border border-line rounded-xl px-4 py-2.5 font-body text-[color:var(--text)] font-bold text-sm focus:outline-none focus:border-navy-600"
                                 >
                                     <option value={1}>Preseason</option>

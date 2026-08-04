@@ -129,7 +129,12 @@ export const SuperAdminNFLSpreads: React.FC = () => {
           <label className="text-[10px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] block mb-2">Type</label>
           <select
             value={seasonType}
-            onChange={(e) => setSeasonType(parseInt(e.target.value))}
+            onChange={(e) => {
+              const st = parseInt(e.target.value);
+              setSeasonType(st);
+              // Keep state inside the shrunken preseason option list (codex r5).
+              if (st === 1 && week > 4) setWeek(1);
+            }}
             className="w-full rounded-md border-[1.5px] border-line bg-page px-4 py-2.5 text-[color:var(--text)] font-bold text-sm cursor-pointer transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
           >
             <option value={1}>Preseason</option>
