@@ -132,13 +132,14 @@ export interface LockTimeReadable {
   scores?: { startTime?: string | number };
 }
 
+/**
+ * Epoch 0 is the "no deadline set yet" sentinel, not a date: bracket pools are
+ * created with `lockAt: 0` (functions/src/bracketPools.ts) and only get a real
+ * value on publish. Anything at or below it is unset, never 1970.
+ */
 function toEpochMs(value: number | string | undefined | null): number | null {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  if (typeof value === 'string') {
-    const parsed = Date.parse(value);
-    return Number.isNaN(parsed) ? null : parsed;
-  }
-  return null;
+  const ms = typeof value === 'number' ? value : typeof value === 'string' ? Date.parse(value) : NaN;
+  return Number.isFinite(ms) && ms > 0 ? ms : null;
 }
 
 /**

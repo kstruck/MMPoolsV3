@@ -150,6 +150,15 @@ describe('getPoolLockTime', () => {
     expect(getPoolLockTime({ type: 'SQUARES', scores: {} })).toBeNull();
     expect(getPoolLockTime({ type: 'BRACKET', lockAt: 'not a date' })).toBeNull();
   });
+
+  it('treats epoch 0 as unset, not as 1970', () => {
+    // functions/src/bracketPools.ts creates every bracket pool with lockAt: 0
+    // until a deadline is configured, so this is the common case, not an edge.
+    expect(getPoolLockTime({ type: 'BRACKET', lockAt: 0 })).toBeNull();
+    expect(getPoolLockTime({ type: 'NFL_PLAYOFFS', lockDate: 0 })).toBeNull();
+    expect(getPoolLockTime({ type: 'PROPS', lockDate: 0 })).toBeNull();
+    expect(getPoolLockTime({ type: 'BRACKET', lockAt: '1970-01-01T00:00:00.000Z' })).toBeNull();
+  });
 });
 
 describe('isNFLSeasonPoolType', () => {
