@@ -148,8 +148,18 @@ building the gate at all rather than just watching the job.
 
 1. **Build the gate, default OFF, and deploy it.** The job stops running.
 2. **Set `{ enabled: true, dryRun: true }`.** One nightly run produces the
-   report: exactly which pools *would* transition, and how many emails *would*
-   go out.
+   report: exactly which pools *would* transition.
+
+   ⚠️ **The report is a TRANSITION-candidate count, not an email count**, and
+   the plan must not promise otherwise — the same conflation codex caught in the
+   morning doc's §B0. Today a pool transitions whether or not an email follows:
+   `resolveCommissionerEmail` can find no address on the pool or the owner
+   record, and `sendEmail` failures are caught and logged without affecting the
+   count (`functions/src/billing.ts:145`, `:166-172`). If the gate is built, the
+   dry-run report should record **email-resolution outcomes separately** —
+   resolvable / not resolvable, per candidate — because "four pools will lock"
+   and "four commissioners will be warned first" are different facts and only
+   the second one is reassuring.
 3. **Read the report.** `PLAN-BILLING-INDEX-DEPLOY.md` predicted ~4 pools in
    `trial`. Confirm against reality before any pool moves.
 4. **Arm phase 1 only** —
