@@ -7,6 +7,7 @@ import {
   formatEntryCount,
   getPoolLockTime,
   isNFLSeasonPoolType,
+  isSquaresPoolType,
 } from '../src/utils/poolSport';
 
 describe('getPoolSport', () => {
@@ -151,6 +152,14 @@ describe('getPoolLockTime', () => {
     expect(getPoolLockTime({ type: 'BRACKET', lockAt: 'not a date' })).toBeNull();
   });
 
+  it('normalizes a Firestore Timestamp, which autoLock writes on bracket lock', () => {
+    // functions/src/autoLock.ts sets `lockAt: Timestamp.now()`, so a
+    // number-only normalizer would blank the column on every auto-locked pool.
+    expect(getPoolLockTime({ type: 'BRACKET', lockAt: { toMillis: () => EPOCH } })).toBe(EPOCH);
+    expect(getPoolLockTime({ type: 'SQUARES', scores: { startTime: { toMillis: () => EPOCH } } })).toBe(EPOCH);
+    expect(getPoolLockTime({ type: 'BRACKET', lockAt: {} })).toBeNull();
+  });
+
   it('treats epoch 0 as unset, not as 1970', () => {
     // functions/src/bracketPools.ts creates every bracket pool with lockAt: 0
     // until a deadline is configured, so this is the common case, not an edge.
@@ -166,5 +175,22 @@ describe('isNFLSeasonPoolType', () => {
     expect(isNFLSeasonPoolType('NFL_SURVIVOR')).toBe(true);
     expect(isNFLSeasonPoolType('NFL_PLAYOFFS')).toBe(false);
     expect(isNFLSeasonPoolType(undefined)).toBe(false);
+  });
+});
+
+describe('isSquaresPoolType', () => {
+  it('includes legacy docs written before `type` existed', () => {
+    // getPoolEntrySummary/getPoolLockTime already treat an untyped pool as
+    // squares, so the squares-only row actions must agree or those pools lose
+    // their Sim/Fix buttons.
+    expect(isSquaresPoolType('SQUARES')).toBe(true);
+    expect(isSquaresPoolType(undefined)).toBe(true);
+    expect(isSquaresPoolType('')).toBe(true);
+  });
+
+  it('excludes every other type', () => {
+    for (const type of ['BRACKET', 'PROPS', 'NFL_PLAYOFFS', 'NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN']) {
+      expect(isSquaresPoolType(type)).toBe(false);
+    }
   });
 });

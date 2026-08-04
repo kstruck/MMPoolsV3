@@ -47,6 +47,16 @@ export function isNFLSeasonPoolType(type: string | undefined): boolean {
   return (NFL_SEASON_TYPES as readonly string[]).includes(type ?? '');
 }
 
+/**
+ * True for squares pools, including legacy docs written before `type` existed.
+ * Every squares-only reader treats a missing type as SQUARES (server-side too:
+ * `poolData.type || 'SQUARES'` in functions/src/poolParams.ts), so squares-only
+ * UI must use this rather than an equality check that would drop those docs.
+ */
+export function isSquaresPoolType(type: string | undefined): boolean {
+  return !type || type === 'SQUARES';
+}
+
 export type PoolLifecycleState = 'open' | 'locked' | 'live' | 'final' | 'closed';
 
 /** What a pool's "how full is it" number actually counts, per type. */
@@ -124,12 +134,20 @@ export function formatEntryCount(summary: PoolEntrySummary): string {
   return `${summary.count} ${unit}`;
 }
 
+/**
+ * A stored deadline. Firestore hands these back in all three shapes — autoLock
+ * writes `lockAt: Timestamp.now()` on bracket auto-lock while the create paths
+ * write epoch numbers, and older docs carry ISO strings — which is why
+ * functions/src/autoLock.ts carries the same three-way normalizer server-side.
+ */
+export type StoredTime = number | string | { toMillis?: () => number };
+
 /** Minimal shape needed to read a pool's lock/start time across all types. */
 export interface LockTimeReadable {
   type?: string;
-  lockAt?: number | string;
-  lockDate?: number | string;
-  scores?: { startTime?: string | number };
+  lockAt?: StoredTime;
+  lockDate?: StoredTime;
+  scores?: { startTime?: StoredTime };
 }
 
 /**
@@ -137,8 +155,12 @@ export interface LockTimeReadable {
  * created with `lockAt: 0` (functions/src/bracketPools.ts) and only get a real
  * value on publish. Anything at or below it is unset, never 1970.
  */
-function toEpochMs(value: number | string | undefined | null): number | null {
-  const ms = typeof value === 'number' ? value : typeof value === 'string' ? Date.parse(value) : NaN;
+function toEpochMs(value: StoredTime | undefined | null): number | null {
+  let ms: number;
+  if (typeof value === 'number') ms = value;
+  else if (typeof value === 'string') ms = Date.parse(value);
+  else if (typeof value?.toMillis === 'function') ms = value.toMillis();
+  else ms = NaN;
   return Number.isFinite(ms) && ms > 0 ? ms : null;
 }
 

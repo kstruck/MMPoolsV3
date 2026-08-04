@@ -12,7 +12,7 @@ import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
 import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw, Wrench, Ticket, Megaphone, Globe, PartyPopper, Mail, KeyRound } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
-import { getPoolSport, getPoolLifecycleState, formatPoolMatchup, getPoolEntrySummary, formatEntryCount, getPoolLockTime, isNFLSeasonPoolType } from '../utils/poolSport';
+import { getPoolSport, getPoolLifecycleState, formatPoolMatchup, getPoolEntrySummary, formatEntryCount, getPoolLockTime, isNFLSeasonPoolType, isSquaresPoolType } from '../utils/poolSport';
 import type { EntryCountable, LockTimeReadable } from '../utils/poolSport';
 import { ErrorBoundary } from './ErrorBoundary';
 import { POOL_TYPES, resolvePoolTypeFlags } from '../utils/featureFlags';
@@ -1510,10 +1510,10 @@ export const SuperAdmin: React.FC = () => {
                                                                     pools have. They used to render for every non-BRACKET row, so on an
                                                                     NFL or PROPS pool Sim threw on `pool.scores.current` and Fix ran the
                                                                     wrong scorer (NFL scores through scoreNFLWeek). */}
-                                                                {pool.type === 'SQUARES' && (
+                                                                {isSquaresPoolType(pool.type) && (
                                                                     <button onClick={() => handleRunSim(pool as GameState)} className="text-gold-700 dark:text-gold-400 hover:bg-gold-500/10 text-xs font-display font-bold uppercase tracking-[0.05em] border border-gold-500/40 px-2 py-1 rounded transition-colors">Sim</button>
                                                                 )}
-                                                                {pool.type === 'SQUARES' && (
+                                                                {isSquaresPoolType(pool.type) && (
                                                                     <button onClick={() => handleFixScores(pool as GameState)} className="text-gold-700 dark:text-gold-400 hover:bg-gold-500/10 text-xs font-display font-bold uppercase tracking-[0.05em] border border-gold-500/40 px-2 py-1 rounded flex items-center gap-1 transition-colors">
                                                                         <Settings size={12} /> Fix
                                                                     </button>
