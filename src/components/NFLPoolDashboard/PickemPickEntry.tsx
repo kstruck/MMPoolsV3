@@ -8,6 +8,7 @@ import { getUserMessage, isLockError } from '../../utils/errorMessages';
 import { now as serverNow } from '../../utils/serverClock';
 import { formatTimeWithZone } from '../../utils/formatTime';
 import { poolSeasonType } from '../../utils/nflPending';
+import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { loadDraft, saveDraft, clearDraft } from '../../utils/draftStore';
 import type { User, Pool, NFLGame } from '../../types';
 
@@ -247,7 +248,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
         <div role="status" className="bg-gold-400/10 border border-gold-500/40 text-gold-700 dark:text-gold-400 p-4 rounded-lg text-xs font-body font-bold num flex flex-col sm:flex-row gap-3 sm:items-center">
           <div className="flex gap-2 items-center flex-1">
             <CheckCircle2 size={18} aria-hidden="true" />
-            <span>Week {week} picks submitted at {formatTimeWithZone(submittedAt)}. You can change unlocked picks and resubmit until kickoff.</span>
+            <span>{nflWeekLabel(poolSeasonType(pool), week)} picks submitted at {formatTimeWithZone(submittedAt)}. You can change unlocked picks and resubmit until kickoff.</span>
           </div>
           {onGoToWeek && week < (poolSeasonType(castPool) === 1 ? 4 : 18) && (
             <Button
@@ -281,7 +282,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
       <div className="space-y-4">
         {games.length === 0 ? (
           <div className="bg-card p-8 border border-line rounded-xl text-center">
-            <p className="text-muted font-body font-bold num">No NFL matchups scheduled for Week {week}.</p>
+            <p className="text-muted font-body font-bold num">No NFL matchups scheduled for {nflWeekLabel(poolSeasonType(pool), week)}.</p>
           </div>
         ) : (
           games.map(game => {

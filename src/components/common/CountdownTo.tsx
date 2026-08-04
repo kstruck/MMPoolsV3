@@ -1,0 +1,49 @@
+import React, { useState, useEffect } from 'react';
+import { now as serverNow, syncServerClock } from '../../utils/serverClock';
+
+/**
+ * Compact live countdown to a deadline, on the server-synced clock (the same
+ * one BracketCountdown ticks on, so a skewed local clock cannot show a week
+ * open after it locked). Renders nothing once the deadline passes — the
+ * surrounding card already flips to its locked state.
+ */
+export const CountdownTo: React.FC<{ deadline: number }> = ({ deadline }) => {
+    const [now, setNow] = useState(() => serverNow());
+
+    useEffect(() => {
+        void syncServerClock();
+        const interval = setInterval(() => setNow(serverNow()), 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const diff = deadline - now;
+    if (diff <= 0) return null;
+
+    const days = Math.floor(diff / 86_400_000);
+    const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+    const minutes = Math.floor((diff % 3_600_000) / 60_000);
+    const seconds = Math.floor((diff % 60_000) / 1000);
+    const isUrgent = diff < 2 * 3_600_000;
+
+    return (
+        <div
+            className={`flex items-baseline justify-center gap-1.5 mt-1 ${isUrgent ? 'animate-pulse' : ''}`}
+            role="timer"
+            aria-label="Time until picks lock"
+        >
+            {days > 0 && <Unit value={days} label="d" urgent={isUrgent} />}
+            <Unit value={hours} label="h" urgent={isUrgent} />
+            <Unit value={minutes} label="m" urgent={isUrgent} />
+            <Unit value={seconds} label="s" urgent={isUrgent} />
+        </div>
+    );
+};
+
+const Unit: React.FC<{ value: number; label: string; urgent: boolean }> = ({ value, label, urgent }) => (
+    <div className="flex items-baseline">
+        <span className={`text-base font-display font-extrabold num ${urgent ? 'text-brandred-600' : 'text-gold-600 dark:text-gold-400'}`}>
+            {String(value).padStart(2, '0')}
+        </span>
+        <span className="text-[10px] text-faint font-display font-bold ml-0.5">{label}</span>
+    </div>
+);

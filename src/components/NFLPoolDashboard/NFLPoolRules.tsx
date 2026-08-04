@@ -2,6 +2,8 @@ import React from 'react';
 import { HelpCircle, Shield, Award, Calendar, DollarSign, RefreshCw, Zap, Moon, Star, Trophy, Lock, Settings } from 'lucide-react';
 import type { Pool } from '../../types';
 import { PayoutsPanel } from '../PayoutsPanel';
+import { nflWeekLabel } from '../../utils/nflWeekLabel';
+import { poolSeasonType } from '../../utils/nflPending';
 
 interface NFLPoolRulesProps {
   pool: Pool;
@@ -222,7 +224,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                   <li>You cannot select the same team twice in a season.</li>
                   <li>
                     Rebuys: {settings.maxRebuys > 0
-                      ? `Allowed up to ${settings.maxRebuys} rebuys before Week ${settings.rebuyDeadlineWeek} at a cost of $${settings.rebuyCost} per rebuy.`
+                      ? `Allowed up to ${settings.maxRebuys} rebuys before ${nflWeekLabel(poolSeasonType(castPool), Number(settings.rebuyDeadlineWeek))} at a cost of $${settings.rebuyCost} per rebuy.`
                       : 'Disabled in this pool.'}
                   </li>
                   <li>Failure to submit a pick yields an automatic strike at week-end.</li>

@@ -8,6 +8,8 @@ import { getUserMessage } from '../../utils/errorMessages';
 import { now as serverNow } from '../../utils/serverClock';
 import { formatTimeWithZone } from '../../utils/formatTime';
 import type { User, Pool, NFLGame } from '../../types';
+import { poolSeasonType } from '../../utils/nflPending';
+import { nflWeekLabel } from '../../utils/nflWeekLabel';
 
 interface MarginPickEntryProps {
   pool: Pool;
@@ -181,7 +183,7 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
 
           {currentWeekScore !== null && (
             <div className="mt-4 pt-4 border-t border-line flex justify-between items-center text-sm font-body font-semibold">
-              <span className="text-muted num">Week {week} Result:</span>
+              <span className="text-muted num">{nflWeekLabel(poolSeasonType(pool), week)} Result:</span>
               <span className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-display font-bold uppercase num ${
                 currentWeekScore >= 0
                   ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
@@ -205,7 +207,7 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
       {submittedAt && !error && (
         <div role="status" className="bg-gold-400/10 border border-gold-500/40 text-gold-700 dark:text-gold-400 p-4 rounded-lg text-xs font-body font-bold num flex gap-2 items-center">
           <CheckCircle2 size={18} aria-hidden="true" />
-          Week {week} pick ({selectedTeam}) submitted at {formatTimeWithZone(submittedAt)}. You can change it until the game locks.
+          {nflWeekLabel(poolSeasonType(pool), week)} pick ({selectedTeam}) submitted at {formatTimeWithZone(submittedAt)}. You can change it until the game locks.
         </div>
       )}
 
@@ -227,7 +229,7 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
       <div className="space-y-4">
         {games.length === 0 ? (
           <div className="bg-card p-8 border border-line rounded-xl text-center">
-            <p className="text-muted font-body font-bold num">No NFL matchups scheduled for Week {week}.</p>
+            <p className="text-muted font-body font-bold num">No NFL matchups scheduled for {nflWeekLabel(poolSeasonType(pool), week)}.</p>
           </div>
         ) : (
           games.map(game => {

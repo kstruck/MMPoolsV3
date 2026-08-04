@@ -4,6 +4,7 @@ import type { User as UserType, Pool, NFLGame, WeeklyRecap } from '../../types';
 import { NFLGameTicker } from './NFLGameTicker';
 import { dbService } from '../../services/dbService';
 import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
+import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { 
   LayoutGrid, 
   CheckCircle2, 
@@ -224,7 +225,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     const wkGames = gamesForPoolWeek(_games, castPool, wk);
     const label = wkGames.length
       ? new Date(Math.min(...wkGames.map(g => g.startTime))).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-      : `Week ${wk}`;
+      : nflWeekLabel(seasonType, wk);
     return { week: wk, label };
   }, [_pool.type, castPool, _games]);
 
@@ -355,7 +356,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
           val = survived ? 1 : -1;
         }
       }
-      history.push({ week: w, name: `W${w}`, value: val });
+      history.push({ week: w, name: nflWeekChip(seasonType, w), value: val });
     }
     return history.slice(0, Math.max(selectedWeek, 5));
   }, [myEntry, _pool.type, seasonType, selectedWeek]);
@@ -415,7 +416,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     });
     return sorted.slice(0, 3).map(e => ({
       name: e.userName || 'Anonymous',
-      week: `Week ${selectedWeek}`,
+      week: nflWeekLabel(seasonType, selectedWeek),
       check: !!e.picks?.[selectedWeek] || !!e.picks?.[`week_${selectedWeek}`],
       status: _pool.type === 'NFL_SURVIVOR' ? (e.status || 'ALIVE') : (e.paidStatus || 'UNPAID'),
       strikes: e.strikesUsed || 0,
@@ -575,7 +576,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                 <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">
                   {_pool.type === 'NFL_PICKEM' ? 'Live Weekly Pick\'em' : _pool.type === 'NFL_SURVIVOR' ? 'Weekly Survivor Match' : 'Margin Matchup'}
                 </h3>
-                <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em] num">Week {selectedWeek} Games</p>
+                <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em] num">{nflWeekLabel(seasonType, selectedWeek)} Games</p>
               </div>
               <button 
                 onClick={() => onSelectTab('picks')}
@@ -714,7 +715,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                 {weeklyGames.length > 1 && (
                   <div className="mt-6">
                     <span className="text-[11px] font-display font-bold text-muted uppercase tracking-[0.1em] block mb-3">
-                      Week {selectedWeek} Slate <span className="text-faint num">({weeklyGames.length})</span>
+                      {nflWeekLabel(seasonType, selectedWeek)} Slate <span className="text-faint num">({weeklyGames.length})</span>
                     </span>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1">
                       {weeklyGames.map(g => {
@@ -908,7 +909,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                 <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em] num">Current Week Performance</p>
               </div>
               <span className="bg-page border border-line px-3 py-1 rounded-full text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] num">
-                Week {selectedWeek}
+                {nflWeekLabel(seasonType, selectedWeek)}
               </span>
             </div>
 
