@@ -224,7 +224,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                   <li>You cannot select the same team twice in a season.</li>
                   <li>
                     Rebuys: {settings.maxRebuys > 0
-                      ? `Allowed up to ${settings.maxRebuys} rebuys before ${nflWeekLabel(poolSeasonType(castPool), Number(settings.rebuyDeadlineWeek))} at a cost of $${settings.rebuyCost} per rebuy.`
+                      ? `Allowed up to ${settings.maxRebuys} rebuys before ${Number(settings.rebuyDeadlineWeek) >= 1 ? nflWeekLabel(poolSeasonType(castPool), Number(settings.rebuyDeadlineWeek)) : 'the season starts'} at a cost of $${settings.rebuyCost} per rebuy.`
                       : 'Disabled in this pool.'}
                   </li>
                   <li>Failure to submit a pick yields an automatic strike at week-end.</li>

@@ -526,7 +526,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                                 <span className="text-gold-600 dark:text-gold-400 num font-bold text-sm">
                                   {new Date(weekLock.deadline).toLocaleString()}
                                 </span>
-                                <CountdownTo deadline={weekLock.deadline} />
+                                <CountdownTo deadline={weekLock.deadline} onExpire={() => setLockTick(t => t + 1)} />
                               </div>
                             )}
                           </div>

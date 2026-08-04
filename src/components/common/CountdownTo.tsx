@@ -9,7 +9,7 @@ import { now as serverNow, syncServerClock } from '../../utils/serverClock';
  * and an empty card under a stale "Picks are Open" header would contradict
  * reality for up to that long (codex r1).
  */
-export const CountdownTo: React.FC<{ deadline: number }> = ({ deadline }) => {
+export const CountdownTo: React.FC<{ deadline: number; onExpire?: () => void }> = ({ deadline, onExpire }) => {
     const [now, setNow] = useState(() => serverNow());
 
     useEffect(() => {
@@ -17,6 +17,14 @@ export const CountdownTo: React.FC<{ deadline: number }> = ({ deadline }) => {
         const interval = setInterval(() => setNow(serverNow()), 1000);
         return () => clearInterval(interval);
     }, []);
+
+    // Fire once when the deadline passes so the parent can re-evaluate its own
+    // lock state immediately instead of on its slower tick — otherwise the pick
+    // form stays enabled under a "Locked" countdown for up to 30s (codex r3).
+    const expired = deadline - now <= 0;
+    useEffect(() => {
+        if (expired) onExpire?.();
+    }, [expired, onExpire]);
 
     const diff = deadline - now;
     if (diff <= 0) {

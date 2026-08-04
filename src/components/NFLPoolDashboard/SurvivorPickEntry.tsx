@@ -132,7 +132,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
       message: (
         <>
           <p>This restores your ALIVE status and adds <strong>${rebuyCost}</strong> to what you owe the commissioner.</p>
-          <p className="mt-2 text-muted num">Rebuys used: {(entry?.rebuysUsed ?? 0)} of {maxRebuys}. Available through {nflWeekLabel(poolSeasonType(pool), rebuyDeadlineWeek)}.</p>
+          <p className="mt-2 text-muted num">Rebuys used: {(entry?.rebuysUsed ?? 0)} of {maxRebuys}. Available through {rebuyDeadlineWeek >= 1 ? nflWeekLabel(poolSeasonType(pool), rebuyDeadlineWeek) : 'season start'}.</p>
         </>
       ),
       confirmLabel: `Rebuy — $${rebuyCost}`,
