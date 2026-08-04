@@ -7,6 +7,7 @@ import * as admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
 import { isPoolTypeEnabled, isMaintenanceMode, type FlagConfig } from "./featureFlags";
 import { normalizeRole } from "./roles";
+import { isSimPool } from "../shared/testPool";
 
 async function loadConfig(): Promise<FlagConfig | null> {
   try {
@@ -19,10 +20,34 @@ async function loadConfig(): Promise<FlagConfig | null> {
 }
 
 /**
+ * PURE predicate: may this creation bypass the pool-type kill-switch?
+ * Both legs required — the server-verified SUPER_ADMIN claim AND a payload
+ * that self-identifies as a sim pool (`simRunId` / `season: sim-…`). A
+ * non-admin forging a sim season fails the role leg; a SUPER_ADMIN creating
+ * a REAL pool fails the payload leg, so the kill-switch keeps meaning what
+ * it says for real pools even for the operator. (PLAN-SIM-CREATION-BYPASS —
+ * the 45-scenario E2E suite failed 45/45 against the launch kill-switch and
+ * running it required flipping prod flags on and back off by hand.)
+ */
+export function simCreationBypassAllowed(
+  role: string | null | undefined,
+  payload: { season?: unknown; simRunId?: unknown } | null | undefined,
+): boolean {
+  return normalizeRole(role) === "SUPER_ADMIN" && isSimPool(payload ?? undefined);
+}
+
+/**
  * Guard for pool-CREATION callables: rejects when the platform is in
  * maintenance mode or the specific pool type is disabled.
+ *
+ * `opts.simBypass` (computed via simCreationBypassAllowed at the call site)
+ * skips ONLY the pool-type-flag check. Maintenance mode is checked first and
+ * unconditionally — it means "no writes", and a bypass never crosses it.
  */
-export async function assertPoolCreationAllowed(type: string): Promise<void> {
+export async function assertPoolCreationAllowed(
+  type: string,
+  opts?: { simBypass?: boolean }
+): Promise<void> {
   const cfg = await loadConfig();
   if (isMaintenanceMode(cfg)) {
     throw new HttpsError(
@@ -30,6 +55,7 @@ export async function assertPoolCreationAllowed(type: string): Promise<void> {
       "The platform is in maintenance mode; new pools are temporarily disabled."
     );
   }
+  if (opts?.simBypass === true) return;
   if (!isPoolTypeEnabled(cfg, type)) {
     throw new HttpsError(
       "failed-precondition",

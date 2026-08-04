@@ -4,7 +4,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { BracketPool } from "./types";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import * as crypto from "crypto";
-import { assertPoolCreationAllowed } from "./lib/systemGuards";
+import { assertPoolCreationAllowed, simCreationBypassAllowed } from "./lib/systemGuards";
 import { computeLaunchMode } from "./poolOps";
 import { loadBillingConfig } from "./billing";
 import {
@@ -38,8 +38,11 @@ export const createBracketPool = onCall(async (request) => {
         throw new HttpsError("invalid-argument", "Missing required fields.");
     }
 
-    // Feature-flag + maintenance guard (server-authoritative).
-    await assertPoolCreationAllowed("BRACKET");
+    // Feature-flag + maintenance guard (server-authoritative). SUPER_ADMIN sim
+    // runs bypass the type flag only (PLAN-SIM-CREATION-BYPASS).
+    await assertPoolCreationAllowed("BRACKET", {
+        simBypass: simCreationBypassAllowed(request.auth.token.role as string | undefined, request.data),
+    });
 
     // Shared validation gate + ban check.
     validateCreateInput('BRACKET', request.data);

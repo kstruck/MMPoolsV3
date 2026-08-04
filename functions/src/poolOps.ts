@@ -6,7 +6,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, updatePoolSettingsSchema } from "./schemas/poolCore";
 import { recalculatePoolWinnersSchema, toggleWinnerPaidSchema, fixParticipantIdsSchema } from "./schemas/poolOps";
-import { assertPoolCreationAllowed } from './lib/systemGuards';
+import { assertPoolCreationAllowed, simCreationBypassAllowed } from './lib/systemGuards';
 import { isPoolType, type PoolType } from './shared/poolTypes';
 import {
     validateCreateInput,
@@ -253,8 +253,11 @@ export const createPool = validated(
 
         const isSquaresPool = !data.type || data.type === 'SQUARES';
 
-        // Feature-flag + maintenance guard (server-authoritative).
-        await assertPoolCreationAllowed(data.type || 'SQUARES');
+        // Feature-flag + maintenance guard (server-authoritative). SUPER_ADMIN sim
+        // runs bypass the type flag only (PLAN-SIM-CREATION-BYPASS).
+        await assertPoolCreationAllowed(data.type || 'SQUARES', {
+            simBypass: simCreationBypassAllowed(request.auth!.token.role as string | undefined, data),
+        });
 
         if (isSquaresPool && data.costPerSquare === undefined) {
             throw new HttpsError('invalid-argument', 'Missing required field: costPerSquare');

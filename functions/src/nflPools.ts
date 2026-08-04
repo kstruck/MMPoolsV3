@@ -6,7 +6,7 @@ import { checkBillingAccess } from "./billing";
 import { writeLedgerEvent } from "./paymentLedger";
 import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMode, assertPaidParticipantCeiling, simRunIdForCreate, assertSeasonNotForgedSim } from "./poolOps";
 import { loadBillingConfig } from "./billing";
-import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } from "./lib/systemGuards";
+import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive, simCreationBypassAllowed } from "./lib/systemGuards";
 import { isPoolType, type PoolType } from "./shared/poolTypes";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
 import type { MemberRecord } from "./shared/memberRecord";
@@ -78,8 +78,11 @@ export const createNFLPool = validated(
     if (!type || !['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'].includes(type)) {
       throw new HttpsError('invalid-argument', 'Invalid or missing pool type.');
     }
-    // Feature-flag + maintenance guard (server-authoritative).
-    await assertPoolCreationAllowed(type);
+    // Feature-flag + maintenance guard (server-authoritative). SUPER_ADMIN sim
+    // runs bypass the type flag only (PLAN-SIM-CREATION-BYPASS).
+    await assertPoolCreationAllowed(type, {
+      simBypass: simCreationBypassAllowed(request.auth?.token?.role as string | undefined, data),
+    });
     if (!name || !season) {
       throw new HttpsError('invalid-argument', 'Missing required fields: name, season.');
     }
