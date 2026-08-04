@@ -58,15 +58,18 @@ describe('redactConfigValue', () => {
         expect(redactConfigValue('kevin@example.com')).toBe('[string]');
     });
 
-    it('objects recurse per key, arrays report length only', () => {
+    it('objects recurse per key; string array elements are masked individually', () => {
         expect(redactConfigValue({ enabled: true, notifyEmail: 'a@b.c', sms: ['+1555'] }))
-            .toEqual({ enabled: true, notifyEmail: '[string]', sms: '[array:1]' });
+            .toEqual({ enabled: true, notifyEmail: '[string]', sms: ['[string]'] });
     });
 });
 
 describe('narrowChange', () => {
     it('object change narrows to the flags that moved — a 7-flag map fits the 200-char cap', () => {
-        const all = { SQUARES: false, BRACKET: false, NFL_PLAYOFFS: false, PROPS: false, NFL_PICKEM: false, NFL_SURVIVOR: false, NFL_MARGIN: false };
+        const all = {
+            SQUARES: false, BRACKET: false, NFL_PLAYOFFS: false, PROPS: false,
+            NFL_PICKEM: false, NFL_SURVIVOR: false, NFL_MARGIN: false,
+        };
         const out = narrowChange({ from: all, to: { ...all, NFL_PICKEM: true } });
         expect(out).toEqual({ from: { NFL_PICKEM: false }, to: { NFL_PICKEM: true } });
         expect(JSON.stringify(out).length).toBeLessThan(200);
@@ -75,5 +78,29 @@ describe('narrowChange', () => {
     it('non-object changes pass through untouched', () => {
         expect(narrowChange({ from: null, to: true })).toEqual({ from: null, to: true });
         expect(narrowChange({ from: 60, to: 90 })).toEqual({ from: 60, to: 90 });
+    });
+});
+
+describe('qodo #362 hardening', () => {
+    it('the ABSENT sentinel survives redaction — adds/removes stay distinguishable', () => {
+        expect(redactConfigValue(ABSENT)).toBe(ABSENT);
+    });
+
+    it('primitive arrays survive redaction — a same-length edit stays visible', () => {
+        expect(redactConfigValue([1])).toEqual([1]);
+        expect(redactConfigValue([2])).toEqual([2]);
+        expect(redactConfigValue(['a@b.c', 1])).toEqual(['[string]', 1]);
+    });
+
+    it('long arrays truncate with a marker, not silently', () => {
+        const out = redactConfigValue(Array.from({ length: 25 }, (_, i) => i)) as unknown[];
+        expect(out).toHaveLength(21);
+        expect(out[20]).toBe('[+5 more]');
+    });
+
+    it('__proto__ as a config key diffs like any other key', () => {
+        const out = diffTopLevel({}, JSON.parse('{"__proto__": {"enabled": true}}'));
+        expect(Object.keys(out)).toEqual(['__proto__']);
+        expect(({} as Record<string, unknown>).enabled).toBeUndefined();
     });
 });

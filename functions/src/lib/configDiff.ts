@@ -29,8 +29,19 @@ export interface ConfigKeyChange {
  */
 export function redactConfigValue(v: unknown): unknown {
     if (v === null || typeof v === 'boolean' || typeof v === 'number') return v;
+    // The diff's ABSENT sentinel is a string on purpose (it must survive JSON)
+    // and must NOT be masked to '[string]' — losing it makes an add and a
+    // value-change indistinguishable in the record (qodo #362 r1 #1).
+    if (v === ABSENT) return v;
     if (typeof v === 'string') return '[string]';
-    if (Array.isArray(v)) return `[array:${v.length}]`;
+    // Primitive elements survive (liveSeasonTypes: [1] -> [1,2] must read as
+    // exactly that — a length-only marker hid same-length edits entirely,
+    // qodo #362 r1 #2); string elements are masked like any other string.
+    if (Array.isArray(v)) {
+        const MAX = 20;
+        const shown = v.slice(0, MAX).map(redactConfigValue);
+        return v.length > MAX ? [...shown, `[+${v.length - MAX} more]`] : shown;
+    }
     if (typeof v === 'object') {
         return Object.fromEntries(
             Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, redactConfigValue(x)]),
@@ -43,7 +54,9 @@ export function diffTopLevel(
     before: Record<string, unknown>,
     after: Record<string, unknown>,
 ): Record<string, ConfigKeyChange> {
-    const changed: Record<string, ConfigKeyChange> = {};
+    // Null prototype: config field names are attacker-adjacent input, and a
+    // key like __proto__ misbehaves on a plain object (qodo #362 r1 #5).
+    const changed: Record<string, ConfigKeyChange> = Object.create(null);
     for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
         // Presence-aware: an explicit Firestore null is a VALUE, and absent-vs-null
         // must diff — normalizing both to null made adding or deleting a
@@ -76,8 +89,8 @@ export function narrowChange(change: ConfigKeyChange): ConfigKeyChange {
         x !== null && typeof x === 'object' && !Array.isArray(x);
     if (!isPlainObj(from) || !isPlainObj(to)) return change;
     const sub = diffTopLevel(from, to);
-    const narrowedFrom: Record<string, unknown> = {};
-    const narrowedTo: Record<string, unknown> = {};
+    const narrowedFrom: Record<string, unknown> = Object.create(null);
+    const narrowedTo: Record<string, unknown> = Object.create(null);
     for (const k of Object.keys(sub)) {
         narrowedFrom[k] = sub[k].from;
         narrowedTo[k] = sub[k].to;

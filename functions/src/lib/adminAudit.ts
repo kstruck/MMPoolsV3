@@ -79,7 +79,13 @@ export async function writeAdminAudit(
     const db = admin.firestore();
     const coll = db.collection("admin_audit");
     const ref = opts?.id ? coll.doc(opts.id) : coll.doc();
-    await ref.set({
+    // Deterministic ids exist for at-least-once retries; create() makes the
+    // retry a no-op instead of a set() that re-stamps `at` and shifts the
+    // entry's position in the at-ordered log (qodo #362 r1 #3). The
+    // ALREADY_EXISTS catch below treats a duplicate as success — the record
+    // the caller wanted is there.
+    const write = opts?.id ? ref.create.bind(ref) : ref.set.bind(ref);
+    await write({
       actorUid: entry.actorUid,
       actorEmail: entry.actorEmail ?? null,
       action: entry.action,
@@ -92,6 +98,11 @@ export async function writeAdminAudit(
     });
     return true;
   } catch (e) {
+    if (opts?.id && (e as { code?: number }).code === 6) {
+      // ALREADY_EXISTS on a deterministic id: a retry found the first
+      // attempt's record already in place. That IS success.
+      return true;
+    }
     console.error("[adminAudit] write failed (non-fatal):", e);
     return false;
   }
