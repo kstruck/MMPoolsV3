@@ -361,21 +361,19 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `0f548bf`.**
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `1105392`.**
 Rules remain ≡ `0a705c0` — `firestore.rules` is byte-identical since, so no rules
-deploy is owed. (`shared/memberRecord.ts` changed in #347; nothing generates
-`firestore.rules` from `shared/`, so that does not imply one.)
-✅ **Frontend rebuilt 2026-08-03 04:01 UTC** for #347's `src/**` changes — the
-commissioner roster, `memberCount` and the dues totals now exclude a forged
-Member Record. Live bundle moved `index-DlH8liQe.js` →
-**`index-H9HjG31q.js`**, read off the prod HTML; Coolify reported `Finished`,
-app `Running (healthy)`. **ALL THREE QUEUES EMPTY.** (#349 is tests + docs only
-and owes nothing.)
-(Deployed 2026-08-03 for **#347**. Cloud Functions returned HTTP 429
-`Per project mutation requests` partway through runs 1–3; run 3 completed the
-fleet but still reported 20 updates, so it was not the certification. The
-certification is the FOURTH run: 173 all `Skipped (No changes detected)`, 0
-updates, 0 failures, `✔ Deploy complete!`.)
+deploy is owed. Indexes untouched.
+⚠️ **A Coolify rebuild is OWED** for #358/#359/#348's `src/**` changes and
+#360's root lockfile — the live bundle is still `index-H9HjG31q.js` (the
+2026-08-03 build) until Kevin triggers it. Queues: functions EMPTY (certified),
+rules EMPTY, indexes EMPTY, **Coolify OWED**.
+(Deployed 2026-08-04 for **#360 + #362 + #348 + #363**. The certification is
+the THIRD run: 175 all `Skipped (No changes detected)`, 0 updates,
+`✔ Deploy complete!` — fleet grew 173 → 175 with `onSystemConfigWritten` and
+`getProdWatchdog`. Run 1 ended after 144 updates with no completion line; run
+2 completed the fleet, 155 skipped + 20 updated. Full night's record:
+`MORNING-2026-08-04.md` and HANDOFF's STOP POINT box.)
 
 📊 **Measured 2026-08-03, read-only: production holds ZERO forged Member
 Records.** All **156** of them carry `joinedAt`. The
