@@ -192,15 +192,57 @@ mutation code must prove itself in report-only mode against real data first.
    ```powershell
    npx firebase deploy --only functions:logClientError,functions:scheduledHealthCheck --project gridiron-gamble-uzuqo
    ```
-4. Project is always `gridiron-gamble-uzuqo`.
-5. The www frontend does NOT deploy via Firebase. See Section 6 — it is a
+4. **If the change touched `firestore.indexes.json`, deploy indexes too — it is
+   a THIRD surface and neither command above ships it:**
+   ```powershell
+   npx firebase deploy --only firestore:indexes --project gridiron-gamble-uzuqo
+   ```
+   Ordering is free: index deploys are independent of the functions-before-rules
+   constraint in step 3, so run it whenever in the sequence.
+
+   ⚠️ **This step was MISSING from this ritual until 2026-08-04**, and the cost
+   is on record: `enforceBillingStatus` shipped with two composite queries whose
+   indexes were declared nowhere, threw
+   `9 FAILED_PRECONDITION: The query requires an index` every night for its
+   entire life, and never moved a single expired trial to grace period. A
+   surface that no documented command deploys is a surface that does not get
+   deployed. Found by codex reviewing the fix for that job.
+
+   **VERIFIED 2026-08-04, and re-checkable — do not take it on trust:**
+   ```powershell
+   git log -S 'billing.trialEndsAt' -- firestore.indexes.json   # no commits = never declared
+   ```
+   The live half was read off `/super-admin` → Overview → Ops Health, which
+   showed `STALE JOBS: 1 — enforceBillingStatus — failing — 9 FAILED_PRECONDITION`
+   as the only stale job. (qodo asked for these claims to be marked UNVERIFIED;
+   they are the opposite — verified — so the evidence is cited here instead, which
+   is what makes the label unnecessary.)
+
+   ⚠️ **Read the prompt before confirming.** `--only firestore:indexes`
+   reconciles prod against the file, so an index that exists in prod but NOT in
+   `firestore.indexes.json` — e.g. one created by clicking the console link in a
+   `FAILED_PRECONDITION` error — is offered for DELETION. Deleting an index that
+   a live query depends on breaks that query immediately.
+5. Project is always `gridiron-gamble-uzuqo`.
+6. The www frontend does NOT deploy via Firebase. See Section 6 — it is a
    manual Coolify action by Kevin. `firebase.json` hosting rewrites do not
    apply to prod www (nginx serves it).
 
-CAUTION: `package.json` has `deploy:backend` = `firebase deploy --only
-functions,firestore:rules` (single command). Prefer the two explicit commands
-above so the functions-before-rules ordering is under your control, and
-because the script assumes a resolvable `firebase` (use `npx`).
+CAUTION: `package.json` has `deploy:backend` = `npx firebase deploy --only
+functions,firestore:rules,firestore:indexes --project gridiron-gamble-uzuqo`
+(single command). Prefer the two explicit commands above so the
+functions-before-rules ordering is under your control.
+
+The `npx` and the `--project` pin were both added 2026-08-04 (qodo, PR #365).
+`--project` matters more than it looks now that the script deploys indexes: an
+index deploy RECONCILES prod against the file, so an unpinned run can delete
+indexes in whichever project happened to be active.
+
+⚠️ `firestore:indexes` was ADDED to that script on 2026-08-04. It used to name
+only `functions,firestore:rules`, so a release run through it declared indexes
+in `firestore.indexes.json` and never created them — which is how
+`enforceBillingStatus` could carry two missing composite indexes while looking
+deployed. Found by codex reviewing the index fix, not by reading the script.
 
 **Why.** Two independent failure modes actually happened: (a) skipping the
 functions install produced TS2307 build failures mid-deploy; (b) the

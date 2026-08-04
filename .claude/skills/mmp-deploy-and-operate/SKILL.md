@@ -59,7 +59,7 @@ npx firebase deploy --only firestore:indexes --project gridiron-gamble-uzuqo
 | `--only firestore:rules` | Deploys `firestore.rules` only | `firebase.json:17-20` |
 
 Notes and traps:
-- `npm run deploy:backend` (root package.json) runs `firebase deploy --only functions,firestore:rules` in ONE command — it works (npm scripts resolve the local `firebase` binary) but it does not let you sequence functions-before-rules deliberately, and omits `--project`. Prefer the explicit two-step ritual above.
+- `npm run deploy:backend` (root package.json) runs `npx firebase deploy --only functions,firestore:rules,firestore:indexes --project gridiron-gamble-uzuqo` in ONE command — but it does not let you sequence functions-before-rules deliberately, so prefer the explicit two-step ritual above. ⚠️ **All three of those properties were fixed on 2026-08-04 and the reasons are worth keeping.** It previously (a) shipped `functions,firestore:rules` only, so declared indexes were silently never created — this is how `enforceBillingStatus` ran its whole life without its two composite indexes; (b) invoked a bare `firebase`, against the repo-wide `npx firebase` convention; and (c) omitted `--project`, which became materially riskier once the script started deploying indexes, because an index deploy RECONCILES against the file and can delete indexes in whichever project happened to be active. (b) and (c) were qodo findings on PR #365.
 - A scheduled function's Cloud Scheduler job is created automatically on first deploy of that function (observed with `scheduledHealthCheck`).
 - Deleting an export then deploying prompts the CLI to confirm deleting the prod function. Do not blind-confirm; check what it wants to delete.
 
