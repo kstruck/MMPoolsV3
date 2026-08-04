@@ -36,6 +36,7 @@ vi.mock('lucide-react', () => ({
   CreditCard: () => <span data-testid="icon-credit">💳</span>,
   Clock: () => <span data-testid="icon-clock">🕐</span>,
   ExternalLink: () => <span data-testid="icon-link">🔗</span>,
+  CheckCircle2: () => <span data-testid="icon-paid">✅</span>,
 }));
 
 import React from 'react';
@@ -129,6 +130,115 @@ describe('BillingGate — free / active state', () => {
 
     expect(screen.getByTestId('child-content')).toBeTruthy();
     expect(screen.queryByText(/upgrade/i)).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1b. Active — commissioner-only "hosting fees paid" banner
+//
+// `active` was the one status with no banner at all. The rule is deliberately
+// narrower than "status === 'active'": a pool activated on the free allocation
+// is `active` with `tier: 'free_tier'` and paid NOTHING, so claiming its
+// hosting fees are paid would be a fabricated claim on a money surface.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const activeBilling = (over: Partial<PoolBilling> = {}): PoolBilling => ({
+  status: 'active',
+  tier: 'standard_tier',
+  pricePaid: 29,
+  maxPlayersAllowed: 25,
+  featuresUnlocked: {
+    aiCommissioner: false,
+    smsNotifications: false,
+    whatIfSimulator: false,
+    customBranding: true,
+  },
+  ...over,
+});
+
+describe('BillingGate — active state, hosting-fees-paid banner', () => {
+  it('shows the commissioner a paid banner naming the amount', () => {
+    render(
+      <BillingGate pool={createPool(activeBilling())} isCommissioner={true}>
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.getByTestId('child-content')).toBeTruthy();
+    expect(screen.getByText(/hosting fees paid/i)).toBeTruthy();
+    expect(screen.getByText('$29.00 paid')).toBeTruthy();
+    expect(screen.getByTestId('icon-paid')).toBeTruthy();
+  });
+
+  it('is green with white text, per the request', () => {
+    render(
+      <BillingGate pool={createPool(activeBilling())} isCommissioner={true}>
+        <TestChild />
+      </BillingGate>
+    );
+
+    // Guards the two things that were actually specified. Without this a theme
+    // refactor could silently turn the banner into the same slate gradient as
+    // every other banner on the card.
+    expect(screen.getByText(/linear-gradient\(135deg, ?#15803d/)).toBeTruthy();
+    expect(screen.getByText(/color:#ffffff/)).toBeTruthy();
+  });
+
+  it('does NOT show it to a participant', () => {
+    render(
+      <BillingGate pool={createPool(activeBilling())} isCommissioner={false}>
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.getByTestId('child-content')).toBeTruthy();
+    expect(screen.queryByText(/hosting fees paid/i)).toBeNull();
+  });
+
+  it('does NOT claim fees were paid on a FREE-ALLOCATION pool', () => {
+    // active + free_tier + pricePaid 0 — the pool that is activated and owes
+    // nothing because it was never charged. Claiming "fees paid" here is the
+    // fabricated-claim failure this condition exists to avoid.
+    render(
+      <BillingGate
+        pool={createPool(activeBilling({ tier: 'free_tier', pricePaid: 0, maxPlayersAllowed: 10 }))}
+        isCommissioner={true}
+      >
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.getByTestId('child-content')).toBeTruthy();
+    expect(screen.queryByText(/hosting fees paid/i)).toBeNull();
+  });
+
+  it('DOES show it on a credit/promo activation, without inventing an amount', () => {
+    // A pool credit or a 100%-off coupon leaves pricePaid at 0 but keeps the
+    // quoted paid tier. The commissioner owes nothing and genuinely settled —
+    // so the banner shows, and the copy must not print "$0.00 paid".
+    render(
+      <BillingGate
+        pool={createPool(activeBilling({ tier: 'premium_tier', pricePaid: 0 }))}
+        isCommissioner={true}
+      >
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.getByText(/hosting fees paid/i)).toBeTruthy();
+    expect(screen.getByText(/pool credit or promotion/i)).toBeTruthy();
+    expect(screen.queryByText('$0.00 paid')).toBeNull();
+  });
+
+  it('never offers an upgrade CTA on an active pool', () => {
+    render(
+      <BillingGate pool={createPool(activeBilling())} isCommissioner={true}>
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.queryByText(/upgrade/i)).toBeNull();
+    expect(screen.queryByText('/pricing')).toBeNull();
   });
 });
 
