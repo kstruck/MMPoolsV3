@@ -86,6 +86,32 @@ describe('the other scheduled-job composite queries stay indexed', () => {
     });
 });
 
+describe('a declared index has a deploy path that actually ships it', () => {
+    // codex round 1 [P1]: `deploy:backend` was
+    // `firebase deploy --only functions,firestore:rules` — it named two backend
+    // surfaces and silently omitted the third. Declaring an index in this repo
+    // and releasing through that script left the index absent in production and
+    // the job still throwing FAILED_PRECONDITION, which is indistinguishable
+    // from never having made the fix.
+    //
+    // This does NOT change the documented deploy posture. `mmp-change-control`
+    // still prefers the explicit per-surface commands so functions-before-rules
+    // ordering stays under the operator's control; index deploys are
+    // independent of that ordering. This only stops the convenience script from
+    // lying about its own scope.
+    const pkg = JSON.parse(read('package.json'));
+
+    it('deploy:backend covers firestore:indexes', () => {
+        expect(pkg.scripts['deploy:backend']).toContain('firestore:indexes');
+    });
+
+    it('deploy:backend still covers the surfaces it always did', () => {
+        // Guard against "fixing" the above by replacing the script wholesale.
+        expect(pkg.scripts['deploy:backend']).toContain('functions');
+        expect(pkg.scripts['deploy:backend']).toContain('firestore:rules');
+    });
+});
+
 describe('hasIndex itself discriminates', () => {
     // Without this, a bug making hasIndex return true unconditionally would make
     // every assertion above vacuous and the suite would still be green.
