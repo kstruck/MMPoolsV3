@@ -152,9 +152,16 @@ building the gate at all rather than just watching the job.
    go out.
 3. **Read the report.** `PLAN-BILLING-INDEX-DEPLOY.md` predicted ~4 pools in
    `trial`. Confirm against reality before any pool moves.
-4. **Arm phase 1 only** — `{ dryRun: false, liveTransitions: ['trialToGrace'] }`.
+4. **Arm phase 1 only** —
+   `{ enabled: true, dryRun: false, liveTransitions: ['trialToGrace'] }`.
    Trials move to grace period; commissioners get a warning; nothing locks.
-5. **Arm phase 2 after the grace period has actually elapsed for someone.**
+   ⚠️ **Write the WHOLE map, `enabled` included.** The gate treats an absent
+   `enabled` as `false` (that is the fail-safe), so an edit that replaces the
+   map with only `dryRun` and `liveTransitions` **disables the job** — the exact
+   opposite of arming it — and it would look armed in the config. Alternatively
+   edit only the individual fields in place; do not replace the map.
+5. **Arm phase 2 after the grace period has actually elapsed for someone** —
+   `{ enabled: true, dryRun: false, liveTransitions: ['trialToGrace', 'graceToLocked'] }`.
 
 Step 2 is the whole point: **it is the only sequence that produces the transition
 counts before any pool moves.** Deploying the index without the gate — which is
