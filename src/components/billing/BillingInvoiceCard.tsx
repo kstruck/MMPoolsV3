@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import type { BillingConfig } from '../../types';
 import type { PoolQuote, PoolQuoteInput, AddonSelection } from '@shared/schemas/quote';
+import { checkoutButtonState } from './checkoutButtonState';
 
 // Lightweight applied-coupon shape derived from the server quote's couponState
 // (the full `coupons` doc is no longer read on the client — ADR-0002).
@@ -335,6 +336,24 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     const standardTotal = Math.max(0, subtotal - discount);
     const total = (hasUnlimitedPass || (useCredit && (freePoolsAvailable > 0 || !!eligibleCredit))) ? 0 : standardTotal;
 
+    // No quote has EVER loaded for these inputs. Every figure above is a `?? 0`
+    // fallback, not a price — before PLAN-BUYFLOW-QUOTE-DEADEND this state was
+    // indistinguishable from a genuinely free pool and rendered as FREE.
+    const priceUnknown = !quote;
+
+    const buttonState = checkoutButtonState({
+        isCheckoutLoading,
+        hasPoolId: !!poolId,
+        priceUnknown,
+        basePrice,
+        subtotal,
+        total,
+        hasAppliedCoupon: !!appliedCoupon,
+        useCredit,
+        hasUnlimitedPass,
+        activeFreePoolsCount,
+    });
+
     // Notify parent when prices or coupons change
     useEffect(() => {
         if (onCouponAppliedChange) {
@@ -586,12 +605,25 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         </div>
                     )}
 
+                    {/* Price could not be fetched — say so instead of showing $0. */}
+                    {priceUnknown && (
+                        <div className="bg-[#FCEEED] border border-brandred-500/30 rounded-xl p-4 flex gap-3 items-start">
+                            <AlertTriangle className="text-brandred-600 shrink-0 mt-0.5" size={20} />
+                            <div className="text-xs space-y-1">
+                                <strong className="text-brandred-600 font-bold">Pricing unavailable</strong>
+                                <p className="text-[color:var(--text)] leading-relaxed">
+                                    We could not load hosting pricing for this pool. The amounts below are not a quote. Reload the page to try again — nothing has been charged.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Itemized Table */}
                     <div className="bg-page rounded-xl p-4 border border-line space-y-3 font-body text-sm text-left">
                         <div className="flex justify-between items-center text-[color:var(--text)]">
                             <span>Base Hosting fee (<span className="num">{estimatedPlayers}</span> estimated players)</span>
                             <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                {basePrice === 0 ? 'FREE' : `$${basePrice.toFixed(2)}`}
+                                {priceUnknown ? '—' : basePrice === 0 ? 'FREE' : `$${basePrice.toFixed(2)}`}
                             </span>
                         </div>
 
@@ -645,7 +677,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         <div className="flex justify-between items-center border-t border-line pt-3 mt-1 text-[color:var(--text)] font-bold">
                             <span className="text-base font-display uppercase tracking-[0.05em]">Upgrade Premium Total</span>
                             <span className="text-lg font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                {total === 0 ? 'FREE' : `$${total.toFixed(2)}`}
+                                {priceUnknown ? '—' : total === 0 ? 'FREE' : `$${total.toFixed(2)}`}
                             </span>
                         </div>
 
@@ -743,14 +775,9 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
 
                             <button
                                 onClick={handleCheckout}
-                                disabled={
-                                    isCheckoutLoading ||
-                                    !poolId ||
-                                    (total <= 0 && (!appliedCoupon || subtotal === 0) && !useCredit && !hasUnlimitedPass) ||
-                                    (basePrice === 0 && subtotal === 0 && !useCredit && !hasUnlimitedPass && activeFreePoolsCount > 0)
-                                }
+                                disabled={buttonState.disabled}
                                 className={`w-full font-display font-bold uppercase tracking-[0.05em] py-3.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2 group hover:scale-[1.01] ${
-                                    !poolId || (basePrice === 0 && subtotal === 0 && !useCredit && !hasUnlimitedPass && activeFreePoolsCount > 0)
+                                    buttonState.muted
                                         ? 'bg-cream border border-line text-faint cursor-not-allowed hover:scale-100'
                                         : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-[0_6px_16px_rgba(196,52,46,0.28)]'
                                 }`}
@@ -763,16 +790,8 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                 ) : (
                                     <>
                                         <CreditCard size={18} />
-                                        {!poolId ? (
-                                            'Select a Pool Above to Pay'
-                                        ) : basePrice === 0 && subtotal === 0 && !useCredit && !hasUnlimitedPass && activeFreePoolsCount > 0 ? (
-                                            'Free Limit Reached (Upgrade Needed)'
-                                        ) : total === 0 ? (
-                                            'Activate Pool (Free Allocation)'
-                                        ) : (
-                                            'Upgrade Pool to Premium'
-                                        )}
-                                        {poolId && !(basePrice === 0 && subtotal === 0 && !useCredit && !hasUnlimitedPass && activeFreePoolsCount > 0) && <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />}
+                                        {buttonState.label}
+                                        {!buttonState.muted && <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />}
                                     </>
                                 )}
                             </button>
