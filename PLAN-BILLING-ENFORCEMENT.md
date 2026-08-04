@@ -122,28 +122,45 @@ the operator has: *what would happen tonight?*
 * **Send no email.** The emails are the irreversible part — a status can be
   written back, an email cannot be unsent. Every `sendEmail` call must sit
   behind the same gate as the `update`, not behind a separate one.
-* Write the counts to `admin_audit` the way `nflFinalizeSweepJob`'s dry-run does,
-  so the report survives past the Cloud Logging retention window.
+* **Persist the dry-run report somewhere it actually survives — and NOT in
+  `admin_audit` metadata.** Two separate holes were found here, both by codex,
+  and together they are the most important correction in this document, because
+  §4 step 3 ("read the report") is the step the whole sequence exists for.
 
-  ⚠️ **It will NOT be readable from the SuperAdmin surface, and an earlier draft
-  of this line claimed it would be.** `AdminAuditViewer` renders five columns —
-  When, Actor, Action, Target, Status (`src/components/admin/AdminAuditViewer.tsx:58-62`)
-  — and nothing from the record's `metadata`. So the candidate list, the counts
-  and the email-resolution outcomes land in Firestore and are invisible in the
-  app. Third instance in this document set of a claim about a UI control that
-  does not exist; codex found all three.
+  ⚠️ **Hole 1 — `admin_audit` cannot HOLD a per-pool candidate list.**
+  `writeAdminAudit` passes every record through `capMetadata`
+  (`functions/src/lib/adminAudit.ts:32-54`), which replaces any array or object
+  value with the literal marker `[array]` / `[object]`, truncates strings past
+  200 characters, and stops adding keys once the payload exceeds **1 KB**. A
+  list of candidate pools is an array, so it would be stored as the five
+  characters `[array]`. Scalar counts survive; evidence does not.
 
-  Two honest options, and the plan does not pick for you:
-  **(a)** keep the implementation `functions/`-only and send the operator to the
-  Firestore console (`admin_audit`, filtered by action) to read the dry-run
-  report — consistent with how the NFL gates are armed today; or
-  **(b)** add a metadata expander to `AdminAuditViewer`, which is a small
-  `src/` change but pulls a Coolify rebuild into a functions-only plan and is
-  worth doing on its own rather than smuggled in here.
+  ⚠️ **Hole 2 — `AdminAuditViewer` would not render it even if it fit.** It
+  draws five columns — When, Actor, Action, Target, Status
+  (`src/components/admin/AdminAuditViewer.tsx:58-62`) — and nothing from
+  `metadata`. An earlier draft of this bullet claimed the report would be
+  "readable from the SuperAdmin surface"; that was the third claim in this
+  document set about a UI capability that does not exist, and codex found all
+  three.
 
-  **Whichever is chosen must be settled BEFORE the gate ships**, because §4
-  step 3 — "read the report" — is the step the whole sequence exists for, and a
-  report nobody can find is the same as no dry run at all.
+  **The shape that works**, and the plan's recommendation:
+
+  1. **Summary counts → `admin_audit`.** Scalars only
+     (`candidates`, `emailResolvable`, `emailMissing`, per phase). These fit
+     inside `capMetadata` and give the audit trail a durable "a dry run happened
+     and here is its size".
+  2. **The per-pool detail → its own document**, e.g.
+     `system/billingEnforceLastDryRun` or `billingEnforceReports/{runId}`,
+     written whole and read from the Firestore console. Not
+     `admin_audit`, which is deliberately a capped append-only trail rather than
+     a report store.
+  3. **Cloud Logging is the fallback, not the plan.** It has the detail, but the
+     retention window is exactly why this repo started writing reports to
+     Firestore in the first place.
+
+  Whatever is chosen, **it must be settled before the gate ships** — a report
+  nobody can find is the same as no dry run at all, and a report silently
+  truncated to `[array]` is worse, because it looks like evidence.
 * Return the same heartbeat verdict shape as today so
   `billingEnforceVerdict` keeps grading it.
 
