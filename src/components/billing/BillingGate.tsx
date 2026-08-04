@@ -74,7 +74,12 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     // Unknown is not paid — the same fail-closed rule the buy-flow card had to
     // learn about unknown-vs-zero prices.
     const paidTier = billing.tier === 'standard_tier' || billing.tier === 'premium_tier';
-    if (!isCommissioner || !paidTier) {
+    // `redeemPoolCreditForPool` activates a pool with a Pool Credit and
+    // deliberately does NOT touch `tier` (functions/src/entitlements.ts:446-453),
+    // so a credit-activated pool sits `active` on `free_tier` with a credit
+    // genuinely consumed. The tier allow-list alone would deny it the banner.
+    const paidByCredit = billing.paidVia === 'credit';
+    if (!isCommissioner || !(paidTier || paidByCredit)) {
       return <>{children}</>;
     }
 

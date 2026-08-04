@@ -962,6 +962,15 @@ export interface PoolBilling {
   gracePeriodEndsAt?: number; // timestamp
   maxPlayersAllowed: number;
   couponCode?: string;
+  /**
+   * How the pool was activated when it was not a Stripe charge. Written as
+   * `'credit'` by `redeemPoolCreditForPool` (functions/src/entitlements.ts:449),
+   * which activates the pool and deliberately does NOT touch `tier` — so a
+   * credit-activated pool can be `active` on `free_tier` with `pricePaid: 0`
+   * and still be fully settled. Typed loosely because the server owns the
+   * vocabulary and may add values without a client release.
+   */
+  paidVia?: string;
   featuresUnlocked: {
     aiCommissioner: boolean;
     whatIfSimulator: boolean;

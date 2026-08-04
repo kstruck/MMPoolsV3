@@ -230,6 +230,23 @@ describe('BillingGate — active state, hosting-fees-paid banner', () => {
     expect(screen.queryByText('$0.00 paid')).toBeNull();
   });
 
+  it('DOES show it on a Pool Credit activation, which stays on the free tier', () => {
+    // `redeemPoolCreditForPool` sets status active + paidVia 'credit' and never
+    // touches `tier` (functions/src/entitlements.ts:446-453). Judging on tier
+    // alone denies the banner to a commissioner who spent a credit.
+    render(
+      <BillingGate
+        pool={createPool(activeBilling({ tier: 'free_tier', pricePaid: 0, paidVia: 'credit' }))}
+        isCommissioner={true}
+      >
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.getByText(/hosting fees paid/i)).toBeTruthy();
+    expect(screen.getByText(/pool credit or promotion/i)).toBeTruthy();
+  });
+
   it('does NOT claim fees were paid when the tier is MISSING', () => {
     // `tier` is required by the TypeScript type but not by Firestore, so a
     // legacy pool can lack it. A `!== 'free_tier'` check would pass on
