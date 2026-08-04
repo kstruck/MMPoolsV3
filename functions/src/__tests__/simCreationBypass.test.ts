@@ -1,5 +1,19 @@
-import { describe, it, expect } from 'vitest';
-import { simCreationBypassAllowed } from '../lib/systemGuards';
+import { describe, it, expect, vi } from 'vitest';
+
+// Minimal firebase-admin mock: assertPoolCreationAllowed reads exactly
+// system/config once. Configurable per test via h.configData.
+const h = vi.hoisted(() => ({ configData: {} as Record<string, unknown> }));
+vi.mock('firebase-admin', () => {
+    const firestore: unknown = () => ({
+        collection: () => ({
+            doc: () => ({
+                get: async () => ({ exists: true, data: () => h.configData }),
+            }),
+        }),
+    });
+    return { default: { firestore, apps: [{}] }, firestore, apps: [{}] };
+});
+import { assertPoolCreationAllowed, simCreationBypassAllowed } from '../lib/systemGuards';
 
 const SIM_PAYLOAD = { season: 'sim-run-abc123-xy', simRunId: 'run-abc123-xy' };
 const REAL_PAYLOAD = { season: '2026' };
@@ -26,5 +40,19 @@ describe('simCreationBypassAllowed', () => {
 
     it('the array-forged season from the nflFinalize incident does not pass isSimPool', () => {
         expect(simCreationBypassAllowed('SUPER_ADMIN', { season: ['sim-x'] as unknown as string })).toBe(false);
+    });
+});
+
+describe('assertPoolCreationAllowed ordering (mutation anchor)', () => {
+    it('MAINTENANCE BEATS BYPASS — a sim run during maintenance mode still refuses', async () => {
+        h.configData = { maintenanceMode: true, poolTypeFlags: { NFL_PICKEM: true } };
+        await expect(assertPoolCreationAllowed('NFL_PICKEM', { simBypass: true }))
+            .rejects.toThrow(/maintenance/i);
+    });
+
+    it('bypass clears ONLY the disabled type flag', async () => {
+        h.configData = { maintenanceMode: false, poolTypeFlags: { NFL_PICKEM: false } };
+        await expect(assertPoolCreationAllowed('NFL_PICKEM', { simBypass: true })).resolves.toBeUndefined();
+        await expect(assertPoolCreationAllowed('NFL_PICKEM')).rejects.toThrow(/temporarily disabled/);
     });
 });
