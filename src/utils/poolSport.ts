@@ -147,6 +147,7 @@ export interface LockTimeReadable {
   type?: string;
   lockAt?: StoredTime;
   lockDate?: StoredTime;
+  reminders?: { lock?: { lockAt?: StoredTime } };
   scores?: { startTime?: StoredTime };
 }
 
@@ -165,19 +166,24 @@ function toEpochMs(value: StoredTime | undefined | null): number | null {
 }
 
 /**
- * Epoch-ms lock/start time for a pool, or null when the type has none.
+ * Epoch-ms lock/start time for a pool, or null when the type has none. Each
+ * type keeps it somewhere else, matching what functions/src/autoLock.ts reads
+ * when it actually locks the pool: brackets use a root `lockAt`, props pools
+ * use the `reminders.lock` deadline the props wizard writes, and squares show
+ * kickoff. (`lockDate` is declared on the props and playoff types but no write
+ * path sets it, so it is only ever a fallback.)
  *
  * NFL season pools deliberately return null: they lock per game or per week off
  * the NFL schedule (GAME_LOCKED / WEEK_LOCKED in functions/src/nflPools.ts),
- * never at one pool-wide timestamp. Fields are typed `number` but older docs
- * carry ISO strings, so both are accepted.
+ * never at one pool-wide timestamp.
  */
 export function getPoolLockTime(pool: LockTimeReadable): number | null {
   switch (pool.type) {
     case 'BRACKET':
       return toEpochMs(pool.lockAt);
-    case 'NFL_PLAYOFFS':
     case 'PROPS':
+      return toEpochMs(pool.reminders?.lock?.lockAt) ?? toEpochMs(pool.lockDate);
+    case 'NFL_PLAYOFFS':
       return toEpochMs(pool.lockDate);
     case 'NFL_PICKEM':
     case 'NFL_SURVIVOR':

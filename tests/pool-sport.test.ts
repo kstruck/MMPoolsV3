@@ -138,8 +138,15 @@ describe('getPoolLockTime', () => {
   it('reads the right field per type', () => {
     expect(getPoolLockTime({ type: 'BRACKET', lockAt: EPOCH })).toBe(EPOCH);
     expect(getPoolLockTime({ type: 'NFL_PLAYOFFS', lockDate: EPOCH })).toBe(EPOCH);
-    expect(getPoolLockTime({ type: 'PROPS', lockDate: EPOCH })).toBe(EPOCH);
     expect(getPoolLockTime({ type: 'SQUARES', scores: { startTime: ISO } })).toBe(EPOCH);
+  });
+
+  it('reads a props deadline from reminders.lock, which is where the wizard writes it', () => {
+    // PropsWizard sets reminders.lock.lockAt and autoLock locks off that field;
+    // `lockDate` is declared on PropsPool but no write path sets it.
+    expect(getPoolLockTime({ type: 'PROPS', reminders: { lock: { lockAt: EPOCH } } })).toBe(EPOCH);
+    expect(getPoolLockTime({ type: 'PROPS', lockDate: EPOCH })).toBe(EPOCH);
+    expect(getPoolLockTime({ type: 'PROPS' })).toBeNull();
   });
 
   it('accepts legacy ISO strings where the type declares a number', () => {
