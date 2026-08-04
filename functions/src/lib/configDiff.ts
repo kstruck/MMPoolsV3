@@ -9,6 +9,10 @@
  * unchanged, which is exactly what "nothing actually changed" should mean for
  * an audit line.
  */
+/** Sentinel for "this key did not exist on this side" — distinct from an
+ * explicit Firestore null, which is a real value. */
+export const ABSENT = '[absent]';
+
 export interface ConfigKeyChange {
     from: unknown;
     to: unknown;
@@ -41,10 +45,19 @@ export function diffTopLevel(
 ): Record<string, ConfigKeyChange> {
     const changed: Record<string, ConfigKeyChange> = {};
     for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
-        const b = before[key] === undefined ? null : before[key];
-        const a = after[key] === undefined ? null : after[key];
-        if (JSON.stringify(b) !== JSON.stringify(a)) {
-            changed[key] = { from: b, to: a };
+        // Presence-aware: an explicit Firestore null is a VALUE, and absent-vs-null
+        // must diff — normalizing both to null made adding or deleting a
+        // null-valued key invisible to the very trigger built to see it
+        // (codex r3). The record carries the ABSENT sentinel for the missing
+        // side so the audit line reads as an add/remove, not a null->null.
+        const inB = key in before && before[key] !== undefined;
+        const inA = key in after && after[key] !== undefined;
+        if (inB !== inA) {
+            changed[key] = { from: inB ? before[key] : ABSENT, to: inA ? after[key] : ABSENT };
+            continue;
+        }
+        if (inB && JSON.stringify(before[key]) !== JSON.stringify(after[key])) {
+            changed[key] = { from: before[key], to: after[key] };
         }
     }
     return changed;

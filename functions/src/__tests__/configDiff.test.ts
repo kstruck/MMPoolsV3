@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { diffTopLevel, narrowChange, redactConfigValue } from '../lib/configDiff';
+import { ABSENT, diffTopLevel, narrowChange, redactConfigValue } from '../lib/configDiff';
 
 describe('diffTopLevel', () => {
     it('identical docs produce an EMPTY diff — the trigger must write nothing', () => {
@@ -17,15 +17,24 @@ describe('diffTopLevel', () => {
         });
     });
 
-    it('captures key ADDITION as from:null', () => {
+    it('captures key ADDITION as from:ABSENT', () => {
         expect(diffTopLevel({}, { nflImport: { enabled: false } })).toEqual({
-            nflImport: { from: null, to: { enabled: false } },
+            nflImport: { from: ABSENT, to: { enabled: false } },
         });
     });
 
-    it('captures key REMOVAL as to:null', () => {
+    it('captures key REMOVAL as to:ABSENT', () => {
         expect(diffTopLevel({ statsRecompute: { enabled: true } }, {})).toEqual({
-            statsRecompute: { from: { enabled: true }, to: null },
+            statsRecompute: { from: { enabled: true }, to: ABSENT },
+        });
+    });
+
+    it('adding or deleting an EXPLICIT-null key still audits — null is a value, absent is not (codex r3)', () => {
+        expect(diffTopLevel({}, { maintenanceMode: null })).toEqual({
+            maintenanceMode: { from: ABSENT, to: null },
+        });
+        expect(diffTopLevel({ maintenanceMode: null }, {})).toEqual({
+            maintenanceMode: { from: null, to: ABSENT },
         });
     });
 
