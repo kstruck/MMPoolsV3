@@ -1,7 +1,7 @@
 import * as logger from "firebase-functions/logger";
 import { onDocumentWrittenWithAuthContext } from "firebase-functions/v2/firestore";
 import { writeAdminAudit, capMetadata } from "./lib/adminAudit";
-import { diffTopLevel } from "./lib/configDiff";
+import { diffTopLevel, redactConfigValue } from "./lib/configDiff";
 
 /**
  * Audit trail for system/config — the doc that carries every kill-switch,
@@ -26,8 +26,16 @@ export const onSystemConfigWritten = onDocumentWrittenWithAuthContext(
 
         // One string per changed key so capMetadata's nested-object flattening
         // doesn't reduce every entry to "[object]" — the from→to is the record.
+        // Values pass through redactConfigValue FIRST: capMetadata redacts by
+        // KEY name, and once a change is serialized under the key "opsAlerts"
+        // the email/SMS recipients nested inside would ride into the immutable
+        // audit doc as plain text (codex r1 #2). Booleans and numbers — the
+        // actual kill-switch record — survive redaction untouched.
         const metadata = Object.fromEntries(
-            keys.map((k) => [k, JSON.stringify(changed[k])]),
+            keys.map((k) => [k, JSON.stringify({
+                from: redactConfigValue(changed[k].from),
+                to: redactConfigValue(changed[k].to),
+            })]),
         );
 
         const written = await writeAdminAudit({
@@ -37,6 +45,10 @@ export const onSystemConfigWritten = onDocumentWrittenWithAuthContext(
             targetId: "config",
             metadata: capMetadata(metadata),
             status: "success",
+        }, {
+            // At-least-once delivery: a retried event overwrites the SAME doc
+            // instead of appending a duplicate forensic record (codex r1 #1).
+            id: `syscfg_${event.id}`,
         });
         if (!written) {
             // writeAdminAudit swallows by design; this trigger's whole job is

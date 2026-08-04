@@ -14,6 +14,27 @@ export interface ConfigKeyChange {
     to: unknown;
 }
 
+/**
+ * Redact a config value for the audit record. Kill-switch fidelity without
+ * PII: booleans, numbers and null pass through untouched (they ARE the
+ * record for flags and job gates); strings are masked — system/config
+ * carries ops-alert email/SMS recipients, and a raw string in an immutable
+ * audit doc is a leak, not a log; arrays report length only; objects
+ * recurse per key so `{enabled: true, notifyEmail: "..."}` audits as
+ * `{enabled: true, notifyEmail: "[string]"}`.
+ */
+export function redactConfigValue(v: unknown): unknown {
+    if (v === null || typeof v === 'boolean' || typeof v === 'number') return v;
+    if (typeof v === 'string') return '[string]';
+    if (Array.isArray(v)) return `[array:${v.length}]`;
+    if (typeof v === 'object') {
+        return Object.fromEntries(
+            Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, redactConfigValue(x)]),
+        );
+    }
+    return '[value]';
+}
+
 export function diffTopLevel(
     before: Record<string, unknown>,
     after: Record<string, unknown>,

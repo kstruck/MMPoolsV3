@@ -63,10 +63,23 @@ export function capMetadata(
  * sweep, an alert path — needs to know the record was lost, or "audited" and
  * "silently didn't" stay indistinguishable. Callers that don't care may ignore it.
  */
-export async function writeAdminAudit(entry: AdminAuditEntry): Promise<boolean> {
+export async function writeAdminAudit(
+  entry: AdminAuditEntry,
+  opts?: {
+    /**
+     * Deterministic document id. Triggers are delivered at-least-once, so an
+     * auto-id `.add()` from a retried event appends an indistinguishable
+     * duplicate record; passing the Firestore event id makes the retry a
+     * no-op overwrite of the same doc (codex, systemConfigAudit r1).
+     */
+    id?: string;
+  }
+): Promise<boolean> {
   try {
     const db = admin.firestore();
-    await db.collection("admin_audit").add({
+    const coll = db.collection("admin_audit");
+    const ref = opts?.id ? coll.doc(opts.id) : coll.doc();
+    await ref.set({
       actorUid: entry.actorUid,
       actorEmail: entry.actorEmail ?? null,
       action: entry.action,

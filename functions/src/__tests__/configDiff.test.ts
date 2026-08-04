@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { diffTopLevel } from '../lib/configDiff';
+import { diffTopLevel, redactConfigValue } from '../lib/configDiff';
 
 describe('diffTopLevel', () => {
     it('identical docs produce an EMPTY diff — the trigger must write nothing', () => {
@@ -35,5 +35,22 @@ describe('diffTopLevel', () => {
             { maintenanceMode: true, autoClose: { enabled: true, dryRun: false } },
         );
         expect(Object.keys(out)).toEqual(['maintenanceMode']);
+    });
+});
+
+describe('redactConfigValue', () => {
+    it('booleans, numbers and null pass through — the kill-switch record survives', () => {
+        expect(redactConfigValue(true)).toBe(true);
+        expect(redactConfigValue(45)).toBe(45);
+        expect(redactConfigValue(null)).toBe(null);
+    });
+
+    it('strings are masked — ops-alert recipients never reach the audit doc', () => {
+        expect(redactConfigValue('kevin@example.com')).toBe('[string]');
+    });
+
+    it('objects recurse per key, arrays report length only', () => {
+        expect(redactConfigValue({ enabled: true, notifyEmail: 'a@b.c', sms: ['+1555'] }))
+            .toEqual({ enabled: true, notifyEmail: '[string]', sms: '[array:1]' });
     });
 });
