@@ -13,33 +13,27 @@ vi.mock('firebase-admin', () => {
     });
     return { default: { firestore, apps: [{}] }, firestore, apps: [{}] };
 });
-import { assertPoolCreationAllowed, simCreationBypassAllowed } from '../lib/systemGuards';
+import { assertPoolCreationAllowed } from '../lib/systemGuards';
+import { simRunIdForCreate } from '../poolOps';
 
-const SIM_PAYLOAD = { season: 'sim-run-abc123-xy', simRunId: 'run-abc123-xy' };
-const REAL_PAYLOAD = { season: '2026' };
-
-describe('simCreationBypassAllowed', () => {
-    it('SUPER_ADMIN + sim payload = bypass (the E2E path)', () => {
-        expect(simCreationBypassAllowed('SUPER_ADMIN', SIM_PAYLOAD)).toBe(true);
-        expect(simCreationBypassAllowed('SUPER_ADMIN', { season: 'sim-x' })).toBe(true);
-        expect(simCreationBypassAllowed('SUPER_ADMIN', { simRunId: 'run-1' })).toBe(true);
+// The bypass is keyed on the STAMPED trust anchor: simBypass is passed as
+// `simRunIdForCreate(payload, claimRole) !== undefined` at every wired call
+// site, so these tests pin the anchor's gate legs — the same value that gets
+// persisted on the pool doc is the only thing that can clear the kill-switch.
+describe('bypass key = simRunIdForCreate (the stamped trust anchor)', () => {
+    it('SUPER_ADMIN + well-formed run id = stamped (the E2E path)', () => {
+        expect(simRunIdForCreate({ simRunId: 'run-abc123-xy' }, 'SUPER_ADMIN')).toBe('run-abc123-xy');
     });
 
-    it('non-admin with a FORGED sim payload gets NO bypass — the role leg is server-verified', () => {
-        expect(simCreationBypassAllowed('USER', SIM_PAYLOAD)).toBe(false);
-        expect(simCreationBypassAllowed('MANAGER', SIM_PAYLOAD)).toBe(false);
-        expect(simCreationBypassAllowed('BANNED', SIM_PAYLOAD)).toBe(false);
-        expect(simCreationBypassAllowed(undefined, SIM_PAYLOAD)).toBe(false);
+    it('non-admin with a FORGED run id gets nothing — role leg is server-verified', () => {
+        expect(simRunIdForCreate({ simRunId: 'run-abc123-xy' }, 'USER')).toBeUndefined();
+        expect(simRunIdForCreate({ simRunId: 'run-abc123-xy' }, undefined)).toBeUndefined();
     });
 
-    it('SUPER_ADMIN creating a REAL pool gets NO bypass — the kill-switch still binds the operator', () => {
-        expect(simCreationBypassAllowed('SUPER_ADMIN', REAL_PAYLOAD)).toBe(false);
-        expect(simCreationBypassAllowed('SUPER_ADMIN', {})).toBe(false);
-        expect(simCreationBypassAllowed('SUPER_ADMIN', null)).toBe(false);
-    });
-
-    it('the array-forged season from the nflFinalize incident does not pass isSimPool', () => {
-        expect(simCreationBypassAllowed('SUPER_ADMIN', { season: ['sim-x'] as unknown as string })).toBe(false);
+    it('SUPER_ADMIN without a well-formed run id gets nothing — a real pool cannot clear the flag', () => {
+        expect(simRunIdForCreate({}, 'SUPER_ADMIN')).toBeUndefined();
+        expect(simRunIdForCreate({ simRunId: 'BAD ID!' }, 'SUPER_ADMIN')).toBeUndefined();
+        expect(simRunIdForCreate({ simRunId: ['run-x'] }, 'SUPER_ADMIN')).toBeUndefined();
     });
 });
 

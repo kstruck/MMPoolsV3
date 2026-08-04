@@ -4,7 +4,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { BracketPool } from "./types";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import * as crypto from "crypto";
-import { assertPoolCreationAllowed, simCreationBypassAllowed } from "./lib/systemGuards";
+import { assertPoolCreationAllowed } from "./lib/systemGuards";
 import { computeLaunchMode } from "./poolOps";
 import { loadBillingConfig } from "./billing";
 import {
@@ -38,11 +38,12 @@ export const createBracketPool = onCall(async (request) => {
         throw new HttpsError("invalid-argument", "Missing required fields.");
     }
 
-    // Feature-flag + maintenance guard (server-authoritative). SUPER_ADMIN sim
-    // runs bypass the type flag only (PLAN-SIM-CREATION-BYPASS).
-    await assertPoolCreationAllowed("BRACKET", {
-        simBypass: simCreationBypassAllowed(request.auth.token.role as string | undefined, request.data),
-    });
+    // Feature-flag + maintenance guard (server-authoritative). NO sim bypass
+    // here on purpose: bracket sims ride the createPool callable (which stamps
+    // the simRunId trust anchor); this handler persists no sim marker, so a
+    // bypass here would mint a REAL unmarked pool past the kill-switch
+    // (codex r1, PLAN-SIM-CREATION-BYPASS).
+    await assertPoolCreationAllowed("BRACKET");
 
     // Shared validation gate + ban check.
     validateCreateInput('BRACKET', request.data);

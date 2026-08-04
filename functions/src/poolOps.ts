@@ -6,7 +6,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, updatePoolSettingsSchema } from "./schemas/poolCore";
 import { recalculatePoolWinnersSchema, toggleWinnerPaidSchema, fixParticipantIdsSchema } from "./schemas/poolOps";
-import { assertPoolCreationAllowed, simCreationBypassAllowed } from './lib/systemGuards';
+import { assertPoolCreationAllowed } from './lib/systemGuards';
 import { isPoolType, type PoolType } from './shared/poolTypes';
 import {
     validateCreateInput,
@@ -253,11 +253,13 @@ export const createPool = validated(
 
         const isSquaresPool = !data.type || data.type === 'SQUARES';
 
-        // Feature-flag + maintenance guard (server-authoritative). SUPER_ADMIN sim
-        // runs bypass the type flag only (PLAN-SIM-CREATION-BYPASS).
-        await assertPoolCreationAllowed(data.type || 'SQUARES', {
-            simBypass: simCreationBypassAllowed(request.auth!.token.role as string | undefined, data),
-        });
+        // Sim harness trust anchor, computed EARLY: the kill-switch bypass keys
+        // on the STAMPED simRunId (codex r1, PLAN-SIM-CREATION-BYPASS) - input
+        // is the pre-strip payload, simRunId honored only per claimRole.
+        const claimRole = request.auth!.token.role as string | undefined;
+        const simRunId = simRunIdForCreate(input, claimRole);
+        // Feature-flag + maintenance guard (server-authoritative).
+        await assertPoolCreationAllowed(data.type || 'SQUARES', { simBypass: simRunId !== undefined });
 
         if (isSquaresPool && data.costPerSquare === undefined) {
             throw new HttpsError('invalid-argument', 'Missing required field: costPerSquare');
@@ -272,7 +274,6 @@ export const createPool = validated(
         const poolType: PoolType = rawType;
         validateCreateInput(poolType, data);
 
-        const claimRole = request.auth!.token.role as string | undefined;
         assertNotBanned(claimRole, undefined);
 
         const poolsRef = db.collection('pools');
@@ -306,8 +307,7 @@ export const createPool = validated(
             billing: billingForLaunch(launchMode, billingConfig.trialDays, now.toMillis()),
         };
 
-        // input is the pre-strip payload — simRunId is privileged and only honored per claimRole.
-        const simRunId = simRunIdForCreate(input, claimRole);
+        // simRunId computed above the creation guard; stamped here.
         if (simRunId) newPool.simRunId = simRunId;
         assertSeasonNotForgedSim(newPool.season, simRunId);
 
