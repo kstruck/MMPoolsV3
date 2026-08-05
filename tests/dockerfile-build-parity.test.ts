@@ -88,6 +88,29 @@ export function buildStageRunCommands(source: string): string[] {
     return stage.filter((i) => /^RUN\s/i.test(i)).map((i) => i.replace(/^RUN\s+/i, '').trim());
 }
 
+/**
+ * The SOURCE paths of every `COPY` in the node build stage — the arguments
+ * before the destination, with flags like `--from=…` and `--chown=…` dropped.
+ */
+export function copiedSources(source: string): string[] {
+    const instructions = dockerInstructions(source);
+    const isFrom = (i: string) => /^FROM\s/i.test(i);
+    const start = instructions.findIndex((i) => /^FROM\s+(?:--\S+\s+)*node:/i.test(i));
+    const rest = instructions.slice(start + 1);
+    const nextFrom = rest.findIndex(isFrom);
+    const stage = nextFrom === -1 ? rest : rest.slice(0, nextFrom);
+
+    return stage
+        .filter((i) => /^COPY\s/i.test(i))
+        .flatMap((i) => {
+            const args = i
+                .replace(/^COPY\s+/i, '')
+                .split(/\s+/)
+                .filter((a) => !a.startsWith('--'));
+            return args.slice(0, -1); // last arg is the destination
+        });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // .dockerignore semantics
 // ─────────────────────────────────────────────────────────────────────────────
@@ -156,7 +179,11 @@ export function dockerignoreExcludes(target: string, source: string): boolean {
  * and `tsc -b` in an npm script are the same program with the same arguments,
  * and the parity check is about WHAT runs, not how the binary is located.
  */
-function leaves(command: string, seen = new Set<string>()): string[] {
+export function leaves(
+    command: string,
+    scripts: Record<string, string> = pkg.scripts,
+    seen = new Set<string>(),
+): string[] {
     return command
         .split('&&')
         .map((part) => part.trim())
@@ -168,9 +195,24 @@ function leaves(command: string, seen = new Set<string>()): string[] {
                 // Cycle guard: a script that runs itself would otherwise hang
                 // the suite rather than fail it.
                 if (seen.has(name)) return [`<cycle:${name}>`];
-                const body = pkg.scripts[name];
+                const body = scripts[name];
                 if (!body) return [`<missing-script:${name}>`];
-                return leaves(body, new Set([...seen, name]));
+                const next = new Set([...seen, name]);
+                // npm LIFECYCLE HOOKS. `npm run build` also runs `prebuild` and
+                // `postbuild` when they exist — CI gets them for free, and the
+                // Dockerfile's direct `npx tsc -b` would silently skip them
+                // (codex). Modelling them here means adding a hook makes the
+                // parity test FAIL, which is the point: it forces the Dockerfile
+                // to be updated instead of quietly diverging.
+                //
+                // Looked up by exact name, so `prerender` is NOT read as a hook
+                // of a `render` script that does not exist — which is exactly
+                // how npm resolves it too.
+                return [
+                    ...(scripts[`pre${name}`] ? leaves(scripts[`pre${name}`], scripts, next) : []),
+                    ...leaves(body, scripts, next),
+                    ...(scripts[`post${name}`] ? leaves(scripts[`post${name}`], scripts, next) : []),
+                ];
             }
             return [part.replace(/^npx\s+/, '')];
         });
@@ -186,8 +228,20 @@ describe('the image installs the tree CI validated', () => {
     });
 
     it('copies the lockfile in — `npm ci` fails without it', () => {
-        const copies = dockerInstructions(dockerfile).filter((i) => /^COPY\s/i.test(i));
-        expect(copies.some((c) => /package\*?\.json|package-lock\.json/.test(c))).toBe(true);
+        // Match the COPY SOURCES as globs against the real filename, rather
+        // than pattern-matching the instruction text. `/package\*?\.json/`
+        // — the first version — also matches `COPY package.json ./`, which
+        // would leave the build context without a lockfile and `npm ci` dead,
+        // while the guard reported success (codex).
+        expect(copiedSources(dockerfile).some((src) => patternToRegExp(src).test('package-lock.json')))
+            .toBe(true);
+    });
+
+    it('the lockfile-COPY check discriminates — package.json alone fails it', () => {
+        const narrowed = dockerfile.replace(/COPY package\*\.json/g, 'COPY package.json');
+        expect(narrowed).not.toEqual(dockerfile);
+        expect(copiedSources(narrowed).some((src) => patternToRegExp(src).test('package-lock.json')))
+            .toBe(false);
     });
 
     it('.dockerignore does not exclude the lockfile', () => {
@@ -268,5 +322,35 @@ describe('the split build steps still equal `npm run build:static`', () => {
 
     it('the parity check discriminates — a reordered build fails it', () => {
         expect([...EXPECTED].reverse()).not.toEqual(EXPECTED);
+    });
+
+    it('an npm lifecycle hook would break parity rather than hide', () => {
+        // codex: CI's `npm run build:static` runs `prebuild`/`postbuild` for
+        // free; the Dockerfile's direct `npx tsc -b` would skip them. If the
+        // expansion ignored hooks, that divergence would ship with a green
+        // guard. Adding one must change the expected list.
+        const withHook = {
+            ...pkg.scripts,
+            prebuild: 'node scripts/codegen.mjs',
+        };
+        const expanded = leaves('npm run build:static', withHook);
+        expect(expanded).not.toEqual(EXPECTED);
+        expect(expanded).toContain('node scripts/codegen.mjs');
+        // …and it must land BEFORE the build it hooks, not merely somewhere.
+        expect(expanded.indexOf('node scripts/codegen.mjs')).toBeLessThan(expanded.indexOf('tsc -b'));
+    });
+
+    it('a post hook is expanded too, and after the script', () => {
+        const withHook = { ...pkg.scripts, postbuild: 'node scripts/after.mjs' };
+        const expanded = leaves('npm run build:static', withHook);
+        expect(expanded.indexOf('node scripts/after.mjs')).toBeGreaterThan(expanded.indexOf('vite build'));
+    });
+
+    it('`prerender` is NOT mistaken for a hook of a non-existent `render`', () => {
+        // npm resolves hooks by exact name. There is no `render` script, so
+        // `prerender` is a standalone script — as it is used here.
+        expect(Object.keys(pkg.scripts)).toContain('prerender');
+        expect(Object.keys(pkg.scripts)).not.toContain('render');
+        expect(EXPECTED.filter((c) => c.includes('prerender')).length).toBe(1);
     });
 });
