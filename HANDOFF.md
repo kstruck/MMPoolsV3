@@ -63,7 +63,7 @@
 > row.** `fetchGames` (`:17-42`) feeds `doc.data()` straight into `setGames`, so
 > right after a Fetch the rows are the Firestore documents — but `handleLockToggle`
 > (`:61`) and `handleLockAll` (`:76`) are `setGames`-only and persistence happens
-> solely in `handleSave` (`:83`), so a badge you have just clicked is unsaved local
+> solely in `handleSave` (`:86`), so a badge you have just clicked is unsaved local
 > state. This reading was Fetch-then-nothing: no toggle, no Lock All, no Save.
 > (An earlier revision of this box cited `:53` as the provenance; `:53` is inside
 > the local edit handler and proves nothing. qodo's finding on #375.)
