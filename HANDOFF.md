@@ -13,7 +13,7 @@
 >
 > ✅ **THE FRONTEND REBUILD RAN and the previous box's only owed item is
 > discharged.** 📌 **The live bundle is `index-BClXJswC.js`**, read off the prod
-> HTML with `curl -s https://www.marchmeleepools.com/ | grep -o 'index-[A-Za-z0-9_-]*\.js'`.
+> HTML with `[regex]::Match((Invoke-WebRequest https://www.marchmeleepools.com/ -UseBasicParsing).Content, 'index-[A-Za-z0-9_-]+\.js').Value`.
 > It was `index-bJOPbtJA.js` before, so the hash moved — that is the measurement,
 > not a report of someone's click.
 >
