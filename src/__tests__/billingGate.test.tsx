@@ -109,7 +109,13 @@ describe('BillingGate — free / active state', () => {
     expect(screen.queryByText(/pool locked/i)).toBeNull();
   });
 
-  it('should render children without any banner when billing status is "active"', () => {
+  // The name of this test used to say "without any banner", which stopped
+  // being true when #368 gave `active` a banner — and it never failed, because
+  // all it asserts is the children and the ABSENCE OF AN UPGRADE CTA. Renamed
+  // to what it checks, so the next reader does not take the old name as a
+  // statement that an active pool renders nothing. Section 1b below owns the
+  // banner itself.
+  it('should render children and no upgrade CTA when billing status is "active"', () => {
     const pool = createPool({
       status: 'active',
       tier: 'standard_tier',
@@ -311,7 +317,7 @@ describe('BillingGate — active state, hosting-fees-paid banner', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1b. The commissioner can close the hosting banner
+// 1c. The commissioner can close the hosting banner
 // ─────────────────────────────────────────────────────────────────────────────
 // Requested by Kevin 2026-08-05: "I like the banner showing the hosting fees
 // were paid, but I would also like to see a way to close it."
