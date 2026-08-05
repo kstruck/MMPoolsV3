@@ -1,6 +1,6 @@
-# HANDOFF — Session entry point (updated 2026-08-05: functions still deployed from `1105392` — no backend change since; #367 (the buy flow priced every pool at $0), #368 (hosting-fees-paid banner) and #366 (dependency group) are MERGED and are **frontend-only**, so ⚠️ a Coolify REBUILD IS OWED for all three and none of them is live yet; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.**)
+# HANDOFF — Session entry point (updated 2026-08-05: functions still deployed from `1105392` — no backend change since; the rebuild that #367/#368/#366 were waiting on HAS RUN and all three are live in production, measured; ⚠️ #374 then MERGED and is frontend-only, so **a Coolify rebuild is OWED again**; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.**)
 
-> ## ⚠️ STOP POINT **2026-08-05** — #367/#368/#366 merged and awaiting a rebuild; #369/#370/#371 merged, docs+tests only; functions unchanged at `1105392`; billing indexes DEPLOYED; ⚠️ COOLIFY REBUILD IS THE ONLY THING OWED
+> ## ⚠️ STOP POINT **2026-08-05** — the rebuild RAN and #367/#368/#366 are LIVE, measured; then #374 merged, so ⚠️ A COOLIFY REBUILD IS OWED AGAIN and it is the ONLY thing owed; functions unchanged at `1105392`; billing indexes DEPLOYED but the job has NOT yet run with them
 >
 > The heading date is the date of the facts immediately below. It is REPLACED
 > on every deploy rather than annotated, because a note added above a stale
@@ -10,53 +10,73 @@
 > **Functions are deployed from <!-- deploy-state:current --> `main` @ `1105392`.**
 > **Rules remain ≡ `0a705c0`** — `firestore.rules` is byte-identical since, so no
 > rules deploy is owed.
-> ✅ **INDEXES DEPLOYED 2026-08-05 by Kevin.** `npx firebase firestore:indexes
-> --project gridiron-gamble-uzuqo` now returns **17** indexes (was 15) and both
-> `billing.*` composites on `pools` are present —
-> `billing.status + billing.trialEndsAt` and
-> `billing.status + billing.gracePeriodEndsAt`, `COLLECTION` scope. The deploy
-> offered no deletions, so the reconcile hazard did not fire.
 >
-> ⚠️ Two things this does NOT establish. Build **state** is unverified — the
-> CLI lists indexes that exist and does not report `CREATING` vs `READY`. And
-> the deploy does not run the job: `enforceBillingStatus` is `onSchedule` at
-> 23:00 ET, so **the first ever successful run is 2026-08-05 23:00 ET at the
-> earliest** and Ops Health keeps showing the old failing beat until then.
+> ✅ **THE FRONTEND REBUILD RAN and the previous box's only owed item is
+> discharged.** 📌 **The live bundle is `index-BClXJswC.js`**, read off the prod
+> HTML with `[regex]::Match((Invoke-WebRequest https://www.marchmeleepools.com/ -UseBasicParsing).Content, 'index-[A-Za-z0-9_-]+\.js').Value`.
+> It was `index-bJOPbtJA.js` before, so the hash moved — that is the measurement,
+> not a report of someone's click.
 >
-> ⬅️ This retracts TWO earlier claims in this box, in opposite directions: it
-> once said the indexes were deployed (taken from a handoff, disproven by the
-> job on 2026-08-05 at 03:43 UTC), then that they were OWED. Both are now
-> history; the line above is the measured state.
+> ✅ **#367's fix is verified IN A BROWSER, which no unit test could do.** On
+> `/pricing`, selecting the BUYFLOW TEST trial pool now renders
+> `Base Hosting fee (25 estimated players)  $29.00` and
+> `UPGRADE PREMIUM TOTAL  $29.00`, with an enabled `UPGRADE POOL TO PREMIUM`
+> button — where it previously rendered the word FREE and offered a dead
+> button. The Production Watchdog's CLIENT ERRORS list still ends at the six
+> `Invalid request: couponCode — Invalid input: expected string, received null`
+> entries from ~03:00 that morning, and exercising the quote path live produced
+> **no new one**. That absence, on a path that was failing 50×/24h, is the
+> confirmation.
 >
-> ⚠️ **The FRONTEND REBUILD IS OWED and is Kevin's click.** Five PRs merged on
-> 2026-08-05; **exactly three of them land in the bundle**, and #369 (docs) and
-> #370 (a test-only regex fix) change nothing a browser can see: **#367** (`3e11017` — `dbService.ts`,
-> `BillingInvoiceCard.tsx`, `checkoutButtonState.ts`, `callableParams.ts`),
-> **#368** (`7da9189` — `BillingGate.tsx`, `types/index.ts`) and **#366**
-> (`eacfc37` — root `package.json` + `package-lock.json`). Verified with
-> `git diff --name-only <sha>^ <sha> -- functions/ shared/ firestore.rules
-> firestore.indexes.json` on all three: **all empty.** So functions, rules and
-> indexes are untouched by this batch.
+> ⚠️ **THE BILLING JOB HAS STILL NEVER COMPLETED A RUN — and this is expected,
+> not a new failure.** `npx firebase firestore:indexes --project
+> gridiron-gamble-uzuqo` returns **17** indexes (was 15) with both `pools`
+> composites present (`billing.status + billing.trialEndsAt`,
+> `billing.status + billing.gracePeriodEndsAt`). But `enforceBillingStatus` is
+> `onSchedule('0 23 * * *', America/New_York)`, and Kevin deployed the indexes
+> **after** that evening's 23:00 ET fire. Ops Health accordingly still shows
+> `STALE JOBS 1` — `enforceBillingStatus — failing 3h ago — 9 FAILED_PRECONDITION:
+> The query requires an index` — and that beat is the PRE-INDEX one.
 >
-> **`#367` is the one that matters: until the rebuild runs, every hosting quote
-> in production still fails and the buy flow still shows paid pools as FREE.**
+> **The first fire with the indexes present is 23:00 ET tonight.** Judge it on
+> the Ops Health tile: a healthy run leaves **no `enforceBillingStatus` line
+> under Stale Jobs**. Judge the LINE, never the count — `STALE JOBS` aggregates
+> every job in `SCHEDULED_JOB_EXPECTATIONS`. And do **not** hunt for a
+> `failedTransitions: 0`: `billingEnforceVerdict`
+> (`functions/src/lib/heartbeatVerdicts.ts:119-133`) writes that field ONLY when
+> it is above zero, alongside `ok: false`. Its presence is the bad case.
+>
+> ⚠️ **That first successful run is the night before the HOF game, and it sends
+> email.** ~4 pools move `trial → grace_period`, one commissioner email each,
+> all Kevin's. Nothing can lock: no pool sits in `grace_period` today, so phase
+> 2 has no candidates for another 7 days.
+>
+> ✅ **THE THURSDAY-BLOCKING SPREAD LOCK IS ALREADY DONE.** Measured through
+> SuperAdmin → Pools → NFL Schedule → NFL Spread Override Manager (Season 2026,
+> Type Preseason, Week `HOF Weekend`) → Fetch Games: exactly one game,
+> `CAR @ ARI`, `Thu, Aug 6, 6:00 PM` in Mountain time = 8:00 PM ET, spread
+> **`-1.5`** relative to the home team, and the row's lock badge renders the
+> CLOSED padlock — which `SuperAdminNFLSpreads.tsx:223` draws only for
+> `spread.locked === true`.
+>
+> ⚠️ **The badge equals the STORED value only on a freshly-fetched, untouched
+> row.** `fetchGames` (`:17-42`) feeds `doc.data()` straight into `setGames`, so
+> right after a Fetch the rows are the Firestore documents — but `handleLockToggle`
+> (`:61`) and `handleLockAll` (`:76`) are `setGames`-only and persistence happens
+> solely in `handleSave` (`:86`), so a badge you have just clicked is unsaved local
+> state. This reading was Fetch-then-nothing: no toggle, no Lock All, no Save.
+> (An earlier revision of this box cited `:53` as the provenance; `:53` is inside
+> the local edit handler and proves nothing. qodo's finding on #375.)
+> **`MORNING-2026-08-04.md` §2 item 1 still tells Kevin to do this; it is stale.**
 >
 > Queues: functions EMPTY, rules EMPTY, indexes EMPTY, **Coolify OWED**.
->
-> 📌 **The live bundle was `index-bJOPbtJA.js`** when read off the prod HTML on
-> 2026-08-04 — which is how we know the #358/#359/#348/#360 rebuild the previous
-> box called owed had in fact been run. That is a browser observation, not a
-> deploy-log reading; the next person to open the Coolify log should confirm it
-> and can then delete this note.
->
-> ⬆️ **Deployed 2026-08-04 ~07:15 UTC for #360 (functions lockfile) + #362
-> (system/config audit trigger) + #348 (getProdWatchdog) + #363 (sim creation
-> bypass).** Evidence: the certification is the THIRD run — **175 all `Skipped
-> (No changes detected)`, 0 updates, `✔ Deploy complete!`** (fleet grew 173 →
-> **175**: `onSystemConfigWritten` + `getProdWatchdog`). Run 1 ended after 144
-> updates with no completion line; run 2 completed the fleet (155 skipped + 20
-> updated). The partial-then-retry shape is the same quota behaviour every
-> full-fleet deploy here shows.
+> ⚠️ [#374](https://github.com/kstruck/MMPoolsV3/pull/374) (close the
+> hosting-fees banner) **MERGED as `a754987`** and is frontend-only — verified
+> with `git diff --name-only a754987^ a754987 -- functions/ shared/
+> firestore.rules firestore.indexes.json`, which is **empty**. So functions,
+> rules and indexes are untouched by it and the rebuild is the whole debt. Until
+> it runs, the banner's close control is not in the bundle and the `×` does not
+> exist for any user.
 >
 > 📊 **The 45-scenario NFL E2E suite ran against PRODUCTION on 2026-08-04 and
 > passed 45/45** (real guarded callables, sim-namespaced data; zero DATA
@@ -67,9 +87,26 @@
 > enabled via the SuperAdmin UI and restored to `false` after, verified by
 > read-back — #363 exists so no future run needs that. Full detail:
 > `MORNING-2026-08-04.md`.
->
 > ⬇️ **EVERYTHING BELOW THIS LINE IS THE HISTORICAL DEPLOY RECORD.** `1105392`
 > above is the current state.
+>
+> ⬆️ **Deployed 2026-08-04 ~07:15 UTC for #360 (functions lockfile) + #362
+> (system/config audit trigger) + #348 (getProdWatchdog) + #363 (sim creation
+> bypass) — THIS IS THE DEPLOY THAT PRODUCED `1105392`.** Evidence: the
+> certification is the THIRD run — **175 all `Skipped (No changes detected)`, 0
+> updates, `✔ Deploy complete!`** (fleet grew 173 → **175**:
+> `onSystemConfigWritten` + `getProdWatchdog`). Run 1 ended after 144 updates
+> with no completion line; run 2 completed the fleet (155 skipped + 20 updated).
+> The partial-then-retry shape is the same quota behaviour every full-fleet
+> deploy here shows.
+>
+> ⚠️ This paragraph was briefly DELETED on 2026-08-05 when the box above was
+> replaced, because it sat above the boundary marker rather than below it — which
+> would have left the current functions SHA with no certification evidence
+> anywhere in this file. Restored, and moved below the marker where a deploy
+> record belongs. The 2026-08-04 bundle observation that travelled with it is
+> deliberately NOT restored: it named a hash that has since moved twice, and the
+> only live hash claim in this file is the one in the box above.
 >
 > ⬆️ **Deployed 2026-08-03 for #347** (certification was the fourth run, 173
 > all-Skipped; the frontend was rebuilt the same day,
