@@ -4,9 +4,16 @@
 implemented.** This document exists so Kevin can decide; it is not a change.
 
 **Gate if approved:** plan-gated (`mmp-change-control` §1, **money** trigger) and
-a **functions deploy**. That is why it was not built the same night the gap was
-found — the job is currently working correctly, and a functions deploy two days
-before the Hall of Fame game is not a free action.
+a **functions deploy**, which is not a free action in Hall-of-Fame week.
+
+⚠️ **An earlier revision of this line justified the deferral with "the job is
+currently working correctly". It is not, and it never has been.** It has failed
+`FAILED_PRECONDITION` on every run including 2026-08-04's (§2), so billing
+enforcement does not exist in production today. The deferral still stands on the
+deploy cost alone — but an approver must not read "working correctly" and
+conclude that enforcement is running and the gate is therefore optional. The
+opposite is true: **nothing is enforcing, and the first thing to enforce will do
+so ungated.**
 
 **Related:** `PLAN-BILLING-INDEX-DEPLOY.md` (the missing composite indexes, PR
 #365, **merged 2026-08-04 but NOT successfully deployed** — see
