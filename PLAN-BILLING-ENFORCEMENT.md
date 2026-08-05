@@ -4,13 +4,21 @@
 implemented.** This document exists so Kevin can decide; it is not a change.
 
 **Gate if approved:** plan-gated (`mmp-change-control` §1, **money** trigger) and
-a **functions deploy**. That is why it was not built the same night the gap was
-found — the job is currently working correctly, and a functions deploy two days
-before the Hall of Fame game is not a free action.
+a **functions deploy**, which is not a free action in Hall-of-Fame week.
+
+⚠️ **An earlier revision of this line justified the deferral with "the job is
+currently working correctly". It is not, and it never has been.** It has failed
+`FAILED_PRECONDITION` on every run including 2026-08-04's (§2), so billing
+enforcement does not exist in production today. The deferral still stands on the
+deploy cost alone — but an approver must not read "working correctly" and
+conclude that enforcement is running and the gate is therefore optional. The
+opposite is true: **nothing is enforcing, and the first thing to enforce will do
+so ungated.**
 
 **Related:** `PLAN-BILLING-INDEX-DEPLOY.md` (the missing composite indexes, PR
-#365, merged and deployed 2026-08-04) carries the population figures and the
-blast-radius reasoning this plan builds on.
+#365, **merged 2026-08-04 but NOT successfully deployed** — see
+`MORNING-2026-08-04.md` §B0) carries the population figures and the blast-radius
+reasoning this plan builds on.
 
 ---
 
@@ -67,16 +75,34 @@ Until 2026-08-04 the job **had never completed a single run** — it threw
 indexes it needs were never declared. The breakage was, accidentally, the
 kill-switch.
 
-PR #365 deployed those indexes. So the job's first-ever successful run is
-imminent, and the operator's only way to stop it is to delete the scheduler job
-or redeploy functions.
+PR #365 declared those indexes, and an earlier revision of this paragraph said
+it had deployed them. ❌ **It had not.** The 23:00 ET run on 2026-08-04 threw the
+same `FAILED_PRECONDITION` (measured 2026-08-05 03:43 UTC —
+`MORNING-2026-08-04.md` §B0), so the job STILL has never completed a run.
 
-⚠️ **As of this writing the job has still not had a successful run.** The
-indexes were merged at 2026-08-04T08:53:53Z; the 23:00 ET run happened at
-03:00Z the same morning, ~6 h earlier. The `system/heartbeats` beat visible on
-the SuperAdmin Ops Health card at 09:18Z still reads
-`enforceBillingStatus — failing 6h ago — 9 FAILED_PRECONDITION`, which is that
-pre-deploy run. **The first post-index run is 23:00 ET on 2026-08-04.**
+That does not weaken the case for this plan; it sharpens the timing.
+
+⚠️ **An index deploy does NOT invoke the job.** `enforceBillingStatus` is an
+`onSchedule('0 23 * * *', America/New_York)` function — deploying the index
+changes nothing until the next 23:00 ET tick. So the first successful run will
+be **the night AFTER the index deploy lands**, not minutes after it. Do not go
+looking for a heartbeat before then; an earlier revision of this paragraph said
+the run would be "immediate", which would have had the operator reading an
+unchanged beat and concluding the deploy failed.
+
+That gap is the opportunity. **The gate can now be built BEFORE the index deploy
+lands, and there is a whole scheduling cycle to do it in** — which is exactly
+the ordering §4 argues for, and it was not available while the index was
+believed to be live.
+
+⬇️ **HISTORICAL — the 2026-08-04 09:18 UTC reading, superseded by the paragraph
+above.** It is kept because it is the evidence that the failing beat SEEN THAT
+MORNING pre-dated the fix rather than being caused by it. The indexes were
+merged at 2026-08-04T08:53:53Z; the beat on the Ops Health card at 09:18Z read
+`failing 6h ago`, i.e. the 03:00Z run, ~6 h before the merge. At that moment the
+"first post-index run" was still ahead, scheduled for 23:00 ET on 2026-08-04 —
+**that run has since happened and failed**, which is what the current paragraph
+above records.
 
 ## 3. Proposed shape
 
