@@ -14,7 +14,7 @@
  *   npm install --save-dev @testing-library/react @testing-library/jest-dom
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mock framer-motion before importing the component
@@ -37,6 +37,7 @@ vi.mock('lucide-react', () => ({
   Clock: () => <span data-testid="icon-clock">🕐</span>,
   ExternalLink: () => <span data-testid="icon-link">🔗</span>,
   CheckCircle2: () => <span data-testid="icon-paid">✅</span>,
+  X: () => <span data-testid="icon-close">✕</span>,
 }));
 
 import React from 'react';
@@ -306,6 +307,122 @@ describe('BillingGate — active state, hosting-fees-paid banner', () => {
 
     expect(screen.queryByText(/upgrade/i)).toBeNull();
     expect(screen.queryByText('/pricing')).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1b. The commissioner can close the hosting banner
+// ─────────────────────────────────────────────────────────────────────────────
+// Requested by Kevin 2026-08-05: "I like the banner showing the hosting fees
+// were paid, but I would also like to see a way to close it."
+//
+// The CLICK cannot be tested here — `renderToStaticMarkup` produces a string,
+// not a live tree — so what these tests own is the half the markup can prove:
+// the control exists and is labelled, and a dismissal already in storage
+// suppresses the banner for that pool and only that pool. The storage helper's
+// own behaviour is covered directly in
+// `src/components/billing/hostingBannerDismissal.test.ts`.
+
+/** Minimal `localStorage` stand-in; the node env this suite runs in has none. */
+function installStorage(seed: Record<string, string> = {}) {
+  const data = new Map<string, string>(Object.entries(seed));
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: {
+      getItem: (k: string) => (data.has(k) ? (data.get(k) as string) : null),
+      setItem: (k: string, v: string) => void data.set(k, String(v)),
+      removeItem: (k: string) => void data.delete(k),
+      clear: () => data.clear(),
+      key: (i: number) => Array.from(data.keys())[i] ?? null,
+      get length() {
+        return data.size;
+      },
+    } as Storage,
+    configurable: true,
+    writable: true,
+  });
+}
+
+describe('BillingGate — dismissing the hosting-fees-paid banner', () => {
+  afterEach(() => {
+    delete (globalThis as { localStorage?: Storage }).localStorage;
+  });
+
+  it('renders a labelled close control on the banner', () => {
+    render(
+      <BillingGate pool={createPool(activeBilling())} isCommissioner={true}>
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.getByTestId('hosting-banner-dismiss')).toBeTruthy();
+    expect(screen.getByTestId('icon-close')).toBeTruthy();
+    // The icon carries no text, so the accessible name is the only name.
+    expect(screen.getByText('aria-label="Dismiss hosting fees notice"')).toBeTruthy();
+  });
+
+  it('is a type="button" so it cannot submit a surrounding dashboard form', () => {
+    render(
+      <BillingGate pool={createPool(activeBilling())} isCommissioner={true}>
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.getByText('type="button"')).toBeTruthy();
+  });
+
+  it('hides the banner when this pool was already dismissed', () => {
+    installStorage({ 'mmp:hostingBannerDismissed:test-pool': '1' });
+
+    render(
+      <BillingGate pool={createPool(activeBilling())} isCommissioner={true}>
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.getByTestId('child-content')).toBeTruthy();
+    expect(screen.queryByText(/hosting fees paid/i)).toBeNull();
+  });
+
+  it('still shows the banner when a DIFFERENT pool was dismissed', () => {
+    installStorage({ 'mmp:hostingBannerDismissed:some-other-pool': '1' });
+
+    render(
+      <BillingGate pool={createPool(activeBilling())} isCommissioner={true}>
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.getByText(/hosting fees paid/i)).toBeTruthy();
+  });
+
+  it('dismissal suppresses ONLY the banner, never the pool content', () => {
+    installStorage({ 'mmp:hostingBannerDismissed:test-pool': '1' });
+
+    render(
+      <BillingGate pool={createPool(activeBilling())} isCommissioner={true}>
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.getByTestId('child-content')).toBeTruthy();
+  });
+
+  it('a dismissal cannot resurrect the banner on a pool that never earned one', () => {
+    // Free-allocation pool: the tier check denies it the banner. Storage state
+    // must not be able to flip that decision in either direction.
+    installStorage({ 'mmp:hostingBannerDismissed:test-pool': '1' });
+
+    render(
+      <BillingGate
+        pool={createPool(activeBilling({ tier: 'free_tier', pricePaid: 0 }))}
+        isCommissioner={true}
+      >
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.queryByText(/hosting fees paid/i)).toBeNull();
+    expect(screen.getByTestId('child-content')).toBeTruthy();
   });
 });
 

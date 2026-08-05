@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
-import { Lock, AlertTriangle, CreditCard, Clock, ExternalLink, CheckCircle2 } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Lock, AlertTriangle, CreditCard, Clock, ExternalLink, CheckCircle2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { PoolBilling, BillingStatus } from '../../types';
+import { isHostingBannerDismissed, dismissHostingBanner } from './hostingBannerDismissal';
 
 interface BillingGateProps {
   pool: { billing?: PoolBilling; [key: string]: any };
@@ -22,7 +23,8 @@ const getDaysRemaining = (endsAt?: number): number => {
  * - `free` → children + participant-limit banner
  * - `active` → children + a green "hosting fees paid" banner, COMMISSIONER
  *   ONLY, and only when the pool is not on the free tier (see the comment at
- *   the branch — a free-allocation pool is `active` and paid nothing)
+ *   the branch — a free-allocation pool is `active` and paid nothing), and
+ *   only until the commissioner closes it (see `hostingBannerDismissal.ts`)
  * - `trial` → children + subtle gradient countdown banner
  * - `grace_period` → children + prominent pulsing amber warning
  * - `locked` → children rendered read-only (visible, non-interactive) with a lock modal overlaid
@@ -45,6 +47,17 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     () => getDaysRemaining(billing?.gracePeriodEndsAt),
     [billing?.gracePeriodEndsAt]
   );
+
+  /**
+   * Which pool the commissioner closed the hosting banner for IN THIS SESSION,
+   * so the close is instant without waiting on a re-read of storage.
+   *
+   * It holds the pool id rather than a boolean because this component is not
+   * guaranteed to remount between pools, and a bare `true` would then carry one
+   * pool's dismissal onto the next pool's banner. Declared here, above every
+   * early return, because hooks may not be called conditionally.
+   */
+  const [closedForPoolId, setClosedForPoolId] = useState<string | null>(null);
 
   // ─── UNDEFINED BILLING — render children with zero overhead ───
   if (!billing) {
@@ -83,6 +96,26 @@ export const BillingGate: React.FC<BillingGateProps> = ({
       return <>{children}</>;
     }
 
+    // The pool id keys the dismissal. Read defensively: `pool` arrives through
+    // an index signature and all five call sites pass it `as any`, so nothing
+    // in the type system promises an id is there.
+    const poolId = typeof pool.id === 'string' && pool.id ? pool.id : undefined;
+
+    // `''` stands for "this pool has no id". It keeps the session-only close
+    // working on such a pool without letting `null` (nothing closed yet) and
+    // `undefined` (no id) compare equal by accident — and nothing is ever
+    // PERSISTED under it, because the storage helpers reject a falsy id.
+    const closeKey = poolId ?? '';
+
+    // Storage is consulted on each render rather than snapshotted into state,
+    // which is what keeps the answer keyed to the CURRENT `poolId`: this
+    // component is not guaranteed to remount when the pool changes. It is a
+    // synchronous read of one short string, only on the branch that draws the
+    // banner.
+    if (closedForPoolId === closeKey || isHostingBannerDismissed(poolId)) {
+      return <>{children}</>;
+    }
+
     // THREE-WAY, not two. Coercing a missing/corrupt `pricePaid` to 0 sends the
     // copy down the "pool credit or promotion" branch, which asserts a specific
     // payment STORY on a money surface from the absence of data. A legacy
@@ -111,50 +144,92 @@ export const BillingGate: React.FC<BillingGateProps> = ({
             marginBottom: '16px',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'space-between',
             gap: '12px',
             flexWrap: 'wrap' as const,
             boxShadow: '0 4px 20px rgba(22,163,74,0.15)',
           }}
         >
-          <div
+          {/* Icon + copy grouped so the close control can sit opposite them,
+              the same shape the free/trial/grace banners already use. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div
+              style={{
+                padding: '8px',
+                background: 'rgba(255,255,255,0.15)',
+                border: '1px solid rgba(255,255,255,0.25)',
+                borderRadius: '12px',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <CheckCircle2 size={18} />
+            </div>
+            <div>
+              <p
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 900,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  color: '#ffffff',
+                  margin: 0,
+                  lineHeight: 1.2,
+                }}
+              >
+                Hosting Fees Paid
+              </p>
+              <p
+                style={{
+                  fontSize: '10px',
+                  color: 'rgba(255,255,255,0.85)',
+                  margin: '2px 0 0',
+                  fontWeight: 700,
+                }}
+              >
+                {subline}
+              </p>
+            </div>
+          </div>
+
+          {/* Close. Cosmetic only — it hides a confirmation, it does not change
+              anything about the pool or its billing, which is why it needs no
+              confirm step. `type="button"` because these banners render inside
+              pool dashboards that contain forms, and a default-type button
+              inside a form submits it. */}
+          <button
+            type="button"
+            aria-label="Dismiss hosting fees notice"
+            data-testid="hosting-banner-dismiss"
+            onClick={() => {
+              dismissHostingBanner(poolId);
+              setClosedForPoolId(closeKey);
+            }}
             style={{
-              padding: '8px',
-              background: 'rgba(255,255,255,0.15)',
-              border: '1px solid rgba(255,255,255,0.25)',
-              borderRadius: '12px',
-              color: '#ffffff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              alignSelf: 'flex-start',
+              padding: '6px',
+              background: 'rgba(255,255,255,0.12)',
+              border: '1px solid rgba(255,255,255,0.25)',
+              borderRadius: '10px',
+              color: '#ffffff',
+              cursor: 'pointer',
+              lineHeight: 0,
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.25)';
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.12)';
             }}
           >
-            <CheckCircle2 size={18} />
-          </div>
-          <div>
-            <p
-              style={{
-                fontSize: '12px',
-                fontWeight: 900,
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                color: '#ffffff',
-                margin: 0,
-                lineHeight: 1.2,
-              }}
-            >
-              Hosting Fees Paid
-            </p>
-            <p
-              style={{
-                fontSize: '10px',
-                color: 'rgba(255,255,255,0.85)',
-                margin: '2px 0 0',
-                fontWeight: 700,
-              }}
-            >
-              {subline}
-            </p>
-          </div>
+            <X size={14} />
+          </button>
         </motion.div>
 
         {children}
