@@ -81,6 +81,24 @@
 > ⬇️ **EVERYTHING BELOW THIS LINE IS THE HISTORICAL DEPLOY RECORD.** `1105392`
 > above is the current state.
 >
+> ⬆️ **Deployed 2026-08-04 ~07:15 UTC for #360 (functions lockfile) + #362
+> (system/config audit trigger) + #348 (getProdWatchdog) + #363 (sim creation
+> bypass) — THIS IS THE DEPLOY THAT PRODUCED `1105392`.** Evidence: the
+> certification is the THIRD run — **175 all `Skipped (No changes detected)`, 0
+> updates, `✔ Deploy complete!`** (fleet grew 173 → **175**:
+> `onSystemConfigWritten` + `getProdWatchdog`). Run 1 ended after 144 updates
+> with no completion line; run 2 completed the fleet (155 skipped + 20 updated).
+> The partial-then-retry shape is the same quota behaviour every full-fleet
+> deploy here shows.
+>
+> ⚠️ This paragraph was briefly DELETED on 2026-08-05 when the box above was
+> replaced, because it sat above the boundary marker rather than below it — which
+> would have left the current functions SHA with no certification evidence
+> anywhere in this file. Restored, and moved below the marker where a deploy
+> record belongs. The 2026-08-04 bundle observation that travelled with it is
+> deliberately NOT restored: it named a hash that has since moved twice, and the
+> only live hash claim in this file is the one in the box above.
+>
 > ⬆️ **Deployed 2026-08-03 for #347** (certification was the fourth run, 173
 > all-Skipped; the frontend was rebuilt the same day,
 > `index-DlH8liQe.js` → `index-H9HjG31q.js`). 📊 Measured 2026-08-03: ZERO
