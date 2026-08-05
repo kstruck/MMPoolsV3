@@ -1,6 +1,6 @@
 # HANDOFF — Session entry point (updated 2026-08-05: functions still deployed from `1105392` — no backend change since; #367 (the buy flow priced every pool at $0), #368 (hosting-fees-paid banner) and #366 (dependency group) are MERGED and are **frontend-only**, so ⚠️ a Coolify REBUILD IS OWED for all three and none of them is live yet; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.**)
 
-> ## ✅ STOP POINT **2026-08-05** — #367/#368/#366 merged, frontend-only; functions unchanged at `1105392`; ⚠️ COOLIFY REBUILD OWED
+> ## ⚠️ STOP POINT **2026-08-05** — #367/#368/#366/#370/#369 merged, frontend-only; functions unchanged at `1105392`; ⚠️ COOLIFY REBUILD **AND** FIRESTORE INDEXES OWED
 >
 > The heading date is the date of the facts immediately below. It is REPLACED
 > on every deploy rather than annotated, because a note added above a stale
@@ -9,8 +9,20 @@
 >
 > **Functions are deployed from <!-- deploy-state:current --> `main` @ `1105392`.**
 > **Rules remain ≡ `0a705c0`** — `firestore.rules` is byte-identical since, so no
-> rules deploy is owed. **Indexes: the two `billing.*` composite indexes from
-> #365 were deployed 2026-08-04**; nothing is queued behind them.
+> rules deploy is owed.
+> ❌ **INDEXES ARE OWED — the two `billing.*` composites from #365 are declared
+> but NOT live.** Measured 2026-08-05 03:43 UTC: `enforceBillingStatus` failed
+> its 23:00 ET run 44 minutes earlier with
+> `9 FAILED_PRECONDITION: The query requires an index`, and the
+> `create_composite` blob in that error decodes to
+> `pools / billing.status + billing.trialEndsAt` — the exact index
+> `firestore.indexes.json` has carried since #365 merged. An earlier revision of
+> this box said the indexes were deployed; that was taken from a handoff and is
+> now disproven by the job itself. Deploy with
+> `npx firebase deploy --only firestore:indexes --project gridiron-gamble-uzuqo`
+> and confirm both read `Enabled` in the console's Indexes tab —
+> `MORNING-2026-08-04.md` §B0 has the full procedure and the reconcile-deletion
+> warning.
 >
 > ⚠️ **The FRONTEND REBUILD IS OWED and is Kevin's click.** Three merges land in
 > the bundle and nothing else: **#367** (`3e11017` — `dbService.ts`,
@@ -24,7 +36,7 @@
 > **`#367` is the one that matters: until the rebuild runs, every hosting quote
 > in production still fails and the buy flow still shows paid pools as FREE.**
 >
-> Queues: functions EMPTY, rules EMPTY, indexes EMPTY, **Coolify OWED**.
+> Queues: functions EMPTY, rules EMPTY, **indexes OWED**, **Coolify OWED**.
 >
 > 📌 **The live bundle was `index-bJOPbtJA.js`** when read off the prod HTML on
 > 2026-08-04 — which is how we know the #358/#359/#348/#360 rebuild the previous
