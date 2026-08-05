@@ -101,18 +101,19 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     // in the type system promises an id is there.
     const poolId = typeof pool.id === 'string' && pool.id ? pool.id : undefined;
 
-    // `''` stands for "this pool has no id". It keeps the session-only close
-    // working on such a pool without letting `null` (nothing closed yet) and
-    // `undefined` (no id) compare equal by accident — and nothing is ever
-    // PERSISTED under it, because the storage helpers reject a falsy id.
-    const closeKey = poolId ?? '';
-
     // Storage is consulted on each render rather than snapshotted into state,
     // which is what keeps the answer keyed to the CURRENT `poolId`: this
     // component is not guaranteed to remount when the pool changes. It is a
     // synchronous read of one short string, only on the branch that draws the
     // banner.
-    if (closedForPoolId === closeKey || isHostingBannerDismissed(poolId)) {
+    //
+    // `closedForPoolId` only ever holds a real id — see the close control
+    // below, which is not rendered without one — so an absent `poolId` cannot
+    // match it. An earlier revision used `''` as a stand-in for "no id" and
+    // codex correctly holed it: two DIFFERENT unidentifiable pools would then
+    // share one dismissal, which is the same leak the pool-id key exists to
+    // prevent, just moved one case over.
+    if ((poolId !== undefined && closedForPoolId === poolId) || isHostingBannerDismissed(poolId)) {
       return <>{children}</>;
     }
 
@@ -198,14 +199,20 @@ export const BillingGate: React.FC<BillingGateProps> = ({
               anything about the pool or its billing, which is why it needs no
               confirm step. `type="button"` because these banners render inside
               pool dashboards that contain forms, and a default-type button
-              inside a form submits it. */}
+              inside a form submits it.
+
+              Rendered only WITH a pool id: a dismissal that cannot be keyed to
+              a pool cannot be scoped to one either, and every pool type in the
+              `Pool` union declares `id: string`, so this withholds the control
+              from nothing real. */}
+          {poolId !== undefined && (
           <button
             type="button"
             aria-label="Dismiss hosting fees notice"
             data-testid="hosting-banner-dismiss"
             onClick={() => {
               dismissHostingBanner(poolId);
-              setClosedForPoolId(closeKey);
+              setClosedForPoolId(poolId);
             }}
             style={{
               display: 'flex',
@@ -230,6 +237,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
           >
             <X size={14} />
           </button>
+          )}
         </motion.div>
 
         {children}

@@ -413,6 +413,22 @@ describe('BillingGate — dismissing the hosting-fees-paid banner', () => {
     expect(screen.getByTestId('child-content')).toBeTruthy();
   });
 
+  it('withholds the close control from a pool with no id, keeping the banner', () => {
+    // codex holed the first revision here: it kept a session-only dismissal
+    // under a shared `''` key, so closing the banner on one unidentifiable
+    // pool hid it on the next one. No id, no control, no shared state.
+    const { id: _id, ...poolWithoutId } = createPool(activeBilling());
+
+    render(
+      <BillingGate pool={poolWithoutId} isCommissioner={true}>
+        <TestChild />
+      </BillingGate>
+    );
+
+    expect(screen.getByText(/hosting fees paid/i)).toBeTruthy();
+    expect(screen.queryByText('data-testid="hosting-banner-dismiss"')).toBeNull();
+  });
+
   it('a dismissal cannot resurrect the banner on a pool that never earned one', () => {
     // Free-allocation pool: the tier check denies it the banner. Storage state
     // must not be able to flip that decision in either direction.
