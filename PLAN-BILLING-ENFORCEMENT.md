@@ -205,7 +205,12 @@ the operator has: *what would happen tonight?*
 ### 3c. Heartbeat
 
 `billingEnforceVerdict` already reports `trialToGrace`, `graceToLocked` and
-`failedTransitions`. Add `dryRun` and `enabled` to the detail so the beat says
+`failedTransitions` — though **only when it is non-zero**
+(`heartbeatVerdicts.ts:119-133`), so a healthy beat simply lacks the field.
+⚠️ If the gate is built, consider emitting `failedTransitions: 0` explicitly on
+the healthy path: an operator cannot tell "no failures" from "an older build
+that did not report failures" when the evidence is an absence. Add `dryRun` and
+`enabled` to the detail so the beat says
 which mode produced the counts. A dry-run beat reporting
 `trialToGrace: 4` must not be readable as "four pools moved".
 
