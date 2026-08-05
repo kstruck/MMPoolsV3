@@ -1,4 +1,4 @@
-# HANDOFF — Session entry point (updated 2026-08-05: functions still deployed from `1105392` — no backend change since; the rebuild that #367/#368/#366 were waiting on HAS RUN and all three are live in production, measured; ⚠️ #374 then MERGED and is frontend-only, so **a Coolify rebuild is OWED again**; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.**)
+# HANDOFF — Session entry point (updated 2026-08-05 evening: functions still deployed from `1105392` — no backend change since; **both of the day's frontend rebuilds have RUN and ALL FOUR QUEUES ARE EMPTY** — #367/#368/#366 and then #374, the latter verified inside the shipped bundle, not just by a moved hash; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.**)
 
 > ## ✅ STOP POINT **2026-08-05** (evening) — #374's rebuild RAN and is verified IN THE SHIPPED BUNDLE; **ALL FOUR QUEUES EMPTY**; functions unchanged at `1105392`; billing indexes DEPLOYED but the job has STILL not run with them — first fire is 23:00 ET tonight
 >
