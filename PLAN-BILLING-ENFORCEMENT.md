@@ -9,8 +9,9 @@ found — the job is currently working correctly, and a functions deploy two day
 before the Hall of Fame game is not a free action.
 
 **Related:** `PLAN-BILLING-INDEX-DEPLOY.md` (the missing composite indexes, PR
-#365, merged and deployed 2026-08-04) carries the population figures and the
-blast-radius reasoning this plan builds on.
+#365, **merged 2026-08-04 but NOT successfully deployed** — see
+`MORNING-2026-08-04.md` §B0) carries the population figures and the blast-radius
+reasoning this plan builds on.
 
 ---
 
@@ -67,9 +68,16 @@ Until 2026-08-04 the job **had never completed a single run** — it threw
 indexes it needs were never declared. The breakage was, accidentally, the
 kill-switch.
 
-PR #365 deployed those indexes. So the job's first-ever successful run is
-imminent, and the operator's only way to stop it is to delete the scheduler job
-or redeploy functions.
+PR #365 declared those indexes, and an earlier revision of this paragraph said
+it had deployed them. ❌ **It had not.** The 23:00 ET run on 2026-08-04 threw the
+same `FAILED_PRECONDITION` (measured 2026-08-05 03:43 UTC —
+`MORNING-2026-08-04.md` §B0), so the job STILL has never completed a run.
+
+That does not weaken the case for this plan; it sharpens the timing. The moment
+the index deploy does land, the job's first-ever successful run is immediate and
+the operator's only way to stop it is to delete the scheduler job or redeploy
+functions. **Building the gate BEFORE the index deploy is now possible, and it
+is the ordering §4 argues for.**
 
 ⚠️ **As of this writing the job has still not had a successful run.** The
 indexes were merged at 2026-08-04T08:53:53Z; the 23:00 ET run happened at

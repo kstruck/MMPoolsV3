@@ -1,6 +1,6 @@
 # HANDOFF — Session entry point (updated 2026-08-05: functions still deployed from `1105392` — no backend change since; #367 (the buy flow priced every pool at $0), #368 (hosting-fees-paid banner) and #366 (dependency group) are MERGED and are **frontend-only**, so ⚠️ a Coolify REBUILD IS OWED for all three and none of them is live yet; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.**)
 
-> ## ⚠️ STOP POINT **2026-08-05** — #367/#368/#366/#370/#369 merged, frontend-only; functions unchanged at `1105392`; ⚠️ COOLIFY REBUILD **AND** FIRESTORE INDEXES OWED
+> ## ⚠️ STOP POINT **2026-08-05** — #367/#368/#366 merged and awaiting a rebuild; #369/#370 merged, docs+tests only; functions unchanged at `1105392`; ⚠️ COOLIFY REBUILD **AND** FIRESTORE INDEXES OWED
 >
 > The heading date is the date of the facts immediately below. It is REPLACED
 > on every deploy rather than annotated, because a note added above a stale
@@ -24,8 +24,9 @@
 > `MORNING-2026-08-04.md` §B0 has the full procedure and the reconcile-deletion
 > warning.
 >
-> ⚠️ **The FRONTEND REBUILD IS OWED and is Kevin's click.** Three merges land in
-> the bundle and nothing else: **#367** (`3e11017` — `dbService.ts`,
+> ⚠️ **The FRONTEND REBUILD IS OWED and is Kevin's click.** Five PRs merged on
+> 2026-08-05; **exactly three of them land in the bundle**, and #369 (docs) and
+> #370 (a test-only regex fix) change nothing a browser can see: **#367** (`3e11017` — `dbService.ts`,
 > `BillingInvoiceCard.tsx`, `checkoutButtonState.ts`, `callableParams.ts`),
 > **#368** (`7da9189` — `BillingGate.tsx`, `types/index.ts`) and **#366**
 > (`eacfc37` — root `package.json` + `package-lock.json`). Verified with
