@@ -31,14 +31,26 @@ with an outbound email attached.
 **It has no `enabled` flag and no `dryRun` flag.** Every other risky scheduled
 job in this repo has both, defaulting off:
 
-| Job | Gate | Reader |
+| Job (exported name) | Gate | Reader |
 |---|---|---|
-| `autoClosePools` | `system/config.autoClose` | `autoClosePools.ts` |
-| `nflFinalizeSweepJob` | `system/config.nflFinalize` | `readSweepGate`, `nflFinalize.ts:375` |
-| `nflSpreadLockJob` | `system/config.nflSpreadLock` | `readJobGate`, `nflSchedule.ts:911` |
-| `nflDeepScoreSweepJob` | `system/config.nflDeepSweep` | `readJobGate` |
-| `nflLockWatch` | `system/config.nflLockWatch` | `readJobGate` |
+| `autoClosePools` (`autoClosePools.ts:28`) | `system/config.autoClose` | `autoClosePools.ts` |
+| `nflFinalizeSweepJob` (`nflFinalize.ts:423`) | `system/config.nflFinalize` | `readSweepGate`, `nflFinalize.ts:375` |
+| **`lockNFLSpreadsJob`** (`nflSchedule.ts:999`) | `system/config.nflSpreadLock` | `readJobGate`, `nflSchedule.ts:911` |
+| `nflDeepScoreSweepJob` (`nflSchedule.ts:859`) | `system/config.nflDeepSweep` | `readJobGate` |
+| `nflLockWatchJob` (`nflLockWatch.ts:38`) | `system/config.nflLockWatch` | `readJobGate` |
 | **`enforceBillingStatus`** | **none** | — |
+
+⚠️ **The config key and the job name are different words for the spread lock**,
+and this table said `nflSpreadLockJob` — which does not exist — until qodo
+caught it. The config is `nflSpreadLock`; the exported function and its
+`system/heartbeats` key are `lockNFLSpreadsJob`. `nflLockWatch` was likewise
+missing its `Job` suffix. Every name in the column above is now the exported
+symbol, with the line it is exported on, because the point of the table is that
+a reader can go find these.
+
+This is the same fix that landed in `MORNING-2026-08-04.md` §B2 by self-review,
+and it did not get applied here at the time — the third instance tonight of
+correcting one document and leaving its twin standing.
 
 Measured: eleven files under `functions/src` read `system/config`, including
 `stripe.ts` and `monetizationAlerts.ts`. `billing.ts` is not one of them.
