@@ -57,7 +57,16 @@
 > `CAR @ ARI`, `Thu, Aug 6, 6:00 PM` in Mountain time = 8:00 PM ET, spread
 > **`-1.5`** relative to the home team, and the row's lock badge renders the
 > CLOSED padlock — which `SuperAdminNFLSpreads.tsx:223` draws only for
-> `spread.locked === true`, initialised at `:53` from the fetched Firestore doc.
+> `spread.locked === true`.
+>
+> ⚠️ **The badge equals the STORED value only on a freshly-fetched, untouched
+> row.** `fetchGames` (`:17-42`) feeds `doc.data()` straight into `setGames`, so
+> right after a Fetch the rows are the Firestore documents — but `handleLockToggle`
+> (`:61`) and `handleLockAll` (`:76`) are `setGames`-only and persistence happens
+> solely in `handleSave` (`:83`), so a badge you have just clicked is unsaved local
+> state. This reading was Fetch-then-nothing: no toggle, no Lock All, no Save.
+> (An earlier revision of this box cited `:53` as the provenance; `:53` is inside
+> the local edit handler and proves nothing. qodo's finding on #375.)
 > **`MORNING-2026-08-04.md` §2 item 1 still tells Kevin to do this; it is stale.**
 >
 > Queues: functions EMPTY, rules EMPTY, indexes EMPTY, **Coolify OWED**.
