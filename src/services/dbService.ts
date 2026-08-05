@@ -23,6 +23,7 @@ import { poolRepository } from "./poolRepository";
 import { userRepository } from "./userRepository";
 import { errorHandler, ErrorSeverity } from "./errorHandler";
 import { withCorrelationId } from "../utils/correlationId";
+import { stripEmptyCallableFields } from "./callableParams";
 export { db };
 import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament, BanterMessage, NFLGame, WeeklyRecap } from "../types";
 import type { PoolQuoteInput, PoolQuote, AddonSelection } from "@shared/schemas/quote";
@@ -1677,8 +1678,13 @@ export const dbService = {
     // coupon-inclusive quote. The client renders this verbatim — NO price math.
     async getPoolQuote(params: PoolQuoteInput): Promise<PoolQuote> {
         try {
-            const fn = httpsCallable<PoolQuoteInput, PoolQuote>(functions, 'getPoolQuote');
-            const result = await fn(params);
+            const fn = httpsCallable<Record<string, unknown>, PoolQuote>(functions, 'getPoolQuote');
+            // MUST strip — see stripEmptyCallableFields. Both call sites set
+            // `couponCode: … : undefined`, which reached the server as `null`
+            // and failed `.optional()` on EVERY coupon-less quote. The card
+            // renders `quote?.basePrice ?? 0`, so the failure displayed as a
+            // FREE pool rather than as an error (PLAN-BUYFLOW-QUOTE-DEADEND).
+            const result = await fn(stripEmptyCallableFields(params));
             return result.data;
         } catch (error: any) {
             await errorHandler.handleError(error, {
@@ -1706,14 +1712,7 @@ export const dbService = {
     }): Promise<{ sessionUrl: string }> {
         try {
             const fn = httpsCallable<Record<string, unknown>, { sessionUrl: string }>(functions, 'createCheckoutSession');
-            // The Firebase callable serializer encodes `undefined` fields as `null`
-            // on the wire, which fails the server's `.optional()` string schemas
-            // (e.g. couponCode). Strip undefined/null keys so optional fields are
-            // genuinely omitted.
-            const clean = Object.fromEntries(
-                Object.entries(params).filter(([, v]) => v !== undefined && v !== null)
-            );
-            const result = await fn(clean);
+            const result = await fn(stripEmptyCallableFields(params));
             return result.data;
         } catch (error: any) {
             await errorHandler.handleError(error, {

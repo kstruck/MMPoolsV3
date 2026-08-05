@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import type { BillingConfig } from '../../types';
 import type { PoolQuote, PoolQuoteInput, AddonSelection } from '@shared/schemas/quote';
+import { checkoutButtonState, type PriceState } from './checkoutButtonState';
 
 // Lightweight applied-coupon shape derived from the server quote's couponState
 // (the full `coupons` doc is no longer read on the client — ADR-0002).
@@ -115,6 +116,24 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     // Server-computed quote (single price authority). All money numbers below are
     // derived from this — the client performs NO price math.
     const [quote, setQuote] = useState<PoolQuote | null>(null);
+    // Which input set `quote` prices, and which one last failed to price. Both
+    // hold a `quoteKey` string (see below) — comparing them against the CURRENT
+    // key is what stops a stale quote from keeping the checkout button live.
+    const [quoteFor, setQuoteFor] = useState<string | null>(null);
+    const [quoteFailedFor, setQuoteFailedFor] = useState<string | null>(null);
+    // Bumped by the "Try Again" control. Without it a transient quote failure
+    // is permanent for that input set: the effect only re-runs when a priced
+    // input changes, so a recovered service would still show no price.
+    const [quoteRetry, setQuoteRetry] = useState(0);
+
+    const retryQuote = () => {
+        // Drop the loaded-quote stamp too. Keeping it would let a cached quote
+        // for these same inputs read as `ready` while the retry is still in
+        // flight — the stale-price hole one door over (codex round 3 [P1]).
+        setQuoteFor(null);
+        setQuoteFailedFor(null);
+        setQuoteRetry((n) => n + 1);
+    };
 
     // Local addon selection states for the Setup Wizard (Included in trial!)
     const [localAi, setLocalAi] = useState(hasAiCommissioner);
@@ -166,7 +185,11 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         }
     }, []);
     const [managerProfile, setManagerProfile] = useState<any>(null);
-    const [activeFreePoolsCount, setActiveFreePoolsCount] = useState(0);
+    // `null` = the owner's active-free-pool query has not answered yet. It is
+    // NOT 0: starting at 0 offered free activation to an owner who already has
+    // an active free pool, and the server then rejects the checkout
+    // (codex round 3 [P2]).
+    const [activeFreePoolsCount, setActiveFreePoolsCount] = useState<number | null>(null);
     const [useCredit, setUseCredit] = useState(false);
     const [activePaymentTab, setActivePaymentTab] = useState<'single' | 'bundle'>('single');
 
@@ -233,6 +256,16 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         customBranding: !!localBranding,
     };
 
+    // Identity of the inputs a quote prices. A quote is only usable for the
+    // inputs it was fetched for; `quoteFor`/`quoteFailedFor` below are compared
+    // against this, never against "has any quote ever loaded".
+    const quoteKey = JSON.stringify({
+        poolType: poolType.toUpperCase(),
+        estimatedPlayers: Number(estimatedPlayers) || 0,
+        addons: selectedAddons,
+        couponCode: couponInput.trim().toUpperCase(),
+    });
+
     // Fetch the authoritative server quote whenever inputs change (debounced).
     // getPoolQuote validates the coupon AND itemizes the price — the client does
     // no price math and no direct `coupons` query.
@@ -240,6 +273,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         let cancelled = false;
         // Only the seven server pool formats are priceable; skip unknowns.
         const normalizedType = poolType.toUpperCase();
+        const key = quoteKey;
         const t = setTimeout(async () => {
             setIsValidatingCoupon(!!couponInput.trim());
             try {
@@ -251,6 +285,11 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                 });
                 if (cancelled) return;
                 setQuote(q);
+                // Stamp WHICH inputs this quote priced. Without it a stale quote
+                // from earlier inputs keeps the button live while the checkout
+                // payload has already moved on — a $0 label over a paid session.
+                setQuoteFor(key);
+                setQuoteFailedFor(null);
 
                 // Reflect coupon state from the server response.
                 if (couponInput.trim()) {
@@ -275,7 +314,14 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
             } catch (err: any) {
                 if (cancelled) return;
                 console.error('[BillingInvoiceCard] Quote error:', err);
-                // Leave the last good quote in place; only surface coupon errors.
+                // The last good quote stays on screen so the card does not flash
+                // empty, but it is NOT stamped for these inputs, so checkout
+                // stays blocked until a matching quote arrives.
+                setQuoteFailedFor(key);
+                // If the quote on screen was stamped for THESE inputs, a failed
+                // refresh means we can no longer vouch for it. Un-stamp it so
+                // the state is `unavailable` rather than a confident `ready`.
+                setQuoteFor((prev) => (prev === key ? null : prev));
                 if (couponInput.trim()) {
                     setCouponError(err?.message || 'Error validating coupon. Please try again.');
                 }
@@ -288,7 +334,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
             clearTimeout(t);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [poolType, estimatedPlayers, localAi, localSim, localBranding, localSms, couponInput]);
+    }, [poolType, estimatedPlayers, localAi, localSim, localBranding, localSms, couponInput, quoteRetry]);
 
     // --- Derived display values, ALL sourced from the server quote ---
     const basePrice = quote?.basePrice ?? 0;
@@ -334,6 +380,45 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     const discount = Math.min(subtotal, quote?.discount ?? 0);
     const standardTotal = Math.max(0, subtotal - discount);
     const total = (hasUnlimitedPass || (useCredit && (freePoolsAvailable > 0 || !!eligibleCredit))) ? 0 : standardTotal;
+
+    // Does a quote describe what is on screen RIGHT NOW? Before
+    // PLAN-BUYFLOW-QUOTE-DEADEND there was no such question: the figures above
+    // are all `?? 0` fallbacks, so "no price" and "free" were the same render.
+    const priceState: PriceState =
+        quoteFor === quoteKey ? 'ready' : quoteFailedFor === quoteKey ? 'unavailable' : 'pending';
+
+    // Only claim the numbers are wrong once a request for them has actually
+    // failed; during the debounce the last quote is still on screen.
+    const priceUnknown = !quote || priceState === 'unavailable';
+
+    /**
+     * EVERY quote-derived money line goes through this. Fixing only the base
+     * and total rows left the add-on rows and the discount row printing
+     * `+$0.00` beside a "Pricing unavailable" notice — a quote failure leaking
+     * a $0 through a different line, which is the very thing this change
+     * exists to stop (qodo finding 6 on #367).
+     *
+     * `pricePaid` is a PROP, not quote-derived, so its row is deliberately not
+     * routed through here — it is real whether or not a quote loaded.
+     */
+    const money = (n: number, opts?: { free?: boolean; sign?: '+' | '-' }) => {
+        if (priceUnknown) return '—';
+        if (opts?.free && n === 0) return 'FREE';
+        return `${opts?.sign ?? ''}$${n.toFixed(2)}`;
+    };
+
+    const buttonState = checkoutButtonState({
+        isCheckoutLoading,
+        hasPoolId: !!poolId,
+        priceState,
+        freeTierEligible: !!quote?.freeTierEligible,
+        subtotal,
+        total,
+        hasAppliedCoupon: !!appliedCoupon,
+        useCredit,
+        hasUnlimitedPass,
+        activeFreePoolsCount,
+    });
 
     // Notify parent when prices or coupons change
     useEffect(() => {
@@ -428,7 +513,11 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                     </h3>
                     <p className="text-xs text-muted mt-1">Itemized pricing based on monetization rules</p>
                 </div>
-                {basePrice === 0 && estimatedPlayers <= config.freePlayerThreshold && (
+                {/* The SERVER's free-tier verdict, and only when a quote for the
+                    current inputs actually loaded. `basePrice === 0` was true on
+                    every failed quote, so this badge claimed "Free Pool Exempt"
+                    on paid pools (qodo finding 6 on #367). */}
+                {priceState === 'ready' && quote?.freeTierEligible && (
                     <span className="bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A] text-[10px] font-display font-bold uppercase tracking-[0.08em] px-2.5 py-1 rounded-full flex items-center gap-1">
                         <Sparkles size={10} /> Free Pool Exempt
                     </span>
@@ -524,8 +613,10 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         </div>
                     )}
 
-                    {/* 1 Free Pool Limit Warning */}
-                    {basePrice === 0 && subtotal === 0 && !useCredit && !hasUnlimitedPass && activeFreePoolsCount > 0 && (
+                    {/* 1 Free Pool Limit Warning — same condition as the button's
+                        "Free Limit Reached" state, read off the server quote so the
+                        warning and the button can never disagree. */}
+                    {buttonState.kind === 'free-limit-reached' && (
                         <div className="bg-[#FCEEED] border border-brandred-500/30 rounded-xl p-4 flex gap-3 items-start animate-in fade-in duration-300">
                             <AlertTriangle className="text-brandred-600 shrink-0 mt-0.5" size={20} />
                             <div className="text-xs space-y-1">
@@ -586,12 +677,35 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         </div>
                     )}
 
+                    {/* Price could not be fetched — say so instead of showing $0,
+                        and carry the ONLY retry affordance. The checkout button is
+                        disabled in this state, so it must not promise a retry it
+                        cannot perform. */}
+                    {priceState === 'unavailable' && (
+                        <div className="bg-[#FCEEED] border border-brandred-500/30 rounded-xl p-4 flex gap-3 items-start">
+                            <AlertTriangle className="text-brandred-600 shrink-0 mt-0.5" size={20} />
+                            <div className="text-xs space-y-1.5">
+                                <strong className="text-brandred-600 font-bold">Pricing unavailable</strong>
+                                <p className="text-[color:var(--text)] leading-relaxed">
+                                    We could not load hosting pricing for this pool. The amounts below are not a quote — nothing has been charged.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={retryQuote}
+                                    className="font-display font-bold uppercase tracking-[0.08em] text-[10px] px-3 py-1.5 rounded-lg bg-brandred-600 hover:bg-brandred-500 text-white transition-colors"
+                                >
+                                    Try Again
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Itemized Table */}
                     <div className="bg-page rounded-xl p-4 border border-line space-y-3 font-body text-sm text-left">
                         <div className="flex justify-between items-center text-[color:var(--text)]">
                             <span>Base Hosting fee (<span className="num">{estimatedPlayers}</span> estimated players)</span>
                             <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                {basePrice === 0 ? 'FREE' : `$${basePrice.toFixed(2)}`}
+                                {money(basePrice, { free: true })}
                             </span>
                         </div>
 
@@ -599,7 +713,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                             <div className="flex justify-between items-center text-muted text-xs">
                                 <span className="flex items-center gap-1.5"><Sparkles size={11} className="text-gold-500" /> AI Trash-Talk Commissioner Addon</span>
                                 <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                    +${aiCost.toFixed(2)} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
+                                    {money(aiCost, { sign: '+' })} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
                                 </span>
                             </div>
                         )}
@@ -607,7 +721,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                             <div className="flex justify-between items-center text-muted text-xs">
                                 <span className="flex items-center gap-1.5"><Sparkles size={11} className="text-gold-500" /> What-If Standings Simulator</span>
                                 <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                    +${simCost.toFixed(2)} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
+                                    {money(simCost, { sign: '+' })} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
                                 </span>
                             </div>
                         )}
@@ -615,7 +729,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                             <div className="flex justify-between items-center text-muted text-xs">
                                 <span className="flex items-center gap-1.5"><Sparkles size={11} className="text-gold-500" /> Premium Custom Branding & Covers</span>
                                 <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                    +${brandingCost.toFixed(2)} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
+                                    {money(brandingCost, { sign: '+' })} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
                                 </span>
                             </div>
                         )}
@@ -623,7 +737,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                             <div className="flex justify-between items-center text-muted text-xs">
                                 <span className="flex items-center gap-1.5"><Sparkles size={11} className="text-gold-500" /> SMS Notifications Addon</span>
                                 <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                    +${smsCost.toFixed(2)} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
+                                    {money(smsCost, { sign: '+' })} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
                                 </span>
                             </div>
                         )}
@@ -638,14 +752,14 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         {appliedCoupon && (
                             <div className="flex justify-between items-center text-[#0F7B4A] text-xs border-t border-dashed border-line pt-2">
                                 <span>Discount Code applied ({appliedCoupon.code})</span>
-                                <span className="font-mono num">-${discount.toFixed(2)}</span>
+                                <span className="font-mono num">{money(discount, { sign: '-' })}</span>
                             </div>
                         )}
 
                         <div className="flex justify-between items-center border-t border-line pt-3 mt-1 text-[color:var(--text)] font-bold">
                             <span className="text-base font-display uppercase tracking-[0.05em]">Upgrade Premium Total</span>
                             <span className="text-lg font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                {total === 0 ? 'FREE' : `$${total.toFixed(2)}`}
+                                {money(total, { free: true })}
                             </span>
                         </div>
 
@@ -743,14 +857,9 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
 
                             <button
                                 onClick={handleCheckout}
-                                disabled={
-                                    isCheckoutLoading ||
-                                    !poolId ||
-                                    (total <= 0 && (!appliedCoupon || subtotal === 0) && !useCredit && !hasUnlimitedPass) ||
-                                    (basePrice === 0 && subtotal === 0 && !useCredit && !hasUnlimitedPass && activeFreePoolsCount > 0)
-                                }
+                                disabled={buttonState.disabled}
                                 className={`w-full font-display font-bold uppercase tracking-[0.05em] py-3.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2 group hover:scale-[1.01] ${
-                                    !poolId || (basePrice === 0 && subtotal === 0 && !useCredit && !hasUnlimitedPass && activeFreePoolsCount > 0)
+                                    buttonState.muted
                                         ? 'bg-cream border border-line text-faint cursor-not-allowed hover:scale-100'
                                         : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-[0_6px_16px_rgba(196,52,46,0.28)]'
                                 }`}
@@ -763,16 +872,8 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                 ) : (
                                     <>
                                         <CreditCard size={18} />
-                                        {!poolId ? (
-                                            'Select a Pool Above to Pay'
-                                        ) : basePrice === 0 && subtotal === 0 && !useCredit && !hasUnlimitedPass && activeFreePoolsCount > 0 ? (
-                                            'Free Limit Reached (Upgrade Needed)'
-                                        ) : total === 0 ? (
-                                            'Activate Pool (Free Allocation)'
-                                        ) : (
-                                            'Upgrade Pool to Premium'
-                                        )}
-                                        {poolId && !(basePrice === 0 && subtotal === 0 && !useCredit && !hasUnlimitedPass && activeFreePoolsCount > 0) && <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />}
+                                        {buttonState.label}
+                                        {!buttonState.muted && <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />}
                                     </>
                                 )}
                             </button>
