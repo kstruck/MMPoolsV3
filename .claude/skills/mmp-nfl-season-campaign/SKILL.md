@@ -104,7 +104,7 @@ This is what one live NFL week costs today (Option B in the menu — the fallbac
 | When (ET) | Step | Command / click | EXPECTED |
 |---|---|---|---|
 | Tue AM | 1. Confirm last week fully final | NFL Schedule tab → Spread Manager → Fetch Games for LAST week | Every game shows FINAL scores. If a game shows IN_PROGRESS >12h after kickoff → ESPN status stuck; wait one `syncNFLScoresJob` cycle (5 min), then check function logs |
-| Tue AM | 2. Score every NFL pool for last week | Each pool → manager view → select last week → "Score Week N" | Toast "Week N scored successfully." Repeat per pool. **Run exactly once per survivor pool** (see §4.1 idempotency) |
+| Tue AM | 2. Score every NFL pool for last week | Each pool → manager view → select last week → "Score Week N" | Toast "Week N scored successfully." Repeat per pool. **A second click is SAFE on every type since 2026-07-07** (§4.1) — this cell said "run exactly once per survivor pool" for a month after that stopped being true |
 | Tue AM | 3. Verify standings | Pool dashboard leaderboards | Pick'em totals moved; survivor strike/elimination counts match losing picks; margin ranks re-sorted |
 | Tue/Wed | 4. Lock spreads for THIS week | Spread Manager → Fetch Games (this week) → fill any missing spread values by hand → Lock All Spreads → Save | Every game shows the green lock. Count of games matches the week (16 minus byes ÷ 2… typically 13–16 games) |
 | Wed | 5. Prove submission works | As a member, open a pool, submit a pick | Succeeds. If `SPREADS_NOT_LOCKED` → step 4 missed a game (fetch again, look for lock-less rows) |
@@ -170,7 +170,7 @@ GATE (rehearse in preseason, re-verify regular-season week 1): on the chosen loc
 
 ### Phase 2 — Scoring automation (DECISION GATE → Solution Menu §4)
 
-Decide manual vs scheduled scoring. **Hard precondition for ANY scheduled scorer: fix survivor idempotency first (§4.1) — a scheduler that can double-fire will wrongly eliminate paying participants.** Manual scoring (Option B) is idempotency-tolerable only because a human runs it once.
+Decide manual vs scheduled scoring. ~~**Hard precondition for ANY scheduled scorer: fix survivor idempotency first.**~~ **SATISFIED 2026-07-07 by `248f61a`** (§4.1): survivor recomputes from a `strikeWeeks` ledger, and a fenced scoring lease makes a concurrent double-fire a no-op. This precondition is met, not waived — do not re-derive it as outstanding.
 
 GATE: whichever option, week-1-regular-season scoring must produce, for every NFL pool: a `weekly_recaps/week_1` doc, a `SCORE_FINALIZED` audit event, and zero survivor entries struck for games that were not FINAL. Count pools scored == count of live NFL pools.
 
@@ -216,9 +216,47 @@ GATE per week: reminder email count > 0 whenever non-pickers existed at T-36h; u
 |---|---|---|
 | Pick'em | **YES** | Recompute-style: `weeklyPoints[week] = points` overwrites; `totalScore` re-derived from the whole map (nflPools.ts:629-630). Recap doc is a fixed-ID overwrite |
 | Margin | **YES** | Same shape: `weeklyScores[week]` overwrite; seasonTotal/negativeBurden/positiveWeeks/bestWeek all re-derived; ranks recomputed from a fresh re-read (nflPools.ts:710-749) |
-| Survivor | **NO — DANGEROUS** | Incremental: `newStrikes = entry.strikesUsed + (strikeLogged ? 1 : 0)` (nflPools.ts:666). Re-running week N re-evaluates the same lost pick and strikes AGAIN → a 1-strike survivor becomes wrongly ELIMINATED on the second run. Also `exemptWeeks` appends duplicates (nflPools.ts:660). A re-run after a rebuy re-strikes the rebought player. There is no "week N already scored" marker anywhere |
+| Survivor | **YES, since 2026-07-07** — ⚠️ this row said NO for a month after it stopped being true | Ledger-style, like the other two: `computeSurvivorWeekUpdate` (nflScoringEngine.ts:494) keeps `strikeWeeks: number[]`, drops the week being rescored from the prior list (`:517`) and re-derives `strikesUsed = strikeWeeks.length` (`:547`). Scoring week N twice produces the same answer both times |
 
-Corollaries: (a) manual operation must enforce ONE click per survivor pool per week; (b) any scheduler MUST either write/check a per-pool-per-week scored marker (e.g. existence of `weekly_recaps/week_{N}` — already written by every successful run — or a dedicated `scoredWeeks` map) or refactor survivor scoring to recompute strikes from picks+games; (c) if a double-run ever happens, recovery is manual strike correction from the `SURVIVOR_AUTO_STRIKE` audit trail — there is no undo function.
+⚠️ **THE SURVIVOR ROW WAS WRONG FROM 2026-07-07 TO 2026-08-05, AND THAT IS THE
+LESSON, NOT A FOOTNOTE.** This file was written 2026-07-06 against the
+`newStrikes = entry.strikesUsed + …` implementation. `248f61a` — *"fix(nfl):
+dual-MNF combined tiebreaker + idempotent scoreNFLWeek survivor rescoring"* —
+landed the **next day** and replaced it with the `strikeWeeks` ledger. The row
+was then copied forward into handoffs, morning docs and overnight prompts for a
+month, and on 2026-08-05, the night before the first live NFL event, an operator
+runbook was about to tell Kevin he got exactly one Score click per survivor pool.
+He does not. **Getting that backwards is the dangerous direction: it makes
+someone AVOID a necessary retry** after an interrupted or uncertain scoring
+attempt, and conclude a pool was scored when it was not.
+
+Evidence, re-run any time:
+
+```powershell
+npm --prefix functions test -- src/__tests__/survivorRescore.test.ts
+```
+
+That suite's `describe` is literally `computeSurvivorWeekUpdate — idempotency`
+(8 tests, passing as of 2026-08-05).
+
+**One carve-out that survives.** `nflScoringEngine.ts:489-490`: a LEGACY entry
+carrying `strikesUsed` with no `strikeWeeks` ledger loses those unattributed
+strikes on its first rescore. Irrelevant to a fresh season type with no prior
+strikes; it matters for any pool that was struck under the pre-`248f61a` code.
+
+**A second, independent protection added since:** a live pass takes a **fenced
+scoring lease** for the whole pool before it writes anything, and a pass that
+finds the lease held returns `leaseBusy: true` having read and written nothing
+(nflPools.ts:913-951). A dry run deliberately takes NO lease (`:925-927`), so a
+dry-run scorer cannot park a real scoring pass behind a report.
+
+Corollaries, updated: (a) a double click on a survivor pool is **safe** — the
+lease makes a concurrent one a no-op and the ledger makes a sequential one
+idempotent; (b) a scheduler no longer needs a per-pool-per-week scored marker
+for CORRECTNESS, though `scoredWeeks` exists and gates finalization; (c) the
+`SURVIVOR_AUTO_STRIKE` audit trail is still append-only — a corrective rescore
+cannot un-write one (nflPools.ts:1362-1364), so audit events can duplicate
+across rescores even though entry state does not.
 
 Other theory obligations shared by all options:
 - **Locking semantics**: NFL locks are computed, not stored (§ Glossary); the automation surface is only (1) `spread.locked` flags and (2) invoking scoring. Nothing needs to "lock the pool".
@@ -235,11 +273,11 @@ Other theory obligations shared by all options:
 
 ### Option B — Fully manual weekly runbook (zero code change)
 
-§2 is the complete runbook. Viable for a small pool count; the failure mode is human: one forgotten "Lock All Spreads" blocks every member's picks for days silently (members see "check back soon", nobody pages you). If you choose B, put a recurring Tuesday reminder in front of a human and treat §2 step 5 (prove a submit works) as non-optional. Zero idempotency exposure as long as "score once per pool" is respected.
+§2 is the complete runbook. Viable for a small pool count; the failure mode is human: one forgotten "Lock All Spreads" blocks every member's picks for days silently (members see "check back soon", nobody pages you). If you choose B, put a recurring Tuesday reminder in front of a human and treat §2 step 5 (prove a submit works) as non-optional. Idempotency is no longer an exposure at all (§4.1, fixed 2026-07-07); the residual risk in Option B is purely the forgotten click, not the repeated one.
 
 ### Option C — Hybrid: scheduled with kill-switch + dry-run, manual backstop (RECOMMENDED)
 
-Ship Option A's two jobs, but: (1) both behind `system/config` flags (`nflSpreadLock.enabled/dryRun`, `nflScore.enabled/dryRun`), default OFF/dry-run — exactly the `autoClosePools` shape; (2) run dry-run through the remaining preseason weeks, reading the would-lock/would-score audit summaries every Tuesday; (3) flip `dryRun:false` only after ≥1 clean week and Kevin's sign-off; (4) keep §2 as the documented fallback — the kill-switch means one Firestore field-flip reverts to Option B mid-season with zero deploys. Same theory obligations as A (survivor idempotency fix is still a precondition for the scorer's live mode; dry-run mode is safe immediately).
+Ship Option A's two jobs, but: (1) both behind `system/config` flags (`nflSpreadLock.enabled/dryRun`, `nflScore.enabled/dryRun`), default OFF/dry-run — exactly the `autoClosePools` shape; (2) run dry-run through the remaining preseason weeks, reading the would-lock/would-score audit summaries every Tuesday; (3) flip `dryRun:false` only after ≥1 clean week and Kevin's sign-off; (4) keep §2 as the documented fallback — the kill-switch means one Firestore field-flip reverts to Option B mid-season with zero deploys. Same theory obligations as A. ⚠️ The survivor-idempotency precondition this used to carry is DONE (§4.1, 2026-07-07); dry-run mode was always safe and takes no scoring lease.
 
 **Ranking: C > A > B.** B is the launch floor (it works today); do not let automation ambition delay the season — B with a disciplined human beats a half-reviewed A.
 
@@ -250,7 +288,7 @@ Ship Option A's two jobs, but: (1) both behind `system/config` flags (`nflSpread
 1. **Per-minute schedulers for anything NFL.** Cost landmine: this project already runs two 1-minute jobs + `runReminders` doing an unfiltered full `pools` collection read every 15 min (was 5 min until #265, 2026-07-23; reminders.ts:120, flagged in AUDIT-REPORT). The exception that IS legitimate is `syncNFLScoresJob`'s 5-minute cadence — live scores must reflect within minutes during games; do not slow it. Everything else (reminders, roster/lock state) changes on a ~weekly cadence and needs no sub-15-minute polling. Note `syncNFLScoresJob`'s own query has no lower time bound (reads every past game doc each run, nflSchedule.ts:227-229) — the cadence is fine, the unbounded scan is the shape not to copy in new siblings.
 2. **Deploying rules before functions.** House incident: locking a collection to functions-only before the callable exists silently drops writes. Ritual is always: `npm --prefix functions ci` → `npx firebase deploy --only functions --project gridiron-gamble-uzuqo` → then rules. See `mmp-change-control`.
 3. **Scoring before the last game of the week is FINAL (SUPER_ADMIN bypass).** The ACTIVE_GAMES guard blocks owners but not SUPER_ADMIN (nflPools.ts:580). Scoring mid-week: strikes survivors for non-submission while PER_GAME-lock players could still legally pick a later game; breaks the rebuy window the README promises; margin entries with pending games score `null→0` for that week. If you must re-run after an early mistake, remember §4.1: survivor re-runs double-strike.
-4. **Re-running `scoreNFLWeek` on a survivor pool "just to refresh".** See §4.1. Pick'em/margin refresh fine; survivor does not.
+4. ~~**Re-running `scoreNFLWeek` on a survivor pool "just to refresh".**~~ **RETIRED 2026-08-05 — this was fenced off wrongly for a month.** Survivor became idempotent on 2026-07-07 (`248f61a`); all three pool types refresh safely, and the fenced scoring lease makes a concurrent second pass a no-op. See §4.1 for the evidence and the one legacy-entry carve-out. Kept as a numbered entry rather than deleted so the numbering below does not shift and so the correction is visible to anyone who learned the old rule.
 5. **Re-importing the schedule mid-season.** `importNFLSeason` DELETES all existing `nfl_games` for that season+type, then re-imports fresh (nflSchedule.ts:168-186) — fresh games carry `locked:false` (or no spread at all), so every locked spread and manual override for the season is destroyed; picks survive (game IDs are stable `espn_{eventId}`) but the submission gate re-closes for all future weeks until re-locked. Single-week re-import has the same blast radius (season+type-wide delete). Mid-season game-data repair belongs in the Spread Manager or a reviewed one-off, never the importer.
 6. **Trusting NFL_POOLS_README automation claims.** §1.6 table. The README describes a scoring engine that runs itself after MNF; no such thing is deployed. Ops decisions based on the README instead of index.ts exports is how a week goes unscored.
 7. **"Fixing" the spread gate by hand-editing `nfl_games` beyond the Spread Manager.** Rules allow any SUPER_ADMIN client write to `nfl_games`; ad-hoc console edits to scores/status fight `syncNFLScoresJob` (it re-syncs from ESPN every 5 min and will overwrite everything except locked spreads). Only `spread` survives (and only when `locked:true`).
@@ -274,7 +312,7 @@ Per-phase success criteria (numbers, not vibes):
 | 4 | Every week with non-pickers at T-36h produced >0 reminder sends (check `notifications` prefix `NFL_NONPICK_`); 0 unsubscribe complaints ignored |
 | 5 | Checklist items 1–7 each have dated evidence |
 
-**You are season-ready when:** Phase 0 exit gate passed with evidence; a spread-locking path is chosen, rehearsed, and its backstop documented; the scoring path is chosen and — if scheduled — survivor idempotency is fixed and dry-run reviewed; the §2 manual runbook has been executed start-to-finish at least once by the human who owns Tuesdays; Phase 5 checklist is green; and every deviation discovered in preseason is either fixed through change control or written down as an accepted, commissioner-communicated limitation (the two-MNF tiebreaker and G4 theater settings at minimum).
+**You are season-ready when:** Phase 0 exit gate passed with evidence; a spread-locking path is chosen, rehearsed, and its backstop documented; the scoring path is chosen and — if scheduled — dry-run reviewed (survivor idempotency was the other half of this and has been done since 2026-07-07, §4.1); the §2 manual runbook has been executed start-to-finish at least once by the human who owns Tuesdays; Phase 5 checklist is green; and every deviation discovered in preseason is either fixed through change control or written down as an accepted, commissioner-communicated limitation (the two-MNF tiebreaker and G4 theater settings at minimum).
 
 ---
 
@@ -287,7 +325,7 @@ Written 2026-07-06 against branch `fix/superadmin-phase0-control`. Volatile fact
 | `lockNFLSpreadsJob` still dark / NFL export set | `Select-String -Path functions\src\index.ts -Pattern "nfl" ` (expect syncNFLScoresJob, importNFLSchedule, createNFLPool…scoreNFLWeek; NOT lockNFLSpreadsJob) |
 | What is actually deployed in prod | `npx firebase functions:list --project gridiron-gamble-uzuqo` |
 | Spread submission gate still exists | `Select-String -Path functions\src\nflPools.ts -Pattern "SPREADS_NOT_LOCKED"` |
-| Survivor scoring still non-idempotent | `Select-String -Path functions\src\nflPools.ts -Pattern "strikesUsed \+"` (a hit at the `newStrikes` line means still incremental) |
+| Survivor scoring still idempotent (it is, since `248f61a`) | `npm --prefix functions test -- src/__tests__/survivorRescore.test.ts` — 8 tests, `describe('computeSurvivorWeekUpdate — idempotency')`. ⚠️ Run the SUITE, not a grep: the old check here was `Select-String … -Pattern "strikesUsed \+"`, and its absence is what a reader has to interpret. Absence of a pattern is the weakest possible evidence and it is what let this section stay wrong for a month |
 | Wizard still can't set seasonType | `Select-String -Path src\components\wizard\create\buildNFLPayload.ts,shared\schemas\nfl.ts -Pattern "seasonType"` (0 hits = gap remains) |
 | Engine ignores primetimeBonus/pointsPerPick | `Get-ChildItem functions\src -Recurse -Filter *.ts | Select-String -Pattern "primetimeBonus|pointsPerPick"` (0 hits = still theater) |
 | NFL reminder tiers wired | `Select-String -Path functions\src\reminders.ts -Pattern "NFL_NONPICK_"` |
