@@ -1,6 +1,6 @@
-# HANDOFF — Session entry point (updated 2026-08-05: functions still deployed from `1105392` — no backend change since; the rebuild that #367/#368/#366 were waiting on HAS RUN and all three are live in production, measured; ⚠️ #374 then MERGED and is frontend-only, so **a Coolify rebuild is OWED again**; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.**)
+# HANDOFF — Session entry point (updated 2026-08-05 evening: functions still deployed from `1105392` — no backend change since; **both of the day's frontend rebuilds have RUN and ALL FOUR QUEUES ARE EMPTY** — #367/#368/#366 and then #374, the latter verified inside the shipped bundle, not just by a moved hash; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.**)
 
-> ## ⚠️ STOP POINT **2026-08-05** — the rebuild RAN and #367/#368/#366 are LIVE, measured; then #374 merged, so ⚠️ A COOLIFY REBUILD IS OWED AGAIN and it is the ONLY thing owed; functions unchanged at `1105392`; billing indexes DEPLOYED but the job has NOT yet run with them
+> ## ✅ STOP POINT **2026-08-05** (evening) — #374's rebuild RAN and is verified IN THE SHIPPED BUNDLE; **ALL FOUR QUEUES EMPTY**; functions unchanged at `1105392`; billing indexes DEPLOYED but the job has STILL not run with them — first fire is 23:00 ET tonight
 >
 > The heading date is the date of the facts immediately below. It is REPLACED
 > on every deploy rather than annotated, because a note added above a stale
@@ -11,22 +11,39 @@
 > **Rules remain ≡ `0a705c0`** — `firestore.rules` is byte-identical since, so no
 > rules deploy is owed.
 >
-> ✅ **THE FRONTEND REBUILD RAN and the previous box's only owed item is
-> discharged.** 📌 **The live bundle is `index-BClXJswC.js`**, read off the prod
-> HTML with `[regex]::Match((Invoke-WebRequest https://www.marchmeleepools.com/ -UseBasicParsing).Content, 'index-[A-Za-z0-9_-]+\.js').Value`.
-> It was `index-bJOPbtJA.js` before, so the hash moved — that is the measurement,
-> not a report of someone's click.
+> ✅ **BOTH REBUILDS OF 2026-08-05 HAVE RUN. NOTHING IS OWED.** 📌 **The live
+> bundle is `index-BkVTInz0.js`**, read off the prod HTML with
+> `[regex]::Match((Invoke-WebRequest https://www.marchmeleepools.com/ -UseBasicParsing).Content, 'index-[A-Za-z0-9_-]+\.js').Value`.
+> The chain that day was `index-bJOPbtJA.js` → `index-BClXJswC.js` (#367/#368/#366)
+> → **`index-BkVTInz0.js`** (#374).
+>
+> ✅ **#374 is verified INSIDE THE SHIPPED JAVASCRIPT, not merely inferred from a
+> moved hash.** Crawling the entry bundle and every chunk it references — 102
+> assets — all three of the change's literal strings are present, together, in
+> `PlayoffDashboard-BFVCgMyT.js` (the shared chunk `BillingGate` compiles into):
+> `mmp:hostingBannerDismissed:` (the storage key), `Dismiss hosting fees notice`
+> (the close button's `aria-label`) and `Hosting Fees Paid` (the banner title).
+>
+> ⚠️ **Do NOT check this by grepping only the entry bundle** — the first attempt
+> did, found none of the three, and briefly looked like a failed deploy. The
+> giveaway was that `Hosting Fees Paid` was also "missing", and that string
+> shipped in #368 and was already confirmed live. `BillingGate` lives in a
+> lazily-imported route chunk; the crawl has to follow the chunk graph.
 >
 > ✅ **#367's fix is verified IN A BROWSER, which no unit test could do.** On
 > `/pricing`, selecting the BUYFLOW TEST trial pool now renders
 > `Base Hosting fee (25 estimated players)  $29.00` and
 > `UPGRADE PREMIUM TOTAL  $29.00`, with an enabled `UPGRADE POOL TO PREMIUM`
 > button — where it previously rendered the word FREE and offered a dead
-> button. The Production Watchdog's CLIENT ERRORS list still ends at the six
+> button.
+>
+> 📊 **And the strongest form of that evidence has now arrived: at 15:32 MDT the
+> Production Watchdog reads `CLIENT ERRORS 0` for the last 24 hours.** The six
 > `Invalid request: couponCode — Invalid input: expected string, received null`
-> entries from ~03:00 that morning, and exercising the quote path live produced
-> **no new one**. That absence, on a path that was failing 50×/24h, is the
-> confirmation.
+> entries have aged out of the window and **nothing replaced them** — on a path
+> that was firing ~50×/24h before the fix, and which was exercised live in the
+> meantime. A full quiet 24h is a much better result than the overnight reading
+> ("no NEW entry after I clicked it"), and it retires that weaker claim.
 >
 > ⚠️ **THE BILLING JOB HAS STILL NEVER COMPLETED A RUN — and this is expected,
 > not a new failure.** `npx firebase firestore:indexes --project
@@ -35,8 +52,16 @@
 > `billing.status + billing.gracePeriodEndsAt`). But `enforceBillingStatus` is
 > `onSchedule('0 23 * * *', America/New_York)`, and Kevin deployed the indexes
 > **after** that evening's 23:00 ET fire. Ops Health accordingly still shows
-> `STALE JOBS 1` — `enforceBillingStatus — failing 3h ago — 9 FAILED_PRECONDITION:
+> `STALE JOBS 1` — `enforceBillingStatus — failing 19h ago — 9 FAILED_PRECONDITION:
 > The query requires an index` — and that beat is the PRE-INDEX one.
+>
+> 📊 **Re-read at 15:32 MDT on 2026-08-05 and the age had advanced 3h → 19h with
+> the error unchanged** — consistent with the job not having run since, which is
+> the expected state. ⚠️ **It is not PROOF of that.** `recordHeartbeat` swallows a
+> failure of its own write, logging `[heartbeat] FAILED to record <job> —
+> liveness for this job is now unknown` (`functions/src/lib/heartbeat.ts:95-97`),
+> so a job can run and fail to record. A stale age means "no heartbeat was
+> written". Function logs disambiguate. Nothing to diagnose yet either way.
 >
 > **The first fire with the indexes present is 23:00 ET tonight.** Judge it on
 > the Ops Health tile: a healthy run leaves **no `enforceBillingStatus` line
@@ -69,14 +94,12 @@
 > the local edit handler and proves nothing. qodo's finding on #375.)
 > **`MORNING-2026-08-04.md` §2 item 1 still tells Kevin to do this; it is stale.**
 >
-> Queues: functions EMPTY, rules EMPTY, indexes EMPTY, **Coolify OWED**.
-> ⚠️ [#374](https://github.com/kstruck/MMPoolsV3/pull/374) (close the
-> hosting-fees banner) **MERGED as `a754987`** and is frontend-only — verified
-> with `git diff --name-only a754987^ a754987 -- functions/ shared/
-> firestore.rules firestore.indexes.json`, which is **empty**. So functions,
-> rules and indexes are untouched by it and the rebuild is the whole debt. Until
-> it runs, the banner's close control is not in the bundle and the `×` does not
-> exist for any user.
+> **Queues: functions EMPTY, rules EMPTY, indexes EMPTY, Coolify EMPTY.**
+> [#374](https://github.com/kstruck/MMPoolsV3/pull/374) (close the hosting-fees
+> banner) merged as `a754987`, is frontend-only — `git diff --name-only
+> a754987^ a754987 -- functions/ shared/ firestore.rules firestore.indexes.json`
+> is **empty** — and its rebuild has now run. #375 and #376 are docs and a skill;
+> they touch no bundle.
 >
 > 📊 **The 45-scenario NFL E2E suite ran against PRODUCTION on 2026-08-04 and
 > passed 45/45** (real guarded callables, sim-namespaced data; zero DATA
