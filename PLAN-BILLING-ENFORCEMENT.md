@@ -73,18 +73,29 @@ it had deployed them. ❌ **It had not.** The 23:00 ET run on 2026-08-04 threw t
 same `FAILED_PRECONDITION` (measured 2026-08-05 03:43 UTC —
 `MORNING-2026-08-04.md` §B0), so the job STILL has never completed a run.
 
-That does not weaken the case for this plan; it sharpens the timing. The moment
-the index deploy does land, the job's first-ever successful run is immediate and
-the operator's only way to stop it is to delete the scheduler job or redeploy
-functions. **Building the gate BEFORE the index deploy is now possible, and it
-is the ordering §4 argues for.**
+That does not weaken the case for this plan; it sharpens the timing.
 
-⚠️ **As of this writing the job has still not had a successful run.** The
-indexes were merged at 2026-08-04T08:53:53Z; the 23:00 ET run happened at
-03:00Z the same morning, ~6 h earlier. The `system/heartbeats` beat visible on
-the SuperAdmin Ops Health card at 09:18Z still reads
-`enforceBillingStatus — failing 6h ago — 9 FAILED_PRECONDITION`, which is that
-pre-deploy run. **The first post-index run is 23:00 ET on 2026-08-04.**
+⚠️ **An index deploy does NOT invoke the job.** `enforceBillingStatus` is an
+`onSchedule('0 23 * * *', America/New_York)` function — deploying the index
+changes nothing until the next 23:00 ET tick. So the first successful run will
+be **the night AFTER the index deploy lands**, not minutes after it. Do not go
+looking for a heartbeat before then; an earlier revision of this paragraph said
+the run would be "immediate", which would have had the operator reading an
+unchanged beat and concluding the deploy failed.
+
+That gap is the opportunity. **The gate can now be built BEFORE the index deploy
+lands, and there is a whole scheduling cycle to do it in** — which is exactly
+the ordering §4 argues for, and it was not available while the index was
+believed to be live.
+
+⬇️ **HISTORICAL — the 2026-08-04 09:18 UTC reading, superseded by the paragraph
+above.** It is kept because it is the evidence that the failing beat SEEN THAT
+MORNING pre-dated the fix rather than being caused by it. The indexes were
+merged at 2026-08-04T08:53:53Z; the beat on the Ops Health card at 09:18Z read
+`failing 6h ago`, i.e. the 03:00Z run, ~6 h before the merge. At that moment the
+"first post-index run" was still ahead, scheduled for 23:00 ET on 2026-08-04 —
+**that run has since happened and failed**, which is what the current paragraph
+above records.
 
 ## 3. Proposed shape
 
