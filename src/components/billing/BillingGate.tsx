@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Lock, AlertTriangle, CreditCard, Clock, ExternalLink } from 'lucide-react';
+import { Lock, AlertTriangle, CreditCard, Clock, ExternalLink, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { PoolBilling, BillingStatus } from '../../types';
 
@@ -19,7 +19,10 @@ const getDaysRemaining = (endsAt?: number): number => {
 /**
  * BillingGate — wraps pool content and renders billing-status-aware UI:
  *
- * - `free` / `active` → children only, no banner
+ * - `free` → children + participant-limit banner
+ * - `active` → children + a green "hosting fees paid" banner, COMMISSIONER
+ *   ONLY, and only when the pool is not on the free tier (see the comment at
+ *   the branch — a free-allocation pool is `active` and paid nothing)
  * - `trial` → children + subtle gradient countdown banner
  * - `grace_period` → children + prominent pulsing amber warning
  * - `locked` → children rendered read-only (visible, non-interactive) with a lock modal overlaid
@@ -43,9 +46,120 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     [billing?.gracePeriodEndsAt]
   );
 
-  // ─── UNDEFINED BILLING OR ACTIVE — render children with zero overhead ───
-  if (!billing || status === 'active') {
+  // ─── UNDEFINED BILLING — render children with zero overhead ───
+  if (!billing) {
     return <>{children}</>;
+  }
+
+  // ─── ACTIVE — hosting settled ─────────────────────────────
+  // The only status that had no banner at all. Commissioner-only: a
+  // participant has no hosting-fee relationship with the platform, and
+  // telling them about one is noise on someone else's money.
+  //
+  // ⚠️ The condition is `active` AND NOT `free_tier` — deliberately not
+  // `active` alone. A pool activated on the free allocation is `active` with
+  // `pricePaid: 0` and `tier: 'free_tier'` (functions/src/stripe.ts writes
+  // exactly that on the $0 path), and telling that commissioner their hosting
+  // fees are paid is a fabricated claim on a money surface. The tier — not
+  // `pricePaid` — is the discriminator, because a pool activated with a pool
+  // credit or a 100%-off coupon ALSO carries `pricePaid: 0` while the
+  // commissioner genuinely owes nothing; that pool keeps its quoted
+  // standard/premium tier, so the tier separates "nothing was owed" from
+  // "nothing was paid". The sub-line then distinguishes cash from credit so
+  // neither case has to be papered over.
+  if (status === 'active') {
+    // An ALLOW-LIST, not `!== 'free_tier'`. `tier` is required by the type but
+    // not by Firestore, and a legacy pool with the field missing would satisfy
+    // a not-equals check and get told its fees were paid on no evidence at all.
+    // Unknown is not paid — the same fail-closed rule the buy-flow card had to
+    // learn about unknown-vs-zero prices.
+    const paidTier = billing.tier === 'standard_tier' || billing.tier === 'premium_tier';
+    // `redeemPoolCreditForPool` activates a pool with a Pool Credit and
+    // deliberately does NOT touch `tier` (functions/src/entitlements.ts:446-453),
+    // so a credit-activated pool sits `active` on `free_tier` with a credit
+    // genuinely consumed. The tier allow-list alone would deny it the banner.
+    const paidByCredit = billing.paidVia === 'credit';
+    if (!isCommissioner || !(paidTier || paidByCredit)) {
+      return <>{children}</>;
+    }
+
+    // THREE-WAY, not two. Coercing a missing/corrupt `pricePaid` to 0 sends the
+    // copy down the "pool credit or promotion" branch, which asserts a specific
+    // payment STORY on a money surface from the absence of data. A legacy
+    // record can carry a paid tier with no amount; the honest answer there is
+    // to say the pool is settled and say nothing about how.
+    const rawPaid = billing.pricePaid;
+    const paidAmount = typeof rawPaid === 'number' && Number.isFinite(rawPaid) ? rawPaid : null;
+    const subline =
+      paidAmount !== null && paidAmount > 0
+        ? `This pool is fully activated — $${paidAmount.toFixed(2)} paid. Nothing further is due.`
+        : paidAmount === 0
+          ? 'This pool is fully activated with a pool credit or promotion. Nothing further is due.'
+          : 'This pool is fully activated. Nothing further is due.';
+
+    return (
+      <>
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          style={{
+            background: 'linear-gradient(135deg, #15803d 0%, #16a34a 100%)',
+            border: '1px solid rgba(22,163,74,0.5)',
+            borderRadius: '16px',
+            padding: '14px 20px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            flexWrap: 'wrap' as const,
+            boxShadow: '0 4px 20px rgba(22,163,74,0.15)',
+          }}
+        >
+          <div
+            style={{
+              padding: '8px',
+              background: 'rgba(255,255,255,0.15)',
+              border: '1px solid rgba(255,255,255,0.25)',
+              borderRadius: '12px',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <CheckCircle2 size={18} />
+          </div>
+          <div>
+            <p
+              style={{
+                fontSize: '12px',
+                fontWeight: 900,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: '#ffffff',
+                margin: 0,
+                lineHeight: 1.2,
+              }}
+            >
+              Hosting Fees Paid
+            </p>
+            <p
+              style={{
+                fontSize: '10px',
+                color: 'rgba(255,255,255,0.85)',
+                margin: '2px 0 0',
+                fontWeight: 700,
+              }}
+            >
+              {subline}
+            </p>
+          </div>
+        </motion.div>
+
+        {children}
+      </>
+    );
   }
 
   // ─── FREE PLAN PARTICIPANT LIMIT BANNER ───────────────────
