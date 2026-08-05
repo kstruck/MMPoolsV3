@@ -1,6 +1,6 @@
-# HANDOFF — Session entry point (updated 2026-08-04: functions deployed from `1105392` — the E2E suite is green 45/45 against prod, one week label everywhere (the Survivor "Preseason Week 1"≠"Week 2" trap is fixed), system/config writes now leave an audit trail, sim runs bypass the launch kill-switch, and the security-audit gate is unblocked; ⚠️ a Coolify REBUILD IS OWED for #358+#359+#360+#348's frontend changes; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.**)
+# HANDOFF — Session entry point (updated 2026-08-05: functions still deployed from `1105392` — no backend change since; #367 (the buy flow priced every pool at $0), #368 (hosting-fees-paid banner) and #366 (dependency group) are MERGED and are **frontend-only**, so ⚠️ a Coolify REBUILD IS OWED for all three and none of them is live yet; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.**)
 
-> ## ✅ STOP POINT **2026-08-04** — E2E 45/45 green; #358/#360/#362/#363 + Kevin's #348/#359 merged; functions deployed and certified; ⚠️ COOLIFY REBUILD OWED
+> ## ✅ STOP POINT **2026-08-05** — #367/#368/#366 merged, frontend-only; functions unchanged at `1105392`; ⚠️ COOLIFY REBUILD OWED
 >
 > The heading date is the date of the facts immediately below. It is REPLACED
 > on every deploy rather than annotated, because a note added above a stale
@@ -9,13 +9,28 @@
 >
 > **Functions are deployed from <!-- deploy-state:current --> `main` @ `1105392`.**
 > **Rules remain ≡ `0a705c0`** — `firestore.rules` is byte-identical since, so no
-> rules deploy is owed. Indexes untouched.
-> ⚠️ **The FRONTEND REBUILD IS OWED and is Kevin's click** — #358 (week labels +
-> lock countdown), #359 (pool-list squares count), #348 (watchdog UI) touched
-> `src/**`, and #360 moved the root lockfile. The live bundle is still
-> **`index-H9HjG31q.js`** (the 2026-08-03 build) until the Coolify trigger runs.
-> Queues: functions EMPTY (certified below), rules EMPTY, indexes EMPTY,
-> **Coolify OWED**.
+> rules deploy is owed. **Indexes: the two `billing.*` composite indexes from
+> #365 were deployed 2026-08-04**; nothing is queued behind them.
+>
+> ⚠️ **The FRONTEND REBUILD IS OWED and is Kevin's click.** Three merges land in
+> the bundle and nothing else: **#367** (`3e11017` — `dbService.ts`,
+> `BillingInvoiceCard.tsx`, `checkoutButtonState.ts`, `callableParams.ts`),
+> **#368** (`7da9189` — `BillingGate.tsx`, `types/index.ts`) and **#366**
+> (`eacfc37` — root `package.json` + `package-lock.json`). Verified with
+> `git diff --name-only <sha>^ <sha> -- functions/ shared/ firestore.rules
+> firestore.indexes.json` on all three: **all empty.** So functions, rules and
+> indexes are untouched by this batch.
+>
+> **`#367` is the one that matters: until the rebuild runs, every hosting quote
+> in production still fails and the buy flow still shows paid pools as FREE.**
+>
+> Queues: functions EMPTY, rules EMPTY, indexes EMPTY, **Coolify OWED**.
+>
+> 📌 **The live bundle was `index-bJOPbtJA.js`** when read off the prod HTML on
+> 2026-08-04 — which is how we know the #358/#359/#348/#360 rebuild the previous
+> box called owed had in fact been run. That is a browser observation, not a
+> deploy-log reading; the next person to open the Coolify log should confirm it
+> and can then delete this note.
 >
 > ⬆️ **Deployed 2026-08-04 ~07:15 UTC for #360 (functions lockfile) + #362
 > (system/config audit trigger) + #348 (getProdWatchdog) + #363 (sim creation
