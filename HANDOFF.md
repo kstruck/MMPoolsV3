@@ -56,9 +56,12 @@
 > The query requires an index` — and that beat is the PRE-INDEX one.
 >
 > 📊 **Re-read at 15:32 MDT on 2026-08-05 and the age had advanced 3h → 19h with
-> the error unchanged.** That is the confirmation that the job has not run since,
-> rather than an assumption: `withHeartbeat` writes only on completion, so an age
-> that keeps counting up is a job that never completed. Nothing to diagnose yet.
+> the error unchanged** — consistent with the job not having run since, which is
+> the expected state. ⚠️ **It is not PROOF of that.** `recordHeartbeat` swallows a
+> failure of its own write, logging `[heartbeat] FAILED to record <job> —
+> liveness for this job is now unknown` (`functions/src/lib/heartbeat.ts:95-97`),
+> so a job can run and fail to record. A stale age means "no heartbeat was
+> written". Function logs disambiguate. Nothing to diagnose yet either way.
 >
 > **The first fire with the indexes present is 23:00 ET tonight.** Judge it on
 > the Ops Health tile: a healthy run leaves **no `enforceBillingStatus` line
