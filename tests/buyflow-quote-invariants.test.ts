@@ -119,7 +119,20 @@ describe('BillingInvoiceCard delegates the button rule instead of inlining it', 
         expect(card).toMatch(/couponInput, quoteRetry\]\);/);
         // codex round 3 [P1]: the retry must also drop the loaded-quote stamp,
         // or a cached quote for these inputs reads as `ready` mid-retry.
-        expect(card).toMatch(/const retryQuote = \(\) => \{\n(?:.*\n)*?\s*setQuoteFor\(null\);/);
+        //
+        // ⚠️ `[\s\S]*?` rather than `(?:.*\n)*?`. A mandatory bare `\n` does not
+        // match `\r\n`, so the first version of this guard passed on CI (Linux
+        // checkouts are LF) and FAILED on every Windows checkout — including the
+        // one this repo is developed in, where `core.autocrlf` materialises the
+        // file with CRLF. A guard that is red on the developer's machine and
+        // green in CI gets muted, which is the opposite of what it is for.
+        // Every other source-matching regex in `tests/` already avoids this by
+        // using `\s`, which matches `\r`.
+        // The `{0,400}` bound matters: unbounded, a lazy match would happily
+        // reach a `setQuoteFor(null)` somewhere else in the file if the one
+        // inside `retryQuote` were deleted, and the guard would pass on the
+        // exact edit it exists to catch.
+        expect(card).toMatch(/const retryQuote = \(\) => \{[\s\S]{0,400}?setQuoteFor\(null\);/);
     });
 
     it('a failed refresh un-stamps a quote that was stamped for those inputs', () => {
