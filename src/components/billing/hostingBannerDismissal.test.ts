@@ -17,6 +17,17 @@ import {
   dismissHostingBanner,
 } from './hostingBannerDismissal';
 
+/**
+ * The `localStorage` descriptor as this file found it, captured ONCE at module
+ * load so the teardown puts back what was there rather than assuming there was
+ * nothing. Today vitest's node environment supplies none and the restore is a
+ * `delete` — but these suites share a worker with every other test file, so a
+ * future `environment: 'jsdom'` (or any other file defining the global) would
+ * otherwise have its `localStorage` silently deleted by whichever of these
+ * tests ran last. qodo's finding on PR #374; low severity, three lines.
+ */
+const ORIGINAL_LOCAL_STORAGE = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+
 /** Installs a `localStorage` on the global and returns its backing map. */
 function installStorage(overrides: Partial<Storage> = {}): Map<string, string> {
   const data = new Map<string, string>();
@@ -44,10 +55,14 @@ function installStorage(overrides: Partial<Storage> = {}): Map<string, string> {
 }
 
 afterEach(() => {
-  // `delete` rather than assigning undefined: the helper branches on
-  // `typeof localStorage === 'undefined'`, and an own property holding
-  // `undefined` still satisfies that check but would leave a different shape
-  // behind than the suite started with.
+  if (ORIGINAL_LOCAL_STORAGE) {
+    Object.defineProperty(globalThis, 'localStorage', ORIGINAL_LOCAL_STORAGE);
+    return;
+  }
+  // Nothing was there to begin with. `delete` rather than assigning undefined:
+  // the helper branches on `typeof localStorage === 'undefined'`, and an own
+  // property holding `undefined` still satisfies that check but would leave a
+  // different shape behind than the suite started with.
   delete (globalThis as { localStorage?: Storage }).localStorage;
 });
 

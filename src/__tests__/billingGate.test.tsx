@@ -329,6 +329,15 @@ describe('BillingGate — active state, hosting-fees-paid banner', () => {
 // own behaviour is covered directly in
 // `src/components/billing/hostingBannerDismissal.test.ts`.
 
+/**
+ * The `localStorage` descriptor as this file found it, captured once at module
+ * load. The teardown restores THIS rather than assuming there was nothing to
+ * restore: vitest shares a worker across test files, so deleting a global this
+ * file did not create would leak into whatever runs next under a jsdom-style
+ * environment. qodo's finding on PR #374.
+ */
+const ORIGINAL_LOCAL_STORAGE = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+
 /** Minimal `localStorage` stand-in; the node env this suite runs in has none. */
 function installStorage(seed: Record<string, string> = {}) {
   const data = new Map<string, string>(Object.entries(seed));
@@ -350,6 +359,10 @@ function installStorage(seed: Record<string, string> = {}) {
 
 describe('BillingGate — dismissing the hosting-fees-paid banner', () => {
   afterEach(() => {
+    if (ORIGINAL_LOCAL_STORAGE) {
+      Object.defineProperty(globalThis, 'localStorage', ORIGINAL_LOCAL_STORAGE);
+      return;
+    }
     delete (globalThis as { localStorage?: Storage }).localStorage;
   });
 

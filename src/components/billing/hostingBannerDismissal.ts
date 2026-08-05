@@ -15,12 +15,14 @@
  * the only way to assert this logic is to call it directly.
  *
  * That same absence of a DOM is why every function here tolerates `localStorage`
- * simply not existing. `BillingGate` reads the dismissal in a `useState`
- * initializer, which DOES run under `renderToStaticMarkup`; a bare
- * `localStorage.getItem` there would throw and take all 25 of those tests with
- * it. Storage access is also wrapped in `try`/`catch` because a browser can have
- * `localStorage` present and throwing — Safari private mode on `setItem` when
- * the quota is zero is the usual one.
+ * simply not existing. `BillingGate` reads the dismissal DURING RENDER, in the
+ * `status === 'active'` branch that draws the banner — so a bare
+ * `localStorage.getItem` would throw under `renderToStaticMarkup` and take all
+ * of that suite with it. (An earlier revision read it in a `useState`
+ * initializer and this paragraph still said so after the read moved; qodo
+ * caught the leftover.) Storage access is also wrapped in `try`/`catch` because
+ * a browser can have `localStorage` present and throwing — Safari private mode
+ * on `setItem` when the quota is zero is the usual one.
  */
 
 const KEY_PREFIX = 'mmp:hostingBannerDismissed:';
