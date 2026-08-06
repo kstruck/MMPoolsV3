@@ -37,7 +37,7 @@ A comprehensive full-season NFL suite equipped with robust scoring engines, sche
 * **Real-Time Scoring Pipeline (NEW!):** A multi-tier automated scoring engine built for a live NFL season.
   * **Provisional Live Scoring:** Scores update as games go final, with a fenced scoring lease so only one scorer can grade a week at a time.
   * **Durable Reconciliation Queue:** A rescore queue re-grades weeks when late stat corrections land, and a deep-sweep job catches corrections that arrive more than 24 hours after a game.
-  * **Feed Snapshots & Replay:** Every ESPN payload is snapshotted; any week can be rebuilt from a stored snapshot, and the scorer only grades what the feed actually reported.
+  * **Feed Snapshots & Replay:** When enabled, ESPN payloads are snapshotted best-effort (deduplicated against the previous response); a week can be rebuilt from a stored snapshot, and the scorer only grades what the feed actually reported.
   * **Automated Spread Locks:** Scheduled spread-lock job with a kill-switch, dry-run gate, and a pre-kickoff tripwire that pages ops if spreads aren't locked in time.
 * **Polished Pick Flow (NEW!):** Saved picks are unmistakable — green saved highlights, a saved banner, and a pick-status strip that always speaks about the current week. Plus one-tap registration from the join page, a picks call-to-action on the dashboard, live lock countdowns, team win/loss records in the picker, and consistent week labels across every surface (including preseason/HOF weeks).
 * **Straight Up or Against the Spread:** The setup wizard lets Pick'em commissioners choose straight-up or ATS picking (with a heads-up that ATS requires locked spreads), and straight-up Pick'em, Survivor, and Margin pools open for picks without waiting on spreads at all.
@@ -116,7 +116,7 @@ Streamline pool administration and communication.
 * **Waitlist Engine:** Secure waitlist collection and admin invite deck for grids exceeding 100 entries.
 * **Viral Referral System:** Attribution-based referral links (`?ref=`) that reward managers and track signups.
 * **Smart Reminders:** Integrated with SMS (Courier/Twilio) and Web-Push (FCM) to notify users of locks, payment deadlines, and scores.
-* **Delivery Tracking:** Email and SMS sends report their real delivery outcome, so the reminder engine can see (and surface) failures instead of silently swallowing them.
+* **Submission Tracking:** Email and SMS sends report whether the email queue and SMS provider accepted them, so the reminder engine can see (and surface) submission failures instead of silently swallowing them.
 
 ---
 
