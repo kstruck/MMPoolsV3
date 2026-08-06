@@ -45,16 +45,22 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
     const castPool = pool as any;
     const seasonType = poolSeasonType(castPool);
     const totalWeeks = seasonType === 1 ? 4 : 18;
-    const weeks = useMemo(() => {
-        return Array.from({ length: totalWeeks }, (_, i) => i + 1).map(week => {
-            const weekGames = gamesForPoolWeek(games, castPool, week);
-            // Per week, because a hard-lock pool's deadline is frozen per week — the
-            // checklist must show the deadline the server actually enforces.
-            const lockBufferMinutes = effectiveBufferMinutesForWeek(castPool, week, weekGames.map(g => g.startTime));
-            const status = getWeekStatus(pool.type, entry, weekGames, week, lockBufferMinutes);
-            return { week, status, deadline: weekDeadline(weekGames, lockBufferMinutes) };
-        });
-    }, [games, entry, pool.type, totalWeeks, castPool]);
+    // NOT memoized, deliberately. `getWeekStatus` reads `serverNow()`, so a
+    // useMemo keyed on [games, entry, ...] FREEZES TIME: leave the dashboard
+    // open across a deadline with no data change and the memo never reruns —
+    // the old current week keeps its pre-deadline status (and, worse, its green
+    // "picks are in" confirmation) while the real week has moved on. codex
+    // found this on the first version of the current-week strip. The parent
+    // re-renders on a ~30s tick, and this is 4–18 weeks of array filtering —
+    // recomputing per render is the correct price for a clock-dependent value.
+    const weeks = Array.from({ length: totalWeeks }, (_, i) => i + 1).map(week => {
+        const weekGames = gamesForPoolWeek(games, castPool, week);
+        // Per week, because a hard-lock pool's deadline is frozen per week — the
+        // checklist must show the deadline the server actually enforces.
+        const lockBufferMinutes = effectiveBufferMinutesForWeek(castPool, week, weekGames.map(g => g.startTime));
+        const status = getWeekStatus(pool.type, entry, weekGames, week, lockBufferMinutes);
+        return { week, status, deadline: weekDeadline(weekGames, lockBufferMinutes) };
+    });
 
     // The week the pool is IN: the earliest week whose deadline has not passed.
     // The strip used to nag about the nearest unpicked week ANYWHERE in the
@@ -63,10 +69,7 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
     // being on the wrong week (Kevin's live-test report, 2026-08-05). The nag
     // now speaks only about the current week; future weeks stay visible as
     // chips below, and the nag moves forward on its own when this week locks.
-    const currentWeek = useMemo(() => {
-        const now = serverNow();
-        return weeks.find(w => w.deadline !== null && w.deadline > now) ?? null;
-    }, [weeks]);
+    const currentWeek = weeks.find(w => w.deadline !== null && w.deadline > serverNow()) ?? null;
 
     const nextDue = currentWeek && currentWeek.status === 'due' ? currentWeek : null;
     // Positive confirmation for the same slot: "your picks are in" is exactly

@@ -64,6 +64,16 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
 
   // Load existing picks when week, games, or entry changes; unsaved drafts win over
   // the last submitted entry (they are newer edits the user never got to submit)
+  // The session receipt describes ONE week's submit. Carrying it across a week
+  // switch relabels it as the new week's submission AND suppresses the
+  // entry-derived saved banner for that week (codex r1 on the banner change).
+  // Its own effect, keyed on `week` ONLY: the load effect below also fires when
+  // the ENTRY snapshot refreshes — which happens moments after every successful
+  // submit — and resetting there would wipe the receipt it just earned.
+  useEffect(() => {
+    setSubmittedAt(null);
+  }, [week]);
+
   useEffect(() => {
     dirtyRef.current = false;
     const base: PickemDraft = entry

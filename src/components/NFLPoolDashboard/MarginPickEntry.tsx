@@ -35,6 +35,14 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
 
   const settings = (pool as any).settings || {};
 
+  // The session receipt describes ONE week's submit — reset on week change
+  // only. NOT in the load effect below: that also fires when the entry
+  // snapshot refreshes right after a successful submit, and would wipe the
+  // receipt it just earned. Same shape as PickemPickEntry (codex r1).
+  useEffect(() => {
+    setSubmittedAt(null);
+  }, [week]);
+
   // Load existing selection for this week when entry or week changes
   useEffect(() => {
     if (entry && entry.picks && entry.picks[week]) {
