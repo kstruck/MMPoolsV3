@@ -1,42 +1,70 @@
-# HANDOFF — Session entry point (updated 2026-08-06 early hours: 🏈 **GAME DAY — HOF game CAR @ ARI, 8:00 PM ET.** Three frontend PRs merged overnight (#381, #382, #383) and **a Coolify rebuild is OWED**; functions still deployed from `1105392`, rules still ≡ `0a705c0`; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.** Full runbook: `MORNING-2026-08-06.md`.)
+# HANDOFF — Session entry point (updated 2026-08-06: 🏈 **GAME DAY — HOF game CAR @ ARI, 8:00 PM ET.** ✅ **The overnight rebuild has RUN and is verified per-PR inside the shipped bundle — ALL FOUR QUEUES ARE EMPTY**; functions still deployed from `1105392`, rules still ≡ `0a705c0`; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.** Full runbook: `MORNING-2026-08-06.md`.)
 
-> ## 🏈 STOP POINT **2026-08-06** (early hours) — **COOLIFY REBUILD OWED**; functions/rules/indexes queues EMPTY; functions unchanged at `1105392`
+> ## 🏈 STOP POINT **2026-08-06** — **REBUILD DONE AND VERIFIED PER PR; ALL FOUR QUEUES EMPTY**; functions unchanged at `1105392`
 >
-> 🔴 **A FRONTEND REBUILD IS OWED AND NOTHING FROM OVERNIGHT IS LIVE UNTIL IT
-> RUNS.** Three PRs merged after the last rebuild — [#381](https://github.com/kstruck/MMPoolsV3/pull/381)
-> (`5e53b2f`), [#382](https://github.com/kstruck/MMPoolsV3/pull/382) (`60149c8`)
-> and [#383](https://github.com/kstruck/MMPoolsV3/pull/383) (`e69c87e`) — and all
-> three touch `src/**`. 📌 **The live bundle at 23:35 MDT 2026-08-05, BEFORE that
-> rebuild, was `index-uIeNGo85.js`**, read off the prod HTML.
+> ✅ **THE FRONTEND REBUILD HAS RUN, and #381 / #382 / #383 are each verified
+> INSIDE the shipped JavaScript — not inferred from a moved hash.** Kevin ran the
+> chunk-graph crawl from `MORNING-2026-08-06.md` §1 step 7 and it scanned **104
+> assets**, returning:
 >
-> ⚠️ **A DIFFERENT HASH IS NOT PROOF THE REBUILD SHIPPED THIS CODE.** It proves
-> *some* bundle is serving; a cached or pinned revision, or an unrelated
-> deployment, moves the hash just as well. **The check that settles it is the
-> chunk-graph crawl in `MORNING-2026-08-06.md` §1 step 7** — it follows every
-> asset reachable from the entry bundle and checks a SEPARATE marker for each of
-> the three PRs. Separate markers matter: a build from `5e53b2f` carries #381's
-> string and not #382's fix, so a single sentinel would certify a partial deploy
-> missing the go-live blocker itself. Nothing in the app exposes a build SHA.
-> Measured both ways before it was written down — against pre-rebuild prod it
-> scanned 103 assets and printed the failure reading `ABSENT / 3 / ABSENT`.
+> ```
+> entry bundle: assets/index-C9jX7I-m.js
+> scanned 104 assets
+> #381 Save Edited Picks .......... PRESENT
+> #382 spread-gate copies ......... 1 (must be exactly 1)
+> #383 wizard season hint ......... PRESENT
+> ```
 >
-> ⚠️ **Do NOT shortcut it to grepping `index-*.js`.** That string is in a
-> lazily-imported route chunk, so the entry bundle alone reports ABSENT on a
+> All four verdict conditions hold, so the script's final line is
+> **`VERDICT: ALL THREE SHIPPED`**.
+>
+> 📌 **The live bundle is `index-C9jX7I-m.js`.** The chain was
+> `index-uIeNGo85.js` (pre-rebuild, 23:35 MDT 2026-08-05) → **`index-C9jX7I-m.js`**.
+>
+> 🎯 **THE GO-LIVE BLOCKER IS CLEARED IN PRODUCTION.** The `1` above is the
+> load-bearing number, not the two `PRESENT`s: the "Spreads Not Yet Finalized"
+> block existed on all THREE member pick sheets and now exists only on Pick'em,
+> which is the shape #382 was supposed to produce. Straight-up Pick'em, Survivor
+> and Margin can now open their pick sheets on a week with no betting lines —
+> i.e. every preseason week, since the 2026 preseason feed carries a line on 1 of
+> 49 games. The pre-rebuild run of the same script returned `ABSENT / 3 / ABSENT`,
+> so both directions are measured.
+>
+> ⚠️ **A DIFFERENT HASH IS NOT PROOF THE REBUILD SHIPPED THIS CODE**, and that is
+> why the reading above is a per-PR crawl rather than a hash comparison. A cached
+> or pinned revision, or an unrelated deployment, moves the hash just as well.
+> Separate markers matter for the same reason: a build from `5e53b2f` carries
+> #381's string and NOT #382's fix, so a single sentinel would have certified a
+> partial deploy missing the go-live blocker itself. Nothing in the app exposes a
+> build SHA.
+>
+> 🔁 **Keep using the §1 step 7 METHOD next time — but SWAP THE SENTINELS FIRST.**
+> Those three markers are now LIVE, so running the script unchanged passes
+> against the *current* bundle: it would print `ALL THREE SHIPPED` on a failed or
+> stale deploy and tell you nothing about the change you just pushed. Replace them
+> with one marker unique to that change (a string it introduces, or a COUNT it
+> changes — the `$gate` pattern, which is the only way to detect a change that
+> *removes* code). `MORNING-2026-08-06.md` §1 carries the reuse note.
+>
+> ⚠️ **Do NOT shortcut it to grepping `index-*.js`.** Those strings live in
+> lazily-imported route chunks, so the entry bundle alone reports ABSENT on a
 > perfectly good deploy — the mistake that briefly condemned #374's rebuild.
-> Full step-by-step in `MORNING-2026-08-06.md` §1.
 >
-> ✅ **All three are FRONTEND ONLY.** Verified per merge commit —
+> ✅ **All three merges are FRONTEND ONLY.** Verified per merge commit —
 > `git diff --name-only <sha>^ <sha> -- functions/ shared/ firestore.rules firestore.indexes.json`
 > is **empty** for `5e53b2f`, `60149c8` and `e69c87e`. **Functions, rules and
 > indexes queues are EMPTY. Do NOT deploy functions or rules for this work.**
 >
 > 🚧 **[#384](https://github.com/kstruck/MMPoolsV3/pull/384) IS OPEN AND
-> DELIBERATELY UNMERGED.** It fixes two server bugs (the `TEAM_ALREADY_USED`
+> DELIBERATELY UNMERGED, and it is the ONLY thing that would put work back into
+> the functions queue.** It fixes two server bugs (the `TEAM_ALREADY_USED`
 > re-submit guard and scoring's raw `Week ${week}` strings) and touches
 > `functions/` **and** `shared/`. Merging it would put undeployed backend code on
 > `main` during game day, where a deploy triggered for any other reason would
 > ship it. It waits on Kevin and on the game being final. It carries
-> `PLAN-NFL-RESUBMIT-GUARD.md`.
+> `PLAN-NFL-RESUBMIT-GUARD.md`; deploy steps are in `MORNING-2026-08-06.md` §3.
+> ⚠️ It owes **no** Coolify rebuild — measured, both branches emit byte-identical
+> assets.
 >
 > 📌 **The T5 "go-live blocker" needed NO functions change, and the brief's
 > premise was stale.** `submitNFLPicks`' `SPREADS_NOT_LOCKED` precondition has
@@ -52,9 +80,12 @@
 >
 > ## ✅ STOP POINT **2026-08-05** (night) — **THE BILLING JOB RAN CLEAN, first success ever**; #374's rebuild RAN and is verified IN THE SHIPPED BUNDLE; functions unchanged at `1105392`
 >
-> ⚠️ **This box's "ALL FOUR QUEUES EMPTY" claim was true on 2026-08-05 and is NOT
-> true now** — see the Coolify line in the box above, which supersedes it. Its
-> bundle hash (`index-BkVTInz0.js`) is likewise superseded twice over.
+> ⚠️ **Read this box's queue and bundle claims as HISTORY, not as status.** Its
+> "all four queues empty" reading was true on 2026-08-05, went stale when
+> #381/#382/#383 merged, and is true again after the 2026-08-06 rebuild — but it
+> is the box above that says so, not this one. Its bundle hash
+> (`index-BkVTInz0.js`) is superseded twice over. **Current queue state and
+> current hash are stated ONCE, at the top of this file.**
 >
 > ✅ **`enforceBillingStatus` COMPLETED ITS FIRST-EVER SUCCESSFUL RUN** — the
 > 23:00 ET 2026-08-05 fire, the first with the composite indexes present.
@@ -75,11 +106,12 @@
 > **Rules remain ≡ `0a705c0`** — `firestore.rules` is byte-identical since, so no
 > rules deploy is owed.
 >
-> ⚠️ **HISTORICAL — superseded by the current box at the top of this file, twice
-> over.** Both rebuilds recorded here ran and nothing was owed AT THAT TIME; a
-> rebuild IS owed now. The hash named here has moved twice since. **The only live
-> hash claim in this file is in the box at the top.** 📌 The reading at the time
-> was `index-BkVTInz0.js`, read off the prod HTML with
+> ⚠️ **HISTORICAL — superseded by the current box at the top of this file.** Both
+> rebuilds recorded here ran and nothing was owed at that time. **Nothing is owed
+> now either**, but that is the top box's statement, not this one's — a later
+> rebuild has happened since and the hash named here has moved twice. **The only
+> live hash claim in this file is in the box at the top.** 📌 The reading at the
+> time was `index-BkVTInz0.js`, read off the prod HTML with
 > `[regex]::Match((Invoke-WebRequest https://www.marchmeleepools.com/ -UseBasicParsing).Content, 'index-[A-Za-z0-9_-]+\.js').Value`.
 > The chain that day was `index-bJOPbtJA.js` → `index-BClXJswC.js` (#367/#368/#366)
 > → **`index-BkVTInz0.js`** (#374).
@@ -161,9 +193,10 @@
 > the local edit handler and proves nothing. qodo's finding on #375.)
 > **`MORNING-2026-08-04.md` §2 item 1 still tells Kevin to do this; it is stale.**
 >
-> ⚠️ **HISTORICAL QUEUE STATE.** Functions, rules and indexes are still EMPTY;
-> **Coolify is NOT — it is OWED.** See the current box at the top of this file.
-> Queues as recorded here: functions EMPTY, rules EMPTY, indexes EMPTY, Coolify EMPTY.
+> ⚠️ **HISTORICAL QUEUE STATE — read it as a record, not as an instruction.**
+> Queues as recorded here: functions EMPTY, rules EMPTY, indexes EMPTY, Coolify
+> EMPTY. That happens to match the current state too, but **the current state is
+> stated only in the box at the top of this file** — do not act on this line.
 > [#374](https://github.com/kstruck/MMPoolsV3/pull/374) (close the hosting-fees
 > banner) merged as `a754987`, is frontend-only — `git diff --name-only
 > a754987^ a754987 -- functions/ shared/ firestore.rules firestore.indexes.json`
