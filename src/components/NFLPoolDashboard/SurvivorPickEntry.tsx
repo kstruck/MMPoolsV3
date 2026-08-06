@@ -182,20 +182,21 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
   const branding = (pool as any).branding || {};
   const primaryAccent = branding.secondaryColor || '#6366f1';
 
-  // Check if spreads are fully incorporated for all active games
-  const allSpreadsLocked = useMemo(() => {
-    return games.filter(g => g.status !== 'CANCELLED').every(g => g.spread?.locked);
-  }, [games]);
-
-  if (!allSpreadsLocked) {
-    return (
-      <div className="bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 p-8 rounded-xl text-center">
-        <AlertCircle size={48} className="mx-auto mb-4 opacity-50" />
-        <h3 className="font-display font-bold uppercase text-xl mb-2">Spreads Not Yet Finalized</h3>
-        <p className="font-body font-semibold text-sm">Pick sheets for this week are locked until all spreads have been fully incorporated. Please check back later.</p>
-      </div>
-    );
-  }
+  // ⛔ REMOVED: the "Spreads Not Yet Finalized" gate.
+  //
+  // Survivor is pick-a-winner. Its scoring never reads `game.spread` under any
+  // setting, so this sheet was refusing to render over data it does not use —
+  // on every preseason week, because the 2026 preseason feed carries a line on
+  // 1 of 49 games. The SERVER stopped doing this in #214 (`8c8e9c5`, an
+  // ancestor of the deployed functions build), which scoped SPREADS_NOT_LOCKED
+  // to `poolUsesSpreads`; this client copy was the only thing left blocking.
+  //
+  // Deleted rather than wrapped in `poolUsesSpreads(pool)`: that predicate is
+  // `type === 'NFL_PICKEM' && pickMode === 'ATS'`, so on a Survivor pool the
+  // branch could never fire, and an unreachable guard reads as a live one.
+  // `tests/spread-gate-parity.test.ts` pins that Survivor never uses spreads,
+  // so a future spread-consuming Survivor mode fails that test rather than
+  // silently inheriting a missing gate.
 
   return (
     <div className="space-y-6">

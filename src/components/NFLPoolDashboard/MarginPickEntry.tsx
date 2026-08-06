@@ -146,20 +146,11 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
   const branding = (pool as any).branding || {};
   const primaryAccent = branding.secondaryColor || '#6366f1';
 
-  // Check if spreads are fully incorporated for all active games
-  const allSpreadsLocked = useMemo(() => {
-    return games.filter(g => g.status !== 'CANCELLED').every(g => g.spread?.locked);
-  }, [games]);
-
-  if (!allSpreadsLocked) {
-    return (
-      <div className="bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 p-8 rounded-xl text-center">
-        <AlertCircle size={48} className="mx-auto mb-4 opacity-50" />
-        <h3 className="font-display font-bold uppercase text-xl mb-2">Spreads Not Yet Finalized</h3>
-        <p className="font-body font-semibold text-sm">Pick sheets for this week are locked until all spreads have been fully incorporated. Please check back later.</p>
-      </div>
-    );
-  }
+  // ⛔ REMOVED: the "Spreads Not Yet Finalized" gate. Twin of the Survivor
+  // sheet's — see the comment there for the full reasoning. Margin scores on
+  // the raw margin of victory and never reads `game.spread`, so this gate
+  // blocked a pool over data it does not use. The server's equivalent was
+  // scoped to `poolUsesSpreads` in #214 and has been deployed that way since.
 
   return (
     <div className="space-y-6">

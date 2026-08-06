@@ -11,6 +11,7 @@ import { poolSeasonType } from '../../utils/nflPending';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { loadDraft, saveDraft, clearDraft } from '../../utils/draftStore';
 import { pickHighlightClass, pickHighlightLabel } from '../../utils/pickHighlight';
+import { poolUsesSpreads } from '../../utils/poolUsesSpreads';
 import type { User, Pool, NFLGame } from '../../types';
 
 interface PickemDraft {
@@ -264,12 +265,16 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     return games.some(g => g.isMonday);
   }, [games]);
 
-  // Check if spreads are fully incorporated for all active games
-  const allSpreadsLocked = useMemo(() => {
-    return games.filter(g => g.status !== 'CANCELLED').every(g => g.spread?.locked);
-  }, [games]);
+  // Spreads block the sheet ONLY on a pool whose scoring reads them — i.e. an
+  // ATS pick'em. Mirrors the server's own precondition, which was scoped the
+  // same way in #214 and has been deployed that way since; this client copy is
+  // what has been blocking straight-up pick'em on a spread-less week.
+  const spreadsBlock = useMemo(() => {
+    if (!poolUsesSpreads(castPool)) return false;
+    return !games.filter(g => g.status !== 'CANCELLED').every(g => g.spread?.locked);
+  }, [games, castPool]);
 
-  if (!allSpreadsLocked) {
+  if (spreadsBlock) {
     return (
       <div className="bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 p-8 rounded-xl text-center">
         <AlertCircle size={48} className="mx-auto mb-4 opacity-50" />
