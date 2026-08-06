@@ -1,6 +1,16 @@
-# HANDOFF — Session entry point (updated 2026-08-05 evening: functions still deployed from `1105392` — no backend change since; **both of the day's frontend rebuilds have RUN and ALL FOUR QUEUES ARE EMPTY** — #367/#368/#366 and then #374, the latter verified inside the shipped bundle, not just by a moved hash; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.**)
+# HANDOFF — Session entry point (updated 2026-08-05 night: ✅ **`enforceBillingStatus` COMPLETED ITS FIRST-EVER SUCCESSFUL RUN** at 23:00 ET — Ops Health reads `STALE JOBS 0`, measured 21:22 MDT; functions still deployed from `1105392`; both of the day's frontend rebuilds have RUN; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.**)
 
-> ## ✅ STOP POINT **2026-08-05** (evening) — #374's rebuild RAN and is verified IN THE SHIPPED BUNDLE; **ALL FOUR QUEUES EMPTY**; functions unchanged at `1105392`; billing indexes DEPLOYED but the job has STILL not run with them — first fire is 23:00 ET tonight
+> ## ✅ STOP POINT **2026-08-05** (night) — **THE BILLING JOB RAN CLEAN, first success ever**; #374's rebuild RAN and is verified IN THE SHIPPED BUNDLE; **ALL FOUR QUEUES EMPTY**; functions unchanged at `1105392`
+>
+> ✅ **`enforceBillingStatus` COMPLETED ITS FIRST-EVER SUCCESSFUL RUN** — the
+> 23:00 ET 2026-08-05 fire, the first with the composite indexes present.
+> Measured at 21:22 MDT on Ops Health: **`STALE JOBS 0`** and **no
+> `enforceBillingStatus` line**, which is the win condition the morning doc's §0
+> table specifies (the line, not the count). Every earlier paragraph in this
+> file about that job failing on a missing index is now HISTORY. What this does
+> not yet report: how many pools moved `trial → grace_period` and whether the
+> commissioner emails went out — that detail lives in the heartbeat/logs, and a
+> zero-email clean run is still a clean run (`billing.ts:148-171`).
 >
 > The heading date is the date of the facts immediately below. It is REPLACED
 > on every deploy rather than annotated, because a note added above a stale

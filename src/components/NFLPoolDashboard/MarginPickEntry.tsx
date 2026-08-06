@@ -84,8 +84,26 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
     setSelectedTeam(teamAbbreviation);
   };
 
+  // The pick the SERVER already holds for this week — the source of truth the
+  // submit path compares against. `selectedTeam` alone cannot distinguish "I
+  // just clicked this" from "this was loaded from my saved entry".
+  const savedPick: string | null = entry?.picks?.[week] ?? null;
+
   const handleSubmit = async () => {
     if (!selectedTeam || isSelectionLocked) return;
+
+    // Re-submitting the pick that is already saved is not an error — it is a
+    // member double-checking. The server would reject it (its usedTeams guard
+    // does not exempt the current week's own pick), and the rejection rendered
+    // as "Your pick was NOT saved", telling someone their SAVED pick failed.
+    // Answer the actual question — "is my pick in?" — without a server call.
+    if (savedPick && selectedTeam === savedPick) {
+      setError(null);
+      setSubmittedAt(entry?.submittedAt ?? serverNow());
+      toast.success(`You're all set — your ${nflWeekLabel(poolSeasonType(pool), week)} pick (${selectedTeam}) is already saved.`);
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
 
@@ -208,6 +226,19 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
         <div role="status" className="bg-gold-400/10 border border-gold-500/40 text-gold-700 dark:text-gold-400 p-4 rounded-lg text-xs font-body font-bold num flex gap-2 items-center">
           <CheckCircle2 size={18} aria-hidden="true" />
           {nflWeekLabel(poolSeasonType(pool), week)} pick ({selectedTeam}) submitted at {formatTimeWithZone(submittedAt)}. You can change it until the game locks.
+        </div>
+      )}
+
+      {/* Saved-state banner from the SERVER's entry, not session state. The
+          receipt above only exists after a submit in this browser session, so a
+          member who saved yesterday and reloads sees nothing telling them their
+          pick is in — which is precisely the doubt that made a real user
+          re-submit the same pick and read the rejection as "not saved". */}
+      {savedPick && !submittedAt && !error && (
+        <div role="status" className="bg-gold-400/10 border border-gold-500/40 text-gold-700 dark:text-gold-400 p-4 rounded-lg text-xs font-body font-bold num flex gap-2 items-center">
+          <CheckCircle2 size={18} aria-hidden="true" />
+          Your {nflWeekLabel(poolSeasonType(pool), week)} pick is saved: {savedPick}.
+          {isSelectionLocked ? ' Picks are locked for this week.' : ' You can change it until lock.'}
         </div>
       )}
 
@@ -372,9 +403,17 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
             onClick={handleSubmit}
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Locking in...' : (
+            {isSubmitting ? 'Locking in...' : savedPick === selectedTeam ? (
+              // The selection on screen IS the saved pick. Label with the fact
+              // rather than an action, so "did it save?" is answered before the
+              // click — clicking still works and confirms via handleSubmit's
+              // short-circuit.
               <>
-                <Save size={18} /> Lock In Margin Selection
+                <Check size={18} /> Pick Saved: {selectedTeam}
+              </>
+            ) : (
+              <>
+                <Save size={18} /> {savedPick ? `Change Pick to ${selectedTeam}` : 'Lock In Margin Selection'}
               </>
             )}
           </Button>

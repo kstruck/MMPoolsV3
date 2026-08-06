@@ -99,8 +99,24 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
     setSelectedTeam(teamAbbreviation);
   };
 
+  // The pick the SERVER already holds for this week — see MarginPickEntry for
+  // the twin of this pattern and the reasoning.
+  const savedPick: string | null = entry?.picks?.[week] ?? null;
+
   const handleSubmit = async () => {
     if (!selectedTeam || isSelectionLocked) return;
+
+    // Re-submitting the already-saved pick is a member double-checking, not an
+    // error. The server's usedTeams guard does not exempt the current week's
+    // own pick, so the call would come back TEAM_ALREADY_USED and render as a
+    // failed save — about a pick that is safely in. Answer locally instead.
+    if (savedPick && selectedTeam === savedPick) {
+      setError(null);
+      setSubmittedAt(entry?.submittedAt ?? serverNow());
+      toast.success(`You're all set — your ${nflWeekLabel(poolSeasonType(pool), week)} pick (${selectedTeam}) is already saved.`);
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
 
@@ -241,6 +257,17 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
         <div role="status" className="bg-gold-400/10 border border-gold-500/40 text-gold-700 dark:text-gold-400 p-4 rounded-lg text-xs font-body font-bold num flex gap-2 items-center">
           <CheckCircle2 size={18} aria-hidden="true" />
           {nflWeekLabel(poolSeasonType(pool), week)} pick ({selectedTeam}) submitted at {formatTimeWithZone(submittedAt)}. You can change it until the game locks.
+        </div>
+      )}
+
+      {/* Saved-state banner from the SERVER's entry — the receipt above only
+          exists after a submit in this session, so a reload showed nothing and
+          left members unsure whether their pick was in. Twin of MarginPickEntry. */}
+      {savedPick && !submittedAt && !error && (
+        <div role="status" className="bg-gold-400/10 border border-gold-500/40 text-gold-700 dark:text-gold-400 p-4 rounded-lg text-xs font-body font-bold num flex gap-2 items-center">
+          <CheckCircle2 size={18} aria-hidden="true" />
+          Your {nflWeekLabel(poolSeasonType(pool), week)} pick is saved: {savedPick}.
+          {isSelectionLocked ? ' Picks are locked for this week.' : ' You can change it until lock.'}
         </div>
       )}
 
@@ -411,9 +438,14 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
             onClick={handleSubmit}
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Locking in...' : (
+            {isSubmitting ? 'Locking in...' : savedPick === selectedTeam ? (
+              // Fact, not action — the on-screen selection IS the saved pick.
               <>
-                <Save size={18} /> Lock In Survivor Selection
+                <Check size={18} /> Pick Saved: {selectedTeam}
+              </>
+            ) : (
+              <>
+                <Save size={18} /> {savedPick ? `Change Pick to ${selectedTeam}` : 'Lock In Survivor Selection'}
               </>
             )}
           </Button>
