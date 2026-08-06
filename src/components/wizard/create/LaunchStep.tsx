@@ -363,7 +363,26 @@ export function LaunchStep(props: LaunchStepProps) {
       <div className="mb-4 rounded-lg border border-slate-800 bg-slate-950/50 p-4">
         <CheckboxField
           name="_tosAccepted"
-          label="I agree to the Terms of Service and confirm entry fees are collected peer-to-peer."
+          label={
+            <span>
+              I agree to the{' '}
+              {/* Opens in a new tab so reading the terms does not destroy a
+                  wizard that holds six steps of unsaved form state.
+                  stopPropagation because this anchor sits INSIDE the <label>:
+                  without it, clicking through to read the terms would also
+                  tick the box the reader has not yet agreed to. */}
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="font-semibold text-indigo-400 underline underline-offset-2 hover:text-indigo-300"
+              >
+                Terms of Service
+              </a>{' '}
+              and confirm entry fees are collected peer-to-peer.
+            </span>
+          }
         />
       </div>
 

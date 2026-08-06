@@ -6,7 +6,8 @@ import {
   WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep,
 } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
-import { TextField, SelectField, CheckboxField } from '../fields';
+import { ReadOnlyField, SelectField, CheckboxField } from '../fields';
+import { CURRENT_SEASON } from './currentSeason';
 import type { WizardStepDef } from '../types';
 import { buildNFLPayload } from './buildNFLPayload';
 
@@ -21,7 +22,11 @@ function StepPickemRules() {
     <div>
       <h3 className="mb-1 text-lg font-bold text-white">Pick&apos;em rules</h3>
       <p className="mb-5 text-sm text-slate-400">Season and how picks lock and score.</p>
-      <TextField name="season" label="Season" placeholder="2025" />
+      <ReadOnlyField
+        label="Season"
+        value={CURRENT_SEASON}
+        hint="Pools are created for the current NFL season. Pick preseason, regular season or postseason below."
+      />
       <SelectField
         name="seasonType"
         label="Season type"
@@ -56,7 +61,7 @@ function StepPickemRules() {
 const defaultValues: Record<string, unknown> = {
   type: 'NFL_PICKEM',
   name: '', managerName: '', contactEmail: '', isPublic: true,
-  season: '2025',
+  season: CURRENT_SEASON,
   seasonType: '2',
   paymentInstructions: '',
   paymentHandles: { venmo: '', zelle: '', cashapp: '', paypal: '', googlePay: '' },
@@ -81,7 +86,7 @@ export function CreateNFLPickemPool(props: { user: User; onComplete: (poolId: st
   const { user, onComplete, onCancel } = props;
   const steps: WizardStepDef[] = useMemo(() => [
     { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
-    { id: 'rules', title: "Pick'em rules", fields: ['season'], Component: StepPickemRules },
+    { id: 'rules', title: "Pick'em rules", Component: StepPickemRules },
     { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="settings.entryFee" /> },
     { id: 'payouts', title: 'Payouts', Component: () => <StepPayouts payoutsField="settings.payouts" /> },
     { id: 'branding', title: 'Branding', Component: StepBranding },
