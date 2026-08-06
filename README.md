@@ -34,7 +34,7 @@ A comprehensive full-season NFL suite equipped with robust scoring engines, sche
   * **Drag-and-Drop Picker:** Interactive UI to reorder and rank all 14 playoff teams from 14 (most confident) to 1 (least confident).
   * **Round Multiplier Scoring:** Points scale with each round (x1 Wild Card, x2 Divisional, x4 Conference, x8 Super Bowl).
   * **Seed Underdog Bonus:** Optional configuration to reward underdog wins with extra points.
-* **Real-Time Scoring Pipeline (NEW!):** A multi-tier automated scoring engine built for a live NFL season.
+* **Real-Time Scoring Pipeline (NEW!):** A multi-tier automated scoring engine built for a live NFL season. Every scheduled job ships behind a kill-switch and a dry-run gate (fail-closed) — the operator explicitly enables each one per season.
   * **Provisional Live Scoring:** Scores update as games go final, with a fenced scoring lease so only one scorer can grade a week at a time.
   * **Durable Reconciliation Queue:** A rescore queue re-grades weeks when late stat corrections land, and a deep-sweep job catches corrections that arrive more than 24 hours after a game.
   * **Feed Snapshots & Replay:** When enabled, ESPN payloads are snapshotted best-effort (deduplicated against the previous response); a week can be rebuilt from a stored snapshot, and the scorer only grades what the feed actually reported.
