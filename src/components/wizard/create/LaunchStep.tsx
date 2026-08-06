@@ -10,6 +10,9 @@ import {
   isPassLive,
 } from '@shared/schemas';
 import { dbService } from '../../../services/dbService';
+import { logger } from '../../../utils/logger';
+import type { User } from '../../../types';
+import { profileUpdatesFrom } from './profilePrefill';
 import { CheckboxField, Field, NumberField } from '../fields';
 
 // ---------------------------------------------------------------------------
@@ -51,6 +54,13 @@ interface RedeemableEntitlement {
 
 export interface LaunchStepProps {
   uid: string;
+  /**
+   * The signed-in commissioner, used ONLY to remember their contact and payout
+   * handles after a successful create (`profileUpdatesFrom`). Optional so the
+   * seven wizards can adopt it independently; omitting it just skips the
+   * write-back.
+   */
+  user?: User | null;
   poolType: PoolType;
   /** RHF path of the entry fee (for the summary line); optional. */
   feeField?: string;
@@ -63,7 +73,7 @@ export interface LaunchStepProps {
 type Busy = null | 'free' | 'trial' | 'activate' | 'redeem';
 
 export function LaunchStep(props: LaunchStepProps) {
-  const { uid, poolType, feeField, createPool, onCreated } = props;
+  const { uid, user, poolType, feeField, createPool, onCreated } = props;
   const { watch, getValues, trigger } = useFormContext();
 
   const name = String(watch('name') ?? '');
@@ -205,8 +215,41 @@ export function LaunchStep(props: LaunchStepProps) {
     void _tosAccepted;
     const poolId = await createPool(clean);
     setCreatedPoolId(poolId);
+
+    // Remember this commissioner's contact + payout handles so their NEXT pool
+    // starts pre-filled. Blanks only — see profilePrefill's docblock.
+    //
+    // ⚠️ Deliberately swallowed. The pool EXISTS at this point; a failed profile
+    // write is a lost convenience, not a lost pool, and letting it throw here
+    // would surface as "Something went wrong launching your pool" and send the
+    // commissioner back to create a SECOND one. Silence read as success is this
+    // repo's most repeated defect, so the failure is logged rather than dropped.
+    const profileUpdates = profileUpdatesFrom(user, clean);
+    if (profileUpdates) {
+      try {
+        // ⚠️ CHECK THE RETURN VALUE, do not rely on the catch alone.
+        // `dbService.updateUser` → `BaseRepository.update`, which CATCHES every
+        // Firestore failure and resolves `false` (BaseRepository.ts:84-90). So a
+        // permission-denied, an offline write or a missing user doc never throws
+        // and would sail straight past a try/catch as a success. The catch is
+        // kept for anything that throws before the repository is reached.
+        // `profileUpdates` uses Firestore DOT PATHS (`paymentHandles.cashapp`)
+        // rather than a nested object, so the write merges instead of replacing
+        // the handle map. That is why it is not shaped like `Partial<User>`.
+        const saved = await dbService.updateUser(uid, profileUpdates);
+        if (!saved) {
+          logger.warn(
+            '[LaunchStep] profile save returned false — contact/payment details were NOT remembered',
+            { uid, fields: Object.keys(profileUpdates) },
+          );
+        }
+      } catch (e) {
+        logger.warn('[LaunchStep] could not save contact/payment details to the profile', e);
+      }
+    }
+
     return poolId;
-  }, [tosAccepted, trigger, getValues, createPool, createdPoolId]);
+  }, [tosAccepted, trigger, getValues, createPool, createdPoolId, user, uid]);
 
   const startTrialOrFree = useCallback(async (mode: 'free' | 'trial') => {
     setBusy(mode);

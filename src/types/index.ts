@@ -527,9 +527,18 @@ export interface User {
     linkedin?: string;
     other?: string;
   };
+  // The commissioner's own payout handles, remembered across pools.
+  //
+  // Widened from { venmo, zelle } on 2026-08-06 to match the FIVE the pool
+  // wizard collects. It stored two of five, so a commissioner re-typed their
+  // Cash App / PayPal / Google Pay details for every pool they created and the
+  // profile could never prefill them.
   paymentHandles?: {
     venmo?: string;
     zelle?: string;
+    cashapp?: string;
+    paypal?: string;
+    googlePay?: string;
   };
   // Referral System
   referralCode?: string; // Unique code for referral link (typically same as user ID)

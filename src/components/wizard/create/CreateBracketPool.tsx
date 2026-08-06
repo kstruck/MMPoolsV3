@@ -7,6 +7,7 @@ import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep } 
 import { StepPayouts } from '../steps/StepPayouts';
 import { NumberField, SelectField, CheckboxField } from '../fields';
 import type { WizardStepDef } from '../types';
+import { prefillFromUser } from './profilePrefill';
 import { buildBracketPayload } from './buildBracketPayload';
 
 // Creates the bracket DRAFT and RESOLVES the new poolId (no navigation) so the
@@ -72,6 +73,17 @@ const defaultValues: Record<string, unknown> = {
 
 export function CreateBracketPool(props: { user: User; onComplete: (poolId: string) => void; onCancel: () => void }) {
   const { user, onComplete, onCancel } = props;
+  // Start from the commissioner's own profile: they are already a signed-in
+  // member, so their name, contact email and payout handles are known.
+  //
+  // Read ONCE, at mount. `useForm({ defaultValues })` in WizardShell does not
+  // re-initialise when this object changes, and that is fine here rather than a
+  // latent bug: App.tsx gates this whole route on `user &&`, so the wizard never
+  // mounts with a null user and there is no late-arriving profile to wait for.
+  // It is also the safe direction — the post-create write-back updates the user
+  // doc, and a shell that DID re-initialise would wipe a half-filled form the
+  // moment that landed. The useMemo is for referential stability, nothing more.
+  const seededDefaults = useMemo(() => ({ ...defaultValues, ...prefillFromUser(user) }), [user]);
   const steps: WizardStepDef[] = useMemo(() => [
     { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
     { id: 'tournament', title: 'Tournament', fields: ['seasonYear'], Component: StepBracketDetails },
@@ -83,6 +95,7 @@ export function CreateBracketPool(props: { user: User; onComplete: (poolId: stri
       Component: () => (
         <LaunchStep
           uid={user.id}
+          user={user}
           poolType="BRACKET"
           feeField="settings.entryFee"
           createPool={createBracketPool}
@@ -90,7 +103,7 @@ export function CreateBracketPool(props: { user: User; onComplete: (poolId: stri
         />
       ),
     },
-  ], [user.id, onComplete]);
+  ], [user, onComplete]);
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-10">
@@ -101,7 +114,7 @@ export function CreateBracketPool(props: { user: User; onComplete: (poolId: stri
         poolType="BRACKET"
         steps={steps}
         schema={bracketCreateInputSchema}
-        defaultValues={defaultValues}
+        defaultValues={seededDefaults}
         userId={user.id}
         submitLabel="Create draft"
         onSubmit={async (values) => {

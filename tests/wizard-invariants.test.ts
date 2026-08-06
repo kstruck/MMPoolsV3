@@ -115,6 +115,81 @@ describe('CURRENT_SEASON is usable as a Firestore key', () => {
   });
 });
 
+describe('every wizard prefills from the profile and remembers what it learns', () => {
+  // The unit tests in `src/components/wizard/create/profilePrefill.test.ts`
+  // prove the two helpers are correct. They cannot prove the wizards CALL them —
+  // and "correct helper, wired into six of seven surfaces" is the exact defect
+  // shape #315 and #319 were.
+  it.each(WIZARDS)('%s seeds its defaults from the signed-in user', file => {
+    const src = readFileSync(resolve(root, file), 'utf8');
+    expect(src, `${file} should import prefillFromUser`).toMatch(/from '\.\/profilePrefill'/);
+    expect(src, `${file} should build seeded defaults`).toMatch(/prefillFromUser\(user\)/);
+    // Wired into the shell, not merely computed. A `seededDefaults` that is
+    // built and then never passed compiles, lints and prefills nothing.
+    expect(src, `${file} should pass seededDefaults to WizardShell`).toMatch(/defaultValues=\{seededDefaults\}/);
+    expect(src, `${file} should not still pass the raw module-level defaults`).not.toMatch(/defaultValues=\{defaultValues\}/);
+  });
+
+  it.each(WIZARDS)('%s hands LaunchStep the user, so the write-back can run', file => {
+    const src = readFileSync(resolve(root, file), 'utf8');
+    // `user` is optional on LaunchStepProps so the wizards could adopt this
+    // independently — which means omitting it is silent. Pinned here instead.
+    expect(src, `${file} should pass user={user} to LaunchStep`).toMatch(/user=\{user\}/);
+  });
+
+  it('LaunchStep saves the profile without being able to fail the launch', () => {
+    const launch = readFileSync(resolve(root, `${CREATE_DIR}/LaunchStep.tsx`), 'utf8');
+    expect(launch).toMatch(/profileUpdatesFrom\(user, clean\)/);
+    expect(launch).toMatch(/dbService\.updateUser\(uid, profileUpdates\)/);
+    // The pool EXISTS by this point. An unhandled throw here would surface as
+    // "Something went wrong launching your pool" and send the commissioner back
+    // to create a SECOND one — so the write must be caught, and the failure
+    // must still be logged rather than swallowed silently.
+    // Ordering, not proximity. A character-window regex here failed the moment
+    // an explanatory comment was added between the `try` and the call — the
+    // guard broke on prose, which is a guard that will eventually be deleted
+    // for being annoying rather than fixed.
+    const call = launch.indexOf('dbService.updateUser(uid, profileUpdates)');
+    const tryBefore = launch.lastIndexOf('try {', call);
+    const catchAfter = launch.indexOf('} catch', call);
+    expect(call).toBeGreaterThan(-1);
+    expect(tryBefore).toBeGreaterThan(-1);
+    expect(catchAfter).toBeGreaterThan(call);
+    expect(launch).toMatch(/logger\.warn\(/);
+  });
+
+  it('checks the RETURN VALUE, because the repository never throws', () => {
+    const launch = readFileSync(resolve(root, `${CREATE_DIR}/LaunchStep.tsx`), 'utf8');
+    // `dbService.updateUser` -> `BaseRepository.update`, which catches every
+    // Firestore failure and resolves `false` (BaseRepository.ts:84-90). A
+    // try/catch alone therefore reads permission-denied, offline and
+    // missing-doc as SUCCESS — the "absent error is a pass" defect this repo
+    // has shipped three times (#314's unbound token, the zero-counter
+    // heartbeat, the 13-day Sentry outage). Found by codex on this PR.
+    expect(launch).toMatch(/const saved = await dbService\.updateUser\(/);
+    expect(launch).toMatch(/if \(!saved\)/);
+  });
+
+  it.each(WIZARDS)('%s gives LaunchStep the CURRENT user, not a first-render snapshot', file => {
+    const src = readFileSync(resolve(root, file), 'utf8');
+    // The steps memo used to depend on `user.id`, which never changes — so
+    // LaunchStep kept the user object from first render. If the commissioner
+    // edited their profile in another tab mid-wizard, the write-back would run
+    // against a stale snapshot. (codex, on this PR. The dot-path write makes
+    // that harmless, but the two fixes are independent and both are kept.)
+    expect(src).not.toMatch(/\], \[user\.id, onComplete\]\)/);
+    expect(src).toMatch(/\], \[user, onComplete\]\)/);
+  });
+
+  it('the write-back runs AFTER the pool is created, never before', () => {
+    const launch = readFileSync(resolve(root, `${CREATE_DIR}/LaunchStep.tsx`), 'utf8');
+    const created = launch.indexOf('const poolId = await createPool(clean);');
+    const saved = launch.indexOf('profileUpdatesFrom(user, clean)');
+    expect(created).toBeGreaterThan(-1);
+    expect(saved).toBeGreaterThan(created);
+  });
+});
+
 describe('the Terms of Service gate links to the terms', () => {
   const launch = readFileSync(resolve(root, `${CREATE_DIR}/LaunchStep.tsx`), 'utf8');
 
