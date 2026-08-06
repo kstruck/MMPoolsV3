@@ -28,6 +28,29 @@ export function Field(props: { label: string; htmlFor?: string; error?: string; 
   );
 }
 
+/**
+ * A labelled value the commissioner can SEE but not change.
+ *
+ * Not a disabled `<input>`: a greyed-out box still reads as "a field I might be
+ * able to enable", and a disabled input is skipped by keyboard navigation, so
+ * a keyboard or screen-reader user would never encounter the value at all.
+ * This renders plain text that is in the tab order of nothing and in the
+ * reading order of everything.
+ *
+ * It is deliberately NOT registered with react-hook-form — the value it shows
+ * comes from `defaultValues` and no user action can alter it.
+ */
+export function ReadOnlyField(props: { label: string; value: string; hint?: string }) {
+  const { label, value, hint } = props;
+  return (
+    <Field label={label} hint={hint}>
+      <p className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm font-semibold text-white">
+        {value}
+      </p>
+    </Field>
+  );
+}
+
 export function TextField(props: { name: string; label: string; placeholder?: string; hint?: string }) {
   const { name, label, placeholder, hint } = props;
   const { register, formState: { errors } } = useFormContext();
@@ -70,7 +93,11 @@ export function SelectField(props: { name: string; label: string; options: { val
   );
 }
 
-export function CheckboxField(props: { name: string; label: string }) {
+// `label` is a ReactNode, not a string, so a caller can put a link inside it —
+// the Terms of Service gate on LaunchStep needs one. A link nested in a <label>
+// still activates the label's control on click, so any such caller must
+// stopPropagation on the anchor or reading the terms silently ticks the box.
+export function CheckboxField(props: { name: string; label: ReactNode }) {
   const { name, label } = props;
   const { register } = useFormContext();
   return (

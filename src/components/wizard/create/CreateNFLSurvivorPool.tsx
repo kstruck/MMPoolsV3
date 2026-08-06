@@ -4,7 +4,8 @@ import { dbService } from '../../../services/dbService';
 import { survivorCreateInputSchema } from '@shared/schemas';
 import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
-import { TextField, NumberField, CheckboxField, SelectField } from '../fields';
+import { ReadOnlyField, NumberField, CheckboxField, SelectField } from '../fields';
+import { CURRENT_SEASON } from './currentSeason';
 import type { WizardStepDef } from '../types';
 import { buildNFLPayload } from './buildNFLPayload';
 
@@ -18,7 +19,11 @@ function StepSurvivorRules() {
     <div>
       <h3 className="mb-1 text-lg font-bold text-white">Survivor rules</h3>
       <p className="mb-5 text-sm text-slate-400">Season, strikes, and buy-backs.</p>
-      <TextField name="season" label="Season" placeholder="2025" />
+      <ReadOnlyField
+        label="Season"
+        value={CURRENT_SEASON}
+        hint="Pools are created for the current NFL season. Pick preseason, regular season or postseason below."
+      />
       <SelectField
         name="seasonType"
         label="Season type"
@@ -43,7 +48,7 @@ function StepSurvivorRules() {
 const defaultValues: Record<string, unknown> = {
   type: 'NFL_SURVIVOR',
   name: '', managerName: '', contactEmail: '', isPublic: true,
-  season: '2025',
+  season: CURRENT_SEASON,
   seasonType: '2',
   paymentInstructions: '',
   paymentHandles: { venmo: '', zelle: '', cashapp: '', paypal: '', googlePay: '' },

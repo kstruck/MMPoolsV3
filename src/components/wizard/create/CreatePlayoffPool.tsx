@@ -7,7 +7,8 @@ import {
   WizardShell, StepBasics, StepFeeAndPayment, StepBranding, StepReminders, LaunchStep,
 } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
-import { TextField, NumberField, Field } from '../fields';
+import { ReadOnlyField, NumberField, Field } from '../fields';
+import { CURRENT_SEASON } from './currentSeason';
 import type { WizardStepDef } from '../types';
 import { buildPlayoffPayload } from './buildPlayoffPayload';
 
@@ -24,7 +25,7 @@ function StepPlayoffDetails() {
     <div>
       <h3 className="mb-1 text-lg font-bold text-white">Playoff details</h3>
       <p className="mb-5 text-sm text-slate-400">Season, lock time, and how each round scores.</p>
-      <TextField name="season" label="Season" placeholder="2025" />
+      <ReadOnlyField label="Season" value={CURRENT_SEASON} hint="Playoff pools belong to the current NFL season, whose postseason is played the following January." />
       <Field label="Lock date &amp; time" htmlFor="lockDate" hint="Picks lock at Wild Card kickoff by default.">
         <input id="lockDate" type="datetime-local" className={inputCls} {...register('lockDate')} />
       </Field>
@@ -42,7 +43,7 @@ function StepPlayoffDetails() {
 const defaultValues: Record<string, unknown> = {
   type: 'NFL_PLAYOFFS',
   name: '', managerName: '', contactEmail: '', isPublic: true,
-  season: '2025', slug: '', lockDate: '',
+  season: CURRENT_SEASON, slug: '', lockDate: '',
   paymentInstructions: '',
   paymentHandles: { venmo: '', zelle: '', cashapp: '', paypal: '', googlePay: '' },
   branding: { logoUrl: '', primaryColor: '', secondaryColor: '' },
