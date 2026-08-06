@@ -98,11 +98,12 @@
 > **Rules remain ≡ `0a705c0`** — `firestore.rules` is byte-identical since, so no
 > rules deploy is owed.
 >
-> ⚠️ **HISTORICAL — superseded by the current box at the top of this file, twice
-> over.** Both rebuilds recorded here ran and nothing was owed AT THAT TIME; a
-> rebuild IS owed now. The hash named here has moved twice since. **The only live
-> hash claim in this file is in the box at the top.** 📌 The reading at the time
-> was `index-BkVTInz0.js`, read off the prod HTML with
+> ⚠️ **HISTORICAL — superseded by the current box at the top of this file.** Both
+> rebuilds recorded here ran and nothing was owed at that time. **Nothing is owed
+> now either**, but that is the top box's statement, not this one's — a later
+> rebuild has happened since and the hash named here has moved twice. **The only
+> live hash claim in this file is in the box at the top.** 📌 The reading at the
+> time was `index-BkVTInz0.js`, read off the prod HTML with
 > `[regex]::Match((Invoke-WebRequest https://www.marchmeleepools.com/ -UseBasicParsing).Content, 'index-[A-Za-z0-9_-]+\.js').Value`.
 > The chain that day was `index-bJOPbtJA.js` → `index-BClXJswC.js` (#367/#368/#366)
 > → **`index-BkVTInz0.js`** (#374).
@@ -184,9 +185,10 @@
 > the local edit handler and proves nothing. qodo's finding on #375.)
 > **`MORNING-2026-08-04.md` §2 item 1 still tells Kevin to do this; it is stale.**
 >
-> ⚠️ **HISTORICAL QUEUE STATE.** Functions, rules and indexes are still EMPTY;
-> **Coolify is NOT — it is OWED.** See the current box at the top of this file.
-> Queues as recorded here: functions EMPTY, rules EMPTY, indexes EMPTY, Coolify EMPTY.
+> ⚠️ **HISTORICAL QUEUE STATE — read it as a record, not as an instruction.**
+> Queues as recorded here: functions EMPTY, rules EMPTY, indexes EMPTY, Coolify
+> EMPTY. That happens to match the current state too, but **the current state is
+> stated only in the box at the top of this file** — do not act on this line.
 > [#374](https://github.com/kstruck/MMPoolsV3/pull/374) (close the hosting-fees
 > banner) merged as `a754987`, is frontend-only — `git diff --name-only
 > a754987^ a754987 -- functions/ shared/ firestore.rules firestore.indexes.json`
