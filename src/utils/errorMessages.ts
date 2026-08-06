@@ -12,6 +12,15 @@ interface ErrorLike {
 // Server callables prefix domain errors inside the message, e.g.
 // "WEEK_LOCKED: All picks in weekly lock pools are locked."
 const DOMAIN_PREFIX_MESSAGES: Record<string, string> = {
+    // Survivor/Margin one-team-once-per-season rule (nflPools.ts throws it for
+    // both). Without this entry the prefix fell through to the generic
+    // "Your pick was NOT saved. Please try again." — which reads as a transient
+    // failure and invites the exact retry the server just refused. The genuine
+    // reach of this error is CROSS-week reuse; the same-team-same-week resubmit
+    // is short-circuited client-side before it ever calls the server (the
+    // saved pick is already in hand), so this copy only speaks to reuse.
+    TEAM_ALREADY_USED: "You've already used that team in an earlier week — each team can only be picked once per season. Choose a different team.",
+    TEAM_NOT_PLAYING: "That team doesn't play this week. Pick a team from this week's games.",
     WEEK_LOCKED: 'This week is locked — the first game has already kicked off, so picks can no longer be changed.',
     GAME_LOCKED: 'That game has already started, so this pick is locked. Your other picks were not affected — review and resubmit them.',
     SPREADS_NOT_LOCKED: "This week's spreads aren't finalized yet. Picks open once all lines are set — check back soon.",

@@ -4,6 +4,7 @@ import type { User as UserType, Pool, NFLGame, WeeklyRecap } from '../../types';
 import { NFLGameTicker } from './NFLGameTicker';
 import { dbService } from '../../services/dbService';
 import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
+import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { 
   LayoutGrid, 
@@ -240,6 +241,11 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       return p;
     }, { replace: true });
   };
+
+  // Per-team W-L(-T) for THIS pool's seasonType, folded from the season games
+  // already in hand — no record data exists in Firestore, so this is derived,
+  // and it is honest for HOF weekend: everyone is 0-0 until a game goes FINAL.
+  const teamRecords = useMemo(() => computeTeamRecords(_games, seasonType), [_games, seasonType]);
 
   const focusGame = useMemo(() => {
     if (weeklyGames.length === 0) return null;
@@ -578,18 +584,41 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                 </h3>
                 <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em] num">{nflWeekLabel(seasonType, selectedWeek)} Games</p>
               </div>
-              <button 
+              {/* THE picks entry point, promoted from a 12px "Upcoming ›" text
+                  link that nobody read as "this is where you pick". Users were
+                  clicking the team logos below and concluding picks were broken
+                  — this is the affordance they were looking for, where they
+                  were looking for it. */}
+              <Button
+                variant="primary"
+                size="md"
                 onClick={() => onSelectTab('picks')}
-                className="font-display font-bold uppercase text-[12px] tracking-[0.05em] text-navy-700 dark:text-gold-400 hover:text-navy-600 dark:hover:text-gold-300 flex items-center gap-1 transition-colors duration-150"
               >
-                Upcoming <ChevronRight size={14} />
-              </button>
+                Make My Picks <ChevronRight size={14} />
+              </Button>
             </div>
 
             {focusGame ? (
               <>
-                {/* Live Match Helmets/Logos & Score Panel */}
-                <div className="bg-page border border-line p-5 pt-7 rounded-lg mb-5 flex justify-between items-center relative overflow-hidden">
+                {/* Live Match Helmets/Logos & Score Panel.
+
+                    The whole panel is a click target for the picks tab: real
+                    users were clicking the team logos here expecting to pick
+                    and getting nothing — the dead click read as a broken site.
+                    This panel is a PREVIEW, not a ballot (picks live on their
+                    own tab with lock/used-team rules), so the honest response
+                    to a click anywhere on it is "take me to where I pick".
+                    A real <button> wrapper would fight the absolute-positioned
+                    badge and the flex layout, so it is role="button" with
+                    keyboard support instead. */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Open the picks tab to make your pick"
+                  title="Make your pick"
+                  onClick={() => onSelectTab('picks')}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectTab('picks'); } }}
+                  className="bg-page border border-line p-5 pt-7 rounded-lg mb-5 flex justify-between items-center relative overflow-hidden cursor-pointer hover:border-gold-500/50 transition-colors duration-150">
                   <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20">
                     {focusGame.status === 'IN_PROGRESS' ? (
                       <Badge status="live" />
@@ -622,6 +651,9 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                     )}
                     <span className="text-xs font-display font-bold uppercase text-[color:var(--text)] mt-1 num">
                       {focusGame.awayTeam.abbreviation} {focusGame.scores?.away ?? 0}
+                    </span>
+                    <span className="text-[9px] font-display font-bold text-faint num">
+                      ({formatTeamRecord(teamRecords.get(focusGame.awayTeam.abbreviation))})
                     </span>
                     <span className="text-[9px] font-display font-bold uppercase tracking-[0.08em] text-gold-600 dark:text-gold-400 inline-flex items-center gap-0.5">
                       {myPick === focusGame.awayTeam.name || myPick === focusGame.awayTeam.abbreviation ? (<><Star size={9} className="fill-current" /> Picked</>) : ''}
@@ -656,6 +688,9 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                     )}
                     <span className="text-xs font-display font-bold uppercase text-[color:var(--text)] mt-1 num">
                       {focusGame.homeTeam.abbreviation} {focusGame.scores?.home ?? 0}
+                    </span>
+                    <span className="text-[9px] font-display font-bold text-faint num">
+                      ({formatTeamRecord(teamRecords.get(focusGame.homeTeam.abbreviation))})
                     </span>
                     <span className="text-[9px] font-display font-bold uppercase tracking-[0.08em] text-gold-600 dark:text-gold-400 inline-flex items-center gap-0.5">
                       {myPick === focusGame.homeTeam.name || myPick === focusGame.homeTeam.abbreviation ? (<><Star size={9} className="fill-current" /> Picked</>) : ''}

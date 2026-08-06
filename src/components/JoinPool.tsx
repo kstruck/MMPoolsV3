@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { nflWeekLabel } from '../utils/nflWeekLabel';
 import { poolSeasonType } from '../utils/nflPending';
 import { useParams, useNavigate } from 'react-router';
-import { Trophy, ShieldAlert, Coins, Users, ArrowRight, LogIn, Mail, Phone, Check } from 'lucide-react';
+import { Trophy, ShieldAlert, Coins, Users, ArrowRight, LogIn, UserPlus, Mail, Phone, Check } from 'lucide-react';
 import { dbService } from '../services/dbService';
 import { logger } from '../utils/logger';
 import { useToast } from './ui/Toast';
@@ -15,7 +15,10 @@ import { Button } from './ui';
 
 interface JoinPoolProps {
   user: User | null;
-  onOpenAuth: () => void;
+  /** Opens the auth modal. `mode` preselects the sign-in vs create-account face
+      — App's `handleOpenAuth` has taken this since the Auth modal gained
+      `defaultIsRegistering`; this prop type was just never widened to say so. */
+  onOpenAuth: (mode?: 'login' | 'register') => void;
   onLogout: () => void;
   onCreatePool: () => void;
 }
@@ -49,11 +52,17 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
     return () => unsub();
   }, [poolId]);
 
+  /** Signed-out path: remember the join intent, then open auth on the face the
+      visitor asked for. A brand-new invitee should land on Create Account, not
+      on a sign-in form for an account they do not have. */
+  const handleAuthThenJoin = useCallback((mode: 'login' | 'register') => {
+    try { sessionStorage.setItem(pendingJoinKey, '1'); } catch { /* storage unavailable */ }
+    onOpenAuth(mode);
+  }, [onOpenAuth, pendingJoinKey]);
+
   const handleJoin = useCallback(async () => {
     if (!user) {
-      // Remember the intent so signing in/up completes the join automatically
-      try { sessionStorage.setItem(pendingJoinKey, '1'); } catch { /* storage unavailable */ }
-      onOpenAuth();
+      handleAuthThenJoin('login');
       return;
     }
     if (!poolId) return;
@@ -301,14 +310,29 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                 Enter Pool Dashboard <ArrowRight size={18} />
               </Button>
             ) : !user ? (
-              <Button
-                variant="secondary"
-                size="lg"
-                onClick={handleJoin}
-                className="w-full"
-              >
-                <LogIn size={18} /> Sign In to Join Pool
-              </Button>
+              // Two doors, new players first. This page IS the invite landing
+              // for people who have never seen the site; a lone "Sign In" told
+              // them they needed an account they don't have and gave no way to
+              // make one. Both doors remember the join intent, so signing up OR
+              // in completes the join automatically.
+              <div className="flex flex-col gap-3">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={() => handleAuthThenJoin('register')}
+                  className="w-full"
+                >
+                  <UserPlus size={18} /> New Here? Create Free Account &amp; Join
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  onClick={() => handleAuthThenJoin('login')}
+                  className="w-full"
+                >
+                  <LogIn size={18} /> Have an Account? Sign In to Join
+                </Button>
+              </div>
             ) : (
               <Button
                 variant="primary"
