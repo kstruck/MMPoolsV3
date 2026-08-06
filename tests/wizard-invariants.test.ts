@@ -145,8 +145,20 @@ describe('every wizard prefills from the profile and remembers what it learns', 
     // "Something went wrong launching your pool" and send the commissioner back
     // to create a SECOND one — so the write must be caught, and the failure
     // must still be logged rather than swallowed silently.
-    expect(launch).toMatch(/try \{[\s\S]{0,200}?dbService\.updateUser[\s\S]{0,200}?\} catch/);
+    expect(launch).toMatch(/try \{[\s\S]{0,600}?dbService\.updateUser[\s\S]{0,600}?\} catch/);
     expect(launch).toMatch(/logger\.warn\(/);
+  });
+
+  it('checks the RETURN VALUE, because the repository never throws', () => {
+    const launch = readFileSync(resolve(root, `${CREATE_DIR}/LaunchStep.tsx`), 'utf8');
+    // `dbService.updateUser` -> `BaseRepository.update`, which catches every
+    // Firestore failure and resolves `false` (BaseRepository.ts:84-90). A
+    // try/catch alone therefore reads permission-denied, offline and
+    // missing-doc as SUCCESS — the "absent error is a pass" defect this repo
+    // has shipped three times (#314's unbound token, the zero-counter
+    // heartbeat, the 13-day Sentry outage). Found by codex on this PR.
+    expect(launch).toMatch(/const saved = await dbService\.updateUser\(/);
+    expect(launch).toMatch(/if \(!saved\)/);
   });
 
   it('the write-back runs AFTER the pool is created, never before', () => {

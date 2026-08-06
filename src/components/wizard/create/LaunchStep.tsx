@@ -227,7 +227,19 @@ export function LaunchStep(props: LaunchStepProps) {
     const profileUpdates = profileUpdatesFrom(user, clean);
     if (profileUpdates) {
       try {
-        await dbService.updateUser(uid, profileUpdates);
+        // ⚠️ CHECK THE RETURN VALUE, do not rely on the catch alone.
+        // `dbService.updateUser` → `BaseRepository.update`, which CATCHES every
+        // Firestore failure and resolves `false` (BaseRepository.ts:84-90). So a
+        // permission-denied, an offline write or a missing user doc never throws
+        // and would sail straight past a try/catch as a success. The catch is
+        // kept for anything that throws before the repository is reached.
+        const saved = await dbService.updateUser(uid, profileUpdates);
+        if (!saved) {
+          logger.warn(
+            '[LaunchStep] profile save returned false — contact/payment details were NOT remembered',
+            { uid, fields: Object.keys(profileUpdates) },
+          );
+        }
       } catch (e) {
         logger.warn('[LaunchStep] could not save contact/payment details to the profile', e);
       }
