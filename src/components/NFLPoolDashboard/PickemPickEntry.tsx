@@ -72,6 +72,11 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   // submit — and resetting there would wipe the receipt it just earned.
   useEffect(() => {
     setSubmittedAt(null);
+    // Week-scoped like the receipt: a week-N submit error carried into week M
+    // both displays against the wrong week and suppresses the saved banner
+    // (gated on !validationError). Margin/Survivor clear theirs in the load
+    // effect; Pick'em never did (qodo, on this PR).
+    setValidationError(null);
   }, [week]);
 
   useEffect(() => {
