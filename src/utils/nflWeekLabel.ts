@@ -1,28 +1,14 @@
 /**
  * ONE label per NFL week, everywhere.
  *
- * Preseason (seasonType 1) importer weeks are OFFSET from what fans call them:
- * importer week 1 is HOF Weekend and importer week 2 is what ESPN/fans call
- * "Preseason Week 1". The week dropdown already relabeled, but every other
- * surface (chips, lock-status card, standings columns, banners) rendered the
- * RAW importer number — so one and the same slate read "Preseason Week 1" in
- * the header and "Week 2" in the sidebar, and a member picking "the first
- * preseason week" landed on the second slate. This module is the single
- * source for both the long and chip forms; render nothing else.
+ * The implementation moved to `shared/nflWeekLabel.ts` so the Cloud Functions
+ * can render the same strings — `scoreNFLWeek`'s result messages said "Week 1"
+ * where the UI said "HOF Weekend". This module re-exports it so the ~30 existing
+ * `utils/nflWeekLabel` imports keep working unchanged; there is still exactly
+ * one definition.
+ *
+ * Render nothing else. Preseason importer weeks are OFFSET from what fans call
+ * them (importer week 1 is HOF Weekend, importer week 2 is "Preseason Week 1"),
+ * and a surface that formats the raw number will disagree with every other one.
  */
-
-/** Long form: "HOF Weekend", "Preseason Week 2", "Week 14". */
-export function nflWeekLabel(seasonType: number | undefined, week: number): string {
-    if (Number(seasonType) === 1) {
-        return week === 1 ? 'HOF Weekend' : `Preseason Week ${week - 1}`;
-    }
-    return `Week ${week}`;
-}
-
-/** Chip form for tight UI: "HOF", "P2", "W14". */
-export function nflWeekChip(seasonType: number | undefined, week: number): string {
-    if (Number(seasonType) === 1) {
-        return week === 1 ? 'HOF' : `P${week - 1}`;
-    }
-    return `W${week}`;
-}
+export { nflWeekLabel, nflWeekChip } from '@shared/nflWeekLabel';
