@@ -34,6 +34,13 @@ A comprehensive full-season NFL suite equipped with robust scoring engines, sche
   * **Drag-and-Drop Picker:** Interactive UI to reorder and rank all 14 playoff teams from 14 (most confident) to 1 (least confident).
   * **Round Multiplier Scoring:** Points scale with each round (x1 Wild Card, x2 Divisional, x4 Conference, x8 Super Bowl).
   * **Seed Underdog Bonus:** Optional configuration to reward underdog wins with extra points.
+* **Real-Time Scoring Pipeline (NEW!):** A multi-tier automated scoring engine built for a live NFL season.
+  * **Provisional Live Scoring:** Scores update as games go final, with a fenced scoring lease so only one scorer can grade a week at a time.
+  * **Durable Reconciliation Queue:** A rescore queue re-grades weeks when late stat corrections land, and a deep-sweep job catches corrections that arrive more than 24 hours after a game.
+  * **Feed Snapshots & Replay:** Every ESPN payload is snapshotted; any week can be rebuilt from a stored snapshot, and the scorer only grades what the feed actually reported.
+  * **Automated Spread Locks:** Scheduled spread-lock job with a kill-switch, dry-run gate, and a pre-kickoff tripwire that pages ops if spreads aren't locked in time.
+* **Polished Pick Flow (NEW!):** Saved-pick confirmation you can trust, one-tap registration from the join page, a picks call-to-action on the dashboard, live lock countdowns, team win/loss records in the picker, and consistent week labels across every surface (including preseason/HOF weeks).
+* **Hard Weekly Deadlines:** Survivor and Margin pools enforce a hard weekly pick deadline server-side — no late submissions, no exceptions.
 
 ---
 
@@ -75,11 +82,22 @@ The foundational system powering MMPools.
   * **Score Locking:** Lock and persist quarter scores as they happen, preventing data corruption from API fluctuations.
   * **Live Ticker:** Real-time ticker displaying active scores, TV networks, and game clocks.
 * **Participant Dashboard V2:** Redwood-styled home for players featuring unified entries (public, joined, private), smart status tracking (badges, progress bars), and real-time tabs for "Open", "Live", and "Completed" pools.
+* **Player Profiles:** Public player profile pages with season stats, a league-average comparison chart line, and shareable entry points across the app.
 * **AI Commissioner (Gemini-Powered):** Neutral, zero-hallucination assistant providing:
   * **"Why I Won":** Generates human-friendly explanations of winning coordinates.
   * **Dispute Helper:** Validates the immutable audit trail to verify that coordinates were generated fairly and payouts are mathematically sound.
 * **Immutable Audit Trail:** All critical operations (locking, number generation, transactions) are logged to an append-only collection. Client writes are locked down via Firestore rules for absolute integrity.
 * **Global Stats & Prizes:** Total prize money tracker updates via secure Cloud Functions (`onPoolCompleted`) to display all-time winnings on the home landing page.
+
+---
+
+### 🧑‍💼 Commissioner Console (NEW!)
+A rebuilt manager experience focused on truth, not guesswork.
+* **Four-Section Manager Page:** The pool manager view is organized into focused sections with a save control in every settings section and a floating save confirmation — no more hunting for the right button.
+* **Submission Health:** At-a-glance view of who has and hasn't submitted picks this week — including the manager's own entry.
+* **Buy-In Ledger:** Complete payment picture covering every member, not just those with entries.
+* **Payment Truth:** `setPaidStatus` is the single writer for payment state, carries method/date detail fields, and rebuys have their own paid control — payment records finally have one source of truth.
+* **Hosting-Fees Banner:** Managers see a clear "hosting fees paid" confirmation banner, dismissible once acknowledged.
 
 ---
 
@@ -96,6 +114,7 @@ Streamline pool administration and communication.
 * **Waitlist Engine:** Secure waitlist collection and admin invite deck for grids exceeding 100 entries.
 * **Viral Referral System:** Attribution-based referral links (`?ref=`) that reward managers and track signups.
 * **Smart Reminders:** Integrated with SMS (Courier/Twilio) and Web-Push (FCM) to notify users of locks, payment deadlines, and scores.
+* **Delivery Tracking:** Email and SMS sends report their real delivery outcome, so the reminder engine can see (and surface) failures instead of silently swallowing them.
 
 ---
 
@@ -105,7 +124,12 @@ Full-control dashboards for site administrators.
 * **Simulation Dashboard:** Verify game logic, standings math, and automated email/SMS alerts:
   * **Scenario Runner:** Simulate entire matches or tournaments round-by-round.
   * **Auto-Fill Grids:** Stress-test payment splits with 1,000+ random entries.
+  * **Kill-Switch Bypass:** Super-admin simulation runs bypass pool-type kill-switches, so disabled pool types can still be tested safely.
 * **Targeted Pool Repair:** Emergency "Fix Pool Scores" tool to recalculate specific pools without affecting global data.
+* **Production Watchdog (NEW!):** A single dashboard showing the last 24 hours of real user activity — signups, entries, picks, payments — so admins can see the platform breathing.
+* **Scheduled-Job Heartbeats (NEW!):** Every scheduled job in the fleet reports a heartbeat with a rendered health verdict, making "never ran" instantly distinguishable from "ran clean" or "ran and failed".
+* **Config Audit Trail:** Every write to system configuration is logged (`SYSTEM_CONFIG_CHANGED`) to the immutable audit trail.
+* **Stats Integrity Engine:** Real pot calculation across all pool types, a shared test-pool predicate that keeps simulations out of public stats, and a daily scheduled recompute to keep global numbers honest.
 
 ---
 
@@ -200,10 +224,17 @@ Sensitive operations are moved off the client-side to a trusted Node.js environm
 * `runReminders` (Scheduled): Runs periodically to check for unpaid squares or upcoming locks and sends notifications.
 * `onWinnerComputed` (Trigger): Listens for game score updates to instantly notify winners via email.
 
+### Trust-Boundary Hardening (NEW!)
+* **Full Callable Sweep:** Every Cloud Function callable — across billing, pools, squares, brackets, props, referrals, and admin ops — is wrapped with input validation (zod schemas) and role checks at the trust boundary. No callable trusts client input.
+* **Server-Side Billing Enforcement:** Billing status is enforced in Cloud Functions, not the client — a modified client cannot bypass hosting-fee gates.
+* **Membership Integrity:** Payment and repair operations can no longer mint or launder member records; membership has one legitimate write path.
+* **Error Monitoring:** Client-side Sentry with a correctly scoped CSP, so production errors surface instead of silently dropping.
+
 ### Firestore Security Rules
 * **Audit Log:** `read: true` for transparency, `write: false` for everyone (Client-side writes blocked).
 * **Clients:** Explicitly blocked from writing to sensitive fields like `isLocked` and `axisNumbers`.
 * **Users:** Can only write to their own user profile.
+* **Server-Only Fields:** Scoring, settings-publish state, and stats flags are writable only by Cloud Functions.
 
 ### Email Service (Extension)
 Uses the **"Trigger Email from Firestore"** extension to send transaction confirmations.
