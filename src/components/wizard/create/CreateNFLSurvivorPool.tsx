@@ -98,7 +98,7 @@ export function CreateNFLSurvivorPool(props: { user: User; onComplete: (poolId: 
         />
       ),
     },
-  ], [user.id, onComplete]);
+  ], [user, onComplete]);
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-10">

@@ -43,7 +43,9 @@ describe('profileUpdatesFrom — learns blanks only', () => {
   it('saves a handle the profile did not have', () => {
     const u = asUser({ name: 'Kevin', paymentHandles: { venmo: '@kev' } });
     const out = profileUpdatesFrom(u, { paymentHandles: { venmo: '@kev', cashapp: '$new' } });
-    expect(out?.paymentHandles).toEqual({ venmo: '@kev', cashapp: '$new' });
+    // Dot path, not a rebuilt map: updateDoc REPLACES a nested object, so
+    // writing the whole map would drop a handle added since `user` was read.
+    expect(out).toEqual({ 'paymentHandles.cashapp': '$new' });
   });
 
   it('NEVER overwrites a handle the profile already holds', () => {
@@ -57,7 +59,9 @@ describe('profileUpdatesFrom — learns blanks only', () => {
   it('keeps the existing value while learning a new one in the same write', () => {
     const u = asUser({ name: 'Kevin', paymentHandles: { venmo: '@default' } });
     const out = profileUpdatesFrom(u, { paymentHandles: { venmo: '@one-off', zelle: 'k@z.com' } });
-    expect(out?.paymentHandles).toEqual({ venmo: '@default', zelle: 'k@z.com' });
+    // The untouched venmo is ABSENT from the write entirely — it is not
+    // rewritten with its own value, so it cannot be clobbered by a stale read.
+    expect(out).toEqual({ 'paymentHandles.zelle': 'k@z.com' });
   });
 
   it('returns NULL when there is nothing new — the caller skips the write', () => {
@@ -97,7 +101,7 @@ describe('profileUpdatesFrom — learns blanks only', () => {
       role: 'SUPER_ADMIN',
       poolCredits: 999,
     });
-    expect(Object.keys(out ?? {}).sort()).toEqual(['name', 'paymentHandles']);
+    expect(Object.keys(out ?? {}).sort()).toEqual(['name', 'paymentHandles.venmo']);
   });
 
   it('ignores blank and whitespace-only typed values', () => {

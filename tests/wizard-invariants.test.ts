@@ -145,7 +145,16 @@ describe('every wizard prefills from the profile and remembers what it learns', 
     // "Something went wrong launching your pool" and send the commissioner back
     // to create a SECOND one — so the write must be caught, and the failure
     // must still be logged rather than swallowed silently.
-    expect(launch).toMatch(/try \{[\s\S]{0,600}?dbService\.updateUser[\s\S]{0,600}?\} catch/);
+    // Ordering, not proximity. A character-window regex here failed the moment
+    // an explanatory comment was added between the `try` and the call — the
+    // guard broke on prose, which is a guard that will eventually be deleted
+    // for being annoying rather than fixed.
+    const call = launch.indexOf('dbService.updateUser(uid, profileUpdates)');
+    const tryBefore = launch.lastIndexOf('try {', call);
+    const catchAfter = launch.indexOf('} catch', call);
+    expect(call).toBeGreaterThan(-1);
+    expect(tryBefore).toBeGreaterThan(-1);
+    expect(catchAfter).toBeGreaterThan(call);
     expect(launch).toMatch(/logger\.warn\(/);
   });
 
@@ -159,6 +168,17 @@ describe('every wizard prefills from the profile and remembers what it learns', 
     // heartbeat, the 13-day Sentry outage). Found by codex on this PR.
     expect(launch).toMatch(/const saved = await dbService\.updateUser\(/);
     expect(launch).toMatch(/if \(!saved\)/);
+  });
+
+  it.each(WIZARDS)('%s gives LaunchStep the CURRENT user, not a first-render snapshot', file => {
+    const src = readFileSync(resolve(root, file), 'utf8');
+    // The steps memo used to depend on `user.id`, which never changes — so
+    // LaunchStep kept the user object from first render. If the commissioner
+    // edited their profile in another tab mid-wizard, the write-back would run
+    // against a stale snapshot. (codex, on this PR. The dot-path write makes
+    // that harmless, but the two fixes are independent and both are kept.)
+    expect(src).not.toMatch(/\], \[user\.id, onComplete\]\)/);
+    expect(src).toMatch(/\], \[user, onComplete\]\)/);
   });
 
   it('the write-back runs AFTER the pool is created, never before', () => {

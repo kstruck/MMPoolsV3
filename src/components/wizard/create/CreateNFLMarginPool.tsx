@@ -97,7 +97,7 @@ export function CreateNFLMarginPool(props: { user: User; onComplete: (poolId: st
         />
       ),
     },
-  ], [user.id, onComplete]);
+  ], [user, onComplete]);
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-10">

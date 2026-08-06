@@ -103,7 +103,7 @@ export function CreateBracketPool(props: { user: User; onComplete: (poolId: stri
         />
       ),
     },
-  ], [user.id, onComplete]);
+  ], [user, onComplete]);
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-10">

@@ -79,9 +79,9 @@ export function prefillFromUser(user: User | null | undefined): {
 export function profileUpdatesFrom(
   user: User | null | undefined,
   values: Record<string, unknown>,
-): Partial<User> | null {
+): Record<string, unknown> | null {
   if (!user) return null;
-  const updates: Partial<User> = {};
+  const updates: Record<string, unknown> = {};
 
   // Name: only when the profile has none. `managerName` is what they just typed.
   if (!clean(user.name)) {
@@ -91,20 +91,18 @@ export function profileUpdatesFrom(
 
   const typedHandles = (values.paymentHandles ?? {}) as Record<string, unknown>;
   const stored = (user.paymentHandles ?? {}) as Record<string, unknown>;
-  const merged: Record<string, string> = {};
-  let learned = false;
   for (const k of HANDLE_KEYS) {
-    const existing = clean(stored[k]);
-    const typed = clean(typedHandles[k]);
     // Blanks only. An existing value always wins — see the docblock.
-    if (existing) {
-      merged[k] = existing;
-    } else if (typed) {
-      merged[k] = typed;
-      learned = true;
-    }
+    if (clean(stored[k])) continue;
+    const typed = clean(typedHandles[k]);
+    // DOT PATHS, not a rebuilt `paymentHandles` object. Firestore's updateDoc
+    // REPLACES a nested map wholesale, so writing the whole map would drop any
+    // handle added since this component read `user` — e.g. the commissioner
+    // editing their profile in another tab mid-wizard. A dot path merges, so
+    // only the keys actually learned here are touched and a stale snapshot
+    // cannot destroy a concurrent edit. (codex, on this PR.)
+    if (typed) updates[`paymentHandles.${k}`] = typed;
   }
-  if (learned) updates.paymentHandles = merged as User['paymentHandles'];
 
   return Object.keys(updates).length > 0 ? updates : null;
 }

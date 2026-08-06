@@ -233,6 +233,9 @@ export function LaunchStep(props: LaunchStepProps) {
         // permission-denied, an offline write or a missing user doc never throws
         // and would sail straight past a try/catch as a success. The catch is
         // kept for anything that throws before the repository is reached.
+        // `profileUpdates` uses Firestore DOT PATHS (`paymentHandles.cashapp`)
+        // rather than a nested object, so the write merges instead of replacing
+        // the handle map. That is why it is not shaped like `Partial<User>`.
         const saved = await dbService.updateUser(uid, profileUpdates);
         if (!saved) {
           logger.warn(
