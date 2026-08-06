@@ -188,7 +188,19 @@ Certification is a **second** full-fleet run reporting every function
 **Rules are NOT deployed** — `firestore.rules` and `firestore.indexes.json` are
 untouched by this PR.
 
-**A Coolify rebuild is also owed**, because `src/utils/nflWeekLabel.ts` changed.
+**No Coolify rebuild is owed — measured, not assumed.** `src/utils/nflWeekLabel.ts`
+does change, so the usual rule says one is. It is not: the change makes that file
+a **re-export** of `shared/nflWeekLabel.ts` rather than a definition, and Vite
+inlines the result identically. Both branches were built and their emitted assets
+compared — **byte-identical filenames**: `index-3vC8k8ii.js`, `index-Y-VDW8GS.js`,
+`PoolRoute-CYo6vqHW.js`.
+
+This is HANDOFF's documented case from the other direction — *"a `src/**` change
+confined to code the tree-shake drops emits byte-identical assets and leaves the
+hash alone"*. So if a rebuild is run anyway it is harmless, and its **unchanged
+hash is the expected result here, not a failed deploy**.
+
+The same correction applies to the rollback in §5.
 
 ## 5. Rollback
 
