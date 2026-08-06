@@ -12,6 +12,7 @@ import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { loadDraft, saveDraft, clearDraft } from '../../utils/draftStore';
 import { pickHighlightClass, pickHighlightLabel } from '../../utils/pickHighlight';
 import { poolUsesSpreads } from '../../utils/poolUsesSpreads';
+import { gradePick } from '../../utils/pickemResult';
 import type { User, Pool, NFLGame } from '../../types';
 
 interface PickemDraft {
@@ -271,7 +272,14 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   // what has been blocking straight-up pick'em on a spread-less week.
   const spreadsBlock = useMemo(() => {
     if (!poolUsesSpreads(castPool)) return false;
-    return !games.filter(g => g.status !== 'CANCELLED').every(g => g.spread?.locked);
+    // EVERY game of the week, cancelled ones included — because that is what
+    // the server checks (`nflPools.ts`: `games.every(g => g.spread?.locked ===
+    // true)` over the whole week query). The client used to exempt CANCELLED,
+    // so a cancelled game with no locked line rendered an editable sheet whose
+    // every submission failed with SPREADS_NOT_LOCKED. Unreachable until the
+    // wizard could create an ATS pool; exposing the mode made it live.
+    // (codex, on that PR.)
+    return !games.every(g => g.spread?.locked);
   }, [games, castPool]);
 
   if (spreadsBlock) {
@@ -362,17 +370,22 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
             const homeSaved = savedForGame === game.homeTeam.abbreviation;
             const awaySaved = savedForGame === game.awayTeam.abbreviation;
 
-            const homeWon = game.status === 'FINAL' && (game.scores?.home ?? 0) > (game.scores?.away ?? 0);
-            const awayWon = game.status === 'FINAL' && (game.scores?.away ?? 0) > (game.scores?.home ?? 0);
-
-            const isCorrect = 
-              (homeWon && homePicked) || (awayWon && awayPicked);
+            // Graded the way the SCORER grades it. This used to compare raw
+            // scores, which is right for straight-up and wrong for ATS: a pick
+            // that covered but lost outright rendered RED while the server
+            // recorded a WIN. Unreachable until the wizard gained an ATS
+            // control; exposing the mode is what made it live.
+            const result = gradePick(game, savedForGame ?? myPick, castPool.settings?.pickMode);
+            const isCorrect = result === 'W';
+            // A PUSH is neither a win nor a loss — colouring it red would call
+            // a refunded pick wrong.
+            const isGraded = result === 'W' || result === 'L';
 
             return (
               <div
                 key={game.id}
                 className={`bg-card border rounded-xl p-5 flex flex-col md:flex-row items-center justify-between gap-4 transition-all duration-150 relative overflow-hidden shadow-card ${
-                  game.status === 'FINAL'
+                  isGraded
                     ? isCorrect
                       ? 'border-[#BEE7D0] bg-[#0F7B4A]/5'
                       : 'border-brandred-600/30 bg-brandred-600/5'

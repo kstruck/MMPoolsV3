@@ -1,0 +1,141 @@
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { gradePick } from '../src/utils/pickemResult';
+import { gradePickemGames } from '../functions/src/nflScoringEngine';
+
+/**
+ * The pick sheet must colour a matchup the way the SCORER grades it.
+ *
+ * `PickemPickEntry` derived its green/red purely from the raw score. That is
+ * correct for straight-up and WRONG for ATS: a pick that covered but lost
+ * outright rendered RED while the server recorded a WIN, and a winner that
+ * failed to cover rendered GREEN while the server recorded a loss. The member's
+ * own sheet contradicted their standings.
+ *
+ * It was unreachable until the wizard gained a Straight/ATS control, because no
+ * supported path could create an ATS pool — so enabling the mode is what made
+ * the defect live, and it is fixed in the same change.
+ *
+ * This compares BEHAVIOUR against the REAL `gradePickemGames`, over a matrix, so
+ * a drift in meaning fails. The two live in module-incompatible TS roots and
+ * cannot import one another; moving the rule to `shared/` would make every
+ * frontend tweak owe a functions deploy. Same arrangement, and same reasoning,
+ * as `tests/spread-gate-parity.test.ts`.
+ */
+
+const T = (abbr: string) => ({ id: abbr, name: abbr, abbreviation: abbr });
+
+function game(over: Record<string, unknown> = {}) {
+  return {
+    id: 'g1', season: '2026', seasonType: 1, week: 1,
+    startTime: 0, status: 'FINAL', isMonday: false,
+    homeTeam: T('ARI'), awayTeam: T('CAR'),
+    scores: { home: 0, away: 0 },
+    ...over,
+  } as never;
+}
+
+// Home/away scores chosen to straddle every boundary the two rules can differ
+// on: outright blowouts, one-point games, exact ties, and — for ATS — a spread
+// that lands exactly on the margin (a PUSH).
+const SCORES = [
+  { home: 24, away: 17 }, // home wins by 7
+  { home: 17, away: 24 }, // away wins by 7
+  { home: 20, away: 20 }, // tie
+  { home: 21, away: 20 }, // home by 1
+  { home: 20, away: 21 }, // away by 1
+];
+const SPREADS = [undefined, -7, -6.5, -3, 0, 3, 7, 7.5];
+const PICKS = ['ARI', 'CAR'];
+const MODES = ['STRAIGHT', 'ATS', undefined];
+
+describe('gradePick parity (client sheet vs the real scorer)', () => {
+  it('agrees with gradePickemGames on every score × spread × pick × mode', () => {
+    let checked = 0;
+    for (const scores of SCORES) {
+      for (const spreadValue of SPREADS) {
+        for (const pick of PICKS) {
+          for (const pickMode of MODES) {
+            const g = game({
+              scores,
+              spread: spreadValue === undefined ? undefined : { value: spreadValue, locked: true },
+            });
+            const pool = { settings: { pickMode } } as never;
+            const entry = { picks: { g1: pick } } as never;
+
+            const serverGrade = gradePickemGames(entry, [g], pool).g1?.result ?? null;
+            const clientGrade = gradePick(g, pick, pickMode);
+
+            expect(
+              clientGrade,
+              `disagreement: ${JSON.stringify(scores)} spread=${String(spreadValue)} pick=${pick} mode=${String(pickMode)}`,
+            ).toBe(serverGrade);
+            checked++;
+          }
+        }
+      }
+    }
+    // Guard the guard: an empty or collapsed matrix would pass vacuously.
+    expect(checked).toBe(SCORES.length * SPREADS.length * PICKS.length * MODES.length);
+  });
+
+  it('agrees that a CANCELLED game is VOID, whatever the score says', () => {
+    const g = game({ status: 'CANCELLED', scores: { home: 30, away: 0 } });
+    const pool = { settings: { pickMode: 'ATS' } } as never;
+    expect(gradePick(g, 'ARI', 'ATS')).toBe('VOID');
+    expect(gradePickemGames({ picks: { g1: 'ARI' } } as never, [g], pool).g1?.result).toBe('VOID');
+  });
+
+  it('grades nothing for an unpicked or unconcluded game', () => {
+    expect(gradePick(game(), undefined, 'STRAIGHT')).toBeNull();
+    expect(gradePick(game({ status: 'SCHEDULED' }), 'ARI', 'STRAIGHT')).toBeNull();
+    expect(gradePick(game({ status: 'IN_PROGRESS' }), 'ARI', 'STRAIGHT')).toBeNull();
+  });
+
+  it('proves the OLD rule really did disagree — this is the defect', () => {
+    // ARI wins 24-17 but is a 10-point favourite, so ARI does NOT cover.
+    const g = game({ scores: { home: 24, away: 17 }, spread: { value: -10, locked: true } });
+    const oldRuleSaysCorrect = (g as never as { scores: { home: number; away: number } }).scores.home > 17; // raw winner
+    expect(oldRuleSaysCorrect).toBe(true);
+    expect(gradePick(g, 'ARI', 'ATS')).toBe('L');
+    // Green under the old rule, a loss to the scorer. That contradiction is
+    // what this parity test exists to prevent returning.
+  });
+});
+
+describe('the sheet consults the shared rule rather than re-deriving it', () => {
+  const src = readFileSync(
+    resolve(__dirname, '..', 'src/components/NFLPoolDashboard/PickemPickEntry.tsx'),
+    'utf8',
+  );
+
+  it('calls gradePick', () => {
+    expect(src).toMatch(/utils\/pickemResult/);
+    expect(src).toMatch(/gradePick\(game, savedForGame \?\? myPick, castPool\.settings\?\.pickMode\)/);
+  });
+
+  it('no longer colours from the raw score', () => {
+    expect(src).not.toMatch(/const homeWon = game\.status === 'FINAL'/);
+    expect(src).not.toMatch(/\(homeWon && homePicked\)/);
+  });
+
+  it('that grep matches the code it was written to catch', () => {
+    const removed = "const homeWon = game.status === 'FINAL' && (game.scores?.home ?? 0) > (game.scores?.away ?? 0);";
+    expect(removed).toMatch(/const homeWon = game\.status === 'FINAL'/);
+  });
+
+  it('does not paint a PUSH as a loss', () => {
+    // `isGraded` gates the colouring so a refunded pick stays neutral.
+    expect(src).toMatch(/const isGraded = result === 'W' \|\| result === 'L'/);
+    expect(src).toMatch(/isGraded\s*\n?\s*\? isCorrect/);
+  });
+
+  it("matches the server's spread gate exactly — cancelled games included", () => {
+    // Server: `games.every(g => g.spread?.locked === true)` over the whole week
+    // query. The client used to exempt CANCELLED, so a cancelled game with no
+    // locked line rendered an editable sheet whose every submit failed.
+    expect(src).toMatch(/return !games\.every\(g => g\.spread\?\.locked\);/);
+    expect(src).not.toMatch(/games\.filter\(g => g\.status !== 'CANCELLED'\)\.every\(g => g\.spread\?\.locked\)/);
+  });
+});
