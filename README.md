@@ -39,7 +39,9 @@ A comprehensive full-season NFL suite equipped with robust scoring engines, sche
   * **Durable Reconciliation Queue:** A rescore queue re-grades weeks when late stat corrections land, and a deep-sweep job catches corrections that arrive more than 24 hours after a game.
   * **Feed Snapshots & Replay:** Every ESPN payload is snapshotted; any week can be rebuilt from a stored snapshot, and the scorer only grades what the feed actually reported.
   * **Automated Spread Locks:** Scheduled spread-lock job with a kill-switch, dry-run gate, and a pre-kickoff tripwire that pages ops if spreads aren't locked in time.
-* **Polished Pick Flow (NEW!):** Saved-pick confirmation you can trust, one-tap registration from the join page, a picks call-to-action on the dashboard, live lock countdowns, team win/loss records in the picker, and consistent week labels across every surface (including preseason/HOF weeks).
+* **Polished Pick Flow (NEW!):** Saved picks are unmistakable — green saved highlights, a saved banner, and a pick-status strip that always speaks about the current week. Plus one-tap registration from the join page, a picks call-to-action on the dashboard, live lock countdowns, team win/loss records in the picker, and consistent week labels across every surface (including preseason/HOF weeks).
+* **Straight Up or Against the Spread:** The setup wizard lets Pick'em commissioners choose straight-up or ATS picking (with a heads-up that ATS requires locked spreads), and straight-up Pick'em, Survivor, and Margin pools open for picks without waiting on spreads at all.
+* **Smart Setup Wizard:** Prefills the commissioner's contact details from their profile (and remembers what it learns), stamps the season automatically instead of asking, and links the Terms of Service inline.
 * **Hard Weekly Deadlines:** Survivor and Margin pools enforce a hard weekly pick deadline server-side — no late submissions, no exceptions.
 
 ---
