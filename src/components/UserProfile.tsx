@@ -56,6 +56,9 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
         paymentHandles: {
             venmo: user.paymentHandles?.venmo || '',
             zelle: user.paymentHandles?.zelle || '',
+            cashapp: user.paymentHandles?.cashapp || '',
+            paypal: user.paymentHandles?.paypal || '',
+            googlePay: user.paymentHandles?.googlePay || '',
         }
     });
 
@@ -109,6 +112,9 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
             paymentHandles: {
                 venmo: user.paymentHandles?.venmo || '',
                 zelle: user.paymentHandles?.zelle || '',
+                cashapp: user.paymentHandles?.cashapp || '',
+                paypal: user.paymentHandles?.paypal || '',
+                googlePay: user.paymentHandles?.googlePay || '',
             }
         });
     }, [user]);
@@ -528,6 +534,49 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                                         type="text"
                                         value={formData.paymentHandles?.zelle || ''}
                                         onChange={(e) => setFormData({ ...formData, paymentHandles: { ...formData.paymentHandles, zelle: e.target.value } })}
+                                        className="w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-2.5 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
+                                        placeholder="your@email.com or phone"
+                                    />
+                                </div>
+                                {/* The pool wizard collects FIVE handles; this panel stored two,
+                                    so Cash App / PayPal / Google Pay could be learned from a pool
+                                    but never corrected here — write-only fields. Added 2026-08-06
+                                    alongside the wizard prefill. */}
+                                <div className="space-y-2">
+                                    <label htmlFor="profile-cashapp" className="text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)]">
+                                        Cash App Cashtag
+                                    </label>
+                                    <input
+                                        id="profile-cashapp"
+                                        type="text"
+                                        value={formData.paymentHandles?.cashapp || ''}
+                                        onChange={(e) => setFormData({ ...formData, paymentHandles: { ...formData.paymentHandles, cashapp: e.target.value } })}
+                                        className="w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-2.5 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
+                                        placeholder="$YourCashtag"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label htmlFor="profile-paypal" className="text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)]">
+                                        PayPal
+                                    </label>
+                                    <input
+                                        id="profile-paypal"
+                                        type="text"
+                                        value={formData.paymentHandles?.paypal || ''}
+                                        onChange={(e) => setFormData({ ...formData, paymentHandles: { ...formData.paymentHandles, paypal: e.target.value } })}
+                                        className="w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-2.5 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
+                                        placeholder="paypal.me/you"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label htmlFor="profile-googlepay" className="text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)]">
+                                        Google Pay Email/Phone
+                                    </label>
+                                    <input
+                                        id="profile-googlepay"
+                                        type="text"
+                                        value={formData.paymentHandles?.googlePay || ''}
+                                        onChange={(e) => setFormData({ ...formData, paymentHandles: { ...formData.paymentHandles, googlePay: e.target.value } })}
                                         className="w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-2.5 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                                         placeholder="your@email.com or phone"
                                     />

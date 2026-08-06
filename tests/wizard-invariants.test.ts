@@ -115,6 +115,49 @@ describe('CURRENT_SEASON is usable as a Firestore key', () => {
   });
 });
 
+describe('every wizard prefills from the profile and remembers what it learns', () => {
+  // The unit tests in `src/components/wizard/create/profilePrefill.test.ts`
+  // prove the two helpers are correct. They cannot prove the wizards CALL them —
+  // and "correct helper, wired into six of seven surfaces" is the exact defect
+  // shape #315 and #319 were.
+  it.each(WIZARDS)('%s seeds its defaults from the signed-in user', file => {
+    const src = readFileSync(resolve(root, file), 'utf8');
+    expect(src, `${file} should import prefillFromUser`).toMatch(/from '\.\/profilePrefill'/);
+    expect(src, `${file} should build seeded defaults`).toMatch(/prefillFromUser\(user\)/);
+    // Wired into the shell, not merely computed. A `seededDefaults` that is
+    // built and then never passed compiles, lints and prefills nothing.
+    expect(src, `${file} should pass seededDefaults to WizardShell`).toMatch(/defaultValues=\{seededDefaults\}/);
+    expect(src, `${file} should not still pass the raw module-level defaults`).not.toMatch(/defaultValues=\{defaultValues\}/);
+  });
+
+  it.each(WIZARDS)('%s hands LaunchStep the user, so the write-back can run', file => {
+    const src = readFileSync(resolve(root, file), 'utf8');
+    // `user` is optional on LaunchStepProps so the wizards could adopt this
+    // independently — which means omitting it is silent. Pinned here instead.
+    expect(src, `${file} should pass user={user} to LaunchStep`).toMatch(/user=\{user\}/);
+  });
+
+  it('LaunchStep saves the profile without being able to fail the launch', () => {
+    const launch = readFileSync(resolve(root, `${CREATE_DIR}/LaunchStep.tsx`), 'utf8');
+    expect(launch).toMatch(/profileUpdatesFrom\(user, clean\)/);
+    expect(launch).toMatch(/dbService\.updateUser\(uid, profileUpdates\)/);
+    // The pool EXISTS by this point. An unhandled throw here would surface as
+    // "Something went wrong launching your pool" and send the commissioner back
+    // to create a SECOND one — so the write must be caught, and the failure
+    // must still be logged rather than swallowed silently.
+    expect(launch).toMatch(/try \{[\s\S]{0,200}?dbService\.updateUser[\s\S]{0,200}?\} catch/);
+    expect(launch).toMatch(/logger\.warn\(/);
+  });
+
+  it('the write-back runs AFTER the pool is created, never before', () => {
+    const launch = readFileSync(resolve(root, `${CREATE_DIR}/LaunchStep.tsx`), 'utf8');
+    const created = launch.indexOf('const poolId = await createPool(clean);');
+    const saved = launch.indexOf('profileUpdatesFrom(user, clean)');
+    expect(created).toBeGreaterThan(-1);
+    expect(saved).toBeGreaterThan(created);
+  });
+});
+
 describe('the Terms of Service gate links to the terms', () => {
   const launch = readFileSync(resolve(root, `${CREATE_DIR}/LaunchStep.tsx`), 'utf8');
 

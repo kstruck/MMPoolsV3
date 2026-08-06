@@ -7,6 +7,7 @@ import { StepPayouts } from '../steps/StepPayouts';
 import { ReadOnlyField, SelectField } from '../fields';
 import { CURRENT_SEASON } from './currentSeason';
 import type { WizardStepDef } from '../types';
+import { prefillFromUser } from './profilePrefill';
 import { buildNFLPayload } from './buildNFLPayload';
 
 // Creates the NFL Margin pool and RESOLVES its poolId (no navigation) for LaunchStep.
@@ -66,6 +67,17 @@ const defaultValues: Record<string, unknown> = {
 
 export function CreateNFLMarginPool(props: { user: User; onComplete: (poolId: string) => void; onCancel: () => void }) {
   const { user, onComplete, onCancel } = props;
+  // Start from the commissioner's own profile: they are already a signed-in
+  // member, so their name, contact email and payout handles are known.
+  //
+  // Read ONCE, at mount. `useForm({ defaultValues })` in WizardShell does not
+  // re-initialise when this object changes, and that is fine here rather than a
+  // latent bug: App.tsx gates this whole route on `user &&`, so the wizard never
+  // mounts with a null user and there is no late-arriving profile to wait for.
+  // It is also the safe direction — the post-create write-back updates the user
+  // doc, and a shell that DID re-initialise would wipe a half-filled form the
+  // moment that landed. The useMemo is for referential stability, nothing more.
+  const seededDefaults = useMemo(() => ({ ...defaultValues, ...prefillFromUser(user) }), [user]);
   const steps: WizardStepDef[] = useMemo(() => [
     { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
     { id: 'rules', title: 'Margin rules', Component: StepMarginRules },
@@ -77,6 +89,7 @@ export function CreateNFLMarginPool(props: { user: User; onComplete: (poolId: st
       Component: () => (
         <LaunchStep
           uid={user.id}
+          user={user}
           poolType="NFL_MARGIN"
           feeField="settings.entryFee"
           createPool={createMarginPool}
@@ -95,7 +108,7 @@ export function CreateNFLMarginPool(props: { user: User; onComplete: (poolId: st
         poolType="NFL_MARGIN"
         steps={steps}
         schema={marginCreateInputSchema}
-        defaultValues={defaultValues}
+        defaultValues={seededDefaults}
         userId={user.id}
         submitLabel="Launch pool"
         onSubmit={async (values) => {
