@@ -36,7 +36,15 @@
 > Separate markers matter for the same reason: a build from `5e53b2f` carries
 > #381's string and NOT #382's fix, so a single sentinel would have certified a
 > partial deploy missing the go-live blocker itself. Nothing in the app exposes a
-> build SHA. Keep using the §1 step 7 script for the next rebuild.
+> build SHA.
+>
+> 🔁 **Keep using the §1 step 7 METHOD next time — but SWAP THE SENTINELS FIRST.**
+> Those three markers are now LIVE, so running the script unchanged passes
+> against the *current* bundle: it would print `ALL THREE SHIPPED` on a failed or
+> stale deploy and tell you nothing about the change you just pushed. Replace them
+> with one marker unique to that change (a string it introduces, or a COUNT it
+> changes — the `$gate` pattern, which is the only way to detect a change that
+> *removes* code). `MORNING-2026-08-06.md` §1 carries the reuse note.
 >
 > ⚠️ **Do NOT shortcut it to grepping `index-*.js`.** Those strings live in
 > lazily-imported route chunks, so the entry bundle alone reports ABSENT on a
