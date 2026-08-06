@@ -7,8 +7,22 @@
 > (`5e53b2f`), [#382](https://github.com/kstruck/MMPoolsV3/pull/382) (`60149c8`)
 > and [#383](https://github.com/kstruck/MMPoolsV3/pull/383) (`e69c87e`) — and all
 > three touch `src/**`. 📌 **The live bundle at 23:35 MDT 2026-08-05, BEFORE that
-> rebuild, was `index-uIeNGo85.js`**, read off the prod HTML. A hash that is
-> anything else means the rebuild has run. Step-by-step in `MORNING-2026-08-06.md` §1.
+> rebuild, was `index-uIeNGo85.js`**, read off the prod HTML.
+>
+> ⚠️ **A DIFFERENT HASH IS NOT PROOF THE REBUILD SHIPPED THIS CODE.** It proves
+> *some* bundle is serving; a cached or pinned revision, or an unrelated
+> deployment, moves the hash just as well. **The check that settles it is the
+> chunk-graph crawl in `MORNING-2026-08-06.md` §1 step 7** — it follows every
+> asset reachable from the entry bundle and looks for `Save Edited Picks`, the
+> Pick'em edited-state label from #381, which exists in no earlier build.
+> Measured both ways before it was written down: 103 assets / `RESULT: ABSENT`
+> against pre-rebuild prod, and present in the locally built
+> `dist/assets/PoolRoute-*.js`.
+>
+> ⚠️ **Do NOT shortcut it to grepping `index-*.js`.** That string is in a
+> lazily-imported route chunk, so the entry bundle alone reports ABSENT on a
+> perfectly good deploy — the mistake that briefly condemned #374's rebuild.
+> Full step-by-step in `MORNING-2026-08-06.md` §1.
 >
 > ✅ **All three are FRONTEND ONLY.** Verified per merge commit —
 > `git diff --name-only <sha>^ <sha> -- functions/ shared/ firestore.rules firestore.indexes.json`
