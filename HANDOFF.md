@@ -72,9 +72,12 @@
 >
 > ## ✅ STOP POINT **2026-08-05** (night) — **THE BILLING JOB RAN CLEAN, first success ever**; #374's rebuild RAN and is verified IN THE SHIPPED BUNDLE; functions unchanged at `1105392`
 >
-> ⚠️ **This box's "ALL FOUR QUEUES EMPTY" claim was true on 2026-08-05 and is NOT
-> true now** — see the Coolify line in the box above, which supersedes it. Its
-> bundle hash (`index-BkVTInz0.js`) is likewise superseded twice over.
+> ⚠️ **Read this box's queue and bundle claims as HISTORY, not as status.** Its
+> "all four queues empty" reading was true on 2026-08-05, went stale when
+> #381/#382/#383 merged, and is true again after the 2026-08-06 rebuild — but it
+> is the box above that says so, not this one. Its bundle hash
+> (`index-BkVTInz0.js`) is superseded twice over. **Current queue state and
+> current hash are stated ONCE, at the top of this file.**
 >
 > ✅ **`enforceBillingStatus` COMPLETED ITS FIRST-EVER SUCCESSFUL RUN** — the
 > 23:00 ET 2026-08-05 fire, the first with the composite indexes present.
