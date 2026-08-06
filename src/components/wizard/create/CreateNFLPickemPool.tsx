@@ -86,7 +86,7 @@ export function CreateNFLPickemPool(props: { user: User; onComplete: (poolId: st
   const { user, onComplete, onCancel } = props;
   const steps: WizardStepDef[] = useMemo(() => [
     { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
-    { id: 'rules', title: "Pick'em rules", fields: ['season'], Component: StepPickemRules },
+    { id: 'rules', title: "Pick'em rules", Component: StepPickemRules },
     { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="settings.entryFee" /> },
     { id: 'payouts', title: 'Payouts', Component: () => <StepPayouts payoutsField="settings.payouts" /> },
     { id: 'branding', title: 'Branding', Component: StepBranding },

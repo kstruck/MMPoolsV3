@@ -42,12 +42,17 @@ export function Field(props: { label: string; htmlFor?: string; error?: string; 
  */
 export function ReadOnlyField(props: { label: string; value: string; hint?: string }) {
   const { label, value, hint } = props;
+  // Deliberately NOT built on <Field>: that renders a <label>, and a <label>
+  // with no associated control is invalid and announces as a stray string. The
+  // label styling is reused; the element is a <span>.
   return (
-    <Field label={label} hint={hint}>
+    <div className="mb-4">
+      <span className={`${labelCls} block`}>{label}</span>
       <p className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm font-semibold text-white">
         {value}
       </p>
-    </Field>
+      {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
+    </div>
   );
 }
 

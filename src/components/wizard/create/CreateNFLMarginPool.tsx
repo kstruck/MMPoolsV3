@@ -68,7 +68,7 @@ export function CreateNFLMarginPool(props: { user: User; onComplete: (poolId: st
   const { user, onComplete, onCancel } = props;
   const steps: WizardStepDef[] = useMemo(() => [
     { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
-    { id: 'rules', title: 'Margin rules', fields: ['season'], Component: StepMarginRules },
+    { id: 'rules', title: 'Margin rules', Component: StepMarginRules },
     { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="settings.entryFee" /> },
     { id: 'payouts', title: 'Payouts', Component: () => <StepPayouts payoutsField="settings.payouts" /> },
     { id: 'branding', title: 'Branding', Component: StepBranding },

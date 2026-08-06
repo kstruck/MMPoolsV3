@@ -78,6 +78,23 @@ describe('season is stamped, never typed', () => {
   });
 });
 
+describe('the season step no longer gates on a field nobody can edit', () => {
+  it.each(WIZARDS)('%s does not name "season" in a step\'s validation fields', file => {
+    const src = readFileSync(resolve(root, file), 'utf8');
+    // `WizardShell.goNext` calls `methods.trigger(step.fields)`. `season` is no
+    // longer registered with react-hook-form, so naming it there makes the Next
+    // button depend on RHF's behaviour for an unregistered field — and if that
+    // ever resolves false, step 2 becomes impossible to pass and NO POOL CAN BE
+    // CREATED. The risk is removed rather than reasoned about.
+    expect(src).not.toMatch(/fields:\s*\[[^\]]*'season'/);
+  });
+
+  it('that grep matches the string it was written to catch', () => {
+    const removed = "{ id: 'rules', title: 'Survivor rules', fields: ['season'], Component: StepSurvivorRules },";
+    expect(removed).toMatch(/fields:\s*\[[^\]]*'season'/);
+  });
+});
+
 describe('CURRENT_SEASON is usable as a Firestore key', () => {
   it('is a four-digit STRING', () => {
     // `nfl_games.season` is queried as a string; a number would match nothing.

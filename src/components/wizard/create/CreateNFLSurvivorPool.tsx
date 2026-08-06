@@ -69,7 +69,7 @@ export function CreateNFLSurvivorPool(props: { user: User; onComplete: (poolId: 
   const { user, onComplete, onCancel } = props;
   const steps: WizardStepDef[] = useMemo(() => [
     { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
-    { id: 'rules', title: 'Survivor rules', fields: ['season'], Component: StepSurvivorRules },
+    { id: 'rules', title: 'Survivor rules', Component: StepSurvivorRules },
     { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="settings.entryFee" /> },
     { id: 'payouts', title: 'Payouts', Component: () => <StepPayouts payoutsField="settings.payouts" /> },
     { id: 'branding', title: 'Branding', Component: StepBranding },

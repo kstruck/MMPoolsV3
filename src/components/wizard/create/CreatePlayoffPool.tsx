@@ -64,7 +64,7 @@ export function CreatePlayoffPool(props: { user: User; onComplete: (poolId: stri
   const { user, onComplete, onCancel } = props;
   const steps: WizardStepDef[] = useMemo(() => [
     { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
-    { id: 'details', title: 'Playoff details', fields: ['season'], Component: StepPlayoffDetails },
+    { id: 'details', title: 'Playoff details', Component: StepPlayoffDetails },
     { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="settings.entryFee" /> },
     { id: 'payouts', title: 'Payouts', Component: () => <StepPayouts payoutsField="settings.payouts" /> },
     { id: 'branding', title: 'Branding', Component: StepBranding },
