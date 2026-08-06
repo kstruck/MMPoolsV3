@@ -13,11 +13,12 @@
 > *some* bundle is serving; a cached or pinned revision, or an unrelated
 > deployment, moves the hash just as well. **The check that settles it is the
 > chunk-graph crawl in `MORNING-2026-08-06.md` §1 step 7** — it follows every
-> asset reachable from the entry bundle and looks for `Save Edited Picks`, the
-> Pick'em edited-state label from #381, which exists in no earlier build.
-> Measured both ways before it was written down: 103 assets / `RESULT: ABSENT`
-> against pre-rebuild prod, and present in the locally built
-> `dist/assets/PoolRoute-*.js`.
+> asset reachable from the entry bundle and checks a SEPARATE marker for each of
+> the three PRs. Separate markers matter: a build from `5e53b2f` carries #381's
+> string and not #382's fix, so a single sentinel would certify a partial deploy
+> missing the go-live blocker itself. Nothing in the app exposes a build SHA.
+> Measured both ways before it was written down — against pre-rebuild prod it
+> scanned 103 assets and printed the failure reading `ABSENT / 3 / ABSENT`.
 >
 > ⚠️ **Do NOT shortcut it to grepping `index-*.js`.** That string is in a
 > lazily-imported route chunk, so the entry bundle alone reports ABSENT on a
