@@ -279,6 +279,19 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   const focusPoolC = focusGame ? poolConsensus[focusGame.id] : null;
   const focusSiteC = focusGame ? siteConsensus[focusGame.id] : null;
 
+  // Are THIS week's picks in? Pick'em is a sheet, so "in" means every game on
+  // the slate has a pick — a half-filled sheet must still say "Make My Picks".
+  // Survivor and Margin are one pick per week, keyed by week number.
+  // `weeklyGames.length > 0` matters: an empty slate makes `every()` vacuously
+  // true and would label a pool with no games as already picked.
+  const weekPicksComplete = useMemo(() => {
+    if (!myEntry || weeklyGames.length === 0) return false;
+    if (_pool.type === 'NFL_PICKEM') {
+      return weeklyGames.every(g => !!myEntry.picks?.[g.id]);
+    }
+    return !!myEntry.picks?.[selectedWeek];
+  }, [myEntry, weeklyGames, _pool.type, selectedWeek]);
+
   const myPick = useMemo(() => {
     if (!myEntry || !focusGame) return null;
     if (_pool.type === 'NFL_PICKEM') {
@@ -594,7 +607,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                 size="md"
                 onClick={() => onSelectTab('picks')}
               >
-                Make My Picks <ChevronRight size={14} />
+                {weekPicksComplete ? 'Edit My Picks' : 'Make My Picks'} <ChevronRight size={14} />
               </Button>
             </div>
 

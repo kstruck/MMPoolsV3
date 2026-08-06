@@ -71,6 +71,93 @@ describe('one definition — no NFL surface re-derives the season-type rule', ()
 });
 
 /**
+ * Saved-pick visibility — the three member pick sheets say the same things.
+ *
+ * `src/utils/pickHighlight.test.ts` proves the helper returns distinguishable
+ * classes; it cannot prove the sheets USE it. Every defect in this area has
+ * been a re-derivation or an omission on one sheet out of three:
+ *
+ *  - Survivor and Margin gained a saved-pick button state in #378 and Pick'em
+ *    did not, so a fully-saved Pick'em sheet still read "Submit Weekly Picks".
+ *  - Survivor and Margin gained a saved BANNER in #378 and Pick'em only got one
+ *    in #379, for the same reason.
+ *  - All three inlined one navy/gold class string for "selected" with no saved
+ *    state at all, copied between three separate files.
+ *
+ * Coarse source greps, same convention as the season-type block above: they
+ * assert the wiring, not the rendering.
+ */
+describe('saved-pick visibility — all three member sheets, one definition', () => {
+  const SHEETS = [
+    'src/components/NFLPoolDashboard/PickemPickEntry.tsx',
+    'src/components/NFLPoolDashboard/SurvivorPickEntry.tsx',
+    'src/components/NFLPoolDashboard/MarginPickEntry.tsx',
+  ];
+
+  it.each(SHEETS)('%s highlights team buttons through pickHighlightClass()', file => {
+    const src = readFileSync(resolve(root, file), 'utf8');
+    expect(src, `${file} should import utils/pickHighlight`).toMatch(/utils\/pickHighlight/);
+    expect(/\bpickHighlightClass\s*\(/.test(src), `${file} should call pickHighlightClass`).toBe(true);
+  });
+
+  it.each(SHEETS)('%s inlines no copy of the old selected-team class string', file => {
+    const src = readFileSync(resolve(root, file), 'utf8');
+    // The exact string that was duplicated six times. A re-inlined copy would
+    // render gold for a saved pick again and no test would otherwise notice.
+    expect(src).not.toContain('ring-2 ring-navy-600 dark:border-gold-500');
+  });
+
+  it('that grep matches the string it was written to catch', () => {
+    // A guard that matches nothing is indistinguishable from a guard that
+    // passes — this is the literal pre-change source, and it must still trip.
+    const removed = "'bg-page border-navy-600 ring-2 ring-navy-600 dark:border-gold-500 dark:ring-gold-500'";
+    expect(removed).toContain('ring-2 ring-navy-600 dark:border-gold-500');
+  });
+
+  it.each(SHEETS)('%s tells the member their pick is saved without relying on colour', file => {
+    const src = readFileSync(resolve(root, file), 'utf8');
+    expect(/\bpickHighlightLabel\s*\(/.test(src), `${file} should render the text state`).toBe(true);
+  });
+
+  it("Pick'em's submit button is state-aware, like Survivor's and Margin's", () => {
+    const src = readFileSync(
+      resolve(root, 'src/components/NFLPoolDashboard/PickemPickEntry.tsx'),
+      'utf8',
+    );
+    // All three labels must exist, or the button is stuck on one of them again.
+    expect(src).toContain('Picks Saved (');
+    expect(src).toContain('Save Edited Picks');
+    expect(src).toContain('Submit Weekly Picks');
+    // "Edited" must be derived from the entry, not from the dirty flag, which
+    // latches on the first tap and never clears.
+    expect(src).toMatch(/matchesSaved/);
+    expect(src).not.toMatch(/hasUnsavedEdits\s*=\s*dirtyRef/);
+  });
+
+  it("the Pick'em receipt no longer offers a jump to an unopened week", () => {
+    const src = readFileSync(
+      resolve(root, 'src/components/NFLPoolDashboard/PickemPickEntry.tsx'),
+      'utf8',
+    );
+    // It landed the member on "Spreads Not Yet Finalized" with nothing to do.
+    expect(src).not.toContain('onGoToWeek');
+    expect(src).not.toMatch(/week\s*\+\s*1/);
+  });
+
+  it('the pool-home CTA names the action it will actually perform', () => {
+    const src = readFileSync(
+      resolve(root, 'src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx'),
+      'utf8',
+    );
+    expect(src).toContain('Edit My Picks');
+    expect(src).toContain('Make My Picks');
+    // Vacuous-true guard: an empty slate makes `every()` true, which would
+    // label a pool with no games as already picked.
+    expect(src).toMatch(/weeklyGames\.length === 0\) return false/);
+  });
+});
+
+/**
  * The commissioner surface is SPLIT INTO FOUR SECTIONS, and every one of them
  * still renders.
  *

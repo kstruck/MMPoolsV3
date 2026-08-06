@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Lock, AlertCircle, AlertTriangle, ArrowRight, Save, CheckCircle2 } from 'lucide-react';
+import { Lock, AlertCircle, AlertTriangle, Check, Save, CheckCircle2 } from 'lucide-react';
 import { Button } from '../ui';
 import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
@@ -10,6 +10,7 @@ import { formatTimeWithZone } from '../../utils/formatTime';
 import { poolSeasonType } from '../../utils/nflPending';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { loadDraft, saveDraft, clearDraft } from '../../utils/draftStore';
+import { pickHighlightClass, pickHighlightLabel } from '../../utils/pickHighlight';
 import type { User, Pool, NFLGame } from '../../types';
 
 interface PickemDraft {
@@ -25,8 +26,6 @@ interface PickemPickEntryProps {
   games: NFLGame[];
   entry: any; // NFLPickemEntry or null
   isWeekLocked: boolean;
-  /** Navigate the dashboard to another week (enables the post-submit "Next Week" CTA) */
-  onGoToWeek?: (week: number) => void;
 }
 
 export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
@@ -34,8 +33,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   week,
   games,
   entry,
-  isWeekLocked,
-  onGoToWeek
+  isWeekLocked
 }) => {
   const castPool = pool as any;
   const [picks, setPicks] = useState<Record<string, string>>({});
@@ -159,6 +157,37 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     return true;
   }, [games, picks, confidence, confidenceMode, duplicateConfidenceValues]);
 
+  // How much of THIS week's slate the server already holds, and whether the
+  // sheet on screen still matches it. Drives the submit button's three states.
+  // The button used to read "Submit Weekly Picks" forever — even on a sheet
+  // that was fully saved and untouched — while Survivor and Margin both said
+  // "Pick Saved: CAR" (#378). Kevin's live test flagged Pick'em as the odd one
+  // out for the second time; the saved BANNER was the first half (#379).
+  const savedCount = useMemo(
+    () => (entry?.picks ? games.filter(g => !!entry.picks[g.id]).length : 0),
+    [entry, games]
+  );
+
+  // "Edited" is draft-vs-entry, not a dirty flag: `dirtyRef` latches on the
+  // first tap and never clears, so it cannot tell "changed my mind back" from
+  // a real edit. Compared per-field against the same base the load effect
+  // hydrates from, so the two can never disagree about what "unchanged" means.
+  const matchesSaved = useMemo(() => {
+    if (!entry?.picks) return false;
+    if (!games.every(g => picks[g.id] === entry.picks[g.id])) return false;
+    if (confidenceMode && !games.every(g => (confidence[g.id] ?? null) === (entry.confidence?.[g.id] ?? null))) return false;
+    // Unconditional, including on a week with no MNF game: the tiebreaker's
+    // base value is loaded FROM the entry either way, so an untouched sheet
+    // matches whether or not the input is on screen.
+    return tiebreakerPrediction === (entry.weeklyTiebreakers?.[week] ?? 40);
+  }, [entry, games, picks, confidence, confidenceMode, tiebreakerPrediction, week]);
+
+  // Green "saved" only when the WHOLE slate is in and untouched — a half-saved
+  // sheet must not claim to be complete, which is the same overclaiming trap
+  // the saved banner avoids by printing "(N of M)".
+  const sheetFullySaved = games.length > 0 && savedCount === games.length && matchesSaved;
+  const hasUnsavedEdits = savedCount > 0 && !matchesSaved;
+
   const handlePickSelect = (gameId: string, teamAbbreviation: string) => {
     const game = games.find(g => g.id === gameId);
     if (!game || isGameLocked(game)) return;
@@ -258,23 +287,17 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
         </div>
       )}
 
-      {/* Persistent receipt — survives the toast so the user can always verify */}
+      {/* Persistent receipt — survives the toast so the user can always verify.
+          The "Pick <next week> →" CTA that used to sit here is REMOVED (Kevin,
+          2026-08-05): next week's spreads are not locked yet, so it landed the
+          member on "Spreads Not Yet Finalized" with nothing to do — a dead end
+          served as a next step. It is not gated on lock state instead because
+          the WeekChecklist strip already advances on its own once a week opens,
+          so a second, worse advance control has no job. */}
       {submittedAt && !validationError && (
-        <div role="status" className="bg-gold-400/10 border border-gold-500/40 text-gold-700 dark:text-gold-400 p-4 rounded-lg text-xs font-body font-bold num flex flex-col sm:flex-row gap-3 sm:items-center">
-          <div className="flex gap-2 items-center flex-1">
-            <CheckCircle2 size={18} aria-hidden="true" />
-            <span>{nflWeekLabel(poolSeasonType(pool), week)} picks submitted at {formatTimeWithZone(submittedAt)}. You can change unlocked picks and resubmit until kickoff.</span>
-          </div>
-          {onGoToWeek && week < (poolSeasonType(castPool) === 1 ? 4 : 18) && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => onGoToWeek(week + 1)}
-              className="shrink-0 num"
-            >
-              Pick {nflWeekLabel(poolSeasonType(pool), week + 1)} <ArrowRight size={14} aria-hidden="true" />
-            </Button>
-          )}
+        <div role="status" className="bg-gold-400/10 border border-gold-500/40 text-gold-700 dark:text-gold-400 p-4 rounded-lg text-xs font-body font-bold num flex gap-2 items-center">
+          <CheckCircle2 size={18} aria-hidden="true" />
+          <span>{nflWeekLabel(poolSeasonType(pool), week)} picks submitted at {formatTimeWithZone(submittedAt)}. You can change unlocked picks and resubmit until kickoff.</span>
         </div>
       )}
 
@@ -328,6 +351,12 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
             const homePicked = myPick === game.homeTeam.abbreviation;
             const awayPicked = myPick === game.awayTeam.abbreviation;
 
+            // Per-GAME saved state, not per-sheet: on a partially-edited sheet
+            // the untouched games are genuinely saved and should stay green.
+            const savedForGame: string | undefined = entry?.picks?.[game.id];
+            const homeSaved = savedForGame === game.homeTeam.abbreviation;
+            const awaySaved = savedForGame === game.awayTeam.abbreviation;
+
             const homeWon = game.status === 'FINAL' && (game.scores?.home ?? 0) > (game.scores?.away ?? 0);
             const awayWon = game.status === 'FINAL' && (game.scores?.away ?? 0) > (game.scores?.home ?? 0);
 
@@ -358,10 +387,10 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                   <button
                     onClick={() => handlePickSelect(game.id, game.awayTeam.abbreviation)}
                     disabled={locked}
+                    title={pickHighlightLabel(awayPicked, awaySaved) || undefined}
+                    aria-label={`${game.awayTeam.name}${pickHighlightLabel(awayPicked, awaySaved) ? ` — ${pickHighlightLabel(awayPicked, awaySaved)}` : ''}`}
                     className={`flex-1 max-w-[200px] flex flex-col items-center p-3 rounded-lg border transition-all duration-150 text-center ${
-                      awayPicked
-                        ? 'bg-page border-navy-600 ring-2 ring-navy-600 dark:border-gold-500 dark:ring-gold-500'
-                        : 'bg-page border-line'
+                      pickHighlightClass(awayPicked, awaySaved)
                     } ${locked ? 'cursor-not-allowed opacity-90' : 'hover:-translate-y-1 hover:shadow-card-hover'}`}
                   >
                     {game.awayTeam.logoUrl && (
@@ -410,10 +439,10 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                   <button
                     onClick={() => handlePickSelect(game.id, game.homeTeam.abbreviation)}
                     disabled={locked}
+                    title={pickHighlightLabel(homePicked, homeSaved) || undefined}
+                    aria-label={`${game.homeTeam.name}${pickHighlightLabel(homePicked, homeSaved) ? ` — ${pickHighlightLabel(homePicked, homeSaved)}` : ''}`}
                     className={`flex-1 max-w-[200px] flex flex-col items-center p-3 rounded-lg border transition-all duration-150 text-center ${
-                      homePicked
-                        ? 'bg-page border-navy-600 ring-2 ring-navy-600 dark:border-gold-500 dark:ring-gold-500'
-                        : 'bg-page border-line'
+                      pickHighlightClass(homePicked, homeSaved)
                     } ${locked ? 'cursor-not-allowed opacity-90' : 'hover:-translate-y-1 hover:shadow-card-hover'}`}
                   >
                     {game.homeTeam.logoUrl && (
@@ -487,9 +516,14 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
               onClick={handleSubmit}
               disabled={!canSubmit || isSubmitting}
             >
-              {isSubmitting ? 'Saving picks...' : (
+              {isSubmitting ? 'Saving picks...' : sheetFullySaved ? (
+                // Fact, not action — the sheet on screen IS what the server holds.
                 <>
-                  <Save size={18} /> Submit Weekly Picks
+                  <Check size={18} /> Picks Saved ({savedCount} of {games.length})
+                </>
+              ) : (
+                <>
+                  <Save size={18} /> {hasUnsavedEdits ? 'Save Edited Picks' : 'Submit Weekly Picks'}
                 </>
               )}
             </Button>
