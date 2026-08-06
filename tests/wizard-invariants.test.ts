@@ -190,6 +190,45 @@ describe('every wizard prefills from the profile and remembers what it learns', 
   });
 });
 
+describe("the Pick'em wizard offers Straight vs ATS, and warns about ATS", () => {
+  const pickem = readFileSync(resolve(root, `${CREATE_DIR}/CreateNFLPickemPool.tsx`), 'utf8');
+
+  it('exposes a scoring-mode control bound to settings.pickMode', () => {
+    // It hardcoded STRAIGHT and offered no control until 2026-08-06, so a
+    // commissioner could not create an ATS pool at all.
+    expect(pickem).toMatch(/name="settings\.pickMode"/);
+    expect(pickem).toContain("value: 'STRAIGHT'");
+    expect(pickem).toContain("value: 'ATS'");
+  });
+
+  it('still defaults to STRAIGHT', () => {
+    // ATS is the trap option (see below). It must never become the default.
+    expect(pickem).toMatch(/pickMode:\s*'STRAIGHT'/);
+    expect(pickem).not.toMatch(/pickMode:\s*'ATS'/);
+  });
+
+  it('warns, at the point of choice, that ATS needs locked spreads', () => {
+    // `submitNFLPicks` refuses EVERY pick for a week unless all its games have
+    // spread.locked. The 2026 preseason feed carries a line on 1 of 49 games, so
+    // an ATS preseason pool locks its whole room out — and the commissioner who
+    // chose it is not the person who sees the failure.
+    expect(pickem).toMatch(/function AtsWarning/);
+    expect(pickem).toMatch(/watch\('settings\.pickMode'\) !== 'ATS'\) return null/);
+    expect(pickem).toContain('Spreads Not Yet Finalized');
+    // Rendered from the rules step, or it warns nobody.
+    expect(pickem).toMatch(/<AtsWarning \/>/);
+  });
+
+  it('offers the mode ONLY on Pick\'em — the other pools never read a spread', () => {
+    // poolUsesSpreads is `type === 'NFL_PICKEM' && pickMode === 'ATS'`, so a
+    // pickMode control on Survivor or Margin would be a setting with no effect.
+    for (const file of WIZARDS.filter(f => !f.includes('CreateNFLPickemPool'))) {
+      const src = readFileSync(resolve(root, file), 'utf8');
+      expect(src, `${file} should not offer a pickMode control`).not.toMatch(/name="settings\.pickMode"/);
+    }
+  });
+});
+
 describe('the Terms of Service gate links to the terms', () => {
   const launch = readFileSync(resolve(root, `${CREATE_DIR}/LaunchStep.tsx`), 'utf8');
 

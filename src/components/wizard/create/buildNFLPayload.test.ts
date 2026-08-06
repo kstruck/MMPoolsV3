@@ -24,6 +24,27 @@ describe('buildNFLPayload', () => {
     expect(pickemCreateInputSchema.safeParse(p).success).toBe(true);
   });
 
+  // The wizard exposes a Straight/ATS choice (Kevin, 2026-08-06). Before that it
+  // hardcoded STRAIGHT, so nothing ever proved the OTHER value survives the
+  // payload builder and the server schema — a silently-dropped `pickMode` would
+  // have quietly downgraded every ATS pool to straight-up scoring, and the
+  // commissioner would only find out when a push scored as a win.
+  it.each(['STRAIGHT', 'ATS'] as const)('carries pickMode=%s through to the payload', mode => {
+    const src = { ...pickemBase, settings: { ...(pickemBase.settings as object), pickMode: mode } };
+    const p = buildNFLPayload(src, 'NFL_PICKEM') as Record<string, any>;
+    expect(p.settings.pickMode).toBe(mode);
+    expect(pickemCreateInputSchema.safeParse(p).success).toBe(true);
+  });
+
+  it('rejects a pickMode the scorer does not implement', () => {
+    // The select can only emit the two valid values, but the payload is
+    // hand-buildable and the schema is the real gate. If this ever passes, the
+    // enum has been widened without the scorer being taught the new mode.
+    const src = { ...pickemBase, settings: { ...(pickemBase.settings as object), pickMode: 'TEASER' } };
+    const p = buildNFLPayload(src, 'NFL_PICKEM');
+    expect(pickemCreateInputSchema.safeParse(p).success).toBe(false);
+  });
+
   it('dual-writes legacy handles', () => {
     const p = buildNFLPayload(pickemBase, 'NFL_PICKEM') as Record<string, any>;
     expect(p.venmo).toBe('@x');
