@@ -461,7 +461,6 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                             games={weeklyGames}
                             entry={myEntry}
                             isWeekLocked={isWeekLocked}
-                            onGoToWeek={setSelectedWeek}
                           />
                         )}
 

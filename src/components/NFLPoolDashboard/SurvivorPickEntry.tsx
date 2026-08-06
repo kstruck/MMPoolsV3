@@ -10,6 +10,7 @@ import { formatTimeWithZone } from '../../utils/formatTime';
 import type { User, Pool, NFLGame } from '../../types';
 import { poolSeasonType } from '../../utils/nflPending';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
+import { pickHighlightClass, pickHighlightLabel, pickBadgeClass } from '../../utils/pickHighlight';
 
 interface SurvivorPickEntryProps {
   pool: Pool;
@@ -336,9 +337,10 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                   <button
                     onClick={() => handleTeamSelect(awayAbbrev, game)}
                     disabled={locked || isAwayUsed || isEliminated}
+                    title={pickHighlightLabel(isAwaySelected, savedPick === awayAbbrev) || undefined}
                     className={`flex-1 max-w-[240px] flex flex-col items-center p-4 rounded-lg border transition-all duration-150 text-center relative ${
                       isAwaySelected
-                        ? 'bg-page border-navy-600 ring-2 ring-navy-600 dark:border-gold-500 dark:ring-gold-500'
+                        ? pickHighlightClass(true, savedPick === awayAbbrev)
                         : isAwayUsed
                           ? 'bg-page border-line opacity-40 cursor-not-allowed'
                           : (locked || isEliminated)
@@ -352,7 +354,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                       </span>
                     )}
                     {isAwaySelected && (
-                      <span className="absolute top-2 right-2 bg-navy-800 text-white dark:bg-gold-500 dark:text-ink p-0.5 rounded-full">
+                      <span className={`absolute top-2 right-2 p-0.5 rounded-full ${pickBadgeClass(savedPick === awayAbbrev)}`}>
                         <Check size={10} className="stroke-[4]" />
                       </span>
                     )}
@@ -397,9 +399,10 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                   <button
                     onClick={() => handleTeamSelect(homeAbbrev, game)}
                     disabled={locked || isHomeUsed || isEliminated}
+                    title={pickHighlightLabel(isHomeSelected, savedPick === homeAbbrev) || undefined}
                     className={`flex-1 max-w-[240px] flex flex-col items-center p-4 rounded-lg border transition-all duration-150 text-center relative ${
                       isHomeSelected
-                        ? 'bg-page border-navy-600 ring-2 ring-navy-600 dark:border-gold-500 dark:ring-gold-500'
+                        ? pickHighlightClass(true, savedPick === homeAbbrev)
                         : isHomeUsed
                           ? 'bg-page border-line opacity-40 cursor-not-allowed'
                           : (locked || isEliminated)
@@ -413,7 +416,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                       </span>
                     )}
                     {isHomeSelected && (
-                      <span className="absolute top-2 right-2 bg-navy-800 text-white dark:bg-gold-500 dark:text-ink p-0.5 rounded-full">
+                      <span className={`absolute top-2 right-2 p-0.5 rounded-full ${pickBadgeClass(savedPick === homeAbbrev)}`}>
                         <Check size={10} className="stroke-[4]" />
                       </span>
                     )}
