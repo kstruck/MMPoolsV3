@@ -225,7 +225,7 @@ Sensitive operations are moved off the client-side to a trusted Node.js environm
 * `onWinnerComputed` (Trigger): Listens for game score updates to instantly notify winners via email.
 
 ### Trust-Boundary Hardening (NEW!)
-* **Full Callable Sweep:** Every Cloud Function callable — across billing, pools, squares, brackets, props, referrals, and admin ops — is wrapped with input validation (zod schemas) and role checks at the trust boundary. No callable trusts client input.
+* **Trust-Boundary Sweep:** Sensitive Cloud Function callables — across billing, pools, squares, brackets, props, referrals, and admin ops — were retrofitted with input validation (zod schemas) and role checks at the trust boundary via a shared `validated()` wrapper. A small set of low-risk endpoints (e.g., the public server-time callable) remain on plain `onCall`.
 * **Server-Side Billing Enforcement:** Billing status is enforced in Cloud Functions, not the client — a modified client cannot bypass hosting-fee gates.
 * **Membership Integrity:** Payment and repair operations can no longer mint or launder member records; membership has one legitimate write path.
 * **Error Monitoring:** Client-side Sentry with a correctly scoped CSP, so production errors surface instead of silently dropping.
