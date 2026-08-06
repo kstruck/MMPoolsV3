@@ -56,11 +56,22 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
         });
     }, [games, entry, pool.type, totalWeeks, castPool]);
 
-    // The nearest upcoming week the user hasn't finished — that's the one to nag about
-    const nextDue = useMemo(() => {
+    // The week the pool is IN: the earliest week whose deadline has not passed.
+    // The strip used to nag about the nearest unpicked week ANYWHERE in the
+    // season — with HOF and P1 picked it read "Preseason Week 2 picks not in
+    // yet" while the HOF game hadn't even kicked off, which reads as the site
+    // being on the wrong week (Kevin's live-test report, 2026-08-05). The nag
+    // now speaks only about the current week; future weeks stay visible as
+    // chips below, and the nag moves forward on its own when this week locks.
+    const currentWeek = useMemo(() => {
         const now = serverNow();
-        return weeks.find(w => w.status === 'due' && w.deadline !== null && w.deadline > now) ?? null;
+        return weeks.find(w => w.deadline !== null && w.deadline > now) ?? null;
     }, [weeks]);
+
+    const nextDue = currentWeek && currentWeek.status === 'due' ? currentWeek : null;
+    // Positive confirmation for the same slot: "your picks are in" is exactly
+    // the assurance whose absence made a tester re-submit a saved pick.
+    const currentComplete = currentWeek && currentWeek.status === 'complete' ? currentWeek : null;
 
     // Survivor members who are eliminated owe nothing — don't nag them
     if (pool.type === 'NFL_SURVIVOR' && entry?.status === 'ELIMINATED') return null;
@@ -82,6 +93,15 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
                     >
                         Make picks <ArrowRight size={13} aria-hidden="true" />
                     </Button>
+                </div>
+            )}
+
+            {currentComplete && (
+                <div role="status" className="bg-[#E4F5EC]/60 dark:bg-emerald-500/10 border border-[#BEE7D0] dark:border-emerald-500/30 rounded-xl px-4 py-3 flex items-center gap-2">
+                    <Check size={16} className="text-[#0F7B4A] dark:text-emerald-400 shrink-0" aria-hidden="true" />
+                    <span className="font-display font-bold uppercase tracking-[0.05em] text-[13px] text-[#0F7B4A] dark:text-emerald-300">
+                        {nflWeekLabel(poolSeasonType(castPool), currentComplete.week)} picks are in — locks {formatDeadline(currentComplete.deadline!)}
+                    </span>
                 </div>
             )}
 
