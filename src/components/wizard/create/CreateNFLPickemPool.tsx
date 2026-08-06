@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useFormContext } from 'react-hook-form';
 import type { User } from '../../../types';
 import { dbService } from '../../../services/dbService';
 import { pickemCreateInputSchema } from '@shared/schemas';
@@ -54,7 +55,52 @@ function StepPickemRules() {
           { value: 'HYBRID', label: 'Hybrid' },
         ]}
       />
+      <SelectField
+        name="settings.pickMode"
+        label="Scoring mode"
+        options={[
+          { value: 'STRAIGHT', label: 'Straight up — pick the winner, no point spread' },
+          { value: 'ATS', label: 'Against the spread (ATS) — picks graded against the line' },
+        ]}
+        hint="Straight up is the default and needs no betting lines. ATS grades every pick against the game's spread, with a push scoring zero."
+      />
+      <AtsWarning />
       <CheckboxField name="settings.confidenceMode" label="Confidence points (rank picks; forces weekly lock)" />
+    </div>
+  );
+}
+
+/**
+ * ATS has a hard operational precondition and choosing it blind is a trap.
+ *
+ * `submitNFLPicks` refuses EVERY pick for the week unless all of that week's
+ * games have `spread.locked === true` (`poolUsesSpreads`, scoped in #214). So an
+ * ATS pool on a week with no betting lines is a pool nobody can enter — the
+ * member sees "Spreads Not Yet Finalized" and can do nothing.
+ *
+ * That is not a rare edge: the 2026 PRESEASON feed carries a line on 1 of 49
+ * games. A commissioner picking ATS for a preseason pool would lock their whole
+ * room out, and the failure surfaces only later, to the members, not to them.
+ *
+ * Shown at the point of choice rather than documented elsewhere, because the
+ * cost lands on someone who never saw the decision.
+ */
+function AtsWarning() {
+  const { watch } = useFormContext();
+  if (watch('settings.pickMode') !== 'ATS') return null;
+  return (
+    <div
+      role="status"
+      className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200"
+    >
+      <p className="font-semibold">ATS needs locked spreads before anyone can pick.</p>
+      <p className="mt-1 text-amber-200/80">
+        Members cannot submit picks for a week until <strong>every</strong> game that week has a
+        finalized spread. Preseason slates mostly have no betting line, so an ATS preseason pool
+        will show <em>&ldquo;Spreads Not Yet Finalized&rdquo;</em> and accept nothing. Choose{' '}
+        <strong>Straight up</strong> unless you are running a regular-season pool and will lock
+        spreads each week.
+      </p>
     </div>
   );
 }
