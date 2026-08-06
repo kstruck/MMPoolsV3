@@ -98,7 +98,7 @@ A rebuilt manager experience focused on truth, not guesswork.
 * **Four-Section Manager Page:** The pool manager view is organized into focused sections with a save control in every settings section and a floating save confirmation — no more hunting for the right button.
 * **Submission Health:** At-a-glance view of who has and hasn't submitted picks this week — including the manager's own entry.
 * **Buy-In Ledger:** Complete payment picture covering every member, not just those with entries.
-* **Payment Truth:** `setPaidStatus` is the single writer for payment state, carries method/date detail fields, and rebuys have their own paid control — payment records finally have one source of truth.
+* **Payment Truth:** Member payment state has a single canonical writer (`setPaidStatus`) carrying method/date detail fields, and rebuys have their own paid control. (Bracket entries keep their own entry-level payment writer.)
 * **Hosting-Fees Banner:** Managers see a clear "hosting fees paid" confirmation banner, dismissible once acknowledged.
 
 ---
@@ -227,7 +227,7 @@ Sensitive operations are moved off the client-side to a trusted Node.js environm
 * `onWinnerComputed` (Trigger): Listens for game score updates to instantly notify winners via email.
 
 ### Trust-Boundary Hardening (NEW!)
-* **Trust-Boundary Sweep:** Sensitive Cloud Function callables — across billing, pools, squares, brackets, props, referrals, and admin ops — were retrofitted with input validation (zod schemas) and role checks at the trust boundary via a shared `validated()` wrapper. A small set of low-risk endpoints (e.g., the public server-time callable) remain on plain `onCall`.
+* **Trust-Boundary Sweep:** Sensitive Cloud Function callables — across billing, pools, squares, brackets, props, referrals, and admin ops — were retrofitted with input validation (zod schemas) and role checks at the trust boundary via a shared `validated()` wrapper. Remaining plain-`onCall` endpoints are classified and tracked for hardening in `SECURITY-BARE-ONCALL-CLASSIFICATION.md`.
 * **Server-Side Billing Enforcement:** Billing status is enforced in Cloud Functions, not the client — a modified client cannot bypass hosting-fee gates.
 * **Membership Integrity:** Payment and repair operations can no longer mint or launder member records; membership has one legitimate write path.
 * **Error Monitoring:** Client-side Sentry with a correctly scoped CSP, so production errors surface instead of silently dropping.
