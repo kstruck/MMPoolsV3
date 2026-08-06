@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { AlertTriangle, ArrowRight, Check, X, Square, Dot, Minus } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
 import { gamesForPoolWeek, getWeekStatus, poolSeasonType, weekDeadline, type WeekStatus } from '../../utils/nflPending';
@@ -45,22 +45,36 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
     const castPool = pool as any;
     const seasonType = poolSeasonType(castPool);
     const totalWeeks = seasonType === 1 ? 4 : 18;
-    const weeks = useMemo(() => {
-        return Array.from({ length: totalWeeks }, (_, i) => i + 1).map(week => {
-            const weekGames = gamesForPoolWeek(games, castPool, week);
-            // Per week, because a hard-lock pool's deadline is frozen per week — the
-            // checklist must show the deadline the server actually enforces.
-            const lockBufferMinutes = effectiveBufferMinutesForWeek(castPool, week, weekGames.map(g => g.startTime));
-            const status = getWeekStatus(pool.type, entry, weekGames, week, lockBufferMinutes);
-            return { week, status, deadline: weekDeadline(weekGames, lockBufferMinutes) };
-        });
-    }, [games, entry, pool.type, totalWeeks, castPool]);
+    // NOT memoized, deliberately. `getWeekStatus` reads `serverNow()`, so a
+    // useMemo keyed on [games, entry, ...] FREEZES TIME: leave the dashboard
+    // open across a deadline with no data change and the memo never reruns —
+    // the old current week keeps its pre-deadline status (and, worse, its green
+    // "picks are in" confirmation) while the real week has moved on. codex
+    // found this on the first version of the current-week strip. The parent
+    // re-renders on a ~30s tick, and this is 4–18 weeks of array filtering —
+    // recomputing per render is the correct price for a clock-dependent value.
+    const weeks = Array.from({ length: totalWeeks }, (_, i) => i + 1).map(week => {
+        const weekGames = gamesForPoolWeek(games, castPool, week);
+        // Per week, because a hard-lock pool's deadline is frozen per week — the
+        // checklist must show the deadline the server actually enforces.
+        const lockBufferMinutes = effectiveBufferMinutesForWeek(castPool, week, weekGames.map(g => g.startTime));
+        const status = getWeekStatus(pool.type, entry, weekGames, week, lockBufferMinutes);
+        return { week, status, deadline: weekDeadline(weekGames, lockBufferMinutes) };
+    });
 
-    // The nearest upcoming week the user hasn't finished — that's the one to nag about
-    const nextDue = useMemo(() => {
-        const now = serverNow();
-        return weeks.find(w => w.status === 'due' && w.deadline !== null && w.deadline > now) ?? null;
-    }, [weeks]);
+    // The week the pool is IN: the earliest week whose deadline has not passed.
+    // The strip used to nag about the nearest unpicked week ANYWHERE in the
+    // season — with HOF and P1 picked it read "Preseason Week 2 picks not in
+    // yet" while the HOF game hadn't even kicked off, which reads as the site
+    // being on the wrong week (Kevin's live-test report, 2026-08-05). The nag
+    // now speaks only about the current week; future weeks stay visible as
+    // chips below, and the nag moves forward on its own when this week locks.
+    const currentWeek = weeks.find(w => w.deadline !== null && w.deadline > serverNow()) ?? null;
+
+    const nextDue = currentWeek && currentWeek.status === 'due' ? currentWeek : null;
+    // Positive confirmation for the same slot: "your picks are in" is exactly
+    // the assurance whose absence made a tester re-submit a saved pick.
+    const currentComplete = currentWeek && currentWeek.status === 'complete' ? currentWeek : null;
 
     // Survivor members who are eliminated owe nothing — don't nag them
     if (pool.type === 'NFL_SURVIVOR' && entry?.status === 'ELIMINATED') return null;
@@ -82,6 +96,15 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
                     >
                         Make picks <ArrowRight size={13} aria-hidden="true" />
                     </Button>
+                </div>
+            )}
+
+            {currentComplete && (
+                <div role="status" className="bg-[#E4F5EC]/60 dark:bg-emerald-500/10 border border-[#BEE7D0] dark:border-emerald-500/30 rounded-xl px-4 py-3 flex items-center gap-2">
+                    <Check size={16} className="text-[#0F7B4A] dark:text-emerald-400 shrink-0" aria-hidden="true" />
+                    <span className="font-display font-bold uppercase tracking-[0.05em] text-[13px] text-[#0F7B4A] dark:text-emerald-300">
+                        {nflWeekLabel(poolSeasonType(castPool), currentComplete.week)} picks are in — locks {formatDeadline(currentComplete.deadline!)}
+                    </span>
                 </div>
             )}
 

@@ -64,6 +64,21 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
 
   // Load existing picks when week, games, or entry changes; unsaved drafts win over
   // the last submitted entry (they are newer edits the user never got to submit)
+  // The session receipt describes ONE week's submit. Carrying it across a week
+  // switch relabels it as the new week's submission AND suppresses the
+  // entry-derived saved banner for that week (codex r1 on the banner change).
+  // Its own effect, keyed on `week` ONLY: the load effect below also fires when
+  // the ENTRY snapshot refreshes — which happens moments after every successful
+  // submit — and resetting there would wipe the receipt it just earned.
+  useEffect(() => {
+    setSubmittedAt(null);
+    // Week-scoped like the receipt: a week-N submit error carried into week M
+    // both displays against the wrong week and suppresses the saved banner
+    // (gated on !validationError). Margin/Survivor clear theirs in the load
+    // effect; Pick'em never did (qodo, on this PR).
+    setValidationError(null);
+  }, [week]);
+
   useEffect(() => {
     dirtyRef.current = false;
     const base: PickemDraft = entry
@@ -262,6 +277,27 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
           )}
         </div>
       )}
+
+      {/* Saved-state banner from the SERVER's entry, not session state — the
+          receipt above only exists after a submit in this browser session, so
+          a member who saved yesterday and reloads saw nothing saying their
+          picks are in. Margin and Survivor gained the same banner in #378;
+          Kevin's live test flagged Pick'em as the odd one out. Counting is per
+          THIS week's games against the saved entry, so a partially-saved sheet
+          says so rather than overclaiming. */}
+      {!submittedAt && !validationError && entry?.picks && (() => {
+        const savedCount = games.filter(g => !!entry.picks[g.id]).length;
+        if (savedCount === 0) return null;
+        return (
+          <div role="status" className="bg-gold-400/10 border border-gold-500/40 text-gold-700 dark:text-gold-400 p-4 rounded-lg text-xs font-body font-bold num flex gap-2 items-center">
+            <CheckCircle2 size={18} aria-hidden="true" />
+            <span>
+              Your {nflWeekLabel(poolSeasonType(pool), week)} picks are saved ({savedCount} of {games.length}).
+              {isWeekLocked ? ' Picks are locked for this week.' : ' You can change unlocked picks and resubmit until kickoff.'}
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Progress — how much of the sheet is done */}
       {games.length > 0 && !isWeekLocked && (

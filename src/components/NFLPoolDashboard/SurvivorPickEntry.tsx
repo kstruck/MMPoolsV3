@@ -41,6 +41,13 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
   const rebuyCost = settings.rebuyCost ?? settings.entryFee ?? 0;
   const pickLosersMode = settings.pickLosersMode ?? false;
 
+  // The session receipt describes ONE week's submit — reset on week change
+  // only, not in the load effect below (which also fires on the post-submit
+  // entry refresh and would wipe the fresh receipt). Twin of MarginPickEntry.
+  useEffect(() => {
+    setSubmittedAt(null);
+  }, [week]);
+
   // Load existing pick for this week when entry or week changes
   useEffect(() => {
     if (entry && entry.picks && entry.picks[week]) {
