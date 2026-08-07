@@ -3,6 +3,7 @@ import {
   decodeSnapshot, detectStatCorrections, encodeSnapshot, isExpired,
   MAX_SNAPSHOT_GZIP_BYTES, snapshotSlateId, SnapshotTooLargeError,
 } from '../lib/feedSnapshot';
+import { snapshotPointerLine } from '../feedSnapshotStore';
 import { eventMatchesSeason, parseScoreboardResponse } from '../nflSchedule';
 import type { NFLGame } from '../types';
 
@@ -294,5 +295,32 @@ describe('parseScoreboardResponse — filters cross-boundary events end to end',
   it('drops prior-season games entirely', () => {
     const games = parseScoreboardResponse({ events: [mk('old', 2025, 1)] }, 1, '2026', 1);
     expect(games).toEqual([]);
+  });
+});
+
+// qodo #3 on PR #392 — the snapshot pointer in a stat-correction alert.
+//
+// ESPN's calendar entries overlap, so a fetch for week N can return week N+1's
+// games. A correction among those is reported under the week that OWNS the game,
+// while the raw payload was snapshotted under the week that was FETCHED. The
+// alert told the operator the payloads were "in the nfl_feed_snapshots collection
+// for this slate" — pointing at a slate with nothing in it for that response.
+//
+// This is the one sentence in the alert somebody ACTS on mid-incident, so a
+// confidently wrong pointer is worse than no pointer at all.
+describe('snapshotPointerLine', () => {
+  it('points at this slate when the correction was observed in its own response', () => {
+    const line = snapshotPointerLine('2026/1/2', '2026/1/2');
+    expect(line).toContain('for this slate');
+    expect(line).not.toContain('NOT');
+  });
+
+  it('names the SOURCE slate when the correction spilled over from another week', () => {
+    const line = snapshotPointerLine('2026/1/2', '2026/1/1');
+    // The slate that actually holds the payload must be named...
+    expect(line).toContain('under slate 2026/1/1');
+    // ...and the one that does NOT must be called out, so nobody looks there.
+    expect(line).toContain('NOT 2026/1/2');
+    expect(line).not.toContain('for this slate');
   });
 });

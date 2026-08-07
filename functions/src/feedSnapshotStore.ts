@@ -101,6 +101,25 @@ export async function captureFeedSnapshot(
 }
 
 /**
+ * Where the raw payloads for THIS correction actually live.
+ *
+ * Pure and exported so the pointer is unit-tested rather than trusted. It is the
+ * one sentence in the alert an operator ACTS on during an incident, and a
+ * confidently wrong pointer is worse than none: ESPN's calendar entries overlap,
+ * so a correction can be reported under the week that OWNS the game while the
+ * snapshot was filed under the week that was FETCHED. (qodo #3 on PR #392.)
+ */
+export function snapshotPointerLine(owningSlateId: string, sourceSlateId: string): string {
+  if (owningSlateId === sourceSlateId) {
+    return `The raw feed payloads before and after are in the ${FEED_SNAPSHOTS} collection for this slate.`;
+  }
+  return (
+    `⚠️ This correction arrived inside the ${sourceSlateId} response (ESPN's calendar ranges overlap), ` +
+    `so the raw feed payloads are in the ${FEED_SNAPSHOTS} collection under slate ${sourceSlateId}, NOT ${owningSlateId}.`
+  );
+}
+
+/**
  * A game that was already FINAL changed. This is the case that can invalidate a
  * settled pool, so it pages rather than just logging.
  */
@@ -108,10 +127,26 @@ export async function reportStatCorrections(
   db: Firestore,
   key: SnapshotKey,
   corrections: GameStateChange[],
+  /**
+   * The slate whose RESPONSE the correction was observed in, when that is not
+   * `key` itself.
+   *
+   * ESPN's calendar entries overlap, so a fetch for week N can return week N+1's
+   * games; a correction among those is reported under the week that OWNS it
+   * (`key`) while the raw payload was snapshotted under the week that was
+   * FETCHED. Without this, the message below sends an operator to
+   * `nfl_feed_snapshots` "for this slate" and there is nothing there for this
+   * response — the pointer is confidently wrong, which during an incident is
+   * worse than no pointer. (qodo #3 on PR #392.)
+   */
+  observedIn?: SnapshotKey,
 ): Promise<boolean> {
   if (corrections.length === 0) return true;
   const detail = corrections.map((c) => `${c.gameId}: ${c.field} ${c.from} → ${c.to}`).join("; ");
-  console.warn(`[feedSnapshot] STAT CORRECTION on ${snapshotSlateId(key)}: ${detail}`);
+  const owning = snapshotSlateId(key);
+  const source = observedIn ? snapshotSlateId(observedIn) : owning;
+  const spilledOver = source !== owning;
+  console.warn(`[feedSnapshot] STAT CORRECTION on ${owning}${spilledOver ? ` (observed in the ${source} response)` : ""}: ${detail}`);
 
   // Independent sinks — the audit trail must not wait on the pager, and neither
   // throws, so a failure in one cannot lose the other. But BOTH failing means
@@ -123,18 +158,26 @@ export async function reportStatCorrections(
       actorUid: "system",
       action: "NFL_STAT_CORRECTION",
       targetType: "pool",
-      metadata: { slate: snapshotSlateId(key), corrections: corrections.slice(0, 50) },
+      metadata: {
+        slate: owning,
+        ...(spilledOver ? { observedInSlate: source } : {}),
+        corrections: corrections.slice(0, 50),
+      },
       status: "success",
     }),
     dispatchOpsAlert(db, {
       type: "NFL_STAT_CORRECTION",
       title: `NFL stat correction — week ${key.week}`,
       message:
-        `ESPN changed ${corrections.length} game(s) that were already FINAL on slate ${snapshotSlateId(key)}.\n\n${detail}\n\n` +
+        `ESPN changed ${corrections.length} game(s) that were already FINAL on slate ${owning}.\n\n${detail}\n\n` +
         `Any pool already scored or finalized on the old values is now settled on stale data. ` +
         `Re-score the affected week, then let the finalize sweep re-derive (finalization is a re-runnable overwrite). ` +
-        `The raw feed payloads before and after are in the ${FEED_SNAPSHOTS} collection for this slate.`,
-      context: { slate: snapshotSlateId(key), count: corrections.length },
+        snapshotPointerLine(owning, source),
+      context: {
+        slate: owning,
+        ...(spilledOver ? { observedInSlate: source } : {}),
+        count: corrections.length,
+      },
     }),
   ]);
   // "no-recipients" counts as delivered: an unconfigured pager is a setup gap

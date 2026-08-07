@@ -101,7 +101,12 @@ describe('syncScoresWindow — the lookback is what it queries', () => {
  * only the docs that fall inside it, exactly as Firestore would, while getAll()
  * resolves any id directly. That asymmetry is the whole point of the test below.
  */
-function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: number) {
+function fakeDbWithDocs(
+  stored: Record<string, any>,
+  now: number,
+  lookbackMs: number,
+  snapshotsOn = false,
+) {
   const writes: Array<{ id: string; data: any }> = [];
   // The §5b handoff: syncScoresWindow enqueues a rescore event after it commits a
   // slate. Recorded rather than ignored so the enqueue is asserted here, at the
@@ -121,8 +126,14 @@ function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: nu
    * lookback): the fake would answer it with the in-window docs, so the test
    * would pass without the door existing. Constraints are applied for real now.
    */
+  // Snapshots captured this run. `captureFeedSnapshot` reaches Firestore through
+  // `.where().orderBy().limit().get()` then `.add()`, so the stand-in has to
+  // carry both or the snapshot branch is silently unreachable and any test of it
+  // passes without executing anything.
+  const snapshots: any[] = [];
   const makeQuery = (constraints: Array<[string, string, any]>, cap?: number): any => ({
     where: (field: string, op: string, value: any) => makeQuery([...constraints, [field, op, value]], cap),
+    orderBy: () => makeQuery(constraints, cap),
     limit: (n: number) => makeQuery(constraints, n),
     async get() {
       const ids = Object.keys(stored).filter((id) => constraints.every(([field, op, value]) => {
@@ -142,6 +153,7 @@ function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: nu
       ...query,
       // doc() with no id is how a batch appends a queue event.
       doc: (id?: string) => ({ id: id ?? `auto${autoIds++}`, _id: id ?? `auto${autoIds}`, _col: name }),
+      async add(data: any) { snapshots.push({ col: name, data }); return { id: `snap${snapshots.length}` }; },
     }),
     async getAll(...refs: any[]) {
       return refs.map((r) => docOf(r._id));
@@ -153,9 +165,19 @@ function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: nu
       },
       async commit() { /* no-op */ },
     }),
-    doc: () => ({ async get() { return { data: () => undefined }; } }),
+    // `system/config` is where readSnapshotGate looks. Off unless a test opts in,
+    // matching production's fail-safe default.
+    doc: (path?: string) => ({
+      async get() {
+        return {
+          data: () => (path === 'system/config' && snapshotsOn
+            ? { nflFeedSnapshots: { enabled: true } }
+            : undefined),
+        };
+      },
+    }),
   } as unknown as Firestore;
-  return { db, writes, enqueued };
+  return { db, writes, enqueued, snapshots };
 }
 
 const espnGame = (over: Record<string, any>) => ({
@@ -525,6 +547,264 @@ describe('syncScoresWindow — the rescore handoff', () => {
       fetchSlate: async () => ({ games: fresh({ status: 'IN_PROGRESS', scores: undefined }), raw: { ok: true } }),
     });
     expect(enqueued).toHaveLength(0);
+  });
+
+  it('enqueues a SPILLOVER game under its OWN week, not the slot that fetched it', async () => {
+    // Found by codex on the week-stamping change (#392), and the revision it
+    // holed had a comment asserting the opposite.
+    //
+    // ESPN's preseason calendar entries OVERLAP, so a date-range fetch for week 1
+    // can return week-2 games; since parseScoreboardResponse now files by
+    // `event.week.number`, `freshGames` spans weeks. Everything slate-scoped is
+    // keyed on the SLOT, so the first fix scoped the terminal test to this
+    // slate's games on the reasoning that the spillover "picks itself up on its
+    // own pass".
+    //
+    // It does not. The write loop persists EVERY fresh game including the
+    // spillover, so once this pass commits it as FINAL, the week-2 pass reads
+    // that FINAL as its prior state and sees FINAL -> FINAL — no transition, no
+    // event, ever. (And week 2 may not be a slot at all: `weeksToSync` is built
+    // from stored docs before any of this runs.) The rescore is not deferred to
+    // the other pass; it is lost, and the pool's standings are never reconciled.
+    const { db, enqueued } = fakeDbWithDocs(storedLive, NOW, HOT_WINDOW_LOOKBACK_MS);
+    await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        games: [
+          // this slate's game, unchanged and already terminal -> no transition
+          espnGame({ id: 'espn_thu', week: 1, startTime: NOW - 20 * HOUR, status: 'FINAL', scores: { home: 27, away: 24 } }),
+          // the spillover: belongs to week 2, arrives terminal with no stored doc
+          espnGame({ id: 'espn_spill', week: 2, startTime: NOW - 2 * HOUR, status: 'FINAL', scores: { home: 17, away: 10 } }),
+        ] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    const terminal = enqueued.filter((e: any) => e.reason === 'terminal');
+    // Both games transitioned (espn_thu LIVE -> FINAL, espn_spill absent -> FINAL),
+    // so both weeks are enqueued — each under the week that owns it.
+    expect(terminal.map((e: any) => e.week).sort()).toEqual([1, 2]);
+    expect(terminal.every((e: any) => e.season === '2026' && e.seasonType === 1)).toBe(true);
+  });
+
+  it('does not enqueue a spillover week that had no transition', async () => {
+    // The other half: filing by owning week must not turn every overlapping
+    // response into an event for the neighbouring week.
+    const { db, enqueued } = fakeDbWithDocs(storedLive, NOW, HOT_WINDOW_LOOKBACK_MS);
+    await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        games: [
+          espnGame({ id: 'espn_thu', week: 1, startTime: NOW - 20 * HOUR, status: 'FINAL', scores: { home: 27, away: 24 } }),
+          espnGame({ id: 'espn_spill', week: 2, startTime: NOW + HOUR, status: 'SCHEDULED' }),
+        ] as any,
+        raw: { ok: true },
+      }),
+    });
+    expect(enqueued.filter((e: any) => e.reason === 'terminal').map((e: any) => e.week)).toEqual([1]);
+  });
+
+  it('counts a SPILLOVER-ONLY response as an unreconciled slate', async () => {
+    // qodo #6 on this PR. `freshGames.length === 0` catches a slate that returned
+    // nothing, but an overlapping calendar range can return a response made up
+    // ENTIRELY of the neighbouring week — we asked about week 1 and learned
+    // nothing about it. That is a slate-level fetch failure wearing a success:
+    // without this the run reports healthy and captureFeedSnapshot files a
+    // snapshot claiming gameCount 0 next to a non-empty raw payload.
+    const { db, enqueued, writes } = fakeDbWithDocs(storedLive, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        games: [
+          espnGame({ id: 'espn_spill', week: 2, startTime: NOW - 2 * HOUR, status: 'FINAL', scores: { home: 17, away: 10 } }),
+        ] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(r.slatesNotReconciled, 'a spillover-only response left week 1 unexamined').toBe(1);
+    // …and the response is NOT discarded: the spillover game is still written and
+    // still enqueued under the week that owns it.
+    expect(writes.map((w: any) => w.id)).toContain('espn_spill');
+    expect(enqueued.filter((e: any) => e.reason === 'terminal').map((e: any) => e.week)).toEqual([2]);
+  });
+
+  it('KEEPS the snapshot when a spillover-only response carries a correction', async () => {
+    // Codex, on the round after the two fixes that collided here. One skipped the
+    // snapshot when the slate was not reconciled (a `gameCount: 0` row beside a
+    // non-empty payload reads as misleading evidence); the other made the
+    // spillover alert point operators at THIS slate's snapshots. Together they
+    // produced an alert naming a slate where the response was never stored —
+    // promising before/after payloads that do not exist.
+    const stored = {
+      // outside the window, so week 2 gets no slot of its own
+      espn_spill: {
+        id: 'espn_spill', season: '2026', seasonType: 1, week: 2, startTime: NOW - 400 * HOUR,
+        status: 'FINAL', scores: { home: 17, away: 10 },
+      },
+      // in-window week 1 game, so week 1 IS a slot
+      espn_thu: {
+        id: 'espn_thu', season: '2026', seasonType: 1, week: 1, startTime: NOW - 20 * HOUR,
+        status: 'FINAL', scores: { home: 27, away: 24 },
+      },
+    };
+    const { db, snapshots } = fakeDbWithDocs(stored, NOW, HOT_WINDOW_LOOKBACK_MS, true);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      // Spillover-ONLY: nothing in the response belongs to week 1.
+      fetchSlate: async () => ({
+        games: [
+          espnGame({ id: 'espn_spill', week: 2, startTime: NOW - 400 * HOUR, status: 'FINAL', scores: { home: 20, away: 10 } }),
+        ] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(r.slatesNotReconciled, 'week 1 still learned nothing about itself').toBe(1);
+    expect(r.corrections).toBe(1);
+    const feed = snapshots.filter((s: any) => s.col === 'nfl_feed_snapshots');
+    expect(feed, 'the alert promises payloads that were never stored').toHaveLength(1);
+    // The row explains itself: no games for THIS slate, but a correction that
+    // justifies keeping it. `gameCount: 0` with an EMPTY corrections list is the
+    // genuinely misleading shape, and that one is still skipped.
+    expect(feed[0].data.gameCount).toBe(0);
+    expect(feed[0].data.corrections).toHaveLength(1);
+  });
+
+  it('still SKIPS the snapshot on a spillover-only response with nothing to keep', async () => {
+    const { db, snapshots } = fakeDbWithDocs(storedLive, NOW, HOT_WINDOW_LOOKBACK_MS, true);
+    await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        games: [espnGame({ id: 'espn_spill', week: 2, startTime: NOW + HOUR, status: 'SCHEDULED' })] as any,
+        raw: { ok: true },
+      }),
+    });
+    expect(snapshots.filter((s: any) => s.col === 'nfl_feed_snapshots')).toHaveLength(0);
+  });
+
+  it('reports one correction ONCE when two overlapping slots both deliver it', async () => {
+    // codex r7. `activeGamesSnap` is read once before the slot loop, so after the
+    // week-1 pass writes the corrected score, the week-2 pass still compares
+    // against the stale prior state and detects the SAME correction again —
+    // paging twice for one restatement and inflating the count. A
+    // stat-correction page is a wake-somebody event; crying it twice is how a
+    // real one starts being ignored.
+    const stored = {
+      espn_thu: {
+        id: 'espn_thu', season: '2026', seasonType: 1, week: 1, startTime: NOW - 20 * HOUR,
+        status: 'FINAL', scores: { home: 27, away: 24 },
+      },
+      // in-window, so week 2 IS its own slot and BOTH slots run
+      espn_spill: {
+        id: 'espn_spill', season: '2026', seasonType: 1, week: 2, startTime: NOW - 3 * HOUR,
+        status: 'FINAL', scores: { home: 17, away: 10 },
+      },
+    };
+    const { db, enqueued } = fakeDbWithDocs(stored, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const corrected = espnGame({
+      id: 'espn_spill', week: 2, startTime: NOW - 3 * HOUR, status: 'FINAL', scores: { home: 20, away: 10 },
+    });
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      // BOTH ranges carry the corrected week-2 game — that is what "overlapping
+      // calendar entries" means.
+      fetchSlate: async (week: number) => ({
+        games: week === 1
+          ? [espnGame({ id: 'espn_thu', week: 1, startTime: NOW - 20 * HOUR, status: 'FINAL', scores: { home: 27, away: 24 } }), corrected] as any
+          : [corrected] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(r.corrections, 'one restatement was counted twice').toBe(1);
+    expect(enqueued.filter((e: any) => e.reason === 'correction'), 'one restatement enqueued twice').toHaveLength(1);
+
+    // …AND the alert is still RE-ATTEMPTED (qodo #3, second pass). Reporting fails
+    // in this stand-in — `writeAdminAudit` goes through admin.firestore(), not the
+    // injected db — so both slots try and both fail, which is exactly the case the
+    // retry exists for. Two failures means the second slot did attempt; one would
+    // mean the dedupe had silenced the only remaining chance to page this run.
+    //
+    // This is the whole reason counting/enqueue and reporting use SEPARATE sets:
+    // suppressing on "seen" would have made this number 1.
+    expect(r.correctionReportFailures, 'the retry was silenced by the dedupe').toBe(2);
+  });
+
+  it('retries a failed alert when the OWNING slot saw it first, too', async () => {
+    // The mirror of the test above, and it exists because a mutation proved the
+    // first one did not cover this branch: there, the owning slot ran SECOND, so
+    // only the spillover path's mark-on-success was exercised. Reversing the order
+    // — the corrected game's own week is the first slot — puts the correction in
+    // the SLATE path first and pins the same rule there.
+    //
+    // Key ordering is what selects the first slot: `weeksToSync` is built by
+    // iterating stored docs, so espn_spill (week 2) listed first makes week 2 the
+    // first slot.
+    const stored = {
+      espn_spill: {
+        id: 'espn_spill', season: '2026', seasonType: 1, week: 2, startTime: NOW - 3 * HOUR,
+        status: 'FINAL', scores: { home: 17, away: 10 },
+      },
+      espn_thu: {
+        id: 'espn_thu', season: '2026', seasonType: 1, week: 1, startTime: NOW - 20 * HOUR,
+        status: 'FINAL', scores: { home: 27, away: 24 },
+      },
+    };
+    const { db, enqueued } = fakeDbWithDocs(stored, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const corrected = espnGame({
+      id: 'espn_spill', week: 2, startTime: NOW - 3 * HOUR, status: 'FINAL', scores: { home: 20, away: 10 },
+    });
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async (week: number) => ({
+        games: week === 2
+          ? [corrected] as any
+          : [espnGame({ id: 'espn_thu', week: 1, startTime: NOW - 20 * HOUR, status: 'FINAL', scores: { home: 27, away: 24 } }), corrected] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(r.corrections, 'counted twice').toBe(1);
+    expect(enqueued.filter((e: any) => e.reason === 'correction'), 'enqueued twice').toHaveLength(1);
+    expect(r.correctionReportFailures, 'the slate path silenced the retry').toBe(2);
+  });
+
+  it('enqueues a SPILLOVER stat correction under its OWN week', async () => {
+    // Codex, on the round AFTER the terminal-spillover fix — the same shape in the
+    // corrections path, and it holed the reasoning written into that fix's own
+    // commit message ("`correction` can only ever describe this slate").
+    //
+    // detectStatCorrections compares this slate only, so an already-FINAL game
+    // from a neighbouring week whose score changed produces no correction — while
+    // the write loop persists the new score regardless. After that the evidence is
+    // destroyed: the owning week's pass compares against the score this run just
+    // wrote and sees nothing changed, and if that week has no slot it is never
+    // revisited at all. A stat correction is the one class of change that
+    // invalidates a settled result, so losing it leaves standings wrong with
+    // nothing left to notice.
+    const stored = {
+      // this slate: FINAL and unchanged, so it contributes nothing
+      espn_thu: {
+        id: 'espn_thu', season: '2026', seasonType: 1, week: 1, startTime: NOW - 20 * HOUR,
+        status: 'FINAL', scores: { home: 27, away: 24 },
+      },
+      // the neighbour's game: already FINAL, and OUTSIDE the time window, so it is
+      // not in activeGamesSnap and week 2 is not a slot of its own.
+      espn_spill: {
+        id: 'espn_spill', season: '2026', seasonType: 1, week: 2, startTime: NOW - 400 * HOUR,
+        status: 'FINAL', scores: { home: 17, away: 10 },
+      },
+    };
+    const { db, enqueued } = fakeDbWithDocs(stored, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        games: [
+          espnGame({ id: 'espn_thu', week: 1, startTime: NOW - 20 * HOUR, status: 'FINAL', scores: { home: 27, away: 24 } }),
+          // restated on the Tuesday: 17-10 becomes 20-10
+          espnGame({ id: 'espn_spill', week: 2, startTime: NOW - 400 * HOUR, status: 'FINAL', scores: { home: 20, away: 10 } }),
+        ] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(r.corrections, 'the spillover correction must be counted, not swallowed').toBe(1);
+    const corr = enqueued.filter((e: any) => e.reason === 'correction');
+    expect(corr.map((e: any) => e.week)).toEqual([2]);
+    expect(corr[0]).toMatchObject({ season: '2026', seasonType: 1, reason: 'correction' });
   });
 
   it('enqueues a correction on an already-FINAL game', async () => {
