@@ -105,8 +105,9 @@ describe('importNFLSchedule', () => {
     expect(importNFLScheduleSchema.safeParse({}).success).toBe(true);
   });
   it('REJECTS a nonsense seasonType before it reaches a destructive delete', () => {
-    // importNFLSeason() batch-deletes every nfl_games doc matching
-    // season+seasonType. The handler did a bare parseInt with no range check.
+    // importNFLSeason() batch-deletes stored nfl_games docs (now scoped to the
+    // requested weeks, but still on this season+seasonType). The handler did a
+    // bare parseInt with no range check.
     expect(importNFLScheduleSchema.safeParse({ seasonType: 9 }).success).toBe(false);
     expect(importNFLScheduleSchema.safeParse({ seasonType: 0 }).success).toBe(false);
   });

@@ -347,40 +347,91 @@ export function parseScoreboardResponse(
 }
 
 /**
+ * Is this stored game inside the set of weeks a given import is about to write?
+ *
+ * The importer's cleanup delete is the only path in this repo that can destroy a
+ * real season's `nfl_games` documents (`PLAN-IMPORTER-SAFETY-SWEEPS.md`), and it
+ * used to query on `season` + `seasonType` ALONE — so `importNFLSeason(season,
+ * type, [2])` deleted weeks 1-18 and re-imported only week 2. Everything outside
+ * the requested weeks was destroyed with nothing left to restore it: the deletes
+ * commit BEFORE the first fetch, and there are no backups yet
+ * (`PLAN-BACKUPS-PHASE3.md`).
+ *
+ * Filtering the snapshot rather than adding `.where('week', 'in', weeks)` is
+ * deliberate. An `in` clause caps at 30 values and would need a composite index —
+ * and a missing index is the single failure mode that has bitten this repo
+ * hardest (A5 and the finalize sweep both died silently on one). The season+type
+ * query already loads exactly the docs this predicate chooses among, so the
+ * filter is free.
+ *
+ * `Number()` on both sides because the stored `week` has been written by more
+ * than one path over the life of the collection and the caller coerces its own
+ * input (`importNFLSchedule` does `data.weeks.map(Number)`); a string/number
+ * mismatch here would silently spare a doc the import is about to overwrite,
+ * leaving a duplicate fixture in the week.
+ *
+ * An unusable stored week (`undefined`, `'wk2'`) coerces to `NaN`, and no
+ * comparison against `NaN` succeeds — so it is out of scope and the doc
+ * survives, which is the safe direction on a destructive path. That falls out of
+ * the coercion; a `Number.isFinite` guard was written here first and REMOVED
+ * after a mutation test showed removing it changed no observable behaviour. A
+ * dead guard on a delete path is worse than no guard: it reads as protection
+ * that is not there.
+ */
+export function isWeekInImportScope(
+  game: Pick<NFLGame, 'week'> | undefined,
+  weeks: number[],
+): boolean {
+  const w = Number(game?.week);
+  return weeks.some(requested => Number(requested) === w);
+}
+
+/**
  * Bulk import a full season (or specific week) of NFL games into Firestore.
+ *
+ * `fetchWeek` is injectable ONLY so the delete scoping above can be tested
+ * without a network call. Production always uses the default.
  */
 export async function importNFLSeason(
   season: string,
   seasonType: 1 | 2 | 3,
-  weeks: number[] = Array.from({ length: 18 }, (_, i) => i + 1)
+  weeks: number[] = Array.from({ length: 18 }, (_, i) => i + 1),
+  opts: { fetchWeek?: typeof fetchNFLWeekSchedule } = {},
 ): Promise<{ success: boolean; importedCount: number }> {
   const db = admin.firestore();
+  const fetchWeek = opts.fetchWeek ?? fetchNFLWeekSchedule;
   let importedCount = 0;
 
   console.log(`[nflSchedule] Starting import of season ${season} (type: ${seasonType}) for weeks: ${weeks.join(', ')}`);
 
-  // Auto-cleanup any existing/legacy games for this season and seasonType to prevent orphan/mismatched data
+  // Auto-cleanup existing/legacy games to prevent orphan/mismatched data — but
+  // ONLY within the weeks this run is about to re-import. See
+  // isWeekInImportScope: the query cannot express the week filter without a
+  // composite index, so it is applied to the snapshot.
   try {
     const existingSnap = await db.collection('nfl_games')
       .where('season', '==', season)
       .where('seasonType', '==', seasonType)
       .get();
-    
-    if (!existingSnap.empty) {
-      console.log(`[nflSchedule] Found ${existingSnap.size} existing matching games for season ${season} (type ${seasonType}). Cleaning up...`);
+
+    const doomed = existingSnap.docs.filter(doc =>
+      isWeekInImportScope(doc.data() as NFLGame, weeks));
+
+    if (doomed.length > 0) {
+      console.log(`[nflSchedule] Found ${doomed.length} existing game(s) in weeks ${weeks.join(', ')} of season ${season} (type ${seasonType}), out of ${existingSnap.size} for the whole season+type. Cleaning up the in-scope ones...`);
       const deleteBatch = db.batch();
-      existingSnap.docs.forEach(doc => {
+      doomed.forEach(doc => {
         deleteBatch.delete(doc.ref);
       });
       await deleteBatch.commit();
-      console.log(`[nflSchedule] Cleaned up ${existingSnap.size} legacy matching games successfully.`);
+      console.log(`[nflSchedule] Cleaned up ${doomed.length} in-scope game(s) successfully; ${existingSnap.size - doomed.length} game(s) in other weeks were left untouched.`);
     }
   } catch (cleanupErr) {
     console.warn("[nflSchedule] Failed to clean up legacy matching games in DB:", cleanupErr);
   }
 
   for (const week of weeks) {
-    const games = await fetchNFLWeekSchedule(week, season, seasonType);
+    const games = await fetchWeek(week, season, seasonType);
     if (games.length === 0) {
       console.log(`[nflSchedule] No games fetched for Week ${week}. Skipping.`);
       continue;

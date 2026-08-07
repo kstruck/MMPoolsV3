@@ -8,11 +8,17 @@ import { z } from "zod";
 /**
  * importNFLSchedule - SUPER_ADMIN. SWEEP-LATER batch 17.
  *
- * DESTRUCTIVE AND UNGATED: importNFLSeason() batch-DELETES every existing
- * nfl_games doc matching season+seasonType before re-importing, and there is no
- * dryRun flag. That is pre-existing behavior this sweep deliberately does not
- * change (a dry-run retrofit is a behavior change needing its own review), but
- * it is why the envelope is tightened hard here.
+ * DESTRUCTIVE AND UNGATED: importNFLSeason() batch-DELETES existing nfl_games
+ * docs before re-importing, and there is still no dryRun flag or kill-switch —
+ * PLAN-IMPORTER-SAFETY.md Phase 0 remains unimplemented. That is why the
+ * envelope is tightened hard here.
+ *
+ * The blast radius is now bounded to the REQUESTED WEEKS: the delete used to
+ * match on season+seasonType alone, so a one-week re-import destroyed the whole
+ * season+type. It is scoped by isWeekInImportScope() as of the Phase-1.1 slice.
+ * Everything else about the destructiveness is unchanged — within those weeks it
+ * still deletes first and fetches after, so a fetch failure still leaves a hole
+ * (PLAN-IMPORTER-SAFETY.md defect 2, open).
  *
  * Every field is optional in the handler with coercing defaults (season->'2026',
  * seasonType->2, weeks->all 18). Those defaults are LOAD BEARING and are left in
