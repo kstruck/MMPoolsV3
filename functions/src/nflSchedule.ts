@@ -773,6 +773,30 @@ export async function syncScoresWindow(
     if (slateGames.length !== freshGames.length) {
       console.log(`[nflSchedule] slate ${slateKey.season}/${slateKey.seasonType}/wk${slateKey.week}: ${freshGames.length - slateGames.length} game(s) belong to another week; written but reconciled under their own slate.`);
     }
+
+    // ⚠️ A NON-EMPTY RESPONSE IS NOT PROOF THIS SLATE WAS FETCHED.
+    //
+    // The `freshGames.length === 0` guard above counts a slate that returned
+    // nothing. But an overlapping calendar range can return a response made up
+    // ENTIRELY of the neighbouring week's games, and that is a slate-level fetch
+    // failure wearing a success: we asked about week N and learned nothing about
+    // it. Without this the run reports healthy, `slatesNotReconciled` stays 0, and
+    // `captureFeedSnapshot` stores a snapshot claiming `gameCount: 0` beside a
+    // non-empty raw payload — evidence that actively misleads whoever reads it
+    // during the next incident.
+    //
+    // The importer already guards the identical shape
+    // (`games.some(g => Number(g.week) === Number(week))` before marking a week
+    // fetched); this is the sync path catching up to it. (qodo #6 on this PR.)
+    //
+    // The spillover games are still WRITTEN, and their terminal transitions and
+    // stat corrections are still enqueued under their own weeks below — the
+    // response is not discarded, only its claim about THIS slate is. (qodo #6.)
+    const slateReconciled = slateGames.length > 0;
+    if (!slateReconciled) {
+      slatesNotReconciled++;
+      console.warn(`[nflSchedule] slate ${slateKey.season}/${slateKey.seasonType}/wk${slateKey.week}: spillover-only response (${freshGames.length} game(s), none in this week); slate NOT reconciled. Its games are still written under their own weeks.`);
+    }
     // Existing docs for the WHOLE slate, not just the ones inside the time
     // window. ESPN returns the entire week, and every one of those games gets
     // written below — but a game later in the week can already carry a spread
@@ -805,13 +829,17 @@ export async function syncScoresWindow(
     // dedupe key, and storing the same payload under a second slate would collide
     // with the snapshot that slate's own pass writes. The ALERT and the RESCORE
     // for a spillover correction are handled below, under the owning week.
-    if (snapshotGate.enabled && raw !== null) {
+    // Both are gated on `slateReconciled`: a spillover-only response says nothing
+    // about this slate, so snapshotting `gameCount: 0` under its key would file
+    // misleading evidence, and there is nothing to report. The spillover's own
+    // alert and rescore are handled under its owning week below.
+    if (snapshotGate.enabled && raw !== null && slateReconciled) {
       const outcome = await captureFeedSnapshot(db, slateKey, raw, corrections, slateGames.length);
       if (outcome === "skipped") snapshotFailures++;
     }
     // Corrections are reported whether or not snapshots are on — the page is the
     // point; the snapshot is only the evidence attached to it.
-    if (!(await reportStatCorrections(db, slateKey, corrections))) correctionReportFailures++;
+    if (slateReconciled && !(await reportStatCorrections(db, slateKey, corrections))) correctionReportFailures++;
     correctionCount += corrections.length;
 
     // ⚠️ A SPILLOVER GAME CAN CARRY A STAT CORRECTION, AND SLATE-SCOPING SWALLOWS IT.

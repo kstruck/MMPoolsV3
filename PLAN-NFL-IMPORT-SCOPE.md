@@ -124,24 +124,38 @@ event plus 6 week-2 events — and asserts they file into weeks 1 and 6.
 `week: week` fails exactly 3 of the 9, including *"never files a team twice in one
 week"* — the symptom that exposed the bug in the UI.
 
-**`importScope.emulator.test.ts` (6)** exercises the real write path against the
-emulator: a week-2 import leaves weeks 1/3/4 intact; a locked spread survives;
-an unlocked one still refreshes; a cancelled fixture is cleaned up but only in
-scope; and an empty fetch does not empty the stored week.
+**`importScope.emulator.test.ts` (9)** exercises the real write path against the
+emulator: a week-2 import leaves weeks 1/3/4 intact; a locked spread survives; an
+unlocked one still refreshes; a cancelled fixture is cleaned up but only in scope;
+an empty fetch does not empty the stored week; and a withdrawn unlocked line is
+cleared while a locked one is not.
 
-> ⚠️ **That last case caught a bug in this very change.** The first revision
-> swept orphans for every requested week including ones whose fetch returned
-> nothing — so an ESPN outage would have emptied a stored week. The comment above
-> it claimed that could not happen. The test disagreed and was right.
+> ⚠️ **That "empty fetch" case caught a bug in this very change.** The first
+> revision swept orphans for every requested week including ones whose fetch
+> returned nothing — so an ESPN outage would have emptied a stored week. The
+> comment above it claimed that could not happen. The test disagreed and was right.
+
+**`nflDeepSweep.test.ts` (36, +4)** covers the reconciliation consequences of a
+response that spans weeks: a spillover terminal transition and a spillover stat
+correction are each enqueued under the week that OWNS them; a spillover that did
+not change enqueues nothing extra; and a response made up ENTIRELY of the
+neighbouring week counts as an unreconciled slate.
+
+**Gates — all re-run <!-- hof-date:ignore --> 2026-08-07 ET at `1566669`+, on the
+final diff.** Counts are dated because a bare count rots silently and this table
+had already gone stale once (qodo #5).
 
 | Gate | Result |
 |---|---|
 | `npx tsc -b` | clean |
-| `npm run lint` | 0 errors |
+| `npm run lint` | 0 errors (1137 pre-existing warnings) |
 | root `vitest run` | 817 / 817 |
 | `functions` typecheck | clean |
-| `functions` `vitest run` | **1343 / 1343** (+9) |
-| `functions` `test:emulator` | **312 passed** (+6), 2 expected-fail, 10 skipped |
+| `functions` `vitest run` | **1347 / 1347** (+13) |
+| `functions` `test:emulator` | **315 passed** (+9), 2 expected-fail, 10 skipped |
+
+Every guard added by this change is mutation-checked; the mutant and what it
+breaks are recorded in the commit that introduced each one.
 
 ## 5. Deploy — GATED ON KEVIN
 

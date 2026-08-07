@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
+// Refuses to start unless FIRESTORE_EMULATOR_HOST is set — this suite wipes
+// `nfl_games` between tests. `vitest.emulator.config.ts` already applies it to
+// every file via `setupFiles`, so this import is redundant belt-and-braces; it
+// matches the sibling suites and closes the gap if this file is ever run under a
+// config that forgets it. (qodo #7 on this PR, partially absorbed — the per-file
+// guard it asked for was rejected; see the PR reply.)
+import './setup';
 import { importNFLSeason } from '../../nflSchedule';
 import type { NFLGame } from '../../types';
 

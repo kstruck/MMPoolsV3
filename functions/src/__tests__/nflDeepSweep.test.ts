@@ -580,6 +580,30 @@ describe('syncScoresWindow — the rescore handoff', () => {
     expect(enqueued.filter((e: any) => e.reason === 'terminal').map((e: any) => e.week)).toEqual([1]);
   });
 
+  it('counts a SPILLOVER-ONLY response as an unreconciled slate', async () => {
+    // qodo #6 on this PR. `freshGames.length === 0` catches a slate that returned
+    // nothing, but an overlapping calendar range can return a response made up
+    // ENTIRELY of the neighbouring week — we asked about week 1 and learned
+    // nothing about it. That is a slate-level fetch failure wearing a success:
+    // without this the run reports healthy and captureFeedSnapshot files a
+    // snapshot claiming gameCount 0 next to a non-empty raw payload.
+    const { db, enqueued, writes } = fakeDbWithDocs(storedLive, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        games: [
+          espnGame({ id: 'espn_spill', week: 2, startTime: NOW - 2 * HOUR, status: 'FINAL', scores: { home: 17, away: 10 } }),
+        ] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(r.slatesNotReconciled, 'a spillover-only response left week 1 unexamined').toBe(1);
+    // …and the response is NOT discarded: the spillover game is still written and
+    // still enqueued under the week that owns it.
+    expect(writes.map((w: any) => w.id)).toContain('espn_spill');
+    expect(enqueued.filter((e: any) => e.reason === 'terminal').map((e: any) => e.week)).toEqual([2]);
+  });
+
   it('enqueues a SPILLOVER stat correction under its OWN week', async () => {
     // Codex, on the round AFTER the terminal-spillover fix — the same shape in the
     // corrections path, and it holed the reasoning written into that fix's own
