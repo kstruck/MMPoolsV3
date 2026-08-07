@@ -176,6 +176,111 @@ With the fix in place that is now safe and sufficient:
 ⚠️ **Do NOT run this against the OLD importer.** It would delete all 49 preseason
 games and wipe the locked spread.
 
+### 6a. Re-score weeks 1 and 2 — the step the import does not do
+
+Counts are not the finish line. Re-filing a game changes which slate a week is
+scored against, and **nothing re-scores on its own**: `system/config.nflAutoScore`
+is unset and `nflFinalize` / `nflSpreadLock` are `{enabled:true, dryRun:true}`, so
+score INGESTION is automatic (`syncNFLScoresJob`, every 5 min, no kill switch) but
+GRADING is not.
+
+So after the import, from the pool's COMMISSIONER surface (the gear-icon button in
+the pool header, right of INVITE LINK — there is no "Manager" tab), run **Score &
+Recap for week 1 and then week 2** on every affected pool. Scoring is idempotent —
+the Survivor `strikeWeeks` ledger has set semantics and `computeSurvivorWeekUpdate`
+recomputes per `(entry, week)` — so re-clicking is safe.
+
+Week 1 is the one that visibly changes: it holds a single FINAL game afterwards, so
+`isWeekComplete` is satisfied and the pass stops being provisional. **"Week 1 scored
+successfully." replacing "scored provisionally" is the confirmation the repair
+landed**, and it is a stronger signal than the counts because it depends on slate
+membership rather than on a number we could also have read wrong.
+
+### 6b. Member picks — MEASURED, exposure is ZERO
+
+_Measured against production <!-- hof-date:ignore --> 2026-08-07 ET, before the
+repair. The tag is there because that is the measurement date, not the game date —
+the Hall of Fame game is 2026-08-06._
+
+Re-filing games can strand picks, and the counts in §6 would not show it. Two
+mechanisms, both real, both measured against production before the repair:
+
+1. **Confidence values are validated only at submit.**
+   `validateConfidenceValues` runs inside `submitNFLPicks`
+   (`functions/src/nflPools.ts:475`) and nowhere else; the legal set is
+   `[17-N .. 16]`, unique, for N games in the week
+   (`functions/src/nflScoringEngine.ts:183-186`). Scoring simply sums the stored
+   values (`functions/src/nflScoringEngine.ts:165`) with no revalidation. Changing
+   N can therefore leave a stored value out of range, or colliding with one already
+   used in the destination week.
+2. **Survivor and Margin picks are keyed by WEEK and hold a TEAM abbreviation**
+   (`functions/src/nflPools.ts:546`, `:604`) — never a game id, so a pick does not
+   follow its game across weeks. A stranded Survivor pick grades `survived: true`
+   with no strike (`functions/src/nflScoringEngine.ts:266-267`); a stranded Margin
+   pick returns `null` and the entry is `continue`d entirely — no `weeklyScores`
+   write and no `-14` (`functions/src/nflScoringEngine.ts:377-382`,
+   `functions/src/nflPools.ts:1271`, `:1289`).
+
+**Measured with `.claude/skills/mmp-diagnostics-and-tooling/scripts/confidence-exposure-census.mjs`
+and `…/confidence-exposure-detail.mjs`** (read-only; both refuse to run without
+credentials rather than printing a zero, because an empty read from a
+rules-restricted collection is not evidence of absence — an unauthenticated REST
+read of `pools` returns 403 while `nfl_games` returns 200):
+
+```
+pools scanned: 134   NFL preseason pools: 7
+games  week1 7 -> 1    week2 10 -> 16     six moving ids found in week 1: 6/6
+legal confidence  week1 [10..16] -> [16..16]     week2 [7..16] -> [1..16]
+
+(a) NFL_PICKEM pools with confidenceMode === true ......... 3
+(b) confidence entries holding week 1 or 2 picks ........... 4
+    of those, stored value out of range after the move .... 0
+    of those, colliding value inside week 2 after ......... 0
+(c) Survivor/Margin pools with a stranded week 1 pick ...... 0
+```
+
+Why each is zero, so the zeros can be read rather than trusted:
+
+- **Confidence.** All four entries hold exactly one week-1 pick, on
+  `espn_401873271`, at confidence **16** — with `0 MISSING` values, so the count is
+  not the predicate skipping gaps. 16 is the only legal value in a one-game week,
+  so every sheet is legal both before and after. Week 2 only *widens*
+  (`[7..16]` → `[1..16]`), so nothing arriving there can fall out of range either.
+- **Survivor / Margin.** The single surviving week-1 game is `espn_401873271`
+  **CAR@ARI**, and the Margin entry in question picked **ARI** — which also plays
+  the moving `espn_401873640` ARI@LV. ARI still has a week-1 game after the repair,
+  so the pick resolves. The Survivor entry picked CAR, likewise still in week 1.
+- **Nothing has been scored yet.** Every affected pool reads `scoredWeeks` unset,
+  `publishedWeeks` unset, `scoredThroughWeek` unset, `weeklyScores` empty,
+  `seasonTotal` 0. This matters because a stale per-week value **survives** a
+  re-score: the scorer `continue`s a stranded entry and writes nothing, while
+  `seasonTotal` re-sums the whole map (`functions/src/nflPools.ts:1302`). With
+  nothing banked, there is nothing to go stale.
+
+⚠️ **A first version of the census reported (c) = 1 and that was a FALSE POSITIVE.**
+It tested "is this team in a moving game", which flags ARI. The correct test is
+"is this team in a moving game **and** left with no game in the week afterwards".
+Recorded because the same trap is waiting for anyone who re-runs this analysis for
+a different re-file.
+
+**Re-run both scripts before any FUTURE re-file** — in particular the regular-season
+week-1 restoration that `PLAN-IMPORTER-SAFETY.md` defect 1 describes, where
+`seasonType 2` week 1 held zero documents. That one lands mid-season with picks and
+scores already banked, and none of the three reasons above will hold.
+
+### 6c. One ambiguity the repair silently FIXES
+
+Week 1 currently contains **both** `espn_401873271` CAR@**ARI** and
+`espn_401873640` **ARI**@LV. `scoreMarginWeek` resolves a pick with
+`gamesInWeek.find(g => g.homeTeam.abbreviation === pick || g.awayTeam.abbreviation === pick)`
+(`functions/src/nflScoringEngine.ts:376-378`) — a *first match by array order*. So a
+Margin pick of ARI is, today, graded against whichever of the two games the query
+happened to return first. There is one such entry.
+
+After the repair week 1 holds one ARI game and the ambiguity is gone. No action
+needed; noted so that a grade which changes across the repair is not mistaken for a
+regression.
+
 ## 7. Rollback
 
 Revert the merge and redeploy functions. The code change is pure logic — no
