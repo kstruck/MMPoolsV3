@@ -440,7 +440,16 @@ export async function importNFLSeason(
       console.log(`[nflSchedule] No games fetched for Week ${week}. Skipping (its stored games are left untouched).`);
       continue;
     }
-    fetchedWeeks.add(Number(week));
+    // ⚠️ ONLY when the response actually contains a game FOR THIS WEEK.
+    //
+    // A non-empty response is not proof the week was fetched: at an overlapping
+    // calendar boundary ESPN can return a slate made up ENTIRELY of the next
+    // week's games. Marking the week fetched on `games.length > 0` alone would
+    // then let the orphan sweep below delete every stored game in it, because
+    // none of them appear in `freshIds` — destroying a good week from a response
+    // that said nothing about it. Same spillover class this change exists to
+    // handle, one layer down. (codex r2 on this change.)
+    if (games.some(g => Number(g.week) === Number(week))) fetchedWeeks.add(Number(week));
 
     const batch = db.batch();
     for (const game of games) {

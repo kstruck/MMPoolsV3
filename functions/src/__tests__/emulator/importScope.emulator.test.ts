@@ -144,4 +144,20 @@ describe('importNFLSeason — a partial import is scoped to its weeks', () => {
     expect(byWeek[1]).toEqual(['espn_hof']);
     expect(byWeek[2]).toEqual(['espn_spill']);
   }, 60000);
+
+  it('does not empty a week when the response is ALL spillover', async () => {
+    // A non-empty response is not proof the week was fetched. At an overlapping
+    // calendar boundary ESPN can return a slate made up entirely of the NEXT
+    // week's games; marking the week fetched on `games.length > 0` alone let the
+    // orphan sweep delete every stored game in it. (codex r2.)
+    await seed([game('espn_w2keep', 2, 'DET', 'CIN')]);
+
+    await importNFLSeason(SEASON, 1, [2], {
+      fetchWeek: async () => [game('espn_w3spill', 3, 'GB', 'PIT')],
+    });
+
+    const byWeek = await weeksInStore();
+    expect(byWeek[2], 'week 2 was emptied by an all-spillover response').toEqual(['espn_w2keep']);
+    expect(byWeek[3], 'the spillover game should still be written, under its own week').toEqual(['espn_w3spill']);
+  }, 60000);
 });
