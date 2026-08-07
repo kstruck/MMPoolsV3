@@ -249,7 +249,10 @@ export function eventWeekNumber(
   requestedWeek: number,
 ): number {
   const n = Number(event?.week?.number);
-  return Number.isFinite(n) && n > 0 ? n : requestedWeek;
+  // Integral, not merely finite: a fractional 1.5 would file the game outside
+  // EVERY real slate (pools and importer requests are whole weeks) and would
+  // slip the scoped cleanup too. (codex.)
+  return Number.isInteger(n) && n > 0 ? n : requestedWeek;
 }
 
 export function eventMatchesSeason(

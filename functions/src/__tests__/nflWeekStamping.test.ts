@@ -87,6 +87,9 @@ describe('eventWeekNumber', () => {
     expect(eventWeekNumber({ week: { number: 'wk2' as unknown as number } }, 5)).toBe(5);
     expect(eventWeekNumber({ week: { number: 0 } }, 5)).toBe(5);
     expect(eventWeekNumber({ week: { number: -1 } }, 5)).toBe(5);
+    // Fractional weeks file a game outside every real slate.
+    expect(eventWeekNumber({ week: { number: 1.5 } }, 5)).toBe(5);
+    expect(eventWeekNumber({ week: { number: Infinity } }, 5)).toBe(5);
   });
 
   it('accepts a numeric string, which is how ESPN sometimes sends it', () => {
