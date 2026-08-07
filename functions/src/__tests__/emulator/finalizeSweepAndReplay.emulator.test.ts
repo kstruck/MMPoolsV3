@@ -284,6 +284,62 @@ describe('replayFeedSnapshot', () => {
     await seedUser('admin-1', 'SUPER_ADMIN');
   });
 
+  it('does not unlock a SPILLOVER game stored under another week, and names it for re-scoring', async () => {
+    // codex r9 on the week-stamping change. ESPN's calendar ranges overlap, so a
+    // snapshot fetched for week 1 can parse to a game ESPN labels week 2 — and
+    // that game is STORED under week 2. `replayFeedSnapshot` read current state
+    // with `week == <snapshot week>` only, so it saw the spillover game as ABSENT.
+    //
+    // Absent is the dangerous verdict: buildReplayPlan's locked-spread
+    // preservation is conditional on finding a current doc, so the replay wrote
+    // the parser's `locked: false` over a commissioner's locked line — the #235
+    // bug class, and an ATS pool with an unlocked line refuses every pick.
+    const payload = {
+      events: [{
+        id: '401873640',
+        // ESPN's own answer: this belongs to week 2, not the snapshot's week 1.
+        week: { number: 2 },
+        season: { year: 2026, type: 1 },
+        status: { type: { id: '3', name: 'STATUS_FINAL', state: 'post' }, displayClock: '0:00', period: 4 },
+        competitions: [{
+          date: '2026-08-14T00:00Z',
+          competitors: [
+            { homeAway: 'home', score: '24', team: { id: '13', name: 'Raiders', abbreviation: 'LV', logo: 'h.png' } },
+            { homeAway: 'away', score: '20', team: { id: '22', name: 'Cardinals', abbreviation: 'ARI', logo: 'a.png' } },
+          ],
+          // A fresh line the replay must NOT apply over the locked one.
+          odds: [{ details: 'LV -6.5' }],
+        }],
+      }],
+    };
+    await db.collection('nfl_feed_snapshots').doc('spill').set({
+      season: SEASON, seasonType: 1, week: WEEK, slate: `${SEASON}/1/${WEEK}`,
+      fetchedAt: 1_700_000_000_000, payloadGzip: encodeSnapshot(payload).gzipped,
+    });
+
+    // Stored under WEEK 2 — invisible to a `week == 1` query.
+    await db.collection('nfl_games').doc('espn_401873640').set({
+      id: 'espn_401873640', season: SEASON, seasonType: 1, week: 2,
+      startTime: 1_786_000_000_000, status: 'SCHEDULED',
+      homeTeam: { abbreviation: 'LV' }, awayTeam: { abbreviation: 'ARI' },
+      spread: { value: -1.5, locked: true },
+    });
+
+    const res: any = await runReplay({
+      data: { snapshotId: 'spill', dryRun: false }, auth: superAdmin,
+    } as never);
+
+    const doc = (await db.collection('nfl_games').doc('espn_401873640').get()).data()!;
+    expect(doc.spread?.locked, 'a replay unlocked a locked spread on a spillover game').toBe(true);
+    expect(doc.spread?.value, 'a replay re-priced a locked spread').toBe(-1.5);
+
+    // …and the follow-up names the week that actually changed, not the snapshot's.
+    // Restoring week 2's game while telling the operator to re-score week 1 leaves
+    // week 2's standings stale with the job reported finished.
+    expect(res.affectedWeeks).toEqual([2]);
+    expect(res.nextStep).toContain('week 2');
+  }, 60000);
+
   it('defaults to DRY RUN and writes no game rows', async () => {
     // dryRun defaults true at the SCHEMA layer; omitting it must not go live.
     await seedSnapshot('snap-1');
