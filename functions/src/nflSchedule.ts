@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { writeAuditEvent } from './audit';
 import { NFLGame } from './types';
-import { detectStatCorrections } from './lib/feedSnapshot';
+import { detectStatCorrections, type GameStateChange } from './lib/feedSnapshot';
 import { captureFeedSnapshot, pruneExpiredSnapshots, readSnapshotGate, reportStatCorrections } from './feedSnapshotStore';
 import { opsCourierAuthToken } from './lib/opsAlertDispatcher';
 import { withHeartbeat, configReadFailedVerdict } from './lib/heartbeat';
@@ -743,26 +743,11 @@ export async function syncScoresWindow(
     // `week` are real data and dropping them would strand the spillover games.
     // (codex, on the week-stamping change.)
     const slateGames = freshGames.filter(g => Number(g.week) === Number(slot.week));
+    /** id -> the fresh game, so a correction can be traced back to its owning week. */
+    const freshById = new Map(freshGames.map(g => [g.id, g]));
     if (slateGames.length !== freshGames.length) {
       console.log(`[nflSchedule] slate ${slateKey.season}/${slateKey.seasonType}/wk${slateKey.week}: ${freshGames.length - slateGames.length} game(s) belong to another week; written but reconciled under their own slate.`);
     }
-    // Prior state for this slate, as the finalizer would have seen it. Scoped to
-    // the window we queried — which is why the deep sweep's wider lookback is what
-    // makes a late correction detectable at all.
-    const prevGames = activeGamesSnap.docs
-      .map(d => d.data() as NFLGame)
-      .filter(g => g.season === slot.season && Number(g.seasonType) === Number(slot.seasonType) && Number(g.week) === Number(slot.week));
-    const corrections = detectStatCorrections(prevGames, slateGames);
-
-    if (snapshotGate.enabled && raw !== null) {
-      const outcome = await captureFeedSnapshot(db, slateKey, raw, corrections, slateGames.length);
-      if (outcome === "skipped") snapshotFailures++;
-    }
-    // Corrections are reported whether or not snapshots are on — the page is the
-    // point; the snapshot is only the evidence attached to it.
-    if (!(await reportStatCorrections(db, slateKey, corrections))) correctionReportFailures++;
-    correctionCount += corrections.length;
-
     // Existing docs for the WHOLE slate, not just the ones inside the time
     // window. ESPN returns the entire week, and every one of those games gets
     // written below — but a game later in the week can already carry a spread
@@ -774,9 +759,70 @@ export async function syncScoresWindow(
     // week) query: a direct ID lookup needs no composite index and therefore has
     // no way to die silently, which is the failure mode that took out A5 and the
     // finalize sweep.
+    //
+    // Hoisted above correction detection so the spillover pass below has a prior
+    // state to compare against — `activeGamesSnap` only covers this slate.
     const existingById = new Map<string, NFLGame>();
     for (const doc of await db.getAll(...freshGames.map(g => db.collection('nfl_games').doc(g.id)))) {
       if (doc.exists) existingById.set(doc.id, doc.data() as NFLGame);
+    }
+
+    // Prior state for this slate, as the finalizer would have seen it. Scoped to
+    // the window we queried — which is why the deep sweep's wider lookback is what
+    // makes a late correction detectable at all.
+    const prevGames = activeGamesSnap.docs
+      .map(d => d.data() as NFLGame)
+      .filter(g => g.season === slot.season && Number(g.seasonType) === Number(slot.seasonType) && Number(g.week) === Number(slot.week));
+    const corrections = detectStatCorrections(prevGames, slateGames);
+
+    // The SNAPSHOT stays keyed to this slate and carries only this slate's
+    // correction list. `raw` is this slot's response, `snapshotSlateId` is the
+    // dedupe key, and storing the same payload under a second slate would collide
+    // with the snapshot that slate's own pass writes. The ALERT and the RESCORE
+    // for a spillover correction are handled below, under the owning week.
+    if (snapshotGate.enabled && raw !== null) {
+      const outcome = await captureFeedSnapshot(db, slateKey, raw, corrections, slateGames.length);
+      if (outcome === "skipped") snapshotFailures++;
+    }
+    // Corrections are reported whether or not snapshots are on — the page is the
+    // point; the snapshot is only the evidence attached to it.
+    if (!(await reportStatCorrections(db, slateKey, corrections))) correctionReportFailures++;
+    correctionCount += corrections.length;
+
+    // ⚠️ A SPILLOVER GAME CAN CARRY A STAT CORRECTION, AND SLATE-SCOPING SWALLOWS IT.
+    //
+    // Second finding of the same shape as `terminalSlates` below, on the round
+    // after that one was fixed (codex). `detectStatCorrections` above compares
+    // this slate only, so an already-FINAL game from a NEIGHBOURING week whose
+    // score changed produces no correction — while the write loop persists the new
+    // score anyway. After that the evidence is gone: the owning week's pass, on
+    // this run or any later one, compares against the score this run just wrote
+    // and sees nothing changed. If that week has no slot at all, it is never
+    // revisited.
+    //
+    // A stat correction is the one class of change that invalidates a settled
+    // result, so losing it leaves a pool's standings wrong with nothing left to
+    // notice. Detect it against the stored doc — `existingById`, hoisted above for
+    // exactly this — and file the alert and the rescore under the owning week.
+    const spilloverGames = freshGames.filter(g => Number(g.week) !== Number(slot.week));
+    const correctionSlates = new Map<number, GameStateChange[]>();
+    if (spilloverGames.length > 0) {
+      const prevSpill = spilloverGames
+        .map(g => existingById.get(g.id))
+        .filter((g): g is NFLGame => g !== undefined);
+      for (const change of detectStatCorrections(prevSpill, spilloverGames)) {
+        const week = Number(freshById.get(change.gameId)?.week);
+        // Unusable week: attribute it to the slot we fetched rather than dropping
+        // it or keying an un-drainable event.
+        const owning = Number.isInteger(week) && week > 0 ? week : Number(slot.week);
+        correctionSlates.set(owning, [...(correctionSlates.get(owning) ?? []), change]);
+      }
+      for (const [week, changes] of correctionSlates) {
+        const owningKey = { season: slot.season, seasonType: slot.seasonType, week };
+        if (!(await reportStatCorrections(db, owningKey, changes))) correctionReportFailures++;
+        correctionCount += changes.length;
+        console.warn(`[nflSchedule] ${changes.length} stat correction(s) arrived for week ${week} inside the week ${slot.week} response: ${changes.map(c => c.gameId).join(', ')}`);
+      }
     }
 
     // Any status change where EITHER side is terminal, measured against the WHOLE
@@ -938,13 +984,18 @@ export async function syncScoresWindow(
     // reconcile. Both reasons can fire for one slate — they are distinct events
     // and the drain unions them, which is what lets a Survivor pool be scored for
     // a delayed final on a slate that also carries a correction.
-    // `correction` stays keyed to THIS slate: `corrections` is computed from
-    // `prevGames`, which is already filtered to this slate, so it can only ever
-    // describe this one. `terminal` is keyed to the OWNING week of each game that
-    // moved — usually just this slate, and additionally a spillover week when an
-    // overlapping ESPN range delivered one.
+    // BOTH reasons are keyed to the OWNING week now, not to the slot we fetched.
+    // `corrections` covers this slate; `correctionSlates` covers a neighbouring
+    // week whose already-FINAL game was corrected inside this response — the
+    // write below persists that new score, so if this event is not enqueued the
+    // correction is gone for good (see the spillover block above).
     if (corrections.length > 0) {
       batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({ ...slateKey, reason: 'correction', enqueuedAt: now }));
+    }
+    for (const week of correctionSlates.keys()) {
+      batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({
+        season: slot.season, seasonType: slot.seasonType, week, reason: 'correction', enqueuedAt: now,
+      }));
     }
     for (const owning of terminalSlates.values()) {
       batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({ ...owning, reason: 'terminal', enqueuedAt: now }));

@@ -580,6 +580,50 @@ describe('syncScoresWindow — the rescore handoff', () => {
     expect(enqueued.filter((e: any) => e.reason === 'terminal').map((e: any) => e.week)).toEqual([1]);
   });
 
+  it('enqueues a SPILLOVER stat correction under its OWN week', async () => {
+    // Codex, on the round AFTER the terminal-spillover fix — the same shape in the
+    // corrections path, and it holed the reasoning written into that fix's own
+    // commit message ("`correction` can only ever describe this slate").
+    //
+    // detectStatCorrections compares this slate only, so an already-FINAL game
+    // from a neighbouring week whose score changed produces no correction — while
+    // the write loop persists the new score regardless. After that the evidence is
+    // destroyed: the owning week's pass compares against the score this run just
+    // wrote and sees nothing changed, and if that week has no slot it is never
+    // revisited at all. A stat correction is the one class of change that
+    // invalidates a settled result, so losing it leaves standings wrong with
+    // nothing left to notice.
+    const stored = {
+      // this slate: FINAL and unchanged, so it contributes nothing
+      espn_thu: {
+        id: 'espn_thu', season: '2026', seasonType: 1, week: 1, startTime: NOW - 20 * HOUR,
+        status: 'FINAL', scores: { home: 27, away: 24 },
+      },
+      // the neighbour's game: already FINAL, and OUTSIDE the time window, so it is
+      // not in activeGamesSnap and week 2 is not a slot of its own.
+      espn_spill: {
+        id: 'espn_spill', season: '2026', seasonType: 1, week: 2, startTime: NOW - 400 * HOUR,
+        status: 'FINAL', scores: { home: 17, away: 10 },
+      },
+    };
+    const { db, enqueued } = fakeDbWithDocs(stored, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        games: [
+          espnGame({ id: 'espn_thu', week: 1, startTime: NOW - 20 * HOUR, status: 'FINAL', scores: { home: 27, away: 24 } }),
+          // restated on the Tuesday: 17-10 becomes 20-10
+          espnGame({ id: 'espn_spill', week: 2, startTime: NOW - 400 * HOUR, status: 'FINAL', scores: { home: 20, away: 10 } }),
+        ] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(r.corrections, 'the spillover correction must be counted, not swallowed').toBe(1);
+    const corr = enqueued.filter((e: any) => e.reason === 'correction');
+    expect(corr.map((e: any) => e.week)).toEqual([2]);
+    expect(corr[0]).toMatchObject({ season: '2026', seasonType: 1, reason: 'correction' });
+  });
+
   it('enqueues a correction on an already-FINAL game', async () => {
     // detectStatCorrections only fires on games that were ALREADY final, which is
     // the other half of the pair — a Sunday score restated on the Tuesday.
