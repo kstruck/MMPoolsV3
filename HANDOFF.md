@@ -1,4 +1,44 @@
-# HANDOFF — Session entry point (updated 2026-08-06: 🏈 **GAME DAY — HOF game CAR @ ARI, 8:00 PM ET.** ✅ **The overnight rebuild has RUN and is verified per-PR inside the shipped bundle — ALL FOUR QUEUES ARE EMPTY**; functions still deployed from `1105392`, rules still ≡ `0a705c0`; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle hash is stated once, in the STOP POINT box below.** Full runbook: `MORNING-2026-08-06.md`.)
+# HANDOFF — Session entry point (updated <!-- hof-date:ignore --> 2026-08-07: 🏈 **The HOF game has been PLAYED.** ⏳ **TWO PRs ARE READY TO MERGE AND OWE ONE FUNCTIONS DEPLOY — #392 and #384** — after which the week-1 data repair can run. Functions still deployed from `1105392`, rules still ≡ `0a705c0`; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle is `index-W6uLtMV7.js`** — the 2026-08-06 box below names an older one and is superseded. Full runbook: `MORNING-2026-08-07.md`.)
+
+> ## ⏳ STOP POINT <!-- hof-date:ignore --> **2026-08-07** — **FUNCTIONS DEPLOY OWED (#392 + #384), THEN A DATA REPAIR**; functions unchanged at `1105392`
+>
+> 📌 **THE LIVE BUNDLE IS `index-W6uLtMV7.js`.** The 2026-08-06 box below states
+> `index-C9jX7I-m.js`, which was true when Kevin ran the chunk-graph crawl and
+> stopped being true when #385–#388 merged and rebuilt. Measured from production:
+>
+> ```
+> status 200   https://www.marchmeleepools.com/
+> entry assets: index-W6uLtMV7.js, index-Dl2F2o_4.css
+> ```
+>
+> ⚠️ **NOTHING IS OWED ON COOLIFY**, and that survives merging both PRs. #392
+> touches no client file (`git diff --stat origin/main...origin/claude/nfl-import-scope
+> -- src/ shared/ index.html public/` is empty). #384 does touch
+> `src/utils/nflWeekLabel.ts`, so it was re-measured by building `origin/main` and
+> `origin/main` MERGED WITH #384 on one machine: both emit the identical asset set.
+> Compare against the MERGE, never the branch tip — #384 is 5 commits behind main
+> and comparing tips reports a false difference.
+>
+> 🛑 **THE BACKEND QUEUE IS NOT EMPTY.** #392 (importer hardening) and #384
+> (`TEAM_ALREADY_USED` guard + week labels) are both `MERGEABLE`, both 7/7 green,
+> and both `functions/`-coupled. They ship in ONE functions deploy. No rules
+> deploy.
+>
+> 🐞 **A PRODUCTION DATA DEFECT IS OPEN AND ITS FIX IS GATED ON THAT DEPLOY.**
+> `nfl_games` season 2026 seasonType 1 holds week1=7, week2=10 where the truth is
+> 1 and 16 — six games that kick off Aug 13/14 are filed under the HOF week.
+> ⛔ **Do NOT re-import against the currently-deployed importer**: it deletes all
+> 49 preseason games and wipes the HOF game's locked spread. Steps in
+> `MORNING-2026-08-07.md` Task 2.
+>
+> ✅ **Member picks are NOT at risk from that repair — measured, exposure ZERO**
+> across 134 pools / 7 NFL preseason pools / 4 confidence entries. Evidence and
+> the two read-only census scripts are in `PLAN-NFL-IMPORT-SCOPE.md` §6b.
+>
+> ✅ **Auto-scoring is OFF and stays off.** `system/config.nflAutoScore` unset;
+> `nflFinalize` and `nflSpreadLock` `{enabled:true, dryRun:true}`; `nflDeepSweep`
+> unset. `syncNFLScoresJob` (5-min, no kill switch) IS live — score INGESTION is
+> automatic, GRADING is not.
 
 > ## 🏈 STOP POINT **2026-08-06** — **REBUILD DONE AND VERIFIED PER PR; ALL FOUR QUEUES EMPTY**; functions unchanged at `1105392`
 >
@@ -18,8 +58,12 @@
 > All four verdict conditions hold, so the script's final line is
 > **`VERDICT: ALL THREE SHIPPED`**.
 >
-> 📌 **The live bundle is `index-C9jX7I-m.js`.** The chain was
-> `index-uIeNGo85.js` (pre-rebuild, 23:35 MDT 2026-08-05) → **`index-C9jX7I-m.js`**.
+> 📌 **The live bundle WAS `index-C9jX7I-m.js` when this box was written.** The
+> chain was `index-uIeNGo85.js` (pre-rebuild, 23:35 MDT 2026-08-05) →
+> **`index-C9jX7I-m.js`**. ⚠️ **SUPERSEDED** — #385–#388 merged and rebuilt after
+> this, and production now serves `index-W6uLtMV7.js`. See the
+> <!-- hof-date:ignore --> 2026-08-07 box at the top; this line is the historical
+> record of that day's crawl, not the current hash.
 >
 > 🎯 **THE GO-LIVE BLOCKER IS CLEARED IN PRODUCTION.** The `1` above is the
 > load-bearing number, not the two `PRESENT`s: the "Spreads Not Yet Finalized"
