@@ -107,6 +107,36 @@ describe('importNFLSeason — a partial import is scoped to its weeks', () => {
     expect(doc.spread.value).toBe(-3);
   }, 60000);
 
+  it('CLEARS an unlocked spread the feed no longer carries', async () => {
+    // Found by codex, and it exists only because this change stopped deleting the
+    // docs first: the old importer wiped the week, so a withdrawn line vanished.
+    // With `merge: true` it would survive — and `lockNFLSpreadsJob` locks any
+    // spread with a value and `locked !== true`, so the next Tuesday would freeze
+    // a number ESPN has withdrawn and every ATS pick and grade would run against
+    // it.
+    await seed([game('espn_w1a', 1, 'CAR', 'ARI', { value: -1.5, locked: false })]);
+
+    // Fresh payload with NO odds at all — the parser omits `spread` entirely.
+    await importNFLSeason(SEASON, 1, [1], {
+      fetchWeek: async () => [game('espn_w1a', 1, 'CAR', 'ARI')],
+    });
+
+    const doc = (await db.collection('nfl_games').doc('espn_w1a').get()).data()!;
+    expect(doc.spread, 'a withdrawn line survived the re-import and is now lockable').toBeUndefined();
+  }, 60000);
+
+  it('does NOT clear a LOCKED spread when the feed carries no odds', async () => {
+    // The other side of the same branch: preservation must still win. A
+    // commissioner's committed line is not withdrawn by a quiet feed.
+    await seed([game('espn_w1a', 1, 'CAR', 'ARI', { value: -1.5, locked: true })]);
+    await importNFLSeason(SEASON, 1, [1], {
+      fetchWeek: async () => [game('espn_w1a', 1, 'CAR', 'ARI')],
+    });
+    const doc = (await db.collection('nfl_games').doc('espn_w1a').get()).data()!;
+    expect(doc.spread?.locked).toBe(true);
+    expect(doc.spread?.value).toBe(-1.5);
+  }, 60000);
+
   it('removes a game the fresh fetch no longer returns, but only in scope', async () => {
     await seed([
       game('espn_w2a', 2, 'DET', 'CIN'),

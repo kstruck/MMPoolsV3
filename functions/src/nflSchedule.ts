@@ -468,7 +468,32 @@ export async function importNFLSeason(
       // every pick (SPREADS_NOT_LOCKED). Dropping the key lets `merge: true`
       // keep what is stored.
       const stored = existingById.get(cleanedGame.id) as { spread?: { locked?: boolean } } | undefined;
-      if (stored?.spread?.locked === true) delete cleanedGame.spread;
+      if (stored?.spread?.locked === true) {
+        delete cleanedGame.spread;
+      } else if (stored?.spread !== undefined && cleanedGame.spread === undefined) {
+        // ⚠️ AN UNLOCKED SPREAD THE FEED NO LONGER CARRIES MUST BE REMOVED, NOT KEPT.
+        //
+        // This case only exists because this change stopped deleting the docs
+        // first. The old importer wiped the week and rewrote it, so a line ESPN
+        // had dropped simply vanished; the orphan sweep replaced that with
+        // `merge: true`, and merge keeps a field the new payload omits — which is
+        // exactly what makes the locked-spread preservation above work.
+        //
+        // Keeping a stale UNLOCKED line is not harmless. `lockNFLSpreadsJob` locks
+        // any spread it finds with a value and `locked !== true`
+        // (`shouldLockSpread`), so the next Tuesday it would freeze a number ESPN
+        // has withdrawn, and every ATS pick and grade on that game would run
+        // against it. Nothing downstream can tell a withdrawn line from a current
+        // one.
+        //
+        // The opposite reading — "an absent field is feed flakiness, do not act on
+        // it", which `detectStatCorrections` applies to scores — is right for the
+        // 5-minute poll and wrong here: an import is an explicit operator action
+        // whose whole purpose is to make storage match the feed, and it is cheap
+        // to re-run. A locked spread is still preserved above, so this can never
+        // touch a line a commissioner has committed to. (codex.)
+        cleanedGame.spread = admin.firestore.FieldValue.delete();
+      }
 
       freshIds.add(cleanedGame.id);
       const gameRef = db.collection('nfl_games').doc(cleanedGame.id);
