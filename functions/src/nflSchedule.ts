@@ -454,6 +454,31 @@ export async function importNFLSeason(
     // handle, one layer down. (codex r2 on this change.)
     if (games.some(g => Number(g.week) === Number(week))) fetchedWeeks.add(Number(week));
 
+    // ⚠️ RE-READ THIS WEEK'S DOCS IMMEDIATELY BEFORE WRITING THEM.
+    //
+    // The spread decision below used `existingById`, which is read ONCE before
+    // the week loop — so on an 18-week import the snapshot backing week 18's
+    // decision is minutes old and 17 ESPN round-trips stale. A spread locked in
+    // that gap (a commissioner in the admin UI, or `lockNFLSpreadsJob`) would be
+    // overwritten with the fresh line and `locked: false`, which is the #235 bug
+    // class: an ATS pool then refuses every pick behind SPREADS_NOT_LOCKED.
+    // (qodo #2 on this PR.)
+    //
+    // 🛑 THIS NARROWS THE RACE, IT DOES NOT CLOSE IT. There is still a gap
+    // between this read and the commit. The real fix is the single atomic
+    // TRANSACTION specified in PLAN-IMPORTER-SAFETY.md §1.1/§1.5, which re-reads
+    // inside the transaction so a concurrent lock forces a retry — that is Phase
+    // 1 work and deliberately not in this PR. Do not read this comment as the
+    // race being handled.
+    //
+    // It is still strictly better than what shipped before this change, which
+    // DELETED the documents first and destroyed a concurrently-locked spread
+    // outright.
+    const freshExisting = new Map<string, NFLGame>();
+    for (const doc of await db.getAll(...games.map(g => db.collection('nfl_games').doc(g.id)))) {
+      if (doc.exists) freshExisting.set(doc.id, doc.data() as NFLGame);
+    }
+
     const batch = db.batch();
     for (const game of games) {
       const cleanedGame = JSON.parse(JSON.stringify(game));
@@ -467,7 +492,10 @@ export async function importNFLSeason(
       // commissioner had locked — and an ATS pool with an unlocked line refuses
       // every pick (SPREADS_NOT_LOCKED). Dropping the key lets `merge: true`
       // keep what is stored.
-      const stored = existingById.get(cleanedGame.id) as { spread?: { locked?: boolean } } | undefined;
+      // `freshExisting`, not `existingById` — see the re-read above. The orphan
+      // sweep keeps using `existingById`, which is correct for it: it decides
+      // which STORED ids existed when the run began.
+      const stored = freshExisting.get(cleanedGame.id) as { spread?: { locked?: boolean } } | undefined;
       if (stored?.spread?.locked === true) {
         delete cleanedGame.spread;
       } else if (stored?.spread !== undefined && cleanedGame.spread === undefined) {
@@ -872,7 +900,11 @@ export async function syncScoresWindow(
       }
       for (const [week, changes] of correctionSlates) {
         const owningKey = { season: slot.season, seasonType: slot.seasonType, week };
-        if (!(await reportStatCorrections(db, owningKey, changes))) correctionReportFailures++;
+        // `slateKey` is passed as `observedIn` so the alert names the slate whose
+        // response this arrived in — the snapshot is filed under THAT one, and
+        // pointing an operator at the owning week's snapshots during an incident
+        // would send them somewhere with nothing in it. (qodo #3.)
+        if (!(await reportStatCorrections(db, owningKey, changes, slateKey))) correctionReportFailures++;
         correctionCount += changes.length;
         console.warn(`[nflSchedule] ${changes.length} stat correction(s) arrived for week ${week} inside the week ${slot.week} response: ${changes.map(c => c.gameId).join(', ')}`);
       }

@@ -144,6 +144,37 @@ describe('importNFLSeason — a partial import is scoped to its weeks', () => {
     expect(doc.spread?.value).toBe(-1.5);
   }, 60000);
 
+  it('preserves a spread locked AFTER the run started, not just before it', async () => {
+    // qodo #2. The spread decision used to read a snapshot taken once, before the
+    // week loop — so on a multi-week import the snapshot behind the last week's
+    // decision is minutes and many ESPN round-trips stale. A lock committed in
+    // that gap was overwritten with the fresh line and `locked: false`, which is
+    // the #235 bug class: an ATS pool then refuses every pick behind
+    // SPREADS_NOT_LOCKED.
+    //
+    // The lock is flipped from INSIDE the fetch, which is the one hook that runs
+    // after the pre-loop read and before the batch write — the same interleaving,
+    // deterministically.
+    //
+    // 🛑 This proves the read was NARROWED, not that the race is closed. The gap
+    // between the re-read and the commit remains; PLAN-IMPORTER-SAFETY.md
+    // §1.1/§1.5 specifies the transaction that actually closes it.
+    await seed([game('espn_w1a', 1, 'CAR', 'ARI', { value: -1.5, locked: false })]);
+
+    await importNFLSeason(SEASON, 1, [1], {
+      fetchWeek: async () => {
+        // A commissioner locks the line while the import is in flight.
+        await db.collection('nfl_games').doc('espn_w1a')
+          .set({ spread: { value: -1.5, locked: true } }, { merge: true });
+        return [game('espn_w1a', 1, 'CAR', 'ARI', { value: -7, locked: false })];
+      },
+    });
+
+    const doc = (await db.collection('nfl_games').doc('espn_w1a').get()).data()!;
+    expect(doc.spread?.locked, 'a spread locked mid-import was reopened').toBe(true);
+    expect(doc.spread?.value, 'a spread locked mid-import was re-priced').toBe(-1.5);
+  }, 60000);
+
   it('removes a game the fresh fetch no longer returns, but only in scope', async () => {
     await seed([
       game('espn_w2a', 2, 'DET', 'CIN'),
