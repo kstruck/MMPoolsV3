@@ -678,6 +678,43 @@ describe('syncScoresWindow — the rescore handoff', () => {
     expect(snapshots.filter((s: any) => s.col === 'nfl_feed_snapshots')).toHaveLength(0);
   });
 
+  it('reports one correction ONCE when two overlapping slots both deliver it', async () => {
+    // codex r7. `activeGamesSnap` is read once before the slot loop, so after the
+    // week-1 pass writes the corrected score, the week-2 pass still compares
+    // against the stale prior state and detects the SAME correction again —
+    // paging twice for one restatement and inflating the count. A
+    // stat-correction page is a wake-somebody event; crying it twice is how a
+    // real one starts being ignored.
+    const stored = {
+      espn_thu: {
+        id: 'espn_thu', season: '2026', seasonType: 1, week: 1, startTime: NOW - 20 * HOUR,
+        status: 'FINAL', scores: { home: 27, away: 24 },
+      },
+      // in-window, so week 2 IS its own slot and BOTH slots run
+      espn_spill: {
+        id: 'espn_spill', season: '2026', seasonType: 1, week: 2, startTime: NOW - 3 * HOUR,
+        status: 'FINAL', scores: { home: 17, away: 10 },
+      },
+    };
+    const { db, enqueued } = fakeDbWithDocs(stored, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const corrected = espnGame({
+      id: 'espn_spill', week: 2, startTime: NOW - 3 * HOUR, status: 'FINAL', scores: { home: 20, away: 10 },
+    });
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      // BOTH ranges carry the corrected week-2 game — that is what "overlapping
+      // calendar entries" means.
+      fetchSlate: async (week: number) => ({
+        games: week === 1
+          ? [espnGame({ id: 'espn_thu', week: 1, startTime: NOW - 20 * HOUR, status: 'FINAL', scores: { home: 27, away: 24 } }), corrected] as any
+          : [corrected] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(r.corrections, 'one restatement was counted twice').toBe(1);
+    expect(enqueued.filter((e: any) => e.reason === 'correction'), 'one restatement paged twice').toHaveLength(1);
+  });
+
   it('enqueues a SPILLOVER stat correction under its OWN week', async () => {
     // Codex, on the round AFTER the terminal-spillover fix — the same shape in the
     // corrections path, and it holed the reasoning written into that fix's own

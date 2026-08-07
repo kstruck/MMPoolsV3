@@ -767,6 +767,22 @@ export async function syncScoresWindow(
   let slatesNotReconciled = 0;
   let snapshotFailures = 0;
   let correctionReportFailures = 0;
+  /**
+   * Game ids whose correction has already been reported THIS RUN.
+   *
+   * ESPN's calendar ranges overlap, so one corrected game can arrive in two
+   * slots' responses. `activeGamesSnap` is read once before this loop, so after
+   * the first slot writes the new score the second slot still compares against
+   * the stale prior state and detects the SAME correction again — paging twice
+   * and inflating `corrections`. A stat-correction page is a wake-somebody event;
+   * crying it twice for one restatement is how a real one starts getting ignored.
+   *
+   * Keyed by game id, not by the change tuple: two different fields changing on
+   * one game is still one correction event for one game, and the report already
+   * carries the detail. First slot to see it owns it — which is the slot whose
+   * response actually delivered it. (codex r7 on this change.)
+   */
+  const reportedCorrections = new Set<string>();
 
   for (const [_, slot] of weeksToSync) {
     const { games: freshGames, raw } = await fetchSlate(slot.week, slot.season, slot.seasonType);
@@ -850,7 +866,11 @@ export async function syncScoresWindow(
     const prevGames = activeGamesSnap.docs
       .map(d => d.data() as NFLGame)
       .filter(g => g.season === slot.season && Number(g.seasonType) === Number(slot.seasonType) && Number(g.week) === Number(slot.week));
-    const corrections = detectStatCorrections(prevGames, slateGames);
+    // Filtered through the run-level set: an overlapping slot may already have
+    // reported one of these against fresher state than `activeGamesSnap` holds.
+    const corrections = detectStatCorrections(prevGames, slateGames)
+      .filter(c => !reportedCorrections.has(c.gameId));
+    for (const c of corrections) reportedCorrections.add(c.gameId);
 
     // ⚠️ A SPILLOVER GAME CAN CARRY A STAT CORRECTION, AND SLATE-SCOPING SWALLOWS IT.
     //
@@ -877,6 +897,10 @@ export async function syncScoresWindow(
       spilloverGames.map(g => existingById.get(g.id)).filter((g): g is NFLGame => g !== undefined),
       spilloverGames,
     )) {
+      // Same run-level dedupe as the slate pass above — the owning week's own
+      // slot may already have reported this one.
+      if (reportedCorrections.has(change.gameId)) continue;
+      reportedCorrections.add(change.gameId);
       const week = Number(freshById.get(change.gameId)?.week);
       // Unusable week: attribute it to the slot we fetched rather than dropping
       // it or keying an un-drainable event.
