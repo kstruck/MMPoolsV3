@@ -8,6 +8,7 @@ import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMo
 import { loadBillingConfig } from "./billing";
 import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } from "./lib/systemGuards";
 import { isPoolType, type PoolType } from "./shared/poolTypes";
+import { nflWeekLabel } from "./shared/nflWeekLabel";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
 import type { MemberRecord } from "./shared/memberRecord";
 import { effectiveWeekLockAt, isGameLocked as isGameLockedAt, effectiveLockSettings, usesWeeklyHardLock, weekLockDecision, ensureHardLockFreeze } from "./lib/effectiveLock";
@@ -58,6 +59,24 @@ import { recomputeWeekConsensus } from './consensus';
 import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, submitNFLPicksSchema } from "./schemas/poolCore";
 import { joinNFLPoolSchema, executeSurvivorRebuySchema, scoreNFLWeekSchema } from "./schemas/nflPools";
+
+/**
+ * The week label a HUMAN reads — "HOF Weekend", not "Week 1".
+ *
+ * Every client surface has rendered these since `nflWeekLabel` was introduced,
+ * but this file's result strings, errors and audit-log messages interpolated the
+ * RAW importer week. So scoring the Hall of Fame game reported
+ * "Week 1 scored successfully." while the button the commissioner had just
+ * pressed said "Score & Recap HOF Weekend" — and on preseason weeks the two
+ * numberings are genuinely OFFSET, so "Week 1" and "Preseason Week 1" are two
+ * different slates. This is the one place that disagreement is most expensive.
+ *
+ * `seasonType` is OPTIONAL on a pool and omitting it means REGULAR season
+ * (`shared/schemas/nfl.ts`), so it defaults to 2 rather than coercing to NaN —
+ * the direction #319 got wrong. Matches the client's `poolSeasonType`.
+ */
+const weekLabelFor = (p: { seasonType?: unknown } | null | undefined, w: number): string =>
+  nflWeekLabel(Number(p?.seasonType) || 2, w);
 
 /**
  * Creates an NFL pool (Pick'em, Survivor, or Margin).
@@ -384,7 +403,7 @@ export async function submitNFLPicksInternal(
 
   const games = gamesSnap.docs.map(doc => doc.data() as NFLGame);
   if (games.length === 0) {
-    throw new HttpsError('not-found', `No NFL games found for week ${week}.`);
+    throw new HttpsError('not-found', `No NFL games found for ${weekLabelFor(pool, week)}.`);
   }
 
   // 1.5 Spread Validation — ONLY for pools whose scoring consumes spreads.
@@ -548,15 +567,24 @@ export async function submitNFLPicksInternal(
         throw new HttpsError('invalid-argument', 'Missing Survivor team selection.');
       }
 
-      // Check single-pick reuse
-      if (survivorEntry.usedTeams.includes(teamPicked)) {
+      // Check single-pick reuse — against every OTHER week, not this one.
+      //
+      // `usedTeams` is a season-long ledger that already contains this week's
+      // own saved pick, so re-submitting the same team (a member double-checking
+      // their pick, or a client retry) came back TEAM_ALREADY_USED about a pick
+      // that was safely in — reported to them as a FAILED SAVE. The write path
+      // below has always known to exclude it; only the guard did not, so the two
+      // disagreed about what "used" means. One definition now, computed once and
+      // used by both.
+      const usedElsewhere = survivorEntry.usedTeams.filter(t => t !== survivorEntry.picks?.[week]);
+      if (usedElsewhere.includes(teamPicked)) {
         throw new HttpsError('invalid-argument', `TEAM_ALREADY_USED: You have already picked the ${teamPicked} this season.`);
       }
 
       // Validate team is playing and not on bye
       const game = games.find(g => g.homeTeam.abbreviation === teamPicked || g.awayTeam.abbreviation === teamPicked);
       if (!game) {
-        throw new HttpsError('invalid-argument', `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in week ${week}.`);
+        throw new HttpsError('invalid-argument', `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in ${weekLabelFor(pool, week)}.`);
       }
 
       // HARD weekly lock, derived from the pool TYPE (not settings.lockMode) so a
@@ -572,10 +600,12 @@ export async function submitNFLPicksInternal(
         throw new HttpsError('failed-precondition', `GAME_LOCKED: The game for ${teamPicked} has already locked.`);
       }
 
-      // Update used teams and selections
-      const oldUsed = survivorEntry.usedTeams.filter(t => t !== survivorEntry.picks[week]);
+      // Update used teams and selections. `usedElsewhere` is the same set the
+      // reuse guard above tested — deliberately reused rather than recomputed,
+      // because two copies of "every week except this one" is what let the
+      // guard and the write disagree in the first place.
       survivorEntry.picks[week] = teamPicked;
-      survivorEntry.usedTeams = [...new Set([...oldUsed, teamPicked])];
+      survivorEntry.usedTeams = [...new Set([...usedElsewhere, teamPicked])];
       survivorEntry.submittedAt = now;
 
       transaction.set(entryRef, {
@@ -606,15 +636,17 @@ export async function submitNFLPicksInternal(
         throw new HttpsError('invalid-argument', 'Missing Margin team selection.');
       }
 
-      // Check single-pick reuse
-      if (marginEntry.usedTeams.includes(teamPicked)) {
+      // Check single-pick reuse — against every OTHER week. Twin of the
+      // Survivor guard above; see that comment for the full reasoning.
+      const usedElsewhere = marginEntry.usedTeams.filter(t => t !== marginEntry.picks?.[week]);
+      if (usedElsewhere.includes(teamPicked)) {
         throw new HttpsError('invalid-argument', `TEAM_ALREADY_USED: You have already picked the ${teamPicked} this season.`);
       }
 
       // Validate team playing
       const game = games.find(g => g.homeTeam.abbreviation === teamPicked || g.awayTeam.abbreviation === teamPicked);
       if (!game) {
-        throw new HttpsError('invalid-argument', `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in week ${week}.`);
+        throw new HttpsError('invalid-argument', `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in ${weekLabelFor(pool, week)}.`);
       }
 
       // HARD weekly lock, derived from the pool TYPE — see the Survivor branch.
@@ -629,9 +661,9 @@ export async function submitNFLPicksInternal(
         throw new HttpsError('failed-precondition', `GAME_LOCKED: The game for ${teamPicked} has already locked.`);
       }
 
-      const oldUsed = marginEntry.usedTeams.filter(t => t !== marginEntry.picks[week]);
+      // Same set the guard tested — reused, not recomputed.
       marginEntry.picks[week] = teamPicked;
-      marginEntry.usedTeams = [...new Set([...oldUsed, teamPicked])];
+      marginEntry.usedTeams = [...new Set([...usedElsewhere, teamPicked])];
       marginEntry.submittedAt = now;
 
       transaction.set(entryRef, {
@@ -1375,7 +1407,7 @@ async function scoreWeekPass(
     await writeAuditEvent({
       poolId,
       type: 'SURVIVOR_AUTO_STRIKE',
-      message: `Participant ${strike.userName} suffered a strike in week ${week}`,
+      message: `Participant ${strike.userName} suffered a strike in ${weekLabelFor(pool, week)}`,
       severity: 'WARNING',
       actor: { uid: 'system', role: 'SYSTEM', label: 'Scoring Engine' },
       payload: { week }
@@ -1462,7 +1494,7 @@ async function scoreWeekPass(
       await writeAuditEvent({
         poolId,
         type: 'SCORE_FINALIZED',
-        message: `NFL Pool Scoring concluded for Week ${week}`,
+        message: `NFL Pool Scoring concluded for ${weekLabelFor(pool, week)}`,
         severity: 'INFO',
         actor: actor,
         payload: { week }
@@ -1473,10 +1505,10 @@ async function scoreWeekPass(
   return {
     success: true,
     message: dryRun
-      ? `Week ${week} dry run — nothing written.`
+      ? `${weekLabelFor(pool, week)} dry run — nothing written.`
       : provisional
-        ? `Week ${week} scored provisionally — live standings updated.`
-        : `Week ${week} scored successfully.`,
+        ? `${weekLabelFor(pool, week)} scored provisionally — live standings updated.`
+        : `${weekLabelFor(pool, week)} scored successfully.`,
     dryRun,
     provisional,
     pickemScored,
@@ -1529,7 +1561,7 @@ export const scoreNFLWeek = validated(
 
     const games = gamesSnap.docs.map(doc => doc.data() as NFLGame);
     if (games.length === 0) {
-      throw new HttpsError('failed-precondition', `No games found to score for week ${week}.`);
+      throw new HttpsError('failed-precondition', `No games found to score for ${weekLabelFor(pool, week)}.`);
     }
 
     // Confirm all games are final
