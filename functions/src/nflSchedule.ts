@@ -814,13 +814,45 @@ export async function syncScoresWindow(
       g.id,
       { ...g, scores: g.scores ?? existingById.get(g.id)?.scores } as NFLGame,
     ]));
-    // Slate-scoped: this decides whether THIS slate is enqueued for rescore, so
-    // a spillover game going terminal must not enqueue the wrong week. Its own
-    // slate picks it up on its own pass. `mergedById` deliberately still spans
-    // `freshGames`, because the write loop below reads it for every game it
-    // persists. (codex, on the week-stamping change.)
-    const firstTerminal = slateGames.some(g =>
-      isTerminalTransition(existingById.get(g.id), mergedById.get(g.id)!));
+    // Which SLATES had a terminal transition in this response — keyed by each
+    // game's OWN week, not by the slot we fetched.
+    //
+    // ⚠️ THE OBVIOUS VERSION IS WRONG AND SHIPPED IN AN EARLIER REVISION OF THIS
+    // CHANGE. It scoped the test to `slateGames` on the reasoning that a
+    // spillover game "picks itself up on its own pass". It does not, for two
+    // independent reasons (codex, on this change):
+    //
+    //  - THE WRITE BELOW PERSISTS IT. Every game in `freshGames` is written,
+    //    spillover included — deliberately, its scores are real data. So once
+    //    this slot's pass commits a spillover game as FINAL, the pass for the
+    //    week that OWNS it reads that FINAL as its prior state and sees
+    //    `FINAL -> FINAL`, which `isTerminalTransition` correctly reports as no
+    //    transition. The event is not deferred to the other pass; it is lost.
+    //  - THE OTHER PASS MAY NOT EXIST. `weeksToSync` was built from stored docs
+    //    before any of this ran, so a week whose games are outside the
+    //    `startTime` window is not a slot at all and never gets a pass.
+    //
+    // The consequence is the one the rescore queue exists to prevent: a game
+    // goes terminal, its pool's standings are never reconciled, and nothing
+    // downstream ever revisits it. Enqueue under the owning week instead — the
+    // event still rides in this slot's batch, because this slot's write is what
+    // made it necessary.
+    //
+    // `mergedById` deliberately spans all of `freshGames`, because the write loop
+    // below reads it for every game it persists.
+    const terminalSlates = new Map<string, { season: string; seasonType: 1 | 2 | 3; week: number }>();
+    for (const g of freshGames) {
+      if (!isTerminalTransition(existingById.get(g.id), mergedById.get(g.id)!)) continue;
+      const week = Number(g.week);
+      // A game whose week is unusable would key an un-drainable event; file it
+      // under the slot we asked for, which is where it would have gone before
+      // ESPN's week was trusted at all.
+      const owning = Number.isInteger(week) && week > 0 ? week : Number(slot.week);
+      const key = `${slot.season}_${slot.seasonType}_${owning}`;
+      if (!terminalSlates.has(key)) {
+        terminalSlates.set(key, { season: slot.season, seasonType: slot.seasonType, week: owning });
+      }
+    }
 
     // Counted BEFORE the dry-run early-out below. A dry run that re-fetches an
     // already-stranded game, gets another scoreless FINAL, and then reports a
@@ -906,9 +938,16 @@ export async function syncScoresWindow(
     // reconcile. Both reasons can fire for one slate — they are distinct events
     // and the drain unions them, which is what lets a Survivor pool be scored for
     // a delayed final on a slate that also carries a correction.
-    for (const reason of ['correction', 'terminal'] as const) {
-      if (reason === 'correction' ? corrections.length === 0 : !firstTerminal) continue;
-      batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({ ...slateKey, reason, enqueuedAt: now }));
+    // `correction` stays keyed to THIS slate: `corrections` is computed from
+    // `prevGames`, which is already filtered to this slate, so it can only ever
+    // describe this one. `terminal` is keyed to the OWNING week of each game that
+    // moved — usually just this slate, and additionally a spillover week when an
+    // overlapping ESPN range delivered one.
+    if (corrections.length > 0) {
+      batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({ ...slateKey, reason: 'correction', enqueuedAt: now }));
+    }
+    for (const owning of terminalSlates.values()) {
+      batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({ ...owning, reason: 'terminal', enqueuedAt: now }));
     }
 
     await batch.commit();

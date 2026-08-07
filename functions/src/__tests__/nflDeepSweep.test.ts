@@ -527,6 +527,59 @@ describe('syncScoresWindow — the rescore handoff', () => {
     expect(enqueued).toHaveLength(0);
   });
 
+  it('enqueues a SPILLOVER game under its OWN week, not the slot that fetched it', async () => {
+    // Found by codex on the week-stamping change (#392), and the revision it
+    // holed had a comment asserting the opposite.
+    //
+    // ESPN's preseason calendar entries OVERLAP, so a date-range fetch for week 1
+    // can return week-2 games; since parseScoreboardResponse now files by
+    // `event.week.number`, `freshGames` spans weeks. Everything slate-scoped is
+    // keyed on the SLOT, so the first fix scoped the terminal test to this
+    // slate's games on the reasoning that the spillover "picks itself up on its
+    // own pass".
+    //
+    // It does not. The write loop persists EVERY fresh game including the
+    // spillover, so once this pass commits it as FINAL, the week-2 pass reads
+    // that FINAL as its prior state and sees FINAL -> FINAL — no transition, no
+    // event, ever. (And week 2 may not be a slot at all: `weeksToSync` is built
+    // from stored docs before any of this runs.) The rescore is not deferred to
+    // the other pass; it is lost, and the pool's standings are never reconciled.
+    const { db, enqueued } = fakeDbWithDocs(storedLive, NOW, HOT_WINDOW_LOOKBACK_MS);
+    await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        games: [
+          // this slate's game, unchanged and already terminal -> no transition
+          espnGame({ id: 'espn_thu', week: 1, startTime: NOW - 20 * HOUR, status: 'FINAL', scores: { home: 27, away: 24 } }),
+          // the spillover: belongs to week 2, arrives terminal with no stored doc
+          espnGame({ id: 'espn_spill', week: 2, startTime: NOW - 2 * HOUR, status: 'FINAL', scores: { home: 17, away: 10 } }),
+        ] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    const terminal = enqueued.filter((e: any) => e.reason === 'terminal');
+    // Both games transitioned (espn_thu LIVE -> FINAL, espn_spill absent -> FINAL),
+    // so both weeks are enqueued — each under the week that owns it.
+    expect(terminal.map((e: any) => e.week).sort()).toEqual([1, 2]);
+    expect(terminal.every((e: any) => e.season === '2026' && e.seasonType === 1)).toBe(true);
+  });
+
+  it('does not enqueue a spillover week that had no transition', async () => {
+    // The other half: filing by owning week must not turn every overlapping
+    // response into an event for the neighbouring week.
+    const { db, enqueued } = fakeDbWithDocs(storedLive, NOW, HOT_WINDOW_LOOKBACK_MS);
+    await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        games: [
+          espnGame({ id: 'espn_thu', week: 1, startTime: NOW - 20 * HOUR, status: 'FINAL', scores: { home: 27, away: 24 } }),
+          espnGame({ id: 'espn_spill', week: 2, startTime: NOW + HOUR, status: 'SCHEDULED' }),
+        ] as any,
+        raw: { ok: true },
+      }),
+    });
+    expect(enqueued.filter((e: any) => e.reason === 'terminal').map((e: any) => e.week)).toEqual([1]);
+  });
+
   it('enqueues a correction on an already-FINAL game', async () => {
     // detectStatCorrections only fires on games that were ALREADY final, which is
     // the other half of the pair — a Sunday score restated on the Tuesday.
