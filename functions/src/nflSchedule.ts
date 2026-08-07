@@ -852,24 +852,6 @@ export async function syncScoresWindow(
       .filter(g => g.season === slot.season && Number(g.seasonType) === Number(slot.seasonType) && Number(g.week) === Number(slot.week));
     const corrections = detectStatCorrections(prevGames, slateGames);
 
-    // The SNAPSHOT stays keyed to this slate and carries only this slate's
-    // correction list. `raw` is this slot's response, `snapshotSlateId` is the
-    // dedupe key, and storing the same payload under a second slate would collide
-    // with the snapshot that slate's own pass writes. The ALERT and the RESCORE
-    // for a spillover correction are handled below, under the owning week.
-    // Both are gated on `slateReconciled`: a spillover-only response says nothing
-    // about this slate, so snapshotting `gameCount: 0` under its key would file
-    // misleading evidence, and there is nothing to report. The spillover's own
-    // alert and rescore are handled under its owning week below.
-    if (snapshotGate.enabled && raw !== null && slateReconciled) {
-      const outcome = await captureFeedSnapshot(db, slateKey, raw, corrections, slateGames.length);
-      if (outcome === "skipped") snapshotFailures++;
-    }
-    // Corrections are reported whether or not snapshots are on — the page is the
-    // point; the snapshot is only the evidence attached to it.
-    if (slateReconciled && !(await reportStatCorrections(db, slateKey, corrections))) correctionReportFailures++;
-    correctionCount += corrections.length;
-
     // ⚠️ A SPILLOVER GAME CAN CARRY A STAT CORRECTION, AND SLATE-SCOPING SWALLOWS IT.
     //
     // Second finding of the same shape as `terminalSlates` below, on the round
@@ -885,29 +867,69 @@ export async function syncScoresWindow(
     // result, so losing it leaves a pool's standings wrong with nothing left to
     // notice. Detect it against the stored doc — `existingById`, hoisted above for
     // exactly this — and file the alert and the rescore under the owning week.
+    //
+    // DETECTION RUNS BEFORE THE SNAPSHOT so the snapshot can carry it. Reporting
+    // still happens after, keeping the snapshot-then-report order the main slate
+    // has always used.
     const spilloverGames = freshGames.filter(g => Number(g.week) !== Number(slot.week));
     const correctionSlates = new Map<number, GameStateChange[]>();
-    if (spilloverGames.length > 0) {
-      const prevSpill = spilloverGames
-        .map(g => existingById.get(g.id))
-        .filter((g): g is NFLGame => g !== undefined);
-      for (const change of detectStatCorrections(prevSpill, spilloverGames)) {
-        const week = Number(freshById.get(change.gameId)?.week);
-        // Unusable week: attribute it to the slot we fetched rather than dropping
-        // it or keying an un-drainable event.
-        const owning = Number.isInteger(week) && week > 0 ? week : Number(slot.week);
-        correctionSlates.set(owning, [...(correctionSlates.get(owning) ?? []), change]);
-      }
-      for (const [week, changes] of correctionSlates) {
-        const owningKey = { season: slot.season, seasonType: slot.seasonType, week };
-        // `slateKey` is passed as `observedIn` so the alert names the slate whose
-        // response this arrived in — the snapshot is filed under THAT one, and
-        // pointing an operator at the owning week's snapshots during an incident
-        // would send them somewhere with nothing in it. (qodo #3.)
-        if (!(await reportStatCorrections(db, owningKey, changes, slateKey))) correctionReportFailures++;
-        correctionCount += changes.length;
-        console.warn(`[nflSchedule] ${changes.length} stat correction(s) arrived for week ${week} inside the week ${slot.week} response: ${changes.map(c => c.gameId).join(', ')}`);
-      }
+    for (const change of detectStatCorrections(
+      spilloverGames.map(g => existingById.get(g.id)).filter((g): g is NFLGame => g !== undefined),
+      spilloverGames,
+    )) {
+      const week = Number(freshById.get(change.gameId)?.week);
+      // Unusable week: attribute it to the slot we fetched rather than dropping
+      // it or keying an un-drainable event.
+      const owning = Number.isInteger(week) && week > 0 ? week : Number(slot.week);
+      correctionSlates.set(owning, [...(correctionSlates.get(owning) ?? []), change]);
+    }
+    const spilloverChanges = [...correctionSlates.values()].flat();
+
+    // THE SNAPSHOT IS THE EVIDENCE BEHIND THE ALERT, so it is captured whenever
+    // there is an alert to support — including on a spillover-only response.
+    //
+    // Two earlier fixes on this PR collided here (codex, the round after both).
+    // One skipped the snapshot when the slate was not reconciled, because
+    // `gameCount: 0` beside a non-empty payload reads as misleading evidence. The
+    // other made the spillover alert point operators at THIS slate's snapshots.
+    // Together they produced an alert that names a slate where the response was
+    // never stored — promising before/after payloads that do not exist, which is
+    // worse than the misleading count either fix was avoiding.
+    //
+    // So the gate is "is there anything to keep", not "was this slate
+    // reconciled", and the snapshot carries BOTH correction lists. That also
+    // resolves the original objection: a row with `gameCount: 0` and a non-empty
+    // `corrections` array explains itself — the response carried no games for this
+    // slate but did carry a correction for another week. The genuinely misleading
+    // shape, `gameCount: 0` with no corrections, is still skipped.
+    //
+    // `gameCount` remains THIS slate's count, so it keeps meaning one thing.
+    // Filing under `slateKey` is deliberate: it is the response we fetched, it is
+    // where `snapshotPointerLine` sends the operator, and writing it under the
+    // owning week would collide with the snapshot that week's own pass stores.
+    const keepEvidence = slateReconciled || spilloverChanges.length > 0;
+    if (snapshotGate.enabled && raw !== null && keepEvidence) {
+      const outcome = await captureFeedSnapshot(
+        db, slateKey, raw, [...corrections, ...spilloverChanges], slateGames.length,
+      );
+      if (outcome === "skipped") snapshotFailures++;
+    }
+    // Corrections are reported whether or not snapshots are on — the page is the
+    // point; the snapshot is only the evidence attached to it. Gated on
+    // `slateReconciled` because a spillover-only response says nothing about THIS
+    // slate; the spillover's own alert follows.
+    if (slateReconciled && !(await reportStatCorrections(db, slateKey, corrections))) correctionReportFailures++;
+    correctionCount += corrections.length;
+
+    for (const [week, changes] of correctionSlates) {
+      const owningKey = { season: slot.season, seasonType: slot.seasonType, week };
+      // `slateKey` is passed as `observedIn` so the alert names the slate whose
+      // response this arrived in — the snapshot is filed under THAT one, and
+      // pointing an operator at the owning week's snapshots during an incident
+      // would send them somewhere with nothing in it. (qodo #3.)
+      if (!(await reportStatCorrections(db, owningKey, changes, slateKey))) correctionReportFailures++;
+      correctionCount += changes.length;
+      console.warn(`[nflSchedule] ${changes.length} stat correction(s) arrived for week ${week} inside the week ${slot.week} response: ${changes.map(c => c.gameId).join(', ')}`);
     }
 
     // Any status change where EITHER side is terminal, measured against the WHOLE

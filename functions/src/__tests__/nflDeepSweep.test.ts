@@ -101,7 +101,12 @@ describe('syncScoresWindow — the lookback is what it queries', () => {
  * only the docs that fall inside it, exactly as Firestore would, while getAll()
  * resolves any id directly. That asymmetry is the whole point of the test below.
  */
-function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: number) {
+function fakeDbWithDocs(
+  stored: Record<string, any>,
+  now: number,
+  lookbackMs: number,
+  snapshotsOn = false,
+) {
   const writes: Array<{ id: string; data: any }> = [];
   // The §5b handoff: syncScoresWindow enqueues a rescore event after it commits a
   // slate. Recorded rather than ignored so the enqueue is asserted here, at the
@@ -121,8 +126,14 @@ function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: nu
    * lookback): the fake would answer it with the in-window docs, so the test
    * would pass without the door existing. Constraints are applied for real now.
    */
+  // Snapshots captured this run. `captureFeedSnapshot` reaches Firestore through
+  // `.where().orderBy().limit().get()` then `.add()`, so the stand-in has to
+  // carry both or the snapshot branch is silently unreachable and any test of it
+  // passes without executing anything.
+  const snapshots: any[] = [];
   const makeQuery = (constraints: Array<[string, string, any]>, cap?: number): any => ({
     where: (field: string, op: string, value: any) => makeQuery([...constraints, [field, op, value]], cap),
+    orderBy: () => makeQuery(constraints, cap),
     limit: (n: number) => makeQuery(constraints, n),
     async get() {
       const ids = Object.keys(stored).filter((id) => constraints.every(([field, op, value]) => {
@@ -142,6 +153,7 @@ function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: nu
       ...query,
       // doc() with no id is how a batch appends a queue event.
       doc: (id?: string) => ({ id: id ?? `auto${autoIds++}`, _id: id ?? `auto${autoIds}`, _col: name }),
+      async add(data: any) { snapshots.push({ col: name, data }); return { id: `snap${snapshots.length}` }; },
     }),
     async getAll(...refs: any[]) {
       return refs.map((r) => docOf(r._id));
@@ -153,9 +165,19 @@ function fakeDbWithDocs(stored: Record<string, any>, now: number, lookbackMs: nu
       },
       async commit() { /* no-op */ },
     }),
-    doc: () => ({ async get() { return { data: () => undefined }; } }),
+    // `system/config` is where readSnapshotGate looks. Off unless a test opts in,
+    // matching production's fail-safe default.
+    doc: (path?: string) => ({
+      async get() {
+        return {
+          data: () => (path === 'system/config' && snapshotsOn
+            ? { nflFeedSnapshots: { enabled: true } }
+            : undefined),
+        };
+      },
+    }),
   } as unknown as Firestore;
-  return { db, writes, enqueued };
+  return { db, writes, enqueued, snapshots };
 }
 
 const espnGame = (over: Record<string, any>) => ({
@@ -602,6 +624,58 @@ describe('syncScoresWindow — the rescore handoff', () => {
     // still enqueued under the week that owns it.
     expect(writes.map((w: any) => w.id)).toContain('espn_spill');
     expect(enqueued.filter((e: any) => e.reason === 'terminal').map((e: any) => e.week)).toEqual([2]);
+  });
+
+  it('KEEPS the snapshot when a spillover-only response carries a correction', async () => {
+    // Codex, on the round after the two fixes that collided here. One skipped the
+    // snapshot when the slate was not reconciled (a `gameCount: 0` row beside a
+    // non-empty payload reads as misleading evidence); the other made the
+    // spillover alert point operators at THIS slate's snapshots. Together they
+    // produced an alert naming a slate where the response was never stored —
+    // promising before/after payloads that do not exist.
+    const stored = {
+      // outside the window, so week 2 gets no slot of its own
+      espn_spill: {
+        id: 'espn_spill', season: '2026', seasonType: 1, week: 2, startTime: NOW - 400 * HOUR,
+        status: 'FINAL', scores: { home: 17, away: 10 },
+      },
+      // in-window week 1 game, so week 1 IS a slot
+      espn_thu: {
+        id: 'espn_thu', season: '2026', seasonType: 1, week: 1, startTime: NOW - 20 * HOUR,
+        status: 'FINAL', scores: { home: 27, away: 24 },
+      },
+    };
+    const { db, snapshots } = fakeDbWithDocs(stored, NOW, HOT_WINDOW_LOOKBACK_MS, true);
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      // Spillover-ONLY: nothing in the response belongs to week 1.
+      fetchSlate: async () => ({
+        games: [
+          espnGame({ id: 'espn_spill', week: 2, startTime: NOW - 400 * HOUR, status: 'FINAL', scores: { home: 20, away: 10 } }),
+        ] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(r.slatesNotReconciled, 'week 1 still learned nothing about itself').toBe(1);
+    expect(r.corrections).toBe(1);
+    const feed = snapshots.filter((s: any) => s.col === 'nfl_feed_snapshots');
+    expect(feed, 'the alert promises payloads that were never stored').toHaveLength(1);
+    // The row explains itself: no games for THIS slate, but a correction that
+    // justifies keeping it. `gameCount: 0` with an EMPTY corrections list is the
+    // genuinely misleading shape, and that one is still skipped.
+    expect(feed[0].data.gameCount).toBe(0);
+    expect(feed[0].data.corrections).toHaveLength(1);
+  });
+
+  it('still SKIPS the snapshot on a spillover-only response with nothing to keep', async () => {
+    const { db, snapshots } = fakeDbWithDocs(storedLive, NOW, HOT_WINDOW_LOOKBACK_MS, true);
+    await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async () => ({
+        games: [espnGame({ id: 'espn_spill', week: 2, startTime: NOW + HOUR, status: 'SCHEDULED' })] as any,
+        raw: { ok: true },
+      }),
+    });
+    expect(snapshots.filter((s: any) => s.col === 'nfl_feed_snapshots')).toHaveLength(0);
   });
 
   it('enqueues a SPILLOVER stat correction under its OWN week', async () => {
