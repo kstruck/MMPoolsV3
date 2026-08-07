@@ -713,16 +713,37 @@ export async function syncScoresWindow(
     if (freshGames.length === 0) { slatesNotReconciled++; continue; }
 
     const slateKey = { season: slot.season, seasonType: slot.seasonType, week: slot.week };
+
+    // ⚠️ SPLIT THE RESPONSE BY THE WEEK EACH GAME ACTUALLY BELONGS TO.
+    //
+    // `resolveScoreboardUrl` queries a DATE RANGE from ESPN's calendar, and those
+    // calendar entries OVERLAP at the boundary — the 2026 "Hall of Fame Weekend"
+    // entry runs 08-06..08-13 and "Preseason Week 1" starts on 08-13. So a slate
+    // fetch legitimately returns games from the NEXT week, and since
+    // `parseScoreboardResponse` now files each game under ESPN's own
+    // `week.number`, `freshGames` can span weeks.
+    //
+    // Everything slate-SCOPED below (correction detection, the feed snapshot,
+    // terminal-transition detection and the rescore-queue key) is keyed on
+    // `slateKey`, so feeding it the spillover would attribute another week's
+    // corrections and rescore events to this one. Reconcile only this slate's
+    // games; still WRITE all of them, because their scores and their corrected
+    // `week` are real data and dropping them would strand the spillover games.
+    // (codex, on the week-stamping change.)
+    const slateGames = freshGames.filter(g => Number(g.week) === Number(slot.week));
+    if (slateGames.length !== freshGames.length) {
+      console.log(`[nflSchedule] slate ${slateKey.season}/${slateKey.seasonType}/wk${slateKey.week}: ${freshGames.length - slateGames.length} game(s) belong to another week; written but reconciled under their own slate.`);
+    }
     // Prior state for this slate, as the finalizer would have seen it. Scoped to
     // the window we queried — which is why the deep sweep's wider lookback is what
     // makes a late correction detectable at all.
     const prevGames = activeGamesSnap.docs
       .map(d => d.data() as NFLGame)
       .filter(g => g.season === slot.season && Number(g.seasonType) === Number(slot.seasonType) && Number(g.week) === Number(slot.week));
-    const corrections = detectStatCorrections(prevGames, freshGames);
+    const corrections = detectStatCorrections(prevGames, slateGames);
 
     if (snapshotGate.enabled && raw !== null) {
-      const outcome = await captureFeedSnapshot(db, slateKey, raw, corrections, freshGames.length);
+      const outcome = await captureFeedSnapshot(db, slateKey, raw, corrections, slateGames.length);
       if (outcome === "skipped") snapshotFailures++;
     }
     // Corrections are reported whether or not snapshots are on — the page is the
@@ -781,7 +802,12 @@ export async function syncScoresWindow(
       g.id,
       { ...g, scores: g.scores ?? existingById.get(g.id)?.scores } as NFLGame,
     ]));
-    const firstTerminal = freshGames.some(g =>
+    // Slate-scoped: this decides whether THIS slate is enqueued for rescore, so
+    // a spillover game going terminal must not enqueue the wrong week. Its own
+    // slate picks it up on its own pass. `mergedById` deliberately still spans
+    // `freshGames`, because the write loop below reads it for every game it
+    // persists. (codex, on the week-stamping change.)
+    const firstTerminal = slateGames.some(g =>
       isTerminalTransition(existingById.get(g.id), mergedById.get(g.id)!));
 
     // Counted BEFORE the dry-run early-out below. A dry run that re-fetches an

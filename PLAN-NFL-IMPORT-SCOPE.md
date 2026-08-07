@@ -1,7 +1,8 @@
 # PLAN — the schedule importer files games by ESPN's week, and touches only the weeks it was asked for
 
 **Status: CODE COMPLETE, awaiting review. The DEPLOY and the follow-up data repair are gated on Kevin.**
-Written 2026-08-07, after diagnosing the mis-filed Hall of Fame week.
+Written overnight after the Hall of Fame game (which was **2026-08-06**, Thu
+8:00pm ET), while diagnosing the mis-filed HOF week.
 
 ## 0. Why this is plan-gated
 
@@ -52,14 +53,17 @@ entries[1] "Preseason Week 1"      2026-08-13 .. 2026-08-20
 So the week-1 import issues `dates=20260806-20260813` and gets **7 events** back.
 Confirmed by replaying that exact URL:
 
+Kickoffs below are ESPN's **UTC** timestamps, not calendar dates — the HOF game
+is 2026-08-06 8:00pm ET, i.e. `2026-08-07T00:00Z`:
+
 ```
-2026-08-07  espn week 1  CAR VS ARI
-2026-08-13  espn week 2  DET @ CIN
-2026-08-13  espn week 2  GB @ PIT
-2026-08-13  espn week 2  IND @ NE
-2026-08-14  espn week 2  ARI @ LV
-2026-08-14  espn week 2  LAC @ HOU
-2026-08-14  espn week 2  TEN @ SF
+2026-08-07T00:00Z  espn week 1  CAR @ ARI
+2026-08-13T23:00Z  espn week 2  DET @ CIN
+2026-08-13T23:00Z  espn week 2  GB @ PIT
+2026-08-13T23:30Z  espn week 2  IND @ NE
+2026-08-14T00:00Z  espn week 2  ARI @ LV
+2026-08-14T00:00Z  espn week 2  LAC @ HOU
+2026-08-14T01:00Z  espn week 2  TEN @ SF
 ```
 
 `parseScoreboardResponse` then stamped every one `week: week` — the **requested**
