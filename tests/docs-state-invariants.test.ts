@@ -1198,7 +1198,24 @@ export const HOF_GAME_ET = '2026-08-06';
  * denote the same instant and flagging them would cry wolf. Any other offset or
  * time-of-day is not the feed value and is flagged.
  */
-const BARE_WRONG_HOF_DATE = /2026-08-07(?!T00:00(:00(\.\d+)?)?Z)/g;
+/**
+ * A `MORNING-` prefix is excluded because it is a FILENAME, not a date claim.
+ *
+ * The escape-hatch docblock below already says a *"MORNING 2026-08-07"* written
+ * the day after the game is correct and that failing CI on it "would tell the
+ * author to change a right date to a wrong one". The tag was supposed to cover
+ * that — but the tag can only bind to a date it immediately precedes, and the
+ * date here sits INSIDE a token (`MORNING-2026-08-07.md`). There is nowhere to
+ * put the marker, so referencing that runbook by name was impossible: HANDOFF
+ * could not point at its own morning doc.
+ *
+ * Narrow on purpose. Only the literal `MORNING-` prefix is exempt, so a bare
+ * `2026-08-07` anywhere else on the same line is still flagged, and this cannot
+ * launder a real claim — a filename is a different kind of statement from
+ * "the game was on this date", and the repo's naming convention makes
+ * `MORNING-<the day you wrote it>` the correct name.
+ */
+const BARE_WRONG_HOF_DATE = /(?<!MORNING-)2026-08-07(?!T00:00(:00(\.\d+)?)?Z)/g;
 
 /**
  * Escape hatch for an honest, unrelated 2026-08-07.
@@ -1283,6 +1300,20 @@ describe('operator docs state the right Hall of Fame date', () => {
 
     it('exempts a tagged unrelated mention', () => {
       expect(wrongHofDateMentions(`Deployed ${HOF_TAG} 2026-08-07.`)).toEqual([]);
+    });
+
+    it('does not flag a MORNING runbook FILENAME — the tag cannot bind inside a token', () => {
+      // Without this, HANDOFF could not name its own morning doc: the date sits
+      // inside `MORNING-2026-08-07.md`, so there is nowhere to put the marker.
+      expect(wrongHofDateMentions('Full runbook: `MORNING-2026-08-07.md`.')).toEqual([]);
+      expect(wrongHofDateMentions('See MORNING-2026-08-07-OVERNIGHT.md')).toEqual([]);
+    });
+
+    it('still flags a bare date sharing a line with a MORNING filename', () => {
+      // The exemption is the prefix, not the line — otherwise naming the file
+      // would launder every other claim beside it.
+      expect(wrongHofDateMentions('MORNING-2026-08-07.md says the HOF game is 2026-08-07'))
+        .toEqual([1]);
     });
 
     it('exempts a tagged mention through emphasis of either flavour', () => {
