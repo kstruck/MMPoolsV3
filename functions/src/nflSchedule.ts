@@ -221,6 +221,37 @@ export async function fetchNFLWeekScheduleWithRaw(
  * silently importing zero games and looking like an outage; but when the field
  * IS present and disagrees, we trust it over our own arguments.
  */
+/**
+ * Which week does ESPN say this event belongs to?
+ *
+ * Same convention as `eventMatchesSeason` directly below: FAIL-OPEN on a
+ * missing field, TRUST ESPN over our own argument when the field is present.
+ * The requested week is only ever a fallback.
+ *
+ * ⚠️ THIS EXISTS BECAUSE THE OPPOSITE COST A GAME-DAY DEFECT. `week` used to be
+ * stamped from the REQUESTED week — `week: week` — while season and seasonType
+ * were already validated against ESPN's own answer. So when a scoreboard query
+ * for preseason week 1 came back holding the week-2 slate, all sixteen of those
+ * games were written as week 1.
+ *
+ * Measured in production 2026-08-06: `nfl_games` season 2026 seasonType 1 held
+ * week1=7, week2=10 where the truth is 1 and 16 — six games (DET@CIN, GB@PIT,
+ * IND@NE, LAC@HOU, ARI@LV, TEN@SF) mis-filed into the Hall of Fame week. A
+ * commissioner's HOF pool asked members to pick seven games, six of them from
+ * the following weekend, and the week could not score cleanly because those six
+ * would not be final for another week.
+ *
+ * ESPN reports `event.week.number` correctly for every one of them, so trusting
+ * it would have prevented the whole thing.
+ */
+export function eventWeekNumber(
+  event: { week?: { number?: number | string } } | undefined | null,
+  requestedWeek: number,
+): number {
+  const n = Number(event?.week?.number);
+  return Number.isFinite(n) && n > 0 ? n : requestedWeek;
+}
+
 export function eventMatchesSeason(
   event: { season?: { year?: number | string; type?: number | string } } | undefined | null,
   season: string,
@@ -311,7 +342,8 @@ export function parseScoreboardResponse(
       games.push({
         id: gameId,
         espnGameId: event.id,
-        week: week,
+        // ESPN's own answer wins over the requested week — see eventWeekNumber.
+        week: eventWeekNumber(event, week),
         season: season,
         seasonType: seasonType,
         homeTeam: {
@@ -352,39 +384,63 @@ export function parseScoreboardResponse(
 export async function importNFLSeason(
   season: string,
   seasonType: 1 | 2 | 3,
-  weeks: number[] = Array.from({ length: 18 }, (_, i) => i + 1)
+  weeks: number[] = Array.from({ length: 18 }, (_, i) => i + 1),
+  // Injectable ONLY so the write path — the week-scoped orphan cleanup and the
+  // locked-spread preservation — is testable without a network call.
+  // Production always uses the default. Same arrangement as syncScoresWindow.
+  opts: { fetchWeek?: typeof fetchNFLWeekSchedule } = {},
 ): Promise<{ success: boolean; importedCount: number }> {
   const db = admin.firestore();
+  const fetchWeek = opts.fetchWeek ?? fetchNFLWeekSchedule;
   let importedCount = 0;
 
   console.log(`[nflSchedule] Starting import of season ${season} (type: ${seasonType}) for weeks: ${weeks.join(', ')}`);
 
-  // Auto-cleanup any existing/legacy games for this season and seasonType to prevent orphan/mismatched data
+  // Read what is already stored for this season+type. Used for two things: the
+  // scoped orphan cleanup below, and preserving manually locked spreads.
+  const requested = new Set(weeks.map(Number));
+  const existingById = new Map<string, Record<string, unknown>>();
+  const inScopeWeekById = new Map<string, number>();
   try {
     const existingSnap = await db.collection('nfl_games')
       .where('season', '==', season)
       .where('seasonType', '==', seasonType)
       .get();
-    
-    if (!existingSnap.empty) {
-      console.log(`[nflSchedule] Found ${existingSnap.size} existing matching games for season ${season} (type ${seasonType}). Cleaning up...`);
-      const deleteBatch = db.batch();
-      existingSnap.docs.forEach(doc => {
-        deleteBatch.delete(doc.ref);
-      });
-      await deleteBatch.commit();
-      console.log(`[nflSchedule] Cleaned up ${existingSnap.size} legacy matching games successfully.`);
+    for (const doc of existingSnap.docs) {
+      const data = doc.data() as Record<string, unknown>;
+      existingById.set(doc.id, data);
+      // ⚠️ SCOPED TO THE WEEKS BEING IMPORTED.
+      //
+      // This cleanup used to delete EVERY game of the season+type regardless of
+      // which weeks the caller asked for, then re-import only those weeks — so
+      // `importNFLSchedule(2026, 1, weeks:[2])` would have destroyed weeks 1, 3
+      // and 4, including a Hall of Fame game hours before kickoff. Nothing in
+      // the signature hinted at that; `weeks` reads like a filter.
+      if (requested.has(Number(data.week))) inScopeWeekById.set(doc.id, Number(data.week));
     }
-  } catch (cleanupErr) {
-    console.warn("[nflSchedule] Failed to clean up legacy matching games in DB:", cleanupErr);
+  } catch (readErr) {
+    // Fail CLOSED on the read. Without it we cannot tell an orphan from a game
+    // in another week, and we cannot see which spreads are locked — proceeding
+    // would risk both deleting the wrong docs and clobbering a manual lock.
+    console.error('[nflSchedule] Could not read existing games; aborting import rather than guessing:', readErr);
+    throw new HttpsError('unavailable', 'Could not read existing NFL games; import aborted.');
   }
 
+  const freshIds = new Set<string>();
+  // Only weeks whose fetch actually returned a slate are eligible for the orphan
+  // sweep below. A week that fetched NOTHING is skipped entirely — otherwise an
+  // ESPN outage or a bad date range would delete a perfectly good stored week,
+  // which is the failure this whole change exists to prevent. Caught by
+  // `importScope.emulator.test.ts`; an earlier revision of this function
+  // asserted in a comment that it could not happen, and it could.
+  const fetchedWeeks = new Set<number>();
   for (const week of weeks) {
-    const games = await fetchNFLWeekSchedule(week, season, seasonType);
+    const games = await fetchWeek(week, season, seasonType);
     if (games.length === 0) {
-      console.log(`[nflSchedule] No games fetched for Week ${week}. Skipping.`);
+      console.log(`[nflSchedule] No games fetched for Week ${week}. Skipping (its stored games are left untouched).`);
       continue;
     }
+    fetchedWeeks.add(Number(week));
 
     const batch = db.batch();
     for (const game of games) {
@@ -393,12 +449,39 @@ export async function importNFLSeason(
       // so it can create a scoreless FINAL too — and without the marker that game
       // is outside BOTH doors and never refreshed again (codex r2).
       cleanedGame.scoresMissing = scoresMissingMarker(game);
+
+      // ⚠️ NEVER CLOBBER A MANUALLY LOCKED SPREAD. The parser always emits
+      // `locked: false`, so a re-import used to silently unlock every line a
+      // commissioner had locked — and an ATS pool with an unlocked line refuses
+      // every pick (SPREADS_NOT_LOCKED). Dropping the key lets `merge: true`
+      // keep what is stored.
+      const stored = existingById.get(cleanedGame.id) as { spread?: { locked?: boolean } } | undefined;
+      if (stored?.spread?.locked === true) delete cleanedGame.spread;
+
+      freshIds.add(cleanedGame.id);
       const gameRef = db.collection('nfl_games').doc(cleanedGame.id);
       batch.set(gameRef, cleanedGame, { merge: true });
       importedCount++;
     }
     await batch.commit();
     console.log(`[nflSchedule] Week ${week} imported successfully with ${games.length} games.`);
+  }
+
+  // Orphans: stored games in a SUCCESSFULLY FETCHED week that the fresh slate no
+  // longer returns — a cancelled or re-scheduled fixture. Deleted AFTER the
+  // writes, and only for weeks that actually returned data. Chunked under the
+  // 500-op batch cap.
+  const orphanIds = [...inScopeWeekById.entries()]
+    .filter(([id, wk]) => fetchedWeeks.has(wk) && !freshIds.has(id))
+    .map(([id]) => id);
+  for (let i = 0; i < orphanIds.length; i += 400) {
+    const chunk = orphanIds.slice(i, i + 400);
+    const deleteBatch = db.batch();
+    chunk.forEach(id => deleteBatch.delete(db.collection('nfl_games').doc(id)));
+    await deleteBatch.commit();
+  }
+  if (orphanIds.length > 0) {
+    console.log(`[nflSchedule] Removed ${orphanIds.length} orphaned game(s) from weeks ${weeks.join(', ')}: ${orphanIds.join(', ')}`);
   }
 
   await writeAuditEvent({
