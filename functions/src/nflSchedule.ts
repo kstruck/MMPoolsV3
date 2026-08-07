@@ -783,6 +783,19 @@ export async function syncScoresWindow(
    * response actually delivered it. (codex r7 on this change.)
    */
   const reportedCorrections = new Set<string>();
+  /**
+   * Game ids whose correction has been COUNTED this run.
+   *
+   * Separate from `reportedCorrections` because the two answer different
+   * questions, and collapsing them costs one of the answers. Suppression must
+   * only happen once a report SUCCEEDED — otherwise a failed alert silences the
+   * retry a later overlapping slot could have made, and this file's own
+   * `correctionReportFailures` docblock calls a detected-then-dropped correction
+   * the most expensive silent failure here. Counting, by contrast, must happen
+   * once per correction however many slots deliver it, or a retry inflates the
+   * heartbeat number an operator uses to judge the night. (qodo #3, second pass.)
+   */
+  const countedCorrections = new Set<string>();
 
   for (const [_, slot] of weeksToSync) {
     const { games: freshGames, raw } = await fetchSlate(slot.week, slot.season, slot.seasonType);
@@ -866,11 +879,24 @@ export async function syncScoresWindow(
     const prevGames = activeGamesSnap.docs
       .map(d => d.data() as NFLGame)
       .filter(g => g.season === slot.season && Number(g.seasonType) === Number(slot.seasonType) && Number(g.week) === Number(slot.week));
-    // Filtered through the run-level set: an overlapping slot may already have
-    // reported one of these against fresher state than `activeGamesSnap` holds.
+    // Filtered on what has been REPORTED, not on what has been seen: an
+    // overlapping slot that already alerted successfully owns it, but one whose
+    // alert FAILED must not silence this slot's attempt.
     const corrections = detectStatCorrections(prevGames, slateGames)
       .filter(c => !reportedCorrections.has(c.gameId));
-    for (const c of corrections) reportedCorrections.add(c.gameId);
+
+    // COUNTING AND THE RESCORE ENQUEUE ARE ONCE-PER-RUN; ONLY THE ALERT RETRIES.
+    //
+    // Splitting these is the point (qodo #3, second pass). A failed alert should
+    // be re-attempted by a later overlapping slot, because both of its sinks
+    // swallow their own failures and a dropped correction is the most expensive
+    // silent failure in this file. But the rescore event and the heartbeat count
+    // must not be re-emitted on that retry: the queue would carry a duplicate for
+    // a slate it already covers, and `corrections` is the number an operator reads
+    // to judge how bad a night was.
+    const newCorrections = corrections.filter(c => !countedCorrections.has(c.gameId));
+    for (const c of newCorrections) countedCorrections.add(c.gameId);
+    correctionCount += newCorrections.length;
 
     // ⚠️ A SPILLOVER GAME CAN CARRY A STAT CORRECTION, AND SLATE-SCOPING SWALLOWS IT.
     //
@@ -893,19 +919,28 @@ export async function syncScoresWindow(
     // has always used.
     const spilloverGames = freshGames.filter(g => Number(g.week) !== Number(slot.week));
     const correctionSlates = new Map<number, GameStateChange[]>();
+    /** Owning weeks carrying at least one correction NEW to this run. */
+    const newCorrectionSlates = new Set<number>();
     for (const change of detectStatCorrections(
       spilloverGames.map(g => existingById.get(g.id)).filter((g): g is NFLGame => g !== undefined),
       spilloverGames,
     )) {
       // Same run-level dedupe as the slate pass above — the owning week's own
-      // slot may already have reported this one.
+      // slot may already have reported this one. Marked reported only after the
+      // report below succeeds.
       if (reportedCorrections.has(change.gameId)) continue;
-      reportedCorrections.add(change.gameId);
       const week = Number(freshById.get(change.gameId)?.week);
       // Unusable week: attribute it to the slot we fetched rather than dropping
       // it or keying an un-drainable event.
       const owning = Number.isInteger(week) && week > 0 ? week : Number(slot.week);
       correctionSlates.set(owning, [...(correctionSlates.get(owning) ?? []), change]);
+      // Same split as the slate pass: counted and enqueued once per run, alerted
+      // again if the alert failed.
+      if (!countedCorrections.has(change.gameId)) {
+        countedCorrections.add(change.gameId);
+        correctionCount++;
+        newCorrectionSlates.add(owning);
+      }
     }
     const spilloverChanges = [...correctionSlates.values()].flat();
 
@@ -942,8 +977,15 @@ export async function syncScoresWindow(
     // point; the snapshot is only the evidence attached to it. Gated on
     // `slateReconciled` because a spillover-only response says nothing about THIS
     // slate; the spillover's own alert follows.
-    if (slateReconciled && !(await reportStatCorrections(db, slateKey, corrections))) correctionReportFailures++;
-    correctionCount += corrections.length;
+    if (slateReconciled && corrections.length > 0) {
+      // Marked reported ONLY on success, so a failed alert leaves the retry open
+      // to a later overlapping slot in this same run.
+      if (await reportStatCorrections(db, slateKey, corrections)) {
+        for (const c of corrections) reportedCorrections.add(c.gameId);
+      } else {
+        correctionReportFailures++;
+      }
+    }
 
     for (const [week, changes] of correctionSlates) {
       const owningKey = { season: slot.season, seasonType: slot.seasonType, week };
@@ -951,8 +993,11 @@ export async function syncScoresWindow(
       // response this arrived in — the snapshot is filed under THAT one, and
       // pointing an operator at the owning week's snapshots during an incident
       // would send them somewhere with nothing in it. (qodo #3.)
-      if (!(await reportStatCorrections(db, owningKey, changes, slateKey))) correctionReportFailures++;
-      correctionCount += changes.length;
+      if (await reportStatCorrections(db, owningKey, changes, slateKey)) {
+        for (const c of changes) reportedCorrections.add(c.gameId);
+      } else {
+        correctionReportFailures++;
+      }
       console.warn(`[nflSchedule] ${changes.length} stat correction(s) arrived for week ${week} inside the week ${slot.week} response: ${changes.map(c => c.gameId).join(', ')}`);
     }
 
@@ -1120,10 +1165,13 @@ export async function syncScoresWindow(
     // week whose already-FINAL game was corrected inside this response — the
     // write below persists that new score, so if this event is not enqueued the
     // correction is gone for good (see the spillover block above).
-    if (corrections.length > 0) {
+    // Gated on NEW corrections, not on `corrections`: a correction whose alert
+    // failed in an earlier slot is deliberately re-attempted here, and that retry
+    // must not enqueue a second rescore for a slate the queue already covers.
+    if (newCorrections.length > 0) {
       batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({ ...slateKey, reason: 'correction', enqueuedAt: now }));
     }
-    for (const week of correctionSlates.keys()) {
+    for (const week of newCorrectionSlates) {
       batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({
         season: slot.season, seasonType: slot.seasonType, week, reason: 'correction', enqueuedAt: now,
       }));

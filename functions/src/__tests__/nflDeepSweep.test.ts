@@ -712,7 +712,55 @@ describe('syncScoresWindow — the rescore handoff', () => {
     });
 
     expect(r.corrections, 'one restatement was counted twice').toBe(1);
-    expect(enqueued.filter((e: any) => e.reason === 'correction'), 'one restatement paged twice').toHaveLength(1);
+    expect(enqueued.filter((e: any) => e.reason === 'correction'), 'one restatement enqueued twice').toHaveLength(1);
+
+    // …AND the alert is still RE-ATTEMPTED (qodo #3, second pass). Reporting fails
+    // in this stand-in — `writeAdminAudit` goes through admin.firestore(), not the
+    // injected db — so both slots try and both fail, which is exactly the case the
+    // retry exists for. Two failures means the second slot did attempt; one would
+    // mean the dedupe had silenced the only remaining chance to page this run.
+    //
+    // This is the whole reason counting/enqueue and reporting use SEPARATE sets:
+    // suppressing on "seen" would have made this number 1.
+    expect(r.correctionReportFailures, 'the retry was silenced by the dedupe').toBe(2);
+  });
+
+  it('retries a failed alert when the OWNING slot saw it first, too', async () => {
+    // The mirror of the test above, and it exists because a mutation proved the
+    // first one did not cover this branch: there, the owning slot ran SECOND, so
+    // only the spillover path's mark-on-success was exercised. Reversing the order
+    // — the corrected game's own week is the first slot — puts the correction in
+    // the SLATE path first and pins the same rule there.
+    //
+    // Key ordering is what selects the first slot: `weeksToSync` is built by
+    // iterating stored docs, so espn_spill (week 2) listed first makes week 2 the
+    // first slot.
+    const stored = {
+      espn_spill: {
+        id: 'espn_spill', season: '2026', seasonType: 1, week: 2, startTime: NOW - 3 * HOUR,
+        status: 'FINAL', scores: { home: 17, away: 10 },
+      },
+      espn_thu: {
+        id: 'espn_thu', season: '2026', seasonType: 1, week: 1, startTime: NOW - 20 * HOUR,
+        status: 'FINAL', scores: { home: 27, away: 24 },
+      },
+    };
+    const { db, enqueued } = fakeDbWithDocs(stored, NOW, HOT_WINDOW_LOOKBACK_MS);
+    const corrected = espnGame({
+      id: 'espn_spill', week: 2, startTime: NOW - 3 * HOUR, status: 'FINAL', scores: { home: 20, away: 10 },
+    });
+    const r = await syncScoresWindow(db, NOW, HOT_WINDOW_LOOKBACK_MS, {
+      fetchSlate: async (week: number) => ({
+        games: week === 2
+          ? [corrected] as any
+          : [espnGame({ id: 'espn_thu', week: 1, startTime: NOW - 20 * HOUR, status: 'FINAL', scores: { home: 27, away: 24 } }), corrected] as any,
+        raw: { ok: true },
+      }),
+    });
+
+    expect(r.corrections, 'counted twice').toBe(1);
+    expect(enqueued.filter((e: any) => e.reason === 'correction'), 'enqueued twice').toHaveLength(1);
+    expect(r.correctionReportFailures, 'the slate path silenced the retry').toBe(2);
   });
 
   it('enqueues a SPILLOVER stat correction under its OWN week', async () => {
