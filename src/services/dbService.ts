@@ -1462,7 +1462,7 @@ export const dbService = {
             // button, i.e. the documented FALLBACK for automated scoring. When it
             // is used, something has already gone sideways, so a call that leaves
             // no trace is exactly the wrong time to have no trace.
-            const scoreNFLWeekFn = httpsCallable<Record<string, unknown>, { success: boolean; message: string }>(functions, 'scoreNFLWeek');
+            const scoreNFLWeekFn = httpsCallable<{ poolId: string; week: number; _correlationId: string }, { success: boolean; message: string }>(functions, 'scoreNFLWeek');
             const result = await scoreNFLWeekFn(withCorrelationId({ poolId, week }));
             return { message: result.data.message };
         } catch (error) {
@@ -1572,7 +1572,13 @@ export const dbService = {
     // it, which is why 29 other callables here already do this.
     importNFLSchedule: async (data: { season: string; seasonType: number; weeks?: number[] }): Promise<{ success: boolean; importedCount: number }> => {
         try {
-            const importNFLScheduleFn = httpsCallable<Record<string, unknown>, { success: boolean; importedCount: number }>(functions, 'importNFLSchedule');
+            // Typed as the payload PLUS the correlation key, not widened to
+            // Record<string, unknown>: `withCorrelationId` returns
+            // `T & { _correlationId: string }`, so the callable keeps compile-time
+            // checking of season/seasonType/weeks. The first version of this change
+            // widened it and gave that up for nothing (qodo, PR #397).
+            type ImportPayload = { season: string; seasonType: number; weeks?: number[] };
+            const importNFLScheduleFn = httpsCallable<ImportPayload & { _correlationId: string }, { success: boolean; importedCount: number }>(functions, 'importNFLSchedule');
             const result = await importNFLScheduleFn(withCorrelationId({ ...data }));
             return result.data;
         } catch (error) {

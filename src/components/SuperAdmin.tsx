@@ -4323,7 +4323,11 @@ export const SuperAdmin: React.FC = () => {
                                 // still showed the hand cursor and simply did nothing when
                                 // clicked — indistinguishable from a broken one. An empty Season
                                 // Year is the reachable case.
-                                className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-display font-extrabold uppercase tracking-[0.05em] px-6 py-3 rounded-xl text-sm transition-all hover:-translate-y-px shadow-red-cta flex items-center gap-2 cursor-pointer"
+                                // `disabled:hover:*` neutralises the hover styles too. Without
+                                // them a disabled button still lightens and lifts under the
+                                // cursor, which reads as "this is clickable" — the same wrong
+                                // signal `cursor-pointer` was giving (qodo, PR #397).
+                                className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-brandred-600 disabled:hover:translate-y-0 text-white font-display font-extrabold uppercase tracking-[0.05em] px-6 py-3 rounded-xl text-sm transition-all hover:-translate-y-px shadow-red-cta flex items-center gap-2 cursor-pointer"
                             >
                                 <RefreshCw size={16} className={isImportingNfl ? 'animate-spin' : ''} />
                                 {isImportingNfl ? 'Seeding games...' : 'Bulk Import ESPN NFL Schedule'}

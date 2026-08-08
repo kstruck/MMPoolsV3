@@ -54,14 +54,36 @@ const CALLABLE = /httpsCallable[^(]*\(\s*functions\s*,\s*['"]([A-Za-z0-9_]+)['"]
  */
 const LOOKAHEAD = 12;
 
+/**
+ * Blank out comments before scanning, so PROSE cannot vouch for CODE.
+ *
+ * The first version of this scan matched the bare substring `withCorrelationId`
+ * anywhere in the window — and the wrappers this PR fixed carry comments that
+ * name the helper. Deleting the actual call while leaving the comment would have
+ * left the ratchet green: a guard satisfied by its own documentation, which is
+ * the exact shape `heartbeat.test.ts` already blanks comments to avoid. Found by
+ * qodo on PR #397.
+ *
+ * Replaced with spaces rather than removed so line indices stay exact.
+ * The `(?<!:)` keeps `https://` from being read as a line comment.
+ */
+function blankComments(s: string): string {
+  return s
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => ' '.repeat(m.length))
+    .replace(/(?<!:)\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
+}
+
+/** A real invocation, not a mention: `withCorrelationId(` with its open paren. */
+const CALL = /withCorrelationId\s*\(/;
+
 function callablesMissingCorrelation(src: string): string[] {
-  const lines = src.split(/\r?\n/);
+  const lines = blankComments(src).split(/\r?\n/);
   const missing: string[] = [];
   lines.forEach((line, i) => {
     const m = CALLABLE.exec(line);
     if (!m) return;
     const window = lines.slice(i, i + LOOKAHEAD).join('\n');
-    if (!window.includes('withCorrelationId')) missing.push(m[1]);
+    if (!CALL.test(window)) missing.push(m[1]);
   });
   return [...new Set(missing)].sort();
 }
@@ -129,6 +151,26 @@ describe('callable correlation coverage', () => {
   it('finds the callables (the scan is not matching nothing)', () => {
     const total = src.split(/\r?\n/).filter((l) => CALLABLE.test(l)).length;
     expect(total).toBeGreaterThanOrEqual(50);
+  });
+
+  // Pins the comment-blanking above, on a fixture rather than on the real file —
+  // otherwise the protection is asserted only by the absence of a failure.
+  it('a COMMENT naming the helper does not count as using it', () => {
+    const commentOnly = [
+      "const fn = httpsCallable<A, B>(functions, 'fakeCallable');",
+      '// withCorrelationId is deliberately not used here',
+      '/* withCorrelationId( — even with a paren, inside a block comment */',
+      'const r = await fn(payload);',
+    ].join('\n');
+    expect(callablesMissingCorrelation(commentOnly)).toEqual(['fakeCallable']);
+  });
+
+  it('a real call DOES count', () => {
+    const realCall = [
+      "const fn = httpsCallable<A, B>(functions, 'fakeCallable');",
+      'const r = await fn(withCorrelationId(payload));',
+    ].join('\n');
+    expect(callablesMissingCorrelation(realCall)).toEqual([]);
   });
 
   it('no NEW callable ships without a correlation id', () => {

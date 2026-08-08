@@ -79,10 +79,19 @@ Diagnosing it now would need the Cloud Functions logs from
 production read this session did not take, and the state before the fix is not
 reproducible: the call left no trace by construction.
 
-One observation cuts against "the click never left the browser": App Check is in
-`monitor` mode and OFF in the client, so `request.app` is undefined and
-`validated()` emits `[appcheck-monitor] importNFLSchedule: call WITHOUT a valid
-App Check token` — **unconditionally, before the gate**. If that line is absent
+One observation cuts against "the click never left the browser".
+📌 **UNVERIFIED — this is environment-dependent and was reasoned from the code,
+not observed in production.** `importNFLSchedule` is declared
+`appCheck: "monitor"`, and `validated()` emits its `[appcheck-monitor]` warning
+whenever `request.app` is absent — before the auth/role/schema gate, so it does
+not depend on the call being accepted. The environment half is the part to
+re-check: App Check is believed OFF in the client (`VITE_RECAPTCHA_SITE_KEY`
+unset, per HANDOFF), so no token is attached and the warning fires on every call.
+**If App Check is ever turned on, this signal disappears** and the reasoning
+below stops holding.
+
+On that basis `validated()` emits `[appcheck-monitor] importNFLSchedule: call
+WITHOUT a valid App Check token` for every call that arrives. If that line is absent
 from the logs for that window, the request genuinely did not reach the function.
 If it is present, it did, and the failure was downstream. **That single grep
 settles it**, and it is the first thing to run if this recurs:
