@@ -9,7 +9,7 @@ Command: `grep -rn 'usedTeams' --include=*.ts --include=*.tsx src functions/src 
 | Site | Role | Change required |
 |---|---|---|
 | `functions/src/nflPools.ts:572-579` | Survivor submit reuse guard | **YES** — authority moves to counting `picks` map vs `maxTeamUses` |
-| `functions/src/nflPools.ts:608` | Survivor submit `usedTeams` write | No (Set write stays; now derived data) |
+| `functions/src/nflPools.ts:608` | Survivor submit `usedTeams` write | **YES — CORRECTED r2 #2** (first pass said "no change"): remove-then-re-add breaks under reuse; when `maxTeamUses ≠ 1` derive `usedTeams` from `values(nextPicks)`; absent/1 keeps today's rewrite |
 | `functions/src/nflPools.ts:554,624` | Entry init `usedTeams: []` | No |
 | `functions/src/nflPools.ts:641,666` | **Margin** twin guard + write | **NO — explicitly out of scope** (named in plan) |
 | `functions/src/nflPools.ts:1420` | Comment (leak rationale) | No |

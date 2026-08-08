@@ -22,3 +22,18 @@ VERDICT: REVISE. 7 findings (4×P1, 2×P2, 1×P3). All accepted.
    **Response: accepted.** `countTeamUses` iterates `Object.entries(picks)`, validates numeric week keys, excludes `String(currentWeek)`; used by submit, proxy, exemption, and client. Types documented at the normalization boundary (no type migration in this PR).
 
 Plan and sweeps updated. Proceeding to round 2.
+
+## Round 2 — codex
+
+VERDICT: REVISE. Confirmed all 7 round-1 fixes landed. 4 new findings (1×P1, 2×P2, 1×P3). All accepted.
+
+1. **(P1) Once-scored rejection unresolved and named at the wrong seam.** `flattenSettingsPatch` receives only `set`+`poolType`; the callable writes after a non-transactional read (`poolOps.ts:400-466`); survivor outcomes can exist in `entries/*/weeklyResults` while the pool is lifecycle-open.
+   **Response: accepted.** Server-side rejection promoted from recommendation to **plan of record** (Phase 3 deliverable): implemented in the `updatePoolSettings` write path inside a transaction reading the pool doc; "scored" := `publishedWeeks` ∪ `scoredWeeks` non-empty (`scoredWeeks` is withheld on provisional passes — `nflPools.ts:1455-1464` — so `publishedWeeks` covers provisional); reject only a **value change** to either field. Race + provisional tests added. Kevin's open question 1 becomes a veto (accept plan of record, or switch to per-week snapshotting) rather than a design blocker.
+2. **(P2) `usedTeams` Set rewrite breaks under reuse.** Remove-current-then-re-add assumes single-use: KC in weeks 1+2, change week 1 → BUF strips KC despite the week-2 pick.
+   **Response: accepted.** When `maxTeamUses ≠ 1`: build `nextPicks` (picks with current week replaced) and derive `usedTeams = new Set(values(nextPicks))` — identical in submit and proxy. Absent/1 keeps today's rewrite byte-for-byte (legacy authority per r1 #2). Duplicate-then-replace regression test on both paths.
+3. **(P2) Week-key contract not actually normalized** — `"01"` counted instead of excluded for week 1; self-resubmit would consume a use.
+   **Response: accepted.** `countTeamUses` contract: parse integer keys, validate NFL week range (1–23 per `submitNFLPicksSchema`), compare NUMERIC value to `excludeWeek`, skip malformed keys. Tests: `"1"`, numeric access, `"01"`, decimal, nonnumeric.
+4. **(P3) Optionality not explicit in the mirrored interfaces.**
+   **Response: accepted.** Plan now names `tieCountsAs?: 'WIN' | 'LOSS'` and `maxTeamUses?: number` as optional in BOTH `src/types/nflPoolTypes.ts` and `functions/src/nflPoolTypes.ts`; defaults live at read sites only.
+
+Plan updated. Proceeding to round 3.

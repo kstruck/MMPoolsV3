@@ -17,7 +17,7 @@ Two new commissioner settings on `NFL_SURVIVOR` pools, both defaulting to today'
 ### Phase 1 — engine + schema + types (the scoring change)
 
 - `shared/schemas/nfl.ts` `survivorCreateInputSchema.settings`: add `tieCountsAs: z.enum(['WIN','LOSS']).optional()`, `maxTeamUses: z.number().int().min(0).optional()`.
-- Mirror in `src/types/nflPoolTypes.ts` `NFLSurvivorPool.settings` AND `functions/src/nflPoolTypes.ts` (the two are kept in sync by hand — ADR 0005 comment at `weeklyResults`).
+- Mirror in `src/types/nflPoolTypes.ts` `NFLSurvivorPool.settings` AND `functions/src/nflPoolTypes.ts` (kept in sync by hand — ADR 0005 comment at `weeklyResults`). Both fields are declared **optional in both interfaces** — `tieCountsAs?: 'WIN' | 'LOSS'`, `maxTeamUses?: number` — with defaults applied at read sites only (codex r2 #4); existing pool docs never carry them.
 - `functions/src/nflScoringEngine.ts` `evaluateSurvivorWeek` (~line 300): fold the tie **before** the mode branch —
   ```ts
   if (teamTied) {
@@ -36,7 +36,11 @@ Two new commissioner settings on `NFL_SURVIVOR` pools, both defaulting to today'
 
 ### Phase 2 — submit guard + client pick entry
 
-- `functions/src/nflPools.ts` `submitNFLPicks` survivor branch (~line 570): the reuse guard's authority moves from `usedTeams` membership to **counting the `picks` map** — `uses = weeks w ≠ current where picks[w] === teamPicked`; reject when `maxTeamUses > 0 && uses >= maxTeamUses`. Error text gains the limit ("You have already picked the {team} {N} times"). `usedTeams` keeps being written (Set semantics unchanged — it is display/exemption data, no longer the guard), preserving the re-submit-own-pick fix from PR #384: counting *other* weeks excludes the current week by construction, same as today's `usedElsewhere`.
+- `functions/src/nflPools.ts` `submitNFLPicks` survivor branch (~line 570): the reuse guard's authority moves from `usedTeams` membership to **counting the `picks` map** — `uses = weeks w ≠ current where picks[w] === teamPicked`; reject when `maxTeamUses > 0 && uses >= maxTeamUses`. Error text gains the limit ("You have already picked the {team} {N} times"). Re-submit-own-pick stays safe (PR #384): counting *other* weeks excludes the current week by construction.
+- **`usedTeams` write splits by setting** (codex r2 #2 — the remove-current-then-re-add Set rewrite assumes single-use; under reuse, KC picked weeks 1+2 then week 1 changed to BUF would strip KC entirely):
+  - `maxTeamUses` absent/`1`: today's rewrite, byte-for-byte.
+  - `maxTeamUses ≠ 1`: build `nextPicks` (picks with the current week's pick replaced) and derive `usedTeams = Set(values(nextPicks))` — identically in submit and proxy. Duplicate-then-replace regression test on both paths.
+- **`countTeamUses(picks, excludeWeek)` contract** (codex r2 #3): iterate `Object.entries(picks)`; parse each key as an integer; skip keys that don't parse or fall outside 1–23 (the `submitNFLPicksSchema` week range); exclude by NUMERIC equality with `excludeWeek` — so `"01"`, `"1"`, and numeric access all exclude week 1. Tests cover `"1"`, numeric keys, `"01"`, decimals, nonnumeric junk.
 - **Margin twin guard (~line 641) is explicitly NOT changed** — margin pools keep one-use-per-team. Named here so the sweep can prove the twin was considered, not missed.
 - **`proxyPick` (`functions/src/poolExceptions.ts:~409-421`) carries a THIRD reuse guard** (found by sweep S1, missed by this plan's first draft): the commissioner proxy path does its own `usedTeams.includes` check and rewrite. Both guards move to one shared helper `countTeamUses(picks, excludeWeek)` — one definition, same reasoning as the PR #384 fix quoted in the submit path.
 - `src/components/NFLPoolDashboard/SurvivorPickEntry.tsx` `usedTeams` memo: becomes a per-team use-count; a team disables at `count >= maxTeamUses` (with `0` = never disable). UI copy on the disabled chip shows uses ("2/2 used").
@@ -54,12 +58,12 @@ Two new commissioner settings on `NFL_SURVIVOR` pools, both defaulting to today'
 1. **Defaults preserve semantics with NO migration.** `tieCountsAs` absent ⇒ `'LOSS'`; `maxTeamUses` absent ⇒ `1`. Every read site uses `?? fallback`. Zero writes to existing pool docs.
 2. **Tie folded into won/lost pre-mode-branch** rather than a 2×2 settings matrix in each mode arm — one branch, composes with `pickLosersMode`, and the losers-mode meaning is derivable instead of specified case-by-case.
 3. **Guard authority moves to the `picks` map; `usedTeams` demoted to derived data.** A Set cannot represent "picked twice". Rewriting `usedTeams` as a multiset/array-with-dupes would change its meaning for every consumer at once; counting `picks` changes only the guard. `usedTeams` remains correct as "the set of teams ever picked" for display.
-4. **Mid-season setting flips are a real retroactivity hazard — for BOTH fields** (codex r1 #4): `computeSurvivorWeekUpdate` recomputes past weeks with *current* settings, so flipping `tieCountsAs` after a tied week rewrites history on rescore, and changing `maxTeamUses` can add/remove auto-survive exemptions with the same effect. UI-only gating is insufficient — the callable stays reachable and super-admin bypasses the UI. **Recommendation: server-side rejection in the settings-update path of changes to either field once the pool has any scored week**, alongside the pre-season-editable UI placement. Fallback if rejected: snapshot both values per scored week. OPEN — question 1.
+4. **Mid-season setting flips are a real retroactivity hazard — for BOTH fields** (codex r1 #4): `computeSurvivorWeekUpdate` recomputes past weeks with *current* settings, so flipping `tieCountsAs` after a tied week rewrites history on rescore, and changing `maxTeamUses` can add/remove auto-survive exemptions with the same effect. UI-only gating is insufficient — the callable stays reachable and super-admin bypasses the UI. **Plan of record (codex r2 #1, promoted from recommendation): server-side rejection is a required Phase 3 deliverable**, implemented in the `updatePoolSettings` write path inside a transaction that reads the pool doc (the current callable writes after a non-transactional read — `poolOps.ts:400-466` — and `flattenSettingsPatch` sees only `set`+`poolType`, so the check lives in the callable, not the flattener). "Scored" := `publishedWeeks ∪ scoredWeeks` non-empty — `scoredWeeks` is withheld on provisional passes (`nflPools.ts:1455-1464`), so `publishedWeeks` covers the provisional window; lifecycle status is NOT a proxy (a pool can hold scored survivor outcomes while lifecycle-open — `editability.ts:28-44`). Reject only a **value change** to either field; a same-value write passes. Race + provisional-score tests. Kevin may veto in favor of per-week snapshotting (question 1).
 5. **`0 = unlimited`** rather than a separate boolean — one field, and the wizard hint carries the convention. (Open question 2 if review objects.)
 
 ## Risks / open questions
 
-1. **OPEN — DECISION NEEDED (Kevin):** decision 4 — recommended: server rejects changes to `tieCountsAs`/`maxTeamUses` once any week is scored (plus pre-season UI placement). Alternative: snapshot values per scored week (more code, allows mid-season flips forward-only). Codex r1 judged UI-only gating insufficient; concur.
+1. **OPEN — Kevin veto point:** decision 4's plan of record is server-side once-scored rejection of changes to `tieCountsAs`/`maxTeamUses` (details in decision 4). Alternative if vetoed: snapshot values per scored week (more code; allows forward-only mid-season flips). Codex r1+r2 both judged anything weaker insufficient; concur.
 2. Any client-side duplicate of survivor evaluation (What-If simulator, sim harness scenario runners) asserting tie=strike or single-use — the sweep enumerates and updates them.
 3. Rebuy interaction: rebuys retain `usedTeams` ([nflPools.ts](functions/src/nflPools.ts) "retain previously used teams") and count `picks` regardless — reuse counting is unaffected by rebuy. Test pins this.
 4. `weekLockOverrides`-style stringified week keys: `picks` is `Record<number, string>` but Firestore keys are strings — the count must compare loosely or normalize keys (known repo pattern, see poolExceptions `String(weekNum)` fallback).
@@ -67,7 +71,7 @@ Two new commissioner settings on `NFL_SURVIVOR` pools, both defaulting to today'
 ## Out of scope
 
 - Margin-pool reuse setting; Pick'em anything.
-- Server-side season-gating of settings edits (decision 4).
+- Server-side season-gating of settings edits OTHER than the two new fields (the once-scored rejection in decision 4 covers `tieCountsAs`/`maxTeamUses` only; extending it to `maxStrikes`/`pickLosersMode` is a follow-up, not this PR).
 - The competitor's default-auto-pick, playoff extension, multi-entry (separate tasks #2–#5 + backlog).
 - Any prod data write — this ships settings that only future pool docs carry.
 
