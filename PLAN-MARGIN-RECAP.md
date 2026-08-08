@@ -84,9 +84,23 @@ watching a real week, it is an additive follow-up.
 - **The AI Commissioner trash-talk trigger** (`aiCommissioner.ts:366`) receives
   the recap document as `facts.recapData`. It already fires for Margin recaps
   today — on the empty ones — and is gated on
-  `billing.featuresUnlocked.aiCommissioner`. It will now have actual material.
-  `computeFactsHash` covers `recapData`, so a re-score that changes the sharp
-  produces a new artifact rather than reusing a stale one.
+  `billing.featuresUnlocked.aiCommissioner`. A recap written for the FIRST time
+  after this ships carries the sharp, so the AI has actual material.
+
+  ⚠️ **A RE-SCORE DOES NOT REFRESH AN ALREADY-GENERATED ARTIFACT, and this plan
+  said the opposite in its first draft.** The trigger is registered with
+  `onDocumentCreated`, not `onDocumentWritten`. A re-score `set`s the existing
+  `weekly_recaps/week_N` document, which is an UPDATE, so the trigger does not
+  fire at all — `computeFactsHash` never gets the chance to notice that
+  `recapData` changed, because nothing invokes it. Any pool that both has
+  `aiCommissioner` unlocked and already holds a trash-talk artifact built from
+  an empty Margin recap keeps that artifact after the post-deploy re-score.
+
+  **Deliberately not fixed here.** It is pre-existing and applies to every
+  re-score of every pool type, not just to this change; widening the trigger to
+  `onDocumentWritten` would fire a paid Gemini call on every corrective re-score,
+  which is a monetization decision rather than a bug fix. Recorded as a follow-up
+  (found by `codex exec review`, round 1).
 - **Scoring is idempotent**, so re-scoring a week already scored regenerates the
   recap document with the new field. That is how HOF Weekend gets a populated
   recap after this deploys.
