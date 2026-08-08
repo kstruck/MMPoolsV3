@@ -36,7 +36,7 @@
 > `{enabled:true, dryRun:true}`; `nflDeepSweep` unset. `syncNFLScoresJob` (5-min,
 > no kill switch) IS live, so score **ingestion** is automatic and **grading** is
 > not. `nflAutoScoreJob` exists and is deployed but has never run live. The flip
-> is Kevin's, and the sequence is in `PLAN-AUTOSCORE-GOLIVE.md`.
+> is Kevin's, and the numbered sequence is in `MORNING-2026-08-08.md`.
 >
 > 🔐 **The service-account key `C:\keys\gridiron-admin.json` is still ACTIVE.**
 > Revoke steps are at the end of `MORNING-2026-08-08.md`.
