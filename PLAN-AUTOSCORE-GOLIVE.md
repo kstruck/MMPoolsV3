@@ -217,10 +217,21 @@ arming. Three have:
 |---|---|
 | PR-B2 — the `nfl_rescore_queue` durable tier | ✅ shipped (`lib/rescoreQueue.ts`, `drainRescoreQueue`) |
 | PR-B′ — per-entry submission revision watermark | ✅ shipped (`lib/entryRevision.ts`, folded into the fingerprint) |
-| PR-B′ — the `extendWeekDeadline` publish guard | ✅ shipped — `extensionRefusal` → `WEEK_ALREADY_PUBLISHED` (`poolExceptions.ts:162`). No cold-start backfill is owed: `publishedWeeks` is written by **any** revealing pass including the manual button (`nflPools.ts:1455`), so weeks scored under current code already carry it |
+| PR-B′ — the `extendWeekDeadline` publish guard | ✅ shipped — `extensionRefusal` → `WEEK_ALREADY_PUBLISHED` (`poolExceptions.ts:162`) |
 | **K2 — `nflDeepSweep` live with writes** | ❌ **still UNSET, i.e. disabled** |
 
-**What the gap actually costs.** `syncNFLScoresJob` re-reads only games that
+**The cold-start backfill that prerequisite mentioned is not owed, and the reason
+is dates rather than code.** `publishedWeeks.{week}` is stamped by **any**
+revealing pass, provisional or complete, including the manual commissioner button
+(`nflPools.ts:1455`) — but only since PR-B′ deployed on 2026-07-26. A week scored
+before that would carry no marker. **No NFL 2026 week was scored before that
+date**: the season's first game was the Hall of Fame opener on 2026-08-06, and it
+was scored the following day, <!-- hof-date:ignore --> 2026-08-07. So every
+scored week in this season already carries the
+marker, and there is nothing to backfill. That reasoning stops holding if an
+older season is ever replayed through this path.
+
+**What the `nflDeepSweep` gap actually costs.** `syncNFLScoresJob` re-reads only games that
 kicked off within `HOT_WINDOW_LOOKBACK_MS` = 24h. `nflDeepScoreSweepJob`
 (`'30 11 * * *'`) is what widens that to a configurable 1–30 days and feeds
 `detectStatCorrections`, which is what enqueues rescore events. With it disabled,

@@ -525,6 +525,15 @@ describe('SCHEDULED_JOB_EXPECTATIONS matches each job’s actual cron string', (
 
   const found: Array<{ job: string; schedule: string }> = [];
   const noSchedule: string[] = [];
+  /**
+   * onSchedule() calls this scan cannot attribute to an exported job name.
+   *
+   * They must be REPORTED, not skipped. The wrapper scan above only names an
+   * anonymous job when it is ALSO unwrapped, so an anonymous-but-wrapped job
+   * would appear in neither list and would silently escape the registry check —
+   * exactly the "looks like it guards, doesn't" shape this file exists to stop.
+   */
+  const unnamed: string[] = [];
 
   for (const file of walk5(SRC5)) {
     // lib/heartbeat.ts documents onSchedule in prose and quotes cron strings in
@@ -538,7 +547,10 @@ describe('SCHEDULED_JOB_EXPECTATIONS matches each job’s actual cron string', (
       const nextCall = starts[i + 1] ?? src.length;
       const window = src.slice(start, Math.min(start + 600, nextCall));
       const job = owningJobName(src, start);
-      if (!job) return;   // reported as unwrapped by the scan above; not this test's business
+      if (!job) {
+        unnamed.push(`${relKey(SRC5, file)}@${src.slice(0, start).split(String.fromCharCode(10)).length}`);
+        return;
+      }
       // Either onSchedule('cron', handler) or onSchedule({ schedule: 'cron', … }, handler).
       const m = /schedule:\s*['"]([^'"]+)['"]/.exec(window)
         ?? /onSchedule\(\s*['"]([^'"]+)['"]/.exec(window);
@@ -593,6 +605,15 @@ describe('SCHEDULED_JOB_EXPECTATIONS matches each job’s actual cron string', (
       noSchedule.sort(),
       'this onSchedule() call has no literal schedule string within the scan ' +
         'window, so its cadence cannot be compared with the registry',
+    ).toEqual([]);
+  });
+
+  it('reports any onSchedule() it cannot attribute to an exported job name', () => {
+    expect(
+      unnamed.sort(),
+      'this onSchedule() is not preceded by `export const <name> =`, so neither ' +
+        'this scan nor the wrapper scan can name it — it would escape the ' +
+        'registry check entirely',
     ).toEqual([]);
   });
 });
