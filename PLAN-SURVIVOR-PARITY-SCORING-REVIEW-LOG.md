@@ -111,3 +111,12 @@ VERDICT: REVISE. Round-7 fixes confirmed ("correctly closes the race"). 1 new fi
    **Response: accepted, scope narrowed.** Codex proposed denying SA the whole NFL-settings write surface; this plan takes the two-field version: a rules check denying ANY client write (SA included) whose `diff().affectedKeys()` touches `settings.tieCountsAs` or `settings.maxTeamUses` — privileged edits route through the gated callable; Admin-SDK/console operational writes are documented as carrying the same invariant (rules cannot bind the Admin SDK). Emulator rules test: SA direct update of either field is DENIED. Narrowing rationale: a blanket SA lockout of NFL settings would change the SA repair surface for every other field, which is out of this plan's blast radius; the two-field deny closes the actual bypass. Deploy ordering note: callable (functions) deploys BEFORE the rules change — Rule 2.
 
 Plan updated. Proceeding to round 9.
+
+## Round 9 — codex
+
+VERDICT: REVISE. Round-8 intentions confirmed present. 1 new finding (P1) — in the fix itself. Accepted.
+
+1. **(P1) The proposed rule cannot detect nested fields as written.** Root `diff().affectedKeys()` reports only top-level `settings` — the repo documents exactly this at `firestore.rules:138` and `poolUpdate.ts:127` — so the round-8 deny would never fire and the SA bypass would stay open.
+   **Response: accepted, with codex's mechanism verbatim:** nested map diff — `request.resource.data.get('settings', {}).diff(resource.data.get('settings', {})).affectedKeys()` contains bare `tieCountsAs`/`maxTeamUses` → deny, applied OUTSIDE the super-admin disjunction. Emulator coverage: dotted update, wholesale `settings` replacement, field deletion, and an unrelated SA settings update that remains ALLOWED.
+
+Plan updated. Proceeding to round 10 (the cap).
