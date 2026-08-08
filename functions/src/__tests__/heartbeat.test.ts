@@ -539,16 +539,26 @@ describe('SCHEDULED_JOB_EXPECTATIONS matches each job’s actual cron string', (
     // lib/heartbeat.ts documents onSchedule in prose and quotes cron strings in
     // the registry's own comments; it defines no jobs.
     if (file.endsWith(path.join('lib', 'heartbeat.ts'))) continue;
-    // Comments blanked for the same reason as the wrapper scan above: prose
-    // must not be able to vouch for code.
-    const src = blankComments(fs.readFileSync(file, 'utf8'));
-    const starts = [...src.matchAll(/onSchedule\(/g)].map((m) => m.index!);
+    // Scan the BLANKED text so prose cannot vouch for code, but report line
+    // numbers from the RAW text.
+    //
+    // `blankComments` preserves byte OFFSETS — that is why the wrapper scan can
+    // share indices between the two — but it does NOT preserve line breaks: a
+    // multi-line block comment becomes one long run of spaces, so counting
+    // newlines in the blanked text undercounts by the height of every comment
+    // above the match. The wrapper scan above gets this right by slicing `src`
+    // for the line and `scanned` for the offset; the first version of this scan
+    // did not, and reported an `@line` that could be dozens off. Found by qodo
+    // on PR #396.
+    const raw = fs.readFileSync(file, 'utf8');
+    const scanned5 = blankComments(raw);
+    const starts = [...scanned5.matchAll(/onSchedule\(/g)].map((m) => m.index!);
     starts.forEach((start, i) => {
-      const nextCall = starts[i + 1] ?? src.length;
-      const window = src.slice(start, Math.min(start + 600, nextCall));
-      const job = owningJobName(src, start);
+      const nextCall = starts[i + 1] ?? scanned5.length;
+      const window = scanned5.slice(start, Math.min(start + 600, nextCall));
+      const job = owningJobName(scanned5, start);
       if (!job) {
-        unnamed.push(`${relKey(SRC5, file)}@${src.slice(0, start).split(String.fromCharCode(10)).length}`);
+        unnamed.push(`${relKey(SRC5, file)}@${raw.slice(0, start).split(String.fromCharCode(10)).length}`);
         return;
       }
       // Either onSchedule('cron', handler) or onSchedule({ schedule: 'cron', … }, handler).

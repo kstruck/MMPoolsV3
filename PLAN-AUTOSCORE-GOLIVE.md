@@ -137,7 +137,12 @@ fingerprint unchanged, a pool costs one aggregate read of its entry-revision sum
 and **zero writes** — `poolsSkipped++` and `continue`, before the lease is even
 taken. A slate with no live games ends after one windowed `nfl_games` query. The
 cost that scales is scoring work, and that only happens when something changed.
-The NFL fleet is currently **seven** preseason pools, four with entries.
+📌 **UNVERIFIED (carried, not measured by this PR):** the NFL fleet is **seven**
+preseason pools, four with entries — read from production on
+<!-- hof-date:ignore --> 2026-08-07, not re-counted here. Nothing in the cadence argument depends on the exact number;
+it would have to grow by two orders of magnitude before a 5-minute pass stopped
+being cheap, and the per-run cap (`MAX_POOLS_PER_RUN = 200`) plus the honest
+`overflow` counter is what handles that case.
 
 ⚠️ **`timeoutSeconds` moves with it, 540 → 270.** The 540 was not chosen for
 itself — its comment says it "stays inside the 10-minute cadence, so two runs
@@ -251,7 +256,8 @@ be a deliberate decision, not an oversight, and it is Kevin's to make.
 
 The emulator suite already pins the go-live behaviour; this plan cites it rather
 than restating it. `functions/src/__tests__/emulator/autoScore.emulator.test.ts`,
-**77 cases**, including:
+**77 cases** (counted 2026-08-08 by running the suite; re-run it rather than
+trusting this number), including:
 
 - `provisional Pick'em` (7) — reveal gating, live standings with no finalization
   markers, the `publishedWeeks` stamp, and the `weekLockOverride` withhold;
@@ -265,7 +271,7 @@ than restating it. `functions/src/__tests__/emulator/autoScore.emulator.test.ts`
 - `scoring lease — the mutex between scorers` (7) — §2c's idempotence claim;
 - `rescore queue` (17) — including the Survivor deferral of F1.
 
-This PR adds to `heartbeat.test.ts` (20 → 26 cases): `scheduleToMinutes` and the
+This PR adds to `heartbeat.test.ts` (20 → 27 cases, counted 2026-08-08): `scheduleToMinutes` and the
 registry-vs-cron agreement check of §3. **Mutation-checked** — restoring
 `everyMinutes: 10` under a `'*/5'` schedule fails with
 `nflAutoScoreJob: runs every 5min ('*/5 * * * *') but is registered as 10min`.
