@@ -581,9 +581,14 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                         </div>
 
                         <div className="space-y-3.5 font-body text-sm">
+                          {/* A recap document only exists after a COMPLETE scoring pass, so by
+                              the time this card renders the week is already over. The copy must
+                              NOT promise live updates — an empty recap means there was nothing to
+                              rank (nobody submitted, or no game produced a result), not that more
+                              is on the way. */}
                           {!recapHasHighlights(recap) && (
                             <p className="text-muted text-[13px]">
-                              No highlights for this week yet — results appear here as games conclude.
+                              No highlights this week — there were no results to rank.
                             </p>
                           )}
 
