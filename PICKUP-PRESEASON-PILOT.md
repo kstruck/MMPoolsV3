@@ -333,7 +333,7 @@ state. Concretely:
 
 ---
 
-## 2. Live state (deploy state verified 2026-08-03)
+## 2. Live state (deploy state verified 2026-08-08)
 
 > ⚠️ **HISTORICAL — this block records the 2026-07-28 state.** Its bundle hash is
 > long superseded; for the CURRENT live bundle see the tagged claim below, which
@@ -361,14 +361,20 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `1105392`.**
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `62ff437`.**
 Rules remain ≡ `0a705c0` — `firestore.rules` is byte-identical since, so no rules
 deploy is owed. Indexes untouched.
-⚠️ **A Coolify rebuild is OWED** for #358/#359/#348's `src/**` changes and
-#360's root lockfile — the live bundle is still `index-H9HjG31q.js` (the
-2026-08-03 build) until Kevin triggers it. Queues: functions EMPTY (certified),
-rules EMPTY, indexes EMPTY, **Coolify OWED**.
-(Deployed 2026-08-04 for **#360 + #362 + #348 + #363**. The certification is
+✅ **ALL FOUR QUEUES ARE EMPTY:** functions EMPTY (certified by an all-`Skipped`
+run), rules EMPTY, indexes EMPTY, Coolify EMPTY — the live bundle is
+`index-W6uLtMV7.js`, read off the prod HTML on 2026-08-08.
+(Deployed 2026-08-08 for **#392 + #384**, the importer hardening and the
+`TEAM_ALREADY_USED` resubmit guard / week-label change. Full fleet, then a
+second run reporting every function `Skipped (No changes detected)`. On Windows,
+set `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"` first and expect to re-run
+through 429s. Record: HANDOFF's 2026-08-08 STOP POINT box.)
+
+(HISTORICAL — the deploy before it, 2026-08-04 for **#360 + #362 + #348 + #363**
+from <!-- deploy-state:ignore --> `main` @ `1105392`. The certification is
 the THIRD run: 175 all `Skipped (No changes detected)`, 0 updates,
 `✔ Deploy complete!` — fleet grew 173 → 175 with `onSystemConfigWritten` and
 `getProdWatchdog`. Run 1 ended after 144 updates with no completion line; run
