@@ -102,3 +102,12 @@ VERDICT: REVISE. Round-6 fixes confirmed. 2 new findings (1×P1, 1×P2). All acc
    **Response: accepted.** Transition rule: a reduction to a positive limit is REJECTED when any entry's canonical `countTeamUses(picks)` exceeds it, validated by reading entries inside the same settings transaction. Tests: `0→1`, `2→1` (rejected when violated), increases always permitted.
 
 Plan updated. Proceeding to round 8.
+
+## Round 8 — codex
+
+VERDICT: REVISE. Round-7 fixes confirmed ("correctly closes the race"). 1 new finding (P1). Accepted, narrowed.
+
+1. **(P1) Once-scored gate bypassable by super-admin direct Firestore writes.** `firestore.rules:242-245` grants `isSuperAdmin()` pool updates that skip `nflSettingsWriteBlocked()` — a SA client write can flip either field post-scoring, the exact hazard the gate prevents.
+   **Response: accepted, scope narrowed.** Codex proposed denying SA the whole NFL-settings write surface; this plan takes the two-field version: a rules check denying ANY client write (SA included) whose `diff().affectedKeys()` touches `settings.tieCountsAs` or `settings.maxTeamUses` — privileged edits route through the gated callable; Admin-SDK/console operational writes are documented as carrying the same invariant (rules cannot bind the Admin SDK). Emulator rules test: SA direct update of either field is DENIED. Narrowing rationale: a blanket SA lockout of NFL settings would change the SA repair surface for every other field, which is out of this plan's blast radius; the two-field deny closes the actual bypass. Deploy ordering note: callable (functions) deploys BEFORE the rules change — Rule 2.
+
+Plan updated. Proceeding to round 9.
