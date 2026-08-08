@@ -244,7 +244,7 @@ export const SCHEDULED_JOB_EXPECTATIONS: Record<string, JobExpectation> = {
     syncNFLScoresJob: { everyMinutes: 5 },                // '*/5 * * * *'
     nflFinalizeSweepJob: { everyMinutes: 24 * 60 },       // '30 4 * * *' ET
     nflLockWatchJob: { everyMinutes: 60 },                // 'every 60 minutes'
-    nflAutoScoreJob: { everyMinutes: 10 },                // '*/10 * * * *' ET
+    nflAutoScoreJob: { everyMinutes: 5 },                 // '*/5 * * * *' ET
     // Weekly. The tolerance multiplier makes this ~3 weeks before it is called
     // stale, which is deliberate — a weekly job that ran late is not an outage,
     // and preseason is the only window where a missed run would matter.
