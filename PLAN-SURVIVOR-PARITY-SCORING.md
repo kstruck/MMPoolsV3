@@ -47,7 +47,7 @@ Two new commissioner settings on `NFL_SURVIVOR` pools, both defaulting to today'
 - **`SurvivorPickEntry.tsx:293-295` rules copy is wrong TODAY** (codex r3 #1 — it tells members ties survive in both modes; the engine strikes ties): rewrite the copy derived from `tieCountsAs × pickLosersMode`, all four combinations covered by test. Pre-existing prod defect fixed in passing; called out in the PR body.
 - **Margin twin guard (~line 641) is explicitly NOT changed** — margin pools keep one-use-per-team. Named here so the sweep can prove the twin was considered, not missed.
 - **`proxyPick` (`functions/src/poolExceptions.ts:~409-421`) carries a THIRD reuse guard** (found by sweep S1, missed by this plan's first draft): the commissioner proxy path does its own `usedTeams.includes` check and rewrite. Both guards move to one shared helper `countTeamUses(picks, excludeWeek)` — one definition, same reasoning as the PR #384 fix quoted in the submit path.
-- `src/components/NFLPoolDashboard/SurvivorPickEntry.tsx` `usedTeams` memo: becomes a per-team use-count; a team disables at `count >= maxTeamUses` (with `0` = never disable). UI copy on the disabled chip shows uses ("2/2 used").
+- `src/components/NFLPoolDashboard/SurvivorPickEntry.tsx` `usedTeams` memo carries **the same tri-mode branch as the server guards** (codex r10 #1 — the earlier wording contradicted the byte-for-byte guarantee): absent/`1` keeps today's `usedTeams` Set + current-week exclusion unchanged; `≥ 2` disables at `countTeamUses(entry.picks, week)[team] >= maxTeamUses`; `0` never disables. Count-derived "N/N used" badges stay separate from eligibility. Client regression coverage for divergent `usedTeams`/`picks` under absent and explicit `1`.
 - Client gating stays advisory; the callable is the enforcement point (standing invariant: "Server-side flag/lifecycle checks are authoritative; UI checks are UX only").
 - Tests: guard parity between `submitNFLPicks` and `proxyPick` (same team, same limit, both accept/reject identically), re-submit-own-current-week under reuse limits, string-vs-number week-key normalization through `countTeamUses`.
 
@@ -92,7 +92,7 @@ Two new commissioner settings on `NFL_SURVIVOR` pools, both defaulting to today'
 | Item | Status |
 |---|---|
 | Plan drafted | ✅ 2026-08-07 |
-| Codex adversarial review (log: PLAN-SURVIVOR-PARITY-SCORING-REVIEW-LOG.md) | PENDING |
-| Sweeps | PENDING |
-| Kevin sign-off (open question 1) | PENDING |
+| Codex adversarial review (log: PLAN-SURVIVOR-PARITY-SCORING-REVIEW-LOG.md) | ✅ 2026-08-08 — CONVERGED at the 10-round cap: 28 findings, 100% accepted, zero open |
+| Sweeps (PLAN-SURVIVOR-PARITY-SCORING-SWEEPS.md) | ✅ 2026-08-08 — S1–S4 complete; corrected 4× during review (proxyPick, simOracle, rules/README copy, fingerprint) |
+| Kevin sign-off (open question 1) | **PENDING — blocks implementation** |
 | Phase 1–3 implementation | PENDING |

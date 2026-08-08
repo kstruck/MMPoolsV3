@@ -120,3 +120,14 @@ VERDICT: REVISE. Round-8 intentions confirmed present. 1 new finding (P1) — in
    **Response: accepted, with codex's mechanism verbatim:** nested map diff — `request.resource.data.get('settings', {}).diff(resource.data.get('settings', {})).affectedKeys()` contains bare `tieCountsAs`/`maxTeamUses` → deny, applied OUTSIDE the super-admin disjunction. Emulator coverage: dotted update, wholesale `settings` replacement, field deletion, and an unrelated SA settings update that remains ALLOWED.
 
 Plan updated. Proceeding to round 10 (the cap).
+
+## Round 10 — codex (cap)
+
+VERDICT: REVISE. Round-9 fix confirmed ("correctly addresses" the diff limitation and SA disjunction). 1 new finding (P2). Accepted.
+
+1. **(P2) Phase 2's client bullet contradicted the tri-mode guarantee** — it unconditionally replaced the client memo with pick-derived counts while line 40 promised absent/`1` stays `usedTeams`-authority byte-for-byte.
+   **Response: accepted.** Client bullet now carries the identical tri-mode branch as the server guards; regression coverage for divergent `usedTeams`/`picks` at absent and explicit `1`.
+
+## Resolution status
+
+**CONVERGED (cap reached, not deadlocked).** 10 rounds, 28 findings total, 100% accepted, zero disputes. Severity trajectory: r1 4×P1 → r10 1×P2 (a plan-text consistency fix, not a design hole). Every round from r5 on confirmed the prior round's fixes had landed before finding new material. No open findings. The plan now awaits the Rule-3 step-5 gate: **Kevin's sign-off**, including open question 1 (once-scored rejection as plan of record vs per-week snapshotting).
