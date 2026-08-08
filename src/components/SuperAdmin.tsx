@@ -4251,17 +4251,6 @@ export const SuperAdmin: React.FC = () => {
                             </div>
                         </div>
 
-                        {nflImportResult && (
-                            <div className={`p-4 rounded-xl text-xs font-bold mb-6 flex gap-2 items-center ${
-                                nflImportResult.type === 'success'
-                                    ? 'bg-[#0F7B4A]/10 border border-[#0F7B4A]/25 text-[#0F7B4A]'
-                                    : 'bg-brandred-600/10 border border-brandred-600/25 text-brandred-500'
-                            }`}>
-                                {nflImportResult.type === 'success' ? <CheckCircle size={18} /> : <XCircle size={18} />}
-                                {nflImportResult.message}
-                            </div>
-                        )}
-
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             {/* Season Input */}
                             <div>
@@ -4330,12 +4319,41 @@ export const SuperAdmin: React.FC = () => {
                             <button
                                 onClick={handleImportNFLSchedule}
                                 disabled={isImportingNfl || !nflSeason}
-                                className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white font-display font-extrabold uppercase tracking-[0.05em] px-6 py-3 rounded-xl text-sm transition-all hover:-translate-y-px shadow-red-cta flex items-center gap-2 cursor-pointer"
+                                // `cursor-pointer` used to be unconditional, so a DISABLED button
+                                // still showed the hand cursor and simply did nothing when
+                                // clicked — indistinguishable from a broken one. An empty Season
+                                // Year is the reachable case.
+                                // `disabled:hover:*` neutralises the hover styles too. Without
+                                // them a disabled button still lightens and lifts under the
+                                // cursor, which reads as "this is clickable" — the same wrong
+                                // signal `cursor-pointer` was giving (qodo, PR #397).
+                                className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-brandred-600 disabled:hover:translate-y-0 text-white font-display font-extrabold uppercase tracking-[0.05em] px-6 py-3 rounded-xl text-sm transition-all hover:-translate-y-px shadow-red-cta flex items-center gap-2 cursor-pointer"
                             >
                                 <RefreshCw size={16} className={isImportingNfl ? 'animate-spin' : ''} />
                                 {isImportingNfl ? 'Seeding games...' : 'Bulk Import ESPN NFL Schedule'}
                             </button>
                         </div>
+
+                        {/* The outcome banner lives BELOW the button, not above the form.
+                            It used to render at the top of the card, so on a short window the
+                            success or failure of a click at the bottom of a three-column form
+                            appeared off-screen — which is one way an import that really ran, or
+                            really failed, reads as a button that did nothing. */}
+                        {!nflSeason && (
+                            <p className="mt-4 text-right text-xs font-bold text-brandred-500">
+                                Enter a Season Year — the import button is disabled without one.
+                            </p>
+                        )}
+                        {nflImportResult && (
+                            <div className={`p-4 rounded-xl text-xs font-bold mt-4 flex gap-2 items-center ${
+                                nflImportResult.type === 'success'
+                                    ? 'bg-[#0F7B4A]/10 border border-[#0F7B4A]/25 text-[#0F7B4A]'
+                                    : 'bg-brandred-600/10 border border-brandred-600/25 text-brandred-500'
+                            }`}>
+                                {nflImportResult.type === 'success' ? <CheckCircle size={18} /> : <XCircle size={18} />}
+                                {nflImportResult.message}
+                            </div>
+                        )}
                     </div>
 
                     {/* NFL Spread Override */}
