@@ -1,6 +1,53 @@
-# HANDOFF — Session entry point (updated <!-- hof-date:ignore --> 2026-08-07: 🏈 **The HOF game has been PLAYED.** ⏳ **TWO PRs ARE READY TO MERGE AND OWE ONE FUNCTIONS DEPLOY — #392 and #384** — after which the week-1 data repair can run. Functions still deployed from `1105392`, rules still ≡ `0a705c0`; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle is `index-W6uLtMV7.js`** — the 2026-08-06 box below names an older one and is superseded. Full runbook: `MORNING-2026-08-07.md`.)
+# HANDOFF — Session entry point (updated <!-- hof-date:ignore --> 2026-08-08: ✅ **#392 AND #384 ARE MERGED AND DEPLOYED, AND THE WEEK-1 DATA REPAIR IS DONE AND VERIFIED.** Functions deployed from `62ff437`, rules still ≡ `0a705c0`; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle is `index-W6uLtMV7.js`** and nothing is owed on Coolify. 🛑 **AUTOMATED SCORING IS STILL OFF — that is the launch blocker.** Full runbook: `MORNING-2026-08-08.md`.)
 
-> ## ⏳ STOP POINT <!-- hof-date:ignore --> **2026-08-07** — **FUNCTIONS DEPLOY OWED (#392 + #384), THEN A DATA REPAIR**; functions unchanged at `1105392`
+> ## ✅ STOP POINT <!-- hof-date:ignore --> **2026-08-08** — **BACKEND QUEUE EMPTY, DATA REPAIR DONE, HOF WEEKEND SCORED**; functions now at `62ff437`
+>
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `62ff437`.**
+> **Rules remain ≡ `0a705c0`** — `firestore.rules` is byte-identical since, so no
+> rules deploy is owed.
+>
+> ✅ **THE BACKEND QUEUE IS EMPTY.** #392 (importer hardening — file games by
+> ESPN's week, stop a partial import deleting a whole season type) and #384
+> (`TEAM_ALREADY_USED` resubmit guard + scoring speaks in week LABELS) are both
+> merged and both shipped in one full-fleet functions deploy. Certified by a
+> follow-up deploy that reported every function **Skipped** — i.e. the deployed
+> code is byte-identical to `62ff437`, not merely "the command said complete".
+>
+> ⚠️ **WINDOWS DEPLOY GOTCHA, now proven twice.** Set
+> `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"` before `npx firebase deploy`, expect
+> HTTP 429s partway through the fleet, and re-run the same command until it ends
+> in `Deploy complete!`. Then re-run once more and confirm an all-`Skipped` pass.
+> The re-runs are safe: deploying an unchanged function is a no-op.
+>
+> ✅ **THE WEEK-1 DATA DEFECT IS REPAIRED AND THE REPAIR IS VERIFIED.** After the
+> fix, `nfl_games` season 2026 / seasonType 1 reads **week1=1** (only
+> `espn_401873271`, CAR@ARI, `FINAL`), **week2=16, week3=16, week4=16**, and
+> `espn_401873271.spread` is intact at `locked=true value=-1.5`. It was applied
+> with `.claude/skills/mmp-diagnostics-and-tooling/scripts/restamp-preseason-weeks.mjs`
+> (dry-run first, then `--apply`; 6 documents, `week` field only) — **not** with
+> the importer. That script now lives in git and REFUSES to re-run, by design.
+>
+> ✅ **HOF Weekend is scored** — done manually via the commissioner Score & Recap
+> button on the four pools that have entries. Scoring is idempotent, so a re-score
+> after any scoring deploy is safe and is how a regenerated recap doc is obtained.
+>
+> 🛑 **AUTO-SCORING IS STILL OFF, AND THAT IS THE LAUNCH BLOCKER.**
+> `system/config.nflAutoScore` is unset; `nflFinalize` and `nflSpreadLock` are
+> `{enabled:true, dryRun:true}`; `nflDeepSweep` unset. `syncNFLScoresJob` (5-min,
+> no kill switch) IS live, so score **ingestion** is automatic and **grading** is
+> not. `nflAutoScoreJob` exists and is deployed but has never run live. The flip
+> is Kevin's, and the sequence is in `PLAN-AUTOSCORE-GOLIVE.md`.
+>
+> 🔐 **The service-account key `C:\keys\gridiron-admin.json` is still ACTIVE.**
+> Revoke steps are at the end of `MORNING-2026-08-08.md`.
+>
+> 🟢 **Dependency audit is clean at `--audit-level=high` in BOTH trees.** The
+> nanoid advisory GHSA-2v37-7h3g-55p8 (HIGH, dev-only in both trees) is closed by
+> a lockfile-only bump 3.3.16 → 3.3.18. The remaining moderates are accepted, same
+> as #390: root `@opentelemetry/core` (via `firebase-tools`) and functions
+> `ts-deepmerge` (via `firebase-functions-test`) each need a breaking major.
+
+> ## ⚠️ SUPERSEDED — STOP POINT <!-- hof-date:ignore --> **2026-08-07** — **FUNCTIONS DEPLOY OWED (#392 + #384), THEN A DATA REPAIR**; functions unchanged at `1105392`
 >
 > 📌 **THE LIVE BUNDLE IS `index-W6uLtMV7.js`.** The 2026-08-06 box below states
 > `index-C9jX7I-m.js`, which was true when Kevin ran the chunk-graph crawl and
@@ -146,7 +193,9 @@
 > claim leaves two live-looking claims and the reader takes whichever they
 > reach first — the lesson #343 recorded and this box kept re-learning.
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `1105392`.**
+> **Functions were deployed from <!-- deploy-state:ignore --> `main` @ `1105392`.**
+> ⚠️ **HISTORICAL — superseded by the 2026-08-08 box at the top of this file,
+> which moved the live claim to `62ff437`.**
 > **Rules remain ≡ `0a705c0`** — `firestore.rules` is byte-identical since, so no
 > rules deploy is owed.
 >
