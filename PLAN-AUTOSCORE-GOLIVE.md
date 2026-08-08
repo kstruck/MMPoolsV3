@@ -191,10 +191,16 @@ Watch the first three runs, then one full slate.
 What good looks like:
 
 - `detail.dryRun: false`, `detail.poolsScored` > 0 on a live slate;
-- `pools/{id}/standings/current` gains a fresh `lastScoredAt` within ~10 minutes
-  of a game going FINAL;
-- `pools/{id}` gains `autoScore.fingerprintByWeek.{week}` — the proof a live pass
+- `pools/{id}/standings/current` — its **`updatedAt`** moves and its `rows`
+  reflect the new result, within ~10 minutes of a game going FINAL;
+- `pools/{id}` gains a fresh **`lastScoredAt`** and
+  `autoScore.fingerprintByWeek.{week}` — the fingerprint is the proof a live pass
   banked its work;
+  ⚠️ `lastScoredAt` lives on the **pool document**, not on `standings/current`.
+  This plan said otherwise when it merged in #396; the standings doc carries
+  `updatedAt`, and `nflPools.ts:1467-1470` writes `lastScoredAt` in the fenced
+  pool-document half of the same transaction. Corrected here rather than left to
+  send an operator hunting for a field that does not exist;
 - `detail.poolsFailed` = 0, `detail.overflow` = 0.
 
 **Rollback is one config write** at any point: set

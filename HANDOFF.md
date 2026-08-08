@@ -1,8 +1,50 @@
-# HANDOFF — Session entry point (updated <!-- hof-date:ignore --> 2026-08-08: ✅ **#392 AND #384 ARE MERGED AND DEPLOYED, AND THE WEEK-1 DATA REPAIR IS DONE AND VERIFIED.** Functions deployed from `62ff437`, rules still ≡ `0a705c0`; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. **The live bundle is `index-W6uLtMV7.js`** and nothing is owed on Coolify. 🛑 **AUTOMATED SCORING IS STILL OFF — that is the launch blocker.** Full runbook: `MORNING-2026-08-08.md`.)
+# HANDOFF — Session entry point (updated <!-- hof-date:ignore --> 2026-08-08 (late): ⏳ **ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED** — #395 (Margin recap) and #396 (5-minute scoring cadence) are merged but NOT deployed; #395 and #397 also change `src/**`. Functions still deployed from `62ff437`, rules still ≡ `0a705c0`; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. 🛑 **AUTOMATED SCORING IS STILL OFF — that is the launch blocker, and `PLAN-AUTOSCORE-GOLIVE.md` is now the plan for clearing it.** Full runbook: `MORNING-2026-08-08.md`.)
 
-> ## ✅ STOP POINT <!-- hof-date:ignore --> **2026-08-08** — **BACKEND QUEUE EMPTY, DATA REPAIR DONE, HOF WEEKEND SCORED**; functions now at `62ff437`
+> ## ⏳ STOP POINT <!-- hof-date:ignore --> **2026-08-08 (late)** — **FUNCTIONS DEPLOY + COOLIFY REBUILD OWED, THEN THE AUTO-SCORING FLIP**; functions unchanged at `62ff437`
 >
 > **Functions are deployed from <!-- deploy-state:current --> `main` @ `62ff437`.**
+> **`origin/main` is AHEAD of that** by the four PRs below. The deployed SHA is
+> the only one stated here; for the other, run **`git fetch origin` and then**
+> `git rev-parse origin/main` — the fetch is not optional, because every worktree
+> shares one `origin/main` ref and it is routinely stale (CLAUDE.md §2c). Reading
+> it without fetching is how a deploy-state conclusion goes wrong.
+>
+> 🛑 **THE BACKEND QUEUE IS NOT EMPTY.** Four PRs merged overnight and two of
+> them are `functions/`-coupled:
+>
+> | PR | what | deploy owed |
+> |---|---|---|
+> | #394 | nanoid patch + doc state + the restamp script | none |
+> | #395 | the Margin weekly recap was an empty document | **functions + Coolify** |
+> | #396 | scoring cadence `'*/10'` → `'*/5'`, heartbeat-registry guard | **functions** |
+> | #397 | import-button observability (correlation ids, UI) | **Coolify** |
+>
+> They ship in **ONE functions deploy** and **ONE Coolify rebuild**. **No rules
+> deploy** — `firestore.rules` is untouched by all four.
+>
+> ⚠️ **The live bundle is `index-W6uLtMV7.js`** (read off production 00:23 MT).
+> #395 and #397 both change `src/**`, so unlike the previous box, a rebuild IS
+> owed and the hash must move.
+>
+> ⚠️ **Windows deploy gotcha, now proven twice.** Set
+> `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"` before `npx firebase deploy`, expect
+> HTTP 429s partway through the fleet, and re-run the same command until it ends
+> in `Deploy complete!`. Then re-run once more and confirm an all-`Skipped` pass.
+>
+> 🐞 **HOF Weekend's Margin recap needs a RE-SCORE after the deploy.** Its recap
+> document was written by the old code and holds no content fields, which is why
+> the card renders empty. Scoring is idempotent and the scorer REPLACES the recap
+> document, so one press of `Score & Recap HOF Weekend` on pool
+> `2mv4pKI734hHeQHzQVTP` regenerates it. Steps in `MORNING-2026-08-08.md` Task 4.
+>
+> ⛔ **`system/config.nflDeepSweep` is still unset**, and it is the one remaining
+> item from the 2026-07-25 arming prerequisites. With it off, a game that reaches
+> FINAL or is corrected more than 24h after kickoff is never re-read from ESPN.
+> Kevin's decision — `PLAN-AUTOSCORE-GOLIVE.md` §5.
+
+> ## ⚠️ SUPERSEDED — STOP POINT <!-- hof-date:ignore --> **2026-08-08** — **BACKEND QUEUE EMPTY, DATA REPAIR DONE, HOF WEEKEND SCORED**; functions at `62ff437`
+>
+> **Functions were deployed from <!-- deploy-state:ignore --> `main` @ `62ff437`.**
 > **Rules remain ≡ `0a705c0`** — `firestore.rules` is byte-identical since, so no
 > rules deploy is owed.
 >

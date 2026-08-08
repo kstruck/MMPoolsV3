@@ -169,6 +169,27 @@ all-`Skipped` run.
 
 ## 6. The data repair, AFTER the deploy — GATED ON KEVIN
 
+> ## ✅ DONE — <!-- hof-date:ignore --> 2026-08-07, and NOT the way this section says
+>
+> **The repair was executed with
+> `.claude/skills/mmp-diagnostics-and-tooling/scripts/restamp-preseason-weeks.mjs`,
+> not with the importer** — dry run first, then `--apply`, rewriting the `week`
+> field on exactly six documents by id and touching nothing else. The smaller
+> instrument for the same outcome; the script's own header explains why.
+>
+> **Verified after:** `nfl_games` 2026 / seasonType 1 is week1=1
+> (`espn_401873271` CAR@ARI, `FINAL`), week2=16, week3=16, week4=16, and
+> `espn_401873271.spread` is `locked=true value=-1.5` — i.e. exactly the
+> "Expected after" this section states.
+>
+> ⚠️ **AND THE INSTRUCTION BELOW CANNOT BE FOLLOWED AS WRITTEN.** It says to run
+> one import for "weeks 1 and 2". **There is no multi-week selector.** Read off
+> the rendered JSX (`SuperAdmin.tsx`, Weeks Filter), the control offers exactly
+> **"All 18 Weeks (Regular)"** or **"Specific Week Only"** — all eighteen, or one.
+> An arbitrary pair would have to be two separate runs. Left in place because the
+> reasoning about *what* the import does is still correct and worth keeping; only
+> the "in one run" part is wrong.
+
 Deploying alone fixes nothing already stored. The six mis-filed games stay in week
 1 until an import rewrites them.
 
