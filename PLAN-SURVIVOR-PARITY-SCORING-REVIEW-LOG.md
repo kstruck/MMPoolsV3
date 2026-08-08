@@ -52,3 +52,18 @@ VERDICT: REVISE. Confirmed all 4 round-2 fixes landed. 4 new findings (3×P2, 1�
    **Response: accepted.** Client eligibility uses `countTeamUses(entry.picks, week)` (current week excluded, matching server); inclusive count only for the "N/N used" badge.
 
 Plan and sweeps updated. Proceeding to round 4.
+
+## Round 4 — codex
+
+(Operational note: the first round-4 run was chained after a git commit in one background command and hung for 3.5h with no output; killed, re-run standalone foreground, completed in minutes. Codex runs are standalone from here on.)
+
+VERDICT: REVISE. Round-3 fixes confirmed. 3 new findings (1×P1, 2×P2). All accepted.
+
+1. **(P1) Legacy-divergence protection must extend to ALL guards, not just the exemption.** The plan moved submit/proxy/client eligibility unconditionally to `picks` counting while keeping `usedTeams` authority only for the exemption at absent/1 — inconsistent, and an entry whose `usedTeams` diverges from `picks` would change submit behavior on a default pool.
+   **Response: accepted.** The tri-mode split now governs EVERY reuse decision point: at `maxTeamUses` absent/`1`, submit guard, proxy guard, client gating, exemption, and the `usedTeams` write are all today's `usedTeams`-authority code byte-for-byte; `countTeamUses` is consulted only when `maxTeamUses ≠ 1`. Regression tests where `usedTeams` and `picks` disagree, for absent and explicit `1`.
+2. **(P2) Duplicate logical weeks (`"1"` + `"01"`) would consume two uses.** Entry iteration counts spellings, not weeks.
+   **Response: accepted.** `countTeamUses` builds a `Map<weekNumber, team>` first (canonical spelling `String(week)` wins a collision; otherwise first seen), then counts map entries — one use per logical week by construction. Test `"1"`+`"01"` same team (1 use) and different teams (collision rule pinned).
+3. **(P2) Docs/rules surfaces missed by sweeps:** `docs/NFL_POOLS_README.md:12,30,52-59` asserts tie=strike + single-use; `NFLPoolRules.tsx:224` says a team can never be selected twice.
+   **Response: accepted.** Both added to S1/S2 and Phase 3: Rules page renders effective settings (tie outcome, reuse limit incl. unlimited); README documents the new settings and their defaults.
+
+Plan and sweeps updated. Proceeding to round 5.
