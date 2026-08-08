@@ -5,6 +5,7 @@ import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target
 import { dbService } from '../../services/dbService';
 import type { User, Pool, NFLGame, WeeklyRecap } from '../../types';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
+import { formatSharpScore, recapHasHighlights } from '../../utils/recapHighlight';
 import { CountdownTo } from '../common/CountdownTo';
 
 // Lazy load or import sub-views (we will create them next!)
@@ -580,11 +581,17 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                         </div>
 
                         <div className="space-y-3.5 font-body text-sm">
+                          {!recapHasHighlights(recap) && (
+                            <p className="text-muted text-[13px]">
+                              No highlights for this week yet — results appear here as games conclude.
+                            </p>
+                          )}
+
                           {recap.sharpOfWeek && (
                             <div className="flex justify-between items-center border-b border-line pb-2">
                               <span className="text-muted font-bold flex items-center gap-1.5"><Target size={13} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> Sharp of the Week:</span>
                               <span className="text-[color:var(--text)] font-display font-bold num">
-                                {recap.sharpOfWeek.userName} ({recap.sharpOfWeek.score} pts)
+                                {recap.sharpOfWeek.userName} ({formatSharpScore(pool.type, recap.sharpOfWeek.score)})
                               </span>
                             </div>
                           )}

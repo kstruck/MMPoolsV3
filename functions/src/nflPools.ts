@@ -1361,6 +1361,22 @@ async function scoreWeekPass(
         resultsVersion: (((entry as any).resultsVersion) || 0) + 1
       });
       marginScored++;
+
+      // Sharp of the week — the largest margin of victory anyone posted.
+      //
+      // ONLY entries that actually submitted a pick are eligible. `weekScore` is
+      // also -14 for a no-show, and a week where everyone forgot would otherwise
+      // crown the least-punished absentee "Sharp of the Week". A member who
+      // picked and lost by 3 is genuinely the sharpest of a bad week; a member
+      // who did not play is not in the running at all.
+      //
+      // Without this the Margin recap doc carried nothing but id/poolId/week/
+      // createdAt — `sharpUser` was computed only in the PICK'EM branch and
+      // `attritionCount` only for NFL_SURVIVOR — so `buildWeeklyRecap` emitted a
+      // recap with no fields and the client rendered an empty card.
+      if (pick && (!sharpUser || weekScore > sharpUser.val)) {
+        sharpUser = { uid: entry.ownerUid, name: entry.userName, val: weekScore };
+      }
     }
   }
 
