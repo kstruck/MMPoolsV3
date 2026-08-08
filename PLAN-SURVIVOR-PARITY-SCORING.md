@@ -68,7 +68,7 @@ Two new commissioner settings on `NFL_SURVIVOR` pools, both defaulting to today'
 
 ## Risks / open questions
 
-1. **OPEN — Kevin veto point:** decision 4's plan of record is server-side once-scored rejection of changes to `tieCountsAs`/`maxTeamUses` (details in decision 4). Alternative if vetoed: snapshot values per scored week (more code; allows forward-only mid-season flips). Codex r1+r2 both judged anything weaker insufficient; concur.
+1. **RESOLVED 2026-08-08 (Kevin): reject once scored.** Server-side once-scored rejection of changes to `tieCountsAs`/`maxTeamUses` is confirmed as plan of record (details in decision 4). Snapshotting alternative declined. No open questions remain.
 2. Any client-side duplicate of survivor evaluation (What-If simulator, sim harness scenario runners) asserting tie=strike or single-use — the sweep enumerates and updates them.
 3. Rebuy interaction: rebuys retain `usedTeams` ([nflPools.ts](functions/src/nflPools.ts) "retain previously used teams") and count `picks` regardless — reuse counting is unaffected by rebuy. Test pins this.
 4. `weekLockOverrides`-style stringified week keys: `picks` is `Record<number, string>` but Firestore keys are strings — the count must compare loosely or normalize keys (known repo pattern, see poolExceptions `String(weekNum)` fallback).
@@ -94,5 +94,5 @@ Two new commissioner settings on `NFL_SURVIVOR` pools, both defaulting to today'
 | Plan drafted | ✅ 2026-08-07 |
 | Codex adversarial review (log: PLAN-SURVIVOR-PARITY-SCORING-REVIEW-LOG.md) | ✅ 2026-08-08 — CONVERGED at the 10-round cap: 28 findings, 100% accepted, zero open |
 | Sweeps (PLAN-SURVIVOR-PARITY-SCORING-SWEEPS.md) | ✅ 2026-08-08 — S1–S4 complete; corrected 4× during review (proxyPick, simOracle, rules/README copy, fingerprint) |
-| Kevin sign-off (open question 1) | **PENDING — blocks implementation** |
-| Phase 1–3 implementation | PENDING |
+| Kevin sign-off (open question 1) | ✅ 2026-08-08 — question 1 resolved: reject once scored. Implementation to run in a dedicated follow-up session |
+| Phase 1–3 implementation | PENDING — next session |
