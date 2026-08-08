@@ -1458,8 +1458,12 @@ export const dbService = {
 
     scoreNFLWeek: async (poolId: string, week: number): Promise<{ message: string }> => {
         try {
-            const scoreNFLWeekFn = httpsCallable<{ poolId: string; week: number }, { success: boolean; message: string }>(functions, 'scoreNFLWeek');
-            const result = await scoreNFLWeekFn({ poolId, week });
+            // Correlation id: this is the commissioner's manual Score & Recap
+            // button, i.e. the documented FALLBACK for automated scoring. When it
+            // is used, something has already gone sideways, so a call that leaves
+            // no trace is exactly the wrong time to have no trace.
+            const scoreNFLWeekFn = httpsCallable<Record<string, unknown>, { success: boolean; message: string }>(functions, 'scoreNFLWeek');
+            const result = await scoreNFLWeekFn(withCorrelationId({ poolId, week }));
             return { message: result.data.message };
         } catch (error) {
             await errorHandler.handleError(error, {
@@ -1555,10 +1559,21 @@ export const dbService = {
         }
     },
 
+    // withCorrelationId, added 2026-08-08. Kevin ran this import from SuperAdmin
+    // on 2026-08-07 and reported it as a silent no-op with "ZERO invocation logs".
+    // Without a correlation id, `validated()` emits NOTHING for a call it accepts
+    // and NOTHING for one it rejects at the auth/role/schema gate — its
+    // start/ok/error logging is entirely conditional on this key
+    // (functions/src/lib/validated.ts). So an absent log was never evidence the
+    // click failed to land; it is what a SUCCESSFUL call looks like too. Now the
+    // question is answerable: `[correlation] importNFLSchedule start` proves
+    // arrival, and `… error` carries the reason.
+    // Safe on a strictObject schema — validated() strips the key before zod sees
+    // it, which is why 29 other callables here already do this.
     importNFLSchedule: async (data: { season: string; seasonType: number; weeks?: number[] }): Promise<{ success: boolean; importedCount: number }> => {
         try {
-            const importNFLScheduleFn = httpsCallable<{ season: string; seasonType: number; weeks?: number[] }, { success: boolean; importedCount: number }>(functions, 'importNFLSchedule');
-            const result = await importNFLScheduleFn(data);
+            const importNFLScheduleFn = httpsCallable<Record<string, unknown>, { success: boolean; importedCount: number }>(functions, 'importNFLSchedule');
+            const result = await importNFLScheduleFn(withCorrelationId(data as unknown as Record<string, unknown>));
             return result.data;
         } catch (error) {
             await errorHandler.handleError(error, {
