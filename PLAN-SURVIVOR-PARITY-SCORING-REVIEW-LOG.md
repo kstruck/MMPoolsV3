@@ -67,3 +67,16 @@ VERDICT: REVISE. Round-3 fixes confirmed. 3 new findings (1×P1, 2×P2). All acc
    **Response: accepted.** Both added to S1/S2 and Phase 3: Rules page renders effective settings (tie outcome, reuse limit incl. unlimited); README documents the new settings and their defaults.
 
 Plan and sweeps updated. Proceeding to round 5.
+
+## Round 5 — codex
+
+VERDICT: REVISE. Round-4 fixes confirmed. 3 new findings (2×P1, 1×P2). All accepted.
+
+1. **(P1) Once-scored gate misses legacy scoring evidence and treats `false` markers as scored.** Legacy pools carry `scoredThroughWeek` (`publishedWeeks.ts:34,50`); marker maps can hold `false` = unscored (`rescoreQueue.test.ts:145`).
+   **Response: accepted.** "Scored" := any **true** `publishedWeeks` marker OR `legacyPublishedWeeks(pool).length > 0` (covers true `scoredWeeks` + legacy `scoredThroughWeek`). Legacy-high-water and false-marker tests added.
+2. **(P1) Effective-value comparison undefined for PARTIAL settings updates.** `flattenSettingsPatch` applies only present keys; a scored pool with `tieCountsAs:'WIN'` saving `{settings:{maxStrikes:2}}` would falsely compare omitted `tieCountsAs` as `'LOSS'` and reject an unrelated save.
+   **Response: accepted.** The gate evaluates each new field **only when that property is present in the incoming patch**; then compares normalized effective values. Partial-unrelated-save test on a scored non-default pool.
+3. **(P2) More copy/comment surfaces asserting tie=strike or never-reuse:** `HowItWorksPage.tsx:98-104`, `simOracle.ts:14-18` contract comments (both mirrors), `NFL_POOLS_README.md:104`, `nflScoringEngine.ts:27` header, `CreatePoolSelection.tsx:133` marketing copy.
+   **Response: accepted.** All added to S2 as default-vs-configurable copy updates; marketing copy qualified as "default rule".
+
+Plan and sweeps updated. Proceeding to round 6.

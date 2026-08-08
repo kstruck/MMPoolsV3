@@ -35,7 +35,11 @@ Command: `grep -rn 'teamTied|tie counts|tied' --include=*.ts --include=*.tsx src
 | `shared/simOracle.ts:96-117` (+ `functions/src/shared/simOracle.ts` mirror) | **YES** — extend oracle with `tieCountsAs`, keep it independent of the engine |
 | `src/components/NFLPoolDashboard/SurvivorPickEntry.tsx:293-295` (rules copy) | **YES — CORRECTED r3 #1** (second S2 miss): copy claims ties survive in both modes — wrong against today's engine, wrong for half the new matrix. Derive from `tieCountsAs × pickLosersMode` |
 | `src/components/NFLPoolDashboard/NFLPoolRules.tsx:224` (Rules page) | **YES — CORRECTED r4 #3** (third S2 miss): states a team can never be selected twice; must render effective reuse limit + tie outcome |
-| `docs/NFL_POOLS_README.md:12,30,52-59` | **YES — CORRECTED r4 #3**: asserts tie=strike + single-use; document the new settings and defaults |
+| `docs/NFL_POOLS_README.md:12,30,52-59,104` | **YES — CORRECTED r4 #3 + r5 #3**: asserts tie=strike + single-use; document the new settings and defaults |
+| `src/components/HowItWorksPage.tsx:98-104` | **YES — CORRECTED r5 #3**: tie=strike and "never" reuse copy → default-vs-configurable |
+| `shared/simOracle.ts:14-18` contract comments (+ `functions/src/shared` mirror) | **YES — CORRECTED r5 #3**: comment asserts tie=strike unconditionally |
+| `functions/src/nflScoringEngine.ts:27` header comment | **YES — CORRECTED r5 #3**: "tie is always a strike" → notes the setting |
+| `src/components/CreatePoolSelection.tsx:133` marketing copy | **YES — CORRECTED r5 #3**: qualify as the default rule |
 
 Other matches are bracket tiebreakers or prose. Lesson: grep by semantics-bearing identifiers (`teamTied`, `strike`), not prose words — the oracle's tie logic doesn't say "tied".
 
