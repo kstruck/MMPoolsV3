@@ -104,6 +104,24 @@ Because Margin pools often result in similar total scores, a strict 5-level casc
    every Pick'em entry and as a TIE for Survivor, and a tie is a strike. The game
    is marked so its slate keeps being re-fetched, and the condition is reported as
    a DEGRADED score-sync heartbeat until the feed delivers.
+8. **What the weekly recap holds, per pool type.** A `weekly_recaps/week_N`
+   document is written **only by a COMPLETE (non-provisional) pass**, so it never
+   appears mid-week, and it carries only the fields that apply:
+
+   | pool type | recap contents |
+   |---|---|
+   | Pick'em | `sharpOfWeek` — the highest weekly POINT total; plus `closestTiebreaker` when the MNF tiebreaker resolved |
+   | Margin | `sharpOfWeek` — the largest MARGIN OF VICTORY, among entries that actually submitted |
+   | Survivor | `attritionCount` — how many entries are still alive |
+
+   `sharpOfWeek.score` therefore means different things in different pool types
+   — points in Pick'em, a signed margin in Margin — and the client formats it
+   per type (`src/utils/recapHighlight.ts`). A Margin **no-show scores −14**,
+   which is a larger number than any loss by more than two touchdowns, so
+   non-submitters are excluded from the sharp calculation entirely; otherwise a
+   week everybody forgot would crown the least-punished absentee. A recap with
+   none of these fields is legitimate — a Margin week nobody entered — and the
+   card says so rather than rendering empty.
 
 ---
 

@@ -390,6 +390,110 @@ describe('provisional Margin — the -14 is due at the lock, not at the pass', (
   });
 });
 
+// ---------------------------------------------------------------------------
+// The Margin weekly recap. Reported by Kevin 2026-08-07: the recap card renders
+// its header and then nothing at all on a Margin pool.
+//
+// Cause: `sharpUser` was computed ONLY in the Pick'em branch of scoreWeekPass,
+// and `buildWeeklyRecap` adds `attritionCount` only for NFL_SURVIVOR — so a
+// Margin recap document held id/poolId/week/createdAt and no content field, and
+// the client had nothing to render.
+//
+// Emulator rather than unit, for the same reason as everything else in this
+// file: the claim is about what is PERSISTED into `weekly_recaps`, and a test on
+// buildWeeklyRecap's return value passes against a scorer that never calls it
+// with a sharp user.
+// ---------------------------------------------------------------------------
+
+describe('Margin weekly recap — sharp of the week', () => {
+  const poolId = 'p-margin-recap';
+  const NOPICK = 'mr-nopick';
+  const BIG = 'mr-big';
+  const SMALL = 'mr-small';
+
+  const recapDoc = async () =>
+    (await db.collection('pools').doc(poolId).collection('weekly_recaps').doc('week_1').get()).data();
+
+  /**
+   * Two finished games, so two pickers can post genuinely different margins.
+   * `laterWeekGame()` keeps the season open — see its comment; without it the
+   * pool finalizes on this pass and later assertions run against a terminal pool.
+   */
+  async function setup(picks: Record<string, string | undefined>) {
+    await wipe();
+    await seedGames([
+      gameDoc('mr-g1', { status: 'FINAL', scores: { home: 30, away: 10 } }),                        // KC by 20
+      gameDoc('mr-g2', { homeTeam: T('SF'), awayTeam: T('DAL'), scores: { home: 24, away: 21 } }), // SF by 3
+      laterWeekGame(),
+    ]);
+    await seedPool(poolId, 'NFL_MARGIN', { lockBufferMinutes: 5 });
+    for (const [uid, pick] of Object.entries(picks)) {
+      await seedEntry(poolId, uid, {
+        picks: pick ? { 1: pick } : {}, usedTeams: pick ? [pick] : [],
+        weeklyScores: {}, seasonTotal: 0, negativeBurden: 0, positiveWeeks: 0, bestWeek: 0,
+      });
+    }
+  }
+
+  /** A COMPLETE pass — a provisional one deliberately writes no recap at all. */
+  const scoreComplete = async () => scoreNFLWeekInternal(db, poolId, 1, {
+    pool: await poolDoc(poolId), games: await loadSlate(), actor: SYSTEM_ACTOR,
+  });
+
+  it('writes a recap with the LARGEST margin as sharp of the week', async () => {
+    await setup({ [BIG]: 'KC', [SMALL]: 'SF' });
+    await scoreComplete();
+
+    expect(await recapDoc()).toMatchObject({
+      sharpOfWeek: { userId: BIG, userName: BIG, score: 20 },
+    });
+  });
+
+  // The regression itself, stated as its own assertion so it fails loudly rather
+  // than as a confusing `toMatchObject` diff if the branch is removed again.
+  it('the recap is no longer content-free', async () => {
+    await setup({ [BIG]: 'KC', [SMALL]: 'SF' });
+    await scoreComplete();
+
+    const recap = await recapDoc()!;
+    expect(Object.keys(recap!).sort()).not.toEqual(['createdAt', 'id', 'poolId', 'week']);
+    expect(recap!.sharpOfWeek).toBeTruthy();
+  });
+
+  // A no-show scores -14, which is a LARGER number than a heavy loss. Crowning
+  // the least-punished absentee "sharp of the week" is the failure mode the
+  // `pick &&` guard exists for, so the picked team here must lose by MORE than
+  // 14 — otherwise the guard could be deleted and this test would still pass on
+  // the arithmetic alone. (Measured: with `-3` it did.)
+  it('never crowns a member who did not submit a pick', async () => {
+    await setup({ [NOPICK]: undefined, [SMALL]: 'BUF' });   // BUF lost by 20 → -20, WORSE than -14
+    await scoreComplete();
+
+    expect(await recapDoc()).toMatchObject({
+      sharpOfWeek: { userId: SMALL, score: -20 },
+    });
+  });
+
+  // The other half of the guard: with EVERY entry a no-show there is no eligible
+  // sharp at all, so the recap must carry no `sharpOfWeek` rather than a -14 one.
+  it('leaves sharpOfWeek unset when nobody submitted', async () => {
+    await setup({ [NOPICK]: undefined, [BIG]: undefined });
+    await scoreComplete();
+
+    const recap = await recapDoc();
+    expect(recap).toBeTruthy();
+    expect(recap!.sharpOfWeek).toBeUndefined();
+  });
+
+  // Pick'em and Survivor recaps render today and must not change shape.
+  it('does not add attritionCount to a Margin recap', async () => {
+    await setup({ [BIG]: 'KC' });
+    await scoreComplete();
+
+    expect((await recapDoc())!.attritionCount).toBeUndefined();
+  });
+});
+
 describe('provisional never finalizes a season', () => {
   const poolId = 'p-final';
 
