@@ -91,3 +91,14 @@ VERDICT: REVISE. Round-5 fixes confirmed. 2 new findings (1×P1, 1×P2). All acc
    **Response: accepted.** Added to S2; copy describes default one-use or configurable limits.
 
 Plan and sweeps updated. Proceeding to round 7.
+
+## Round 7 — codex
+
+VERDICT: REVISE. Round-6 fixes confirmed. 2 new findings (1×P1, 1×P2). All accepted.
+
+1. **(P1) Settings gate can race a MANUAL scoring pass.** `updatePoolSettings` serializes only lock-affecting settings (`poolOps.ts:449`, `poolUpdate.ts:98`); the manual scorer re-reads after acquiring its lease (`nflPools.ts:986`), so a concurrent edit committing between that re-read and publication yields results published under settings they weren't computed with. Fingerprint recovery only rescues the scheduled scorer.
+   **Response: accepted.** Changes to either field route through the `retryWhileScoring` transaction pattern: re-read pool in-transaction, reject on a live scoring lease, do the once-scored check there, then write. Interleaving test against `scoreNFLWeekInternal` specifically.
+2. **(P2) Lowering `maxTeamUses` pre-publication can strand entries over the new limit** (unlimited/2 → 1 after an entry picked KC twice) with no later write to catch it.
+   **Response: accepted.** Transition rule: a reduction to a positive limit is REJECTED when any entry's canonical `countTeamUses(picks)` exceeds it, validated by reading entries inside the same settings transaction. Tests: `0→1`, `2→1` (rejected when violated), increases always permitted.
+
+Plan updated. Proceeding to round 8.
