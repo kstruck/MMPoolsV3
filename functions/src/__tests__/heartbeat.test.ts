@@ -436,3 +436,163 @@ describe('a wrapped job that swallows errors still reports failure', () => {
     ).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The registry and the cron string must agree.
+//
+// SCHEDULED_JOB_EXPECTATIONS is what decides whether a job is reported DEAD, and
+// every entry in it is a hand-maintained copy of that job's onSchedule({
+// schedule }) — the comment beside each one even quotes the cron. Nothing kept
+// the copy in step with the original.
+//
+// Two ways that hurts, both silent:
+//  - registry SLOWER than reality (10 registered, '*/5' in the code): staleness
+//    is judged against 3x the registered interval, so a job dead for 25 minutes
+//    still looks fresh.
+//  - registry FASTER than reality: a perfectly healthy job is reported stale,
+//    the monitor cries wolf, and people learn to ignore it.
+//
+// Written alongside nflAutoScoreJob moving '*/10' -> '*/5' for the real-time
+// scoring go-live — i.e. by exactly the kind of change that desyncs them.
+// ---------------------------------------------------------------------------
+
+/**
+ * Minutes between runs, from a Cloud Scheduler string, or `null` if this parser
+ * does not recognise the form.
+ *
+ * Deliberately narrow: it handles every form present in this repo and returns
+ * null on anything else. The test below FAILS on a null rather than skipping it,
+ * so an unrecognised schedule is an explicit decision, never a quiet hole.
+ */
+export function scheduleToMinutes(schedule: string): number | null {
+  const s = schedule.trim();
+
+  // App Engine style: 'every 5 minutes', 'every 6 hours'.
+  const appEngine = /^every\s+(\d+)\s+(minutes?|hours?)$/i.exec(s);
+  if (appEngine) {
+    const n = Number(appEngine[1]);
+    return /^hour/i.test(appEngine[2]) ? n * 60 : n;
+  }
+
+  const f = s.split(/\s+/);
+  if (f.length !== 5) return null;
+  const [min, hour, dom, mon, dow] = f;
+
+  // Anything month- or day-of-month-scoped is not a fixed interval.
+  if (dom !== '*' || mon !== '*') return null;
+
+  const step = /^\*\/(\d+)$/.exec(min);
+  if (step && hour === '*' && dow === '*') return Number(step[1]);   // '*/5 * * * *'
+  if (!/^\d+$/.test(min)) return null;
+  if (hour === '*' && dow === '*') return 60;                        // '15 * * * *'
+  if (/^\d+$/.test(hour) && dow === '*') return 24 * 60;             // '0 3 * * *'
+  if (/^\d+$/.test(hour) && /^\d+$/.test(dow)) return 7 * 24 * 60;   // '0 9 * * 2'
+  return null;
+}
+
+describe('scheduleToMinutes', () => {
+  it('reads the forms this repo uses', () => {
+    expect(scheduleToMinutes('*/5 * * * *')).toBe(5);
+    expect(scheduleToMinutes('*/10 * * * *')).toBe(10);
+    expect(scheduleToMinutes('15 * * * *')).toBe(60);
+    expect(scheduleToMinutes('0 3 * * *')).toBe(24 * 60);
+    expect(scheduleToMinutes('0 9 * * 2')).toBe(7 * 24 * 60);
+    expect(scheduleToMinutes('every 1 minutes')).toBe(1);
+    expect(scheduleToMinutes('every 6 hours')).toBe(6 * 60);
+  });
+
+  // Fails CLOSED. A form it cannot read is reported, never treated as agreeing
+  // with whatever the registry happens to say.
+  it('returns null on a form it does not understand', () => {
+    expect(scheduleToMinutes('0 0 1 * *')).toBeNull();          // monthly
+    expect(scheduleToMinutes('every 3 fortnights')).toBeNull();
+    expect(scheduleToMinutes('*/5 * * *')).toBeNull();          // four fields
+  });
+});
+
+describe('SCHEDULED_JOB_EXPECTATIONS matches each job’s actual cron string', () => {
+  const SRC5 = path.resolve(__dirname, '..');
+
+  function walk5(dir: string, acc: string[] = []): string[] {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === '__tests__' || e.name === 'shared' || e.name === 'node_modules') continue;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk5(full, acc);
+      else if (e.name.endsWith('.ts')) acc.push(full);
+    }
+    return acc;
+  }
+
+  const found: Array<{ job: string; schedule: string }> = [];
+  const noSchedule: string[] = [];
+
+  for (const file of walk5(SRC5)) {
+    // lib/heartbeat.ts documents onSchedule in prose and quotes cron strings in
+    // the registry's own comments; it defines no jobs.
+    if (file.endsWith(path.join('lib', 'heartbeat.ts'))) continue;
+    // Comments blanked for the same reason as the wrapper scan above: prose
+    // must not be able to vouch for code.
+    const src = blankComments(fs.readFileSync(file, 'utf8'));
+    const starts = [...src.matchAll(/onSchedule\(/g)].map((m) => m.index!);
+    starts.forEach((start, i) => {
+      const nextCall = starts[i + 1] ?? src.length;
+      const window = src.slice(start, Math.min(start + 600, nextCall));
+      const job = owningJobName(src, start);
+      if (!job) return;   // reported as unwrapped by the scan above; not this test's business
+      // Either onSchedule('cron', handler) or onSchedule({ schedule: 'cron', … }, handler).
+      const m = /schedule:\s*['"]([^'"]+)['"]/.exec(window)
+        ?? /onSchedule\(\s*['"]([^'"]+)['"]/.exec(window);
+      if (m) found.push({ job, schedule: m[1] });
+      else noSchedule.push(job);
+    });
+  }
+
+  it('found the schedules (guards against the regex matching nothing)', () => {
+    expect(found.length).toBeGreaterThanOrEqual(12);
+  });
+
+  it('every scheduled job has a registry entry', () => {
+    const missing = found
+      .map((f) => f.job)
+      .filter((job) => !(job in SCHEDULED_JOB_EXPECTATIONS))
+      .sort();
+    expect(
+      missing,
+      'a scheduled job with no SCHEDULED_JOB_EXPECTATIONS entry is invisible to ' +
+        'the stale-job monitor — it can die and nothing will say so',
+    ).toEqual([]);
+  });
+
+  it('every registered interval equals the job’s real cadence', () => {
+    const drift = found
+      .filter((f) => f.job in SCHEDULED_JOB_EXPECTATIONS)
+      .map((f) => {
+        const actual = scheduleToMinutes(f.schedule);
+        const registered = SCHEDULED_JOB_EXPECTATIONS[f.job].everyMinutes;
+        if (actual === null) {
+          return `${f.job}: schedule '${f.schedule}' is not a form scheduleToMinutes understands`;
+        }
+        return actual === registered
+          ? null
+          : `${f.job}: runs every ${actual}min ('${f.schedule}') but is registered as ${registered}min`;
+      })
+      .filter((x): x is string => x !== null)
+      .sort();
+
+    expect(
+      drift,
+      'SCHEDULED_JOB_EXPECTATIONS has drifted from the cron strings. A registry ' +
+        'SLOWER than reality lets a dead job look fresh; one FASTER makes a ' +
+        'healthy job look dead. Fix the registry, or teach scheduleToMinutes the ' +
+        'new form — do not delete the assertion',
+    ).toEqual([]);
+  });
+
+  it('reports any onSchedule() whose schedule string could not be read', () => {
+    expect(
+      noSchedule.sort(),
+      'this onSchedule() call has no literal schedule string within the scan ' +
+        'window, so its cadence cannot be compared with the registry',
+    ).toEqual([]);
+  });
+});
