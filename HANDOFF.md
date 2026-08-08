@@ -4,8 +4,10 @@
 >
 > **Functions are deployed from <!-- deploy-state:current --> `main` @ `62ff437`.**
 > **`origin/main` is AHEAD of that** by the four PRs below. The deployed SHA is
-> the only one stated here; run `git rev-parse origin/main` for the other, rather
-> than trusting a copy in prose that rots on the next merge.
+> the only one stated here; for the other, run **`git fetch origin` and then**
+> `git rev-parse origin/main` — the fetch is not optional, because every worktree
+> shares one `origin/main` ref and it is routinely stale (CLAUDE.md §2c). Reading
+> it without fetching is how a deploy-state conclusion goes wrong.
 >
 > 🛑 **THE BACKEND QUEUE IS NOT EMPTY.** Four PRs merged overnight and two of
 > them are `functions/`-coupled:
