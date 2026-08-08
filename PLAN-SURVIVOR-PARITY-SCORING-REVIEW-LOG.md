@@ -37,3 +37,18 @@ VERDICT: REVISE. Confirmed all 7 round-1 fixes landed. 4 new findings (1×P1, 2�
    **Response: accepted.** Plan now names `tieCountsAs?: 'WIN' | 'LOSS'` and `maxTeamUses?: number` as optional in BOTH `src/types/nflPoolTypes.ts` and `functions/src/nflPoolTypes.ts`; defaults live at read sites only.
 
 Plan updated. Proceeding to round 3.
+
+## Round 3 — codex
+
+VERDICT: REVISE. Confirmed all 4 round-2 fixes landed. 4 new findings (3×P2, 1×P3). All accepted. Finding severity is falling (4×P1 → 0×P1).
+
+1. **(P2) Sweep S2 missed a live client rules copy** — `SurvivorPickEntry.tsx:293-295` tells members ties SURVIVE in both modes. **That copy is wrong against today's engine already** (tie = strike), and wrong for half the new setting matrix.
+   **Response: accepted.** Added to S2 and Phase 2: copy derived from `tieCountsAs × pickLosersMode`, all four combinations tested. Noted as a pre-existing prod defect this PR fixes in passing.
+2. **(P2) "Same-value write passes" undefined for absent legacy fields** — NFLManagerView submits a complete settings object, so a scored legacy pool saving UI defaults would show `undefined → 'LOSS'` and be rejected.
+   **Response: accepted.** The transaction compares **effective normalized values** (`current ?? default` vs `incoming ?? default`). Test: scored legacy pool saves defaults alongside an unrelated change — passes.
+3. **(P2) Integer-parse contract too loose** — `parseInt`-style parsing accepts `"1.5"`→1, `"2junk"`→2, contradicting "skip malformed".
+   **Response: accepted.** Exact grammar: key matches `/^\d+$/`, then `Number(key)` in 1–23, compare numerically. Test table: `"01"` (=1, excluded for week 1), `"1.5"`/`"2junk"`/whitespace/`"1e0"` (all skipped), `"1"` and numeric access (counted/excluded).
+4. **(P3) Client gating must preserve current-week exclusion** — counting ALL picks would disable an already-selected team at its limit though the callable permits re-submit.
+   **Response: accepted.** Client eligibility uses `countTeamUses(entry.picks, week)` (current week excluded, matching server); inclusive count only for the "N/N used" badge.
+
+Plan and sweeps updated. Proceeding to round 4.

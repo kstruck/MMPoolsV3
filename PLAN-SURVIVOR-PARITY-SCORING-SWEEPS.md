@@ -33,6 +33,7 @@ Command: `grep -rn 'teamTied|tie counts|tied' --include=*.ts --include=*.tsx src
 |---|---|
 | `functions/src/nflScoringEngine.ts:292-310` (`evaluateSurvivorWeek`) | **YES** — the engine branch |
 | `shared/simOracle.ts:96-117` (+ `functions/src/shared/simOracle.ts` mirror) | **YES** — extend oracle with `tieCountsAs`, keep it independent of the engine |
+| `src/components/NFLPoolDashboard/SurvivorPickEntry.tsx:293-295` (rules copy) | **YES — CORRECTED r3 #1** (second S2 miss): copy claims ties survive in both modes — wrong against today's engine, wrong for half the new matrix. Derive from `tieCountsAs × pickLosersMode` |
 
 Other matches are bracket tiebreakers or prose. Lesson: grep by semantics-bearing identifiers (`teamTied`, `strike`), not prose words — the oracle's tie logic doesn't say "tied".
 
