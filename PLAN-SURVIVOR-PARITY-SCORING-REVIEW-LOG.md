@@ -80,3 +80,14 @@ VERDICT: REVISE. Round-4 fixes confirmed. 3 new findings (2×P1, 1×P2). All acc
    **Response: accepted.** All added to S2 as default-vs-configurable copy updates; marketing copy qualified as "default rule".
 
 Plan and sweeps updated. Proceeding to round 6.
+
+## Round 6 — codex
+
+VERDICT: REVISE. Round-5 fixes confirmed. 2 new findings (1×P1, 1×P2). All accepted.
+
+1. **(P1) Auto-score week fingerprint omits both new settings.** `computeWeekFingerprint` (`autoScoreDecisions.ts:188-193`) hashes every scoring-relevant survivor setting by contract (`:143`); without the two new fields, an allowed pre-publication settings change would never trigger a rescore — skipped forever by the auto-scorer.
+   **Response: accepted.** Phase 1 gains: add normalized effective values of `tieCountsAs`/`maxTeamUses` to the fingerprint + fingerprint-difference tests.
+2. **(P2) `LandingPage.tsx:444` advertises unconditional "Used team lockouts".**
+   **Response: accepted.** Added to S2; copy describes default one-use or configurable limits.
+
+Plan and sweeps updated. Proceeding to round 7.

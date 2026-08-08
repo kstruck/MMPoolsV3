@@ -40,6 +40,8 @@ Command: `grep -rn 'teamTied|tie counts|tied' --include=*.ts --include=*.tsx src
 | `shared/simOracle.ts:14-18` contract comments (+ `functions/src/shared` mirror) | **YES — CORRECTED r5 #3**: comment asserts tie=strike unconditionally |
 | `functions/src/nflScoringEngine.ts:27` header comment | **YES — CORRECTED r5 #3**: "tie is always a strike" → notes the setting |
 | `src/components/CreatePoolSelection.tsx:133` marketing copy | **YES — CORRECTED r5 #3**: qualify as the default rule |
+| `src/components/LandingPage.tsx:444` marketing copy | **YES — CORRECTED r6 #2**: "Used team lockouts" → default one-use or configurable limits |
+| `functions/src/lib/autoScoreDecisions.ts:188-193` (`computeWeekFingerprint`) | **YES — CORRECTED r6 #1** (S1-adjacent miss): hash both new fields as normalized effective values |
 
 Other matches are bracket tiebreakers or prose. Lesson: grep by semantics-bearing identifiers (`teamTied`, `strike`), not prose words — the oracle's tie logic doesn't say "tied".
 
