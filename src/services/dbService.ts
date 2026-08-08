@@ -1573,7 +1573,7 @@ export const dbService = {
     importNFLSchedule: async (data: { season: string; seasonType: number; weeks?: number[] }): Promise<{ success: boolean; importedCount: number }> => {
         try {
             const importNFLScheduleFn = httpsCallable<Record<string, unknown>, { success: boolean; importedCount: number }>(functions, 'importNFLSchedule');
-            const result = await importNFLScheduleFn(withCorrelationId(data as unknown as Record<string, unknown>));
+            const result = await importNFLScheduleFn(withCorrelationId({ ...data }));
             return result.data;
         } catch (error) {
             await errorHandler.handleError(error, {
