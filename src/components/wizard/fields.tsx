@@ -66,12 +66,12 @@ export function TextField(props: { name: string; label: string; placeholder?: st
   );
 }
 
-export function NumberField(props: { name: string; label: string; placeholder?: string; hint?: string; min?: number }) {
-  const { name, label, placeholder, hint, min } = props;
+export function NumberField(props: { name: string; label: string; placeholder?: string; hint?: string; min?: number; max?: number }) {
+  const { name, label, placeholder, hint, min, max } = props;
   const { register, formState: { errors } } = useFormContext();
   return (
     <Field label={label} htmlFor={name} error={errorAt(errors, name)} hint={hint}>
-      <input id={name} type="number" min={min} placeholder={placeholder} className={inputCls} {...register(name, { valueAsNumber: true })} />
+      <input id={name} type="number" min={min} max={max} placeholder={placeholder} className={inputCls} {...register(name, { valueAsNumber: true })} />
     </Field>
   );
 }

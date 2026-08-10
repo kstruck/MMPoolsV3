@@ -5,6 +5,8 @@ import {
   teamReuseRuleCopy,
   survivorRuleCopy,
 } from '../src/utils/survivorRules';
+import { survivorCreateInputSchema } from '@shared/schemas';
+import { MAX_TEAM_USES } from '@shared/survivorReuse';
 
 /**
  * PLAN-SURVIVOR-PARITY-SCORING — the member-facing rules copy.
@@ -92,5 +94,28 @@ describe('survivorRuleCopy — settings blob in, three lines out', () => {
     const copy = survivorRuleCopy({ tieCountsAs: 'WIN', maxTeamUses: 3, pickLosersMode: false });
     expect(copy.tie).toMatch(/you survive/i);
     expect(copy.reuse).toMatch(/up to 3 times/);
+  });
+});
+
+describe('MAX_TEAM_USES — create and update must agree on the bound', () => {
+  // codex round 2: the create schema had no upper bound while the update
+  // validator capped at 23, so a pool created with 24 could never save its
+  // settings again — the manager UI resends the whole settings object,
+  // persisted value included. One constant now; this pins that they share it.
+  it('the create schema rejects exactly what the update validator rejects', () => {
+    const settings = (maxTeamUses: number) => ({
+      entryFee: 0, isListedPublic: true,
+      maxStrikes: 1, maxRebuys: 0, rebuyDeadlineWeek: 4, rebuyCost: 0,
+      maxTeamUses,
+      payouts: { places: [{ rank: 1, percentage: 100 }], bonuses: [] },
+    });
+    const create = (n: number) => survivorCreateInputSchema.safeParse({
+      type: 'NFL_SURVIVOR', name: 'P', season: '2026', settings: settings(n),
+    }).success;
+
+    expect(create(MAX_TEAM_USES)).toBe(true);
+    expect(create(MAX_TEAM_USES + 1)).toBe(false);
+    expect(create(0)).toBe(true);
+    expect(create(-1)).toBe(false);
   });
 });

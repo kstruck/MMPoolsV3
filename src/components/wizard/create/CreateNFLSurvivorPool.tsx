@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { User } from '../../../types';
 import { dbService } from '../../../services/dbService';
 import { survivorCreateInputSchema } from '@shared/schemas';
+import { MAX_TEAM_USES } from '@shared/survivorReuse';
 import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
 import { ReadOnlyField, NumberField, CheckboxField, SelectField } from '../fields';
@@ -49,7 +50,7 @@ function StepSurvivorRules() {
             { value: 'WIN', label: 'Tie counts as a win for the picked team' },
           ]}
         />
-        <NumberField name="settings.maxTeamUses" label="Team-use limit (0 = unlimited)" min={0} />
+        <NumberField name="settings.maxTeamUses" label="Team-use limit (0 = unlimited)" min={0} max={MAX_TEAM_USES} />
       </div>
       <CheckboxField name="settings.pickLosersMode" label="Pick teams to LOSE (reverse survivor)" />
       <CheckboxField name="settings.autoSurviveExemptionEnabled" label="Auto-survive when no eligible teams remain" />

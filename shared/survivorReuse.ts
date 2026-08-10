@@ -30,6 +30,17 @@ export const DEFAULT_MAX_TEAM_USES = 1;
 /** `maxTeamUses: 0` means unlimited — one field instead of a second boolean. */
 export const UNLIMITED_TEAM_USES = 0;
 
+/**
+ * Highest storable `maxTeamUses`: the NFL week range the submit schema accepts.
+ * Above it the limit is indistinguishable from unlimited, which `0` expresses.
+ *
+ * ⚠️ The CREATE schema and the UPDATE validator must share this. They did not,
+ * and codex round 2 found the consequence: create accepted 24, update rejected
+ * it, so a pool created at 24 could never save its settings again — the manager
+ * UI resends the whole settings object, persisted value included.
+ */
+export const MAX_TEAM_USES = 23;
+
 // The week range `submitNFLPicksSchema` accepts. A key outside it is not a week
 // this pool could ever hold a pick for, so it is skipped rather than counted.
 const MIN_WEEK = 1;

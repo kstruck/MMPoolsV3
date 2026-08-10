@@ -2,6 +2,7 @@
 // through createNFLPool, which requires type + name + season (nflPools.ts:44-52).
 // Settings shapes per src/types/nflPoolTypes.ts.
 import { z } from 'zod';
+import { MAX_TEAM_USES } from '../survivorReuse';
 import { contactFieldsSchema, brandingSchema, payoutsSchema } from './common';
 
 const nflBase = contactFieldsSchema.extend({
@@ -49,7 +50,7 @@ export const survivorCreateInputSchema = nflBase.extend({
     // the wizard's values would be silently dropped at create. Mandatory, not
     // cosmetic (sweep S3).
     tieCountsAs: z.enum(['WIN', 'LOSS']).optional(),
-    maxTeamUses: z.number().int().min(0).optional(),
+    maxTeamUses: z.number().int().min(0).max(MAX_TEAM_USES).optional(),
   }),
 });
 

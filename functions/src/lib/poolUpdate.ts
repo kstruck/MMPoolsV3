@@ -10,6 +10,7 @@ import {
 } from '../shared/editability';
 import { writePaymentHandles, CLEAR, LEGACY_TOP_LEVEL_HANDLE_KEYS } from '../shared/paymentHandles';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '../shared/weeklyHardLock';
+import { MAX_TEAM_USES } from '../shared/survivorReuse';
 
 export interface PoolSettingsUpdatePlan {
   // Fields to set on the pool doc.
@@ -101,8 +102,7 @@ export const LOCK_AFFECTING_SETTINGS_KEYS: readonly string[] =
 /** Widest Pick'em buffer we will store: a full day before the first kickoff. */
 const MAX_PICKEM_LOCK_BUFFER_MINUTES = 24 * 60;
 
-/** Highest storable `maxTeamUses`: the NFL week range the submit schema accepts. */
-const MAX_TEAM_USES = 23;
+
 
 export function touchesLockSettings(patch: Record<string, unknown>): boolean {
   // `flattenSettingsPatch` always expands a `settings` key into dotted paths, so
