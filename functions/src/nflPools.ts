@@ -53,6 +53,7 @@ import {
   type ScoringFence,
 } from './lib/scoringLease';
 import { nextEntryRevision, ENTRY_REVISION_FIELD } from './lib/entryRevision';
+import { countTeamUses, effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from './shared/survivorReuse';
 import { isVoidedPool } from './lib/autoScoreDecisions';
 import { fetchNFLWeekSchedule } from './nflSchedule';
 import { recomputeWeekConsensus } from './consensus';
@@ -567,7 +568,7 @@ export async function submitNFLPicksInternal(
         throw new HttpsError('invalid-argument', 'Missing Survivor team selection.');
       }
 
-      // Check single-pick reuse — against every OTHER week, not this one.
+      // Check reuse — against every OTHER week, not this one.
       //
       // `usedTeams` is a season-long ledger that already contains this week's
       // own saved pick, so re-submitting the same team (a member double-checking
@@ -576,9 +577,27 @@ export async function submitNFLPicksInternal(
       // below has always known to exclude it; only the guard did not, so the two
       // disagreed about what "used" means. One definition now, computed once and
       // used by both.
+      //
+      // TRI-MODE (PLAN-SURVIVOR-PARITY-SCORING Phase 2). At `maxTeamUses`
+      // absent or 1 this is today's `usedTeams`-authority code, byte-for-byte —
+      // a legacy entry whose seeded ledger diverges from its `picks` must keep
+      // behaving exactly as it does now. Only a pool that actually configured a
+      // different limit counts the `picks` map, because a Set cannot represent
+      // "picked twice".
+      const maxTeamUses = effectiveMaxTeamUses(pool.settings);
       const usedElsewhere = survivorEntry.usedTeams.filter(t => t !== survivorEntry.picks?.[week]);
-      if (usedElsewhere.includes(teamPicked)) {
-        throw new HttpsError('invalid-argument', `TEAM_ALREADY_USED: You have already picked the ${teamPicked} this season.`);
+      if (maxTeamUses === 1) {
+        if (usedElsewhere.includes(teamPicked)) {
+          throw new HttpsError('invalid-argument', `TEAM_ALREADY_USED: You have already picked the ${teamPicked} this season.`);
+        }
+      } else if (maxTeamUses !== UNLIMITED_TEAM_USES) {
+        const uses = countTeamUses(survivorEntry.picks, week)[teamPicked] ?? 0;
+        if (uses >= maxTeamUses) {
+          throw new HttpsError(
+            'invalid-argument',
+            `TEAM_ALREADY_USED: You have already picked the ${teamPicked} ${maxTeamUses} time${maxTeamUses === 1 ? '' : 's'} this season.`,
+          );
+        }
       }
 
       // Validate team is playing and not on bye
@@ -600,12 +619,20 @@ export async function submitNFLPicksInternal(
         throw new HttpsError('failed-precondition', `GAME_LOCKED: The game for ${teamPicked} has already locked.`);
       }
 
-      // Update used teams and selections. `usedElsewhere` is the same set the
-      // reuse guard above tested — deliberately reused rather than recomputed,
-      // because two copies of "every week except this one" is what let the
-      // guard and the write disagree in the first place.
+      // Update used teams and selections. At the default limit `usedElsewhere`
+      // is the same set the reuse guard above tested — deliberately reused
+      // rather than recomputed, because two copies of "every week except this
+      // one" is what let the guard and the write disagree in the first place.
+      //
+      // Under reuse that remove-then-re-add rewrite is WRONG (it assumes one
+      // use per team): KC picked in weeks 1 and 2, then week 1 changed to BUF,
+      // would strip KC from the ledger despite the week-2 pick still standing.
+      // So derive the ledger from the resulting picks map instead — the same
+      // derivation `proxyPick` uses.
       survivorEntry.picks[week] = teamPicked;
-      survivorEntry.usedTeams = [...new Set([...usedElsewhere, teamPicked])];
+      survivorEntry.usedTeams = maxTeamUses === 1
+        ? [...new Set([...usedElsewhere, teamPicked])]
+        : [...new Set(Object.values(survivorEntry.picks))];
       survivorEntry.submittedAt = now;
 
       transaction.set(entryRef, {

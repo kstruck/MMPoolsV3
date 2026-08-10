@@ -11,6 +11,14 @@ import type { User, Pool, NFLGame } from '../../types';
 import { poolSeasonType } from '../../utils/nflPending';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { pickHighlightClass, pickHighlightLabel, pickBadgeClass } from '../../utils/pickHighlight';
+import { survivorModeRulesCopy } from '../../utils/survivorRules';
+import {
+  blockedTeamsFor,
+  countTeamUses,
+  effectiveMaxTeamUses,
+  effectiveTieCountsAs,
+  UNLIMITED_TEAM_USES,
+} from '@shared/survivorReuse';
 
 interface SurvivorPickEntryProps {
   pool: Pool;
@@ -41,6 +49,8 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
   const rebuyDeadlineWeek = settings.rebuyDeadlineWeek ?? 4;
   const rebuyCost = settings.rebuyCost ?? settings.entryFee ?? 0;
   const pickLosersMode = settings.pickLosersMode ?? false;
+  const maxTeamUses = effectiveMaxTeamUses(settings);
+  const tieCountsAs = effectiveTieCountsAs(settings);
 
   // The session receipt describes ONE week's submit — reset on week change
   // only, not in the load effect below (which also fires on the post-submit
@@ -59,17 +69,43 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
     setError(null);
   }, [entry, week]);
 
-  // Extract previously used teams (excluding the pick for the current week if already set)
-  const usedTeams = useMemo(() => {
-    if (!entry) return new Set<string>();
-    const teams = new Set<string>(entry.usedTeams || []);
-    // Allow changing the current week's pick if not locked
-    const currentWeekPick = entry.picks?.[week];
-    if (currentWeekPick) {
-      teams.delete(currentWeekPick);
-    }
-    return teams;
-  }, [entry, week]);
+  // Teams this member can no longer pick. Advisory only — the callable is the
+  // enforcement point — but it must AGREE with it, or the grid disables a pick
+  // the server would accept (or offers one it would reject).
+  //
+  // TRI-MODE, identical to the server guards: at `maxTeamUses` absent or 1 this
+  // is today's `usedTeams` Set with the current week excluded, unchanged, so a
+  // legacy entry whose ledger diverges from its picks gates exactly as it does
+  // now. Only a configured limit counts the picks map, and `0` (unlimited)
+  // never disables anything.
+  const blockedTeams = useMemo(
+    () => (entry ? blockedTeamsFor(entry.picks, entry.usedTeams, week, maxTeamUses) : new Set<string>()),
+    [entry, week, maxTeamUses],
+  );
+
+  // Inclusive count — the "N/N used" badge, deliberately NOT the eligibility
+  // source. Excluding the current week there would under-report the pick the
+  // member is looking at.
+  const useCounts = useMemo(
+    () => (maxTeamUses === 1 ? {} : countTeamUses(entry?.picks)),
+    [entry, maxTeamUses],
+  );
+
+  // Badge copy for a team. "Used" is the one-use pool's word; once a limit is
+  // configured the member needs the count, including for a team they can still
+  // pick again.
+  const usedBadgeLabel = (team: string): string | null => {
+    if (maxTeamUses === 1) return blockedTeams.has(team) ? 'Used' : null;
+    const n = useCounts[team] ?? 0;
+    if (n === 0) return null;
+    return maxTeamUses === UNLIMITED_TEAM_USES ? `Used ${n}×` : `${n}/${maxTeamUses} used`;
+  };
+
+  // ⚠️ This copy was WRONG in production before this change: it told members
+  // that ties survive in BOTH modes, while the engine has always struck them.
+  // Derived from the two settings now — see utils/survivorRules for the four
+  // combinations and their test.
+  const modeRulesCopy = survivorModeRulesCopy(pickLosersMode, tieCountsAs);
 
   // Check if a specific game is locked (server-corrected clock — device time can drift)
   const isGameLocked = (game: NFLGame): boolean => {
@@ -102,7 +138,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
 
   const handleTeamSelect = (teamAbbreviation: string, game: NFLGame) => {
     if (isGameLocked(game) || (entry && entry.status === 'ELIMINATED')) return;
-    if (usedTeams.has(teamAbbreviation)) return;
+    if (blockedTeams.has(teamAbbreviation)) return;
 
     setSelectedTeam(teamAbbreviation);
   };
@@ -290,9 +326,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
             {pickLosersMode ? 'Pick the Loser' : 'Pick the Winner'}
           </h4>
           <p className="text-[11px] font-body text-muted">
-            {pickLosersMode 
-              ? 'Select a team you expect to LOSE their game this week. If they lose or tie, you survive!'
-              : 'Select a team you expect to WIN their game this week. If they win or tie, you survive!'}
+            {modeRulesCopy}
           </p>
         </div>
       </div>
@@ -316,8 +350,8 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
             const isHomeSelected = selectedTeam === homeAbbrev;
             const isAwaySelected = selectedTeam === awayAbbrev;
 
-            const isHomeUsed = usedTeams.has(homeAbbrev);
-            const isAwayUsed = usedTeams.has(awayAbbrev);
+            const isHomeUsed = blockedTeams.has(homeAbbrev);
+            const isAwayUsed = blockedTeams.has(awayAbbrev);
 
             return (
               <div
@@ -349,9 +383,9 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                             : 'bg-page border-line hover:-translate-y-1 hover:shadow-card-hover'
                     }`}
                   >
-                    {isAwayUsed && (
+                    {usedBadgeLabel(awayAbbrev) && (
                       <span className="absolute top-2 left-2 bg-page border border-line text-faint text-[8px] font-display font-bold tracking-[0.16em] px-1.5 py-0.5 rounded-full uppercase">
-                        Used
+                        {usedBadgeLabel(awayAbbrev)}
                       </span>
                     )}
                     {isAwaySelected && (
@@ -411,9 +445,9 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                             : 'bg-page border-line hover:-translate-y-1 hover:shadow-card-hover'
                     }`}
                   >
-                    {isHomeUsed && (
+                    {usedBadgeLabel(homeAbbrev) && (
                       <span className="absolute top-2 left-2 bg-page border border-line text-faint text-[8px] font-display font-bold tracking-[0.16em] px-1.5 py-0.5 rounded-full uppercase">
-                        Used
+                        {usedBadgeLabel(homeAbbrev)}
                       </span>
                     )}
                     {isHomeSelected && (

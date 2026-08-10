@@ -6,6 +6,7 @@ import {
     checkAutoSurviveExemption,
 } from '../nflScoringEngine';
 import {
+    blockedTeamsFor,
     countTeamUses,
     normalizePickWeeks,
     effectiveMaxTeamUses,
@@ -196,6 +197,40 @@ describe('effective setting defaults', () => {
         // The legitimate values still read through.
         expect(effectiveMaxTeamUses({ maxTeamUses: 0 })).toBe(0);
         expect(effectiveTieCountsAs({ tieCountsAs: 'WIN' })).toBe('WIN');
+    });
+});
+
+describe('blockedTeamsFor — the client grid must agree with the callable', () => {
+    // The component holds no branch of its own: it calls this. These are the
+    // client-gating regression cases (SurvivorPickEntry.tsx).
+    it('default limit: usedTeams is the authority, current week excluded', () => {
+        const blocked = blockedTeamsFor({ 1: 'KC', 2: 'BUF' }, ['KC', 'BUF', 'SF'], 2, 1);
+        expect([...blocked].sort()).toEqual(['KC', 'SF']); // BUF is this week's own pick
+    });
+
+    it('default limit: a DIVERGENT ledger still wins — today behaviour, unchanged', () => {
+        // Seeded/legacy entries exist whose usedTeams does not match picks
+        // (e.g. the auto-survive fixtures). Counting picks here would offer a
+        // team the ledger says is spent.
+        expect([...blockedTeamsFor({}, ['KC'], 1, 1)]).toEqual(['KC']);
+        // ...and a team in picks but NOT in the ledger stays offered.
+        expect([...blockedTeamsFor({ 3: 'SF' }, [], 1, 1)]).toEqual([]);
+    });
+
+    it('handles a stringified current-week key when excluding this week', () => {
+        expect([...blockedTeamsFor({ '2': 'BUF' }, ['BUF'], 2, 1)]).toEqual([]);
+    });
+
+    it('limit 2: blocked only at the limit, current week excluded', () => {
+        expect([...blockedTeamsFor({ 1: 'KC' }, [], 5, 2)]).toEqual([]);
+        expect([...blockedTeamsFor({ 1: 'KC', 2: 'KC' }, [], 5, 2)]).toEqual(['KC']);
+        // The member is looking at week 2, where KC is already their pick — it
+        // must stay re-submittable, matching the callable's exclusion.
+        expect([...blockedTeamsFor({ 1: 'KC', 2: 'KC' }, [], 2, 2)]).toEqual([]);
+    });
+
+    it('unlimited blocks nothing, however long the history', () => {
+        expect([...blockedTeamsFor({ 1: 'KC', 2: 'KC', 3: 'KC' }, ['KC'], 9, 0)]).toEqual([]);
     });
 });
 

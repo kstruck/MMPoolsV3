@@ -109,18 +109,36 @@ export function countTeamUses(
 }
 
 /**
- * May this entry pick `team` in `week`, given the pool's reuse limit?
+ * Teams this entry may NOT pick in `week` — the whole tri-mode decision in one
+ * place, so the client grid and the callable cannot drift apart.
  *
- * Advisory on the client, authoritative on the server — the callable is the
- * enforcement point either way. Only valid for `maxTeamUses !== 1`; the default
- * path keeps its `usedTeams` authority (see the tri-mode note at the top).
+ *  - `maxTeamUses` 1 (or absent, which resolves to 1): today's rule, and
+ *    `usedTeams` is the authority. The current week's own saved pick is removed
+ *    so it stays re-submittable (PR #384). A legacy entry whose ledger diverges
+ *    from its `picks` gates exactly as it does now.
+ *  - `0`: unlimited, nothing is ever blocked.
+ *  - `N >= 2`: a team is blocked once it holds N uses in weeks OTHER than this
+ *    one — same exclusion as the callable, so an already-selected team sitting
+ *    at its limit is still re-submittable.
+ *
+ * Client use is advisory; the callable is the enforcement point (standing
+ * invariant: server checks are authoritative, UI checks are UX only).
  */
-export function teamUsesRemaining(
+export function blockedTeamsFor(
   picks: Record<number | string, unknown> | undefined | null,
-  team: string,
+  usedTeams: readonly string[] | undefined | null,
   week: number,
   maxTeamUses: number,
-): boolean {
-  if (maxTeamUses === UNLIMITED_TEAM_USES) return true;
-  return (countTeamUses(picks, week)[team] ?? 0) < maxTeamUses;
+): Set<string> {
+  if (maxTeamUses === DEFAULT_MAX_TEAM_USES) {
+    const blocked = new Set<string>(usedTeams ?? []);
+    const currentWeekPick = picks?.[week] ?? picks?.[String(week)];
+    if (typeof currentWeekPick === 'string') blocked.delete(currentWeekPick);
+    return blocked;
+  }
+  if (maxTeamUses === UNLIMITED_TEAM_USES) return new Set<string>();
+  const counts = countTeamUses(picks, week);
+  return new Set<string>(
+    Object.entries(counts).filter(([, n]) => n >= maxTeamUses).map(([team]) => team),
+  );
 }
