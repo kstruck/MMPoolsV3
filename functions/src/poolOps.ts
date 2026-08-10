@@ -17,6 +17,7 @@ import {
 } from './lib/poolCreation';
 import { loadBillingConfig } from './billing';
 import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } from './lib/poolUpdate';
+import { survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
 import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } from './lib/scoringLease';
 
 // Helper to determine if user can manage pool
@@ -446,20 +447,41 @@ export const updatePoolSettings = validated(
     // land, the in-flight pass would still hold a matching `lockRevision`, and it
     // would publish grades — and `publishedWeeks` — computed against the OLD lock
     // while the new one keeps that week's picks open.
-    if (touchesLockSettings(patch)) {
+    // The survivor parity settings serialize for a DIFFERENT reason but need the
+    // same machinery (PLAN-SURVIVOR-PARITY-SCORING decision 4): both regrade
+    // already-scored weeks on the next rescore, so the once-scored refusal has to
+    // be evaluated against a pool read INSIDE the transaction that writes, and a
+    // live scoring lease has to bounce the edit. Without it a manager's save can
+    // land between the manual scorer's post-lease re-read and its publication —
+    // results published under settings they were not computed with.
+    const parityTouched = touchesSurvivorParitySettings(patch);
+    if (touchesLockSettings(patch) || parityTouched) {
+        const bumpsLockRevision = touchesLockSettings(patch);
         await retryWhileScoring(() => db.runTransaction(async (tx) => {
             const current = (await tx.get(poolRef)).data() as Record<string, unknown> | undefined;
+            // The reduction invariant needs every entry, and Firestore forbids a
+            // read after a write, so this happens with the other reads.
+            const entries = parityTouched
+                ? (await tx.get(poolRef.collection('entries'))).docs.map((d) => d.data() as { picks?: Record<string, unknown> })
+                : [];
             if (leaseIsLive(readScoringLease(current), Date.now())) {
                 throw new HttpsError(
                     'aborted',
                     'SCORING_IN_PROGRESS: this pool is being scored right now. Try again in a moment.',
                 );
             }
+            if (parityTouched) {
+                const refusal = survivorParitySettingsRefusal({ ...current, id: poolId }, patch, entries);
+                if (refusal) throw new HttpsError('failed-precondition', refusal.message);
+            }
             tx.update(poolRef, {
                 ...patch,
                 // Invalidates any pass that captured the old value — the backstop
                 // for a scorer that acquired its lease between our read and here.
-                'settings.lockRevision': readLockRevision(current) + 1,
+                // Scoped to lock edits: a parity-only save changes no deadline, and
+                // bumping the revision would invalidate an in-flight pass for
+                // nothing.
+                ...(bumpsLockRevision ? { 'settings.lockRevision': readLockRevision(current) + 1 } : {}),
             });
         }));
     } else {

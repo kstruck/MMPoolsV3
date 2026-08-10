@@ -441,7 +441,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 Uncompromising Survivor pool automation. Mulligans, strikes logging, bye week checks, and easy rebuy triggers.
               </p>
               <ul className="space-y-2 text-sm text-[color:var(--text)] font-body">
-                <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-gold-600 dark:text-gold-400" /> Used team lockouts</li>
+                <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-gold-600 dark:text-gold-400" /> Team-reuse limits (one-and-done by default)</li>
                 <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-gold-600 dark:text-gold-400" /> Automatic strike logging</li>
                 <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-gold-600 dark:text-gold-400" /> Pre-deadline buybacks</li>
               </ul>

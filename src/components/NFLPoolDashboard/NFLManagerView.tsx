@@ -16,6 +16,7 @@ import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { buildPoolRoster, memberOutstanding, duesRates } from '../../utils/poolRoster';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
+import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReuse';
 
 /**
  * The save control, repeated at the end of every settings section (E6, #281).
@@ -170,6 +171,12 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const [rebuyDeadlineWeek, setRebuyDeadlineWeek] = useState<number>(settings.rebuyDeadlineWeek ?? 8);
   const [rebuyCost, setRebuyCost] = useState<number>(settings.rebuyCost ?? entryFee);
   const [pickLosersMode, setPickLosersMode] = useState<boolean>(settings.pickLosersMode ?? false);
+  // Effective values, not raw: an untouched legacy pool must render — and then
+  // save — today's rules rather than a blank control. The server refuses a
+  // CHANGE to either field once a week is scored, and compares effective values,
+  // so re-saving these is a no-op on such a pool rather than a rejection.
+  const [tieCountsAs, setTieCountsAs] = useState<'WIN' | 'LOSS'>(effectiveTieCountsAs(settings));
+  const [maxTeamUses, setMaxTeamUses] = useState<number>(effectiveMaxTeamUses(settings));
 
   // Margin-specific
   const [marginPayoutMode, setMarginPayoutMode] = useState<string>(settings.payoutMode ?? 'SEASON');
@@ -414,6 +421,8 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           rebuyDeadlineWeek,
           rebuyCost,
           pickLosersMode,
+          tieCountsAs,
+          maxTeamUses,
           // Survivor/Margin run a HARD weekly deadline before the first kickoff;
           // the buffer is the only knob. The server derives the weekly lock from
           // the pool type and re-snaps this to an allowed preset, so omitting or
@@ -1006,6 +1015,33 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   </div>
                 </div>
               )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Tie Outcome</label>
+                  <select
+                    value={tieCountsAs}
+                    onChange={e => setTieCountsAs(e.target.value === 'WIN' ? 'WIN' : 'LOSS')}
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                  >
+                    <option value="LOSS">Tie counts as a loss (strike)</option>
+                    <option value="WIN">Tie counts as a win for the picked team</option>
+                  </select>
+                  <p className="font-body text-[10px] text-faint mt-1">Cannot be changed once a week has been scored.</p>
+                </div>
+                <div>
+                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Team-Use Limit</label>
+                  <input
+                    type="number"
+                    value={maxTeamUses}
+                    min={0}
+                    max={23}
+                    onChange={e => setMaxTeamUses(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))}
+                    className="w-full font-body bg-page border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                  />
+                  <p className="font-body text-[10px] text-faint mt-1">How many weeks a team may be picked. 0 = unlimited.</p>
+                </div>
+              </div>
 
               <div className="flex items-center justify-between bg-page border border-line rounded-md px-4 py-3">
                 <div>

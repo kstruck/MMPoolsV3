@@ -4,6 +4,8 @@ import type { Pool } from '../../types';
 import { PayoutsPanel } from '../PayoutsPanel';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType } from '../../utils/nflPending';
+import { survivorRuleCopy } from '../../utils/survivorRules';
+import { effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from '@shared/survivorReuse';
 
 interface NFLPoolRulesProps {
   pool: Pool;
@@ -209,6 +211,20 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                   </span>
                 </div>
                 <div className="flex justify-between border-b border-line pb-2">
+                  <span className="font-bold">Tie Outcome:</span>
+                  <span className="font-display font-bold">
+                    {survivorRuleCopy(settings).tie}
+                  </span>
+                </div>
+                <div className="flex justify-between border-b border-line pb-2">
+                  <span className="font-bold">Team-Use Limit:</span>
+                  <span className="font-display font-bold num">
+                    {effectiveMaxTeamUses(settings) === UNLIMITED_TEAM_USES
+                      ? 'Unlimited'
+                      : `${effectiveMaxTeamUses(settings)} per team`}
+                  </span>
+                </div>
+                <div className="flex justify-between border-b border-line pb-2">
                   <span className="font-bold">Auto-Survive Exemption:</span>
                   <span className="font-display font-bold">
                     {settings.autoSurviveExemptionEnabled ? 'Enabled (Exempt when 0 eligible teams left)' : 'Disabled'}
@@ -221,7 +237,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                   <RefreshCw size={14} /> Rebuy &amp; Strike Rules
                 </p>
                 <ul className="space-y-2 text-[12px] text-muted leading-relaxed list-disc list-inside">
-                  <li>You cannot select the same team twice in a season.</li>
+                  <li>{survivorRuleCopy(settings).reuse}</li>
                   <li>
                     Rebuys: {settings.maxRebuys > 0
                       ? `Allowed up to ${settings.maxRebuys} rebuys before ${Number(settings.rebuyDeadlineWeek) >= 1 ? nflWeekLabel(poolSeasonType(castPool), Number(settings.rebuyDeadlineWeek)) : 'the season starts'} at a cost of $${settings.rebuyCost} per rebuy.`
