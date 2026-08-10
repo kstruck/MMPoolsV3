@@ -302,6 +302,26 @@ describe('checkAutoSurviveExemption — maxTeamUses tri-mode', () => {
         expect(checkAutoSurviveExemption([], cancelled, true, exhausted)).toBe(false);
     });
 
+    it('a FUTURE-week reservation counts as a use — in BOTH modes, matching production', () => {
+        // codex round 4 raised this as a P1 against the maxTeamUses >= 2 path:
+        // scoring week 3 while the member has pre-submitted picks for weeks 5-6
+        // counts those reservations, so the exemption can excuse an earlier
+        // week's missed pick. The observation is right, but it is NOT something
+        // this PR introduces — `submitNFLPicks` writes every submitted team into
+        // `usedTeams` whatever week it is for, so the DEPLOYED default path has
+        // exactly the same property. Both assertions below pass on `main`'s
+        // logic and on the new one.
+        //
+        // This test exists to keep them EQUAL. Changing only the counted path
+        // would split behaviour between a default pool and a configured one,
+        // which is the split the tri-mode guarantee exists to prevent. If this
+        // is ever fixed it must be fixed for both, as its own scoring change
+        // with its own plan gate.
+        const reservedLater = { maxTeamUses: 2, picks: { 5: 'KC', 6: 'KC', 7: 'BUF', 8: 'BUF' }, week: 3 };
+        expect(checkAutoSurviveExemption(['KC', 'BUF'], games, true)).toBe(true);
+        expect(checkAutoSurviveExemption([], games, true, reservedLater)).toBe(true);
+    });
+
     it('the exemption toggle still wins over every mode', () => {
         expect(checkAutoSurviveExemption(['KC', 'BUF'], games, false, { maxTeamUses: 2, picks: {}, week: 1 })).toBe(false);
     });
