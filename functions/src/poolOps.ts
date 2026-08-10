@@ -17,7 +17,7 @@ import {
 } from './lib/poolCreation';
 import { loadBillingConfig } from './billing';
 import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } from './lib/poolUpdate';
-import { survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
+import { parityEditNeedsEntries, survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
 import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } from './lib/scoringLease';
 
 // Helper to determine if user can manage pool
@@ -459,9 +459,13 @@ export const updatePoolSettings = validated(
         const bumpsLockRevision = touchesLockSettings(patch);
         await retryWhileScoring(() => db.runTransaction(async (tx) => {
             const current = (await tx.get(poolRef)).data() as Record<string, unknown> | undefined;
-            // The reduction invariant needs every entry, and Firestore forbids a
-            // read after a write, so this happens with the other reads.
-            const entries = parityTouched
+            // The reduction invariant needs every entry — but ONLY that check
+            // does, and only when the limit is actually moving down. The manager
+            // UI submits a complete settings object on every save, so reading
+            // them unconditionally would mean hundreds of transactional reads to
+            // confirm that nothing changed. Sequential reads are fine; it is a
+            // read AFTER a write that Firestore forbids.
+            const entries = parityTouched && parityEditNeedsEntries({ ...current, id: poolId }, patch)
                 ? (await tx.get(poolRef.collection('entries'))).docs.map((d) => d.data() as { picks?: Record<string, unknown> })
                 : [];
             if (leaseIsLive(readScoringLease(current), Date.now())) {

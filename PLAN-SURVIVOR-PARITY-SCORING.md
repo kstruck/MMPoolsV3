@@ -95,4 +95,16 @@ Two new commissioner settings on `NFL_SURVIVOR` pools, both defaulting to today'
 | Codex adversarial review (log: PLAN-SURVIVOR-PARITY-SCORING-REVIEW-LOG.md) | ✅ 2026-08-08 — CONVERGED at the 10-round cap: 28 findings, 100% accepted, zero open |
 | Sweeps (PLAN-SURVIVOR-PARITY-SCORING-SWEEPS.md) | ✅ 2026-08-08 — S1–S4 complete; corrected 4× during review (proxyPick, simOracle, rules/README copy, fingerprint) |
 | Kevin sign-off (open question 1) | ✅ 2026-08-08 — question 1 resolved: reject once scored. Implementation to run in a dedicated follow-up session |
-| Phase 1–3 implementation | PENDING — next session |
+| Phase 1 — engine + schema + types | ✅ 2026-08-09 — `b654839` |
+| Phase 2 — submit/proxy guards + client pick entry | ✅ 2026-08-09 — `7303537` |
+| Phase 3 — wizard + manager settings + once-scored gate + rules deny | ✅ 2026-08-09 — `707f4b1` |
+
+### Departure from the plan text, recorded at implementation (Phase 1)
+
+Decision 2's code snippet folded **both** tie outcomes into won/lost before the
+mode branch. Taken literally that CHANGES today's behaviour on pick-losers pools:
+under the default `'LOSS'` the picked team would have "lost", which in losers
+mode is a SURVIVE — while today a tie strikes in **both** modes. That contradicts
+the harder locked constraint ("defaults preserve current behaviour exactly"), so
+only `'WIN'` folds and `'LOSS'` means "today's rule". The four cells are pinned by
+test in `survivorRescore.test.ts` and independently in the oracle.

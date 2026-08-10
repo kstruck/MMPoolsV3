@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  parityEditNeedsEntries,
   poolHasScoredWeek,
   survivorParitySettingsRefusal,
   touchesSurvivorParitySettings,
@@ -135,5 +136,38 @@ describe('survivorParitySettingsRefusal — the reduction invariant', () => {
     const spread = [{ picks: { 1: 'KC', 9: 'KC', 17: 'KC' } }];
     expect(survivorParitySettingsRefusal(unlimited, { 'settings.maxTeamUses': 2 }, spread)?.code)
       .toBe('TEAM_USE_LIMIT_TOO_LOW');
+  });
+});
+
+describe('parityEditNeedsEntries — do not read the whole pool to confirm nothing changed', () => {
+  const unlimited = survivor({ settings: { maxTeamUses: 0 } });
+
+  it('is false for the ordinary save: the UI resends the same value every time', () => {
+    expect(parityEditNeedsEntries(unlimited, { 'settings.maxTeamUses': 0 })).toBe(false);
+    expect(parityEditNeedsEntries(survivor(), { 'settings.maxTeamUses': 1 })).toBe(false);
+  });
+
+  it('is false when the patch does not carry the field at all', () => {
+    expect(parityEditNeedsEntries(unlimited, { 'settings.tieCountsAs': 'WIN' })).toBe(false);
+    expect(parityEditNeedsEntries(unlimited, { 'settings.maxStrikes': 2 })).toBe(false);
+  });
+
+  it('is false for an INCREASE or a move to unlimited — no entry can be stranded', () => {
+    expect(parityEditNeedsEntries(survivor({ settings: { maxTeamUses: 2 } }), { 'settings.maxTeamUses': 5 })).toBe(false);
+    expect(parityEditNeedsEntries(survivor({ settings: { maxTeamUses: 2 } }), { 'settings.maxTeamUses': 0 })).toBe(false);
+  });
+
+  it('is TRUE for a reduction to a positive limit', () => {
+    expect(parityEditNeedsEntries(unlimited, { 'settings.maxTeamUses': 1 })).toBe(true);
+    expect(parityEditNeedsEntries(survivor({ settings: { maxTeamUses: 3 } }), { 'settings.maxTeamUses': 2 })).toBe(true);
+  });
+
+  it('is false on a SCORED pool — the value change alone is already refused', () => {
+    const scored = survivor({ publishedWeeks: { 1: true }, settings: { maxTeamUses: 0 } });
+    expect(parityEditNeedsEntries(scored, { 'settings.maxTeamUses': 1 })).toBe(false);
+  });
+
+  it('is false for a non-survivor pool', () => {
+    expect(parityEditNeedsEntries({ type: 'NFL_PICKEM', settings: {} }, { 'settings.maxTeamUses': 1 })).toBe(false);
   });
 });

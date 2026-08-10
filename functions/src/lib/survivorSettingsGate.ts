@@ -52,6 +52,33 @@ export function poolHasScoredWeek(pool: Record<string, unknown> | undefined): bo
   return legacyPublishedWeeks(pool).length > 0;
 }
 
+/**
+ * Does judging this patch require reading the pool's entries?
+ *
+ * Only the reduction invariant looks at them, and only when `maxTeamUses` is
+ * actually moving DOWN to a positive limit. The manager UI submits a complete
+ * settings object on every save, so without this check every ordinary survivor
+ * settings save would read every entry in the pool inside a transaction — for a
+ * large pool, hundreds of reads to confirm nothing changed.
+ *
+ * Call it with the pool read inside the transaction, before reading entries;
+ * Firestore allows sequential reads, it forbids a read after a write.
+ */
+export function parityEditNeedsEntries(
+  pool: Record<string, unknown> | undefined,
+  patch: Record<string, unknown>,
+): boolean {
+  if (pool?.type !== 'NFL_SURVIVOR') return false;
+  if (!('settings.maxTeamUses' in patch)) return false;
+  // A scored pool is refused on the value change alone — no entries needed.
+  if (poolHasScoredWeek(pool)) return false;
+  const incoming = effectiveMaxTeamUses({ maxTeamUses: patch['settings.maxTeamUses'] });
+  const current = effectiveMaxTeamUses((pool?.settings ?? {}) as Record<string, unknown>);
+  if (incoming === current || incoming === UNLIMITED_TEAM_USES) return false;
+  // Unlimited -> any positive limit is always a reduction; otherwise compare.
+  return current === UNLIMITED_TEAM_USES || incoming < current;
+}
+
 export type SurvivorParityRefusal =
   | { code: 'SETTINGS_LOCKED_AFTER_SCORING'; field: string; message: string }
   | { code: 'TEAM_USE_LIMIT_TOO_LOW'; field: string; message: string };
