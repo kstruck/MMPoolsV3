@@ -15,6 +15,7 @@ import {
   usesWeeklyHardLock,
 } from './effectiveLock';
 import { isTerminalGame } from './weekCompletion';
+import { effectiveMaxTeamUses, effectiveTieCountsAs } from '../shared/survivorReuse';
 import type { NFLGame } from '../nflPoolTypes';
 
 /** Pool statuses that mean "settled — never score this again". */
@@ -191,6 +192,14 @@ export function computeWeekFingerprint(
     `maxStrikes=${s.maxStrikes ?? ''}`,
     `pickLosersMode=${s.pickLosersMode ?? ''}`,
     `autoSurviveExemptionEnabled=${s.autoSurviveExemptionEnabled ?? ''}`,
+    // Survivor parity settings, hashed as NORMALIZED EFFECTIVE values so a
+    // legacy pool and one that explicitly saved the defaults hash the same —
+    // an unchanged pool must not look changed. Both are scoring-relevant by
+    // this function's contract above: `tieCountsAs` regrades a tied week and
+    // `maxTeamUses` moves the auto-survive exemption, so omitting them would
+    // leave an allowed pre-publication settings change skipped FOREVER.
+    `tieCountsAs=${effectiveTieCountsAs(s)}`,
+    `maxTeamUses=${effectiveMaxTeamUses(s)}`,
   ];
 
   const lockTerms: string[] = [];

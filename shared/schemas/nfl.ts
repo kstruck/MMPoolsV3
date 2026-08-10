@@ -45,6 +45,11 @@ export const survivorCreateInputSchema = nflBase.extend({
     rebuyCost: z.number().min(0).optional(),
     pickLosersMode: z.boolean().optional(),
     autoSurviveExemptionEnabled: z.boolean().optional(),
+    // This is a z.object, so it STRIPS unknown keys — without these two lines
+    // the wizard's values would be silently dropped at create. Mandatory, not
+    // cosmetic (sweep S3).
+    tieCountsAs: z.enum(['WIN', 'LOSS']).optional(),
+    maxTeamUses: z.number().int().min(0).optional(),
   }),
 });
 

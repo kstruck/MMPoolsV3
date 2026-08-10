@@ -3,7 +3,7 @@
 **Status:** DRAFT — awaiting adversarial review (codex) + Kevin sign-off.
 **Classification:** Plan-gated — SCORING trigger (changes how a winner is decided), plus a narrow AUTHORIZATION component added in review round 8 (a two-field `firestore.rules` deny; see decision 4). Not money, not prod-data.
 **Branch:** `claude/survivor-parity-scoring` off `origin/main` @ `62ff437`.
-**Origin:** Competitor feature review (usafootballpools.com, 2026-08-07). These are the two survivor knobs they offer that we hard-code.
+**Origin:** Competitor feature review (usafootballpools.com, <!-- hof-date:ignore --> 2026-08-07). These are the two survivor knobs they offer that we hard-code.
 
 ## Goal
 
@@ -91,7 +91,7 @@ Two new commissioner settings on `NFL_SURVIVOR` pools, both defaulting to today'
 
 | Item | Status |
 |---|---|
-| Plan drafted | ✅ 2026-08-07 |
+| Plan drafted | ✅ <!-- hof-date:ignore --> 2026-08-07 |
 | Codex adversarial review (log: PLAN-SURVIVOR-PARITY-SCORING-REVIEW-LOG.md) | ✅ 2026-08-08 — CONVERGED at the 10-round cap: 28 findings, 100% accepted, zero open |
 | Sweeps (PLAN-SURVIVOR-PARITY-SCORING-SWEEPS.md) | ✅ 2026-08-08 — S1–S4 complete; corrected 4× during review (proxyPick, simOracle, rules/README copy, fingerprint) |
 | Kevin sign-off (open question 1) | ✅ 2026-08-08 — question 1 resolved: reject once scored. Implementation to run in a dedicated follow-up session |

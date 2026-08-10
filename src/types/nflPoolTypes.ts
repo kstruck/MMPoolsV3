@@ -118,6 +118,11 @@ export interface NFLSurvivorPool {
     rebuyCost: number; // Default equal to entryFee
     pickLosersMode: boolean; // true = pick team to LOSE. false = pick team to WIN
     autoSurviveExemptionEnabled: boolean; // optional: survives if no eligible teams are left (on bye or picked)
+    // Both OPTIONAL and both default to today's behaviour, so no existing pool
+    // doc carries them and none needs a migration. Defaults are applied at read
+    // sites only, via @shared/survivorReuse.
+    tieCountsAs?: 'WIN' | 'LOSS';   // absent ⇒ a tie is a strike in BOTH modes
+    maxTeamUses?: number;           // absent ⇒ 1; 0 = unlimited
   };
 
   managerName?: string;

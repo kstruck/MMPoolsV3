@@ -8,6 +8,12 @@ import {
   MarginEntry,
   WeeklyRecap
 } from './nflPoolTypes';
+import {
+  countTeamUses,
+  effectiveMaxTeamUses,
+  effectiveTieCountsAs,
+  UNLIMITED_TEAM_USES,
+} from './shared/survivorReuse';
 
 // ============================================================================
 // Feed-integrity predicates — what the scorer is allowed to treat as played
@@ -25,8 +31,9 @@ import {
  * grades a broken payload as a real 0-0.
  *
  * That is defect NFL7-3/NFL7-4 from the chaos drill. A 0-0 is a PUSH for every
- * Pick'em entry, a TIE for Survivor — and a tie is a strike, so at
- * `maxStrikes: 0` a dropped field ELIMINATES the member who picked correctly.
+ * Pick'em entry, a TIE for Survivor — and a tie is a strike by default
+ * (`settings.tieCountsAs`, absent ⇒ today's rule), so at `maxStrikes: 0` a
+ * dropped field ELIMINATES the member who picked correctly.
  *
  * A **one-sided** drop is deliberately NOT detectable here and is not claimed
  * to be: the importer emits both values when EITHER competitor has a score, so
@@ -299,6 +306,22 @@ export function evaluateSurvivorWeek(
     teamTied = true;
   }
 
+  // Fold the tie into won/lost BEFORE the mode branch, so `pickLosersMode`
+  // composes with the setting instead of needing a 2×2 matrix in each arm:
+  // tie-as-WIN in losers mode means the picked team "won", which is a strike.
+  //
+  // ⚠️ ONLY 'WIN' folds. The plan's snippet also folded the default 'LOSS' into
+  // `teamLost`, and that would have CHANGED today's behaviour on every existing
+  // pick-losers pool with no setting written: a tie there would become a
+  // survive, because "the team I picked to lose lost". Today a tie is a strike
+  // in BOTH modes, and the locked decision is that defaults preserve current
+  // behaviour exactly. So 'LOSS' means "today's rule" — it is the WIN option
+  // that this setting exists to add ("ties count as a win for the picked team").
+  if (teamTied && effectiveTieCountsAs(pool.settings) === 'WIN') {
+    teamWon = true;
+    teamTied = false;
+  }
+
   const pickLosersMode = pool.settings.pickLosersMode;
   let strike = false;
 
@@ -342,7 +365,11 @@ export function updateSurvivorStatus(
 export function checkAutoSurviveExemption(
   usedTeams: string[],
   gamesInWeek: NFLGame[],
-  autoSurviveEnabled: boolean
+  autoSurviveEnabled: boolean,
+  // Reuse context — omitted by callers on a default pool, which is the
+  // byte-for-byte `usedTeams` path below. See the tri-mode note in
+  // shared/survivorReuse.ts for why this is opt-in rather than always counted.
+  reuse?: { maxTeamUses: number; picks: Record<number, string>; week: number },
 ): boolean {
   if (!autoSurviveEnabled) return false;
 
@@ -355,8 +382,24 @@ export function checkAutoSurviveExemption(
     }
   }
 
-  // Filter out teams that the player has already picked in past weeks
-  const eligibleTeams = [...teamsPlaying].filter(t => !usedTeams.includes(t));
+  // Filter out teams that the player can no longer pick.
+  //
+  // Default (no reuse context, or a limit of exactly 1): the authority stays
+  // `usedTeams`, unchanged. A legacy entry whose seeded `usedTeams` diverges
+  // from its `picks` must keep the outcome it has today.
+  //
+  // `maxTeamUses: 0` (unlimited): every playing team stays eligible, so this
+  // can never grant an exemption — surviving a week nobody could play is
+  // `isVoidWeek`'s job, not this one, and an all-cancelled slate contributes
+  // no teams so `teamsPlaying.size > 0` fails there anyway.
+  const useCounts = reuse && reuse.maxTeamUses !== 1
+    ? countTeamUses(reuse.picks, reuse.week)
+    : null;
+  const eligibleTeams = [...teamsPlaying].filter(t => {
+    if (!useCounts || !reuse) return !usedTeams.includes(t);
+    if (reuse.maxTeamUses === UNLIMITED_TEAM_USES) return true;
+    return (useCounts[t] ?? 0) < reuse.maxTeamUses;
+  });
 
   // If there are zero eligible teams playing this week, they get an exemption!
   return eligibleTeams.length === 0 && teamsPlaying.size > 0;
@@ -526,7 +569,10 @@ export function computeSurvivorWeekUpdate(
   };
 
   const autoSurviveEnabled = pool.settings.autoSurviveExemptionEnabled ?? true;
-  if (checkAutoSurviveExemption(cleaned.usedTeams, games, autoSurviveEnabled)) {
+  const maxTeamUses = effectiveMaxTeamUses(pool.settings);
+  if (checkAutoSurviveExemption(cleaned.usedTeams, games, autoSurviveEnabled, {
+    maxTeamUses, picks: cleaned.picks, week,
+  })) {
     return {
       update: {
         status: 'ALIVE',

@@ -13,9 +13,11 @@
 //     from totals).
 //   Survivor (sudden-death defaults): a week's pick must WIN or the entry takes
 //     a strike; strikes > maxStrikes => ELIMINATED at that week. A TIE is a
-//     strike in BOTH modes (docs/NFL_POOLS_README.md: "loses/ties" strikes in
-//     standard mode, "wins or ties" strikes in pick-loser mode).
-//     pickLosersMode inverts the win condition.
+//     strike in BOTH modes by DEFAULT (docs/NFL_POOLS_README.md: "loses/ties"
+//     strikes in standard mode, "wins or ties" strikes in pick-loser mode).
+//     `tieCountsAs: 'WIN'` instead treats the tie as the picked team winning,
+//     which composes with the mode: a survive in standard, a strike in
+//     pick-loser. pickLosersMode inverts the win condition.
 //   Margin: weekly score = picked team's signed victory margin; season total
 //     accumulates. Tie game = 0.
 // Edge semantics beyond these (auto-survive exemptions, rebuys, dual-MNF) are
@@ -93,9 +95,10 @@ export function expectPickem(
 
 export function expectSurvivor(
   season: GeneratedSeason,
-  opts: { maxStrikes?: number; pickLosersMode?: boolean } = {},
+  opts: { maxStrikes?: number; pickLosersMode?: boolean; tieCountsAs?: 'WIN' | 'LOSS' } = {},
 ): OracleSurvivorEntryExpectation[] {
   const maxStrikes = opts.maxStrikes ?? 0;
+  const tieCountsAs = opts.tieCountsAs ?? 'LOSS';
   return season.entries.map(e => {
     let strikes = 0;
     let eliminatedWeek: number | null = null;
@@ -106,12 +109,22 @@ export function expectSurvivor(
       const game = season.games.find(g => g.week === week && (g.home === pick || g.away === pick));
       if (!game) continue; // pick not playing — the ENGINE rejects this pre-write; oracle skips
       const w = winnerOf(game);
-      // Tie = strike in BOTH modes (product rule; the engine's
+      // Tie = strike in BOTH modes at the DEFAULT (product rule; the engine's
       // evaluateSurvivorWeek has always done this). The oracle's original
       // "ties survive" reading contradicted docs/NFL_POOLS_README.md and was
       // caught by the Phase 4 tie-game edge fixture — fixed to the documented
       // rule, NOT synced to the engine blindly.
-      const survived = w !== null && (opts.pickLosersMode ? w !== pick : w === pick);
+      //
+      // `tieCountsAs: 'WIN'` is the one documented escape: the tie grades as
+      // the PICKED TEAM winning, so it survives in standard mode and strikes in
+      // pick-loser mode. Written from the product rule, not read off the
+      // engine — oracle/engine disagreement stays a finding, not a sync target.
+      let survived: boolean;
+      if (w === null) {
+        survived = tieCountsAs === 'WIN' ? !opts.pickLosersMode : false;
+      } else {
+        survived = opts.pickLosersMode ? w !== pick : w === pick;
+      }
       if (!survived) {
         strikes++;
         if (strikes > maxStrikes) eliminatedWeek = week;
