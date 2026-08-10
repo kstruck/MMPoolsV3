@@ -160,3 +160,26 @@ describe('touchesLockSettings — which saves must serialize with the scoring le
     expect(touchesLockSettings({ settings: { entryFee: 5 } })).toBe(true);
   });
 });
+
+describe('flattenSettingsPatch — survivor parity settings are validated, not forwarded', () => {
+  // `updatePoolSettingsSchema.updates` is `z.record(z.string(), z.unknown())`, so
+  // whatever a caller sends arrives here unvalidated. The failure this exists to
+  // stop is specific: a NEGATIVE maxTeamUses reads as "unlimited" to any `> 0`
+  // test, which is the opposite of the restriction the manager was tightening.
+  it('passes the legitimate values through', () => {
+    expect(flattenSettingsPatch({ settings: { tieCountsAs: 'WIN', maxTeamUses: 0 } }, 'NFL_SURVIVOR'))
+      .toEqual({ 'settings.tieCountsAs': 'WIN', 'settings.maxTeamUses': 0 });
+  });
+
+  // '' is in this list on purpose: `Number('')` is 0, the unlimited sentinel, so
+  // a coercing guard would turn an empty form field into "no restriction".
+  it.each([-1, 1.5, '2', '', true, NaN, 24, null])('REJECTS maxTeamUses %p rather than coercing it', (value) => {
+    expect(() => flattenSettingsPatch({ settings: { maxTeamUses: value } }, 'NFL_SURVIVOR'))
+      .toThrow(/maxTeamUses/);
+  });
+
+  it.each(['win', 'TIE', '', 1, null])('REJECTS tieCountsAs %p', (value) => {
+    expect(() => flattenSettingsPatch({ settings: { tieCountsAs: value } }, 'NFL_SURVIVOR'))
+      .toThrow(/tieCountsAs/);
+  });
+});

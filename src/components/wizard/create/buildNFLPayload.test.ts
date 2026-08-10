@@ -67,6 +67,43 @@ describe('buildNFLPayload', () => {
     expect(survivorCreateInputSchema.safeParse(p).success).toBe(true);
   });
 
+  it('carries the parity settings THROUGH the schema — it strips unknown keys', () => {
+    // `survivorCreateInputSchema.settings` is a z.object, so a field the schema
+    // does not name is silently DROPPED at create and the wizard's control would
+    // do nothing at all. Assert on the PARSED output, not on safeParse success:
+    // a stripped key still parses fine (sweep S3).
+    const survivorBase: Record<string, unknown> = {
+      ...pickemBase, type: 'NFL_SURVIVOR',
+      settings: {
+        entryFee: 20, isListedPublic: true,
+        maxStrikes: 1, maxRebuys: 0, rebuyDeadlineWeek: 4, rebuyCost: 20,
+        pickLosersMode: false, autoSurviveExemptionEnabled: true,
+        tieCountsAs: 'WIN', maxTeamUses: 2,
+        payouts: { places: [{ rank: 1, percentage: 100 }], bonuses: [] },
+      },
+    };
+    const parsed = survivorCreateInputSchema.parse(buildNFLPayload(survivorBase, 'NFL_SURVIVOR'));
+    expect(parsed.settings.tieCountsAs).toBe('WIN');
+    expect(parsed.settings.maxTeamUses).toBe(2);
+  });
+
+  it('rejects an out-of-contract parity value at create', () => {
+    const bad = (settings: Record<string, unknown>) => survivorCreateInputSchema.safeParse(
+      buildNFLPayload({
+        ...pickemBase, type: 'NFL_SURVIVOR',
+        settings: {
+          entryFee: 0, isListedPublic: true,
+          maxStrikes: 1, maxRebuys: 0, rebuyDeadlineWeek: 4, rebuyCost: 0,
+          payouts: { places: [{ rank: 1, percentage: 100 }], bonuses: [] },
+          ...settings,
+        },
+      }, 'NFL_SURVIVOR'),
+    ).success;
+    expect(bad({ maxTeamUses: -1 })).toBe(false); // must not read as "unlimited"
+    expect(bad({ maxTeamUses: 1.5 })).toBe(false);
+    expect(bad({ tieCountsAs: 'win' })).toBe(false);
+  });
+
   it('passes through margin settings and gate', () => {
     const marginBase: Record<string, unknown> = {
       ...pickemBase, type: 'NFL_MARGIN',

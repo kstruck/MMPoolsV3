@@ -112,6 +112,11 @@ export interface NFLSurvivorPool {
     rebuyCost: number;
     pickLosersMode: boolean;
     autoSurviveExemptionEnabled: boolean;
+    // Both OPTIONAL and both default to today's behaviour, so no existing pool
+    // doc carries them and none needs a migration. Defaults are applied at read
+    // sites only, via shared/survivorReuse.ts.
+    tieCountsAs?: 'WIN' | 'LOSS';   // absent ⇒ a tie is a strike in BOTH modes
+    maxTeamUses?: number;           // absent ⇒ 1; 0 = unlimited
   };
 
   managerName?: string;

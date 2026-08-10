@@ -95,13 +95,13 @@ const poolData: Record<Sport, {
     },
     survivor: {
         title: 'NFL Survivor Pools',
-        description: 'Pick one winner each week. If they win, you advance. If they lose or tie, you take a strike. You can never select the same team twice.',
+        description: 'Pick one winner each week. If they win, you advance. By default a loss or a tie is a strike, and each team can be picked once — commissioners can allow ties to count as a win, or let a team be picked more than once.',
         stepsTitle: 'The Survivor Roadmap',
         steps: [
             { title: "1. Select One Team Weekly", desc: "Pick one NFL team you are confident will win their matchup in the upcoming week." },
             { title: "2. Lock Your Selection", desc: "Submit your pick before that team's kickoff or the pool weekly deadline." },
-            { title: "3. Avoid the Strike", desc: "If your chosen team wins, you survive to the next week. A loss or tie gives you a strike." },
-            { title: "4. The One-and-Done Constraint", desc: "Once you select a team, you cannot pick them again for the rest of the season. Plan ahead!" },
+            { title: "3. Avoid the Strike", desc: "If your chosen team wins, you survive to the next week. A loss gives you a strike, and so does a tie unless your commissioner set ties to count as a win." },
+            { title: "4. The One-and-Done Constraint", desc: "By default, once you select a team you cannot pick them again for the rest of the season. Some pools raise that limit or remove it — your pool's Rules page states the one in force. Plan ahead!" },
             { title: "5. Last Person Standing", desc: "The pool continues week by week until only one active player remains." }
         ],
         strategyTitle: 'How to Outlast Your Pool',

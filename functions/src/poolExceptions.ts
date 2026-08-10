@@ -26,6 +26,7 @@ import {
     readLockRevision,
 } from "./lib/scoringLease";
 import { nextEntryRevision, ENTRY_REVISION_FIELD } from "./lib/entryRevision";
+import { countTeamUses, effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from "./shared/survivorReuse";
 import { extensionRefusal } from "./lib/publishedWeeks";
 
 // Commissioner exception tools (UX overhaul Phase 3.6).
@@ -388,8 +389,27 @@ export const proxyPick = validated(
             const usedTeams: string[] = entry.usedTeams || [];
 
             // Reject teams already used this season (excluding this week's current pick).
-            if (teamPicked !== oldPick && usedTeams.includes(teamPicked)) {
-                throw new HttpsError("invalid-argument", `TEAM_ALREADY_USED: ${targetName} has already used the ${teamPicked} this season.`);
+            //
+            // TRI-MODE, and it must MATCH `submitNFLPicks` exactly: a
+            // commissioner proxy pick that rejected a reuse the member could
+            // submit themselves would be a third opinion about what "used"
+            // means, which is the class of bug PR #384 was. Survivor only —
+            // Margin keeps one use per team per season (out of scope).
+            const maxTeamUses = type === "NFL_SURVIVOR"
+                ? effectiveMaxTeamUses(pool.settings)
+                : 1;
+            if (maxTeamUses === 1) {
+                if (teamPicked !== oldPick && usedTeams.includes(teamPicked)) {
+                    throw new HttpsError("invalid-argument", `TEAM_ALREADY_USED: ${targetName} has already used the ${teamPicked} this season.`);
+                }
+            } else if (maxTeamUses !== UNLIMITED_TEAM_USES) {
+                const uses = countTeamUses(entry.picks, weekNum)[teamPicked] ?? 0;
+                if (uses >= maxTeamUses) {
+                    throw new HttpsError(
+                        "invalid-argument",
+                        `TEAM_ALREADY_USED: ${targetName} has already used the ${teamPicked} ${maxTeamUses} time${maxTeamUses === 1 ? "" : "s"} this season.`,
+                    );
+                }
             }
 
             // Team must actually be playing this week.
@@ -414,11 +434,17 @@ export const proxyPick = validated(
             // throws on a missing selection.
             committedPick = true;
 
+            // Ledger rewrite, twin of the submit path. Remove-then-re-add
+            // assumes one use per team and would strip a team still held by
+            // another week, so under reuse derive it from the resulting picks.
+            const nextPicks = { ...(entry.picks || {}), [weekNum]: teamPicked };
             const oldUsed = usedTeams.filter((t: string) => t !== oldPick);
             transaction.set(entryRef, {
                 ...entry,
-                picks: { ...(entry.picks || {}), [weekNum]: teamPicked },
-                usedTeams: [...new Set([...oldUsed, teamPicked])],
+                picks: nextPicks,
+                usedTeams: maxTeamUses === 1
+                    ? [...new Set([...oldUsed, teamPicked])]
+                    : [...new Set(Object.values(nextPicks) as string[])],
                 submittedAt: now,
                 proxySubmittedBy: uid,
                 proxyReason: reason,

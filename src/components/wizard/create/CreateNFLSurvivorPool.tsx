@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { User } from '../../../types';
 import { dbService } from '../../../services/dbService';
 import { survivorCreateInputSchema } from '@shared/schemas';
+import { MAX_TEAM_USES } from '@shared/survivorReuse';
 import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
 import { ReadOnlyField, NumberField, CheckboxField, SelectField } from '../fields';
@@ -40,6 +41,17 @@ function StepSurvivorRules() {
         <NumberField name="settings.rebuyDeadlineWeek" label="Rebuy deadline week" min={0} />
         <NumberField name="settings.rebuyCost" label="Rebuy cost ($)" min={0} />
       </div>
+      <div className="grid grid-cols-2 gap-x-4">
+        <SelectField
+          name="settings.tieCountsAs"
+          label="Tie outcome"
+          options={[
+            { value: 'LOSS', label: 'Tie counts as a loss (strike)' },
+            { value: 'WIN', label: 'Tie counts as a win for the picked team' },
+          ]}
+        />
+        <NumberField name="settings.maxTeamUses" label="Team-use limit (0 = unlimited)" min={0} max={MAX_TEAM_USES} />
+      </div>
       <CheckboxField name="settings.pickLosersMode" label="Pick teams to LOSE (reverse survivor)" />
       <CheckboxField name="settings.autoSurviveExemptionEnabled" label="Auto-survive when no eligible teams remain" />
     </div>
@@ -61,6 +73,9 @@ const defaultValues: Record<string, unknown> = {
     entryFee: 0, isListedPublic: true,
     maxStrikes: 1, maxRebuys: 0, rebuyDeadlineWeek: 4, rebuyCost: 0,
     pickLosersMode: false, autoSurviveExemptionEnabled: true,
+    // Today's rules, spelled out. Both are also the read-site defaults, so a
+    // pool created before these existed behaves identically.
+    tieCountsAs: 'LOSS', maxTeamUses: 1,
     payouts: { places: [{ rank: 1, percentage: 100 }], bonuses: [] },
   },
   _tosAccepted: false,

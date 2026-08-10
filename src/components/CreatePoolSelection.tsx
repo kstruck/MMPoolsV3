@@ -130,7 +130,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                     <Trophy size={20} className="text-navy-800 dark:text-[#9FB0CC] group-hover:text-white" />
                                 </div>
                                 <h3 className="font-display font-bold uppercase text-[22px] leading-[0.95] text-[color:var(--text)] mb-2 pr-10">Survivor Pool</h3>
-                                <p className="text-muted text-sm mb-4 flex-grow font-body">Pick 1 winner per week. Lose/tie = take a strike. Supports mulligans and buy-backs.</p>
+                                <p className="text-muted text-sm mb-4 flex-grow font-body">Pick 1 winner per week. By default a loss or tie is a strike. Supports mulligans, buy-backs and configurable tie and team-reuse rules.</p>
                                 <ul className="text-xs text-muted space-y-2 mb-6 mt-auto font-body">
                                     <li className="flex items-center gap-2"><Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> 1 strike or custom multi-strikes</li>
                                     <li className="flex items-center gap-2"><Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> Mulligans &amp; buy-back settings</li>

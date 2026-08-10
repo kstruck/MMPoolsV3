@@ -9,7 +9,7 @@ This document outlines the business logic, product rules, and technical implemen
 The platform supports three distinct NFL pool types, all leveraging the same ESPN scheduling and scoring integration:
 
 1. **Weekly Pick'em:** Pick the winner of every game each week. Supports standard scoring (1 pt/win) or Confidence assigned scoring.
-2. **Survivor:** Pick one winner per week. If the team loses/ties, you take a strike. Once strikes equal the limit, you are eliminated (unless rebuys are active). You cannot pick the same team twice in a season.
+2. **Survivor:** Pick one winner per week. By default, if the team loses or ties you take a strike, and you cannot pick the same team twice in a season — both are commissioner settings (`tieCountsAs`, `maxTeamUses`; see Survivor Settings). Once strikes equal the limit, you are eliminated (unless rebuys are active).
 3. **Margin:** Pick one team per week. Your score is their margin of victory. If they lose, the negative margin counts against you.
 
 ---
@@ -27,7 +27,10 @@ The platform supports three distinct NFL pool types, all leveraging the same ESP
 ### Survivor Settings
 
 - **Max Strikes:** Integer. Set to `0` for true sudden death. Set to `> 0` to allow "mulligans".
-- **Pick-Loser Mode:** Boolean. If true, the logic is inverted: picking a loser = survive. Picking a winner/tie = strike.
+- **Pick-Loser Mode:** Boolean. If true, the logic is inverted: picking a loser = survive. Picking a winner = strike.
+- **Tie Outcome (`tieCountsAs`):** `'LOSS'` (default, and what every pool created before this setting existed does) or `'WIN'`. At the default a tied game is a strike in BOTH modes. At `'WIN'` the tie grades as the picked team WINNING, which composes with the mode: survive in standard, strike in pick-loser.
+- **Team-Use Limit (`maxTeamUses`):** Integer, default `1` — one use per team per season, today's rule. `N >= 2` allows a team in up to N distinct weeks; `0` means unlimited.
+  Both settings are absent from existing pool docs and default at every read site, so no migration was needed. Both are also refused by `updatePoolSettings` once the pool has published a scored week: the engine recomputes past weeks with CURRENT settings, so changing either would rewrite results members have already seen.
 - **Max Buy-Backs (Rebuys):** Default `0`. Number of times an eliminated player can pay to re-enter.
 - **Buy-Back Deadline:** The final week rebuys are permitted (e.g., Week 4).
 - **Buy-Back Cost:** Dollar amount added to the pot for re-entering.
@@ -49,14 +52,14 @@ The platform supports three distinct NFL pool types, all leveraging the same ESP
 ### Survivor
 
 - A "Strike" is logged if:
-  - The picked team loses or ties (in standard mode).
-  - The picked team wins or ties (in pick-loser mode).
+  - The picked team loses (in standard mode), or wins (in pick-loser mode).
+  - The picked team TIES — in both modes, unless `tieCountsAs` is `'WIN'`, in which case the tie grades as that team winning (survive in standard mode, strike in pick-loser mode).
   - The user **forgets to submit a pick** before the week locks (Auto-Strike).
 - **State Machine:**
   - `ALIVE`: `strikes < maxStrikes + 1`
   - `ELIMINATED`: `strikes >= maxStrikes + 1` (Note: if `maxStrikes = 0`, 1 strike = `ELIMINATED`).
-- **Auto-Survive Exemption:** If a player is alive but has no eligible teams left to pick (e.g., all remaining valid teams are on bye), they automatically survive the week without using a pick.
-- **Rebuy State:** If eligible and within deadline, `strikesUsed` resets to 0, `rebuysUsed` increments. Importantly, **previously used teams remain locked** and cannot be picked again.
+- **Auto-Survive Exemption:** If a player is alive but has no eligible teams left to pick (e.g., all remaining valid teams are on bye), they automatically survive the week without using a pick. "Eligible" respects `maxTeamUses`, so under an unlimited limit the exemption can never fire — a week nobody could play is handled by the void-week rule instead.
+- **Rebuy State:** If eligible and within deadline, `strikesUsed` resets to 0, `rebuysUsed` increments. Importantly, **previously used teams are retained** — a rebuy does not refund team uses, whatever `maxTeamUses` is.
 
 ### Margin
 
@@ -101,7 +104,7 @@ Because Margin pools often result in similar total scores, a strict 5-level casc
    a game as **not concluded**: nothing is graded, the week does not complete, no
    recap is written and the season is not finalized. Waiting is the intended
    outcome — grading it would publish a fabricated 0-0, which reads as a PUSH for
-   every Pick'em entry and as a TIE for Survivor, and a tie is a strike. The game
+   every Pick'em entry and as a TIE for Survivor, and a tie is a strike by default. The game
    is marked so its slate keeps being re-fetched, and the condition is reported as
    a DEGRADED score-sync heartbeat until the feed delivers.
 8. **What the weekly recap holds, per pool type.** A `weekly_recaps/week_N`

@@ -10,6 +10,7 @@ import {
 } from '../shared/editability';
 import { writePaymentHandles, CLEAR, LEGACY_TOP_LEVEL_HANDLE_KEYS } from '../shared/paymentHandles';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '../shared/weeklyHardLock';
+import { MAX_TEAM_USES } from '../shared/survivorReuse';
 
 export interface PoolSettingsUpdatePlan {
   // Fields to set on the pool doc.
@@ -101,6 +102,8 @@ export const LOCK_AFFECTING_SETTINGS_KEYS: readonly string[] =
 /** Widest Pick'em buffer we will store: a full day before the first kickoff. */
 const MAX_PICKEM_LOCK_BUFFER_MINUTES = 24 * 60;
 
+
+
 export function touchesLockSettings(patch: Record<string, unknown>): boolean {
   // `flattenSettingsPatch` always expands a `settings` key into dotted paths, so
   // the first test is the real one. The second is defence against a future caller
@@ -184,6 +187,36 @@ export function flattenSettingsPatch(
         continue;
       }
       out['settings.lockBufferMinutes'] = n;
+      continue;
+    }
+    // Survivor parity settings. `updatePoolSettingsSchema.updates` is
+    // `z.record(z.string(), z.unknown())` — permissive, which means these arrive
+    // UNVALIDATED. A negative `maxTeamUses` sliding through would read as
+    // "unlimited" to any `> 0` test, so reject rather than coerce: a mis-set
+    // value must be visible, not silently reinterpreted.
+    if (key === 'tieCountsAs') {
+      if (value !== 'WIN' && value !== 'LOSS') {
+        rejected.push(`settings.tieCountsAs (must be WIN or LOSS)`);
+        continue;
+      }
+      out['settings.tieCountsAs'] = value;
+      continue;
+    }
+    if (key === 'maxTeamUses') {
+      // A NUMBER, not something Number() can chew into one. `Number('')` is 0 —
+      // which is the "unlimited" sentinel — so an empty-string field from some
+      // future form would quietly remove the restriction it was meant to set.
+      // That is the same hazard as the negative value, wearing a different hat.
+      const n = value;
+      // Capped at the number of weeks a season can hold: above that the limit
+      // is indistinguishable from unlimited, which `0` already expresses.
+      if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > MAX_TEAM_USES) {
+        rejected.push(
+          `settings.maxTeamUses (must be a whole number from 0 to ${MAX_TEAM_USES}; 0 means unlimited)`,
+        );
+        continue;
+      }
+      out['settings.maxTeamUses'] = n;
       continue;
     }
     out[`settings.${key}`] = value;

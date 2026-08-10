@@ -221,6 +221,40 @@ service cloud.firestore {
                || s is float;
       }
 
+      // The two survivor parity settings are CALLABLE-ONLY, for EVERY client
+      // principal including SUPER_ADMIN (PLAN-SURVIVOR-PARITY-SCORING decision 4).
+      //
+      // `updatePoolSettings` refuses to change either field once the pool has
+      // published a scored week, because both regrade past weeks on the next
+      // rescore. A direct client write skips that refusal entirely, and
+      // `firestore.rules:242` grants isSuperAdmin() unrestricted pool updates —
+      // so without this the gate is one console-adjacent write away from being
+      // decorative.
+      //
+      // ⚠️ THE NESTED DIFF IS THE POINT. Root-level
+      // `request.resource.data.diff(resource.data).affectedKeys()` reports only
+      // the top-level `settings` key — documented at the nflSettingsWriteBlocked()
+      // comment above and at poolUpdate.ts's flatten helper — so a per-field check
+      // written against the ROOT diff would never fire and this rule would read as
+      // a guard while guarding nothing. Diffing the settings MAPS catches all
+      // three shapes: a dotted `settings.maxTeamUses` update, a wholesale
+      // `settings` replacement with the value changed inside it, and a deletion.
+      //
+      // Applied OUTSIDE the super-admin disjunction below, deliberately. Scoped to
+      // these two fields, also deliberately: a blanket SA lockout of NFL settings
+      // would change the repair surface for every other field, which is a bigger
+      // blast radius than the bypass being closed. Privileged edits go through the
+      // gated callable.
+      //
+      // Admin-SDK and console writes bypass rules by nature; they carry the same
+      // invariant by convention, not by enforcement.
+      function survivorParitySettingsUnchanged() {
+        let changed = request.resource.data.get('settings', {})
+                        .diff(resource.data.get('settings', {}))
+                        .affectedKeys();
+        return !changed.hasAny(['tieCountsAs', 'maxTeamUses']);
+      }
+
       // Pool is in an editable state.
       // NOTE: 'PUBLISHED' is removed — status was renamed to 'OPEN'.
       function poolIsEditable() {
@@ -239,8 +273,9 @@ service cloud.firestore {
         );
       }
 
-      // Update: Owner/Manager (filtered) OR SuperAdmin (unrestricted)
-      allow update: if request.auth != null && (
+      // Update: Owner/Manager (filtered) OR SuperAdmin (unrestricted) — except
+      // the two survivor parity settings, which no client principal may write.
+      allow update: if request.auth != null && survivorParitySettingsUnchanged() && (
         (isPoolManager() && protectedFieldsUnchanged() && nflSettingsWriteBlocked() && nflSeasonTypeWriteBlocked() && seasonNotForgedSim() && poolIsEditable())
         || isSuperAdmin()
       );
