@@ -17,8 +17,17 @@
 // `picks` behaves exactly as it does today. That guarantee is why the callers
 // branch instead of always counting.
 
-/** Tie outcome for the picked team. Absent ⇒ today's rule (see below). */
-export type TieCountsAs = 'WIN' | 'LOSS';
+/**
+ * Tie outcome for the picked team. Absent ⇒ today's rule (see below).
+ *
+ * The VALUES are the source of truth and the type is derived from them, so the
+ * create schema's `z.enum()` consumes the same tuple instead of hand-copying the
+ * members. Two hand-written copies of one value set is how a schema starts
+ * rejecting a value the engine supports (qodo, PR #399) — the same drift the
+ * `MAX_TEAM_USES` constant below prevents for the numeric bound.
+ */
+export const TIE_COUNTS_AS_VALUES = ['WIN', 'LOSS'] as const;
+export type TieCountsAs = (typeof TIE_COUNTS_AS_VALUES)[number];
 
 /** No setting ⇒ a tie is a strike in BOTH modes, which is what the engine has
  *  always done. See `evaluateSurvivorWeek` for why 'LOSS' is not folded. */

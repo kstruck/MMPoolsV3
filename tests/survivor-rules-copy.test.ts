@@ -6,7 +6,7 @@ import {
   survivorRuleCopy,
 } from '../src/utils/survivorRules';
 import { survivorCreateInputSchema } from '@shared/schemas';
-import { MAX_TEAM_USES } from '@shared/survivorReuse';
+import { MAX_TEAM_USES, TIE_COUNTS_AS_VALUES, effectiveTieCountsAs } from '@shared/survivorReuse';
 
 /**
  * PLAN-SURVIVOR-PARITY-SCORING — the member-facing rules copy.
@@ -117,5 +117,31 @@ describe('MAX_TEAM_USES — create and update must agree on the bound', () => {
     expect(create(MAX_TEAM_USES + 1)).toBe(false);
     expect(create(0)).toBe(true);
     expect(create(-1)).toBe(false);
+  });
+});
+
+describe('tieCountsAs — the schema and the type share one value set', () => {
+  // qodo, PR #399: the create schema hand-copied ['WIN','LOSS'] instead of
+  // consuming the constant the engine reads, so adding a third outcome would
+  // have left the schema silently rejecting it. Derived now; this pins that.
+  it('the schema accepts exactly the declared values and nothing else', () => {
+    const parse = (tieCountsAs: unknown) => survivorCreateInputSchema.safeParse({
+      type: 'NFL_SURVIVOR', name: 'P', season: '2026',
+      settings: {
+        entryFee: 0, isListedPublic: true,
+        maxStrikes: 1, maxRebuys: 0, rebuyDeadlineWeek: 4, rebuyCost: 0,
+        tieCountsAs,
+        payouts: { places: [{ rank: 1, percentage: 100 }], bonuses: [] },
+      },
+    }).success;
+
+    for (const value of TIE_COUNTS_AS_VALUES) expect(parse(value), value).toBe(true);
+    expect(parse('PUSH')).toBe(false);
+  });
+
+  it('the effective-value reader agrees with the same set', () => {
+    for (const value of TIE_COUNTS_AS_VALUES) {
+      expect(effectiveTieCountsAs({ tieCountsAs: value })).toBe(value);
+    }
   });
 });
