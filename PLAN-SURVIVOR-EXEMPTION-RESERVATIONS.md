@@ -1,6 +1,11 @@
 # PLAN: auto-survive eligibility must not count FUTURE-week reservations
 
-**Status:** DRAFT — design SIGNED OFF 2026-08-09 (Kevin); adversarial review NOT converged, a further round is owed. Do not implement from this without re-verifying its specifics against the code.
+**Status:** IMPLEMENTING 2026-08-10 — design SIGNED OFF 2026-08-09 (Kevin). The
+implementing session re-ran S1–S4 from scratch on 2026-08-10 against
+`origin/main` @ `8a1d110` (shape-proofs included: 4 JSON fixtures, 3 TS seeds,
+12 call sites all found by the published commands) and recorded the concrete
+implementation decisions below. Review round 9 runs on this refreshed plan
+before code.
 **Classification:** Plan-gated — **SCORING** trigger. It changes how a week is
 decided (whether a missed pick is a strike or an exemption). Not money, not
 authorization, not prod data.
@@ -72,6 +77,30 @@ default pool and a configured pool continue to agree.
 - **Default path**: `usedTeams` cannot express *when* a team was used, so it
   cannot answer this question at all. The exemption therefore stops reading
   `usedTeams` and reads `countTeamUsesBefore(picks, week)` with a limit of 1.
+
+**Signature decision (implementing session, 2026-08-10).** With both paths
+picks-derived, the `usedTeams` parameter is DEAD — nothing inside the helper
+reads it. It is REMOVED rather than kept as a decoy, and the reuse context
+becomes REQUIRED:
+
+```ts
+checkAutoSurviveExemption(
+  gamesInWeek: NFLGame[],
+  autoSurviveEnabled: boolean,
+  ctx: { maxTeamUses: number; picks: ...; week: number },
+): boolean
+```
+
+Two consequences, both intended:
+1. **The two modes collapse into ONE counting path** — `maxTeamUses === 0`
+   short-circuits to eligible, everything else is
+   `countTeamUsesBefore(picks, week)[team] < maxTeamUses` (the default resolves
+   to `1` via `effectiveMaxTeamUses` at the caller). Default and configured
+   pools cannot diverge because there is no second branch to diverge in.
+2. **Every 3-arg call site is a compile error**, so TypeScript enumerates the
+   collision list instead of a grep: `survivorRescore.test.ts` (the tri-mode
+   describe block) and `tests/nfl-scoring.test.ts:272`. The engine's one
+   production call site already passes the full context (#399).
 
 ⚠️ **That second bullet knowingly breaks the #399 byte-for-byte guarantee for
 this one helper, and the plan must own it rather than bury it.** The guarantee
@@ -278,12 +307,32 @@ deleted, so the reasoning survives.
 - **S4** — every place that could pre-submit a future week (schema range, lock
   paths, proxy).
 
+## Fixture rebuild design (implementing session, 2026-08-10)
+
+The rebuilt `nfl-survivor-autosurvive.json` spans **three weeks** so the
+exemption fires from genuinely PRIOR uses:
+
+- **Games**: w1 `KC 27–24 BUF`, `SF 30–10 DAL`; w2 `BUF 21–14 MIA`,
+  `DAL 28–7 NYJ`; w3 `KC 20–17 BUF`. `scoreWeeks: [1, 2, 3]`.
+- **Alice**: `survivorPicks {"1":"KC","2":"BUF"}` — both win, she survives w1/w2.
+  Week 3's slate is KC and BUF only, both used strictly before week 3 →
+  **exempt week 3**. Her seeded `usedTeams` stays `['KC','BUF','SF','DAL']`
+  DELIBERATELY divergent, proving the seeded ledger is no longer the authority.
+- **Bob**: `survivorPicks {"1":"SF","2":"DAL","3":"KC"}` — the week-1 SF
+  reservation is PRESERVED (sweep S2 requirement), all three win, he survives
+  normally. His divergent `usedTeams ['KC']` also stays.
+- Assertions move `exemptWeeks [1]` → `[3]`; Bob stays ALIVE.
+
+`nfl-survivor-autosurvive-off.json` gets the SAME rebuild with the exemption
+disabled: Alice has no week-3 pick, so the missing pick auto-strikes and
+eliminates her in **week 3** (assertions move `eliminatedWeek 1` → `3`).
+
 ## Implementation status
 
 | Item | Status |
 |---|---|
 | Plan drafted | ✅ 2026-08-09 |
-| Sweeps (S1–S4) | ⚠️ 2026-08-09 — S2 corrected the plan, but S2's own command has been wrong **four times** (JSON-only include, literal `|`, `head` truncation, unquoted JSON key). Re-run it and verify it finds a known instance of every shape before relying on it |
+| Sweeps (S1–S4) | ✅ **re-run from scratch 2026-08-10** against `8a1d110` with shape-proofs (one JSON fixture, one TS seed, one call site each found). One NEW file since the tables: `survivorParitySettings.emulator.test.ts` (#399) — seeds `usedTeams`+`picks` but exercises the settings-reduction validator via `updatePoolSettings`, never `checkAutoSurviveExemption`; unaffected. Line drift only otherwise: the tri-mode call sites are now `survivorRescore.test.ts:273–326` |
 | Adversarial review (log: PLAN-SURVIVOR-EXEMPTION-RESERVATIONS-REVIEW-LOG.md) | ⏳ **8 rounds** (7 codex, 1 qodo), **19 findings**, 18 accepted / 1 rejected — **STOPPED at 8, NOT converged.** The log is authoritative; if this row disagrees with it, the log wins |
 | Kevin sign-off | ✅ 2026-08-09 — Q1 (change both paths) and Q4 (fix-forward only) RESOLVED; Q3 deferred to the reset-and-replay work; Q2/Q5 are implementation detail |
 | Implementation | PENDING — dedicated session |

@@ -3,6 +3,26 @@
 Deterministic grep-built COMPLETE instance lists. Commands are reproducible from
 repo root; re-run them before implementation if the branch has moved.
 
+> ✅ **RE-RUN FROM SCRATCH 2026-08-10** by the implementing session against
+> `origin/main` @ `8a1d110`, with the shape-proofs rule 5/6 demands executed
+> first: the S2 declaration command finds the 4 JSON fixture rows
+> (`--include=*.json` alone → 4) and the 3 TS seeds in `survivorRescore.test.ts`;
+> the S2 call-site command finds all 12 call sites including the two the
+> property-name grep cannot see. Deltas against the tables below:
+>
+> 1. **One NEW file**: `functions/src/__tests__/emulator/survivorParitySettings.emulator.test.ts`
+>    (#399) seeds entries with `usedTeams` + `picks` (`:133`, `:146` —
+>    `usedTeams ['KC']` with picks whose team SET matches, so not divergent).
+>    It exercises the settings-reduction validator through `updatePoolSettings`
+>    and never reaches `checkAutoSurviveExemption`. **Unaffected**, and it must
+>    stay green untouched — it pins #399 behaviour this plan does not change.
+> 2. **Line drift only** elsewhere: the tri-mode call sites in
+>    `survivorRescore.test.ts` are now `:273`/`:274` (no-context form),
+>    `:277`–`:283` (the maxTeamUses-1 divergence pin that INVERTS),
+>    `:305`–`:323` (the future-reservation pin that INVERTS), `:326` (toggle).
+>    `poolExceptions.ts` writer rows are now `:375`/`:380`/`:389`/`:445`.
+> 3. Everything else matches the tables.
+
 ## S1 — every writer of `usedTeams` (is it submit-time everywhere?)
 
 Command (**`grep -E`** — see the note at the foot of this file):
