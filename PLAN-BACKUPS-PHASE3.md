@@ -18,17 +18,26 @@ costs time, not data.
 
 | Asset | Backed up? | Consequence if lost |
 |---|---|---|
-| **Firestore** — pools, entries, picks, member records, billing charges, payout records | ❌ none | Permanent. Nothing anywhere else holds this. |
+| **Firestore** — pools, entries, picks, member records, billing charges, payout records | ✅ **PITR, 7-day window** (measured 2026-08-10) | Bad writes/corruption in the last 7 days are recoverable **while the database still exists** — PITR is historical reads/exports of a live database, not a restore after deletion or project loss. Deletion and >7-day corruption still need the scheduled/off-region exports (items 16/17). |
 | **Firebase Auth** — user accounts, emails, password hashes | ❌ none | Every member loses access, even with a perfect Firestore restore. |
 
-No PITR, no scheduled backups, no exports, no Auth export. If the Firestore
-database were deleted or corrupted today, every pool, entry, pick, member record
-and billing charge would be gone permanently — and the VPS snapshots would not
-help, because none of that data has ever lived on the VPS.
+✅ **PITR IS ENABLED — measured 2026-08-10, not assumed.**
+`npx firebase firestore:databases:get "(default)" --project gridiron-gamble-uzuqo --json`
+returns `pointInTimeRecoveryEnablement: "POINT_IN_TIME_RECOVERY_ENABLED"`,
+`versionRetentionPeriod: "604800s"` (7 days), `earliestVersionTime:
+2026-08-04T04:26:00Z` — so it went on around 2026-08-04. The paragraph this
+replaces said "No PITR, no scheduled backups, no exports, no Auth export"; the
+first clause is now false and the other three are still true as far as this
+repo can see (scheduled exports and the Auth export are console/Cloud Shell
+state this machine cannot read — verify in the console before treating them as
+absent OR present).
 
-That remains the largest unaddressed risk in the system, and it is larger than
-any bug in the preseason list, because every other risk is recoverable and this
-one is not.
+The recovery floor exists — with its limits stated: PITR reads a database that
+is still there. It does not bring back a DELETED database or survive a
+project-level loss; the recovery matrix below still requires the off-region
+export for those. The remaining exposure is: database deletion / project loss
+(items 16/17), corruption discovered more than 7 days late (item 16), and Auth
+(item 18) — Auth is still the un-recreatable half with nothing behind it.
 
 Scope and corrected facts come from `PLAN-SECURITY-OBSERVABILITY.md` Phase 3
 (items 15–19, already corrected by Codex review #10/#11). This document is the
@@ -45,8 +54,8 @@ deliberately deferred until the bucket from item 17 exists, because a scheduled
 job that writes to a nonexistent bucket is a job that fails silently. This repo
 has already been bitten four times by exactly that failure mode.
 
-**Recommended order:** 15 → 19 → 17 → 16 → 18. PITR first because it is one
-command and immediately buys a 7-day floor.
+**Recommended order:** ~~15~~ → 19 → 17 → 16 → 18. Item 15 (PITR) is **done —
+measured enabled 2026-08-10**; the remaining work starts at 19.
 
 ---
 
@@ -146,8 +155,11 @@ gcloud firestore databases describe --database="(default)" --project gridiron-ga
 
 **Expect:** a YAML block. Read two fields:
 - `locationId:` — e.g. `nam5`, `us-central1`, `us-east1`. **Write this down.**
-- `pointInTimeRecoveryEnablement:` — almost certainly
-  `POINT_IN_TIME_RECOVERY_DISABLED` today. That is what step 2 fixes.
+  (Measured 2026-07-21: it is `nam5`.)
+- `pointInTimeRecoveryEnablement:` — **`POINT_IN_TIME_RECOVERY_ENABLED`**
+  (measured 2026-08-10). If you see `..._DISABLED`, PITR has been turned OFF
+  since that measurement — treat that as a finding, not a to-do, and step 2
+  is how to turn it back on.
 
 **If instead** you get `PERMISSION_DENIED`, your account lacks the
 `datastore.databases.get` permission — check you signed in as the project owner
@@ -163,7 +175,11 @@ with all steps regardless.
 
 ## Step 2 — Enable Point-in-Time Recovery (item 15)
 
-**Do this first. It needs no install and takes about two minutes.**
+✅ **ALREADY DONE — measured 2026-08-10** (`POINT_IN_TIME_RECOVERY_ENABLED`,
+7-day window, versions back to 2026-08-04). **Skip the Enable steps; run only
+the "Verify independently" check below if you want fresh evidence.** The
+instructions are kept for the recovery case where PITR is ever found disabled
+again.
 
 PITR keeps a rolling **7-day** window. Firestore retains **one version per
 minute** inside that window, and you read the database as-of a whole-minute
