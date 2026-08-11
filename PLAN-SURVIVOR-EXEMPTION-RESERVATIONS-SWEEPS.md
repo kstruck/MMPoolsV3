@@ -36,8 +36,13 @@ divergent entries live, and the "complete inventory" it produced was nothing of
 the kind. Corrected command:
 
 ```bash
-grep -rn 'usedTeams:' --include=*.ts --include=*.tsx --include=*.json src functions/src tests   | grep -Ev 'functions/src/shared|nflPoolTypes|survivorReuse|: string\[\]'
+grep -rEn '"?usedTeams"?:' --include=*.ts --include=*.tsx --include=*.json src functions/src tests   | grep -Ev 'functions/src/shared|nflPoolTypes|survivorReuse|: string\[\]'
 ```
+
+⚠️ **The `"?` is load-bearing** — JSON writes `"usedTeams":`, TypeScript writes
+`usedTeams:`. A bare `usedTeams:` matches **zero** of the four scenario fixtures
+in the table below while the command's own `--include=*.json` advertises that it
+covers them (measured: `0` vs `4`). Do not "simplify" it back.
 
 **Scoping note that makes this tractable.** The blast radius is not "every seed
 whose ledgers diverge" — it is "every seed that reaches
@@ -169,3 +174,15 @@ the defect's precondition is ordinary usage rather than a corrupt state.
    been shown capable of finding everything it claims to cover** — no `head`, no
    narrowed `--include`, no untested regex flavour. Run it wide, then filter for
    reading.
+6. **And a FOURTH: the pattern could not match JSON keys at all** (codex r5). The
+   corrected command still searched for `usedTeams:` while advertising
+   `--include=*.json`, and JSON writes `"usedTeams":` — so it matched **0** of the
+   four scenario fixtures that the table's own first four rows are about
+   (`grep -rEn '"?usedTeams"?:' --include=*.json src` finds 4). The rows were right;
+   the command that claimed to produce them could not have.
+
+   Four failures, one sweep, every one of them a command that ran clean and
+   returned something. **Treat rule 5 above as mandatory rather than aspirational:
+   before writing a sweep up as complete, prove the command finds a known instance
+   of every shape it claims to cover.** For this sweep that means: one TypeScript
+   seed, one JSON fixture, one match that must be excluded.

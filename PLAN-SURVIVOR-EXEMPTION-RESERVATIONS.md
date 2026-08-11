@@ -246,7 +246,7 @@ deleted, so the reasoning survives.
 | Item | Status |
 |---|---|
 | Plan drafted | ✅ 2026-08-09 |
-| Sweeps (S1–S4) | ✅ 2026-08-09 — S1–S4 complete; **S2 corrected the plan** (fixtures carry `usedTeams` with no `picks`) |
-| Codex adversarial review (log: PLAN-SURVIVOR-EXEMPTION-RESERVATIONS-REVIEW-LOG.md) | ⏳ 2 rounds, 4 findings, 100% accepted — NOT converged; round 3 owed |
+| Sweeps (S1–S4) | ⚠️ 2026-08-09 — S2 corrected the plan, but S2's own command has been wrong **four times** (JSON-only include, literal `|`, `head` truncation, unquoted JSON key). Re-run it and verify it finds a known instance of every shape before relying on it |
+| Adversarial review (log: PLAN-SURVIVOR-EXEMPTION-RESERVATIONS-REVIEW-LOG.md) | ⏳ **5 rounds** (4 codex, 1 qodo), **12 findings**, 11 accepted / 1 rejected — **NOT converged; a further round is owed.** The log is authoritative; if this row disagrees with it, the log wins |
 | Kevin sign-off | ✅ 2026-08-09 — Q1 (change both paths) and Q4 (fix-forward only) RESOLVED; Q3 deferred to the reset-and-replay work; Q2/Q5 are implementation detail |
 | Implementation | PENDING — dedicated session |

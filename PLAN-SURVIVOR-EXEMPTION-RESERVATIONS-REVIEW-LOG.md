@@ -134,16 +134,49 @@ was worth the round.
    until the command has been shown capable of finding everything it claims to
    cover.
 
+## Round 5 — codex
+
+VERDICT: REVISE. 3 findings (3×P2). All accepted. All three are the previous
+round's fixes being wrong, not new design problems.
+
+1. **(P2) The S2 command could not match JSON keys at all.** It searched
+   `usedTeams:` while advertising `--include=*.json`, and JSON writes
+   `"usedTeams":` — so it matched **0** of the four scenario fixtures the table's
+   first four rows are about.
+   **Response: accepted.** Pattern is now `'"?usedTeams"?:'`, measured 0 → 4, and
+   the `"?` is annotated as load-bearing so it does not get "simplified" away.
+   **Fourth failure of the same family on this one sweep.** Rule 5 promoted from
+   aspiration to procedure: before writing a sweep up as complete, prove the
+   command finds a known instance of EVERY shape it claims to cover.
+
+2. **(P2) The plan's status table contradicted this log** — it said 2 rounds / 4
+   findings / round 3 owed while the log recorded 4 rounds / 9 findings / round 5
+   owed. A future session could have read the gate as nearly closed.
+   **Response: accepted.** Row synchronised, and it now names this log as
+   authoritative on disagreement so the two cannot drift silently again. The
+   sweeps row likewise now warns that S2's command has been wrong four times.
+
+3. **(P2) The round-1 resolution paragraph still described the shape questions as
+   open** after Kevin had resolved them.
+   **Response: accepted.** Marked SUPERSEDED in place rather than rewritten — the
+   round-1 record stays honest — with a pointer to the current status.
+
 ## Resolution status
 
-**NOT CONVERGED — round 5 is owed before implementation.** 4 rounds (3 codex,
-1 qodo), 9 findings, 8 accepted and 1 rejected with reasoning on the PR.
+**NOT CONVERGED — a further round is owed before implementation.** 5 rounds
+(4 codex, 1 qodo), 12 findings, 11 accepted and 1 rejected with reasoning on the
+PR.
 
-Trajectory is finally improving — 2×P1 in round 2, then P2-only in rounds 3 and
-4 — but three consecutive rounds have found defects in the SWEEP rather than in
-the design, and the last one was introduced by the previous round's fix. That is
-the pattern CLAUDE.md §2c describes ("rounds 2+ find defects in the fixes"), so
-one more round is owed.
+Severity has settled — 2×P1 in round 2, then P2-only in rounds 3, 4 and 5 — and
+**no round since round 2 has found anything wrong with the DESIGN.** Every finding
+since has been in the sweep tooling or in doc consistency, and each was introduced
+by the previous round's fix. That is exactly the pattern CLAUDE.md §2c predicts,
+and it is why the counter is not the stopping rule.
+
+**The design is stable and signed off; the sweep is the part that keeps failing.**
+The implementing session should re-run S1–S4 from scratch, verify each command
+finds a known instance of every shape it covers, and run one more codex round on
+the result before writing code.
 
 What HAS closed is the design. **Kevin resolved both shape-changing questions on
 2026-08-09** — change both eligibility paths, and fix-forward only, with existing
