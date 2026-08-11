@@ -142,9 +142,10 @@ trigger regrading nobody asked for.
 The option remains on the table only for the narrow case below, and it should be
 taken only if that case is shown to be real:
 
-**Deliverable IF taken:** a scoring-version term in `computeWeekFingerprint` — a
-constant bumped by any grading-logic change — with a test pinning that the same
-pool, games and settings hash differently across a bump.
+**If a future change ever does need it:** a scoring-version term in
+`computeWeekFingerprint` — a constant bumped by any grading-logic change — with a
+test pinning that the same pool, games and settings hash differently across a
+bump. Not this PR.
 
 ⚠️ **SCOPE IT HONESTLY — it does NOT repair history** (codex r3), and under
 fix-forward it may buy nothing at all (codex r6). Now that Kevin
@@ -154,9 +155,17 @@ mechanism that corrects existing wrong exemptions, because it cannot be:
 fingerprint, so an already-scored survivor week is deferred regardless of what
 the hash says, and weeks outside the active window are not candidates at all.
 
-What the version term actually buys is that a week scored AFTER deploy grades
-under the new rule even when it is re-graded for some unrelated reason. That is
-worth having and it is all it is worth claiming.
+**And it buys nothing else either** (codex r8, retiring the last claim made for
+it). The "re-graded for an unrelated reason" case does not need it: once any other
+fingerprint input moves and the scorer runs, it executes the DEPLOYED eligibility
+code regardless of whether a version is hashed. The term's only distinct effect is
+to force regrades when nothing else changed.
+
+**So the honest position is: under fix-forward, no version term. Do not add one.**
+The section is kept — rather than deleted — because "we considered hashing the
+algorithm and here is why it buys nothing" is the useful artifact; a future change
+that DOES need historical regrading will want this reasoning and the
+`survivorAllowedForGroup` constraint that shapes it.
 
 It also has a wide blast radius (it invalidates stored fingerprints for every NFL
 pool, not just survivor), so global-vs-survivor-scoped is a real implementation
@@ -243,10 +252,9 @@ deleted, so the reasoning survives.
    - The PR must state plainly that it **knowingly leaves existing wrong
      exemptions in place**, and HANDOFF must carry the same, so a future session
      does not read a green PR as "history is correct now".
-   - The fingerprint question is **decided, not skipped**. Default answer is NO
-     version term (see the fingerprint section — codex r6 showed it buys nothing
-     under fix-forward). If the implementing session takes it anyway, the PR must
-     say which concrete re-grade case it is buying.
+   - The fingerprint question is **decided: NO version term** (see the fingerprint
+     section — r6 showed it cannot repair history, r8 retired the last remaining
+     claim made for it). Ship without one.
 
    Reset-and-replay stays tracked as separate work. Question 3 becomes its
    entry criterion rather than a blocker for this PR.
@@ -276,6 +284,6 @@ deleted, so the reasoning survives.
 |---|---|
 | Plan drafted | ✅ 2026-08-09 |
 | Sweeps (S1–S4) | ⚠️ 2026-08-09 — S2 corrected the plan, but S2's own command has been wrong **four times** (JSON-only include, literal `|`, `head` truncation, unquoted JSON key). Re-run it and verify it finds a known instance of every shape before relying on it |
-| Adversarial review (log: PLAN-SURVIVOR-EXEMPTION-RESERVATIONS-REVIEW-LOG.md) | ⏳ **7 rounds** (6 codex, 1 qodo), **17 findings**, 16 accepted / 1 rejected — **NOT converged; a further round is owed.** The log is authoritative; if this row disagrees with it, the log wins |
+| Adversarial review (log: PLAN-SURVIVOR-EXEMPTION-RESERVATIONS-REVIEW-LOG.md) | ⏳ **8 rounds** (7 codex, 1 qodo), **19 findings**, 18 accepted / 1 rejected — **STOPPED at 8, NOT converged.** The log is authoritative; if this row disagrees with it, the log wins |
 | Kevin sign-off | ✅ 2026-08-09 — Q1 (change both paths) and Q4 (fix-forward only) RESOLVED; Q3 deferred to the reset-and-replay work; Q2/Q5 are implementation detail |
 | Implementation | PENDING — dedicated session |

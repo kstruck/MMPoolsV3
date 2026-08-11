@@ -214,11 +214,39 @@ question 1" and "for Kevin" first, then editing all of them. Fixing only what a
 reviewer cites is what produced rounds 5, 6 and 7 in the first place: each round
 corrected one copy and left the others to be found next time.
 
+## Round 8 — codex
+
+VERDICT: REVISE. 2 findings (2×P2). Both accepted.
+
+1. **(P2) The last surviving claim for the fingerprint version term was false.**
+   Round 6 left it as "buys a week re-graded for an unrelated reason". It does
+   not: once any other fingerprint input moves and the scorer runs, it executes
+   the DEPLOYED eligibility code whether or not a version is hashed. The term's
+   only distinct effect is forcing regrades when nothing else changed.
+   **Response: accepted. The answer is now simply NO version term**, and the
+   section is kept rather than deleted because "we considered hashing the
+   algorithm and here is why it buys nothing" is the artifact worth having — a
+   future change that DOES need historical regrading will want this reasoning and
+   the `survivorAllowedForGroup` constraint that shapes it.
+
+2. **(P2) S2 searched DECLARATIONS and never CALL SITES — a fifth shape failure.**
+   `survivorRescore.test.ts:277` passes a divergent ledger straight into
+   `checkAutoSurviveExemption` as an argument, reaching the helper as directly as
+   any seeded entry, and it exists specifically to pin the behaviour this plan
+   removes — so its assertion REVERSES. A property-name grep cannot see it.
+   **Response: accepted.** S2 now carries two commands (declarations + call
+   sites), both call sites are in the table with their verdicts, and the sweep
+   rule gains a clause: enumerate the SHAPES a thing can take before writing the
+   command — seed literal, JSON key, function argument — not just the files it
+   can live in.
+
 ## Resolution status
 
-**NOT CONVERGED — a further round is owed before implementation.** 7 rounds
-(6 codex, 1 qodo), 17 findings, 16 accepted and 1 rejected with reasoning on the
-PR.
+**STOPPING AT 8 ROUNDS, NOT CONVERGED — and stopping is a judgement call, not a
+clean result.** 8 rounds (7 codex, 1 qodo), 19 findings, 18 accepted and 1
+rejected with reasoning on the PR. CLAUDE.md §2c allows up to 10; the remaining
+two are deliberately left for the implementing session, which will have to run
+codex again anyway once there is code.
 
 Severity has settled — 2×P1 in round 2, then P2-only in rounds 3, 4 and 5 — and
 **no round since round 2 has found anything wrong with the DESIGN.** Every finding
@@ -240,3 +268,18 @@ What HAS closed is the design. **Kevin resolved both shape-changing questions on
 2026-08-09** — change both eligibility paths, and fix-forward only, with existing
 wrong exemptions deliberately left standing until reset-and-replay exists. The
 implementing session starts from a settled shape and an unsettled sweep.
+
+### What eight rounds actually bought, and what a reader should take from it
+
+**Nothing since round 2 has found a problem with the DESIGN.** Rounds 3–8 found
+one class of defect over and over: a sweep command or an instruction that looked
+right, ran clean, returned something plausible, and could not have found what it
+claimed to cover. Five of those were the S2 sweep alone — JSON-only `--include`,
+literal `|` under plain `grep`, `head` truncation, unquoted JSON key,
+declarations-but-not-call-sites.
+
+That is the honest summary to hand forward: **treat this plan's direction as
+settled and every one of its specifics as a claim to re-verify against the code.**
+The sweep tables are a starting inventory, not evidence. Re-run S1–S4 from
+scratch, prove each command finds a known instance of every shape it covers, and
+take at least one more codex round before writing code.

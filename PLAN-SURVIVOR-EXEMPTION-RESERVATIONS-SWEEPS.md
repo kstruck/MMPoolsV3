@@ -39,6 +39,17 @@ the kind. Corrected command:
 grep -rEn '"?usedTeams"?:' --include=*.ts --include=*.tsx --include=*.json src functions/src tests   | grep -Ev 'functions/src/shared|nflPoolTypes|survivorReuse|: string\[\]'
 ```
 
+**S2 NEEDS TWO SEARCHES, NOT ONE** (codex r8). The pattern above finds SEED
+DECLARATIONS. It cannot find a divergent ledger passed straight into the helper
+as an argument — those are call sites, and they reach the exemption just as
+directly:
+
+```bash
+grep -rEn 'checkAutoSurviveExemption\(' --include=*.ts functions/src tests   | grep -v 'export function'
+```
+
+(12 call sites at the time of writing.)
+
 ⚠️ **The `"?` is load-bearing** — JSON writes `"usedTeams":`, TypeScript writes
 `usedTeams:`. A bare `usedTeams:` matches **zero** of the four scenario fixtures
 in the table below while the command's own `--include=*.json` advertises that it
@@ -62,6 +73,8 @@ never touch the exemption, and saying so per row is the point of the table.
 | `functions/src/__tests__/emulator/memberRecord.emulator.test.ts:111` | `[]` | `{}` | Member-record latch; no exemption. Unaffected |
 | `functions/src/__tests__/emulator/hofChaosDrill.emulator.test.ts:365` | `[]` | `{}` | Void-week / no-pick path, exemption explicitly cannot fire (`teamsPlaying.size === 0`). Unaffected |
 | `functions/src/__tests__/survivorRescore.test.ts:357` | `['KC','BUF']` | `{1:'KC', 9:'KC'}` | ⚠️ **DIVERGENT *AND* REACHES THE EXEMPTION** — added by #399 to assert that at `maxTeamUses: 2` the picks map wins over a stale ledger. Under the change its verdict must be RESTATED: with `countTeamUsesBefore(picks, 9)` KC has one use before week 9, so it stays eligible and the exemption still does not fire — same outcome, different reason. **Re-derive it rather than assume it; it is the one seed in this table that exercises the path being changed.** |
+| `functions/src/__tests__/survivorRescore.test.ts:277` (**CALL SITE**, codex r8) | `['KC','BUF']` passed as an argument | `{}` passed alongside | 🛑 **ITS ASSERTION REVERSES.** "maxTeamUses 1 keeps usedTeams authority even when picks DISAGREE" — it exists to pin the exact behaviour this plan removes. Invert it, do not delete it, exactly as `:357`'s sibling was handled in #399 |
+| `functions/src/__tests__/survivorRescore.test.ts:272` (**CALL SITE**) | `['KC','BUF']` / `['KC']` | none passed | "no reuse context: usedTeams stays the authority" — 3-arg form. Its verdict changes with the default path; restate |
 | `functions/src/__tests__/survivorRescore.test.ts:98` | `['KC','BUF']` | `{}` (none) | ⚠️ **DIVERGENT AND REACHES THE EXEMPTION** — "exemption weeks use set semantics across reruns". With no picks at all, a picks-derived default path counts zero uses and the exemption STOPS FIRING, so this test breaks exactly as the autosurvive fixtures do. Same repair as the fixtures — and per codex r6 that is a REBUILD (a bare `picks`/`survivorPicks` addition cannot create a week earlier than the one being scored), not a one-line seed edit |
 | `autoScore` / `goldenArc` / `hofChaosDrill` / `fixtureMatrix` / `phase3Arc` / `scenarioRunner` / `settingsMatrix` emulator seeds | consistent with `picks` | consistent | Non-divergent by construction. Unaffected |
 
@@ -188,3 +201,14 @@ the defect's precondition is ordinary usage rather than a corrupt state.
    before writing a sweep up as complete, prove the command finds a known instance
    of every shape it claims to cover.** For this sweep that means: one TypeScript
    seed, one JSON fixture, one match that must be excluded.
+7. **A FIFTH shape failure — S2 searched only DECLARATIONS, never CALL SITES**
+   (codex r8). A divergent ledger handed straight to `checkAutoSurviveExemption`
+   as an argument reaches the helper just as directly as a seeded entry does, and
+   `survivorRescore.test.ts:272` and `:277` do exactly that — `:277` exists
+   specifically to pin the behaviour this plan removes, so its assertion reverses.
+   A property-name grep cannot see either.
+
+   S2 now carries **two** commands, declarations and call sites. And the rule
+   earns one more clause: **enumerate the SHAPES a thing can take before writing
+   the command** — a seed literal, a JSON key, a function argument — not just the
+   files it can live in.
