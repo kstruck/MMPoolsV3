@@ -56,6 +56,8 @@ never touch the exemption, and saying so per row is the point of the table.
 | `functions/src/__tests__/emulator/resubmitSameTeam.emulator.test.ts:287` | `['ARI']` | `{}` | Added by #399 to pin the SUBMIT GUARD's ledger authority. Guards are out of scope (decision 3), so unaffected — but it is the closest thing to a trap in this list and must be re-read, not assumed |
 | `functions/src/__tests__/emulator/memberRecord.emulator.test.ts:111` | `[]` | `{}` | Member-record latch; no exemption. Unaffected |
 | `functions/src/__tests__/emulator/hofChaosDrill.emulator.test.ts:365` | `[]` | `{}` | Void-week / no-pick path, exemption explicitly cannot fire (`teamsPlaying.size === 0`). Unaffected |
+| `functions/src/__tests__/survivorRescore.test.ts:357` | `['KC','BUF']` | `{1:'KC', 9:'KC'}` | ⚠️ **DIVERGENT *AND* REACHES THE EXEMPTION** — added by #399 to assert that at `maxTeamUses: 2` the picks map wins over a stale ledger. Under the change its verdict must be RESTATED: with `countTeamUsesBefore(picks, 9)` KC has one use before week 9, so it stays eligible and the exemption still does not fire — same outcome, different reason. **Re-derive it rather than assume it; it is the one seed in this table that exercises the path being changed.** |
+| `functions/src/__tests__/survivorRescore.test.ts:98` | `['KC','BUF']` | `{}` (none) | ⚠️ **DIVERGENT AND REACHES THE EXEMPTION** — "exemption weeks use set semantics across reruns". With no picks at all, a picks-derived default path counts zero uses and the exemption STOPS FIRING, so this test breaks exactly as the autosurvive fixtures do. Must gain a `picks` map in the same PR |
 | `autoScore` / `goldenArc` / `hofChaosDrill` / `fixtureMatrix` / `phase3Arc` / `scenarioRunner` / `settingsMatrix` emulator seeds | consistent with `picks` | consistent | Non-divergent by construction. Unaffected |
 
 ⚠️ **This table is the corrected sweep's OUTPUT, not its completion.** Each
@@ -153,3 +155,17 @@ the defect's precondition is ordinary usage rather than a corrupt state.
    ⚠️ The same unescaped-alternation pattern appears in **already-merged** sweep
    docs, `PLAN-SURVIVOR-PARITY-SCORING-SWEEPS.md` among them. Out of scope for
    this PR and left alone deliberately; worth a sweep of its own.
+5. **The corrected S2 was ALSO incomplete — it was truncated by `head -25`**
+   (codex r3). Two divergent seeds that reach the exemption were cut off the
+   bottom: `survivorRescore.test.ts:98` and `:357`. Both are now in the table, and
+   `:98` is a second instance of the autosurvive-fixture problem hiding in a unit
+   test.
+
+   **That is the THIRD failure of the same family on this one sweep** — first the
+   `--include` list was JSON-only, then `|` alternation was literal under plain
+   `grep`, now the output was truncated. Each time the command "worked", returned
+   something plausible, and was written up as COMPLETE. The generalisable rule,
+   earned three times: **a sweep's output is not evidence until the command has
+   been shown capable of finding everything it claims to cover** — no `head`, no
+   narrowed `--include`, no untested regex flavour. Run it wide, then filter for
+   reading.

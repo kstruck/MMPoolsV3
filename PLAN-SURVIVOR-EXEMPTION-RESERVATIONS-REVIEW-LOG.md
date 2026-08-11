@@ -102,19 +102,53 @@ VERDICT: REVISE. 3 findings. 1 accepted as a real defect, 1 accepted as trivial,
    qodo calibration, where defect findings have been 17/17 valid and style findings
    7/7 rejected.
 
+## Round 4 — codex (on the post-sign-off shape)
+
+VERDICT: REVISE. 2 findings (2×P2). Both accepted. Both are consequences of the
+sign-off edits, which is why running codex again AFTER recording Kevin's rulings
+was worth the round.
+
+1. **(P2) The fingerprint section still claimed to repair history.** Kevin's
+   fix-forward ruling was recorded in question 4, but the fingerprint section was
+   left reading as though the version term corrects existing wrong exemptions. It
+   cannot: `scoreSlateOnce` calls `survivorAllowedForGroup` BEFORE computing the
+   fingerprint, so an already-scored survivor week is deferred whatever the hash
+   says, and weeks outside the active window are not candidates at all.
+   **Response: accepted.** Section re-scoped to what the term actually buys — a
+   week scored after deploy grades under the new rule even when re-graded for an
+   unrelated reason — and "no version term at all, documented as future-passes-only"
+   added as a legitimate third option now that it cannot repair history.
+
+2. **(P2) The CORRECTED S2 was still incomplete.** It omitted
+   `survivorRescore.test.ts:357` — `usedTeams: ['KC','BUF']` with picks only for
+   weeks 1 and 9 — which is divergent AND reaches `computeSurvivorWeekUpdate`.
+   **Response: accepted.** Cause: the re-run was truncated by `head -25`. Re-run
+   untruncated, which surfaced `:357` and also `:98` (divergent, no picks at all —
+   a second instance of the autosurvive-fixture problem hiding in a unit test).
+   Both added with explicit verdicts.
+
+   **This is the third failure of the same family on one sweep** — JSON-only
+   `--include`, then literal `|` under plain `grep`, now `head` truncation. Each
+   time the command ran, returned something plausible, and was written up as
+   COMPLETE. Recorded in the sweeps doc as a rule: a sweep's output is not evidence
+   until the command has been shown capable of finding everything it claims to
+   cover.
+
 ## Resolution status
 
-**NOT CONVERGED for implementation — a codex round on the plan's post-sign-off
-shape is still owed.** 3 rounds (2 codex, 1 qodo), 7 findings, 6 accepted and 1
-rejected with reasoning on the PR.
+**NOT CONVERGED — round 5 is owed before implementation.** 4 rounds (3 codex,
+1 qodo), 9 findings, 8 accepted and 1 rejected with reasoning on the PR.
 
-Severity went UP in round 2 (1×P2 → 2×P1) and round 3 found a correctness defect
-in the sweep tooling itself, so the trajectory has not yet converged. What HAS
-closed is the design: **Kevin resolved both shape-changing questions on
-2026-08-09** — change both eligibility paths, and fix-forward only (existing wrong
-exemptions deliberately left standing until reset-and-replay exists). The
-implementing session should run codex again on the plan as it now stands before
-writing code. The plan's two open
+Trajectory is finally improving — 2×P1 in round 2, then P2-only in rounds 3 and
+4 — but three consecutive rounds have found defects in the SWEEP rather than in
+the design, and the last one was introduced by the previous round's fix. That is
+the pattern CLAUDE.md §2c describes ("rounds 2+ find defects in the fixes"), so
+one more round is owed.
+
+What HAS closed is the design. **Kevin resolved both shape-changing questions on
+2026-08-09** — change both eligibility paths, and fix-forward only, with existing
+wrong exemptions deliberately left standing until reset-and-replay exists. The
+implementing session starts from a settled shape and an unsettled sweep. The plan's two open
 questions (default-path change vs. path divergence; and whether any live pool
 currently holds an exemption this would revoke) are for Kevin and are NOT review
 findings — they are deliberately left open for sign-off.

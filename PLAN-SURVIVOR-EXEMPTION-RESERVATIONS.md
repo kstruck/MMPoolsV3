@@ -122,10 +122,22 @@ bumped by any change to grading logic — so a logic change invalidates every
 stored fingerprint the way a settings change already does. With a test that pins
 it: same pool, same games, same settings, bumped version ⇒ different hash.
 
-This is a small addition with a wide blast radius (it forces a rescore of every
-NFL pool on deploy, not just survivor), so the version term's scope — global vs.
-survivor-only — is a review question in its own right, not a detail to settle at
-implementation time.
+⚠️ **SCOPE IT HONESTLY — it does NOT repair history** (codex r3). Now that Kevin
+has chosen fix-forward (question 4), this term must not be described as the
+mechanism that corrects existing wrong exemptions, because it cannot be:
+`scoreSlateOnce` calls `survivorAllowedForGroup` BEFORE computing the
+fingerprint, so an already-scored survivor week is deferred regardless of what
+the hash says, and weeks outside the active window are not candidates at all.
+
+What the version term actually buys is that a week scored AFTER deploy grades
+under the new rule even when it is re-graded for some unrelated reason. That is
+worth having and it is all it is worth claiming.
+
+It also has a wide blast radius (it invalidates stored fingerprints for every NFL
+pool, not just survivor), so global-vs-survivor-scoped is a real implementation
+question — and given it cannot repair history, "no version term at all, and
+document that only future passes differ" is now a legitimate third option for the
+implementing session to weigh.
 
 ### Tests
 
