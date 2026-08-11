@@ -252,6 +252,21 @@ and the concrete three-week fixture rebuild. This is the "one more codex round
 before writing code" the round-8 stop demanded; implementation proceeds from
 here, and the CODE will earn its own rounds.
 
+## Round 10 — codex (round 1 on the CODE)
+
+VERDICT: **CLEAN.** "The change consistently derives exemption eligibility from
+picks in weeks strictly before the scored week, updates all direct call sites,
+and covers future reservations, same-week picks, reuse limits, and divergent
+ledgers."
+
+Self-review of the same diff (§2c: a clean round 1 is not the review) found one
+staleness codex did not: `checkAutoSurviveExemption`'s docstring still described
+the pre-change rule ("already used or on bye") with no prior-week qualifier.
+Fixed in the same PR. Gate evidence (all measured 2026-08-10): root tsc clean,
+functions typecheck clean, root vitest 860/860, functions vitest 1432/1432,
+emulator 348 passed / 2 expected-fail / 10 skipped with both rebuilt autosurvive
+scenarios passing through the real callables; 4 mutations applied, 4 killed.
+
 ## Resolution status
 
 **STOPPING AT 8 ROUNDS, NOT CONVERGED — and stopping is a judgement call, not a

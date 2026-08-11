@@ -360,7 +360,9 @@ export function updateSurvivorStatus(
 
 /**
  * Checks if a player qualifies for an auto-survive exemption (no eligible teams remaining).
- * Evaluates whether all NFL teams playing this week are either already used or on bye.
+ * Evaluates whether every NFL team playing this week was already used in a week
+ * STRICTLY BEFORE the one being scored — a use that had not happened yet by that
+ * week (a future-week reservation) does not count.
  */
 export function checkAutoSurviveExemption(
   gamesInWeek: NFLGame[],
