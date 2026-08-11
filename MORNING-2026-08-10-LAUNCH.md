@@ -196,8 +196,11 @@ Full canonical steps: `TOMORROW-TASKS.md` → **NFL-6** (line ~849). Summary:
    console → Firestore → Disaster Recovery → check whether a backup schedule
    exists. If not, `PLAN-BACKUPS-PHASE3.md` item 16 has the steps.
 2. **Auth export** (the un-recreatable half): `PLAN-BACKUPS-PHASE3.md` step 6 —
-   one Cloud Shell command. **What you should see:** a dated export in the GCS
-   bucket.
+   it is a short SEQUENCE, not one command: the backup bucket must exist first
+   (its step 4/`$BACKUP_BUCKET`), then the export, then the upload
+   (`gcloud storage cp`), and its commands are written for PowerShell — do not
+   paste them into Cloud Shell as-is. **What you should see at the end:** a
+   dated export object in the GCS bucket, listed by the runbook's verify step.
 
 ## TASK 8 — Confirm the SA key is revoked (not just deleted)
 

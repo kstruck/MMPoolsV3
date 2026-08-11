@@ -43,7 +43,7 @@ field.
 | # | Item | Verify | Measured tonight | Verdict |
 |---|---|---|---|---|
 | C1 | PITR | `npx firebase firestore:databases:get "(default)" --project gridiron-gamble-uzuqo --json` | **`POINT_IN_TIME_RECOVERY_ENABLED`**, `versionRetentionPeriod: 604800s` (7 days), `earliestVersionTime: 2026-08-04T04:26:00Z` | **READY** — ⚠️ `PLAN-BACKUPS-PHASE3.md`'s "No PITR" line is STALE; PITR went on ~2026-08-04. Doc updated this session |
-| C2 | Scheduled Firestore exports | Console → Firestore → Disaster Recovery (or `gcloud firestore operations list`) | Not verifiable from this machine (no gcloud, no key) | **KEVIN-ACTION** — verify/enable per `PLAN-BACKUPS-PHASE3.md`; PITR (C1) already gives a 7-day floor, so this is belt-and-braces, not a blocker |
+| C2 | Scheduled Firestore exports | Console → Firestore → Disaster Recovery (or `gcloud firestore operations list`) | Not verifiable from this machine (no gcloud, no key) | **KEVIN-ACTION** — verify/enable per `PLAN-BACKUPS-PHASE3.md`. ⚠️ PITR (C1) covers bad writes on a LIVE database only — database deletion, project loss and >7-day corruption still need these exports, so this is the remaining real backup work, not belt-and-braces |
 | C3 | Auth export | `PLAN-BACKUPS-PHASE3.md` step 6 | Never run (per plan doc; not verifiable tonight) | **KEVIN-ACTION** — one command in Cloud Shell; Auth is the un-recreatable half |
 | C4 | VPS snapshots | Hostinger daily snapshot (deploy-topology memory) | Not re-verified tonight | **READY** (standing; frontend also rebuilds from git) |
 

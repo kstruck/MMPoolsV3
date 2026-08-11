@@ -18,7 +18,7 @@ costs time, not data.
 
 | Asset | Backed up? | Consequence if lost |
 |---|---|---|
-| **Firestore** — pools, entries, picks, member records, billing charges, payout records | ✅ **PITR, 7-day window** (measured 2026-08-10) | Recoverable to any point in the last 7 days. Older-than-7-days corruption still unprotected until scheduled exports (item 16) exist. |
+| **Firestore** — pools, entries, picks, member records, billing charges, payout records | ✅ **PITR, 7-day window** (measured 2026-08-10) | Bad writes/corruption in the last 7 days are recoverable **while the database still exists** — PITR is historical reads/exports of a live database, not a restore after deletion or project loss. Deletion and >7-day corruption still need the scheduled/off-region exports (items 16/17). |
 | **Firebase Auth** — user accounts, emails, password hashes | ❌ none | Every member loses access, even with a perfect Firestore restore. |
 
 ✅ **PITR IS ENABLED — measured 2026-08-10, not assumed.**
@@ -32,9 +32,12 @@ repo can see (scheduled exports and the Auth export are console/Cloud Shell
 state this machine cannot read — verify in the console before treating them as
 absent OR present).
 
-The recovery floor exists. The remaining exposure is: corruption discovered
-more than 7 days late (needs item 16, scheduled exports) and Auth (item 18) —
-Auth is still the un-recreatable half with nothing behind it.
+The recovery floor exists — with its limits stated: PITR reads a database that
+is still there. It does not bring back a DELETED database or survive a
+project-level loss; the recovery matrix below still requires the off-region
+export for those. The remaining exposure is: database deletion / project loss
+(items 16/17), corruption discovered more than 7 days late (item 16), and Auth
+(item 18) — Auth is still the un-recreatable half with nothing behind it.
 
 Scope and corrected facts come from `PLAN-SECURITY-OBSERVABILITY.md` Phase 3
 (items 15–19, already corrected by Codex review #10/#11). This document is the
