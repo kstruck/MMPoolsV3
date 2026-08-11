@@ -35,7 +35,9 @@
 > `shared/` and `firebase.json` — the three things that decide what gets uploaded.
 > `firebase.json` sets `"source": "functions"`, so **nothing outside `functions/`
 > can enter the bundle**; `shared/` is in scope only because the predeploy step
-> copies it in (`scripts/copy-shared.mjs`), and `firebase.json` itself controls the
+> copies it in (**`functions/scripts/copy-shared.mjs`** — the build script invokes
+> it package-relative as `node scripts/copy-shared.mjs`, so it is NOT a repo-root
+> path and no such root file exists), and `firebase.json` itself controls the
 > source, the ignore list and that predeploy command. **Untracked or modified files
 > anywhere else — stray notes at the repo root, `src/` work in progress — do NOT
 > block a functions deploy and must not be "cleaned up" to satisfy this gate.**
