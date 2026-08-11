@@ -12,10 +12,11 @@
 >
 > **Result: every function `Skipped (No changes detected)`, `Deploy complete!`** —
 > prod is byte-identical to `d7f02d6` and the #405 survivor exemption fix is live.
-> Preflight held: `git rev-parse HEAD` = `d7f02d6`, and the only working-tree
-> entries were two untracked root notes (`NEXT-SESSION-PROMPT.md`,
-> `PROMPT-SURVIVOR-PARITY.md`) — outside `functions/`, so outside the upload:
-> `firebase.json` sets `"source": "functions"`.
+> Preflight held: `git rev-parse HEAD` = `d7f02d6`, and `functions/`, `shared/`
+> and `firebase.json` were all clean. Two untracked root notes were present
+> (`NEXT-SESSION-PROMPT.md`, `PROMPT-SURVIVOR-PARITY.md`) and were correctly
+> ignored — they are outside the upload, and the scoped check below says so
+> rather than leaving it to judgement.
 >
 > **The procedure below stays here because #408's merge owes the same ritual.**
 >
@@ -30,16 +31,34 @@
 > **PowerShell, one command per line — no `&&` anywhere** (it is a syntax error in
 > PowerShell 5.1; standing rule). Run them in order and stop at the first failure:
 >
+> **What "clean" means here, exactly.** The check is scoped to `functions/`,
+> `shared/` and `firebase.json` — the three things that decide what gets uploaded.
+> `firebase.json` sets `"source": "functions"`, so **nothing outside `functions/`
+> can enter the bundle**; `shared/` is in scope only because the predeploy step
+> copies it in (`scripts/copy-shared.mjs`), and `firebase.json` itself controls the
+> source, the ignore list and that predeploy command. **Untracked or modified files
+> anywhere else — stray notes at the repo root, `src/` work in progress — do NOT
+> block a functions deploy and must not be "cleaned up" to satisfy this gate.**
+> A whole-tree `git status` would fail on ordinary working state and teach the
+> operator to wave the check through, which is worse than not having it.
+>
+> ⚠️ **`git status` CANNOT see `functions/.env`, and Firebase deploys it.** The
+> deploy log says so on every run — `Loaded environment variables from .env` — and
+> the file is gitignored, so a change to it is invisible to every git check above
+> while still altering live runtime configuration. Hence the `Get-ChildItem` line:
+> it lists **name, size and last-write time only, never contents**, so a `.env`
+> that moved since the last deploy is visible without putting secrets on screen.
+> If its timestamp is newer than the last deploy and you did not change it
+> deliberately, **stop and find out why before deploying**.
+>
 > ```powershell
 > cd D:\march-melee-pools
 > git fetch origin
 > git checkout main
 > git pull --ff-only
 > git rev-parse HEAD                          # must equal the SHA you intend to certify
-> git status --porcelain                      # must print NOTHING — the WHOLE tree,
->                                             # because firebase.json controls the
->                                             # functions source, ignore rules and
->                                             # predeploy build for the run below
+> git status --porcelain -- functions shared firebase.json   # must print NOTHING
+> Get-ChildItem functions/.env* | Select-Object Name, Length, LastWriteTime
 > npm --prefix functions ci                   # ci, not install — install rewrites the lockfile
 > $env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"
 > ```
