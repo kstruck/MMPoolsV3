@@ -1,4 +1,4 @@
-# HANDOFF — Session entry point (updated 2026-08-11 evening: ✅ **THREE GATED PRs AWAIT KEVIN** — [#408](https://github.com/kstruck/MMPoolsV3/pull/408) fixes the two defects his prod walkthrough found (default week landed on the finished HOF slate; new members' entries read "Participant"), [#409](https://github.com/kstruck/MMPoolsV3/pull/409) is the NFL spreads runbook, [#410](https://github.com/kstruck/MMPoolsV3/pull/410) is the commissioner-blind-picks PLAN and needs his sign-off before any code. #405/#406/#407 all MERGED — `main` merged **through `d7f02d6`** as of this writing; **do not treat that SHA as current state**, run `git fetch origin && git rev-parse origin/main` (CLAUDE.md §2c — every worktree shares one `origin/main` ref and it is routinely stale). ⚠️ **The functions deploy of `d7f02d6` is UNCONFIRMED** — only Coolify was confirmed, so the survivor exemption fix may not be live; see **Task 1** in the stop-point box. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5`, so #408's functions half deploys into a live scorer. *(CARRIED from the 2026-08-09 box, **not re-measured this session** — no admin credentials on this machine; re-read `system/config` in the Firebase console before relying on it.)* App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
+# HANDOFF — Session entry point (updated 2026-08-11 evening: ✅ **THREE GATED PRs AWAIT KEVIN** — [#408](https://github.com/kstruck/MMPoolsV3/pull/408) fixes the two defects his prod walkthrough found (default week landed on the finished HOF slate; new members' entries read "Participant"), [#409](https://github.com/kstruck/MMPoolsV3/pull/409) is the NFL spreads runbook, [#410](https://github.com/kstruck/MMPoolsV3/pull/410) is the commissioner-blind-picks PLAN and needs his sign-off before any code. #405/#406/#407 all MERGED — `main` merged **through `d7f02d6`** as of this writing; **do not treat that SHA as current state**, run `git fetch origin`, then `git rev-parse origin/main` — two commands, because Kevin's shell is PowerShell 5.1 and `&&` is a syntax error there (CLAUDE.md §2c — every worktree shares one `origin/main` ref and it is routinely stale). ⚠️ **The functions deploy of `d7f02d6` is UNCONFIRMED** — only Coolify was confirmed, so the survivor exemption fix may not be live; see **Task 1** in the stop-point box. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5`, so #408's functions half deploys into a live scorer. *(CARRIED from the 2026-08-09 box, **not re-measured this session** — no admin credentials on this machine; re-read `system/config` in the Firebase console before relying on it.)* App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
 > ## 🚀 STOP POINT 2026-08-11 (evening) — **three PRs gated and waiting; the spreads mystery is solved and it was not the flag**
 >
@@ -16,17 +16,21 @@
 > worktree.** `main` is checked out there, and git refuses to check the same
 > branch out twice, so `git checkout main` fails in any linked worktree.
 >
-> ```bash
+> **PowerShell, one command per line — no `&&` anywhere** (it is a syntax error in
+> PowerShell 5.1; standing rule). Run them in order and stop at the first failure:
+>
+> ```powershell
 > cd D:\march-melee-pools
 > git fetch origin
 > git checkout main
 > git pull --ff-only
 > git rev-parse HEAD                          # must equal the SHA you intend to certify
-> git status --porcelain                      # must print NOTHING — the whole tree,
+> git status --porcelain                      # must print NOTHING — the WHOLE tree,
 >                                             # because firebase.json controls the
 >                                             # functions source, ignore rules and
 >                                             # predeploy build for the run below
 > npm --prefix functions ci                   # ci, not install — install rewrites the lockfile
+> $env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"
 > ```
 >
 > Then `npx firebase deploy --only functions --project gridiron-gamble-uzuqo`.
