@@ -95,13 +95,34 @@ describe('computeSurvivorWeekUpdate — idempotency', () => {
     });
 
     it('exemption weeks use set semantics across reruns', () => {
-        const e0 = entry({ usedTeams: ['KC', 'BUF'] }); // all playing teams used
+        // Rebuilt for strictly-prior counting (PLAN-SURVIVOR-EXEMPTION-
+        // RESERVATIONS): the exemption now needs uses in EARLIER weeks, so the
+        // entry holds week-1/2 picks for both playing teams and week 3 is the
+        // scored week. (It was a bare seeded usedTeams at week 1, which no
+        // longer grants anything — pinned by the divergence test below.)
+        const e0 = entry({ picks: { 1: 'KC', 2: 'BUF' }, usedTeams: ['KC', 'BUF'] });
         const p = pool(1);
         p.settings.autoSurviveExemptionEnabled = true;
-        const r1 = computeSurvivorWeekUpdate(e0, 1, games, p);
-        expect(r1.update.exemptWeeks).toEqual([1]);
-        const r2 = computeSurvivorWeekUpdate(apply(e0, r1), 1, games, p);
-        expect(r2.update.exemptWeeks).toEqual([1]); // not [1, 1]
+        const r1 = computeSurvivorWeekUpdate(e0, 3, games, p);
+        expect(r1.update.exemptWeeks).toEqual([3]);
+        const r2 = computeSurvivorWeekUpdate(apply(e0, r1), 3, games, p);
+        expect(r2.update.exemptWeeks).toEqual([3]); // not [3, 3]
+    });
+
+    it('a legacy divergent usedTeams ledger GRADES instead of exempting (fix-forward)', () => {
+        // The plan's legacy-divergence obligation: assert the NEW outcome
+        // explicitly so the change is recorded rather than discovered. This
+        // entry's seeded ledger says every playing team is spent, but its
+        // picks map is empty — zero uses had actually occurred, so the missed
+        // pick is a strike again. Existing exemptions already recorded in
+        // exemptWeeks are untouched (fix-forward); only future gradings move.
+        const e = entry({ usedTeams: ['KC', 'BUF'] }); // divergent: no picks at all
+        const p = pool(1);
+        p.settings.autoSurviveExemptionEnabled = true;
+        const r = computeSurvivorWeekUpdate(e, 1, games, p);
+        expect(r.update.exemptWeeks).toEqual([]);
+        expect(r.update.strikeWeeks).toEqual([1]);
+        expect(r.update.status).toBe('ALIVE'); // maxStrikes 1 absorbs it
     });
 });
 
@@ -269,24 +290,30 @@ describe('evaluateSurvivorWeek — tieCountsAs × pickLosersMode', () => {
 describe('checkAutoSurviveExemption — maxTeamUses tri-mode', () => {
     const games = [game({ id: 'g1' })]; // KC and BUF play
 
-    it('no reuse context: usedTeams stays the authority (today path)', () => {
-        expect(checkAutoSurviveExemption(['KC', 'BUF'], games, true)).toBe(true);
-        expect(checkAutoSurviveExemption(['KC'], games, true)).toBe(false);
+    it('default (maxTeamUses 1): a PRIOR-week use makes a team ineligible', () => {
+        const bothUsed = { maxTeamUses: 1, picks: { 1: 'KC', 2: 'BUF' } as Record<number, string>, week: 3 };
+        expect(checkAutoSurviveExemption(games, true, bothUsed)).toBe(true);
+        const oneLeft = { maxTeamUses: 1, picks: { 1: 'KC' } as Record<number, string>, week: 3 };
+        expect(checkAutoSurviveExemption(games, true, oneLeft)).toBe(false);
     });
 
-    it('maxTeamUses 1 keeps usedTeams authority even when picks DISAGREE', () => {
-        // The legacy-divergence guarantee: a seeded usedTeams that does not
-        // match picks must produce the same outcome it does today. Counting
-        // picks here would return false and change the entry outcome.
-        const reuse = { maxTeamUses: 1, picks: {} as Record<number, string>, week: 1 };
-        expect(checkAutoSurviveExemption(['KC', 'BUF'], games, true, reuse)).toBe(true);
+    it('an empty picks map has ZERO uses — the divergent-ledger exemption is gone (INVERTS #399)', () => {
+        // #399 pinned the opposite: at maxTeamUses 1 a seeded usedTeams
+        // ['KC','BUF'] with empty picks granted the exemption, preserving
+        // legacy divergent seeds byte-for-byte. PLAN-SURVIVOR-EXEMPTION-
+        // RESERVATIONS is the sanctioned, non-silent removal of that
+        // behaviour: eligibility is picks-derived in EVERY mode, `usedTeams`
+        // is no longer consulted (it cannot say WHEN a team was used), and an
+        // empty picks map leaves every playing team eligible.
+        const ctx = { maxTeamUses: 1, picks: {} as Record<number, string>, week: 1 };
+        expect(checkAutoSurviveExemption(games, true, ctx)).toBe(false);
     });
 
-    it('maxTeamUses 2: a team picked once is still eligible, twice is not', () => {
+    it('maxTeamUses 2: a team picked once before is still eligible, twice is not', () => {
         const once = { maxTeamUses: 2, picks: { 1: 'KC', 2: 'BUF' }, week: 9 };
-        expect(checkAutoSurviveExemption([], games, true, once)).toBe(false);
+        expect(checkAutoSurviveExemption(games, true, once)).toBe(false);
         const twice = { maxTeamUses: 2, picks: { 1: 'KC', 2: 'KC', 3: 'BUF', 4: 'BUF' }, week: 9 };
-        expect(checkAutoSurviveExemption([], games, true, twice)).toBe(true);
+        expect(checkAutoSurviveExemption(games, true, twice)).toBe(true);
     });
 
     it('maxTeamUses 0 (unlimited): the exemption can NEVER fire', () => {
@@ -295,35 +322,49 @@ describe('checkAutoSurviveExemption — maxTeamUses tri-mode', () => {
             picks: { 1: 'KC', 2: 'KC', 3: 'BUF', 4: 'BUF', 5: 'KC' },
             week: 9,
         };
-        expect(checkAutoSurviveExemption(['KC', 'BUF'], games, true, exhausted)).toBe(false);
+        expect(checkAutoSurviveExemption(games, true, exhausted)).toBe(false);
         // And an all-cancelled slate still cannot reach it — teamsPlaying is
         // empty, which is isVoidWeek's job, not this helper's.
         const cancelled = [game({ id: 'g1', status: 'CANCELLED' })];
-        expect(checkAutoSurviveExemption([], cancelled, true, exhausted)).toBe(false);
+        expect(checkAutoSurviveExemption(cancelled, true, exhausted)).toBe(false);
     });
 
-    it('a FUTURE-week reservation counts as a use — in BOTH modes, matching production', () => {
-        // codex round 4 raised this as a P1 against the maxTeamUses >= 2 path:
-        // scoring week 3 while the member has pre-submitted picks for weeks 5-6
-        // counts those reservations, so the exemption can excuse an earlier
-        // week's missed pick. The observation is right, but it is NOT something
-        // this PR introduces — `submitNFLPicks` writes every submitted team into
-        // `usedTeams` whatever week it is for, so the DEPLOYED default path has
-        // exactly the same property. Both assertions below pass on `main`'s
-        // logic and on the new one.
-        //
-        // This test exists to keep them EQUAL. Changing only the counted path
-        // would split behaviour between a default pool and a configured one,
-        // which is the split the tri-mode guarantee exists to prevent. If this
-        // is ever fixed it must be fixed for both, as its own scoring change
-        // with its own plan gate.
-        const reservedLater = { maxTeamUses: 2, picks: { 5: 'KC', 6: 'KC', 7: 'BUF', 8: 'BUF' }, week: 3 };
-        expect(checkAutoSurviveExemption(['KC', 'BUF'], games, true)).toBe(true);
-        expect(checkAutoSurviveExemption([], games, true, reservedLater)).toBe(true);
+    it('a FUTURE-week reservation does NOT count — in EITHER mode (INVERTS #399)', () => {
+        // The defect this plan exists to fix (codex round 4 on #399): scoring
+        // week 3 while the member has pre-submitted weeks 5-8 counted those
+        // reservations as uses, so a thin slate could be "exhausted" by picks
+        // that had not happened yet and a missed pick excused instead of
+        // struck. The #399 version of this test pinned the two modes EQUAL on
+        // that behaviour; both now ignore weeks at or after the scored week,
+        // so they remain equal — inverted together, never split.
+        const reservedLater2 = { maxTeamUses: 2, picks: { 5: 'KC', 6: 'KC', 7: 'BUF', 8: 'BUF' }, week: 3 };
+        expect(checkAutoSurviveExemption(games, true, reservedLater2)).toBe(false);
+        const reservedLater1 = { maxTeamUses: 1, picks: { 5: 'KC', 6: 'BUF' }, week: 3 };
+        expect(checkAutoSurviveExemption(games, true, reservedLater1)).toBe(false);
+    });
+
+    it('mixed past and future: only the past uses count', () => {
+        // KC used in week 1 (past) — blocked. BUF only reserved for week 5
+        // (future) — still eligible, so no exemption...
+        const mixed = { maxTeamUses: 1, picks: { 1: 'KC', 5: 'BUF' }, week: 3 };
+        expect(checkAutoSurviveExemption(games, true, mixed)).toBe(false);
+        // ...and once BUF's use is also in the past, the exemption fires.
+        const bothPast = { maxTeamUses: 1, picks: { 1: 'KC', 2: 'BUF', 5: 'KC' }, week: 3 };
+        expect(checkAutoSurviveExemption(games, true, bothPast)).toBe(true);
+    });
+
+    it("the scored week's OWN pick is not a prior use", () => {
+        // Strictly-before is doing work here: a member who picked KC for the
+        // week being scored has not "used" KC by that week, so KC is eligible
+        // and the week grades the pick instead of exempting it. (Under the old
+        // submit-time usedTeams read, the current week's own un-scored pick
+        // already counted — nflScoringEngine.ts's projection comment.)
+        const ownPick = { maxTeamUses: 1, picks: { 3: 'KC' } as Record<number, string>, week: 3 };
+        expect(checkAutoSurviveExemption(games, true, ownPick)).toBe(false);
     });
 
     it('the exemption toggle still wins over every mode', () => {
-        expect(checkAutoSurviveExemption(['KC', 'BUF'], games, false, { maxTeamUses: 2, picks: {}, week: 1 })).toBe(false);
+        expect(checkAutoSurviveExemption(games, false, { maxTeamUses: 1, picks: { 1: 'KC', 2: 'BUF' }, week: 3 })).toBe(false);
     });
 });
 
@@ -351,9 +392,11 @@ describe('computeSurvivorWeekUpdate — idempotency under the new settings', () 
 
     it('maxTeamUses 2 grants no exemption to an entry with a team still available', () => {
         const p = parityPool({ maxStrikes: 1, maxTeamUses: 2, autoSurviveExemptionEnabled: true });
-        // usedTeams says both teams are spent — under maxTeamUses 2 the picks
-        // map is the authority and KC has one use left, so no exemption and the
-        // week grades normally.
+        // usedTeams says both teams are spent — the picks map is the authority,
+        // and under strictly-prior counting KC has ONE use before week 9 (the
+        // week-9 key is the scored week itself, not a prior use), so KC stays
+        // eligible, no exemption, and the week grades normally. Same verdict as
+        // #399, re-derived under the new counting rule (sweep S2 row).
         const e = entry({ usedTeams: ['KC', 'BUF'], picks: { 1: 'KC', 9: 'KC' } });
         const r = computeSurvivorWeekUpdate(e, 9, [game({ id: 'g1' })], p);
         expect(r.update.exemptWeeks).toEqual([]);

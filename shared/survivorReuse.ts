@@ -11,11 +11,14 @@
 // cannot represent "picked twice". `usedTeams` stays correct as "the set of
 // teams ever picked" and keeps its display role — see the tri-mode note below.
 //
-// ⚠️ TRI-MODE. This helper is consulted ONLY when `maxTeamUses !== 1`. At the
-// default (absent or 1) every guard keeps `usedTeams` as its authority,
-// byte-for-byte, so a legacy entry whose seeded `usedTeams` diverges from its
-// `picks` behaves exactly as it does today. That guarantee is why the callers
-// branch instead of always counting.
+// ⚠️ TRI-MODE — GUARDS ONLY. `countTeamUses` is consulted by the submit/proxy
+// guards ONLY when `maxTeamUses !== 1`; at the default (absent or 1) those
+// guards keep `usedTeams` as their authority, byte-for-byte, so a legacy entry
+// whose seeded `usedTeams` diverges from its `picks` GATES exactly as it does
+// today. The auto-survive EXEMPTION is deliberately no longer under that
+// guarantee (PLAN-SURVIVOR-EXEMPTION-RESERVATIONS): it reads
+// `countTeamUsesBefore` in EVERY mode, because it judges the past and
+// `usedTeams` carries no week information.
 
 /**
  * Tie outcome for the picked team. Absent ⇒ today's rule (see below).
@@ -123,6 +126,30 @@ export function countTeamUses(
   const counts: Record<string, number> = {};
   for (const [week, team] of normalizePickWeeks(picks)) {
     if (excludeWeek !== undefined && week === excludeWeek) continue;
+    counts[team] = (counts[team] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * How many DISTINCT WEEKS each team appears in STRICTLY BEFORE `week`.
+ *
+ * The auto-survive exemption's counting rule (PLAN-SURVIVOR-EXEMPTION-
+ * RESERVATIONS): the exemption judges whether a member had run out of options
+ * by the time a week was graded, so a use that had not happened yet — a pick
+ * pre-submitted for a LATER week — is not a use. Contrast `countTeamUses`,
+ * which the submit/proxy guards keep: "may I pick this team now?" must count
+ * every other week including future reservations, or week 3 could take a team
+ * week 6 already holds and put the entry over its limit with no later write to
+ * catch it. Different question, different answer — both deliberate.
+ */
+export function countTeamUsesBefore(
+  picks: Record<number | string, unknown> | undefined | null,
+  week: number,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const [w, team] of normalizePickWeeks(picks)) {
+    if (w >= week) continue;
     counts[team] = (counts[team] ?? 0) + 1;
   }
   return counts;

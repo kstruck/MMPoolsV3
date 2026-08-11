@@ -9,7 +9,7 @@ import {
   WeeklyRecap
 } from './nflPoolTypes';
 import {
-  countTeamUses,
+  countTeamUsesBefore,
   effectiveMaxTeamUses,
   effectiveTieCountsAs,
   UNLIMITED_TEAM_USES,
@@ -363,13 +363,14 @@ export function updateSurvivorStatus(
  * Evaluates whether all NFL teams playing this week are either already used or on bye.
  */
 export function checkAutoSurviveExemption(
-  usedTeams: string[],
   gamesInWeek: NFLGame[],
   autoSurviveEnabled: boolean,
-  // Reuse context — omitted by callers on a default pool, which is the
-  // byte-for-byte `usedTeams` path below. See the tri-mode note in
-  // shared/survivorReuse.ts for why this is opt-in rather than always counted.
-  reuse?: { maxTeamUses: number; picks: Record<number, string>; week: number },
+  // Required, not opt-in: eligibility is picks-derived in EVERY mode
+  // (PLAN-SURVIVOR-EXEMPTION-RESERVATIONS). `usedTeams` is submit-time and
+  // carries no week information, so it cannot answer "had this member run out
+  // of options by the time this week was graded" — a pick pre-submitted for a
+  // LATER week was counting as a use and could excuse a missed pick.
+  ctx: { maxTeamUses: number; picks: Record<number, string>; week: number },
 ): boolean {
   if (!autoSurviveEnabled) return false;
 
@@ -382,23 +383,19 @@ export function checkAutoSurviveExemption(
     }
   }
 
-  // Filter out teams that the player can no longer pick.
-  //
-  // Default (no reuse context, or a limit of exactly 1): the authority stays
-  // `usedTeams`, unchanged. A legacy entry whose seeded `usedTeams` diverges
-  // from its `picks` must keep the outcome it has today.
+  // Filter out teams the player could no longer pick BY THIS WEEK: uses are
+  // counted over weeks strictly before it, one code path for every mode, so a
+  // default pool (limit 1 via effectiveMaxTeamUses at the caller) and a
+  // configured pool cannot diverge.
   //
   // `maxTeamUses: 0` (unlimited): every playing team stays eligible, so this
   // can never grant an exemption — surviving a week nobody could play is
   // `isVoidWeek`'s job, not this one, and an all-cancelled slate contributes
   // no teams so `teamsPlaying.size > 0` fails there anyway.
-  const useCounts = reuse && reuse.maxTeamUses !== 1
-    ? countTeamUses(reuse.picks, reuse.week)
-    : null;
+  const useCounts = countTeamUsesBefore(ctx.picks, ctx.week);
   const eligibleTeams = [...teamsPlaying].filter(t => {
-    if (!useCounts || !reuse) return !usedTeams.includes(t);
-    if (reuse.maxTeamUses === UNLIMITED_TEAM_USES) return true;
-    return (useCounts[t] ?? 0) < reuse.maxTeamUses;
+    if (ctx.maxTeamUses === UNLIMITED_TEAM_USES) return true;
+    return (useCounts[t] ?? 0) < ctx.maxTeamUses;
   });
 
   // If there are zero eligible teams playing this week, they get an exemption!
@@ -570,7 +567,7 @@ export function computeSurvivorWeekUpdate(
 
   const autoSurviveEnabled = pool.settings.autoSurviveExemptionEnabled ?? true;
   const maxTeamUses = effectiveMaxTeamUses(pool.settings);
-  if (checkAutoSurviveExemption(cleaned.usedTeams, games, autoSurviveEnabled, {
+  if (checkAutoSurviveExemption(games, autoSurviveEnabled, {
     maxTeamUses, picks: cleaned.picks, week,
   })) {
     return {

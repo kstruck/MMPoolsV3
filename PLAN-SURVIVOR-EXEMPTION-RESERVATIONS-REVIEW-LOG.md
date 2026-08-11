@@ -240,6 +240,18 @@ VERDICT: REVISE. 2 findings (2×P2). Both accepted.
    command — seed literal, JSON key, function argument — not just the files it
    can live in.
 
+## Round 9 — codex (implementing session, on the refreshed plan)
+
+VERDICT: **CLEAN.** "The changes update planning and sweep documentation only.
+I found no actionable inconsistencies that would break existing code or tests."
+
+Run 2026-08-10 against the S1–S4 re-run (shape-proofs executed first) plus the
+recorded implementation decisions: required-context signature with the dead
+`usedTeams` parameter removed (one counting path, so the modes cannot diverge),
+and the concrete three-week fixture rebuild. This is the "one more codex round
+before writing code" the round-8 stop demanded; implementation proceeds from
+here, and the CODE will earn its own rounds.
+
 ## Resolution status
 
 **STOPPING AT 8 ROUNDS, NOT CONVERGED — and stopping is a judgement call, not a
