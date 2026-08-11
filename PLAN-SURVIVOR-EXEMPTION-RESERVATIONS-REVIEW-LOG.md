@@ -71,12 +71,50 @@ first-draft claims, which is the point of running this before implementing.
    seed — and marked the per-instance verdicts as claims to be tested rather than
    evidence.
 
+## Round 3 — qodo (PR #404)
+
+VERDICT: REVISE. 3 findings. 1 accepted as a real defect, 1 accepted as trivial,
+1 rejected.
+
+1. **(🐞 Bug / Correctness) The sweep commands are not reproducible.** They used
+   `|` alternation with plain `grep`, which is BRE — `|` is a literal pipe there —
+   so every documented command returned ZERO matches, while the commands actually
+   run had used `\|`.
+   **Response: accepted, and it is the most valuable finding on this branch.**
+   Measured before fixing: the published form returns 0, the real form returns 39.
+   A sweep doc exists so the next session can re-run it and get the same list; one
+   that silently returns nothing hands them an empty inventory plus the confidence
+   of a completed sweep. That is this very file's correction #3 ("grep found
+   nothing is not evidence when the grep could not have looked") reproduced inside
+   the fix for it. All commands moved to `grep -E` / `grep -Ev`, and each was
+   executed to confirm it returns results (16 / 77 / 40). The same pattern exists
+   in already-merged sweep docs; noted as out of scope rather than fixed here.
+
+2. **(Quality) Shell fence missing the `bash` language identifier.**
+   **Response: accepted.** One word, improves rendering. Done.
+
+3. **(Maintainability) Lines exceed 100 characters.**
+   **Response: REJECTED.** Miscalibrated to this repo. `HANDOFF.md` line 1 is a
+   single-line status banner by construction, and the operator docs are written in
+   long prose lines throughout — the finding would require reformatting documents
+   this PR only touches in passing. It also names no rule that exists in the repo:
+   there is no line-length lint for Markdown here. Consistent with this repo's
+   qodo calibration, where defect findings have been 17/17 valid and style findings
+   7/7 rejected.
+
 ## Resolution status
 
-**NOT CONVERGED — round 3 is owed.** 2 rounds, 4 findings, 100% accepted, zero
-disputes. Severity went UP in round 2 (1×P2 → 2×P1), which is the opposite of the
-converging trajectory a plan should show, so this is explicitly not ready to
-implement. Round 1 complete, 1 finding, 100% accepted. The plan's two open
+**NOT CONVERGED for implementation — a codex round on the plan's post-sign-off
+shape is still owed.** 3 rounds (2 codex, 1 qodo), 7 findings, 6 accepted and 1
+rejected with reasoning on the PR.
+
+Severity went UP in round 2 (1×P2 → 2×P1) and round 3 found a correctness defect
+in the sweep tooling itself, so the trajectory has not yet converged. What HAS
+closed is the design: **Kevin resolved both shape-changing questions on
+2026-08-09** — change both eligibility paths, and fix-forward only (existing wrong
+exemptions deliberately left standing until reset-and-replay exists). The
+implementing session should run codex again on the plan as it now stands before
+writing code. The plan's two open
 questions (default-path change vs. path divergence; and whether any live pool
 currently holds an exemption this would revoke) are for Kevin and are NOT review
 findings — they are deliberately left open for sign-off.

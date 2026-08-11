@@ -5,7 +5,11 @@ repo root; re-run them before implementation if the branch has moved.
 
 ## S1 — every writer of `usedTeams` (is it submit-time everywhere?)
 
-Command: `grep -rn 'usedTeams = |usedTeams:' --include=*.ts src functions/src shared | grep -v 'functions/src/shared|__tests__|\.test\.'`
+Command (**`grep -E`** — see the note at the foot of this file):
+
+```bash
+grep -rEn 'usedTeams = |usedTeams:' --include=*.ts src functions/src shared   | grep -Ev 'functions/src/shared|__tests__|\.test\.'
+```
 
 | Site | Role | Submit-time? |
 |---|---|---|
@@ -31,8 +35,8 @@ searched none of the TypeScript seeds, which is where most of this repo's
 divergent entries live, and the "complete inventory" it produced was nothing of
 the kind. Corrected command:
 
-```
-grep -rn 'usedTeams:' --include=*.ts --include=*.tsx --include=*.json src functions/src tests   | grep -v 'functions/src/shared|nflPoolTypes|survivorReuse|: string\[\]'
+```bash
+grep -rn 'usedTeams:' --include=*.ts --include=*.tsx --include=*.json src functions/src tests   | grep -Ev 'functions/src/shared|nflPoolTypes|survivorReuse|: string\[\]'
 ```
 
 **Scoping note that makes this tractable.** The blast radius is not "every seed
@@ -82,7 +86,11 @@ and it is the same shape as the sim-backdoor discovery that resequenced
 
 ## S3 — every consumer of the exemption
 
-Command: `grep -rn 'checkAutoSurviveExemption|exemptWeeks|autoSurviveExemptionEnabled' --include=*.ts --include=*.tsx src functions/src shared`
+Command:
+
+```bash
+grep -rEn 'checkAutoSurviveExemption|exemptWeeks|autoSurviveExemptionEnabled'   --include=*.ts --include=*.tsx src functions/src shared
+```
 
 | Site | Role | Change required |
 |---|---|---|
@@ -125,3 +133,23 @@ the defect's precondition is ordinary usage rather than a corrupt state.
    not have looked. The same failure produced the S2 miss in
    PLAN-SURVIVOR-PARITY-SCORING (the oracle's tie logic does not contain the word
    "tie").
+4. **The documented commands were NOT REPRODUCIBLE, and that is worse here than
+   almost anywhere else** (qodo, PR #404). They were written with `|` alternation
+   but plain `grep`, which is BRE — `|` is a LITERAL PIPE there. The commands as
+   published returned **zero** matches; the ones actually run used `\|`. Measured:
+
+   ```bash
+   grep -rn  'usedTeams = |usedTeams:'  --include=*.ts functions/src | wc -l   # -> 0
+   grep -rEn 'usedTeams = |usedTeams:'  --include=*.ts functions/src | wc -l   # -> 39
+   ```
+
+   A sweep document exists so the next session can RE-RUN it and get the same
+   list. One that silently returns nothing would have handed them an empty
+   inventory and the confidence of a completed sweep — the precise failure this
+   file's own correction #3 warns about ("grep found nothing is not evidence when
+   the grep could not have looked"), reproduced in the fix for it. All commands
+   now use `grep -E` / `grep -Ev`, which is also more legible than escaping.
+
+   ⚠️ The same unescaped-alternation pattern appears in **already-merged** sweep
+   docs, `PLAN-SURVIVOR-PARITY-SCORING-SWEEPS.md` among them. Out of scope for
+   this PR and left alone deliberately; worth a sweep of its own.

@@ -84,11 +84,11 @@ decided is wrong — but it means:
    just entries with future reservations. Sweep S2 must enumerate every fixture
    and seeded entry in that state, and the plan must state the outcome change
    for each before implementation.
-2. **Open question 1 (Kevin):** is that acceptable, or should the default path
-   keep `usedTeams` and accept that a default pool and a configured pool then
-   disagree? Recommendation: change both. A divergence between "the same pool
-   with the setting written explicitly" and "without it" is the harder thing to
-   explain, and #399's own test pins them equal.
+2. ✅ **RESOLVED 2026-08-09 (Kevin): change BOTH paths.** A divergence between
+   "the same pool with the setting written explicitly" and "without it" is the
+   harder thing to explain, and #399's own test pins them equal. The knock-on is
+   binding, not optional: the autosurvive scenario fixtures MUST gain a `picks`
+   map in the same PR (sweep S2), or they silently stop testing the exemption.
 
 ### Only the exemption changes
 
@@ -173,8 +173,12 @@ Extend the existing suites (no new suite, no coverage claims):
 
 ## Risks / open questions
 
-1. **Does the default path change too?** See above. Kevin's call. This is the
-   only question that changes the shape of the work.
+**Kevin resolved the two shape-changing questions on 2026-08-09: change both
+paths, and fix-forward first.** Both are recorded inline below rather than
+deleted, so the reasoning survives.
+
+1. ✅ **RESOLVED — the default path changes too.** See the decision above. The
+   fixture work is now in scope by consequence, not by choice.
 2. **The autosurvive scenario fixtures must change with it (sweep S2).**
    `nfl-survivor-autosurvive.json` seeds `usedTeams: ['KC','BUF','SF','DAL']`
    with **no `picks` map at all**, so a picks-derived default path counts zero
@@ -186,20 +190,25 @@ Extend the existing suites (no new suite, no coverage claims):
    acquires `usedTeams` by submitting picks.
 3. **Do any live pools currently hold an exemption that this would revoke?**
    Answerable only against production. Preseason has been running, so it is not
-   hypothetical. If yes, a rescore flips a member from ALIVE-by-exemption to
-   struck — a member-visible reversal that needs a decision (and possibly a
-   grandfather cutoff) before deploy, not after.
-4. **Sequencing against reset-and-replay (the big one).** Given decision 4, there
-   are two orders and Kevin picks:
-   **(a) Fix-forward only** — ship the eligibility fix so no NEW wrong exemption
-   is granted, and leave existing ones standing until reset-and-replay exists.
-   Cheap, safe, leaves known-wrong history in place.
-   **(b) Build reset-and-replay first**, then ship this behind it, correcting
-   history in the same operation. Correct, materially larger, and it is a
-   member-visible reversal (ALIVE-by-exemption → struck) that needs its own
-   decision about notification and grandfathering.
-   Recommendation: **(a) first**, with (b) tracked — the fix-forward half is what
-   stops the exploit, and it does not depend on the replay machinery.
+   hypothetical. **No longer blocks THIS PR** now that question 4 is fix-forward —
+   existing exemptions are deliberately left alone. It becomes the entry criterion
+   for the reset-and-replay work, where flipping a member from ALIVE-by-exemption
+   to struck needs its own decision about notification and grandfathering.
+4. ✅ **RESOLVED 2026-08-09 (Kevin): FIX-FORWARD ONLY, this PR.** Ship the
+   eligibility fix so no NEW wrong exemption is granted; leave existing ones
+   standing until the reset-and-replay path exists. It stops the exploit and does
+   not depend on machinery nobody has built.
+
+   **Two obligations follow, and neither is optional:**
+   - The PR must state plainly that it **knowingly leaves existing wrong
+     exemptions in place**, and HANDOFF must carry the same, so a future session
+     does not read a green PR as "history is correct now".
+   - The fingerprint work still ships (deliverable above), because without it the
+     fix would not even apply to weeks scored AFTER deploy that get re-graded for
+     an unrelated reason. Fix-forward is not a reason to skip it.
+
+   Reset-and-replay stays tracked as separate work. Question 3 becomes its
+   entry criterion rather than a blocker for this PR.
 5. **Rebuy interaction.** `lastRebuyWeek` short-circuits weeks at or before it;
    confirm eligibility counting is unaffected for the weeks that ARE recomputed.
 
@@ -227,5 +236,5 @@ Extend the existing suites (no new suite, no coverage claims):
 | Plan drafted | ✅ 2026-08-09 |
 | Sweeps (S1–S4) | ✅ 2026-08-09 — S1–S4 complete; **S2 corrected the plan** (fixtures carry `usedTeams` with no `picks`) |
 | Codex adversarial review (log: PLAN-SURVIVOR-EXEMPTION-RESERVATIONS-REVIEW-LOG.md) | ⏳ 2 rounds, 4 findings, 100% accepted — NOT converged; round 3 owed |
-| Kevin sign-off (open questions 1–5) | PENDING |
+| Kevin sign-off | ✅ 2026-08-09 — Q1 (change both paths) and Q4 (fix-forward only) RESOLVED; Q3 deferred to the reset-and-replay work; Q2/Q5 are implementation detail |
 | Implementation | PENDING — dedicated session |
