@@ -1,12 +1,23 @@
-# HANDOFF — Session entry point (updated 2026-08-11 evening: ✅ **THREE GATED PRs AWAIT KEVIN** — [#408](https://github.com/kstruck/MMPoolsV3/pull/408) fixes the two defects his prod walkthrough found (default week landed on the finished HOF slate; new members' entries read "Participant"), [#409](https://github.com/kstruck/MMPoolsV3/pull/409) is the NFL spreads runbook, [#410](https://github.com/kstruck/MMPoolsV3/pull/410) is the commissioner-blind-picks PLAN and needs his sign-off before any code. #405/#406/#407 all MERGED — `main` merged **through `d7f02d6`** as of this writing; **do not treat that SHA as current state**, run `git fetch origin`, then `git rev-parse origin/main` — two commands, because Kevin's shell is PowerShell 5.1 and `&&` is a syntax error there (CLAUDE.md §2c — every worktree shares one `origin/main` ref and it is routinely stale). ⚠️ **The functions deploy of `d7f02d6` is UNCONFIRMED** — only Coolify was confirmed, so the survivor exemption fix may not be live; see **Task 1** in the stop-point box. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5`, so #408's functions half deploys into a live scorer. *(CARRIED from the 2026-08-09 box, **not re-measured this session** — no admin credentials on this machine; re-read `system/config` in the Firebase console before relying on it.)* App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
+# HANDOFF — Session entry point (updated 2026-08-11 evening: ✅ **THREE GATED PRs AWAIT KEVIN** — [#408](https://github.com/kstruck/MMPoolsV3/pull/408) fixes the two defects his prod walkthrough found (default week landed on the finished HOF slate; new members' entries read "Participant"), [#409](https://github.com/kstruck/MMPoolsV3/pull/409) is the NFL spreads runbook, [#410](https://github.com/kstruck/MMPoolsV3/pull/410) is the commissioner-blind-picks PLAN and needs his sign-off before any code. #405/#406/#407 all MERGED — `main` merged **through `d7f02d6`** as of this writing; **do not treat that SHA as current state**, run `git fetch origin`, then `git rev-parse origin/main` — two commands, because Kevin's shell is PowerShell 5.1 and `&&` is a syntax error there (CLAUDE.md §2c — every worktree shares one `origin/main` ref and it is routinely stale). ✅ **The functions deploy of `d7f02d6` is CERTIFIED** — Kevin ran the certify pass 2026-08-11 evening from the primary checkout with a verified `HEAD` and a clean `functions/`+`shared/`+`firebase.json` tree: **every function reported `Skipped (No changes detected)`**, ending `Deploy complete!`. Prod functions are byte-identical to `d7f02d6`, so the #405 survivor exemption fix **is live**. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5`, so #408's functions half deploys into a live scorer. *(CARRIED from the 2026-08-09 box, **not re-measured this session** — no admin credentials on this machine; re-read `system/config` in the Firebase console before relying on it.)* App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
 > ## 🚀 STOP POINT 2026-08-11 (evening) — **three PRs gated and waiting; the spreads mystery is solved and it was not the flag**
 >
-> **Nothing was deployed today.** Functions, rules and the frontend are wherever
-> the 2026-08-10 box below leaves them — and note that box's own caveat: the
-> functions deploy of `d7f02d6` was never confirmed.
+> **Nothing NEW was deployed today** — the only deploy run was the certify pass in
+> Task 1, which changed nothing (all-`Skipped`). Functions, rules and the frontend
+> are where the 2026-08-10 box leaves them, and that box's open caveat — the
+> unconfirmed functions deploy — is now **closed**: prod functions are certified
+> byte-identical to `d7f02d6`.
 >
-> ### Task 1 — certify the functions deploy (do this before anything else)
+> ### Task 1 — certify the functions deploy ✅ **DONE 2026-08-11 evening**
+>
+> **Result: every function `Skipped (No changes detected)`, `Deploy complete!`** —
+> prod is byte-identical to `d7f02d6` and the #405 survivor exemption fix is live.
+> Preflight held: `git rev-parse HEAD` = `d7f02d6`, and the only working-tree
+> entries were two untracked root notes (`NEXT-SESSION-PROMPT.md`,
+> `PROMPT-SURVIVOR-PARITY.md`) — outside `functions/`, so outside the upload:
+> `firebase.json` sets `"source": "functions"`.
+>
+> **The procedure below stays here because #408's merge owes the same ritual.**
 >
 > ⚠️ **`npx firebase deploy` packages the WORKING TREE, so the UPDATE-vs-Skipped
 > signal means nothing until you have proved which commit you are on and that the
