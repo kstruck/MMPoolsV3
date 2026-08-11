@@ -1,13 +1,46 @@
-# HANDOFF — Session entry point (updated 2026-08-11 evening: ✅ **THREE GATED PRs AWAIT KEVIN** — [#408](https://github.com/kstruck/MMPoolsV3/pull/408) fixes the two defects his prod walkthrough found (default week landed on the finished HOF slate; new members' entries read "Participant"), [#409](https://github.com/kstruck/MMPoolsV3/pull/409) is the NFL spreads runbook, [#410](https://github.com/kstruck/MMPoolsV3/pull/410) is the commissioner-blind-picks PLAN and needs his sign-off before any code. #405/#406/#407 all MERGED; `origin/main` = `d7f02d6`. ⚠️ **The functions deploy of `d7f02d6` is UNCONFIRMED** — only Coolify was confirmed, so the survivor exemption fix may not be live; the certify pass is task 1 below. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5`, so #408's functions half deploys into a live scorer. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
+# HANDOFF — Session entry point (updated 2026-08-11 evening: ✅ **THREE GATED PRs AWAIT KEVIN** — [#408](https://github.com/kstruck/MMPoolsV3/pull/408) fixes the two defects his prod walkthrough found (default week landed on the finished HOF slate; new members' entries read "Participant"), [#409](https://github.com/kstruck/MMPoolsV3/pull/409) is the NFL spreads runbook, [#410](https://github.com/kstruck/MMPoolsV3/pull/410) is the commissioner-blind-picks PLAN and needs his sign-off before any code. #405/#406/#407 all MERGED — `main` merged **through `d7f02d6`** as of this writing; **do not treat that SHA as current state**, run `git fetch origin && git rev-parse origin/main` (CLAUDE.md §2c — every worktree shares one `origin/main` ref and it is routinely stale). ⚠️ **The functions deploy of `d7f02d6` is UNCONFIRMED** — only Coolify was confirmed, so the survivor exemption fix may not be live; see **Task 1** in the stop-point box. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5`, so #408's functions half deploys into a live scorer. *(CARRIED from the 2026-08-09 box, **not re-measured this session** — no admin credentials on this machine; re-read `system/config` in the Firebase console before relying on it.)* App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
 > ## 🚀 STOP POINT 2026-08-11 (evening) — **three PRs gated and waiting; the spreads mystery is solved and it was not the flag**
 >
 > **Nothing was deployed today.** Functions, rules and the frontend are wherever
 > the 2026-08-10 box below leaves them — and note that box's own caveat: the
-> functions deploy of `d7f02d6` was never confirmed. **Certify it first**
-> (`npx firebase deploy --only functions --project gridiron-gamble-uzuqo`, expect
-> every function `Skipped (No changes detected)`); if functions UPDATE instead,
-> the #405 survivor exemption fix was never live.
+> functions deploy of `d7f02d6` was never confirmed.
+>
+> ### Task 1 — certify the functions deploy (do this before anything else)
+>
+> ⚠️ **`npx firebase deploy` packages the WORKING TREE, so the UPDATE-vs-Skipped
+> signal means nothing until you have proved which commit you are on and that the
+> tree is clean.** Preflight first:
+>
+> **Run this from the PRIMARY checkout, `D:\march-melee-pools` — not from a
+> worktree.** `main` is checked out there, and git refuses to check the same
+> branch out twice, so `git checkout main` fails in any linked worktree.
+>
+> ```bash
+> cd D:\march-melee-pools
+> git fetch origin
+> git checkout main
+> git pull --ff-only
+> git rev-parse HEAD                          # must equal the SHA you intend to certify
+> git status --porcelain                      # must print NOTHING — the whole tree,
+>                                             # because firebase.json controls the
+>                                             # functions source, ignore rules and
+>                                             # predeploy build for the run below
+> npm --prefix functions ci                   # ci, not install — install rewrites the lockfile
+> ```
+>
+> Then `npx firebase deploy --only functions --project gridiron-gamble-uzuqo`.
+>
+> - **Every function `Skipped (No changes detected)`** → the deployed code is
+>   byte-identical to your (verified) checkout. Certified.
+> - **Functions UPDATE** → prod was **not** byte-identical to that commit before
+>   this run, i.e. the #405 survivor exemption fix was not live and this run is
+>   its first confirmed deploy. Let it finish, then re-run for an all-`Skipped`
+>   pass.
+> - A **429 mid-deploy is usually not a failure** — re-run before concluding
+>   anything (see the 2026-08-09 box).
+>
+> Without the preflight, UPDATE/Skipped describes your laptop, not production.
 >
 > | PR | What | Deploy owed on merge |
 > |---|---|---|
