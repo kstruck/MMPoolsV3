@@ -51,8 +51,8 @@ deliberately deferred until the bucket from item 17 exists, because a scheduled
 job that writes to a nonexistent bucket is a job that fails silently. This repo
 has already been bitten four times by exactly that failure mode.
 
-**Recommended order:** 15 → 19 → 17 → 16 → 18. PITR first because it is one
-command and immediately buys a 7-day floor.
+**Recommended order:** ~~15~~ → 19 → 17 → 16 → 18. Item 15 (PITR) is **done —
+measured enabled 2026-08-10**; the remaining work starts at 19.
 
 ---
 
@@ -152,8 +152,11 @@ gcloud firestore databases describe --database="(default)" --project gridiron-ga
 
 **Expect:** a YAML block. Read two fields:
 - `locationId:` — e.g. `nam5`, `us-central1`, `us-east1`. **Write this down.**
-- `pointInTimeRecoveryEnablement:` — almost certainly
-  `POINT_IN_TIME_RECOVERY_DISABLED` today. That is what step 2 fixes.
+  (Measured 2026-07-21: it is `nam5`.)
+- `pointInTimeRecoveryEnablement:` — **`POINT_IN_TIME_RECOVERY_ENABLED`**
+  (measured 2026-08-10). If you see `..._DISABLED`, PITR has been turned OFF
+  since that measurement — treat that as a finding, not a to-do, and step 2
+  is how to turn it back on.
 
 **If instead** you get `PERMISSION_DENIED`, your account lacks the
 `datastore.databases.get` permission — check you signed in as the project owner
@@ -169,7 +172,11 @@ with all steps regardless.
 
 ## Step 2 — Enable Point-in-Time Recovery (item 15)
 
-**Do this first. It needs no install and takes about two minutes.**
+✅ **ALREADY DONE — measured 2026-08-10** (`POINT_IN_TIME_RECOVERY_ENABLED`,
+7-day window, versions back to 2026-08-04). **Skip the Enable steps; run only
+the "Verify independently" check below if you want fresh evidence.** The
+instructions are kept for the recovery case where PITR is ever found disabled
+again.
 
 PITR keeps a rolling **7-day** window. Firestore retains **one version per
 minute** inside that window, and you read the database as-of a whole-minute
