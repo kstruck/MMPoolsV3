@@ -31,7 +31,7 @@ field.
 | # | Item | Last verified state | Verdict |
 |---|---|---|---|
 | B1 | `nflAutoScore` — the auto-scorer | `{enabled: true, dryRun: false}`, `nflAutoScoreJob` runs `*/5` — **LIVE** (HANDOFF top box, 2026-08-09) | **READY** — grading is automatic |
-| B2 | `syncNFLScoresJob` — score ingestion | 5-min schedule, no kill switch, live since July | **READY** |
+| B2 | `syncNFLScoresJob` — score ingestion | 5-min schedule with no kill switch is a CODE fact (`functions/src/nflSchedule.ts`, in tonight's 176-function fleet); "running in prod" is HANDOFF provenance (heartbeats since July), not re-measured tonight | **READY** |
 | B3 | `nflDeepSweep` — late FINAL / correction re-reads | **unset** (HANDOFF 2026-08-09). While unset, a game reaching FINAL or corrected >24h after kickoff is never re-read from ESPN | **KEVIN-ACTION** — two-stage flip per `PLAN-AUTOSCORE-GOLIVE.md` §5 (morning doc). Dry-run stage is safe: it detects and reports, suppressing only the write |
 | B4 | `nflFinalize` — finalize sweep | `{enabled: true, dryRun: true}`, `liveSeasonTypes` **unset** — `dryRun: false` alone keeps it dry (#210's deliberate two-key arming) | **KEVIN-ACTION** — NFL-6 in `TOMORROW-TASKS.md` (morning doc): read the audit-log candidate counts first, then set `liveSeasonTypes: [1]` |
 | B5 | `nflLockWatch` — spread-lock pager | `{enabled: true, dryRun: true}` | **READY as-is** — Kevin's standing decision: stays dry through preseason (1 of 49 preseason games has a line; arming it pages nightly about a known condition) |

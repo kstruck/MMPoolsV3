@@ -30,25 +30,39 @@ strictly-before rule. Already-scored weeks are untouched (fix-forward).
    **If not:** a red X on a check means CI moved since tonight — stop, tell the
    next session.
 
-2. Where: PowerShell, main checkout. **First prove the tree is clean — a
-   functions deploy uploads whatever is in the working tree, so uncommitted
-   local changes here would ship to the live scorer alongside #405.**
+2. Where: PowerShell, main checkout. **Prove you are on `main` and that the
+   deploy inputs are clean — a functions deploy uploads whatever is in the
+   working tree, so uncommitted changes under `functions/` or `shared/` would
+   ship to the live scorer alongside #405.**
 
    ```powershell
    cd D:\march-melee-pools
    ```
 
    ```powershell
-   git status --short
+   git switch main
    ```
 
-   **What you should see:** no output at all.
-   **If anything is listed:** STOP — another session may have live work in
-   this checkout. Do not deploy over it; tell the next session what
-   `git status` showed.
+   ```powershell
+   git branch --show-current
+   ```
+
+   **What you should see:** `main` (the switch says "Already on 'main'" if you
+   were there). **If the switch errors** (uncommitted changes conflict), STOP —
+   another session may have live work in this checkout; tell the next session.
 
    ```powershell
-   git pull --ff-only
+   git status --porcelain -- functions shared firebase.json
+   ```
+
+   **What you should see:** no output at all. The check is deliberately scoped
+   to what `--only functions` actually packages — untracked root-level strays
+   are normal in this checkout and do not ship.
+   **If anything is listed:** STOP — do not deploy over it; tell the next
+   session what the command showed.
+
+   ```powershell
+   git pull --ff-only origin main
    ```
 
    **What you should see:** `Fast-forward` ending at a commit whose subject is
@@ -62,8 +76,8 @@ strictly-before rule. Already-scored weeks are untouched (fix-forward).
    git log --oneline -1
    ```
 
-   **What you should see:** the #405 squash commit as HEAD — this is the SHA
-   the deploy will ship.
+   **What you should see:** the #405 squash commit as the post-pull HEAD of
+   `main` — this is the SHA the deploy will ship.
 
 3. Install functions deps (ci, NOT install — install rewrites the lockfile):
 
