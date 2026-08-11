@@ -35,6 +35,32 @@ export function gamesForPoolWeek(games: NFLGame[], pool: any, week: number): NFL
     return games.filter(g => g.week === week && Number(g.seasonType) === seasonType);
 }
 
+/**
+ * The week a pool's surfaces should DEFAULT to: the first week of the pool's
+ * season type that still has a game left to play, or the last week once the whole
+ * slate is FINAL. `null` when no games for this season type are loaded — callers
+ * fall back to their date estimate.
+ *
+ * The dashboard used to derive this from the calendar alone
+ * (`ceil((now - seasonStart) / 7d)`), which only ticks on 7-day boundaries: HOF
+ * Weekend (one game, Aug 6) stayed "current" until Aug 13, so members landed on a
+ * finished, locked slate for the whole first week of real picking. The schedule is
+ * the truth; the calendar is only the pre-load fallback.
+ */
+export function currentSlateWeek(games: NFLGame[], pool: any): number | null {
+    const seasonType = poolSeasonType(pool);
+    const slate = games.filter(g => Number(g.seasonType) === seasonType);
+    if (slate.length === 0) return null;
+    const weeks = [...new Set(slate.map(g => Number(g.week)))].sort((a, b) => a - b);
+    // CANCELLED is terminal, same as FINAL — the manager's "week is done" count
+    // (NFLManagerView) treats them alike, and a cancelled game grades VOID rather
+    // than waiting to be played. Counting it as open would park the dashboard on a
+    // week nobody can enter, which is the very defect this function exists to fix.
+    const playable = (g: NFLGame) => g.status !== 'FINAL' && g.status !== 'CANCELLED';
+    const open = weeks.find(w => slate.some(g => Number(g.week) === w && playable(g)));
+    return open ?? weeks[weeks.length - 1];
+}
+
 export function isWeekComplete(poolType: string, entry: any, weekGames: NFLGame[], week: number): boolean {
     if (!entry) return false;
     if (poolType === 'NFL_PICKEM') {
