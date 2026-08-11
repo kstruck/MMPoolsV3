@@ -86,9 +86,23 @@ decided is wrong — but it means:
    for each before implementation.
 2. ✅ **RESOLVED 2026-08-09 (Kevin): change BOTH paths.** A divergence between
    "the same pool with the setting written explicitly" and "without it" is the
-   harder thing to explain, and #399's own test pins them equal. The knock-on is
-   binding, not optional: the autosurvive scenario fixtures MUST gain a `picks`
-   map in the same PR (sweep S2), or they silently stop testing the exemption.
+   harder thing to explain, and #399's own test pins them equal.
+
+   ⚠️ **The knock-on is binding, and it is BIGGER than "add a `picks` map"**
+   (codex r6). Measured against the actual fixture:
+   - The scenario schema has **no `picks` field**. Entries carry `survivorPicks`,
+     and `nflSeasonSimulator.ts:331` persists `picks: numKeys(e.survivorPicks)`.
+     A `picks` map added to the JSON is **silently ignored**.
+   - `nfl-survivor-autosurvive.json` has `scoreWeeks: [1]`, `nflGames` in week 1
+     only, and `testEntries[0].survivorPicks` is `{}` — its exemption today comes
+     entirely from the seeded `usedTeams`.
+
+   So under strictly-prior counting there is no week before week 1 for a use to
+   have happened in, and **no edit to the entry alone can preserve this
+   scenario's exemption.** It has to be rebuilt: earlier weeks of `nflGames`,
+   `survivorPicks` in those weeks, and `scoreWeeks` moved to the later week. That
+   is real work and it belongs in the implementing PR's scope estimate, not in a
+   footnote.
 
 ### Only the exemption changes
 
@@ -117,12 +131,23 @@ exemption stays wrong forever. That is exactly the "skipped FOREVER" failure the
 contract at `autoScoreDecisions.ts:143` exists to prevent, arriving through the
 one door that contract does not cover.
 
-**Deliverable:** a scoring-version term in `computeWeekFingerprint` — a constant
-bumped by any change to grading logic — so a logic change invalidates every
-stored fingerprint the way a settings change already does. With a test that pins
-it: same pool, same games, same settings, bumped version ⇒ different hash.
+**NOT a deliverable — an explicit decision for the implementing session, and the
+default is NO** (codex r6, correcting r2). Under fix-forward the version term has
+no demonstrated benefit: a week first scored after deploy already runs the new
+eligibility code without it, and an already-scored survivor week is rejected by
+`survivorAllowedForGroup` BEFORE its fingerprint is ever computed. What a global
+term would reliably do is invalidate stored fingerprints for every NFL pool and
+trigger regrading nobody asked for.
 
-⚠️ **SCOPE IT HONESTLY — it does NOT repair history** (codex r3). Now that Kevin
+The option remains on the table only for the narrow case below, and it should be
+taken only if that case is shown to be real:
+
+**Deliverable IF taken:** a scoring-version term in `computeWeekFingerprint` — a
+constant bumped by any grading-logic change — with a test pinning that the same
+pool, games and settings hash differently across a bump.
+
+⚠️ **SCOPE IT HONESTLY — it does NOT repair history** (codex r3), and under
+fix-forward it may buy nothing at all (codex r6). Now that Kevin
 has chosen fix-forward (question 4), this term must not be described as the
 mechanism that corrects existing wrong exemptions, because it cannot be:
 `scoreSlateOnce` calls `survivorAllowedForGroup` BEFORE computing the
@@ -215,9 +240,10 @@ deleted, so the reasoning survives.
    - The PR must state plainly that it **knowingly leaves existing wrong
      exemptions in place**, and HANDOFF must carry the same, so a future session
      does not read a green PR as "history is correct now".
-   - The fingerprint work still ships (deliverable above), because without it the
-     fix would not even apply to weeks scored AFTER deploy that get re-graded for
-     an unrelated reason. Fix-forward is not a reason to skip it.
+   - The fingerprint question is **decided, not skipped**. Default answer is NO
+     version term (see the fingerprint section — codex r6 showed it buys nothing
+     under fix-forward). If the implementing session takes it anyway, the PR must
+     say which concrete re-grade case it is buying.
 
    Reset-and-replay stays tracked as separate work. Question 3 becomes its
    entry criterion rather than a blocker for this PR.
@@ -247,6 +273,6 @@ deleted, so the reasoning survives.
 |---|---|
 | Plan drafted | ✅ 2026-08-09 |
 | Sweeps (S1–S4) | ⚠️ 2026-08-09 — S2 corrected the plan, but S2's own command has been wrong **four times** (JSON-only include, literal `|`, `head` truncation, unquoted JSON key). Re-run it and verify it finds a known instance of every shape before relying on it |
-| Adversarial review (log: PLAN-SURVIVOR-EXEMPTION-RESERVATIONS-REVIEW-LOG.md) | ⏳ **5 rounds** (4 codex, 1 qodo), **12 findings**, 11 accepted / 1 rejected — **NOT converged; a further round is owed.** The log is authoritative; if this row disagrees with it, the log wins |
+| Adversarial review (log: PLAN-SURVIVOR-EXEMPTION-RESERVATIONS-REVIEW-LOG.md) | ⏳ **6 rounds** (5 codex, 1 qodo), **14 findings**, 13 accepted / 1 rejected — **NOT converged; a further round is owed.** The log is authoritative; if this row disagrees with it, the log wins |
 | Kevin sign-off | ✅ 2026-08-09 — Q1 (change both paths) and Q4 (fix-forward only) RESOLVED; Q3 deferred to the reset-and-replay work; Q2/Q5 are implementation detail |
 | Implementation | PENDING — dedicated session |

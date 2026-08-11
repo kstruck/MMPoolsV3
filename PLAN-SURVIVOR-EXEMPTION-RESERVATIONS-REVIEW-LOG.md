@@ -161,10 +161,40 @@ round's fixes being wrong, not new design problems.
    **Response: accepted.** Marked SUPERSEDED in place rather than rewritten — the
    round-1 record stays honest — with a pointer to the current status.
 
+## Round 6 — codex
+
+VERDICT: REVISE. 2 findings (2×P2). Both accepted. Both are the plan telling the
+implementing session to do something that would not work.
+
+1. **(P2) The prescribed fixture fix would be silently ignored, and is bigger than
+   stated.** The plan said the autosurvive fixtures "must gain a `picks` map".
+   Measured: the scenario schema has **no `picks` field** — entries carry
+   `survivorPicks`, and `nflSeasonSimulator.ts:331` persists
+   `picks: numKeys(e.survivorPicks)`. Worse, the fixture has `scoreWeeks: [1]`,
+   `nflGames` in week 1 only, and `testEntries[0].survivorPicks` is `{}` — its
+   exemption comes entirely from seeded `usedTeams`.
+   **Response: accepted.** Under strictly-prior counting there is no week before
+   week 1 for a use to have occurred in, so **no edit to the entry alone can
+   preserve this scenario.** It must be rebuilt with earlier `nflGames`,
+   `survivorPicks` in those weeks, and `scoreWeeks` moved later. Written into the
+   plan as scope, not a footnote.
+
+2. **(P2) The fingerprint-version term was still MANDATORY while the plan
+   simultaneously said no term was a valid option.** Under fix-forward it has no
+   demonstrated benefit: a week first scored after deploy already runs the new
+   code without it, and an already-scored survivor week is rejected by
+   `survivorAllowedForGroup` before its fingerprint is computed. A global term
+   would invalidate fingerprints for every NFL pool and trigger regrading nobody
+   asked for.
+   **Response: accepted.** Demoted from deliverable to an explicit decision with
+   **NO as the default**; if the implementing session takes it anyway, the PR must
+   name the concrete re-grade case it is buying. This reverses part of round 2's
+   own finding — correctly, because round 2 predated the fix-forward ruling.
+
 ## Resolution status
 
-**NOT CONVERGED — a further round is owed before implementation.** 5 rounds
-(4 codex, 1 qodo), 12 findings, 11 accepted and 1 rejected with reasoning on the
+**NOT CONVERGED — a further round is owed before implementation.** 6 rounds
+(5 codex, 1 qodo), 14 findings, 13 accepted and 1 rejected with reasoning on the
 PR.
 
 Severity has settled — 2×P1 in round 2, then P2-only in rounds 3, 4 and 5 — and
@@ -173,10 +203,15 @@ since has been in the sweep tooling or in doc consistency, and each was introduc
 by the previous round's fix. That is exactly the pattern CLAUDE.md §2c predicts,
 and it is why the counter is not the stopping rule.
 
-**The design is stable and signed off; the sweep is the part that keeps failing.**
-The implementing session should re-run S1–S4 from scratch, verify each command
-finds a known instance of every shape it covers, and run one more codex round on
-the result before writing code.
+**The DIRECTION is stable and signed off. The instructions are what keep being
+wrong** — three rounds of sweep-command defects, then round 6 finding that the
+prescribed fixture remedy would be silently ignored and that a "mandatory"
+deliverable buys nothing under the chosen scope.
+
+That is a useful thing to know about this plan: its shape is right and its detail
+is not yet trustworthy. The implementing session should treat every specific
+instruction here as a claim to verify against the code before acting on it,
+re-run S1–S4 from scratch, and take one more codex round before writing code.
 
 What HAS closed is the design. **Kevin resolved both shape-changing questions on
 2026-08-09** — change both eligibility paths, and fix-forward only, with existing
