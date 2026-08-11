@@ -191,10 +191,33 @@ implementing session to do something that would not work.
    name the concrete re-grade case it is buying. This reverses part of round 2's
    own finding — correctly, because round 2 predated the fix-forward ruling.
 
+## Round 7 — codex
+
+VERDICT: REVISE. 3 findings (3×P2). All accepted. All three are STALE COPIES that
+round 6's fixes left behind elsewhere in the same documents.
+
+1. **(P2) The obsolete "add a `picks` map" instruction survived** in the plan's
+   risks section, directly contradicting round 6's correction a hundred lines
+   above it.
+2. **(P2) The sweep table said `testEntries[1]`'s picks were "absent entirely"** —
+   it carries `survivorPicks: {"1":"SF"}`, which the simulator converts into a
+   persisted `picks` map. All four scenario rows restated with what is actually
+   persisted, so the rebuild cannot silently drop that week-1 reservation.
+3. **(P2) The round-1 resolution paragraph still said the shape questions were
+   open** — and worse, it was a DANGLING TAIL from an earlier botched replace of
+   mine, so a sentence about a settled shape ran straight into a clause saying it
+   was unsettled.
+
+**Response: all accepted, and fixed by a SWEEP of each document rather than at the
+three cited lines** — grepping every remaining instance of "picks map", "open
+question 1" and "for Kevin" first, then editing all of them. Fixing only what a
+reviewer cites is what produced rounds 5, 6 and 7 in the first place: each round
+corrected one copy and left the others to be found next time.
+
 ## Resolution status
 
-**NOT CONVERGED — a further round is owed before implementation.** 6 rounds
-(5 codex, 1 qodo), 14 findings, 13 accepted and 1 rejected with reasoning on the
+**NOT CONVERGED — a further round is owed before implementation.** 7 rounds
+(6 codex, 1 qodo), 17 findings, 16 accepted and 1 rejected with reasoning on the
 PR.
 
 Severity has settled — 2×P1 in round 2, then P2-only in rounds 3, 4 and 5 — and
@@ -216,7 +239,4 @@ re-run S1–S4 from scratch, and take one more codex round before writing code.
 What HAS closed is the design. **Kevin resolved both shape-changing questions on
 2026-08-09** — change both eligibility paths, and fix-forward only, with existing
 wrong exemptions deliberately left standing until reset-and-replay exists. The
-implementing session starts from a settled shape and an unsettled sweep. The plan's two open
-questions (default-path change vs. path divergence; and whether any live pool
-currently holds an exemption this would revoke) are for Kevin and are NOT review
-findings — they are deliberately left open for sign-off.
+implementing session starts from a settled shape and an unsettled sweep.

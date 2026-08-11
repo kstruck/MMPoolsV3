@@ -1,6 +1,6 @@
 # PLAN: auto-survive eligibility must not count FUTURE-week reservations
 
-**Status:** DRAFT — awaiting adversarial review (codex) + Kevin sign-off.
+**Status:** DRAFT — design SIGNED OFF 2026-08-09 (Kevin); adversarial review NOT converged, a further round is owed. Do not implement from this without re-verifying its specifics against the code.
 **Classification:** Plan-gated — **SCORING** trigger. It changes how a week is
 decided (whether a missed pick is a strike or an exemption). Not money, not
 authorization, not prod data.
@@ -189,7 +189,7 @@ Extend the existing suites (no new suite, no coverage claims):
 1. **Strictly before, not "all but current".** The exemption is a judgement about
    a week that has been graded; a use that had not happened yet is not a use.
 2. **Both paths move together.** #399's test pinning them equal is the reason
-   this is a plan and not a one-line edit — see open question 1.
+   this is a plan and not a one-line edit. RESOLVED — both paths change.
 3. **Guards unchanged.** Different question, different answer (above).
 4. **A one-time rescore of the affected week is NOT a safe repair** (codex r2 #2
    — this reverses the first draft, which claimed it was). `computeSurvivorWeekUpdate`
@@ -221,10 +221,13 @@ deleted, so the reasoning survives.
    with **no `picks` map at all**, so a picks-derived default path counts zero
    uses, every team stays eligible, and the scenario silently stops testing the
    exemption it exists to prove. Those scenarios are reachable from the live
-   SuperAdmin Test Suite, not just CI. If open question 1 is "change both paths",
-   the fixtures gain a `picks` map consistent with their `usedTeams` **in the
-   same PR** — which is also the realistic state, since a real entry only
-   acquires `usedTeams` by submitting picks.
+   SuperAdmin Test Suite, not just CI. Since question 1 resolved to "change both
+   paths", the fixtures must be repaired **in the same PR** — and per codex r6
+   that is NOT "add a `picks` map": the schema has no such field (entries carry
+   `survivorPicks`, which `nflSeasonSimulator.ts:331` converts), and with
+   `scoreWeeks: [1]` there is no earlier week for a prior use to live in. The
+   scenario has to be REBUILT — earlier `nflGames`, `survivorPicks` in those
+   weeks, `scoreWeeks` moved later.
 3. **Do any live pools currently hold an exemption that this would revoke?**
    Answerable only against production. Preseason has been running, so it is not
    hypothetical. **No longer blocks THIS PR** now that question 4 is fix-forward —
@@ -273,6 +276,6 @@ deleted, so the reasoning survives.
 |---|---|
 | Plan drafted | ✅ 2026-08-09 |
 | Sweeps (S1–S4) | ⚠️ 2026-08-09 — S2 corrected the plan, but S2's own command has been wrong **four times** (JSON-only include, literal `|`, `head` truncation, unquoted JSON key). Re-run it and verify it finds a known instance of every shape before relying on it |
-| Adversarial review (log: PLAN-SURVIVOR-EXEMPTION-RESERVATIONS-REVIEW-LOG.md) | ⏳ **6 rounds** (5 codex, 1 qodo), **14 findings**, 13 accepted / 1 rejected — **NOT converged; a further round is owed.** The log is authoritative; if this row disagrees with it, the log wins |
+| Adversarial review (log: PLAN-SURVIVOR-EXEMPTION-RESERVATIONS-REVIEW-LOG.md) | ⏳ **7 rounds** (6 codex, 1 qodo), **17 findings**, 16 accepted / 1 rejected — **NOT converged; a further round is owed.** The log is authoritative; if this row disagrees with it, the log wins |
 | Kevin sign-off | ✅ 2026-08-09 — Q1 (change both paths) and Q4 (fix-forward only) RESOLVED; Q3 deferred to the reset-and-replay work; Q2/Q5 are implementation detail |
 | Implementation | PENDING — dedicated session |

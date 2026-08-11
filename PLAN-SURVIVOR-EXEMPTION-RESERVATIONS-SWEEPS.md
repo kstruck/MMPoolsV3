@@ -53,16 +53,16 @@ never touch the exemption, and saying so per row is the point of the table.
 
 | Fixture | `usedTeams` | `picks` | Consequence |
 |---|---|---|---|
-| `src/utils/testing/scenarios/nfl-survivor-autosurvive.json` `testEntries[0]` | `['KC','BUF','SF','DAL']` | **absent entirely** | exemption fires today; would **NEVER fire** under a picks-derived default path |
-| `src/utils/testing/scenarios/nfl-survivor-autosurvive.json` `testEntries[1]` | `['KC']` | **absent entirely** | unchanged (was not exempt either way) |
-| `src/utils/testing/scenarios/nfl-survivor-autosurvive-off.json` `testEntries[0]` | `['KC','BUF','SF','DAL']` | **absent entirely** | control case — exemption disabled, so unaffected |
-| `src/utils/testing/scenarios/nfl-survivor-autosurvive-off.json` `testEntries[1]` | `['KC']` | **absent entirely** | unchanged |
+| `src/utils/testing/scenarios/nfl-survivor-autosurvive.json` `testEntries[0]` | `['KC','BUF','SF','DAL']` | `survivorPicks {}` → persisted `picks {}` | exemption fires today off the seeded ledger alone; would **NEVER fire** under a picks-derived default path |
+| `src/utils/testing/scenarios/nfl-survivor-autosurvive.json` `testEntries[1]` | `['KC']` | `survivorPicks {"1":"SF"}` → persisted `picks {1:'SF'}` (codex r7) | Divergent (`usedTeams` says KC, the pick is SF) but not exempt either way. ⚠️ Its week-1 reservation is real and must not be dropped when the scenario is rebuilt |
+| `src/utils/testing/scenarios/nfl-survivor-autosurvive-off.json` `testEntries[0]` | `['KC','BUF','SF','DAL']` | `survivorPicks {}` → persisted `picks {}` | control case — exemption disabled, so unaffected |
+| `src/utils/testing/scenarios/nfl-survivor-autosurvive-off.json` `testEntries[1]` | `['KC']` | `survivorPicks {"1":"SF"}` → persisted `picks {1:'SF'}` | Same shape; exemption disabled in this control, so unaffected |
 | `functions/src/__tests__/perPickResults.test.ts:114` | `[]` | populated | **diverges the OTHER way** — exercises `gradeSurvivorWeekGame`, never the exemption. Unaffected |
 | `functions/src/__tests__/emulator/resubmitSameTeam.emulator.test.ts:287` | `['ARI']` | `{}` | Added by #399 to pin the SUBMIT GUARD's ledger authority. Guards are out of scope (decision 3), so unaffected — but it is the closest thing to a trap in this list and must be re-read, not assumed |
 | `functions/src/__tests__/emulator/memberRecord.emulator.test.ts:111` | `[]` | `{}` | Member-record latch; no exemption. Unaffected |
 | `functions/src/__tests__/emulator/hofChaosDrill.emulator.test.ts:365` | `[]` | `{}` | Void-week / no-pick path, exemption explicitly cannot fire (`teamsPlaying.size === 0`). Unaffected |
 | `functions/src/__tests__/survivorRescore.test.ts:357` | `['KC','BUF']` | `{1:'KC', 9:'KC'}` | ⚠️ **DIVERGENT *AND* REACHES THE EXEMPTION** — added by #399 to assert that at `maxTeamUses: 2` the picks map wins over a stale ledger. Under the change its verdict must be RESTATED: with `countTeamUsesBefore(picks, 9)` KC has one use before week 9, so it stays eligible and the exemption still does not fire — same outcome, different reason. **Re-derive it rather than assume it; it is the one seed in this table that exercises the path being changed.** |
-| `functions/src/__tests__/survivorRescore.test.ts:98` | `['KC','BUF']` | `{}` (none) | ⚠️ **DIVERGENT AND REACHES THE EXEMPTION** — "exemption weeks use set semantics across reruns". With no picks at all, a picks-derived default path counts zero uses and the exemption STOPS FIRING, so this test breaks exactly as the autosurvive fixtures do. Must gain a `picks` map in the same PR |
+| `functions/src/__tests__/survivorRescore.test.ts:98` | `['KC','BUF']` | `{}` (none) | ⚠️ **DIVERGENT AND REACHES THE EXEMPTION** — "exemption weeks use set semantics across reruns". With no picks at all, a picks-derived default path counts zero uses and the exemption STOPS FIRING, so this test breaks exactly as the autosurvive fixtures do. Same repair as the fixtures — and per codex r6 that is a REBUILD (a bare `picks`/`survivorPicks` addition cannot create a week earlier than the one being scored), not a one-line seed edit |
 | `autoScore` / `goldenArc` / `hofChaosDrill` / `fixtureMatrix` / `phase3Arc` / `scenarioRunner` / `settingsMatrix` emulator seeds | consistent with `picks` | consistent | Non-divergent by construction. Unaffected |
 
 ⚠️ **This table is the corrected sweep's OUTPUT, not its completion.** Each
@@ -83,12 +83,14 @@ These scenarios are reachable from the live SuperAdmin **Test Suite** tab and ru
 against production Firestore (see `mmp-validation-and-qa` §7), so this is not
 confined to CI.
 
-**Correction fed back into the plan:** if open question 1 is answered "change both
-paths", the fixtures must be updated **in the same PR** to carry a `picks` map
-consistent with their `usedTeams` — which is also the realistic state, since a
-real entry only acquires `usedTeams` by submitting picks. Implementing the engine
-change without the fixture change is the failure mode this sweep exists to catch,
-and it is the same shape as the sim-backdoor discovery that resequenced
+**Correction fed back into the plan:** question 1 resolved to "change both
+paths", so these fixtures must be repaired **in the same PR**. ⚠️ Per codex r6/r7
+that repair is a REBUILD, not a seed edit — the scenario schema has no `picks`
+field (entries carry `survivorPicks`, converted by `nflSeasonSimulator.ts:331`),
+and `scoreWeeks: [1]` leaves no earlier week for a prior use to live in. Earlier
+`nflGames`, `survivorPicks` in those weeks, and `scoreWeeks` moved later.
+Implementing the engine change without it is the failure mode this sweep exists
+to catch — the same shape as the sim-backdoor discovery that resequenced
 `PLAN-SUPERADMIN-CONTROL` Phase 0.3.
 
 ## S3 — every consumer of the exemption
