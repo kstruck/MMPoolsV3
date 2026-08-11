@@ -65,9 +65,11 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // crash on first render.
   const [games, setGames] = useState<NFLGame[]>([]);
 
-  // Estimate current NFL Week based on date (standard season calculations)
+  // Estimate current NFL Week based on date (standard season calculations).
+  // serverNow(), not Date.now(): a skewed device clock must not choose the week
+  // (qodo #4). Only reachable before the schedule loads — the slate decides after.
   const getEstimatedNFLWeek = (): number => {
-    const now = Date.now();
+    const now = serverNow();
     const isPre = seasonType === 1;
 
     if (isPre) {
