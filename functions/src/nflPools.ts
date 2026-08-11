@@ -388,6 +388,18 @@ export async function submitNFLPicksInternal(
 
   assertNFLPickMembership(pool, uid, ctx.actorRole);
 
+  // Display name for the rows this submission writes. The ID token's `name` is
+  // minted at sign-in and registration sets `displayName` AFTER that (
+  // src/services/authService.ts), so anyone who registers → joins → picks in one
+  // sitting has no token name for the life of that token (~1h) and every row they
+  // touched read "Participant". Same fallback chain joinNFLPoolInternal already
+  // uses; `undefined` when neither source has a name, so the call sites can prefer
+  // a name already stored over overwriting it with the placeholder. Read outside
+  // the transaction — it is not part of any invariant the transaction defends.
+  const subjectName: string | undefined = ctx.subjectName
+    || (await db.collection('users').doc(uid).get()).data()?.name
+    || undefined;
+
   const type = pool.type;
   // MUTABLE, and refreshed at the top of every transaction attempt below. The
   // lease can bounce a submission and `retryWhileScoring` re-runs the transaction
@@ -522,7 +534,7 @@ export async function submitNFLPicksInternal(
         id: uid,
         poolId,
         ownerUid: uid,
-        userName: ctx.subjectName || 'Participant',
+        userName: subjectName || existingEntry?.userName || 'Participant',
         picks: { ...(existingEntry?.picks || {}), ...picks },
         ...(settings.confidenceMode && confidence ? { confidence } : {}),
         weeklyTiebreakers: {
@@ -548,7 +560,7 @@ export async function submitNFLPicksInternal(
         id: uid,
         poolId,
         ownerUid: uid,
-        userName: ctx.subjectName || 'Participant',
+        userName: subjectName || 'Participant',
         status: 'ALIVE',
         strikesUsed: 0,
         rebuysUsed: 0,
@@ -634,6 +646,10 @@ export async function submitNFLPicksInternal(
         ? [...new Set([...usedElsewhere, teamPicked])]
         : [...new Set(Object.values(survivorEntry.picks))];
       survivorEntry.submittedAt = now;
+      // Heal-on-touch: an entry created while the token carried no name is stuck at
+      // "Participant" forever otherwise — this branch reuses the existing entry and
+      // never revisits the field. Never downgrades a stored name to the placeholder.
+      survivorEntry.userName = subjectName || survivorEntry.userName || 'Participant';
 
       transaction.set(entryRef, {
         ...survivorEntry,
@@ -646,7 +662,7 @@ export async function submitNFLPicksInternal(
         id: uid,
         poolId,
         ownerUid: uid,
-        userName: ctx.subjectName || 'Participant',
+        userName: subjectName || 'Participant',
         picks: {},
         usedTeams: [],
         weeklyScores: {},
@@ -692,6 +708,8 @@ export async function submitNFLPicksInternal(
       marginEntry.picks[week] = teamPicked;
       marginEntry.usedTeams = [...new Set([...usedElsewhere, teamPicked])];
       marginEntry.submittedAt = now;
+      // Heal-on-touch — twin of the Survivor line above.
+      marginEntry.userName = subjectName || marginEntry.userName || 'Participant';
 
       transaction.set(entryRef, {
         ...marginEntry,
@@ -704,7 +722,7 @@ export async function submitNFLPicksInternal(
     // liability — this is the moment a seeded owner's feeOwed upgrades 0 -> fee,
     // and it heals records that predate the feeOwed field (fill-on-touch).
     ensureMemberRecord(transaction, db, poolId, uid, {
-      userName: ctx.subjectName || 'Participant',
+      userName: subjectName || existingMember?.userName || 'Participant',
       role: existingMember?.role ?? (pool.ownerId === uid ? 'MANAGER' : 'PARTICIPANT'),
       poolType: type,
       present: true,

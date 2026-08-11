@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 // Firebase out of the import graph entirely.
 vi.mock('./serverClock', () => ({ now: () => 0 }));
 
-import { gamesForPoolWeek, poolSeasonType } from './nflPending';
+import { gamesForPoolWeek, poolSeasonType, currentSlateWeek } from './nflPending';
 import type { NFLGame } from '../types';
 
 /**
@@ -78,5 +78,62 @@ describe('gamesForPoolWeek', () => {
         const out = gamesForPoolWeek(SCHEDULE, { seasonType: 2 }, 1);
         out.sort((a, b) => (a.id < b.id ? 1 : -1));
         expect(SCHEDULE.map(g => g.id)).toEqual(['pre1', 'pre2', 'reg1a', 'reg1b']);
+    });
+});
+
+describe('currentSlateWeek', () => {
+    const finished = (g: NFLGame): NFLGame => ({ ...g, status: 'FINAL' });
+
+    // The reported defect: HOF Weekend (preseason week 1, one game) had finished,
+    // and the dashboard still opened on it because the calendar week had not ticked.
+    it('skips a fully FINAL week and lands on the next week with a game to play', () => {
+        const slate = [finished(game('pre1', 1, 1)), game('pre2', 2, 1)];
+        expect(currentSlateWeek(slate, { seasonType: 1 })).toBe(2);
+    });
+
+    it('stays on a week that still has an unplayed game, even if some are FINAL', () => {
+        const slate = [
+            finished(game('pre2a', 2, 1)),
+            game('pre2b', 2, 1),
+            game('pre3', 3, 1),
+        ];
+        expect(currentSlateWeek(slate, { seasonType: 1 })).toBe(2);
+    });
+
+    it('counts only the pool season type, so a live regular-season week cannot pull a preseason pool forward', () => {
+        const slate = [finished(game('pre1', 1, 1)), game('reg1', 1, 2)];
+        expect(currentSlateWeek(slate, { seasonType: 1 })).toBe(1); // all preseason final -> last week
+        expect(currentSlateWeek(slate, { seasonType: 2 })).toBe(1);
+    });
+
+    it('lands on the LAST week once every game of the season type is FINAL', () => {
+        const slate = [finished(game('pre1', 1, 1)), finished(game('pre2', 2, 1))];
+        expect(currentSlateWeek(slate, { seasonType: 1 })).toBe(2);
+    });
+
+    // codex r1: CANCELLED is terminal too — a week of only cancelled games can
+    // never be entered, so treating it as open parks the dashboard on it.
+    it('treats CANCELLED as terminal, not as a game still to play', () => {
+        const cancelled = (g: NFLGame): NFLGame => ({ ...g, status: 'CANCELLED' });
+        const slate = [
+            finished(game('pre1', 1, 1)),
+            cancelled(game('pre2', 2, 1)),
+            game('pre3', 3, 1),
+        ];
+        expect(currentSlateWeek(slate, { seasonType: 1 })).toBe(3);
+    });
+
+    it('returns null when nothing is loaded for the season type, so callers keep their estimate', () => {
+        expect(currentSlateWeek([], { seasonType: 1 })).toBeNull();
+        expect(currentSlateWeek(SCHEDULE, { seasonType: 3 })).toBeNull();
+    });
+
+    it('treats an unset pool seasonType as regular season', () => {
+        expect(currentSlateWeek(SCHEDULE, {})).toBe(1);
+    });
+
+    it('picks the lowest open week regardless of document order', () => {
+        const slate = [game('pre3', 3, 1), game('pre2', 2, 1)];
+        expect(currentSlateWeek(slate, { seasonType: 1 })).toBe(2);
     });
 });

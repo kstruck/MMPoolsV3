@@ -21,7 +21,7 @@ import { AICommissioner } from '../AICommissioner';
 import { useToast } from '../ui/Toast';
 import { Button } from '../ui';
 import { now as serverNow } from '../../utils/serverClock';
-import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
+import { gamesForPoolWeek, poolSeasonType, currentSlateWeek } from '../../utils/nflPending';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes, resolveHardWeekLock, frozenHardLockFor } from '@shared/weeklyHardLock';
 import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
@@ -60,9 +60,16 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     });
   };
 
-  // Estimate current NFL Week based on date (standard season calculations)
+  // Declared before the week defaulting below, which reads `games` — a `const`
+  // is not hoisted, so leaving it with the other subscribed state would be a TDZ
+  // crash on first render.
+  const [games, setGames] = useState<NFLGame[]>([]);
+
+  // Estimate current NFL Week based on date (standard season calculations).
+  // serverNow(), not Date.now(): a skewed device clock must not choose the week
+  // (qodo #4). Only reachable before the schedule loads — the slate decides after.
   const getEstimatedNFLWeek = (): number => {
-    const now = Date.now();
+    const now = serverNow();
     const isPre = seasonType === 1;
 
     if (isPre) {
@@ -80,7 +87,14 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     }
   };
 
-  const currentEstWeek = useMemo(() => getEstimatedNFLWeek(), [seasonType]);
+  // The loaded slate decides the default week; the date estimate is only the
+  // fallback for before games arrive (see currentSlateWeek for why). Deps are
+  // (games, seasonType) rather than the pool: both this and getEstimatedNFLWeek
+  // read the pool for nothing but its season type.
+  const currentEstWeek = useMemo(
+    () => currentSlateWeek(games, castPool) ?? getEstimatedNFLWeek(),
+    [games, seasonType],
+  );
   // Selected week also rides in the URL (?week=) so refresh/Back restore the drilldown.
   // Week changes replace (not push) so scrubbing weeks doesn't spam browser history.
   const weekParam = searchParams.get('week');
@@ -95,7 +109,6 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   };
 
   // Subscribed States
-  const [games, setGames] = useState<NFLGame[]>([]);
   const [entries, setEntries] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [recaps, setRecaps] = useState<WeeklyRecap[]>([]);
