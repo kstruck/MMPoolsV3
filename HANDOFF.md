@@ -1,6 +1,51 @@
-# HANDOFF — Session entry point (updated 2026-08-10 overnight: ✅ **LAUNCH-READY PENDING TWO MERGES** — #405 (survivor exemption fix, functions deploy owed on merge) and #406 (invite-path proof, nothing to deploy) are both fully gated; `LAUNCH-READINESS.md` is the measured audit and `MORNING-2026-08-10-LAUNCH.md` the runbook. #400 (deps minors) MERGED — root-only, a low-urgency Coolify rebuild is owed for the client `firebase` patch. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` is `{enabled:true, dryRun:false}` and `nflAutoScoreJob` runs `*/5`, so merging #405 changes live grading on its first post-deploy pass (fix-forward: already-scored weeks untouched). App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
+# HANDOFF — Session entry point (updated 2026-08-11 evening: ✅ **THREE GATED PRs AWAIT KEVIN** — [#408](https://github.com/kstruck/MMPoolsV3/pull/408) fixes the two defects his prod walkthrough found (default week landed on the finished HOF slate; new members' entries read "Participant"), [#409](https://github.com/kstruck/MMPoolsV3/pull/409) is the NFL spreads runbook, [#410](https://github.com/kstruck/MMPoolsV3/pull/410) is the commissioner-blind-picks PLAN and needs his sign-off before any code. #405/#406/#407 all MERGED; `origin/main` = `d7f02d6`. ⚠️ **The functions deploy of `d7f02d6` is UNCONFIRMED** — only Coolify was confirmed, so the survivor exemption fix may not be live; the certify pass is task 1 below. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5`, so #408's functions half deploys into a live scorer. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
-> ## 🚀 STOP POINT 2026-08-10 (overnight) — **LAUNCH WEEK: two gated PRs await Kevin; invites unblocked once #405 deploys**
+> ## 🚀 STOP POINT 2026-08-11 (evening) — **three PRs gated and waiting; the spreads mystery is solved and it was not the flag**
+>
+> **Nothing was deployed today.** Functions, rules and the frontend are wherever
+> the 2026-08-10 box below leaves them — and note that box's own caveat: the
+> functions deploy of `d7f02d6` was never confirmed. **Certify it first**
+> (`npx firebase deploy --only functions --project gridiron-gamble-uzuqo`, expect
+> every function `Skipped (No changes detected)`); if functions UPDATE instead,
+> the #405 survivor exemption fix was never live.
+>
+> | PR | What | Deploy owed on merge |
+> |---|---|---|
+> | [#408](https://github.com/kstruck/MMPoolsV3/pull/408) | default week from the loaded slate; entry `userName` falls back to `users/{uid}.name` and heals a stored "Participant" | **functions** (into the LIVE scorer) **+ Coolify rebuild** |
+> | [#409](https://github.com/kstruck/MMPoolsV3/pull/409) | `docs/nfl-spreads-runbook.md` + two `LAUNCH-READINESS.md` corrections | none |
+> | [#410](https://github.com/kstruck/MMPoolsV3/pull/410) | `PLAN-COMMISSIONER-BLIND-PICKS` + sweeps + review log — **PLAN ONLY, needs Kevin's sign-off on §5 before any code** | none |
+>
+> All three: CI green, codex clean on the final diff, qodo reported and every
+> finding fixed or rejected in writing on the PR. No findings are carried.
+>
+> 🆕 **The spreads answer is not the Tuesday flag.** Measured 2026-08-11:
+> **no member surface renders a spread unless the pool is Pick'em in ATS mode**
+> (`PickemPickEntry.tsx:447`) — Survivor and Margin never read `game.spread`, so
+> on Kevin's walkthrough pool a line could never appear, whatever the data says.
+> ESPN coverage is fine now (importer week 2 = **16/16** priced; weeks 3-4 = 0/16,
+> unpriced this early). And `lockNFLSpreadsJob` has been armed-but-dry its whole
+> life. Runbook: `docs/nfl-spreads-runbook.md`.
+>
+> ⚠️ **A sequencing gap worth carrying:** `lockSpreadsOnce` never fetches
+> (`nflSchedule.ts:1347-1362`), and the 5-minute sync only refreshes a slate once
+> a game in it is inside `[now-24h, now+2h]` (`:671-674`) — an upper bound of
+> **+2 hours**, not a day ahead. So any week whose lines are not already stored by
+> Tuesday 09:00 ET never gets locked before kickoff. This week is exactly that,
+> which is why the catch-up in the runbook §3 is manual regardless of the flag.
+> Candidate fixes are named in §5 for Kevin's prioritisation; none was attempted.
+>
+> 🆕 **A pre-lock inference channel nobody had named:** `pools/{id}/consensus/{gameId}`
+> is readable by every participant, the owner and the manager with **no lock
+> condition** (`firestore.rules:497-505`) and is recomputed on every submit. Only
+> the UI hides it. `CONTEXT.md` already defines Pool Consensus as revealed *"per
+> game only after that game's effective lock"*, so this is code contradicting the
+> canonical glossary — it is T5 in the #410 plan, required rather than optional.
+>
+> ✅ **The incognito standings check PASSED** (Kevin, 2026-08-11): a player view
+> shows "No selection" for other rows pre-lock. No pick leak. The commissioner
+> DOES see raw picks pre-lock by design today — that is what #410 plans to change.
+
+> ## ⚠️ SUPERSEDED — STOP POINT 2026-08-10 (overnight) — **LAUNCH WEEK: two gated PRs await Kevin; invites unblocked once #405 deploys**
 >
 > **Nothing was deployed tonight** — functions, rules and the frontend remain
 > live from `c7bdcf5` exactly as the 2026-08-09 box below records (its deploy
