@@ -54,7 +54,25 @@ beforeAll(async () => {
   await db.collection('users').doc(LURKER).set({ name: 'Lurker', role: 'PARTICIPANT', email: `${LURKER}@example.com` });
 }, 60000);
 
-afterAll(() => test.cleanup());
+let CREATED_POOL_ID: string | undefined;
+
+// The suite's residue burdens every emulator suite that wipes by scanning whole
+// collections, and createNFLPool mints a fresh pool id per run — so repeated
+// runs accumulate (qodo on PR #406). Best-effort recursive deletes, guarded so
+// a failed create still cleans what exists.
+afterAll(async () => {
+  const poolIds = [CREATED_POOL_ID, 'invite-capped-pool'].filter(Boolean) as string[];
+  for (const id of poolIds) {
+    await db.recursiveDelete(db.collection('pools').doc(id)).catch(() => undefined);
+  }
+  for (const g of GAMES) {
+    await db.collection('nfl_games').doc(g.id).delete().catch(() => undefined);
+  }
+  for (const uid of [OWNER, STRANGER, LURKER]) {
+    await db.recursiveDelete(db.collection('users').doc(uid)).catch(() => undefined);
+  }
+  await test.cleanup();
+});
 
 describe('invite path — a stranger with the link (emulator)', () => {
   let poolId: string;
@@ -72,6 +90,7 @@ describe('invite path — a stranger with the link (emulator)', () => {
       auth: { uid: OWNER, token: { name: 'Pool Host' } },
     } as never)) as { poolId: string };
     poolId = res.poolId;
+    CREATED_POOL_ID = res.poolId;
     expect(poolId).toBeTruthy();
   }, 60000);
 
