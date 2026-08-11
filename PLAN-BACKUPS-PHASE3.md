@@ -18,17 +18,23 @@ costs time, not data.
 
 | Asset | Backed up? | Consequence if lost |
 |---|---|---|
-| **Firestore** — pools, entries, picks, member records, billing charges, payout records | ❌ none | Permanent. Nothing anywhere else holds this. |
+| **Firestore** — pools, entries, picks, member records, billing charges, payout records | ✅ **PITR, 7-day window** (measured 2026-08-10) | Recoverable to any point in the last 7 days. Older-than-7-days corruption still unprotected until scheduled exports (item 16) exist. |
 | **Firebase Auth** — user accounts, emails, password hashes | ❌ none | Every member loses access, even with a perfect Firestore restore. |
 
-No PITR, no scheduled backups, no exports, no Auth export. If the Firestore
-database were deleted or corrupted today, every pool, entry, pick, member record
-and billing charge would be gone permanently — and the VPS snapshots would not
-help, because none of that data has ever lived on the VPS.
+✅ **PITR IS ENABLED — measured 2026-08-10, not assumed.**
+`npx firebase firestore:databases:get "(default)" --project gridiron-gamble-uzuqo --json`
+returns `pointInTimeRecoveryEnablement: "POINT_IN_TIME_RECOVERY_ENABLED"`,
+`versionRetentionPeriod: "604800s"` (7 days), `earliestVersionTime:
+2026-08-04T04:26:00Z` — so it went on around 2026-08-04. The paragraph this
+replaces said "No PITR, no scheduled backups, no exports, no Auth export"; the
+first clause is now false and the other three are still true as far as this
+repo can see (scheduled exports and the Auth export are console/Cloud Shell
+state this machine cannot read — verify in the console before treating them as
+absent OR present).
 
-That remains the largest unaddressed risk in the system, and it is larger than
-any bug in the preseason list, because every other risk is recoverable and this
-one is not.
+The recovery floor exists. The remaining exposure is: corruption discovered
+more than 7 days late (needs item 16, scheduled exports) and Auth (item 18) —
+Auth is still the un-recreatable half with nothing behind it.
 
 Scope and corrected facts come from `PLAN-SECURITY-OBSERVABILITY.md` Phase 3
 (items 15–19, already corrected by Codex review #10/#11). This document is the

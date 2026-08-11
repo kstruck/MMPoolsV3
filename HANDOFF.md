@@ -1,6 +1,42 @@
-# HANDOFF — Session entry point (updated <!-- hof-date:ignore --> 2026-08-09: ✅ **THE DEPLOY QUEUE IS EMPTY — functions, rules AND the frontend are all live from `c7bdcf5`.** #399 (survivor tie/team-reuse settings) shipped functions-before-rules, then Coolify. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` is `{enabled:true, dryRun:false}` and `nflAutoScoreJob` runs `*/5`. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. Runbook that produced this state: `MORNING-2026-08-09-SURVIVOR-PARITY.md`.)
+# HANDOFF — Session entry point (updated 2026-08-10 overnight: ✅ **LAUNCH-READY PENDING TWO MERGES** — #405 (survivor exemption fix, functions deploy owed on merge) and #406 (invite-path proof, nothing to deploy) are both fully gated; `LAUNCH-READINESS.md` is the measured audit and `MORNING-2026-08-10-LAUNCH.md` the runbook. #400 (deps minors) MERGED — root-only, a low-urgency Coolify rebuild is owed for the client `firebase` patch. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` is `{enabled:true, dryRun:false}` and `nflAutoScoreJob` runs `*/5`, so merging #405 changes live grading on its first post-deploy pass (fix-forward: already-scored weeks untouched). App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
-> ## ✅ DEPLOY STATE <!-- hof-date:ignore --> **2026-08-09** — **QUEUE EMPTY**; functions + rules + frontend all at `c7bdcf5`
+> ## 🚀 STOP POINT 2026-08-10 (overnight) — **LAUNCH WEEK: two gated PRs await Kevin; invites unblocked once #405 deploys**
+>
+> **Nothing was deployed tonight** — functions, rules and the frontend remain
+> live from `c7bdcf5` exactly as the 2026-08-09 box below records (its deploy
+> facts are still the current ones; prod entry bundle re-measured tonight as
+> `index-Dhm5WwL_.js`, HTTP 200). What changed is on GitHub and in the repo:
+>
+> - **[#405](https://github.com/kstruck/MMPoolsV3/pull/405)** implements
+>   `PLAN-SURVIVOR-EXEMPTION-RESERVATIONS` (plan-gated SCORING): auto-survive
+>   eligibility now counts uses **strictly before** the scored week, both modes,
+>   one code path. CI 7/7, codex clean (plan round 9 + code round 10), qodo
+>   settled (1 doc finding fixed, 2 style insights rejected with reasoning on
+>   the PR), 4 mutations killed. ⚠️ **FIX-FORWARD ONLY — existing wrong
+>   exemptions deliberately stay** until reset-and-replay exists (Kevin's
+>   2026-08-09 ruling). **Merge owes ONE functions deploy, nothing else.**
+> - **[#406](https://github.com/kstruck/MMPoolsV3/pull/406)** pins the invite
+>   path end to end in the emulator (join by pool id alone → survivor pick →
+>   visible; no-join refused; free-plan 10-cap fires). Test-only, no deploy.
+>   Investigation recorded in-code: `POOLS_OPEN=false` gates CREATION only,
+>   client-side — strangers can join and play today.
+> - **#400 (deps minor group) MERGED** at 04:43Z after green worktree gates;
+>   root `package.json`/lockfile only, so **no functions deploy** — the client
+>   `firebase` 12.17.0→12.17.1 patch ships with the **next Coolify rebuild
+>   (owed, low urgency)**. Majors: #401 blocked upstream (vite-8 peer conflict),
+>   #402 gates-green but wants a visual smoke, #403 really broken (brand icons
+>   removed) — verdicts on each PR and in the morning doc.
+> - **`LAUNCH-READINESS.md`** (NEW) is the measured launch audit — headline
+>   wins measured tonight: **PITR is ENABLED** (7-day window, on since
+>   ~2026-08-04; `PLAN-BACKUPS-PHASE3.md` corrected), and the SA key **file is
+>   gone from `C:\keys`** (console-side revocation still to confirm — morning
+>   doc task 8).
+> - **`MORNING-2026-08-10-LAUNCH.md`** is the runbook, ordered by what unblocks
+>   invite sends soonest: merge+deploy #405 → merge #406 → 10-min prod
+>   walkthrough → SEND (with A8 price) → deepSweep two-stage arm → NFL-6 →
+>   backups verify → SA-key confirm.
+
+> ## ✅ DEPLOY STATE <!-- hof-date:ignore --> **2026-08-09** — functions + rules + frontend all at `c7bdcf5` *(deploy facts still current; the "QUEUE EMPTY" this heading used to claim was superseded 2026-08-10 — #400's merge owes a low-urgency Coolify rebuild, and #405 will owe a functions deploy on merge; the box above is the live queue statement)*
 >
 > **Functions are deployed from <!-- deploy-state:current --> `main` @ `c7bdcf5`.**
 > **Rules are deployed from the same commit** — #399 is the first change to
