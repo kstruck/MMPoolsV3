@@ -30,21 +30,40 @@ strictly-before rule. Already-scored weeks are untouched (fix-forward).
    **If not:** a red X on a check means CI moved since tonight — stop, tell the
    next session.
 
-2. Where: PowerShell, main checkout.
+2. Where: PowerShell, main checkout. **First prove the tree is clean — a
+   functions deploy uploads whatever is in the working tree, so uncommitted
+   local changes here would ship to the live scorer alongside #405.**
 
    ```powershell
    cd D:\march-melee-pools
    ```
 
    ```powershell
-   git pull
+   git status --short
+   ```
+
+   **What you should see:** no output at all.
+   **If anything is listed:** STOP — another session may have live work in
+   this checkout. Do not deploy over it; tell the next session what
+   `git status` showed.
+
+   ```powershell
+   git pull --ff-only
    ```
 
    **What you should see:** `Fast-forward` ending at a commit whose subject is
    the #405 squash ("fix(survivor): auto-survive eligibility counts only weeks
    strictly before the scored week").
-   **If not:** `Already up to date` means the merge did not land — re-check
-   step 1.
+   **If not:** `Already up to date` means the merge did not land (re-check
+   step 1); a "Not possible to fast-forward" error means this checkout has
+   local commits — STOP and tell the next session.
+
+   ```powershell
+   git log --oneline -1
+   ```
+
+   **What you should see:** the #405 squash commit as HEAD — this is the SHA
+   the deploy will ship.
 
 3. Install functions deps (ci, NOT install — install rewrites the lockfile):
 
