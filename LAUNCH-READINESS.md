@@ -14,7 +14,7 @@ every KEVIN-ACTION row, ordered by what unblocks invites soonest.
 
 | # | Item | Verify | Measured tonight | Verdict |
 |---|---|---|---|---|
-| A1 | Functions deployed from `main` @ `c7bdcf5` | HANDOFF top box (certified 2026-08-09 by an all-`Skipped` follow-up deploy) | `origin/main` is `8a1d110` = `c7bdcf5` + #404 (docs-only — `git show --stat 8a1d110` touches no `functions/`). Fleet size tonight: `npx firebase functions:list` → **176 functions** | **READY** — no functions deploy owed until #405 merges |
+| A1 | Functions deployed from `main` @ `c7bdcf5` | HANDOFF top box (certified 2026-08-09 by an all-`Skipped` follow-up deploy) | `origin/main` moved to `f68ca6e` during this session (= `c7bdcf5` + #404 docs-only + #400 root-deps-only — neither touches `functions/`, verified per merge commit). Fleet size tonight: `npx firebase functions:list` → **176 functions** | **READY** — no functions deploy owed until #405 merges |
 | A2 | Rules deployed from `c7bdcf5` | HANDOFF top box: #399 was the first rules change since `0a705c0`, shipped functions-first | No rules change has merged since (`git log c7bdcf5..origin/main -- firestore.rules` is empty) | **READY** |
 | A3 | Frontend live from `c7bdcf5` | `curl -s https://www.marchmeleepools.com/` → entry assets | **HTTP 200, `index-Dhm5WwL_.js` + `index-Dl2F2o_4.css`** — the JS hash MOVED from pre-#399 `index-W6uLtMV7.js`, which is the positive-evidence direction (HANDOFF's own rule) | **READY** |
 | A4 | Indexes | `npx firebase firestore:indexes --project gridiron-gamble-uzuqo` | **17 composite indexes**, matching the 2026-08-05 count (both `pools` billing composites present) | **READY** |
