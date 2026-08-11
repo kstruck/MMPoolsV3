@@ -1,8 +1,60 @@
-# HANDOFF — Session entry point (updated <!-- hof-date:ignore --> 2026-08-08 (late): ⏳ **ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED** — #395 (Margin recap) and #396 (5-minute scoring cadence) are merged but NOT deployed; #395 and #397 also change `src/**`. Functions still deployed from `62ff437`, rules still ≡ `0a705c0`; App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. 🛑 **AUTOMATED SCORING IS STILL OFF — that is the launch blocker, and `PLAN-AUTOSCORE-GOLIVE.md` is now the plan for clearing it.** Full runbook: `MORNING-2026-08-08.md`.)
+# HANDOFF — Session entry point (updated <!-- hof-date:ignore --> 2026-08-09: ✅ **THE DEPLOY QUEUE IS EMPTY — functions, rules AND the frontend are all live from `c7bdcf5`.** #399 (survivor tie/team-reuse settings) shipped functions-before-rules, then Coolify. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` is `{enabled:true, dryRun:false}` and `nflAutoScoreJob` runs `*/5`. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. Runbook that produced this state: `MORNING-2026-08-09-SURVIVOR-PARITY.md`.)
 
-> ## ⏳ STOP POINT <!-- hof-date:ignore --> **2026-08-08 (late)** — **FUNCTIONS DEPLOY + COOLIFY REBUILD OWED, THEN THE AUTO-SCORING FLIP**; functions unchanged at `62ff437`
+> ## ✅ DEPLOY STATE <!-- hof-date:ignore --> **2026-08-09** — **QUEUE EMPTY**; functions + rules + frontend all at `c7bdcf5`
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `62ff437`.**
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `c7bdcf5`.**
+> **Rules are deployed from the same commit** — #399 is the first change to
+> `firestore.rules` since `0a705c0`, so the "rules ≡ `0a705c0`" line that ran
+> through every box below is NO LONGER TRUE. **The frontend is rebuilt from it
+> too.** Verify the other side with **`git fetch origin` and then**
+> `git rev-parse origin/main` — the fetch is not optional, because every worktree
+> shares one `origin/main` ref and it is routinely stale (CLAUDE.md §2c).
+>
+> ✅ **Nothing is owed.** #399 shipped in the required order — **functions first,
+> then rules** — because the new rules deny routes survivor-settings edits through
+> the `updatePoolSettings` callable, so rules-first would have locked out the very
+> path the callable needs. Coolify rebuilt afterwards. Certified by a follow-up
+> functions deploy that reported **every function `Skipped (No changes detected)`**,
+> i.e. the deployed code is byte-identical to `c7bdcf5` rather than merely "the
+> command said complete".
+>
+> ⚠️ **A 429 MID-DEPLOY LOOKS LIKE A FAILURE AND USUALLY IS NOT.** The first
+> functions run ended `Error: There was an error deploying functions` naming
+> `simUpdatePool`, after `HTTP Error: 429, Quota exceeded ... Per project mutation
+> requests per minute per region`. The follow-up run reported that same function
+> `Skipped (No changes detected)` — so the update had in fact landed and the CLI
+> had merely lost its operation poll (`Could not get operation details ...
+> Deadline Exceeded`). **Re-run before concluding anything from a 429.** The
+> Windows gotcha below still applies: set `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"`,
+> expect 429s partway through the fleet, re-run until `Deploy complete!`, then once
+> more for an all-`Skipped` pass.
+>
+> 🆕 **What #399 added, and what it did NOT change.** Two commissioner settings on
+> `NFL_SURVIVOR` pools — `settings.tieCountsAs` (`'LOSS'` default = a tie is a
+> strike in BOTH modes, today's rule) and `settings.maxTeamUses` (`1` default;
+> `0` = unlimited). **No pool doc carries either field and none was migrated**;
+> defaults are applied at read sites only, so every existing survivor pool grades
+> exactly as it did before. Changing either field is REFUSED once a pool has
+> published a scored week, and `firestore.rules` denies a client write to both
+> for every principal including SUPER_ADMIN — privileged edits go through the
+> callable.
+>
+> 📌 **One finding is carried, unresolved, by deliberate decision** (codex round 4
+> on #399): a pick pre-submitted for a LATER week counts toward auto-survive
+> eligibility when an EARLIER week is scored, so future reservations can excuse a
+> missed pick. It is not a #399 regression — `submitNFLPicks` writes every
+> submitted team into `usedTeams` whatever week it is for, so the deployed default
+> path has the identical property. Fixing only the counted path would split a
+> default pool from a configured one. `PLAN-SURVIVOR-EXEMPTION-RESERVATIONS.md`
+> is the plan for fixing both together; a test pins the two paths equal until then.
+>
+> ⛔ **`system/config.nflDeepSweep` is still unset**, unchanged by this deploy. With
+> it off, a game that reaches FINAL or is corrected more than 24h after kickoff is
+> never re-read from ESPN. Kevin's decision — `PLAN-AUTOSCORE-GOLIVE.md` §5.
+
+> ## ⚠️ SUPERSEDED — STOP POINT <!-- hof-date:ignore --> **2026-08-08 (late)** — **FUNCTIONS DEPLOY + COOLIFY REBUILD OWED, THEN THE AUTO-SCORING FLIP**; functions unchanged at `62ff437`
+>
+> **Functions were deployed from <!-- deploy-state:ignore --> `main` @ `62ff437`.**
 > **`origin/main` is AHEAD of that** by the four PRs below. The deployed SHA is
 > the only one stated here; for the other, run **`git fetch origin` and then**
 > `git rev-parse origin/main` — the fetch is not optional, because every worktree
@@ -238,7 +290,7 @@
 > **Functions were deployed from <!-- deploy-state:ignore --> `main` @ `1105392`.**
 > ⚠️ **HISTORICAL — superseded by the 2026-08-08 box at the top of this file,
 > which moved the live claim to `62ff437`.**
-> **Rules remain ≡ `0a705c0`** — `firestore.rules` is byte-identical since, so no
+> **Rules remain ≡ `0a705c0`** *(true when written; NO LONGER TRUE — #399 changed `firestore.rules` on 2026-08-09)* — `firestore.rules` is byte-identical since, so no
 > rules deploy is owed.
 >
 > ⚠️ **HISTORICAL — superseded by the current box at the top of this file.** Both
