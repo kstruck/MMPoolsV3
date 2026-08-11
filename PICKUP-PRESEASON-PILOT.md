@@ -333,7 +333,7 @@ state. Concretely:
 
 ---
 
-## 2. Live state (deploy state verified 2026-08-08)
+## 2. Live state (deploy state verified 2026-08-09)
 
 > ⚠️ **HISTORICAL — this block records the 2026-07-28 state.** Its bundle hash is
 > long superseded; for the CURRENT live bundle see the tagged claim below, which
@@ -361,17 +361,31 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `62ff437`.**
-Rules remain ≡ `0a705c0` — `firestore.rules` is byte-identical since, so no rules
-deploy is owed. Indexes untouched.
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `c7bdcf5`.**
+**Rules are deployed from that same commit, and the frontend is rebuilt from it.**
+⚠️ **`firestore.rules` is NO LONGER ≡ `0a705c0`.** #399 is the first rules change
+since that commit, so every earlier box below claiming the equivalence is
+historical from 2026-08-09 onward. Indexes untouched — `firestore.indexes.json`
+is unchanged by #399.
 ✅ **ALL FOUR QUEUES ARE EMPTY:** functions EMPTY (certified by an all-`Skipped`
-run), rules EMPTY, indexes EMPTY, Coolify EMPTY — the live bundle is
-`index-W6uLtMV7.js`, read off the prod HTML on 2026-08-08.
-(Deployed 2026-08-08 for **#392 + #384**, the importer hardening and the
-`TEAM_ALREADY_USED` resubmit guard / week-label change. Full fleet, then a
-second run reporting every function `Skipped (No changes detected)`. On Windows,
-set `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"` first and expect to re-run
-through 429s. Record: HANDOFF's 2026-08-08 STOP POINT box.)
+run), rules EMPTY, indexes EMPTY, Coolify EMPTY.
+(Deployed 2026-08-09 for **#399**, the survivor tie-outcome and team-reuse
+settings. Ordered deploy — **functions BEFORE rules**, because the new rules deny
+routes survivor-settings edits through the `updatePoolSettings` callable, so
+rules-first would have locked out the path the callable needs. Then Coolify.
+⚠️ The first functions run ended `Error: There was an error deploying functions`
+naming `simUpdatePool` after an `HTTP 429` quota error; the follow-up run reported
+that function `Skipped (No changes detected)`, so the update HAD landed and the
+CLI had merely lost its operation poll. **Re-run before concluding anything from
+a 429.** On Windows set `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"` first.
+Record: HANDOFF's 2026-08-09 DEPLOY STATE box and
+`MORNING-2026-08-09-SURVIVOR-PARITY.md`.)
+
+(HISTORICAL — the deploy before it, 2026-08-08 for **#392 + #384**, the importer
+hardening and the `TEAM_ALREADY_USED` resubmit guard / week-label change. Full
+fleet, then a second run reporting every function `Skipped (No changes detected)`.
+The live bundle then was `index-W6uLtMV7.js`. Record: HANDOFF's 2026-08-08 STOP
+POINT box.)
 
 (HISTORICAL — the deploy before it, 2026-08-04 for **#360 + #362 + #348 + #363**
 from <!-- deploy-state:ignore --> `main` @ `1105392`. The certification is
