@@ -58,7 +58,7 @@ The platform supports three distinct NFL pool types, all leveraging the same ESP
 - **State Machine:**
   - `ALIVE`: `strikes < maxStrikes + 1`
   - `ELIMINATED`: `strikes >= maxStrikes + 1` (Note: if `maxStrikes = 0`, 1 strike = `ELIMINATED`).
-- **Auto-Survive Exemption:** If a player is alive but has no eligible teams left to pick (e.g., all remaining valid teams are on bye), they automatically survive the week without using a pick. "Eligible" respects `maxTeamUses`, so under an unlimited limit the exemption can never fire — a week nobody could play is handled by the void-week rule instead.
+- **Auto-Survive Exemption:** If a player is alive but has no eligible teams left to pick (e.g., all remaining valid teams are on bye), they automatically survive the week without using a pick. "Eligible" respects `maxTeamUses`, so under an unlimited limit the exemption can never fire — a week nobody could play is handled by the void-week rule instead. Eligibility counts uses in weeks **strictly before** the week being scored (PLAN-SURVIVOR-EXEMPTION-RESERVATIONS): a pick pre-submitted for a *later* week is not yet a use, so future-week reservations cannot exhaust a slate and excuse a missed pick. The submit/proxy reuse **guards** deliberately still count every other week including future reservations — "may I pick this team now?" and "had this member run out of options by the scored week?" are different questions with different answers.
 - **Rebuy State:** If eligible and within deadline, `strikesUsed` resets to 0, `rebuysUsed` increments. Importantly, **previously used teams are retained** — a rebuy does not refund team uses, whatever `maxTeamUses` is.
 
 ### Margin

@@ -266,10 +266,12 @@ describe('NFL Pools Scoring Engine Tests', () => {
     });
 
     it('processes auto-survive exemption if zero eligible teams remaining', () => {
-      // User has used KC, NYG, SF. The only active games playing are between these teams.
-      // So no eligible playing teams remain.
-      const usedTeams = ['KC', 'NYG', 'SF', 'BAL', 'MIN', 'NYJ'];
-      const isExempt = checkAutoSurviveExemption(usedTeams, mockGames, true);
+      // Every team playing this week was picked in an EARLIER week (1-6), so
+      // strictly-prior counting exhausts the week-7 slate and the exemption
+      // fires. (PLAN-SURVIVOR-EXEMPTION-RESERVATIONS: eligibility is
+      // picks-derived; a submit-time usedTeams array is no longer consulted.)
+      const picks = { 1: 'KC', 2: 'NYG', 3: 'SF', 4: 'BAL', 5: 'MIN', 6: 'NYJ' };
+      const isExempt = checkAutoSurviveExemption(mockGames, true, { maxTeamUses: 1, picks, week: 7 });
       expect(isExempt).toBe(true);
     });
 

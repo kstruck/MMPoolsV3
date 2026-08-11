@@ -240,6 +240,33 @@ VERDICT: REVISE. 2 findings (2×P2). Both accepted.
    command — seed literal, JSON key, function argument — not just the files it
    can live in.
 
+## Round 9 — codex (implementing session, on the refreshed plan)
+
+VERDICT: **CLEAN.** "The changes update planning and sweep documentation only.
+I found no actionable inconsistencies that would break existing code or tests."
+
+Run 2026-08-10 against the S1–S4 re-run (shape-proofs executed first) plus the
+recorded implementation decisions: required-context signature with the dead
+`usedTeams` parameter removed (one counting path, so the modes cannot diverge),
+and the concrete three-week fixture rebuild. This is the "one more codex round
+before writing code" the round-8 stop demanded; implementation proceeds from
+here, and the CODE will earn its own rounds.
+
+## Round 10 — codex (round 1 on the CODE)
+
+VERDICT: **CLEAN.** "The change consistently derives exemption eligibility from
+picks in weeks strictly before the scored week, updates all direct call sites,
+and covers future reservations, same-week picks, reuse limits, and divergent
+ledgers."
+
+Self-review of the same diff (§2c: a clean round 1 is not the review) found one
+staleness codex did not: `checkAutoSurviveExemption`'s docstring still described
+the pre-change rule ("already used or on bye") with no prior-week qualifier.
+Fixed in the same PR. Gate evidence (all measured 2026-08-10): root tsc clean,
+functions typecheck clean, root vitest 860/860, functions vitest 1432/1432,
+emulator 348 passed / 2 expected-fail / 10 skipped with both rebuilt autosurvive
+scenarios passing through the real callables; 4 mutations applied, 4 killed.
+
 ## Resolution status
 
 **STOPPING AT 8 ROUNDS, NOT CONVERGED — and stopping is a judgement call, not a
