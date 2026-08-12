@@ -361,8 +361,18 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `c7bdcf5`.**
-**Rules are deployed from that same commit, and the frontend is rebuilt from it.**
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `c37bbd37`.**
+⚠️ Updated 2026-08-12 (was <!-- deploy-state:ignore --> `main` @ `c7bdcf5`, which
+this file carried since 2026-08-09). Rules and the frontend are at the same
+commit. `HANDOFF.md`'s top box is the fuller statement, including the evidence
+for each surface.
+**Rules are deployed from that same commit, and the frontend is rebuilt from it**
+(frontend bundle `index-Dv5RBrGq.js`).
+⚠️ **An all-`Skipped` certification pass was NOT run for the 2026-08-12 deploy**,
+so byte-identity to `c37bbd37` is not claimed anywhere. What IS proven is that
+`functions:list` returns `getPoolPicks`, the callable #414 adds and which was
+absent before. Any sentence below asserting an all-`Skipped` certification refers
+to an EARLIER deploy, not this one.
 ⚠️ **`firestore.rules` is NO LONGER ≡ `0a705c0`.** #399 is the first rules change
 since that commit, so every earlier box below claiming the equivalence is
 historical from 2026-08-09 onward. Indexes untouched — `firestore.indexes.json`
