@@ -342,6 +342,24 @@ export function parseScoreboardResponse(
         }
       }
 
+      // TV / streaming listing, e.g. "NFL Net", "ESPN Unlmtd", "CBS".
+      //
+      // ⚠️ OFTEN ABSENT, and that is normal rather than a feed fault. Measured
+      // against the live ESPN scoreboard on 2026-08-12: present on 11 of 16
+      // preseason week-2 games, 13 of 16 in week 3, 11 of 16 in week 4 — a game
+      // carried only in its local markets has no national listing to report.
+      // So this is written only when the feed supplies one; the pick sheet omits
+      // the field rather than printing a placeholder for it.
+      //
+      // `names` can hold more than one entry (a simulcast). They are joined
+      // rather than truncated to the first, because "CBS/Paramount+" is the
+      // honest answer and picking one of the two silently drops where half the
+      // audience will actually watch.
+      const broadcast: string | undefined = (competition.broadcasts || [])
+        .flatMap((b: any) => b?.names || [])
+        .filter((n: unknown): n is string => typeof n === 'string' && n.trim().length > 0)
+        .join('/') || undefined;
+
       games.push({
         id: gameId,
         espnGameId: event.id,
@@ -374,7 +392,8 @@ export function parseScoreboardResponse(
         clock: event.status?.displayClock || '0:00',
         period: safeInt(event.status?.period),
         isMonday: isMonday,
-        ...(spreadFound ? { spread: { value: spreadValue, locked: false } } : {})
+        ...(spreadFound ? { spread: { value: spreadValue, locked: false } } : {}),
+        ...(broadcast ? { broadcast } : {})
       });
     }
 

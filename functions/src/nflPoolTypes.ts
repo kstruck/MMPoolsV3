@@ -30,6 +30,21 @@ export interface NFLGame {
   clock?: string;
   period?: number;
   isMonday?: boolean;
+  /**
+   * TV / streaming listing for the game, e.g. "NFL Net", "CBS", "CBS/Paramount+".
+   *
+   * Captured by the importer from ESPN's
+   * `events[].competitions[].broadcasts[].names` (joined on `/` for a simulcast)
+   * and rendered on the pick sheet's game row.
+   *
+   * ⚠️ ABSENT on most games, and that is the feed's normal state, not a defect:
+   * a game carried only in its local markets has no national listing. Measured
+   * 2026-08-12 — present on 11/16 preseason week-2 games, 13/16 week 3, 11/16
+   * week 4. Also absent on every game imported before 2026-08-12; there is no
+   * backfill, so it fills in on the next import of that week. Surfaces must omit
+   * the field, never print a placeholder for it.
+   */
+  broadcast?: string;
   spread?: {
     value: number; // Relative to home team. Negative means home is favored.
     locked: boolean;

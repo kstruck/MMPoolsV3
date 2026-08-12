@@ -163,6 +163,43 @@ describe('parseScoreboardResponse — real ESPN shape', () => {
     expect(games[0].spread).toBeUndefined();
   });
 
+  /**
+   * The TV listing (B1). Verified against the LIVE ESPN scoreboard on
+   * 2026-08-12 before it was written: `competitions[].broadcasts[].names`.
+   *
+   * ⚠️ It is present on only SOME games — 11 of 16 preseason week-2 events,
+   * 13 of 16 week 3, 11 of 16 week 4 — because a game carried only in its local
+   * markets has no national listing. Absence is the feed's normal state, so the
+   * field is omitted rather than written as an empty string, and the pick sheet
+   * prints nothing rather than a placeholder.
+   */
+  it('captures the national broadcast when the feed carries one', () => {
+    const games = parseScoreboardResponse(
+      { events: [espnEvent({ broadcasts: [{ market: 'national', names: ['NFL Net'] }] })] }, 1, '2026', 1);
+    expect(games[0].broadcast).toBe('NFL Net');
+  });
+
+  it('joins a simulcast rather than silently keeping only the first channel', () => {
+    // "CBS/Paramount+" is the honest answer; picking one drops where half the
+    // audience actually watches.
+    const games = parseScoreboardResponse(
+      { events: [espnEvent({ broadcasts: [{ market: 'national', names: ['CBS', 'Paramount+'] }] })] }, 1, '2026', 1);
+    expect(games[0].broadcast).toBe('CBS/Paramount+');
+  });
+
+  it('omits broadcast entirely on a local-market game — the COMMON case', () => {
+    for (const b of [undefined, [], [{ market: 'national', names: [] }], [{ market: 'national' }]]) {
+      const games = parseScoreboardResponse({ events: [espnEvent({ broadcasts: b })] }, 1, '2026', 1);
+      expect(games[0].broadcast).toBeUndefined();
+    }
+  });
+
+  it('drops blank and non-string channel names rather than emitting "  " or "undefined"', () => {
+    const games = parseScoreboardResponse(
+      { events: [espnEvent({ broadcasts: [{ names: ['', '   ', null, 'FOX'] }] })] }, 1, '2026', 1);
+    expect(games[0].broadcast).toBe('FOX');
+  });
+
   it('stamps the requested week/season/seasonType, not values guessed from the payload', () => {
     const games = parseScoreboardResponse({ events: [espnEvent()] }, 3, '2026', 1);
     expect(games[0]).toMatchObject({ week: 3, season: '2026', seasonType: 1 });
