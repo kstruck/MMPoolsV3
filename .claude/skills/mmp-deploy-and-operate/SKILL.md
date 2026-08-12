@@ -23,7 +23,44 @@ This is non-negotiable discipline rule (b) — canonical incident history lives 
 1. Always `npx firebase` (firebase-tools is a devDependency; there is no global CLI on the machines this runs on).
 2. Always `npm --prefix functions ci` FIRST — skipping it causes `TS2307: Cannot find module 'stripe'` (and firebase-functions-test) errors during the predeploy build. **`ci`, not `install`**: `install` rewrites `functions/package-lock.json`, which dirties the tree `firebase deploy` packages and defeats any clean-worktree check (2026-07-21).
 3. Deploy **functions BEFORE firestore rules** when both changed — the rules assume the new functions exist (e.g. tightened `system_logs` rules made client writes illegal because `logClientError` was supposed to take over; deploying rules first silently drops telemetry).
-4. Always pass `--project gridiron-gamble-uzuqo` explicitly.
+4. ⚠️ **When the rules change REVOKES a read the LIVE frontend still makes, the Coolify rebuild goes BETWEEN the functions deploy and the rules deploy** — see §1a. The obvious functions → rules → Coolify order breaks production for the length of the build.
+5. Always pass `--project gridiron-gamble-uzuqo` explicitly.
+
+### 1a. The three-step order, and when the middle step is load-bearing
+
+**Promoted from HANDOFF 2026-08-12, where it was learned the expensive way on
+#414 (commissioner-blind picks).**
+
+The two-step ritual above assumes the rules change only *adds* permissions, or
+removes ones nothing is using. **When it takes a read away from a client that is
+still deployed and still making it, the order is three steps:**
+
+```
+functions  →  Coolify rebuild  →  rules
+```
+
+**Why.** #414's rules edit removed the owner/manager read of `entries`. The
+frontend then live in production (`subscribeToNFLEntries`,
+`NFLPoolDashboard.tsx:139` on the pre-#414 build) was still subscribing to it.
+Deploying rules before the rebuild revokes the read out from under a client that
+does not know to stop asking — **every commissioner's standings tab blanks for
+the length of the build**. Deploying the new callable first does not help: the
+old bundle does not know to call it.
+
+**The reverse mistake is safe.** Rebuilding first means the new client is asking
+only for what the new rules will allow, and the old rules already allow that (a
+revocation only ever narrows). So a rebuild that lands early costs nothing; a
+rules deploy that lands early costs an outage.
+
+**How to tell whether this applies.** Ask one question about the diff: *does
+`firestore.rules` remove or narrow a read/list that any file under `src/**` on
+the CURRENTLY DEPLOYED bundle performs?* If yes — three steps. If the rules
+change only adds, or only touches writes the client never makes — the ordinary
+two-step ritual is fine and the rebuild can go last.
+
+⚠️ **This does not reorder functions.** Functions still go first in both
+variants: a new callable the rebuilt client calls must exist before that client
+ships, or the rebuild lands on a 404.
 
 ### Full sequence (copy-paste)
 
@@ -40,6 +77,10 @@ npm --prefix functions run build
 
 # 3. Deploy ALL functions
 npx firebase deploy --only functions --project gridiron-gamble-uzuqo
+
+# 3b. ⚠️ IF the rules change REVOKES a read the live client still makes,
+#     the Coolify rebuild goes HERE — before the rules deploy, not after.
+#     Manual trigger in the Coolify dashboard; wait for it to finish. See §1a.
 
 # 4. THEN rules, only if firestore.rules changed
 npx firebase deploy --only firestore:rules --project gridiron-gamble-uzuqo
