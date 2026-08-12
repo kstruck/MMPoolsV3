@@ -18,7 +18,7 @@ import { TeamPickButton } from './pickSheet/TeamPickButton';
 import { StickySaveBar } from './pickSheet/StickySaveBar';
 import { useSiteConsensus } from './pickSheet/useSiteConsensus';
 import { QuickPicksDialog } from './pickSheet/QuickPicksDialog';
-import type { QuickPickPlan } from './pickSheet/quickPicks';
+import { planQuickPicks, type QuickPickStrategy } from './pickSheet/quickPicks';
 import type { User, Pool, NFLGame } from '../../types';
 
 interface PickemDraft {
@@ -259,24 +259,38 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   /**
    * Apply a Quick Picks fill.
    *
+   * ⚠️ THE PLAN IS RE-COMPUTED HERE, not taken from the dialog. The dialog's
+   * counts are rendered once, on open; a member who opens it shortly before a
+   * kickoff can press a strategy AFTER that game has locked, and the sheet only
+   * re-evaluates lock state every 30s. Applying the cached plan would then write
+   * a pick to a locked game and the save would come back rejected — a Quick Pick
+   * that fails. Re-planning against `isGameLocked` at the moment of the press
+   * makes this exactly as safe as tapping a team, which re-checks the same way.
+   * (codex round 1 on this PR.)
+   *
    * ⚠️ IT DOES NOT SAVE. The fill lands in local state exactly as sixteen taps
    * would, so the member reviews and adjusts before pressing Save — Kevin's
    * instruction, and the reason this is not a one-press submit. The draft
    * effect persists it like any other edit, so a closed tab does not lose it.
    *
-   * The plan already excludes locked and already-picked games (`planQuickPicks`),
-   * so this merge cannot move a pick the server would refuse. Spreading `prev`
-   * FIRST and the plan second is still correct: on the empty-intersection case
-   * the order does not matter, and if the plan ever gained an overwrite mode the
-   * plan should win.
+   * `planQuickPicks` already excludes locked and already-picked games, so
+   * spreading `prev` first and the plan second cannot clobber anything; the
+   * order matters only if the plan ever gains an overwrite mode, where the plan
+   * should win.
    *
    * In confidence mode the WEIGHTS are deliberately untouched. Confidence is an
    * ordering the member owns — the whole point of the mode — and there is no
    * mechanical rule that could assign it without inventing a preference.
    * `canSubmit` still requires every weight, so the sheet says what is missing.
    */
-  const handleQuickPicks = (plan: QuickPickPlan) => {
-    if (plan.pickCount === 0) return;
+  const handleQuickPicks = (strategy: QuickPickStrategy) => {
+    const plan = planQuickPicks(games, strategy, picks, g => !isGameLocked(g));
+    if (plan.pickCount === 0) {
+      // Reachable: every candidate locked between opening the dialog and the
+      // press. Silence would read as a broken button.
+      toast.info('Nothing left to fill — those games have locked.');
+      return;
+    }
     dirtyRef.current = true;
     setPicks(prev => ({ ...prev, ...plan.picks }));
     toast.info(

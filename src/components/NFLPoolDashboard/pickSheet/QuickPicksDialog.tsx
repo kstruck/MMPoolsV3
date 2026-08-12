@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Zap, Home, Plane, TrendingUp, TrendingDown, X } from 'lucide-react';
 import type { NFLGame } from '../../../types';
-import { planQuickPicks, type QuickPickPlan, type QuickPickStrategy } from './quickPicks';
+import { planQuickPicks, type QuickPickStrategy } from './quickPicks';
 
 /**
  * The Quick Picks chooser — four mechanical fills for an empty pick'em sheet.
@@ -28,7 +28,21 @@ interface QuickPicksDialogProps {
   picks: Record<string, string>;
   /** The sheet's clock-corrected "can this game still move" predicate. */
   eligible: (game: NFLGame) => boolean;
-  onApply: (plan: QuickPickPlan) => void;
+  /**
+   * ⚠️ Receives the STRATEGY, not the plan the counts were rendered from.
+   *
+   * The counts below are computed when this dialog renders. A member who opens
+   * it a minute before a kickoff and then chooses can be choosing AFTER that
+   * game locked — the sheet re-evaluates lock state only every 30s — and a
+   * cached plan would then write a pick the server refuses, turning a Quick
+   * Pick into a failed save. The sheet re-plans against the live predicate at
+   * the moment of the press instead. (codex round 1 on this PR.)
+   *
+   * The consequence is deliberate: the numbers on screen are a PREVIEW and may
+   * be one game higher than what lands. The toast reports what was actually
+   * filled, so the member is told the true number either way.
+   */
+  onApply: (strategy: QuickPickStrategy) => void;
   onClose: () => void;
 }
 
@@ -114,7 +128,7 @@ export const QuickPicksDialog: React.FC<QuickPicksDialogProps> = ({
                 ref={i === 0 ? firstRef : undefined}
                 type="button"
                 disabled={empty}
-                onClick={() => { onApply(plan); onClose(); }}
+                onClick={() => { onApply(id); onClose(); }}
                 className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all duration-150 ${
                   empty
                     ? 'bg-page border-line opacity-50 cursor-not-allowed'

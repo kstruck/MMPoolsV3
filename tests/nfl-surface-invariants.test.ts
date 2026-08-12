@@ -231,6 +231,30 @@ describe('saved-pick visibility — all three member sheets, one definition', ()
     expect(union?.[1].trim()).toBe("'FAVORITES' | 'UNDERDOGS' | 'HOME' | 'AWAY'");
   });
 
+  it('Quick Picks re-plans at the press, not at dialog render', () => {
+    // codex round 1 on this PR: the dialog computes its counts once, on open.
+    // A member who opens it a minute before kickoff and then chooses is
+    // choosing after that game may have locked — the sheet re-evaluates lock
+    // state only every 30s — and applying the cached plan would write a pick
+    // the server refuses. The sheet must re-plan against its own live lock
+    // predicate, exactly as tapping a team does.
+    const sheet = readFileSync(
+      resolve(root, 'src/components/NFLPoolDashboard/PickemPickEntry.tsx'),
+      'utf8',
+    );
+    expect(sheet).toMatch(/const handleQuickPicks = \(strategy: QuickPickStrategy\) => \{/);
+    expect(sheet).toMatch(/planQuickPicks\(games, strategy, picks, g => !isGameLocked\(g\)\)/);
+
+    const dialog = readFileSync(
+      resolve(root, 'src/components/NFLPoolDashboard/pickSheet/QuickPicksDialog.tsx'),
+      'utf8',
+    );
+    const dialogCode = dialog.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+    // It hands back the STRATEGY. Handing back `plan` is the regression.
+    expect(dialogCode).toContain('onApply(id)');
+    expect(dialogCode).not.toContain('onApply(plan)');
+  });
+
   it('the pool-home CTA names the action it will actually perform', () => {
     const src = readFileSync(
       resolve(root, 'src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx'),
