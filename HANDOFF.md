@@ -1,4 +1,4 @@
-# HANDOFF — Session entry point (updated 2026-08-12 overnight: 🛑 **TWO PRs ARE OPEN AND UNMERGED, AND THE DEPLOY ORDER MATTERS.** [#414](https://github.com/kstruck/MMPoolsV3/pull/414) (commissioner-blind picks — rules + functions + client) and [#415](https://github.com/kstruck/MMPoolsV3/pull/415) (CBS-style pick sheet — importer + client) are both fully gated and waiting on Kevin. **Merge #414 first, then deploy functions BEFORE rules, then Coolify.** The runbook is `MORNING-2026-08-12.md`. ⚠️ **A Coolify rebuild has been OWED since #413 merged on 2026-08-11 and has never run** — the same rebuild pays off all three. `origin/main` was `8719d20a` when this was written; **run `git fetch origin` then `git rev-parse origin/main` rather than trusting that** (two commands — Kevin's shell is PowerShell 5.1 and `&&` is a syntax error there). 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5`, so both functions deploys land in a live scorer *(**UNVERIFIED** — carried from the 2026-08-09 box, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
+# HANDOFF — Session entry point (updated 2026-08-12 overnight: 🛑 **TWO PRs ARE OPEN AND UNMERGED, AND THE DEPLOY ORDER MATTERS.** [#414](https://github.com/kstruck/MMPoolsV3/pull/414) (commissioner-blind picks — rules + functions + client) and [#415](https://github.com/kstruck/MMPoolsV3/pull/415) (CBS-style pick sheet — importer + client) are both fully gated and waiting on Kevin. **Deploy order is functions → Coolify rebuild → rules, in that order and no other** (the LIVE frontend still makes the read the new rules revoke, so rules-before-rebuild blanks every commissioner's standings for the length of the build). The runbook is `MORNING-2026-08-12.md`. ⚠️ **A Coolify rebuild has been OWED since #413 merged on 2026-08-11 and has never run** — the same rebuild pays off all three. `origin/main` was `8719d20a` when this was written; **run `git fetch origin` then `git rev-parse origin/main` rather than trusting that** (two commands — Kevin's shell is PowerShell 5.1 and `&&` is a syntax error there). 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5`, so both functions deploys land in a live scorer *(**UNVERIFIED** — carried from the 2026-08-09 box, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
 > ## 🚀 STOP POINT 2026-08-12 (overnight) — **two gated PRs await Kevin; nothing was deployed and no flag was flipped**
 >
@@ -8,15 +8,20 @@
 >
 > | PR | What | Gates | Deploy owed ON MERGE |
 > |---|---|---|---|
-> | [#414](https://github.com/kstruck/MMPoolsV3/pull/414) | **Commissioner-blind picks** — implements `PLAN-COMMISSIONER-BLIND-PICKS` under Kevin's sign-off. `ownerId`/`managerUid` dropped from the `entries` read rule; a new `getPoolPicks` callable serves pick CONTENT only past the week's own effective lock and per-member COUNTS at any time; `pickedWeeks` marker on the Member Record drives a three-state standings cell (**Hidden** / **No selection** / **—**) | CI **7/7**, codex **7 rounds / 5 findings**, qodo **REPORTED — 6 findings, 4 fixed and 2 rejected with reasoning on the PR** | **functions FIRST, then rules, then Coolify** |
+> | [#414](https://github.com/kstruck/MMPoolsV3/pull/414) | **Commissioner-blind picks** — implements `PLAN-COMMISSIONER-BLIND-PICKS` under Kevin's sign-off. `ownerId`/`managerUid` dropped from the `entries` read rule; a new `getPoolPicks` callable serves pick CONTENT only past the week's own effective lock and per-member COUNTS at any time; `pickedWeeks` marker on the Member Record drives a three-state standings cell (**Hidden** / **No selection** / **—**) | CI **7/7**, codex **7 rounds / 5 findings**, qodo **REPORTED — 6 findings, 4 fixed and 2 rejected with reasoning on the PR** | **functions → Coolify → rules** |
 > | [#415](https://github.com/kstruck/MMPoolsV3/pull/415) | **CBS-style pick sheet** — Survivor + Margin slates gain records, the betting line, kickoff day/time, TV network and the site-wide split ON the row, a sticky save bar, and team-colour selection. The importer captures `nfl_games.broadcast` | CI **7/7**, codex **5 rounds / 4 findings, round 5 clean**, qodo **REPORTED — 4 findings, 2 fixed and 2 rejected with reasoning on the PR** | **functions + Coolify** (no rules) |
 >
-> ⚠️ **THE FUNCTIONS-BEFORE-RULES ORDER IS NOT A PREFERENCE.** #414's rules edit
-> removes the commissioner's raw entry read, and the callable that replaces it
-> ships with the functions. Rules first locks every commissioner's standings tab
-> out of a door whose replacement is not deployed. Same shape as #399.
-> `MORNING-2026-08-12.md` §1c includes a `functions:list | Select-String
-> getPoolPicks` check that must pass BEFORE the rules deploy.
+> ⚠️ **THE DEPLOY ORDER IS THREE STEPS, NOT TWO: functions → Coolify → rules.**
+> #414's rules edit removes the commissioner's raw entry read, and TWO things
+> must be in place first — the callable that replaces it (ships with
+> **functions**) *and a client that calls it* (ships with the **Coolify
+> rebuild**). The frontend live in production right now is the pre-#414 build and
+> still subscribes to the raw entries collection, so deploying rules before the
+> rebuild revokes that read out from under a client still making it: every
+> commissioner's standings tab blanks for the length of the build. The reverse
+> order is safe — the new client never makes the raw read at all.
+> `MORNING-2026-08-12.md` §1c–§1e carries the sequence, including a
+> `functions:list | Select-String getPoolPicks` check that must pass first.
 >
 > 🆕 **Kevin's Q4 ruling OVERRULED the plan, and it is now the product rule:**
 > **the live consensus is visible at all times and is never hidden.** The plan's
