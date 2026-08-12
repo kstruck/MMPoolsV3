@@ -24,7 +24,7 @@ one gets built.
 | **Q3** | Bracket / playoff pools in scope? | **Out** | As recommended (D4). `getPoolPicks` refuses any non-NFL pool type. |
 | **Q4** | Gate the live consensus channel to the reveal boundary? | ⚠️ **OVERRULED — "live consensus visible at all times, never hidden."** | **T5 IS DEAD.** The plan called T5 "REQUIRED"; it is now not to be built. `PickDistribution`'s `isGameLocked` gating is REMOVED, `pools/{id}/consensus` keeps its current rules, and **`CONTEXT.md` §Pool Consensus was corrected to match the ruling** — the glossary said post-lock reveal and is the thing that was wrong. `docs/adr/0004` carries a superseding note. |
 | **Q5** | Anything change for ordinary members? | **No** | As recommended. `getPoolPicks` refuses participants outright. |
-| **backfill** | Backfill `pickedWeeks` for entries that predate the field? | **Fix-forward, no backfill** | §8's open item is closed. `undefined` renders "—" (unknown), `[]` renders "No selection". The join path seeds `[]`, so the unknown state is confined to records written before 2026-08-12. Known cost, accepted: on such a record, weeks picked before its owner's next submit read "No selection" once that submit lands. |
+| **backfill** | Backfill `pickedWeeks` for entries that predate the field? | **Fix-forward, no backfill** | §8's open item is closed. an ABSENT `pickedWeeks` renders "—" (unknown); a present array renders "No selection" for any week missing from it. The join path deliberately does NOT seed the field — it is also the backfill path for a legacy participant whose pick history is unknown (codex r3). Known cost, accepted: on a legacy record, weeks picked before its owner's next submit read "No selection" once that submit lands. |
 
 **Why Q4 landing this way is coherent rather than a contradiction.** Consensus is
 an AGGREGATE — it says what fraction of the pool took each side, never who. What
@@ -370,9 +370,11 @@ first would lock the manager UI out of a door whose replacement is not deployed.
   sign-off: fix-forward, no backfill** — one would itself be a prod-data mutation
   under Rule 1 (kill-switch + dry-run) for a display marker. What shipped instead
   is a three-state cell: a Member Record with NO `pickedWeeks` field renders "—"
-  (unknown), not "No selection". The join path seeds `[]`, so the unknown state
-  exists only on records written before 2026-08-12. **The residual, stated
-  plainly:** once such a record's owner submits again, the field appears holding
+  (unknown), not "No selection". The field appears on a member's FIRST submit and
+  never at join — the join path also backfills records for legacy participants
+  whose pick history is unknown, so seeding it there would manufacture a "picked
+  nothing" claim. **The residual, stated plainly:** once such a record's owner
+  submits again, the field appears holding
   only that week, and the earlier weeks they really did pick then read
   "No selection". Accepted; the affected population is a handful of preseason
   pools days old.

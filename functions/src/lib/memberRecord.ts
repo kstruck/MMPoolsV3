@@ -97,12 +97,24 @@ export function planMembershipWrite(
     if (facts.hasPlayableEntry !== undefined) {
       data.hasPlayableEntry = facts.hasPlayableEntry;
     }
-    // Seed the pick marker even when there is no pick yet. `[]` and `undefined`
-    // are NOT the same answer downstream: `[]` means "this member has picked no
-    // week", which renders "No selection"; `undefined` means "this record
-    // predates the field", which renders "—". Seeding here is what confines the
-    // unknown state to records written before 2026-08-12.
-    data.pickedWeeks = facts.pickedWeek !== undefined ? [facts.pickedWeek] : [];
+    // Same unknown-is-not-false discipline as `hasPlayableEntry` directly above,
+    // and for the same reason: THIS CREATE BRANCH IS ALSO THE BACKFILL-ON-TOUCH
+    // PATH. `joinNFLPoolInternal` (nflPools.ts:238) reaches it for someone who
+    // is ALREADY a participant but has no Member Record — a legacy pool — and
+    // that person may well already have weeks of picks.
+    //
+    // Seeding `[]` there would convert "we do not know which weeks this member
+    // picked" into "they picked no week", and the standings cell renders those
+    // two differently on purpose: absent is "—", `[]` is "No selection". So the
+    // field is written ONLY when this caller is actually reporting a pick.
+    // (codex r3 on the commissioner-blind-picks PR, which caught the first
+    // version doing exactly what the comment above it warns against.)
+    //
+    // Cost of the honest version: nothing visible. `buildMemberStandings` keeps
+    // a member off the leaderboard until they have a scored row or the
+    // `hasPlayableEntry` latch, so a joined-and-never-picked member has no cell
+    // to render either way.
+    if (facts.pickedWeek !== undefined) data.pickedWeeks = [facts.pickedWeek];
     return { participant: 'add', member: { op: 'set', data, merge: false } };
   }
   // Update: merge identity/units only; preserve paidStatus + claim. feeOwed is

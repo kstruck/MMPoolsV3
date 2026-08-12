@@ -71,7 +71,12 @@ async function seedMember(poolId: string, uid: string, over: Record<string, unkn
     await db.collection('pools').doc(poolId).collection('members').doc(uid).set({
         uid, poolId, userName: uid, role: uid === OWNER ? 'MANAGER' : 'PARTICIPANT',
         paidStatus: 'UNPAID', joinedAt: Date.now(), feeOwed: 25, feeOwedSource: 'LIVE',
-        hasPlayableEntry: false, pickedWeeks: [],
+        // NOTE: no `pickedWeeks`. That is the real shape a joined-but-not-yet-
+        // submitted member has — the join path deliberately does not seed the
+        // field, because it is also the backfill path for a legacy participant
+        // whose pick history is unknown (codex r3). So these suites exercise the
+        // heal-from-absent path rather than a pre-seeded array.
+        hasPlayableEntry: false,
         ...over,
     });
 }
@@ -130,7 +135,8 @@ describe('T1 — submitNFLPicks writes the pickedWeeks marker', () => {
         await submitNFLPicksInternal(db, { actorUid: BOB, subjectUid: BOB }, {
             poolId: POOL, week: 1, picks: {},
         } as never);
-        expect((await memberDoc(POOL, BOB))?.pickedWeeks).toEqual([]);
+        // Absent, not `[]`: nothing was reported, so nothing is claimed.
+        expect((await memberDoc(POOL, BOB))?.pickedWeeks).toBeUndefined();
     }, 30000);
 
     /**
@@ -153,7 +159,7 @@ describe('T1 — submitNFLPicks writes the pickedWeeks marker', () => {
         await submitNFLPicksInternal(db, { actorUid: ALICE, subjectUid: ALICE }, {
             poolId: OTHER_POOL, week: 1, picks: { [W2]: 'KC' },
         } as never);
-        expect((await memberDoc(OTHER_POOL, ALICE))?.pickedWeeks).toEqual([]);
+        expect((await memberDoc(OTHER_POOL, ALICE))?.pickedWeeks).toBeUndefined();
 
         // ...and a pick that IS on week 1's slate does mark it.
         await submitNFLPicksInternal(db, { actorUid: ALICE, subjectUid: ALICE }, {

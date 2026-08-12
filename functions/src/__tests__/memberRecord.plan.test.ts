@@ -179,13 +179,18 @@ describe('isProvableMember', () => {
 describe('planMembershipWrite — pickedWeeks', () => {
   const base = { userName: 'U', poolType: 'NFL_PICKEM', present: true } as const;
 
-  it('seeds [] on create when no pick is being reported', () => {
-    // `[]` and absent are DIFFERENT answers downstream: [] renders
-    // "No selection", absent renders "—". Seeding confines "absent" to records
-    // written before the field existed.
+  /**
+   * ⚠️ THE CREATE BRANCH IS ALSO THE BACKFILL-ON-TOUCH PATH.
+   * `joinNFLPoolInternal` reaches it for a legacy participant who has no Member
+   * Record and may already have weeks of picks, so seeding `[]` here would turn
+   * "unknown" into "picked no week" — and the standings cell renders those two
+   * differently ("—" vs "No selection"). codex r3 caught the first version doing
+   * this, which is the same trap `hasPlayableEntry` documents one field above.
+   */
+  it('writes NOTHING on create when no pick is being reported', () => {
     const plan = planMembershipWrite('p1', 'u1', { ...base }, null, NOW);
     if (plan.participant !== 'add') throw new Error('expected add');
-    expect(plan.member.data.pickedWeeks).toEqual([]);
+    expect(plan.member.data.pickedWeeks).toBeUndefined();
   });
 
   it('seeds [week] on create when the caller reports a pick', () => {

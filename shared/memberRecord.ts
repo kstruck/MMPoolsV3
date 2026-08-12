@@ -61,13 +61,17 @@ export interface MemberRecord {
    * Union-only: weeks are added, never removed. A member cannot un-pick, and
    * losing membership deletes the record outright.
    *
-   * ⚠️ ABSENT on every record written before 2026-08-12, and on nothing since —
-   * the join/create path seeds `[]`. So `undefined` means "this pool predates
-   * the marker, the answer is unknown" and MUST render as "—", never as
-   * "No selection". Fix-forward, per Kevin's ruling: there is no backfill, so on
-   * a legacy record the weeks picked before its owner's next submit stay
-   * unknown, and once that submit lands they read "No selection". Same
-   * unknown-is-not-false discipline as `hasPlayableEntry` above.
+   * ⚠️ ABSENT until this member's first submit — including on every record
+   * written before 2026-08-12. `undefined` means "the answer is unknown" and
+   * MUST render as "—", never as "No selection"; `[]` would mean "picked no
+   * week", and nothing writes that. The join path deliberately does NOT seed it,
+   * because that path also backfills a Member Record for a legacy participant
+   * who may already have weeks of picks — same unknown-is-not-false discipline
+   * as `hasPlayableEntry` above, and the same trap.
+   *
+   * Fix-forward, per Kevin's ruling: there is no backfill, so on a legacy record
+   * the weeks picked before its owner's next submit stay unknown, and once that
+   * submit lands they read "No selection".
    */
   pickedWeeks?: number[];
 }

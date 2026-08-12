@@ -160,9 +160,10 @@ export function buildMemberStandings({ pool, members, standingsRows, ownEntry, r
     // pick reach a row whichever of the three loops above produced it.
     //
     // `pickedWeeks` is copied verbatim — including when it is ABSENT, which is
-    // the whole point. `undefined` means "this Member Record predates the field"
-    // and the table renders "—"; `[]` means "has picked no week" and renders
-    // "No selection". Coercing one to the other here would put the lie back
+    // the whole point. `undefined` means "unknown" (no submit has landed since
+    // the field existed) and the table renders "—"; a present array means the
+    // answer is known, so a week missing from it renders "No selection".
+    // Coercing one to the other here would put the lie back
     // (shared/memberRecord.ts).
     const pickedByUid = new Map<string, number[] | undefined>();
     for (const m of members || []) {
