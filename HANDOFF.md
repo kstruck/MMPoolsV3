@@ -1,6 +1,120 @@
-# HANDOFF — Session entry point (updated 2026-08-10 overnight: ✅ **LAUNCH-READY PENDING TWO MERGES** — #405 (survivor exemption fix, functions deploy owed on merge) and #406 (invite-path proof, nothing to deploy) are both fully gated; `LAUNCH-READINESS.md` is the measured audit and `MORNING-2026-08-10-LAUNCH.md` the runbook. #400 (deps minors) MERGED — root-only, a low-urgency Coolify rebuild is owed for the client `firebase` patch. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` is `{enabled:true, dryRun:false}` and `nflAutoScoreJob` runs `*/5`, so merging #405 changes live grading on its first post-deploy pass (fix-forward: already-scored weeks untouched). App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
+# HANDOFF — Session entry point (updated 2026-08-11 evening: ⚠️ **#408 IS MERGED AND OWES A FUNCTIONS DEPLOY + COOLIFY REBUILD** — it fixes the two defects Kevin's prod walkthrough found (default week landed on the finished HOF slate; new members' entries read "Participant"). Still open: [#409](https://github.com/kstruck/MMPoolsV3/pull/409) the NFL spreads runbook, [#410](https://github.com/kstruck/MMPoolsV3/pull/410) the commissioner-blind-picks PLAN (needs sign-off before any code), and this box's own PR. #405/#406/#407 MERGED, and **#408 merged 2026-08-11 as `39d5702`** — `main` merged **through `39d5702`** as of this writing; **do not treat that SHA as current state**, run `git fetch origin`, then `git rev-parse origin/main` — two commands, because Kevin's shell is PowerShell 5.1 and `&&` is a syntax error there (CLAUDE.md §2c — every worktree shares one `origin/main` ref and it is routinely stale). ✅ **The functions deploy of `d7f02d6` is CERTIFIED** *(that is the PRE-#408 state — #408 itself is undeployed, see the box)* — Kevin ran the certify pass 2026-08-11 evening from the primary checkout with a verified `HEAD` and a clean `functions/`+`shared/`+`firebase.json` tree: **every function reported `Skipped (No changes detected)`**, ending `Deploy complete!`. Prod functions are byte-identical to `d7f02d6`, so the #405 survivor exemption fix **is live**. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5`, so #408's functions half deploys into a live scorer. *(CARRIED from the 2026-08-09 box, **not re-measured this session** — no admin credentials on this machine; re-read `system/config` in the Firebase console before relying on it.)* App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
-> ## 🚀 STOP POINT 2026-08-10 (overnight) — **LAUNCH WEEK: two gated PRs await Kevin; invites unblocked once #405 deploys**
+> ## 🚀 STOP POINT 2026-08-11 (evening) — **three PRs gated and waiting; the spreads mystery is solved and it was not the flag**
+>
+> **Nothing NEW was deployed today** — the only deploy run was the certify pass in
+> Task 1, which changed nothing (all-`Skipped`). Functions, rules and the frontend
+> are where the 2026-08-10 box leaves them, and that box's open caveat — the
+> unconfirmed functions deploy — is now **closed**: prod functions are certified
+> byte-identical to `d7f02d6`.
+>
+> ### Task 1 — certify the functions deploy ✅ **DONE 2026-08-11 evening**
+>
+> **Result: every function `Skipped (No changes detected)`, `Deploy complete!`** —
+> prod is byte-identical to `d7f02d6` and the #405 survivor exemption fix is live.
+> Preflight held: `git rev-parse HEAD` = `d7f02d6`, and `functions/`, `shared/`
+> and `firebase.json` were all clean. Two untracked root notes were present
+> (`NEXT-SESSION-PROMPT.md`, `PROMPT-SURVIVOR-PARITY.md`) and were correctly
+> ignored — they are outside the upload, and the scoped check below says so
+> rather than leaving it to judgement.
+>
+> **The procedure below stays here because #408's merge owes the same ritual.**
+>
+> ⚠️ **`npx firebase deploy` packages the WORKING TREE, so the UPDATE-vs-Skipped
+> signal means nothing until you have proved which commit you are on and that the
+> tree is clean.** Preflight first:
+>
+> **Run this from the PRIMARY checkout, `D:\march-melee-pools` — not from a
+> worktree.** `main` is checked out there, and git refuses to check the same
+> branch out twice, so `git checkout main` fails in any linked worktree.
+>
+> **PowerShell, one command per line — no `&&` anywhere** (it is a syntax error in
+> PowerShell 5.1; standing rule). Run them in order and stop at the first failure:
+>
+> **What "clean" means here, exactly.** The check is scoped to `functions/`,
+> `shared/` and `firebase.json` — the three things that decide what gets uploaded.
+> `firebase.json` sets `"source": "functions"`, so **nothing outside `functions/`
+> can enter the bundle**; `shared/` is in scope only because the predeploy step
+> copies it in (**`functions/scripts/copy-shared.mjs`** — the build script invokes
+> it package-relative as `node scripts/copy-shared.mjs`, so it is NOT a repo-root
+> path and no such root file exists), and `firebase.json` itself controls the
+> source, the ignore list and that predeploy command. **Untracked or modified files
+> anywhere else — stray notes at the repo root, `src/` work in progress — do NOT
+> block a functions deploy and must not be "cleaned up" to satisfy this gate.**
+> A whole-tree `git status` would fail on ordinary working state and teach the
+> operator to wave the check through, which is worse than not having it.
+>
+> ⚠️ **`git status` CANNOT see `functions/.env`, and Firebase deploys it.** The
+> deploy log says so on every run — `Loaded environment variables from .env` — and
+> the file is gitignored, so a change to it is invisible to every git check above
+> while still altering live runtime configuration. Hence the `Get-ChildItem` line:
+> it lists **name, size and last-write time only, never contents**, so a `.env`
+> that moved since the last deploy is visible without putting secrets on screen.
+> If its timestamp is newer than the last deploy and you did not change it
+> deliberately, **stop and find out why before deploying**.
+>
+> ```powershell
+> cd D:\march-melee-pools
+> git fetch origin
+> git checkout main
+> git pull --ff-only
+> git rev-parse HEAD                          # must equal the SHA you intend to certify
+> git status --porcelain -- functions shared firebase.json   # must print NOTHING
+> Get-ChildItem functions/.env* | Select-Object Name, Length, LastWriteTime
+> npm --prefix functions ci                   # ci, not install — install rewrites the lockfile
+> $env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"
+> ```
+>
+> Then `npx firebase deploy --only functions --project gridiron-gamble-uzuqo`.
+>
+> - **Every function `Skipped (No changes detected)`** → the deployed code is
+>   byte-identical to your (verified) checkout. Certified.
+> - **Functions UPDATE** → prod was **not** byte-identical to that commit before
+>   this run, i.e. the #405 survivor exemption fix was not live and this run is
+>   its first confirmed deploy. Let it finish, then re-run for an all-`Skipped`
+>   pass.
+> - A **429 mid-deploy is usually not a failure** — re-run before concluding
+>   anything (see the 2026-08-09 box).
+>
+> Without the preflight, UPDATE/Skipped describes your laptop, not production.
+>
+> | PR | What | Deploy owed on merge |
+> |---|---|---|
+> | [#408](https://github.com/kstruck/MMPoolsV3/pull/408) **MERGED 2026-08-11** | default week from the loaded slate; entry `userName` falls back to `users/{uid}.name` and heals a stored "Participant" | ⚠️ **OWED: functions** (into the LIVE scorer) **+ a Coolify rebuild.** Run Task 1's preflight, then the deploy — this time functions SHOULD update (`submitNFLPicks` at minimum); an all-`Skipped` first pass would mean the merge commit is not what you have checked out. Re-run once after for the all-`Skipped` confirmation. |
+> | [#409](https://github.com/kstruck/MMPoolsV3/pull/409) | `docs/nfl-spreads-runbook.md` + two `LAUNCH-READINESS.md` corrections | none |
+> | [#410](https://github.com/kstruck/MMPoolsV3/pull/410) | `PLAN-COMMISSIONER-BLIND-PICKS` + sweeps + review log — **PLAN ONLY, needs Kevin's sign-off on §5 before any code** | none |
+>
+> All four: CI green, codex clean on the final diff, qodo reported and every
+> finding fixed or rejected in writing on the PR. No findings are carried.
+>
+> 🆕 **The spreads answer is not the Tuesday flag.** Measured 2026-08-11:
+> **no member surface renders a spread unless the pool is Pick'em in ATS mode**
+> (`PickemPickEntry.tsx:447`) — Survivor and Margin never read `game.spread`, so
+> on Kevin's walkthrough pool a line could never appear, whatever the data says.
+> ESPN coverage is fine now (importer week 2 = **16/16** priced; weeks 3-4 = 0/16,
+> unpriced this early). And `lockNFLSpreadsJob` has been armed-but-dry its whole
+> life. Runbook: `docs/nfl-spreads-runbook.md`.
+>
+> ⚠️ **A sequencing gap worth carrying:** `lockSpreadsOnce` never fetches
+> (`nflSchedule.ts:1347-1362`), and the 5-minute sync only refreshes a slate once
+> a game in it is inside `[now-24h, now+2h]` (`:671-674`) — an upper bound of
+> **+2 hours**, not a day ahead. So any week whose lines are not already stored by
+> Tuesday 09:00 ET never gets locked before kickoff. This week is exactly that,
+> which is why the catch-up in the runbook §3 is manual regardless of the flag.
+> Candidate fixes are named in §5 for Kevin's prioritisation; none was attempted.
+>
+> 🆕 **A pre-lock inference channel nobody had named:** `pools/{id}/consensus/{gameId}`
+> is readable by every participant, the owner and the manager with **no lock
+> condition** (`firestore.rules:497-505`) and is recomputed on every submit. Only
+> the UI hides it. `CONTEXT.md` already defines Pool Consensus as revealed *"per
+> game only after that game's effective lock"*, so this is code contradicting the
+> canonical glossary — it is T5 in the #410 plan, required rather than optional.
+>
+> ✅ **The incognito standings check PASSED** (Kevin, 2026-08-11): a player view
+> shows "No selection" for other rows pre-lock. No pick leak. The commissioner
+> DOES see raw picks pre-lock by design today — that is what #410 plans to change.
+
+> ## ⚠️ SUPERSEDED — STOP POINT 2026-08-10 (overnight) — **LAUNCH WEEK: two gated PRs await Kevin; invites unblocked once #405 deploys**
 >
 > **Nothing was deployed tonight** — functions, rules and the frontend remain
 > live from `c7bdcf5` exactly as the 2026-08-09 box below records (its deploy
