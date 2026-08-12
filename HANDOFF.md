@@ -1,24 +1,30 @@
-# HANDOFF — Session entry point (updated 2026-08-11 evening: ⚠️ **#408 IS MERGED AND OWES A FUNCTIONS DEPLOY + COOLIFY REBUILD** — it fixes the two defects Kevin's prod walkthrough found (default week landed on the finished HOF slate; new members' entries read "Participant"). Still open: [#409](https://github.com/kstruck/MMPoolsV3/pull/409) the NFL spreads runbook, [#410](https://github.com/kstruck/MMPoolsV3/pull/410) the commissioner-blind-picks PLAN (needs sign-off before any code), and this box's own PR. #405/#406/#407 MERGED, and **#408 merged 2026-08-11 as `39d5702`** — `main` merged **through `39d5702`** as of this writing; **do not treat that SHA as current state**, run `git fetch origin`, then `git rev-parse origin/main` — two commands, because Kevin's shell is PowerShell 5.1 and `&&` is a syntax error there (CLAUDE.md §2c — every worktree shares one `origin/main` ref and it is routinely stale). ✅ **The functions deploy of `d7f02d6` is CERTIFIED** *(that is the PRE-#408 state — #408 itself is undeployed, see the box)* — Kevin ran the certify pass 2026-08-11 evening from the primary checkout with a verified `HEAD` and a clean `functions/`+`shared/`+`firebase.json` tree: **every function reported `Skipped (No changes detected)`**, ending `Deploy complete!`. Prod functions are byte-identical to `d7f02d6`, so the #405 survivor exemption fix **is live**. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5`, so #408's functions half deploys into a live scorer. *(CARRIED from the 2026-08-09 box, **not re-measured this session** — no admin credentials on this machine; re-read `system/config` in the Firebase console before relying on it.)* App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
+# HANDOFF — Session entry point (updated 2026-08-11 evening: ✅ **THE QUEUE IS EMPTY — #408/#409/#410/#411 are all MERGED, and #408 is DEPLOYED AND VERIFIED IN PROD.** Both defects from Kevin's walkthrough are fixed live: the dashboard opens on the first unplayed week, and a stored "Participant" entry heals to the member's profile name on their next submit (fix-forward — there is no backfill, so an untouched old entry keeps the placeholder until its owner submits again). **The one thing still blocking work is a decision, not a deploy:** `PLAN-COMMISSIONER-BLIND-PICKS.md` §5 needs Kevin's sign-off before any of that code is written. #405/#406/#407 MERGED, **#408 merged as `39d5702`** (the last commit that changed shipped code), and #409/#410/#411 merged after it — `main` is at **`dbf378a`** as of this writing, which is docs-only ahead of `39d5702`;  **do not treat that SHA as current state**, run `git fetch origin`, then `git rev-parse origin/main` — two commands, because Kevin's shell is PowerShell 5.1 and `&&` is a syntax error there (CLAUDE.md §2c — every worktree shares one `origin/main` ref and it is routinely stale). ✅ **Functions are deployed from `39d5702` (#408) and verified in prod.** Earlier the same evening a certify pass proved the THEN-current deploy matched `d7f02d6`; that pass is history, not the live state — `39d5702` superseded it hours later (that certify pass, run from the primary checkout with a verified `HEAD` and a clean tree, reported **every function `Skipped (No changes detected)`** — which is how we know the #405 survivor exemption fix was **already live** before #408 went out; `39d5702` then shipped on top of it). 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5`, so #408's functions half deploys into a live scorer. *(**UNVERIFIED** — carried from the 2026-08-09 box and NOT re-measured this session; no admin credentials on this machine. Re-read `system/config` in the Firebase console before relying on these values.)* App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
-> ## 🚀 STOP POINT 2026-08-11 (evening) — **three PRs gated and waiting; the spreads mystery is solved and it was not the flag**
+> ## 🚀 STOP POINT 2026-08-11 (evening) — **everything merged and deployed; the spreads mystery is solved and it was not the flag**
 >
-> **Nothing NEW was deployed today** — the only deploy run was the certify pass in
-> Task 1, which changed nothing (all-`Skipped`). Functions, rules and the frontend
-> are where the 2026-08-10 box leaves them, and that box's open caveat — the
-> unconfirmed functions deploy — is now **closed**: prod functions are certified
-> byte-identical to `d7f02d6`.
+> **Two deploy runs happened this evening, in this order.** First the Task 1
+> certify pass, which changed nothing (all-`Skipped`) and closed the 2026-08-10
+> box's open caveat by proving the deploy then matched `d7f02d6`. Then, after
+> #408 merged, a real functions deploy of `39d5702` plus a Coolify rebuild — that
+> is the live state now, and the table below records it as verified in prod.
+> Rules were not deployed; nothing merged tonight touched `firestore.rules`.
 >
 > ### Task 1 — certify the functions deploy ✅ **DONE 2026-08-11 evening**
 >
-> **Result: every function `Skipped (No changes detected)`, `Deploy complete!`** —
-> prod is byte-identical to `d7f02d6` and the #405 survivor exemption fix is live.
+> **Result at the time: every function `Skipped (No changes detected)`,
+> `Deploy complete!`** — the deploy then matched `d7f02d6`, which is what proved
+> the #405 survivor exemption fix was already live. **Superseded the same evening
+> by the #408 deploy (`39d5702`)**; this entry records how the question was
+> settled, not what is running now.
 > Preflight held: `git rev-parse HEAD` = `d7f02d6`, and `functions/`, `shared/`
 > and `firebase.json` were all clean. Two untracked root notes were present
 > (`NEXT-SESSION-PROMPT.md`, `PROMPT-SURVIVOR-PARITY.md`) and were correctly
 > ignored — they are outside the upload, and the scoped check below says so
 > rather than leaving it to judgement.
 >
-> **The procedure below stays here because #408's merge owes the same ritual.**
+> **The procedure below stays here because it is the ritual for EVERY functions
+> deploy** — it was used again for #408 an hour later, and the next one will need
+> it too. Nothing is owed right now.
 >
 > ⚠️ **`npx firebase deploy` packages the WORKING TREE, so the UPDATE-vs-Skipped
 > signal means nothing until you have proved which commit you are on and that the
@@ -80,7 +86,7 @@
 >
 > | PR | What | Deploy owed on merge |
 > |---|---|---|
-> | [#408](https://github.com/kstruck/MMPoolsV3/pull/408) **MERGED 2026-08-11** | default week from the loaded slate; entry `userName` falls back to `users/{uid}.name` and heals a stored "Participant" | ⚠️ **OWED: functions** (into the LIVE scorer) **+ a Coolify rebuild.** Run Task 1's preflight, then the deploy — this time functions SHOULD update (`submitNFLPicks` at minimum); an all-`Skipped` first pass would mean the merge commit is not what you have checked out. Re-run once after for the all-`Skipped` confirmation. |
+> | [#408](https://github.com/kstruck/MMPoolsV3/pull/408) **MERGED `39d5702`** | default week from the loaded slate; entry `userName` falls back to `users/{uid}.name` and heals a stored "Participant" | ✅ **DEPLOYED AND VERIFIED IN PROD 2026-08-11.** Functions deployed (`Deploy complete!`, `submitNFLPicks` among the updates; four 429s mid-run all recovered inside the same run), Coolify rebuilt. Verified live: the dashboard opens on **Preseason Week 1** with `HOF ×` behind it — old calendar math would have said HOF Weekend on Aug 11 (`ceil(5/7)` = 1) — and a re-submit healed a stored "Participant" row to the member's profile name. **Nothing owed.** |
 > | [#409](https://github.com/kstruck/MMPoolsV3/pull/409) | `docs/nfl-spreads-runbook.md` + two `LAUNCH-READINESS.md` corrections | none |
 > | [#410](https://github.com/kstruck/MMPoolsV3/pull/410) | `PLAN-COMMISSIONER-BLIND-PICKS` + sweeps + review log — **PLAN ONLY, needs Kevin's sign-off on §5 before any code** | none |
 >
