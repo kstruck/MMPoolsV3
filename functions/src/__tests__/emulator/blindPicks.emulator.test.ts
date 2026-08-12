@@ -115,6 +115,53 @@ describe('T1 — submitNFLPicks writes the pickedWeeks marker', () => {
         expect((await memberDoc(POOL, ALICE))?.pickedWeeks).toEqual([1]);
     }, 30000);
 
+    /**
+     * ⚠️ AN EMPTY SUBMISSION IS NOT A PICK. `submitNFLPicksSchema` permits
+     * `picks: {}` for pick'em and the handler does not require a selection, so
+     * without the `committedPickForWeek` gate the entry write would still mark
+     * the week — and the standings cell would read "Hidden" for a pick nobody
+     * made, which is a worse lie than the one the marker exists to fix.
+     * (codex r2 on this PR. Survivor and Margin throw on a missing team, so this
+     * is a pick'em-only hazard.)
+     */
+    it('an EMPTY pickem submission does not mark the week', async () => {
+        await seedMember(POOL, BOB);
+        await db.collection('users').doc(BOB).set({ name: 'Bob' });
+        await submitNFLPicksInternal(db, { actorUid: BOB, subjectUid: BOB }, {
+            poolId: POOL, week: 1, picks: {},
+        } as never);
+        expect((await memberDoc(POOL, BOB))?.pickedWeeks).toEqual([]);
+    }, 30000);
+
+    /**
+     * A WEEKLY-lock pick'em pool has no per-game validation loop, so a gameId
+     * belonging to another week reaches the entry write. Deriving the marker
+     * from THIS week's slate is what stops it marking the wrong week.
+     */
+    it('picks whose games belong to another week do not mark this week', async () => {
+        const OTHER_POOL = 'blind-submit-weekly-pool';
+        const OTHER_SEASON = 'blind-submit-weekly-season';
+        const W1 = 'blind-weekly-w1-g';
+        const W2 = 'blind-weekly-w2-g';
+        await seedGame(OTHER_SEASON, W1, 1, Date.now() + 4 * HOUR);
+        await seedGame(OTHER_SEASON, W2, 2, Date.now() + 30 * HOUR);
+        await seedPool(OTHER_SEASON, OTHER_POOL, 'NFL_PICKEM', {
+            settings: { entryFee: 25, lockMode: 'WEEKLY', pickMode: 'STRAIGHT', confidenceMode: false },
+        });
+        await seedMember(OTHER_POOL, ALICE);
+
+        await submitNFLPicksInternal(db, { actorUid: ALICE, subjectUid: ALICE }, {
+            poolId: OTHER_POOL, week: 1, picks: { [W2]: 'KC' },
+        } as never);
+        expect((await memberDoc(OTHER_POOL, ALICE))?.pickedWeeks).toEqual([]);
+
+        // ...and a pick that IS on week 1's slate does mark it.
+        await submitNFLPicksInternal(db, { actorUid: ALICE, subjectUid: ALICE }, {
+            poolId: OTHER_POOL, week: 1, picks: { [W1]: 'KC' },
+        } as never);
+        expect((await memberDoc(OTHER_POOL, ALICE))?.pickedWeeks).toEqual([1]);
+    }, 30000);
+
     it('unions a second week rather than replacing the first', async () => {
         const GAME2 = 'blind-submit-g2';
         await seedGame(SEASON, GAME2, 2, Date.now() + 8 * HOUR);
