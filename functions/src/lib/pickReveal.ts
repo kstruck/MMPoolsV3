@@ -28,7 +28,7 @@ import {
 
 export interface RevealPool {
   type?: string;
-  settings?: LockSettings & { lockMode?: string };
+  settings?: LockSettings & { lockMode?: string; confidenceMode?: boolean };
   hardLockByWeek?: Record<string | number, unknown>;
 }
 
@@ -54,10 +54,21 @@ export interface WeekReveal {
  * Survivor and Margin carry a HARD weekly lock derived from the pool TYPE (a
  * settings write cannot downgrade it), and a WEEKLY-lockMode pick'em pool has
  * opted into the same shape. Everything else is PER_GAME.
+ *
+ * ⚠️ `confidenceMode` COUNTS AS WEEKLY, and it is easy to miss because the pool's
+ * `lockMode` may still read `'PER_GAME'`. `submitNFLPicksInternal` derives the
+ * submission lock as `settings.confidenceMode || settings.lockMode === 'WEEKLY'`
+ * (nflPools.ts) — a confidence sheet has to be ranked as a whole, so the whole
+ * week freezes at the earliest deadline. Reading it per game would hold a
+ * commissioner out of a sheet that has been immutable for hours, and withhold
+ * the weekly tiebreaker until the last kickoff. This predicate must mirror that
+ * expression exactly; if the submit path's definition moves, move this one with
+ * it. (codex r4 on the commissioner-blind-picks PR.)
  */
 export function revealMode(pool: RevealPool | undefined): 'WEEK' | 'PER_GAME' {
   if (usesWeeklyHardLock(pool?.type)) return 'WEEK';
-  return pool?.settings?.lockMode === 'WEEKLY' ? 'WEEK' : 'PER_GAME';
+  const s = pool?.settings;
+  return (s?.confidenceMode || s?.lockMode === 'WEEKLY') ? 'WEEK' : 'PER_GAME';
 }
 
 /**

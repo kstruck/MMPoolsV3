@@ -31,6 +31,20 @@ describe('revealMode', () => {
     expect(revealMode({ type: 'NFL_PICKEM', settings: { lockMode: 'PER_GAME' } })).toBe('PER_GAME');
   });
 
+  /**
+   * ⚠️ confidenceMode is a WEEKLY lock even when lockMode still reads PER_GAME.
+   * `submitNFLPicksInternal` derives its submission lock as
+   * `confidenceMode || lockMode === 'WEEKLY'`, and this predicate must mirror
+   * that expression — otherwise the commissioner is held out of a sheet that has
+   * been immutable for hours, and the weekly tiebreaker is withheld until the
+   * last kickoff. codex r4.
+   */
+  it('is WEEK for a confidence pool whose lockMode still says PER_GAME', () => {
+    expect(revealMode({ type: 'NFL_PICKEM', settings: { confidenceMode: true } })).toBe('WEEK');
+    expect(revealMode({ type: 'NFL_PICKEM', settings: { confidenceMode: true, lockMode: 'PER_GAME' } })).toBe('WEEK');
+    expect(revealMode({ type: 'NFL_PICKEM', settings: { confidenceMode: false, lockMode: 'PER_GAME' } })).toBe('PER_GAME');
+  });
+
   it('cannot be downgraded on a hard-lock pool by a settings write', () => {
     // The whole point of deriving it from the TYPE: a Survivor pool whose
     // settings claim PER_GAME still reveals wholesale at the weekly deadline.
@@ -96,6 +110,21 @@ describe('weekRevealFor — WEEK mode (Survivor / Margin / WEEKLY pick\'em)', ()
     const r = weekRevealFor(frozen, 1, games, KICK - 30 * MIN);
     expect(r.weekRevealAt).toBe(KICK - 60 * MIN);
     expect(r.weekRevealed).toBe(true);
+  });
+});
+
+describe('weekRevealFor — a confidence sheet reveals as a WHOLE SHEET', () => {
+  const conf = { type: 'NFL_PICKEM', settings: { confidenceMode: true, lockMode: 'PER_GAME' } };
+
+  it('reveals nothing before the earliest deadline', () => {
+    expect(weekRevealFor(conf, 1, games, KICK - 10 * MIN).weekRevealed).toBe(false);
+  });
+
+  it('reveals every game at the earliest deadline, not game by game', () => {
+    const r = weekRevealFor(conf, 1, games, KICK);
+    expect(r.mode).toBe('WEEK');
+    expect(r.weekRevealed).toBe(true);
+    expect(r.revealedGameIds).toEqual(['g1', 'g2', 'g3']);
   });
 });
 
