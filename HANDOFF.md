@@ -58,7 +58,7 @@
 > invite walkthrough, SENDING the invites, the A8 price, the `nflDeepSweep`
 > two-stage arm, NFL-6 (`nflFinalize` `liveSeasonTypes: [1]`), the two remaining
 > backups, and confirming the SA key is revoked in the console. All Kevin-only.
-> `MORNING-2026-08-12.md` §4.
+> `MORNING-2026-08-12.md` §3 (§4 is the email-logo question, §2f the browser checks).
 >
 > 🛑 **T-C (auto-pick) and T-D (margin missed-pick penalty) were NOT started.**
 > Both are plan-gated and neither plan exists. ⚠️ T-D's plan must FIRST measure
