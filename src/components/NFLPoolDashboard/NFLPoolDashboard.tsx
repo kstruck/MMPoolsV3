@@ -22,6 +22,7 @@ import { useToast } from '../ui/Toast';
 import { Button } from '../ui';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType, currentSlateWeek } from '../../utils/nflPending';
+import { buildMemberStandings } from '../../utils/memberStandings';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes, resolveHardWeekLock, frozenHardLockFor } from '@shared/weeklyHardLock';
 import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
@@ -147,11 +148,14 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     return () => { unsubStandings(); unsubOwn?.(); };
   }, [pool.id, isManager, user?.id]);
 
+  // Roster from Member Records, stats from the scored projection, own picks from
+  // the own-entry doc. The projection alone is a snapshot of the last SCORED week,
+  // so a member who joined after it was written was invisible to everyone but the
+  // commissioner — see buildMemberStandings for the full reasoning.
   useEffect(() => {
     if (isManager) return;
-    const others = standingsRows.filter(r => !ownEntry || r.ownerUid !== ownEntry.ownerUid);
-    setEntries(ownEntry ? [ownEntry, ...others] : others);
-  }, [isManager, standingsRows, ownEntry]);
+    setEntries(buildMemberStandings({ pool: castPool, members, standingsRows, ownEntry }));
+  }, [isManager, standingsRows, ownEntry, members, castPool]);
 
   // 2b. Subscribe to Member Records (roster truth — everyone who joined, ADR 0003)
   useEffect(() => {
@@ -564,6 +568,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   entries={entries}
                   games={games}
                   week={selectedWeek}
+                  viewerUid={user?.id}
+                  canSeeAllPicks={isManager}
                 />
               )}
 

@@ -11,12 +11,18 @@ interface NFLStandingsProps {
   entries: any[];
   games: NFLGame[];
   week: number;
+  /** Signed-in viewer, so their own row can show their own picks and be badged. */
+  viewerUid?: string;
+  /** True only for surfaces reading RAW entries (manager/admin), which carry picks. */
+  canSeeAllPicks?: boolean;
 }
 
 export const NFLStandings: React.FC<NFLStandingsProps> = ({
   pool,
   entries,
-  week
+  week,
+  viewerUid,
+  canSeeAllPicks = false
 }) => {
   const navigate = useNavigate();
   const type = pool.type;
@@ -25,7 +31,20 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
   const sortedEntries = useMemo(() => {
     if (!entries || entries.length === 0) return [];
 
-    const copy = [...entries];
+    // Members with no scored row sort LAST, whatever the pool type, and never
+    // mix into the ranked field. Their score fields are absent, and every
+    // comparator below coalesces absent to 0 — so a member who joined after the
+    // last scoring pass would outrank every Margin player on a negative season
+    // total, and would make the Pick'em comparator return NaN. They are not
+    // losing to those players; they simply have not been scored yet. (codex.)
+    const rank = (list: any[]) => {
+      const scored = list.filter(e => !e.unscored);
+      const unscored = list.filter(e => e.unscored)
+        .sort((a, b) => (a.userName || '').localeCompare(b.userName || ''));
+      return [...sortByType(scored), ...unscored];
+    };
+
+    const sortByType = (copy: any[]) => {
 
     if (type === 'NFL_PICKEM') {
       // Sort Pick'em: totalScore desc, then correctCount desc (fallback), then name
@@ -104,10 +123,17 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
       });
     }
 
-    return copy;
+      return copy;
+    };
+
+    return rank([...entries]);
   }, [entries, type]);
 
-  const renderRankBadge = (index: number) => {
+  // An unscored member has no rank to show. They sort last (see `rank` above), so
+  // the scored rows still read 1..N by index; giving the unscored row the next
+  // number would assert a placing its own score cells say is unknown. (codex.)
+  const renderRankBadge = (index: number, entry: any) => {
+    if (entry?.unscored) return <span className="text-faint">—</span>;
     return <RankChip rank={index + 1} />;
   };
 
@@ -167,7 +193,19 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
             </thead>
             <tbody className="divide-y divide-[color:var(--line)]">
               {sortedEntries.map((entry, index) => {
-                const isMyEntry = false; // user profile checking is bypassed/not needed for row highlight
+                const isMyEntry = !!viewerUid && (entry.ownerUid ?? entry.id) === viewerUid;
+                // A member reads the scored projection, which carries NO pick data by
+                // design (ADR 0005 Phase 2). Only the viewer's own row — sourced from
+                // their own entry — can show a pick, and a manager reading raw entries
+                // sees every one. Anywhere else the absence of a pick here says NOTHING
+                // about whether that player picked, so it must not read "No selection".
+                const pickKnown = canSeeAllPicks || isMyEntry;
+                const dash = <span className="text-faint">—</span>;
+                const pickCell = (pickKnown ? entry.picks?.[week] : undefined) || (
+                  <span className="text-faint italic text-[11px] normal-case font-body">
+                    {pickKnown ? 'No selection' : '—'}
+                  </span>
+                );
 
                 return (
                   <tr
@@ -177,7 +215,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                     }`}
                   >
                     {/* Rank */}
-                    <td className="sticky left-0 z-10 bg-card py-4 px-3 font-bold">{renderRankBadge(index)}</td>
+                    <td className="sticky left-0 z-10 bg-card py-4 px-3 font-bold">{renderRankBadge(index, entry)}</td>
 
                     {/* Username */}
                     <td className="sticky left-16 z-10 bg-card py-4 px-6 font-display font-bold text-[color:var(--text)] text-sm">
@@ -200,13 +238,13 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                     {type === 'NFL_PICKEM' && (
                       <>
                         <td className="py-4 px-6 text-center text-[13px] font-bold text-muted num">
-                          {Object.keys(entry.picks || {}).length} Picks Set
+                          {pickKnown ? `${Object.keys(entry.picks || {}).length} Picks Set` : dash}
                         </td>
                         <td className="py-4 px-6 text-center text-[13px] num font-bold text-muted">
                           {entry.weeklyTiebreakers?.[week] ? `${entry.weeklyTiebreakers[week]} pts` : '—'}
                         </td>
                         <td className="py-4 px-6 text-right font-display font-bold text-[color:var(--text)] text-sm num">
-                          {entry.totalScore ?? 0}
+                          {entry.unscored ? dash : entry.totalScore ?? 0}
                         </td>
                       </>
                     )}
@@ -215,7 +253,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                     {type === 'NFL_SURVIVOR' && (
                       <>
                         <td className="py-4 px-6 text-center">
-                          {entry.status === 'ALIVE' ? (
+                          {entry.unscored ? dash : entry.status === 'ALIVE' ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E4F5EC] border border-[#BEE7D0] font-display font-bold text-[10px] text-[#0F7B4A] uppercase tracking-[0.08em]">
                               <Heart size={8} className="fill-[#0F7B4A]/20" /> Alive
                             </span>
@@ -226,15 +264,13 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                           )}
                         </td>
                         <td className="py-4 px-6 text-center text-[13px] font-bold num text-muted">
-                          {entry.strikesUsed ?? 0}
+                          {entry.unscored ? dash : entry.strikesUsed ?? 0}
                         </td>
                         <td className="py-4 px-6 text-center text-[13px] font-bold num text-muted">
-                          {entry.rebuysUsed ?? 0}
+                          {entry.unscored ? dash : entry.rebuysUsed ?? 0}
                         </td>
                         <td className="py-4 px-6 text-center text-[13px] font-display font-bold text-navy-700 dark:text-gold-400 uppercase tracking-[0.08em]">
-                          {entry.picks?.[week] || (
-                            <span className="text-faint italic text-[11px] normal-case font-body">No selection</span>
-                          )}
+                          {pickCell}
                         </td>
                       </>
                     )}
@@ -243,21 +279,19 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                     {type === 'NFL_MARGIN' && (
                       <>
                         <td className="py-4 px-6 text-center text-[13px] font-display font-bold text-navy-700 dark:text-gold-400 uppercase tracking-[0.08em]">
-                          {entry.picks?.[week] || (
-                            <span className="text-faint italic text-[11px] normal-case font-body">No selection</span>
-                          )}
+                          {pickCell}
                         </td>
                         <td className="py-4 px-6 text-center text-[13px] font-bold num text-brandred-600">
-                          -{entry.negativeBurden ?? 0}
+                          {entry.unscored ? dash : `-${entry.negativeBurden ?? 0}`}
                         </td>
                         <td className="py-4 px-6 text-center text-[13px] font-bold num text-muted">
-                          {entry.positiveWeeks ?? 0}
+                          {entry.unscored ? dash : entry.positiveWeeks ?? 0}
                         </td>
                         <td className="py-4 px-6 text-center text-[13px] font-bold num text-gold-600 dark:text-gold-400">
-                          +{entry.bestWeek ?? 0}
+                          {entry.unscored ? dash : `+${entry.bestWeek ?? 0}`}
                         </td>
                         <td className="py-4 px-6 text-right font-display font-bold text-[color:var(--text)] text-sm num">
-                          {entry.seasonTotal ?? 0}
+                          {entry.unscored ? dash : entry.seasonTotal ?? 0}
                         </td>
                       </>
                     )}

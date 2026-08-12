@@ -1,0 +1,191 @@
+import { describe, it, expect } from 'vitest';
+import { buildMemberStandings } from './memberStandings';
+
+/**
+ * The defect these pin (Kevin's 2026-08-11 walkthrough, second report): a third
+ * member joined the pool and picked, and the other MEMBERS could not see him at
+ * all — only the commissioner could. The member view was built from
+ * `standings/current`, which `scoreNFLWeek` writes and nothing else, so it is a
+ * snapshot of the last SCORED week being used as a live roster.
+ */
+
+// Membership evidence. `isProvableMember` accepts a record whose uid is in the
+// pool's participantIds — the same predicate the commissioner roster applies, so
+// a forged Member Record cannot put a stranger on the board.
+const POOL = { participantIds: ['kevin', 'ron', 'johnny', 'aaron', 'gone', 'legacy', 'removed'] };
+
+// A member who has submitted: the one-way latch set at submit time.
+const member = (uid: string, userName: string, extra: Record<string, unknown> = {}) =>
+    ({ uid, userName, hasPlayableEntry: true, ...extra });
+
+const scored = (uid: string, userName: string, extra: Record<string, unknown> = {}) =>
+    ({ id: uid, ownerUid: uid, userName, status: 'ALIVE', strikesUsed: 0, rebuysUsed: 0, ...extra });
+
+describe('buildMemberStandings', () => {
+    it('shows a member who joined AFTER the last scored week', () => {
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('kevin', 'Kevin Struck'), member('ron', 'Ron Johnson')],
+            standingsRows: [scored('kevin', 'Kevin Struck')], // written before Ron joined
+            ownEntry: null,
+        });
+        expect(rows.map(r => r.ownerUid)).toEqual(['kevin', 'ron']);
+    });
+
+    it('marks a member with no scored row `unscored` instead of inventing standings', () => {
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('ron', 'Ron Johnson')],
+            standingsRows: [],
+            ownEntry: null,
+        });
+        expect(rows).toHaveLength(1);
+        expect(rows[0].unscored).toBe(true);
+        // The row must NOT claim a status, a strike count or a rebuy count.
+        expect(rows[0].status).toBeUndefined();
+        expect(rows[0].strikesUsed).toBeUndefined();
+        expect(rows[0].rebuysUsed).toBeUndefined();
+    });
+
+    it("uses the viewer's own entry for their own row, so their live picks render", () => {
+        const own = { id: 'johnny', ownerUid: 'johnny', userName: 'Johnny Football', picks: { 2: 'ATL' } };
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('johnny', 'Johnny Football'), member('kevin', 'Kevin Struck')],
+            standingsRows: [scored('johnny', 'Johnny Football'), scored('kevin', 'Kevin Struck')],
+            ownEntry: own,
+        });
+        expect(rows[0].ownerUid).toBe('johnny');
+        expect(rows[0].picks).toEqual({ 2: 'ATL' }); // grafted onto the scored row
+        expect(rows[0].unscored).toBeUndefined();    // a scored row exists for them
+        expect(rows.filter(r => r.ownerUid === 'johnny')).toHaveLength(1); // never doubled
+    });
+
+    it('prefers the scored row for everyone else, so real stats survive', () => {
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('kevin', 'Kevin Struck')],
+            standingsRows: [scored('kevin', 'Kevin Struck', { strikesUsed: 2, status: 'ELIMINATED' })],
+            ownEntry: null,
+        });
+        expect(rows[0].strikesUsed).toBe(2);
+        expect(rows[0].status).toBe('ELIMINATED');
+        expect(rows[0].unscored).toBeUndefined();
+    });
+
+    it('falls back to the projection ONLY when there is no roster at all', () => {
+        // Legacy pool, pre-roster-backfill: scored rows exist, Member Records do not.
+        // Dropping the fallback here would empty the table.
+        const noRoster = buildMemberStandings({
+            pool: POOL,
+            members: [],
+            standingsRows: [scored('kevin', 'Kevin Struck'), scored('legacy', 'Legacy Player')],
+            ownEntry: null,
+        });
+        expect(noRoster.map(r => r.ownerUid).sort()).toEqual(['kevin', 'legacy']);
+
+        // codex, twice: a removal DELETES the Member Record (planMembershipWrite
+        // returns { op: 'delete' }), so with a populated roster "in the projection
+        // but not on the roster" IS the removed case. Re-adding it would put a
+        // removed player back on the board until the next scored week.
+        const withRoster = buildMemberStandings({
+            pool: POOL,
+            members: [member('kevin', 'Kevin Struck')],
+            standingsRows: [scored('kevin', 'Kevin Struck'), scored('removed', 'Removed Player')],
+            ownEntry: null,
+        });
+        expect(withRoster.map(r => r.ownerUid)).toEqual(['kevin']);
+    });
+
+    it('drops a member marked not present, and tolerates empty inputs', () => {
+        expect(buildMemberStandings({
+            pool: POOL,
+            members: [member('gone', 'Removed', { present: false })],
+            standingsRows: [],
+            ownEntry: null,
+        })).toEqual([]);
+        // A roster that exists but lists nobody present yields an empty table — the
+        // fallback must not resurrect the projection's copy of them.
+        expect(buildMemberStandings({
+            pool: POOL,
+            members: [member('gone', 'Removed', { present: false })],
+            standingsRows: [scored('gone', 'Removed')],
+            ownEntry: null,
+        })).toEqual([]);
+        expect(buildMemberStandings({ pool: POOL, members: [], standingsRows: [], ownEntry: null })).toEqual([]);
+    });
+
+    // codex: a Member Record's existence proves nothing — the pre-#344 claim path
+    // could forge one. Same predicate the commissioner roster uses.
+    it('ignores an unproven Member Record, and still shows the legacy projection', () => {
+        const rows = buildMemberStandings({
+            pool: { participantIds: ['kevin'] },
+            members: [member('kevin', 'Kevin Struck'), member('forged', 'Forged Member')],
+            standingsRows: [scored('kevin', 'Kevin Struck')],
+            ownEntry: null,
+        });
+        expect(rows.map(r => r.ownerUid)).toEqual(['kevin']);
+
+        // And an ENTIRELY unproven roster must not suppress the projection fallback,
+        // which would empty the table for a legacy pool.
+        const onlyForged = buildMemberStandings({
+            pool: { participantIds: [] },
+            members: [member('forged', 'Forged Member')],
+            standingsRows: [scored('legacy', 'Legacy Player')],
+            ownEntry: null,
+        });
+        expect(onlyForged.map(r => r.ownerUid)).toEqual(['legacy']);
+    });
+
+    // codex: a raw entry carries initialized ALIVE / 0 / 0 values. Before the first
+    // scoring pass those are not results, and ranking them as such would put the
+    // viewer above scored players on a negative total.
+    it("marks the viewer's own row unscored when no scored row exists, but keeps their picks", () => {
+        const own = { id: 'ron', ownerUid: 'ron', userName: 'Ron Johnson', status: 'ALIVE', strikesUsed: 0, picks: { 2: 'PIT' } };
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('ron', 'Ron Johnson')],
+            standingsRows: [],
+            ownEntry: own,
+        });
+        expect(rows[0].unscored).toBe(true);
+        expect(rows[0].picks).toEqual({ 2: 'PIT' });
+    });
+
+    // codex: a leaderboard lists competitors. A host seeded at pool creation has a
+    // Member Record and no entry, and the manager's own standings (raw entries) do
+    // not list them — showing them only to members would make the two disagree.
+    it('leaves out someone who joined but never submitted', () => {
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [
+                member('ron', 'Ron Johnson'),
+                { uid: 'kevin', userName: 'Kevin Struck', hasPlayableEntry: false }, // host, no entry
+            ],
+            standingsRows: [],
+            ownEntry: null,
+        });
+        expect(rows.map(r => r.ownerUid)).toEqual(['ron']);
+    });
+
+    it('keeps a member whose latch is unset but who HAS been scored', () => {
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [{ uid: 'kevin', userName: 'Kevin Struck' }], // pre-latch record
+            standingsRows: [scored('kevin', 'Kevin Struck')],
+            ownEntry: null,
+        });
+        expect(rows.map(r => r.ownerUid)).toEqual(['kevin']);
+    });
+
+    it('lists the viewer first', () => {
+        const own = { id: 'johnny', ownerUid: 'johnny', userName: 'Johnny Football' };
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('aaron', 'Aaron A'), member('johnny', 'Johnny Football')],
+            standingsRows: [],
+            ownEntry: own,
+        });
+        expect(rows[0].ownerUid).toBe('johnny');
+    });
+});
