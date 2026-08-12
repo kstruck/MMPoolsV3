@@ -1,71 +1,73 @@
-# HANDOFF — Session entry point (updated 2026-08-12 overnight: 🛑 **TWO PRs ARE OPEN AND UNMERGED, AND THE DEPLOY ORDER MATTERS.** [#414](https://github.com/kstruck/MMPoolsV3/pull/414) (commissioner-blind picks — rules + functions + client) and [#415](https://github.com/kstruck/MMPoolsV3/pull/415) (CBS-style pick sheet — importer + client) are both fully gated and waiting on Kevin. **Deploy order is functions → Coolify rebuild → rules, in that order and no other** (the LIVE frontend still makes the read the new rules revoke, so rules-before-rebuild blanks every commissioner's standings for the length of the build). The runbook is `MORNING-2026-08-12.md`. ⚠️ **A Coolify rebuild has been OWED since #413 merged on 2026-08-11 and has never run** — the same rebuild pays off all three. `origin/main` was `8719d20a` when this was written; **run `git fetch origin` then `git rev-parse origin/main` rather than trusting that** (two commands — Kevin's shell is PowerShell 5.1 and `&&` is a syntax error there). 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5`, so both functions deploys land in a live scorer *(**UNVERIFIED** — carried from the 2026-08-09 box, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
+# HANDOFF — Session entry point (updated 2026-08-12: ✅ **#414 AND #415 ARE MERGED AND DEPLOYED.** Functions, frontend and rules are all live from `main` @ `c37bbd37` — deployed in the required order (functions → Coolify → rules) on the morning of 2026-08-12 and each surface verified independently, not inferred from a deploy log. **Commissioner-blind picks are LIVE in production**: a pool's owner/manager can no longer read raw entries, and pick content comes from the `getPoolPicks` callable past each game's own lock. **Nothing is owed on any deploy queue.** The one thing still open is the launch checklist (invites, `nflDeepSweep`, NFL-6, backups, SA key) — `MORNING-2026-08-12.md` §3–§4. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5` *(**UNVERIFIED** — carried from 2026-08-09, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
-> ## 🚀 STOP POINT 2026-08-12 (overnight) — **two gated PRs await Kevin; nothing was deployed and no flag was flipped**
+> ## ✅ DEPLOY STATE 2026-08-12 — **functions + frontend + rules all at `c37bbd37`; all queues EMPTY**
 >
-> **Nothing shipped tonight.** Functions, rules and the frontend are live exactly
-> as the 2026-08-11 box below records (functions `39d5702`). What changed is on
-> GitHub.
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `c37bbd37`,
+> and so are the rules and the frontend.** Deployed the morning of 2026-08-12, in
+> the order the change required: **functions → Coolify rebuild → rules.** That order is not cosmetic — see the
+> box below for why the obvious order would have taken commissioner standings
+> down for the length of the rebuild.
 >
-> | PR | What | Gates | Deploy owed ON MERGE |
-> |---|---|---|---|
-> | [#414](https://github.com/kstruck/MMPoolsV3/pull/414) | **Commissioner-blind picks** — implements `PLAN-COMMISSIONER-BLIND-PICKS` under Kevin's sign-off. `ownerId`/`managerUid` dropped from the `entries` read rule; a new `getPoolPicks` callable serves pick CONTENT only past the week's own effective lock and per-member COUNTS at any time; `pickedWeeks` marker on the Member Record drives a three-state standings cell (**Hidden** / **No selection** / **—**) | CI **7/7**, codex **7 rounds / 5 findings**, qodo **REPORTED — 6 findings, 4 fixed and 2 rejected with reasoning on the PR** | **functions → Coolify → rules** |
-> | [#415](https://github.com/kstruck/MMPoolsV3/pull/415) | **CBS-style pick sheet** — Survivor + Margin slates gain records, the betting line, kickoff day/time, TV network and the site-wide split ON the row, a sticky save bar, and team-colour selection. The importer captures `nfl_games.broadcast` | CI **7/7**, codex **5 rounds / 4 findings, round 5 clean**, qodo **REPORTED — 4 findings, 2 fixed and 2 rejected with reasoning on the PR** | **functions + Coolify** (no rules) |
+> **Each surface was verified separately rather than inferred from
+> `Deploy complete!`:**
 >
-> ⚠️ **THE DEPLOY ORDER IS THREE STEPS, NOT TWO: functions → Coolify → rules.**
-> #414's rules edit removes the commissioner's raw entry read, and TWO things
-> must be in place first — the callable that replaces it (ships with
-> **functions**) *and a client that calls it* (ships with the **Coolify
-> rebuild**). The frontend live in production right now is the pre-#414 build and
-> still subscribes to the raw entries collection, so deploying rules before the
-> rebuild revokes that read out from under a client still making it: every
-> commissioner's standings tab blanks for the length of the build. The reverse
-> order is safe — the new client never makes the raw read at all.
-> `MORNING-2026-08-12.md` §1c–§1e carries the runnable sequence — do not deploy
-> from this summary. Two gates live there and both must pass before the rules
-> deploy: one that proves the `getPoolPicks` callable is actually in the deployed
-> fleet, and one that proves `firestore.rules` is clean in the working tree (the
-> rules deploy uploads the working tree, and §1c's preflight deliberately does
-> not cover that file).
+> | Surface | Evidence |
+> |---|---|
+> | **functions** | `npx firebase functions:list` returns **`getPoolPicks`** (v2 callable, us-central1) — the callable #414 adds, absent before this deploy. ⚠️ An all-`Skipped` certification pass was **NOT** run, so "byte-identical to `c37bbd37`" is *not* claimed here; what is proven is that the new callable is live |
+> | **frontend** | live bundle moved **`index-Dhm5WwL_.js` → `index-Dv5RBrGq.js`**, read off the prod HTML |
+> | **rules** | `+ firestore: released rules firestore.rules to cloud.firestore`, `+ Deploy complete!`. Pre-deploy the working tree was clean on `firestore.rules`, its last commit was `c59a41d4` (#414), and the `entries` read block was confirmed to carry only `ownerUid` + `isSuperAdmin()` + the participant branch |
 >
-> 🆕 **Kevin's Q4 ruling OVERRULED the plan, and it is now the product rule:**
-> **the live consensus is visible at all times and is never hidden.** The plan's
-> T5 (gating `pools/{id}/consensus` behind the lock) is **dead and must not be
-> built**. `PickDistribution`'s per-game lock gate is removed, **`CONTEXT.md`
-> §Pool Consensus was corrected** — it claimed a post-lock reveal and was the
-> thing that was wrong — and `docs/adr/0004` carries a superseding note on its
-> reveal-timing decisions. Accepted consequence, recorded in the code: in a very
-> small pool the aggregate is close to identifying.
+> 🔴 **WHAT IS DIFFERENT IN PRODUCTION AS OF THIS DEPLOY.** A pool's `ownerId`
+> and `managerUid` can **no longer read raw entry documents at all**. Pick content
+> reaches a commissioner only through `getPoolPicks`, which returns per-member
+> COUNTS at any time and pick CONTENT only for games past their own effective
+> lock. SUPER_ADMIN is unchanged (everything, always) and a member's own entry is
+> unchanged. The standings cell is three-state: **Hidden** / **No selection** /
+> **—**.
 >
-> ⚠️ **`pickedWeeks` is FIX-FORWARD by Kevin's ruling — no backfill.** An ABSENT
-> marker renders "—" (unknown); it appears on a member's FIRST submit and never
-> at join, because the join path is also the backfill path for a legacy
-> participant whose pick history is unknown. **Residual, stated plainly:** on a
-> pre-2026-08-12 record, weeks picked before its owner's next submit read
-> "No selection" once that submit lands.
+> ⚠️ **"—" ON EVERY OTHER PLAYER IS THE EXPECTED FIRST READING, NOT A BUG.**
+> `pickedWeeks` is fix-forward with no backfill: it appears on each member's NEXT
+> submit. Until a member submits again, their row is honestly unknowable and says
+> so. **Residual, stated plainly:** once that submit lands, the weeks they picked
+> BEFORE it read "No selection".
 >
-> 🐞 **An adjacent money bug was FOUND and deliberately NOT FIXED.** An empty
-> pick'em submission (`picks: {}` — the schema permits it) still latches
+> ⚠️ **THE DEPLOY ORDER IS THREE STEPS AND THE MIDDLE ONE IS LOAD-BEARING:
+> functions → Coolify → rules.** The rules edit removes a read the LIVE frontend
+> was still making (`subscribeToNFLEntries`, `NFLPoolDashboard.tsx:139` on the
+> pre-#414 build). Deploying rules before the rebuild revokes that read out from
+> under a client still making it — every commissioner's standings tab blanks for
+> the length of the build. Deploying the callable does not help; the old client
+> does not know to call it. The reverse order is safe. **Keep this generalisation:
+> when a rules change revokes a read the live client makes, the frontend rebuild
+> goes BETWEEN the functions deploy and the rules deploy.**
+>
+> 🆕 **Kevin's Q4 ruling is now the product rule:** the live consensus is visible
+> at all times and is never hidden. Plan ticket T5 is **dead and must not be
+> built**. `CONTEXT.md` §Pool Consensus was corrected — it claimed a post-lock
+> reveal and was the thing that was wrong — and `docs/adr/0004` carries a
+> superseding note.
+>
+> 🐞 **An adjacent money bug is OPEN and was deliberately not fixed.** An empty
+> pick'em submission (`picks: {}` — the schema permits it) latches
 > `hasPlayableEntry` and can upgrade a seeded manager's `feeOwed` from 0 to the
 > entry fee: a charge for a pick nobody made. Same class as the `proxyPick` bug
 > closed 2026-07-31, but on the submit path. It **moves money**, so it is
-> plan-gated and was out of #414's bounds. Named in #414's body.
+> plan-gated. Named in #414's body.
 >
-> 🛑 **T-C (auto-pick on a missed deadline) and T-D (margin missed-pick penalty)
-> were NOT started.** Both are plan-gated — T-C writes entries server-side
-> outside a user's own flow, T-D changes scoring — and neither plan was written.
-> There is no dry-run output to read and no switch to flip.
-> ⚠️ T-D's plan must FIRST measure whether `scoreNFLWeek` already strikes a
-> missed Survivor pick; the spec assumes it does and that was never verified.
+> 🛑 **STILL OPEN — the launch checklist, unchanged since 2026-08-10.** The prod
+> invite walkthrough, SENDING the invites, the A8 price, the `nflDeepSweep`
+> two-stage arm, NFL-6 (`nflFinalize` `liveSeasonTypes: [1]`), the two remaining
+> backups, and confirming the SA key is revoked in the console. All Kevin-only.
+> `MORNING-2026-08-12.md` §4.
 >
-> 🛑 **The 2026-08-10 launch checklist is still entirely open** — the prod invite
-> walkthrough, SENDING the invites, the A8 price, the `nflDeepSweep` two-stage
-> arm, NFL-6 (`nflFinalize` `liveSeasonTypes: [1]`), the two remaining backups,
-> and confirming the SA key is revoked in the console. All Kevin-only; folded
-> into `MORNING-2026-08-12.md` §3 as a checklist.
+> 🛑 **T-C (auto-pick) and T-D (margin missed-pick penalty) were NOT started.**
+> Both are plan-gated and neither plan exists. ⚠️ T-D's plan must FIRST measure
+> whether `scoreNFLWeek` already strikes a missed Survivor pick; the spec assumes
+> it does and that was never verified.
 >
-> ❓ **One question outstanding:** which file is the new email logo? Every
-> template renders `public/email-logo.png` (`emailStyles.ts:6`) and it is still
-> the old mark. Held per Kevin's instruction; `LAUNCH-READINESS.md` row E5.
+> ❓ **One question outstanding:** which file is the new email logo?
+> `LAUNCH-READINESS.md` row E5. Two consumers, one asset — decide before the
+> invites go out.
 
 > ## ⚠️ SUPERSEDED — 🚀 STOP POINT 2026-08-11 (evening) — **everything merged and deployed; the spreads mystery is solved and it was not the flag**
 >
@@ -225,7 +227,7 @@
 
 > ## ✅ DEPLOY STATE <!-- hof-date:ignore --> **2026-08-09** — functions + rules + frontend all at `c7bdcf5` *(deploy facts still current; the "QUEUE EMPTY" this heading used to claim was superseded 2026-08-10 — #400's merge owes a low-urgency Coolify rebuild, and #405 will owe a functions deploy on merge; the box above is the live queue statement)*
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `c7bdcf5`.**
+> **Functions were deployed from <!-- deploy-state:ignore --> `main` @ `c7bdcf5`.** ⚠️ HISTORICAL — superseded twice since (`39d5702`, then `c37bbd37` on 2026-08-12). The only live claim in this file is in the box at the top.
 > **Rules are deployed from the same commit** — #399 is the first change to
 > `firestore.rules` since `0a705c0`, so the "rules ≡ `0a705c0`" line that ran
 > through every box below is NO LONGER TRUE. **The frontend is rebuilt from it
