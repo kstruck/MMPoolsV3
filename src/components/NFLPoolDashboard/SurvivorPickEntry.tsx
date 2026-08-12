@@ -108,6 +108,14 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
     [seasonGames, games, seasonType],
   );
   const consensus = useSiteConsensus(pool, week);
+  // ⚠️ NO RECORD AT ALL until the season's slate has arrived. `formatTeamRecord`
+  // turns an absent entry into "0-0", which is the CORRECT answer for a team
+  // with no FINAL games — but not while the subscription is still in flight,
+  // where it is a plausible value standing in for one we do not have yet.
+  // (qodo #6 on this PR.) Once the slate is loaded, 0-0 is a real reading.
+  const recordsLoaded = (seasonGames ?? games).length > 0;
+  const recordFor = (abbr: string): string | undefined =>
+    recordsLoaded ? formatTeamRecord(teamRecords.get(abbr)) : undefined;
 
   // Inclusive count — the "N/N used" badge, deliberately NOT the eligibility
   // source. Excluding the current week there would under-report the pick the
@@ -383,7 +391,8 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                 <div className="flex items-stretch gap-3">
                   <TeamPickButton
                     team={game.awayTeam}
-                    record={formatTeamRecord(teamRecords.get(awayAbbrev))}
+                    subtitle={awayAbbrev}
+                    record={recordFor(awayAbbrev)}
                     consensusPct={split?.awayPct}
                     selected={selectedTeam === awayAbbrev}
                     saved={savedPick === awayAbbrev}
@@ -421,7 +430,8 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
 
                   <TeamPickButton
                     team={game.homeTeam}
-                    record={formatTeamRecord(teamRecords.get(homeAbbrev))}
+                    subtitle={homeAbbrev}
+                    record={recordFor(homeAbbrev)}
                     consensusPct={split?.homePct}
                     selected={selectedTeam === homeAbbrev}
                     saved={savedPick === homeAbbrev}

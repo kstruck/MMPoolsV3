@@ -23,7 +23,18 @@ export type PickTeam = NFLGame['homeTeam'];
 
 export interface TeamPickButtonProps {
   team: PickTeam;
-  /** City / place name, drawn as the watermark behind a selected card. */
+  /**
+   * Drawn large and faint behind a selected card. Callers pass the team's
+   * ABBREVIATION.
+   *
+   * CBS uses the city here, and this component's first draft said so — but
+   * `NFLGame` stores only `name` (the nickname, "Cardinals") and
+   * `abbreviation`. There is no city field, and inventing a 32-entry city map
+   * to fill a decorative slot is more surface to keep correct through the next
+   * relocation than the effect is worth. The abbreviation gives the same visual
+   * weight and cannot go stale. (qodo #7 on this PR caught that no caller was
+   * passing this at all, so the watermark never rendered.)
+   */
   subtitle?: string;
   /** "2-1" — from `computeTeamRecords`; omitted entirely when unknown. */
   record?: string;
@@ -74,7 +85,7 @@ export const TeamPickButton: React.FC<TeamPickButtonProps> = ({
       className={`${base} ${state}`}
       style={colour ? { backgroundColor: colour.bg, color: colour.fg } : undefined}
     >
-      {/* City watermark — decorative, and hidden from assistive tech because the
+      {/* Watermark — decorative, and hidden from assistive tech because the
           team name below already says it. `select-none` + `pointer-events-none`
           keep it from swallowing the tap on the button it sits inside. */}
       {selected && subtitle && (
