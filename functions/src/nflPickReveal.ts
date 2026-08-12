@@ -29,6 +29,7 @@
 import * as admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
+import { assertCallerRole } from "./lib/assertRole";
 import { getPoolPicksSchema } from "./schemas/pickReveal";
 import { weekRevealFor, fullReveal, weekPickCount, type WeekReveal } from "./lib/pickReveal";
 import type { NFLGame } from "./nflPoolTypes";
@@ -74,12 +75,34 @@ export interface PoolPicksResponse {
  * If co-managers should have this capability, that is a product decision that
  * changes the rule and this function together, deliberately.
  */
-function assertPickReader(
+async function assertPickReader(
     pool: { ownerId?: string; managerUid?: string },
-    uid: string,
-    role?: string,
-): { isSuperAdmin: boolean } {
-    if (role === 'SUPER_ADMIN') return { isSuperAdmin: true };
+    request: { auth?: { uid: string; token: Record<string, unknown> } | null },
+): Promise<{ isSuperAdmin: boolean }> {
+    const uid = request.auth!.uid;
+    const claimsSuperAdmin = (request.auth!.token as { role?: string })?.role === 'SUPER_ADMIN';
+
+    // ⚠️ THE CLAIM ALONE IS NOT PROOF. `assertCallerRole` exists precisely
+    // because a demoted-but-not-yet-refreshed token keeps its old `role` claim
+    // until it expires — and the SUPER_ADMIN branch of this callable returns
+    // EVERY member's picks regardless of reveal timing. Trusting the claim would
+    // leave a stale token with full pre-kickoff pick access on the one door this
+    // plan built to close it. Claim AND `users/{uid}.role` must agree.
+    // (qodo #6 on this PR.)
+    //
+    // A failed check is NOT fatal on its own: a demoted admin who is still this
+    // pool's owner keeps the owner's boundary-limited view, which is exactly
+    // what they would have with no claim at all. Demotion costs the elevated
+    // read, not the pool they own.
+    if (claimsSuperAdmin) {
+        try {
+            await assertCallerRole(request, 'SUPER_ADMIN');
+            return { isSuperAdmin: true };
+        } catch {
+            // fall through to the owner/manager test below
+        }
+    }
+
     if (pool.ownerId !== uid && pool.managerUid !== uid) {
         throw new HttpsError('permission-denied', 'Only this pool\'s commissioner can read the pool\'s picks.');
     }
@@ -89,8 +112,6 @@ function assertPickReader(
 export const getPoolPicks = validated(
     { schema: getPoolPicksSchema, label: "getPoolPicks", appCheck: "monitor" },
     async (input, request): Promise<PoolPicksResponse> => {
-        const uid = request.auth!.uid;
-        const role = (request.auth!.token as { role?: string })?.role;
         const db = admin.firestore();
         const { poolId, week } = input;
 
@@ -105,7 +126,7 @@ export const getPoolPicks = validated(
             throw new HttpsError('failed-precondition', 'getPoolPicks is only available for NFL season pools.');
         }
 
-        const { isSuperAdmin } = assertPickReader(pool, uid, role);
+        const { isSuperAdmin } = await assertPickReader(pool, request);
 
         // The week's slate — same query the submit path and the scorer use, so
         // the reveal boundary is computed over exactly the games that count.
@@ -129,7 +150,41 @@ export const getPoolPicks = validated(
         if (reveal.weekRevealed) allowedKeys.add(String(week));
 
         const weekGameIds = games.map(g => g.id);
-        const entriesSnap = await db.collection('pools').doc(poolId).collection('entries').get();
+
+        // FIELD-MASKED READ. An entry document bundles the WHOLE SEASON's picks,
+        // and the manager dashboard polls this callable every 60 seconds — so an
+        // unmasked read ships eighteen weeks of pick data across the wire to
+        // answer a question about one week. (qodo #8 on this PR.)
+        //
+        // It is also defence in depth on the one dangerous artifact in this
+        // plan: the allowlist below already refuses to RETURN an unrevealed
+        // pick, and this stops the callable from even loading one. Two
+        // independent reasons a future edit would have to defeat.
+        //
+        // `FieldPath` rather than a dotted string, because Survivor and Margin
+        // key their picks by the WEEK NUMBER — `'picks.4'` is a field path whose
+        // second segment is numeric, which is exactly the shape that parses
+        // wrong. The explicit segments have no such ambiguity.
+        //
+        // ⚠️ A wrong mask fails SILENTLY and expensively: every count comes back
+        // 0, the roster reports the whole pool unpicked, and the reminder buttons
+        // light up for people who have already picked. The emulator suite covers
+        // both pool shapes for exactly that reason.
+        const FieldPath = admin.firestore.FieldPath;
+        const fields: Array<string | InstanceType<typeof FieldPath>> = ['ownerUid'];
+        if (pool.type === 'NFL_PICKEM') {
+            for (const id of weekGameIds) {
+                fields.push(new FieldPath('picks', id));
+                fields.push(new FieldPath('confidence', id));
+            }
+        } else {
+            fields.push(new FieldPath('picks', String(week)));
+        }
+        if (reveal.weekRevealed) fields.push(new FieldPath('weeklyTiebreakers', String(week)));
+
+        const entriesSnap = await db.collection('pools').doc(poolId).collection('entries')
+            .select(...(fields as string[]))
+            .get();
 
         const counts: Record<string, number> = {};
         const picks: Record<string, Record<string, string>> = {};

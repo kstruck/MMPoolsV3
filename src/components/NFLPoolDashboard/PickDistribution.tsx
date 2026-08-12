@@ -34,9 +34,25 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
   games,
   week,
 }) => {
+  // `loaded` is not ceremony. Until the first snapshot arrives every game is
+  // absent from the map, and rendering that as "0 picks / No picks yet" states a
+  // fact the client does not have — the same substitute-for-unavailable-data
+  // problem the standings cell has (qodo #5 on this PR). Before the snapshot the
+  // card says so; after it, an absent game genuinely means nobody has picked.
+  //
+  // ⚠️ KNOWN AMBIGUITY, left as it is: `subscribeToPoolConsensus` reports a
+  // read FAILURE by calling back with `{}` (dbService), so a permission error
+  // and an empty pool are indistinguishable here and both land as "no picks
+  // yet". Narrowing that means changing the subscription's error contract, which
+  // every other consensus reader shares — out of this PR's bounds.
   const [consensus, setConsensus] = useState<Record<string, any>>({});
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
-    return dbService.subscribeToPoolConsensus(pool.id, setConsensus);
+    setLoaded(false);
+    return dbService.subscribeToPoolConsensus(pool.id, (byGame) => {
+      setConsensus(byGame);
+      setLoaded(true);
+    });
   }, [pool.id]);
 
   // Compile pick distribution statistics from the server aggregate
@@ -45,11 +61,13 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
 
     return games.map(game => {
       const c = consensus[game.id];
+      // `undefined` where the aggregate has nothing for this game — NOT 0.
+      // The renderer distinguishes "not loaded" from "loaded, nobody picked".
       return {
         game,
-        totalPicksForGame: c?.total ?? 0,
-        homePct: c?.homePct ?? 0,
-        awayPct: c?.awayPct ?? 0,
+        totalPicksForGame: typeof c?.total === 'number' ? c.total : undefined,
+        homePct: typeof c?.homePct === 'number' ? c.homePct : undefined,
+        awayPct: typeof c?.awayPct === 'number' ? c.awayPct : undefined,
       };
     });
   }, [consensus, games, week]);
@@ -70,14 +88,17 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
               <div className="flex justify-between items-center font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted">
                 <span>{game.awayTeam.abbreviation} vs {game.homeTeam.abbreviation}</span>
                 <span className="text-navy-700 dark:text-gold-400 flex items-center gap-1 num">
-                  <Eye size={10} /> {totalPicksForGame} {totalPicksForGame === 1 ? 'pick' : 'picks'}
+                  <Eye size={10} aria-hidden="true" />{' '}
+                  {totalPicksForGame === undefined
+                    ? '—'
+                    : `${totalPicksForGame} ${totalPicksForGame === 1 ? 'pick' : 'picks'}`}
                 </span>
               </div>
 
               {/* Progress Bar Distribution */}
-              {totalPicksForGame === 0 ? (
+              {!loaded || totalPicksForGame === undefined || totalPicksForGame === 0 ? (
                 <div className="h-10 border border-dashed border-line rounded-md flex items-center justify-center font-display font-bold uppercase text-[11px] tracking-[0.08em] text-faint bg-page/50">
-                  No picks yet
+                  {loaded && totalPicksForGame !== undefined ? 'No picks yet' : 'Loading picks…'}
                 </div>
               ) : (
                 <div className="space-y-1.5">

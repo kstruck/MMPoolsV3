@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 import './setup';
@@ -43,7 +43,15 @@ const OUTSIDER = 'blind-outsider';
 const asOwner = { uid: OWNER, token: {} } as any;
 const asAlice = { uid: ALICE, token: {} } as any;
 const asOutsider = { uid: OUTSIDER, token: {} } as any;
-const asSuperAdmin = { uid: 'blind-admin', token: { role: 'SUPER_ADMIN' } } as any;
+const ADMIN = 'blind-admin';
+const asSuperAdmin = { uid: ADMIN, token: { role: 'SUPER_ADMIN' } } as any;
+/**
+ * A token that CLAIMS SUPER_ADMIN with no matching `users/{uid}.role` — the
+ * demoted-but-not-yet-refreshed shape. `assertCallerRole` requires both to
+ * agree, so this principal must NOT get the elevated read. (qodo #6.)
+ */
+const STALE_ADMIN = 'blind-stale-admin';
+const asStaleAdmin = { uid: STALE_ADMIN, token: { role: 'SUPER_ADMIN' } } as any;
 
 /** A commissioner with no SUPER_ADMIN claim — the principal this plan blinds. */
 const asProxyCommish = { uid: OWNER, token: {} } as any;
@@ -84,6 +92,43 @@ async function seedMember(poolId: string, uid: string, over: Record<string, unkn
 const memberDoc = (poolId: string, uid: string) =>
     db.collection('pools').doc(poolId).collection('members').doc(uid).get().then(s => s.data());
 
+/**
+ * TEARDOWN. Without it this suite's pools, games and users stay in the emulator
+ * for the rest of the run, and every OTHER emulator suite that wipes by scanning
+ * whole collections pays for them — which is how these suites become
+ * order-dependent and slow (qodo #7 on this PR; the same fix invitePath took).
+ *
+ * `recursiveDelete` on the pool so `members` and `entries` go with it. Every
+ * delete is best-effort: a suite that failed partway through must still clean
+ * what it did create rather than throwing in teardown and hiding the real
+ * failure.
+ */
+const CREATED_POOLS = [
+    'blind-submit-pool', 'blind-submit-weekly-pool', 'blind-proxy-pool',
+    'blind-reveal-pickem', 'blind-reveal-survivor-open', 'blind-reveal-survivor-locked',
+    'blind-bracket-pool', 'blind-plain-commish',
+];
+const CREATED_GAMES = [
+    'blind-submit-g1', 'blind-submit-g2', 'blind-weekly-w1-g', 'blind-weekly-w2-g',
+    'blind-proxy-g1', 'blind-reveal-locked', 'blind-reveal-open',
+    'blind-surv-future-1', 'blind-surv-future-2', 'blind-surv-past-1', 'blind-surv-past-2',
+    'blind-plain-future-g',
+];
+const CREATED_USERS = [ALICE, BOB, OWNER, ADMIN, STALE_ADMIN, 'blind-legacy-no-record'];
+
+afterAll(async () => {
+    for (const id of CREATED_POOLS) {
+        await db.recursiveDelete(db.collection('pools').doc(id)).catch(() => undefined);
+    }
+    for (const id of CREATED_GAMES) {
+        await db.collection('nfl_games').doc(id).delete().catch(() => undefined);
+    }
+    for (const uid of CREATED_USERS) {
+        await db.recursiveDelete(db.collection('users').doc(uid)).catch(() => undefined);
+    }
+    await test.cleanup();
+});
+
 // ---------------------------------------------------------------------------
 // T1 — the marker
 // ---------------------------------------------------------------------------
@@ -98,6 +143,9 @@ describe('T1 — submitNFLPicks writes the pickedWeeks marker', () => {
         await seedPool(SEASON, POOL, 'NFL_PICKEM');
         await seedMember(POOL, ALICE);
         await db.collection('users').doc(ALICE).set({ name: 'Alice' });
+        // The SUPER_ADMIN's PROFILE role, not just their token claim. Required
+        // as of qodo #6: `assertCallerRole` demands both agree.
+        await db.collection('users').doc(ADMIN).set({ name: 'Admin', role: 'SUPER_ADMIN' });
     }, 30000);
 
     it('marks the week on the Member Record, and only that week', async () => {
@@ -297,6 +345,34 @@ describe('T2 — getPoolPicks, PER_GAME pick\'em', () => {
         expect(res.weekRevealed).toBe(true);
         expect(res.picks[ALICE]).toEqual({ [LOCKED_GAME]: 'KC', [OPEN_GAME]: 'BUF' });
         expect(res.tiebreakers[ALICE]).toBe(44);
+    }, 30000);
+
+    /**
+     * ⚠️ A SUPER_ADMIN CLAIM ALONE IS NOT PROOF. This principal's token says
+     * SUPER_ADMIN and their `users/{uid}` doc does not — the shape a demoted
+     * admin carries until their token refreshes. The elevated branch of this
+     * callable returns every member's picks regardless of reveal timing, so
+     * trusting the claim would leave a stale token with full pre-kickoff access
+     * on the one door this plan built to close it. (qodo #6 on this PR.)
+     *
+     * They are not a member of this pool either, so the fall-through to
+     * owner/manager refuses them outright.
+     */
+    it('a token claiming SUPER_ADMIN with no matching profile role is REFUSED', async () => {
+        await expect(wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asStaleAdmin } as never))
+            .rejects.toThrow(/commissioner can read/i);
+    }, 30000);
+
+    it('a demoted admin who OWNS the pool keeps the owner view, not the elevated one', async () => {
+        // Demotion costs the elevated read, not the pool they own. The owner's
+        // answer is boundary-limited, so the un-kicked-off game stays hidden.
+        await db.collection('users').doc(OWNER).set({ name: 'Owner' });
+        const res: any = await wGetPicks({
+            data: { poolId: POOL, week: 1 },
+            auth: { uid: OWNER, token: { role: 'SUPER_ADMIN' } } as any,
+        } as never);
+        expect(res.weekRevealed).toBe(false);
+        expect(res.revealedGameIds).toEqual([LOCKED_GAME]);
     }, 30000);
 
     it('an ordinary participant is REFUSED — members gain nothing from this plan', async () => {
