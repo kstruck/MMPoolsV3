@@ -64,6 +64,7 @@ field.
 | E2 | App Check | HANDOFF top box | OFF, and turning it on is BLOCKED (4 known faults; the 2026-07-30 attempt took prod down). Do NOT set `VITE_RECAPTCHA_SITE_KEY` | **READY as accepted risk** — decision on record |
 | E3 | `claimMySquares` timing hole | `SECURITY-CLAIM-SQUARES.md` | Unfixed, repo public | **READY as accepted risk** — Kevin's decision on record: accept through the pilot, fix before regular season |
 | E4 | Dependency audit | CI `security-audit` job on #405 | **pass** tonight (`--audit-level=high` both trees); remaining moderates accepted per #390 | **READY** |
+| E5 | Email templates still carry the OLD logo | `src/services/emailStyles.ts:6` renders `public/email-logo.png` at `height: 50px`, and every template goes through it | Not swapped. Added 2026-08-12 | 🛑 **BLOCKED ON KEVIN** — the swap is one asset replace + a Coolify rebuild (~2 min), but the asset has not been chosen. Candidates in the repo: `mmp-logo-full.png`, `mmp_logo.png`, `mmp_logo_500x150_trans3.png`, `logo.png` — or something not yet committed. **Nothing was changed**; Kevin's 2026-08-11 instruction was to hold until he decides. Every invite and reminder email sent before the swap carries the old mark |
 
 ## F. Test estate (all measured tonight, this branch)
 

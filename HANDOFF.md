@@ -1,6 +1,64 @@
-# HANDOFF — Session entry point (updated 2026-08-11 evening: ✅ **THE QUEUE IS EMPTY — #408/#409/#410/#411 are all MERGED, and #408 is DEPLOYED AND VERIFIED IN PROD.** Both defects from Kevin's walkthrough are fixed live: the dashboard opens on the first unplayed week, and a stored "Participant" entry heals to the member's profile name on their next submit (fix-forward — there is no backfill, so an untouched old entry keeps the placeholder until its owner submits again). **The one thing still blocking work is a decision, not a deploy:** `PLAN-COMMISSIONER-BLIND-PICKS.md` §5 needs Kevin's sign-off before any of that code is written. #405/#406/#407 MERGED, **#408 merged as `39d5702`** (the last commit that changed shipped code), and #409/#410/#411 merged after it — `main` is at **`dbf378a`** as of this writing, which is docs-only ahead of `39d5702`;  **do not treat that SHA as current state**, run `git fetch origin`, then `git rev-parse origin/main` — two commands, because Kevin's shell is PowerShell 5.1 and `&&` is a syntax error there (CLAUDE.md §2c — every worktree shares one `origin/main` ref and it is routinely stale). ✅ **Functions are deployed from `39d5702` (#408) and verified in prod.** Earlier the same evening a certify pass proved the THEN-current deploy matched `d7f02d6`; that pass is history, not the live state — `39d5702` superseded it hours later (that certify pass, run from the primary checkout with a verified `HEAD` and a clean tree, reported **every function `Skipped (No changes detected)`** — which is how we know the #405 survivor exemption fix was **already live** before #408 went out; `39d5702` then shipped on top of it). 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5`, so #408's functions half deploys into a live scorer. *(**UNVERIFIED** — carried from the 2026-08-09 box and NOT re-measured this session; no admin credentials on this machine. Re-read `system/config` in the Firebase console before relying on these values.)* App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
+# HANDOFF — Session entry point (updated 2026-08-12 overnight: 🛑 **TWO PRs ARE OPEN AND UNMERGED, AND THE DEPLOY ORDER MATTERS.** [#414](https://github.com/kstruck/MMPoolsV3/pull/414) (commissioner-blind picks — rules + functions + client) and [#415](https://github.com/kstruck/MMPoolsV3/pull/415) (CBS-style pick sheet — importer + client) are both fully gated and waiting on Kevin. **Merge #414 first, then deploy functions BEFORE rules, then Coolify.** The runbook is `MORNING-2026-08-12.md`. ⚠️ **A Coolify rebuild has been OWED since #413 merged on 2026-08-11 and has never run** — the same rebuild pays off all three. `origin/main` was `8719d20a` when this was written; **run `git fetch origin` then `git rev-parse origin/main` rather than trusting that** (two commands — Kevin's shell is PowerShell 5.1 and `&&` is a syntax error there). 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5`, so both functions deploys land in a live scorer *(**UNVERIFIED** — carried from the 2026-08-09 box, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
-> ## 🚀 STOP POINT 2026-08-11 (evening) — **everything merged and deployed; the spreads mystery is solved and it was not the flag**
+> ## 🚀 STOP POINT 2026-08-12 (overnight) — **two gated PRs await Kevin; nothing was deployed and no flag was flipped**
+>
+> **Nothing shipped tonight.** Functions, rules and the frontend are live exactly
+> as the 2026-08-11 box below records (functions `39d5702`). What changed is on
+> GitHub.
+>
+> | PR | What | Gates | Deploy owed ON MERGE |
+> |---|---|---|---|
+> | [#414](https://github.com/kstruck/MMPoolsV3/pull/414) | **Commissioner-blind picks** — implements `PLAN-COMMISSIONER-BLIND-PICKS` under Kevin's sign-off. `ownerId`/`managerUid` dropped from the `entries` read rule; a new `getPoolPicks` callable serves pick CONTENT only past the week's own effective lock and per-member COUNTS at any time; `pickedWeeks` marker on the Member Record drives a three-state standings cell (**Hidden** / **No selection** / **—**) | CI **7/7**, codex **7 rounds / 5 findings**, qodo **REPORTED — 6 findings, 4 fixed and 2 rejected with reasoning on the PR** | **functions FIRST, then rules, then Coolify** |
+> | [#415](https://github.com/kstruck/MMPoolsV3/pull/415) | **CBS-style pick sheet** — Survivor + Margin slates gain records, the betting line, kickoff day/time, TV network and the site-wide split ON the row, a sticky save bar, and team-colour selection. The importer captures `nfl_games.broadcast` | CI **7/7**, codex **3 rounds / 3 findings, round 3 clean**. ⚠️ **qodo was still settling when this was written — check before merging** | **functions + Coolify** (no rules) |
+>
+> ⚠️ **THE FUNCTIONS-BEFORE-RULES ORDER IS NOT A PREFERENCE.** #414's rules edit
+> removes the commissioner's raw entry read, and the callable that replaces it
+> ships with the functions. Rules first locks every commissioner's standings tab
+> out of a door whose replacement is not deployed. Same shape as #399.
+> `MORNING-2026-08-12.md` §1c includes a `functions:list | Select-String
+> getPoolPicks` check that must pass BEFORE the rules deploy.
+>
+> 🆕 **Kevin's Q4 ruling OVERRULED the plan, and it is now the product rule:**
+> **the live consensus is visible at all times and is never hidden.** The plan's
+> T5 (gating `pools/{id}/consensus` behind the lock) is **dead and must not be
+> built**. `PickDistribution`'s per-game lock gate is removed, **`CONTEXT.md`
+> §Pool Consensus was corrected** — it claimed a post-lock reveal and was the
+> thing that was wrong — and `docs/adr/0004` carries a superseding note on its
+> reveal-timing decisions. Accepted consequence, recorded in the code: in a very
+> small pool the aggregate is close to identifying.
+>
+> ⚠️ **`pickedWeeks` is FIX-FORWARD by Kevin's ruling — no backfill.** An ABSENT
+> marker renders "—" (unknown); it appears on a member's FIRST submit and never
+> at join, because the join path is also the backfill path for a legacy
+> participant whose pick history is unknown. **Residual, stated plainly:** on a
+> pre-2026-08-12 record, weeks picked before its owner's next submit read
+> "No selection" once that submit lands.
+>
+> 🐞 **An adjacent money bug was FOUND and deliberately NOT FIXED.** An empty
+> pick'em submission (`picks: {}` — the schema permits it) still latches
+> `hasPlayableEntry` and can upgrade a seeded manager's `feeOwed` from 0 to the
+> entry fee: a charge for a pick nobody made. Same class as the `proxyPick` bug
+> closed 2026-07-31, but on the submit path. It **moves money**, so it is
+> plan-gated and was out of #414's bounds. Named in #414's body.
+>
+> 🛑 **T-C (auto-pick on a missed deadline) and T-D (margin missed-pick penalty)
+> were NOT started.** Both are plan-gated — T-C writes entries server-side
+> outside a user's own flow, T-D changes scoring — and neither plan was written.
+> There is no dry-run output to read and no switch to flip.
+> ⚠️ T-D's plan must FIRST measure whether `scoreNFLWeek` already strikes a
+> missed Survivor pick; the spec assumes it does and that was never verified.
+>
+> 🛑 **The 2026-08-10 launch checklist is still entirely open** — the prod invite
+> walkthrough, SENDING the invites, the A8 price, the `nflDeepSweep` two-stage
+> arm, NFL-6 (`nflFinalize` `liveSeasonTypes: [1]`), the two remaining backups,
+> and confirming the SA key is revoked in the console. All Kevin-only; folded
+> into `MORNING-2026-08-12.md` §3 as a checklist.
+>
+> ❓ **One question outstanding:** which file is the new email logo? Every
+> template renders `public/email-logo.png` (`emailStyles.ts:6`) and it is still
+> the old mark. Held per Kevin's instruction; `LAUNCH-READINESS.md` row E5.
+
+> ## ⚠️ SUPERSEDED — 🚀 STOP POINT 2026-08-11 (evening) — **everything merged and deployed; the spreads mystery is solved and it was not the flag**
 >
 > **Two deploy runs happened this evening, in this order.** First the Task 1
 > certify pass, which changed nothing (all-`Skipped`) and closed the 2026-08-10
