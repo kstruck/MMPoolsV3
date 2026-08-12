@@ -47,6 +47,29 @@ export interface MemberRecord {
    * time without a backfill.
    */
   hasPlayableEntry?: boolean;
+  /**
+   * Weeks this member has saved AT LEAST ONE pick for, ascending.
+   *
+   * The whole point of this field is to let the standings table say "Hidden"
+   * instead of "No selection" for a player whose picks the viewer may not read
+   * yet (PLAN-COMMISSIONER-BLIND-PICKS D1). It says only THAT a pick exists —
+   * never how many, and never which — because this record is readable by every
+   * participant (`firestore.rules` members block). A per-week COUNT here would
+   * tell the whole pool how far through their sheet each player is; that
+   * reading belongs to the commissioner only and comes from `getPoolPicks`.
+   *
+   * Union-only: weeks are added, never removed. A member cannot un-pick, and
+   * losing membership deletes the record outright.
+   *
+   * ⚠️ ABSENT on every record written before 2026-08-12, and on nothing since —
+   * the join/create path seeds `[]`. So `undefined` means "this pool predates
+   * the marker, the answer is unknown" and MUST render as "—", never as
+   * "No selection". Fix-forward, per Kevin's ruling: there is no backfill, so on
+   * a legacy record the weeks picked before its owner's next submit stay
+   * unknown, and once that submit lands they read "No selection". Same
+   * unknown-is-not-false discipline as `hasPlayableEntry` above.
+   */
+  pickedWeeks?: number[];
 }
 
 export interface RosterSummary {

@@ -728,6 +728,10 @@ export async function submitNFLPicksInternal(
       present: true,
       entryFee: Number(pool.settings?.entryFee ?? 0),
       hasPlayableEntry: true,
+      // Pick marker (PLAN-COMMISSIONER-BLIND-PICKS T1). Rides the write that is
+      // already here, in the same transaction as the entry, so the marker can
+      // never disagree with the pick it describes.
+      pickedWeek: week,
     }, existingMember, now);
   }));
 

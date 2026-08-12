@@ -30,6 +30,14 @@ export interface MembershipFacts {
   // never "false", on an existing record.
   entryFee?: number;
   hasPlayableEntry?: boolean;
+  /**
+   * The week this write is committing a pick for, if any. Unioned into
+   * `MemberRecord.pickedWeeks` (PLAN-COMMISSIONER-BLIND-PICKS T1).
+   *
+   * `undefined` means "this caller is not reporting a pick" — a join, a
+   * backfill-on-touch, a payment edit — and leaves the stored array alone.
+   */
+  pickedWeek?: number;
 }
 
 export type MembershipPlan =
@@ -89,6 +97,12 @@ export function planMembershipWrite(
     if (facts.hasPlayableEntry !== undefined) {
       data.hasPlayableEntry = facts.hasPlayableEntry;
     }
+    // Seed the pick marker even when there is no pick yet. `[]` and `undefined`
+    // are NOT the same answer downstream: `[]` means "this member has picked no
+    // week", which renders "No selection"; `undefined` means "this record
+    // predates the field", which renders "—". Seeding here is what confines the
+    // unknown state to records written before 2026-08-12.
+    data.pickedWeeks = facts.pickedWeek !== undefined ? [facts.pickedWeek] : [];
     return { participant: 'add', member: { op: 'set', data, merge: false } };
   }
   // Update: merge identity/units only; preserve paidStatus + claim. feeOwed is
@@ -106,6 +120,16 @@ export function planMembershipWrite(
   // written before the field existed, without a backfill.
   if (facts.hasPlayableEntry === true && existing.hasPlayableEntry !== true) {
     data.hasPlayableEntry = true;
+  }
+  // Union-only, and written ONLY when this caller is actually reporting a pick.
+  // A join/backfill touch passes `undefined`; writing `[]` for it under
+  // `merge: true` would REPLACE the stored array (Firestore merges maps, not
+  // array contents) and erase every marker the member had earned.
+  if (facts.pickedWeek !== undefined) {
+    const stored = Array.isArray(existing.pickedWeeks) ? existing.pickedWeeks : [];
+    if (!stored.includes(facts.pickedWeek)) {
+      data.pickedWeeks = [...stored, facts.pickedWeek].sort((a, b) => a - b);
+    }
   }
   return { participant: 'add', member: { op: 'set', data, merge: true } };
 }

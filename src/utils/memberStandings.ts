@@ -28,11 +28,27 @@ export interface MemberStandingsInput {
     /** The pool doc. Only `participantIds` is read — membership evidence. */
     pool: any;
     /** Member Records — roster truth, once proven. */
-    members: Array<{ uid?: string; userName?: string; present?: boolean }>;
+    members: Array<{ uid?: string; userName?: string; present?: boolean; pickedWeeks?: number[] }>;
     /** `pools/{id}/standings/current` rows — scored stats, never picks. */
     standingsRows: any[];
     /** The viewer's own entry document, which DOES carry their own picks. */
     ownEntry: any | null;
+    /**
+     * `getPoolPicks` output, when the viewer is a commissioner
+     * (PLAN-COMMISSIONER-BLIND-PICKS T2). `null`/absent for ordinary members —
+     * the callable refuses them, and this file must build the same rows either
+     * way. Only what the SERVER decided was revealed is grafted on; this
+     * function never widens the boundary.
+     */
+    reveal?: PoolPicksReveal | null;
+}
+
+/** The subset of `getPoolPicks`' response this file reads. */
+export interface PoolPicksReveal {
+    week: number;
+    picks: Record<string, Record<string, string>>;
+    confidence: Record<string, Record<string, number>>;
+    tiebreakers: Record<string, number>;
 }
 
 const uidOf = (row: any): string | undefined => row?.ownerUid ?? row?.id;
@@ -42,7 +58,7 @@ const uidOf = (row: any): string | undefined => row?.ownerUid ?? row?.id;
  * holding a Member Record, then any scored row whose member record is missing
  * (a legacy pool that predates the roster backfill — nobody should vanish).
  */
-export function buildMemberStandings({ pool, members, standingsRows, ownEntry }: MemberStandingsInput): any[] {
+export function buildMemberStandings({ pool, members, standingsRows, ownEntry, reveal }: MemberStandingsInput): any[] {
     // Same predicate the commissioner roster uses (`utils/poolRoster.ts:138`), for
     // the same reason: a Member Record's mere EXISTENCE proves nothing, because the
     // pre-#344 claim path was itself a way to forge one. Not redefined here —
@@ -138,6 +154,33 @@ export function buildMemberStandings({ pool, members, standingsRows, ownEntry }:
         // No participantIds at all (a legacy pool doc, or a snapshot that has not
         // arrived): fall back to showing the projection rather than an empty table.
         if (uid && (stillAParticipant(uid) || !Array.isArray(participantIds))) push(uid, row);
+    }
+
+    // ONE grafting pass, after every row exists, so the marker and any revealed
+    // pick reach a row whichever of the three loops above produced it.
+    //
+    // `pickedWeeks` is copied verbatim — including when it is ABSENT, which is
+    // the whole point. `undefined` means "this Member Record predates the field"
+    // and the table renders "—"; `[]` means "has picked no week" and renders
+    // "No selection". Coercing one to the other here would put the lie back
+    // (shared/memberRecord.ts).
+    const pickedByUid = new Map<string, number[] | undefined>();
+    for (const m of members || []) {
+        if (m?.uid) pickedByUid.set(m.uid, m.pickedWeeks);
+    }
+    for (const row of rows) {
+        const uid = uidOf(row);
+        if (!uid) continue;
+        if (pickedByUid.has(uid)) row.pickedWeeks = pickedByUid.get(uid);
+        if (!reveal || uid === ownUid) continue;
+        // Merge, never replace: the own row above already grafted real picks, and
+        // a scored row may carry nothing. Only server-revealed keys arrive here.
+        const revealedPicks = reveal.picks?.[uid];
+        if (revealedPicks) row.picks = { ...(row.picks || {}), ...revealedPicks };
+        const revealedConfidence = reveal.confidence?.[uid];
+        if (revealedConfidence) row.confidence = { ...(row.confidence || {}), ...revealedConfidence };
+        const tb = reveal.tiebreakers?.[uid];
+        if (tb !== undefined) row.weeklyTiebreakers = { ...(row.weeklyTiebreakers || {}), [reveal.week]: tb };
     }
 
     return rows;

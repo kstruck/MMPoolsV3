@@ -167,3 +167,77 @@ describe('isProvableMember', () => {
     expect(isProvableMember(poolWithClaimedSquare, undefined, 'u1')).toBe(false);
   });
 });
+
+/**
+ * `pickedWeeks` — the Hidden/No-selection marker (PLAN-COMMISSIONER-BLIND-PICKS T1).
+ *
+ * It rides the Member Record write the submit path already makes, so the marker
+ * cannot disagree with the pick it describes. Two properties are load-bearing:
+ * it is UNION-ONLY, and it is written only when the caller actually reports a
+ * pick — a join or backfill touch must leave the stored array alone.
+ */
+describe('planMembershipWrite — pickedWeeks', () => {
+  const base = { userName: 'U', poolType: 'NFL_PICKEM', present: true } as const;
+
+  it('seeds [] on create when no pick is being reported', () => {
+    // `[]` and absent are DIFFERENT answers downstream: [] renders
+    // "No selection", absent renders "—". Seeding confines "absent" to records
+    // written before the field existed.
+    const plan = planMembershipWrite('p1', 'u1', { ...base }, null, NOW);
+    if (plan.participant !== 'add') throw new Error('expected add');
+    expect(plan.member.data.pickedWeeks).toEqual([]);
+  });
+
+  it('seeds [week] on create when the caller reports a pick', () => {
+    const plan = planMembershipWrite('p1', 'u1', { ...base, pickedWeek: 3 }, null, NOW);
+    if (plan.participant !== 'add') throw new Error('expected add');
+    expect(plan.member.data.pickedWeeks).toEqual([3]);
+  });
+
+  it('unions into the existing array, sorted', () => {
+    const existing: MemberRecord = { uid: 'u1', poolId: 'p1', userName: 'U', paidStatus: 'UNPAID', pickedWeeks: [3, 5] };
+    const plan = planMembershipWrite('p1', 'u1', { ...base, pickedWeek: 4 }, existing, NOW);
+    if (plan.participant !== 'add') throw new Error('expected add');
+    expect(plan.member.data.pickedWeeks).toEqual([3, 4, 5]);
+  });
+
+  it('writes NOTHING when the week is already marked (idempotent re-submit)', () => {
+    const existing: MemberRecord = { uid: 'u1', poolId: 'p1', userName: 'U', paidStatus: 'UNPAID', pickedWeeks: [3] };
+    const plan = planMembershipWrite('p1', 'u1', { ...base, pickedWeek: 3 }, existing, NOW);
+    if (plan.participant !== 'add') throw new Error('expected add');
+    expect(plan.member.data.pickedWeeks).toBeUndefined();
+  });
+
+  /**
+   * ⚠️ The regression this guards is silent and total. `ensureMemberRecord`
+   * writes with `merge: true`, and Firestore merges MAPS, not array contents —
+   * so writing `[]` on a join touch would REPLACE the stored array and erase
+   * every marker the member had earned. The join path
+   * (`joinNFLPoolInternal`) touches existing records on every re-join.
+   */
+  it('a join/backfill touch (no pickedWeek) leaves the stored array alone', () => {
+    const existing: MemberRecord = { uid: 'u1', poolId: 'p1', userName: 'U', paidStatus: 'UNPAID', pickedWeeks: [1, 2] };
+    const plan = planMembershipWrite('p1', 'u1', { ...base }, existing, NOW);
+    if (plan.participant !== 'add') throw new Error('expected add');
+    expect(plan.member.data.pickedWeeks).toBeUndefined();
+  });
+
+  it('heals a legacy record with no array at all', () => {
+    const existing: MemberRecord = { uid: 'u1', poolId: 'p1', userName: 'U', paidStatus: 'UNPAID' };
+    const plan = planMembershipWrite('p1', 'u1', { ...base, pickedWeek: 2 }, existing, NOW);
+    if (plan.participant !== 'add') throw new Error('expected add');
+    expect(plan.member.data.pickedWeeks).toEqual([2]);
+  });
+
+  it('never removes a week — the marker is one-way', () => {
+    const existing: MemberRecord = { uid: 'u1', poolId: 'p1', userName: 'U', paidStatus: 'UNPAID', pickedWeeks: [1, 2, 3] };
+    const plan = planMembershipWrite('p1', 'u1', { ...base, pickedWeek: 9 }, existing, NOW);
+    if (plan.participant !== 'add') throw new Error('expected add');
+    expect(plan.member.data.pickedWeeks).toEqual([1, 2, 3, 9]);
+  });
+
+  it('a removal still deletes the record outright, marker and all', () => {
+    const plan = planMembershipWrite('p1', 'u1', { ...base, present: false, pickedWeek: 4 }, null, NOW);
+    expect(plan).toEqual({ participant: 'remove', member: { op: 'delete' } });
+  });
+});

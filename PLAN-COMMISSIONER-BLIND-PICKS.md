@@ -1,12 +1,36 @@
 # PLAN — Commissioner-blind picks, and a "Hidden" marker in standings
 
-**Status: DRAFT — awaiting Kevin's sign-off. No code has been written.**
+**Status: ✅ SIGNED OFF 2026-08-11 (Kevin, on [#410](https://github.com/kstruck/MMPoolsV3/pull/410)) — IMPLEMENTED 2026-08-12.**
 Plan-gated under `mmp-change-control` §1: this changes **who may read what**,
 which is the *authorization* trigger. The gate is PLAN → adversarial review log →
-sweeps → sign-off → implement, in that order.
+sweeps → sign-off → implement, in that order, and all five steps are done.
 
 **Evidence:** `PLAN-COMMISSIONER-BLIND-PICKS-SWEEPS.md` (S1–S8), measured
 2026-08-11 against `origin/main` @ `d7f02d6`.
+
+---
+
+## 0. Kevin's rulings — the answers §5 was waiting for
+
+Recorded verbatim from the PR, 2026-08-11. **Where a ruling contradicts the
+recommendation this plan made, the ruling wins and the body below has been
+corrected to match** — a plan carrying two live-looking answers is how the wrong
+one gets built.
+
+| # | Question | **Kevin's ruling** | Effect on this plan |
+|---|---|---|---|
+| **Q1** | PER_GAME pick'em: reveal per game, or hold the sheet to the last kickoff? | **Per game** | As recommended. `weekRevealFor` returns an allowlist of the game ids whose own lock has passed. |
+| **Q2** | Does the commissioner keep the pre-lock "has picked / missing" roster marker? | **Yes** | As recommended. It is served by `getPoolPicks`' per-member COUNTS, which carry no pick content. |
+| **Q3** | Bracket / playoff pools in scope? | **Out** | As recommended (D4). `getPoolPicks` refuses any non-NFL pool type. |
+| **Q4** | Gate the live consensus channel to the reveal boundary? | ⚠️ **OVERRULED — "live consensus visible at all times, never hidden."** | **T5 IS DEAD.** The plan called T5 "REQUIRED"; it is now not to be built. `PickDistribution`'s `isGameLocked` gating is REMOVED, `pools/{id}/consensus` keeps its current rules, and **`CONTEXT.md` §Pool Consensus was corrected to match the ruling** — the glossary said post-lock reveal and is the thing that was wrong. `docs/adr/0004` carries a superseding note. |
+| **Q5** | Anything change for ordinary members? | **No** | As recommended. `getPoolPicks` refuses participants outright. |
+| **backfill** | Backfill `pickedWeeks` for entries that predate the field? | **Fix-forward, no backfill** | §8's open item is closed. `undefined` renders "—" (unknown), `[]` renders "No selection". The join path seeds `[]`, so the unknown state is confined to records written before 2026-08-12. Known cost, accepted: on such a record, weeks picked before its owner's next submit read "No selection" once that submit lands. |
+
+**Why Q4 landing this way is coherent rather than a contradiction.** Consensus is
+an AGGREGATE — it says what fraction of the pool took each side, never who. What
+this plan protects is an INDIVIDUAL's pick, which an aggregate cannot express.
+The one real cost is that a very small pool's split is close to identifying; that
+is named, accepted, and Kevin's to reopen.
 
 ---
 
@@ -197,7 +221,15 @@ builder, reminder targeting, sweeps and `proxyPick` are untouched by the rules
 edit (S7). The only new server surface is the callable in D2, and its
 authorization is the real security work in this plan.
 
-### D6 — Closing the consensus channel is a PROJECTION problem, not a rules one
+### D6 — ❌ SUPERSEDED BY Q4. Kept as analysis, not as a decision.
+
+> ⚠️ **Do not build any of this.** Kevin ruled 2026-08-11 that the live consensus
+> is visible at all times, so there is nothing to gate and no revealed projection
+> to write. The two rejected shapes below are still worth reading — they are the
+> reason a lock-gated consensus is hard in Firestore at all — but Option A is
+> **not** the plan of record any more.
+
+### D6 (superseded) — Closing the consensus channel is a PROJECTION problem, not a rules one
 
 Codex round 2 holed the obvious implementation of T5, and the objection is
 Firestore semantics rather than an opinion: **a collection query must be provably
@@ -274,7 +306,11 @@ is owner/manager/SUPER_ADMIN only, never "participant".
 
 ---
 
-## 5. Open questions — Kevin's sign-off needed before any code
+## 5. Open questions — ✅ ALL ANSWERED, see §0 for the rulings
+
+⚠️ **The "Recommendation" column below is the plan's ORIGINAL proposal, kept for
+the record. Q4's recommendation was OVERRULED.** §0 is authoritative.
+
 
 | # | Question | Recommendation |
 |---|---|---|
@@ -286,7 +322,7 @@ is owner/manager/SUPER_ADMIN only, never "participant".
 
 ---
 
-## 6. Implementation tickets (do not start before sign-off)
+## 6. Implementation tickets — ✅ SHIPPED 2026-08-12, except T5 which Q4 killed
 
 | # | Ticket | Files | Gate |
 |---|---|---|---|
@@ -294,7 +330,7 @@ is owner/manager/SUPER_ADMIN only, never "participant".
 | T2 | `getPoolPicks` callable + its authorization (SUPER_ADMIN any time; owner/manager only past the reveal boundary) | `functions/src/`, `index.ts` export | unit tests on the predicate; emulator test per pool type, before and after the boundary |
 | T3 | `firestore.rules`: drop `ownerId` / `managerUid` from the `entries` read | `firestore.rules` | rules test: manager denied pre-lock, self and SUPER_ADMIN allowed |
 | T4 | Client: manager path stops subscribing to raw entries **and gains `subscribeToMyNFLEntry`, merged the way the member branch already does it (`NFLPoolDashboard.tsx:137-141`)**; standings cell renders Hidden / No selection; roster boolean moves to the marker | `NFLPoolDashboard.tsx`, `NFLStandings.tsx`, `NFLManagerView.tsx`, `NFLUserBentoDashboard.tsx`, `utils/poolRoster.ts` | component/unit tests; the S2(a) list is the checklist |
-| T5 | **REQUIRED** (see Q4 and D6): make the rules enforce what `CONTEXT.md` already defines about Pool Consensus | `firestore.rules`, `PickDistribution.tsx`, and the server-written revealed projection (D6) | rules tests **including the mixed-lock collection query** (one game locked, one not): the surface the client actually uses must still work |
+| ~~T5~~ | ❌ **DEAD — Q4 was overruled.** The plan called this REQUIRED on the reasoning that the code contradicted `CONTEXT.md`. Kevin ruled the other way: the live consensus is never hidden, so it is the GLOSSARY that was wrong and it has been corrected. What shipped instead is the removal of `PickDistribution`'s `isGameLocked` gating, plus the `CONTEXT.md` and ADR-0004 corrections. **The server-written revealed projection (D6 Option A) was NOT built and must not be**; D6's analysis is kept below only so nobody re-derives it. | — | — |
 | T6 | Docs: CONTEXT.md semantics, ADR-0002 for the reveal boundary, HANDOFF box | docs | `tests/docs-state-invariants.test.ts` |
 
 **Deploy shape when it lands:** functions **and** rules (functions first — the
@@ -330,7 +366,13 @@ first would lock the manager UI out of a door whose replacement is not deployed.
 - It does not change what ordinary members see (Q5).
 - It does not touch bracket or playoff pools (D4).
 - It does not alter scoring, money or lock semantics — only who may read.
-- It does not backfill `pickedWeeks` for existing entries. A member who picked
-  before the field existed shows "No selection" until their next submit unless a
-  backfill is added; **that is a decision for Kevin at sign-off**, and a backfill
-  would itself be a prod-data mutation under Rule 1 (kill-switch + dry-run).
+- It does not backfill `pickedWeeks` for existing entries. **Kevin's ruling at
+  sign-off: fix-forward, no backfill** — one would itself be a prod-data mutation
+  under Rule 1 (kill-switch + dry-run) for a display marker. What shipped instead
+  is a three-state cell: a Member Record with NO `pickedWeeks` field renders "—"
+  (unknown), not "No selection". The join path seeds `[]`, so the unknown state
+  exists only on records written before 2026-08-12. **The residual, stated
+  plainly:** once such a record's owner submits again, the field appears holding
+  only that week, and the earlier weeks they really did pick then read
+  "No selection". Accepted; the affected population is a handful of preseason
+  pools days old.

@@ -1,7 +1,26 @@
 # ADR 0004: A real Performance Stats + Consensus aggregation layer
 
 Date: 2026-07-08
-Status: Accepted
+Status: Accepted — **the consensus REVEAL TIMING below is superseded (2026-08-12)**
+
+> ⚠️ **Superseding decision: consensus is LIVE, not post-lock.** Everywhere this
+> ADR says consensus is "revealed / published only after that game's
+> `effectiveLockAt`" (decisions 5, 5a, 5b, the acceptance bullet and the
+> consequences), that is no longer the rule. Kevin's ruling 2026-08-11
+> (`PLAN-COMMISSIONER-BLIND-PICKS` Q4, overruling that plan's own
+> recommendation): **the live consensus is visible at all times and is never
+> hidden.** `CONTEXT.md` §Pool Consensus carries the current definition.
+>
+> Everything else in this ADR stands, and the parts that matter most are
+> untouched: consensus is still a SERVER aggregate, clients still never compute
+> it from raw entries, and it still exposes counts only — never who picked what.
+> What changed is only *when* the aggregate may be shown.
+>
+> The rule for an INDIVIDUAL's pick moved the other way in the same ruling: as of
+> 2026-08-12 a pool's owner and manager can no longer read raw entries at all,
+> and their pick reads go through the `getPoolPicks` callable past the same
+> `effectiveLockAt` boundary this ADR defines. See
+> `PLAN-COMMISSIONER-BLIND-PICKS.md`.
 
 ## Context
 

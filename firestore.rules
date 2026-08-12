@@ -382,7 +382,20 @@ service cloud.firestore {
       }
 
       // BRACKET/PLAYOFF/NFL ENTRIES
-      // A member always reads their OWN entry; owner/manager/admin retain management reads.
+      // A member always reads their OWN entry; SUPER_ADMIN reads everything.
+      //
+      // ⚠️ THE POOL'S OWNER AND managerUid ARE DELIBERATELY NOT LISTED HERE
+      // (PLAN-COMMISSIONER-BLIND-PICKS T3, 2026-08-12). They used to be, which
+      // meant a commissioner read every member's picks before kickoff — Kevin:
+      // "Pool commissioners should not see picks until pool lock. Only superadmin
+      // should have the ability to see all picks at all times."
+      //
+      // An entry document bundles EVERY week's picks, so no document-level rule
+      // can say "week 4 yes, week 5 no". Commissioner reads therefore go through
+      // the `getPoolPicks` callable, which has a server-side clock and assembles
+      // its response by allowlist of revealed game ids. Do not re-add them here
+      // to fix a manager surface: that reopens the whole season, for every week.
+      //
       // Non-owner PARTICIPANT reads split by pool type (ADR 0004 finding, closed by ADR 0005
       // Phase 2):
       // - NFL season types (PER_GAME/WEEKLY lock): an entry doc bundles ALL of a member's
@@ -394,8 +407,6 @@ service cloud.firestore {
       match /entries/{entryId} {
         allow read: if request.auth != null && (
           request.auth.uid == resource.data.ownerUid ||
-          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
-          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
           isSuperAdmin() ||
           (
             request.auth.uid in get(/databases/$(database)/documents/pools/$(poolId)).data.participantIds &&

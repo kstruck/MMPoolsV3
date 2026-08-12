@@ -84,6 +84,14 @@ interface NFLManagerViewProps {
   games: NFLGame[];
   week: number;
   user: User | null;
+  /**
+   * uid → games picked this week, from `getPoolPicks`
+   * (PLAN-COMMISSIONER-BLIND-PICKS D1). Pick COMPLETENESS is a commissioner-only
+   * reading and no longer derivable here: raw entry reads by owner/manager were
+   * removed from firestore.rules, so `entries` rows carry pick content only for
+   * the viewer's own row and for games the server revealed.
+   */
+  pickCounts?: Record<string, number>;
   onSelectTab?: (tab: 'picks' | 'standings' | 'recaps' | 'rules' | 'manager') => void;
 }
 
@@ -94,6 +102,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   games,
   week,
   user,
+  pickCounts,
   onSelectTab = () => {}
 }) => {
   const toast = useToast();
@@ -222,15 +231,22 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     // the same roster this panel does; only the pick state, the display-name
     // fallback and the owner-first sort are this surface's own.
     const rows = buildPoolRoster({ pool, members, entries }).map(r => {
+      // Completeness comes from the server's per-member COUNT when it has
+      // arrived (PLAN-COMMISSIONER-BLIND-PICKS D1) — `r.entry.picks` no longer
+      // holds another member's sheet, so counting it would report the whole
+      // pool unpicked and light up every reminder before kickoff. The entry
+      // reading stays as the pre-arrival fallback and for SUPER_ADMIN surfaces.
       const picks = r.entry?.picks || {};
-      const picked = !!r.hasEntry && (type === 'NFL_PICKEM'
-        ? (weeklyGames.length > 0 && weeklyGames.every(g => !!picks[g.id]))
-        : !!picks[week]);
+      const picked = !!r.hasEntry && (pickCounts
+        ? (pickCounts[r.uid] ?? 0) >= (type === 'NFL_PICKEM' ? Math.max(weeklyGames.length, 1) : 1)
+        : (type === 'NFL_PICKEM'
+          ? (weeklyGames.length > 0 && weeklyGames.every(g => !!picks[g.id]))
+          : !!picks[week]));
       const userName = r.userName || (r.uid === user?.id ? (user?.name || 'You') : 'Member');
       return { ...r, userName, picked };
     });
     return rows.sort((a, b) => (a.isOwner ? -1 : b.isOwner ? 1 : a.userName.localeCompare(b.userName)));
-  }, [members, entries, pool, weeklyGames, week, type, user]);
+  }, [members, entries, pool, weeklyGames, week, type, user, pickCounts]);
 
   const unpickedCount = useMemo(() => roster.filter(r => !r.picked).length, [roster]);
   // Outstanding BALANCE, not paidStatus. A Survivor member can have paid their
@@ -632,9 +648,10 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         entries={entries}
         members={members}
         games={games}
-        week={week} 
-        user={user} 
-        onSelectTab={onSelectTab} 
+        week={week}
+        user={user}
+        pickCounts={pickCounts}
+        onSelectTab={onSelectTab}
       />
 
       {/* Record Payouts (ADR 0005 Phase 4) — renders only once the pool is finalized */}

@@ -723,3 +723,62 @@ describe('the pool manager is a player too', () => {
     expect(unsubmittedRoster(roster, PICKEM).map((r) => r.uid)).toEqual(['owner']);
   });
 });
+
+/**
+ * PLAN-COMMISSIONER-BLIND-PICKS D1/T4 — completeness from the server's COUNT.
+ *
+ * The commissioner no longer holds other members' entry documents, so the
+ * entries-derived reading below can only see the viewer's own row and the games
+ * the server revealed. Counting that subset would report the whole pool
+ * incomplete before kickoff and fire every reminder. `getPoolPicks` returns
+ * per-member counts at any time precisely for this reading.
+ */
+describe('unsubmittedRoster — pickCounts (commissioner-blind picks)', () => {
+  const PICKEM = { poolType: 'NFL_PICKEM', week: 1, weeklyGameIds: ['g1', 'g2'] };
+  const rosterOf = (uids: string[], entries: any[] = []) =>
+    buildPoolRoster(
+      inputs({
+        pool: pool({ participantIds: uids }),
+        members: uids.map((uid) => ({ uid, userName: uid })),
+        entries,
+      }),
+    );
+
+  it('uses the count instead of the (now absent) picks map', () => {
+    // Entry rows carry NO picks — exactly the post-T3 shape. Without pickCounts
+    // both members read as pending; with it, only the partial one does.
+    const roster = rosterOf(['a', 'b'], [
+      { id: 'a', ownerUid: 'a' },
+      { id: 'b', ownerUid: 'b' },
+    ]);
+    expect(unsubmittedRoster(roster, { ...PICKEM, pickCounts: { a: 2, b: 1 } }).map((r) => r.uid))
+      .toEqual(['b']);
+  });
+
+  it('survivor/margin needs exactly one pick', () => {
+    const roster = rosterOf(['a', 'b'], [
+      { id: 'a', ownerUid: 'a' },
+      { id: 'b', ownerUid: 'b' },
+    ]);
+    const opts = { poolType: 'NFL_SURVIVOR', week: 1, weeklyGameIds: ['g1', 'g2'], pickCounts: { a: 1 } };
+    expect(unsubmittedRoster(roster, opts).map((r) => r.uid)).toEqual(['b']);
+  });
+
+  it('a member with no entry is pending whatever the counts say', () => {
+    const roster = rosterOf(['a', 'b'], [{ id: 'a', ownerUid: 'a' }]);
+    expect(unsubmittedRoster(roster, { ...PICKEM, pickCounts: { a: 2 } }).map((r) => r.uid))
+      .toEqual(['b']);
+  });
+
+  it('falls back to the picks map when no counts have arrived yet', () => {
+    // The callable is in flight on first render. The old reading is still the
+    // right answer for the rows that do carry picks.
+    const roster = rosterOf(['a'], [{ id: 'a', ownerUid: 'a', picks: { g1: 'KC', g2: 'SF' } }]);
+    expect(unsubmittedRoster(roster, PICKEM)).toEqual([]);
+  });
+
+  it('a week with no games leaves entry holders un-pending, same as before', () => {
+    const roster = rosterOf(['a'], [{ id: 'a', ownerUid: 'a' }]);
+    expect(unsubmittedRoster(roster, { ...PICKEM, weeklyGameIds: [], pickCounts: { a: 0 } })).toEqual([]);
+  });
+});

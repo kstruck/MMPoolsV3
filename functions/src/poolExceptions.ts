@@ -478,6 +478,12 @@ export const proxyPick = validated(
             present: true,
             entryFee: Number(pool.settings?.entryFee ?? 0),
             hasPlayableEntry: true,
+            // Pick marker (PLAN-COMMISSIONER-BLIND-PICKS T1). Without it a
+            // proxy-picked member's own standings cell reads "No selection" for
+            // a pick that exists. The `existingMember &&` guard above still
+            // holds: a member with NO record gets no marker and no record, which
+            // is the money-safety behaviour, not an oversight.
+            pickedWeek: weekNum,
         }, existingMember, now);
     }));
 

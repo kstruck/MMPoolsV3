@@ -28,6 +28,25 @@ export { db };
 import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament, BanterMessage, NFLGame, WeeklyRecap } from "../types";
 import type { PoolQuoteInput, PoolQuote, AddonSelection } from "@shared/schemas/quote";
 
+/**
+ * What `getPoolPicks` hands a commissioner (PLAN-COMMISSIONER-BLIND-PICKS T2).
+ * Mirrors `PoolPicksResponse` in functions/src/nflPickReveal.ts.
+ *
+ * `picks` / `confidence` / `tiebreakers` carry only what the server decided was
+ * revealed; `counts` is available at any time and carries no pick content.
+ */
+export interface PoolPicksReveal {
+    week: number;
+    mode: 'WEEK' | 'PER_GAME';
+    revealedGameIds: string[];
+    weekRevealed: boolean;
+    weekGameIds: string[];
+    counts: Record<string, number>;
+    picks: Record<string, Record<string, string>>;
+    confidence: Record<string, Record<string, number>>;
+    tiebreakers: Record<string, number>;
+}
+
 // --- Monetization dashboard read shapes (PLAN-BUYFLOW-OVERHAUL Phase 6) -------
 // Firestore is untyped; these are the client-side views of the docs the
 // Monetization tab reads. Kept permissive (optional fields) so a partially
@@ -1608,18 +1627,28 @@ export const dbService = {
         });
     },
 
-    // Raw entries collection — MANAGER/OWNER/ADMIN VIEWS ONLY (ADR 0005 Phase 2):
-    // rules restrict non-owner participant reads of NFL entries until the pool is FINAL,
-    // so member views must use subscribeToNFLStandings + subscribeToMyNFLEntry instead.
-    subscribeToNFLEntries: (poolId: string, callback: (entries: any[]) => void) => {
-        const q = collection(db, "pools", poolId, "entries");
-        return onSnapshot(q, (snapshot) => {
-            const entries = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-            callback(entries);
-        }, (error) => {
-            logger.error("Error subscribing to NFL entries:", error);
-            callback([]);
-        });
+    // `subscribeToNFLEntries` — DELETED 2026-08-12 (PLAN-COMMISSIONER-BLIND-PICKS
+    // T3/T4). It subscribed to the whole `pools/{id}/entries` collection for
+    // manager/owner views, and firestore.rules serves that read to neither
+    // principal any more. Left in place it would be a method whose comment
+    // advertises a capability nobody has, swallowing the permission error into
+    // `callback([])` — i.e. rendering a populated pool as an empty one.
+    //
+    // What replaced it: `subscribeToNFLStandings` + `subscribeToPoolMembers` +
+    // `subscribeToMyNFLEntry` for the rows, and `getPoolPicks` below for pick
+    // content past the reveal boundary. Do not reinstate it to fix a manager
+    // surface — that reopens every week of the season to the commissioner.
+
+    // Commissioner pick reads (PLAN-COMMISSIONER-BLIND-PICKS T2). Raw entry reads
+    // by a pool's owner/manager are DENIED by firestore.rules as of 2026-08-12 —
+    // an entry bundles every week's picks, so only a server-side clock can answer
+    // "this week, these games". Returns per-member COUNTS at any time and pick
+    // CONTENT only past the week's (or game's) effective lock. SUPER_ADMIN gets
+    // everything. Never call this for a member view: it refuses participants.
+    getPoolPicks: async (poolId: string, week: number): Promise<PoolPicksReveal> => {
+        const fn = httpsCallable(functions, 'getPoolPicks');
+        const res = await fn(withCorrelationId({ poolId, week }));
+        return res.data as PoolPicksReveal;
     },
 
     // Standings projection (ADR 0005 Phase 2) — reveal-safe scored rows written by

@@ -1,0 +1,142 @@
+/**
+ * WHEN another member's pick may be shown to a pool's commissioner.
+ *
+ * PLAN-COMMISSIONER-BLIND-PICKS D3: the reveal boundary is the SAME instant the
+ * members' own lock uses — `weekLockDecision` / `effectiveGameLockAt` — so there
+ * is exactly one definition of "locked" in the system and the commissioner is
+ * never blind to something the members can already see.
+ *
+ * Pure and framework-free on purpose: this is the predicate the `getPoolPicks`
+ * callable's authorization rests on, and it is the one thing in that callable
+ * that can be unit-tested without an emulator.
+ *
+ * ⚠️ The unit of reveal is the GAME, not the week (Kevin's Q1 ruling, 2026-08-11).
+ * An entry document bundles a member's whole sheet, so a callable authorized at
+ * WEEK granularity would hand back the picks for games that have not kicked off
+ * the moment the first one locks — the exact leak this plan exists to close,
+ * reintroduced through the door built to close it. Callers assemble their
+ * response by ALLOWLIST of the ids this module returns.
+ */
+
+import {
+  effectiveLockSettings,
+  effectiveGameLockAt,
+  weekLockDecision,
+  usesWeeklyHardLock,
+  type LockSettings,
+} from './effectiveLock';
+
+export interface RevealPool {
+  type?: string;
+  settings?: LockSettings & { lockMode?: string };
+  hardLockByWeek?: Record<string | number, unknown>;
+}
+
+export interface RevealGame {
+  id: string;
+  startTime: number;
+}
+
+export interface WeekReveal {
+  /** 'WEEK' flips wholesale at one instant; 'PER_GAME' fills in game by game. */
+  mode: 'WEEK' | 'PER_GAME';
+  /** Game ids whose picks may be shown. The ALLOWLIST — never widen it downstream. */
+  revealedGameIds: string[];
+  /** Every game in the week is revealed. NOT a licence to skip the allowlist. */
+  weekRevealed: boolean;
+  /** The instant the whole week reveals (WEEK mode only; undefined for PER_GAME). */
+  weekRevealAt?: number;
+}
+
+/**
+ * Does this pool reveal a week all at once, or game by game?
+ *
+ * Survivor and Margin carry a HARD weekly lock derived from the pool TYPE (a
+ * settings write cannot downgrade it), and a WEEKLY-lockMode pick'em pool has
+ * opted into the same shape. Everything else is PER_GAME.
+ */
+export function revealMode(pool: RevealPool | undefined): 'WEEK' | 'PER_GAME' {
+  if (usesWeeklyHardLock(pool?.type)) return 'WEEK';
+  return pool?.settings?.lockMode === 'WEEKLY' ? 'WEEK' : 'PER_GAME';
+}
+
+/**
+ * What of `week` is revealed to a commissioner at instant `now`.
+ *
+ * `games` must be the pool's slate for that week — the same set the submit path
+ * and the scorer read. An empty slate reveals nothing: with no kickoffs there is
+ * no deadline, and guessing one would open picks on games nobody has seen.
+ */
+export function weekRevealFor(
+  pool: RevealPool | undefined,
+  week: number,
+  games: RevealGame[],
+  now: number,
+): WeekReveal {
+  const mode = revealMode(pool);
+  if (!games || games.length === 0) {
+    return { mode, revealedGameIds: [], weekRevealed: false };
+  }
+
+  if (mode === 'WEEK') {
+    // weekLockDecision folds in the earliest-ever freeze, so a commissioner
+    // cannot widen the buffer to move their own reveal later either — the
+    // reveal and the members' deadline are literally the same number.
+    const { lockAt } = weekLockDecision(pool, week, games.map(g => g.startTime));
+    const open = now >= lockAt;
+    return {
+      mode,
+      revealedGameIds: open ? games.map(g => g.id) : [],
+      weekRevealed: open,
+      weekRevealAt: lockAt,
+    };
+  }
+
+  const settings = effectiveLockSettings(pool?.settings, pool?.type);
+  const revealedGameIds = games
+    .filter(g => now >= effectiveGameLockAt(g.startTime, week, settings))
+    .map(g => g.id);
+  return {
+    mode,
+    revealedGameIds,
+    weekRevealed: revealedGameIds.length === games.length,
+  };
+}
+
+/**
+ * The reveal a SUPER_ADMIN gets: everything, always (Kevin's ruling). Kept here
+ * rather than as an `if` at the call site so both callers produce the identical
+ * shape and the allowlist discipline holds on every path.
+ */
+export function fullReveal(pool: RevealPool | undefined, games: RevealGame[]): WeekReveal {
+  return {
+    mode: revealMode(pool),
+    revealedGameIds: (games || []).map(g => g.id),
+    weekRevealed: true,
+  };
+}
+
+/**
+ * How many of this week's games a member has a saved pick for.
+ *
+ * Commissioner-only (D1): it is what the roster's completeness column and the
+ * reminder targeting need — "picked 3 of 16" is a different question from "has
+ * picked at all", and only the second is safe to tell the whole pool.
+ *
+ * `picks` is the raw entry map: keyed by gameId for pick'em, by week number for
+ * Survivor/Margin (numeric keys arrive as strings out of Firestore, hence the
+ * String() lookup).
+ */
+export function weekPickCount(
+  poolType: string | undefined,
+  picks: Record<string, unknown> | undefined,
+  week: number,
+  gameIds: string[],
+): number {
+  const p = picks || {};
+  if (poolType === 'NFL_PICKEM') {
+    return gameIds.filter(id => !!p[id]).length;
+  }
+  // Survivor/Margin: one pick per week, keyed by the week number.
+  return p[String(week)] ? 1 : 0;
+}
