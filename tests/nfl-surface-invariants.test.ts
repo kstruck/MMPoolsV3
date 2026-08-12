@@ -94,10 +94,39 @@ describe('saved-pick visibility — all three member sheets, one definition', ()
     'src/components/NFLPoolDashboard/MarginPickEntry.tsx',
   ];
 
-  it.each(SHEETS)('%s highlights team buttons through pickHighlightClass()', file => {
+  /**
+   * ⚠️ THE INVARIANT MOVED, IT DID NOT WEAKEN (2026-08-12, pick-sheet overhaul).
+   *
+   * This used to assert that each sheet calls `pickHighlightClass` directly.
+   * Survivor and Margin now render their team buttons through the shared
+   * `TeamPickButton`, which owns the selected/saved styling — a STRONGER form of
+   * "one definition", not an escape from it. Keeping the old assertion would
+   * force the styling back into the three files it was just extracted from.
+   *
+   * So: each sheet must route through ONE of the two shared definitions, and the
+   * shared component must itself distinguish saved from unsaved (the next test).
+   * A sheet that hand-rolls its own selected state satisfies neither.
+   */
+  it.each(SHEETS)('%s highlights team buttons through a SHARED definition', file => {
     const src = readFileSync(resolve(root, file), 'utf8');
-    expect(src, `${file} should import utils/pickHighlight`).toMatch(/utils\/pickHighlight/);
-    expect(/\bpickHighlightClass\s*\(/.test(src), `${file} should call pickHighlightClass`).toBe(true);
+    const viaHelper = /\bpickHighlightClass\s*\(/.test(src);
+    const viaComponent = /\bTeamPickButton\b/.test(src);
+    expect(
+      viaHelper || viaComponent,
+      `${file} must style selected teams via pickHighlightClass() or TeamPickButton, never its own copy`,
+    ).toBe(true);
+  });
+
+  it('TeamPickButton distinguishes a SAVED pick from an unsaved change', () => {
+    // What the old per-sheet assertion actually protected: colour alone cannot
+    // say "this is in". Two sheets now depend on this one component getting it
+    // right, so it is asserted once here rather than three times over.
+    const src = readFileSync(
+      resolve(root, 'src/components/NFLPoolDashboard/pickSheet/TeamPickButton.tsx'),
+      'utf8',
+    );
+    expect(src).toMatch(/\bsaved\b/);
+    expect(src).toContain('Not saved yet');
   });
 
   it.each(SHEETS)('%s inlines no copy of the old selected-team class string', file => {

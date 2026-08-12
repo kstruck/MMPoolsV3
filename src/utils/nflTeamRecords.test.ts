@@ -77,3 +77,78 @@ describe('formatTeamRecord', () => {
     expect(formatTeamRecord({ wins: 1, losses: 1, ties: 1 })).toBe('1-1-1');
   });
 });
+
+/**
+ * ⚠️ THE PICK SHEET MUST PASS THE SEASON, NOT THE WEEK.
+ *
+ * codex on the pick-sheet overhaul PR: the sheets receive `games` already
+ * filtered to the selected week, so computing records from that argument
+ * renders every team 0-0 for the whole season — a plausible-looking value in
+ * place of the real record, which is worse than showing nothing. The fix is a
+ * separate `seasonGames` prop; this pins the arithmetic that makes the two
+ * arguments give different answers, so a future revert fails here.
+ */
+describe('computeTeamRecords — week slate vs season slate', () => {
+  const FINAL = (id: string, week: number, home: string, away: string, hs: number, as: number) => ({
+    id, week, seasonType: 1, status: 'FINAL',
+    homeTeam: { abbreviation: home }, awayTeam: { abbreviation: away },
+    scores: { home: hs, away: as },
+  }) as any;
+
+  const season = [
+    FINAL('g1', 1, 'KC', 'BUF', 24, 17),
+    FINAL('g2', 2, 'BUF', 'KC', 30, 27),
+    { id: 'g3', week: 3, seasonType: 1, status: 'SCHEDULED', homeTeam: { abbreviation: 'KC' }, awayTeam: { abbreviation: 'BUF' } } as any,
+  ];
+
+  it('reads the full season when given the full season', () => {
+    const r = computeTeamRecords(season, 1);
+    expect(formatTeamRecord(r.get('KC'))).toBe('1-1');
+    expect(formatTeamRecord(r.get('BUF'))).toBe('1-1');
+  });
+
+  it('reads 0-0 for everyone when handed only an upcoming week — the defect', () => {
+    const weekThreeOnly = season.filter(g => g.week === 3);
+    const r = computeTeamRecords(weekThreeOnly, 1);
+    expect(formatTeamRecord(r.get('KC'))).toBe('0-0');
+    expect(formatTeamRecord(r.get('BUF'))).toBe('0-0');
+  });
+});
+
+/**
+ * ⚠️ RECORDS ARE "AS OF" THE WEEK ON SCREEN.
+ *
+ * The dashboard lets a member scrub back to a completed week. Folding the whole
+ * season in prints each team's week-10 record beside a week-1 matchup — a row
+ * describing a game with information nobody had when it was played. codex round
+ * 4 on the pick-sheet overhaul PR. The sheets filter to `week < selectedWeek`
+ * before calling this; the arithmetic that makes that filter matter is here.
+ */
+describe('computeTeamRecords — "as of" a week, via the caller filter', () => {
+  const FINAL = (week: number, home: string, away: string, hs: number, as: number) => ({
+    id: `w${week}-${home}`, week, seasonType: 1, status: 'FINAL',
+    homeTeam: { abbreviation: home }, awayTeam: { abbreviation: away },
+    scores: { home: hs, away: as },
+  }) as any;
+
+  const season = [
+    FINAL(1, 'KC', 'BUF', 24, 17),
+    FINAL(2, 'KC', 'DEN', 31, 10),
+    FINAL(3, 'BUF', 'KC', 20, 14),
+  ];
+  const asOf = (week: number) => computeTeamRecords(season.filter(g => g.week < week), 1);
+
+  it('week 1 shows nobody with a record yet', () => {
+    expect(formatTeamRecord(asOf(1).get('KC'))).toBe('0-0');
+  });
+
+  it('week 2 counts only week 1', () => {
+    expect(formatTeamRecord(asOf(2).get('KC'))).toBe('1-0');
+    expect(formatTeamRecord(asOf(2).get('BUF'))).toBe('0-1');
+  });
+
+  it('week 4 counts weeks 1-3 — and differs from week 2, which is the point', () => {
+    expect(formatTeamRecord(asOf(4).get('KC'))).toBe('2-1');
+    expect(formatTeamRecord(asOf(2).get('KC'))).not.toBe(formatTeamRecord(asOf(4).get('KC')));
+  });
+});

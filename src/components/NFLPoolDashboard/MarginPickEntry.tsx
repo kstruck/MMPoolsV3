@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Lock, AlertCircle, Save, Percent, ArrowUpRight, ArrowDownRight, Check, CheckCircle2 } from 'lucide-react';
-import { Button } from '../ui';
+import { AlertCircle, Percent, ArrowUpRight, ArrowDownRight, CheckCircle2 } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import { useToast } from '../ui/Toast';
@@ -10,13 +9,28 @@ import { formatTimeWithZone } from '../../utils/formatTime';
 import type { User, Pool, NFLGame } from '../../types';
 import { poolSeasonType } from '../../utils/nflPending';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
-import { pickHighlightClass, pickHighlightLabel, pickBadgeClass } from '../../utils/pickHighlight';
+import { pickHighlightLabel } from '../../utils/pickHighlight';
+import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
+import { GameMeta } from './pickSheet/GameMeta';
+import { TeamPickButton } from './pickSheet/TeamPickButton';
+import { StickySaveBar } from './pickSheet/StickySaveBar';
+import { useSiteConsensus } from './pickSheet/useSiteConsensus';
 
 interface MarginPickEntryProps {
   pool: Pool;
   user: User;
   week: number;
   games: NFLGame[];
+  /**
+   * The WHOLE season's games, not this week's slate.
+   *
+   * ⚠️ `games` above is already filtered to the selected week, so computing team
+   * records from it yields 0-0 for every team all season long — a plausible
+   * value rather than the real record, which is worse than showing nothing.
+   * (codex on the pick-sheet overhaul PR.) `computeTeamRecords` folds only FINAL
+   * games and scopes to the pool's seasonType, so passing the season is safe.
+   */
+  seasonGames?: NFLGame[];
   entry: any; // MarginEntry or null
   isWeekLocked: boolean;
 }
@@ -25,6 +39,7 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
   pool,
   week,
   games,
+  seasonGames,
   entry,
   isWeekLocked
 }) => {
@@ -64,6 +79,34 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
     }
     return teams;
   }, [entry, week]);
+
+  // Records and the crowd split — shown ON the row, not on another screen
+  // (Kevin's testers, 2026-08-11). Both derive from data already in hand or
+  // already subscribed to; neither adds a read path. Twin of SurvivorPickEntry.
+  const seasonType = poolSeasonType(pool);
+  // RECORDS AS OF THE SELECTED WEEK, not as of today.
+  //
+  // The dashboard lets a member scrub back to a completed week, and folding the
+  // whole season in would print each team's WEEK 10 record beside a WEEK 1
+  // matchup — the row would describe a game with information nobody had when it
+  // was played. A pick sheet's record is the one a team carried INTO the game.
+  // (codex round 4 on this PR.)
+  //
+  // Strictly earlier weeks: a Thursday result does not count toward the record
+  // shown on that same week's Sunday rows, which is how a sheet reads.
+  const teamRecords = useMemo(
+    () => computeTeamRecords((seasonGames ?? games).filter(g => Number(g.week) < week), seasonType),
+    [seasonGames, games, seasonType, week],
+  );
+  const consensus = useSiteConsensus(pool, week);
+  // ⚠️ NO RECORD AT ALL until the season's slate has arrived. `formatTeamRecord`
+  // turns an absent entry into "0-0", which is the CORRECT answer for a team
+  // with no FINAL games — but not while the subscription is still in flight,
+  // where it is a plausible value standing in for one we do not have yet.
+  // (qodo #6 on this PR.) Once the slate is loaded, 0-0 is a real reading.
+  const recordsLoaded = (seasonGames ?? games).length > 0;
+  const recordFor = (abbr: string): string | undefined =>
+    recordsLoaded ? formatTeamRecord(teamRecords.get(abbr)) : undefined;
 
   // Check if a specific game is locked (server-corrected clock — device time can drift)
   const isGameLocked = (game: NFLGame): boolean => {
@@ -256,8 +299,9 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
         </div>
       </div>
 
-      {/* 3. Game / Team Matchup Grid */}
-      <div className="space-y-4">
+      {/* 3. The week's slate — one screen, CBS-style rows. Twin of
+          SurvivorPickEntry; see that file for the tester complaint this answers. */}
+      <div className="space-y-3">
         {games.length === 0 ? (
           <div className="bg-card p-8 border border-line rounded-xl text-center">
             <p className="text-muted font-body font-bold num">No NFL matchups scheduled for {nflWeekLabel(poolSeasonType(pool), week)}.</p>
@@ -265,130 +309,64 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
         ) : (
           games.map(game => {
             const locked = isGameLocked(game);
-
             const homeAbbrev = game.homeTeam.abbreviation;
             const awayAbbrev = game.awayTeam.abbreviation;
-
-            const isHomeSelected = selectedTeam === homeAbbrev;
-            const isAwaySelected = selectedTeam === awayAbbrev;
-
-            const isHomeUsed = usedTeams.has(homeAbbrev);
-            const isAwayUsed = usedTeams.has(awayAbbrev);
+            const split = consensus[game.id];
 
             return (
-              <div
-                key={game.id}
-                className="bg-card border border-line rounded-xl p-5 flex flex-col md:flex-row items-center justify-between gap-4 transition-all duration-150 relative overflow-hidden shadow-card"
-              >
-                {/* Visual Lock overlay */}
-                {locked && game.status === 'SCHEDULED' && (
-                  <div className="absolute top-2 right-2 flex items-center gap-1 bg-page border border-line rounded-full px-2 py-0.5 text-[9px] text-muted font-display font-bold tracking-[0.08em] uppercase">
-                    <Lock size={9} /> Locked
-                  </div>
-                )}
+              <div key={game.id} className="bg-card border border-line rounded-xl p-4 shadow-card space-y-2">
+                <GameMeta game={game} locked={locked && game.status === 'SCHEDULED'} />
 
-                {/* Team Buttons Grid */}
-                <div className="flex-grow flex items-center justify-center gap-6 w-full">
-                  
-                  {/* AWAY TEAM */}
-                  <button
-                    onClick={() => handleTeamSelect(awayAbbrev, game)}
-                    disabled={locked || isAwayUsed}
-                    title={pickHighlightLabel(isAwaySelected, savedPick === awayAbbrev) || undefined}
-                    className={`flex-1 max-w-[240px] flex flex-col items-center p-4 rounded-lg border transition-all duration-150 text-center relative ${
-                      isAwaySelected
-                        ? pickHighlightClass(true, savedPick === awayAbbrev)
-                        : isAwayUsed
-                          ? 'bg-page border-line opacity-40 cursor-not-allowed'
-                          : locked
-                            ? 'bg-page border-line opacity-80 cursor-not-allowed'
-                            : 'bg-page border-line hover:-translate-y-1 hover:shadow-card-hover'
-                    }`}
-                  >
-                    {isAwayUsed && (
-                      <span className="absolute top-2 left-2 bg-page border border-line text-faint text-[8px] font-display font-bold tracking-[0.16em] px-1.5 py-0.5 rounded-full uppercase">
-                        Used
-                      </span>
-                    )}
-                    {isAwaySelected && (
-                      <span className={`absolute top-2 right-2 p-0.5 rounded-full ${pickBadgeClass(savedPick === awayAbbrev)}`}>
-                        <Check size={10} className="stroke-[4]" />
-                      </span>
-                    )}
+                <div className="flex items-stretch gap-3">
+                  <TeamPickButton
+                    team={game.awayTeam}
+                    subtitle={awayAbbrev}
+                    record={recordFor(awayAbbrev)}
+                    consensusPct={split?.awayPct}
+                    selected={selectedTeam === awayAbbrev}
+                    saved={savedPick === awayAbbrev}
+                    disabled={locked || usedTeams.has(awayAbbrev)}
+                    badge={usedTeams.has(awayAbbrev) ? 'Used' : null}
+                    title={pickHighlightLabel(selectedTeam === awayAbbrev, savedPick === awayAbbrev) || undefined}
+                    onSelect={() => handleTeamSelect(awayAbbrev, game)}
+                  />
 
-                    {game.awayTeam.logoUrl && (
-                      <img src={game.awayTeam.logoUrl} className="w-12 h-12 object-contain mb-2" alt={`${game.awayTeam.name} logo`} />
-                    )}
-                    <span className="text-[color:var(--text)] font-display font-bold text-sm leading-tight truncate w-full">
-                      {game.awayTeam.name}
-                    </span>
-                    <span className="text-muted text-[10px] font-display font-bold tracking-[0.16em] mt-0.5">
-                      {awayAbbrev}
-                    </span>
-                  </button>
-
-                  {/* SCORE OR VS STATUS */}
-                  <div className="flex flex-col items-center justify-center min-w-[60px]">
+                  <div className="flex flex-col items-center justify-center min-w-[52px] shrink-0">
                     {game.status === 'FINAL' ? (
-                      <div className="text-center">
-                        <span className="text-muted text-[9px] font-display font-bold uppercase tracking-[0.08em] block mb-1">Final</span>
-                        <span className="text-base font-display font-bold text-[color:var(--text)] num">
+                      <>
+                        <span className="text-muted text-[9px] font-display font-bold uppercase tracking-[0.08em]">Final</span>
+                        <span className="text-sm font-display font-bold text-[color:var(--text)] num">
                           {game.scores?.away} - {game.scores?.home}
                         </span>
-                      </div>
+                      </>
                     ) : game.status === 'IN_PROGRESS' ? (
-                      <div className="text-center">
-                        <span className="relative flex h-1.5 w-1.5 mx-auto mb-1">
+                      <>
+                        <span className="relative flex h-1.5 w-1.5 mb-1">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brandred-500 opacity-75"></span>
                           <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-brandred-600"></span>
                         </span>
                         <span className="text-sm font-display font-bold text-brandred-600 num">
                           {game.scores?.away} - {game.scores?.home}
                         </span>
-                        <span className="text-[9px] text-muted num block mt-0.5 leading-none">{game.clock}</span>
-                      </div>
+                        <span className="text-[9px] text-muted num leading-none">{game.clock}</span>
+                      </>
                     ) : (
-                      <div className="text-faint text-xs font-display font-bold tracking-[0.16em]">VS</div>
+                      <span className="text-faint text-[10px] font-display font-bold tracking-[0.16em]">AT</span>
                     )}
                   </div>
 
-                  {/* HOME TEAM */}
-                  <button
-                    onClick={() => handleTeamSelect(homeAbbrev, game)}
-                    disabled={locked || isHomeUsed}
-                    title={pickHighlightLabel(isHomeSelected, savedPick === homeAbbrev) || undefined}
-                    className={`flex-1 max-w-[240px] flex flex-col items-center p-4 rounded-lg border transition-all duration-150 text-center relative ${
-                      isHomeSelected
-                        ? pickHighlightClass(true, savedPick === homeAbbrev)
-                        : isHomeUsed
-                          ? 'bg-page border-line opacity-40 cursor-not-allowed'
-                          : locked
-                            ? 'bg-page border-line opacity-80 cursor-not-allowed'
-                            : 'bg-page border-line hover:-translate-y-1 hover:shadow-card-hover'
-                    }`}
-                  >
-                    {isHomeUsed && (
-                      <span className="absolute top-2 left-2 bg-page border border-line text-faint text-[8px] font-display font-bold tracking-[0.16em] px-1.5 py-0.5 rounded-full uppercase">
-                        Used
-                      </span>
-                    )}
-                    {isHomeSelected && (
-                      <span className={`absolute top-2 right-2 p-0.5 rounded-full ${pickBadgeClass(savedPick === homeAbbrev)}`}>
-                        <Check size={10} className="stroke-[4]" />
-                      </span>
-                    )}
-
-                    {game.homeTeam.logoUrl && (
-                      <img src={game.homeTeam.logoUrl} className="w-12 h-12 object-contain mb-2" alt={`${game.homeTeam.name} logo`} />
-                    )}
-                    <span className="text-[color:var(--text)] font-display font-bold text-sm leading-tight truncate w-full">
-                      {game.homeTeam.name}
-                    </span>
-                    <span className="text-muted text-[10px] font-display font-bold tracking-[0.16em] mt-0.5">
-                      {homeAbbrev}
-                    </span>
-                  </button>
-
+                  <TeamPickButton
+                    team={game.homeTeam}
+                    subtitle={homeAbbrev}
+                    record={recordFor(homeAbbrev)}
+                    consensusPct={split?.homePct}
+                    selected={selectedTeam === homeAbbrev}
+                    saved={savedPick === homeAbbrev}
+                    disabled={locked || usedTeams.has(homeAbbrev)}
+                    badge={usedTeams.has(homeAbbrev) ? 'Used' : null}
+                    title={pickHighlightLabel(selectedTeam === homeAbbrev, savedPick === homeAbbrev) || undefined}
+                    onSelect={() => handleTeamSelect(homeAbbrev, game)}
+                  />
                 </div>
               </div>
             );
@@ -396,30 +374,21 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
         )}
       </div>
 
-      {/* 4. Action Save Footer */}
-      {games.length > 0 && selectedTeam && !isSelectionLocked && (
-        <div className="bg-card border border-line rounded-xl p-6 shadow-card flex justify-center">
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? 'Locking in...' : savedPick === selectedTeam ? (
-              // The selection on screen IS the saved pick. Label with the fact
-              // rather than an action, so "did it save?" is answered before the
-              // click — clicking still works and confirms via handleSubmit's
-              // short-circuit.
-              <>
-                <Check size={18} /> Pick Saved: {selectedTeam}
-              </>
-            ) : (
-              <>
-                <Save size={18} /> {savedPick ? `Change Pick to ${selectedTeam}` : 'Lock In Margin Selection'}
-              </>
-            )}
-          </Button>
-        </div>
+      {/* 4. The save bar, pinned — see SurvivorPickEntry for the reasoning. */}
+      {games.length > 0 && (
+        <StickySaveBar
+          dirty={!!selectedTeam && selectedTeam !== savedPick}
+          submitting={isSubmitting}
+          summary={selectedTeam ? `${nflWeekLabel(poolSeasonType(pool), week)}: ${selectedTeam}` : undefined}
+          saveLabel={savedPick ? 'Change Pick' : 'Lock In Pick'}
+          savedLabel={savedPick ? `Pick saved: ${savedPick}` : 'No pick yet'}
+          blockedReason={
+            isSelectionLocked ? 'Picks are locked for this week'
+              : !selectedTeam ? 'Tap a team to pick'
+                : null
+          }
+          onSave={handleSubmit}
+        />
       )}
     </div>
   );

@@ -163,6 +163,65 @@ describe('parseScoreboardResponse — real ESPN shape', () => {
     expect(games[0].spread).toBeUndefined();
   });
 
+  /**
+   * The TV listing (B1). Verified against the LIVE ESPN scoreboard on
+   * 2026-08-12 before it was written: `competitions[].broadcasts[].names`.
+   *
+   * ⚠️ It is present on only SOME games — 11 of 16 preseason week-2 events,
+   * 13 of 16 week 3, 11 of 16 week 4 — because a game carried only in its local
+   * markets has no national listing. Absence is the feed's normal state, so the
+   * field is omitted rather than written as an empty string, and the pick sheet
+   * prints nothing rather than a placeholder.
+   */
+  it('captures the national broadcast when the feed carries one', () => {
+    const games = parseScoreboardResponse(
+      { events: [espnEvent({ broadcasts: [{ market: 'national', names: ['NFL Net'] }] })] }, 1, '2026', 1);
+    expect(games[0].broadcast).toBe('NFL Net');
+  });
+
+  it('ignores LOCAL market entries — the label is the national listing', () => {
+    // ESPN returns home/away market rows for local affiliates. Flattening them
+    // would put one city's station on a label the pick sheet presents as the
+    // national listing. (codex on this PR.)
+    const games = parseScoreboardResponse({ events: [espnEvent({ broadcasts: [
+      { market: 'home', names: ['KPIX 5'] },
+      { market: 'away', names: ['WFAA'] },
+    ] })] }, 1, '2026', 1);
+    expect(games[0].broadcast).toBeNull();
+  });
+
+  it('keeps the national row when local rows sit alongside it', () => {
+    const games = parseScoreboardResponse({ events: [espnEvent({ broadcasts: [
+      { market: 'home', names: ['KPIX 5'] },
+      { market: 'national', names: ['FOX'] },
+    ] })] }, 1, '2026', 1);
+    expect(games[0].broadcast).toBe('FOX');
+  });
+
+  it('joins a simulcast rather than silently keeping only the first channel', () => {
+    // "CBS/Paramount+" is the honest answer; picking one drops where half the
+    // audience actually watches.
+    const games = parseScoreboardResponse(
+      { events: [espnEvent({ broadcasts: [{ market: 'national', names: ['CBS', 'Paramount+'] }] })] }, 1, '2026', 1);
+    expect(games[0].broadcast).toBe('CBS/Paramount+');
+  });
+
+  it('omits broadcast entirely on a local-market game — the COMMON case', () => {
+    for (const b of [undefined, [], [{ market: 'national', names: [] }], [{ market: 'national' }]]) {
+      const games = parseScoreboardResponse({ events: [espnEvent({ broadcasts: b })] }, 1, '2026', 1);
+      // ⚠️ NULL, not undefined. Game writes are `merge: true` and merge keeps a
+      // field the new payload omits, so omitting it would leave a stale channel
+      // on a game that lost its national slot. (codex on this PR.)
+      expect(games[0].broadcast).toBeNull();
+    }
+  });
+
+  it('drops blank and non-string channel names rather than emitting "  " or "undefined"', () => {
+    const games = parseScoreboardResponse(
+      { events: [espnEvent({ broadcasts: [{ market: 'national', names: ['', '   ', null, 'FOX'] }] })] }, 1, '2026', 1);
+    expect(games[0].broadcast).toBe('FOX');
+  });
+
   it('stamps the requested week/season/seasonType, not values guessed from the payload', () => {
     const games = parseScoreboardResponse({ events: [espnEvent()] }, 3, '2026', 1);
     expect(games[0]).toMatchObject({ week: 3, season: '2026', seasonType: 1 });

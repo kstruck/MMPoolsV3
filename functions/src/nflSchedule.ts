@@ -6,7 +6,8 @@ import { detectStatCorrections, type GameStateChange } from './lib/feedSnapshot'
 import { captureFeedSnapshot, pruneExpiredSnapshots, readSnapshotGate, reportStatCorrections } from './feedSnapshotStore';
 import { opsCourierAuthToken } from './lib/opsAlertDispatcher';
 import { withHeartbeat, configReadFailedVerdict } from './lib/heartbeat';
-import { isTerminalGame } from './lib/weekCompletion';import { hasReportedScores } from './nflScoringEngine';
+import { isTerminalGame } from './lib/weekCompletion';
+import { hasReportedScores } from './nflScoringEngine';
 import { RESCORE_QUEUE, rescoreEventDoc } from './lib/rescoreQueue';
 import type { Firestore } from 'firebase-admin/firestore';
 import { validated } from "./lib/validated";
@@ -342,6 +343,38 @@ export function parseScoreboardResponse(
         }
       }
 
+      // TV / streaming listing, e.g. "NFL Net", "ESPN Unlmtd", "CBS".
+      //
+      // ⚠️ OFTEN ABSENT, and that is normal rather than a feed fault. Measured
+      // against the live ESPN scoreboard on 2026-08-12: present on 11 of 16
+      // preseason week-2 games, 13 of 16 in week 3, 11 of 16 in week 4 — a game
+      // carried only in its local markets has no national listing to report.
+      // So this is written only when the feed supplies one; the pick sheet omits
+      // the field rather than printing a placeholder for it.
+      //
+      // `names` can hold more than one entry (a simulcast). They are joined
+      // rather than truncated to the first, because "CBS/Paramount+" is the
+      // honest answer and picking one of the two silently drops where half the
+      // audience will actually watch.
+      // NATIONAL entries only. ESPN also returns `home`/`away` market rows for
+      // local affiliates, and flattening those would put a single city's
+      // station on a label the pick sheet presents as the national listing.
+      // Filtering here is also what makes the measured counts above TRUE — they
+      // were taken over national listings. (codex on this PR.)
+      const broadcastNames: string[] = (competition.broadcasts || [])
+        .filter((b: any) => b?.market === 'national')
+        .flatMap((b: any) => b?.names || [])
+        .filter((n: unknown): n is string => typeof n === 'string' && n.trim().length > 0);
+
+      // ⚠️ `null`, NOT omitted, when there is no listing. Every game write in
+      // this file is `merge: true`, and merge KEEPS a field the new payload
+      // omits — so a game that loses its national listing (a flex, a feed
+      // correction) would keep displaying the old channel forever. An explicit
+      // null overwrites it. Readers already test truthiness, so null and absent
+      // render identically. (codex on this PR — the same merge-semantics trap
+      // this file documents for `scores` and for dropped spreads.)
+      const broadcast: string | null = broadcastNames.join('/') || null;
+
       games.push({
         id: gameId,
         espnGameId: event.id,
@@ -374,7 +407,8 @@ export function parseScoreboardResponse(
         clock: event.status?.displayClock || '0:00',
         period: safeInt(event.status?.period),
         isMonday: isMonday,
-        ...(spreadFound ? { spread: { value: spreadValue, locked: false } } : {})
+        ...(spreadFound ? { spread: { value: spreadValue, locked: false } } : {}),
+        broadcast,
       });
     }
 
