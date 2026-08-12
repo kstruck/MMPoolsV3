@@ -172,17 +172,25 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     return () => { cancelled = true; clearInterval(id); };
   }, [isManager, pool.id, selectedWeek, members]);
 
+  // ⚠️ ONLY EVER USE THE REVEAL THAT MATCHES THE WEEK ON SCREEN. `reveal` holds
+  // the previous week's answer for the moment between changing weeks and the
+  // callable returning, and that answer is wrong in a way that shows: the
+  // counts would drive "4 of 16 Picks Set" and the roster's picked/unpicked
+  // state for a week nobody is looking at. Dropping it for that moment renders
+  // the honest fallback instead. (Own diff read.)
+  const weekReveal = reveal?.week === selectedWeek ? reveal : null;
+
   // Roster from Member Records, stats from the scored projection, own picks from
   // the own-entry doc, other members' picks only where the SERVER revealed them.
   // The projection alone is a snapshot of the last SCORED week, so a member who
   // joined after it was written was invisible to everyone but the commissioner —
   // see buildMemberStandings for the full reasoning.
   useEffect(() => {
-    setEntries(buildMemberStandings({ pool: castPool, members, standingsRows, ownEntry, reveal }));
+    setEntries(buildMemberStandings({ pool: castPool, members, standingsRows, ownEntry, reveal: weekReveal }));
   // Depends on `participantIds`, not the whole pool object: it is the only field
   // buildMemberStandings reads from the pool, and a snapshot re-instantiating the
   // doc should not re-run this. (qodo.)
-  }, [standingsRows, ownEntry, members, reveal, castPool.participantIds]);
+  }, [standingsRows, ownEntry, members, weekReveal, castPool.participantIds]);
 
   // 2b. Subscribe to Member Records (roster truth — everyone who joined, ADR 0003)
   useEffect(() => {
@@ -598,7 +606,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   games={games}
                   week={selectedWeek}
                   viewerUid={user?.id}
-                  pickCounts={reveal?.counts}
+                  pickCounts={weekReveal?.counts}
                 />
               )}
 
@@ -697,7 +705,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   games={games}
                   week={selectedWeek}
                   user={user}
-                  pickCounts={reveal?.counts}
+                  pickCounts={weekReveal?.counts}
                   onSelectTab={(tab) => setActiveTab(tab)}
                 />
               )}
