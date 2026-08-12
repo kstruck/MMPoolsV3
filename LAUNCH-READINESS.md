@@ -34,8 +34,8 @@ field.
 | B2 | `syncNFLScoresJob` — score ingestion | 5-min schedule with no kill switch is a CODE fact (`functions/src/nflSchedule.ts`, in tonight's 176-function fleet); "running in prod" is HANDOFF provenance (heartbeats since July), not re-measured tonight | **READY** |
 | B3 | `nflDeepSweep` — late FINAL / correction re-reads | **unset** (HANDOFF 2026-08-09). While unset, a game reaching FINAL or corrected >24h after kickoff is never re-read from ESPN | **KEVIN-ACTION** — two-stage flip per `PLAN-AUTOSCORE-GOLIVE.md` §5 (morning doc). Dry-run stage is safe: it detects and reports, suppressing only the write |
 | B4 | `nflFinalize` — finalize sweep | `{enabled: true, dryRun: true}`, `liveSeasonTypes` **unset** — `dryRun: false` alone keeps it dry (#210's deliberate two-key arming) | **KEVIN-ACTION** — NFL-6 in `TOMORROW-TASKS.md` (morning doc): read the audit-log candidate counts first, then set `liveSeasonTypes: [1]` |
-| B5 | `nflLockWatch` — spread-lock pager | `{enabled: true, dryRun: true}` | **READY as-is** — Kevin's standing decision: stays dry through preseason (1 of 49 preseason games has a line; arming it pages nightly about a known condition) |
-| B6 | `nflSpreadLock` — Tuesday spread lock | `{enabled: true, dryRun: true}`; the HOF game's spread was locked MANUALLY and verified 2026-08-05 | **READY for invites** — ATS pick'em is not required for the pilot's survivor/margin/straight-up pools; arm before any ATS pool's first live week |
+| B5 | `nflLockWatch` — spread-lock pager | `{enabled: true, dryRun: true}` | **READY as-is** — Kevin's standing decision: stays dry. ⚠️ The parenthetical this row used to carry — *"1 of 49 preseason games has a line; arming it pages nightly about a known condition"* — is **wrong on both halves** and was corrected 2026-08-11: importer week 2 now carries odds on **16 of 16** games (measured against ESPN), and the watcher filters affected pools through `poolIsBlockable` (ATS pick'em only) and returns `no live pool on this slate` without paging when that set is empty (`lib/nflLockWatch.ts:91-93`, `:147`). Arming it today would be harmless and pointless alike. See `docs/nfl-spreads-runbook.md` §6 |
+| B6 | `nflSpreadLock` — Tuesday spread lock | `{enabled: true, dryRun: true}`; the HOF game's spread was locked MANUALLY and verified 2026-08-05 | **READY for invites** — ATS pick'em is not required for the pilot's survivor/margin/straight-up pools; arm before any ATS pool's first live week. **Runbook: `docs/nfl-spreads-runbook.md`** — the flip is §4, and §5 records the sequencing gap that makes the weekly job insufficient on its own (values arrive from the sync ~2h before kickoff; the lock runs Tuesdays) |
 | B7 | Survivor exemption correctness | PR #405 (tonight): future-week reservations no longer excuse a missed pick; fix-forward, both modes | **READY once A5 merges+deploys** — until then the deployed engine has the known #399-carried defect (small reachable surface: thin slates only) |
 
 ## C. Data safety
@@ -108,7 +108,10 @@ decision homes:
 2. **`claimMySquares` hole through the pilot** — `SECURITY-CLAIM-SQUARES.md`,
    Kevin 2026-07-21.
 3. **`nflLockWatch` stays dry-run in preseason** — HANDOFF 2026-07-22 standing
-   note (1 of 49 games has a line).
+   decision. The "1 of 49 games has a line" rationale this entry used to give is
+   **retired 2026-08-11**: coverage is 16/16 on importer week 2, and the watcher
+   would not page with no ATS pool in existence anyway (row B5 above;
+   `docs/nfl-spreads-runbook.md` §6). It stays dry on the decision, not the count.
 4. **Moderate dep advisories** — root `@opentelemetry/core`, functions
    `ts-deepmerge`; accepted in #390, each needs a breaking major.
 5. **Existing wrong survivor exemptions stay** — fix-forward ruling, Kevin
