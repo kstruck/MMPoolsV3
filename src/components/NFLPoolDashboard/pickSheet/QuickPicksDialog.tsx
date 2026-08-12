@@ -155,6 +155,16 @@ export const QuickPicksDialog: React.FC<QuickPicksDialogProps> = ({
           })}
         </div>
 
+        {/* Every strategy empty AND nothing was skipped for want of a line, so
+            the only explanation left is that the remaining games have locked.
+            Without this the dialog is four disabled rows and no reason — which
+            reads as broken. (self-review, before the PR.) */}
+        {plans.every(p => p.plan.pickCount === 0) && plans[0].plan.skipCount === 0 && (
+          <p className="mt-4 font-body text-[11px] text-muted bg-page border border-line rounded-lg px-3 py-2">
+            Nothing left to fill — the games you have not picked have already locked.
+          </p>
+        )}
+
         {/* The unpriced-games notice. `skipCount` is identical for FAVORITES and
             UNDERDOGS — both need the same line — so it is stated once, from the
             first of the two, rather than repeated on each row. */}
