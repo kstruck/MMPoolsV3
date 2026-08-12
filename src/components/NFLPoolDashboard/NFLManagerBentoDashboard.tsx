@@ -43,6 +43,14 @@ interface NFLManagerBentoDashboardProps {
   games: NFLGame[];
   week: number;
   user: UserType | null;
+  /**
+   * uid → games picked this week, from `getPoolPicks`
+   * (PLAN-COMMISSIONER-BLIND-PICKS D1). The commissioner no longer holds other
+   * members' entry documents, so this is now the ONLY source for pick
+   * completeness before the reveal boundary. Undefined while the callable is in
+   * flight, in which case `unsubmittedRoster` falls back to entry inspection.
+   */
+  pickCounts?: Record<string, number>;
   onSelectTab: (tab: 'picks' | 'standings' | 'recaps' | 'rules' | 'manager') => void;
 }
 
@@ -53,6 +61,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   games: _games,
   week,
   user: _user,
+  pickCounts,
   onSelectTab: _onSelectTab
 }) => {
   const castPool = pool as any;
@@ -192,6 +201,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
       poolType: pool.type,
       week,
       weeklyGameIds: weeklyGames.map(g => g.id),
+      pickCounts,
     }).map(r => ({
       id: r.entry?.id || r.uid,
       uid: r.uid,
@@ -205,7 +215,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
       hasEntry: r.hasEntry,
       hasMember: r.hasMember,
     })),
-    [roster, week, pool.type, weeklyGames],
+    [roster, week, pool.type, weeklyGames, pickCounts],
   );
 
   // 1. Calculations for Pick submissions status — denominator is the ROSTER.

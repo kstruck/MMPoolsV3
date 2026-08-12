@@ -4,7 +4,7 @@ import { Trophy, Heart, ShieldAlert } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
 import { RankChip } from '../ui';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
-import { poolSeasonType } from '../../utils/nflPending';
+import { poolSeasonType, gamesForPoolWeek } from '../../utils/nflPending';
 
 interface NFLStandingsProps {
   pool: Pool;
@@ -13,19 +13,35 @@ interface NFLStandingsProps {
   week: number;
   /** Signed-in viewer, so their own row can show their own picks and be badged. */
   viewerUid?: string;
-  /** True only for surfaces reading RAW entries (manager/admin), which carry picks. */
-  canSeeAllPicks?: boolean;
+  /**
+   * uid → games picked this week, from `getPoolPicks`. Commissioner surfaces
+   * only, and it carries NO pick content — it is what the Pick'em column needs
+   * to say "4 of 16 Picks Set" before anything is revealed
+   * (PLAN-COMMISSIONER-BLIND-PICKS D1). Absent for ordinary members, whose
+   * column falls back to the Hidden / No selection marker.
+   */
+  pickCounts?: Record<string, number>;
 }
 
 export const NFLStandings: React.FC<NFLStandingsProps> = ({
   pool,
   entries,
+  games,
   week,
   viewerUid,
-  canSeeAllPicks = false
+  pickCounts
 }) => {
   const navigate = useNavigate();
   const type = pool.type;
+
+  // This week's slate — the denominator for the Pick'em completeness column, and
+  // the key set a pick'em entry's picks are stored under.
+  const weekGameIds = useMemo(
+    () => gamesForPoolWeek(games || [], pool as any, week).map(g => g.id),
+    [games, pool, week],
+  );
+  const ownWeekPickCount = (entry: any): number =>
+    weekGameIds.filter(id => !!entry?.picks?.[id]).length;
 
   // Rank and sort entries based on pool type rulesets
   const sortedEntries = useMemo(() => {
@@ -194,18 +210,34 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
             <tbody className="divide-y divide-[color:var(--line)]">
               {sortedEntries.map((entry, index) => {
                 const isMyEntry = !!viewerUid && (entry.ownerUid ?? entry.id) === viewerUid;
-                // A member reads the scored projection, which carries NO pick data by
-                // design (ADR 0005 Phase 2). Only the viewer's own row — sourced from
-                // their own entry — can show a pick, and a manager reading raw entries
-                // sees every one. Anywhere else the absence of a pick here says NOTHING
-                // about whether that player picked, so it must not read "No selection".
-                const pickKnown = canSeeAllPicks || isMyEntry;
                 const dash = <span className="text-faint">—</span>;
-                const pickCell = (pickKnown ? entry.picks?.[week] : undefined) || (
-                  <span className="text-faint italic text-[11px] normal-case font-body">
-                    {pickKnown ? 'No selection' : '—'}
-                  </span>
+                // THE THREE-STATE PICK CELL (PLAN-COMMISSIONER-BLIND-PICKS §4).
+                //
+                // A pick appears in `entry.picks` only when the viewer is entitled
+                // to it: their own row always, and another member's row only for
+                // the games the SERVER revealed (`getPoolPicks`, grafted on by
+                // buildMemberStandings). Nobody — commissioner included — holds
+                // raw entries any more, so this component never has to decide the
+                // boundary; it renders what it was handed.
+                //
+                // When there is no pick to show, the Member Record's `pickedWeeks`
+                // marker says which of two different things happened:
+                //   week present  -> they picked, you may not see it  -> "Hidden"
+                //   week absent   -> they have not picked            -> "No selection"
+                //   field absent  -> record predates the marker      -> "—"
+                // The third case is the honest one and must NOT collapse into the
+                // second: saying "No selection" about a member whose pick simply
+                // is not knowable is the exact lie #413 removed from this cell.
+                const marker = (): string => {
+                  if (isMyEntry) return 'No selection';   // their own absence is a fact
+                  const picked = entry.pickedWeeks;
+                  if (!Array.isArray(picked)) return '—';
+                  return picked.includes(week) ? 'Hidden' : 'No selection';
+                };
+                const faint = (text: string) => (
+                  <span className="text-faint italic text-[11px] normal-case font-body">{text}</span>
                 );
+                const pickCell = entry.picks?.[week] || faint(marker());
 
                 return (
                   <tr
@@ -238,7 +270,17 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                     {type === 'NFL_PICKEM' && (
                       <>
                         <td className="py-4 px-6 text-center text-[13px] font-bold text-muted num">
-                          {pickKnown ? `${Object.keys(entry.picks || {}).length} Picks Set` : dash}
+                          {/* Counted over THIS week's slate. It used to be
+                              `Object.keys(entry.picks).length`, which counts every
+                              pick of the season — a pick'em entry keys picks by
+                              gameId, not by week — so week 2 read "32 Picks Set".
+                              The commissioner's count comes from getPoolPicks and
+                              is a count only: no pick content rides with it. */}
+                          {isMyEntry
+                            ? `${ownWeekPickCount(entry)} of ${weekGameIds.length} Picks Set`
+                            : pickCounts?.[entry.ownerUid ?? entry.id] !== undefined
+                              ? `${pickCounts[entry.ownerUid ?? entry.id]} of ${weekGameIds.length} Picks Set`
+                              : faint(marker())}
                         </td>
                         <td className="py-4 px-6 text-center text-[13px] num font-bold text-muted">
                           {entry.weeklyTiebreakers?.[week] ? `${entry.weeklyTiebreakers[week]} pts` : '—'}

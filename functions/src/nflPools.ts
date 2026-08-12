@@ -493,6 +493,22 @@ export async function submitNFLPicksInternal(
 
     // --- LOCK CHECKS & POOL SPECIFIC VALIDATIONS ---
 
+    // Did this submission actually store a pick FOR THIS WEEK? Only then may the
+    // `pickedWeeks` marker advance (PLAN-COMMISSIONER-BLIND-PICKS T1). Declared
+    // inside the transaction body so a retry resets it.
+    //
+    // Two ways it can be false while the entry write still happens, both
+    // pick'em-only — Survivor and Margin throw on a missing team above:
+    //   1. `picks: {}`. `submitNFLPicksSchema` permits it and this handler does
+    //      not require a selection, so an empty submission would otherwise mark
+    //      the week and render "Hidden" for a pick nobody made (codex r2).
+    //   2. keys that belong to ANOTHER week. The PER_GAME branch rejects an
+    //      unknown gameId, but the weekly/confidence branch has no such loop, so
+    //      a week-4 gameId submitted under week 5 would mark week 5.
+    // Testing against this week's slate answers both at once.
+    const weekGameIds = new Set(games.map(g => g.id));
+    let committedPickForWeek = false;
+
     if (type === 'NFL_PICKEM') {
       const settings = pool.settings;
       const weeklyLockMode = settings.confidenceMode || settings.lockMode === 'WEEKLY';
@@ -554,6 +570,8 @@ export async function submitNFLPicksInternal(
         // fingerprint and forces one more pass (lib/entryRevision.ts).
         [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
       }, { merge: true });
+
+      committedPickForWeek = Object.keys(picks).some(gameId => weekGameIds.has(gameId));
 
     } else if (type === 'NFL_SURVIVOR') {
       const survivorEntry = (existingEntry as SurvivorEntry) || {
@@ -645,6 +663,7 @@ export async function submitNFLPicksInternal(
       survivorEntry.usedTeams = maxTeamUses === 1
         ? [...new Set([...usedElsewhere, teamPicked])]
         : [...new Set(Object.values(survivorEntry.picks))];
+      committedPickForWeek = true;   // the guard above threw on a missing team
       survivorEntry.submittedAt = now;
       // Heal-on-touch: an entry created while the token carried no name is stuck at
       // "Participant" forever otherwise — this branch reuses the existing entry and
@@ -707,6 +726,7 @@ export async function submitNFLPicksInternal(
       // Same set the guard tested — reused, not recomputed.
       marginEntry.picks[week] = teamPicked;
       marginEntry.usedTeams = [...new Set([...usedElsewhere, teamPicked])];
+      committedPickForWeek = true;   // the guard above threw on a missing team
       marginEntry.submittedAt = now;
       // Heal-on-touch — twin of the Survivor line above.
       marginEntry.userName = subjectName || marginEntry.userName || 'Participant';
@@ -728,6 +748,11 @@ export async function submitNFLPicksInternal(
       present: true,
       entryFee: Number(pool.settings?.entryFee ?? 0),
       hasPlayableEntry: true,
+      // Pick marker (PLAN-COMMISSIONER-BLIND-PICKS T1). Rides the write that is
+      // already here, in the same transaction as the entry, so the marker can
+      // never disagree with the pick it describes. `undefined` when this
+      // submission stored no pick for this week — see committedPickForWeek.
+      ...(committedPickForWeek ? { pickedWeek: week } : {}),
     }, existingMember, now);
   }));
 

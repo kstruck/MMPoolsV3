@@ -30,6 +30,14 @@ export interface MembershipFacts {
   // never "false", on an existing record.
   entryFee?: number;
   hasPlayableEntry?: boolean;
+  /**
+   * The week this write is committing a pick for, if any. Unioned into
+   * `MemberRecord.pickedWeeks` (PLAN-COMMISSIONER-BLIND-PICKS T1).
+   *
+   * `undefined` means "this caller is not reporting a pick" — a join, a
+   * backfill-on-touch, a payment edit — and leaves the stored array alone.
+   */
+  pickedWeek?: number;
 }
 
 export type MembershipPlan =
@@ -89,6 +97,24 @@ export function planMembershipWrite(
     if (facts.hasPlayableEntry !== undefined) {
       data.hasPlayableEntry = facts.hasPlayableEntry;
     }
+    // Same unknown-is-not-false discipline as `hasPlayableEntry` directly above,
+    // and for the same reason: THIS CREATE BRANCH IS ALSO THE BACKFILL-ON-TOUCH
+    // PATH. `joinNFLPoolInternal` (nflPools.ts:238) reaches it for someone who
+    // is ALREADY a participant but has no Member Record — a legacy pool — and
+    // that person may well already have weeks of picks.
+    //
+    // Seeding `[]` there would convert "we do not know which weeks this member
+    // picked" into "they picked no week", and the standings cell renders those
+    // two differently on purpose: absent is "—", `[]` is "No selection". So the
+    // field is written ONLY when this caller is actually reporting a pick.
+    // (codex r3 on the commissioner-blind-picks PR, which caught the first
+    // version doing exactly what the comment above it warns against.)
+    //
+    // Cost of the honest version: nothing visible. `buildMemberStandings` keeps
+    // a member off the leaderboard until they have a scored row or the
+    // `hasPlayableEntry` latch, so a joined-and-never-picked member has no cell
+    // to render either way.
+    if (facts.pickedWeek !== undefined) data.pickedWeeks = [facts.pickedWeek];
     return { participant: 'add', member: { op: 'set', data, merge: false } };
   }
   // Update: merge identity/units only; preserve paidStatus + claim. feeOwed is
@@ -106,6 +132,16 @@ export function planMembershipWrite(
   // written before the field existed, without a backfill.
   if (facts.hasPlayableEntry === true && existing.hasPlayableEntry !== true) {
     data.hasPlayableEntry = true;
+  }
+  // Union-only, and written ONLY when this caller is actually reporting a pick.
+  // A join/backfill touch passes `undefined`; writing `[]` for it under
+  // `merge: true` would REPLACE the stored array (Firestore merges maps, not
+  // array contents) and erase every marker the member had earned.
+  if (facts.pickedWeek !== undefined) {
+    const stored = Array.isArray(existing.pickedWeeks) ? existing.pickedWeeks : [];
+    if (!stored.includes(facts.pickedWeek)) {
+      data.pickedWeeks = [...stored, facts.pickedWeek].sort((a, b) => a - b);
+    }
   }
   return { participant: 'add', member: { op: 'set', data, merge: true } };
 }

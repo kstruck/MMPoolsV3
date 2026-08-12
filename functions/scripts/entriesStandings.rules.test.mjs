@@ -9,7 +9,11 @@
  * Verifies (NFL pool, LOCKED):
  *   - a member reads their OWN entry
  *   - a member CANNOT read another member's entry (pre-FINAL)
- *   - pool owner + manager still read all entries
+ *   - the pool OWNER and MANAGER cannot read another member's entry either —
+ *     PLAN-COMMISSIONER-BLIND-PICKS T3, 2026-08-12. They used to be able to, at
+ *     any time, which is exactly what that plan removed; commissioner reads now
+ *     go through the `getPoolPicks` callable, which has a server-side clock.
+ *   - a SUPER_ADMIN still reads every entry (Kevin's ruling: superadmin only)
  *   - members read /standings/current; non-participants and guests cannot
  * Verifies (NFL pool, FINAL): a member CAN read another member's entry
  * Verifies (BRACKET pool, LOCKED): coarse post-lock read unchanged (reveal by design)
@@ -34,6 +38,7 @@ const MANAGER = 'manager1';
 const ALICE = 'alice';
 const BOB = 'bob';
 const OUTSIDER = 'outsider';
+const ADMIN = 'superadmin1';
 
 await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
@@ -43,6 +48,9 @@ await env.withSecurityRulesDisabled(async (ctx) => {
         ownerId: OWNER, managerUid: MANAGER,
         participantIds: [OWNER, ALICE, BOB],
     });
+    // The commissioner plays too — the case PLAN-COMMISSIONER-BLIND-PICKS calls
+    // the most likely way to ship a visible regression.
+    await setDoc(doc(db, 'pools', 'nfl1', 'entries', OWNER), { ownerUid: OWNER, picks: { g9: 'SF' } });
     await setDoc(doc(db, 'pools', 'nfl1', 'entries', ALICE), { ownerUid: ALICE, picks: { g9: 'KC' } });
     await setDoc(doc(db, 'pools', 'nfl1', 'entries', BOB), { ownerUid: BOB, picks: { g9: 'BUF' } });
     await setDoc(doc(db, 'pools', 'nfl1', 'standings', 'current'), {
@@ -67,13 +75,21 @@ const alice = env.authenticatedContext(ALICE).firestore();
 const owner = env.authenticatedContext(OWNER).firestore();
 const manager = env.authenticatedContext(MANAGER).firestore();
 const outsider = env.authenticatedContext(OUTSIDER).firestore();
+const superadmin = env.authenticatedContext(ADMIN, { role: 'SUPER_ADMIN' }).firestore();
 const guest = env.unauthenticatedContext().firestore();
 
-// --- NFL LOCKED: own yes, other's no, owner/manager yes ---
+// --- NFL LOCKED: own yes; other's no for EVERYONE but SUPER_ADMIN ---
 await assertSucceeds(getDoc(doc(alice, 'pools', 'nfl1', 'entries', ALICE)));
 await assertFails(getDoc(doc(alice, 'pools', 'nfl1', 'entries', BOB)));
-await assertSucceeds(getDoc(doc(owner, 'pools', 'nfl1', 'entries', BOB)));
-await assertSucceeds(getDoc(doc(manager, 'pools', 'nfl1', 'entries', BOB)));
+// The commissioner-blind pair. If either of these two starts SUCCEEDING, the
+// owner/manager clauses have been re-added to the entries read rule and every
+// pool's commissioner can read every member's picks before kickoff again.
+await assertFails(getDoc(doc(owner, 'pools', 'nfl1', 'entries', BOB)));
+await assertFails(getDoc(doc(manager, 'pools', 'nfl1', 'entries', BOB)));
+// ...and the owner still reads their OWN entry, which is what keeps a
+// commissioner who plays from losing their own picks.
+await assertSucceeds(getDoc(doc(owner, 'pools', 'nfl1', 'entries', OWNER)));
+await assertSucceeds(getDoc(doc(superadmin, 'pools', 'nfl1', 'entries', BOB)));
 await assertFails(getDoc(doc(outsider, 'pools', 'nfl1', 'entries', BOB)));
 
 // --- Standings projection: participants yes, outsiders/guests no, writes never ---

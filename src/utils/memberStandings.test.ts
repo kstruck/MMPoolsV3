@@ -221,3 +221,84 @@ describe('buildMemberStandings', () => {
         expect(rows[0].ownerUid).toBe('johnny');
     });
 });
+
+/**
+ * PLAN-COMMISSIONER-BLIND-PICKS T4 — what the row carries so the standings cell
+ * can tell "picked, you may not see it" from "has not picked" from "unknowable".
+ */
+describe('buildMemberStandings — pickedWeeks marker and the reveal graft', () => {
+    it('copies pickedWeeks onto the row', () => {
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('ron', 'Ron Johnson', { pickedWeeks: [1, 2] })],
+            standingsRows: [],
+            ownEntry: null,
+        });
+        expect(rows[0].pickedWeeks).toEqual([1, 2]);
+    });
+
+    /**
+     * ⚠️ ABSENT MUST STAY ABSENT. A record written before the marker existed
+     * cannot answer the question, and the cell renders "—" for that. Coercing it
+     * to `[]` here would make the table say "No selection" about a member whose
+     * pick is simply not knowable — the exact lie #413 removed from that cell.
+     */
+    it('leaves an absent marker absent rather than defaulting it to []', () => {
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('ron', 'Ron Johnson')],   // legacy record, no field
+            standingsRows: [],
+            ownEntry: null,
+        });
+        expect('pickedWeeks' in rows[0]).toBe(true);
+        expect(rows[0].pickedWeeks).toBeUndefined();
+    });
+
+    it('an empty marker is preserved as [] — "has picked no week"', () => {
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('ron', 'Ron Johnson', { pickedWeeks: [] })],
+            standingsRows: [],
+            ownEntry: null,
+        });
+        expect(rows[0].pickedWeeks).toEqual([]);
+    });
+
+    it('grafts server-revealed picks onto another member\'s row', () => {
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('ron', 'Ron Johnson', { pickedWeeks: [4] })],
+            standingsRows: [scored('ron', 'Ron Johnson')],
+            ownEntry: null,
+            reveal: { week: 4, picks: { ron: { 4: 'KC' } }, confidence: {}, tiebreakers: { ron: 41 } },
+        });
+        expect(rows[0].picks).toEqual({ 4: 'KC' });
+        expect(rows[0].weeklyTiebreakers).toEqual({ 4: 41 });
+    });
+
+    it('grafts NOTHING when the server revealed nothing — the boundary is not widened here', () => {
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('ron', 'Ron Johnson', { pickedWeeks: [4] })],
+            standingsRows: [scored('ron', 'Ron Johnson')],
+            ownEntry: null,
+            reveal: { week: 4, picks: {}, confidence: {}, tiebreakers: {} },
+        });
+        expect(rows[0].picks).toBeUndefined();
+    });
+
+    it('never overwrites the viewer\'s OWN grafted picks with the reveal', () => {
+        // The commissioner who plays: their own entry is the source of their own
+        // picks, and it holds the whole sheet — including games the reveal has
+        // not opened. This is the regression PLAN §7 risk 1 names.
+        const own = { id: 'johnny', ownerUid: 'johnny', userName: 'Johnny Football', picks: { 4: 'SF', 5: 'DAL' } };
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('johnny', 'Johnny Football', { pickedWeeks: [4, 5] })],
+            standingsRows: [],
+            ownEntry: own,
+            reveal: { week: 4, picks: { johnny: { 4: 'KC' } }, confidence: {}, tiebreakers: {} },
+        });
+        expect(rows[0].picks).toEqual({ 4: 'SF', 5: 'DAL' });
+    });
+});

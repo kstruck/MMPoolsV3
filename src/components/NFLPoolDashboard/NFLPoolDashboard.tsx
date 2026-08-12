@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router';
 import { BillingGate } from '../billing';
 import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame } from 'lucide-react';
 import { dbService } from '../../services/dbService';
+import type { PoolPicksReveal } from '../../services/dbService';
+import { logger } from '../../utils/logger';
 import type { User, Pool, NFLGame, WeeklyRecap } from '../../types';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { formatSharpScore, recapHasHighlights } from '../../utils/recapHighlight';
@@ -125,40 +127,70 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     return () => unsub();
   }, [castPool.season]);
 
-  // 2. Entry data, split by role (ADR 0005 Phase 2). Rules now restrict non-owner
-  // participant reads of NFL entries until the pool is FINAL, so:
-  // - manager/owner: raw entries collection (management reads stay allowed)
-  // - member: the reveal-safe standings projection + their OWN entry doc (merged in,
-  //   so their current-week picks still render). Standings are empty until the first
-  //   scored week — members see only their own row before then.
+  // 2. Entry data — ONE path for every viewer (PLAN-COMMISSIONER-BLIND-PICKS T4).
+  //
+  // The manager/owner branch used to subscribe to the raw `entries` collection,
+  // which is how a commissioner saw everyone's picks before kickoff. Rules no
+  // longer serve it to them (T3), so both roles now read the same three sources:
+  // the reveal-safe standings projection, the Member Records, and their OWN entry
+  // document.
+  //
+  // ⚠️ `subscribeToMyNFLEntry` is now load-bearing for the commissioner, not just
+  // the member. A commissioner is usually also a player, and their own entry is
+  // what the three pick-entry forms render and edit — dropping the raw read
+  // without this would make their own saved picks vanish while `getPoolPicks`
+  // correctly refused to hand them back before the boundary.
   const [standingsRows, setStandingsRows] = useState<any[]>([]);
   const [ownEntry, setOwnEntry] = useState<any | null>(null);
+  const [reveal, setReveal] = useState<PoolPicksReveal | null>(null);
 
   useEffect(() => {
-    if (isManager) {
-      const unsub = dbService.subscribeToNFLEntries(pool.id, (data) => {
-        setEntries(data);
-      });
-      return () => unsub();
-    }
     const unsubStandings = dbService.subscribeToNFLStandings(pool.id, setStandingsRows);
     const unsubOwn = user
       ? dbService.subscribeToMyNFLEntry(pool.id, user.id, setOwnEntry)
       : undefined;
     return () => { unsubStandings(); unsubOwn?.(); };
-  }, [pool.id, isManager, user?.id]);
+  }, [pool.id, user?.id]);
+
+  // 2a. The commissioner's pick window. `getPoolPicks` is a callable, not a
+  // subscription — a reveal boundary passing is a CLOCK event with no Firestore
+  // write behind it, so nothing would push. Refetched when the week changes, when
+  // a Member Record moves (every submit writes one), and on a slow poll so a
+  // kickoff opens the window without a page reload.
+  useEffect(() => {
+    if (!isManager) { setReveal(null); return; }
+    let cancelled = false;
+    const load = () => {
+      dbService.getPoolPicks(pool.id, selectedWeek)
+        .then(r => { if (!cancelled) setReveal(r); })
+        // A refusal is not a crash: the standings simply keep rendering
+        // Hidden / No selection, which is the correct pre-boundary answer.
+        .catch(err => { logger.warn('[NFLPoolDashboard] getPoolPicks failed', err); });
+    };
+    load();
+    const id = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [isManager, pool.id, selectedWeek, members]);
+
+  // ⚠️ ONLY EVER USE THE REVEAL THAT MATCHES THE WEEK ON SCREEN. `reveal` holds
+  // the previous week's answer for the moment between changing weeks and the
+  // callable returning, and that answer is wrong in a way that shows: the
+  // counts would drive "4 of 16 Picks Set" and the roster's picked/unpicked
+  // state for a week nobody is looking at. Dropping it for that moment renders
+  // the honest fallback instead. (Own diff read.)
+  const weekReveal = reveal?.week === selectedWeek ? reveal : null;
 
   // Roster from Member Records, stats from the scored projection, own picks from
-  // the own-entry doc. The projection alone is a snapshot of the last SCORED week,
-  // so a member who joined after it was written was invisible to everyone but the
-  // commissioner — see buildMemberStandings for the full reasoning.
+  // the own-entry doc, other members' picks only where the SERVER revealed them.
+  // The projection alone is a snapshot of the last SCORED week, so a member who
+  // joined after it was written was invisible to everyone but the commissioner —
+  // see buildMemberStandings for the full reasoning.
   useEffect(() => {
-    if (isManager) return;
-    setEntries(buildMemberStandings({ pool: castPool, members, standingsRows, ownEntry }));
+    setEntries(buildMemberStandings({ pool: castPool, members, standingsRows, ownEntry, reveal: weekReveal }));
   // Depends on `participantIds`, not the whole pool object: it is the only field
   // buildMemberStandings reads from the pool, and a snapshot re-instantiating the
   // doc should not re-run this. (qodo.)
-  }, [isManager, standingsRows, ownEntry, members, castPool.participantIds]);
+  }, [standingsRows, ownEntry, members, weekReveal, castPool.participantIds]);
 
   // 2b. Subscribe to Member Records (roster truth — everyone who joined, ADR 0003)
   useEffect(() => {
@@ -190,11 +222,14 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     return filtered;
   }, [games, selectedWeek, castPool, seasonType]);
 
-  // Retrieve user's personal entry
+  // Retrieve user's personal entry. The own-entry DOCUMENT wins: it is the only
+  // object that carries this viewer's full pick map, and after T4 the synthesized
+  // `entries` row for them is a scored projection with picks grafted on. The
+  // lookup stays as a fallback for the moment before the snapshot lands.
   const myEntry = useMemo(() => {
     if (!user) return null;
-    return entries.find(e => e.ownerUid === user.id) || null;
-  }, [entries, user]);
+    return ownEntry || entries.find(e => e.ownerUid === user.id) || null;
+  }, [ownEntry, entries, user]);
 
   // Check if the current selected week is locked (earliest game kicked off).
   // Server-corrected clock — device time can drift and lie about the deadline.
@@ -556,7 +591,6 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                           pool={pool}
                           games={weeklyGames}
                           week={selectedWeek}
-                          isWeekLocked={isWeekLocked}
                         />
                       </div>
                     </div>
@@ -572,7 +606,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   games={games}
                   week={selectedWeek}
                   viewerUid={user?.id}
-                  canSeeAllPicks={isManager}
+                  pickCounts={weekReveal?.counts}
                 />
               )}
 
@@ -671,6 +705,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   games={games}
                   week={selectedWeek}
                   user={user}
+                  pickCounts={weekReveal?.counts}
                   onSelectTab={(tab) => setActiveTab(tab)}
                 />
               )}
