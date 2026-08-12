@@ -30,6 +30,16 @@ interface SurvivorPickEntryProps {
   user: User;
   week: number;
   games: NFLGame[];
+  /**
+   * The WHOLE season's games, not this week's slate.
+   *
+   * ⚠️ `games` above is already filtered to the selected week, so computing team
+   * records from it yields 0-0 for every team all season long — a plausible
+   * value rather than the real record, which is worse than showing nothing.
+   * (codex on the pick-sheet overhaul PR.) `computeTeamRecords` folds only FINAL
+   * games and scopes to the pool's seasonType, so passing the season is safe.
+   */
+  seasonGames?: NFLGame[];
   entry: any; // SurvivorEntry or null
   isWeekLocked: boolean;
 }
@@ -38,6 +48,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
   pool,
   week,
   games,
+  seasonGames,
   entry,
   isWeekLocked
 }) => {
@@ -92,7 +103,10 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
   // WHILE picking rather than on another screen. Both are derived from data the
   // dashboard already holds or already subscribes to; neither adds a read path.
   const seasonType = poolSeasonType(pool);
-  const teamRecords = useMemo(() => computeTeamRecords(games, seasonType), [games, seasonType]);
+  const teamRecords = useMemo(
+    () => computeTeamRecords(seasonGames ?? games, seasonType),
+    [seasonGames, games, seasonType],
+  );
   const consensus = useSiteConsensus(pool, week);
 
   // Inclusive count — the "N/N used" badge, deliberately NOT the eligibility
