@@ -43,8 +43,13 @@ export interface NFLGame {
    * week 4. Also absent on every game imported before 2026-08-12; there is no
    * backfill, so it fills in on the next import of that week. Surfaces must omit
    * the field, never print a placeholder for it.
+   *
+   * ⚠️ Written as `null` rather than omitted when the feed has no listing. Game
+   * writes are `merge: true`, and merge KEEPS a field the new payload omits — so
+   * omission would leave a stale channel on a game that lost its national slot.
+   * `null` and absent are equivalent to every reader (all test truthiness).
    */
-  broadcast?: string;
+  broadcast?: string | null;
   spread?: {
     value: number; // Relative to home team. Negative means home is favored.
     locked: boolean;
