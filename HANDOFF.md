@@ -20,8 +20,12 @@
 > rebuild revokes that read out from under a client still making it: every
 > commissioner's standings tab blanks for the length of the build. The reverse
 > order is safe — the new client never makes the raw read at all.
-> `MORNING-2026-08-12.md` §1c–§1e carries the sequence, including a
-> `functions:list | Select-String getPoolPicks` check that must pass first.
+> `MORNING-2026-08-12.md` §1c–§1e carries the runnable sequence — do not deploy
+> from this summary. Two gates live there and both must pass before the rules
+> deploy: one that proves the `getPoolPicks` callable is actually in the deployed
+> fleet, and one that proves `firestore.rules` is clean in the working tree (the
+> rules deploy uploads the working tree, and §1c's preflight deliberately does
+> not cover that file).
 >
 > 🆕 **Kevin's Q4 ruling OVERRULED the plan, and it is now the product rule:**
 > **the live consensus is visible at all times and is never hidden.** The plan's
