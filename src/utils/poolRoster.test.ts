@@ -7,6 +7,7 @@ import {
   duesRates,
   memberOutstanding,
   unsubmittedRoster,
+  hasCompletePicks,
   type RosterInputs,
 } from './poolRoster';
 
@@ -777,8 +778,25 @@ describe('unsubmittedRoster — pickCounts (commissioner-blind picks)', () => {
     expect(unsubmittedRoster(roster, PICKEM)).toEqual([]);
   });
 
-  it('a week with no games leaves entry holders un-pending, same as before', () => {
+  /**
+   * ⚠️ The empty-slate answer, and the reason `hasCompletePicks` exists at all.
+   * `NFLManagerView` used to carry its own copy of this rule that said the
+   * opposite — every entry holder pending on a week with no games — so the same
+   * page offered "Remind all unpicked" for games that did not exist while the
+   * Bento readiness card beside it read 100%. codex r1 on the
+   * commissioner-blind-picks PR. One definition now; this is it.
+   */
+  it('a week with no games leaves entry holders COMPLETE, on both paths', () => {
     const roster = rosterOf(['a'], [{ id: 'a', ownerUid: 'a' }]);
-    expect(unsubmittedRoster(roster, { ...PICKEM, weeklyGameIds: [], pickCounts: { a: 0 } })).toEqual([]);
+    const empty = { ...PICKEM, weeklyGameIds: [] };
+    expect(unsubmittedRoster(roster, { ...empty, pickCounts: { a: 0 } })).toEqual([]);
+    expect(unsubmittedRoster(roster, empty)).toEqual([]);
+    expect(hasCompletePicks(roster[0], { ...empty, pickCounts: { a: 0 } })).toBe(true);
+  });
+
+  it('hasCompletePicks is the predicate unsubmittedRoster filters on', () => {
+    const roster = rosterOf(['a', 'b'], [{ id: 'a', ownerUid: 'a' }, { id: 'b', ownerUid: 'b' }]);
+    const opts = { ...PICKEM, pickCounts: { a: 2, b: 1 } };
+    expect(roster.filter((r) => !hasCompletePicks(r, opts))).toEqual(unsubmittedRoster(roster, opts));
   });
 });

@@ -256,6 +256,32 @@ describe('T2 — getPoolPicks, PER_GAME pick\'em', () => {
             .rejects.toThrow(/commissioner can read/i);
     }, 30000);
 
+    /**
+     * ⚠️ THE WIDENING TEST. `assertPoolOwnerOrSuperAdmin` — the obvious helper to
+     * reach for here — also admits `createdByUid` and a participant listed in
+     * `coManagers`. The removed firestore.rules clause admitted neither, so using
+     * it would make this callable a WIDER door to pick data than the raw read it
+     * replaces. codex r1 on this PR.
+     */
+    it('a co-manager is REFUSED — the callable must not be wider than the rule it replaced', async () => {
+        await db.collection('pools').doc(POOL).update({
+            coManagers: [BOB], createdByUid: 'someone-else-entirely',
+        });
+        await expect(wGetPicks({ data: { poolId: POOL, week: 1 }, auth: { uid: BOB, token: {} } as any } as never))
+            .rejects.toThrow(/commissioner can read/i);
+        // ...and the real owner is unaffected by a createdByUid that disagrees.
+        const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asOwner } as never);
+        expect(res.revealedGameIds).toEqual([LOCKED_GAME]);
+        await db.collection('pools').doc(POOL).update({ coManagers: [], createdByUid: OWNER });
+    }, 30000);
+
+    it('a distinct managerUid IS admitted — the rule named them', async () => {
+        await db.collection('pools').doc(POOL).update({ managerUid: BOB });
+        const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: { uid: BOB, token: {} } as any } as never);
+        expect(res.counts[ALICE]).toBe(2);
+        await db.collection('pools').doc(POOL).update({ managerUid: admin.firestore.FieldValue.delete() });
+    }, 30000);
+
     it('a week with no games reveals nothing and returns no picks', async () => {
         const res: any = await wGetPicks({ data: { poolId: POOL, week: 9 }, auth: asOwner } as never);
         expect(res.weekGameIds).toEqual([]);

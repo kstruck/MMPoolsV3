@@ -14,7 +14,7 @@ import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
-import { buildPoolRoster, memberOutstanding, duesRates } from '../../utils/poolRoster';
+import { buildPoolRoster, hasCompletePicks, memberOutstanding, duesRates } from '../../utils/poolRoster';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
 import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReuse';
 
@@ -236,12 +236,18 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       // holds another member's sheet, so counting it would report the whole
       // pool unpicked and light up every reminder before kickoff. The entry
       // reading stays as the pre-arrival fallback and for SUPER_ADMIN surfaces.
-      const picks = r.entry?.picks || {};
-      const picked = !!r.hasEntry && (pickCounts
-        ? (pickCounts[r.uid] ?? 0) >= (type === 'NFL_PICKEM' ? Math.max(weeklyGames.length, 1) : 1)
-        : (type === 'NFL_PICKEM'
-          ? (weeklyGames.length > 0 && weeklyGames.every(g => !!picks[g.id]))
-          : !!picks[week]));
+      // Completeness is `hasCompletePicks` and nothing else. This used to be an
+      // inline copy of the same rule, and the two drifted: the copy marked every
+      // entry holder pending on a week with NO games, while the shared version
+      // (which the Bento readiness card uses) called that complete — so the same
+      // page offered "Remind all unpicked" for games that did not exist.
+      // codex r1 on the commissioner-blind-picks PR.
+      const picked = hasCompletePicks(r, {
+        poolType: type,
+        week,
+        weeklyGameIds: weeklyGames.map(g => g.id),
+        pickCounts,
+      });
       const userName = r.userName || (r.uid === user?.id ? (user?.name || 'You') : 'Member');
       return { ...r, userName, picked };
     });

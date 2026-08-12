@@ -283,35 +283,55 @@ export function buildPoolRoster({ pool, members, entries }: RosterInputs): Roste
  * it survived mutation testing precisely because it can never change an answer.
  * The behaviour it looked like it protected is real and is pinned by a test.
  */
+export interface PickCompletenessOpts {
+  poolType?: string;
+  week: number;
+  weeklyGameIds: string[];
+  /**
+   * uid → games picked this week, from the `getPoolPicks` callable
+   * (PLAN-COMMISSIONER-BLIND-PICKS D1). WHERE THE COMPLETENESS FACT COMES FROM
+   * AS OF 2026-08-12: the commissioner no longer holds other members' entry
+   * documents — firestore.rules stopped serving them — so `r.entry.picks` is
+   * populated only for the viewer's own row and for games the server has
+   * REVEALED. Counting that subset would report everyone incomplete before
+   * kickoff and fire every reminder.
+   *
+   * The `picks` path stays as the fallback for callers that legitimately hold
+   * whole entries (SUPER_ADMIN surfaces, the sim harness, these tests) and for
+   * the moment before the callable's first response arrives.
+   */
+  pickCounts?: Record<string, number>;
+}
+
+/**
+ * Has this roster row submitted everything the week asks of them?
+ *
+ * ONE definition, because there were two and they disagreed: this function's
+ * caller `unsubmittedRoster` treated a pick'em week with no games as COMPLETE
+ * (nothing to pick), while `NFLManagerView`'s inline copy marked every entry
+ * holder pending on the same week and lit up "Remind all unpicked" with nothing
+ * to remind anyone about. codex r1 on the commissioner-blind-picks PR. The
+ * empty-slate answer here is "complete", and both surfaces now get it.
+ */
+export function hasCompletePicks(r: RosterRow, opts: PickCompletenessOpts): boolean {
+  const { poolType, week, weeklyGameIds, pickCounts } = opts;
+  if (!r.hasEntry) return false;
+  if (pickCounts) {
+    const need = poolType === 'NFL_PICKEM' ? weeklyGameIds.length : 1;
+    return (pickCounts[r.uid] ?? 0) >= need;
+  }
+  const picks = r.entry?.picks || {};
+  if (poolType === 'NFL_PICKEM') {
+    return weeklyGameIds.every((id) => !!picks[id]);
+  }
+  return !!picks[week];
+}
+
 export function unsubmittedRoster(
   roster: RosterRow[],
-  opts: { poolType?: string; week: number; weeklyGameIds: string[]; pickCounts?: Record<string, number> },
+  opts: PickCompletenessOpts,
 ): RosterRow[] {
-  const { poolType, week, weeklyGameIds, pickCounts } = opts;
-  return roster.filter((r) => {
-    if (!r.hasEntry) return true;
-    // WHERE THE COMPLETENESS FACT COMES FROM AS OF 2026-08-12
-    // (PLAN-COMMISSIONER-BLIND-PICKS T2/T4). The commissioner no longer holds
-    // other members' entry documents — firestore.rules stopped serving them —
-    // so `r.entry.picks` is now populated only for the viewer's own row and for
-    // games the server has REVEALED. Counting a revealed subset would report
-    // everyone incomplete before kickoff and break the reminders.
-    //
-    // `getPoolPicks` returns per-member COUNTS at any time precisely for this:
-    // it is the one reading that needs pre-lock precision and carries no pick
-    // content. The `picks` path below stays as the fallback for callers that
-    // legitimately hold whole entries (SUPER_ADMIN surfaces, the sim harness,
-    // and this function's own tests).
-    if (pickCounts) {
-      const need = poolType === 'NFL_PICKEM' ? weeklyGameIds.length : 1;
-      return (pickCounts[r.uid] ?? 0) < need;
-    }
-    const picks = r.entry?.picks || {};
-    if (poolType === 'NFL_PICKEM') {
-      return !weeklyGameIds.every((id) => !!picks[id]);
-    }
-    return !picks[week];
-  });
+  return roster.filter((r) => !hasCompletePicks(r, opts));
 }
 
 

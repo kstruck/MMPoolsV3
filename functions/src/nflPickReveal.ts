@@ -60,24 +60,27 @@ export interface PoolPicksResponse {
 }
 
 /**
- * Owner / manager / SUPER_ADMIN, matching the principals the entries read rule
- * used to name — widened by nothing.
+ * EXACTLY the principals the entries read rule used to name, and not one more:
+ * `ownerId`, `managerUid`, `isSuperAdmin()`.
  *
- * `assertPoolOwnerOrSuperAdmin` resolves a SINGLE owner
- * (`createdByUid || ownerId || managerUid`) and therefore rejects a distinct
- * `managerUid` when an owner is present, so the managerUid check is separate.
- * Same shape `updatePoolSettings` uses (poolOps.ts:412-418) and for the same
- * reason: preserving the rules' principal set, not widening it.
+ * ⚠️ Do NOT reach for `assertPoolOwnerOrSuperAdmin` here, tempting as it is.
+ * That helper also admits `createdByUid` and a participant listed in
+ * `coManagers` — neither of which the removed rule granted. Using it would make
+ * this callable a WIDER door to pick data than the one it replaces, which is the
+ * opposite of the point: a co-manager who could not read a single entry
+ * yesterday would gain per-member completion counts before lock and revealed
+ * picks after it. (codex r1 on this PR.)
+ *
+ * If co-managers should have this capability, that is a product decision that
+ * changes the rule and this function together, deliberately.
  */
 function assertPickReader(
-    pool: { ownerId?: string; managerUid?: string; createdByUid?: string; coManagers?: string[]; participantIds?: string[] },
+    pool: { ownerId?: string; managerUid?: string },
     uid: string,
     role?: string,
 ): { isSuperAdmin: boolean } {
     if (role === 'SUPER_ADMIN') return { isSuperAdmin: true };
-    const owner = pool.createdByUid || pool.ownerId || pool.managerUid;
-    const isCoManager = !!pool.participantIds?.includes(uid) && !!pool.coManagers?.includes(uid);
-    if (owner !== uid && pool.managerUid !== uid && !isCoManager) {
+    if (pool.ownerId !== uid && pool.managerUid !== uid) {
         throw new HttpsError('permission-denied', 'Only this pool\'s commissioner can read the pool\'s picks.');
     }
     return { isSuperAdmin: false };
