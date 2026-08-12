@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Lock, AlertCircle, AlertTriangle, Check, Save, CheckCircle2 } from 'lucide-react';
-import { Button } from '../ui';
+import { AlertCircle, AlertTriangle, CheckCircle2, Zap } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import { useToast } from '../ui/Toast';
@@ -10,9 +9,16 @@ import { formatTimeWithZone } from '../../utils/formatTime';
 import { poolSeasonType } from '../../utils/nflPending';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { loadDraft, saveDraft, clearDraft } from '../../utils/draftStore';
-import { pickHighlightClass, pickHighlightLabel } from '../../utils/pickHighlight';
+import { pickHighlightLabel } from '../../utils/pickHighlight';
 import { poolUsesSpreads } from '../../utils/poolUsesSpreads';
 import { gradePick } from '../../utils/pickemResult';
+import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
+import { GameMeta } from './pickSheet/GameMeta';
+import { TeamPickButton } from './pickSheet/TeamPickButton';
+import { StickySaveBar } from './pickSheet/StickySaveBar';
+import { useSiteConsensus } from './pickSheet/useSiteConsensus';
+import { QuickPicksDialog } from './pickSheet/QuickPicksDialog';
+import type { QuickPickPlan } from './pickSheet/quickPicks';
 import type { User, Pool, NFLGame } from '../../types';
 
 interface PickemDraft {
@@ -26,6 +32,16 @@ interface PickemPickEntryProps {
   user: User;
   week: number;
   games: NFLGame[];
+  /**
+   * The WHOLE season's games, not this week's slate.
+   *
+   * ⚠️ `games` above is already filtered to the selected week, so computing team
+   * records from it yields 0-0 for every team all season long — a plausible
+   * value rather than the real record, which is worse than showing nothing.
+   * (codex on the pick-sheet overhaul PR; the same trap Survivor and Margin
+   * document on their own copies of this prop.)
+   */
+  seasonGames?: NFLGame[];
   entry: any; // NFLPickemEntry or null
   isWeekLocked: boolean;
 }
@@ -34,6 +50,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   pool,
   week,
   games,
+  seasonGames,
   entry,
   isWeekLocked
 }) => {
@@ -44,6 +61,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [submittedAt, setSubmittedAt] = useState<number | null>(null);
+  const [quickPicksOpen, setQuickPicksOpen] = useState(false);
   const toast = useToast();
   const errorRef = useRef<HTMLDivElement>(null);
   // Only persist drafts after the user actually edits — otherwise entry hydration
@@ -121,6 +139,31 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     return serverNow() >= (game.startTime - bufferMs);
   };
 
+  // Records and the crowd split — the two things Kevin's testers asked to see
+  // WHILE picking rather than on another screen. Both derive from data the
+  // dashboard already holds or already subscribes to; neither adds a read path.
+  // Identical wiring to Survivor and Margin, deliberately.
+  const seasonType = poolSeasonType(pool);
+  // RECORDS AS OF THE SELECTED WEEK, not as of today.
+  //
+  // The dashboard lets a member scrub back to a completed week, and folding the
+  // whole season in would print each team's WEEK 10 record beside a WEEK 1
+  // matchup — the row would describe a game with information nobody had when it
+  // was played. A pick sheet's record is the one a team carried INTO the game.
+  // (codex holed the whole-season fold twice on the Survivor/Margin PR.)
+  const teamRecords = useMemo(
+    () => computeTeamRecords((seasonGames ?? games).filter(g => Number(g.week) < week), seasonType),
+    [seasonGames, games, seasonType, week],
+  );
+  const consensus = useSiteConsensus(pool, week);
+  // ⚠️ NO RECORD AT ALL until the season's slate has arrived. `formatTeamRecord`
+  // turns an absent entry into "0-0", which is the CORRECT answer for a team
+  // with no FINAL games — but not while the subscription is still in flight,
+  // where it is a plausible value standing in for one we do not have yet.
+  const recordsLoaded = (seasonGames ?? games).length > 0;
+  const recordFor = (abbr: string): string | undefined =>
+    recordsLoaded ? formatTeamRecord(teamRecords.get(abbr)) : undefined;
+
   // Check for duplicate confidence selections
   const duplicateConfidenceValues = useMemo(() => {
     if (!confidenceMode) return new Set<number>();
@@ -184,10 +227,11 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     return tiebreakerPrediction === (entry.weeklyTiebreakers?.[week] ?? 40);
   }, [entry, games, picks, confidence, confidenceMode, tiebreakerPrediction, week]);
 
-  // Green "saved" only when the WHOLE slate is in and untouched — a half-saved
-  // sheet must not claim to be complete, which is the same overclaiming trap
-  // the saved banner avoids by printing "(N of M)".
-  const sheetFullySaved = games.length > 0 && savedCount === games.length && matchesSaved;
+  // ⛔ `sheetFullySaved` (whole slate in AND untouched) is GONE. The save bar
+  // prints "(N of M)" from `savedCount` unconditionally, which carries the same
+  // no-overclaiming property in every state instead of only the complete one —
+  // a half-saved sheet now says "Picks Saved (8 of 16)" where the old boolean
+  // could only choose between "complete" and saying nothing.
   const hasUnsavedEdits = savedCount > 0 && !matchesSaved;
 
   const handlePickSelect = (gameId: string, teamAbbreviation: string) => {
@@ -210,6 +254,34 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
       ...prev,
       [gameId]: val
     }));
+  };
+
+  /**
+   * Apply a Quick Picks fill.
+   *
+   * ⚠️ IT DOES NOT SAVE. The fill lands in local state exactly as sixteen taps
+   * would, so the member reviews and adjusts before pressing Save — Kevin's
+   * instruction, and the reason this is not a one-press submit. The draft
+   * effect persists it like any other edit, so a closed tab does not lose it.
+   *
+   * The plan already excludes locked and already-picked games (`planQuickPicks`),
+   * so this merge cannot move a pick the server would refuse. Spreading `prev`
+   * FIRST and the plan second is still correct: on the empty-intersection case
+   * the order does not matter, and if the plan ever gained an overwrite mode the
+   * plan should win.
+   *
+   * In confidence mode the WEIGHTS are deliberately untouched. Confidence is an
+   * ordering the member owns — the whole point of the mode — and there is no
+   * mechanical rule that could assign it without inventing a preference.
+   * `canSubmit` still requires every weight, so the sheet says what is missing.
+   */
+  const handleQuickPicks = (plan: QuickPickPlan) => {
+    if (plan.pickCount === 0) return;
+    dirtyRef.current = true;
+    setPicks(prev => ({ ...prev, ...plan.picks }));
+    toast.info(
+      `Filled ${plan.pickCount} ${plan.pickCount === 1 ? 'game' : 'games'}. Adjust anything you like, then save.`,
+    );
   };
 
   const handleSubmit = async () => {
@@ -335,7 +407,10 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
         );
       })()}
 
-      {/* Progress — how much of the sheet is done */}
+      {/* Progress — how much of the sheet is done, and the one-press fill.
+          The tester complaint this answers was the NUMBER OF PRESSES: sixteen
+          taps plus a save. Quick Picks sits beside the progress bar because
+          that is where a member looks when the bar is not full. */}
       {games.length > 0 && !isWeekLocked && (
         <div className="flex items-center gap-3">
           <div className="flex-1 h-2 bg-line rounded-full overflow-hidden">
@@ -347,11 +422,32 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
           <span className="text-xs font-display font-bold uppercase tracking-[0.05em] text-muted num whitespace-nowrap">
             {pickedCount} of {games.length} picked
           </span>
+          {/* Hidden once the sheet is full — there is nothing left for it to
+              fill, and every strategy would render disabled. */}
+          {pickedCount < games.length && (
+            <button
+              type="button"
+              onClick={() => setQuickPicksOpen(true)}
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-card text-[color:var(--text)] font-display font-bold uppercase text-[11px] tracking-[0.08em] hover:border-gold-500/60 hover:shadow-card transition-all duration-150"
+            >
+              <Zap size={13} aria-hidden="true" /> Quick Picks
+            </button>
+          )}
         </div>
       )}
 
+      {quickPicksOpen && (
+        <QuickPicksDialog
+          games={games}
+          picks={picks}
+          eligible={g => !isGameLocked(g)}
+          onApply={handleQuickPicks}
+          onClose={() => setQuickPicksOpen(false)}
+        />
+      )}
+
       {/* Matchups list */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         {games.length === 0 ? (
           <div className="bg-card p-8 border border-line rounded-xl text-center">
             <p className="text-muted font-body font-bold num">No NFL matchups scheduled for {nflWeekLabel(poolSeasonType(pool), week)}.</p>
@@ -381,10 +477,14 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
             // a refunded pick wrong.
             const isGraded = result === 'W' || result === 'L';
 
+            const homeAbbrev = game.homeTeam.abbreviation;
+            const awayAbbrev = game.awayTeam.abbreviation;
+            const split = consensus[game.id];
+
             return (
               <div
                 key={game.id}
-                className={`bg-card border rounded-xl p-5 flex flex-col md:flex-row items-center justify-between gap-4 transition-all duration-150 relative overflow-hidden shadow-card ${
+                className={`bg-card border rounded-xl p-4 shadow-card space-y-2 transition-all duration-150 ${
                   isGraded
                     ? isCorrect
                       ? 'border-[#BEE7D0] bg-[#0F7B4A]/5'
@@ -392,99 +492,82 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                     : 'border-line'
                 }`}
               >
-                {/* Visual Lock overlay */}
-                {locked && game.status === 'SCHEDULED' && (
-                  <div className="absolute top-2 right-2 flex items-center gap-1 bg-page border border-line rounded-full px-2 py-0.5 text-[9px] text-muted font-display font-bold tracking-[0.08em] uppercase">
-                    <Lock size={9} /> Locked
-                  </div>
-                )}
+                {/* Day, kickoff, TV listing, the line, and the lock badge — the
+                    CBS row. The old hand-rolled lock pill and the ATS-only
+                    "Spread: -6.5" chip are both GONE: GameMeta renders the lock
+                    state, and it writes the line favourite-relative ("CIN -6.5")
+                    where the chip printed a bare home-relative number that no
+                    sheet reader expects. One definition across all three
+                    sheets. */}
+                <GameMeta game={game} locked={locked && game.status === 'SCHEDULED'} />
 
                 {/* Team Buttons */}
-                <div className="flex-grow flex items-center justify-center gap-6 w-full md:w-auto">
-                  {/* AWAY TEAM */}
-                  <button
-                    onClick={() => handlePickSelect(game.id, game.awayTeam.abbreviation)}
+                <div className="flex items-stretch gap-3">
+                  <TeamPickButton
+                    team={game.awayTeam}
+                    subtitle={awayAbbrev}
+                    record={recordFor(awayAbbrev)}
+                    consensusPct={split?.awayPct}
+                    selected={awayPicked}
+                    saved={awaySaved}
                     disabled={locked}
                     title={pickHighlightLabel(awayPicked, awaySaved) || undefined}
-                    aria-label={`${game.awayTeam.name}${pickHighlightLabel(awayPicked, awaySaved) ? ` — ${pickHighlightLabel(awayPicked, awaySaved)}` : ''}`}
-                    className={`flex-1 max-w-[200px] flex flex-col items-center p-3 rounded-lg border transition-all duration-150 text-center ${
-                      pickHighlightClass(awayPicked, awaySaved)
-                    } ${locked ? 'cursor-not-allowed opacity-90' : 'hover:-translate-y-1 hover:shadow-card-hover'}`}
-                  >
-                    {game.awayTeam.logoUrl && (
-                      <img src={game.awayTeam.logoUrl} className="w-10 h-10 object-contain mb-2" alt={`${game.awayTeam.name} logo`} />
-                    )}
-                    <span className="text-[color:var(--text)] font-display font-bold text-sm leading-tight truncate w-full">
-                      {game.awayTeam.name}
-                    </span>
-                    <span className="text-muted text-[10px] font-display font-bold tracking-[0.16em] mt-0.5">
-                      {game.awayTeam.abbreviation}
-                    </span>
-                  </button>
+                    onSelect={() => handlePickSelect(game.id, awayAbbrev)}
+                  />
 
-                  <div className="flex flex-col items-center justify-center">
+                  {/* Live score, or plain "AT". The slate is the picking surface,
+                      so this column stays narrow. */}
+                  <div className="flex flex-col items-center justify-center min-w-[52px] shrink-0">
                     {game.status === 'FINAL' ? (
-                      <div className="text-center">
-                        <span className="text-muted text-[10px] font-display font-bold uppercase tracking-[0.08em] block mb-1">Final</span>
-                        <span className="text-xl font-display font-bold text-[color:var(--text)] num">
+                      <>
+                        <span className="text-muted text-[9px] font-display font-bold uppercase tracking-[0.08em]">Final</span>
+                        <span className="text-sm font-display font-bold text-[color:var(--text)] num">
                           {game.scores?.away} - {game.scores?.home}
                         </span>
-                      </div>
+                      </>
                     ) : game.status === 'IN_PROGRESS' ? (
-                      <div className="text-center">
-                        <span className="relative flex h-2 w-2 mx-auto mb-1">
+                      <>
+                        <span className="relative flex h-1.5 w-1.5 mb-1">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brandred-500 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-brandred-600"></span>
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-brandred-600"></span>
                         </span>
                         <span className="text-sm font-display font-bold text-brandred-600 num">
                           {game.scores?.away} - {game.scores?.home}
                         </span>
-                        <span className="text-[10px] text-muted num block mt-0.5">{game.clock}</span>
-                      </div>
+                        <span className="text-[9px] text-muted num leading-none">{game.clock}</span>
+                      </>
                     ) : (
-                      <div className="text-faint text-xs font-display font-bold tracking-[0.16em]">VS</div>
-                    )}
-                    {castPool.settings?.pickMode === 'ATS' && game.spread && (
-                      <div className="text-center mt-2">
-                        <span className="bg-page border border-line text-muted text-[10px] px-2 py-1 rounded-full font-display font-bold uppercase tracking-[0.05em] num">
-                          Spread: {game.spread.value > 0 ? `+${game.spread.value}` : game.spread.value === 0 ? 'EVEN' : game.spread.value}
-                        </span>
-                      </div>
+                      <span className="text-faint text-[10px] font-display font-bold tracking-[0.16em]">AT</span>
                     )}
                   </div>
 
-                  {/* HOME TEAM */}
-                  <button
-                    onClick={() => handlePickSelect(game.id, game.homeTeam.abbreviation)}
+                  <TeamPickButton
+                    team={game.homeTeam}
+                    subtitle={homeAbbrev}
+                    record={recordFor(homeAbbrev)}
+                    consensusPct={split?.homePct}
+                    selected={homePicked}
+                    saved={homeSaved}
                     disabled={locked}
                     title={pickHighlightLabel(homePicked, homeSaved) || undefined}
-                    aria-label={`${game.homeTeam.name}${pickHighlightLabel(homePicked, homeSaved) ? ` — ${pickHighlightLabel(homePicked, homeSaved)}` : ''}`}
-                    className={`flex-1 max-w-[200px] flex flex-col items-center p-3 rounded-lg border transition-all duration-150 text-center ${
-                      pickHighlightClass(homePicked, homeSaved)
-                    } ${locked ? 'cursor-not-allowed opacity-90' : 'hover:-translate-y-1 hover:shadow-card-hover'}`}
-                  >
-                    {game.homeTeam.logoUrl && (
-                      <img src={game.homeTeam.logoUrl} className="w-10 h-10 object-contain mb-2" alt={`${game.homeTeam.name} logo`} />
-                    )}
-                    <span className="text-[color:var(--text)] font-display font-bold text-sm leading-tight truncate w-full">
-                      {game.homeTeam.name}
-                    </span>
-                    <span className="text-muted text-[10px] font-display font-bold tracking-[0.16em] mt-0.5">
-                      {game.homeTeam.abbreviation}
-                    </span>
-                  </button>
+                    onSelect={() => handlePickSelect(game.id, homeAbbrev)}
+                  />
                 </div>
 
-                {/* Confidence Assignments */}
+                {/* Confidence Assignments — BELOW the matchup now rather than
+                    beside it. The two team buttons are the row's job; a third
+                    column squeezed all three on a phone. Unchanged otherwise:
+                    the weight ordering is load-bearing for scoring and this
+                    change moves the control, not the rule. */}
                 {confidenceMode && (
-                  <div className="flex flex-col items-center justify-center bg-page p-3 border border-line rounded-lg min-w-[120px] w-full md:w-auto">
-                    <span className="text-[9px] text-muted font-display font-bold uppercase tracking-[0.08em] block mb-1">Confidence Weight</span>
+                  <div className="flex items-center gap-2 bg-page px-3 py-2 border border-line rounded-lg">
+                    <span className="text-[9px] text-muted font-display font-bold uppercase tracking-[0.08em] shrink-0">Confidence Weight</span>
                     <select
                       value={confidence[game.id] || ''}
                       disabled={locked}
                       onChange={e => handleConfidenceSelect(game.id, parseInt(e.target.value))}
                       aria-label={`Confidence weight for ${game.awayTeam.abbreviation} at ${game.homeTeam.abbreviation}`}
-                      className={`bg-page text-[color:var(--text)] border border-line rounded-xl px-2 py-2.5 focus:outline-none text-xs font-body font-bold num w-full text-center ${
+                      className={`bg-page text-[color:var(--text)] border border-line rounded-lg px-2 py-2 focus:outline-none text-xs font-body font-bold num flex-1 min-w-0 text-center ${
                         duplicateConfidenceValues.has(confidence[game.id]) ? 'border-gold-500 focus:ring-gold-500' : ''
                       } ${locked ? 'opacity-85 cursor-not-allowed' : ''}`}
                     >
@@ -495,7 +578,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                     </select>
 
                     {duplicateConfidenceValues.has(confidence[game.id]) && (
-                      <span className="text-[9px] text-gold-600 dark:text-gold-400 font-body font-bold flex items-center gap-1 mt-1">
+                      <span className="shrink-0 text-[9px] text-gold-600 dark:text-gold-400 font-body font-bold flex items-center gap-1">
                         <AlertTriangle size={9} aria-hidden="true" /> Duplicate value!
                       </span>
                     )}
@@ -507,46 +590,58 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
         )}
       </div>
 
-      {/* Tiebreaker Details & Submission CTA */}
-      {games.length > 0 && !isWeekLocked && (
-        <div className="bg-card border border-line rounded-xl p-6 shadow-card space-y-6">
-          {showTiebreaker && (
-            <div className="max-w-md mx-auto space-y-3">
-              <label className="block text-sm font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] text-center">
-                Tiebreaker: Predicted Monday Night Football Combined Score
-              </label>
-              <input
-                type="number"
-                value={tiebreakerPrediction}
-                onChange={e => { dirtyRef.current = true; setTiebreakerPrediction(Math.max(1, parseInt(e.target.value) || 0)); }}
-                className="w-full bg-page border border-line rounded-xl px-4 py-3 text-[color:var(--text)] text-center num font-bold focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500"
-              />
-              <p className="text-[10px] font-body text-muted leading-normal text-center">
-                Close counts: Predict the combined final score of the MNF games. If there are 2 MNF games, we count the combined score of <strong>both</strong> games.
-              </p>
-            </div>
-          )}
-
-          <div className="flex justify-center">
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={handleSubmit}
-              disabled={!canSubmit || isSubmitting}
-            >
-              {isSubmitting ? 'Saving picks...' : sheetFullySaved ? (
-                // Fact, not action — the sheet on screen IS what the server holds.
-                <>
-                  <Check size={18} /> Picks Saved ({savedCount} of {games.length})
-                </>
-              ) : (
-                <>
-                  <Save size={18} /> {hasUnsavedEdits ? 'Save Edited Picks' : 'Submit Weekly Picks'}
-                </>
-              )}
-            </Button>
+      {/* Tiebreaker. The submit button that used to share this card is gone —
+          it is the sticky bar below now, because on a sixteen-game slate the
+          old one sat past every matchup and saving meant scrolling the whole
+          sheet (the tester complaint #415 fixed on the other two sheets).
+          The card renders only when there is a tiebreaker to ask for; an empty
+          bordered box on a week with no Monday game was the alternative. */}
+      {games.length > 0 && !isWeekLocked && showTiebreaker && (
+        <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+          <div className="max-w-md mx-auto space-y-3">
+            <label className="block text-sm font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] text-center">
+              Tiebreaker: Predicted Monday Night Football Combined Score
+            </label>
+            <input
+              type="number"
+              value={tiebreakerPrediction}
+              onChange={e => { dirtyRef.current = true; setTiebreakerPrediction(Math.max(1, parseInt(e.target.value) || 0)); }}
+              className="w-full bg-page border border-line rounded-xl px-4 py-3 text-[color:var(--text)] text-center num font-bold focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500"
+            />
+            <p className="text-[10px] font-body text-muted leading-normal text-center">
+              Close counts: Predict the combined final score of the MNF games. If there are 2 MNF games, we count the combined score of <strong>both</strong> games.
+            </p>
           </div>
         </div>
+      )}
+
+      {/* The save bar, pinned — the third sheet to get it. Its labels are the
+          three the submit button already carried, kept verbatim: "Picks Saved
+          (N of M)" is a FACT about the server's copy, "Save Edited Picks" means
+          the sheet diverges from it, and "Submit Weekly Picks" is a first save.
+          `blockedReason` is what the old disabled button never said — a member
+          staring at a greyed control had no way to learn WHY. */}
+      {games.length > 0 && (
+        <StickySaveBar
+          // `pickedCount > 0 &&` matters: with no entry yet `matchesSaved` is
+          // false, so a completely untouched sheet would otherwise announce
+          // "Unsaved changes" before the member had touched anything.
+          dirty={pickedCount > 0 && !matchesSaved}
+          submitting={isSubmitting}
+          summary={`${pickedCount} of ${games.length} picked`}
+          saveLabel={hasUnsavedEdits ? 'Save Edited Picks' : 'Submit Weekly Picks'}
+          // Counts the SERVER's copy, not the sheet's — a partially saved sheet
+          // says "(8 of 16)" rather than claiming to be complete or to be empty.
+          savedLabel={savedCount > 0 ? `Picks Saved (${savedCount} of ${games.length})` : 'No picks yet'}
+          blockedReason={
+            isWeekLocked ? 'Picks are locked for this week'
+              : canSubmit ? null
+                : duplicateConfidenceValues.size > 0 ? 'Two games share a confidence weight'
+                  : pickedCount < games.length ? `Pick all ${games.length} games to submit`
+                    : 'Set a confidence weight for every game'
+          }
+          onSave={handleSubmit}
+        />
       )}
     </div>
   );
