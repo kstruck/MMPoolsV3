@@ -114,3 +114,41 @@ describe('computeTeamRecords — week slate vs season slate', () => {
     expect(formatTeamRecord(r.get('BUF'))).toBe('0-0');
   });
 });
+
+/**
+ * ⚠️ RECORDS ARE "AS OF" THE WEEK ON SCREEN.
+ *
+ * The dashboard lets a member scrub back to a completed week. Folding the whole
+ * season in prints each team's week-10 record beside a week-1 matchup — a row
+ * describing a game with information nobody had when it was played. codex round
+ * 4 on the pick-sheet overhaul PR. The sheets filter to `week < selectedWeek`
+ * before calling this; the arithmetic that makes that filter matter is here.
+ */
+describe('computeTeamRecords — "as of" a week, via the caller filter', () => {
+  const FINAL = (week: number, home: string, away: string, hs: number, as: number) => ({
+    id: `w${week}-${home}`, week, seasonType: 1, status: 'FINAL',
+    homeTeam: { abbreviation: home }, awayTeam: { abbreviation: away },
+    scores: { home: hs, away: as },
+  }) as any;
+
+  const season = [
+    FINAL(1, 'KC', 'BUF', 24, 17),
+    FINAL(2, 'KC', 'DEN', 31, 10),
+    FINAL(3, 'BUF', 'KC', 20, 14),
+  ];
+  const asOf = (week: number) => computeTeamRecords(season.filter(g => g.week < week), 1);
+
+  it('week 1 shows nobody with a record yet', () => {
+    expect(formatTeamRecord(asOf(1).get('KC'))).toBe('0-0');
+  });
+
+  it('week 2 counts only week 1', () => {
+    expect(formatTeamRecord(asOf(2).get('KC'))).toBe('1-0');
+    expect(formatTeamRecord(asOf(2).get('BUF'))).toBe('0-1');
+  });
+
+  it('week 4 counts weeks 1-3 — and differs from week 2, which is the point', () => {
+    expect(formatTeamRecord(asOf(4).get('KC'))).toBe('2-1');
+    expect(formatTeamRecord(asOf(2).get('KC'))).not.toBe(formatTeamRecord(asOf(4).get('KC')));
+  });
+});

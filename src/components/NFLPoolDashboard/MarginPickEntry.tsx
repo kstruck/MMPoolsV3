@@ -84,9 +84,19 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
   // (Kevin's testers, 2026-08-11). Both derive from data already in hand or
   // already subscribed to; neither adds a read path. Twin of SurvivorPickEntry.
   const seasonType = poolSeasonType(pool);
+  // RECORDS AS OF THE SELECTED WEEK, not as of today.
+  //
+  // The dashboard lets a member scrub back to a completed week, and folding the
+  // whole season in would print each team's WEEK 10 record beside a WEEK 1
+  // matchup — the row would describe a game with information nobody had when it
+  // was played. A pick sheet's record is the one a team carried INTO the game.
+  // (codex round 4 on this PR.)
+  //
+  // Strictly earlier weeks: a Thursday result does not count toward the record
+  // shown on that same week's Sunday rows, which is how a sheet reads.
   const teamRecords = useMemo(
-    () => computeTeamRecords(seasonGames ?? games, seasonType),
-    [seasonGames, games, seasonType],
+    () => computeTeamRecords((seasonGames ?? games).filter(g => Number(g.week) < week), seasonType),
+    [seasonGames, games, seasonType, week],
   );
   const consensus = useSiteConsensus(pool, week);
   // ⚠️ NO RECORD AT ALL until the season's slate has arrived. `formatTeamRecord`
