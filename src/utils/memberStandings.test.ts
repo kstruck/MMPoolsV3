@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { buildMemberStandings } from './memberStandings';
 
 /**
@@ -12,7 +13,12 @@ import { buildMemberStandings } from './memberStandings';
 // Membership evidence. `isProvableMember` accepts a record whose uid is in the
 // pool's participantIds — the same predicate the commissioner roster applies, so
 // a forged Member Record cannot put a stranger on the board.
-const POOL = { participantIds: ['kevin', 'ron', 'johnny', 'aaron', 'gone', 'legacy', 'removed'] };
+const POOL = {
+    participantIds: [
+        'kevin', 'ron', 'johnny', 'aaron',
+        'gone', 'legacy', 'removed',
+    ],
+};
 
 // A member who has submitted: the one-way latch set at submit time.
 const member = (uid: string, userName: string, extra: Record<string, unknown> = {}) =>
@@ -73,6 +79,18 @@ describe('buildMemberStandings', () => {
         expect(rows[0].unscored).toBeUndefined();
     });
 
+    it('keeps a scored participant whose Member Record has not been backfilled', () => {
+        // qodo: a PARTIALLY backfilled pool — Kevin has a record, the legacy player
+        // does not, and both are still listed as participants. Neither may vanish.
+        const rows = buildMemberStandings({
+            pool: { participantIds: ['kevin', 'legacy'] },
+            members: [member('kevin', 'Kevin Struck')],
+            standingsRows: [scored('kevin', 'Kevin Struck'), scored('legacy', 'Legacy Player')],
+            ownEntry: null,
+        });
+        expect(rows.map(r => r.ownerUid).sort()).toEqual(['kevin', 'legacy']);
+    });
+
     it('falls back to the projection ONLY when there is no roster at all', () => {
         // Legacy pool, pre-roster-backfill: scored rows exist, Member Records do not.
         // Dropping the fallback here would empty the table.
@@ -89,7 +107,7 @@ describe('buildMemberStandings', () => {
         // but not on the roster" IS the removed case. Re-adding it would put a
         // removed player back on the board until the next scored week.
         const withRoster = buildMemberStandings({
-            pool: POOL,
+            pool: { participantIds: ['kevin'] }, // 'removed' is no longer a participant
             members: [member('kevin', 'Kevin Struck')],
             standingsRows: [scored('kevin', 'Kevin Struck'), scored('removed', 'Removed Player')],
             ownEntry: null,
@@ -104,10 +122,11 @@ describe('buildMemberStandings', () => {
             standingsRows: [],
             ownEntry: null,
         })).toEqual([]);
-        // A roster that exists but lists nobody present yields an empty table — the
-        // fallback must not resurrect the projection's copy of them.
+        // A REMOVED player: the same transaction that deletes the Member Record also
+        // drops the uid from participantIds, so the projection's stale copy of them
+        // must not resurrect them.
         expect(buildMemberStandings({
-            pool: POOL,
+            pool: { participantIds: ['kevin'] },
             members: [member('gone', 'Removed', { present: false })],
             standingsRows: [scored('gone', 'Removed')],
             ownEntry: null,
@@ -126,22 +145,35 @@ describe('buildMemberStandings', () => {
         });
         expect(rows.map(r => r.ownerUid)).toEqual(['kevin']);
 
-        // And an ENTIRELY unproven roster must not suppress the projection fallback,
-        // which would empty the table for a legacy pool.
+        // A forged record cannot suppress a legitimate scored participant either:
+        // the projection row is kept on its own evidence, participantIds.
         const onlyForged = buildMemberStandings({
-            pool: { participantIds: [] },
+            pool: { participantIds: ['legacy'] },
             members: [member('forged', 'Forged Member')],
             standingsRows: [scored('legacy', 'Legacy Player')],
             ownEntry: null,
         });
         expect(onlyForged.map(r => r.ownerUid)).toEqual(['legacy']);
+
+        // And a pool doc with NO participantIds at all (legacy shape, or a snapshot
+        // that has not arrived) still shows the projection rather than an empty table.
+        const noIds = buildMemberStandings({
+            pool: {},
+            members: [],
+            standingsRows: [scored('legacy', 'Legacy Player')],
+            ownEntry: null,
+        });
+        expect(noIds.map(r => r.ownerUid)).toEqual(['legacy']);
     });
 
     // codex: a raw entry carries initialized ALIVE / 0 / 0 values. Before the first
     // scoring pass those are not results, and ranking them as such would put the
     // viewer above scored players on a negative total.
     it("marks the viewer's own row unscored when no scored row exists, but keeps their picks", () => {
-        const own = { id: 'ron', ownerUid: 'ron', userName: 'Ron Johnson', status: 'ALIVE', strikesUsed: 0, picks: { 2: 'PIT' } };
+        const own = {
+            id: 'ron', ownerUid: 'ron', userName: 'Ron Johnson',
+            status: 'ALIVE', strikesUsed: 0, picks: { 2: 'PIT' },
+        };
         const rows = buildMemberStandings({
             pool: POOL,
             members: [member('ron', 'Ron Johnson')],

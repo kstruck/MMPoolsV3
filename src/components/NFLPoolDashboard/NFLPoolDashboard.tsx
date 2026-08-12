@@ -155,7 +155,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   useEffect(() => {
     if (isManager) return;
     setEntries(buildMemberStandings({ pool: castPool, members, standingsRows, ownEntry }));
-  }, [isManager, standingsRows, ownEntry, members, castPool]);
+  // Depends on `participantIds`, not the whole pool object: it is the only field
+  // buildMemberStandings reads from the pool, and a snapshot re-instantiating the
+  // doc should not re-run this. (qodo.)
+  }, [isManager, standingsRows, ownEntry, members, castPool.participantIds]);
 
   // 2b. Subscribe to Member Records (roster truth — everyone who joined, ADR 0003)
   useEffect(() => {

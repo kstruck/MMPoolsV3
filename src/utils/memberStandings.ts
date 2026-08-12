@@ -114,19 +114,30 @@ export function buildMemberStandings({ pool, members, standingsRows, ownEntry }:
         });
     }
 
-    // The projection is a fallback ONLY for a pool with no roster at all.
+    // A scored player with no Member Record: keep them IF the pool still lists them
+    // as a participant.
     //
-    // A removal DELETES the Member Record — `planMembershipWrite` returns
-    // `{ op: 'delete' }` (functions/src/lib/memberRecord.ts:52), it does not keep a
-    // `present: false` tombstone. So for a pool that HAS Member Records, "in the
-    // projection but not in the roster" and "removed since the last scoring pass"
-    // are the same shape, and re-adding those rows would put a removed player back
-    // on the board until the next scored week. With a populated roster the roster
-    // is authoritative; the fallback exists for a legacy pool that predates the
-    // backfill (or a snapshot that has not arrived yet), where dropping it would
-    // empty the table. (codex, twice.)
-    if (!proven.some(m => m?.uid)) {
-        for (const row of standingsRows || []) push(uidOf(row), row);
+    // Two reviewers pulled this in opposite directions and `participantIds` is what
+    // settles it. codex: a removal DELETES the Member Record
+    // (`planMembershipWrite` → `{ op: 'delete' }`), so on a rostered pool "in the
+    // projection, not on the roster" looks exactly like "removed", and re-adding
+    // those rows puts a removed player back on the board. qodo: gating the whole
+    // fallback on "the roster is empty" hides scored participants in a PARTIALLY
+    // backfilled pool, where some records exist and some do not.
+    //
+    // Both are right about their case, and neither needs guessing, because the same
+    // transaction that deletes the record also does
+    // `participantIds: arrayRemove(uid)` (functions/src/lib/memberRecord.ts:173-176).
+    // So membership survives a missing Member Record but does NOT survive a removal.
+    // Per row, not all-or-nothing.
+    const participantIds: unknown = pool?.participantIds;
+    const stillAParticipant = (uid: string) =>
+        Array.isArray(participantIds) && participantIds.includes(uid);
+    for (const row of standingsRows || []) {
+        const uid = uidOf(row);
+        // No participantIds at all (a legacy pool doc, or a snapshot that has not
+        // arrived): fall back to showing the projection rather than an empty table.
+        if (uid && (stillAParticipant(uid) || !Array.isArray(participantIds))) push(uid, row);
     }
 
     return rows;
