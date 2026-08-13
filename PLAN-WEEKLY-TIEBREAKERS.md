@@ -150,6 +150,27 @@ weeklyTiebreaker: z.enum(['MNF_COMBINED', 'MNF_LAST_GAME', 'NONE']).optional(),
 
 `.optional()` is load-bearing and is the whole no-migration story — see §4.
 
+⚠️ **The Zod schema is not the only type contract, and forgetting the other two
+is a typecheck failure or, worse, an `as any`.** `NFLPickemPool.settings` is
+declared **twice**, by hand, in two module-incompatible TS roots:
+
+| File | Line | Note |
+|---|---|---|
+| `src/types/nflPoolTypes.ts` | 83 | the client's copy |
+| `functions/src/nflPoolTypes.ts` | 86 | the scorer's copy |
+
+Both currently carry `payoutMode` and `pickMode` and **neither carries
+`weeklyTiebreaker`**. Add `weeklyTiebreaker?: WeeklyTiebreaker;` to **both**, in
+the same change. (codex P2 on this plan — the first draft's touch list had only
+the Zod schema, which would have compiled nowhere.)
+
+**Do NOT "fix" the duplication as part of this ticket.** Collapsing the two
+interfaces into `shared/` is a repo-wide refactor of a hand-maintained contract
+that predates `shared/` and is touched by every NFL surface — a strictly larger
+and riskier change than the feature, three weeks from kickoff. The tiebreaker
+type itself does go in `shared/` (§4); the surrounding `NFLPickemPool` interface
+stays where it is.
+
 Nothing else in the schema chain needs a change: `settings` is already a single
 editable group in the matrix (`shared/editability.ts` `KEY_GROUPS.settings =
 'settings'`), so a new nested key inherits its lifecycle rules with no matrix

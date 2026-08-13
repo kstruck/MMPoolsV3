@@ -1,18 +1,20 @@
 # PLAN-WEEKLY-TIEBREAKERS — REVIEW LOG
 
 Adversarial review of the plan itself, before any code exists. Reviewer:
-`codex exec review --uncommitted` (OpenAI), per CLAUDE.md §2c — `--uncommitted`
-rather than `--base origin/main` because the plan is an uncommitted working-tree
-document. Findings are quoted in substance and answered individually; a rejection
-would be recorded with its reasoning, same as an acceptance.
+`codex exec review` (OpenAI), per CLAUDE.md §2c. Rounds 1–3 ran `--uncommitted`
+while the plan was a working-tree document; rounds 4–5 ran `--base origin/main`
+once it was committed to a branch — and that difference mattered (see round 3).
+Findings are quoted in substance and answered individually; a rejection is
+recorded with its reasoning, same as an acceptance.
 
-**Rounds: 3. Findings: 2 — both valid, both absorbed. Round 3 clean.**
+**Rounds: 5. Findings: 3 — all valid, all absorbed. Round 5 clean.**
 
-Both findings hit the same clause — §5, the mid-season edit gate — and the
-second one is a hole the first one's fix opened. That is the pattern CLAUDE.md
-§2c documents ("round 1 finds defects in the code, rounds 2+ find defects in the
+Two of the three hit the same clause — §5, the mid-season edit gate — and the
+second is a hole the first one's fix opened. That is the pattern CLAUDE.md §2c
+documents ("round 1 finds defects in the code, rounds 2+ find defects in the
 fixes"), reproduced exactly, on a plan that had already copied a gate this repo
-believed was correct.
+believed was correct. The third (round 4) is a different class: not a wrong
+design, an incomplete touch list.
 
 ---
 
@@ -80,12 +82,56 @@ or were never asked the new one").
 
 ---
 
-## Round 3 — clean
+## Round 3 — clean (against the working tree)
 
 > The only untracked change is a planning document marked as awaiting sign-off;
 > it makes no executable code or configuration changes.
 
 No findings.
+
+⚠️ **This round was run `--uncommitted` and it is the weaker of the two forms.**
+Round 4 below, run `--base origin/main` once the plan was committed, found a P2
+that round 3 did not — the branch diff gives the reviewer the repo to check the
+plan's claims *against*, where the working-tree diff gives it the document
+alone. Both forms were run deliberately; the branch-diff one is the one that
+earned its keep.
+
+---
+
+## Round 4 — `--base origin/main`, on the committed branch
+
+### R4.1 — the touch list omits two hand-duplicated type contracts (P2) — **ACCEPTED**
+
+> When the wizard, manager UI, pick sheet, and scorer read
+> `settings.weeklyTiebreaker`, both existing `NFLPickemPool.settings` interfaces
+> (`src/types/nflPoolTypes.ts` and `functions/src/nflPoolTypes.ts`) lack that
+> property. The plan only adds the Zod create schema and its touch list omits
+> these types, so a typed implementation will fail both typechecks or require
+> unsafe casts.
+
+**Verdict: valid.** Verified — `src/types/nflPoolTypes.ts:83` and
+`functions/src/nflPoolTypes.ts:86` each declare `NFLPickemPool.settings` by
+hand, both carry `payoutMode` and `pickMode`, and neither carries
+`weeklyTiebreaker`. A plan whose touch list is short by two files is a plan that
+budgets wrong and invites an `as any` at implementation time — this repo already
+carries `castPool = pool as any` in the pick sheet, so that is not a theoretical
+failure mode.
+
+Severity is right at P2, not P1: it would surface as a compile error on the
+first implementation attempt, not as a live defect. But the point of writing the
+plan first is that the touch list is the estimate.
+
+**Absorbed** into §3 as a table of both files plus the instruction to add the
+field to both.
+
+**One half of codex's suggestion is REJECTED, with reasoning.** It offered "or
+replace them with a shared type". Collapsing the two hand-maintained
+`NFLPickemPool` interfaces into `shared/` is a repo-wide refactor of a contract
+that predates `shared/` and is read by every NFL surface — strictly larger and
+riskier than the feature it would be riding on, three weeks from kickoff. The
+**tiebreaker enum** does go in `shared/` (§4), because the scorer and the client
+must agree on it exactly; the surrounding interface stays duplicated. Recorded
+in §3 so the next reader does not re-open it.
 
 ---
 
@@ -94,13 +140,16 @@ No findings.
 CLAUDE.md §2c's stopping rule is **evidence, not the counter**: a clean codex
 round **and** qodo clean **and** my own read of the artifact agreeing.
 
-- **codex:** round 3 clean. ✅
+- **codex:** round 5 clean, on the committed branch —
+  *"The current changes only clarify the implementation plan and review log; they
+  introduce no executable behavior or actionable defect."* ✅
 - **own read:** agrees, with one reservation recorded in the plan rather than
   hidden — §2 is a scope question, not a specification, and the plan is
   deliberately not implementable until Kevin answers it. That is the intended
   state of a plan-gated artifact awaiting sign-off, not an open finding. ✅
-- **qodo:** ⚠️ **NOT RUN.** qodo reviews pull requests; this plan is an
-  uncommitted document with no PR. It will run on the PR that carries the plan
-  and again on the PR that implements it. Stated rather than skipped silently.
+- **qodo:** runs on the PR that carries these documents; its verdict is recorded
+  in that PR. It could not run earlier — qodo reviews pull requests, and rounds
+  1–3 predate the branch. It will run again on the PR that implements the plan,
+  which is the review that matters more.
 
 **No findings are carried open.**
