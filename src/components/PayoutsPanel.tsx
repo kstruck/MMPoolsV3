@@ -133,6 +133,7 @@ const SquaresPayouts: React.FC<{ gameState: GameState; compact: boolean }> = ({ 
     const dollarFor = (pct: number) =>
         netPot !== undefined && netPot > 0 ? ` (${money(netPot * (pct / 100))})` : '';
 
+
     if (compact) {
         return (
             <div className="space-y-3 text-left">
@@ -307,6 +308,15 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
 
     const dollarFor = (pct: number) =>
         netPot !== undefined && netPot > 0 ? ` (${money(netPot * (pct / 100))})` : '';
+    // HYBRID split (PLAN-HYBRID-SPLIT): when declared, the fee is two pots and
+    // the place percentages apply to EACH. Absent split = pre-existing hybrid
+    // pool keeps the honest "ask your commissioner" copy below. Amounts are
+    // whole-dollar approximations by design; the commissioner settles cents.
+    const split = payoutMode === 'HYBRID' ? (settings.hybridSplit as { weeklyPerEntry?: number; seasonPerEntry?: number } | undefined) : undefined;
+    const splitPots = split && knownEntries !== undefined && knownEntries > 0
+        ? { weekly: (split.weeklyPerEntry ?? 0) * knownEntries, season: (split.seasonPerEntry ?? 0) * knownEntries }
+        : undefined;
+
 
     const hasAnyConfig = entryFee > 0 || places.length > 0 || bonuses.length > 0 || Boolean(modeCopy);
     if (!hasAnyConfig) {
@@ -347,7 +357,17 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
                         <span className="font-bold text-[color:var(--text)]">Payout Format</span>
                         <span className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-[color:var(--text)]">{modeCopy.label}</span>
                     </div>
-                    <p className="text-[11px] font-body text-muted leading-relaxed">{modeCopy.explanation}</p>
+                    <p className="text-[11px] font-body text-muted leading-relaxed">
+                        {split
+                            ? `The entry fee splits $${split.weeklyPerEntry ?? 0} into the weekly prize pots and $${split.seasonPerEntry ?? 0} into the season pot, per entry. The place percentages below apply to both pots. Dollar figures are rounded to whole dollars — your commissioner settles exact amounts.`
+                            : modeCopy.explanation}
+                    </p>
+                    {splitPots && (
+                        <div className="mt-2 flex gap-4 text-[11px] font-body font-bold num">
+                            <span>Weekly pots: {money(splitPots.weekly)} total</span>
+                            <span>Season pot: {money(splitPots.season)} total</span>
+                        </div>
+                    )}
                 </div>
             )}
 

@@ -268,7 +268,7 @@ service cloud.firestore {
         let changed = request.resource.data.get('settings', {})
                         .diff(resource.data.get('settings', {}))
                         .affectedKeys();
-        return !changed.hasAny(['tieCountsAs', 'maxTeamUses', 'weeklyTiebreaker']);
+        return !changed.hasAny(['tieCountsAs', 'maxTeamUses', 'weeklyTiebreaker', 'hybridSplit']);
       }
 
       // Pool is in an editable state.

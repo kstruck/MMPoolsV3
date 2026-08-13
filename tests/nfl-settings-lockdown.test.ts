@@ -204,6 +204,10 @@ describe('firestore.rules — callable-only settings bind SUPER_ADMIN too', () =
     // Changes what a number members ALREADY TYPED means — and under NONE they
     // were never asked, so the scorer would read them all as having predicted 0.
     'weeklyTiebreaker',
+    // The money split: an SA direct write could store an invalid split, or move
+    // entryFee/payoutMode around a valid one, making "site-verified" decorative
+    // for exactly the principal most likely to hand-fix money fields.
+    'hybridSplit',
   ])('callableOnlySettingsUnchanged() lists %s', (field) => {
     const fn = rules.slice(rules.indexOf('function callableOnlySettingsUnchanged()'));
     const body = fn.slice(0, fn.indexOf('\n      }'));

@@ -10,6 +10,14 @@ function dropUndefined<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
 }
 
+function hybridSplitFrom(settings: Record<string, unknown> | undefined): { weeklyPerEntry: number; seasonPerEntry: number } | undefined {
+  if (settings?.payoutMode !== 'HYBRID') return undefined;
+  const raw = settings?.hybridSplit as { weeklyPerEntry?: unknown; seasonPerEntry?: unknown } | undefined;
+  if (!raw) return undefined;
+  const num = (x: unknown) => (Number.isFinite(Number(x)) ? Number(x) : 0);
+  return { weeklyPerEntry: num(raw.weeklyPerEntry), seasonPerEntry: num(raw.seasonPerEntry) };
+}
+
 export function buildNFLPayload(
   values: Record<string, unknown>,
   poolType: Extract<PoolType, 'NFL_PICKEM' | 'NFL_SURVIVOR' | 'NFL_MARGIN'>,
@@ -46,6 +54,14 @@ export function buildNFLPayload(
       isListedPublic: isPublic,
       paymentInstructions: v.paymentInstructions || undefined,
       payouts: v.settings?.payouts,
+      // The hybrid split survives ONLY on a HYBRID pool. react-hook-form keeps
+      // unmounted field values (shouldUnregister defaults false), so a manager
+      // who tried HYBRID, typed a split, then settled on SEASON would submit a
+      // stray split the create schema rightly refuses — on a screen where the
+      // fields are no longer visible. And `valueAsNumber` reads an untouched
+      // input as NaN; normalizing to 0 here lets the schema's mismatch message
+      // (the useful one) fire instead of a bare "expected number, got nan".
+      hybridSplit: hybridSplitFrom(v.settings),
     },
   });
 }
