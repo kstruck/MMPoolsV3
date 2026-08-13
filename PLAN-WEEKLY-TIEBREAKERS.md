@@ -1,6 +1,10 @@
 # PLAN — wizard tie-breaker options for weekly / hybrid pools
 
-**Status:** ✅ **SIGNED OFF — Kevin chose OPTION B, 2026-08-13 (UTC; the
+**Status:** ✅ **BUILT.** Kevin chose OPTION B and it is implemented — see the PR
+for the gate evidence. §§3–7 (the A half) and §8 (the B half) both shipped;
+§9's open questions were resolved as recorded there.
+
+*(Original sign-off note:)* **SIGNED OFF — Kevin chose OPTION B, 2026-08-13 (UTC; the
 evening of 08-12 ET).** The sign-off was given in chat, in the session that
 wrote this section; codex flagged the header as bypassing the change-control
 gate because it cannot see the conversation — rejected on that ground, and the
@@ -599,22 +603,38 @@ the winner renders "No highlights this week".
 
 1. ~~**A or B?**~~ ✅ **ANSWERED: B** (Kevin, 2026-08-13). Specified in §8 rather
    than in a separate plan — §8a is why that turned out to be proportionate.
-2. **Is `MNF_LAST_GAME` "the last game to kick off", or "the game that ends
-   last"?** They are the same on any real Monday slate, and kickoff order is the
+2. ✅ **RESOLVED AS BUILT: the last game to KICK OFF.** Implemented as latest
+   `startTime`, ties broken by `id` descending so the answer cannot move between
+   scoring passes, and the copy says "the last Monday game to kick off". Original
+   question and reasoning kept below — say the word if you want finish order
+   instead, but note the sheet has to ask the question days before anyone knows
+   which game ends last.
+
+   ~~**Is `MNF_LAST_GAME` "the last game to kick off", or "the game that ends
+   last"?**~~ They are the same on any real Monday slate, and kickoff order is the
    only one the data supports before the games are played — the sheet has to ask
    the question days ahead. I plan to implement latest-kickoff and say so in the
    copy. Confirm.
-3. **Should `NONE` be offered at all?** It is the honest option for a
+3. ✅ **RESOLVED AS BUILT: yes, `NONE` is offered.** Under it the pick sheet asks
+   nothing, the standings MNF column is hidden, and the rules page says tied weeks
+   are shared. Easy to remove if you disagree — it is one enum value and one
+   wizard option.
+
+   ~~**Should `NONE` be offered at all?**~~ It is the honest option for a
    season-long pool, but it removes a question members are used to seeing. If you
    would rather always ask, I drop it and the enum is two values.
-4. **Should the manager UI expose this at all, or wizard-only?** §5 refuses the
+4. ✅ **RESOLVED AS BUILT: manager UI included**, with the freeze stated on the
+   control itself rather than left to an error toast. — §5 refuses the
    change once anyone has submitted a prediction either way; the question is
    whether a commissioner may fix a wizard misclick in the window before that.
    I propose **yes**, manager UI included — but note the window is now narrower
    than it first looked: it closes at the **first submitted prediction**, not
    the first scored week.
-5. **Do you want the pick sheet to keep asking on `SEASON` payout pools?** Today
-   it does, and the number is never used for anything but a recap trivia line.
+5. ✅ **RESOLVED AS BUILT: yes, it still asks on `SEASON` pools** — the number is
+   no longer trivia there either, since it now breaks the tie for the recap's
+   "Top Scorer" line. A `SEASON` commissioner who does not want the question can
+   choose `NONE`. Original question: *do you want the pick sheet to keep asking on
+   `SEASON` payout pools?*
 
 ---
 

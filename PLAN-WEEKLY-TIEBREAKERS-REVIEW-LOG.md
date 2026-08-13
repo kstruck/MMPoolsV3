@@ -8,7 +8,9 @@ that difference mattered (see round 3).
 Findings are quoted in substance and answered individually; a rejection is
 recorded with its reasoning, same as an acceptance.
 
-**codex: 10 rounds (the §2c ceiling), 9 findings, all valid, all absorbed.**
+**codex on the PLAN: 10 rounds (the §2c ceiling), 9 findings, all valid, all absorbed.**
+**codex on the CODE: 4 rounds, 2 findings, both valid, both absorbed; rounds 3 and 4 clean.**
+**Self-review found a third defect between those two clean rounds (appendix 3).**
 **qodo: 1 review of #421, 5 findings — 4 absorbed, 1 rejected with reasoning (appendix 2).**
 
 Two of the seven hit the same clause — §5, the mid-season edit gate — and the
@@ -354,3 +356,78 @@ review log itself. qodo did, first look.
 both claims about how text will be *executed* or *resolved*, and no gate in this
 repo checks either. Three of the eleven findings across both reviewers were in
 that class.
+
+
+---
+
+## Appendix 3 — reviewing the IMPLEMENTATION (Option B)
+
+A fresh count: the plan's ten rounds reviewed a document, and the code is a
+different artifact. Four rounds, two codex findings, one self-review finding.
+
+### C1.1 — a member who did not play could win the week (P1) — **ACCEPTED**
+
+> When an entry has no pick for the scored week, this unconditional push still
+> gives it a zero-point weekly-winner candidate. Thus, in a `NONE` pool or a week
+> with no usable tiebreak target, non-submitters can be named as shared winners
+> alongside zero-point participants.
+
+**Verdict: valid, and it is the plan's own rule the code failed to implement.**
+§8c says in as many words that "entries with no submission for the week are not
+candidates at all". The Margin branch gated its push on `pick`; the Pick'em
+branch did not, and copying the neighbouring code would have been enough.
+
+Worth noticing about the failure mode: it is invisible on a normal week, because
+somebody who played always outscores 0. It surfaces exactly on the ugly weeks —
+an all-zero week, or a pool with no tiebreak target — which is where a wrong
+answer is least likely to be questioned.
+
+**Absorbed**: gated on `picksThisWeek > 0`. The invariant added with it asserts
+there are exactly TWO `winnerCandidates.push(` sites, so a third ungated one
+cannot appear later.
+
+### C2.1 — the UPDATE path did not validate the enum (P2) — **ACCEPTED**
+
+> `updatePoolSettings` … the permissive update schema and settings flattener
+> persist that value without validation. `effectiveWeeklyTiebreaker` then
+> silently treats it as `MNF_COMBINED`, so an intended `NONE` pool can be changed
+> to the combined-MNF behavior while its stored setting remains invalid.
+
+**Verdict: valid.** The `z.enum` guard is on the CREATE schema only.
+`updatePoolSettingsSchema` is permissive by design and `flattenSettingsPatch`
+writes present keys as given.
+
+The interesting half is the ORDERING, which the finding implies and the fix makes
+explicit: the validity check has to run **before** the changed-value check.
+Junk resolves to `MNF_COMBINED`, so on a pool already playing `MNF_COMBINED` a
+junk write reads as "no effective change", returns null, and stores the garbage.
+Validity first, then the change test.
+
+Note this is a design tension resolved deliberately, not an inconsistency:
+`effectiveWeeklyTiebreaker` **should** keep resolving junk to the default on
+READ — a hand-edited pool must keep playing something — while the WRITE path
+refuses to create that state in the first place.
+
+### C-self.1 — a void week published a shared win over a week nobody played
+
+Found by self-review **after codex round 3 came back clean**, which is the third
+time this repo has recorded that sequence.
+
+An all-cancelled week gives every Pick'em entry 0 points and leaves no Monday
+game FINAL. So the cascade sees a perfect tie with no tiebreak target and does
+exactly what it is supposed to do — returns a shared win — over a week nobody
+played. On a `payoutMode: WEEKLY` pool the recap would have told the commissioner
+to pay everyone.
+
+The cascade cannot see this: it is handed points and diffs, and by that point a
+void week is indistinguishable from a genuinely tied one. The caller has the
+information (`isVoidWeek(games)`) and has to apply it. Gated there.
+
+### Rounds 3 and 4 — clean
+
+> No actionable correctness issues were identified in the changes relative to the
+> specified merge base. Frontend and functions TypeScript checks pass.
+
+⚠️ Round 3 was also clean, and C-self.1 was found after it. A clean round is
+evidence, not a finish line — the same sentence this log's header has been
+carrying since the plan.
