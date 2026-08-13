@@ -13,7 +13,6 @@ import { pickHighlightLabel } from '../../utils/pickHighlight';
 import { poolUsesSpreads } from '../../utils/poolUsesSpreads';
 import { gradePick } from '../../utils/pickemResult';
 import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
-import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction, tiebreakerCopy } from '@shared/nflTiebreaker';
 import { GameMeta } from './pickSheet/GameMeta';
 import { TeamPickButton } from './pickSheet/TeamPickButton';
 import { StickySaveBar } from './pickSheet/StickySaveBar';
@@ -21,6 +20,7 @@ import { useSiteConsensus } from './pickSheet/useSiteConsensus';
 import { QuickPicksDialog } from './pickSheet/QuickPicksDialog';
 import { planQuickPicks, type QuickPickStrategy } from './pickSheet/quickPicks';
 import type { User, Pool, NFLGame } from '../../types';
+import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction, tiebreakerCopy } from '@shared/nflTiebreaker';
 
 interface PickemDraft {
   picks: Record<string, string>;
