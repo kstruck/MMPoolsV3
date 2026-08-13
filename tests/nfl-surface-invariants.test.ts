@@ -522,3 +522,31 @@ describe('standings week view — absence is not zero, and Survivor has no week 
     expect(code).toContain('if (weekRanked && weekValue(entry) === null)');
   });
 });
+
+/**
+ * WEEK-view ties share a rank (competition ranking). Positional numbering
+ * would hand a tied week to the alphabet, and the tiebreak is the SCORER's
+ * call — the recap's winner line applies the MNF prediction (Pick'em) or
+ * declares the tie shared (Margin). A table showing a different first place
+ * than the recap is the exact contradiction this view exists to remove.
+ * (codex r1 on the standings-toggle PR.)
+ */
+describe('standings week view — tied scores share a rank', () => {
+  const src = readFileSync(
+    resolve(root, 'src/components/NFLPoolDashboard/NFLStandings.tsx'),
+    'utf8',
+  );
+  const code = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+  it('week rank is computed from strictly-better counts, not the row index', () => {
+    expect(code).toContain('(weekValue(e) as number) > mine');
+    expect(code).toContain('rank={better + 1}');
+  });
+
+  it('the season view still ranks positionally', () => {
+    expect(code).toContain('rank={index + 1}');
+  });
+});

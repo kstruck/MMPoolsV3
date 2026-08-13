@@ -202,6 +202,17 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
     // WEEK view: a member the scorer has not reached this week has no weekly
     // rank — same honesty rule as `unscored`, one week narrower.
     if (weekRanked && weekValue(entry) === null) return <span className="text-faint">—</span>;
+    // WEEK view: tied scores SHARE a rank (competition ranking — 1, 1, 3).
+    // Positional index would hand the tie to the alphabet, and the tiebreak is
+    // not this table's call: Pick'em ties are settled by the MNF prediction in
+    // the SCORER, Margin ties are shared by rule. Numbering tied players 1 and
+    // 2 here would show a different first place than the recap's winner line.
+    // (codex r1 on this PR.)
+    if (weekRanked) {
+      const mine = weekValue(entry) as number;
+      const better = sortedEntries.filter(e => !e.unscored && weekValue(e) !== null && (weekValue(e) as number) > mine).length;
+      return <RankChip rank={better + 1} />;
+    }
     return <RankChip rank={index + 1} />;
   };
 
