@@ -98,6 +98,21 @@ field.
 | H2 | A9 — recruit ~10 commissioners | The invites themselves | **KEVIN-ACTION** — this is the launch |
 | H3 | A11 — "tests every pool type" overclaim | Quick copy pass | **KEVIN-ACTION** (5 min, alongside H1) |
 
+## I. Product gaps Kevin declared launch-blocking (added 2026-08-13)
+
+Kevin, 2026-08-13, on pick-entry UX — scoped to **confidence, pick'em and
+survivor where applicable**. Both are GAPs: engineering work, not console flips.
+
+| # | Item | What exists today (measured) | What Kevin asked for | Verdict |
+|---|---|---|---|---|
+| I1 | **Used confidence weights gray out** | `PickemPickEntry`'s per-game `<select>` renders the full `[17-N .. 16]` range in every dropdown regardless of what other games have taken; a duplicate is flagged *after* selection (`duplicateConfidenceValues`, gold border + "Duplicate value!") and blocks submit, but nothing stops the mistake up front | Once a weight is assigned to a game (e.g. 10), gray it out / disable it in the OTHER games' dropdowns so it cannot be picked again by mistake. Keep the existing duplicate detection as the backstop — a graying bug must not silently allow a duplicate through | **GAP** — confidence mode only; no server change (validation already exists server-side); frontend + tests + Coolify |
+| I2 | **Wizard tie-breaker options for weekly/hybrid pools** | The MNF-combined-score tiebreaker is hardcoded: the pick sheet asks for it whenever a week has a Monday game (`showTiebreaker`), and scoring reads `weeklyTiebreakers[week]`. The setup wizard exposes **no tie-breaker choice at all** | Wizard options for how a weekly tie breaks — e.g. combined score of the Monday night game; if two MNF games, the LAST game (note: today's copy says *both* games combined, which is a different rule); other options as sensible. Applies to weekly/hybrid pick'em (incl. confidence); survivor **if applicable** — survivor has no weekly winner, so likely N/A, but say so explicitly rather than skipping silently | **GAP** — touches the wizard, `shared/` schema, pick sheet copy and the **scorer** → scoring trigger → **plan-gated** (`mmp-change-control` §1); functions deploy on ship |
+
+⚠️ **I2 is a SCORING change and lands in a live scorer** — `nflAutoScoreJob` runs
+`*/5`. Its plan must state how existing pools keep today's behaviour (default =
+current rule, no migration) and how a mid-season settings change is refused or
+handled, same as #399 did for survivor settings.
+
 ## Accepted non-blockers (decision references)
 
 The brief's "§C non-blockers" list — no literal §C section exists in any repo
