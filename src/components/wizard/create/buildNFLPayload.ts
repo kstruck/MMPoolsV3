@@ -14,8 +14,16 @@ function hybridSplitFrom(settings: Record<string, unknown> | undefined): { weekl
   if (settings?.payoutMode !== 'HYBRID') return undefined;
   const raw = settings?.hybridSplit as { weeklyPerEntry?: unknown; seasonPerEntry?: unknown } | undefined;
   if (!raw) return undefined;
-  const num = (x: unknown) => (Number.isFinite(Number(x)) ? Number(x) : 0);
-  return { weeklyPerEntry: num(raw.weeklyPerEntry), seasonPerEntry: num(raw.seasonPerEntry) };
+  // BOTH untouched (NaN from valueAsNumber on empty inputs) = nothing declared.
+  // Manufacturing {0,0} here made a zero-fee HYBRID pool impossible to create:
+  // the declared split tripped HYBRID_SPLIT_NEEDS_FEE where an absent one is
+  // explicitly valid. One touched field still declares — half an answer should
+  // be refused loudly, not silently dropped. (codex r3 on the split PR.)
+  const w = Number(raw.weeklyPerEntry);
+  const se = Number(raw.seasonPerEntry);
+  if (!Number.isFinite(w) && !Number.isFinite(se)) return undefined;
+  const num = (x: number) => (Number.isFinite(x) ? x : 0);
+  return { weeklyPerEntry: num(w), seasonPerEntry: num(se) };
 }
 
 export function buildNFLPayload(

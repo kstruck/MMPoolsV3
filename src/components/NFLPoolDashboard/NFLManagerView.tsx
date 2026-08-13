@@ -918,7 +918,14 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Payout Method</label>
                 <select
                   value={payoutMode}
-                  onChange={e => setPayoutMode(e.target.value)}
+                  onChange={e => {
+                    setPayoutMode(e.target.value);
+                    // Leaving HYBRID forgets the split locally, matching the
+                    // server's delete — otherwise re-selecting HYBRID later
+                    // silently resurrects the old numbers on the next save.
+                    // (codex r3.)
+                    if (e.target.value !== 'HYBRID') { setSplitDeclared(false); setSplitWeekly(0); setSplitSeason(0); }
+                  }}
                   className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                 >
                   <option value="SEASON">Season-End Standings Only</option>
@@ -1163,7 +1170,10 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Payout Method</label>
                 <select
                   value={marginPayoutMode}
-                  onChange={e => setMarginPayoutMode(e.target.value)}
+                  onChange={e => {
+                    setMarginPayoutMode(e.target.value);
+                    if (e.target.value !== 'HYBRID') { setSplitDeclared(false); setSplitWeekly(0); setSplitSeason(0); }
+                  }}
                   className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                 >
                   <option value="SEASON">Season-End Totals Only</option>
