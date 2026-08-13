@@ -381,6 +381,16 @@ setting cannot move once a week is scored, which §5 enforces.
   rule, so the sheet can never claim "both games" while the scorer sums one.
 - `NFLPoolRules.tsx` states the pool's tiebreaker rule in plain words — it is a
   house rule and belongs where members read the house rules.
+- ⚠️ **`NFLStandings.tsx`'s "MNF Score" column, which the first draft's touch
+  list forgot** (codex P2, round 8). It renders **unconditionally** for every
+  Pick'em pool — the header at `NFLStandings.tsx:184-187` and the cell that
+  prints `entry.weeklyTiebreakers[week]`. Under `NONE` that leaves an
+  all-dashes column with no meaning, and — worse — a prediction submitted by an
+  **older client before the flip** still renders in it, so the standings display
+  a tiebreaker number for a pool that has no tiebreaker. Gate the column *and*
+  its cell on `rule !== 'NONE'`. **Hiding the column is the whole fix**: nothing
+  is deleted, and if the commissioner switches back before any submission, the
+  numbers are still there.
 - ⚠️ **`tiebreakerPrediction` keeps being submitted and stored under `NONE`?**
   Proposed: **no** — the sheet stops sending it, and `submitNFLPicks` keeps
   accepting it (the field is `?? undefined`-guarded at

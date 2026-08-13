@@ -3,25 +3,28 @@
 Adversarial review of the plan itself, before any code exists. Reviewer:
 `codex exec review` (OpenAI), per CLAUDE.md §2c. Rounds 1–3 ran `--uncommitted`
 while the plan was a working-tree document; rounds 4 and 6 ran
-`--base origin/main` once it was committed to a branch — and that difference
-mattered (see round 3).
+`--base origin/main` once it was committed to a branch, as did round 8 — and
+that difference mattered (see round 3).
 Findings are quoted in substance and answered individually; a rejection is
 recorded with its reasoning, same as an acceptance.
 
-**Rounds: 7. Findings: 4 — all valid, all absorbed. Round 8 is the confirming pass.**
+**Rounds: 8. Findings: 5 — all valid, all absorbed.**
 
-Two of the four hit the same clause — §5, the mid-season edit gate — and the
+Two of the five hit the same clause — §5, the mid-season edit gate — and the
 second is a hole the first one's fix opened. That is the pattern CLAUDE.md §2c
 documents ("round 1 finds defects in the code, rounds 2+ find defects in the
 fixes"), reproduced exactly, on a plan that had already copied a gate this repo
 believed was correct. R4.1 is a different class — not a wrong design, an
-incomplete touch list — and R7.1 (appendix) is a third: a wrong *classification*
-in the audit document riding the same branch, which would have made a follow-up
-ticket look four times cheaper than it is.
+incomplete touch list, and R8.1 is the same class one surface further out.
+R7.1 (appendix) is a third kind: a wrong *classification* in the audit document
+riding the same branch, which would have made a follow-up ticket look far
+cheaper than it is.
 
-⚠️ **Three of the four landed on rounds that came AFTER a clean one.** Rounds 3,
+⚠️ **Four of the five landed on rounds that came AFTER a clean one.** Rounds 3,
 5 and 6 each came back clean and each was followed by a round that found
-something real. The counter is not the stopping rule; the evidence is.
+something real — R7.1 and R8.1 both arrived after a clean pass. The counter is
+not the stopping rule; the evidence is, and a clean round is a data point rather
+than a finish line.
 
 ---
 
@@ -190,6 +193,37 @@ round **and** qodo clean **and** my own read of the artifact agreeing.
   which is the review that matters more.
 
 **No findings are carried open.**
+
+---
+
+## Round 8 — a P2 in the plan's touch list, after two clean rounds on it
+
+### R8.1 — the standings "MNF Score" column is not gated on the rule (P2) — **ACCEPTED**
+
+> When a pool selects `NONE`, this plan suppresses the input and stops new
+> writes, but `NFLStandings.tsx` always renders the `MNF Score` column and reads
+> `weeklyTiebreakers[week]`. New pools will therefore show an irrelevant all-dash
+> column, while predictions submitted by an older client can still appear despite
+> the pool having no tiebreaker.
+
+**Verdict: valid, and it is the same class of miss as R4.1 — an incomplete touch
+list, one surface further out.** §7 gated the pick sheet's input and its copy and
+stopped there; the column that *displays* the number was never mentioned. The
+second half of the finding is the sharper one: this is not merely an empty
+column. A prediction stored before a commissioner flips to `NONE` keeps
+rendering, so the standings would show a tiebreaker figure for a pool that has
+no tiebreaker — the display contradicting the rules page.
+
+The sweeps document had actually enumerated this surface (S2's consumer table
+lists the MNF Score column as "display only, not a sort key"), and the plan's §7
+still failed to act on it. **An enumeration is not a touch list**, and that is
+worth remembering: S2 answered "who reads this number", §7 needed "who must
+change when the number's meaning changes", and the second question was never
+asked of the first question's own output.
+
+**Absorbed** into §7 as a fifth bullet: gate the header *and* the cell on
+`rule !== 'NONE'`, hiding rather than deleting, so a switch back before any
+submission loses nothing.
 
 ---
 
