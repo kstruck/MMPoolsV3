@@ -38,12 +38,13 @@
 > is empty across #416, #418 and #417 — all three are docs or `src/**`.
 
 
-*(2026-08-12 — **deploy facts still current**: ✅ **#414 AND #415 ARE MERGED AND DEPLOYED.** Functions, frontend and rules are all live from `main` @ `c37bbd37` — deployed in the required order (functions → Coolify → rules) on the morning of 2026-08-12 and each surface verified independently, not inferred from a deploy log. **Commissioner-blind picks are LIVE in production**: a pool's owner/manager can no longer read raw entries, and pick content comes from the `getPoolPicks` callable past each game's own lock. **Nothing is owed on any deploy queue.** The one thing still open is the launch checklist (invites, `nflDeepSweep`, NFL-6, backups, SA key) — `MORNING-2026-08-12.md` §3–§4. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5` *(**UNVERIFIED** — carried from 2026-08-09, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
+*(2026-08-12 — **functions and rules facts still current; its frontend claim is SUPERSEDED — the frontend moved to `d6bae3f4` on 2026-08-13, see the box above**: ✅ **#414 AND #415 ARE MERGED AND DEPLOYED.** Functions and rules are live from `main` @ `c37bbd37` (the frontend was too, when this was written) — deployed in the required order (functions → Coolify → rules) on the morning of 2026-08-12 and each surface verified independently, not inferred from a deploy log. **Commissioner-blind picks are LIVE in production**: a pool's owner/manager can no longer read raw entries, and pick content comes from the `getPoolPicks` callable past each game's own lock. **Nothing is owed on any deploy queue.** The one thing still open is the launch checklist (invites, `nflDeepSweep`, NFL-6, backups, SA key) — `MORNING-2026-08-12.md` §3–§4. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5` *(**UNVERIFIED** — carried from 2026-08-09, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
-> ## ✅ DEPLOY STATE 2026-08-12 — **functions + frontend + rules all at `c37bbd37`; all queues EMPTY**
+> ## ✅ DEPLOY STATE 2026-08-12 — **functions + rules at `c37bbd37` (still current); its frontend claim is SUPERSEDED — frontend at `d6bae3f4` since 2026-08-13, per the box above**
 >
 > **Functions are deployed from <!-- deploy-state:current --> `main` @ `c37bbd37`,
-> and so are the rules and the frontend.** Deployed the morning of 2026-08-12, in
+> and so are the rules.** The frontend WAS at this commit when this box was
+> written and has since moved to `d6bae3f4` (2026-08-13, box above). Deployed the morning of 2026-08-12, in
 > the order the change required: **functions → Coolify rebuild → rules.** That order is not cosmetic — see the
 > box below for why the obvious order would have taken commissioner standings
 > down for the length of the rebuild.
@@ -54,7 +55,7 @@
 > | Surface | Evidence |
 > |---|---|
 > | **functions** | `npx firebase functions:list` returns **`getPoolPicks`** (v2 callable, us-central1) — the callable #414 adds, absent before this deploy. ⚠️ An all-`Skipped` certification pass was **NOT** run, so "byte-identical to `c37bbd37`" is *not* claimed here; what is proven is that the new callable is live |
-> | **frontend** | live bundle moved **`index-Dhm5WwL_.js` → `index-Dv5RBrGq.js`**, read off the prod HTML |
+> | **frontend** | live bundle moved **`index-Dhm5WwL_.js` → `index-Dv5RBrGq.js`**, read off the prod HTML. ⚠️ SUPERSEDED 2026-08-13 — the live bundle is now `index-BB2oOzrg.js` (box above); this row is the record of THAT day's verification |
 > | **rules** | `+ firestore: released rules firestore.rules to cloud.firestore`, `+ Deploy complete!`. Pre-deploy the working tree was clean on `firestore.rules`, its last commit was `c59a41d4` (#414), and the `entries` read block was confirmed to carry only `ownerUid` + `isSuperAdmin()` + the participant branch |
 >
 > 🔴 **WHAT IS DIFFERENT IN PRODUCTION AS OF THIS DEPLOY.** A pool's `ownerId`
