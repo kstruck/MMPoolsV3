@@ -1634,9 +1634,17 @@ async function scoreWeekPass(
       // for publishing a winner (PLAN-WEEKLY-TIEBREAKERS §8b). A mid-Sunday
       // "leader so far", which members would read as a result, cannot be
       // written because this code does not run until it would be true.
+      // ⚠️ A VOID WEEK HAS NO WINNER, and this is the one case the cascade
+      // cannot work out for itself. Every game cancelled means every Pick'em
+      // entry scores 0 and no Monday game reaches FINAL, so the candidates are
+      // all tied at 0 with no tiebreak target — a textbook shared win, over a
+      // week nobody played. On a `payoutMode: WEEKLY` pool that publishes "pay
+      // everyone". `isVoidWeek` is all-cancelled only, so a week with one
+      // cancelled game still has a real winner and still gets one.
+      const weeklyWinners = isVoidWeek(games) ? [] : computeWeeklyWinners(winnerCandidates);
       const recapDoc = buildWeeklyRecap({
         poolId, week, poolType: pool.type, sharpUser, closestTie, aliveCount,
-        weeklyWinners: computeWeeklyWinners(winnerCandidates),
+        weeklyWinners,
       });
       // Fenced: creating this doc fires onWeeklyRecapCreated → AI trash-talk, and
       // the later authoritative pass only UPDATEs it, so a recap created from a

@@ -127,6 +127,15 @@ describe('wiring — no surface re-derives the rule or hard-codes the copy', () 
     expect(src.match(/winnerCandidates\.push\(/g)).toHaveLength(2);
   });
 
+  it('a VOID week publishes no winner', () => {
+    // All games cancelled means everyone scores 0 and no Monday game reaches
+    // FINAL, so the cascade produces a shared win over a week nobody played —
+    // "pay everyone" on a WEEKLY pool. The cascade cannot see this; the caller
+    // must. (Self-review, after codex round 3 came back clean.)
+    const src = read('functions/src/nflPools.ts');
+    expect(src).toContain('isVoidWeek(games) ? [] : computeWeeklyWinners(winnerCandidates)');
+  });
+
   it('the standings MNF column is gated on the rule', () => {
     // Under NONE a prediction stored before the switch would otherwise keep
     // rendering, contradicting the rules page. (codex R8.1.)
