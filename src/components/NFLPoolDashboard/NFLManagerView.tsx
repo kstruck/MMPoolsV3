@@ -925,6 +925,16 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     // silently resurrects the old numbers on the next save.
                     // (codex r3.)
                     if (e.target.value !== 'HYBRID') { setSplitDeclared(false); setSplitWeekly(0); setSplitSeason(0); }
+                    // Returning to HYBRID re-hydrates from the STORED split, so
+                    // the editor shows what the pool actually has rather than an
+                    // undeclared 0/0 sitting on top of live stored numbers — the
+                    // toggle-away-and-back sequence otherwise saves HYBRID with
+                    // no split while the old one persists server-side. (codex r6.)
+                    if (e.target.value === 'HYBRID' && settings.hybridSplit) {
+                      setSplitWeekly(settings.hybridSplit.weeklyPerEntry ?? 0);
+                      setSplitSeason(settings.hybridSplit.seasonPerEntry ?? 0);
+                      setSplitDeclared(true);
+                    }
                   }}
                   className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                 >
@@ -1173,6 +1183,16 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   onChange={e => {
                     setMarginPayoutMode(e.target.value);
                     if (e.target.value !== 'HYBRID') { setSplitDeclared(false); setSplitWeekly(0); setSplitSeason(0); }
+                    // Returning to HYBRID re-hydrates from the STORED split, so
+                    // the editor shows what the pool actually has rather than an
+                    // undeclared 0/0 sitting on top of live stored numbers — the
+                    // toggle-away-and-back sequence otherwise saves HYBRID with
+                    // no split while the old one persists server-side. (codex r6.)
+                    if (e.target.value === 'HYBRID' && settings.hybridSplit) {
+                      setSplitWeekly(settings.hybridSplit.weeklyPerEntry ?? 0);
+                      setSplitSeason(settings.hybridSplit.seasonPerEntry ?? 0);
+                      setSplitDeclared(true);
+                    }
                   }}
                   className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                 >
