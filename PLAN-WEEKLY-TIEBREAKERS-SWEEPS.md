@@ -104,22 +104,58 @@ grep -n "protectedFieldsUnchanged" -A 20 firestore.rules
 
 **Must find:** a denial of the top-level `settings` key on NFL pools.
 
-**Result — `firestore.rules:138-158`.** NFL pool `settings` writes are denied to
-**every** client principal, with the reasoning in-file: the manager UI sends a
-complete `settings` replacement and `affectedKeys()` only reports the top-level
-`settings` key, so a per-field rule cannot see inside it. Denying the key is the
-only correct shape.
+> ### 🛑 THIS SWEEP WAS WRONG, AND THE PLAN BUILT ON IT
+>
+> **Original conclusion: "NFL pool `settings` writes are denied to every client
+> principal, so no rules change and no rules deploy is owed." That is false.**
+> They are denied to **MANAGERS**. Caught by codex on the implementation PR,
+> after the plan had been through ten review rounds carrying the claim.
+>
+> The misreading is one line of Boolean structure:
+>
+> ```
+> allow update: if request.auth != null && callableOnlySettingsUnchanged() && (
+>     (isPoolManager() && ... && nflSettingsWriteBlocked() && ...)
+>     || isSuperAdmin()
+> );
+> ```
+>
+> `nflSettingsWriteBlocked()` is **inside the manager branch**, and
+> `isSuperAdmin()` short-circuits the whole disjunction. The only check that
+> applies to both principals is the one hoisted **outside** it — which, before
+> this change, guarded exactly two survivor fields.
+>
+> So a SUPER_ADMIN client could write `settings.weeklyTiebreaker` directly and
+> skip the callable's refusal entirely. #399 had already found and closed this
+> for its own two fields; the rules file even explains the reasoning, three
+> lines above the sweep's own quote. Reading the function and not the expression
+> it sits in is the whole mistake.
+>
+> **Corrected consequence: this feature DOES owe a rules edit and a rules
+> deploy.** `weeklyTiebreaker` joins the nested `callableOnlySettingsUnchanged()`
+> guard.
+>
+> **The general lesson, which is worth more than the fix:** a guard's *position
+> in the expression* is part of the guard. Grepping for the function name found
+> the right code and answered the wrong question.
 
-Consequences for this plan, all favourable:
+**Original result — `firestore.rules:138-158`.** `nflSettingsWriteBlocked()`
+denies a top-level `settings` write on NFL pools, with the reasoning in-file: the
+manager UI sends a complete `settings` replacement and `affectedKeys()` only
+reports the top-level `settings` key, so a per-field rule cannot see inside it.
+That much is accurate — and it is scoped to the manager branch.
 
-1. A new nested settings key is **server-only from the moment it exists** — no
-   rules edit, no rules deploy.
-2. The **only** write path is the `updatePoolSettings` callable, which is where
-   §5's refusal goes. There is no second door to guard.
-3. `tests/nfl-settings-lockdown.test.ts` already pins this block, and its header
-   records why it must be a source assertion: **this repo has no
-   `firestore.rules` test harness** — the emulator suites use the Admin SDK,
-   which bypasses rules entirely.
+What survives from the original three consequences:
+
+1. ~~A new nested settings key is server-only from the moment it exists.~~
+   **FALSE for SUPER_ADMIN.** Fixed by adding the field to the nested guard.
+2. The `updatePoolSettings` callable is the write path the UI uses, and it is
+   where §5's refusal goes. ✅ — but it was **not** the only door.
+3. `tests/nfl-settings-lockdown.test.ts` pins this block, and its header records
+   why it must be a source assertion: **this repo has no `firestore.rules` test
+   harness** — the emulator suites use the Admin SDK, which bypasses rules
+   entirely. ✅ **And that is exactly why this went unnoticed:** nothing in CI
+   could have failed on it.
 
 ---
 

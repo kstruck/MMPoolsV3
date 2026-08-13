@@ -211,6 +211,22 @@ write path is the `updatePoolSettings` callable. **Measured, per the brief's
 instruction: the field is NOT client-writable today and needs no new rules
 work.** `tests/nfl-settings-lockdown.test.ts` pins that block.
 
+> 🛑 **CORRECTION — the paragraph above is WRONG and the feature DOES owe a
+> rules change.** `nflSettingsWriteBlocked()` sits inside the `isPoolManager()`
+> branch of the `allow update` disjunction, and `isSuperAdmin()` short-circuits
+> past it. NFL settings are denied to **managers**, not to every client
+> principal. A SUPER_ADMIN client could write `settings.weeklyTiebreaker`
+> directly and skip §5's refusal.
+>
+> `weeklyTiebreaker` is therefore added to the nested
+> `callableOnlySettingsUnchanged()` guard — the one hoisted OUTSIDE the
+> disjunction, where #399 put its two survivor fields for exactly this reason.
+>
+> **This PR owes a RULES DEPLOY.** Order: functions → rules (the rules change
+> revokes no read the live client makes, so the frontend does not have to go
+> between them). Caught by codex on the implementation PR; sweep S4 carried the
+> wrong reading through ten plan-review rounds.
+
 ### The option set, with the justification for each
 
 | Value | Rule | Why it is in the set |
@@ -644,7 +660,7 @@ the winner renders "No highlights this week".
 |---|---|
 | Frontend typecheck, functions typecheck, root suite, functions suite | yes |
 | Scoring invariant tests named (§5 of `mmp-validation-and-qa`) | **yes** — `computeMNFTiebreakerTotal` is in the scoring engine |
-| `firestore.rules` | **no** — NFL `settings` is already server-only; no rules edit |
+| `firestore.rules` | **YES** — `weeklyTiebreaker` joins `callableOnlySettingsUnchanged()`. Sweep S4's "no rules change" was wrong; see the §3 correction |
 | Wizard touched → Playwright specs run, or explicitly stated not run | yes |
 | Adversarial review log + sweep pass | **yes** — `PLAN-WEEKLY-TIEBREAKERS-REVIEW-LOG.md` |
 | codex round on the PR, qodo on the PR, joint stop | yes |
