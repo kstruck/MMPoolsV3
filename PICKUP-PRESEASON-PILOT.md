@@ -333,7 +333,7 @@ state. Concretely:
 
 ---
 
-## 2. Live state (deploy state verified 2026-08-09)
+## 2. Live state (deploy state verified 2026-08-13 — functions+rules at `c37bbd37`, frontend at `d6bae3f4`)
 
 > ⚠️ **HISTORICAL — this block records the 2026-07-28 state.** Its bundle hash is
 > long superseded; for the CURRENT live bundle see the tagged claim below, which
