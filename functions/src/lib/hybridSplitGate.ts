@@ -60,6 +60,18 @@ export function hybridSplitRefusal(
   patch: Record<string, unknown>,
 ): string | null {
   if (!touchesHybridSplitSettings(patch)) return null;
+  // The split exists on the two types that carry payoutMode. Judged on TYPE,
+  // not on values: a balanced split written to a Survivor pool would persist a
+  // money configuration no Survivor UI or create schema can represent.
+  // (codex P2, split r2.) Only refuses when the patch actually carries a
+  // split — entryFee edits on other types stay this gate's non-business.
+  if (pool?.type !== 'NFL_PICKEM' && pool?.type !== 'NFL_MARGIN') {
+    const incoming = 'settings.hybridSplit' in patch ? patch['settings.hybridSplit'] : undefined;
+    if (incoming !== undefined && incoming !== null) {
+      return "HYBRID_SPLIT_WRONG_TYPE: an entry-fee split only exists on Pick'em and Margin pools.";
+    }
+    return null;
+  }
   const merged = mergedSettings(pool, patch);
   // A save the caller will clear the split on is judged WITHOUT the split —
   // that is the state the write produces.

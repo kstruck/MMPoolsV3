@@ -75,3 +75,17 @@ describe('hybridSplitRefusal — judged over the settings AS SAVED', () => {
     })).toContain('HYBRID_SPLIT_MISMATCH');
   });
 });
+
+describe('hybridSplitRefusal — type scoping (codex P2, r2)', () => {
+  it('refuses a split written to a Survivor pool, even a balanced one', () => {
+    const survivor = { type: 'NFL_SURVIVOR', settings: { entryFee: 25 } };
+    expect(hybridSplitRefusal(survivor, {
+      'settings.payoutMode': 'HYBRID',
+      'settings.hybridSplit': { weeklyPerEntry: 18, seasonPerEntry: 7 },
+    })).toContain('HYBRID_SPLIT_WRONG_TYPE');
+  });
+  it('ignores fee edits on other pool types — not this gate\'s business', () => {
+    expect(hybridSplitRefusal({ type: 'NFL_SURVIVOR', settings: {} }, { 'settings.entryFee': 30 })).toBeNull();
+    expect(hybridSplitRefusal({ type: 'BRACKET', settings: {} }, { 'settings.entryFee': 30 })).toBeNull();
+  });
+});
