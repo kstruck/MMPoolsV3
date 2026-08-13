@@ -8,7 +8,8 @@ that difference mattered (see round 3).
 Findings are quoted in substance and answered individually; a rejection is
 recorded with its reasoning, same as an acceptance.
 
-**Rounds: 9. Findings: 7 — all valid, all absorbed.**
+**codex: 10 rounds (the §2c ceiling), 9 findings, all valid, all absorbed.**
+**qodo: 1 review of #421, 5 findings — 4 absorbed, 1 rejected with reasoning (appendix 2).**
 
 Two of the seven hit the same clause — §5, the mid-season edit gate — and the
 second is a hole the first one's fix opened. That is the pattern CLAUDE.md §2c
@@ -21,9 +22,14 @@ riding the same branch, which would have made a follow-up ticket look far
 cheaper than it is.
 
 ⚠️ **Every finding after R2.1 arrived on a round that followed a clean one.**
-Rounds 3, 5 and 6 each came back clean, and R7.1, R8.1, R9.1 and R9.2 all landed
-afterwards. The counter is not the stopping rule; the evidence is, and a clean
-round is a data point rather than a finish line.
+Round 3 was clean and round 4 found R4.1; round 6 was clean and round 7 found
+R7.1; round 7's absorption reviewed clean in substance and round 8 found R8.1;
+rounds 9 and 10 each found two more. (Round 5 is the exception that proves
+nothing: it was clean and so was round 6.) The counter is not the stopping rule;
+the evidence is, and a clean round is a data point rather than a finish line.
+*(qodo caught this sentence claiming more than the log below supports — it
+originally said rounds 3, **5** and 6 were each followed by a round with
+findings, and round 5 was followed by a clean round 6.)*
 
 ---
 
@@ -80,7 +86,7 @@ empty map and permits everything.
 
 The consequence is worse than round 1's, not equal to it. Round 1's case
 re-reads a number the member chose; this one **invents** one:
-`entry.weeklyTiebreakers?.[week] ?? 0` ([nflPools.ts:1308](functions/src/nflPools.ts:1308))
+`entry.weeklyTiebreakers?.[week] ?? 0` ([nflPools.ts:1308](functions/src/nflPools.ts#L1308))
 reads every member as having predicted **0** for a question they were never
 asked, on picks they can no longer change.
 
@@ -303,3 +309,48 @@ row's classification changed from *frontend* to *backend*. `LAUNCH-READINESS.md`
 
 **It strengthens the audit's recommendation rather than weakening it.** "G1 only
 before launch, G2 after kickoff" was the call; this is a second reason for it.
+
+---
+
+## Appendix 2 — qodo on #421
+
+qodo re-reviewed at the current head after a draft→ready toggle (CLAUDE.md §2b)
+and reported **3 bugs + 2 skill insights**. Per-finding verdicts, since a
+rejection needs its reasoning on the record as much as an acceptance does.
+
+| # | Finding | Verdict |
+|---|---|---|
+| Q1 | Markdown lines exceed 100 characters | ❌ **REJECTED** |
+| Q2 | An unverified checklist is not labelled `UNVERIFIED` | ✅ ACCEPTED |
+| Q3 | `cd D:\march-melee-pools` inside a ```bash fence | ✅ ACCEPTED |
+| Q4 | "`main` is at `d6bae3f4`" conflates a branch head with a deploy fact | ✅ ACCEPTED — the best of the five |
+| Q5 | `](path.ts:698)` link targets 404 on GitHub | ✅ ACCEPTED |
+| Q6 | The log's own clean-round summary contradicted the log | ✅ ACCEPTED |
+
+**Q1 — rejected.** No line-length rule exists in this repo: there is no
+markdownlint config, no CI step that checks it, and `HANDOFF.md`'s first line is
+a single paragraph of several hundred characters by design. Wrapping the tables
+in these documents would make them less readable, not more. This is the
+style-finding class CLAUDE.md §2b's calibration note predicts (7/7 rejected on
+the previous run), and it lands the same way.
+
+**Q4 is the one worth reading.** `HANDOFF.md` said "`main` is at `d6bae3f4`" —
+already false when this branch started, because #419 had moved `main` to
+`0572babc`. The sentence conflated two things that must not be conflated: the
+commit the **live bundle was built from** (a deploy fact, fixed until the next
+rebuild) and where the **branch head points** (which moves on every merge). An
+operator comparing the two would read ordinary forward progress as deploy drift.
+Rewritten to state the build-from fact and to send the reader to
+`git log origin/main` for the head. The runbook gained a three-row table naming
+all three SHAs and what each one does.
+
+**Q6 is the one that stings, and it is the argument for a second reviewer.** The
+summary paragraph claimed rounds 3, 5 and 6 were each followed by a round that
+found something — while the log two screens below records round 5 as clean and
+round 6 as clean. Ten codex rounds did not catch a self-contradiction inside the
+review log itself. qodo did, first look.
+
+**Q3 and Q5 are the same shape as R9.2:** a fence label and a link target are
+both claims about how text will be *executed* or *resolved*, and no gate in this
+repo checks either. Three of the eleven findings across both reviewers were in
+that class.

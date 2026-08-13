@@ -25,7 +25,7 @@ breaks no tie.** Both halves measured tonight against `origin/main` @ `0572babc`
 ### 1a. The tiebreaker number is a recap trivia field, not a tiebreak
 
 `entry.weeklyTiebreakers[week]` is written by `submitNFLPicks`
-([nflPools.ts:556](functions/src/nflPools.ts:556)) and read in exactly one place
+([nflPools.ts:556](functions/src/nflPools.ts#L556)) and read in exactly one place
 in the scorer:
 
 ```ts
@@ -40,23 +40,23 @@ if (mnfTotalScore !== null) {
 ```
 
 `closestTie` becomes `recap.closestTiebreaker`
-([nflScoringEngine.ts:786](functions/src/nflScoringEngine.ts:786)) and its only
+([nflScoringEngine.ts:786](functions/src/nflScoringEngine.ts#L786)) and its only
 consumer is a highlight line on the weekly recap card
-([NFLPoolDashboard.tsx:663-667](src/components/NFLPoolDashboard/NFLPoolDashboard.tsx:663)).
+([NFLPoolDashboard.tsx:663-667](src/components/NFLPoolDashboard/NFLPoolDashboard.tsx#L663)).
 It is a "closest guess" callout. It orders nothing.
 
 ### 1b. Nothing ranks a week, so there is no tie to break
 
-- `buildStandingsRows` ([nflScoringEngine.ts:712](functions/src/nflScoringEngine.ts:712))
+- `buildStandingsRows` ([nflScoringEngine.ts:712](functions/src/nflScoringEngine.ts#L712))
   emits `totalScore`, `weeklyPoints`, `weeklyResults` per entry. **It computes no
   rank for Pick'em** — the only `rank` field it copies is Margin's.
 - The standings table sorts Pick'em by **season** `totalScore` desc, then
-  `userName` ([NFLStandings.tsx:64-71](src/components/NFLPoolDashboard/NFLStandings.tsx:64)).
+  `userName` ([NFLStandings.tsx:64-71](src/components/NFLPoolDashboard/NFLStandings.tsx#L64)).
   No weekly column, no tiebreak.
 - `settings.payoutMode` (`SEASON` | `WEEKLY` | `HYBRID`) **is stored and
   displayed only.** Every consumer is a label: the wizard select
-  ([CreateNFLPickemPool.tsx:50](src/components/wizard/create/CreateNFLPickemPool.tsx:50)),
-  the manager select ([NFLManagerView.tsx:898](src/components/NFLPoolDashboard/NFLManagerView.tsx:898)),
+  ([CreateNFLPickemPool.tsx:50](src/components/wizard/create/CreateNFLPickemPool.tsx#L50)),
+  the manager select ([NFLManagerView.tsx:898](src/components/NFLPoolDashboard/NFLManagerView.tsx#L898)),
   and explanatory copy in `PayoutsPanel.tsx:44-49` which literally tells the
   member to **"Ask your commissioner how the split works in this pool."**
   Grep for `weeklyWinner`/`weekWinner`/`weeklyPayout` across `src/`,
@@ -75,11 +75,11 @@ The pick sheet says the tiebreaker is the combined score of **both** MNF games:
 
 > "Close counts: Predict the combined final score of the MNF games. If there are
 > 2 MNF games, we count the combined score of **both** games."
-> — [PickemPickEntry.tsx:626](src/components/NFLPoolDashboard/PickemPickEntry.tsx:626)
+> — [PickemPickEntry.tsx:626](src/components/NFLPoolDashboard/PickemPickEntry.tsx#L626)
 
 and `computeMNFTiebreakerTotal` does exactly that — sums home+away across every
 `isMonday` game, returning `null` until **every** Monday game is FINAL
-([nflScoringEngine.ts:491](functions/src/nflScoringEngine.ts:491)). So copy and
+([nflScoringEngine.ts:491](functions/src/nflScoringEngine.ts#L491)). So copy and
 code agree today. Kevin's example ("if there are two games, the **last** game")
 is a **different rule** and would be a behaviour change, not a copy fix.
 
@@ -328,7 +328,7 @@ already past a scored week; two messages because the member-facing explanation
 genuinely differs.)
 
 Wired into `updatePoolSettings` at the same point as `parityTouched`
-([poolOps.ts:457](functions/src/poolOps.ts:457)) — **inside** the transaction,
+([poolOps.ts:457](functions/src/poolOps.ts#L457)) — **inside** the transaction,
 against a pool read in that transaction, and under `retryWhileScoring` so an
 in-flight scoring lease bounces the edit. That is not optional politeness: a
 save landing between the scorer's post-lease re-read and its publication
@@ -385,7 +385,7 @@ setting cannot move once a week is scored, which §5 enforces.
 
 ## 7. The pick sheet follows the setting
 
-- `showTiebreaker` ([PickemPickEntry.tsx:351](src/components/NFLPoolDashboard/PickemPickEntry.tsx:351))
+- `showTiebreaker` ([PickemPickEntry.tsx:351](src/components/NFLPoolDashboard/PickemPickEntry.tsx#L351))
   gains `&& rule !== 'NONE'`.
 - The label and the "Close counts" paragraph become rule-derived, one string per
   rule, so the sheet can never claim "both games" while the scorer sums one.
@@ -404,7 +404,7 @@ setting cannot move once a week is scored, which §5 enforces.
 - ⚠️ **`tiebreakerPrediction` keeps being submitted and stored under `NONE`?**
   Proposed: **no** — the sheet stops sending it, and `submitNFLPicks` keeps
   accepting it (the field is `?? undefined`-guarded at
-  [nflPools.ts:558](functions/src/nflPools.ts:558), so an absent value writes
+  [nflPools.ts:558](functions/src/nflPools.ts#L558), so an absent value writes
   nothing and an older client keeps working). Do not add a server-side rejection
   of the field for `NONE` pools; it would break every already-installed client
   the moment a commissioner flips the setting.
