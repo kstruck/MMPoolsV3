@@ -5,6 +5,7 @@ import type { Pool, NFLGame } from '../../types';
 import { RankChip } from '../ui';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType, gamesForPoolWeek } from '../../utils/nflPending';
+import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction } from '@shared/nflTiebreaker';
 
 interface NFLStandingsProps {
   pool: Pool;
@@ -33,6 +34,16 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
 }) => {
   const navigate = useNavigate();
   const type = pool.type;
+
+  // The MNF Score column is the tiebreaker PREDICTION, so it has no meaning on a
+  // pool whose rule is NONE. Hiding it is not cosmetic: a prediction stored
+  // before the commissioner switched to NONE keeps rendering, and the standings
+  // would print a tiebreaker figure for a pool whose rules page says it has
+  // none — the display contradicting the rules. Nothing is deleted, so a switch
+  // back before anyone submits loses no data. (codex R8.1.)
+  const showTiebreakerColumn = tiebreakerAsksForPrediction(
+    effectiveWeeklyTiebreaker((pool as { settings?: { weeklyTiebreaker?: unknown } }).settings),
+  );
 
   // This week's slate — the denominator for the Pick'em completeness column, and
   // the key set a pick'em entry's picks are stored under.
@@ -182,7 +193,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                 {type === 'NFL_PICKEM' && (
                   <>
                     <th className={`${TH} text-center`}>{nflWeekLabel(poolSeasonType(pool), week)} Pick</th>
-                    <th className={`${TH} text-center`}>MNF Score</th>
+                    {showTiebreakerColumn && <th className={`${TH} text-center`}>MNF Score</th>}
                     <th className={`${TH} text-right w-24`}>Total Points</th>
                   </>
                 )}
@@ -282,9 +293,11 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                               ? `${pickCounts[entry.ownerUid ?? entry.id]} of ${weekGameIds.length} Picks Set`
                               : faint(marker())}
                         </td>
-                        <td className="py-4 px-6 text-center text-[13px] num font-bold text-muted">
-                          {entry.weeklyTiebreakers?.[week] ? `${entry.weeklyTiebreakers[week]} pts` : '—'}
-                        </td>
+                        {showTiebreakerColumn && (
+                          <td className="py-4 px-6 text-center text-[13px] num font-bold text-muted">
+                            {entry.weeklyTiebreakers?.[week] ? `${entry.weeklyTiebreakers[week]} pts` : '—'}
+                          </td>
+                        )}
                         <td className="py-4 px-6 text-right font-display font-bold text-[color:var(--text)] text-sm num">
                           {entry.unscored ? dash : entry.totalScore ?? 0}
                         </td>

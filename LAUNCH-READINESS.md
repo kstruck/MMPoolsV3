@@ -101,17 +101,33 @@ field.
 ## I. Product gaps Kevin declared launch-blocking (added 2026-08-13)
 
 Kevin, 2026-08-13, on pick-entry UX — scoped to **confidence, pick'em and
-survivor where applicable**. Both are GAPs: engineering work, not console flips.
+survivor where applicable**. **Row status updated 2026-08-13 evening.**
 
 | # | Item | What exists today (measured) | What Kevin asked for | Verdict |
 |---|---|---|---|---|
-| I1 | **Used confidence weights gray out** | `PickemPickEntry`'s per-game `<select>` renders the full `[17-N .. 16]` range in every dropdown regardless of what other games have taken; a duplicate is flagged *after* selection (`duplicateConfidenceValues`, gold border + "Duplicate value!") and blocks submit, but nothing stops the mistake up front | Once a weight is assigned to a game (e.g. 10), gray it out / disable it in the OTHER games' dropdowns so it cannot be picked again by mistake. Keep the existing duplicate detection as the backstop — a graying bug must not silently allow a duplicate through | **GAP** — confidence mode only; no server change (validation already exists server-side); frontend + tests + Coolify |
-| I2 | **Wizard tie-breaker options for weekly/hybrid pools** | The MNF-combined-score tiebreaker is hardcoded: the pick sheet asks for it whenever a week has a Monday game (`showTiebreaker`), and scoring reads `weeklyTiebreakers[week]`. The setup wizard exposes **no tie-breaker choice at all** | Wizard options for how a weekly tie breaks — e.g. combined score of the Monday night game; if two MNF games, the LAST game (note: today's copy says *both* games combined, which is a different rule); other options as sensible. Applies to weekly/hybrid pick'em (incl. confidence); survivor **if applicable** — survivor has no weekly winner, so likely N/A, but say so explicitly rather than skipping silently | **GAP** — touches the wizard, `shared/` schema, pick sheet copy and the **scorer** → scoring trigger → **plan-gated** (`mmp-change-control` §1); functions deploy on ship |
+| I1 | **Used confidence weights gray out** | ~~Full `[17-N .. 16]` range in every dropdown~~ — **BUILT**: each game's `<select>` renders `<option disabled>` on any weight another game holds, `(used)` suffix, own weight never disabled. The duplicate backstop (`duplicateConfidenceValues` → gold border, "Duplicate value!", blocked submit) is untouched and pinned by test | Once a weight is assigned to a game (e.g. 10), gray it out / disable it in the OTHER games' dropdowns so it cannot be picked again by mistake. Keep the existing duplicate detection as the backstop | ✅ **READY — [PR #420](https://github.com/kstruck/MMPoolsV3/pull/420) open.** All gates green (943 + 1463 tests, both typechecks, CI 7/7); codex r1 clean **and** qodo 0 findings. Owes **merge + one Coolify rebuild**, no functions/rules deploy. ⚠️ **No screenshot** — see the PR body; `MORNING-2026-08-14.md` §2b is the browser look-at list |
+| I2 | **Wizard tie-breaker options for weekly/hybrid pools** | The MNF-combined-score tiebreaker is hardcoded, and — **measured 2026-08-13** — **it breaks no tie at all**: the number feeds one "closest guess" line on the weekly recap card. `buildStandingsRows` computes **no** Pick'em rank; standings sort by *season* `totalScore`. `payoutMode` (SEASON/WEEKLY/HYBRID) is stored and displayed only, and `PayoutsPanel` tells members to "ask your commissioner". **There is no weekly winner in the codebase** | Wizard options for how a weekly tie breaks — MNF combined; if two MNF games, the LAST game (today's copy says *both*, a different rule); other options as sensible. Survivor **if applicable** | ✅ **BUILT — Option B, [PR #421](https://github.com/kstruck/MMPoolsV3/pull/421).** Kevin ruled B on 2026-08-13. Ships the setting (all-Monday / last-Monday / none, default = today's rule, no migration), a real tie-broken **weekly winner** on the recap, and a server refusal that freezes the rule once anyone submits. ⚠️ **Owes a FUNCTIONS deploy and lands in the LIVE scorer.** 963 root / 1514 functions tests green. §8a is the finding worth reading: a weekly winner already existed and awarded every tied week to whichever entry Firestore iterated first. Plan: `PLAN-WEEKLY-TIEBREAKERS.md` + `-REVIEW-LOG` (**10 codex rounds, 9 findings, all valid, all absorbed** — round 10 is the §2c cap and its fixes are unreviewed, named in #421) + `-SWEEPS` (6 enumerations). Q2–Q5 of §9 were resolved as built and are recorded there. |
+| I3 | **Survivor / Margin sheets show no Correct-Incorrect state** *(from the 2026-08-13 live-scoring audit, gap G1)* | Pick'em's own sheet colours each game card green/red the moment it goes FINAL — client-side `gradePick`, no scorer involved. **Survivor and Margin render a plain `border-line` card**: live score and clock, but no win/loss acknowledgement. Their entry-level state (ALIVE/ELIMINATED, week result) moves only after the weekly lock, by design | *(not a Kevin ask — surfaced by the audit he requested)* | **GAP, recommended before launch.** Pure frontend, no reveal risk (the member's own pick and the game's FINAL status are both already on screen), **not plan-gated**, no functions deploy. `MORNING-2026-08-14.md` §4c |
 
 ⚠️ **I2 is a SCORING change and lands in a live scorer** — `nflAutoScoreJob` runs
-`*/5`. Its plan must state how existing pools keep today's behaviour (default =
-current rule, no migration) and how a mid-season settings change is refused or
-handled, same as #399 did for survivor settings.
+`*/5`. Its plan states how existing pools keep today's behaviour (absent field =
+current rule, defaults at read sites, **no migration** — the #399 pattern) and
+how a mid-season change is refused. ⚠️ **The refusal is TIGHTER than #399's**:
+codex holed the first draft for copying `poolHasScoredWeek`, which would let a
+commissioner change the rule after members had already typed a number. It freezes
+at the **first submission**, not the first scored week.
+
+**The live-scoring audit itself (Kevin's third 2026-08-13 ask) is answered in
+`MORNING-2026-08-14.md` §4** — per pool type: when a pick becomes scored, where
+each surface shows Correct/Incorrect with file:line evidence, and four ranked
+gaps. Headline: Pick'em grades **per game as each game ends** (worst case ~10
+min: ≤5 for ESPN's FINAL, ≤5 for the scorer's next pass), Survivor/Margin hold
+until the weekly lock by design, and **no surface anywhere shows a per-pick ✓/✗
+for other players** (gap G2 — the per-pick grades are written to the entry as
+`weeklyResults[week].games`, but the member-readable standings projection
+**strips them** (`sanitizeWeeklyResults`) and raw entries have been unreadable by
+other members since #414, so G2 is a **backend** change with a fresh
+reveal-policy decision in it, not a UI one).
 
 ## Accepted non-blockers (decision references)
 

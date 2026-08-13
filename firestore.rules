@@ -221,8 +221,9 @@ service cloud.firestore {
                || s is float;
       }
 
-      // The two survivor parity settings are CALLABLE-ONLY, for EVERY client
-      // principal including SUPER_ADMIN (PLAN-SURVIVOR-PARITY-SCORING decision 4).
+      // These settings are CALLABLE-ONLY, for EVERY client principal including
+      // SUPER_ADMIN (PLAN-SURVIVOR-PARITY-SCORING decision 4;
+      // PLAN-WEEKLY-TIEBREAKERS §5).
       //
       // `updatePoolSettings` refuses to change either field once the pool has
       // published a scored week, because both regrade past weeks on the next
@@ -248,11 +249,26 @@ service cloud.firestore {
       //
       // Admin-SDK and console writes bypass rules by nature; they carry the same
       // invariant by convention, not by enforcement.
-      function survivorParitySettingsUnchanged() {
+      //
+      // ⚠️ `weeklyTiebreaker` JOINED THIS LIST FOR EXACTLY THE SAME REASON, and
+      // it was nearly missed. `updatePoolSettings` refuses to change the weekly
+      // tie-breaker rule once anybody has submitted a sheet, because the number
+      // members already typed was an answer to the OLD question — and under the
+      // `NONE` rule they were never asked at all, so the scorer would read every
+      // one of them as having predicted 0.
+      //
+      // The plan for that change asserted the opposite of what this file does:
+      // it read `nflSettingsWriteBlocked()` and concluded NFL settings were
+      // denied to every client principal, so no rules work was owed. They are
+      // denied to MANAGERS. `nflSettingsWriteBlocked()` lives INSIDE the
+      // isPoolManager() branch of the disjunction below, and `isSuperAdmin()`
+      // short-circuits past it. Only the nested check in this function applies
+      // to both. (codex, on the implementation PR.)
+      function callableOnlySettingsUnchanged() {
         let changed = request.resource.data.get('settings', {})
                         .diff(resource.data.get('settings', {}))
                         .affectedKeys();
-        return !changed.hasAny(['tieCountsAs', 'maxTeamUses']);
+        return !changed.hasAny(['tieCountsAs', 'maxTeamUses', 'weeklyTiebreaker']);
       }
 
       // Pool is in an editable state.
@@ -274,8 +290,13 @@ service cloud.firestore {
       }
 
       // Update: Owner/Manager (filtered) OR SuperAdmin (unrestricted) — except
-      // the two survivor parity settings, which no client principal may write.
-      allow update: if request.auth != null && survivorParitySettingsUnchanged() && (
+      // the callable-only settings, which NO client principal may write.
+      //
+      // ⚠️ THE POSITION OF THIS CALL IS THE WHOLE GUARD. It sits OUTSIDE the
+      // disjunction, so it applies to the super-admin branch too. Every other
+      // settings protection — `nflSettingsWriteBlocked()` included — is inside
+      // the manager branch and is short-circuited by `isSuperAdmin()`.
+      allow update: if request.auth != null && callableOnlySettingsUnchanged() && (
         (isPoolManager() && protectedFieldsUnchanged() && nflSettingsWriteBlocked() && nflSeasonTypeWriteBlocked() && seasonNotForgedSim() && poolIsEditable())
         || isSuperAdmin()
       );

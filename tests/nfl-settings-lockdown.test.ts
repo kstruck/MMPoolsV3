@@ -171,3 +171,61 @@ describe('NFLManagerView — the roster toggle has no legacy payment fallback', 
     expect(view).not.toContain('is the payments update deployed?');
   });
 });
+
+/**
+ * The callable-only settings guard, and WHERE it sits in the expression
+ * (PLAN-WEEKLY-TIEBREAKERS §5; PLAN-SURVIVOR-PARITY-SCORING decision 4).
+ *
+ * ⚠️ POSITION IS THE GUARD. `allow update` is
+ *
+ *     request.auth != null && callableOnlySettingsUnchanged() && (
+ *       (isPoolManager() && ... && nflSettingsWriteBlocked() && ...)
+ *       || isSuperAdmin()
+ *     )
+ *
+ * Every settings protection except this one lives INSIDE the manager branch and
+ * is short-circuited by `isSuperAdmin()`. Hoisting a check outside the
+ * disjunction is the only way to bind a super-admin client.
+ *
+ * This block exists because a plan with ten review rounds behind it asserted
+ * that `nflSettingsWriteBlocked()` denied NFL settings to every client
+ * principal. It denies them to MANAGERS. The claim survived because grepping
+ * the function name finds the right code and answers the wrong question — and
+ * because this repo has no rules test harness, so nothing in CI could fail on
+ * it. (codex, on the weekly-tiebreaker PR.)
+ */
+describe('firestore.rules — callable-only settings bind SUPER_ADMIN too', () => {
+  const rules = read('firestore.rules');
+
+  it.each([
+    // Regrade past weeks on the next rescore (#399).
+    'tieCountsAs',
+    'maxTeamUses',
+    // Changes what a number members ALREADY TYPED means — and under NONE they
+    // were never asked, so the scorer would read them all as having predicted 0.
+    'weeklyTiebreaker',
+  ])('callableOnlySettingsUnchanged() lists %s', (field) => {
+    const fn = rules.slice(rules.indexOf('function callableOnlySettingsUnchanged()'));
+    const body = fn.slice(0, fn.indexOf('\n      }'));
+    expect(body).toContain(`'${field}'`);
+  });
+
+  it('diffs the settings MAP, not the root — a root diff would guard nothing', () => {
+    // Root `affectedKeys()` reports only the top-level `settings` key, so a
+    // per-field check against it never fires.
+    const fn = rules.slice(rules.indexOf('function callableOnlySettingsUnchanged()'));
+    const body = fn.slice(0, fn.indexOf('\n      }'));
+    expect(body).toContain("request.resource.data.get('settings', {})");
+    expect(body).toContain(".diff(resource.data.get('settings', {}))");
+  });
+
+  it('is applied OUTSIDE the super-admin disjunction', () => {
+    // The assertion that actually matters. If this call ever moves inside the
+    // `isPoolManager()` branch, every guard above becomes decorative for a
+    // super-admin client and no other test in this repo would notice.
+    const allow = rules.slice(rules.indexOf('allow update: if request.auth != null'));
+    const header = allow.slice(0, allow.indexOf('||'));
+    expect(header).toContain('callableOnlySettingsUnchanged() && (');
+    expect(header.indexOf('callableOnlySettingsUnchanged()')).toBeLessThan(header.indexOf('isPoolManager()'));
+  });
+});

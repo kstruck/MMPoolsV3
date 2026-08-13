@@ -1,4 +1,5 @@
 import React from 'react';
+import { effectiveWeeklyTiebreaker } from '@shared/nflTiebreaker';
 import { HelpCircle, Shield, Award, Calendar, DollarSign, RefreshCw, Zap, Moon, Star, Trophy, Lock, Settings } from 'lucide-react';
 import type { Pool } from '../../types';
 import { PayoutsPanel } from '../PayoutsPanel';
@@ -19,6 +20,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
   const castPool = pool as any;
   const type = pool.type;
   const settings = castPool.settings || {};
+  const tiebreakerRule = effectiveWeeklyTiebreaker(settings as { weeklyTiebreaker?: unknown });
 
   const entryFee = settings.entryFee ?? 0;
   const lockBuffer = settings.lockBufferMinutes ?? 5;
@@ -126,6 +128,8 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
         </div>
 
         {/* Card 3: Game Rules Specific to Pool Type */}
+        {/* Resolved, never raw — an unset pool plays MNF_COMBINED and the
+            rules page must say so rather than showing nothing. */}
         {type === 'NFL_PICKEM' && (
           <div className="bg-card border border-line rounded-xl p-6 shadow-card space-y-4 md:col-span-2">
             <h4 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted flex items-center gap-2">
@@ -171,6 +175,24 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                       <span className="text-gold-600 dark:text-gold-400 font-display font-bold num">+{settings.primetimeBonus.monday} pts</span>
                     </div>
                   )}
+                  {/* THE HOUSE RULE FOR A TIED WEEK. It belongs on the rules
+                      page and not only on the pick sheet: the sheet asks for the
+                      number, this says what the number decides — and on a NONE
+                      pool the sheet asks nothing at all, so this is the only
+                      place a member can learn that a tied week is shared. */}
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted font-bold flex items-center gap-1 shrink-0"><Trophy size={11} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> Weekly Tie:</span>
+                    <span className="text-[color:var(--text)] font-display font-bold text-right text-[12px]">
+                      {tiebreakerRule === 'NONE' ? 'Shared — no tiebreaker'
+                        : tiebreakerRule === 'MNF_LAST_GAME' ? 'Closest to the LAST Monday game total'
+                          : 'Closest to the combined Monday total'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted leading-relaxed">
+                    {tiebreakerRule === 'NONE'
+                      ? 'Players who finish a week level share it — this pool asks for no tiebreaker prediction.'
+                      : 'Level on points? The player whose predicted score is closest wins the week. Still level after that, and it is shared.'}
+                  </p>
                 </div>
               </div>
 

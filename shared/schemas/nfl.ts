@@ -3,6 +3,7 @@
 // Settings shapes per src/types/nflPoolTypes.ts.
 import { z } from 'zod';
 import { MAX_TEAM_USES, TIE_COUNTS_AS_VALUES } from '../survivorReuse';
+import { WEEKLY_TIEBREAKER_VALUES } from '../nflTiebreaker';
 import { contactFieldsSchema, brandingSchema, payoutsSchema } from './common';
 
 const nflBase = contactFieldsSchema.extend({
@@ -32,6 +33,11 @@ export const pickemCreateInputSchema = nflBase.extend({
     lockBufferMinutes: z.number().optional(),
     payoutMode: z.enum(['SEASON', 'WEEKLY', 'HYBRID']).optional(),
     pickMode: z.enum(['STRAIGHT', 'ATS']).optional(),
+    // This is a z.object, so it STRIPS unknown keys — without this line the
+    // wizard's choice would be silently dropped at create and every new pool
+    // would play the default. Mandatory, not cosmetic (the same trap the two
+    // survivor parity settings document above).
+    weeklyTiebreaker: z.enum(WEEKLY_TIEBREAKER_VALUES).optional(),
     pointsPerPick: z.number().optional(),
   }),
 });

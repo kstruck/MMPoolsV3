@@ -30,5 +30,30 @@ export function formatSharpScore(poolType: string | undefined, score: number): s
  * broken page rather than as a quiet week.
  */
 export function recapHasHighlights(recap: WeeklyRecap): boolean {
-  return Boolean(recap.sharpOfWeek) || Boolean(recap.closestTiebreaker) || recap.attritionCount !== undefined;
+  return (
+    Boolean(recap.weeklyWinners?.length) ||
+    Boolean(recap.sharpOfWeek) ||
+    Boolean(recap.closestTiebreaker) ||
+    recap.attritionCount !== undefined
+  );
+}
+
+/**
+ * How the weekly-winner line reads.
+ *
+ * Two decisions live here rather than in JSX, so the rules cannot drift apart
+ * in a template:
+ *
+ *  - **The word "Winner" is gated on `payoutMode`.** On a SEASON pool nothing is
+ *    won weekly, and a trophy line would imply a prize that does not exist. The
+ *    same data is honest as "Top Scorer".
+ *  - **A shared win says so.** More than one name is the ordinary outcome of a
+ *    tie the pool's tiebreaker cannot separate — see `computeWeeklyWinners`. It
+ *    is never an error, and it must never render as if one of them won.
+ */
+export function weeklyWinnerLabel(payoutMode: string | undefined, shared: boolean): string {
+  if (payoutMode !== 'WEEKLY' && payoutMode !== 'HYBRID') {
+    return shared ? 'Top Scorers (tied)' : 'Top Scorer';
+  }
+  return shared ? 'Weekly Winners (shared)' : 'Weekly Winner';
 }

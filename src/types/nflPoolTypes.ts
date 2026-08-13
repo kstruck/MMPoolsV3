@@ -1,4 +1,5 @@
 import type { PayoutSettings } from './index';
+import type { WeeklyTiebreaker } from '@shared/nflTiebreaker';
 
 export interface NFLGame {
   id: string; // e.g. "espn_401671234"
@@ -82,6 +83,13 @@ export interface NFLPickemPool {
     lockBufferMinutes: number; // grace period buffer (default: 5)
     payoutMode: 'SEASON' | 'WEEKLY' | 'HYBRID';
     pickMode: 'STRAIGHT' | 'ATS'; // ATS scored vs game.spread (push = 0 points)
+    /**
+     * How a weekly tie breaks. OPTIONAL, and absence means `MNF_COMBINED` —
+     * the rule every pool created before this setting has been playing. Resolve
+     * it through `effectiveWeeklyTiebreaker` (`@shared/nflTiebreaker`), never by
+     * reading this field raw, or an unset pool changes behaviour on read.
+     */
+    weeklyTiebreaker?: WeeklyTiebreaker;
     // Custom scoring options
     pointsPerPick?: number; // base points awarded per correct pick (default: 1)
     primetimeBonus?: {
@@ -274,6 +282,17 @@ export interface WeeklyRecap {
   biggestUpsetPick?: { userId: string; userName: string; gameId: string; teamName: string };
   closestTiebreaker?: { userId: string; userName: string; diff: number };
   mostContrarianPick?: { userId: string; userName: string; gameId: string; teamName: string };
+  /**
+   * Who won the week, after the pool's tie-breaker rule
+   * (PLAN-WEEKLY-TIEBREAKERS §8b). Hand-duplicated from
+   * `functions/src/nflPoolTypes.ts` — keep the two in step.
+   *
+   * ALWAYS an array: more than one entry is a SHARED win, the ordinary outcome
+   * of a tie the tiebreaker cannot separate. ABSENT means "not computed" (an
+   * older recap, a Survivor pool, a week with no scored entries) and never
+   * "nobody won" — so a renderer must not print an empty-state for it.
+   */
+  weeklyWinners?: Array<{ userId: string; userName: string; points: number; tiebreakDiff?: number }>;
   attritionCount?: number; // Survivor remaining alive count
   recapText?: string; // AI generated context
   createdAt: number;

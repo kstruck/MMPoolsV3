@@ -7,7 +7,7 @@ import type { PoolPicksReveal } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import type { User, Pool, NFLGame, WeeklyRecap } from '../../types';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
-import { formatSharpScore, recapHasHighlights } from '../../utils/recapHighlight';
+import { formatSharpScore, recapHasHighlights, weeklyWinnerLabel } from '../../utils/recapHighlight';
 import { CountdownTo } from '../common/CountdownTo';
 
 // Lazy load or import sub-views (we will create them next!)
@@ -651,7 +651,34 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                             </p>
                           )}
 
-                          {recap.sharpOfWeek && (
+                          {/* WHO WON THE WEEK. Written only on a COMPLETE
+                              scoring pass — every game concluded and past its
+                              own lock — so it cannot appear as a mid-Sunday
+                              "leader so far" that members would read as a
+                              result (PLAN-WEEKLY-TIEBREAKERS §8b).
+
+                              More than one name is a SHARED win: the pool's
+                              tiebreaker could not separate them, or there was
+                              no tiebreaker to apply. That is the ordinary
+                              outcome of a tie, not an error state. */}
+                          {!!recap.weeklyWinners?.length && (
+                            <div className="flex justify-between items-center border-b border-line pb-2 gap-3">
+                              <span className="text-muted font-bold flex items-center gap-1.5 shrink-0"><Trophy size={13} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> {weeklyWinnerLabel((pool as { settings?: { payoutMode?: string } }).settings?.payoutMode, recap.weeklyWinners.length > 1)}:</span>
+                              <span className="text-[color:var(--text)] font-display font-bold num text-right">
+                                {recap.weeklyWinners.map(w => w.userName).join(', ')}
+                                {' '}({formatSharpScore(pool.type, recap.weeklyWinners[0].points)}{recap.weeklyWinners.length > 1 ? ' each' : ''})
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Suppressed when the winner line is present: both
+                              are "highest score this week", so rendering both
+                              prints the same name twice — and on a TIED week
+                              they would disagree, because `sharpOfWeek` still
+                              holds the arbitrary first-iterated entry that
+                              `weeklyWinners` exists to replace. It is still
+                              WRITTEN, so older recaps keep rendering. */}
+                          {!recap.weeklyWinners?.length && recap.sharpOfWeek && (
                             <div className="flex justify-between items-center border-b border-line pb-2">
                               <span className="text-muted font-bold flex items-center gap-1.5"><Target size={13} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> Sharp of the Week:</span>
                               <span className="text-[color:var(--text)] font-display font-bold num">
