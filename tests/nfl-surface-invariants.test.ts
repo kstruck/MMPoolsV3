@@ -479,3 +479,83 @@ describe('confidence weights — graying is wired, and the duplicate backstop su
     expect(code).toContain("'Two games share a confidence weight'");
   });
 });
+
+/**
+ * The Season/Week standings toggle (Kevin, 2026-08-13: a pool paying weekly
+ * needs the week's own ranking on screen).
+ *
+ * The invariant worth pinning is NULL-IS-NOT-ZERO. A member the scorer has not
+ * reached this week has no weekly value; coalescing that to 0 would rank
+ * "hasn't been scored" above a Margin player who played and lost by 3, and tie
+ * them with a Pick'em player who played and got everything wrong. The view is
+ * read during live Sunday scoring, which is exactly when half the pool is in
+ * that state.
+ */
+describe('standings week view — absence is not zero, and Survivor has no week to rank', () => {
+  const src = readFileSync(
+    resolve(root, 'src/components/NFLPoolDashboard/NFLStandings.tsx'),
+    'utf8',
+  );
+  const code = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+  it('weekValue returns null for a missing week, never a coalesced 0', () => {
+    expect(code).toContain("return typeof v === 'number' ? v : null;");
+    // The one wrong implementation this is most likely to rot into.
+    expect(code).not.toContain('weeklyPoints?.[week] ?? 0');
+    expect(code).not.toContain('weeklyScores?.[week] ?? 0');
+  });
+
+  it('the week ranking drops nulls to the bottom instead of sorting them as values', () => {
+    expect(code).toContain('weekValue(e) !== null');
+    expect(code).toContain('weekValue(e) === null');
+  });
+
+  it('Survivor is excluded from the toggle — N/A, not just unranked', () => {
+    expect(code).toContain("weekRanked = standingsView === 'WEEK' && type !== 'NFL_SURVIVOR'");
+    expect(code).toContain("type !== 'NFL_SURVIVOR' && (");
+  });
+
+  it('a not-yet-scored week shows no rank chip', () => {
+    expect(code).toContain('if (weekRanked && weekValue(entry) === null)');
+  });
+});
+
+/**
+ * WEEK-view ties share a rank (competition ranking). Positional numbering
+ * would hand a tied week to the alphabet, and the tiebreak is the SCORER's
+ * call — the recap's winner line applies the MNF prediction (Pick'em) or
+ * declares the tie shared (Margin). A table showing a different first place
+ * than the recap is the exact contradiction this view exists to remove.
+ * (codex r1 on the standings-toggle PR.)
+ */
+describe('standings week view — tied scores share a rank', () => {
+  const src = readFileSync(
+    resolve(root, 'src/components/NFLPoolDashboard/NFLStandings.tsx'),
+    'utf8',
+  );
+  const code = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+  it('week rank comes from the precomputed shared-rank map, not the row index', () => {
+    // Competition ranking (1,1,3) via one O(n) pass over the sorted list — the
+    // per-row strictly-better filter it replaces was O(n²) (qodo). Same-value
+    // rows share the previous rank; a new value takes index+1.
+    expect(code).toContain('weekRankByUid.get(entry.id)');
+    expect(code).toContain('v === prevVal ? prevRank : i');
+  });
+
+  it('the toggle resets to Season when the pool changes', () => {
+    // PoolRoute reuses the component across pool navigation; without the reset
+    // a WEEK view chosen in one pool leaks into the next pool's standings.
+    expect(code).toContain("useEffect(() => { setStandingsView('SEASON'); }, [pool.id]);");
+  });
+
+  it('the season view still ranks positionally', () => {
+    expect(code).toContain('rank={index + 1}');
+  });
+});
