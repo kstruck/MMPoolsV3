@@ -311,8 +311,16 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
     // pool keeps the honest "ask your commissioner" copy below. Amounts are
     // whole-dollar approximations by design; the commissioner settles cents.
     const split = payoutMode === 'HYBRID' ? (settings.hybridSplit as { weeklyPerEntry?: number; seasonPerEntry?: number } | undefined) : undefined;
+    // Charity comes off each pot proportionally BEFORE percentages — the
+    // PotBreakdown says donations are removed before payouts, so gross pots
+    // here would overstate every award by the donated share. Same Math.floor
+    // convention as the charity line itself. (codex r4.)
+    const charityFactor = charity?.enabled ? 1 - charity.percentage / 100 : 1;
     const splitPots = split && knownEntries !== undefined && knownEntries > 0
-        ? { weekly: (split.weeklyPerEntry ?? 0) * knownEntries, season: (split.seasonPerEntry ?? 0) * knownEntries }
+        ? {
+            weekly: Math.floor((split.weeklyPerEntry ?? 0) * knownEntries * charityFactor),
+            season: Math.floor((split.seasonPerEntry ?? 0) * knownEntries * charityFactor),
+          }
         : undefined;
 
     // Under a declared HYBRID split the percentages apply to EACH pot, so one
