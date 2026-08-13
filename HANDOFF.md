@@ -1,4 +1,42 @@
-# HANDOFF — Session entry point (updated 2026-08-13 overnight: **#416 is MERGED (`43c00f09`, docs only — nothing deployed for it). [#417](https://github.com/kstruck/MMPoolsV3/pull/417) is OPEN and fully gated** — the pick'em sheet joins the shared CBS row treatment and gains a Quick Picks autofill; CI 7/7, vitest 931/931, codex clean on the final diff after one real P2, qodo reported with no defect findings, no findings carried. **It is FRONTEND ONLY and owes ONE Coolify rebuild on merge — no functions, no rules, no indexes.** ⚠️ **No deploy was run and no config was flipped overnight**; the deploy facts in the box below are unchanged and still current. 🛑 **A money bug is LIVE and now has a plan awaiting sign-off** — `PLAN-EMPTY-SUBMISSION-FEE.md`: an empty pick'em submission latches `hasPlayableEntry` and upgrades a seeded manager's `feeOwed` from 0 to the entry fee. No code was written; §6 needs Kevin's four answers. ⚠️ **Nothing from #414/#415/#417 has EVER been looked at in a browser** — `MORNING-2026-08-13.md` §2 is the whole substitute. Runbook: **`MORNING-2026-08-13.md`**. ⬇️ The 2026-08-12 paragraph below is retained because its deploy facts are still the live ones.)
+# HANDOFF — Session entry point (updated 2026-08-13: ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417's REBUILD IS DEPLOYED AND VERIFIED IN THE SHIPPED BUNDLE.** `main` is at `d6bae3f4`. **ALL QUEUES ARE EMPTY.** The frontend is rebuilt from `d6bae3f4` — live bundle moved `index-Dv5RBrGq.js` → **`index-BB2oOzrg.js`**. **Functions and rules are UNCHANGED and remain deployed from `c37bbd37`**; #417 touched no `functions/`, no `shared/`, no `firestore.rules`, no `firestore.indexes.json`, so no functions or rules deploy was owed or run. 🛑 **A money bug is LIVE and has a plan awaiting sign-off** — `PLAN-EMPTY-SUBMISSION-FEE.md`: an empty pick'em submission latches `hasPlayableEntry` and upgrades a seeded manager's `feeOwed` from 0 to the entry fee. No code written; §6 needs Kevin's four answers. ⚠️ **Nothing from #414/#415/#417 has EVER been looked at in a browser** — `MORNING-2026-08-13.md` §2 is the whole substitute, and it is the largest open item. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5` *(**UNVERIFIED** — carried from 2026-08-09, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. Runbook: **`MORNING-2026-08-13.md`**. ⬇️ The 2026-08-12 paragraph below is retained because its FUNCTIONS and RULES facts are still the live ones — its frontend claim is superseded by this line.)
+
+> ## ✅ FRONTEND DEPLOY 2026-08-13 — **#417 verified INSIDE the shipped JavaScript, not inferred from a moved hash**
+>
+> **Live bundle: `index-BB2oOzrg.js`** (`index-Dv5RBrGq.js` before), read off the
+> prod HTML, HTTP 200.
+>
+> ⚠️ **A moved hash proves a rebuild ran; it does not prove WHICH code shipped.**
+> So the check was the chunk-graph crawl from the 2026-08-06 box, **with fresh
+> sentinels** — five strings that exist only after #417, crawled across the entry
+> bundle and every chunk it references:
+>
+> ```
+> scanned 106 assets
+> games to submit                          1
+> no line yet                              1
+> Nothing left to fill                     1
+> Quick Picks                              1
+> Two games share a confidence weight      1
+> ```
+>
+> All five present, each exactly once. `Quick Picks` is the button and dialog
+> title, `no line yet` the unpriced-games notice, `Nothing left to fill` the
+> all-locked fallback, and the other two are new `StickySaveBar` blocked reasons.
+>
+> 🔁 **SWAP THE SENTINELS BEFORE REUSING THIS.** Those five are now LIVE, so the
+> same crawl passes against the current bundle and would report success on a
+> failed or stale deploy. Next time, pick a string the NEXT change introduces —
+> or a COUNT it changes, which is the only way to detect a change that REMOVES
+> code.
+>
+> ⚠️ **Do NOT shortcut it to grepping `index-*.js`.** These strings live in
+> lazily-imported route chunks; the entry bundle alone reports ABSENT on a
+> perfectly good deploy.
+>
+> **Functions and rules were NOT redeployed and nothing is owed on either.**
+> Verified: `git diff --name-only c37bbd37 d6bae3f4 -- functions/ shared/ firestore.rules firestore.indexes.json`
+> is empty across #416, #418 and #417 — all three are docs or `src/**`.
+
 
 *(2026-08-12 — **deploy facts still current**: ✅ **#414 AND #415 ARE MERGED AND DEPLOYED.** Functions, frontend and rules are all live from `main` @ `c37bbd37` — deployed in the required order (functions → Coolify → rules) on the morning of 2026-08-12 and each surface verified independently, not inferred from a deploy log. **Commissioner-blind picks are LIVE in production**: a pool's owner/manager can no longer read raw entries, and pick content comes from the `getPoolPicks` callable past each game's own lock. **Nothing is owed on any deploy queue.** The one thing still open is the launch checklist (invites, `nflDeepSweep`, NFL-6, backups, SA key) — `MORNING-2026-08-12.md` §3–§4. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5` *(**UNVERIFIED** — carried from 2026-08-09, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
