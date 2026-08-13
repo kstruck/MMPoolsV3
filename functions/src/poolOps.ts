@@ -18,6 +18,7 @@ import {
 import { loadBillingConfig } from './billing';
 import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } from './lib/poolUpdate';
 import { parityEditNeedsEntries, survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
+import { tiebreakerEditNeedsEntries, touchesWeeklyTiebreakerSetting, weeklyTiebreakerRefusal } from './lib/weeklyTiebreakerGate';
 import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } from './lib/scoringLease';
 
 // Helper to determine if user can manage pool
@@ -455,7 +456,16 @@ export const updatePoolSettings = validated(
     // land between the manual scorer's post-lease re-read and its publication —
     // results published under settings they were not computed with.
     const parityTouched = touchesSurvivorParitySettings(patch);
-    if (touchesLockSettings(patch) || parityTouched) {
+    // The weekly tie-breaker rule joins the SAME transaction, for the same
+    // reason and one extra one. Same reason: its refusal has to be evaluated
+    // against a pool read inside the transaction that writes, or a save can
+    // land between a scorer's post-lease re-read and its publication. Extra
+    // reason: unlike the parity settings, this one is refused on evidence that
+    // lives in the ENTRIES (has anybody submitted?), so a non-transactional
+    // check could pass while a member's first submission commits behind it.
+    // (PLAN-WEEKLY-TIEBREAKERS §5.)
+    const tiebreakerTouched = touchesWeeklyTiebreakerSetting(patch);
+    if (touchesLockSettings(patch) || parityTouched || tiebreakerTouched) {
         const bumpsLockRevision = touchesLockSettings(patch);
         await retryWhileScoring(() => db.runTransaction(async (tx) => {
             const current = (await tx.get(poolRef)).data() as Record<string, unknown> | undefined;
@@ -465,8 +475,11 @@ export const updatePoolSettings = validated(
             // them unconditionally would mean hundreds of transactional reads to
             // confirm that nothing changed. Sequential reads are fine; it is a
             // read AFTER a write that Firestore forbids.
-            const entries = parityTouched && parityEditNeedsEntries({ ...current, id: poolId }, patch)
-                ? (await tx.get(poolRef.collection('entries'))).docs.map((d) => d.data() as { picks?: Record<string, unknown> })
+            const needsEntries =
+                (parityTouched && parityEditNeedsEntries({ ...current, id: poolId }, patch)) ||
+                (tiebreakerTouched && tiebreakerEditNeedsEntries({ ...current, id: poolId }, patch));
+            const entries = needsEntries
+                ? (await tx.get(poolRef.collection('entries'))).docs.map((d) => d.data() as { picks?: Record<string, unknown>; weeklyTiebreakers?: Record<string, unknown> })
                 : [];
             if (leaseIsLive(readScoringLease(current), Date.now())) {
                 throw new HttpsError(
@@ -476,6 +489,10 @@ export const updatePoolSettings = validated(
             }
             if (parityTouched) {
                 const refusal = survivorParitySettingsRefusal({ ...current, id: poolId }, patch, entries);
+                if (refusal) throw new HttpsError('failed-precondition', refusal.message);
+            }
+            if (tiebreakerTouched) {
+                const refusal = weeklyTiebreakerRefusal({ ...current, id: poolId }, patch, entries);
                 if (refusal) throw new HttpsError('failed-precondition', refusal.message);
             }
             tx.update(poolRef, {

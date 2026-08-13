@@ -1,3 +1,5 @@
+import type { WeeklyTiebreaker } from './shared/nflTiebreaker';
+
 export interface PayoutSettings {
   places: { rank: number; percentage: number }[];
   bonuses: { name: string; percentage: number }[];
@@ -85,6 +87,12 @@ export interface NFLPickemPool {
     lockBufferMinutes: number;
     payoutMode: 'SEASON' | 'WEEKLY' | 'HYBRID';
     pickMode: 'STRAIGHT' | 'ATS';
+    /**
+     * How a weekly tie breaks. OPTIONAL — absence means `MNF_COMBINED`, the
+     * rule every pre-existing pool has been playing. Always resolve through
+     * `effectiveWeeklyTiebreaker`, never by reading this field raw.
+     */
+    weeklyTiebreaker?: WeeklyTiebreaker;
   };
 
   managerName?: string;
@@ -283,6 +291,17 @@ export interface WeeklyRecap {
   biggestUpsetPick?: { userId: string; userName: string; gameId: string; teamName: string };
   closestTiebreaker?: { userId: string; userName: string; diff: number };
   mostContrarianPick?: { userId: string; userName: string; gameId: string; teamName: string };
+  /**
+   * Who won the week, after the pool's tie-breaker rule
+   * (PLAN-WEEKLY-TIEBREAKERS §8b). Pick'em and Margin only — Survivor has no
+   * weekly score to rank.
+   *
+   * ALWAYS an array: more than one entry means a shared win, which is the
+   * ordinary outcome of a tie the tiebreaker cannot separate, not an error.
+   * ABSENT means "not computed" — an older recap, a Survivor pool, or a week
+   * with no scored entries. It never means "nobody won".
+   */
+  weeklyWinners?: Array<{ userId: string; userName: string; points: number; tiebreakDiff?: number }>;
   attritionCount?: number;
   recapText?: string;
   createdAt: number;

@@ -65,6 +65,16 @@ function StepPickemRules() {
         hint="Straight up is the default and needs no betting lines. ATS grades every pick against the game's spread, with a push scoring zero."
       />
       <AtsWarning />
+      <SelectField
+        name="settings.weeklyTiebreaker"
+        label="Weekly tie-breaker"
+        options={[
+          { value: 'MNF_COMBINED', label: 'Monday night — combined score of ALL Monday games' },
+          { value: 'MNF_LAST_GAME', label: 'Monday night — combined score of the LAST Monday game' },
+          { value: 'NONE', label: 'None — tied weeks are shared' },
+        ]}
+        hint="Decides who wins a week when two players score the same. Players predict the number on their pick sheet. It cannot be changed once anyone has submitted picks, so pick it now."
+      />
       <CheckboxField name="settings.confidenceMode" label="Confidence points (rank picks; forces weekly lock)" />
     </div>
   );
@@ -122,6 +132,9 @@ const defaultValues: Record<string, unknown> = {
     lockMode: 'PER_GAME',
     payoutMode: 'SEASON',
     pickMode: 'STRAIGHT',
+    // The historical rule, so a commissioner who never touches the control
+    // creates the pool everyone already understands.
+    weeklyTiebreaker: 'MNF_COMBINED',
     lockBufferMinutes: 5,
     confidenceMode: false,
     payouts: { places: [{ rank: 1, percentage: 100 }], bonuses: [] },

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatSharpScore, recapHasHighlights } from './recapHighlight';
+import { formatSharpScore, recapHasHighlights, weeklyWinnerLabel } from './recapHighlight';
 import type { WeeklyRecap } from '../types';
 
 const base: WeeklyRecap = { id: 'week_1', poolId: 'p1', week: 1, createdAt: 0 };
@@ -48,5 +48,40 @@ describe('recapHasHighlights', () => {
   // truthiness check would report that week as having nothing to show.
   it('is true on an attrition count of ZERO', () => {
     expect(recapHasHighlights({ ...base, attritionCount: 0 })).toBe(true);
+  });
+
+  it('is true on a weekly winner', () => {
+    // Without this a recap whose ONLY content is the winner renders
+    // "No highlights this week" over the thing members came to see.
+    expect(recapHasHighlights({
+      ...base,
+      weeklyWinners: [{ userId: 'u', userName: 'U', points: 11 }],
+    })).toBe(true);
+  });
+
+  it('is NOT true on an empty weeklyWinners array', () => {
+    // The scorer never writes one, but a hand-edited or partially-migrated doc
+    // could carry it, and an empty array is not a highlight.
+    expect(recapHasHighlights({ ...base, weeklyWinners: [] })).toBe(false);
+  });
+});
+
+describe('weeklyWinnerLabel', () => {
+  it('says WINNER only where something is actually won weekly', () => {
+    expect(weeklyWinnerLabel('WEEKLY', false)).toBe('Weekly Winner');
+    expect(weeklyWinnerLabel('HYBRID', false)).toBe('Weekly Winner');
+  });
+
+  it('says TOP SCORER on a season-long pool, where no weekly prize exists', () => {
+    // A trophy line on a SEASON pool would imply a prize that does not exist.
+    expect(weeklyWinnerLabel('SEASON', false)).toBe('Top Scorer');
+    expect(weeklyWinnerLabel(undefined, false)).toBe('Top Scorer');
+  });
+
+  it('marks a shared week as shared, in both registers', () => {
+    // A tie the pool's tiebreaker could not separate must never render as if
+    // one of them won.
+    expect(weeklyWinnerLabel('WEEKLY', true)).toBe('Weekly Winners (shared)');
+    expect(weeklyWinnerLabel('SEASON', true)).toBe('Top Scorers (tied)');
   });
 });

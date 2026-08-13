@@ -16,6 +16,7 @@ import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { buildPoolRoster, hasCompletePicks, memberOutstanding, duesRates } from '../../utils/poolRoster';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
+import { effectiveWeeklyTiebreaker } from '@shared/nflTiebreaker';
 import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReuse';
 
 /**
@@ -169,6 +170,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       : (settings.lockBufferMinutes ?? 5)
   );
   const [payoutMode, setPayoutMode] = useState<string>(settings.payoutMode ?? 'SEASON');
+  // Resolved, never raw: an unset pool must show the rule it is actually
+  // playing (MNF_COMBINED), not an empty select that would save as a change.
+  const [weeklyTiebreaker, setWeeklyTiebreaker] = useState<string>(effectiveWeeklyTiebreaker(settings));
   const [pointsPerPick, setPointsPerPick] = useState<number>(settings.pointsPerPick ?? 1);
   const [thursdayBonus, setThursdayBonus] = useState<number>(settings.primetimeBonus?.thursday ?? 0);
   const [sundayNightBonus, setSundayNightBonus] = useState<number>(settings.primetimeBonus?.sundayNight ?? 0);
@@ -432,6 +436,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           lockMode,
           lockBufferMinutes,
           payoutMode,
+          weeklyTiebreaker,
           pointsPerPick,
           ...(Object.keys(primetimeBonus).length > 0 ? { primetimeBonus } : { primetimeBonus: null }),
         };
@@ -903,6 +908,27 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <option value="WEEKLY">Weekly Winner Only</option>
                   <option value="HYBRID">Hybrid (Season-End + Weekly Prizes)</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Weekly Tie-Breaker</label>
+                <select
+                  value={weeklyTiebreaker}
+                  onChange={e => setWeeklyTiebreaker(e.target.value)}
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                >
+                  <option value="MNF_COMBINED">Monday night — combined score of ALL Monday games</option>
+                  <option value="MNF_LAST_GAME">Monday night — combined score of the LAST Monday game</option>
+                  <option value="NONE">None — tied weeks are shared</option>
+                </select>
+                {/* The server refuses the change once anyone has submitted, and
+                    it refuses it in a transaction that also reads the entries —
+                    so this is the honest warning, not the enforcement. Saying
+                    nothing here would let a commissioner discover the rule from
+                    an error toast. */}
+                <p className="mt-1.5 text-[11px] font-body text-muted leading-normal">
+                  Breaks a tie when two players score the same in a week. <strong>Locked once anybody submits picks</strong> — after that the number players already entered was an answer to the old question.
+                </p>
               </div>
 
               {/* Scoring Configuration */}

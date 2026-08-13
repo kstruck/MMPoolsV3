@@ -1,6 +1,14 @@
 # PLAN — wizard tie-breaker options for weekly / hybrid pools
 
-**Status:** 🛑 AWAITING KEVIN'S SIGN-OFF. No code written.
+**Status:** ✅ **SIGNED OFF — Kevin chose OPTION B, 2026-08-13 (UTC; the
+evening of 08-12 ET).** The sign-off was given in chat, in the session that
+wrote this section; codex flagged the header as bypassing the change-control
+gate because it cannot see the conversation — rejected on that ground, and the
+date qualified here because the repo dates tonight's work 08-13 (UTC) while the
+workspace clock reads 08-12 (ET). §8 is now a
+specification rather than a sketch, and implementation is under way. §2 is kept
+verbatim as the record of what the choice was between; my recommendation there
+was A, Kevin's ruling is B, and B is what gets built.
 **Trigger:** `LAUNCH-READINESS.md` §I row **I2**, Kevin 2026-08-13.
 **Gate:** `mmp-change-control` §1 — **scoring**. PLAN → adversarial review log →
 sweeps → sign-off → code.
@@ -143,7 +151,16 @@ in a scorer that has never run a live season, three weeks before kickoff. The
 commissioners are the people paying out; taking the ruling off them is a bigger
 change than it looks.
 
-**Everything below specifies Option A.** Section 8 sketches what B would add.
+**Everything in §§3–7 specifies Option A. §8 specifies B on top of it.**
+
+✅ **KEVIN RULED: B** (2026-08-13). The recommendation above stands as written
+— a recommendation that was not taken is still the honest record of what was
+advised, and burying it would make this document a worse account of the
+decision. What changed after the ruling is §8a: measuring B properly showed it is
+**far smaller than the estimate in this section**, because a weekly winner
+already exists and already breaks ties arbitrarily. The "2–3 PRs, not a
+pre-season item" line above is **withdrawn** on that evidence, not on the
+ruling.
 
 ---
 
@@ -411,31 +428,177 @@ setting cannot move once a week is scored, which §5 enforces.
 
 ---
 
-## 8. What Option B would add, if Kevin wants it
+## 8. OPTION B — the specification (Kevin chose B, 2026-08-13)
 
-Listed so the decision is informed, **not** as a specification:
+**Kevin picked B.** This section was a sketch and is now the spec. §§3–7 above
+(the setting, the no-migration default, the edit freeze, the scorer, the sheet)
+are unchanged and are the **A half**; everything here is what B adds on top.
 
-1. A per-week ranking for Pick'em in `buildStandingsRows` (it computes none today).
-2. A tiebreak cascade: weekly points desc → `|prediction − target|` asc → **then
-   what?** Two members exactly 1 off is not rare. Shared win? Earlier submit
-   time? That is a product decision with money attached.
-3. A publication rule that survives the provisional pass — the winner cannot be
-   final before every Monday game is, and a "leader so far" that changes on
-   Monday night will be read as a result.
-4. A surface: a weekly-winner column or a recap line, and a Payouts panel that
-   stops saying "ask your commissioner".
-5. A reveal-safety pass: a weekly winner is derived from picks, so it must not
-   leak anything `getPoolPicks` withholds.
+### 8a. 🛑 The finding that makes B far smaller than §2 estimated
 
-Estimate, honestly: this is a plan of its own plus 2–3 PRs, and it lands in the
-live scorer. It is not a pre-season item.
+**A weekly winner already exists, is already published, and already picks
+arbitrarily among ties.** `recap.sharpOfWeek` is "highest points this week":
 
----
+```ts
+// functions/src/nflPools.ts:1302  (Pick'em)
+if (!sharpUser || points > sharpUser.val) { sharpUser = {...}; }
+// functions/src/nflPools.ts:1447  (Margin — same shape)
+```
+
+Strict `>`, so the **first** entry iterated wins every tie, and the iteration
+order is `entriesSnap.docs` — Firestore document order, i.e. arbitrary. On a
+`payoutMode: WEEKLY` pool the recap has been naming the winner of a tied week by
+document id since the feature shipped.
+
+So B is **not** "build a weekly winner". It is:
+
+1. make the existing one break ties by the rule §3 lets the commissioner choose,
+2. let it say **shared** when the tiebreak cannot separate the leaders, and
+3. label it as a winner where a winner is what it means.
+
+§2's estimate ("a plan of its own plus 2–3 PRs") was written before this was
+measured and is **withdrawn**. One PR.
+
+### 8b. Where the winner lives — the recap, and nothing new
+
+`weeklyWinners` is added to the existing `WeeklyRecap` doc. No new collection,
+no new callable, **no new reveal policy**, and that last one is the reason:
+
+- The recap is written **only on a complete pass** —
+  `const recapWritten = !dryRun && !provisional` ([nflPools.ts:1512](functions/src/nflPools.ts#L1512)).
+  A complete pass means every game concluded **and** past its own effective lock
+  (`isWeekComplete`). So the winner cannot be published before the week is fully
+  revealed, and §2's worry about a mid-Sunday "leader so far" being read as a
+  result **cannot arise** — the field simply is not there yet.
+- The recap is already member-readable and already rendered
+  ([NFLPoolDashboard.tsx:663](src/components/NFLPoolDashboard/NFLPoolDashboard.tsx#L663)).
+- It derives from `weeklyPoints` and `weeklyTiebreakers`, on a week that is
+  fully revealed by construction. A name plus a point total discloses nothing
+  that week has not already disclosed.
+
+```ts
+weeklyWinners?: Array<{ userId: string; userName: string; points: number; tiebreakDiff?: number }>;
+```
+
+An **array**, always, even for one winner — a shared week is a first-class
+outcome (§8c), not an exception, and a `| null` union or a separate `isShared`
+flag would be two states to keep in sync.
+
+`buildWeeklyRecap` omits undefined optional fields deliberately (Firestore
+`set()` throws on a literal `undefined`), so the field is written only when
+there is a winner. Existing recaps have no `weeklyWinners`, and every read site
+must treat absence as "not computed", never as "nobody won".
+
+### 8c. The rule, stated exactly
+
+1. **Highest `weeklyPoints[week]`** among entries scored on this pass.
+2. Tied → **lowest `|prediction − target|`**, where `target` is
+   `computeMNFTiebreakerTotal(games, rule)` under the pool's §3 setting.
+3. Still tied, or **no target available** → **shared win: every tied member is
+   listed.**
+
+"No target available" is not an edge case, it is three ordinary states: the rule
+is `NONE`; the week has no Monday game; or a Monday game is not FINAL. All three
+resolve to a shared win rather than to an arbitrary pick, and that is the whole
+correctness argument for this change.
+
+**A member with no prediction loses a tiebreak that anybody else can win.**
+Precisely — an earlier draft of this paragraph said both "they lose it" and
+"they stay in the tie and share", which are different rules and one of them
+splits a payout wrongly (codex P1, round 11). The rule is:
+
+> Among the tied leaders, if **at least one** has a prediction, everyone without
+> one is **eliminated** and the diff cascade runs over the rest. If **none** of
+> them has a prediction, the tie is unbreakable and they **share**.
+
+`weeklyTiebreakers[week]` is absent for anyone who never answered, and the
+scorer's existing read coerces that to `0`
+([nflPools.ts:1308](functions/src/nflPools.ts#L1308)). **This code must not
+copy that coercion.** A fake diff of `target − 0` usually loses, which looks
+like the right answer and is the wrong mechanism: it makes two non-answerers
+"tie" at the same invented number, and on a week where the real target happens
+to be near zero it would make a non-answerer *win*. Absence is modelled as
+absence — `tiebreakDiff` stays `undefined` — and eliminated by the rule above,
+never ranked on a number the member did not provide.
+
+**Zero points still wins if it is the highest.** A week where everybody scored 0
+is a shared win among everybody, which is the honest reading — nobody outscored
+anybody. Entries with no submission for the week are not candidates at all.
+
+**Rejected alternative — earliest submission as a final tiebreak.** It rewards
+whoever picked first rather than whoever was more right, and this repo holds no
+reliable per-week submit timestamp. Shared win is the standard house rule and
+needs no data we do not have.
+
+### 8d. Which pool types
+
+| Type | Weekly winner? | Tiebreak |
+|---|---|---|
+| `NFL_PICKEM` | **yes** | full cascade (§8c) |
+| `NFL_MARGIN` | **yes** | points only — **ties always share** |
+| `NFL_SURVIVOR` | **no** | N/A |
+
+**Margin is included** because it carries the same `payoutMode`
+(`SEASON`/`WEEKLY`/`HYBRID`) and already computes a `sharpUser` with the same
+arbitrary-tie defect. It gets no cascade: the Margin sheet asks for no
+prediction, so there is nothing to break a tie *with*, and inventing a Margin
+tiebreaker prediction is a new product surface nobody asked for. Ties share.
+
+**Survivor is N/A, and here is why**, since Kevin's ask said "survivor if
+applicable": a Survivor week has no score to rank. Everyone who survives
+survives; there is no "winner of week 4" to tie-break. The recap already says
+the meaningful thing (`attritionCount`).
+
+### 8e. What renders, and where
+
+In the weekly recap card, **above** the existing lines:
+
+- one winner → `Week 4 Winner: Dana (11 pts)`
+- shared → `Week 4 Winners (shared): Dana, Sam, Alex (11 pts each)`
+
+⚠️ **`sharpOfWeek` is SUPPRESSED whenever `weeklyWinners` is present.** They are
+the same fact — highest points — and rendering both prints the same name twice,
+with the sharp line silently disagreeing on a tied week because it still holds
+the arbitrary pick. `sharpOfWeek` keeps being **written** (older recaps render
+it, and `src/utils/testing/scenarios/assertionRunner.ts` reads it); it only
+loses the render when the better field exists.
+
+⚠️ **The word "Winner" is gated on `payoutMode`.** On a `SEASON` pool nothing is
+won weekly, and a trophy line would imply a prize that does not exist. There the
+label is `Top Scorer, Week 4`. Same data, honest label.
+
+`recapHasHighlights` must count `weeklyWinners`, or a recap whose only content is
+the winner renders "No highlights this week".
+
+### 8f. What B does NOT add, deliberately
+
+- **No weekly rank in `buildStandingsRows`.** §2 assumed one was needed; it is
+  not — the winner is computed inside the pass that already loops every entry,
+  and a full per-week ordering is a bigger projection with no consumer asking
+  for it.
+- **No change to `PayoutsPanel`'s "ask your commissioner" copy.** The platform
+  still moves no money and still does not know the split. Naming the winner is
+  not the same as knowing what they are owed, and claiming otherwise would be
+  this product's first false statement about money.
+- **No backfill.** Past recaps keep their `sharpOfWeek` and gain no
+  `weeklyWinners`. A rescore of an old week recomputes both — the existing
+  fix-forward pattern.
+
+### 8g. Touch list — B only (A's is §3, §6, §7)
+
+| File | Change |
+|---|---|
+| `functions/src/nflScoringEngine.ts` | `computeWeeklyWinners()` — pure; `buildWeeklyRecap` gains the param |
+| `functions/src/nflPoolTypes.ts` | `WeeklyRecap.weeklyWinners` |
+| `src/types/nflPoolTypes.ts` | the same, hand-duplicated (R4.1) |
+| `functions/src/nflPools.ts` | collect candidates in the Pick'em and Margin branches; pass them to the recap |
+| `src/components/NFLPoolDashboard/NFLPoolDashboard.tsx` | render the line; suppress `sharpOfWeek` when present |
+| `src/utils/recapHighlight.ts` | count `weeklyWinners` |
 
 ## 9. 🛑 Questions for Kevin — sign-off gate
 
-1. **A or B?** (§2). My recommendation is A now, B after launch. If you want B,
-   it needs its own plan and I would not start it before the Hall of Fame game.
+1. ~~**A or B?**~~ ✅ **ANSWERED: B** (Kevin, 2026-08-13). Specified in §8 rather
+   than in a separate plan — §8a is why that turned out to be proportionate.
 2. **Is `MNF_LAST_GAME` "the last game to kick off", or "the game that ends
    last"?** They are the same on any real Monday slate, and kickoff order is the
    only one the data supports before the games are played — the sheet has to ask

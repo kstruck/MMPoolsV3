@@ -14,6 +14,7 @@ import {
   effectiveTieCountsAs,
   UNLIMITED_TEAM_USES,
 } from './shared/survivorReuse';
+import type { WeeklyTiebreaker } from './shared/nflTiebreaker';
 
 // ============================================================================
 // Feed-integrity predicates — what the scorer is allowed to treat as played
@@ -483,19 +484,134 @@ export function sortMarginLeaderboard(entries: MarginEntry[]): MarginEntry[] {
 // ============================================================================
 
 /**
- * MNF tiebreaker target: the COMBINED score of ALL Monday games in the week
- * (docs/NFL_POOLS_README.md), not just the first one found. Returns null until
- * EVERY Monday game is FINAL — a mid-Monday SUPER_ADMIN scoring run must not
- * freeze a partial total into the tiebreak; a rescore recomputes it.
+ * The tiebreaker TARGET: the number a member's prediction is measured against.
+ *
+ * `rule` comes from `settings.weeklyTiebreaker` via `effectiveWeeklyTiebreaker`,
+ * and defaults to `MNF_COMBINED` — the historical behaviour, so a pool that has
+ * never heard of this setting computes exactly what it always did
+ * (PLAN-WEEKLY-TIEBREAKERS §4, no migration).
+ *
+ *  - `MNF_COMBINED` — the combined score of ALL Monday games in the week
+ *    (docs/NFL_POOLS_README.md), not just the first one found.
+ *  - `MNF_LAST_GAME` — the combined score of the LAST Monday game to kick off.
+ *  - `NONE` — the pool does not use a tiebreaker.
+ *
+ * `null` means "no target", and every caller must already handle it (the pool
+ * has no Monday game, or the games are not final yet). That is why `NONE` can
+ * simply return `null` rather than needing a new branch downstream.
+ *
+ * ⚠️ Returns null until the games it reads are FINAL — a mid-Monday scoring run
+ * must not freeze a partial total into the tiebreak; a rescore recomputes it.
+ * `MNF_LAST_GAME` waits only on the ONE game it names, so on a doubleheader it
+ * can resolve while the earlier game is still being corrected. That is the
+ * rule's point, not a hole in it.
  */
-export function computeMNFTiebreakerTotal(games: NFLGame[]): number | null {
+export function computeMNFTiebreakerTotal(
+  games: NFLGame[],
+  rule: WeeklyTiebreaker = 'MNF_COMBINED',
+): number | null {
+  if (rule === 'NONE') return null;
   const mondayGames = games.filter(g => g.isMonday);
   if (mondayGames.length === 0) return null;
-  if (!mondayGames.every(g => g.status === 'FINAL')) return null;
-  return mondayGames.reduce(
+
+  const counted = rule === 'MNF_LAST_GAME' ? [lastMondayGame(mondayGames)!] : mondayGames;
+  if (!counted.every(g => g.status === 'FINAL')) return null;
+  return counted.reduce(
     (sum, g) => sum + (g.scores?.home ?? 0) + (g.scores?.away ?? 0),
     0,
   );
+}
+
+/**
+ * The last Monday game to KICK OFF — latest `startTime`, ties broken by `id`
+ * descending.
+ *
+ * Kickoff order, not finish order: the sheet has to ask the question days
+ * before anyone knows which game ends last, so finish order is not information
+ * the member could have had. The `id` tiebreak exists because two Monday games
+ * CAN share a start time and Firestore query order is not a promise — without
+ * it the same week could resolve to different games on two scoring passes, and
+ * a tiebreak target that moves is worse than one that is arbitrary.
+ *
+ * Caller guarantees a non-empty list.
+ */
+function lastMondayGame(mondayGames: NFLGame[]): NFLGame | undefined {
+  return [...mondayGames].sort(
+    (a, b) => (b.startTime - a.startTime) || String(b.id).localeCompare(String(a.id)),
+  )[0];
+}
+
+/** One entry's claim on the week, as the winner computation sees it. */
+export interface WeeklyWinnerCandidate {
+  userId: string;
+  userName: string;
+  points: number;
+  /**
+   * `|prediction − target|`, or `undefined` when this member made no
+   * prediction. ⚠️ Undefined is NOT zero and must never be coerced to it — see
+   * `computeWeeklyWinners`.
+   */
+  tiebreakDiff?: number;
+}
+
+export interface WeeklyWinner {
+  userId: string;
+  userName: string;
+  points: number;
+  tiebreakDiff?: number;
+}
+
+/**
+ * Who won the week (PLAN-WEEKLY-TIEBREAKERS §8c).
+ *
+ * The cascade, and every step of it is load-bearing:
+ *
+ *  1. Highest `points`. Nobody below the top score is a candidate for anything.
+ *  2. Tied at the top → lowest `tiebreakDiff`.
+ *  3. Still tied → **shared win**: every remaining member is returned.
+ *
+ * ⚠️ **A SHARED WIN IS THE NORMAL OUTCOME OF AN UNBREAKABLE TIE, NOT AN ERROR.**
+ * This function replaces `sharpUser`'s `if (points > best)`, which handed every
+ * tied week to whichever entry Firestore happened to iterate first — i.e. to a
+ * document id. On a `payoutMode: WEEKLY` pool that named a winner of a tied
+ * week arbitrarily. Returning the whole tied set is the fix; the caller renders
+ * "(shared)".
+ *
+ * ⚠️ **A MISSING PREDICTION IS ABSENCE, NOT ZERO.** Members with no
+ * `tiebreakDiff` are dropped **only when at least one tied leader has one** —
+ * they lose a tiebreak somebody else can win, but two non-answerers tie with
+ * each other and share. The scorer's older `?? 0` read
+ * (`nflPools.ts`, `closestTiebreaker`) must NOT be copied here: a fake diff of
+ * `target − 0` merely usually loses, and on a low-scoring Monday it would let
+ * somebody who never answered WIN the tiebreak. (codex P1, plan round 11.)
+ *
+ * Returns `[]` for no candidates, which the caller writes as "no field" rather
+ * than as "nobody won" — an empty array in the recap would be a claim.
+ */
+export function computeWeeklyWinners(candidates: WeeklyWinnerCandidate[]): WeeklyWinner[] {
+  if (candidates.length === 0) return [];
+
+  const best = Math.max(...candidates.map(c => c.points));
+  const leaders = candidates.filter(c => c.points === best);
+  if (leaders.length === 1) return leaders.map(toWinner);
+
+  const withDiff = leaders.filter(c => typeof c.tiebreakDiff === 'number');
+  // Nobody among the leaders answered: the tie is unbreakable, so they share.
+  // Deliberately NOT the same as "no target" — the caller passes no diffs in
+  // that case either, and both land here for the same honest reason.
+  if (withDiff.length === 0) return leaders.map(toWinner);
+
+  const closest = Math.min(...withDiff.map(c => c.tiebreakDiff as number));
+  return withDiff.filter(c => c.tiebreakDiff === closest).map(toWinner);
+}
+
+function toWinner(c: WeeklyWinnerCandidate): WeeklyWinner {
+  // Rebuilt field by field rather than spread: `tiebreakDiff: undefined` is a
+  // LITERAL undefined to Firestore's `set()`, which throws on it (the same trap
+  // buildWeeklyRecap documents). Omitting the key is not the same as setting it.
+  const w: WeeklyWinner = { userId: c.userId, userName: c.userName, points: c.points };
+  if (typeof c.tiebreakDiff === 'number') w.tiebreakDiff = c.tiebreakDiff;
+  return w;
 }
 
 /**
@@ -770,9 +886,16 @@ export function buildWeeklyRecap(params: {
   sharpUser: { uid: string; name: string; val: number } | null;
   closestTie: { uid: string; name: string; diff: number } | null;
   aliveCount: number;
+  /**
+   * The tie-broken winner set (PLAN-WEEKLY-TIEBREAKERS §8b). Omitted from the
+   * doc when empty — an empty ARRAY in the recap would assert "nobody won",
+   * where absence honestly says "not computed" (an older recap, a pool type
+   * with no weekly winner, or a week nobody entered).
+   */
+  weeklyWinners?: WeeklyWinner[];
   nowMs?: number;
 }): WeeklyRecap {
-  const { poolId, week, poolType, sharpUser, closestTie, aliveCount, nowMs = Date.now() } = params;
+  const { poolId, week, poolType, sharpUser, closestTie, aliveCount, weeklyWinners, nowMs = Date.now() } = params;
   const recap: WeeklyRecap = {
     id: `week_${week}`,
     poolId,
@@ -784,6 +907,9 @@ export function buildWeeklyRecap(params: {
   }
   if (closestTie) {
     recap.closestTiebreaker = { userId: closestTie.uid, userName: closestTie.name, diff: closestTie.diff };
+  }
+  if (weeklyWinners && weeklyWinners.length > 0) {
+    recap.weeklyWinners = weeklyWinners;
   }
   if (poolType === 'NFL_SURVIVOR') {
     recap.attritionCount = aliveCount;

@@ -41,8 +41,11 @@ import {
   gradeMarginWeekGame,
   buildStandingsRows,
   poolUsesSpreads,
-  isVoidWeek
+  isVoidWeek,
+  computeWeeklyWinners,
+  type WeeklyWinnerCandidate
 } from './nflScoringEngine';
+import { effectiveWeeklyTiebreaker } from './shared/nflTiebreaker';
 import { maybeFinalizeNFLPool } from './nflFinalize';
 import {
   acquireScoringLease,
@@ -1250,10 +1253,23 @@ async function scoreWeekPass(
   const biggestUpset: { uid: string; name: string; gameId: string; team: string } | null = null;
   let closestTie: { uid: string; name: string; diff: number } | null = null;
 
-  // MNF tiebreaker target: combined score of ALL Monday games, resolved only
-  // once every Monday game is FINAL (dual-MNF weeks; mid-Monday admin scoring
-  // stays provisional and a rescore recomputes it).
-  const mnfTotalScore = computeMNFTiebreakerTotal(games);
+  // WEEKLY WINNER candidates (PLAN-WEEKLY-TIEBREAKERS §8). One per SCORED entry
+  // for the types that have a weekly score — Pick'em and Margin. Survivor has
+  // no week to win, so it contributes none and the recap gains no field.
+  //
+  // This is the list `sharpUser` above should always have been: `sharpUser`
+  // keeps only the running maximum with a strict `>`, so it silently awards
+  // every TIED week to whichever entry Firestore iterated first. Collecting the
+  // candidates lets `computeWeeklyWinners` apply the pool's chosen tiebreaker
+  // and, when that cannot separate them, say SHARED instead of picking one.
+  const winnerCandidates: WeeklyWinnerCandidate[] = [];
+
+  // The tiebreaker TARGET, under this pool's rule (`settings.weeklyTiebreaker`,
+  // absent ⇒ MNF_COMBINED — the historical behaviour, no migration). Resolved
+  // only once the game(s) it names are FINAL; mid-Monday admin scoring stays
+  // provisional and a rescore recomputes it.
+  const tiebreakerRule = effectiveWeeklyTiebreaker(pool?.settings as { weeklyTiebreaker?: unknown } | undefined);
+  const mnfTotalScore = computeMNFTiebreakerTotal(games, tiebreakerRule);
 
   // Survivor tracking
   let aliveCount = 0;
@@ -1311,6 +1327,22 @@ async function scoreWeekPass(
           closestTie = { uid: entry.ownerUid, name: entry.userName, diff };
         }
       }
+
+      // Weekly-winner candidate. The diff here is deliberately NOT the `?? 0`
+      // one above: `closestTiebreaker` is a trivia callout where coercing a
+      // missing guess to 0 merely makes that member lose, but this diff DECIDES
+      // the week. A member who never answered must be absent, not sitting on an
+      // invented prediction of 0 that a low-scoring Monday could make a WINNER.
+      // (PLAN-WEEKLY-TIEBREAKERS §8c; codex P1, plan round 11.)
+      const ownPrediction = entry.weeklyTiebreakers?.[week];
+      winnerCandidates.push({
+        userId: entry.ownerUid,
+        userName: entry.userName,
+        points,
+        ...(mnfTotalScore !== null && typeof ownPrediction === 'number'
+          ? { tiebreakDiff: Math.abs(ownPrediction - mnfTotalScore) }
+          : {}),
+      });
 
     } else if (pool.type === 'NFL_SURVIVOR') {
       const entry = doc.data() as SurvivorEntry;
@@ -1447,6 +1479,18 @@ async function scoreWeekPass(
       if (pick && (!sharpUser || weekScore > sharpUser.val)) {
         sharpUser = { uid: entry.ownerUid, name: entry.userName, val: weekScore };
       }
+
+      // Weekly-winner candidate, gated on `pick` for the same reason the sharp
+      // line above is: a no-show also scores -14, and a week everybody forgot
+      // would otherwise crown the least-punished absentee.
+      //
+      // NO `tiebreakDiff` EVER on Margin. The Margin sheet asks for no
+      // prediction, so there is nothing to break a tie with and tied leaders
+      // SHARE. Passing the Pick'em diff here would be worse than useless — it
+      // would rank Margin players on a number their sheet never collected.
+      if (pick) {
+        winnerCandidates.push({ userId: entry.ownerUid, userName: entry.userName, points: weekScore });
+      }
     }
   }
 
@@ -1571,7 +1615,16 @@ async function scoreWeekPass(
       // (no ignoreUndefinedProperties here), which crashed every prior call that
       // had no sharp user / no MNF tiebreaker / a non-Survivor pool.
       const recapRef = poolRef.collection('weekly_recaps').doc(`week_${week}`);
-      const recapDoc = buildWeeklyRecap({ poolId, week, poolType: pool.type, sharpUser, closestTie, aliveCount });
+      // The weekly winner is computed HERE and nowhere else, and this branch is
+      // `!provisional` — i.e. the week is complete: every game concluded AND
+      // past its own effective lock. That is the whole reveal-safety argument
+      // for publishing a winner (PLAN-WEEKLY-TIEBREAKERS §8b). A mid-Sunday
+      // "leader so far", which members would read as a result, cannot be
+      // written because this code does not run until it would be true.
+      const recapDoc = buildWeeklyRecap({
+        poolId, week, poolType: pool.type, sharpUser, closestTie, aliveCount,
+        weeklyWinners: computeWeeklyWinners(winnerCandidates),
+      });
       // Fenced: creating this doc fires onWeeklyRecapCreated → AI trash-talk, and
       // the later authoritative pass only UPDATEs it, so a recap created from a
       // pass that lost its lease can never be regenerated on correct standings.

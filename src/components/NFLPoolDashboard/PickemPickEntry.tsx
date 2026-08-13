@@ -13,6 +13,7 @@ import { pickHighlightLabel } from '../../utils/pickHighlight';
 import { poolUsesSpreads } from '../../utils/poolUsesSpreads';
 import { gradePick } from '../../utils/pickemResult';
 import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
+import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction, tiebreakerCopy } from '@shared/nflTiebreaker';
 import { GameMeta } from './pickSheet/GameMeta';
 import { TeamPickButton } from './pickSheet/TeamPickButton';
 import { StickySaveBar } from './pickSheet/StickySaveBar';
@@ -310,7 +311,12 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
       week,
       picks,
       confidence: confidenceMode ? confidence : undefined,
-      tiebreakerPrediction,
+      // Omitted under NONE — the sheet never asked, so sending the default 40
+      // would store a prediction the member did not make. `submitNFLPicks`
+      // already writes nothing for an absent value, so this is a no-op on the
+      // server rather than a contract change, and an older client that still
+      // sends one keeps working.
+      tiebreakerPrediction: showTiebreaker ? tiebreakerPrediction : undefined,
       requestId: crypto.randomUUID()
     };
 
@@ -347,10 +353,18 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
 
   const pickedCount = useMemo(() => games.filter(g => !!picks[g.id]).length, [games, picks]);
 
-  // Find if there is a scheduled MNF tiebreaker game
+  // The pool's tie-breaker rule, resolved (absent ⇒ MNF_COMBINED, the rule every
+  // pool created before the setting existed has been playing).
+  const tiebreakerRule = effectiveWeeklyTiebreaker(castPool.settings);
+  const tiebreakerText = tiebreakerCopy(tiebreakerRule);
+
+  // Ask for the prediction only when the rule uses one AND the week actually has
+  // a Monday game. Under `NONE` the sheet asks nothing — the alternative is
+  // collecting a number that decides nothing, which is worse than not asking.
   const showTiebreaker = useMemo(() => {
+    if (!tiebreakerAsksForPrediction(tiebreakerRule)) return false;
     return games.some(g => g.isMonday);
-  }, [games]);
+  }, [games, tiebreakerRule]);
 
   // Spreads block the sheet ONLY on a pool whose scoring reads them — i.e. an
   // ATS pick'em. Mirrors the server's own precondition, which was scoped the
@@ -613,8 +627,14 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
       {games.length > 0 && !isWeekLocked && showTiebreaker && (
         <div className="bg-card border border-line rounded-xl p-6 shadow-card">
           <div className="max-w-md mx-auto space-y-3">
+            {/* Label and hint both come from `tiebreakerCopy`, one definition
+                shared with the rules page and the scorer's enum. The label used
+                to be hard-coded "Predicted Monday Night Football Combined
+                Score" — true only under MNF_COMBINED, and silently wrong on a
+                pool playing the last-game rule. Copy that can disagree with the
+                scorer is exactly the failure this setting exists to end. */}
             <label className="block text-sm font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] text-center">
-              Tiebreaker: Predicted Monday Night Football Combined Score
+              {tiebreakerText?.label}
             </label>
             <input
               type="number"
@@ -623,7 +643,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
               className="w-full bg-page border border-line rounded-xl px-4 py-3 text-[color:var(--text)] text-center num font-bold focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500"
             />
             <p className="text-[10px] font-body text-muted leading-normal text-center">
-              Close counts: Predict the combined final score of the MNF games. If there are 2 MNF games, we count the combined score of <strong>both</strong> games.
+              {tiebreakerText?.hint}
             </p>
           </div>
         </div>
