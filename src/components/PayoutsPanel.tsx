@@ -306,8 +306,6 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
         : 0;
     const netPot = grossPot !== undefined ? grossPot - charityCut : undefined;
 
-    const dollarFor = (pct: number) =>
-        netPot !== undefined && netPot > 0 ? ` (${money(netPot * (pct / 100))})` : '';
     // HYBRID split (PLAN-HYBRID-SPLIT): when declared, the fee is two pots and
     // the place percentages apply to EACH. Absent split = pre-existing hybrid
     // pool keeps the honest "ask your commissioner" copy below. Amounts are
@@ -316,6 +314,16 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
     const splitPots = split && knownEntries !== undefined && knownEntries > 0
         ? { weekly: (split.weeklyPerEntry ?? 0) * knownEntries, season: (split.seasonPerEntry ?? 0) * knownEntries }
         : undefined;
+
+    // Under a declared HYBRID split the percentages apply to EACH pot, so one
+    // combined figure would overstate every place (a 50% place on a $250 pot is
+    // $90 weekly-total + $35 season, never $125). (codex P2 on the split PR.)
+    const dollarFor = (pct: number) => {
+        if (splitPots) {
+            return ` (${money(splitPots.weekly * (pct / 100))} weekly total / ${money(splitPots.season * (pct / 100))} season)`;
+        }
+        return netPot !== undefined && netPot > 0 ? ` (${money(netPot * (pct / 100))})` : '';
+    };
 
 
     const hasAnyConfig = entryFee > 0 || places.length > 0 || bonuses.length > 0 || Boolean(modeCopy);

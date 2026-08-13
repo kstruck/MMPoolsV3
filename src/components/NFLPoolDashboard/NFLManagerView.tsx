@@ -468,7 +468,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           lockBufferMinutes,
         };
       } else if (type === 'NFL_MARGIN') {
-        updatedSettings = { ...updatedSettings, payoutMode: marginPayoutMode, lockBufferMinutes };
+        updatedSettings = {
+          ...updatedSettings,
+          payoutMode: marginPayoutMode,
+          lockBufferMinutes,
+          ...(marginPayoutMode === 'HYBRID' && splitDeclared
+            ? { hybridSplit: { weeklyPerEntry: splitWeekly, seasonPerEntry: splitSeason } } : {}),
+        };
       }
 
       // Routed through the server callable, not dbService.updatePool: firestore.rules
@@ -1165,6 +1171,39 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <option value="HYBRID">Hybrid (Season-End + Weekly)</option>
                 </select>
               </div>
+
+              {/* Same split editor as Pick'em — the wizard can declare a Margin
+                  split, so the editor must be able to view and adjust it, or an
+                  entryFee change strands the pool against server validation
+                  with no UI to fix it. (codex P2 on the split PR.) */}
+              {marginPayoutMode === 'HYBRID' && (
+                <div className="bg-page border border-line rounded-lg p-4 space-y-3">
+                  <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Hybrid Entry-Fee Split</p>
+                  <p className="text-[11px] font-body text-muted leading-normal">
+                    Whole dollars per entry into each pot — the two must add up to the entry fee exactly.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted mb-1">Weekly pots ($/entry)</label>
+                      <input type="number" min={0} value={splitWeekly}
+                        onChange={e => { setSplitDeclared(true); setSplitWeekly(Math.max(0, Math.floor(Number(e.target.value) || 0))); }}
+                        className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
+                    </div>
+                    <div>
+                      <label className="block font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted mb-1">Season pot ($/entry)</label>
+                      <input type="number" min={0} value={splitSeason}
+                        onChange={e => { setSplitDeclared(true); setSplitSeason(Math.max(0, Math.floor(Number(e.target.value) || 0))); }}
+                        className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
+                    </div>
+                  </div>
+                  {splitDeclared && (() => {
+                    const problem = hybridSplitProblem({ payoutMode: 'HYBRID', entryFee: Number(entryFee), hybridSplit: { weeklyPerEntry: splitWeekly, seasonPerEntry: splitSeason } });
+                    return problem
+                      ? <p role="alert" className="text-[11px] font-body font-bold text-brandred-600">✗ {problem.split(': ').slice(1).join(': ')}</p>
+                      : <p role="status" className="text-[11px] font-body font-bold text-[#0F7B4A]">✓ ${splitWeekly} weekly + ${splitSeason} season = ${Number(entryFee)} entry fee</p>;
+                  })()}
+                </div>
+              )}
             </div>
           )}
 
