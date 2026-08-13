@@ -16,7 +16,7 @@ every KEVIN-ACTION row, ordered by what unblocks invites soonest.
 |---|---|---|---|---|
 | A1 | Functions deployed | `npx firebase functions:list --project gridiron-gamble-uzuqo` | ✅ **UPDATED 2026-08-12: functions are deployed from <!-- deploy-state:ignore --> `main` @ `c37bbd37`** (#414 + #415), replacing the `c7bdcf5` reading this row carried on 2026-08-10. Verified by the fleet listing returning **`getPoolPicks`** — the callable #414 adds, absent before. ⚠️ An all-`Skipped` certification pass was NOT run, so byte-identity to `c37bbd37` is not claimed; what is proven is that the new callable is live | **READY** — nothing owed |
 | A2 | Rules deployed | `git log --oneline -1 -- firestore.rules` + the deploy output | ✅ **UPDATED 2026-08-12: rules deployed from `c37bbd37`.** ⚠️ The `c7bdcf5` reading this row carried is STALE and its reasoning is now FALSE — **#414 changed `firestore.rules`** (last commit touching it is `c59a41d4`), so "no rules change has merged since" no longer holds. Pre-deploy the working tree was clean on the file and the `entries` block was confirmed to carry only `ownerUid` + `isSuperAdmin()` + the participant branch; the deploy reported `released rules firestore.rules to cloud.firestore` | **READY** — nothing owed |
-| A3 | Frontend live | `curl -s https://www.marchmeleepools.com/` → entry assets | ✅ **UPDATED 2026-08-12: rebuilt from `c37bbd37`; live bundle moved `index-Dhm5WwL_.js` → `index-Dv5RBrGq.js`**, read off the prod HTML. That rebuild also paid off the one owed since #413 merged and never ran | **READY** — nothing owed |
+| A3 | Frontend live | `curl -s https://www.marchmeleepools.com/` → entry assets, then crawl the chunk graph for a marker unique to the change | ✅ **UPDATED 2026-08-13: rebuilt from `d6bae3f4` (#417); live bundle moved `index-Dv5RBrGq.js` → `index-BB2oOzrg.js`.** ⚠️ **The hash is not the evidence** — #417 is verified INSIDE the shipped JavaScript by a 106-asset chunk-graph crawl finding all five of its sentinel strings, each exactly once (`Quick Picks`, `no line yet`, `Nothing left to fill`, `games to submit`, `Two games share a confidence weight`). HANDOFF's 2026-08-13 box carries the reading and the ⚠️ that those sentinels are now live and must be swapped before the crawl is reused. The 2026-08-12 reading (`index-Dhm5WwL_.js` → `index-Dv5RBrGq.js`, from `c37bbd37`) is the previous link in the chain | **READY** — nothing owed |
 | A4 | Indexes | `npx firebase firestore:indexes --project gridiron-gamble-uzuqo` | **17 composite indexes**, matching the 2026-08-05 count (both `pools` billing composites present) | **READY** |
 | A5 | PR #405 (survivor exemption fix) | `gh pr checks 405` | ✅ **DONE — merged and deployed 2026-08-10.** Superseded twice since: `39d5702` (#408) then `c37bbd37` (#414 + #415) | **READY** — historical row, no action |
 
@@ -97,6 +97,21 @@ field.
 | H1 | **A8 — publish 2026 price + free-period end date** | Was DUE 2026-08-06 (before HOF); status unknown to this session | **KEVIN-ACTION, now overdue** — the board's 5–0: free-with-no-published-price anchors expectations at zero. Send it with (or before) the invites |
 | H2 | A9 — recruit ~10 commissioners | The invites themselves | **KEVIN-ACTION** — this is the launch |
 | H3 | A11 — "tests every pool type" overclaim | Quick copy pass | **KEVIN-ACTION** (5 min, alongside H1) |
+
+## I. Product gaps Kevin declared launch-blocking (added 2026-08-13)
+
+Kevin, 2026-08-13, on pick-entry UX — scoped to **confidence, pick'em and
+survivor where applicable**. Both are GAPs: engineering work, not console flips.
+
+| # | Item | What exists today (measured) | What Kevin asked for | Verdict |
+|---|---|---|---|---|
+| I1 | **Used confidence weights gray out** | `PickemPickEntry`'s per-game `<select>` renders the full `[17-N .. 16]` range in every dropdown regardless of what other games have taken; a duplicate is flagged *after* selection (`duplicateConfidenceValues`, gold border + "Duplicate value!") and blocks submit, but nothing stops the mistake up front | Once a weight is assigned to a game (e.g. 10), gray it out / disable it in the OTHER games' dropdowns so it cannot be picked again by mistake. Keep the existing duplicate detection as the backstop — a graying bug must not silently allow a duplicate through | **GAP** — confidence mode only; no server change (validation already exists server-side); frontend + tests + Coolify |
+| I2 | **Wizard tie-breaker options for weekly/hybrid pools** | The MNF-combined-score tiebreaker is hardcoded: the pick sheet asks for it whenever a week has a Monday game (`showTiebreaker`), and scoring reads `weeklyTiebreakers[week]`. The setup wizard exposes **no tie-breaker choice at all** | Wizard options for how a weekly tie breaks — e.g. combined score of the Monday night game; if two MNF games, the LAST game (note: today's copy says *both* games combined, which is a different rule); other options as sensible. Applies to weekly/hybrid pick'em (incl. confidence); survivor **if applicable** — survivor has no weekly winner, so likely N/A, but say so explicitly rather than skipping silently | **GAP** — touches the wizard, `shared/` schema, pick sheet copy and the **scorer** → scoring trigger → **plan-gated** (`mmp-change-control` §1); functions deploy on ship |
+
+⚠️ **I2 is a SCORING change and lands in a live scorer** — `nflAutoScoreJob` runs
+`*/5`. Its plan must state how existing pools keep today's behaviour (default =
+current rule, no migration) and how a mid-season settings change is refused or
+handled, same as #399 did for survivor settings.
 
 ## Accepted non-blockers (decision references)
 

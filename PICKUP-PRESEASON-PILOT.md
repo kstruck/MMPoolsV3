@@ -333,7 +333,7 @@ state. Concretely:
 
 ---
 
-## 2. Live state (deploy state verified 2026-08-09)
+## 2. Live state (deploy state verified 2026-08-13 — functions+rules at `c37bbd37`, frontend at `d6bae3f4`)
 
 > ⚠️ **HISTORICAL — this block records the 2026-07-28 state.** Its bundle hash is
 > long superseded; for the CURRENT live bundle see the tagged claim below, which
@@ -363,11 +363,16 @@ state. Concretely:
 
 **Functions are deployed from <!-- deploy-state:current --> `main` @ `c37bbd37`.**
 ⚠️ Updated 2026-08-12 (was <!-- deploy-state:ignore --> `main` @ `c7bdcf5`, which
-this file carried since 2026-08-09). Rules and the frontend are at the same
-commit. `HANDOFF.md`'s top box is the fuller statement, including the evidence
-for each surface.
-**Rules are deployed from that same commit, and the frontend is rebuilt from it**
-(frontend bundle `index-Dv5RBrGq.js`).
+this file carried since 2026-08-09). Rules are at the same commit.
+`HANDOFF.md`'s top box is the fuller statement, including the evidence for each
+surface.
+**Rules are deployed from that same commit. The FRONTEND has moved on: it is
+rebuilt from `d6bae3f4` (#417, 2026-08-13), bundle `index-BB2oOzrg.js`** —
+verified by the 106-asset chunk-graph crawl in HANDOFF's 2026-08-13 box, not by
+the hash alone. The split is deliberate and owes nothing: #416/#418/#417 touched
+no `functions/`, `shared/`, `firestore.rules` or `firestore.indexes.json`
+(measured — that diff is empty across all three merges), so functions and rules
+correctly remain at `c37bbd37` while the frontend carries the newer commit.
 ⚠️ **An all-`Skipped` certification pass was NOT run for the 2026-08-12 deploy**,
 so byte-identity to `c37bbd37` is not claimed anywhere. What IS proven is that
 `functions:list` returns `getPoolPicks`, the callable #414 adds and which was
