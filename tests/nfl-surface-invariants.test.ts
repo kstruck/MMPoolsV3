@@ -541,9 +541,18 @@ describe('standings week view — tied scores share a rank', () => {
     .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 
-  it('week rank is computed from strictly-better counts, not the row index', () => {
-    expect(code).toContain('(weekValue(e) as number) > mine');
-    expect(code).toContain('rank={better + 1}');
+  it('week rank comes from the precomputed shared-rank map, not the row index', () => {
+    // Competition ranking (1,1,3) via one O(n) pass over the sorted list — the
+    // per-row strictly-better filter it replaces was O(n²) (qodo). Same-value
+    // rows share the previous rank; a new value takes index+1.
+    expect(code).toContain('weekRankByUid.get(entry.id)');
+    expect(code).toContain('v === prevVal ? prevRank : i');
+  });
+
+  it('the toggle resets to Season when the pool changes', () => {
+    // PoolRoute reuses the component across pool navigation; without the reset
+    // a WEEK view chosen in one pool leaks into the next pool's standings.
+    expect(code).toContain("useEffect(() => { setStandingsView('SEASON'); }, [pool.id]);");
   });
 
   it('the season view still ranks positionally', () => {
