@@ -2,12 +2,13 @@
 
 Adversarial review of the plan itself, before any code exists. Reviewer:
 `codex exec review` (OpenAI), per CLAUDE.md §2c. Rounds 1–3 ran `--uncommitted`
-while the plan was a working-tree document; rounds 4–5 ran `--base origin/main`
-once it was committed to a branch — and that difference mattered (see round 3).
+while the plan was a working-tree document; rounds 4 and 6 ran
+`--base origin/main` once it was committed to a branch — and that difference
+mattered (see round 3).
 Findings are quoted in substance and answered individually; a rejection is
 recorded with its reasoning, same as an acceptance.
 
-**Rounds: 5. Findings: 3 — all valid, all absorbed. Round 5 clean.**
+**Rounds: 6. Findings: 3 — all valid, all absorbed. Rounds 5 and 6 clean.**
 
 Two of the three hit the same clause — §5, the mid-season edit gate — and the
 second is a hole the first one's fix opened. That is the pattern CLAUDE.md §2c
@@ -135,14 +136,41 @@ in §3 so the next reader does not re-open it.
 
 ---
 
+## Round 5 — clean, on the R4.1 absorption
+
+`--uncommitted`, against the §3 and review-log edits that closed R4.1.
+
+> The current changes only clarify the implementation plan and review log; they
+> introduce no executable behavior or actionable defect.
+
+No findings.
+
+---
+
+## Round 6 — clean, on the FINAL branch diff
+
+`--base origin/main`, after a further commit that the earlier rounds had never
+seen (the runbook's open-PR table). §2c: new writing earns its own round, and
+that applies to a commit made after the reviewer came back clean.
+
+> The diff contains documentation and planning updates only; it introduces no
+> executable code or configuration changes. **The documented implementation
+> claims were consistent with the referenced current source locations.**
+
+No findings. The second sentence is the one worth having: the whole plan is a
+set of claims about file:line locations, and this is a reviewer with the repo in
+hand saying they check out.
+
+---
+
 ## Stopping rule
 
 CLAUDE.md §2c's stopping rule is **evidence, not the counter**: a clean codex
 round **and** qodo clean **and** my own read of the artifact agreeing.
 
-- **codex:** round 5 clean, on the committed branch —
-  *"The current changes only clarify the implementation plan and review log; they
-  introduce no executable behavior or actionable defect."* ✅
+- **codex:** rounds 5 **and** 6 clean. Round 6 is not a formality — it reviewed
+  a commit written *after* round 5 came back clean, and it is the round that
+  confirms the plan's file:line claims against the repo. ✅
 - **own read:** agrees, with one reservation recorded in the plan rather than
   hidden — §2 is a scope question, not a specification, and the plan is
   deliberately not implementable until Kevin answers it. That is the intended
