@@ -316,12 +316,16 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
     // here would overstate every award by the donated share. Same Math.floor
     // convention as the charity line itself. (codex r4.)
     const charityFactor = charity?.enabled ? 1 - charity.percentage / 100 : 1;
-    const splitPots = split && knownEntries !== undefined && knownEntries > 0
-        ? {
-            weekly: Math.floor((split.weeklyPerEntry ?? 0) * knownEntries * charityFactor),
-            season: Math.floor((split.seasonPerEntry ?? 0) * knownEntries * charityFactor),
-          }
-        : undefined;
+    // The two pots must reconcile with the displayed post-donation total, so
+    // ONE pot is derived by subtraction rather than both floored — flooring
+    // each separately can lose a dollar between them ($23 net showing $16+$6;
+    // codex r5). The weekly pot floors; the season pot absorbs the remainder,
+    // deterministically.
+    const splitPots = (() => {
+        if (!split || knownEntries === undefined || knownEntries <= 0 || netPot === undefined) return undefined;
+        const weekly = Math.floor((split.weeklyPerEntry ?? 0) * knownEntries * charityFactor);
+        return { weekly, season: netPot - weekly };
+    })();
 
     // Under a declared HYBRID split the percentages apply to EACH pot, so one
     // combined figure would overstate every place (a 50% place on a $250 pot is
