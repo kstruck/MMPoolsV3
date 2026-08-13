@@ -90,7 +90,17 @@ is a **different rule** and would be a behaviour change, not a copy fix.
 Two genuinely different tickets are hiding in row I2, and they cost very
 different amounts. **I am not choosing between them.**
 
-### Option A — settings-only (small, no scorer change)
+### Option A — settings-only (no weekly-winner computation) — ⚠️ STILL a scorer change
+
+⚠️ **Read the label carefully. "Settings-only" means no weekly-winner
+computation; it does NOT mean the scorer is untouched.** Option A changes
+`computeMNFTiebreakerTotal`, which lives in `functions/src/nflScoringEngine.ts`,
+and alters what gets persisted into the weekly recap. It is plan-gated, it owes
+a **functions deploy**, and it lands in the LIVE scorer. An earlier draft of
+this heading said "no scorer change" and that was wrong in the one section where
+being wrong changes the decision — this is the sign-off gate (codex P2, round 9).
+
+The difference between A and B is **what is computed**, not **where**.
 
 Add a `settings.weeklyTiebreaker` choice to the wizard + manager UI. It changes
 **what the pick sheet asks for** and **what `computeMNFTiebreakerTotal` sums**,

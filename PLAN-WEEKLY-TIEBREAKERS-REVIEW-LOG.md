@@ -8,9 +8,9 @@ that difference mattered (see round 3).
 Findings are quoted in substance and answered individually; a rejection is
 recorded with its reasoning, same as an acceptance.
 
-**Rounds: 8. Findings: 5 — all valid, all absorbed.**
+**Rounds: 9. Findings: 7 — all valid, all absorbed.**
 
-Two of the five hit the same clause — §5, the mid-season edit gate — and the
+Two of the seven hit the same clause — §5, the mid-season edit gate — and the
 second is a hole the first one's fix opened. That is the pattern CLAUDE.md §2c
 documents ("round 1 finds defects in the code, rounds 2+ find defects in the
 fixes"), reproduced exactly, on a plan that had already copied a gate this repo
@@ -20,11 +20,10 @@ R7.1 (appendix) is a third kind: a wrong *classification* in the audit document
 riding the same branch, which would have made a follow-up ticket look far
 cheaper than it is.
 
-⚠️ **Four of the five landed on rounds that came AFTER a clean one.** Rounds 3,
-5 and 6 each came back clean and each was followed by a round that found
-something real — R7.1 and R8.1 both arrived after a clean pass. The counter is
-not the stopping rule; the evidence is, and a clean round is a data point rather
-than a finish line.
+⚠️ **Every finding after R2.1 arrived on a round that followed a clean one.**
+Rounds 3, 5 and 6 each came back clean, and R7.1, R8.1, R9.1 and R9.2 all landed
+afterwards. The counter is not the stopping rule; the evidence is, and a clean
+round is a data point rather than a finish line.
 
 ---
 
@@ -224,6 +223,47 @@ asked of the first question's own output.
 **Absorbed** into §7 as a fifth bullet: gate the header *and* the cell on
 `rule !== 'NONE'`, hiding rather than deleting, so a switch back before any
 submission loses nothing.
+
+---
+
+## Round 9 — two P2s, one in each document
+
+### R9.1 — Option A's heading contradicts the plan's own body (P2) — **ACCEPTED**
+
+> The heading says Option A has "no scorer change," but the option changes
+> `computeMNFTiebreakerTotal`, persists altered recap output, and requires a
+> functions deployment. This is the scope-signoff section, so the contradictory
+> label can cause the approver to choose A under an incorrect risk/deployment
+> assumption.
+
+**Verdict: valid, and it is the worst-placed error in the document.** §2 bullet
+2 of Option A already said *"**Is** a scoring change … so it stays plan-gated and
+owes a functions deploy"* — one line below a heading claiming the opposite. A
+reader skimming to make the call reads headings.
+
+Absorbed: the heading is now **"no weekly-winner computation — ⚠️ STILL a scorer
+change"**, with a box saying so explicitly and the one-line summary that A and B
+differ in **what** is computed, not **where**.
+
+### R9.2 — a `bash`-fenced command that runs in no shell (P2) — **ACCEPTED**
+
+> When this fenced `bash` command is run in Bash … `Select-String` is not
+> available, so the documented post-deploy verification fails before locating the
+> bundle.
+
+**Verdict: valid, and worse than reported.** `curl -s … | Select-String` runs in
+**neither** shell as written: bash has no `Select-String`, and PowerShell 5.1 —
+Kevin's actual shell — does have the cmdlet but not that pipe's semantics. So the
+runbook handed him a step that fails whichever way he ran it, in a section whose
+whole job is verifying a deploy.
+
+Absorbed: replaced with a single PowerShell command (no `&&`, per the standing
+rule about PowerShell 5.1), fenced `powershell`, with the bash equivalent given
+underneath for completeness.
+
+**Lesson:** a fence label is a claim about which shell the command runs in, and
+nothing in the gate set checks it. That is exactly the class of thing a
+cross-model reviewer catches and self-review does not.
 
 ---
 
