@@ -479,3 +479,46 @@ describe('confidence weights — graying is wired, and the duplicate backstop su
     expect(code).toContain("'Two games share a confidence weight'");
   });
 });
+
+/**
+ * The Season/Week standings toggle (Kevin, 2026-08-13: a pool paying weekly
+ * needs the week's own ranking on screen).
+ *
+ * The invariant worth pinning is NULL-IS-NOT-ZERO. A member the scorer has not
+ * reached this week has no weekly value; coalescing that to 0 would rank
+ * "hasn't been scored" above a Margin player who played and lost by 3, and tie
+ * them with a Pick'em player who played and got everything wrong. The view is
+ * read during live Sunday scoring, which is exactly when half the pool is in
+ * that state.
+ */
+describe('standings week view — absence is not zero, and Survivor has no week to rank', () => {
+  const src = readFileSync(
+    resolve(root, 'src/components/NFLPoolDashboard/NFLStandings.tsx'),
+    'utf8',
+  );
+  const code = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+  it('weekValue returns null for a missing week, never a coalesced 0', () => {
+    expect(code).toContain("return typeof v === 'number' ? v : null;");
+    // The one wrong implementation this is most likely to rot into.
+    expect(code).not.toContain('weeklyPoints?.[week] ?? 0');
+    expect(code).not.toContain('weeklyScores?.[week] ?? 0');
+  });
+
+  it('the week ranking drops nulls to the bottom instead of sorting them as values', () => {
+    expect(code).toContain('weekValue(e) !== null');
+    expect(code).toContain('weekValue(e) === null');
+  });
+
+  it('Survivor is excluded from the toggle — N/A, not just unranked', () => {
+    expect(code).toContain("weekRanked = standingsView === 'WEEK' && type !== 'NFL_SURVIVOR'");
+    expect(code).toContain("type !== 'NFL_SURVIVOR' && (");
+  });
+
+  it('a not-yet-scored week shows no rank chip', () => {
+    expect(code).toContain('if (weekRanked && weekValue(entry) === null)');
+  });
+});
