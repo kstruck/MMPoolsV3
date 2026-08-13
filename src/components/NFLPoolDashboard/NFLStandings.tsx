@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Trophy, Heart, ShieldAlert } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
@@ -45,6 +45,10 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
   // buildStandingsRows on every scoring pass — including provisional mid-day
   // passes, so this view moves DURING Sunday. No new data is read.
   const [standingsView, setStandingsView] = useState<'SEASON' | 'WEEK'>('SEASON');
+  // Season is the DEFAULT per pool, not per mount: PoolRoute reuses this
+  // component across pool navigation, so without the reset a WEEK view chosen
+  // in one pool leaks into the next pool's standings. (qodo, this PR.)
+  useEffect(() => { setStandingsView('SEASON'); }, [pool.id]);
   const weekRanked = standingsView === 'WEEK' && type !== 'NFL_SURVIVOR';
   // This week's number for one entry, or null before the scorer first writes
   // it. Null is "not scored yet", NOT zero — a real 0 (every pick wrong, or a
@@ -194,6 +198,28 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, type, weekRanked, week]);
 
+  // WEEK-view competition ranks, computed ONCE per sorted list rather than by
+  // filtering the whole array per row (O(n²) at render; qodo, this PR).
+  // sortedEntries is already week-value-descending, so a rank is: same value
+  // as the previous row shares its rank, otherwise rank = index + 1.
+  const weekRankByUid = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!weekRanked) return m;
+    let prevVal: number | null = null;
+    let prevRank = 1;
+    let i = 0;
+    for (const e of sortedEntries) {
+      if (e.unscored || weekValue(e) === null) continue;
+      i += 1;
+      const v = weekValue(e) as number;
+      const rank = v === prevVal ? prevRank : i;
+      m.set(e.id, rank);
+      prevVal = v; prevRank = rank;
+    }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortedEntries, weekRanked, week]);
+
   // An unscored member has no rank to show. They sort last (see `rank` above), so
   // the scored rows still read 1..N by index; giving the unscored row the next
   // number would assert a placing its own score cells say is unknown. (codex.)
@@ -209,9 +235,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
     // 2 here would show a different first place than the recap's winner line.
     // (codex r1 on this PR.)
     if (weekRanked) {
-      const mine = weekValue(entry) as number;
-      const better = sortedEntries.filter(e => !e.unscored && weekValue(e) !== null && (weekValue(e) as number) > mine).length;
-      return <RankChip rank={better + 1} />;
+      return <RankChip rank={weekRankByUid.get(entry.id) ?? 1} />;
     }
     return <RankChip rank={index + 1} />;
   };
