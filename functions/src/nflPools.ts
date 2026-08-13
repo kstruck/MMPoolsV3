@@ -1328,21 +1328,34 @@ async function scoreWeekPass(
         }
       }
 
-      // Weekly-winner candidate. The diff here is deliberately NOT the `?? 0`
-      // one above: `closestTiebreaker` is a trivia callout where coercing a
-      // missing guess to 0 merely makes that member lose, but this diff DECIDES
-      // the week. A member who never answered must be absent, not sitting on an
-      // invented prediction of 0 that a low-scoring Monday could make a WINNER.
+      // Weekly-winner candidate — ONLY for entries that actually played this
+      // week. `picksThisWeek` counts this week's gradable slate, so a member who
+      // never submitted contributes nothing.
+      //
+      // ⚠️ THE GATE IS NOT COSMETIC. Without it every non-submitter enters at 0
+      // points, and on a week where the real players also finish at 0 — or on a
+      // pool with no usable tiebreak target — the "winners" would be everybody
+      // who did not play, listed as a shared win. Margin has always gated its
+      // sharp line for this reason (`if (pick && ...)`, below); Pick'em's
+      // equivalent was missing here. (codex P1, round 1 on the implementation.)
+      //
+      // The diff is deliberately NOT the `?? 0` one above: `closestTiebreaker`
+      // is a trivia callout where coercing a missing guess to 0 merely makes
+      // that member lose, but this diff DECIDES the week. A member who never
+      // answered must be ABSENT, not sitting on an invented prediction of 0
+      // that a low-scoring Monday could turn into a WIN.
       // (PLAN-WEEKLY-TIEBREAKERS §8c; codex P1, plan round 11.)
-      const ownPrediction = entry.weeklyTiebreakers?.[week];
-      winnerCandidates.push({
-        userId: entry.ownerUid,
-        userName: entry.userName,
-        points,
-        ...(mnfTotalScore !== null && typeof ownPrediction === 'number'
-          ? { tiebreakDiff: Math.abs(ownPrediction - mnfTotalScore) }
-          : {}),
-      });
+      if (picksThisWeek > 0) {
+        const ownPrediction = entry.weeklyTiebreakers?.[week];
+        winnerCandidates.push({
+          userId: entry.ownerUid,
+          userName: entry.userName,
+          points,
+          ...(mnfTotalScore !== null && typeof ownPrediction === 'number'
+            ? { tiebreakDiff: Math.abs(ownPrediction - mnfTotalScore) }
+            : {}),
+        });
+      }
 
     } else if (pool.type === 'NFL_SURVIVOR') {
       const entry = doc.data() as SurvivorEntry;

@@ -112,6 +112,21 @@ describe('wiring — no surface re-derives the rule or hard-codes the copy', () 
     expect(src).toContain('computeMNFTiebreakerTotal(games, tiebreakerRule)');
   });
 
+  it('only entries that PLAYED the week become weekly-winner candidates', () => {
+    // Without this gate every non-submitter enters at 0 points, and on a week
+    // where the real players also finish at 0 the "winners" are everybody who
+    // did not play. Margin has always gated its sharp line the same way.
+    // (codex P1, round 1 on the implementation.)
+    const src = read('functions/src/nflPools.ts');
+    // Pick'em: gated on having picked something in this week's gradable slate.
+    expect(src).toContain('if (picksThisWeek > 0) {');
+    // Margin: gated on `pick`. Whitespace-insensitive — the assertion is about
+    // the gate, and pinning indentation makes a formatter break a real guard.
+    expect(src).toMatch(/if \(pick\) \{\s*winnerCandidates\.push\(/);
+    // Exactly the two gated pushes, so a third ungated one cannot slip in.
+    expect(src.match(/winnerCandidates\.push\(/g)).toHaveLength(2);
+  });
+
   it('the standings MNF column is gated on the rule', () => {
     // Under NONE a prediction stored before the switch would otherwise keep
     // rendering, contradicting the rules page. (codex R8.1.)
