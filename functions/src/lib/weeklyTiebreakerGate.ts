@@ -31,7 +31,7 @@
 // transaction. The caller evaluates it INSIDE the transaction that writes, with
 // the pool and the entries read in that same transaction.
 
-import { effectiveWeeklyTiebreaker } from '../shared/nflTiebreaker';
+import { effectiveWeeklyTiebreaker, WEEKLY_TIEBREAKER_VALUES } from '../shared/nflTiebreaker';
 import { poolHasScoredWeek } from './survivorSettingsGate';
 
 /** The field this gate protects, as it appears in a dotted patch. */
@@ -81,7 +81,7 @@ export function tiebreakerEditNeedsEntries(
 }
 
 export type WeeklyTiebreakerRefusal = {
-  code: 'TIEBREAKER_LOCKED_AFTER_SUBMISSIONS' | 'SETTINGS_LOCKED_AFTER_SCORING';
+  code: 'TIEBREAKER_LOCKED_AFTER_SUBMISSIONS' | 'SETTINGS_LOCKED_AFTER_SCORING' | 'TIEBREAKER_INVALID_VALUE';
   field: 'weeklyTiebreaker';
   message: string;
 };
@@ -124,6 +124,29 @@ export function weeklyTiebreakerRefusal(
 ): WeeklyTiebreakerRefusal | null {
   if (pool?.type !== 'NFL_PICKEM') return null;
   if (!touchesWeeklyTiebreakerSetting(patch)) return null;
+
+  // VALIDITY FIRST, and before `changesRule` — that ordering is the finding.
+  //
+  // `updatePoolSettingsSchema` is permissive and `flattenSettingsPatch` writes
+  // present keys as given, so the CREATE-time `z.enum` guard does not cover this
+  // path at all. A junk value persists, and `effectiveWeeklyTiebreaker` then
+  // resolves it to the default — which is the right read-side behaviour for a
+  // hand-edited pool, and the wrong thing to allow a callable to CREATE.
+  //
+  // Checking after `changesRule` would miss the worst case: junk on a pool
+  // already playing MNF_COMBINED reads as "no effective change", returns null,
+  // and stores the garbage. Worse, a NONE pool set to junk silently becomes
+  // MNF_COMBINED. (codex P2, round 2 on the implementation.)
+  const incomingRaw = patch[WEEKLY_TIEBREAKER_SETTING_KEY];
+  if (!WEEKLY_TIEBREAKER_VALUES.includes(incomingRaw as never)) {
+    return {
+      code: 'TIEBREAKER_INVALID_VALUE',
+      field: 'weeklyTiebreaker',
+      message:
+        `TIEBREAKER_INVALID_VALUE: the weekly tiebreaker must be one of ${WEEKLY_TIEBREAKER_VALUES.join(', ')}.`,
+    };
+  }
+
   if (!changesRule(pool, patch)) return null;
 
   if (poolHasScoredWeek(pool)) {

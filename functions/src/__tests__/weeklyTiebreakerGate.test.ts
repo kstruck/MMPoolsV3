@@ -96,6 +96,29 @@ describe('weeklyTiebreakerRefusal', () => {
     ).toBeNull();
   });
 
+  it('REFUSES a junk value, even on a pool already playing the default', () => {
+    // The create-time z.enum does not cover updatePoolSettings — that schema is
+    // permissive and the flattener writes present keys as given. Checked BEFORE
+    // the changed-value test on purpose: junk resolves to MNF_COMBINED, so on a
+    // pool already on MNF_COMBINED it reads as "no change" and would be stored.
+    // (codex P2, implementation round 2.)
+    const r = weeklyTiebreakerRefusal(pickem(), { [K]: 'MNF_LASTGAME' }, empty);
+    expect(r?.code).toBe('TIEBREAKER_INVALID_VALUE');
+  });
+
+  it('REFUSES a junk value that would silently flip a NONE pool to the default', () => {
+    const r = weeklyTiebreakerRefusal(pickem({ weeklyTiebreaker: 'NONE' }), { [K]: 'whatever' }, empty);
+    expect(r?.code).toBe('TIEBREAKER_INVALID_VALUE');
+  });
+
+  it.each([undefined, null, 3, {}])('REFUSES the non-string value %s', (v) => {
+    expect(weeklyTiebreakerRefusal(pickem(), { [K]: v }, empty)?.code).toBe('TIEBREAKER_INVALID_VALUE');
+  });
+
+  it('does not police junk on a pool type it does not govern', () => {
+    expect(weeklyTiebreakerRefusal({ type: 'NFL_MARGIN', settings: {} }, { [K]: 'junk' }, empty)).toBeNull();
+  });
+
   it('ignores non-pickem pools entirely', () => {
     const survivor = { type: 'NFL_SURVIVOR', settings: {} };
     expect(weeklyTiebreakerRefusal(survivor, { [K]: 'NONE' }, played)).toBeNull();
