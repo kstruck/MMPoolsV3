@@ -173,6 +173,88 @@ describe('saved-pick visibility — all three member sheets, one definition', ()
     expect(src).not.toMatch(/week\s*\+\s*1/);
   });
 
+  /**
+   * ⚠️ RECORDS ARE "AS OF" THE SELECTED WEEK — the defect codex holed TWICE.
+   *
+   * Two separate ways to get this wrong, and both produce a plausible-looking
+   * row rather than an obvious one:
+   *
+   *  - Folding `games` (already filtered to the selected week) gives every team
+   *    0-0 all season long.
+   *  - Folding the whole season gives a team's WEEK 10 record beside a WEEK 1
+   *    matchup — the dashboard lets a member scrub back, so this is reachable.
+   *
+   * `src/utils/nflTeamRecords.test.ts` proves the fold and the `< week` filter
+   * behave; it cannot prove the three sheets APPLY them. Pick'em joined the two
+   * others on 2026-08-13 and inherited both traps with them.
+   */
+  it.each(SHEETS)('%s computes records as of the selected week', file => {
+    const src = readFileSync(resolve(root, file), 'utf8');
+    expect(src, `${file} should derive records from the season slate`).toMatch(
+      /computeTeamRecords\(/,
+    );
+    // The season slate, not the week slate, and cut off strictly BEFORE the
+    // selected week. Whitespace-tolerant, but it must be one expression — a
+    // sheet that folds the wrong array cannot satisfy it.
+    expect(src, `${file} must fold seasonGames filtered to weeks before the selected one`).toMatch(
+      /computeTeamRecords\(\s*\(seasonGames \?\? games\)\.filter\(g => Number\(g\.week\) < week\)/,
+    );
+  });
+
+  it('that grep rejects both shapes it was written to catch', () => {
+    // Guard the guard. Neither defect may satisfy the assertion above.
+    const wholeSeason = 'computeTeamRecords(seasonGames ?? games, seasonType)';
+    const weekOnly = 'computeTeamRecords(games, seasonType)';
+    const rule = /computeTeamRecords\(\s*\(seasonGames \?\? games\)\.filter\(g => Number\(g\.week\) < week\)/;
+    expect(rule.test(wholeSeason)).toBe(false);
+    expect(rule.test(weekOnly)).toBe(false);
+    expect(rule.test('computeTeamRecords((seasonGames ?? games).filter(g => Number(g.week) < week), seasonType)')).toBe(true);
+  });
+
+  it('Quick Picks offers no "optimal" or premium strategy', () => {
+    // Kevin's instruction, 2026-08-12, verbatim: no "Optimal/premium picks"
+    // option. Every strategy must be a mechanical read of stored data, never a
+    // recommendation — a pool product that appears to advise its members on
+    // which side to take is a different product with different obligations.
+    const src = readFileSync(
+      resolve(root, 'src/components/NFLPoolDashboard/pickSheet/quickPicks.ts'),
+      'utf8',
+    );
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+    // Guard the guard: the comment naming the refused option must survive in
+    // the file while being absent from the code the union is built from.
+    expect(src).toContain('Optimal');
+    expect(code).not.toContain('Optimal');
+    expect(code).not.toMatch(/OPTIMAL|PREMIUM|BEST_BETS/);
+    // The union is exactly these four, so a fifth cannot be added silently.
+    const union = code.match(/export type QuickPickStrategy = ([^;]+);/);
+    expect(union?.[1].trim()).toBe("'FAVORITES' | 'UNDERDOGS' | 'HOME' | 'AWAY'");
+  });
+
+  it('Quick Picks re-plans at the press, not at dialog render', () => {
+    // codex round 1 on this PR: the dialog computes its counts once, on open.
+    // A member who opens it a minute before kickoff and then chooses is
+    // choosing after that game may have locked — the sheet re-evaluates lock
+    // state only every 30s — and applying the cached plan would write a pick
+    // the server refuses. The sheet must re-plan against its own live lock
+    // predicate, exactly as tapping a team does.
+    const sheet = readFileSync(
+      resolve(root, 'src/components/NFLPoolDashboard/PickemPickEntry.tsx'),
+      'utf8',
+    );
+    expect(sheet).toMatch(/const handleQuickPicks = \(strategy: QuickPickStrategy\) => \{/);
+    expect(sheet).toMatch(/planQuickPicks\(games, strategy, picks, g => !isGameLocked\(g\)\)/);
+
+    const dialog = readFileSync(
+      resolve(root, 'src/components/NFLPoolDashboard/pickSheet/QuickPicksDialog.tsx'),
+      'utf8',
+    );
+    const dialogCode = dialog.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+    // It hands back the STRATEGY. Handing back `plan` is the regression.
+    expect(dialogCode).toContain('onApply(id)');
+    expect(dialogCode).not.toContain('onApply(plan)');
+  });
+
   it('the pool-home CTA names the action it will actually perform', () => {
     const src = readFileSync(
       resolve(root, 'src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx'),
