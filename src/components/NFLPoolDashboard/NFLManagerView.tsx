@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   Settings, DollarSign, CheckCircle, XCircle, Users, Activity,
   Play, Edit3, Save, Lock, Unlock, AlertTriangle, ShieldCheck, BellRing,
@@ -179,6 +179,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const [splitWeekly, setSplitWeekly] = useState<number>(settings.hybridSplit?.weeklyPerEntry ?? 0);
   const [splitSeason, setSplitSeason] = useState<number>(settings.hybridSplit?.seasonPerEntry ?? 0);
   const [splitDeclared, setSplitDeclared] = useState<boolean>(!!settings.hybridSplit);
+  // The latest split THIS component knows to be stored — updated on every
+  // successful save, because the realtime `settings` prop can lag a save that
+  // just deleted the split, and re-hydrating from a stale prop would resurrect
+  // numbers the commissioner deliberately removed. (codex r7.)
+  const lastKnownSplitRef = useRef<{ weeklyPerEntry: number; seasonPerEntry: number } | null>(settings.hybridSplit ?? null);
   const [pointsPerPick, setPointsPerPick] = useState<number>(settings.pointsPerPick ?? 1);
   const [thursdayBonus, setThursdayBonus] = useState<number>(settings.primetimeBonus?.thursday ?? 0);
   const [sundayNightBonus, setSundayNightBonus] = useState<number>(settings.primetimeBonus?.sundayNight ?? 0);
@@ -497,6 +502,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       // long multi-section form, and the only save button was at the BOTTOM, so a
       // commissioner on a laptop could save successfully and see nothing happen.
       // The toast floats over the viewport wherever they are.
+      // Mirror what the save just made true server-side (see lastKnownSplitRef).
+      const activeMode = type === 'NFL_MARGIN' ? marginPayoutMode : payoutMode;
+      lastKnownSplitRef.current = activeMode === 'HYBRID' && splitDeclared
+        ? { weeklyPerEntry: splitWeekly, seasonPerEntry: splitSeason }
+        : null;
       toast.success('Pool settings saved!');
       // Drives the per-section buttons' green "Saved!" state. Cleared on a timer
       // rather than left latched, so the NEXT save is visibly a new event —
@@ -930,9 +940,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     // undeclared 0/0 sitting on top of live stored numbers — the
                     // toggle-away-and-back sequence otherwise saves HYBRID with
                     // no split while the old one persists server-side. (codex r6.)
-                    if (e.target.value === 'HYBRID' && settings.hybridSplit) {
-                      setSplitWeekly(settings.hybridSplit.weeklyPerEntry ?? 0);
-                      setSplitSeason(settings.hybridSplit.seasonPerEntry ?? 0);
+                    if (e.target.value === 'HYBRID' && lastKnownSplitRef.current) {
+                      setSplitWeekly(lastKnownSplitRef.current.weeklyPerEntry ?? 0);
+                      setSplitSeason(lastKnownSplitRef.current.seasonPerEntry ?? 0);
                       setSplitDeclared(true);
                     }
                   }}
@@ -1188,9 +1198,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     // undeclared 0/0 sitting on top of live stored numbers — the
                     // toggle-away-and-back sequence otherwise saves HYBRID with
                     // no split while the old one persists server-side. (codex r6.)
-                    if (e.target.value === 'HYBRID' && settings.hybridSplit) {
-                      setSplitWeekly(settings.hybridSplit.weeklyPerEntry ?? 0);
-                      setSplitSeason(settings.hybridSplit.seasonPerEntry ?? 0);
+                    if (e.target.value === 'HYBRID' && lastKnownSplitRef.current) {
+                      setSplitWeekly(lastKnownSplitRef.current.weeklyPerEntry ?? 0);
+                      setSplitSeason(lastKnownSplitRef.current.seasonPerEntry ?? 0);
                       setSplitDeclared(true);
                     }
                   }}
