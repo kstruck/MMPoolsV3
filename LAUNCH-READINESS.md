@@ -123,8 +123,11 @@ each surface shows Correct/Incorrect with file:line evidence, and four ranked
 gaps. Headline: Pick'em grades **per game as each game ends** (worst case ~10
 min: ≤5 for ESPN's FINAL, ≤5 for the scorer's next pass), Survivor/Margin hold
 until the weekly lock by design, and **no surface anywhere shows a per-pick ✓/✗
-for other players** (gap G2 — the data exists in `weeklyResults[week].games` and
-is never rendered).
+for other players** (gap G2 — the per-pick grades are written to the entry as
+`weeklyResults[week].games`, but the member-readable standings projection
+**strips them** (`sanitizeWeeklyResults`) and raw entries have been unreadable by
+other members since #414, so G2 is a **backend** change with a fresh
+reveal-policy decision in it, not a UI one).
 
 ## Accepted non-blockers (decision references)
 

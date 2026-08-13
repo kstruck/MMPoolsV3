@@ -8,14 +8,20 @@ mattered (see round 3).
 Findings are quoted in substance and answered individually; a rejection is
 recorded with its reasoning, same as an acceptance.
 
-**Rounds: 6. Findings: 3 — all valid, all absorbed. Rounds 5 and 6 clean.**
+**Rounds: 7. Findings: 4 — all valid, all absorbed. Round 8 is the confirming pass.**
 
-Two of the three hit the same clause — §5, the mid-season edit gate — and the
+Two of the four hit the same clause — §5, the mid-season edit gate — and the
 second is a hole the first one's fix opened. That is the pattern CLAUDE.md §2c
 documents ("round 1 finds defects in the code, rounds 2+ find defects in the
 fixes"), reproduced exactly, on a plan that had already copied a gate this repo
-believed was correct. The third (round 4) is a different class: not a wrong
-design, an incomplete touch list.
+believed was correct. R4.1 is a different class — not a wrong design, an
+incomplete touch list — and R7.1 (appendix) is a third: a wrong *classification*
+in the audit document riding the same branch, which would have made a follow-up
+ticket look four times cheaper than it is.
+
+⚠️ **Three of the four landed on rounds that came AFTER a clean one.** Rounds 3,
+5 and 6 each came back clean and each was followed by a round that found
+something real. The counter is not the stopping rule; the evidence is.
 
 ---
 
@@ -147,7 +153,7 @@ No findings.
 
 ---
 
-## Round 6 — clean, on the FINAL branch diff
+## Round 6 — clean, on the branch diff (and *not* the last word)
 
 `--base origin/main`, after a further commit that the earlier rounds had never
 seen (the runbook's open-PR table). §2c: new writing earns its own round, and
@@ -157,9 +163,12 @@ that applies to a commit made after the reviewer came back clean.
 > executable code or configuration changes. **The documented implementation
 > claims were consistent with the referenced current source locations.**
 
-No findings. The second sentence is the one worth having: the whole plan is a
-set of claims about file:line locations, and this is a reviewer with the repo in
-hand saying they check out.
+No findings on the plan. The second sentence is the one worth having: the whole
+plan is a set of claims about file:line locations, and this is a reviewer with
+the repo in hand saying they check out.
+
+⚠️ **Round 7 then found a P2 in the audit document on the same branch** — see
+the appendix. Round 6 being clean did not mean the branch was.
 
 ---
 
@@ -181,3 +190,42 @@ round **and** qodo clean **and** my own read of the artifact agreeing.
   which is the review that matters more.
 
 **No findings are carried open.**
+
+---
+
+## Appendix — round 7, on the audit document rather than the plan
+
+The same review pass covers `MORNING-2026-08-14.md`, since both ride the same
+branch. Recorded here because there is nowhere better and a rejected-or-absorbed
+finding must live somewhere.
+
+### R7.1 — the audit misclassified gap G2 as frontend work (P2) — **ACCEPTED**
+
+> G2 cannot be implemented as a frontend-only follow-up: the member-readable
+> standings projection explicitly strips `weeklyResults[*].games` in
+> `sanitizeWeeklyResults`, raw entries are not readable by other players, and
+> `getPoolPicks` returns revealed picks but not their graded results … leaving it
+> classified as frontend-only risks either an impossible implementation or
+> reintroducing a protected entry read.
+
+**Verdict: valid, and it is the most useful finding of the seven.** Verified all
+three doors:
+
+1. `sanitizeWeeklyResults` (`nflScoringEngine.ts:698-708`) destructures `games`
+   and `game` out of every week before the row is written. `StandingsRow` is an
+   **allowlist** — its own comment says per-game maps are deliberately excluded.
+2. Raw entries have been unreadable by other members since #414 shipped
+   2026-08-12.
+3. `getPoolPicks` returns revealed picks, not grades.
+
+The original wording ("the data exists and is never rendered") reads as an
+afternoon of UI work. It is a server projection change plus a **new reveal-policy
+decision**, and the cheap-looking version of it is exactly the one that would
+reintroduce the entry read #414 removed.
+
+**Absorbed** into `MORNING-2026-08-14.md` §4c as a correction box, and the G2
+row's classification changed from *frontend* to *backend*. `LAUNCH-READINESS.md`
+§I's summary paragraph corrected to match — it carried the same wrong claim.
+
+**It strengthens the audit's recommendation rather than weakening it.** "G1 only
+before launch, G2 after kickoff" was the call; this is a second reason for it.
