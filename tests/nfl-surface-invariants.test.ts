@@ -425,3 +425,57 @@ describe('commissioner nav — no half-implemented ARIA tab pattern', () => {
     },
   );
 });
+
+/**
+ * Confidence weights: the graying is a GUARD RAIL, the duplicate check is the
+ * CHECK (LAUNCH-READINESS I1, Kevin 2026-08-13).
+ *
+ * `src/utils/confidenceWeights.test.ts` proves the rule — a weight another game
+ * holds is taken, a game's own weight never is, and a pre-existing duplicate
+ * leaves BOTH holders able to keep theirs. It cannot prove the pick sheet USES
+ * it, nor that adding it did not quietly retire the backstop it sits in front
+ * of. That is what this block is for, and the second half is the load-bearing
+ * one: an entry saved by an older client can already carry a duplicate, so if
+ * the graying is ever wrong the sheet must still refuse the submit rather than
+ * silently accept it.
+ */
+describe('confidence weights — graying is wired, and the duplicate backstop survives it', () => {
+  const sheet = readFileSync(
+    resolve(root, 'src/components/NFLPoolDashboard/PickemPickEntry.tsx'),
+    'utf8',
+  );
+  // Comments stripped: the block above the `<option>` has to explain what it
+  // refuses to disable, and a whole-file grep would pass on the explanation
+  // rather than on the code. Same trick, and same reason, as the nav block.
+  const code = sheet
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+  it('the comment stripper actually removed the explanation', () => {
+    // Guard the guard — see the nav block. Both strings live only in comments.
+    expect(sheet).toContain('strand the member');
+    expect(code).not.toContain('strand the member');
+    expect(code).toContain('availableConfidenceValues.map'); // code survived
+  });
+
+  it('the per-game dropdown disables values from the shared rule, not a local re-derivation', () => {
+    expect(code).toContain("from '../../utils/confidenceWeights'");
+    expect(code).toContain('isConfidenceValueTaken(confidenceOwners, v, game.id)');
+    expect(code).toContain('disabled={taken}');
+  });
+
+  it('the owners map is built from THIS week\'s games only', () => {
+    // Folding the whole entry in would gray out weights spent on other weeks.
+    expect(code).toContain('confidenceValueOwners(games.map(g => g.id), confidence)');
+  });
+
+  it('the duplicate detection is still present and still blocks the submit', () => {
+    expect(code).toContain('duplicateConfidenceValues');
+    expect(code).toContain('Duplicate value!');
+    // The `canSubmit` refusal and the save bar's reason for it — the two halves
+    // a member actually experiences.
+    expect(code).toContain('if (duplicateConfidenceValues.size > 0) return false;');
+    expect(code).toContain("'Two games share a confidence weight'");
+  });
+});

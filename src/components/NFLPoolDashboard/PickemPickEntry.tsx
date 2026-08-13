@@ -13,6 +13,7 @@ import { pickHighlightLabel } from '../../utils/pickHighlight';
 import { poolUsesSpreads } from '../../utils/poolUsesSpreads';
 import { gradePick } from '../../utils/pickemResult';
 import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
+import { confidenceValueOwners, isConfidenceValueTaken } from '../../utils/confidenceWeights';
 import { GameMeta } from './pickSheet/GameMeta';
 import { TeamPickButton } from './pickSheet/TeamPickButton';
 import { StickySaveBar } from './pickSheet/StickySaveBar';
@@ -183,6 +184,15 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
 
     return duplicates;
   }, [confidence, confidenceMode, games]);
+
+  // Which weight each game already holds — drives the grayed-out options below.
+  // Scoped to THIS week's games, same as the duplicate audit: `confidence` is
+  // keyed by gameId across the whole entry, so folding in other weeks would
+  // gray out weights nothing on screen is using.
+  const confidenceOwners = useMemo(
+    () => (confidenceMode ? confidenceValueOwners(games.map(g => g.id), confidence) : new Map<number, Set<string>>()),
+    [games, confidence, confidenceMode],
+  );
 
   // Validate form completeness before permitting submission
   const canSubmit = useMemo(() => {
@@ -586,9 +596,26 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                       } ${locked ? 'opacity-85 cursor-not-allowed' : ''}`}
                     >
                       <option value="">Set weight...</option>
-                      {availableConfidenceValues.map(v => (
-                        <option key={v} value={v}>Confidence {v}</option>
-                      ))}
+                      {/* A weight another game already holds renders DISABLED —
+                          native `<option disabled>`, which is what grays it out
+                          and makes it unselectable by keyboard, mouse and the
+                          mobile picker alike. THIS game's own weight is never
+                          disabled: doing so would strand the member's selection
+                          on a value its own list forbids.
+
+                          The "(used)" suffix is not decoration. A disabled
+                          option's gray is the only signal a sighted user gets,
+                          and Android's picker renders disabled entries at close
+                          to full contrast — the word is what carries the reason
+                          when the colour does not. */}
+                      {availableConfidenceValues.map(v => {
+                        const taken = isConfidenceValueTaken(confidenceOwners, v, game.id);
+                        return (
+                          <option key={v} value={v} disabled={taken}>
+                            Confidence {v}{taken ? ' (used)' : ''}
+                          </option>
+                        );
+                      })}
                     </select>
 
                     {duplicateConfidenceValues.has(confidence[game.id]) && (
