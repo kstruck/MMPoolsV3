@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   Settings, DollarSign, CheckCircle, XCircle, Users, Activity,
   Play, Edit3, Save, Lock, Unlock, AlertTriangle, ShieldCheck, BellRing,
@@ -17,6 +17,7 @@ import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { buildPoolRoster, hasCompletePicks, memberOutstanding, duesRates } from '../../utils/poolRoster';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
 import { effectiveWeeklyTiebreaker } from '@shared/nflTiebreaker';
+import { hybridSplitProblem } from '@shared/hybridSplit';
 import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReuse';
 
 /**
@@ -173,6 +174,16 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // Resolved, never raw: an unset pool must show the rule it is actually
   // playing (MNF_COMBINED), not an empty select that would save as a change.
   const [weeklyTiebreaker, setWeeklyTiebreaker] = useState<string>(effectiveWeeklyTiebreaker(settings));
+  // HYBRID split (PLAN-HYBRID-SPLIT). Local state mirrors the stored split;
+  // absent = pre-existing pool that never declared one.
+  const [splitWeekly, setSplitWeekly] = useState<number>(settings.hybridSplit?.weeklyPerEntry ?? 0);
+  const [splitSeason, setSplitSeason] = useState<number>(settings.hybridSplit?.seasonPerEntry ?? 0);
+  const [splitDeclared, setSplitDeclared] = useState<boolean>(!!settings.hybridSplit);
+  // The latest split THIS component knows to be stored — updated on every
+  // successful save, because the realtime `settings` prop can lag a save that
+  // just deleted the split, and re-hydrating from a stale prop would resurrect
+  // numbers the commissioner deliberately removed. (codex r7.)
+  const lastKnownSplitRef = useRef<{ weeklyPerEntry: number; seasonPerEntry: number } | null>(settings.hybridSplit ?? null);
   const [pointsPerPick, setPointsPerPick] = useState<number>(settings.pointsPerPick ?? 1);
   const [thursdayBonus, setThursdayBonus] = useState<number>(settings.primetimeBonus?.thursday ?? 0);
   const [sundayNightBonus, setSundayNightBonus] = useState<number>(settings.primetimeBonus?.sundayNight ?? 0);
@@ -436,6 +447,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           lockMode,
           lockBufferMinutes,
           payoutMode,
+          // Sent only while HYBRID and declared. Leaving HYBRID omits it and
+          // the callable deletes the stored copy in the same write — sending
+          // it on a non-hybrid save would be refused (HYBRID_SPLIT_WRONG_MODE).
+          ...(payoutMode === 'HYBRID' && splitDeclared
+            ? { hybridSplit: { weeklyPerEntry: splitWeekly, seasonPerEntry: splitSeason } } : {}),
           weeklyTiebreaker,
           pointsPerPick,
           ...(Object.keys(primetimeBonus).length > 0 ? { primetimeBonus } : { primetimeBonus: null }),
@@ -457,7 +473,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           lockBufferMinutes,
         };
       } else if (type === 'NFL_MARGIN') {
-        updatedSettings = { ...updatedSettings, payoutMode: marginPayoutMode, lockBufferMinutes };
+        updatedSettings = {
+          ...updatedSettings,
+          payoutMode: marginPayoutMode,
+          lockBufferMinutes,
+          ...(marginPayoutMode === 'HYBRID' && splitDeclared
+            ? { hybridSplit: { weeklyPerEntry: splitWeekly, seasonPerEntry: splitSeason } } : {}),
+        };
       }
 
       // Routed through the server callable, not dbService.updatePool: firestore.rules
@@ -480,6 +502,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       // long multi-section form, and the only save button was at the BOTTOM, so a
       // commissioner on a laptop could save successfully and see nothing happen.
       // The toast floats over the viewport wherever they are.
+      // Mirror what the save just made true server-side (see lastKnownSplitRef).
+      const activeMode = type === 'NFL_MARGIN' ? marginPayoutMode : payoutMode;
+      lastKnownSplitRef.current = activeMode === 'HYBRID' && splitDeclared
+        ? { weeklyPerEntry: splitWeekly, seasonPerEntry: splitSeason }
+        : null;
       toast.success('Pool settings saved!');
       // Drives the per-section buttons' green "Saved!" state. Cleared on a timer
       // rather than left latched, so the NEXT save is visibly a new event —
@@ -901,7 +928,24 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Payout Method</label>
                 <select
                   value={payoutMode}
-                  onChange={e => setPayoutMode(e.target.value)}
+                  onChange={e => {
+                    setPayoutMode(e.target.value);
+                    // Leaving HYBRID forgets the split locally, matching the
+                    // server's delete — otherwise re-selecting HYBRID later
+                    // silently resurrects the old numbers on the next save.
+                    // (codex r3.)
+                    if (e.target.value !== 'HYBRID') { setSplitDeclared(false); setSplitWeekly(0); setSplitSeason(0); }
+                    // Returning to HYBRID re-hydrates from the STORED split, so
+                    // the editor shows what the pool actually has rather than an
+                    // undeclared 0/0 sitting on top of live stored numbers — the
+                    // toggle-away-and-back sequence otherwise saves HYBRID with
+                    // no split while the old one persists server-side. (codex r6.)
+                    if (e.target.value === 'HYBRID' && lastKnownSplitRef.current) {
+                      setSplitWeekly(lastKnownSplitRef.current.weeklyPerEntry ?? 0);
+                      setSplitSeason(lastKnownSplitRef.current.seasonPerEntry ?? 0);
+                      setSplitDeclared(true);
+                    }
+                  }}
                   className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                 >
                   <option value="SEASON">Season-End Standings Only</option>
@@ -909,6 +953,37 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <option value="HYBRID">Hybrid (Season-End + Weekly Prizes)</option>
                 </select>
               </div>
+
+              {payoutMode === 'HYBRID' && (
+                <div className="bg-page border border-line rounded-lg p-4 space-y-3">
+                  <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Hybrid Entry-Fee Split</p>
+                  <p className="text-[11px] font-body text-muted leading-normal">
+                    Whole dollars per entry into each pot — the two must add up to the entry fee exactly. The payout percentages apply to both pots.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted mb-1">Weekly pots ($/entry)</label>
+                      <input type="number" min={0} value={splitWeekly}
+                        onChange={e => { setSplitDeclared(true); setSplitWeekly(Math.max(0, Math.floor(Number(e.target.value) || 0))); }}
+                        className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
+                    </div>
+                    <div>
+                      <label className="block font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted mb-1">Season pot ($/entry)</label>
+                      <input type="number" min={0} value={splitSeason}
+                        onChange={e => { setSplitDeclared(true); setSplitSeason(Math.max(0, Math.floor(Number(e.target.value) || 0))); }}
+                        className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
+                    </div>
+                  </div>
+                  {/* The same check the server enforces — a friendlier local
+                      phrasing would eventually disagree with the refusal. */}
+                  {splitDeclared && (() => {
+                    const problem = hybridSplitProblem({ payoutMode: 'HYBRID', entryFee: Number(entryFee), hybridSplit: { weeklyPerEntry: splitWeekly, seasonPerEntry: splitSeason } });
+                    return problem
+                      ? <p role="alert" className="text-[11px] font-body font-bold text-brandred-600">✗ {problem.split(': ').slice(1).join(': ')}</p>
+                      : <p role="status" className="text-[11px] font-body font-bold text-[#0F7B4A]">✓ ${splitWeekly} weekly + ${splitSeason} season = ${Number(entryFee)} entry fee</p>;
+                  })()}
+                </div>
+              )}
 
               <div>
                 <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Weekly Tie-Breaker</label>
@@ -1115,7 +1190,20 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Payout Method</label>
                 <select
                   value={marginPayoutMode}
-                  onChange={e => setMarginPayoutMode(e.target.value)}
+                  onChange={e => {
+                    setMarginPayoutMode(e.target.value);
+                    if (e.target.value !== 'HYBRID') { setSplitDeclared(false); setSplitWeekly(0); setSplitSeason(0); }
+                    // Returning to HYBRID re-hydrates from the STORED split, so
+                    // the editor shows what the pool actually has rather than an
+                    // undeclared 0/0 sitting on top of live stored numbers — the
+                    // toggle-away-and-back sequence otherwise saves HYBRID with
+                    // no split while the old one persists server-side. (codex r6.)
+                    if (e.target.value === 'HYBRID' && lastKnownSplitRef.current) {
+                      setSplitWeekly(lastKnownSplitRef.current.weeklyPerEntry ?? 0);
+                      setSplitSeason(lastKnownSplitRef.current.seasonPerEntry ?? 0);
+                      setSplitDeclared(true);
+                    }
+                  }}
                   className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                 >
                   <option value="SEASON">Season-End Totals Only</option>
@@ -1123,6 +1211,39 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <option value="HYBRID">Hybrid (Season-End + Weekly)</option>
                 </select>
               </div>
+
+              {/* Same split editor as Pick'em — the wizard can declare a Margin
+                  split, so the editor must be able to view and adjust it, or an
+                  entryFee change strands the pool against server validation
+                  with no UI to fix it. (codex P2 on the split PR.) */}
+              {marginPayoutMode === 'HYBRID' && (
+                <div className="bg-page border border-line rounded-lg p-4 space-y-3">
+                  <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Hybrid Entry-Fee Split</p>
+                  <p className="text-[11px] font-body text-muted leading-normal">
+                    Whole dollars per entry into each pot — the two must add up to the entry fee exactly.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted mb-1">Weekly pots ($/entry)</label>
+                      <input type="number" min={0} value={splitWeekly}
+                        onChange={e => { setSplitDeclared(true); setSplitWeekly(Math.max(0, Math.floor(Number(e.target.value) || 0))); }}
+                        className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
+                    </div>
+                    <div>
+                      <label className="block font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted mb-1">Season pot ($/entry)</label>
+                      <input type="number" min={0} value={splitSeason}
+                        onChange={e => { setSplitDeclared(true); setSplitSeason(Math.max(0, Math.floor(Number(e.target.value) || 0))); }}
+                        className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
+                    </div>
+                  </div>
+                  {splitDeclared && (() => {
+                    const problem = hybridSplitProblem({ payoutMode: 'HYBRID', entryFee: Number(entryFee), hybridSplit: { weeklyPerEntry: splitWeekly, seasonPerEntry: splitSeason } });
+                    return problem
+                      ? <p role="alert" className="text-[11px] font-body font-bold text-brandred-600">✗ {problem.split(': ').slice(1).join(': ')}</p>
+                      : <p role="status" className="text-[11px] font-body font-bold text-[#0F7B4A]">✓ ${splitWeekly} weekly + ${splitSeason} season = ${Number(entryFee)} entry fee</p>;
+                  })()}
+                </div>
+              )}
             </div>
           )}
 

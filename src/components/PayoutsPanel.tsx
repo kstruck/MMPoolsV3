@@ -133,6 +133,7 @@ const SquaresPayouts: React.FC<{ gameState: GameState; compact: boolean }> = ({ 
     const dollarFor = (pct: number) =>
         netPot !== undefined && netPot > 0 ? ` (${money(netPot * (pct / 100))})` : '';
 
+
     if (compact) {
         return (
             <div className="space-y-3 text-left">
@@ -305,8 +306,37 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
         : 0;
     const netPot = grossPot !== undefined ? grossPot - charityCut : undefined;
 
-    const dollarFor = (pct: number) =>
-        netPot !== undefined && netPot > 0 ? ` (${money(netPot * (pct / 100))})` : '';
+    // HYBRID split (PLAN-HYBRID-SPLIT): when declared, the fee is two pots and
+    // the place percentages apply to EACH. Absent split = pre-existing hybrid
+    // pool keeps the honest "ask your commissioner" copy below. Amounts are
+    // whole-dollar approximations by design; the commissioner settles cents.
+    const split = payoutMode === 'HYBRID' ? (settings.hybridSplit as { weeklyPerEntry?: number; seasonPerEntry?: number } | undefined) : undefined;
+    // Charity comes off each pot proportionally BEFORE percentages — the
+    // PotBreakdown says donations are removed before payouts, so gross pots
+    // here would overstate every award by the donated share. Same Math.floor
+    // convention as the charity line itself. (codex r4.)
+    const charityFactor = charity?.enabled ? 1 - charity.percentage / 100 : 1;
+    // The two pots must reconcile with the displayed post-donation total, so
+    // ONE pot is derived by subtraction rather than both floored — flooring
+    // each separately can lose a dollar between them ($23 net showing $16+$6;
+    // codex r5). The weekly pot floors; the season pot absorbs the remainder,
+    // deterministically.
+    const splitPots = (() => {
+        if (!split || knownEntries === undefined || knownEntries <= 0 || netPot === undefined) return undefined;
+        const weekly = Math.floor((split.weeklyPerEntry ?? 0) * knownEntries * charityFactor);
+        return { weekly, season: netPot - weekly };
+    })();
+
+    // Under a declared HYBRID split the percentages apply to EACH pot, so one
+    // combined figure would overstate every place (a 50% place on a $250 pot is
+    // $90 weekly-total + $35 season, never $125). (codex P2 on the split PR.)
+    const dollarFor = (pct: number) => {
+        if (splitPots) {
+            return ` (${money(splitPots.weekly * (pct / 100))} weekly total / ${money(splitPots.season * (pct / 100))} season)`;
+        }
+        return netPot !== undefined && netPot > 0 ? ` (${money(netPot * (pct / 100))})` : '';
+    };
+
 
     const hasAnyConfig = entryFee > 0 || places.length > 0 || bonuses.length > 0 || Boolean(modeCopy);
     if (!hasAnyConfig) {
@@ -347,7 +377,17 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
                         <span className="font-bold text-[color:var(--text)]">Payout Format</span>
                         <span className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-[color:var(--text)]">{modeCopy.label}</span>
                     </div>
-                    <p className="text-[11px] font-body text-muted leading-relaxed">{modeCopy.explanation}</p>
+                    <p className="text-[11px] font-body text-muted leading-relaxed">
+                        {split
+                            ? `The entry fee splits $${split.weeklyPerEntry ?? 0} into the weekly prize pots and $${split.seasonPerEntry ?? 0} into the season pot, per entry. The place percentages below apply to both pots. Dollar figures are rounded to whole dollars — your commissioner settles exact amounts.`
+                            : modeCopy.explanation}
+                    </p>
+                    {splitPots && (
+                        <div className="mt-2 flex gap-4 text-[11px] font-body font-bold num">
+                            <span>Weekly pots: {money(splitPots.weekly)} total</span>
+                            <span>Season pot: {money(splitPots.season)} total</span>
+                        </div>
+                    )}
                 </div>
             )}
 

@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import { MAX_TEAM_USES, TIE_COUNTS_AS_VALUES } from '../survivorReuse';
 import { WEEKLY_TIEBREAKER_VALUES } from '../nflTiebreaker';
+import { hybridSplitProblem } from '../hybridSplit';
 import { contactFieldsSchema, brandingSchema, payoutsSchema } from './common';
 
 const nflBase = contactFieldsSchema.extend({
@@ -24,6 +25,11 @@ const nflSettingsBase = {
   payouts: payoutsSchema,
 };
 
+const hybridSplitCoherent = (settings: { payoutMode?: unknown; entryFee?: unknown; hybridSplit?: unknown }, ctx: z.RefinementCtx) => {
+  const problem = hybridSplitProblem(settings);
+  if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem, path: ['hybridSplit'] });
+};
+
 export const pickemCreateInputSchema = nflBase.extend({
   type: z.literal('NFL_PICKEM'),
   settings: z.object({
@@ -38,8 +44,14 @@ export const pickemCreateInputSchema = nflBase.extend({
     // would play the default. Mandatory, not cosmetic (the same trap the two
     // survivor parity settings document above).
     weeklyTiebreaker: z.enum(WEEKLY_TIEBREAKER_VALUES).optional(),
+    // HYBRID entry-fee split (PLAN-HYBRID-SPLIT). Coherence (whole dollars,
+    // sums to entryFee, HYBRID only) is the superRefine below — shape here.
+    hybridSplit: z.object({
+      weeklyPerEntry: z.number().int().min(0),
+      seasonPerEntry: z.number().int().min(0),
+    }).optional(),
     pointsPerPick: z.number().optional(),
-  }),
+  }).superRefine(hybridSplitCoherent),
 });
 
 export const survivorCreateInputSchema = nflBase.extend({
@@ -65,7 +77,11 @@ export const marginCreateInputSchema = nflBase.extend({
   settings: z.object({
     ...nflSettingsBase,
     payoutMode: z.enum(['SEASON', 'WEEKLY', 'HYBRID']).optional(),
-  }),
+    hybridSplit: z.object({
+      weeklyPerEntry: z.number().int().min(0),
+      seasonPerEntry: z.number().int().min(0),
+    }).optional(),
+  }).superRefine(hybridSplitCoherent),
 });
 
 export type PickemCreateInput = z.infer<typeof pickemCreateInputSchema>;

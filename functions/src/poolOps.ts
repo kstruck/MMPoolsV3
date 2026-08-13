@@ -19,6 +19,7 @@ import { loadBillingConfig } from './billing';
 import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } from './lib/poolUpdate';
 import { parityEditNeedsEntries, survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
 import { tiebreakerEditNeedsEntries, touchesWeeklyTiebreakerSetting, weeklyTiebreakerRefusal } from './lib/weeklyTiebreakerGate';
+import { hybridSplitNeedsClearing, hybridSplitRefusal, touchesHybridSplitSettings } from './lib/hybridSplitGate';
 import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } from './lib/scoringLease';
 
 // Helper to determine if user can manage pool
@@ -465,7 +466,11 @@ export const updatePoolSettings = validated(
     // check could pass while a member's first submission commits behind it.
     // (PLAN-WEEKLY-TIEBREAKERS §5.)
     const tiebreakerTouched = touchesWeeklyTiebreakerSetting(patch);
-    if (touchesLockSettings(patch) || parityTouched || tiebreakerTouched) {
+    // The hybrid split joins the same transaction: its invariant spans three
+    // fields (split, payoutMode, entryFee) and must be judged against the pool
+    // as it stands at write time, not at the pre-transaction read.
+    const hybridTouched = touchesHybridSplitSettings(patch);
+    if (touchesLockSettings(patch) || parityTouched || tiebreakerTouched || hybridTouched) {
         const bumpsLockRevision = touchesLockSettings(patch);
         await retryWhileScoring(() => db.runTransaction(async (tx) => {
             const current = (await tx.get(poolRef)).data() as Record<string, unknown> | undefined;
@@ -495,8 +500,18 @@ export const updatePoolSettings = validated(
                 const refusal = weeklyTiebreakerRefusal({ ...current, id: poolId }, patch, entries);
                 if (refusal) throw new HttpsError('failed-precondition', refusal.message);
             }
+            if (hybridTouched) {
+                const problem = hybridSplitRefusal(current, patch);
+                if (problem) throw new HttpsError('failed-precondition', problem);
+            }
             tx.update(poolRef, {
                 ...patch,
+                // Leaving HYBRID deletes the stored split in the SAME write —
+                // the per-key merge would otherwise strand it, and the gate
+                // above would then refuse every later save as "split on a
+                // non-hybrid pool": a validation deadlock. (codex P2, plan r1.)
+                ...(hybridTouched && hybridSplitNeedsClearing(current, patch)
+                    ? { 'settings.hybridSplit': FieldValue.delete() } : {}),
                 // Invalidates any pass that captured the old value — the backstop
                 // for a scorer that acquired its lease between our read and here.
                 // Scoped to lock edits: a parity-only save changes no deadline, and

@@ -268,7 +268,15 @@ service cloud.firestore {
         let changed = request.resource.data.get('settings', {})
                         .diff(resource.data.get('settings', {}))
                         .affectedKeys();
-        return !changed.hasAny(['tieCountsAs', 'maxTeamUses', 'weeklyTiebreaker']);
+        let nflTypes = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
+        let isNfl = resource.data.get('type', '') in nflTypes
+                    || request.resource.data.get('type', '') in nflTypes;
+        // entryFee/payoutMode join the guard ON NFL POOLS ONLY: a direct write
+        // to either can unbalance a stored hybridSplit the callable would have
+        // refused (codex P1 on the split PR). Scoped to NFL because other pool
+        // types legitimately edit fee fields through non-callable admin paths.
+        return !changed.hasAny(['tieCountsAs', 'maxTeamUses', 'weeklyTiebreaker', 'hybridSplit'])
+               && (!isNfl || !changed.hasAny(['entryFee', 'payoutMode']));
       }
 
       // Pool is in an editable state.
