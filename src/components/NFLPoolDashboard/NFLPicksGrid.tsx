@@ -88,23 +88,26 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
   // ⚠️ Only the reveal that matches the week on screen. The dashboard already
   // drops a stale one, and this is the second guard on the same rule: last
   // week's allowlist applied to this week's slate would reveal by coincidence.
-  const revealedGameIds = useMemo(
-    () => (reveal && reveal.week === week ? new Set(reveal.revealedGameIds) : undefined),
-    [reveal, week],
-  );
+  // Resolved ONCE — three separate copies of this test is how one of them ends
+  // up not being updated.
+  const wk = reveal && reveal.week === week ? reveal : null;
+  const revealedGameIds = useMemo(() => (wk ? new Set(wk.revealedGameIds) : undefined), [wk]);
   // The caption explains WHEN "?" clears, and it takes the answer from the
   // server's own `mode` rather than re-deriving it from `settings`. The rule is
   // `confidenceMode || lockMode === 'WEEKLY'` and it is easy to get wrong — a
   // confidence pool reveals weekly while its `lockMode` still reads PER_GAME
   // (functions/src/lib/pickReveal.ts). Unknown until the reveal lands, and the
   // caption then says nothing about timing rather than guessing.
-  const revealMode = reveal && reveal.week === week ? reveal.mode : undefined;
+  const revealMode = wk?.mode;
 
   const uidOf = (row: any): string => row?.ownerUid ?? row?.id;
+  // The viewer's own count comes from their own entry, not the callable: it is
+  // the only source that is right the instant they save, and it is the same
+  // rule the Standings completeness column uses.
   const countFor = (row: any): number | undefined => {
     const uid = uidOf(row);
     if (uid && uid === viewerUid) return weekGames.filter(g => !!row?.picks?.[g.id]).length;
-    return reveal && reveal.week === week ? reveal.counts?.[uid] : undefined;
+    return wk?.counts?.[uid];
   };
 
   const dash = <span className="text-faint">—</span>;
