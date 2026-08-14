@@ -129,9 +129,26 @@ be a different question than the one the sheet asked.
 2. **The pick-sheet copy must name the actual game** on such a week ("Predict the
    combined score of *Buffalo at Miami*, the final game of the week"). A member
    asked for "the Monday game" on a week with no Monday game will not answer.
-3. **The fallback game must be frozen the same way the target is.** If the
-   schedule moves after submissions, the game the member was told about must
-   remain the game they are judged on. See D3.
+3. **The target game must be frozen — on EVERY week, not just Monday-less ones.**
+
+⚠️ The first draft of this plan froze only the Monday-less fallback, and that is
+too narrow. `MNF_LAST_GAME` and `MNF_FIRST_GAME` both resolve their target from
+the CURRENT schedule at scoring time, so on an ordinary two-Monday-game week a
+later schedule change — a flex move, a postponement, a game gaining or losing
+`isMonday` — silently re-points an already-submitted prediction at a different
+game. That is the §0 defect exactly, arriving through the schedule instead of
+through the settings. (codex P1, plan review r1.)
+
+So: **persist the resolved target game id at first submission of the week**, for
+every rule that asks for a prediction, and judge against the stored id
+thereafter. Same shape and same reasoning as `frozenHardLockFor`
+(`shared/weeklyHardLock.ts`) — freeze the thing the member was told, at the
+moment they act on it.
+
+Residual to state on the rules page: if the frozen game is later **cancelled**,
+there is no combined score to compare against. Recommendation: the week's
+tiebreak becomes unbreakable and the tie is shared, which is the same outcome as
+"nobody answered" and needs no new concept. **Decision D3.**
 
 ### 2c. Season-prize ties broken by pick record
 
@@ -199,10 +216,22 @@ rather than a transfer.
 **There is no canonical weeks constant** (measured; `PLAN-HYBRID-SPLIT` §1), and
 `18` must not be hardcoded — a preseason pool has four.
 
-This plan already shipped the honest source in #427:
-`poolSeasonWeeks(games, pool)` (`src/utils/nflPending.ts`) derives the distinct
-weeks of the pool's season type from the loaded schedule. The server equivalent
-is one query on `nfl_games` for `season` + `seasonType`.
+⚠️ **DEPENDENCY, not an existing fact.** The client-side helper this plan leans
+on — `poolSeasonWeeks(games, pool)` in `src/utils/nflPending.ts`, which derives
+the distinct weeks of the pool's season type from the loaded schedule — is
+**added by PR #427 and does not exist on `main` yet**. An implementer starting
+from this plan before #427 merges will find an unresolved import. (codex P2, plan
+review r1.)
+
+So, explicitly:
+
+- **Client display**: needs #427 merged, or the two-line derivation inlined —
+  distinct `Number(g.week)` over games whose `Number(g.seasonType)` matches
+  `poolSeasonType(pool)`, ascending.
+- **Server**: has no equivalent helper at all and needs its own — one query on
+  `nfl_games` for `season` + `seasonType`, distinct `week`. It is the server
+  value that is authoritative for money, per §3b; the client helper is for
+  display.
 
 Two candidates, **decision D5**:
 
@@ -309,7 +338,7 @@ Stated explicitly because the scorer is LIVE (`nflAutoScoreJob` `*/5`):
 |---|---|---|
 | **D1** | 🛑 §0 — does absent/`MNF_COMBINED` keep resolving to combined for pools that already exist (safe), or re-read as `MNF_LAST_GAME` (simpler, but changes what an in-flight prediction means)? | **Keep resolving to combined.** Write the value explicitly at create so new pools get `MNF_LAST_GAME`. Flip your test pools yourself. |
 | **D2** | Does `NONE` survive the option change? | **Keep it.** The standings MNF column gating depends on it (#422/#423), and a commissioner who wants shared ties has no other way to say so. |
-| **D3** | On a Monday-less week, must the fallback game be FROZEN at first submission, like the hard lock is? | **Yes.** Otherwise a schedule move re-targets a prediction already made — the same defect as D1, one week narrower. |
+| **D3** | Freeze the resolved target game id at first submission on EVERY week (not just Monday-less ones) — and if that frozen game is later cancelled, is the tie simply shared? | **Yes to both.** Without the freeze a flex move or a postponement re-targets a prediction already made, which is the §0 defect arriving through the schedule. A cancelled target has no score to compare against, and "shared" is the outcome the scorer already produces when nobody answered — no new concept needed. |
 | **D4** | Margin season-tie cascade: reuse `positiveWeeks` → `bestWeek`? | **Yes**, and state it on the rules page. `negativeBurden` reads as a penalty, not a record. |
 | **D5** | Weeks-in-season: freeze at creation, or derive at scoring time? | **Freeze at creation, derive as fallback.** A prize that moves after it was announced is the worse failure. |
 | **D6** | Whole-dollar rounding remainder: to first place, or unallocated and named? | **Unallocated and named.** The platform moves no money; naming the remainder is honest, inventing a rule is not. |
