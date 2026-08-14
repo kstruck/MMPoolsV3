@@ -32,6 +32,9 @@ import { validated } from "./lib/validated";
 import { assertCallerRole } from "./lib/assertRole";
 import { getPoolPicksSchema } from "./schemas/pickReveal";
 import { weekRevealFor, fullReveal, weekPickCount, type WeekReveal } from "./lib/pickReveal";
+// The ONE membership predicate. Deliberately not re-derived here — see
+// `assertPickReader`'s header and `shared/memberRecord.ts`.
+import { isProvableMember } from "./shared/memberRecord";
 import type { NFLGame } from "./nflPoolTypes";
 
 const NFL_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
@@ -61,24 +64,50 @@ export interface PoolPicksResponse {
 }
 
 /**
- * EXACTLY the principals the entries read rule used to name, and not one more:
- * `ownerId`, `managerUid`, `isSuperAdmin()`.
+ * Who may read this pool's picks, and as WHAT.
+ *
+ * Three principals now, where #414 had two:
+ *   SUPER_ADMIN            → everything, every week, any time.
+ *   pool owner / manager   → the reveal boundary, plus live per-member COUNTS.
+ *   proven PARTICIPANT     → the reveal boundary, and NO counts until the week
+ *                            reveals (PLAN-MEMBER-PICKS-VISIBILITY K1).
+ *
+ * 🛑 THE PARTICIPANT BRANCH CHANGES **WHO**, NEVER **WHEN**. Kevin's ask was
+ * *"visible for all users if pool is locked"*, and `weekRevealFor` below already
+ * computes exactly that per pool type. A participant is handed the SAME reveal a
+ * commissioner gets, from the same call — there is deliberately no second
+ * definition of "locked" anywhere in this function or on the client.
  *
  * ⚠️ Do NOT reach for `assertPoolOwnerOrSuperAdmin` here, tempting as it is.
  * That helper also admits `createdByUid` and a participant listed in
  * `coManagers` — neither of which the removed rule granted. Using it would make
- * this callable a WIDER door to pick data than the one it replaces, which is the
- * opposite of the point: a co-manager who could not read a single entry
- * yesterday would gain per-member completion counts before lock and revealed
- * picks after it. (codex r1 on this PR.)
+ * this callable a WIDER door to pick data than the one it replaces: a
+ * co-manager would gain per-member completion COUNTS before lock, which is the
+ * commissioner capability K1 exists to keep scarce. (codex r1 on #414.)
  *
- * If co-managers should have this capability, that is a product decision that
- * changes the rule and this function together, deliberately.
+ * ⚠️ MEMBERSHIP IS `isProvableMember`, AND THAT MATTERS MORE THAN IT LOOKS.
+ * The obvious test — `pool.participantIds.includes(uid)` — is what an earlier
+ * draft of the plan proposed, and review round 2 killed it: the array was
+ * client-writable by a manager, so anyone they added gained a DURABLE,
+ * self-refreshing feed of every future reveal. Kevin's K9 ruling closes that at
+ * the root by protecting `participantIds` in `firestore.rules`; this function
+ * calls the canonical shared predicate rather than re-deriving one, because
+ * "two doors with two copies is how one of them ends up wrong"
+ * (`shared/memberRecord.ts`).
+ *
+ * `isProvableMember` needs the caller's Member Record, which this callable did
+ * not previously read. Passing `undefined` would silently degrade it to the
+ * participantIds-only test it exists to replace — so the record is fetched, and
+ * the same fetch serves the departed-member filter below (D7/T8).
  */
+type PickReaderKind = 'SUPER_ADMIN' | 'COMMISSIONER' | 'PARTICIPANT';
+
 async function assertPickReader(
-    pool: { ownerId?: string; managerUid?: string },
+    pool: { ownerId?: string; managerUid?: string; participantIds?: unknown },
     request: { auth?: { uid: string; token: Record<string, unknown> } | null },
-): Promise<{ isSuperAdmin: boolean }> {
+    poolId: string,
+    db: admin.firestore.Firestore,
+): Promise<{ kind: PickReaderKind; isSuperAdmin: boolean }> {
     const uid = request.auth!.uid;
     const claimsSuperAdmin = (request.auth!.token as { role?: string })?.role === 'SUPER_ADMIN';
 
@@ -97,16 +126,24 @@ async function assertPickReader(
     if (claimsSuperAdmin) {
         try {
             await assertCallerRole(request, 'SUPER_ADMIN');
-            return { isSuperAdmin: true };
+            return { kind: 'SUPER_ADMIN', isSuperAdmin: true };
         } catch {
             // fall through to the owner/manager test below
         }
     }
 
-    if (pool.ownerId !== uid && pool.managerUid !== uid) {
-        throw new HttpsError('permission-denied', 'Only this pool\'s commissioner can read the pool\'s picks.');
+    if (pool.ownerId === uid || pool.managerUid === uid) {
+        return { kind: 'COMMISSIONER', isSuperAdmin: false };
     }
-    return { isSuperAdmin: false };
+
+    // The participant branch. One document read, and only for a caller who is
+    // neither admin nor commissioner — the two hot paths pay nothing for it.
+    const memberSnap = await db.collection('pools').doc(poolId).collection('members').doc(uid).get();
+    if (isProvableMember(pool as Record<string, unknown>, memberSnap.data(), uid)) {
+        return { kind: 'PARTICIPANT', isSuperAdmin: false };
+    }
+
+    throw new HttpsError('permission-denied', 'Only this pool\'s members can read the pool\'s picks.');
 }
 
 export const getPoolPicks = validated(
@@ -126,7 +163,29 @@ export const getPoolPicks = validated(
             throw new HttpsError('failed-precondition', 'getPoolPicks is only available for NFL season pools.');
         }
 
-        const { isSuperAdmin } = await assertPickReader(pool, request);
+        const { kind, isSuperAdmin } = await assertPickReader(pool, request, poolId, db);
+        const isParticipant = kind === 'PARTICIPANT';
+
+        // 🛑 A DEPARTED MEMBER'S PICKS ARE NOT SERVED TO A CURRENT ONE (D7/K8).
+        //
+        // Removing a member deletes their Member Record and pulls them from
+        // `participantIds` (`lib/memberRecord.ts`) — it does NOT delete their
+        // entry document. This function iterates the whole `entries` collection,
+        // so before this filter it would hand a participant the picks of someone
+        // the pool no longer lists. That was harmless while only the
+        // commissioner and SUPER_ADMIN could call it; admitting participants is
+        // exactly what turns it into one member's data reaching another.
+        //
+        // ⚠️ PARTICIPANT ONLY. Applying it to every principal would silently
+        // narrow a privileged API and contradict `fullReveal`'s "SUPER_ADMIN
+        // gets everything, always". A commissioner still sees a departed
+        // player's entry, which is what they see today. (codex r2 on the plan.)
+        let stillAMember: ((uid: string) => boolean) | null = null;
+        if (isParticipant) {
+            const membersSnap = await db.collection('pools').doc(poolId).collection('members').get();
+            const byUid = new Map(membersSnap.docs.map(d => [d.id, d.data()]));
+            stillAMember = (uid: string) => isProvableMember(pool as Record<string, unknown>, byUid.get(uid), uid);
+        }
 
         // The week's slate — same query the submit path and the scorer use, so
         // the reveal boundary is computed over exactly the games that count.
@@ -199,7 +258,27 @@ export const getPoolPicks = validated(
                 weeklyTiebreakers?: Record<string, unknown>;
             };
             const memberUid = entry.ownerUid || doc.id;
-            counts[memberUid] = weekPickCount(pool.type, entry.picks as Record<string, unknown>, week, weekGameIds);
+
+            // D7/K8 — skip entirely, so a departed player is absent from EVERY
+            // map rather than merely from `picks`. Their presence in `counts`
+            // alone would still say "this person is playing".
+            if (stillAMember && !stillAMember(memberUid)) continue;
+
+            // 🛑 K1 — `counts` IS THE ONE FIELD THAT CROSSES THE REVEAL BOUNDARY.
+            //
+            // Every other field in the response is already gated: `picks` and
+            // `confidence` by the allowlist, `tiebreakers` by `weekRevealed`.
+            // `counts` is not gated at all, by design — it is what the
+            // commissioner's roster needs to chase missing picks before kickoff.
+            //
+            // Handing it to participants unchanged would let every member watch
+            // every other member's sheet fill in live: "Kevin 14 of 16" ticking
+            // to 15 tells you he is still working, and nobody asked for that.
+            // Kevin's ruling, 2026-08-14. The client already renders "?" for an
+            // absent count, so this needs no UI counterpart.
+            if (!isParticipant || reveal.weekRevealed) {
+                counts[memberUid] = weekPickCount(pool.type, entry.picks as Record<string, unknown>, week, weekGameIds);
+            }
 
             const revealedPicks: Record<string, string> = {};
             for (const key of allowedKeys) {

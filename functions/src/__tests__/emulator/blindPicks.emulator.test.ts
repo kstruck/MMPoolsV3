@@ -360,7 +360,7 @@ describe('T2 — getPoolPicks, PER_GAME pick\'em', () => {
      */
     it('a token claiming SUPER_ADMIN with no matching profile role is REFUSED', async () => {
         await expect(wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asStaleAdmin } as never))
-            .rejects.toThrow(/commissioner can read/i);
+            .rejects.toThrow(/members can read/i);
     }, 30000);
 
     it('a demoted admin who OWNS the pool keeps the owner view, not the elevated one', async () => {
@@ -375,14 +375,77 @@ describe('T2 — getPoolPicks, PER_GAME pick\'em', () => {
         expect(res.revealedGameIds).toEqual([LOCKED_GAME]);
     }, 30000);
 
-    it('an ordinary participant is REFUSED — members gain nothing from this plan', async () => {
-        await expect(wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never))
-            .rejects.toThrow(/commissioner can read/i);
+    /**
+     * ⚠️ REVERSED ON PURPOSE. This used to assert *"an ordinary participant is
+     * REFUSED — members gain nothing from this plan"*, which was
+     * PLAN-COMMISSIONER-BLIND-PICKS Q5. Kevin's 2026-08-14 ruling reversed it:
+     * members see other members' picks once the pool locks.
+     *
+     * 🛑 WHAT DID **NOT** CHANGE IS THE POINT OF THIS TEST. A participant is
+     * admitted to the SAME reveal computation, so they get the locked game and
+     * NOT the open one — identical to the commissioner. Changing WHO can call
+     * this must never change WHEN a pick appears.
+     */
+    it("a participant is ADMITTED, and gets exactly the commissioner's reveal", async () => {
+        const mine: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
+        const boss: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asOwner } as never);
+
+        expect(mine.revealedGameIds).toEqual([LOCKED_GAME]);
+        expect(mine.weekRevealed).toBe(false);
+        // The reveal-bound fields are identical for both principals.
+        expect(mine.picks).toEqual(boss.picks);
+        expect(mine.confidence).toEqual(boss.confidence);
+        expect(mine.tiebreakers).toEqual(boss.tiebreakers);
+        // ...and the OPEN game is still hidden from them, which is the invariant
+        // this reversal must not break.
+        expect(mine.picks[BOB]?.[OPEN_GAME]).toBeUndefined();
     }, 30000);
 
-    it('a non-member is REFUSED', async () => {
+    /**
+     * 🛑 K1 — the one field that does NOT come along. `counts` is ungated by
+     * reveal, so handing it to members would let everyone watch everyone else's
+     * sheet fill in before kickoff ("Kevin 14 of 16" ticking to 15 says he is
+     * still working). Kevin's ruling: withhold it until the week reveals.
+     */
+    it('a participant gets NO counts before the week reveals, while the commissioner does', async () => {
+        const mine: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
+        const boss: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asOwner } as never);
+
+        expect(mine.weekRevealed).toBe(false);
+        expect(mine.counts).toEqual({});          // not zeroes — absent
+        expect(boss.counts[ALICE]).toBe(2);       // the commissioner keeps it
+    }, 30000);
+
+    it('a non-member is still REFUSED', async () => {
         await expect(wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asOutsider } as never))
-            .rejects.toThrow(/commissioner can read/i);
+            .rejects.toThrow(/members can read/i);
+    }, 30000);
+
+    /**
+     * 🛑 D7/K8 — a member the pool no longer lists must vanish from EVERY map,
+     * not merely from `picks`. Presence in `counts` alone still says "this
+     * person is playing". Removal deletes the Member Record and pulls the uid
+     * from `participantIds`; it does NOT delete the entry, which is what made
+     * this reachable the moment participants were admitted.
+     */
+    it('a DEPARTED member is invisible to a participant and still visible to the commissioner', async () => {
+        const GHOST = 'blind-ghost';
+        await db.collection('pools').doc(POOL).collection('entries').doc(GHOST).set({
+            id: GHOST, poolId: POOL, ownerUid: GHOST, userName: 'Ghost',
+            picks: { [LOCKED_GAME]: 'DEN' },
+        });
+        // No Member Record and not in participantIds — i.e. removed.
+        const mine: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
+        expect(mine.picks[GHOST]).toBeUndefined();
+        expect(mine.counts[GHOST]).toBeUndefined();
+        expect(mine.confidence[GHOST]).toBeUndefined();
+        expect(mine.tiebreakers[GHOST]).toBeUndefined();
+
+        // The privileged contract is UNCHANGED — the filter is participant-only.
+        const boss: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asOwner } as never);
+        expect(boss.picks[GHOST]).toEqual({ [LOCKED_GAME]: 'DEN' });
+
+        await db.collection('pools').doc(POOL).collection('entries').doc(GHOST).delete();
     }, 30000);
 
     /**
@@ -392,12 +455,19 @@ describe('T2 — getPoolPicks, PER_GAME pick\'em', () => {
      * it would make this callable a WIDER door to pick data than the raw read it
      * replaces. codex r1 on this PR.
      */
-    it('a co-manager is REFUSED — the callable must not be wider than the rule it replaced', async () => {
+    it('a co-manager gets the PARTICIPANT view, never the commissioner one', async () => {
+        // ⚠️ ADJUSTED, NOT WEAKENED. BOB is a seeded member, so after the
+        // 2026-08-14 widening he is admitted — as a PARTICIPANT. The invariant
+        // that matters is unchanged and is now asserted directly: being listed
+        // in `coManagers` (or as `createdByUid`) must not buy the commissioner's
+        // pre-reveal `counts`, which is the capability the helper would have
+        // handed over.
         await db.collection('pools').doc(POOL).update({
             coManagers: [BOB], createdByUid: 'someone-else-entirely',
         });
-        await expect(wGetPicks({ data: { poolId: POOL, week: 1 }, auth: { uid: BOB, token: {} } as any } as never))
-            .rejects.toThrow(/commissioner can read/i);
+        const asCo: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: { uid: BOB, token: {} } as any } as never);
+        expect(asCo.counts).toEqual({});
+        expect(asCo.revealedGameIds).toEqual([LOCKED_GAME]);
         // ...and the real owner is unaffected by a createdByUid that disagrees.
         const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asOwner } as never);
         expect(res.revealedGameIds).toEqual([LOCKED_GAME]);
