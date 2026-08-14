@@ -1,0 +1,172 @@
+/**
+ * The arithmetic behind the league Results pages (Weekly Results, Season
+ * Summary, Margin Summary, Margin Standings).
+ *
+ * DISPLAY ONLY. Every number here is derived from fields the member-readable
+ * standings projection already publishes (`pools/{id}/standings/current`, built
+ * by `buildStandingsRows`) — `weeklyPoints`, `weeklyResults` summaries,
+ * `weeklyScores`, `seasonTotal`. Nothing in this file reads a pick, writes a
+ * document, or re-scores anything: the scorer stays the only writer of every
+ * value it consumes.
+ *
+ * It lives outside the component so the ranking and the max-points arithmetic
+ * can be unit-tested without rendering — the parts that are easy to get subtly
+ * wrong are the parts a table quietly renders anyway.
+ */
+
+/** The subset of a standings row these pages read. */
+export interface ResultsRow {
+    id: string;
+    ownerUid?: string;
+    userName?: string;
+    unscored?: boolean;
+    totalScore?: number;
+    weeklyPoints?: Record<number, number>;
+    weeklyResults?: Record<number, { correct?: number; total?: number; points?: number; mode?: string }>;
+    weeklyScores?: Record<number, number>;
+    seasonTotal?: number;
+}
+
+/**
+ * The maximum points ONE player could have scored in a week — the denominator
+ * the Weekly Results page's "Max" column reports.
+ *
+ * ⚠️ This is max POSSIBLE for the week, not max STILL ATTAINABLE. Kevin's
+ * reference screenshot does not disambiguate the two and this is the reading
+ * that does not move: it is the same number in every row and it does not change
+ * as games finish, so a player's Points/Max reads as a score out of a fixed
+ * total rather than a target that shrinks under them. Named in the PR body for
+ * Kevin to veto.
+ *
+ * Confidence mode: weights on an N-game week are unique and drawn from
+ * [17-N .. 16] (`validateConfidenceValues`), so the best case is every weight
+ * correct — the sum of that whole range, N*(33-N)/2. For a 16-game week that is
+ * 136, and for a 13-game week 130.
+ *
+ * Standard mode: ONE point per correct pick. Deliberately NOT
+ * `settings.pointsPerPick` — that field exists in the create schema
+ * (`shared/schemas/nfl.ts`) and **the scorer never reads it**:
+ * `scorePickemEntry` hardcodes `points += 1` on a non-confidence pool. Honouring
+ * it here would print a Max the scorer can provably never award.
+ */
+export function weeklyMaxPoints(gameCount: number, confidenceMode: boolean): number {
+    if (gameCount <= 0) return 0;
+    if (!confidenceMode) return gameCount;
+    const n = Math.min(gameCount, 16); // weights are capped at 16 by the validator
+    return (n * (33 - n)) / 2;
+}
+
+/**
+ * A week's value for one row: Pick'em points, or Margin net.
+ *
+ * `null` — never 0 — when the scorer has not published this week for this
+ * player. A real 0 (every pick wrong, or a Margin net of exactly 0) is a played
+ * week and must outrank a week nobody has scored yet. Same rule the standings
+ * table applies; duplicated here rather than imported so the two files cannot
+ * drift into disagreeing about what "no score" means... which is precisely why
+ * `tests/nfl-results.test.ts` asserts the 0-vs-null distinction directly.
+ */
+export function weekValueFor(row: ResultsRow, week: number, isMargin: boolean): number | null {
+    const v = isMargin ? row.weeklyScores?.[week] : row.weeklyPoints?.[week];
+    return typeof v === 'number' ? v : null;
+}
+
+export interface RankedRow<T> {
+    row: T;
+    /** Competition rank — tied values SHARE a place (1, 1, 3). Null when unranked. */
+    place: number | null;
+    value: number | null;
+}
+
+/**
+ * Orders rows by a week's value, descending, with COMPETITION ranking.
+ *
+ * Ties share a place (1, 1, 3) rather than being handed to the alphabet. That is
+ * not cosmetic: a Pick'em weekly tie is settled by the tiebreaker PREDICTION,
+ * which is judged by the scorer and reported in the recap — so numbering two
+ * tied players 1 and 2 here would show a different weekly winner than the recap
+ * does. The table's job is to say "these two are tied", not to break it.
+ *
+ * Unscored players and players with no value for this week sort last, by name,
+ * with `place: null`. They have not lost; they have not been scored.
+ */
+export function rankByWeek<T extends ResultsRow>(rows: T[], week: number, isMargin: boolean): Array<RankedRow<T>> {
+    const played: T[] = [];
+    const rest: T[] = [];
+    for (const row of rows) {
+        if (!row.unscored && weekValueFor(row, week, isMargin) !== null) played.push(row);
+        else rest.push(row);
+    }
+    played.sort((a, b) => {
+        const d = (weekValueFor(b, week, isMargin) as number) - (weekValueFor(a, week, isMargin) as number);
+        if (d !== 0) return d;
+        return (a.userName || '').localeCompare(b.userName || '');
+    });
+    rest.sort((a, b) => (a.userName || '').localeCompare(b.userName || ''));
+
+    const out: Array<RankedRow<T>> = [];
+    let prevValue: number | null = null;
+    let prevPlace = 1;
+    played.forEach((row, i) => {
+        const value = weekValueFor(row, week, isMargin) as number;
+        const place = value === prevValue ? prevPlace : i + 1;
+        out.push({ row, place, value });
+        prevValue = value;
+        prevPlace = place;
+    });
+    for (const row of rest) out.push({ row, place: null, value: null });
+    return out;
+}
+
+/**
+ * Orders rows by a season total, descending, with the same competition ranking.
+ *
+ * Pick'em reads `totalScore`, Margin reads `seasonTotal`. Unscored rows sort
+ * last with a null place, for the same reason as `rankByWeek`.
+ *
+ * ⚠️ This is the DISPLAY order only. It deliberately does not reproduce the
+ * Margin standings' five-level tiebreaker cascade (negative burden → positive
+ * weeks → best week) that `NFLStandings` applies — the Margin Standings page
+ * reports the total and the count of weeks played, and a tie in the total is
+ * shown AS a tie. The season-prize tiebreak is a money question and is being
+ * specified separately (PLAN-WEEKLY-PRIZES); this page must not pre-empt it by
+ * inventing an order the rules page has never published.
+ */
+export function rankBySeason<T extends ResultsRow>(rows: T[], isMargin: boolean): Array<RankedRow<T>> {
+    const valueOf = (r: T): number | null => {
+        if (r.unscored) return null;
+        const v = isMargin ? r.seasonTotal : r.totalScore;
+        return typeof v === 'number' ? v : null;
+    };
+    const played = rows.filter(r => valueOf(r) !== null);
+    const rest = rows.filter(r => valueOf(r) === null)
+        .sort((a, b) => (a.userName || '').localeCompare(b.userName || ''));
+    played.sort((a, b) => {
+        const d = (valueOf(b) as number) - (valueOf(a) as number);
+        if (d !== 0) return d;
+        return (a.userName || '').localeCompare(b.userName || '');
+    });
+
+    const out: Array<RankedRow<T>> = [];
+    let prevValue: number | null = null;
+    let prevPlace = 1;
+    played.forEach((row, i) => {
+        const value = valueOf(row) as number;
+        const place = value === prevValue ? prevPlace : i + 1;
+        out.push({ row, place, value });
+        prevValue = value;
+        prevPlace = place;
+    });
+    for (const row of rest) out.push({ row, place: null, value: null });
+    return out;
+}
+
+/**
+ * How many weeks a Margin player has actually been scored for — the "Weeks"
+ * column. Counts published weeks, INCLUDING zero and negative ones: a week
+ * scored at -14 is a week played, and dropping it would make a player who is
+ * losing look like a player who is absent.
+ */
+export function scoredWeekCount(row: ResultsRow, weeks: number[], isMargin: boolean): number {
+    return weeks.filter(w => weekValueFor(row, w, isMargin) !== null).length;
+}

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { Trophy, Heart, ShieldAlert } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
@@ -35,28 +35,15 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
   const navigate = useNavigate();
   const type = pool.type;
 
-  // SEASON vs WEEK view (Kevin, 2026-08-13: a pool paying weekly needs the
-  // week's own ranking on screen, not just the season's). WEEK ranks by this
-  // week's points alone. Survivor is excluded — a survivor week has no score
-  // to rank, only survived/eliminated, which the season view already shows.
+  // SEASON ONLY. #422 put a Season/Week toggle here; Kevin's 2026-08-13 ruling
+  // moves the weekly view to its own Results page, so this table is the season
+  // standings again and nothing else.
   //
-  // Pure display: `weeklyPoints` (Pick'em) and `weeklyScores` (Margin) are
-  // already published into the member-readable standings rows by
-  // buildStandingsRows on every scoring pass — including provisional mid-day
-  // passes, so this view moves DURING Sunday. No new data is read.
-  const [standingsView, setStandingsView] = useState<'SEASON' | 'WEEK'>('SEASON');
-  // Season is the DEFAULT per pool, not per mount: PoolRoute reuses this
-  // component across pool navigation, so without the reset a WEEK view chosen
-  // in one pool leaks into the next pool's standings. (qodo, this PR.)
-  useEffect(() => { setStandingsView('SEASON'); }, [pool.id]);
-  const weekRanked = standingsView === 'WEEK' && type !== 'NFL_SURVIVOR';
-  // This week's number for one entry, or null before the scorer first writes
-  // it. Null is "not scored yet", NOT zero — a real 0 (every pick wrong, or a
-  // Margin net of 0) must rank above nothing-yet, not tie with it.
-  const weekValue = (entry: any): number | null => {
-    const v = type === 'NFL_MARGIN' ? entry.weeklyScores?.[week] : entry.weeklyPoints?.[week];
-    return typeof v === 'number' ? v : null;
-  };
+  // ⚠️ The week-ranking machinery was NOT deleted, it was RELOCATED — the
+  // competition-ranking rule (ties share a place), the null-is-not-zero rule,
+  // and the unscored-sorts-last rule all now live in `utils/nflResults.ts`,
+  // unit-tested, and drive the Results tab's Weekly view. Everything #422
+  // learned is still on screen; it is one tab over.
 
   // The MNF Score column is the tiebreaker PREDICTION, so it has no meaning on a
   // pool whose rule is NONE. Hiding it is not cosmetic: a prediction stored
@@ -93,24 +80,6 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
         .sort((a, b) => (a.userName || '').localeCompare(b.userName || ''));
       return [...sortByType(scored), ...unscored];
     };
-
-    // WEEK view: this week's value desc; not-yet-scored (null) last, NOT as 0 —
-    // on Margin a real week can be negative, so coalescing null to 0 would rank
-    // "hasn't played yet" above "played and lost by 3". Name breaks ties for a
-    // stable order; the tie itself is real (the MNF prediction that settles it
-    // is judged by the scorer, and the recap's winner line reports the result).
-    const rankByWeek = (list: any[]) => {
-      const played = list.filter(e => !e.unscored && weekValue(e) !== null);
-      const rest = list.filter(e => e.unscored || weekValue(e) === null)
-        .sort((a, b) => (a.userName || '').localeCompare(b.userName || ''));
-      played.sort((a, b) => {
-        const d = (weekValue(b) as number) - (weekValue(a) as number);
-        if (d !== 0) return d;
-        return (a.userName || '').localeCompare(b.userName || '');
-      });
-      return [...played, ...rest];
-    };
-    if (weekRanked) return rankByWeek([...entries]);
 
     const sortByType = (copy: any[]) => {
 
@@ -196,47 +165,13 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
 
     return rank([...entries]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, type, weekRanked, week]);
-
-  // WEEK-view competition ranks, computed ONCE per sorted list rather than by
-  // filtering the whole array per row (O(n²) at render; qodo, this PR).
-  // sortedEntries is already week-value-descending, so a rank is: same value
-  // as the previous row shares its rank, otherwise rank = index + 1.
-  const weekRankByUid = useMemo(() => {
-    const m = new Map<string, number>();
-    if (!weekRanked) return m;
-    let prevVal: number | null = null;
-    let prevRank = 1;
-    let i = 0;
-    for (const e of sortedEntries) {
-      if (e.unscored || weekValue(e) === null) continue;
-      i += 1;
-      const v = weekValue(e) as number;
-      const rank = v === prevVal ? prevRank : i;
-      m.set(e.id, rank);
-      prevVal = v; prevRank = rank;
-    }
-    return m;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortedEntries, weekRanked, week]);
+  }, [entries, type]);
 
   // An unscored member has no rank to show. They sort last (see `rank` above), so
   // the scored rows still read 1..N by index; giving the unscored row the next
   // number would assert a placing its own score cells say is unknown. (codex.)
   const renderRankBadge = (index: number, entry: any) => {
     if (entry?.unscored) return <span className="text-faint">—</span>;
-    // WEEK view: a member the scorer has not reached this week has no weekly
-    // rank — same honesty rule as `unscored`, one week narrower.
-    if (weekRanked && weekValue(entry) === null) return <span className="text-faint">—</span>;
-    // WEEK view: tied scores SHARE a rank (competition ranking — 1, 1, 3).
-    // Positional index would hand the tie to the alphabet, and the tiebreak is
-    // not this table's call: Pick'em ties are settled by the MNF prediction in
-    // the SCORER, Margin ties are shared by rule. Numbering tied players 1 and
-    // 2 here would show a different first place than the recap's winner line.
-    // (codex r1 on this PR.)
-    if (weekRanked) {
-      return <RankChip rank={weekRankByUid.get(entry.id) ?? 1} />;
-    }
     return <RankChip rank={index + 1} />;
   };
 
@@ -249,26 +184,6 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
           <Trophy size={18} className="text-gold-600 dark:text-gold-400" /> Standings Leaderboard
         </h3>
         <div className="flex items-center gap-3">
-          {/* Hidden for Survivor rather than disabled: N/A is not "off". */}
-          {type !== 'NFL_SURVIVOR' && (
-            <div role="group" aria-label="Standings view" className="flex rounded-full border border-line overflow-hidden">
-              {(['SEASON', 'WEEK'] as const).map(v => (
-                <button
-                  key={v}
-                  type="button"
-                  aria-pressed={standingsView === v}
-                  onClick={() => setStandingsView(v)}
-                  className={`px-3 py-1 font-display font-bold uppercase text-[11px] tracking-[0.08em] transition-colors ${
-                    standingsView === v
-                      ? 'bg-navy-700 text-white dark:bg-gold-500 dark:text-navy-900'
-                      : 'bg-page text-muted hover:text-[color:var(--text)]'
-                  }`}
-                >
-                  {v === 'SEASON' ? 'Season' : nflWeekLabel(poolSeasonType(pool), week)}
-                </button>
-              ))}
-            </div>
-          )}
           <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted bg-page border border-line px-3 py-1 rounded-full num">
             {entries.length} Entries
           </span>
@@ -292,7 +207,6 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                   <>
                     <th className={`${TH} text-center`}>{nflWeekLabel(poolSeasonType(pool), week)} Pick</th>
                     {showTiebreakerColumn && <th className={`${TH} text-center`}>MNF Score</th>}
-                    {weekRanked && <th className={`${TH} text-right w-24`}>{nflWeekLabel(poolSeasonType(pool), week)} Points</th>}
                     <th className={`${TH} text-right w-24`}>Total Points</th>
                   </>
                 )}
@@ -309,7 +223,6 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                 {type === 'NFL_MARGIN' && (
                   <>
                     <th className={`${TH} text-center`}>{nflWeekLabel(poolSeasonType(pool), week)} Pick</th>
-                    {weekRanked && <th className={`${TH} text-right`}>{nflWeekLabel(poolSeasonType(pool), week)} Margin</th>}
                     <th className={`${TH} text-center`}>Negative Burden</th>
                     <th className={`${TH} text-center`}>Win Wks</th>
                     <th className={`${TH} text-center`}>Best Wk</th>
@@ -398,14 +311,6 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                             {entry.weeklyTiebreakers?.[week] ? `${entry.weeklyTiebreakers[week]} pts` : '—'}
                           </td>
                         )}
-                        {/* This week's points. `weekValue` distinguishes "not
-                            scored yet" (—) from a genuine 0 — a member whose
-                            every pick lost still played the week. */}
-                        {weekRanked && (
-                          <td className="py-4 px-6 text-right font-display font-bold text-navy-700 dark:text-gold-400 text-sm num">
-                            {weekValue(entry) === null ? dash : weekValue(entry)}
-                          </td>
-                        )}
                         <td className="py-4 px-6 text-right font-display font-bold text-[color:var(--text)] text-sm num">
                           {entry.unscored ? dash : entry.totalScore ?? 0}
                         </td>
@@ -444,11 +349,6 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                         <td className="py-4 px-6 text-center text-[13px] font-display font-bold text-navy-700 dark:text-gold-400 uppercase tracking-[0.08em]">
                           {pickCell}
                         </td>
-                        {weekRanked && (
-                          <td className="py-4 px-6 text-right font-display font-bold text-navy-700 dark:text-gold-400 text-sm num">
-                            {weekValue(entry) === null ? dash : (weekValue(entry) as number) > 0 ? `+${weekValue(entry)}` : weekValue(entry)}
-                          </td>
-                        )}
                         <td className="py-4 px-6 text-center text-[13px] font-bold num text-brandred-600">
                           {entry.unscored ? dash : `-${entry.negativeBurden ?? 0}`}
                         </td>

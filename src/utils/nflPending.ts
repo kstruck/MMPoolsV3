@@ -61,6 +61,26 @@ export function currentSlateWeek(games: NFLGame[], pool: any): number | null {
     return open ?? weeks[weeks.length - 1];
 }
 
+/**
+ * Every week number this pool's season type actually has a game in, ascending.
+ *
+ * The season-grid pages need a column set, and the obvious `1..18` is wrong
+ * twice: a preseason pool runs 1..4, and hardcoding a regular-season length
+ * bakes in a number the schedule is the only authority on. Derived from the
+ * loaded slate instead — the same source `currentSlateWeek` trusts.
+ *
+ * Empty while the schedule is still loading; callers render an empty grid, not
+ * a fabricated one.
+ */
+export function poolSeasonWeeks(games: NFLGame[], pool: any): number[] {
+    const seasonType = poolSeasonType(pool);
+    const weeks = new Set<number>();
+    for (const g of games) {
+        if (Number(g.seasonType) === seasonType) weeks.add(Number(g.week));
+    }
+    return [...weeks].filter(w => Number.isFinite(w)).sort((a, b) => a - b);
+}
+
 export function isWeekComplete(poolType: string, entry: any, weekGames: NFLGame[], week: number): boolean {
     if (!entry) return false;
     if (poolType === 'NFL_PICKEM') {
