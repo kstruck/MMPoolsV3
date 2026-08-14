@@ -379,5 +379,5 @@ one that owes a functions deploy.
 - [x] Plan written
 - [ ] Adversarial review log (`PLAN-WEEKLY-PRIZES-REVIEW-LOG.md`)
 - [ ] Sweep pass (`PLAN-WEEKLY-PRIZES-SWEEPS.md`) — complete instance lists for `MNF_COMBINED`, `weeklyTiebreaker`, `WEEKLY_TIEBREAKER_VALUES`, `showTiebreaker`, `payouts.places`
-- [ ] **Kevin's sign-off on D1–D7**
+- [ ] **Kevin's sign-off on D1–D8**
 - [ ] Implementation
