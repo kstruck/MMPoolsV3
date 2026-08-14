@@ -114,6 +114,13 @@ So the Margin/Survivor grid is **players down, WEEKS across**, one team
 abbreviation per cell — which is also the more useful view for those formats,
 because Survivor's whole strategy is which teams you have burned.
 
+🛑 **A weekly-pool cell renders ONLY from the response for ITS OWN week.** The
+pick key is the week number, and `weekRevealed` — not `revealedGameIds` — is what
+admits it (`nflPickReveal.ts:145-150`). A grid that reads one selected week's
+`weekRevealed` while drawing every column will render `row.picks["2"]` in the
+week-2 column on a week where only week 1 has revealed. Concrete, reproducible,
+and it is the reason T9 caches whole responses rather than allowlists.
+
 ⚠️ **This needs N callable round-trips, one per week, not one.** `getPoolPicks`
 takes a single `week`. See **R2** — this is the main cost driver of B and the
 reason B is not free.
@@ -175,12 +182,27 @@ prevent, while looking like tidying.
 
 **The new branch calls `isProvableMember` and adds no logic of its own.**
 
-⚠️ **The residual is real and is ACCEPTED, not mitigated:** a pool manager can
-add any UID to their own pool's `participantIds` and thereby grant it revealed
-picks. That is not an escalation — `isProvableMember`'s own comment settles it
-(*"A manager listing someone as a participant IS membership"*), and the manager
-can already see every revealed pick and could simply tell them. Written down here
-so the next reviewer does not have to rediscover it.
+🛑 **THE RESIDUAL IS NOW K9, KEVIN'S CALL — an earlier draft dismissed it and
+that dismissal is WITHDRAWN** (review round 2, finding 3).
+
+A pool manager can client-write `participantIds` on a `DRAFT`/`OPEN` pool and
+thereby grant an arbitrary account access to the revealed-pick feed. I argued
+this was not an escalation because *"the manager could simply tell them"*. That
+collapses two different things: a **one-time verbal disclosure** and a **durable,
+self-service API capability** that keeps producing FUTURE reveals, on that
+account's own polling schedule, long after the manager stops caring.
+
+My other argument was circular. I cited `isProvableMember`'s comment as settling
+it — but that comment was written about **roster and payment** surfaces, and a
+comment cannot pre-authorise a read that did not exist when it was written.
+
+⚠️ **Calling `isProvableMember` correctly needs data the callable does not read**
+(round 2, finding 1). It takes `(pool, memberRecord, uid)`, and
+`nflPickReveal.ts` loads only the pool and the entries. Passing `undefined` for
+`memberRecord` **silently degrades it to a `participantIds`-only test** — i.e.
+reproduces the hand-rolled check this decision exists to remove, while looking
+fixed. T1 and T8 therefore share **one bulk `members` query**, read once. Cost is
+O(roster) billed reads per call; see D6.
 
 ### D7 — 🛑 A DEPARTED MEMBER'S PICKS MUST NOT BE SERVED TO A CURRENT ONE
 
@@ -297,6 +319,7 @@ what D1 already claimed — but the plan now shows its work instead of asserting
 | **K5** | Members poll at a **slower cadence** and only on the active tab (D6)? | **Yes.** 5 minutes for members, 60s for the commissioner, active tab only. |
 | **K6** | Does a member who has **not submitted** for a week still see everyone else's revealed picks? | **Yes.** The lock has passed; there is nothing left to protect, and withholding it would punish a missed pick twice. |
 | **K7** | Which weeks are columns in the Margin/Survivor grid? The callable accepts weeks up to **23** (`schemas/pickReveal.ts`), the dashboard renders 1–18, and a preseason pool has four. | **From the loaded SCHEDULE** (`poolSeasonWeeks`, which `NFLResults` already uses for exactly this), never a hardcoded count. Postseason weeks appear if and only if the pool's slate has them. |
+| **K9** | 🛑 **Is a manager adding a UID to `participantIds` sufficient authority to read the pool's revealed picks?** The array is client-writable by a manager (absent from `protectedFieldsUnchanged()`), so after A that account gains a **durable, self-service** feed of every future reveal — not a one-time disclosure. Options: (a) accept it, membership is the manager's to grant; (b) require a CANONICAL Member Record (`joinedAt`, server-stamped) and ignore the array for this read; (c) protect `participantIds` in `firestore.rules`, which is a rules change and pulls D4 open. | **(b).** It costs nothing extra — T1 already reads the Member Records for D5 — and it is the only option that closes the hole without a rules deploy. It does mean a legitimately-added participant sees nothing until a server join path stamps their record. **This is the most consequential open question in the plan.** |
 | **K8** | **A departed member's picks — hide or keep?** (D7) Their entry document survives removal, so today the callable would serve it to every remaining member. | **Hide.** Filter to uids the pool still recognises. It also makes the callable agree with `buildMemberStandings`, which already drops them. |
 
 ---
@@ -312,8 +335,8 @@ what D1 already claimed — but the plan now shows its work instead of asserting
 | **T5** | Polling cadence (D6/K5). | `NFLPoolDashboard.tsx` | — |
 | **T6** | `NFLPoolRules` copy + `CONTEXT.md` + an ADR note (R3). | docs | `docs-state-invariants` still green |
 | **T7** | **Sweep**: prove `nflPickReveal.ts` is not imported by any scoring path (R1), and enumerate every surface that renders another member's pick. | `PLAN-MEMBER-PICKS-VISIBILITY-SWEEPS.md` | deterministic greps, complete lists |
-| **T8** | Filter the response to uids the pool still recognises (D7/K8), using `isProvableMember` — the same predicate as T1, called once. | `functions/src/nflPickReveal.ts` | emulator: a removed member's entry is absent from `picks`, `counts`, `confidence` AND `tiebreakers` |
-| **T9** | Week-keyed reveal cache: `{poolId, data}` → `{poolId, byWeek}`, each week keeping its own `revealedGameIds` (D6). | `NFLPoolDashboard.tsx` | the #430 cross-pool staleness invariants must still pass — this generalises that guard, it does not replace it |
+| **T8** | Filter the response to uids the pool still recognises (D7/K8), from the SAME bulk `members` read as T1. 🛑 **Scoped to the PARTICIPANT principal only** — owner, manager and SUPER_ADMIN keep today's unfiltered response, or this silently narrows a privileged API and contradicts `fullReveal` and the plan's own "SUPER_ADMIN gets everything, always" (round 2, finding 2). | `functions/src/nflPickReveal.ts` | emulator: a removed member's entry is absent from `picks`, `counts`, `confidence` AND `tiebreakers` **for a participant**, and still PRESENT for the commissioner and SUPER_ADMIN |
+| **T9** | Week-keyed reveal cache: `{poolId, data}` → `{poolId, byWeek}`. 🛑 Each column carries its **own whole cached response**, not just its `revealedGameIds` — for Survivor and Margin the pick key is the WEEK NUMBER and `weekRevealed` is what authorises it, so a shared `weekRevealed` across columns leaks an unrevealed week (round 2, finding 4). | `NFLPoolDashboard.tsx` | the #430 cross-pool staleness invariants still pass, PLUS a new case: **week 1 revealed and week 2 open — the week-2 column must render `?`** |
 
 ---
 
