@@ -182,7 +182,10 @@ if the change spans functions that must agree.
    incident: attempt 1 failed 7, immediate attempt 2 failed 5 of the same 7,
    ten-minute wait → attempt 3 passed all 5.
 3. Before any third attempt, pull the revision logs
-   (`npx firebase functions:log --only <fn>`) and check for the
+   (`npx firebase functions:log --only <fn> --project gridiron-gamble-uzuqo` —
+   the explicit project matters exactly here: a worktree has no `.firebaserc`
+   default, and logs pulled from some other active project would falsely show
+   "no application output", i.e. this flake's own signature) and check for the
    silence-then-DEADLINE_EXCEEDED signature. Application output in the gap
    means it is NOT this flake — stop retrying and read the error.
 4. Never `npm audit fix --force` or change code between attempts — the retry
