@@ -168,11 +168,20 @@ Kevin: tied season standings break first on **player pick records**, then split.
   discriminator only in confidence mode; in standard scoring points **are** the
   correct count, so the cascade falls straight through to the split. Say so on
   the rules page rather than implying a tiebreak that cannot fire.
-- **Margin**: the plan proposes reusing the existing display cascade —
-  `positiveWeeks` desc, then `bestWeek` desc — because it is already what
-  `NFLStandings` sorts by and what the rules page describes. **Not**
-  `negativeBurden`, which is the second step of that cascade but is a *penalty*
-  count and reads strangely as a "record". **Decision D4.**
+- **Margin**: reuse the standings cascade **in full and in order** —
+  `negativeBurden` asc, then `positiveWeeks` desc, then `bestWeek` desc.
+
+  ⚠️ The first draft proposed skipping `negativeBurden` because it is a penalty
+  count and "reads strangely as a record". That was a mistake with money attached:
+  `NFLStandings.tsx` sorts tied season totals by `negativeBurden` FIRST, so
+  dropping it would award the season prize to a different player than the
+  leaderboard shows as leading — on any tie where the burdens differ. A prize
+  order that contradicts the visible standings is the worst possible outcome
+  here. (codex P1, plan review r3.)
+
+  If Kevin genuinely wants `negativeBurden` out of the tiebreak, the standings
+  sort, the rules page and the prize order change **together**, as one
+  deliberate change. **Decision D4.**
 - Still tied after the cascade → the prize money splits by the §4 rules.
 
 ---
@@ -182,8 +191,20 @@ Kevin: tied season standings break first on **player pick records**, then split.
 ### 3a. Where the data must come from
 
 `recap.weeklyWinners` (#421) holds only the **tied leaders** — `computeWeeklyWinners`
-returns the top score's tied set and nothing else. The list needs the top **N
-places**, N = `payouts.places.length`.
+returns the top score's tied set and nothing else. The list needs every **paid
+place**.
+
+⚠️ **N is NOT `payouts.places.length`**, and the first draft of this plan said it
+was. `payoutPlaceSchema` (`shared/schemas/common.ts:55`) is
+`{ rank: positive int, percentage }` in a plain array — **the ranks are sparse
+and unordered by construction**. A pool configured `[{rank:1},{rank:3}]` has
+`length === 2`, so ranking only the top two omits the third-place recipient
+entirely and their configured payout can never be shown or split.
+
+The correct depth is **`max(places[].rank)`**, and ties must be allowed to run
+past it: three players tied at rank 2 occupy ranks 2, 3 and 4, so a payout list
+ending at rank 3 still needs rank 4 computed to know that the third of them falls
+outside the money. (codex P1, plan review r3.)
 
 Deriving places client-side is not possible and the reason is specific: the
 client can rank on `weeklyPoints`, but it cannot break a tie, because breaking it
@@ -305,9 +326,21 @@ client display and any server-side publication alike. It is money; it gets one
 implementation.
 
 ```
-splitPrizes({ places: [{place, percentage}], pot, ranked: [{id, place}] })
-  -> Record<id, number>   // whole dollars
+splitPrizes({
+  places: [{ rank, percentage }],   // VERBATIM pool.payouts.places — see below
+  pot,
+  ranked: [{ id, rank }],           // competition ranks, ties sharing a rank
+}) -> Record<id, number>            // whole dollars
 ```
+
+⚠️ **The field is `rank`, not `place`.** The persisted shape is
+`{ rank, percentage }` in both `payoutPlaceSchema` (`shared/schemas/common.ts:55`)
+and the `PayoutSettings` type (`src/types/index.ts:774`). The first draft of this
+plan invented a `place` key, which would have left an implementer passing
+`pool.payouts.places` straight in and silently reading `undefined` for every
+rank — awarding nothing, or awarding wrongly. The helper takes the stored shape
+verbatim, with **no normalization step**, because a normalization step is one
+more place the two can drift. (codex P2, plan review r3.)
 
 ### 4c. The invariants the tests must pin
 
@@ -355,7 +388,7 @@ it is enabled.
 | **D1** | 🛑 §0 — does absent/`MNF_COMBINED` keep resolving to combined for pools that already exist (safe), or re-read as `MNF_LAST_GAME` (simpler, but changes what an in-flight prediction means)? | **Keep resolving to combined.** Write the value explicitly at create so new pools get `MNF_LAST_GAME`. Flip your test pools yourself. |
 | **D2** | Does `NONE` survive the option change? | **Keep it.** The standings MNF column gating depends on it (#422/#423), and a commissioner who wants shared ties has no other way to say so. |
 | **D3** | Freeze the resolved target game id at first submission on EVERY week (not just Monday-less ones) — and if that frozen game is later cancelled, is the tie simply shared? | **Yes to both.** Without the freeze a flex move or a postponement re-targets a prediction already made, which is the §0 defect arriving through the schedule. A cancelled target has no score to compare against, and "shared" is the outcome the scorer already produces when nobody answered — no new concept needed. |
-| **D4** | Margin season-tie cascade: reuse `positiveWeeks` → `bestWeek`? | **Yes**, and state it on the rules page. `negativeBurden` reads as a penalty, not a record. |
+| **D4** | Margin season-tie cascade: reuse the standings cascade **in full**? | **Yes — `negativeBurden` → `positiveWeeks` → `bestWeek`, in that order**, and state it on the rules page. Skipping `negativeBurden` (the first draft's idea) would award the season prize to a different player than the leaderboard shows leading, on any tie where the burdens differ. If you want it out, the standings sort and the rules page change with it, as one deliberate change. |
 | **D5** | Weeks-in-season: freeze at creation, or derive at scoring time? | **Freeze at creation; for pools that have no frozen value, derive ONCE and PERSIST it in the transaction that first publishes a weekly prize** (§3b). Not "derive as fallback" — every pool that exists today lacks the field, so a re-deriving fallback is the common path and re-prices published prizes when the schedule moves. The persist step writes production data and takes the kill-switch + dry-run gate. |
 | **D6** | Whole-dollar rounding remainder: to first place, or unallocated and named? | **Unallocated and named.** The platform moves no money; naming the remainder is honest, inventing a rule is not. |
 | **D7** | Is the Weekly Winners List shown on `payoutMode: WEEKLY` pools too, or HYBRID only? | **Both** (see §3b for each mode's pot). A WEEKLY pool is *entirely* weekly prizes; withholding the list there makes least sense. A SEASON pool gets the list with no Prize column. |
