@@ -221,39 +221,51 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     return poolSeasonWeeks(games, pool).filter(w => w <= selectedWeek);
   }, [games, pool, selectedWeek]);
 
+  // Shared fetch-and-merge. A response for another pool is discarded rather
+  // than merged, which is the #430 cross-pool guard generalised to a map.
+  const loadWeek = React.useCallback((w: number) => {
+    dbService.getPoolPicks(pool.id, w)
+      .then(r => {
+        setReveal(prev => prev.poolId === pool.id
+          ? { poolId: pool.id, byWeek: { ...prev.byWeek, [w]: r } }
+          : { poolId: pool.id, byWeek: { [w]: r } });
+      })
+      // A refusal is not a crash — a non-member gets one, and every surface
+      // keeps rendering Hidden / "?", which is the honest answer.
+      .catch(err => { logger.warn('[NFLPoolDashboard] getPoolPicks failed', err); });
+  }, [pool.id]);
+
+  // (a) THE SELECTED WEEK — the only one whose answer can still change, so the
+  // only one that polls or reacts to a `members` snapshot.
+  //
+  // Members poll five times slower than the commissioner: after this change
+  // EVERY member of every pool polls this callable, where before only the
+  // commissioner did, and the commissioner is the only one who needs
+  // minute-fresh completeness to chase missing picks.
   useEffect(() => {
     if (!user) return;
-    let cancelled = false;
-    const load = (weeks: number[]) => {
-      for (const w of weeks) {
-        dbService.getPoolPicks(pool.id, w)
-          .then(r => {
-            if (cancelled) return;
-            // Merge into the pool's own bucket; a response for another pool is
-            // discarded rather than merged, which is the #430 guard generalised.
-            setReveal(prev => prev.poolId === pool.id
-              ? { poolId: pool.id, byWeek: { ...prev.byWeek, [w]: r } }
-              : { poolId: pool.id, byWeek: { [w]: r } });
-          })
-          // A refusal is not a crash — a non-member gets one, and the surfaces
-          // simply keep rendering Hidden / "?" which is the honest answer.
-          .catch(err => { logger.warn('[NFLPoolDashboard] getPoolPicks failed', err); });
-      }
-    };
-    load(gridWeeks);
-    // ⚠️ ONLY THE SELECTED WEEK IS RE-POLLED. A past week's reveal cannot
-    // change — it is a clock boundary that has already passed — so re-fetching
-    // the whole column set every minute would multiply the call volume by the
-    // season length for no new information.
-    //
-    // Members poll five times slower than the commissioner: after this change
-    // EVERY member of every pool polls this callable, where before only the
-    // commissioner did, and a commissioner is the only one who needs
-    // minute-fresh completeness to chase missing picks.
-    const id = setInterval(() => load([selectedWeek]), isManager ? 60_000 : 300_000);
-    return () => { cancelled = true; clearInterval(id); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isManager, pool.id, pool.type, selectedWeek, members, user?.id, gridWeeks.join(',')]);
+    loadWeek(selectedWeek);
+    const id = setInterval(() => loadWeek(selectedWeek), isManager ? 60_000 : 300_000);
+    return () => clearInterval(id);
+  }, [isManager, selectedWeek, members, user?.id, loadWeek]);
+
+  // (b) THE HISTORICAL COLUMNS of the Survivor/Margin grid — fetched ONCE each,
+  // and only while that grid is actually on screen.
+  //
+  // 🛑 `members` IS DELIBERATELY NOT A DEPENDENCY HERE, and that is a cost fix
+  // rather than a style choice. It changes on every member-record write, i.e.
+  // every pick submission in the pool — and each participant call scans the
+  // pool's members and entries. Sharing one effect with (a) turned a single
+  // submission into one full-pool read per historical week PER CONNECTED
+  // VIEWER: on a week-18 pool, eighteen. A past week's reveal is a clock
+  // boundary that has already passed and cannot change, so it is fetched once
+  // and kept. (codex P2.)
+  const cachedWeeks = reveal.poolId === pool.id ? reveal.byWeek : {};
+  const missingWeeks = gridWeeks.filter(w => w !== selectedWeek && !cachedWeeks[w]).join(',');
+  useEffect(() => {
+    if (!user || activeTab !== 'grid' || pool.type === 'NFL_PICKEM') return;
+    for (const w of missingWeeks.split(',').filter(Boolean)) loadWeek(Number(w));
+  }, [user?.id, activeTab, pool.type, missingWeeks, loadWeek]);
 
   // ⚠️ ONLY EVER USE THE REVEAL THAT MATCHES THE POOL AND THE WEEK ON SCREEN.
   // `reveal` holds the previous answer for the moment between changing either

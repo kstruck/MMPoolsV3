@@ -676,6 +676,20 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     expect(dash).not.toContain('setEntries(');
   });
 
+  it('historical grid weeks are fetched once, NOT on every members snapshot', () => {
+    // `members` changes on every member-record write — i.e. every pick
+    // submission in the pool — and each participant call scans the pool's
+    // members and entries. One shared effect turned a single submission into
+    // one full-pool read per historical week PER CONNECTED VIEWER. (codex P2.)
+    //
+    // The selected week still reacts to `members`; the historical columns must
+    // not, and must only load while their grid is on screen.
+    expect(dash).toContain('[isManager, selectedWeek, members, user?.id, loadWeek]');
+    expect(dash).toContain('[user?.id, activeTab, pool.type, missingWeeks, loadWeek]');
+    expect(dash).toContain("activeTab !== 'grid'");
+    expect(dash).toContain('!cachedWeeks[w]');
+  });
+
   it('a weekly-pool column is admitted by ITS OWN weekRevealed, never a shared one', () => {
     // Survivor and Margin key a pick by the WEEK NUMBER, so `weekRevealed` — not
     // `revealedGameIds` — is what admits a cell. A multi-week grid reading one
