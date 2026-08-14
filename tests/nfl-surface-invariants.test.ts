@@ -668,6 +668,10 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     // ...and an in-flight success must not repopulate it AFTER that denial,
     // which ordering alone would otherwise allow. (codex P1, r5.)
     expect(dash).toContain('authGen.current += 1;');
+    // A viewer change supersedes in-flight requests too, or the new user's
+    // cache is overwritten with the old stamp and they see "?" for a whole
+    // poll interval. (codex r6.)
+    expect(dash).toContain('useEffect(() => { authGen.current += 1; }, [viewerUid, pool.id]);');
     expect(dash).toContain('if (authGen.current !== gen) return;');
     expect(dash).toContain('revealsForPool[selectedWeek]?.week === selectedWeek');
     // Same rule for the Majority row's aggregate, checked at RENDER time —

@@ -242,6 +242,13 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // longer entitled to for the rest of that interval. A response from a
   // superseded generation is dropped rather than merged. (codex P1, r5.)
   const authGen = React.useRef(0);
+  // A VIEWER CHANGE SUPERSEDES EVERYTHING IN FLIGHT, for the same reason a
+  // denial does. Without this, a request issued as the previous user resolves
+  // after the new user's and overwrites the cache with the OLD stamp — the
+  // render guard then rejects it as mismatched and the new viewer sees "?"
+  // everywhere until the next poll, which for a member is five minutes away.
+  // Not a leak (the stamp holds), but a self-inflicted blackout. (codex P2, r6.)
+  useEffect(() => { authGen.current += 1; }, [viewerUid, pool.id]);
   const loadWeek = React.useCallback((w: number) => {
     const gen = authGen.current;
     dbService.getPoolPicks(pool.id, w)
