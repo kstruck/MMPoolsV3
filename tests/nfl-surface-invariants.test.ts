@@ -672,7 +672,9 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     // cache is overwritten with the old stamp and they see "?" for a whole
     // poll interval. (codex r6.)
     expect(dash).toContain('useEffect(() => { authGen.current += 1; }, [viewerUid, pool.id]);');
-    expect(dash).toContain('if (authGen.current !== gen) return;');
+    // BOTH paths check it — a superseded failure is as stale as a superseded
+    // success, and only guarding one inverts the purpose of the guard.
+    expect(dash.match(/if \(authGen\.current !== gen\) return;/g) || []).toHaveLength(2);
     expect(dash).toContain('revealsForPool[selectedWeek]?.week === selectedWeek');
     // Same rule for the Majority row's aggregate, checked at RENDER time —
     // clearing it in the effect leaves one frame of the previous pool's splits,

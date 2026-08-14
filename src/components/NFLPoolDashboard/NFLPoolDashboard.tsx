@@ -267,6 +267,14 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
       // is invalidated with it.
       .catch(err => {
         logger.warn('[NFLPoolDashboard] getPoolPicks failed', err);
+        // ⚠️ THE SAME GENERATION CHECK AS THE SUCCESS PATH, and it was missing
+        // here — an asymmetry that inverted the guard's purpose. A denial from
+        // a PREVIOUS pool or viewer, rejecting after navigation, would bump the
+        // generation and stamp the old identity into state, invalidating the
+        // NEW view's in-flight successful request and blanking a grid the
+        // current viewer is fully entitled to. A superseded failure is as stale
+        // as a superseded success. (codex P2, r7.)
+        if (authGen.current !== gen) return;
         if ((err as { code?: string })?.code === 'functions/permission-denied') {
           authGen.current += 1;
           setReveal({ poolId: pool.id, uid: viewerUid, byWeek: {} });
