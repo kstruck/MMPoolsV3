@@ -68,6 +68,44 @@ export function picksGridCell(args: {
     };
 }
 
+/**
+ * The cell rule for SURVIVOR and MARGIN — one pick per week, keyed by the week
+ * number rather than by a game id.
+ *
+ * 🛑 THE ADMITTING FIELD IS `weekRevealed`, NOT `revealedGameIds`.
+ *
+ * That is the whole difference from `picksGridCell`, and getting it wrong is a
+ * leak rather than a display bug. `getPoolPicks` adds the week's own key to its
+ * allowlist **only when the entire week is revealed**
+ * (`functions/src/nflPickReveal.ts` — `if (reveal.weekRevealed) allowedKeys.add(...)`),
+ * because a weekly pick has no single game to attach to and one kicked-off game
+ * must not expose it.
+ *
+ * ⚠️ `reveal` MUST be the response for THIS week. The multi-week grid holds one
+ * per column; passing the selected week's response for every column renders an
+ * unrevealed week's pick using a revealed week's flag. (codex r2 on the plan.)
+ * `undefined` — not fetched, or refused — is HIDDEN, which is the honest answer.
+ */
+export function weeklyPickCell(args: {
+    week: number;
+    entry: PicksGridEntry | undefined;
+    /** The viewer's own row: sourced from their own entry, never gated. */
+    isOwnRow: boolean;
+    /** `getPoolPicks` for THIS week. */
+    reveal: { week: number; weekRevealed?: boolean } | undefined;
+}): PicksGridCell {
+    const { week, entry, isOwnRow, reveal } = args;
+
+    // A response for a DIFFERENT week can never admit this one, whatever it says.
+    const revealed = reveal?.week === week && reveal?.weekRevealed === true;
+    if (!isOwnRow && !revealed) return { kind: 'HIDDEN' };
+
+    const team = entry?.picks?.[String(week)];
+    if (!team) return { kind: 'NO_PICK' };
+    // No grade: a Survivor/Margin outcome is the scorer's, not this module's.
+    return { kind: 'PICK', team, result: null };
+}
+
 /** One game's row in the pool consensus aggregate (`pools/{id}/consensus/{gameId}`). */
 export interface ConsensusSplit {
     awayPct?: number;

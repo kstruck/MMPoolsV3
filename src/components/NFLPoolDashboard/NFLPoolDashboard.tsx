@@ -23,7 +23,7 @@ import { AICommissioner } from '../AICommissioner';
 import { useToast } from '../ui/Toast';
 import { Button } from '../ui';
 import { now as serverNow } from '../../utils/serverClock';
-import { gamesForPoolWeek, poolSeasonType, currentSlateWeek } from '../../utils/nflPending';
+import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks } from '../../utils/nflPending';
 import { buildMemberStandings } from '../../utils/memberStandings';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes, resolveHardWeekLock, frozenHardLockFor } from '@shared/weeklyHardLock';
 import { WeekChecklist } from './WeekChecklist';
@@ -32,6 +32,7 @@ import { PaymentsPanel } from '../PaymentsPanel';
 // conflicted when they didn't (measured).
 import { NFLResults } from './NFLResults';
 import { NFLPicksGrid } from './NFLPicksGrid';
+import { NFLWeeklyPicksGrid } from './NFLWeeklyPicksGrid';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -65,15 +66,21 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   type TabType = 'dashboard' | 'picks' | 'grid' | 'standings' | 'results' | 'recaps' | 'rules' | 'payments' | 'manager';
   const VALID_TABS: TabType[] = ['dashboard', 'picks', 'grid', 'standings', 'results', 'recaps', 'rules', 'payments', 'manager'];
   const showResultsTab = pool.type !== 'NFL_SURVIVOR';
-  // CURRENT PICKS (Kevin's A2). Pick'em only — Survivor and Margin store one
-  // pick per week keyed by the week number, so they have no games-across axis.
+  // CURRENT PICKS (Kevin's A2, widened by PLAN-MEMBER-PICKS-VISIBILITY).
   //
-  // 🛑 `isManager` here is an AUTHORIZATION fact, not a layout preference:
-  // `getPoolPicks` refuses anyone who is not the pool's owner, manager or
-  // SUPER_ADMIN (functions/src/nflPickReveal.ts, #414 Q5), so a member opening
-  // this tab would get a grid of "?" and nothing else. Admitting members is a
-  // plan-gated functions change; when it lands, this condition is what relaxes.
-  const showPicksGridTab = pool.type === 'NFL_PICKEM' && isManager;
+  // 🛑 THE `isManager` HALF IS GONE, AND THAT IS THE POINT OF THIS CHANGE.
+  // It was an authorization fact, not a layout preference: `getPoolPicks` used
+  // to refuse anyone who was not the owner, manager or SUPER_ADMIN, so a member
+  // opening this tab got a grid of "?" and nothing else. The callable now admits
+  // a proven member (`assertPickReader`), so the tab is offered to everyone
+  // signed in — and a NON-member still gets a refusal from the server and a grid
+  // of "?", which is the honest answer rather than a crash.
+  //
+  // ⚠️ ALL THREE NFL TYPES. An earlier draft said "drop isManager, keep the
+  // pool-type gate", which removes the wrong half and leaves Margin and Survivor
+  // with no tab at all — the exact contradiction codex found in the plan. The
+  // pool TYPE now selects the COMPONENT, not whether the tab exists.
+  const showPicksGridTab = !!user && ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'].includes(pool.type);
   const tabParam = searchParams.get('tab') as TabType | null;
   const requestedTab: TabType = tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'dashboard';
   // A tab the pool does not offer falls back to the dashboard, exactly as an
@@ -176,10 +183,21 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // correctly refused to hand them back before the boundary.
   const [standingsRows, setStandingsRows] = useState<any[]>([]);
   const [ownEntry, setOwnEntry] = useState<any | null>(null);
-  // Stamped with the pool it came from. `PoolRoute` reuses this component across
-  // pool navigation, so the response outlives the pool that asked for it — see
-  // the `weekReveal` note below for why the week check alone is not enough.
-  const [reveal, setReveal] = useState<{ poolId: string; data: PoolPicksReveal } | null>(null);
+  // Stamped with the pool it came from, and keyed BY WEEK.
+  //
+  // `PoolRoute` reuses this component across pool navigation, so a response
+  // outlives the pool that asked for it — see the `weekReveal` note below for
+  // why the week check alone is not enough.
+  //
+  // 🛑 THE WEEK KEY IS NOT A CACHE OPTIMISATION, IT IS THE ALLOWLIST BOUNDARY.
+  // The Survivor/Margin grid draws many weeks at once, and those pool types key
+  // a pick by the WEEK NUMBER — so `weekRevealed`, not `revealedGameIds`, is
+  // what admits a cell. One shared response across columns would render week 2's
+  // pick using week 1's `weekRevealed`, leaking a week that has not locked.
+  // Each week therefore keeps its OWN WHOLE response. (Plan D6/T9, codex r2.)
+  const [reveal, setReveal] = useState<{ poolId: string; byWeek: Record<number, PoolPicksReveal> }>(
+    { poolId: pool.id, byWeek: {} },
+  );
 
   useEffect(() => {
     const unsubStandings = dbService.subscribeToNFLStandings(pool.id, setStandingsRows);
@@ -194,20 +212,48 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // write behind it, so nothing would push. Refetched when the week changes, when
   // a Member Record moves (every submit writes one), and on a slow poll so a
   // kickoff opens the window without a page reload.
+  // Which weeks the grid needs. The selected week always; for Survivor and
+  // Margin — whose grid is players × WEEKS — every week of the pool's own slate
+  // up to and including it. Never a hardcoded 18: a preseason pool has four, and
+  // the schedule is the only thing that knows (plan K7).
+  const gridWeeks = useMemo(() => {
+    if (pool.type === 'NFL_PICKEM') return [selectedWeek];
+    return poolSeasonWeeks(games, pool).filter(w => w <= selectedWeek);
+  }, [games, pool, selectedWeek]);
+
   useEffect(() => {
-    if (!isManager) { setReveal(null); return; }
+    if (!user) return;
     let cancelled = false;
-    const load = () => {
-      dbService.getPoolPicks(pool.id, selectedWeek)
-        .then(r => { if (!cancelled) setReveal({ poolId: pool.id, data: r }); })
-        // A refusal is not a crash: the standings simply keep rendering
-        // Hidden / No selection, which is the correct pre-boundary answer.
-        .catch(err => { logger.warn('[NFLPoolDashboard] getPoolPicks failed', err); });
+    const load = (weeks: number[]) => {
+      for (const w of weeks) {
+        dbService.getPoolPicks(pool.id, w)
+          .then(r => {
+            if (cancelled) return;
+            // Merge into the pool's own bucket; a response for another pool is
+            // discarded rather than merged, which is the #430 guard generalised.
+            setReveal(prev => prev.poolId === pool.id
+              ? { poolId: pool.id, byWeek: { ...prev.byWeek, [w]: r } }
+              : { poolId: pool.id, byWeek: { [w]: r } });
+          })
+          // A refusal is not a crash — a non-member gets one, and the surfaces
+          // simply keep rendering Hidden / "?" which is the honest answer.
+          .catch(err => { logger.warn('[NFLPoolDashboard] getPoolPicks failed', err); });
+      }
     };
-    load();
-    const id = setInterval(load, 60_000);
+    load(gridWeeks);
+    // ⚠️ ONLY THE SELECTED WEEK IS RE-POLLED. A past week's reveal cannot
+    // change — it is a clock boundary that has already passed — so re-fetching
+    // the whole column set every minute would multiply the call volume by the
+    // season length for no new information.
+    //
+    // Members poll five times slower than the commissioner: after this change
+    // EVERY member of every pool polls this callable, where before only the
+    // commissioner did, and a commissioner is the only one who needs
+    // minute-fresh completeness to chase missing picks.
+    const id = setInterval(() => load([selectedWeek]), isManager ? 60_000 : 300_000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [isManager, pool.id, selectedWeek, members]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isManager, pool.id, pool.type, selectedWeek, members, user?.id, gridWeeks.join(',')]);
 
   // ⚠️ ONLY EVER USE THE REVEAL THAT MATCHES THE POOL AND THE WEEK ON SCREEN.
   // `reveal` holds the previous answer for the moment between changing either
@@ -224,8 +270,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // Pick CONTENT from a pool that is no longer on screen. Clearing the state in
   // the effect instead would blank the grid on every `members` snapshot, which
   // is every submit — hence a stamp rather than a reset. (codex r1.)
-  const weekReveal =
-    reveal && reveal.poolId === pool.id && reveal.data.week === selectedWeek ? reveal.data : null;
+  const revealsForPool = reveal.poolId === pool.id ? reveal.byWeek : {};
+  const weekReveal = revealsForPool[selectedWeek]?.week === selectedWeek
+    ? revealsForPool[selectedWeek]
+    : null;
 
   // Roster from Member Records, stats from the scored projection, own picks from
   // the own-entry doc, other members' picks only where the SERVER revealed them.
@@ -690,15 +738,31 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   is already normalized above, so this can only be true on a
                   Pick'em pool with a commissioner viewing it. */}
               {activeTab === 'grid' && (
-                <NFLPicksGrid
-                  pool={pool}
-                  entries={entries}
-                  games={games}
-                  week={selectedWeek}
-                  viewerUid={user?.id}
-                  reveal={weekReveal}
-                  ownEntryLoaded={!!ownEntry}
-                />
+                pool.type === 'NFL_PICKEM' ? (
+                  <NFLPicksGrid
+                    pool={pool}
+                    entries={entries}
+                    games={games}
+                    week={selectedWeek}
+                    viewerUid={user?.id}
+                    reveal={weekReveal}
+                    ownEntryLoaded={!!ownEntry}
+                  />
+                ) : (
+                  /* Survivor and Margin: one pick per WEEK, so the axis is weeks
+                     rather than the week's slate. Each column is handed the whole
+                     per-week reveal map and picks out ITS OWN — see the
+                     component header for why that is a security property. */
+                  <NFLWeeklyPicksGrid
+                    pool={pool}
+                    entries={entries}
+                    games={games}
+                    week={selectedWeek}
+                    viewerUid={user?.id}
+                    revealsByWeek={revealsForPool}
+                    ownEntryLoaded={!!ownEntry}
+                  />
+                )
               )}
 
               {/* TAB 2: STANDINGS */}
