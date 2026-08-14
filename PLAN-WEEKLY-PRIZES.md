@@ -185,6 +185,16 @@ thereafter. One target per pool-week is the invariant; "what the member was told
 is only correct if every member was told the same thing. (codex P2, plan review
 r5.)
 
+⚠️ **The FIRST submitter still needs a handshake.** Freezing inside the first
+submission does not protect that submitter: their sheet was rendered earlier, and
+a schedule update between render and submit changes which game is first/last — so
+the value that gets frozen is not the one they were shown. The submit payload
+therefore **carries the target the sheet displayed**, and the server either (i)
+stores it as the frozen value when nothing is frozen yet, or (ii) **rejects the
+submission and asks the client to reload** when it differs from what is already
+frozen. Rejecting is the right failure: the alternative is accepting a prediction
+about a game the member never agreed to answer. (codex P2, plan review r7.)
+
 Residual to state on the rules page: if the frozen game is later **cancelled**,
 there is no combined score to compare against. Recommendation: the week's
 tiebreak becomes unbreakable and the tie is shared, which is the same outcome as
@@ -274,6 +284,14 @@ therefore stated explicitly. (codex, plan review r1.)
 | `HYBRID` | `hybridSplit.weeklyPerEntry × entries ÷ weeksInSeason` |
 | `WEEKLY` | `entryFee × entries ÷ weeksInSeason` — the whole fee is the weekly pot, by definition of the mode |
 | `SEASON` | **no weekly pot; the list renders places and scores with no Prize column.** Not an error state — a season pool genuinely has no weekly prize, and printing a $0 column would read as one |
+
+⚠️ **FREEZE THE ENTRY COUNT WITH THE POT, NOT JUST THE DIVISOR.** Freezing
+`weeksInSeason` alone leaves `entries` live, and `joinNFLPool` lets a member join
+at any time — so a join followed by a rescore recomputes an already-published
+week's prize against a larger roster, which is the same "published prizes move"
+failure the divisor freeze exists to stop, arriving through the numerator. The
+entry count used for a week's pot is **persisted with that week's published
+prize** and read back on every later pass. (codex P1, plan review r7.)
 
 ⚠️ **`weeklyPerEntry × entries` is the SEASON-LONG weekly total, which is why it
 is divided.** A codex round argued the division understates every weekly prize,

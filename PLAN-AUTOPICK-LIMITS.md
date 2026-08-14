@@ -106,6 +106,7 @@ defined consequence is not a feature.
 - `pickemCreateInputSchema` etc. (`shared/schemas/nfl.ts`) — these are `z.object`, which **STRIPS unknown keys**, so an unlisted field is silently dropped at create and every new pool plays the default. That trap is documented in the file itself and has bitten twice (the survivor parity settings, the `weeklyTiebreaker` line). The field must be listed explicitly.
 - ⚠️ **`updatePoolSettingsSchema` is permissive — validate in the GATE, not only the schema.** This is the #424 lesson; a create-side-only rule is not a rule.
 - Coherence: non-negative integer; and `autopickLimit` is meaningless on a pool with no season prize, so it is rejected (or ignored, D3) on `payoutMode: WEEKLY`.
+- ⚠️ **Validate the MERGED settings, not the submitted patch.** Rejecting `autopickLimit` only when it arrives *alongside* `payoutMode: WEEKLY` leaves a transition hole: set the limit while the pool is HYBRID, then switch `payoutMode` to WEEKLY in a later write, and the pool keeps a setting this plan calls meaningless — with a rules page that may still advertise it. The gate validates the post-merge document, and the mode switch either clears the field or is refused. This is the `flattenSettingsPatch` per-key-merge trap from `PLAN-HYBRID-SPLIT` (`hybridSplitNeedsClearing`) in a new costume, and it applies to **direct SUPER_ADMIN writes too**, not only the callable path. (codex P2, plan review r7.)
 
 ### 1c. The rules guard
 
