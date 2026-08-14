@@ -150,7 +150,11 @@ Prints a table (name / v1-v2 / trigger / location / memory / runtime). To check 
 
 ---
 
-### 1b. Cloud Run healthcheck flakes during a mass deploy — measured 2026-08-13
+### 1c. Cloud Run healthcheck flakes during a mass deploy — measured 2026-08-13
+
+*(1c, not 1b — the deploy ritual's copy-paste block already uses `# 1b.` as a
+step label, and two things answering to "1b" in one skill is how a reference
+points at the wrong one. qodo, on #425.)*
 
 On a full-fleet deploy (~180 functions), a random subset can fail with
 `Container Healthcheck failed … PORT=8080 … within the allocated timeout`.
