@@ -31,6 +31,7 @@ import { PaymentsPanel } from '../PaymentsPanel';
 // New imports go at the END of this block — #420 and #421 both appended here and
 // conflicted when they didn't (measured).
 import { NFLResults } from './NFLResults';
+import { NFLPicksGrid } from './NFLPicksGrid';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -61,9 +62,18 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // purpose: a stale `?tab=results` link into a Survivor pool must fall back to
   // the dashboard rather than crash, and dropping it from this list is what
   // makes that fallback happen.
-  type TabType = 'dashboard' | 'picks' | 'standings' | 'results' | 'recaps' | 'rules' | 'payments' | 'manager';
-  const VALID_TABS: TabType[] = ['dashboard', 'picks', 'standings', 'results', 'recaps', 'rules', 'payments', 'manager'];
+  type TabType = 'dashboard' | 'picks' | 'grid' | 'standings' | 'results' | 'recaps' | 'rules' | 'payments' | 'manager';
+  const VALID_TABS: TabType[] = ['dashboard', 'picks', 'grid', 'standings', 'results', 'recaps', 'rules', 'payments', 'manager'];
   const showResultsTab = pool.type !== 'NFL_SURVIVOR';
+  // CURRENT PICKS (Kevin's A2). Pick'em only — Survivor and Margin store one
+  // pick per week keyed by the week number, so they have no games-across axis.
+  //
+  // 🛑 `isManager` here is an AUTHORIZATION fact, not a layout preference:
+  // `getPoolPicks` refuses anyone who is not the pool's owner, manager or
+  // SUPER_ADMIN (functions/src/nflPickReveal.ts, #414 Q5), so a member opening
+  // this tab would get a grid of "?" and nothing else. Admitting members is a
+  // plan-gated functions change; when it lands, this condition is what relaxes.
+  const showPicksGridTab = pool.type === 'NFL_PICKEM' && isManager;
   const tabParam = searchParams.get('tab') as TabType | null;
   const requestedTab: TabType = tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'dashboard';
   // A tab the pool does not offer falls back to the dashboard, exactly as an
@@ -71,7 +81,15 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // `?tab=results` link renders an EMPTY content area: the strip has no Results
   // button to un-press and no other branch matches, so the member sees a pool
   // page with nothing in it and no way to tell what went wrong. (Own diff read.)
-  const activeTab: TabType = requestedTab === 'results' && !showResultsTab ? 'dashboard' : requestedTab;
+  //
+  // Same fallback for `?tab=grid`, and it has one more way to be reached: a
+  // commissioner sharing their own URL. The link works for them and must not
+  // hand every member a blank page.
+  const tabOffered: Record<TabType, boolean> = {
+    dashboard: true, picks: true, standings: true, recaps: true, rules: true, manager: isManager,
+    payments: !!user, results: showResultsTab, grid: showPicksGridTab,
+  };
+  const activeTab: TabType = tabOffered[requestedTab] ? requestedTab : 'dashboard';
   const setActiveTab = (tab: TabType) => {
     setSearchParams(prev => {
       const p = new URLSearchParams(prev);
@@ -129,7 +147,6 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   };
 
   // Subscribed States
-  const [entries, setEntries] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [recaps, setRecaps] = useState<WeeklyRecap[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -159,7 +176,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // correctly refused to hand them back before the boundary.
   const [standingsRows, setStandingsRows] = useState<any[]>([]);
   const [ownEntry, setOwnEntry] = useState<any | null>(null);
-  const [reveal, setReveal] = useState<PoolPicksReveal | null>(null);
+  // Stamped with the pool it came from. `PoolRoute` reuses this component across
+  // pool navigation, so the response outlives the pool that asked for it — see
+  // the `weekReveal` note below for why the week check alone is not enough.
+  const [reveal, setReveal] = useState<{ poolId: string; data: PoolPicksReveal } | null>(null);
 
   useEffect(() => {
     const unsubStandings = dbService.subscribeToNFLStandings(pool.id, setStandingsRows);
@@ -179,7 +199,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     let cancelled = false;
     const load = () => {
       dbService.getPoolPicks(pool.id, selectedWeek)
-        .then(r => { if (!cancelled) setReveal(r); })
+        .then(r => { if (!cancelled) setReveal({ poolId: pool.id, data: r }); })
         // A refusal is not a crash: the standings simply keep rendering
         // Hidden / No selection, which is the correct pre-boundary answer.
         .catch(err => { logger.warn('[NFLPoolDashboard] getPoolPicks failed', err); });
@@ -189,25 +209,47 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     return () => { cancelled = true; clearInterval(id); };
   }, [isManager, pool.id, selectedWeek, members]);
 
-  // ⚠️ ONLY EVER USE THE REVEAL THAT MATCHES THE WEEK ON SCREEN. `reveal` holds
-  // the previous week's answer for the moment between changing weeks and the
-  // callable returning, and that answer is wrong in a way that shows: the
-  // counts would drive "4 of 16 Picks Set" and the roster's picked/unpicked
-  // state for a week nobody is looking at. Dropping it for that moment renders
-  // the honest fallback instead. (Own diff read.)
-  const weekReveal = reveal?.week === selectedWeek ? reveal : null;
+  // ⚠️ ONLY EVER USE THE REVEAL THAT MATCHES THE POOL AND THE WEEK ON SCREEN.
+  // `reveal` holds the previous answer for the moment between changing either
+  // one and the callable returning, and that answer is wrong in a way that
+  // shows: the counts would drive "4 of 16 Picks Set" and the roster's
+  // picked/unpicked state for a week nobody is looking at. Dropping it for that
+  // moment renders the honest fallback instead. (Own diff read.)
+  //
+  // 🛑 THE POOL CHECK IS NOT BELT-AND-BRACES ON THE WEEK CHECK — it catches a
+  // case the week check cannot. NFL game ids are GLOBAL (`espn_…`), so two
+  // pools on the same week share a slate: navigating between two pools this
+  // commissioner runs leaves the previous pool's response matching by week,
+  // and `buildMemberStandings` grafts its picks onto any uid in both rosters.
+  // Pick CONTENT from a pool that is no longer on screen. Clearing the state in
+  // the effect instead would blank the grid on every `members` snapshot, which
+  // is every submit — hence a stamp rather than a reset. (codex r1.)
+  const weekReveal =
+    reveal && reveal.poolId === pool.id && reveal.data.week === selectedWeek ? reveal.data : null;
 
   // Roster from Member Records, stats from the scored projection, own picks from
   // the own-entry doc, other members' picks only where the SERVER revealed them.
   // The projection alone is a snapshot of the last SCORED week, so a member who
   // joined after it was written was invisible to everyone but the commissioner —
   // see buildMemberStandings for the full reasoning.
-  useEffect(() => {
-    setEntries(buildMemberStandings({ pool: castPool, members, standingsRows, ownEntry, reveal: weekReveal }));
+  //
+  // 🛑 DERIVED DURING RENDER, NOT SET FROM AN EFFECT (codex r6). It used to be
+  // `useState` + `useEffect`, which made it lag `weekReveal` by exactly one
+  // paint — and the two are read TOGETHER by the picks grid: the fresh reveal
+  // supplies the allowlist while the stale `entries` still carry no picks. On
+  // the render where a game first reveals, every player who picked it was drawn
+  // as "—", i.e. "made no pick", and corrected a frame later. Same class as the
+  // three stale-state defects above, and a memo removes it outright rather than
+  // sequencing around it. The deps are unchanged.
+  //
   // Depends on `participantIds`, not the whole pool object: it is the only field
   // buildMemberStandings reads from the pool, and a snapshot re-instantiating the
   // doc should not re-run this. (qodo.)
-  }, [standingsRows, ownEntry, members, weekReveal, castPool.participantIds]);
+  const entries = useMemo(
+    () => buildMemberStandings({ pool: castPool, members, standingsRows, ownEntry, reveal: weekReveal }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [standingsRows, ownEntry, members, weekReveal, castPool.participantIds],
+  );
 
   // 2b. Subscribe to Member Records (roster truth — everyone who joined, ADR 0003)
   useEffect(() => {
@@ -424,6 +466,19 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           >
             My Entry
           </button>
+          {showPicksGridTab && (
+            <button
+              onClick={() => setActiveTab('grid')}
+              className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
+                activeTab === 'grid'
+                  ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
+                  : 'text-muted hover:text-[color:var(--text)] border-transparent'
+              }`}
+              style={activeTab === 'grid' ? { borderBottomColor: accentHex } : {}}
+            >
+              Current Picks
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('standings')}
             className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
@@ -629,6 +684,21 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     </div>
                   )}
                 </>
+              )}
+
+              {/* TAB 1b: CURRENT PICKS — players × this week's games. `activeTab`
+                  is already normalized above, so this can only be true on a
+                  Pick'em pool with a commissioner viewing it. */}
+              {activeTab === 'grid' && (
+                <NFLPicksGrid
+                  pool={pool}
+                  entries={entries}
+                  games={games}
+                  week={selectedWeek}
+                  viewerUid={user?.id}
+                  reveal={weekReveal}
+                  ownEntryLoaded={!!ownEntry}
+                />
               )}
 
               {/* TAB 2: STANDINGS */}

@@ -526,7 +526,16 @@ describe('week results view — absence is not zero, and Survivor has no week to
     expect(dash).toContain("const showResultsTab = pool.type !== 'NFL_SURVIVOR';");
     // ...and a stale ?tab=results link into a Survivor pool must fall back to a
     // rendered tab, never to an empty content area.
-    expect(dash).toContain("requestedTab === 'results' && !showResultsTab ? 'dashboard' : requestedTab");
+    //
+    // ⚠️ This used to grep for a `requestedTab === 'results' && !showResultsTab`
+    // ternary. The Current Picks tab is the SECOND conditional tab, so the rule
+    // became a per-tab availability map instead of a chain of special cases —
+    // the assertion follows it rather than pinning the old shape. What it
+    // guards is unchanged: an offered tab renders, an unoffered one falls back
+    // to the dashboard, and `results` is entered in that map from
+    // `showResultsTab`.
+    expect(dash).toContain('results: showResultsTab');
+    expect(dash).toContain("const activeTab: TabType = tabOffered[requestedTab] ? requestedTab : 'dashboard';");
   });
 
   it('a not-yet-scored week shows no place chip', () => {
@@ -577,5 +586,114 @@ describe('week results view — tied scores share a place', () => {
       'utf8',
     );
     expect(standings).toContain('rank={index + 1}');
+  });
+});
+
+/**
+ * CURRENT PICKS grid (Kevin's A2) — the one NFL surface that prints another
+ * player's pick, so the wiring around it is what these guard.
+ *
+ * The unit tests in `src/utils/picksGrid.test.ts` prove the cell rule. What a
+ * unit test cannot prove is that the component still USES it and that the tab
+ * is still gated — the same gap `SURFACES` above exists for.
+ */
+describe('current picks grid — the reveal boundary stays the server\'s', () => {
+  // 🛑 COMMENTS STRIPPED BEFORE MATCHING, on every source these assertions read.
+  //
+  // These files are heavily commented and several of the comments QUOTE the very
+  // expressions asserted below — so a raw `toContain` would keep passing after
+  // the code was deleted, as long as the comment explaining it survived. That is
+  // a guard that looks like a guard and is not, which is this repo's own most
+  // repeated defect class. The `not.toContain` direction fails the opposite way:
+  // a comment merely MENTIONING `setEntries(` would fail a green build.
+  //
+  // Same stripper the `nflResults` block above uses. (qodo #2, re-review of #430.)
+  const strip = (s: string) => s
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const src = (p: string) => strip(readFileSync(resolve(root, p), 'utf8'));
+  const grid = src('src/components/NFLPoolDashboard/NFLPicksGrid.tsx');
+  const dash = src('src/components/NFLPoolDashboard/NFLPoolDashboard.tsx');
+
+  it('the tab is offered only to a commissioner, and only on Pick\'em', () => {
+    // NOT cosmetic: `getPoolPicks` throws permission-denied for a participant
+    // (functions/src/nflPickReveal.ts), so dropping either half of this gate
+    // gives members a grid of "?" — or, if the callable is ever widened without
+    // a plan, gives them pick content the plan-gate exists to decide on.
+    expect(dash).toContain("const showPicksGridTab = pool.type === 'NFL_PICKEM' && isManager;");
+    expect(dash).toContain('grid: showPicksGridTab');
+  });
+
+  it('the grid derives no reveal rule of its own — it consumes revealedGameIds', () => {
+    expect(grid).toContain('picksGridCell');
+    // A client-side lock comparison here would be a SECOND definition of the
+    // boundary, which is what PLAN-COMMISSIONER-BLIND-PICKS removed.
+    const code = grid
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+    expect(code).not.toContain('startTime <');
+    expect(code).not.toContain('lockBufferMinutes');
+    expect(code).not.toContain('serverNow');
+  });
+
+  it('a stale reveal from another week is dropped, not applied to this slate', () => {
+    expect(grid).toContain('reveal.week === week');
+  });
+
+  it('a reveal is scoped to the POOL that asked for it, not the week alone', () => {
+    // NFL game ids are global, so two pools on the same week share a slate:
+    // navigating between two pools the same commissioner runs leaves the
+    // previous pool's response matching by week, and buildMemberStandings
+    // grafts its picks onto any uid present in both rosters. (codex r1.)
+    expect(dash).toContain('setReveal({ poolId: pool.id, data: r })');
+    expect(dash).toContain('reveal.poolId === pool.id && reveal.data.week === selectedWeek');
+    // Same rule for the Majority row's aggregate, checked at RENDER time —
+    // clearing it in the effect leaves one frame of the previous pool's splits,
+    // because effects run after the render that changed the pool. (codex r2.)
+    expect(grid).toContain('consensus?.poolId === pool.id ? consensus.byGame : undefined');
+  });
+
+  it('the rows are derived during render, so they cannot lag the reveal by a paint', () => {
+    // The grid reads the allowlist and the rows TOGETHER. Setting the rows from
+    // an effect made them lag `weekReveal` by one paint, so on the render where
+    // a game first revealed, every player who picked it was drawn as "—" —
+    // "made no pick" — and corrected a frame later. (codex r6.)
+    expect(dash).toContain('const entries = useMemo(');
+    expect(dash).not.toContain('setEntries(');
+  });
+
+  it('the dashboard is keyed on the pool, so no subscribed state survives navigation', () => {
+    // The route sets `pool` from the global cache with no loading state, so the
+    // dashboard stays MOUNTED between pools and every subscribed state
+    // (`entries`, `ownEntry`, `members`, `standingsRows`) held the previous
+    // pool's data until its snapshot landed. The own-entry row bypasses the
+    // reveal guard by design, so the grid rendered the old pool's picks as this
+    // one's. (codex r4.)
+    // Stripped too — the `key` is introduced by a long JSX comment that names it.
+    const route = src('src/components/routes/PoolRoute.tsx');
+    expect(route).toMatch(/<NFLPoolDashboard\s+key=\{pool\.id\}/);
+  });
+
+  it('an unrevealed cell reads "?" and never collapses into the no-pick dash', () => {
+    expect(grid).toContain("cell.kind === 'HIDDEN' ? '?'");
+    // ...and the Set column uses the SAME glyph for the same fact. Inside one
+    // table "—" cannot mean both "revealed, picked nothing" and "not known".
+    // (qodo #8 — its compliance framing rejected, the overloading absorbed.)
+    expect(grid).toContain("{set === undefined ? '?' : `${set}/${weekGames.length}`}");
+  });
+
+  it('the own-row reveal bypass waits for the own entry to actually load', () => {
+    // The bypass exists because the entry document is the source. Before it
+    // lands, `buildMemberStandings` still emits a row for the viewer from their
+    // Member Record with no `picks` at all — so the bypass printed "0/16" and a
+    // "made no pick" dash across the commissioner's whole week. Passed as a
+    // prop, never inferred from `row.picks` being absent: an entry that has no
+    // picks yet is indistinguishable from one that has not loaded. (qodo #9.)
+    expect(grid).toContain('const ownPicksKnown = (row: any): boolean => isMe(row) && ownEntryLoaded;');
+    expect(dash).toContain('ownEntryLoaded={!!ownEntry}');
+    // The "Me" badge and the row highlight are the OTHER question and must not
+    // disappear while the entry loads.
+    expect(grid).toContain('{mine && (');
   });
 });

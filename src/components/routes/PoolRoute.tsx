@@ -253,7 +253,22 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                     onCreatePool={onCreatePool}
                 />
                 <div className="flex-grow">
+                    {/* 🛑 `key` IS THE FIX, NOT A LIST-RENDER HABIT (codex r4).
+                        This route keeps the dashboard MOUNTED across pool
+                        navigation — the effect above sets `pool` from the global
+                        cache with no loading state, which is the common path for
+                        a commissioner moving between their own pools. Every
+                        subscribed state in the dashboard (`entries`, `ownEntry`,
+                        `members`, `standingsRows`, `recaps`) then holds the
+                        PREVIOUS pool's data until its new snapshot lands, and
+                        the picks grid renders the old own-entry row as this
+                        pool's picks the whole time. Keying on the pool id makes
+                        React discard that state instead of carrying it over —
+                        one line, versus stamping every piece of state
+                        separately. The tab and week ride in the URL, so they
+                        survive the remount. */}
                     <NFLPoolDashboard
+                        key={pool.id}
                         pool={pool}
                         user={user}
                         isManager={isManager}
