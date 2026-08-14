@@ -1,6 +1,23 @@
 # PLAN — member-visible picks, and the grid for Margin and Survivor
 
-> **STATUS: DRAFT — BLOCKED ON KEVIN'S SIGN-OFF (§6).** No code has been written.
+> ## ✅ KEVIN RULED ON THE TWO BLOCKING QUESTIONS — 2026-08-14
+>
+> **K9 → lock `participantIds` down in `firestore.rules` (option c).** Plus, in his
+> words: *"current members need to be able to see the picks after the pool locks
+> and this needs to be automatic going forward."* — no per-pool toggle, no
+> commissioner opt-in.
+>
+> 🛑 **THIS REVERSES D4.** The plan argued for changing no rules; Kevin chose to
+> fix the weak predicate at its root instead of working around it, which is the
+> stronger answer and fixes it for every consumer rather than just this callable.
+> **The change now owes a RULES deploy as well as a functions deploy.**
+>
+> **K1 → withhold `counts` from members until the reveal**, as recommended.
+>
+> Remaining questions (K2–K8) stand at their recommendations unless he says
+> otherwise. **The sweep (T7) is still owed, and round 3 has not run.**
+
+> **STATUS: RULED ON, IMPLEMENTATION NOT STARTED.** No code has been written.
 > This is an **AUTHORIZATION** change (`mmp-change-control` Rule 3), so the plan,
 > an adversarial review log and a sweep pass all come before implementation.
 >
@@ -346,3 +363,48 @@ what D1 already claimed — but the plan now shows its work instead of asserting
 - It does not touch `firestore.rules` (D4).
 - It does not touch the scoring engine, and T7 must prove that rather than assert it.
 - It does not give members the commissioner's completeness view (D1), unless K1 says otherwise.
+
+
+---
+
+## 9. Sweep evidence for K9 — is locking `participantIds` actually safe?
+
+Kevin's ruling only works if **no client path writes the array**, because
+`protectedFieldsUnchanged()` governs client UPDATEs and a protected field breaks
+any client flow that writes it.
+
+**Measured 2026-08-14** over `src/`:
+
+```
+grep -rn "participantIds" src/ --include=*.ts --include=*.tsx
+```
+
+Every hit is one of: a **read** (`BillingGate`, `GlobalStandingsCard`,
+`memberStandings`, the `array-contains` query in `dbService.ts:887`), a **type
+declaration**, a **test fixture**, or the `[]` default in `constants.ts:93`.
+**There is no client-side write.**
+
+Two reasons that holds up:
+
+1. **Pool CREATE is server-only** (`firestore.rules` — *"NO CREATE via Client
+   (must use createPool function)"*), so the `constants.ts` default never reaches
+   a client write governed by this function, which covers UPDATE only.
+2. **Every server join/removal path uses the Admin SDK** (e.g.
+   `functions/src/lib/memberRecord.ts:173-176`, `participantIds: arrayRemove(uid)`),
+   which **bypasses rules entirely**. Joining and removal keep working.
+
+⚠️ **One residual risk, and it has a known precedent in this same function.** The
+pool wizards perform **full-object updates**, so they may send `participantIds`
+back unchanged. That is safe — *a same-value write is not an `affectedKey`* — and
+it is exactly the reasoning already recorded for the `type` field in
+`protectedFieldsUnchanged()`. But a wizard that sends a **stale** array would
+newly be REJECTED rather than silently overwriting the roster. That is arguably
+the fix working as intended; it must still be **verified against the rules test
+suite before deploy**, not assumed.
+
+⚠️ **Deploy ordering matters and is NOT the obvious one.** This change now touches
+functions AND rules. The rules edit REMOVES a write capability rather than a read,
+so the 2026-08-12 hazard (*"when a rules change revokes a read the live client
+makes, the frontend rebuild goes BETWEEN the functions deploy and the rules
+deploy"*) does not apply in the same shape — but the ordering must be decided and
+written into the deploy checklist rather than improvised.
