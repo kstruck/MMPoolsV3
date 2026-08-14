@@ -26,6 +26,7 @@ import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks } from '../../utils/nflPending';
 import { buildMemberStandings } from '../../utils/memberStandings';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes, resolveHardWeekLock, frozenHardLockFor } from '@shared/weeklyHardLock';
+import { isCanonicalMemberRecord } from '@shared/memberRecord';
 import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
 // New imports go at the END of this block — #420 and #421 both appended here and
@@ -319,6 +320,27 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   const revealTabs: TabType[] = ['grid', 'standings', 'manager'];
   const wantsReveal = revealTabs.includes(activeTab);
   const commissionerRosterDep = isManager ? members : null;
+
+  // 🛑 REMOVAL FROM THE ROSTER EMPTIES THE CACHE IMMEDIATELY.
+  //
+  // This closes a hole the `commissionerRosterDep` line above opens: dropping
+  // `members` from a participant's dependencies stops the fan-out, but it also
+  // means a member removed WHILE VIEWING keeps rendering already-revealed picks
+  // until the five-minute poll happens to collect a denial. The server is
+  // authoritative and refuses the next call either way — but the cache is held
+  // HERE, so it has to be dropped here. (codex P1, r12.)
+  //
+  // `isManager` is exempt: a commissioner is not always seeded with a canonical
+  // Member Record, and an empty `members` means the snapshot has not arrived —
+  // neither is evidence of removal, and treating "unknown" as "removed" would
+  // blank the grid on every mount.
+  const viewerStillMember = isManager || !viewerUid || members.length === 0
+    || isCanonicalMemberRecord(members.find(m => m?.uid === viewerUid));
+  useEffect(() => {
+    if (viewerStillMember) return;
+    authGen.current += 1;
+    setReveal({ poolId: pool.id, uid: viewerUid, byWeek: {} });
+  }, [viewerStillMember, pool.id, viewerUid]);
   useEffect(() => {
     if (!user || !wantsReveal) return;
     // The selected week, plus any grid column still waiting on its deadline —

@@ -703,6 +703,10 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     // The members-driven refresh is the COMMISSIONER's, and the fetch only runs
     // on a tab that renders the response.
     expect(dash).toContain('const commissionerRosterDep = isManager ? members : null;');
+    // ...and dropping that dependency must not let a REMOVED member keep
+    // rendering cached picks until the poll collects a denial. (codex r12.)
+    expect(dash).toContain('const viewerStillMember = isManager || !viewerUid || members.length === 0');
+    expect(dash).toContain('if (viewerStillMember) return;');
     expect(dash).toContain("const revealTabs: TabType[] = ['grid', 'standings', 'manager'];");
     expect(dash).toContain('if (!user || !wantsReveal) return;');
     expect(dash).toContain('[user?.id, activeTab, pool.type, openWeeks, loadWeek, isManager]');
