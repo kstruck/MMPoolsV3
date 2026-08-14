@@ -232,6 +232,11 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   const viewerUid = user?.id || '';
   // Every read of the cache goes through this — pool AND viewer must both match.
   const revealsForPool = reveal.poolId === pool.id && reveal.uid === viewerUid ? reveal.byWeek : {};
+  const cachedWeeks = revealsForPool;
+  // Grid columns still waiting on their deadline. These are the only weeks
+  // besides the selected one whose answer can still change, so they are the
+  // only ones the poll below re-requests.
+  const openWeeks = gridWeeks.filter(w => w !== selectedWeek && !cachedWeeks[w]?.weekRevealed).join(',');
   // 🛑 AUTHORIZATION GENERATION. Bumped the moment the server declines this
   // viewer, and captured by every request before it goes out.
   //
@@ -316,11 +321,18 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   const commissionerRosterDep = isManager ? members : null;
   useEffect(() => {
     if (!user || !wantsReveal) return;
-    loadWeek(selectedWeek);
-    const id = setInterval(() => loadWeek(selectedWeek), isManager ? 60_000 : 300_000);
+    // The selected week, plus any grid column still waiting on its deadline —
+    // those are the only weeks whose answer can still change. A revealed week
+    // is a passed clock boundary and is never re-fetched.
+    const tick = () => {
+      loadWeek(selectedWeek);
+      for (const w of openWeeks.split(',').filter(Boolean)) loadWeek(Number(w));
+    };
+    tick();
+    const id = setInterval(tick, isManager ? 60_000 : 300_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isManager, selectedWeek, commissionerRosterDep, user?.id, loadWeek, wantsReveal]);
+  }, [isManager, selectedWeek, commissionerRosterDep, user?.id, loadWeek, wantsReveal, openWeeks]);
 
   // (b) THE HISTORICAL COLUMNS of the Survivor/Margin grid — fetched ONCE each,
   // and only while that grid is actually on screen.
@@ -333,23 +345,22 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // VIEWER: on a week-18 pool, eighteen. A past week's reveal is a clock
   // boundary that has already passed and cannot change, so it is fetched once
   // and kept. (codex P2.)
-  const cachedWeeks = revealsForPool;
   // 🛑 "CACHED" MEANS REVEALED, NOT MERELY FETCHED. A viewer can select a LATER
   // week, which pulls earlier columns that have not reached their deadline yet
   // — and a `weekRevealed: false` response is a snapshot of a clock that is
-  // still running. Treating it as final meant that once such a week locked it
-  // was neither the selected week nor "missing", so nothing ever re-fetched it
-  // and the column showed "?" until the user selected it or reloaded. Only a
-  // revealed response is permanent; an open one stays on the to-fetch list.
-  // (codex P2, r9.)
+  // still running.
   //
-  // This cannot spin: re-fetching an unrevealed week returns another unrevealed
-  // response, so this string is unchanged and the effect does not re-run.
-  const missingWeeks = gridWeeks.filter(w => w !== selectedWeek && !cachedWeeks[w]?.weekRevealed).join(',');
+  // ⚠️ AND KEEPING THEM ON THE "MISSING" LIST IS NOT ENOUGH ON ITS OWN, which
+  // is what an earlier revision of this fix got wrong: re-fetching an
+  // unrevealed week returns another unrevealed response, so this string never
+  // changes and the effect never re-runs. The column would still sit at "?"
+  // after the deadline passed. They are therefore added to the POLL below —
+  // the only thing here that fires on a clock. (codex r9, then r10 on r9's own
+  // fix.)
   useEffect(() => {
     if (!user || activeTab !== 'grid' || pool.type === 'NFL_PICKEM') return;
-    for (const w of missingWeeks.split(',').filter(Boolean)) loadWeek(Number(w));
-  }, [user?.id, activeTab, pool.type, missingWeeks, loadWeek]);
+    for (const w of openWeeks.split(',').filter(Boolean)) loadWeek(Number(w));
+  }, [user?.id, activeTab, pool.type, openWeeks, loadWeek]);
 
   // ⚠️ ONLY EVER USE THE REVEAL THAT MATCHES THE POOL AND THE WEEK ON SCREEN.
   // `reveal` holds the previous answer for the moment between changing either
