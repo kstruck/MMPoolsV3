@@ -45,6 +45,28 @@ describe('weeklyMaxPoints', () => {
         }
     });
 
+    it('is the top-K weights of an N-game slate for EVERY N and K — so the slate size need not be passed', () => {
+        // codex r4 argued that on a confidence week with unwinnable games the
+        // caller must pass the ORIGINAL slate size too, because the legal weight
+        // range is [17-N..16]. It is not needed, and the reason is that the TOP
+        // of that range is 16 whatever N is: the best case always puts the K
+        // highest weights on the K winnable games, so the sum depends on K
+        // alone. Its worked example ("a 16-game slate with one void displays 135
+        // even though the top 15 valid weights total 120") summed the BOTTOM 15
+        // weights, 1..15; the top 15 are 2..16 and total 135 — which is what
+        // this function returns. Brute-forced here so the rejection is runnable
+        // rather than an argument.
+        for (let n = 1; n <= 16; n++) {
+            const weights: number[] = [];
+            for (let w = 17 - n; w <= 16; w++) weights.push(w);
+            weights.sort((a, b) => b - a);
+            for (let k = 0; k <= n; k++) {
+                const topK = weights.slice(0, k).reduce((a, b) => a + b, 0);
+                expect(weeklyMaxPoints(k, true), `N=${n} K=${k}`).toBe(topK);
+            }
+        }
+    });
+
     it('is 0 on an empty or nonsensical slate rather than NaN', () => {
         expect(weeklyMaxPoints(0, true)).toBe(0);
         expect(weeklyMaxPoints(0, false)).toBe(0);
