@@ -26,7 +26,6 @@ import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks } from '../../utils/nflPending';
 import { buildMemberStandings } from '../../utils/memberStandings';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes, resolveHardWeekLock, frozenHardLockFor } from '@shared/weeklyHardLock';
-import { isCanonicalMemberRecord } from '@shared/memberRecord';
 import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
 // New imports go at the END of this block — #420 and #421 both appended here and
@@ -324,18 +323,26 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // 🛑 REMOVAL FROM THE ROSTER EMPTIES THE CACHE IMMEDIATELY.
   //
   // This closes a hole the `commissionerRosterDep` line above opens: dropping
-  // `members` from a participant's dependencies stops the fan-out, but it also
-  // means a member removed WHILE VIEWING keeps rendering already-revealed picks
-  // until the five-minute poll happens to collect a denial. The server is
-  // authoritative and refuses the next call either way — but the cache is held
-  // HERE, so it has to be dropped here. (codex P1, r12.)
+  // `members` from a participant's dependencies stops the read fan-out, but it
+  // also means a member removed WHILE VIEWING keeps rendering already-revealed
+  // picks until the poll happens to collect a denial. The server refuses the
+  // next call either way — but the cache is held HERE, so it is dropped here.
   //
-  // `isManager` is exempt: a commissioner is not always seeded with a canonical
-  // Member Record, and an empty `members` means the snapshot has not arrived —
-  // neither is evidence of removal, and treating "unknown" as "removed" would
-  // blank the grid on every mount.
-  const viewerStillMember = isManager || !viewerUid || members.length === 0
-    || isCanonicalMemberRecord(members.find(m => m?.uid === viewerUid));
+  // ⚠️ THE SIGNAL IS `pool.participantIds`, AND THE OBVIOUS ONE DOES NOT WORK.
+  // An earlier revision derived this from the `members` snapshot and skipped
+  // the check when that array was empty, reading empty as "not loaded yet".
+  // But `subscribeToPoolMembers` reports a PERMISSION ERROR by calling back
+  // with `[]` (`dbService.ts:455`) — and losing the read is exactly what
+  // removal causes. So the guard went quiet in the one case it was written
+  // for: a guard that looks like a guard and is not. (qodo, re-review.)
+  //
+  // The pool document stays world-readable, removal does `arrayRemove(uid)` on
+  // it, and K9 made it server-owned — so it keeps arriving and can be trusted.
+  // Used ONLY to REVOKE cached data, never to grant access: admission is still
+  // the canonical Member Record, server-side.
+  const viewerStillMember = isManager || !viewerUid
+    || !Array.isArray(castPool.participantIds)
+    || castPool.participantIds.includes(viewerUid);
   useEffect(() => {
     if (viewerStillMember) return;
     authGen.current += 1;

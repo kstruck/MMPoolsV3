@@ -203,15 +203,21 @@ export const getPoolPicks = validated(
         // narrow a privileged API and contradict `fullReveal`'s "SUPER_ADMIN
         // gets everything, always". A commissioner still sees a departed
         // player's entry, which is what they see today. (codex r2 on the plan.)
-        let stillAMember: ((uid: string) => boolean) | null = null;
-        if (isParticipant) {
-            const membersSnap = await db.collection('pools').doc(poolId).collection('members').get();
-            const byUid = new Map(membersSnap.docs.map(d => [d.id, d.data()]));
-            // Same predicate the caller was admitted by. Using a wider one here
-            // would show a participant the picks of someone the callable would
-            // refuse to serve — two definitions of membership, one door.
-            stillAMember = (uid: string) => isCanonicalMemberRecord(byUid.get(uid));
-        }
+        // ⚠️ FILTERED FROM `participantIds`, WHICH COSTS NOTHING — the pool doc
+        // is already loaded. An earlier revision read the WHOLE `members`
+        // subcollection per call, an O(roster) read added on top of the entries
+        // scan, on a path every member now polls. (qodo, re-review.)
+        //
+        // Safe to use HERE and not for admission: K9 made the array
+        // server-owned (`firestore.rules`), and "is this person still on the
+        // pool's roster" is exactly the question it answers — removal does
+        // `arrayRemove(uid)` on it. The CALLER gate stays strictly a canonical
+        // Member Record, because that one has to survive the entries that
+        // predate the lock.
+        const roster: unknown = pool.participantIds;
+        const stillAMember: ((uid: string) => boolean) | null = isParticipant && Array.isArray(roster)
+            ? (uid: string) => (roster as string[]).includes(uid)
+            : null;
 
         // The week's slate — same query the submit path and the scorer use, so
         // the reveal boundary is computed over exactly the games that count.

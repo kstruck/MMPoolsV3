@@ -705,7 +705,12 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     expect(dash).toContain('const commissionerRosterDep = isManager ? members : null;');
     // ...and dropping that dependency must not let a REMOVED member keep
     // rendering cached picks until the poll collects a denial. (codex r12.)
-    expect(dash).toContain('const viewerStillMember = isManager || !viewerUid || members.length === 0');
+    // 🛑 The revoke signal is `participantIds`, NOT the members snapshot:
+    // `subscribeToPoolMembers` reports a permission error as `[]`, and losing
+    // that read is exactly what removal causes — so a members-derived guard
+    // went quiet in the one case it existed for. (qodo re-review.)
+    expect(dash).toContain('|| castPool.participantIds.includes(viewerUid);');
+    expect(dash).not.toContain('members.length === 0');
     expect(dash).toContain('if (viewerStillMember) return;');
     expect(dash).toContain("const revealTabs: TabType[] = ['grid', 'standings', 'manager'];");
     expect(dash).toContain('if (!user || !wantsReveal) return;');

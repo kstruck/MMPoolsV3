@@ -471,7 +471,7 @@ describe('T2 — getPoolPicks, PER_GAME pick\'em', () => {
             id: GHOST, poolId: POOL, ownerUid: GHOST, userName: 'Ghost',
             picks: { [LOCKED_GAME]: 'DEN' },
         });
-        // No Member Record and not in participantIds — i.e. removed.
+        // No Member Record and NOT in participantIds — i.e. removed.
         const mine: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
         expect(mine.picks[GHOST]).toBeUndefined();
         expect(mine.counts[GHOST]).toBeUndefined();
