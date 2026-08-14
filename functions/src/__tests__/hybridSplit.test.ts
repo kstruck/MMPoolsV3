@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { hybridSplitProblem } from '../shared/hybridSplit';
-import { hybridSplitRefusal, hybridSplitNeedsClearing, touchesHybridSplitSettings } from '../lib/hybridSplitGate';
+import { hybridNoOpKeys, hybridSplitRefusal, hybridSplitNeedsClearing, touchesHybridSplitSettings } from '../lib/hybridSplitGate';
 
 /** The HYBRID entry-fee split (PLAN-HYBRID-SPLIT). Money — every branch pinned. */
 
@@ -87,5 +87,72 @@ describe('hybridSplitRefusal — type scoping (codex P2, r2)', () => {
   it('ignores fee edits on other pool types — not this gate\'s business', () => {
     expect(hybridSplitRefusal({ type: 'NFL_SURVIVOR', settings: {} }, { 'settings.entryFee': 30 })).toBeNull();
     expect(hybridSplitRefusal({ type: 'BRACKET', settings: {} }, { 'settings.entryFee': 30 })).toBeNull();
+  });
+});
+
+describe('hybridNoOpKeys — equal keys strip so they are never written', () => {
+  // qodo #12 post-merge (the waste) + codex P1 on the first fix (why the skip
+  // was wrong): a sparse stale patch matching the pre-read could clobber a
+  // concurrent fee+split commit into an invalid trio. Keys that strip are
+  // never written; presence over the stripped patch becomes the change test.
+  const pool = (settings: Record<string, unknown>) => ({ type: 'NFL_PICKEM', settings });
+  const stored = { entryFee: 25, payoutMode: 'HYBRID', hybridSplit: { weeklyPerEntry: 18, seasonPerEntry: 7 } };
+
+  it('strips all three when the patch re-sends exactly the stored values', () => {
+    expect(hybridNoOpKeys(pool(stored), {
+      'settings.entryFee': 25,
+      'settings.payoutMode': 'HYBRID',
+      'settings.hybridSplit': { weeklyPerEntry: 18, seasonPerEntry: 7 },
+    })).toEqual(['settings.hybridSplit', 'settings.payoutMode', 'settings.entryFee']);
+  });
+
+  it('strips nothing when the patch touches none of the three keys', () => {
+    expect(hybridNoOpKeys(pool(stored), { 'settings.lockBufferMinutes': 5 })).toEqual([]);
+  });
+
+  it('compares the split by NAMED FIELDS — property order must not matter', () => {
+    // JSON.stringify preserves insertion order; a Firestore read returning the
+    // keys reversed would have reported equal splits as changed and re-entered
+    // the transaction on every save. (codex P2, gate-fix r1.)
+    const reversed = { seasonPerEntry: 7, weeklyPerEntry: 18 };
+    expect(hybridNoOpKeys(pool(stored), { 'settings.hybridSplit': reversed }))
+      .toEqual(['settings.hybridSplit']);
+  });
+
+  it('treats null and undefined as the same absence', () => {
+    expect(hybridNoOpKeys(pool({ entryFee: 25, payoutMode: 'SEASON' }), {
+      'settings.hybridSplit': null,
+    })).toEqual(['settings.hybridSplit']);
+  });
+
+  it('keeps a changed entryFee', () => {
+    expect(hybridNoOpKeys(pool(stored), { 'settings.entryFee': 30 })).toEqual([]);
+  });
+
+  it('keeps a changed payoutMode while stripping the unchanged fee', () => {
+    expect(hybridNoOpKeys(pool(stored), {
+      'settings.entryFee': 25,
+      'settings.payoutMode': 'SEASON',
+    })).toEqual(['settings.entryFee']);
+  });
+
+  it('keeps a changed split even with the other two unchanged', () => {
+    expect(hybridNoOpKeys(pool(stored), {
+      'settings.entryFee': 25,
+      'settings.payoutMode': 'HYBRID',
+      'settings.hybridSplit': { weeklyPerEntry: 17, seasonPerEntry: 8 },
+    })).toEqual(['settings.payoutMode', 'settings.entryFee']);
+  });
+
+  it('keeps a split that first APPEARS on a pool that had none', () => {
+    expect(hybridNoOpKeys(pool({ entryFee: 25, payoutMode: 'HYBRID' }), {
+      'settings.hybridSplit': { weeklyPerEntry: 18, seasonPerEntry: 7 },
+    })).toEqual([]);
+  });
+
+  it('a split differing only in one field is NOT equal', () => {
+    expect(hybridNoOpKeys(pool(stored), {
+      'settings.hybridSplit': { weeklyPerEntry: 18, seasonPerEntry: 6 },
+    })).toEqual([]);
   });
 });

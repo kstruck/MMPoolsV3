@@ -19,7 +19,7 @@ import { loadBillingConfig } from './billing';
 import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } from './lib/poolUpdate';
 import { parityEditNeedsEntries, survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
 import { tiebreakerEditNeedsEntries, touchesWeeklyTiebreakerSetting, weeklyTiebreakerRefusal } from './lib/weeklyTiebreakerGate';
-import { hybridSplitNeedsClearing, hybridSplitRefusal, touchesHybridSplitSettings } from './lib/hybridSplitGate';
+import { hybridNoOpKeys, hybridSplitNeedsClearing, hybridSplitRefusal, touchesHybridSplitSettings } from './lib/hybridSplitGate';
 import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } from './lib/scoringLease';
 
 // Helper to determine if user can manage pool
@@ -469,6 +469,19 @@ export const updatePoolSettings = validated(
     // The hybrid split joins the same transaction: its invariant spans three
     // fields (split, payoutMode, entryFee) and must be judged against the pool
     // as it stands at write time, not at the pre-transaction read.
+    //
+    // Trio keys whose value equals the pre-read pool are DELETED from the
+    // patch, not merely used to skip the transaction. The manager UI re-sends
+    // unchanged `entryFee`/`payoutMode` on every save, so presence-keying made
+    // a contact-email edit pay for a transaction plus a scoring-lease check
+    // (qodo #12, post-merge on the split PR) — and the obvious skip is UNSAFE
+    // for sparse patches: a stale `{entryFee: 25}` matching the pre-read can
+    // clobber a concurrent `$30 = $20+$10` commit into an invalid trio (codex
+    // P1 on the first version of this fix). A key never written cannot clobber
+    // anything; presence over the stripped patch IS the change test.
+    for (const k of hybridNoOpKeys(pool as Record<string, unknown>, patch)) {
+        delete patch[k];
+    }
     const hybridTouched = touchesHybridSplitSettings(patch);
     if (touchesLockSettings(patch) || parityTouched || tiebreakerTouched || hybridTouched) {
         const bumpsLockRevision = touchesLockSettings(patch);

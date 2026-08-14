@@ -116,3 +116,34 @@ manager settings editor get the same two inputs plus a live check line:
 - No per-week payout records; `RecordPayoutsCard` unchanged.
 - No weeks constant anywhere.
 - Survivor untouched (no payoutMode).
+
+---
+
+## Post-merge addendum (2026-08-13 evening) — the update gate's trigger changed in #424
+
+Recorded here because the mechanics above are otherwise stale (qodo, on #424 —
+its "missing plan update" finding, absorbed on exactly this ground: a plan that
+describes superseded mechanics is a stale doc claim, not a historical record).
+
+**What shipped in #423:** the transactional gate fired on the PRESENCE of any
+trio key (`hybridSplit`/`payoutMode`/`entryFee`) in the patch. The manager UI
+sends the complete settings object on every save, so every ordinary settings
+edit paid for a transaction plus a scoring-lease check (qodo #12, post-merge).
+
+**What #424 changed:** trio keys whose value equals the pre-transaction pool
+read are **DELETED from the patch** before anything else looks at it —
+`hybridNoOpKeys` in `functions/src/lib/hybridSplitGate.ts`. Presence over the
+stripped patch is then the change test, so `touchesHybridSplitSettings` needed
+no second predicate.
+
+**Why deletion rather than skipping the transaction** (codex P1 on the first
+draft of the fix): the update schema permits sparse patches, and a stale
+`{entryFee: 25}` matching the pre-read could take the plain path and clobber a
+concurrent `$30 = $20 + $10` commit into an invalid `25 ≠ 20 + 10`. A key that
+is never written cannot clobber anything under any interleaving. The split
+compares by its two named numeric fields, never by serialization — property
+order must not reinstate the waste (codex P2).
+
+**What did NOT change:** the refusal logic, the clearing rule, the create-path
+validation, the rules guard. A patch that genuinely changes any trio value
+still takes the transaction and is re-judged against the in-transaction read.

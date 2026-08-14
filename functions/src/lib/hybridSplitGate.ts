@@ -20,6 +20,61 @@ export function touchesHybridSplitSettings(patch: Record<string, unknown>): bool
 }
 
 /**
+ * Are these two values of trio field `key` the same setting?
+ *
+ * `null` and `undefined` are the same absence (the clearing write stores
+ * deletes; older docs simply lack the key). The split object compares by its
+ * two NAMED numeric fields, never by serialization: `JSON.stringify` preserves
+ * insertion order, so a Firestore read returning `{seasonPerEntry,
+ * weeklyPerEntry}` against a UI object built the other way round would report
+ * equal splits as different — and every ordinary save would re-enter exactly
+ * the transaction path this module exists to avoid. (codex P2, gate-fix r1.)
+ */
+function sameTrioValue(key: string, a: unknown, b: unknown): boolean {
+  const av = a === null || a === undefined ? null : a;
+  const bv = b === null || b === undefined ? null : b;
+  if (av === null || bv === null) return av === bv;
+  if (key === 'hybridSplit') {
+    const ao = av as { weeklyPerEntry?: unknown; seasonPerEntry?: unknown };
+    const bo = bv as { weeklyPerEntry?: unknown; seasonPerEntry?: unknown };
+    return ao.weeklyPerEntry === bo.weeklyPerEntry && ao.seasonPerEntry === bo.seasonPerEntry;
+  }
+  return av === bv;
+}
+
+/**
+ * The trio keys this patch carries whose value EQUALS what is already stored —
+ * the keys the caller should DELETE from the patch before writing.
+ *
+ * Why deletion, and not merely skipping the transaction for a no-op patch
+ * (codex P1, gate-fix r1 — the first version of this fix did the latter and it
+ * was wrong): the update schema permits SPARSE patches. A stale
+ * `{settings.entryFee: 25}` that matches the pre-transaction read looks like a
+ * no-op, but if a concurrent manager meanwhile committed `$30 = $20 + $10`,
+ * plain-writing the fee back to 25 persists an invalid `25 ≠ 20 + 10` — and
+ * routing it through the transaction does not help either, because the refusal
+ * was skipped on the same stale comparison. A key that is NEVER WRITTEN cannot
+ * clobber anything under any interleaving; that is the whole safety argument,
+ * and it is stronger than the one it replaces.
+ *
+ * The perf win survives intact: the manager UI re-sends unchanged
+ * `entryFee`/`payoutMode` on every save, those keys strip, and
+ * `touchesHybridSplitSettings` over the STRIPPED patch becomes a change test —
+ * presence-keying and change-keying collapse into the same predicate.
+ */
+export function hybridNoOpKeys(
+  pool: Record<string, unknown> | undefined,
+  patch: Record<string, unknown>,
+): string[] {
+  const stored = (pool?.settings ?? {}) as Record<string, unknown>;
+  return KEYS.filter((k) => {
+    if (!(k in patch)) return false;
+    const key = k.slice('settings.'.length);
+    return sameTrioValue(key, patch[k], stored[key]);
+  });
+}
+
+/**
  * The settings as they would stand after this patch lands. Patch wins per key;
  * absent keys carry the stored value through — exactly what the per-key dotted
  * write will do.
