@@ -143,7 +143,9 @@ The boundary is the **same instant the picker's own deadline was**, so nobody is
 | Pick'em, per-game lock | per GAME, as each kicks off |
 | Pick'em in confidence or weekly-lock mode, Survivor, Margin | the whole WEEK at once, at its single deadline |
 
-**Who may read a reveal:** any **proven Member** of the Pool (Kevin's ruling, 2026-08-14 — *"make it visible for all users if pool is locked"*), the Commissioner, and Super Admin. A non-member is refused. Membership is proved by `isProvableMember`, and `participantIds` is server-owned for that reason — it is an authorization input, so it is protected in `firestore.rules` rather than manager-writable.
+**Who may read a reveal:** any **proven Member** of the Pool (Kevin's ruling, 2026-08-14 — *"make it visible for all users if pool is locked"*), the Commissioner, and Super Admin. A non-member is refused. Membership for THIS read is a **canonical Member Record** — one carrying a server-stamped `joinedAt`, which no client path can write. `participantIds` is deliberately **not** accepted here, and is separately server-owned in `firestore.rules` because it is an authorization input.
+
+> ⚠️ **Both halves are needed and they do different jobs.** The rules lock stops FUTURE manager writes; requiring a canonical record ignores the ones already there, since a pool created before that lock carries an array a manager could already have added anyone to. Locking a door does not evict who is inside. Cost, accepted by Kevin 2026-08-14: a member on a legacy pool with no server-written record sees no picks until a join path writes them one.
 
 > ⚠️ **This SUPERSEDES `PLAN-COMMISSIONER-BLIND-PICKS` Q5**, which read *"Does anything change for ordinary members? **No.**"* Members now see the same reveal a Commissioner does. What did **not** change is the TIMING — the widening is about **who**, never **when**.
 

@@ -11,14 +11,24 @@
  * picks, so no document-level rule can say "week 4 yes, week 5 no". Same reason
  * participants were moved to the standings projection in ADR 0005 Phase 2.
  *
- * Authorization, in words:
+ * Authorization, in words (WIDENED 2026-08-14 — see below):
  *   - SUPER_ADMIN            → every pick, every week, any time (Kevin's ruling).
  *   - pool owner / manager   → pick CONTENT only for the games whose effective
  *                              lock has passed, plus per-member pick COUNTS at
  *                              any time (the roster's completeness column).
- *   - anyone else            → permission-denied. Ordinary participants are NOT
- *                              a principal here; nothing about member visibility
- *                              changes in this plan (Q5).
+ *   - a MEMBER with a canonical Member Record
+ *                            → the SAME pick content, on the SAME boundary, and
+ *                              NO counts until the whole week reveals.
+ *   - anyone else            → permission-denied.
+ *
+ * 🛑 THE MEMBER PRINCIPAL REVERSES `PLAN-COMMISSIONER-BLIND-PICKS` Q5, which
+ * read *"Does anything change for ordinary members? No."* Kevin's ruling of
+ * 2026-08-14 — *"make it visible for all users if pool is locked"* —
+ * supersedes it (`PLAN-MEMBER-PICKS-VISIBILITY`).
+ *
+ * ⚠️ What did NOT change is the TIMING. The widening is about WHO, never WHEN:
+ * a member is handed the SAME `weekRevealFor` result a commissioner gets, so
+ * there is still exactly one definition of "locked" in the system.
  *
  * ⚠️ The response is assembled by ALLOWLIST of revealed game ids, never by
  * filtering a copy of the entry. A mixed-locked pick'em week is the case that
@@ -32,9 +42,11 @@ import { validated } from "./lib/validated";
 import { assertCallerRole } from "./lib/assertRole";
 import { getPoolPicksSchema } from "./schemas/pickReveal";
 import { weekRevealFor, fullReveal, weekPickCount, type WeekReveal } from "./lib/pickReveal";
-// The ONE membership predicate. Deliberately not re-derived here — see
-// `assertPickReader`'s header and `shared/memberRecord.ts`.
-import { isProvableMember } from "./shared/memberRecord";
+// The SERVER-STAMPED half of the membership evidence. Deliberately NOT
+// `isProvableMember`, which also accepts the manager-writable participantIds
+// array — see `assertPickReader`'s header for why that distinction is the
+// whole point here.
+import { isCanonicalMemberRecord } from "./shared/memberRecord";
 import type { NFLGame } from "./nflPoolTypes";
 
 const NFL_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
@@ -85,20 +97,31 @@ export interface PoolPicksResponse {
  * co-manager would gain per-member completion COUNTS before lock, which is the
  * commissioner capability K1 exists to keep scarce. (codex r1 on #414.)
  *
- * ⚠️ MEMBERSHIP IS `isProvableMember`, AND THAT MATTERS MORE THAN IT LOOKS.
- * The obvious test — `pool.participantIds.includes(uid)` — is what an earlier
- * draft of the plan proposed, and review round 2 killed it: the array was
- * client-writable by a manager, so anyone they added gained a DURABLE,
- * self-refreshing feed of every future reveal. Kevin's K9 ruling closes that at
- * the root by protecting `participantIds` in `firestore.rules`; this function
- * calls the canonical shared predicate rather than re-deriving one, because
- * "two doors with two copies is how one of them ends up wrong"
- * (`shared/memberRecord.ts`).
+ * 🛑 MEMBERSHIP HERE IS A **CANONICAL MEMBER RECORD**, NOT `isProvableMember`.
  *
- * `isProvableMember` needs the caller's Member Record, which this callable did
- * not previously read. Passing `undefined` would silently degrade it to the
- * participantIds-only test it exists to replace — so the record is fetched, and
- * the same fetch serves the departed-member filter below (D7/T8).
+ * That is a deliberate narrowing and it is the whole point. `isProvableMember`
+ * accepts EITHER a canonical record OR the pool's `participantIds` array, and
+ * that array was CLIENT-WRITABLE BY A MANAGER until this change. Kevin's K9
+ * ruling protects it in `firestore.rules` — but a rule only governs FUTURE
+ * writes. Every pool that existed before that deploy carries an array a manager
+ * could already have added anyone to, and locking the door does not evict who is
+ * inside. Anyone so added would gain a durable, self-refreshing feed of every
+ * future reveal. (codex r10; Kevin's ruling on it, 2026-08-14.)
+ *
+ * `joinedAt` is the discriminator and no client path can write it — every
+ * SERVER join path stamps it, and `firestore.rules` allows a client to touch
+ * only `memberReportedPaid`/`memberReportedAt` on this collection. So a
+ * canonical record is evidence a real join happened, which the array is not.
+ *
+ * ⚠️ THE COST, STATED PLAINLY: a member of a legacy or partially-backfilled
+ * pool whose Member Record predates the roster work sees nothing here until a
+ * server path writes them one. They keep every other member capability; only
+ * this read is withheld. That is the trade Kevin took over leaving a
+ * pre-existing grant standing.
+ *
+ * ⚠️ Do NOT "simplify" this back to `isProvableMember` to match the roster
+ * surfaces. It reads the same collection and answers a WIDER question on
+ * purpose; this callable is the one place where the array is not good enough.
  */
 type PickReaderKind = 'SUPER_ADMIN' | 'COMMISSIONER' | 'PARTICIPANT';
 
@@ -139,7 +162,7 @@ async function assertPickReader(
     // The participant branch. One document read, and only for a caller who is
     // neither admin nor commissioner — the two hot paths pay nothing for it.
     const memberSnap = await db.collection('pools').doc(poolId).collection('members').doc(uid).get();
-    if (isProvableMember(pool as Record<string, unknown>, memberSnap.data(), uid)) {
+    if (isCanonicalMemberRecord(memberSnap.data())) {
         return { kind: 'PARTICIPANT', isSuperAdmin: false };
     }
 
@@ -184,7 +207,10 @@ export const getPoolPicks = validated(
         if (isParticipant) {
             const membersSnap = await db.collection('pools').doc(poolId).collection('members').get();
             const byUid = new Map(membersSnap.docs.map(d => [d.id, d.data()]));
-            stillAMember = (uid: string) => isProvableMember(pool as Record<string, unknown>, byUid.get(uid), uid);
+            // Same predicate the caller was admitted by. Using a wider one here
+            // would show a participant the picks of someone the callable would
+            // refuse to serve — two definitions of membership, one door.
+            stillAMember = (uid: string) => isCanonicalMemberRecord(byUid.get(uid));
         }
 
         // The week's slate — same query the submit path and the scorer use, so

@@ -416,6 +416,43 @@ describe('T2 — getPoolPicks, PER_GAME pick\'em', () => {
         expect(boss.counts[ALICE]).toBe(2);       // the commissioner keeps it
     }, 30000);
 
+    /**
+     * 🛑 THE GRANDFATHERED-ROSTER TEST (codex r10, Kevin's ruling 2026-08-14).
+     *
+     * `participantIds` was CLIENT-WRITABLE BY A MANAGER until this change. K9
+     * protects it in firestore.rules, but a rule governs FUTURE writes — every
+     * pool that already existed carries an array a manager could have added
+     * anyone to, and locking the door does not evict who is inside.
+     *
+     * So membership here is a CANONICAL Member Record (`joinedAt`, which no
+     * client path can write), never the array. This is the test that fails if
+     * someone "simplifies" it back to `isProvableMember`.
+     */
+    it('a uid in participantIds with NO Member Record is REFUSED', async () => {
+        const GRANDFATHERED = 'blind-grandfathered';
+        await db.collection('pools').doc(POOL).update({
+            participantIds: admin.firestore.FieldValue.arrayUnion(GRANDFATHERED),
+        });
+        await expect(wGetPicks({
+            data: { poolId: POOL, week: 1 },
+            auth: { uid: GRANDFATHERED, token: {} } as any,
+        } as never)).rejects.toThrow(/members can read/i);
+    }, 30000);
+
+    it('a Member Record with no joinedAt is a FORGERY and is REFUSED', async () => {
+        // The pre-#344 claim path could mint a record carrying only
+        // memberReportedPaid/memberReportedAt. Existence is not evidence.
+        const FORGER = 'blind-forger';
+        await db.collection('pools').doc(POOL).collection('members').doc(FORGER).set({
+            uid: FORGER, poolId: POOL, memberReportedPaid: true, memberReportedAt: Date.now(),
+        });
+        await expect(wGetPicks({
+            data: { poolId: POOL, week: 1 },
+            auth: { uid: FORGER, token: {} } as any,
+        } as never)).rejects.toThrow(/members can read/i);
+        await db.collection('pools').doc(POOL).collection('members').doc(FORGER).delete();
+    }, 30000);
+
     it('a non-member is still REFUSED', async () => {
         await expect(wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asOutsider } as never))
             .rejects.toThrow(/members can read/i);
