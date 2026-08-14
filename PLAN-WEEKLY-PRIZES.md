@@ -281,9 +281,18 @@ therefore stated explicitly. (codex, plan review r1.)
 
 | `payoutMode` | Weekly pot for one week |
 |---|---|
-| `HYBRID` | `hybridSplit.weeklyPerEntry × entries ÷ weeksInSeason` |
-| `WEEKLY` | `entryFee × entries ÷ weeksInSeason` — the whole fee is the weekly pot, by definition of the mode |
+| `HYBRID` | `hybridSplit.weeklyPerEntry × entries × charityFactor ÷ weeksInSeason` |
+| `WEEKLY` | `entryFee × entries × charityFactor ÷ weeksInSeason` — the whole fee is the weekly pot, by definition of the mode |
 | `SEASON` | **no weekly pot; the list renders places and scores with no Prize column.** Not an error state — a season pool genuinely has no weekly prize, and printing a $0 column would read as one |
+
+⚠️ **`charityFactor` is not optional garnish — it is `1 - charity.percentage/100`
+when charity is enabled, and 1 otherwise.** `PayoutsPanel.tsx:318` already takes
+it off each pot BEFORE applying place percentages, because the PotBreakdown tells
+members donations come out before payouts. Computing the weekly pot gross would
+overstate every prize on a charity pool and, across the paid places, award money
+that was promised to the charity. Match the panel exactly — including its
+`Math.floor` convention — or the same pool prints two different prize figures on
+two screens. (codex P1, plan review r8.)
 
 ⚠️ **FREEZE THE ENTRY COUNT WITH THE POT, NOT JUST THE DIVISOR.** Freezing
 `weeksInSeason` alone leaves `entries` live, and `joinNFLPool` lets a member join
@@ -407,6 +416,17 @@ plan invented a `place` key, which would have left an implementer passing
 rank — awarding nothing, or awarding wrongly. The helper takes the stored shape
 verbatim, with **no normalization step**, because a normalization step is one
 more place the two can drift. (codex P2, plan review r3.)
+
+⚠️ **Ranks must be UNIQUE, and nothing enforces that today.**
+`payoutPlaceSchema` validates each array item independently, so
+`[{rank:1,pct:50},{rank:1,pct:20}]` is a *valid* configuration. The helper would
+then have two answers for rank 1 and no stated rule — sum them, take the first,
+take the last — which is an ambiguous award on real money. **Enforce uniqueness in
+create AND update validation** (the update gate, per the #424 lesson, not the
+permissive schema alone) rather than teaching the helper to guess. A pool that
+already holds duplicates is a pre-existing-data question: the helper should
+**throw** rather than silently pick one, so it surfaces as an error the
+commissioner can fix instead of a quietly wrong prize. (codex P2, plan review r8.)
 
 ### 4c. The invariants the tests must pin
 
