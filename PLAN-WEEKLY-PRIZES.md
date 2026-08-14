@@ -148,11 +148,20 @@ later schedule change — a flex move, a postponement, a game gaining or losing
 game. That is the §0 defect exactly, arriving through the schedule instead of
 through the settings. (codex P1, plan review r1.)
 
-So: **persist the resolved target game id at first submission of the week**, for
-every rule that asks for a prediction, and judge against the stored id
-thereafter. Same shape and same reasoning as `frozenHardLockFor`
+So: **persist the resolved target at first submission of the week**, for every
+rule that asks for a prediction, and judge against the stored value thereafter.
+Same shape and same reasoning as `frozenHardLockFor`
 (`shared/weeklyHardLock.ts`) — freeze the thing the member was told, at the
 moment they act on it.
+
+⚠️ **Freeze a game id LIST, not a single id.** `MNF_COMBINED` survives as a
+legacy rule (§0) and its target is *every* Monday game, not one — so a singular
+stored id would make a legacy combined prediction score a single game after the
+freeze, silently changing the rule for exactly the existing pools §0 exists to
+protect. The frozen value is therefore `string[]`: one element for
+`MNF_LAST_GAME` / `MNF_FIRST_GAME` / the Monday-less fallback, and the whole
+Monday set for `MNF_COMBINED`. The scorer sums the frozen list. (codex P1, plan
+review r4.)
 
 Residual to state on the rules page: if the frozen game is later **cancelled**,
 there is no combined score to compare against. Recommendation: the week's
@@ -236,6 +245,16 @@ therefore stated explicitly. (codex, plan review r1.)
 | `HYBRID` | `hybridSplit.weeklyPerEntry × entries ÷ weeksInSeason` |
 | `WEEKLY` | `entryFee × entries ÷ weeksInSeason` — the whole fee is the weekly pot, by definition of the mode |
 | `SEASON` | **no weekly pot; the list renders places and scores with no Prize column.** Not an error state — a season pool genuinely has no weekly prize, and printing a $0 column would read as one |
+
+⚠️ **`weeklyPerEntry × entries` is the SEASON-LONG weekly total, which is why it
+is divided.** A codex round argued the division understates every weekly prize,
+on the reading that `weeklyPerEntry × entries` is already one week's pot. The
+shipped UI says otherwise and is the evidence: `PayoutsPanel.tsx:334` renders
+that figure labelled **"weekly total"**, and its own tooltip (`:382`) reads *"the
+entry fee splits $X into the weekly prize **pots**"* — plural, i.e. the money set
+aside for weekly prizes across the whole season. One week's pot is that total
+divided by the number of weeks. **Finding rejected**; recorded here because it is
+the kind of thing that will be re-raised.
 
 `entries` is the count of entries the pot is actually drawn from. **Decision D8:**
 is that every entry, or only entries marked `PAID`? Recommendation: **every
