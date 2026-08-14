@@ -184,3 +184,102 @@ authorization predicate replaced with the repo's canonical one.
 and the plan's own history says so: round 1 finds defects in the plan, round 2
 finds defects in the fixes. **Round 2 must run against the revised plan before
 Kevin's sign-off is meaningful**, and the sweep (T7) has not been written at all.
+
+---
+
+## Round 2 — adversarial read of the ROUND-1 FIXES (4 findings)
+
+The round-1 log predicted this round would find defects in the fixes. It did,
+including one that **overturns a severity call I made in round 1**.
+
+### 1. HIGH — **ACCEPTED**
+
+> T1/T8 cannot use `isProvableMember` faithfully with the callable's current data.
+> The predicate requires `(pool, memberRecord, uid)` and the callable has only the
+> pool and the entries (`nflPickReveal.ts:118-120, 185-201`). Passing `undefined`
+> for `memberRecord` **silently reduces it to `participantIds` only**, rejecting
+> the canonical records it intentionally accepts. Cost: one extra read for T1 plus
+> one per entry for T8; a bulk `members` query reduces it to ~one read per Member
+> Record but still adds O(roster) billed reads to every invocation.
+
+**Accepted.** D5's fix was "call the canonical predicate" and it did not notice
+that calling it *correctly* needs data the callable never reads. Passing
+`undefined` would have reproduced the exact hand-rolled `participantIds` check
+D5 was written to remove — **while looking like it had been fixed**, which is the
+worse failure.
+
+**Plan changed:** T1/T8 now specify a single bulk `members` query, read once and
+reused for the caller check and the row filter. The O(roster) read cost is stated
+in D6 rather than discovered in a billing alert.
+
+### 2. MEDIUM — **ACCEPTED**
+
+> T8 filters before response assembly, so it also removes departed entries for
+> commissioners and SUPER_ADMIN — contradicting `fullReveal` (`:141-143`) and the
+> plan's own "SUPER_ADMIN gets everything, always".
+
+**Accepted.** I wrote a global filter for a participant-shaped problem. No
+current screen breaks (the reviewer checked: `buildMemberStandings` already drops
+those rows), but it silently narrows a privileged API.
+
+**Plan changed:** T8 is **scoped to the participant principal only**. Owner,
+manager and SUPER_ADMIN keep today's unfiltered response.
+
+### 3. HIGH — **ACCEPTED. This REVERSES my round-1 rejection.**
+
+> The round-1 severity rejection is not sound. A manager can client-write
+> `participantIds` on a `DRAFT`/`OPEN` pool and grant an arbitrary account
+> **continuing, self-service** access to the revealed-pick feed. That account can
+> poll independently and obtain FUTURE reveals without the manager making another
+> disclosure. "A manager could simply tell them" is not equivalent to granting an
+> authenticated principal a durable API capability. The shared predicate's comment
+> establishes membership semantics for its existing roster/payment uses; it does
+> not settle whether manager-controlled enrollment is sufficient authority for
+> this newly sensitive read.
+
+**Accepted, and the round-1 rejection is withdrawn.** The distinction is real and
+I collapsed it: a one-time verbal disclosure and a durable, self-refreshing API
+capability are different things, and only the second survives the manager losing
+interest. My reasoning was also circular in a way I did not notice — I cited
+`isProvableMember`'s comment as settling the question, but that comment was
+written about **roster and payment** surfaces, and a comment cannot pre-authorise
+a read that did not exist when it was written.
+
+**Plan changed:** the residual in D5 is promoted from "accepted, written down" to
+**K9 — a decision Kevin must make**, with the durable-capability framing stated
+plainly. It is now the most consequential open question in the plan.
+
+### 4. MEDIUM — **ACCEPTED. The sharpest finding of the round.**
+
+> T9 protects only the easy half of the cross-week leak. For weekly pools the pick
+> key is the WEEK NUMBER, admitted only when `weekRevealed` is true — `revealedGameIds`
+> alone does not authorize it (`nflPickReveal.ts:145-150`). Concrete failure: cache
+> week 1 revealed and week 2 open; a multi-week component reads a shared
+> `weekRevealed` while rendering all columns and renders `row.picks["2"]` for the
+> week-2 column, leaking week 2.
+
+**Accepted.** T9 said "each week keeps its own `revealedGameIds`" and that is the
+wrong field for exactly the pool types B exists to serve. Survivor and Margin key
+picks by week number, so `weekRevealed` is their allowlist — and a single shared
+copy of it across a multi-week grid is a leak with a concrete reproduction.
+
+**Plan changed:** T9 now requires each column to carry **its own whole cached
+response** — `revealedGameIds` AND `weekRevealed` — and D2 gains the rule that a
+weekly-pool cell renders only from the response for ITS week. A test with week 1
+revealed and week 2 open is named as required evidence.
+
+---
+
+## Resolution status after round 2
+
+**4 findings, 4 accepted. One of them reversed a round-1 severity rejection**,
+which is the single best argument in this log for not stopping at one round.
+
+⚠️ **STOPPING HERE DELIBERATELY, AND NOT BECAUSE IT CONVERGED.** Round 2's
+finding 3 turned the plan's central authorization question into an open product
+decision (**K9**). Spending further paid review rounds on a plan whose main
+question is unanswered reviews a moving target — the answer to K9 changes T1, D5
+and the threat model together. **Round 3 runs after Kevin answers §6**, and the
+sweep (T7) is still not written.
+
+**Nine questions now block implementation. No code exists.**
