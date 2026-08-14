@@ -12,7 +12,9 @@ import {
   weekValueFor,
   scoredWeekCount,
   unwinnableGameIds,
+  resultsFootnote,
   type ResultsRow,
+  type ResultsView,
 } from '../../utils/nflResults';
 
 /**
@@ -315,11 +317,14 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
       </div>
 
       <div className="px-5 py-3 border-t border-line bg-surface text-[11px] font-body text-muted">
-        {isMargin
-          ? 'Scored weeks only. A week with no number has not been scored yet — it is not a zero.'
-          : `Max is the most points anyone could score in ${nflWeekLabel(seasonType, week)} — ${
-              settings.confidenceMode ? 'every confidence weight correct' : 'every pick correct'
-            }, counting only games that can still be won. No Points counts every graded pick that earned nothing, so a tie or a cancelled game is included there.`}
+        {resultsFootnote({
+          // Margin's WEEKLY view has neither a Max nor a No Points column — it
+          // shows the week's net margin — so it takes the grid caption's honest
+          // "a blank week is not a zero" line rather than the Pick'em one.
+          view: isMargin && view === 'WEEKLY' ? 'SUMMARY' : (view as ResultsView),
+          weekLabel: nflWeekLabel(seasonType, week),
+          confidenceMode: !!settings.confidenceMode,
+        })}
       </div>
     </div>
   );
