@@ -67,6 +67,18 @@ describe('weeklyMaxPoints', () => {
         }
     });
 
+    it('falls when a game becomes unwinnable — the same fall for every player', () => {
+        // Max is max POSSIBLE, not max STILL ATTAINABLE: it never moves because
+        // one player's picks went wrong, but it DOES step down when a game is
+        // cancelled or pushes, because those points stopped existing for
+        // everybody at once. Pinned because the doc comment once claimed the
+        // opposite. (qodo on PR #427.)
+        expect(weeklyMaxPoints(16, false)).toBe(16);
+        expect(weeklyMaxPoints(15, false)).toBe(15);   // one game cancelled
+        expect(weeklyMaxPoints(16, true)).toBe(136);
+        expect(weeklyMaxPoints(15, true)).toBe(135);   // the lowest weight, 1, drops out
+    });
+
     it('is 0 on an empty or nonsensical slate rather than NaN', () => {
         expect(weeklyMaxPoints(0, true)).toBe(0);
         expect(weeklyMaxPoints(0, false)).toBe(0);

@@ -31,12 +31,22 @@ export interface ResultsRow {
  * The maximum points ONE player could have scored in a week — the denominator
  * the Weekly Results page's "Max" column reports.
  *
- * ⚠️ This is max POSSIBLE for the week, not max STILL ATTAINABLE. Kevin's
- * reference screenshot does not disambiguate the two and this is the reading
- * that does not move: it is the same number in every row and it does not change
- * as games finish, so a player's Points/Max reads as a score out of a fixed
- * total rather than a target that shrinks under them. Named in the PR body for
- * Kevin to veto.
+ * ⚠️ This is max POSSIBLE for the week, not max STILL ATTAINABLE — the
+ * difference being that it never falls because a PLAYER's picks went wrong. It
+ * is the same number in every row, so Points/Max reads as a score out of a
+ * shared total rather than a target that shrinks under one player. Kevin's
+ * reference screenshot does not disambiguate the two; named in the PR body for
+ * him to veto.
+ *
+ * ⚠️ **It is NOT a constant for the week, and an earlier version of this comment
+ * wrongly said it "does not change as games finish".** The caller passes the
+ * count of games that can still be WON (`unwinnableGameIds`), so Max DOES fall
+ * — once, per game — when a game is cancelled or ends in a push, because at
+ * that moment the points behind it stopped existing for everyone at the same
+ * time. That is the intended behaviour: the alternative is a denominator that
+ * includes points the scorer can provably never award. What it never does is
+ * move for one player and not another. (qodo on PR #427, catching a
+ * doc/behaviour mismatch introduced by the codex r1 fix.)
  *
  * Confidence mode: weights on an N-game week are unique and drawn from
  * [17-N .. 16] (`validateConfidenceValues`), so the best case is every weight
