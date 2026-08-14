@@ -206,6 +206,7 @@ migration; entries without the field have had no autopicks, which is true.
 | **D4** | Is `#` (ineligible) visible to every member, or only to the commissioner and the member themselves? | **Everyone.** It changes who is competing for the season prize, and a prize rule that only some players can see is worse than no rule. |
 | **D5** | Does an autopicked week still SCORE normally (points count, just not toward season-prize eligibility)? | **Yes.** Kevin's complaint is about *winning the season prize* on autopicks, not about the picks being worthless. This also keeps the weekly prizes untouched. |
 | **D6** | Do **commissioner proxy picks** (`proxyPick`) count toward the limit? | **No, and the rules page should say so.** A human chose those teams and the commissioner is accountable for them — that is the opposite of the "just used autopick all season" behaviour you described. But it is a pick the member did not enter, so it must be ruled on explicitly rather than left to whoever implements the counter. |
+| **D7** | When does `autopickLimit` stop being editable — **(i)** immutable once the season opens, or **(ii)** snapshotted onto the entry the first time an autopick is recorded? (§1c) | **(i) Lock it at season open.** Without a lifecycle rule, lowering the limit in week 12 retroactively marks members `#` for weeks they played under a looser rule. (i) is simpler and matches the existing tiebreaker freeze gate; (ii) is more permissive but leaves members in the same pool judged by different thresholds, which is hard to explain on a rules page. |
 
 ---
 
