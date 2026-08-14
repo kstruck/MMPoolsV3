@@ -171,6 +171,20 @@ protect. The frozen value is therefore `string[]`: one element for
 Monday set for `MNF_COMBINED`. The scorer sums the frozen list. (codex P1, plan
 review r4.)
 
+⚠️ **Freeze it ONCE PER POOL-WEEK, not per entry.** Storing the target on each
+entry as that member submits means a schedule change between two members' submits
+gives them **different targets for the same week** — the pick sheet would show one
+game and the scorer would use another, and the two members' `tiebreakDiff` values
+would be measured against different totals, which makes them incomparable in a
+cascade that decides money.
+
+So: a pool-week-level map (`pool.frozenTiebreakTargets.<week> = string[]`),
+initialized **atomically on the first submission of that week** and never
+rewritten, and **both** the pick-sheet copy and the scorer resolve from it
+thereafter. One target per pool-week is the invariant; "what the member was told"
+is only correct if every member was told the same thing. (codex P2, plan review
+r5.)
+
 Residual to state on the rules page: if the frozen game is later **cancelled**,
 there is no combined score to compare against. Recommendation: the week's
 tiebreak becomes unbreakable and the tie is shared, which is the same outcome as
@@ -218,10 +232,17 @@ and unordered by construction**. A pool configured `[{rank:1},{rank:3}]` has
 `length === 2`, so ranking only the top two omits the third-place recipient
 entirely and their configured payout can never be shown or split.
 
-The correct depth is **`max(places[].rank)`**, and ties must be allowed to run
-past it: three players tied at rank 2 occupy ranks 2, 3 and 4, so a payout list
-ending at rank 3 still needs rank 4 computed to know that the third of them falls
-outside the money. (codex P1, plan review r3.)
+The correct depth is **`max(places[].rank)`**, and the ranking must be allowed to
+run past it so a tie straddling the boundary is seen whole. (codex P1, plan
+review r3.)
+
+⚠️ **Running past the last paid rank does NOT mean the overflowing players miss
+out** — an earlier draft said it did, contradicting §4. Worked example, payouts
+to rank 3, three players tied at rank 2: they consume ranks 2, 3 and 4; the
+**paid** ranks inside that span are 2 and 3; those two prizes sum and split
+**three** ways. Nobody in the tie is dropped, and no earned payout is left
+unallocated. Rank 4 has to be computed to know the tie ends there and the next
+player starts at rank 5 — not to exclude anyone. (codex P2, plan review r5.)
 
 Deriving places client-side is not possible and the reason is specific: the
 client can rank on `weeklyPoints`, but it cannot break a tie, because breaking it
