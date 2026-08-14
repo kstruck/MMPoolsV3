@@ -124,16 +124,33 @@ those two can disagree, and the one the member screenshots is the wrong one.
 
 ### 1e. The counter's storage shape
 
-On the entry document:
+On the entry document, **keyed by week**:
 
 ```
-autopickWeeks?: Array<{ week: number; source: 'SYSTEM' | 'QUICK_PICKS' }>
+autopickWeeks?: Record<string, { source: 'SYSTEM' | 'QUICK_PICKS' }>
+//              ^^^^^^ week number as the key — a MAP, not an array
 ```
 
-A list, not a count, and tagged with its source. Three reasons:
+⚠️ **A map, not `Array<{week, source}>`, and that is the whole point.** The first
+draft of this plan specified an array while claiming in the next line that it was
+idempotent because "a set keyed by week cannot double-count". An array has no set
+semantics: a retry, a concurrent pass, or a later record for the same week
+appends a second item, the count goes up, and a member crosses the limit and is
+marked `#` — **ineligible for prize money** — on the strength of a duplicate
+write. (codex P2, plan review r1.)
 
-- **Idempotent.** A rescore or a repeated pass must not double-count; a set keyed by week cannot.
-- **Auditable.** "Which weeks?" is the first question a member will ask about a `#`, and a bare integer cannot answer it.
+A map makes the de-duplication structural rather than a rule the writer has to
+remember, and the write is a merge on `autopickWeeks.<week>`, so it is idempotent
+by construction. Eligibility counts `Object.keys(...).length`, filtered by source
+if D1 lands on (c).
+
+Whatever the shape, the writer takes a **transaction or a field-path merge**, never
+a read-modify-append.
+
+Three reasons for a per-week record rather than a bare count:
+
+- **Idempotent**, per the above — the key IS the deduplication.
+- **Auditable.** "Which weeks?" is the first question a member will ask about a `#`, and an integer cannot answer it.
 - **It makes (a)-now / (c)-later a non-breaking change.** Adding `QUICK_PICKS` entries later does not restate anything already stored.
 
 ⚠️ **Additive, and written only by whatever eventually authors an autopick.** No

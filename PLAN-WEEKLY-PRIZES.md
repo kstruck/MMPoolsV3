@@ -177,9 +177,24 @@ page renders "not published for this week" rather than a fabricated list.
 Firestore `set()` throws on a literal `undefined`, so the field is **omitted**,
 never written as undefined.
 
-### 3b. The weekly pot — and the weeks-count problem
+### 3b. The weekly pot — per payout mode
 
-Weekly pot for one week = `hybridSplit.weeklyPerEntry × entries ÷ weeksInSeason`.
+⚠️ **`hybridSplit` exists ONLY on `payoutMode: HYBRID`** — it is absent, and
+invalid, on the others. D7 asks for the list on `WEEKLY` pools too, so a single
+hybrid formula leaves that mode with no computable prize at all. Both modes are
+therefore stated explicitly. (codex, plan review r1.)
+
+| `payoutMode` | Weekly pot for one week |
+|---|---|
+| `HYBRID` | `hybridSplit.weeklyPerEntry × entries ÷ weeksInSeason` |
+| `WEEKLY` | `entryFee × entries ÷ weeksInSeason` — the whole fee is the weekly pot, by definition of the mode |
+| `SEASON` | **no weekly pot; the list renders places and scores with no Prize column.** Not an error state — a season pool genuinely has no weekly prize, and printing a $0 column would read as one |
+
+`entries` is the count of entries the pot is actually drawn from. **Decision D8:**
+is that every entry, or only entries marked `PAID`? Recommendation: **every
+entry**, matching how the pool's own money model already talks about the pot, and
+say so on the page — the platform moves no money, so this is a stated assumption
+rather than a transfer.
 
 **There is no canonical weeks constant** (measured; `PLAN-HYBRID-SPLIT` §1), and
 `18` must not be hardcoded — a preseason pool has four.
@@ -196,10 +211,30 @@ Two candidates, **decision D5**:
 | **Derive at scoring time** from `nfl_games` | No new stored field, always matches the real schedule | The divisor can MOVE if the schedule import changes mid-season, silently re-pricing earlier weeks |
 | **Store `weeksInSeason` on the pool at creation** | Frozen; a week's prize is decided once and stays decided | A pool created before the schedule was imported has nothing to freeze |
 
-**Recommendation: store it at creation, fall back to deriving when it is absent.**
-A prize that changes after it was announced is worse than a prize computed from a
-slightly stale week count. This mirrors the `frozenHardLockFor` precedent
-(`shared/weeklyHardLock.ts`), which exists for exactly this class of problem.
+**Recommendation: store it at creation, and FREEZE-ON-FIRST-PUBLISH when it is
+absent.**
+
+⚠️ "Fall back to deriving" is NOT sufficient, and this plan said exactly that in
+its first draft. Every pool that exists today lacks the field, and a pool created
+before its schedule import lacks it too — so the fallback path is the *common*
+path, not the edge case. Deriving it on every scoring pass leaves the divisor
+floating for precisely those pools, and a later schedule import re-prices weekly
+prizes that were already published. That is the very guarantee this section
+claims to provide. (codex P1, plan review r1.)
+
+So the rule is:
+
+1. `pool.weeksInSeason` present → use it. Never recomputed.
+2. Absent, and a weekly prize is about to be published for the first time → derive it from `nfl_games`, **write it to the pool in the same transaction**, and use the written value.
+3. Absent and nothing is being published → derive for display only, and label the figure provisional.
+
+Step 2 is a **server write to an existing pool document**, so it is a
+prod-data-touching path: kill-switch + dry-run default, `mmp-change-control`
+Rule 1. It writes one previously-absent field and never overwrites a present one.
+
+This mirrors `frozenHardLockFor` (`shared/weeklyHardLock.ts`), which exists for
+exactly this class of problem — freeze the number at the moment it first starts
+mattering, not before.
 
 ### 3c. Rounding
 
@@ -278,7 +313,8 @@ Stated explicitly because the scorer is LIVE (`nflAutoScoreJob` `*/5`):
 | **D4** | Margin season-tie cascade: reuse `positiveWeeks` → `bestWeek`? | **Yes**, and state it on the rules page. `negativeBurden` reads as a penalty, not a record. |
 | **D5** | Weeks-in-season: freeze at creation, or derive at scoring time? | **Freeze at creation, derive as fallback.** A prize that moves after it was announced is the worse failure. |
 | **D6** | Whole-dollar rounding remainder: to first place, or unallocated and named? | **Unallocated and named.** The platform moves no money; naming the remainder is honest, inventing a rule is not. |
-| **D7** | Is the Weekly Winners List shown on `payoutMode: WEEKLY` pools too, or HYBRID only? | **Both.** A WEEKLY pool is *entirely* weekly prizes; withholding the list there makes least sense. |
+| **D7** | Is the Weekly Winners List shown on `payoutMode: WEEKLY` pools too, or HYBRID only? | **Both** (see §3b for each mode's pot). A WEEKLY pool is *entirely* weekly prizes; withholding the list there makes least sense. A SEASON pool gets the list with no Prize column. |
+| **D8** | Is the pot drawn from every entry, or only entries marked `PAID`? | **Every entry**, stated on the page. The platform moves no money, so this is a printed assumption, not a transfer. |
 
 ---
 
