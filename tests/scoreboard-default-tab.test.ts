@@ -26,20 +26,39 @@ import { resolve } from 'node:path';
  * selection) without adding or updating any tests to cover the new default.")
  */
 
-const src = readFileSync(
+const raw = readFileSync(
   resolve(__dirname, '..', 'src/components/Scoreboard.tsx'),
   'utf8',
 );
 
+/**
+ * ⚠️ COMMENTS ARE BLANKED BEFORE SCANNING, and that is load-bearing.
+ *
+ * Scanning raw source means a comment can satisfy an assertion while the
+ * executable code regresses — this file's own header comment names the tabs, so
+ * the "all three tabs still reachable" check below would pass on a component
+ * that had deleted one. This repo has already had a guard fooled by a name that
+ * appeared only in a comment, and both sibling suites
+ * (`admin-surface-invariants`, `nfl-surface-invariants`) strip comments for
+ * exactly this reason. (qodo on PR #426.)
+ */
+const src = raw
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+  .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
 describe('Live Scoreboard opens on NFL', () => {
   it('initializes activeTab to nfl', () => {
-    expect(src).toMatch(
-      /useState<'nfl' \| 'college' \| 'basketball'>\('nfl'\)/,
-    );
+    // Tolerant of formatting, exact about the VALUE. Pinning the literal
+    // one-line spelling meant a prettier reflow or a reordered union broke CI
+    // while the default was still correct — friction with no safety in it.
+    // The union members are asserted separately below, so nothing is lost.
+    // (qodo on PR #426.)
+    expect(src).toMatch(/useState<[^>]*>\(\s*'nfl'\s*\)/);
   });
 
   it('does not initialize it to basketball', () => {
-    expect(src).not.toContain("'basketball'>('basketball')");
+    expect(src).not.toMatch(/useState<[^>]*>\(\s*'basketball'\s*\)/);
   });
 
   it('still offers all three tabs, so the default is a default and not a removal', () => {
