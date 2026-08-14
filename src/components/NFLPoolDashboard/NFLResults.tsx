@@ -71,13 +71,12 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
   // VOID and a tie (or an exact spread cover) grades PUSH — all three earn
   // nothing, so counting them would print a total the scorer can never award.
   // (codex r1.)
-  const { weekSlateCount, weekScoreableCount, unwinnableCount } = useMemo(() => {
+  const { weekSlateCount, weekScoreableCount } = useMemo(() => {
     const slate = gamesForPoolWeek(games || [], pool as any, week);
     const unwinnable = unwinnableGameIds(slate, settings.pickMode === 'ATS');
     return {
       weekSlateCount: slate.length,
       weekScoreableCount: slate.length - unwinnable.size,
-      unwinnableCount: unwinnable.size,
     };
   }, [games, pool, week, settings.pickMode]);
   const maxPoints = weeklyMaxPoints(weekScoreableCount, !!settings.confidenceMode);
@@ -179,7 +178,7 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                     <th className={`${TH} text-right w-24`}>Points</th>
                     <th className={`${TH} text-right w-24`}>Max</th>
                     <th className={`${TH} text-right w-24`}>Correct</th>
-                    <th className={`${TH} text-right w-28`}>Incorrect</th>
+                    <th className={`${TH} text-right w-28`}>No Points</th>
                   </>
                 )}
               </tr>
@@ -193,21 +192,26 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                 // zero until the scorer has published the week.
                 const correct = wr?.correct;
                 const total = wr?.total;
-                // ⚠️ `total - correct` is "graded picks that did not WIN", which
-                // is the same thing as "incorrect" only when the week contains
-                // no push and no void. A tie, an exact spread cover and a
-                // cancelled game all grade to neither W nor L and earn nothing,
-                // so they land in this subtraction too.
+                // 🛑 THIS COLUMN IS "No Points", NOT "Incorrect" — the rename is
+                // the fix, not a cosmetic choice.
                 //
-                // The exact per-player count is NOT derivable here: it needs the
-                // per-game grade map, which `buildStandingsRows` strips from the
-                // member-readable projection by allowlist (it is bulky, and this
-                // page is not the place to reintroduce it). So on a week that
-                // HAS an unwinnable game the number is marked and the footnote
-                // says what it includes, rather than being quietly asserted as a
-                // loss count. On every other week — the overwhelmingly common
-                // case — it is exact and unmarked. (codex r1.)
-                const incorrect =
+                // `total - correct` is graded picks that did not WIN. That is
+                // the same set as "incorrect" only on a week with no push and
+                // no void: a tie, an exact spread cover and a cancelled game all
+                // grade to neither W nor L, earn nothing, and land in this
+                // subtraction. A player with one correct pick and one push would
+                // have been printed as having 1 incorrect.
+                //
+                // The exact loss count is NOT derivable here. It needs the
+                // per-game grade map, and `buildStandingsRows` strips that from
+                // the member-readable projection by allowlist — this page is not
+                // the place to reintroduce it. An asterisk and a footnote were
+                // tried first and rejected: annotating a wrong number leaves it
+                // wrong. So the header states what the figure IS, which is true
+                // on every week without exception. (codex r1 raised it, r3
+                // refused the footnote; Kevin's reference site labels this
+                // column "Incorrect" — named in the PR for his ruling.)
+                const noPoints =
                   typeof correct === 'number' && typeof total === 'number' ? total - correct : null;
                 return (
                   <tr key={row.id} className={rowClass(row)}>
@@ -227,12 +231,7 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                           {typeof correct === 'number' ? correct : dash}
                         </td>
                         <td className={`${TD} text-right text-muted font-bold`}>
-                          {incorrect === null ? dash : (
-                            <>
-                              {incorrect}
-                              {unwinnableCount > 0 && <span className="text-faint">*</span>}
-                            </>
-                          )}
+                          {noPoints === null ? dash : noPoints}
                         </td>
                       </>
                     )}
@@ -316,25 +315,11 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
       </div>
 
       <div className="px-5 py-3 border-t border-line bg-surface text-[11px] font-body text-muted">
-        {isMargin ? (
-          'Scored weeks only. A week with no number has not been scored yet — it is not a zero.'
-        ) : (
-          <>
-            {`Max is the most points anyone could score in ${nflWeekLabel(seasonType, week)} — ${
+        {isMargin
+          ? 'Scored weeks only. A week with no number has not been scored yet — it is not a zero.'
+          : `Max is the most points anyone could score in ${nflWeekLabel(seasonType, week)} — ${
               settings.confidenceMode ? 'every confidence weight correct' : 'every pick correct'
-            }, counting only games that can still be won. Correct and Incorrect count picks the scorer has graded so far.`}
-            {unwinnableCount > 0 && (
-              <>
-                {' '}
-                <strong>
-                  * {unwinnableCount} {unwinnableCount === 1 ? 'game' : 'games'} this week
-                  {' '}ended in a tie or was cancelled and awarded nobody points. Those picks are
-                  counted under Incorrect because this page cannot tell who picked them.
-                </strong>
-              </>
-            )}
-          </>
-        )}
+            }, counting only games that can still be won. No Points counts every graded pick that earned nothing, so a tie or a cancelled game is included there.`}
       </div>
     </div>
   );
