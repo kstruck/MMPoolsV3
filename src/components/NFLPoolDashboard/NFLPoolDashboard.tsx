@@ -232,22 +232,36 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   const viewerUid = user?.id || '';
   // Every read of the cache goes through this — pool AND viewer must both match.
   const revealsForPool = reveal.poolId === pool.id && reveal.uid === viewerUid ? reveal.byWeek : {};
+  // 🛑 AUTHORIZATION GENERATION. Bumped the moment the server declines this
+  // viewer, and captured by every request before it goes out.
+  //
+  // Without it the denial handler below is defeated by ordering alone: a member
+  // removed mid-flight can have an EARLIER successful response resolve AFTER
+  // the denial that cleared the cache, quietly repopulating it — and, on the
+  // participant's five-minute timer, leaving them looking at picks they are no
+  // longer entitled to for the rest of that interval. A response from a
+  // superseded generation is dropped rather than merged. (codex P1, r5.)
+  const authGen = React.useRef(0);
   const loadWeek = React.useCallback((w: number) => {
+    const gen = authGen.current;
     dbService.getPoolPicks(pool.id, w)
       .then(r => {
+        // The request outlived its own entitlement — discard it.
+        if (authGen.current !== gen) return;
         setReveal(prev => prev.poolId === pool.id && prev.uid === viewerUid
           ? { poolId: pool.id, uid: viewerUid, byWeek: { ...prev.byWeek, [w]: r } }
           : { poolId: pool.id, uid: viewerUid, byWeek: { [w]: r } });
       })
-      // 🛑 A REFUSAL MUST EMPTY THE CACHE, not merely be logged. It is not a
-      // crash — a non-member gets one and every surface then renders "?", which
-      // is the honest answer — but the responses already in hand were fetched
-      // under an entitlement the server has just declined to renew. Keeping
-      // them would show a removed member the picks they could see a minute ago.
-      // (codex P1.)
+      // A refusal is not a crash — a non-member gets one and every surface then
+      // renders "?", which is the honest answer — but the responses already in
+      // hand were fetched under an entitlement the server has just declined to
+      // renew. Keeping them would show a removed member the picks they could
+      // see a minute ago, so the cache is EMPTIED and every in-flight request
+      // is invalidated with it.
       .catch(err => {
         logger.warn('[NFLPoolDashboard] getPoolPicks failed', err);
         if ((err as { code?: string })?.code === 'functions/permission-denied') {
+          authGen.current += 1;
           setReveal({ poolId: pool.id, uid: viewerUid, byWeek: {} });
         }
       });

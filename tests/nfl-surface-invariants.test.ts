@@ -665,6 +665,10 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     // revealed picks. A denial empties it rather than being logged. (codex P1.)
     expect(dash).toContain("err as { code?: string })?.code === 'functions/permission-denied'");
     expect(dash).toContain('setReveal({ poolId: pool.id, uid: viewerUid, byWeek: {} });');
+    // ...and an in-flight success must not repopulate it AFTER that denial,
+    // which ordering alone would otherwise allow. (codex P1, r5.)
+    expect(dash).toContain('authGen.current += 1;');
+    expect(dash).toContain('if (authGen.current !== gen) return;');
     expect(dash).toContain('revealsForPool[selectedWeek]?.week === selectedWeek');
     // Same rule for the Majority row's aggregate, checked at RENDER time —
     // clearing it in the effect leaves one frame of the previous pool's splits,
