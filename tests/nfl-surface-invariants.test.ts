@@ -699,13 +699,13 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     //
     // The selected week still reacts to `members`; the historical columns must
     // not, and must only load while their grid is on screen.
-    expect(dash).toContain('[isManager, selectedWeek, commissionerRosterDep, user?.id, loadWeek, wantsReveal, openWeeks]');
+    expect(dash).toContain('[isManager, selectedWeek, commissionerRosterDep, user?.id, loadWeek, wantsReveal]');
     // The members-driven refresh is the COMMISSIONER's, and the fetch only runs
     // on a tab that renders the response.
     expect(dash).toContain('const commissionerRosterDep = isManager ? members : null;');
     expect(dash).toContain("const revealTabs: TabType[] = ['grid', 'standings', 'manager'];");
     expect(dash).toContain('if (!user || !wantsReveal) return;');
-    expect(dash).toContain('[user?.id, activeTab, pool.type, openWeeks, loadWeek]');
+    expect(dash).toContain('[user?.id, activeTab, pool.type, openWeeks, loadWeek, isManager]');
     expect(dash).toContain("activeTab !== 'grid'");
     // 'Cached' must mean REVEALED. An unrevealed response is a snapshot of a
     // clock still running; caching it as final left the column at "?" forever
@@ -714,7 +714,9 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     // to-fetch list — re-fetching it returns another unrevealed response, so a
     // list keyed on that predicate never changes and never fires again.
     expect(dash).toContain('const openWeeks = gridWeeks.filter(w => w !== selectedWeek && !cachedWeeks[w]?.weekRevealed)');
-    expect(dash).toContain("for (const w of openWeeks.split(',').filter(Boolean)) loadWeek(Number(w));");
+    // ONE owner for the historical columns — issuing them from the poll too
+    // ran them on Standings/Manager and doubled them on the grid. (codex r11.)
+    expect(dash.match(/for \(const w of openWeeks/g) || []).toHaveLength(1);
   });
 
   it('a weekly-pool column is admitted by ITS OWN weekRevealed, never a shared one', () => {

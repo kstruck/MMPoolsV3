@@ -324,15 +324,11 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     // The selected week, plus any grid column still waiting on its deadline —
     // those are the only weeks whose answer can still change. A revealed week
     // is a passed clock boundary and is never re-fetched.
-    const tick = () => {
-      loadWeek(selectedWeek);
-      for (const w of openWeeks.split(',').filter(Boolean)) loadWeek(Number(w));
-    };
-    tick();
-    const id = setInterval(tick, isManager ? 60_000 : 300_000);
+    loadWeek(selectedWeek);
+    const id = setInterval(() => loadWeek(selectedWeek), isManager ? 60_000 : 300_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isManager, selectedWeek, commissionerRosterDep, user?.id, loadWeek, wantsReveal, openWeeks]);
+  }, [isManager, selectedWeek, commissionerRosterDep, user?.id, loadWeek, wantsReveal]);
 
   // (b) THE HISTORICAL COLUMNS of the Survivor/Margin grid — fetched ONCE each,
   // and only while that grid is actually on screen.
@@ -359,8 +355,21 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // fix.)
   useEffect(() => {
     if (!user || activeTab !== 'grid' || pool.type === 'NFL_PICKEM') return;
-    for (const w of openWeeks.split(',').filter(Boolean)) loadWeek(Number(w));
-  }, [user?.id, activeTab, pool.type, openWeeks, loadWeek]);
+    // 🛑 THE SINGLE OWNER of historical-column requests, including their retry.
+    //
+    // An earlier revision put the open-week loop in the poll above instead, and
+    // that was wrong twice over: it ran on Standings and Manager, which consume
+    // only the SELECTED week, and on the grid tab it duplicated this effect —
+    // every historical callable issued twice, each one scanning the pool's
+    // members and entries. Requests for these columns start and repeat here and
+    // nowhere else. (codex r11.)
+    const tick = () => {
+      for (const w of openWeeks.split(',').filter(Boolean)) loadWeek(Number(w));
+    };
+    tick();
+    const id = setInterval(tick, isManager ? 60_000 : 300_000);
+    return () => clearInterval(id);
+  }, [user?.id, activeTab, pool.type, openWeeks, loadWeek, isManager]);
 
   // ⚠️ ONLY EVER USE THE REVEAL THAT MATCHES THE POOL AND THE WEEK ON SCREEN.
   // `reveal` holds the previous answer for the moment between changing either
