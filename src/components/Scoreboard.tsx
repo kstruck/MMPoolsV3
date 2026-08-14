@@ -56,7 +56,9 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
     onLogout,
     onCreatePool
 }) => {
-    const [activeTab, setActiveTab] = useState<'nfl' | 'college' | 'basketball'>('basketball');
+    // ponytail: fixed default, not season-aware. A date-driven default (NFL Aug-Feb,
+    // basketball Mar-Apr) is the better shape; add it when the off-season lands.
+    const [activeTab, setActiveTab] = useState<'nfl' | 'college' | 'basketball'>('nfl');
     const [games, setGames] = useState<Game[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
