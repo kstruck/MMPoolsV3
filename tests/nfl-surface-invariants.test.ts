@@ -632,6 +632,15 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     expect(grid).toContain('reveal.week === week');
   });
 
+  it('a reveal is scoped to the POOL that asked for it, not the week alone', () => {
+    // NFL game ids are global, so two pools on the same week share a slate:
+    // navigating between two pools the same commissioner runs leaves the
+    // previous pool's response matching by week, and buildMemberStandings
+    // grafts its picks onto any uid present in both rosters. (codex r1.)
+    expect(dash).toContain('setReveal({ poolId: pool.id, data: r })');
+    expect(dash).toContain('reveal.poolId === pool.id && reveal.data.week === selectedWeek');
+  });
+
   it('an unrevealed cell reads "?" and never collapses into the no-pick dash', () => {
     expect(grid).toContain("cell.kind === 'HIDDEN' ? '?'");
   });

@@ -177,7 +177,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // correctly refused to hand them back before the boundary.
   const [standingsRows, setStandingsRows] = useState<any[]>([]);
   const [ownEntry, setOwnEntry] = useState<any | null>(null);
-  const [reveal, setReveal] = useState<PoolPicksReveal | null>(null);
+  // Stamped with the pool it came from. `PoolRoute` reuses this component across
+  // pool navigation, so the response outlives the pool that asked for it — see
+  // the `weekReveal` note below for why the week check alone is not enough.
+  const [reveal, setReveal] = useState<{ poolId: string; data: PoolPicksReveal } | null>(null);
 
   useEffect(() => {
     const unsubStandings = dbService.subscribeToNFLStandings(pool.id, setStandingsRows);
@@ -197,7 +200,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     let cancelled = false;
     const load = () => {
       dbService.getPoolPicks(pool.id, selectedWeek)
-        .then(r => { if (!cancelled) setReveal(r); })
+        .then(r => { if (!cancelled) setReveal({ poolId: pool.id, data: r }); })
         // A refusal is not a crash: the standings simply keep rendering
         // Hidden / No selection, which is the correct pre-boundary answer.
         .catch(err => { logger.warn('[NFLPoolDashboard] getPoolPicks failed', err); });
@@ -207,13 +210,23 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     return () => { cancelled = true; clearInterval(id); };
   }, [isManager, pool.id, selectedWeek, members]);
 
-  // ⚠️ ONLY EVER USE THE REVEAL THAT MATCHES THE WEEK ON SCREEN. `reveal` holds
-  // the previous week's answer for the moment between changing weeks and the
-  // callable returning, and that answer is wrong in a way that shows: the
-  // counts would drive "4 of 16 Picks Set" and the roster's picked/unpicked
-  // state for a week nobody is looking at. Dropping it for that moment renders
-  // the honest fallback instead. (Own diff read.)
-  const weekReveal = reveal?.week === selectedWeek ? reveal : null;
+  // ⚠️ ONLY EVER USE THE REVEAL THAT MATCHES THE POOL AND THE WEEK ON SCREEN.
+  // `reveal` holds the previous answer for the moment between changing either
+  // one and the callable returning, and that answer is wrong in a way that
+  // shows: the counts would drive "4 of 16 Picks Set" and the roster's
+  // picked/unpicked state for a week nobody is looking at. Dropping it for that
+  // moment renders the honest fallback instead. (Own diff read.)
+  //
+  // 🛑 THE POOL CHECK IS NOT BELT-AND-BRACES ON THE WEEK CHECK — it catches a
+  // case the week check cannot. NFL game ids are GLOBAL (`espn_…`), so two
+  // pools on the same week share a slate: navigating between two pools this
+  // commissioner runs leaves the previous pool's response matching by week,
+  // and `buildMemberStandings` grafts its picks onto any uid in both rosters.
+  // Pick CONTENT from a pool that is no longer on screen. Clearing the state in
+  // the effect instead would blank the grid on every `members` snapshot, which
+  // is every submit — hence a stamp rather than a reset. (codex r1.)
+  const weekReveal =
+    reveal && reveal.poolId === pool.id && reveal.data.week === selectedWeek ? reveal.data : null;
 
   // Roster from Member Records, stats from the scored projection, own picks from
   // the own-entry doc, other members' picks only where the SERVER revealed them.
