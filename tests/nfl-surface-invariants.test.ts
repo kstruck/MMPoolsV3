@@ -645,6 +645,15 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     expect(grid).toContain('consensus?.poolId === pool.id ? consensus.byGame : undefined');
   });
 
+  it('the rows are derived during render, so they cannot lag the reveal by a paint', () => {
+    // The grid reads the allowlist and the rows TOGETHER. Setting the rows from
+    // an effect made them lag `weekReveal` by one paint, so on the render where
+    // a game first revealed, every player who picked it was drawn as "—" —
+    // "made no pick" — and corrected a frame later. (codex r6.)
+    expect(dash).toContain('const entries = useMemo(');
+    expect(dash).not.toContain('setEntries(');
+  });
+
   it('the dashboard is keyed on the pool, so no subscribed state survives navigation', () => {
     // The route sets `pool` from the global cache with no loading state, so the
     // dashboard stays MOUNTED between pools and every subscribed state

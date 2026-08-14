@@ -147,7 +147,6 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   };
 
   // Subscribed States
-  const [entries, setEntries] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [recaps, setRecaps] = useState<WeeklyRecap[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -233,12 +232,24 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // The projection alone is a snapshot of the last SCORED week, so a member who
   // joined after it was written was invisible to everyone but the commissioner —
   // see buildMemberStandings for the full reasoning.
-  useEffect(() => {
-    setEntries(buildMemberStandings({ pool: castPool, members, standingsRows, ownEntry, reveal: weekReveal }));
+  //
+  // 🛑 DERIVED DURING RENDER, NOT SET FROM AN EFFECT (codex r6). It used to be
+  // `useState` + `useEffect`, which made it lag `weekReveal` by exactly one
+  // paint — and the two are read TOGETHER by the picks grid: the fresh reveal
+  // supplies the allowlist while the stale `entries` still carry no picks. On
+  // the render where a game first reveals, every player who picked it was drawn
+  // as "—", i.e. "made no pick", and corrected a frame later. Same class as the
+  // three stale-state defects above, and a memo removes it outright rather than
+  // sequencing around it. The deps are unchanged.
+  //
   // Depends on `participantIds`, not the whole pool object: it is the only field
   // buildMemberStandings reads from the pool, and a snapshot re-instantiating the
   // doc should not re-run this. (qodo.)
-  }, [standingsRows, ownEntry, members, weekReveal, castPool.participantIds]);
+  const entries = useMemo(
+    () => buildMemberStandings({ pool: castPool, members, standingsRows, ownEntry, reveal: weekReveal }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [standingsRows, ownEntry, members, weekReveal, castPool.participantIds],
+  );
 
   // 2b. Subscribe to Member Records (roster truth — everyone who joined, ADR 0003)
   useEffect(() => {
