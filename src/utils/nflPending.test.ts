@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 // Firebase out of the import graph entirely.
 vi.mock('./serverClock', () => ({ now: () => 0 }));
 
-import { gamesForPoolWeek, poolSeasonType, currentSlateWeek } from './nflPending';
+import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks } from './nflPending';
 import type { NFLGame } from '../types';
 
 /**
@@ -135,5 +135,30 @@ describe('currentSlateWeek', () => {
     it('picks the lowest open week regardless of document order', () => {
         const slate = [game('pre3', 3, 1), game('pre2', 2, 1)];
         expect(currentSlateWeek(slate, { seasonType: 1 })).toBe(2);
+    });
+});
+
+/**
+ * The week columns of the Season Summary / Margin Summary grids come from here.
+ * The obvious `1..18` is wrong twice — a preseason pool runs four weeks, and a
+ * regular-season length is the schedule's fact, not a constant.
+ */
+describe('poolSeasonWeeks', () => {
+    it('derives the weeks from the schedule, ascending, deduped', () => {
+        const slate = [game('r3', 3, 2), game('r1a', 1, 2), game('r1b', 1, 2), game('r2', 2, 2)];
+        expect(poolSeasonWeeks(slate, { seasonType: 2 })).toEqual([1, 2, 3]);
+    });
+
+    it("gives a preseason pool only its own weeks, never the regular season's", () => {
+        expect(poolSeasonWeeks(SCHEDULE, { seasonType: 1 })).toEqual([1, 2]);
+    });
+
+    it('treats an unset pool seasonType as regular season, matching poolSeasonType', () => {
+        expect(poolSeasonWeeks(SCHEDULE, {})).toEqual([1]);
+    });
+
+    it('is empty while the schedule is still loading, so the grid renders empty rather than fabricated', () => {
+        expect(poolSeasonWeeks([], { seasonType: 2 })).toEqual([]);
+        expect(poolSeasonWeeks(SCHEDULE, { seasonType: 3 })).toEqual([]);
     });
 });

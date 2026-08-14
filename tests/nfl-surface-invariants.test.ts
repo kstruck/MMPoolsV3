@@ -491,17 +491,23 @@ describe('confidence weights — graying is wired, and the duplicate backstop su
  * read during live Sunday scoring, which is exactly when half the pool is in
  * that state.
  */
-describe('standings week view — absence is not zero, and Survivor has no week to rank', () => {
-  const src = readFileSync(
-    resolve(root, 'src/components/NFLPoolDashboard/NFLStandings.tsx'),
-    'utf8',
-  );
+describe('week results view — absence is not zero, and Survivor has no week to rank', () => {
+  // ⚠️ RELOCATED, NOT WEAKENED. These invariants were written against
+  // `NFLStandings.tsx` when #422 put a Season/Week toggle there. Kevin's
+  // 2026-08-13 ruling moved the weekly view to its own Results page, so the
+  // rules they guard now live in `src/utils/nflResults.ts` — and they are
+  // STRONGER there, because that module is pure and `src/utils/nflResults.test.ts`
+  // exercises the behavior directly instead of grepping for it.
+  //
+  // The greps below stay because a source grep catches a different failure than
+  // a unit test does: a future edit that reintroduces `?? 0` inside the util
+  // would still pass a test suite someone updated to match it.
+  const src = readFileSync(resolve(root, 'src/utils/nflResults.ts'), 'utf8');
   const code = src
     .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 
-  it('weekValue returns null for a missing week, never a coalesced 0', () => {
+  it('weekValueFor returns null for a missing week, never a coalesced 0', () => {
     expect(code).toContain("return typeof v === 'number' ? v : null;");
     // The one wrong implementation this is most likely to rot into.
     expect(code).not.toContain('weeklyPoints?.[week] ?? 0');
@@ -509,53 +515,67 @@ describe('standings week view — absence is not zero, and Survivor has no week 
   });
 
   it('the week ranking drops nulls to the bottom instead of sorting them as values', () => {
-    expect(code).toContain('weekValue(e) !== null');
-    expect(code).toContain('weekValue(e) === null');
+    expect(code).toContain('weekValueFor(row, week, isMargin) !== null');
   });
 
-  it('Survivor is excluded from the toggle — N/A, not just unranked', () => {
-    expect(code).toContain("weekRanked = standingsView === 'WEEK' && type !== 'NFL_SURVIVOR'");
-    expect(code).toContain("type !== 'NFL_SURVIVOR' && (");
+  it('Survivor is excluded from the Results tab — N/A, not just unranked', () => {
+    const dash = readFileSync(
+      resolve(root, 'src/components/NFLPoolDashboard/NFLPoolDashboard.tsx'),
+      'utf8',
+    );
+    expect(dash).toContain("const showResultsTab = pool.type !== 'NFL_SURVIVOR';");
+    // ...and a stale ?tab=results link into a Survivor pool must fall back to a
+    // rendered tab, never to an empty content area.
+    expect(dash).toContain("requestedTab === 'results' && !showResultsTab ? 'dashboard' : requestedTab");
   });
 
-  it('a not-yet-scored week shows no rank chip', () => {
-    expect(code).toContain('if (weekRanked && weekValue(entry) === null)');
+  it('a not-yet-scored week shows no place chip', () => {
+    const results = readFileSync(
+      resolve(root, 'src/components/NFLPoolDashboard/NFLResults.tsx'),
+      'utf8',
+    );
+    expect(results).toContain('place === null ? dash');
+  });
+
+  it('the standings table no longer carries a week toggle of its own', () => {
+    // Two implementations of "this week's ranking" is how the standings and the
+    // results page start disagreeing about who won a week.
+    const standings = readFileSync(
+      resolve(root, 'src/components/NFLPoolDashboard/NFLStandings.tsx'),
+      'utf8',
+    );
+    expect(standings).not.toContain('standingsView');
+    expect(standings).not.toContain('weekRanked');
   });
 });
 
 /**
- * WEEK-view ties share a rank (competition ranking). Positional numbering
+ * WEEK-view ties share a place (competition ranking). Positional numbering
  * would hand a tied week to the alphabet, and the tiebreak is the SCORER's
  * call — the recap's winner line applies the MNF prediction (Pick'em) or
  * declares the tie shared (Margin). A table showing a different first place
  * than the recap is the exact contradiction this view exists to remove.
- * (codex r1 on the standings-toggle PR.)
+ * (codex r1 on the standings-toggle PR; carried across the relocation.)
  */
-describe('standings week view — tied scores share a rank', () => {
-  const src = readFileSync(
-    resolve(root, 'src/components/NFLPoolDashboard/NFLStandings.tsx'),
-    'utf8',
-  );
+describe('week results view — tied scores share a place', () => {
+  const src = readFileSync(resolve(root, 'src/utils/nflResults.ts'), 'utf8');
   const code = src
     .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 
-  it('week rank comes from the precomputed shared-rank map, not the row index', () => {
-    // Competition ranking (1,1,3) via one O(n) pass over the sorted list — the
-    // per-row strictly-better filter it replaces was O(n²) (qodo). Same-value
-    // rows share the previous rank; a new value takes index+1.
-    expect(code).toContain('weekRankByUid.get(entry.id)');
-    expect(code).toContain('v === prevVal ? prevRank : i');
+  it('a place is shared with the previous row on an equal value, never taken from the index', () => {
+    // One O(n) pass over the sorted list: same-value rows reuse the previous
+    // place, a new value takes index+1. Asserted in BOTH ranking functions —
+    // the season grid ranks too, and only pinning the weekly one is how the two
+    // drift apart.
+    expect(code.match(/const place = value === prevValue \? prevPlace : i \+ 1;/g) || []).toHaveLength(2);
   });
 
-  it('the toggle resets to Season when the pool changes', () => {
-    // PoolRoute reuses the component across pool navigation; without the reset
-    // a WEEK view chosen in one pool leaks into the next pool's standings.
-    expect(code).toContain("useEffect(() => { setStandingsView('SEASON'); }, [pool.id]);");
-  });
-
-  it('the season view still ranks positionally', () => {
-    expect(code).toContain('rank={index + 1}');
+  it('the season standings table still ranks positionally', () => {
+    const standings = readFileSync(
+      resolve(root, 'src/components/NFLPoolDashboard/NFLStandings.tsx'),
+      'utf8',
+    );
+    expect(standings).toContain('rank={index + 1}');
   });
 });

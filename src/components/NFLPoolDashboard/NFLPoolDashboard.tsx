@@ -28,6 +28,9 @@ import { buildMemberStandings } from '../../utils/memberStandings';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes, resolveHardWeekLock, frozenHardLockFor } from '@shared/weeklyHardLock';
 import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
+// New imports go at the END of this block — #420 and #421 both appended here and
+// conflicted when they didn't (measured).
+import { NFLResults } from './NFLResults';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -51,10 +54,24 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // Tab lives in the URL so the browser Back button steps through tabs (and refresh
   // restores the view) instead of leaving the pool. Tab changes push a history entry.
   const [searchParams, setSearchParams] = useSearchParams();
-  type TabType = 'dashboard' | 'picks' | 'standings' | 'recaps' | 'rules' | 'payments' | 'manager';
-  const VALID_TABS: TabType[] = ['dashboard', 'picks', 'standings', 'recaps', 'rules', 'payments', 'manager'];
+  // `results` sits next to `standings`: Standings answers "who is winning the
+  // season", Results answers "what happened in a week / across the weeks".
+  // Survivor has no per-week score to tabulate, so the tab is hidden for it
+  // (see the strip below) — but the value stays VALID for every pool type on
+  // purpose: a stale `?tab=results` link into a Survivor pool must fall back to
+  // the dashboard rather than crash, and dropping it from this list is what
+  // makes that fallback happen.
+  type TabType = 'dashboard' | 'picks' | 'standings' | 'results' | 'recaps' | 'rules' | 'payments' | 'manager';
+  const VALID_TABS: TabType[] = ['dashboard', 'picks', 'standings', 'results', 'recaps', 'rules', 'payments', 'manager'];
+  const showResultsTab = pool.type !== 'NFL_SURVIVOR';
   const tabParam = searchParams.get('tab') as TabType | null;
-  const activeTab: TabType = tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'dashboard';
+  const requestedTab: TabType = tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'dashboard';
+  // A tab the pool does not offer falls back to the dashboard, exactly as an
+  // unknown one does. Without this a Survivor pool opened on a shared
+  // `?tab=results` link renders an EMPTY content area: the strip has no Results
+  // button to un-press and no other branch matches, so the member sees a pool
+  // page with nothing in it and no way to tell what went wrong. (Own diff read.)
+  const activeTab: TabType = requestedTab === 'results' && !showResultsTab ? 'dashboard' : requestedTab;
   const setActiveTab = (tab: TabType) => {
     setSearchParams(prev => {
       const p = new URLSearchParams(prev);
@@ -418,6 +435,19 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           >
             Standings & Leaderboard
           </button>
+          {showResultsTab && (
+            <button
+              onClick={() => setActiveTab('results')}
+              className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
+                activeTab === 'results'
+                  ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
+                  : 'text-muted hover:text-[color:var(--text)] border-transparent'
+              }`}
+              style={activeTab === 'results' ? { borderBottomColor: accentHex } : {}}
+            >
+              Results
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('recaps')}
             className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
@@ -610,6 +640,20 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   week={selectedWeek}
                   viewerUid={user?.id}
                   pickCounts={weekReveal?.counts}
+                />
+              )}
+
+              {/* TAB 2b: RESULTS — weekly + season tables over the SAME scored
+                  projection the standings render. `activeTab` is already
+                  normalized above, so this can only be true on a pool that
+                  offers the tab. */}
+              {activeTab === 'results' && (
+                <NFLResults
+                  pool={pool}
+                  entries={entries}
+                  games={games}
+                  week={selectedWeek}
+                  viewerUid={user?.id}
                 />
               )}
 
