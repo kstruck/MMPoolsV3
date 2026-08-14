@@ -294,10 +294,13 @@ describe('unwinnableGameIds', () => {
  * at the deployed page; a wrong caption type-checks perfectly.
  */
 describe('resultsFootnote', () => {
-    const f = (view: 'WEEKLY' | 'SEASON' | 'SUMMARY' | 'STANDINGS', confidenceMode = true) =>
-        resultsFootnote({ view, weekLabel: 'HOF Weekend', confidenceMode });
+    const f = (
+        view: 'WEEKLY' | 'SEASON' | 'SUMMARY' | 'STANDINGS',
+        confidenceMode = true,
+        isMargin = false,
+    ) => resultsFootnote({ view, isMargin, weekLabel: 'HOF Weekend', confidenceMode });
 
-    it('explains Max and No Points on the weekly view, and names the week', () => {
+    it("explains Max and No Points on the Pick'em weekly view, and names the week", () => {
         const s = f('WEEKLY');
         expect(s).toContain('Max');
         expect(s).toContain('No Points');
@@ -305,11 +308,32 @@ describe('resultsFootnote', () => {
     });
 
     it('does NOT mention Max or No Points on any view that lacks those columns', () => {
-        for (const view of ['SEASON', 'SUMMARY', 'STANDINGS'] as const) {
-            const s = f(view);
-            expect(s, `${view} must not mention Max`).not.toMatch(/\bMax\b/);
-            expect(s, `${view} must not mention No Points`).not.toContain('No Points');
+        // Margin's WEEKLY is in this list: it shows a single Margin column.
+        const lacking = [
+            f('SEASON'), f('SUMMARY'), f('STANDINGS'), f('WEEKLY', true, true),
+        ];
+        for (const s of lacking) {
+            expect(s, `must not mention Max: ${s}`).not.toMatch(/\bMax\b/);
+            expect(s, `must not mention No Points: ${s}`).not.toContain('No Points');
         }
+    });
+
+    it('does NOT claim one-column-per-week on any view that is not a grid', () => {
+        // The defect qodo caught on the FIRST fix: margin WEEKLY was mapped to
+        // the grid caption, so a one-column table advertised a season grid.
+        for (const s of [f('WEEKLY'), f('WEEKLY', true, true), f('STANDINGS')]) {
+            expect(s, `must not claim a per-week grid: ${s}`).not.toContain('column per week');
+        }
+        // ...and both real grids still do say it.
+        for (const s of [f('SEASON'), f('SUMMARY', true, true)]) {
+            expect(s).toContain('column per week');
+        }
+    });
+
+    it("names the week on margin's weekly view too, and keeps the not-a-zero rule", () => {
+        const s = f('WEEKLY', true, true);
+        expect(s).toContain('HOF Weekend');
+        expect(s).toContain('not a zero');
     });
 
     it('describes the Weeks column on the margin standings view', () => {

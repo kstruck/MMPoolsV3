@@ -318,10 +318,8 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
 
       <div className="px-5 py-3 border-t border-line bg-surface text-[11px] font-body text-muted">
         {resultsFootnote({
-          // Margin's WEEKLY view has neither a Max nor a No Points column — it
-          // shows the week's net margin — so it takes the grid caption's honest
-          // "a blank week is not a zero" line rather than the Pick'em one.
-          view: isMargin && view === 'WEEKLY' ? 'SUMMARY' : (view as ResultsView),
+          view: view as ResultsView,
+          isMargin,
           weekLabel: nflWeekLabel(seasonType, week),
           confidenceMode: !!settings.confidenceMode,
         })}

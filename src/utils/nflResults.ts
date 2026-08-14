@@ -236,12 +236,24 @@ export type ResultsView = 'WEEKLY' | 'SEASON' | 'SUMMARY' | 'STANDINGS';
  */
 export function resultsFootnote(opts: {
     view: ResultsView;
+    /** Margin's WEEKLY table is a different shape from Pick'em's — see below. */
+    isMargin: boolean;
     weekLabel: string;
     confidenceMode: boolean;
 }): string {
-    const { view, weekLabel, confidenceMode } = opts;
+    const { view, isMargin, weekLabel, confidenceMode } = opts;
     switch (view) {
         case 'WEEKLY':
+            // ⚠️ MARGIN'S WEEKLY TABLE IS NOT THE PICK'EM ONE AND NOT THE GRID.
+            // It has a single Margin column — no Max, no No Points, and not one
+            // column per week. The first fix for this defect mapped it to the
+            // grid caption, which put "one column per week of the season" under
+            // a one-column table: the SAME defect, reintroduced by its own fix,
+            // in the one view nobody had looked at. (qodo on PR #429; codex r1
+            // passed the mapping.)
+            if (isMargin) {
+                return `Each player's margin for ${weekLabel}. A blank has not been scored yet — it is not a zero, and a real 0 is shown as 0.`;
+            }
             return `Max is the most points anyone could score in ${weekLabel} — ${
                 confidenceMode ? 'every confidence weight correct' : 'every pick correct'
             }, counting only games that can still be won. No Points counts every graded pick that earned nothing, so a tie or a cancelled game is included there.`;
