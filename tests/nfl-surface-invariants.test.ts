@@ -658,5 +658,23 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
 
   it('an unrevealed cell reads "?" and never collapses into the no-pick dash', () => {
     expect(grid).toContain("cell.kind === 'HIDDEN' ? '?'");
+    // ...and the Set column uses the SAME glyph for the same fact. Inside one
+    // table "—" cannot mean both "revealed, picked nothing" and "not known".
+    // (qodo #8 — its compliance framing rejected, the overloading absorbed.)
+    expect(grid).toContain("{set === undefined ? '?' : `${set}/${weekGames.length}`}");
+  });
+
+  it('the own-row reveal bypass waits for the own entry to actually load', () => {
+    // The bypass exists because the entry document is the source. Before it
+    // lands, `buildMemberStandings` still emits a row for the viewer from their
+    // Member Record with no `picks` at all — so the bypass printed "0/16" and a
+    // "made no pick" dash across the commissioner's whole week. Passed as a
+    // prop, never inferred from `row.picks` being absent: an entry that has no
+    // picks yet is indistinguishable from one that has not loaded. (qodo #9.)
+    expect(grid).toContain('const ownPicksKnown = (row: any): boolean => isMe(row) && ownEntryLoaded;');
+    expect(dash).toContain('ownEntryLoaded={!!ownEntry}');
+    // The "Me" badge and the row highlight are the OTHER question and must not
+    // disappear while the entry loads.
+    expect(grid).toContain('{mine && (');
   });
 });

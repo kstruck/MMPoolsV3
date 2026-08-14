@@ -686,6 +686,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   week={selectedWeek}
                   viewerUid={user?.id}
                   reveal={weekReveal}
+                  ownEntryLoaded={!!ownEntry}
                 />
               )}
 

@@ -47,11 +47,25 @@ interface NFLPicksGridProps {
   viewerUid?: string;
   /** `getPoolPicks` for the week ON SCREEN, or null when it has not arrived. */
   reveal: PoolPicksReveal | null;
+  /**
+   * Whether the viewer's OWN entry document has arrived.
+   *
+   * 🛑 NOT the same question as "is this the viewer's row", and conflating them
+   * is a real bug (qodo #9). The own row bypasses the reveal guard because the
+   * entry document is its source — so before that document lands the bypass is
+   * asserting knowledge nobody has. `buildMemberStandings` still emits a row for
+   * the viewer in that window, from their Member Record, carrying no `picks` at
+   * all: the grid then printed "0/16" and a "—" (made no pick) in every cell of
+   * the commissioner's own week. Both are fabricated. Passed explicitly rather
+   * than inferred from `row.picks` being absent, because an entry that genuinely
+   * has no picks yet is indistinguishable from one that has not loaded.
+   */
+  ownEntryLoaded: boolean;
 }
 
 const TH = 'py-3 px-3 font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted';
 
-export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games, week, viewerUid, reveal }) => {
+export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games, week, viewerUid, reveal, ownEntryLoaded }) => {
   const navigate = useNavigate();
   const seasonType = poolSeasonType(pool);
   const settings = (pool as { settings?: { confidenceMode?: boolean; pickMode?: string } }).settings || {};
@@ -101,13 +115,17 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
   const revealMode = wk?.mode;
 
   const uidOf = (row: any): string => row?.ownerUid ?? row?.id;
-  // The viewer's own count comes from their own entry, not the callable: it is
-  // the only source that is right the instant they save, and it is the same
-  // rule the Standings completeness column uses.
+  const isMe = (row: any): boolean => !!viewerUid && uidOf(row) === viewerUid;
+  // Their own entry is the source for their own picks, and it is the only one
+  // that is right the instant they save — the same rule the Standings
+  // completeness column uses. It is authoritative only ONCE IT HAS LOADED; see
+  // `ownEntryLoaded`.
+  const ownPicksKnown = (row: any): boolean => isMe(row) && ownEntryLoaded;
   const countFor = (row: any): number | undefined => {
-    const uid = uidOf(row);
-    if (uid && uid === viewerUid) return weekGames.filter(g => !!row?.picks?.[g.id]).length;
-    return wk?.counts?.[uid];
+    if (ownPicksKnown(row)) return weekGames.filter(g => !!row?.picks?.[g.id]).length;
+    // Everyone else, and the viewer before their entry lands: the server's
+    // count, which carries no pick content and is available at any time.
+    return wk?.counts?.[uidOf(row)];
   };
 
   const dash = <span className="text-faint">—</span>;
@@ -148,14 +166,17 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
             </thead>
             <tbody className="divide-y divide-[color:var(--line)]">
               {rows.map(row => {
-                const uid = uidOf(row);
-                const isOwnRow = !!viewerUid && uid === viewerUid;
+                // Two different questions, deliberately separate: WHOSE row this
+                // is (the badge and the highlight) and whether their picks are
+                // KNOWN to this client (the reveal bypass). qodo #9.
+                const mine = isMe(row);
+                const isOwnRow = ownPicksKnown(row);
                 const set = countFor(row);
                 return (
                   <tr
                     key={row.id}
                     className={`transition-colors hover:bg-[color:var(--page)] ${
-                      isOwnRow ? 'bg-brandred-600/[0.07]' : ''
+                      mine ? 'bg-brandred-600/[0.07]' : ''
                     }`}
                   >
                     <td className="sticky left-0 z-10 bg-card py-3 px-3 whitespace-nowrap">
@@ -167,15 +188,29 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                         >
                           {row.userName}
                         </button>
-                        {isOwnRow && (
+                        {mine && (
                           <span className="ml-1.5 inline-flex items-center rounded-full bg-brandred-600 px-2 py-0.5 leading-none font-display font-bold uppercase text-[11px] tracking-[0.08em] text-white">
                             Me
                           </span>
                         )}
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-center text-[12px] num font-bold text-muted">
-                      {set === undefined ? dash : `${set}/${weekGames.length}`}
+                    {/* "?" and not "—". Inside ONE table the same glyph must not
+                        mean two things, and the pick cells already spend "—" on
+                        a positive fact ("revealed, and they picked nothing").
+                        An unknown count has the same cause as an unknown pick —
+                        the reveal has not arrived — so it gets the same "?".
+                        (qodo #8 pointed here. Its stated reason, that a dash is
+                        a plausible-looking substitute, is REJECTED: "—" is this
+                        repo's unavailable marker throughout `NFLStandings` and
+                        `NFLResults`, and the plausible-looking substitute would
+                        have been "0/16", which is what this deliberately avoids.
+                        The overloading within this table is the real defect.) */}
+                    <td
+                      className="py-3 px-3 text-center text-[12px] num font-bold text-muted"
+                      title={set === undefined ? 'Not known yet' : undefined}
+                    >
+                      {set === undefined ? '?' : `${set}/${weekGames.length}`}
                     </td>
                     {weekGames.map(g => {
                       const cell = picksGridCell({
@@ -247,9 +282,10 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
         {revealMode === 'WEEK' ? ' — this pool reveals the whole week at its one deadline'
           : revealMode === 'PER_GAME' ? ' — picks reveal game by game, each at its own lock'
           : ''}
-        ; your own row is always your own picks. <strong>—</strong> means the pick IS revealed and that
-        player made none. <strong>Set</strong> counts the picks they have saved out of {weekGames.length}{' '}
-        this week and is available before anything is revealed. <strong>Majority</strong> is the share of
+        . <strong>—</strong> means the pick IS revealed and that player made none. <strong>Set</strong>{' '}
+        counts the picks they have saved out of {weekGames.length} this week and is available before
+        anything is revealed; it reads <strong>?</strong> for the same reason a cell does, when the count
+        is not known yet. <strong>Majority</strong> is the share of
         this pool on the leading side, from the live pool consensus — an aggregate that never names anyone.
         {settings.confidenceMode && ' The small number beside a pick is its confidence weight.'}
       </div>
