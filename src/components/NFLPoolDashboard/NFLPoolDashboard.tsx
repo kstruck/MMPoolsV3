@@ -242,12 +242,30 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // EVERY member of every pool polls this callable, where before only the
   // commissioner did, and the commissioner is the only one who needs
   // minute-fresh completeness to chase missing picks.
+  //
+  // 🛑 AND ONLY ON A TAB THAT ACTUALLY RENDERS IT. Three do: the picks grid,
+  // the standings (its completeness column and the Survivor/Margin pick cell)
+  // and the commissioner view. On Pool Home, My Entry, Recaps, Rules or
+  // Payments the response is fetched and thrown away — which was free while one
+  // commissioner did it and is not now that every member does. (codex P2, r3.)
+  //
+  // ⚠️ `members` DRIVES A REFRESH FOR THE COMMISSIONER ONLY. It changes on every
+  // member-record write, i.e. every pick submission in the pool, and each call
+  // scans the pool's entries — so leaving it in for participants makes one
+  // submission fan out into a full-pool read per connected member. The
+  // commissioner keeps it because their roster's "who still owes a pick" column
+  // is the thing that has to be fresh the moment someone submits; a member's
+  // view gains nothing before the reveal, and the timer covers it after.
+  const revealTabs: TabType[] = ['grid', 'standings', 'manager'];
+  const wantsReveal = revealTabs.includes(activeTab);
+  const commissionerRosterDep = isManager ? members : null;
   useEffect(() => {
-    if (!user) return;
+    if (!user || !wantsReveal) return;
     loadWeek(selectedWeek);
     const id = setInterval(() => loadWeek(selectedWeek), isManager ? 60_000 : 300_000);
     return () => clearInterval(id);
-  }, [isManager, selectedWeek, members, user?.id, loadWeek]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isManager, selectedWeek, commissionerRosterDep, user?.id, loadWeek, wantsReveal]);
 
   // (b) THE HISTORICAL COLUMNS of the Survivor/Margin grid — fetched ONCE each,
   // and only while that grid is actually on screen.

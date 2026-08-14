@@ -684,7 +684,12 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     //
     // The selected week still reacts to `members`; the historical columns must
     // not, and must only load while their grid is on screen.
-    expect(dash).toContain('[isManager, selectedWeek, members, user?.id, loadWeek]');
+    expect(dash).toContain('[isManager, selectedWeek, commissionerRosterDep, user?.id, loadWeek, wantsReveal]');
+    // The members-driven refresh is the COMMISSIONER's, and the fetch only runs
+    // on a tab that renders the response.
+    expect(dash).toContain('const commissionerRosterDep = isManager ? members : null;');
+    expect(dash).toContain("const revealTabs: TabType[] = ['grid', 'standings', 'manager'];");
+    expect(dash).toContain('if (!user || !wantsReveal) return;');
     expect(dash).toContain('[user?.id, activeTab, pool.type, missingWeeks, loadWeek]');
     expect(dash).toContain("activeTab !== 'grid'");
     expect(dash).toContain('!cachedWeeks[w]');
