@@ -301,4 +301,60 @@ describe('buildMemberStandings — pickedWeeks marker and the reveal graft', () 
         });
         expect(rows[0].picks).toEqual({ 4: 'SF', 5: 'DAL' });
     });
+
+    /**
+     * 🛑 RENDER-PHASE SAFETY. `NFLPoolDashboard` calls this from a `useMemo`,
+     * so it runs DURING render — and its inputs are React state. The grafting
+     * pass writes `pickedWeeks` / `picks` / `confidence` / `weeklyTiebreakers`
+     * onto every row it returns, so returning a `standingsRows` element by
+     * reference would mutate state during render.
+     *
+     * It is also wrong independently of React: the pick merge is ADDITIVE, so a
+     * row object reused across weeks accumulates the picks of every week it was
+     * ever grafted for and nothing removes them. (qodo, re-review of PR #430.)
+     */
+    it('never mutates the standingsRows it was given', () => {
+        const row = scored('kevin', 'Kevin Struck');
+        const before = JSON.parse(JSON.stringify(row));
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('kevin', 'Kevin Struck', { pickedWeeks: [4] })],
+            standingsRows: [row],
+            ownEntry: null,
+            reveal: { week: 4, picks: { kevin: { 4: 'KC' } }, confidence: {}, tiebreakers: {} },
+        });
+        // The returned row carries the graft...
+        expect(rows[0].picks).toEqual({ 4: 'KC' });
+        expect(rows[0].pickedWeeks).toEqual([4]);
+        // ...and the caller's object is untouched, by value AND by identity.
+        expect(row).toEqual(before);
+        expect(rows[0]).not.toBe(row);
+    });
+
+    it('a row reached through the participant fallback is cloned too', () => {
+        // Same hazard, different loop: this row has no Member Record and is
+        // pushed straight from the projection.
+        const row = scored('legacy', 'Legacy Player');
+        const before = JSON.parse(JSON.stringify(row));
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [],
+            standingsRows: [row],
+            ownEntry: null,
+            reveal: { week: 4, picks: { legacy: { 4: 'KC' } }, confidence: {}, tiebreakers: {} },
+        });
+        expect(rows[0].picks).toEqual({ 4: 'KC' });
+        expect(row).toEqual(before);
+        expect(rows[0]).not.toBe(row);
+    });
+
+    it('two consecutive weeks do not accumulate picks on the same object', () => {
+        // The additive-merge half of the same defect: run week 4, then week 5,
+        // over the SAME input array, exactly as a week change does.
+        const input = [scored('kevin', 'Kevin Struck')];
+        const args = { pool: POOL, members: [member('kevin', 'Kevin Struck')], standingsRows: input, ownEntry: null };
+        buildMemberStandings({ ...args, reveal: { week: 4, picks: { kevin: { 4: 'KC' } }, confidence: {}, tiebreakers: {} } });
+        const week5 = buildMemberStandings({ ...args, reveal: { week: 5, picks: { kevin: { 5: 'SF' } }, confidence: {}, tiebreakers: {} } });
+        expect(week5[0].picks).toEqual({ 5: 'SF' });
+    });
 });

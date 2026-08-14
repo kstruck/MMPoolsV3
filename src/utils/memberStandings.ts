@@ -72,6 +72,22 @@ export function buildMemberStandings({ pool, members, standingsRows, ownEntry, r
 
     const rows: any[] = [];
     const seen = new Set<string>();
+    /**
+     * 🛑 EVERY CALLER MUST HAND THIS A ROW IT OWNS — never a `standingsRows`
+     * element by reference.
+     *
+     * The grafting pass at the bottom MUTATES the rows it is given
+     * (`row.pickedWeeks = …`, `row.picks = { …row.picks, …revealed }`), and
+     * `standingsRows` is React state. Pushing a snapshot's object by reference
+     * therefore mutated state — and since this function is now called from a
+     * render-phase `useMemo` (codex r6), that became a render-phase mutation of
+     * state, which React forbids outright.
+     *
+     * It was already wrong before that: the merge is additive, so a row object
+     * that survives across weeks ACCUMULATES the picks of every week it has been
+     * grafted for, and nothing ever removes them. The clone bounds each pass to
+     * the week it was built for. (qodo #1, re-review of PR #430.)
+     */
     const push = (uid: string | undefined, row: any) => {
         if (!uid || seen.has(uid)) return;
         seen.add(uid);
@@ -120,7 +136,8 @@ export function buildMemberStandings({ pool, members, standingsRows, ownEntry, r
         // "never will". Being owed a pick and being on the leaderboard are different
         // questions, and this file answers only the second.
         if (!scored && (m as { hasPlayableEntry?: boolean }).hasPlayableEntry !== true) continue;
-        push(m.uid, scored ?? {
+        // `{ ...scored }`, never `scored` — see the cloning note above `push`.
+        push(m.uid, scored ? { ...scored } : {
             id: m.uid,
             ownerUid: m.uid,
             userName: m.userName,
@@ -153,7 +170,9 @@ export function buildMemberStandings({ pool, members, standingsRows, ownEntry, r
         const uid = uidOf(row);
         // No participantIds at all (a legacy pool doc, or a snapshot that has not
         // arrived): fall back to showing the projection rather than an empty table.
-        if (uid && (stillAParticipant(uid) || !Array.isArray(participantIds))) push(uid, row);
+        // Cloned, same as the loop above — this `row` IS a `standingsRows`
+        // element and the grafting pass below writes to it.
+        if (uid && (stillAParticipant(uid) || !Array.isArray(participantIds))) push(uid, { ...row });
     }
 
     // ONE grafting pass, after every row exists, so the marker and any revealed

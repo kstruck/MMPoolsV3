@@ -598,14 +598,23 @@ describe('week results view — tied scores share a place', () => {
  * is still gated — the same gap `SURFACES` above exists for.
  */
 describe('current picks grid — the reveal boundary stays the server\'s', () => {
-  const grid = readFileSync(
-    resolve(root, 'src/components/NFLPoolDashboard/NFLPicksGrid.tsx'),
-    'utf8',
-  );
-  const dash = readFileSync(
-    resolve(root, 'src/components/NFLPoolDashboard/NFLPoolDashboard.tsx'),
-    'utf8',
-  );
+  // 🛑 COMMENTS STRIPPED BEFORE MATCHING, on every source these assertions read.
+  //
+  // These files are heavily commented and several of the comments QUOTE the very
+  // expressions asserted below — so a raw `toContain` would keep passing after
+  // the code was deleted, as long as the comment explaining it survived. That is
+  // a guard that looks like a guard and is not, which is this repo's own most
+  // repeated defect class. The `not.toContain` direction fails the opposite way:
+  // a comment merely MENTIONING `setEntries(` would fail a green build.
+  //
+  // Same stripper the `nflResults` block above uses. (qodo #2, re-review of #430.)
+  const strip = (s: string) => s
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const src = (p: string) => strip(readFileSync(resolve(root, p), 'utf8'));
+  const grid = src('src/components/NFLPoolDashboard/NFLPicksGrid.tsx');
+  const dash = src('src/components/NFLPoolDashboard/NFLPoolDashboard.tsx');
 
   it('the tab is offered only to a commissioner, and only on Pick\'em', () => {
     // NOT cosmetic: `getPoolPicks` throws permission-denied for a participant
@@ -661,7 +670,8 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     // pool's data until its snapshot landed. The own-entry row bypasses the
     // reveal guard by design, so the grid rendered the old pool's picks as this
     // one's. (codex r4.)
-    const route = readFileSync(resolve(root, 'src/components/routes/PoolRoute.tsx'), 'utf8');
+    // Stripped too — the `key` is introduced by a long JSX comment that names it.
+    const route = src('src/components/routes/PoolRoute.tsx');
     expect(route).toMatch(/<NFLPoolDashboard\s+key=\{pool\.id\}/);
   });
 
