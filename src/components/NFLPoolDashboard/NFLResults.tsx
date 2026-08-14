@@ -14,7 +14,6 @@ import {
   unwinnableGameIds,
   resultsFootnote,
   type ResultsRow,
-  type ResultsView,
 } from '../../utils/nflResults';
 
 /**
@@ -317,8 +316,16 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
       </div>
 
       <div className="px-5 py-3 border-t border-line bg-surface text-[11px] font-body text-muted">
+        {/* No `as ResultsView` here, deliberately. The cast was redundant —
+            PickemView | MarginView already IS ResultsView — and worse than
+            redundant: it would silence the error if a view were added to the
+            local union and not to ResultsView, and the new value would fall
+            through the switch to the grid caption. That is this PR's own defect
+            class for the third time, so the compiler catches it instead.
+            Verified by mutation: adding a value to MarginView alone now fails
+            with TS2322. (qodo, re-review of this PR.) */}
         {resultsFootnote({
-          view: view as ResultsView,
+          view,
           isMargin,
           weekLabel: nflWeekLabel(seasonType, week),
           confidenceMode: !!settings.confidenceMode,
