@@ -659,7 +659,12 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     // Now week-KEYED as well as pool-stamped: the Survivor/Margin grid draws
     // many weeks at once, so one response per pool is no longer enough.
     expect(dash).toContain('prev.poolId === pool.id');
-    expect(dash).toContain('reveal.poolId === pool.id ? reveal.byWeek : {}');
+    expect(dash).toContain('reveal.poolId === pool.id && reveal.uid === viewerUid ? reveal.byWeek : {}');
+    // The response is per-principal now, so a cache keyed only by pool would
+    // survive a sign-out or a removal and keep serving the previous viewer's
+    // revealed picks. A denial empties it rather than being logged. (codex P1.)
+    expect(dash).toContain("err as { code?: string })?.code === 'functions/permission-denied'");
+    expect(dash).toContain('setReveal({ poolId: pool.id, uid: viewerUid, byWeek: {} });');
     expect(dash).toContain('revealsForPool[selectedWeek]?.week === selectedWeek');
     // Same rule for the Majority row's aggregate, checked at RENDER time —
     // clearing it in the effect leaves one frame of the previous pool's splits,

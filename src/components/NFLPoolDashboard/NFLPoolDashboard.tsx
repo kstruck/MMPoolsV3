@@ -195,8 +195,14 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // what admits a cell. One shared response across columns would render week 2's
   // pick using week 1's `weekRevealed`, leaking a week that has not locked.
   // Each week therefore keeps its OWN WHOLE response. (Plan D6/T9, codex r2.)
-  const [reveal, setReveal] = useState<{ poolId: string; byWeek: Record<number, PoolPicksReveal> }>(
-    { poolId: pool.id, byWeek: {} },
+  //
+  // 🛑 STAMPED WITH THE VIEWER TOO, NOT JUST THE POOL. The response is
+  // per-principal now — a member sees other members' picks, a non-member sees
+  // nothing — so a cache keyed only by pool would survive a sign-out,
+  // account switch, or removal from the roster and keep rendering the previous
+  // viewer's revealed picks to someone no longer entitled to them. (codex P1.)
+  const [reveal, setReveal] = useState<{ poolId: string; uid: string; byWeek: Record<number, PoolPicksReveal> }>(
+    { poolId: pool.id, uid: user?.id || '', byWeek: {} },
   );
 
   useEffect(() => {
@@ -223,17 +229,29 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 
   // Shared fetch-and-merge. A response for another pool is discarded rather
   // than merged, which is the #430 cross-pool guard generalised to a map.
+  const viewerUid = user?.id || '';
+  // Every read of the cache goes through this — pool AND viewer must both match.
+  const revealsForPool = reveal.poolId === pool.id && reveal.uid === viewerUid ? reveal.byWeek : {};
   const loadWeek = React.useCallback((w: number) => {
     dbService.getPoolPicks(pool.id, w)
       .then(r => {
-        setReveal(prev => prev.poolId === pool.id
-          ? { poolId: pool.id, byWeek: { ...prev.byWeek, [w]: r } }
-          : { poolId: pool.id, byWeek: { [w]: r } });
+        setReveal(prev => prev.poolId === pool.id && prev.uid === viewerUid
+          ? { poolId: pool.id, uid: viewerUid, byWeek: { ...prev.byWeek, [w]: r } }
+          : { poolId: pool.id, uid: viewerUid, byWeek: { [w]: r } });
       })
-      // A refusal is not a crash — a non-member gets one, and every surface
-      // keeps rendering Hidden / "?", which is the honest answer.
-      .catch(err => { logger.warn('[NFLPoolDashboard] getPoolPicks failed', err); });
-  }, [pool.id]);
+      // 🛑 A REFUSAL MUST EMPTY THE CACHE, not merely be logged. It is not a
+      // crash — a non-member gets one and every surface then renders "?", which
+      // is the honest answer — but the responses already in hand were fetched
+      // under an entitlement the server has just declined to renew. Keeping
+      // them would show a removed member the picks they could see a minute ago.
+      // (codex P1.)
+      .catch(err => {
+        logger.warn('[NFLPoolDashboard] getPoolPicks failed', err);
+        if ((err as { code?: string })?.code === 'functions/permission-denied') {
+          setReveal({ poolId: pool.id, uid: viewerUid, byWeek: {} });
+        }
+      });
+  }, [pool.id, viewerUid]);
 
   // (a) THE SELECTED WEEK — the only one whose answer can still change, so the
   // only one that polls or reacts to a `members` snapshot.
@@ -278,7 +296,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // VIEWER: on a week-18 pool, eighteen. A past week's reveal is a clock
   // boundary that has already passed and cannot change, so it is fetched once
   // and kept. (codex P2.)
-  const cachedWeeks = reveal.poolId === pool.id ? reveal.byWeek : {};
+  const cachedWeeks = revealsForPool;
   const missingWeeks = gridWeeks.filter(w => w !== selectedWeek && !cachedWeeks[w]).join(',');
   useEffect(() => {
     if (!user || activeTab !== 'grid' || pool.type === 'NFL_PICKEM') return;
@@ -300,7 +318,6 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // Pick CONTENT from a pool that is no longer on screen. Clearing the state in
   // the effect instead would blank the grid on every `members` snapshot, which
   // is every submit — hence a stamp rather than a reset. (codex r1.)
-  const revealsForPool = reveal.poolId === pool.id ? reveal.byWeek : {};
   const weekReveal = revealsForPool[selectedWeek]?.week === selectedWeek
     ? revealsForPool[selectedWeek]
     : null;
