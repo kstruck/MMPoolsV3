@@ -56,6 +56,52 @@ export function weeklyMaxPoints(gameCount: number, confidenceMode: boolean): num
     return (n * (33 - n)) / 2;
 }
 
+/** The fields of an NFL game this file needs. Structural, so tests need no fixture. */
+export interface ScoreableGame {
+    id: string;
+    status?: string;
+    scores?: { home?: number; away?: number } | null;
+    spread?: { value?: number } | null;
+}
+
+/**
+ * The games of a week that can NEVER earn a point, whoever picked them.
+ *
+ * Mirrors `gradePickemGames` (functions/src/nflScoringEngine.ts), which awards
+ * points only on a `W`:
+ *   - CANCELLED            → VOID
+ *   - straight-up tie      → PUSH   (non-ATS pools)
+ *   - exact spread cover   → PUSH   (ATS pools: homeScore + spread === awayScore)
+ *
+ * ⚠️ A game that has not concluded is NOT here. This answers "is this game
+ * unwinnable", not "has it been graded" — an unplayed game is still worth its
+ * full value, which is exactly what a max-POSSIBLE denominator needs.
+ *
+ * A FINAL the feed reported no scores for is likewise excluded: the scorer skips
+ * it for now (NFL7-3) and it may yet be repaired, so calling it unwinnable would
+ * shrink Max over a feed glitch.
+ *
+ * (codex: without this the Max column claimed a score a cancelled game made
+ * impossible.)
+ */
+export function unwinnableGameIds(games: ScoreableGame[], isAts: boolean): Set<string> {
+    const out = new Set<string>();
+    for (const g of games) {
+        if (g.status === 'CANCELLED') { out.add(g.id); continue; }
+        if (g.status !== 'FINAL') continue;
+        const home = g.scores?.home;
+        const away = g.scores?.away;
+        if (!Number.isFinite(home) || !Number.isFinite(away)) continue;
+        const spread = g.spread?.value;
+        if (isAts && typeof spread === 'number') {
+            if ((home as number) + spread === away) out.add(g.id);
+        } else if (home === away) {
+            out.add(g.id);
+        }
+    }
+    return out;
+}
+
 /**
  * A week's value for one row: Pick'em points, or Margin net.
  *

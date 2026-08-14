@@ -11,6 +11,7 @@ import {
   weeklyMaxPoints,
   weekValueFor,
   scoredWeekCount,
+  unwinnableGameIds,
   type ResultsRow,
 } from '../../utils/nflResults';
 
@@ -57,7 +58,7 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
   const type = pool.type;
   const isMargin = type === 'NFL_MARGIN';
   const seasonType = poolSeasonType(pool);
-  const settings = (pool as { settings?: { confidenceMode?: boolean } }).settings || {};
+  const settings = (pool as { settings?: { confidenceMode?: boolean; pickMode?: string } }).settings || {};
 
   // Sub-view, reset per pool for the same reason the Standings toggle resets:
   // PoolRoute reuses this component across pool navigation, so a view chosen in
@@ -66,11 +67,16 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
   useEffect(() => { setView('WEEKLY'); }, [pool.id]);
 
   const weeks = useMemo(() => poolSeasonWeeks(games, pool), [games, pool]);
-  const weekGameCount = useMemo(
-    () => gamesForPoolWeek(games || [], pool as any, week).length,
-    [games, pool, week],
-  );
-  const maxPoints = weeklyMaxPoints(weekGameCount, !!settings.confidenceMode);
+  // Max counts only the games that can still be WON. A cancelled game grades
+  // VOID and a tie (or an exact spread cover) grades PUSH — all three earn
+  // nothing, so counting them would print a total the scorer can never award.
+  // (codex r1.)
+  const { weekScoreableCount, unwinnableCount } = useMemo(() => {
+    const slate = gamesForPoolWeek(games || [], pool as any, week);
+    const unwinnable = unwinnableGameIds(slate, settings.pickMode === 'ATS');
+    return { weekScoreableCount: slate.length - unwinnable.size, unwinnableCount: unwinnable.size };
+  }, [games, pool, week, settings.pickMode]);
+  const maxPoints = weeklyMaxPoints(weekScoreableCount, !!settings.confidenceMode);
 
   const rows = entries as ResultsRow[];
   const weekly = useMemo(() => rankByWeek(rows, week, isMargin), [rows, week, isMargin]);
@@ -178,6 +184,20 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                 // zero until the scorer has published the week.
                 const correct = wr?.correct;
                 const total = wr?.total;
+                // ⚠️ `total - correct` is "graded picks that did not WIN", which
+                // is the same thing as "incorrect" only when the week contains
+                // no push and no void. A tie, an exact spread cover and a
+                // cancelled game all grade to neither W nor L and earn nothing,
+                // so they land in this subtraction too.
+                //
+                // The exact per-player count is NOT derivable here: it needs the
+                // per-game grade map, which `buildStandingsRows` strips from the
+                // member-readable projection by allowlist (it is bulky, and this
+                // page is not the place to reintroduce it). So on a week that
+                // HAS an unwinnable game the number is marked and the footnote
+                // says what it includes, rather than being quietly asserted as a
+                // loss count. On every other week — the overwhelmingly common
+                // case — it is exact and unmarked. (codex r1.)
                 const incorrect =
                   typeof correct === 'number' && typeof total === 'number' ? total - correct : null;
                 return (
@@ -198,7 +218,12 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                           {typeof correct === 'number' ? correct : dash}
                         </td>
                         <td className={`${TD} text-right text-muted font-bold`}>
-                          {incorrect === null ? dash : incorrect}
+                          {incorrect === null ? dash : (
+                            <>
+                              {incorrect}
+                              {unwinnableCount > 0 && <span className="text-faint">*</span>}
+                            </>
+                          )}
                         </td>
                       </>
                     )}
@@ -282,11 +307,25 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
       </div>
 
       <div className="px-5 py-3 border-t border-line bg-surface text-[11px] font-body text-muted">
-        {isMargin
-          ? 'Scored weeks only. A week with no number has not been scored yet — it is not a zero.'
-          : `Max is the most points anyone could score in ${nflWeekLabel(seasonType, week)} (${
+        {isMargin ? (
+          'Scored weeks only. A week with no number has not been scored yet — it is not a zero.'
+        ) : (
+          <>
+            {`Max is the most points anyone could score in ${nflWeekLabel(seasonType, week)} — ${
               settings.confidenceMode ? 'every confidence weight correct' : 'every pick correct'
-            }). Correct and Incorrect count picks the scorer has graded so far.`}
+            }, counting only games that can still be won. Correct and Incorrect count picks the scorer has graded so far.`}
+            {unwinnableCount > 0 && (
+              <>
+                {' '}
+                <strong>
+                  * {unwinnableCount} {unwinnableCount === 1 ? 'game' : 'games'} this week
+                  {' '}ended in a tie or was cancelled and awarded nobody points. Those picks are
+                  counted under Incorrect because this page cannot tell who picked them.
+                </strong>
+              </>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

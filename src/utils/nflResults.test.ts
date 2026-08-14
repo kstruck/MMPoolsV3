@@ -5,7 +5,9 @@ import {
     rankByWeek,
     rankBySeason,
     scoredWeekCount,
+    unwinnableGameIds,
     type ResultsRow,
+    type ScoreableGame,
 } from './nflResults';
 
 /**
@@ -184,6 +186,69 @@ describe('rankBySeason', () => {
             row({ id: 'c' }),
         ];
         expect(rankBySeason(rows, false).map(r => r.row.id).sort()).toEqual(['a', 'b', 'c']);
+    });
+});
+
+/**
+ * These mirror `gradePickemGames` in the scorer. If the two ever disagree, the
+ * Max column claims a total the scorer cannot award — which is exactly the
+ * defect codex found on the first version of this page.
+ */
+describe('unwinnableGameIds', () => {
+    const g = (over: Partial<ScoreableGame> & { id: string }): ScoreableGame => over;
+
+    it('counts a CANCELLED game as unwinnable whatever its scores say', () => {
+        expect([...unwinnableGameIds([g({ id: 'x', status: 'CANCELLED', scores: { home: 21, away: 7 } })], false)])
+            .toEqual(['x']);
+    });
+
+    it('counts a straight-up tie as unwinnable on a non-ATS pool', () => {
+        const games = [g({ id: 'tie', status: 'FINAL', scores: { home: 17, away: 17 } })];
+        expect(unwinnableGameIds(games, false).has('tie')).toBe(true);
+    });
+
+    it('counts an EXACT spread cover as unwinnable on an ATS pool', () => {
+        // spread is relative to home: home 20 + (-3) === away 17 → PUSH.
+        const push = g({ id: 'p', status: 'FINAL', scores: { home: 20, away: 17 }, spread: { value: -3 } });
+        const cover = g({ id: 'c', status: 'FINAL', scores: { home: 24, away: 17 }, spread: { value: -3 } });
+        const ids = unwinnableGameIds([push, cover], true);
+        expect(ids.has('p')).toBe(true);
+        expect(ids.has('c')).toBe(false);
+    });
+
+    it('grades an ATS pool STRAIGHT UP when the game carries no spread, like the scorer does', () => {
+        const tie = g({ id: 't', status: 'FINAL', scores: { home: 17, away: 17 } });
+        expect(unwinnableGameIds([tie], true).has('t')).toBe(true);
+    });
+
+    it('does NOT call an unplayed game unwinnable — Max is max POSSIBLE', () => {
+        const games = [
+            g({ id: 'sched', status: 'SCHEDULED' }),
+            g({ id: 'live', status: 'IN_PROGRESS', scores: { home: 7, away: 7 } }),
+        ];
+        expect(unwinnableGameIds(games, false).size).toBe(0);
+    });
+
+    it('does NOT call a FINAL with no reported scores unwinnable — the feed may still be repaired', () => {
+        const games = [
+            g({ id: 'broken', status: 'FINAL' }),
+            g({ id: 'half', status: 'FINAL', scores: { home: 10 } }),
+        ];
+        expect(unwinnableGameIds(games, false).size).toBe(0);
+    });
+
+    it('shrinks the Max denominator, confidence mode included', () => {
+        const slate: ScoreableGame[] = [
+            g({ id: '1', status: 'FINAL', scores: { home: 10, away: 3 } }),
+            g({ id: '2', status: 'CANCELLED' }),
+            g({ id: '3', status: 'FINAL', scores: { home: 14, away: 14 } }),
+            g({ id: '4', status: 'SCHEDULED' }),
+        ];
+        const scoreable = slate.length - unwinnableGameIds(slate, false).size;
+        expect(scoreable).toBe(2);
+        expect(weeklyMaxPoints(scoreable, false)).toBe(2);
+        // Best case in confidence mode is the two HIGHEST weights, 16 + 15.
+        expect(weeklyMaxPoints(scoreable, true)).toBe(31);
     });
 });
 
