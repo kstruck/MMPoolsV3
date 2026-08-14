@@ -707,7 +707,10 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     expect(dash).toContain('if (!user || !wantsReveal) return;');
     expect(dash).toContain('[user?.id, activeTab, pool.type, missingWeeks, loadWeek]');
     expect(dash).toContain("activeTab !== 'grid'");
-    expect(dash).toContain('!cachedWeeks[w]');
+    // 'Cached' must mean REVEALED. An unrevealed response is a snapshot of a
+    // clock still running; caching it as final left the column at "?" forever
+    // once that week locked. (codex r9.)
+    expect(dash).toContain('!cachedWeeks[w]?.weekRevealed');
   });
 
   it('a weekly-pool column is admitted by ITS OWN weekRevealed, never a shared one', () => {

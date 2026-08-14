@@ -334,7 +334,18 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // boundary that has already passed and cannot change, so it is fetched once
   // and kept. (codex P2.)
   const cachedWeeks = revealsForPool;
-  const missingWeeks = gridWeeks.filter(w => w !== selectedWeek && !cachedWeeks[w]).join(',');
+  // 🛑 "CACHED" MEANS REVEALED, NOT MERELY FETCHED. A viewer can select a LATER
+  // week, which pulls earlier columns that have not reached their deadline yet
+  // — and a `weekRevealed: false` response is a snapshot of a clock that is
+  // still running. Treating it as final meant that once such a week locked it
+  // was neither the selected week nor "missing", so nothing ever re-fetched it
+  // and the column showed "?" until the user selected it or reloaded. Only a
+  // revealed response is permanent; an open one stays on the to-fetch list.
+  // (codex P2, r9.)
+  //
+  // This cannot spin: re-fetching an unrevealed week returns another unrevealed
+  // response, so this string is unchanged and the effect does not re-run.
+  const missingWeeks = gridWeeks.filter(w => w !== selectedWeek && !cachedWeeks[w]?.weekRevealed).join(',');
   useEffect(() => {
     if (!user || activeTab !== 'grid' || pool.type === 'NFL_PICKEM') return;
     for (const w of missingWeeks.split(',').filter(Boolean)) loadWeek(Number(w));
