@@ -71,12 +71,21 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
   // VOID and a tie (or an exact spread cover) grades PUSH — all three earn
   // nothing, so counting them would print a total the scorer can never award.
   // (codex r1.)
-  const { weekScoreableCount, unwinnableCount } = useMemo(() => {
+  const { weekSlateCount, weekScoreableCount, unwinnableCount } = useMemo(() => {
     const slate = gamesForPoolWeek(games || [], pool as any, week);
     const unwinnable = unwinnableGameIds(slate, settings.pickMode === 'ATS');
-    return { weekScoreableCount: slate.length - unwinnable.size, unwinnableCount: unwinnable.size };
+    return {
+      weekSlateCount: slate.length,
+      weekScoreableCount: slate.length - unwinnable.size,
+      unwinnableCount: unwinnable.size,
+    };
   }, [games, pool, week, settings.pickMode]);
   const maxPoints = weeklyMaxPoints(weekScoreableCount, !!settings.confidenceMode);
+  // ⚠️ A Max of 0 is a FACT on a week whose every game was cancelled or tied —
+  // the scorer still publishes that week, and everyone genuinely scored out of
+  // nothing. Only an unloaded slate is unknown. `maxPoints || dash` conflated
+  // the two and rendered the real zero as "—". (codex r2, on r1's own fix.)
+  const maxKnown = weekSlateCount > 0;
 
   const rows = entries as ResultsRow[];
   const weekly = useMemo(() => rankByWeek(rows, week, isMargin), [rows, week, isMargin]);
@@ -213,7 +222,7 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                         <td className={`${TD} text-right font-display font-bold text-[color:var(--text)]`}>
                           {value === null ? dash : value}
                         </td>
-                        <td className={`${TD} text-right text-muted`}>{maxPoints || dash}</td>
+                        <td className={`${TD} text-right text-muted`}>{maxKnown ? maxPoints : dash}</td>
                         <td className={`${TD} text-right text-muted font-bold`}>
                           {typeof correct === 'number' ? correct : dash}
                         </td>
