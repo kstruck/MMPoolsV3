@@ -25,8 +25,17 @@ Measured:
 
 - **T-C — auto-pick for members who miss the deadline — was never started.** It
   is plan-gated and has no plan (`HANDOFF.md:133`, `MORNING-2026-08-12.md` §5:
-  "Not started. No plan"). Nothing anywhere in this codebase generates a pick on
-  a member's behalf.
+  "Not started. No plan"). **Nothing in this codebase generates a pick
+  ALGORITHMICALLY on a member's behalf.**
+
+  ⚠️ An earlier draft said "nothing generates a pick on a member's behalf",
+  full stop, and that is **false**: `proxyPick`
+  (`functions/src/poolExceptions.ts:223`, exported at `index.ts:108`) is a
+  commissioner-invoked callable that writes picks for a target user. It is not an
+  *auto*pick — a human chose those teams, and the commissioner is accountable for
+  them — but it IS a pick the member did not enter, which is close enough to the
+  thing being counted that the plan must say where it lands rather than leave the
+  boundary to an implementer. **Decision D6.** (qodo on PR #428.)
 - **What exists is Quick Picks** (`src/components/NFLPoolDashboard/pickSheet/quickPicks.ts`,
   shipped #417) — four mechanical fills the MEMBER presses, on their own sheet,
   before saving. The member reviews the result and submits it themselves.
@@ -175,6 +184,7 @@ migration; entries without the field have had no autopicks, which is true.
 | **D3** | `autopickLimit` on a `payoutMode: WEEKLY` pool — reject at validation, or accept and ignore? | **Reject.** A stored setting that does nothing is how a commissioner comes to believe a rule is in force when it is not. |
 | **D4** | Is `#` (ineligible) visible to every member, or only to the commissioner and the member themselves? | **Everyone.** It changes who is competing for the season prize, and a prize rule that only some players can see is worse than no rule. |
 | **D5** | Does an autopicked week still SCORE normally (points count, just not toward season-prize eligibility)? | **Yes.** Kevin's complaint is about *winning the season prize* on autopicks, not about the picks being worthless. This also keeps the weekly prizes untouched. |
+| **D6** | Do **commissioner proxy picks** (`proxyPick`) count toward the limit? | **No, and the rules page should say so.** A human chose those teams and the commissioner is accountable for them — that is the opposite of the "just used autopick all season" behaviour you described. But it is a pick the member did not enter, so it must be ruled on explicitly rather than left to whoever implements the counter. |
 
 ---
 
@@ -190,5 +200,5 @@ migration; entries without the field have had no autopicks, which is true.
 - [x] Plan written
 - [ ] Adversarial review log
 - [ ] Sweep pass — complete instance lists for `settings.` validation sites, `callableOnlySettingsUnchanged` field list, standings/Results row renderers
-- [ ] **Kevin's sign-off on D1–D5**
+- [ ] **Kevin's sign-off on D1–D6**
 - [ ] Implementation

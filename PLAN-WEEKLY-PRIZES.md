@@ -27,6 +27,14 @@ the opposite:** Kevin's test pools are IN PROGRESS for the current week and
 testing continues tomorrow, and nothing may change what an in-flight week's
 prediction means.
 
+⚠️ **UNVERIFIED** — that pool state is Kevin's statement in the session brief,
+not something this session measured. No production data was read. If the test
+pools turn out to hold no submissions for the current week, D1 loses its urgency
+and the simpler re-read becomes safe. **The state is worth re-checking before
+acting on D1**, and the check is: does any entry in those pools carry a
+`weeklyTiebreakers` value for the current week? (qodo on PR #428 — the repo's
+UNVERIFIED convention, `mmp-docs-and-writing`.)
+
 Here is the exact mechanism, measured:
 
 - `effectiveWeeklyTiebreaker` (`shared/nflTiebreaker.ts:34`) resolves anything
