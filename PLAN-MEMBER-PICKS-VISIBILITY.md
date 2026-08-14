@@ -147,18 +147,75 @@ is the safe direction**.
 **Recommendation: change no rules.** This keeps the change to `functions/` alone:
 **a functions deploy, and no rules deploy.**
 
+⚠️ An earlier draft also argued the predicate in D5 was safe *because the entries
+rule already uses it*. That is circular and is deleted (review round 1, finding
+6): the rule using a weak predicate is an argument about the rule. D4 now rests
+only on the ordering above, which is independent of D5.
+
 ⚠️ **The tempting "cleanup" is to relax the rules block to match. Do not.** The
 rules path serves the WHOLE entry document — every week, every field — and has no
 way to express a per-game boundary. That is precisely why #414 built a callable
 in the first place. Widening it would hand back the leak the callable exists to
 prevent, while looking like tidying.
 
-### D5 — Membership is proved by `participantIds`, never by a Member Record
+### D5 — Membership is proved by `isProvableMember`, and by nothing hand-rolled
 
-A Member Record's existence proves nothing: the pre-#344 claim path was itself a
-way to forge one, which is why `isProvableMember` tests `pool.participantIds`.
-The new branch in `assertPickReader` must test `participantIds` — the same
-authority the entries rule at `firestore.rules:441` already uses.
+**An earlier draft of this decision said to test `pool.participantIds` directly,
+"never a Member Record". That was wrong twice over** (review round 1, finding 1):
+
+1. `participantIds` **is client-writable by a pool manager** — it is absent from
+   `protectedFieldsUnchanged()` (`firestore.rules:91-135`, which lists
+   `participants` and not `participantIds`), and `allow update` admits
+   `isPoolManager()` on an editable pool (`firestore.rules:300-310`). Verified
+   directly, not taken from the reviewer.
+2. It contradicts the repo's canonical predicate. `isProvableMember`
+   (`shared/memberRecord.ts:166-187`) accepts **either** a canonical Member Record
+   **or** the array, and its own header forbids re-deriving the rule in a caller:
+   *"two doors with two copies is how one of them ends up wrong."*
+
+**The new branch calls `isProvableMember` and adds no logic of its own.**
+
+⚠️ **The residual is real and is ACCEPTED, not mitigated:** a pool manager can
+add any UID to their own pool's `participantIds` and thereby grant it revealed
+picks. That is not an escalation — `isProvableMember`'s own comment settles it
+(*"A manager listing someone as a participant IS membership"*), and the manager
+can already see every revealed pick and could simply tell them. Written down here
+so the next reviewer does not have to rediscover it.
+
+### D7 — 🛑 A DEPARTED MEMBER'S PICKS MUST NOT BE SERVED TO A CURRENT ONE
+
+**The sharpest finding of review round 1, and nothing in the first draft came
+near it.**
+
+`getPoolPicks` builds every map by iterating the **entire `entries` collection**
+(`nflPickReveal.ts:185-209`) with no filter against the current roster. But
+removing a member deletes their Member Record and pulls them from
+`participantIds` — **it does not delete their entry**
+(`functions/src/lib/memberRecord.ts:186-190`).
+
+Today this is invisible: the only readers are the commissioner and SUPER_ADMIN,
+for whom seeing a departed player's entry is unremarkable. **Admitting
+participants is exactly what converts it into one member's data being served to
+another**, for someone the pool no longer lists.
+
+It is also already a UI inconsistency: `buildMemberStandings` drops those players,
+so the callable returns rows the grid does not render — and a players × weeks grid
+would widen the gap.
+
+**Recommendation: filter the response to uids the pool still recognises**, using
+the same `isProvableMember` predicate as D5, and drop the rest before assembling
+any map.
+
+### D8 — Entry EXISTENCE is itself a disclosure, and it is the one to accept
+
+Even with `counts` withheld (D1), the response's key set tells a member **which
+uids have an entry document at all**. That is a much weaker fact than a count —
+it is "this person is playing", not "this person is 14/16 done" — and the roster
+is already readable by every participant (`firestore.rules:431-438`).
+
+**Recommendation: accept it.** Suppressing it would mean returning a padded or
+shuffled key set, which is more machinery than the fact is worth. Named so that
+it is a decision rather than an oversight.
 
 ### D6 — Polling cadence must change, or this multiplies load by the roster
 
@@ -173,7 +230,39 @@ A 30-person pool goes from 1 call/minute to 30, and a Survivor grid over an
 interval off to 5 minutes for members, and fetch the Margin/Survivor week columns
 **once** rather than on the poll — a past week's reveal cannot change.
 
+⚠️ **"Fetch once" is not a specification, and the state shape blocks it** (review
+round 1, finding 8). The dashboard holds exactly ONE response,
+`{poolId, data}`, and accepts it only when `data.week === selectedWeek` — the
+single-slot guard **#430 added** to fix cross-pool staleness. A players × weeks
+grid cannot consume N one-week responses through it.
+
+So B requires generalising that guard to `{poolId, byWeek: Record<number, …>}`:
+pool-scoped still, but week-keyed, with each week keeping **its own
+`revealedGameIds`**. Merging the allowlists across weeks is precisely how one
+week's reveal would open another's.
+
 ---
+
+## 3a. Every field of `PoolPicksResponse`, audited for a participant
+
+The first draft named `counts` and left the rest implied. A reviewer had to redo
+the work to check, so the result lives here now (`nflPickReveal.ts:39-60`).
+
+| Field | Pre-lock / partially revealed | Fully revealed | Verdict |
+|---|---|---|---|
+| `week` | caller supplied it | — | safe |
+| `mode` | pool config; pool docs are already world-readable (`firestore.rules:61-63`) | — | safe |
+| `revealedGameIds` | which games have crossed their lock — a clock fact, no selection | — | safe |
+| `weekRevealed` | boolean timing metadata | — | safe |
+| `weekGameIds` | the week's public slate | — | safe |
+| **`counts`** | 🛑 **UNSAFE — returned regardless of reveal** (`:202`). The whole of D1. | identifies who made no pick / a partial one, which is the intended disclosure | **D1 / K1** |
+| `picks` | empty pre-lock; per-game allowlisted on a partial pick'em week (`:145-150`) | intended | correctly guarded |
+| `confidence` | follows the same allowlist; and `confidenceMode` forces `WEEK` mode, so it stays empty until the week lock (`lib/pickReveal.ts:68-72`) | intended | correctly guarded |
+| `tiebreakers` | returned **only** if `weekRevealed` (`:218-220`) | intended | correctly guarded |
+| *(the key set itself)* | reveals WHICH uids hold an entry | — | **D8 — accepted** |
+
+**Conclusion: `counts` is the only field that crosses the boundary**, which is
+what D1 already claimed — but the plan now shows its work instead of asserting it.
 
 ## 4. Risks
 
@@ -182,7 +271,7 @@ interval off to 5 minutes for members, and fetch the Margin/Survivor week column
 | **R1** | The change lands in `functions/`, which **deploys into a LIVE scorer** (`nflAutoScoreJob` `*/5`). | `nflPickReveal.ts` is read-only and is imported by nothing in the scoring path — to be **proved by a sweep**, not asserted. Deploy ritual per Rule 2. |
 | **R2** | D2's per-week fetch turns one call into N. | D6. If N round-trips prove unacceptable, the alternative is a `weeks: number[]` parameter on the callable — a bigger change, named here so it is a decision and not a surprise. |
 | **R3** | A member sees a pick the pool's own rules page implies is private. | `NFLPoolRules` / `CONTEXT.md` must be updated in the same PR. A product whose rules text contradicts its behaviour is the defect #429 and ADR-0004 both landed on. |
-| **R4** | Widening the one door #414 built to close it. | The reveal computation is untouched; only the principal test changes. Pinned by tests asserting a participant gets **byte-identical** output to the commissioner for the same week, and that a NON-participant is still refused. |
+| **R4** | Widening the one door #414 built to close it. | The reveal computation is untouched; only the principal test changes. **Split oracle** — the REVEAL-BOUND fields (`picks`, `confidence`, `tiebreakers`, `revealedGameIds`, `weekRevealed`) must be identical for every principal on the same week; the PRINCIPAL-SPECIFIC field (`counts`) is asserted against its own spec. An earlier draft demanded "byte-identical" output, which flatly contradicted T2 and would have produced a test asserting the wrong thing (review round 1, finding 7). Plus: a NON-participant is still refused. |
 | **R5** | Small pools de-anonymise. In a 2-person pool, seeing the other player's pick is total information. | Already true of the live consensus (Kevin's accepted consequence, Q4 2026-08-11). Named, not mitigated. |
 
 ---
@@ -207,6 +296,8 @@ interval off to 5 minutes for members, and fetch the Margin/Survivor week column
 | **K4** | Do Survivor/Margin cells get a **result colour** (D3)? | **No colour.** The scorer's outcome lives in Standings/Results; a client-side guess would contradict it. |
 | **K5** | Members poll at a **slower cadence** and only on the active tab (D6)? | **Yes.** 5 minutes for members, 60s for the commissioner, active tab only. |
 | **K6** | Does a member who has **not submitted** for a week still see everyone else's revealed picks? | **Yes.** The lock has passed; there is nothing left to protect, and withholding it would punish a missed pick twice. |
+| **K7** | Which weeks are columns in the Margin/Survivor grid? The callable accepts weeks up to **23** (`schemas/pickReveal.ts`), the dashboard renders 1–18, and a preseason pool has four. | **From the loaded SCHEDULE** (`poolSeasonWeeks`, which `NFLResults` already uses for exactly this), never a hardcoded count. Postseason weeks appear if and only if the pool's slate has them. |
+| **K8** | **A departed member's picks — hide or keep?** (D7) Their entry document survives removal, so today the callable would serve it to every remaining member. | **Hide.** Filter to uids the pool still recognises. It also makes the callable agree with `buildMemberStandings`, which already drops them. |
 
 ---
 
@@ -216,11 +307,13 @@ interval off to 5 minutes for members, and fetch the Margin/Survivor week column
 |---|---|---|---|
 | **T1** | `assertPickReader` gains a participant branch, tested against `participantIds` (D5). Returns a principal kind, not a boolean, so T2 can vary the response. | `functions/src/nflPickReveal.ts` | emulator: participant allowed; **non-participant still refused**; owner/manager/SUPER_ADMIN unchanged |
 | **T2** | Withhold `counts` from participants until `weekRevealed` (D1/K1). | `functions/src/nflPickReveal.ts` | unit: same week, participant vs commissioner — picks identical, counts differ exactly as specified |
-| **T3** | Frontend: the Current Picks tab drops `isManager`, keeps the pool-type gate. | `NFLPoolDashboard.tsx` | invariant test updated — it currently ASSERTS the `isManager` gate, so it must change deliberately, not incidentally |
+| **T3** | Frontend tab gate. The current gate is `pool.type === 'NFL_PICKEM' && isManager`, and an earlier draft said "drop `isManager`, keep the pool-type gate" — which removes the wrong half and leaves Margin and Survivor with no tab at all, contradicting T4 (review round 1, finding 4). **The gate becomes: offered on all three NFL types, to any provable member**; the pool type selects which COMPONENT renders. | `NFLPoolDashboard.tsx` | invariant test updated — `tests/nfl-surface-invariants.test.ts` currently ASSERTS `NFL_PICKEM && isManager`, so it must change deliberately, not incidentally |
 | **T4** | The Margin/Survivor grid: players × weeks (D2/K3), no grade (D3/K4). | new component + `utils/picksGrid.ts` | unit tests on the cell rule, same shape as `picksGrid.test.ts` |
 | **T5** | Polling cadence (D6/K5). | `NFLPoolDashboard.tsx` | — |
 | **T6** | `NFLPoolRules` copy + `CONTEXT.md` + an ADR note (R3). | docs | `docs-state-invariants` still green |
 | **T7** | **Sweep**: prove `nflPickReveal.ts` is not imported by any scoring path (R1), and enumerate every surface that renders another member's pick. | `PLAN-MEMBER-PICKS-VISIBILITY-SWEEPS.md` | deterministic greps, complete lists |
+| **T8** | Filter the response to uids the pool still recognises (D7/K8), using `isProvableMember` — the same predicate as T1, called once. | `functions/src/nflPickReveal.ts` | emulator: a removed member's entry is absent from `picks`, `counts`, `confidence` AND `tiebreakers` |
+| **T9** | Week-keyed reveal cache: `{poolId, data}` → `{poolId, byWeek}`, each week keeping its own `revealedGameIds` (D6). | `NFLPoolDashboard.tsx` | the #430 cross-pool staleness invariants must still pass — this generalises that guard, it does not replace it |
 
 ---
 
