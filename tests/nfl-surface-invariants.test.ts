@@ -616,13 +616,23 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
   const grid = src('src/components/NFLPoolDashboard/NFLPicksGrid.tsx');
   const dash = src('src/components/NFLPoolDashboard/NFLPoolDashboard.tsx');
 
-  it('the tab is offered only to a commissioner, and only on Pick\'em', () => {
-    // NOT cosmetic: `getPoolPicks` throws permission-denied for a participant
-    // (functions/src/nflPickReveal.ts), so dropping either half of this gate
-    // gives members a grid of "?" — or, if the callable is ever widened without
-    // a plan, gives them pick content the plan-gate exists to decide on.
-    expect(dash).toContain("const showPicksGridTab = pool.type === 'NFL_PICKEM' && isManager;");
+  it('the tab is offered to any signed-in viewer, on all three NFL types', () => {
+    // ⚠️ DELIBERATELY REVERSED. This used to assert
+    // `pool.type === 'NFL_PICKEM' && isManager`, and BOTH halves were removed on
+    // purpose (PLAN-MEMBER-PICKS-VISIBILITY, Kevin 2026-08-14):
+    //
+    //   * `isManager` was an AUTHORIZATION fact — `getPoolPicks` refused
+    //     participants — and the callable now admits a proven member, so the
+    //     client gate would be the only thing still refusing them.
+    //   * `NFL_PICKEM` alone left Margin and Survivor with no tab at all, which
+    //     contradicted the ticket that adds their grid.
+    //
+    // What still holds: a NON-member is refused BY THE SERVER and sees "?", and
+    // the pool type now selects the COMPONENT rather than whether the tab exists.
+    expect(dash).toContain("const showPicksGridTab = !!user && ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'].includes(pool.type);");
     expect(dash).toContain('grid: showPicksGridTab');
+    expect(dash).toContain("pool.type === 'NFL_PICKEM' ? (");
+    expect(dash).toContain('<NFLWeeklyPicksGrid');
   });
 
   it('the grid derives no reveal rule of its own — it consumes revealedGameIds', () => {
@@ -646,8 +656,11 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     // navigating between two pools the same commissioner runs leaves the
     // previous pool's response matching by week, and buildMemberStandings
     // grafts its picks onto any uid present in both rosters. (codex r1.)
-    expect(dash).toContain('setReveal({ poolId: pool.id, data: r })');
-    expect(dash).toContain('reveal.poolId === pool.id && reveal.data.week === selectedWeek');
+    // Now week-KEYED as well as pool-stamped: the Survivor/Margin grid draws
+    // many weeks at once, so one response per pool is no longer enough.
+    expect(dash).toContain('prev.poolId === pool.id');
+    expect(dash).toContain('reveal.poolId === pool.id ? reveal.byWeek : {}');
+    expect(dash).toContain('revealsForPool[selectedWeek]?.week === selectedWeek');
     // Same rule for the Majority row's aggregate, checked at RENDER time —
     // clearing it in the effect leaves one frame of the previous pool's splits,
     // because effects run after the render that changed the pool. (codex r2.)
@@ -661,6 +674,19 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     // "made no pick" — and corrected a frame later. (codex r6.)
     expect(dash).toContain('const entries = useMemo(');
     expect(dash).not.toContain('setEntries(');
+  });
+
+  it('a weekly-pool column is admitted by ITS OWN weekRevealed, never a shared one', () => {
+    // Survivor and Margin key a pick by the WEEK NUMBER, so `weekRevealed` — not
+    // `revealedGameIds` — is what admits a cell. A multi-week grid reading one
+    // selected week's flag would render week 2's pick on a week where only week
+    // 1 had locked. The rule is unit-tested in `picksGrid.test.ts`; this pins
+    // that the COMPONENT still routes each column to its own response.
+    const weekly = src('src/components/NFLPoolDashboard/NFLWeeklyPicksGrid.tsx');
+    expect(weekly).toContain('reveal: revealsByWeek[w]');
+    expect(weekly).toContain('weeklyPickCell');
+    const util = src('src/utils/picksGrid.ts');
+    expect(util).toContain('reveal?.week === week && reveal?.weekRevealed === true');
   });
 
   it('the dashboard is keyed on the pool, so no subscribed state survives navigation', () => {
