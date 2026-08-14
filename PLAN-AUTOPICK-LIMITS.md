@@ -113,7 +113,27 @@ defined consequence is not a feature.
 Prize-affecting → the setting must be **callable-only**, so a commissioner cannot
 move the bar by writing the pool document directly.
 
-⚠️ **Two measured traps, both from this repo's own history:**
+⚠️ **Callable-only is NOT enough — the threshold also needs a lifecycle rule.**
+Eligibility counts every recorded prior week, so lowering `autopickLimit` in week
+12 retroactively marks members `#` for weeks they played under a looser rule, and
+raising it un-marks them. Callable-only access stops a commissioner writing the
+field directly; it does nothing to stop them *legitimately editing the setting
+mid-season* and moving season-prize eligibility under people who already played.
+
+Two ways to close it, **Decision D7**:
+
+| | Rule |
+|---|---|
+| **(i) Lock it** | `autopickLimit` becomes immutable once the season opens — the same shape as the tiebreaker freeze gate, which locks a setting once submissions exist |
+| **(ii) Snapshot it** | Store the limit in force on the entry the first time an autopick is recorded, and judge that entry against the snapshot |
+
+**Recommendation: (i).** It is simpler, it matches an existing gate in this repo,
+and a commissioner who genuinely needs to change the rule mid-season is making an
+announcement to their league anyway. (ii) is more permissive but leaves members in
+the same pool judged by different thresholds, which is hard to explain on a rules
+page. (codex P1, plan review r9.)
+
+⚠️ **Two more measured traps, both from this repo's own history:**
 
 1. `callableOnlySettingsUnchanged()` is the ONLY thing in `firestore.rules` that binds SUPER_ADMIN; everything inside the `isPoolManager()` branch is short-circuited. A new callable-enforced invariant must have its field added to **that nested list**, or the guard does not run for the principal it most needs to.
 2. **Position in the expression IS the guard** (the S4 lesson). A term added in the wrong place is a guard that reads as a guard and is not.
@@ -201,5 +221,5 @@ migration; entries without the field have had no autopicks, which is true.
 - [x] Plan written
 - [ ] Adversarial review log
 - [ ] Sweep pass — complete instance lists for `settings.` validation sites, `callableOnlySettingsUnchanged` field list, standings/Results row renderers
-- [ ] **Kevin's sign-off on D1–D6**
+- [ ] **Kevin's sign-off on D1–D7**
 - [ ] Implementation

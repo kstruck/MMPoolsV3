@@ -294,13 +294,36 @@ that was promised to the charity. Match the panel exactly — including its
 `Math.floor` convention — or the same pool prints two different prize figures on
 two screens. (codex P1, plan review r8.)
 
-⚠️ **FREEZE THE ENTRY COUNT WITH THE POT, NOT JUST THE DIVISOR.** Freezing
-`weeksInSeason` alone leaves `entries` live, and `joinNFLPool` lets a member join
-at any time — so a join followed by a rescore recomputes an already-published
-week's prize against a larger roster, which is the same "published prizes move"
-failure the divisor freeze exists to stop, arriving through the numerator. The
-entry count used for a week's pot is **persisted with that week's published
-prize** and read back on every later pass. (codex P1, plan review r7.)
+### 🛑 3b-i. FREEZE THE COMPUTED RESULT, NOT ITS INPUTS ONE AT A TIME
+
+This plan reached the right rule the slow way. Successive review rounds found
+`weeksInSeason` unfrozen, then `entries` unfrozen, then `entryFee`,
+`hybridSplit`, the charity settings and `payouts.places` all still live on a
+rescore — every one of them editable by the commissioner while the pool is OPEN
+(`shared/editability.ts`), and every one of them able to silently change a week's
+award **after a winner was published**.
+
+Freezing them individually is a losing game: the next input added to the formula
+is unfrozen by default, and nobody notices until a prize moves.
+
+**So the rule is: at first publication of a week's prize, persist the OUTPUT.**
+
+Stored with the week's published prize, and read back verbatim on every later
+pass (rescore included):
+
+- the computed **pot** for that week, in whole dollars;
+- the **payout schedule** applied to it (the `places` array as it stood);
+- the **entry count** and **`weeksInSeason`** used, for auditability — so
+  "why is this $40?" is answerable a month later.
+
+A rescore then re-ranks **players** against a frozen pot, which is the only thing
+a rescore should be able to change. A commissioner editing settings afterwards
+affects future weeks and nothing already published.
+
+⚠️ This is also the honest boundary for "the platform moves no money": the site
+publishes a figure, and that figure must not move under the commissioner who read
+it out to their league. (codex P1, plan review r7 and r9 — r9 is the
+generalisation of r7's finding, and it is the one that closes the class.)
 
 ⚠️ **`weeklyPerEntry × entries` is the SEASON-LONG weekly total, which is why it
 is divided.** A codex round argued the division understates every weekly prize,
