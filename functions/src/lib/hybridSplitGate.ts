@@ -20,6 +20,44 @@ export function touchesHybridSplitSettings(patch: Record<string, unknown>): bool
 }
 
 /**
+ * Does this patch actually CHANGE any of the three fields the invariant spans?
+ *
+ * Presence alone is the wrong trigger for the transaction: the manager UI sends
+ * the COMPLETE settings object on every save, so `entryFee` and `payoutMode`
+ * are present in effectively every ordinary edit — a contact-email change was
+ * paying for a Firestore transaction plus a scoring-lease check to confirm that
+ * nothing moved. (qodo #12 on the split PR, post-merge.)
+ *
+ * Judged against the PRE-transaction pool read, deliberately. When every value
+ * the patch carries equals what is stored, the write cannot change the trio no
+ * matter what a concurrent writer does — a no-op rewrite of field X is a no-op
+ * under any interleaving, and the last-write-wins race on OTHER fields is the
+ * plain-update path's existing semantics, not something this gate governs.
+ * When anything differs, the transaction runs and re-judges against the
+ * in-transaction read exactly as before.
+ *
+ * `null` and `undefined` are the same absence (the clearing write stores
+ * deletes; older docs simply lack the key). The split object compares by
+ * value, not identity — the UI sends a fresh object every save.
+ */
+export function hybridSplitGateNeeded(
+  pool: Record<string, unknown> | undefined,
+  patch: Record<string, unknown>,
+): boolean {
+  if (!touchesHybridSplitSettings(patch)) return false;
+  const stored = (pool?.settings ?? {}) as Record<string, unknown>;
+  const norm = (v: unknown) => (v === null || v === undefined ? null : v);
+  for (const k of KEYS) {
+    if (!(k in patch)) continue;
+    const key = k.slice('settings.'.length);
+    const incoming = norm(patch[k]);
+    const current = norm(stored[key]);
+    if (JSON.stringify(incoming) !== JSON.stringify(current)) return true;
+  }
+  return false;
+}
+
+/**
  * The settings as they would stand after this patch lands. Patch wins per key;
  * absent keys carry the stored value through — exactly what the per-key dotted
  * write will do.

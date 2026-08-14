@@ -19,7 +19,7 @@ import { loadBillingConfig } from './billing';
 import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } from './lib/poolUpdate';
 import { parityEditNeedsEntries, survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
 import { tiebreakerEditNeedsEntries, touchesWeeklyTiebreakerSetting, weeklyTiebreakerRefusal } from './lib/weeklyTiebreakerGate';
-import { hybridSplitNeedsClearing, hybridSplitRefusal, touchesHybridSplitSettings } from './lib/hybridSplitGate';
+import { hybridSplitGateNeeded, hybridSplitNeedsClearing, hybridSplitRefusal } from './lib/hybridSplitGate';
 import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } from './lib/scoringLease';
 
 // Helper to determine if user can manage pool
@@ -469,7 +469,16 @@ export const updatePoolSettings = validated(
     // The hybrid split joins the same transaction: its invariant spans three
     // fields (split, payoutMode, entryFee) and must be judged against the pool
     // as it stands at write time, not at the pre-transaction read.
-    const hybridTouched = touchesHybridSplitSettings(patch);
+    //
+    // Gated on the values CHANGING, not on presence. The manager UI sends the
+    // complete settings object on every save, so `entryFee`/`payoutMode` are
+    // present in essentially every ordinary edit — presence-keying made a
+    // contact-email save pay for a transaction and a scoring-lease check to
+    // confirm nothing moved (qodo #12, post-merge on the split PR). A no-op
+    // rewrite cannot change the trio under any interleaving, so the pre-read
+    // comparison is safe; anything that differs still takes the transaction
+    // and is re-judged against the in-transaction read as before.
+    const hybridTouched = hybridSplitGateNeeded(pool as Record<string, unknown>, patch);
     if (touchesLockSettings(patch) || parityTouched || tiebreakerTouched || hybridTouched) {
         const bumpsLockRevision = touchesLockSettings(patch);
         await retryWhileScoring(() => db.runTransaction(async (tx) => {
