@@ -15,7 +15,7 @@ proves it.
 grep -rn "nflPickReveal\|lib/pickReveal" functions/src --include=*.ts | grep -v "__tests__"
 ```
 
-**Complete result — two lines, and they are the same file:**
+**Complete result — two lines:**
 
 | Importer | Imports |
 |---|---|
@@ -45,8 +45,8 @@ you find out.
 grep -rn "getPoolPicks" src/ --include=*.ts --include=*.tsx | grep -v "\.test\."
 ```
 
-Twenty hits. **Nineteen are comments, doc strings or type names.** The complete
-list of code that actually CALLS it:
+Most hits are comments, doc strings or type names. The complete list of code
+that actually CALLS it — which is the claim that matters:
 
 | Site | What |
 |---|---|
@@ -97,11 +97,28 @@ governs client UPDATEs, so it breaks any client flow that writes the array.
 grep -rn "participantIds" src/ --include=*.ts --include=*.tsx
 ```
 
-**Complete result: 21 hits, ZERO writes.** Every one is a read
-(`BillingGate.tsx:259`, `GlobalStandingsCard.tsx:36-37`, `memberStandings.ts:166`,
-the `array-contains` query at `dbService.ts:887`), a type declaration
-(`types/index.ts`, `types/nflPoolTypes.ts`), a test fixture, or the `[]` default
-in `constants.ts:93`.
+**Result: ZERO client writes.** Every hit is a read (`BillingGate.tsx`,
+`GlobalStandingsCard.tsx`, `memberStandings.ts`, the `array-contains` query in
+`dbService.ts`), a type declaration (`types/index.ts`, `types/nflPoolTypes.ts`),
+a test fixture, or the `[]` default in `constants.ts`.
+
+⚠️ **No hard hit-count is quoted here on purpose.** An earlier revision said
+"21 hits"; re-running the same grep at push time returned **113 lines**, because
+the count moves with every test fixture and type annotation added anywhere in
+`src/`. A number that rots on unrelated work makes the whole sweep look wrong
+and teaches the next reader to skim it. The load-bearing claim is the ZERO, and
+it is structural rather than numeric — see the two reasons below. (qodo #8.)
+
+⚠️ **AND THE OBVIOUS CONFIRMATION GREP LIES.** Narrowing to write verbs:
+
+```bash
+grep -rn "participantIds" src/ --include=*.ts --include=*.tsx | grep -E "updateDoc|setDoc|arrayUnion|arrayRemove"
+```
+
+returns **one** line — `src/utils/memberStandings.ts:182` — which is a COMMENT
+quoting the SERVER's `participantIds: arrayRemove(uid)`. Read the hit before
+concluding from it; a bare count here would have said the sweep's conclusion was
+false when it is not.
 
 Two structural reasons this holds:
 

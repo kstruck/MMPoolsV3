@@ -266,7 +266,15 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
       // see a minute ago, so the cache is EMPTIED and every in-flight request
       // is invalidated with it.
       .catch(err => {
-        logger.warn('[NFLPoolDashboard] getPoolPicks failed', err);
+        const denied = (err as { code?: string })?.code === 'functions/permission-denied';
+        // 🛑 A DENIAL IS AN EXPECTED OUTCOME NOW, SO IT IS NOT A WARNING.
+        // The tab is offered to every signed-in viewer, and a NON-member is
+        // refused by the server by design — that is the whole shape of the
+        // feature. Logging it at warn would put a recurring line in production
+        // logs on a normal user path, every poll, and drown the failures that
+        // do mean something. Classified BEFORE logging, not after. (qodo #9.)
+        if (denied) logger.debug('[NFLPoolDashboard] getPoolPicks denied (not a member)');
+        else logger.warn('[NFLPoolDashboard] getPoolPicks failed', err);
         // ⚠️ THE SAME GENERATION CHECK AS THE SUCCESS PATH, and it was missing
         // here — an asymmetry that inverted the guard's purpose. A denial from
         // a PREVIOUS pool or viewer, rejecting after navigation, would bump the
@@ -275,7 +283,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
         // current viewer is fully entitled to. A superseded failure is as stale
         // as a superseded success. (codex P2, r7.)
         if (authGen.current !== gen) return;
-        if ((err as { code?: string })?.code === 'functions/permission-denied') {
+        if (denied) {
           authGen.current += 1;
           setReveal({ poolId: pool.id, uid: viewerUid, byWeek: {} });
         }
