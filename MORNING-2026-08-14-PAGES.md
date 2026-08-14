@@ -243,10 +243,25 @@ me a few minutes and it will cost the next session the same.
 
 | PR | codex rounds | codex findings | qodo findings | Rejected, with reasoning on the PR |
 |---|---|---|---|---|
-| #426 | 3 | 1 | 3 | codex's season-aware default — **you already declined it**; it is noted in the code and the PR body |
-| #427 | 6 | 4 | 2 | codex r4 (its arithmetic was wrong — it summed the bottom 15 confidence weights instead of the top 15; disproved with a brute-force test over every case), qodo's red-highlight finding (`docs/UI-REVAMP-GUIDE.md:51` prescribes exactly that treatment for leaderboards) |
-| #428 | 4 | 7 | pending | none |
+| #426 | 3 | 1 | 3 | codex's season-aware default — **you already declined it**; noted in the code and the PR body |
+| #427 | 6 | 4 | 2 | codex r4 (its arithmetic was wrong — it summed the *bottom* 15 confidence weights instead of the top 15; disproved with a brute-force test over every case), qodo's red-highlight finding (`docs/UI-REVAMP-GUIDE.md:51` prescribes exactly that treatment for leaderboards) |
+| #428 | 6 | 12 | 4 | codex r4's weekly-pot division (the shipped `PayoutsPanel` labels that figure "weekly **total**" and its tooltip says weekly "pot**s**"), qodo's two long-line findings (no markdown line-length rule is configured in this repo) |
 
-The pattern held again: **round 1 found defects in the code, and rounds 2+ found
-defects in the fixes.** #427 r2 caught a bug that r1's own fix had made
-reachable, and #428 r3 caught two contradictions that r2's fix had left behind.
+**qodo state:** #426 re-reviewed to `Bugs (0)` with both absorbed findings
+`✓ Resolved`; #427's absorbed finding `✓ Resolved`; #428 reported and every
+finding resolved or rejected on the PR.
+
+**⚠️ #428's final CI run was still in progress when this was written** — the
+earlier run on the same branch was green and the change is documentation only,
+but check `gh pr checks 428` before merging rather than taking this line for it.
+
+The pattern held again, and hard: **round 1 found defects in the work, and rounds
+2+ found defects in the fixes.** #427 r2 caught a bug that r1's own fix had made
+reachable. #428 r3 caught two contradictions that r2's fix had left behind, and
+r5 caught the plan contradicting itself about whether a tie past the last paid
+rank still gets paid.
+
+The two findings I would most want you to notice are the ones that came from
+**reading the code rather than the plan**: `proxyPick` exists and writes picks for
+another user (qodo, #428), and `getPoolPicks` refuses ordinary members outright,
+which is what blocks A2 (measured while building #427). Neither was in the brief.
