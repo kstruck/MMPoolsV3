@@ -150,6 +150,44 @@ Prints a table (name / v1-v2 / trigger / location / memory / runtime). To check 
 
 ---
 
+### 1b. Cloud Run healthcheck flakes during a mass deploy — measured 2026-08-13
+
+On a full-fleet deploy (~180 functions), a random subset can fail with
+`Container Healthcheck failed … PORT=8080 … within the allocated timeout`.
+Measured signature of the INFRA flake, as opposed to a real startup crash:
+
+- The revision logs show `Starting new instance` then **four minutes of total
+  silence** before `STARTUP TCP probe failed … DEADLINE_EXCEEDED. The instance
+  was not started.` A real code crash logs *something* — an exception, a module
+  error. Zero application output means Node never ran.
+- The failing subset is **non-deterministic across retries** (`createNFLPool`
+  failed attempt 1 and passed attempt 2 with an identical bundle). A code-level
+  import crash fails every function, every attempt — they share one container
+  image.
+- Healthy deploys of the same family pass the probe in ~5 seconds.
+
+**What is and is not broken while this happens:** Cloud Run keeps the LAST GOOD
+revision serving when a new one fails its healthcheck, so a failed update is
+NOT an outage — users stay on the previous deploy's code. The risk is a split
+fleet (some functions on the new bundle, some on the old), which matters only
+if the change spans functions that must agree.
+
+**The procedure that worked:**
+
+1. Retry ONLY the failed subset:
+   `npx firebase deploy --only functions:fnA,functions:fnB,... --project gridiron-gamble-uzuqo`
+2. If the retry fails too, **WAIT ~10 minutes** before the next attempt.
+   Back-to-back retries during the flake window fail the same way, and each
+   attempt costs ~5 minutes of probe timeout per function. The 2026-08-13
+   incident: attempt 1 failed 7, immediate attempt 2 failed 5 of the same 7,
+   ten-minute wait → attempt 3 passed all 5.
+3. Before any third attempt, pull the revision logs
+   (`npx firebase functions:log --only <fn>`) and check for the
+   silence-then-DEADLINE_EXCEEDED signature. Application output in the gap
+   means it is NOT this flake — stop retrying and read the error.
+4. Never `npm audit fix --force` or change code between attempts — the retry
+   must ship the same bundle, or a pass proves nothing about the failure.
+
 ## 2. www frontend deploy (Coolify — NOT Firebase Hosting)
 
 **As of 2026-07-06, per owner: prod www deploy is a MANUAL trigger in the Coolify dashboard by Kevin. Pushing to `main` does NOT deploy the frontend.** (PHASE0-DEPLOY-CHECKLIST.md line 19 claims "Coolify auto-builds main on push" — that doc claim is superseded by the owner interview; treat auto-deploy as false.)

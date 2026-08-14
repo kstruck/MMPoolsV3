@@ -14,10 +14,16 @@
 > the graying and the tie-breaker select in prod; the rest of the browser
 > checklist is `MORNING-2026-08-13-PART2.md` §1 step 5.
 >
-> **Open PR:** [#424](https://github.com/kstruck/MMPoolsV3/pull/424) — the
-> hybrid gate strips no-op keys instead of transacting on every settings save
-> (qodo #12 fix-forward; codex r2 clean; CI 7/7). Owes a **functions deploy
-> only** on merge.
+> **#424 is MERGED AND DEPLOYED** (2026-08-13 late evening) — the hybrid gate
+> strips no-op keys instead of transacting on every settings save. `main` and
+> the deployed functions are both at `427adcbd`. **The queue is EMPTY — nothing
+> is owed on any deploy surface.**
+>
+> ⚠️ That deploy hit a **Cloud Run healthcheck flake**: 7 of ~180 functions
+> failed `Container Healthcheck failed` on the full-fleet pass, 5 again on an
+> immediate retry, and all 5 passed after a ten-minute wait. No outage at any
+> point — Cloud Run kept each last good revision serving. The diagnostic
+> signature and the retry procedure are now §1b of `mmp-deploy-and-operate`.
 >
 > **Next build wave:** `PROMPT-NEXT-SESSION-WEEKLY-PRIZES.md` — tiebreaker
 > option change (last/first Monday game, remove combined, no-Monday → final
