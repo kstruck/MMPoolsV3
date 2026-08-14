@@ -645,6 +645,17 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     expect(grid).toContain('consensus?.poolId === pool.id ? consensus.byGame : undefined');
   });
 
+  it('the dashboard is keyed on the pool, so no subscribed state survives navigation', () => {
+    // The route sets `pool` from the global cache with no loading state, so the
+    // dashboard stays MOUNTED between pools and every subscribed state
+    // (`entries`, `ownEntry`, `members`, `standingsRows`) held the previous
+    // pool's data until its snapshot landed. The own-entry row bypasses the
+    // reveal guard by design, so the grid rendered the old pool's picks as this
+    // one's. (codex r4.)
+    const route = readFileSync(resolve(root, 'src/components/routes/PoolRoute.tsx'), 'utf8');
+    expect(route).toMatch(/<NFLPoolDashboard\s+key=\{pool\.id\}/);
+  });
+
   it('an unrevealed cell reads "?" and never collapses into the no-pick dash', () => {
     expect(grid).toContain("cell.kind === 'HIDDEN' ? '?'");
   });
