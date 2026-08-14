@@ -67,14 +67,27 @@ runbook is `.claude/skills/mmp-deploy-and-operate` §1c. Retry the deploy once
 before investigating.
 
 **Step 3 — confirm the new bundle actually shipped.** A moved hash proves a
-rebuild ran, not which code shipped. Run this from `D:\march-melee-pools`:
+rebuild ran, not which code shipped.
 
-```bash
-curl -s https://YOUR-PROD-HOST/ | grep -o 'index-[A-Za-z0-9_-]*\.js'
+Open **PowerShell** in `D:\march-melee-pools` and run this one line:
+
+```powershell
+[regex]::Matches((Invoke-WebRequest -Uri "https://marchmelee.com" -UseBasicParsing).Content, 'index-[A-Za-z0-9_-]+\.js') | ForEach-Object { $_.Value } | Select-Object -Unique
 ```
 
-*Success looks like:* a hash **different from `index-IDWl1xhV.js`** (the current
-live bundle).
+*Success looks like:* one line of output, a hash **different from
+`index-IDWl1xhV.js`** (the bundle live before this deploy).
+
+*If it prints nothing:* the page did not return the expected HTML — check the
+site loads in a browser first, then re-run.
+*If it prints `index-IDWl1xhV.js`:* the rebuild did not ship. Re-trigger the
+Coolify deploy and watch the build log to the end.
+
+⚠️ PowerShell, not bash: `curl` in PowerShell 5.1 is an alias for
+`Invoke-WebRequest` and takes different arguments, and `grep` does not exist
+there — a `curl … | grep …` pipeline fails before it reaches the site. (codex
+caught this one; the standing rule is that anything handed to Kevin runs in
+PowerShell 5.1 and never uses `&&`.)
 
 ⚠️ **Do NOT grep the entry bundle for the new strings** — the Results page is a
 lazily-imported route chunk and the entry bundle reports ABSENT on a perfectly
