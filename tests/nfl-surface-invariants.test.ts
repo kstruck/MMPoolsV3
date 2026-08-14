@@ -639,6 +639,10 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     // grafts its picks onto any uid present in both rosters. (codex r1.)
     expect(dash).toContain('setReveal({ poolId: pool.id, data: r })');
     expect(dash).toContain('reveal.poolId === pool.id && reveal.data.week === selectedWeek');
+    // Same rule for the Majority row's aggregate, checked at RENDER time —
+    // clearing it in the effect leaves one frame of the previous pool's splits,
+    // because effects run after the render that changed the pool. (codex r2.)
+    expect(grid).toContain('consensus?.poolId === pool.id ? consensus.byGame : undefined');
   });
 
   it('an unrevealed cell reads "?" and never collapses into the no-pick dash', () => {

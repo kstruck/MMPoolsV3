@@ -56,14 +56,19 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
   const seasonType = poolSeasonType(pool);
   const settings = (pool as { settings?: { confidenceMode?: boolean; pickMode?: string } }).settings || {};
 
-  const [consensus, setConsensus] = useState<Record<string, ConsensusSplit>>({});
-  useEffect(() => {
-    // Cleared FIRST: `PoolRoute` reuses this component across pool navigation,
-    // so without it the previous pool's splits sit under the new pool's Majority
-    // row until its first snapshot lands.
-    setConsensus({});
-    return dbService.subscribeToPoolConsensus(pool.id, setConsensus);
-  }, [pool.id]);
+  // Stamped with its pool, and checked at RENDER time — the same rule the
+  // dashboard applies to the reveal, for the same reason. `PoolRoute` reuses
+  // this component across pool navigation, and clearing the state inside the
+  // effect is not enough: effects run AFTER the render that changed the pool,
+  // so one frame of the new slate would carry the previous pool's Majority
+  // percentages — most misleadingly when the two pools share a slate, which two
+  // pools on the same week always do. (codex r2.)
+  const [consensus, setConsensus] = useState<{ poolId: string; byGame: Record<string, ConsensusSplit> } | null>(null);
+  useEffect(
+    () => dbService.subscribeToPoolConsensus(pool.id, byGame => setConsensus({ poolId: pool.id, byGame })),
+    [pool.id],
+  );
+  const splits = consensus?.poolId === pool.id ? consensus.byGame : undefined;
 
   // Columns are the week's slate in kickoff order, so the grid reads left to
   // right in the order the games (and therefore the reveals) happen.
@@ -218,7 +223,7 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                 </td>
                 <td className="py-3 px-3 text-center">{dash}</td>
                 {weekGames.map(g => {
-                  const m = majorityFor(consensus[g.id], g);
+                  const m = majorityFor(splits?.[g.id], g);
                   return (
                     <td key={g.id} className="py-3 px-3 text-center text-[12px] font-display font-bold uppercase tracking-[0.08em] num text-navy-700 dark:text-gold-400">
                       {m === null ? dash : `${m.team} ${m.pct}%`}
