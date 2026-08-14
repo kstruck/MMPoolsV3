@@ -358,3 +358,51 @@ describe('buildMemberStandings — pickedWeeks marker and the reveal graft', () 
         expect(week5[0].picks).toEqual({ 5: 'SF' });
     });
 });
+
+describe('weeklyReveals — the multi-week grid must not print "no pick" for a revealed week', () => {
+    /**
+     * codex P1 on the implementation. `reveal` is the SELECTED week only, so a
+     * Survivor/Margin grid drawing weeks 1..4 saw another member's picks map
+     * holding week 4 and nothing else — and rendered weeks 1-3 as "—", i.e.
+     * "they made no pick", about weeks that had revealed long ago.
+     */
+    it('grafts picks from every cached week, not just the selected one', () => {
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('kevin', 'Kevin Struck'), member('ron', 'Ron Johnson')],
+            standingsRows: [],
+            ownEntry: null,
+            reveal: { week: 3, picks: { ron: { 3: 'KC' } }, confidence: {}, tiebreakers: {} },
+            weeklyReveals: [
+                { week: 1, picks: { ron: { 1: 'SF' } }, confidence: {}, tiebreakers: {} },
+                { week: 2, picks: { ron: { 2: 'DAL' } }, confidence: {}, tiebreakers: {} },
+            ],
+        });
+        const ron = rows.find(r => r.ownerUid === 'ron');
+        expect(ron.picks).toEqual({ 1: 'SF', 2: 'DAL', 3: 'KC' });
+    });
+
+    it('leaves rows untouched when no extra weeks are supplied (the Pick’em path)', () => {
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('ron', 'Ron Johnson')],
+            standingsRows: [],
+            ownEntry: null,
+            reveal: { week: 3, picks: { ron: { 3: 'KC' } }, confidence: {}, tiebreakers: {} },
+        });
+        expect(rows.find(r => r.ownerUid === 'ron').picks).toEqual({ 3: 'KC' });
+    });
+
+    it('still never overwrites the viewer’s OWN picks', () => {
+        const own = { id: 'johnny', ownerUid: 'johnny', userName: 'Johnny Football', picks: { 1: 'SF' } };
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('johnny', 'Johnny Football')],
+            standingsRows: [],
+            ownEntry: own,
+            reveal: null,
+            weeklyReveals: [{ week: 1, picks: { johnny: { 1: 'KC' } }, confidence: {}, tiebreakers: {} }],
+        });
+        expect(rows[0].picks).toEqual({ 1: 'SF' });
+    });
+});

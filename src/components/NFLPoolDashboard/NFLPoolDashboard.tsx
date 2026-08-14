@@ -294,9 +294,16 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // buildMemberStandings reads from the pool, and a snapshot re-instantiating the
   // doc should not re-run this. (qodo.)
   const entries = useMemo(
-    () => buildMemberStandings({ pool: castPool, members, standingsRows, ownEntry, reveal: weekReveal }),
+    () => buildMemberStandings({
+      pool: castPool, members, standingsRows, ownEntry, reveal: weekReveal,
+      // Survivor and Margin draw many weeks at once, so their rows need every
+      // cached week's revealed picks — not just the selected week's, which
+      // would render every earlier column as "made no pick". The per-column
+      // reveal gate still lives in the cell. (codex P1.)
+      weeklyReveals: pool.type === 'NFL_PICKEM' ? undefined : Object.values(revealsForPool),
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [standingsRows, ownEntry, members, weekReveal, castPool.participantIds],
+    [standingsRows, ownEntry, members, weekReveal, castPool.participantIds, pool.type, revealsForPool],
   );
 
   // 2b. Subscribe to Member Records (roster truth — everyone who joined, ADR 0003)

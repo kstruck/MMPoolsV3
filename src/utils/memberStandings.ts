@@ -41,6 +41,25 @@ export interface MemberStandingsInput {
      * function never widens the boundary.
      */
     reveal?: PoolPicksReveal | null;
+    /**
+     * ADDITIONAL revealed weeks whose PICKS are grafted too — Survivor and
+     * Margin only, where the grid draws many weeks at once.
+     *
+     * 🛑 WITHOUT THIS THE MULTI-WEEK GRID LIES. `reveal` is the SELECTED week,
+     * so another member's `picks` map would hold that one week and nothing
+     * else — and every earlier column, however long since revealed, would
+     * render as "—", i.e. *"they made no pick"*. A fabricated claim, and the
+     * exact defect class this whole feature exists to avoid. (codex P1.)
+     *
+     * ⚠️ Only `picks` is taken. `confidence` is a pick'em concept and
+     * `weeklyTiebreakers` belong to the week that produced them; merging those
+     * across weeks would attribute one week's prediction to another.
+     *
+     * Grafting a week here does NOT decide whether a cell renders — the cell
+     * re-checks its own week's `weekRevealed` (`weeklyPickCell`). Two
+     * independent gates, which is what a future edit would have to defeat.
+     */
+    weeklyReveals?: PoolPicksReveal[];
 }
 
 /** The subset of `getPoolPicks`' response this file reads. */
@@ -58,7 +77,7 @@ const uidOf = (row: any): string | undefined => row?.ownerUid ?? row?.id;
  * holding a Member Record, then any scored row whose member record is missing
  * (a legacy pool that predates the roster backfill — nobody should vanish).
  */
-export function buildMemberStandings({ pool, members, standingsRows, ownEntry, reveal }: MemberStandingsInput): any[] {
+export function buildMemberStandings({ pool, members, standingsRows, ownEntry, reveal, weeklyReveals }: MemberStandingsInput): any[] {
     // Same predicate the commissioner roster uses (`utils/poolRoster.ts:138`), for
     // the same reason: a Member Record's mere EXISTENCE proves nothing, because the
     // pre-#344 claim path was itself a way to forge one. Not redefined here —
@@ -192,7 +211,17 @@ export function buildMemberStandings({ pool, members, standingsRows, ownEntry, r
         const uid = uidOf(row);
         if (!uid) continue;
         if (pickedByUid.has(uid)) row.pickedWeeks = pickedByUid.get(uid);
-        if (!reveal || uid === ownUid) continue;
+        if (uid === ownUid) continue;
+
+        // Every OTHER revealed week's picks, for the multi-week grid. Merged
+        // before the selected week below so the selected week wins on a key
+        // collision — it is the freshest response for that week.
+        for (const r of weeklyReveals || []) {
+            const wp = r.picks?.[uid];
+            if (wp) row.picks = { ...(row.picks || {}), ...wp };
+        }
+
+        if (!reveal) continue;
         // Merge, never replace: the own row above already grafted real picks, and
         // a scored row may carry nothing. Only server-revealed keys arrive here.
         const revealedPicks = reveal.picks?.[uid];
