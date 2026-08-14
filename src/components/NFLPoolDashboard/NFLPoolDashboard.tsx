@@ -31,6 +31,7 @@ import { PaymentsPanel } from '../PaymentsPanel';
 // New imports go at the END of this block — #420 and #421 both appended here and
 // conflicted when they didn't (measured).
 import { NFLResults } from './NFLResults';
+import { NFLPicksGrid } from './NFLPicksGrid';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -61,9 +62,18 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // purpose: a stale `?tab=results` link into a Survivor pool must fall back to
   // the dashboard rather than crash, and dropping it from this list is what
   // makes that fallback happen.
-  type TabType = 'dashboard' | 'picks' | 'standings' | 'results' | 'recaps' | 'rules' | 'payments' | 'manager';
-  const VALID_TABS: TabType[] = ['dashboard', 'picks', 'standings', 'results', 'recaps', 'rules', 'payments', 'manager'];
+  type TabType = 'dashboard' | 'picks' | 'grid' | 'standings' | 'results' | 'recaps' | 'rules' | 'payments' | 'manager';
+  const VALID_TABS: TabType[] = ['dashboard', 'picks', 'grid', 'standings', 'results', 'recaps', 'rules', 'payments', 'manager'];
   const showResultsTab = pool.type !== 'NFL_SURVIVOR';
+  // CURRENT PICKS (Kevin's A2). Pick'em only — Survivor and Margin store one
+  // pick per week keyed by the week number, so they have no games-across axis.
+  //
+  // 🛑 `isManager` here is an AUTHORIZATION fact, not a layout preference:
+  // `getPoolPicks` refuses anyone who is not the pool's owner, manager or
+  // SUPER_ADMIN (functions/src/nflPickReveal.ts, #414 Q5), so a member opening
+  // this tab would get a grid of "?" and nothing else. Admitting members is a
+  // plan-gated functions change; when it lands, this condition is what relaxes.
+  const showPicksGridTab = pool.type === 'NFL_PICKEM' && isManager;
   const tabParam = searchParams.get('tab') as TabType | null;
   const requestedTab: TabType = tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'dashboard';
   // A tab the pool does not offer falls back to the dashboard, exactly as an
@@ -71,7 +81,15 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // `?tab=results` link renders an EMPTY content area: the strip has no Results
   // button to un-press and no other branch matches, so the member sees a pool
   // page with nothing in it and no way to tell what went wrong. (Own diff read.)
-  const activeTab: TabType = requestedTab === 'results' && !showResultsTab ? 'dashboard' : requestedTab;
+  //
+  // Same fallback for `?tab=grid`, and it has one more way to be reached: a
+  // commissioner sharing their own URL. The link works for them and must not
+  // hand every member a blank page.
+  const tabOffered: Record<TabType, boolean> = {
+    dashboard: true, picks: true, standings: true, recaps: true, rules: true, manager: isManager,
+    payments: !!user, results: showResultsTab, grid: showPicksGridTab,
+  };
+  const activeTab: TabType = tabOffered[requestedTab] ? requestedTab : 'dashboard';
   const setActiveTab = (tab: TabType) => {
     setSearchParams(prev => {
       const p = new URLSearchParams(prev);
@@ -424,6 +442,19 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           >
             My Entry
           </button>
+          {showPicksGridTab && (
+            <button
+              onClick={() => setActiveTab('grid')}
+              className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
+                activeTab === 'grid'
+                  ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
+                  : 'text-muted hover:text-[color:var(--text)] border-transparent'
+              }`}
+              style={activeTab === 'grid' ? { borderBottomColor: accentHex } : {}}
+            >
+              Current Picks
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('standings')}
             className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
@@ -629,6 +660,20 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     </div>
                   )}
                 </>
+              )}
+
+              {/* TAB 1b: CURRENT PICKS — players × this week's games. `activeTab`
+                  is already normalized above, so this can only be true on a
+                  Pick'em pool with a commissioner viewing it. */}
+              {activeTab === 'grid' && (
+                <NFLPicksGrid
+                  pool={pool}
+                  entries={entries}
+                  games={games}
+                  week={selectedWeek}
+                  viewerUid={user?.id}
+                  reveal={weekReveal}
+                />
               )}
 
               {/* TAB 2: STANDINGS */}

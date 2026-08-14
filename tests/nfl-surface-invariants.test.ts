@@ -526,7 +526,16 @@ describe('week results view — absence is not zero, and Survivor has no week to
     expect(dash).toContain("const showResultsTab = pool.type !== 'NFL_SURVIVOR';");
     // ...and a stale ?tab=results link into a Survivor pool must fall back to a
     // rendered tab, never to an empty content area.
-    expect(dash).toContain("requestedTab === 'results' && !showResultsTab ? 'dashboard' : requestedTab");
+    //
+    // ⚠️ This used to grep for a `requestedTab === 'results' && !showResultsTab`
+    // ternary. The Current Picks tab is the SECOND conditional tab, so the rule
+    // became a per-tab availability map instead of a chain of special cases —
+    // the assertion follows it rather than pinning the old shape. What it
+    // guards is unchanged: an offered tab renders, an unoffered one falls back
+    // to the dashboard, and `results` is entered in that map from
+    // `showResultsTab`.
+    expect(dash).toContain('results: showResultsTab');
+    expect(dash).toContain("const activeTab: TabType = tabOffered[requestedTab] ? requestedTab : 'dashboard';");
   });
 
   it('a not-yet-scored week shows no place chip', () => {
@@ -577,5 +586,53 @@ describe('week results view — tied scores share a place', () => {
       'utf8',
     );
     expect(standings).toContain('rank={index + 1}');
+  });
+});
+
+/**
+ * CURRENT PICKS grid (Kevin's A2) — the one NFL surface that prints another
+ * player's pick, so the wiring around it is what these guard.
+ *
+ * The unit tests in `src/utils/picksGrid.test.ts` prove the cell rule. What a
+ * unit test cannot prove is that the component still USES it and that the tab
+ * is still gated — the same gap `SURFACES` above exists for.
+ */
+describe('current picks grid — the reveal boundary stays the server\'s', () => {
+  const grid = readFileSync(
+    resolve(root, 'src/components/NFLPoolDashboard/NFLPicksGrid.tsx'),
+    'utf8',
+  );
+  const dash = readFileSync(
+    resolve(root, 'src/components/NFLPoolDashboard/NFLPoolDashboard.tsx'),
+    'utf8',
+  );
+
+  it('the tab is offered only to a commissioner, and only on Pick\'em', () => {
+    // NOT cosmetic: `getPoolPicks` throws permission-denied for a participant
+    // (functions/src/nflPickReveal.ts), so dropping either half of this gate
+    // gives members a grid of "?" — or, if the callable is ever widened without
+    // a plan, gives them pick content the plan-gate exists to decide on.
+    expect(dash).toContain("const showPicksGridTab = pool.type === 'NFL_PICKEM' && isManager;");
+    expect(dash).toContain('grid: showPicksGridTab');
+  });
+
+  it('the grid derives no reveal rule of its own — it consumes revealedGameIds', () => {
+    expect(grid).toContain('picksGridCell');
+    // A client-side lock comparison here would be a SECOND definition of the
+    // boundary, which is what PLAN-COMMISSIONER-BLIND-PICKS removed.
+    const code = grid
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+    expect(code).not.toContain('startTime <');
+    expect(code).not.toContain('lockBufferMinutes');
+    expect(code).not.toContain('serverNow');
+  });
+
+  it('a stale reveal from another week is dropped, not applied to this slate', () => {
+    expect(grid).toContain('reveal.week === week');
+  });
+
+  it('an unrevealed cell reads "?" and never collapses into the no-pick dash', () => {
+    expect(grid).toContain("cell.kind === 'HIDDEN' ? '?'");
   });
 });
