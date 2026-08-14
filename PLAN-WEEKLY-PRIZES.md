@@ -69,8 +69,17 @@ pools (they are test pools, after all) and takes the simpler code. That is a
 legitimate call — but it must be *his*, said out loud, because it silently
 changes what an already-submitted prediction means. **Decision D1 in §6.**
 
-⚠️ Whichever he picks, "no migration script" holds either way. Nothing in this
-plan writes to an existing pool document.
+⚠️ Whichever he picks, **"no migration script" holds either way** — no batch job,
+no backfill, nothing swept across the pool collection.
+
+⚠️ That is NOT the same as "nothing writes to an existing pool document", and an
+earlier draft of this section wrongly claimed the stronger thing. §3b's
+freeze-on-first-publish **does** write one previously-absent field
+(`weeksInSeason`) to an existing pool, in the transaction that first publishes a
+weekly prize for it. That is a production-data write and it takes the full Rule-1
+treatment — kill-switch, dry-run default, dry-run output reviewed before enabling
+(`mmp-change-control`). Leaving the blanket assurance in place is exactly how a
+plan walks past that gate. (codex P2, plan review r2.)
 
 ---
 
@@ -325,10 +334,17 @@ same sentence in one constant, for the same reason `tiebreakerCopy` is.
 Stated explicitly because the scorer is LIVE (`nflAutoScoreJob` `*/5`):
 
 - No existing `weeklyPoints`, `weeklyResults`, `weeklyScores` value is read for rewriting or restated.
-- No migration, backfill, or script against production data.
+- No migration, backfill, or sweep script across the pool collection.
 - No entry-document write.
 - `weeklyWinners` keeps its exact current shape and meaning.
 - The `recapWritten = !dryRun && !provisional` condition is unchanged — a prize list must never publish mid-Sunday.
+
+⚠️ **One production write IS in scope and must not be lost in that list:** §3b's
+freeze-on-first-publish sets `weeksInSeason` on a pool that lacks it. It writes
+one previously-absent field, never overwrites a present one, and happens inside
+the first weekly-prize publication for that pool — not as a sweep. It still takes
+the Rule-1 kill-switch + dry-run gate, and its dry-run output is reviewed before
+it is enabled.
 
 ---
 
@@ -340,7 +356,7 @@ Stated explicitly because the scorer is LIVE (`nflAutoScoreJob` `*/5`):
 | **D2** | Does `NONE` survive the option change? | **Keep it.** The standings MNF column gating depends on it (#422/#423), and a commissioner who wants shared ties has no other way to say so. |
 | **D3** | Freeze the resolved target game id at first submission on EVERY week (not just Monday-less ones) — and if that frozen game is later cancelled, is the tie simply shared? | **Yes to both.** Without the freeze a flex move or a postponement re-targets a prediction already made, which is the §0 defect arriving through the schedule. A cancelled target has no score to compare against, and "shared" is the outcome the scorer already produces when nobody answered — no new concept needed. |
 | **D4** | Margin season-tie cascade: reuse `positiveWeeks` → `bestWeek`? | **Yes**, and state it on the rules page. `negativeBurden` reads as a penalty, not a record. |
-| **D5** | Weeks-in-season: freeze at creation, or derive at scoring time? | **Freeze at creation, derive as fallback.** A prize that moves after it was announced is the worse failure. |
+| **D5** | Weeks-in-season: freeze at creation, or derive at scoring time? | **Freeze at creation; for pools that have no frozen value, derive ONCE and PERSIST it in the transaction that first publishes a weekly prize** (§3b). Not "derive as fallback" — every pool that exists today lacks the field, so a re-deriving fallback is the common path and re-prices published prizes when the schedule moves. The persist step writes production data and takes the kill-switch + dry-run gate. |
 | **D6** | Whole-dollar rounding remainder: to first place, or unallocated and named? | **Unallocated and named.** The platform moves no money; naming the remainder is honest, inventing a rule is not. |
 | **D7** | Is the Weekly Winners List shown on `payoutMode: WEEKLY` pools too, or HYBRID only? | **Both** (see §3b for each mode's pot). A WEEKLY pool is *entirely* weekly prizes; withholding the list there makes least sense. A SEASON pool gets the list with no Prize column. |
 | **D8** | Is the pot drawn from every entry, or only entries marked `PAID`? | **Every entry**, stated on the page. The platform moves no money, so this is a printed assumption, not a transfer. |
