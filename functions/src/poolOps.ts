@@ -45,8 +45,9 @@ import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } fr
  * only after the field is server-owned and the audited clear has run.
  */
 export const isPoolOwnerOrManager = (pool: any, uid: string): boolean => {
-    const owner = pool?.ownerId ?? pool?.createdByUid;
-    return uid === owner || (pool?.managerUid !== undefined && uid === pool.managerUid);
+    // `||`, not `??`: a legacy empty-string ownerId must still fall back (self-review).
+    const owner = pool?.ownerId || pool?.createdByUid;
+    return uid === owner || uid === pool?.managerUid;
 };
 
 // Helper to determine if user can manage pool
