@@ -5,6 +5,7 @@ import { recordPoolPayouts } from '../../payoutRecords';
 import { simulateGameUpdate } from '../../scoreUpdates';
 import { simFillSquares } from '../../simLegacy';
 import { cancelPool } from '../../poolExceptions';
+import { clearLegacyCoManagers } from '../../poolOps';
 
 /**
  * PLAN-CO-COMMISSIONERS T1 / T2a — deploy step 1 of D2.
@@ -86,7 +87,7 @@ const CALLABLES: Array<[string, any, any]> = [
 ];
 
 beforeEach(async () => {
-  for (const col of ['pools', 'users']) {
+  for (const col of ['pools', 'users', 'admin_audit']) {
     const snap = await db.collection(col).get();
     await Promise.all(snap.docs.map((d) => db.recursiveDelete(d.ref)));
   }
@@ -128,5 +129,46 @@ describe('ownerId is canonical; createdByUid is a fallback ONLY when ownerId is 
   it('when ownerId is absent, createdByUid is the owner', async () => {
     await db.collection('pools').doc(POOL).update({ ownerId: admin.firestore.FieldValue.delete(), createdByUid: CREATOR });
     await expect(wrappedPayouts({ data: payoutsData, auth: auth(CREATOR) } as never)).resolves.toBeTruthy();
+  });
+});
+
+describe('clearLegacyCoManagers — the T7 census + D2 step-2 audited clear', () => {
+  const wrappedClear = test.wrap(clearLegacyCoManagers);
+  const SA = 'cmi-sa';
+  const saAuth = { uid: SA, token: { role: 'SUPER_ADMIN', email: 'sa@example.com' } } as any;
+
+  const seedLegacy = async () => {
+    await db.collection('users').doc(SA).set({ role: 'SUPER_ADMIN' });
+    await db.collection('pools').doc('lg-nonempty').set({ ownerId: OWNER, coManagers: ['x'] });
+    await db.collection('pools').doc('lg-malformed').set({ ownerId: OWNER, coManagers: 'not-an-array' });
+    await db.collection('pools').doc('lg-revonly').set({ ownerId: OWNER, coManagersRevision: 7 });
+    await db.collection('pools').doc('lg-empty').set({ ownerId: OWNER, coManagers: [] });
+    await db.collection('pools').doc('lg-clean').set({ ownerId: OWNER });
+    await db.collection('pools').doc('lg-mismatch').set({ ownerId: OWNER, createdByUid: 'someone-else' });
+  };
+
+  it('dry run counts, writes nothing; live deletes both fields; re-run is zero', async () => {
+    await seedLegacy();
+    const dry: any = await wrappedClear({ data: { dryRun: true }, auth: saAuth } as never);
+    // The beforeEach POOL (coManagers: [FORGED]) is the second non-empty one.
+    expect(dry).toMatchObject({ dryRun: true, nonEmpty: 2, malformed: 1, withRevision: 1, cleared: 0, ownerMismatch: 1 });
+    expect(dry.withField).toBe(4); // POOL + nonempty + malformed + empty
+    expect((await db.collection('pools').doc('lg-nonempty').get()).data()!.coManagers).toEqual(['x']);
+
+    const live: any = await wrappedClear({ data: { dryRun: false }, auth: saAuth } as never);
+    expect(live.cleared).toBe(5); // POOL, nonempty, malformed, revonly, empty
+    for (const id of ['lg-nonempty', 'lg-malformed', 'lg-revonly', 'lg-empty']) {
+      const d = (await db.collection('pools').doc(id).get()).data()!;
+      expect(d.coManagers).toBeUndefined();
+      expect(d.coManagersRevision).toBeUndefined();
+    }
+    const again: any = await wrappedClear({ data: { dryRun: true }, auth: saAuth } as never);
+    expect(again).toMatchObject({ withField: 0, nonEmpty: 0, malformed: 0, withRevision: 0 });
+    const audit = await db.collection('admin_audit').where('action', '==', 'CLEAR_LEGACY_CO_MANAGERS').get();
+    expect(audit.size).toBe(3);
+  });
+
+  it('refuses a non-SUPER_ADMIN', async () => {
+    await expect(wrappedClear({ data: { dryRun: true }, auth: auth(OWNER) } as never)).rejects.toThrow();
   });
 });

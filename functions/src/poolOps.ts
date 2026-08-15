@@ -792,12 +792,14 @@ export const fixParticipantIds = validated(
  * the field again (T2b/T3). Expected 0 non-empty arrays — the number goes in
  * the PR body. A re-run finds no NON-EMPTY array, which is what makes it
  * resumable: an interrupted run is simply run again. ⚠️ The invariant is
- * `nonEmpty === 0 && malformed === 0`, NOT `withField === 0`: the S8 removal
+ * `nonEmpty === 0 && malformed === 0 && withRevision === 0`, NOT `withField === 0`: the S8 removal
  * helpers' `arrayRemove` legitimately materialises an EMPTY array on a pool
  * that had none (codex r2), and an empty array grants nothing anywhere.
  *
- * ponytail: `coManagersRevision` is NOT stamped here — the T2b setter treats an
- * absent revision as 0, so stamping every pool doc buys nothing.
+ * `coManagersRevision` was client-writable too, so a legacy value is as
+ * untrusted as a legacy array: any pool carrying one has it DELETED (codex r3).
+ * The T2b setter treats an absent revision as 0, so deletion IS the zero
+ * baseline; stamping `0` onto every pool doc would buy nothing beyond that.
  */
 export const clearLegacyCoManagers = validated(
     { schema: clearLegacyCoManagersSchema, label: "clearLegacyCoManagers", role: "SUPER_ADMIN", appCheck: "monitor" },
@@ -811,9 +813,10 @@ export const clearLegacyCoManagers = validated(
     // D3 census: pools whose ownerId and createdByUid both exist and DISAGREE.
     // Expected 0 (creation writes both from one uid). Any hit is listed for
     // Kevin, not reinterpreted — ownerId is canonical from this deploy on.
+    let withRevision = 0;
     let ownerMismatch = 0;
     const mismatchSamples: Array<{ poolId: string; ownerId: string; createdByUid: string }> = [];
-    const samples: Array<{ poolId: string; value: unknown }> = [];
+    const samples: Array<{ poolId: string; value: unknown; revision?: unknown }> = [];
 
     for (const doc of poolsSnap.docs) {
         const data = doc.data();
@@ -821,20 +824,24 @@ export const clearLegacyCoManagers = validated(
             ownerMismatch++;
             if (mismatchSamples.length < 20) mismatchSamples.push({ poolId: doc.id, ownerId: data.ownerId, createdByUid: data.createdByUid });
         }
+        const hasRevision = data.coManagersRevision !== undefined;
+        if (hasRevision) withRevision++;
         const raw = data.coManagers;
-        if (raw === undefined) continue;
-        withField++;
-        const isStringArray = Array.isArray(raw) && raw.every((v: unknown) => typeof v === 'string');
+        if (raw === undefined && !hasRevision) continue;
+        if (raw !== undefined) withField++;
+        const isStringArray = raw === undefined || (Array.isArray(raw) && raw.every((v: unknown) => typeof v === 'string'));
         if (!isStringArray) malformed++;
-        else if (raw.length > 0) nonEmpty++;
-        if (samples.length < 20 && (!isStringArray || (raw as unknown[]).length > 0)) samples.push({ poolId: doc.id, value: raw });
+        else if (Array.isArray(raw) && raw.length > 0) nonEmpty++;
+        if (samples.length < 20 && (!isStringArray || (Array.isArray(raw) && raw.length > 0) || hasRevision)) {
+            samples.push({ poolId: doc.id, value: raw, revision: data.coManagersRevision });
+        }
         if (!dryRun) {
-            await doc.ref.update({ coManagers: FieldValue.delete() });
+            await doc.ref.update({ coManagers: FieldValue.delete(), coManagersRevision: FieldValue.delete() });
             cleared++;
         }
     }
 
-    const summary = { scanned: poolsSnap.size, withField, nonEmpty, malformed, cleared, dryRun, samples, ownerMismatch, mismatchSamples };
+    const summary = { scanned: poolsSnap.size, withField, withRevision, nonEmpty, malformed, cleared, dryRun, samples, ownerMismatch, mismatchSamples };
     await writeAdminAudit({
         actorUid: request.auth!.uid,
         actorEmail: request.auth!.token.email as string | undefined,
