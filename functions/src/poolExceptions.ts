@@ -1,6 +1,6 @@
 import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
+import { assertPoolOwnerOrSuperAdmin, assertPoolOwnerOrManagerNoCo } from "./poolOps";
 import { writeAuditEvent } from "./audit";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
@@ -42,7 +42,11 @@ const loadPoolAndAssertManager = async (
     db: admin.firestore.Firestore,
     poolId: unknown,
     uid: string,
-    role?: string
+    role?: string,
+    // DESTRUCTIVE callables (cancelPool / closePool) pass the owner-only helper
+    // (PLAN-CO-COMMISSIONERS D4) so a later widening of the general helper to
+    // co-commissioners cannot reach them by accident.
+    gate: (pool: any, uid: string, role?: string) => void = assertPoolOwnerOrSuperAdmin,
 ) => {
     if (!poolId || typeof poolId !== "string") {
         throw new HttpsError("invalid-argument", "poolId is required.");
@@ -53,7 +57,7 @@ const loadPoolAndAssertManager = async (
         throw new HttpsError("not-found", "Pool not found.");
     }
     const pool = { id: poolSnap.id, ...poolSnap.data() } as any;
-    assertPoolOwnerOrSuperAdmin(pool, uid, role);
+    gate(pool, uid, role);
     return { poolRef, pool };
 };
 
@@ -510,7 +514,7 @@ export const cancelPool = validated(
     const db = admin.firestore();
     const { poolId, reason } = input;
 
-    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth!.token.role as string | undefined);
+    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth!.token.role as string | undefined, assertPoolOwnerOrManagerNoCo);
 
     if (pool.status === "CANCELED") {
         throw new HttpsError("failed-precondition", "This pool has already been canceled.");
@@ -569,7 +573,7 @@ export const closePool = validated(
     const db = admin.firestore();
     const { poolId } = input;
 
-    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth!.token.role as string | undefined);
+    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth!.token.role as string | undefined, assertPoolOwnerOrManagerNoCo);
 
     // CANCELED (and an already-COMPLETED close) are terminal — never overwrite.
     if (isTerminalStatus(pool.status as string | undefined)) {

@@ -185,7 +185,13 @@ export function ensureMemberRecord(
 
 /** Remove a Member Record + drop the uid from participantIds (leave/last-entry-removal). */
 export function voidMemberRecord(tx: Transaction, db: Firestore, poolId: string, uid: string): void {
-  tx.update(db.collection('pools').doc(poolId), { participantIds: FieldValue.arrayRemove(uid) });
+  // A departed member must never keep a co-commissioner grant
+  // (PLAN-CO-COMMISSIONERS D2, sweeps S8): both removal helpers drop the uid
+  // from `coManagers` too, so whichever removal callable is wired later inherits it.
+  tx.update(db.collection('pools').doc(poolId), {
+    participantIds: FieldValue.arrayRemove(uid),
+    coManagers: FieldValue.arrayRemove(uid),
+  });
   tx.delete(membersCol(db, poolId).doc(uid));
 }
 
@@ -207,7 +213,11 @@ export function reconcileMembership(
   const plan = planMembershipWrite(poolId, uid, facts, existing, now);
 
   if (plan.participant === 'remove') {
-    tx.update(poolRef, { participantIds: FieldValue.arrayRemove(uid) });
+    // See voidMemberRecord — the departed uid leaves `coManagers` as well.
+    tx.update(poolRef, {
+      participantIds: FieldValue.arrayRemove(uid),
+      coManagers: FieldValue.arrayRemove(uid),
+    });
     tx.delete(mRef);
     return;
   }

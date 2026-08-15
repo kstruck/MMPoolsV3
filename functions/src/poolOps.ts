@@ -5,7 +5,8 @@ import { writeAuditEvent } from './audit';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, updatePoolSettingsSchema } from "./schemas/poolCore";
-import { recalculatePoolWinnersSchema, toggleWinnerPaidSchema, fixParticipantIdsSchema } from "./schemas/poolOps";
+import { recalculatePoolWinnersSchema, toggleWinnerPaidSchema, fixParticipantIdsSchema, clearLegacyCoManagersSchema } from "./schemas/poolOps";
+import { writeAdminAudit } from "./lib/adminAudit";
 import { assertPoolCreationAllowed } from './lib/systemGuards';
 import { isPoolType, type PoolType } from './shared/poolTypes';
 import {
@@ -22,16 +23,46 @@ import { tiebreakerEditNeedsEntries, touchesWeeklyTiebreakerSetting, weeklyTiebr
 import { hybridNoOpKeys, hybridSplitNeedsClearing, hybridSplitRefusal, touchesHybridSplitSettings } from './lib/hybridSplitGate';
 import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } from './lib/scoringLease';
 
+/**
+ * Is `uid` the pool's owner or its legacy designated manager?
+ *
+ * A DISJUNCTION over `createdByUid` / `ownerId` / `managerUid`, not the old
+ * `createdByUid || ownerId || managerUid` precedence chain — that chain
+ * resolved ONE owner and so silently dropped a distinct `managerUid` whenever
+ * an owner was present (PLAN-CO-COMMISSIONERS D3, Table 2 note 1), which is
+ * why `updatePoolSettings` used to carry a hand-rolled bypass.
+ *
+ * 🛑 `coManagers` is DELIBERATELY NOT READ HERE (PLAN-CO-COMMISSIONERS T2a,
+ * deploy step 1 of D2). The field is client-writable until the rules lock in
+ * the same PR deploys, and every functions gate must be blind to it BEFORE the
+ * lock ships, so a forged array written during the migration window grants
+ * nothing. T2b re-adds it behind an NFL-type guard, in `isPoolCommissioner`,
+ * only after the field is server-owned and the audited clear has run.
+ */
+export const isPoolOwnerOrManager = (pool: any, uid: string): boolean =>
+    [pool?.createdByUid, pool?.ownerId, pool?.managerUid].includes(uid);
+
 // Helper to determine if user can manage pool
 export const assertPoolOwnerOrSuperAdmin = (pool: any, uid: string, userRole?: string) => {
     // If Super Admin, allow
     if (userRole === 'SUPER_ADMIN') return;
-
-    // Use createdByUid if available, fallback to ownerId / managerUid for legacy/migration
-    const owner = pool.createdByUid || pool.ownerId || pool.managerUid;
-    const isCoManager = pool.participantIds && pool.participantIds.includes(uid) && pool.coManagers && pool.coManagers.includes(uid);
-    if (owner !== uid && !isCoManager) {
+    if (!isPoolOwnerOrManager(pool, uid)) {
         throw new HttpsError('permission-denied', 'You do not have permission to manage this pool.');
+    }
+};
+
+/**
+ * The DESTRUCTIVE principal set (PLAN-CO-COMMISSIONERS D4: owner-only by NAME,
+ * not by omission) — cancel / close / delete. Today identical to
+ * `assertPoolOwnerOrSuperAdmin`; it exists so that when T2b widens the general
+ * helper to co-commissioners, these callables are gated on a helper that says
+ * so and are not widened by accident. It keeps `managerUid`, which rules `:82`
+ * and `closePool`'s own doc already admit for delete/close (codex r3).
+ */
+export const assertPoolOwnerOrManagerNoCo = (pool: any, uid: string, userRole?: string) => {
+    if (userRole === 'SUPER_ADMIN') return;
+    if (!isPoolOwnerOrManager(pool, uid)) {
+        throw new HttpsError('permission-denied', 'Only the pool owner or manager may do this.');
     }
 };
 
@@ -45,7 +76,7 @@ const PRIVILEGED_POOL_FIELDS = [
     'billing', 'status', 'isLocked', 'lockedAt',
     'participantIds', 'participantCount', 'entryCount', 'entries',
     'winners', 'winnerDetermined', 'isPaid', 'paidOut', 'payouts',
-    'createdByUid', 'ownerId', 'managerUid', 'coManagers', 'role',
+    'createdByUid', 'ownerId', 'managerUid', 'coManagers', 'coManagersRevision', 'role',
     'id', 'createdAt', 'updatedAt', 'poolCredits', 'simRunId',
     // Stats discriminator (PLAN-STATS-INTEGRITY §8.1 arm 3, codex r1). The create
     // envelopes are PERMISSIVE (ADR-0001) and spread the surviving payload
@@ -408,16 +439,12 @@ export const updatePoolSettings = validated(
     const pool = snap.data();
     const claimRole = request.auth!.token.role as string | undefined;
     assertNotBanned(claimRole, undefined);
-    // `firestore.rules` isPoolManager() allowed `ownerId` OR `managerUid` to write
-    // pool settings directly, and this callable is now the ONLY path for that write
-    // on NFL pools — so it must accept the same principals or a DESIGNATED MANAGER
-    // loses a capability they have today (codex r3). assertPoolOwnerOrSuperAdmin
-    // resolves a single owner (`createdByUid || ownerId || managerUid`) and so
-    // rejects a distinct managerUid whenever an owner is present. Preserving the
-    // rules' principal set, not widening it.
-    if ((pool as { managerUid?: string } | undefined)?.managerUid !== uid) {
-        assertPoolOwnerOrSuperAdmin(pool, uid, claimRole);
-    }
+    // `firestore.rules` isPoolManager() allows `ownerId` OR `managerUid` to write
+    // pool settings directly, and this callable is the ONLY path for that write
+    // on NFL pools — so it must accept the same principals. It used to carry a
+    // managerUid bypass because the helper resolved a single owner; the helper
+    // is a disjunction now (PLAN-CO-COMMISSIONERS D3), so the bypass is gone.
+    assertPoolOwnerOrSuperAdmin(pool, uid, claimRole);
 
     // Pure gate: validates each key against the editability matrix for the
     // pool's lifecycle phase; throws failed-precondition on any disallowed key.
@@ -748,5 +775,54 @@ export const fixParticipantIds = validated(
     }
 
     return { success: true, processed, updated, dryRun };
+    },
+);
+
+// ============ CLEAR LEGACY coManagers (PLAN-CO-COMMISSIONERS D2, deploy step 2) ============
+/**
+ * One-off, audited, idempotent: delete the `coManagers` field from every pool
+ * that carries one. Run AFTER the rules lock deploys and BEFORE anything reads
+ * the field again (T2b/T3). Expected 0 non-empty arrays — the number goes in
+ * the PR body. A re-run finds nothing and writes nothing, which is what makes
+ * it resumable: an interrupted run is simply run again.
+ *
+ * ponytail: `coManagersRevision` is NOT stamped here — the T2b setter treats an
+ * absent revision as 0, so stamping every pool doc buys nothing.
+ */
+export const clearLegacyCoManagers = validated(
+    { schema: clearLegacyCoManagersSchema, label: "clearLegacyCoManagers", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async ({ dryRun }, request) => {
+    const db = admin.firestore();
+    const poolsSnap = await db.collection('pools').get();
+    let withField = 0;
+    let nonEmpty = 0;
+    let malformed = 0;
+    let cleared = 0;
+    const samples: Array<{ poolId: string; value: unknown }> = [];
+
+    for (const doc of poolsSnap.docs) {
+        const raw = doc.data().coManagers;
+        if (raw === undefined) continue;
+        withField++;
+        const isStringArray = Array.isArray(raw) && raw.every((v: unknown) => typeof v === 'string');
+        if (!isStringArray) malformed++;
+        else if (raw.length > 0) nonEmpty++;
+        if (samples.length < 20 && (!isStringArray || (raw as unknown[]).length > 0)) samples.push({ poolId: doc.id, value: raw });
+        if (!dryRun) {
+            await doc.ref.update({ coManagers: FieldValue.delete() });
+            cleared++;
+        }
+    }
+
+    const summary = { scanned: poolsSnap.size, withField, nonEmpty, malformed, cleared, dryRun, samples };
+    await writeAdminAudit({
+        actorUid: request.auth!.uid,
+        actorEmail: request.auth!.token.email as string | undefined,
+        action: 'CLEAR_LEGACY_CO_MANAGERS',
+        targetType: 'pools',
+        metadata: summary,
+        status: 'success',
+    });
+    return { success: true, ...summary };
     },
 );

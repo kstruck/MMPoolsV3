@@ -29,6 +29,15 @@ export const fixParticipantIdsSchema = z.strictObject({
     dryRun: z.boolean().optional().default(true),
 });
 
+/**
+ * clearLegacyCoManagers (SUPER_ADMIN) — PLAN-CO-COMMISSIONERS D2 step 2, the
+ * one-off audited clear of every legacy `coManagers` array. Same fail-safe
+ * dryRun default as fixParticipantIds.
+ */
+export const clearLegacyCoManagersSchema = z.strictObject({
+    dryRun: z.boolean().optional().default(true),
+});
+
 export type RecalculatePoolWinnersInput = z.infer<typeof recalculatePoolWinnersSchema>;
 export type ToggleWinnerPaidInput = z.infer<typeof toggleWinnerPaidSchema>;
 export type FixParticipantIdsInput = z.infer<typeof fixParticipantIdsSchema>;

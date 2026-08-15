@@ -5,6 +5,7 @@ import { createNFLPool, joinNFLPool, executeSurvivorRebuy } from '../../nflPools
 import { setPaidStatus } from '../../setPaidStatus';
 import { reconcilePaymentTruth } from '../../migrations/reconcilePaymentTruth';
 import { calculatePoolPot } from '../../statsTrigger';
+import { voidMemberRecord, reconcileMembership } from '../../lib/memberRecord';
 
 // Verifies the additive Member Record wiring (ADR 0003) against a live Firestore
 // emulator: create seeds the owner's record, join seeds the joiner's, and a survivor
@@ -790,5 +791,46 @@ describe('reconcilePaymentTruth — the divergence one-off (P2)', () => {
     // Claim without the users-doc role is refused too — the two-source gate.
     await expect(wrappedReconcile({ data: { dryRun: true }, auth: { uid: 'p2_pleb', token: { role: 'SUPER_ADMIN' } } } as never))
       .rejects.toThrow(/required role/i);
+  });
+});
+
+// PLAN-CO-COMMISSIONERS D2 / sweeps S8: a departed member must never keep a
+// co-commissioner grant. There is no live removal callable today — these two
+// helpers ARE every removal path — so the invariant is pinned here, on the
+// helpers, and whichever callable is wired later inherits it.
+describe('coManagers — a departed member is dropped from the array (PLAN-CO-COMMISSIONERS T1)', () => {
+  const seed = async (poolId: string) => {
+    await db.collection('pools').doc(poolId).set({
+      type: 'NFL_PICKEM', name: 'co', ownerId: 'cm_boss',
+      participantIds: ['cm_boss', 'cm_x', 'cm_y'], coManagers: ['cm_x', 'cm_y'], status: 'OPEN',
+    });
+    await db.collection('pools').doc(poolId).collection('members').doc('cm_x').set({ uid: 'cm_x', role: 'PARTICIPANT' });
+  };
+
+  it('voidMemberRecord removes the uid from participantIds AND coManagers, leaving the others', async () => {
+    await seed('cm_pool_a');
+    await db.runTransaction(async (tx) => { voidMemberRecord(tx, db, 'cm_pool_a', 'cm_x'); });
+    const pool = (await db.collection('pools').doc('cm_pool_a').get()).data()!;
+    expect(pool.participantIds).toEqual(['cm_boss', 'cm_y']);
+    expect(pool.coManagers).toEqual(['cm_y']);
+  });
+
+  it('reconcileMembership with present:false removes the uid from coManagers too', async () => {
+    await seed('cm_pool_b');
+    await db.runTransaction(async (tx) => {
+      reconcileMembership(tx, db, 'cm_pool_b', 'cm_x',
+        { userName: 'X', poolType: 'NFL_PICKEM', present: false }, null, Date.now());
+    });
+    const pool = (await db.collection('pools').doc('cm_pool_b').get()).data()!;
+    expect(pool.participantIds).toEqual(['cm_boss', 'cm_y']);
+    expect(pool.coManagers).toEqual(['cm_y']);
+  });
+
+  it('is a no-op on a pool with no coManagers field (arrayRemove on absent field writes nothing surprising)', async () => {
+    await db.collection('pools').doc('cm_pool_c').set({ type: 'NFL_PICKEM', ownerId: 'cm_boss', participantIds: ['cm_boss', 'cm_x'], status: 'OPEN' });
+    await db.runTransaction(async (tx) => { voidMemberRecord(tx, db, 'cm_pool_c', 'cm_x'); });
+    const pool = (await db.collection('pools').doc('cm_pool_c').get()).data()!;
+    expect(pool.participantIds).toEqual(['cm_boss']);
+    expect(pool.coManagers ?? []).toEqual([]);
   });
 });

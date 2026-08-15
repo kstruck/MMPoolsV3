@@ -1319,9 +1319,11 @@ export const simulateGameUpdate = onCall({
             // arbitrary scores (and thus winners) on any real-money pool.
             const authPool = doc.data() as any;
             const isSuperAdmin = request.auth?.token.role === 'SUPER_ADMIN';
+            // `coManagers` is NOT consulted here (PLAN-CO-COMMISSIONERS D3: the
+            // sim tools narrow to owner / managerUid / SUPER_ADMIN; a forged
+            // array must reach nothing while the field is being locked).
             const owns = [authPool.createdByUid, authPool.ownerId, authPool.managerUid].includes(uid);
-            const isCoManager = Array.isArray(authPool.coManagers) && authPool.coManagers.includes(uid);
-            if (!isSuperAdmin && !owns && !isCoManager) {
+            if (!isSuperAdmin && !owns) {
                 throw new HttpsError('permission-denied', 'You do not have permission to simulate scores for this pool.');
             }
 

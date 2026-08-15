@@ -161,6 +161,8 @@ section is rewritten before implementation.
 
 ## 6. 🛑 Questions for Kevin — sign-off gate
 
+> ✅ **SIGNED 2026-08-15 by Kevin — "all recommendations"** (asked and answered in the session that opened the T1 lock PR; every row below stands as recommended).
+
 | # | Question | Recommendation |
 |---|---|---|
 | **Q1** | Fix it at all, or accept it as unreachable-from-the-UI? | **Fix.** It moves money, the callable is public, and it is a one-line change with a test. The `proxyPick` sibling was accepted as worth fixing on the same reasoning. |

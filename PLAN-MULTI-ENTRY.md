@@ -359,6 +359,8 @@ back-compat) and its test covers two entries + one fee (codex r3).
 
 ## 6. 🛑 DECISIONS NEEDED FROM KEVIN — no code until these are answered
 
+> ✅ **SIGNED 2026-08-15 by Kevin — "all recommendations"** (asked and answered in the session that opened the T1 lock PR; every row below stands as recommended).
+
 | # | Question | Recommendation |
 |---|---|---|
 | **K1** | Entry identity scheme: **`e${n}:${uid}` with entry #1 = `uid`** (zero migration; index PREFIX so a uid containing `_` cannot collide) vs Bracket-style auto-ids (migration + create step)? | **`e${n}:${uid}`.** |

@@ -293,6 +293,8 @@ alone exposes nothing (codex r5). **Not** the aggregate stats (C12).
 
 ## 6. 🛑 DECISIONS NEEDED FROM KEVIN — no code until these are answered
 
+> ✅ **SIGNED 2026-08-15 by Kevin — "all recommendations"** (asked and answered in the session that opened the T1 lock PR; every row below stands as recommended).
+
 | # | Question | Recommendation |
 |---|---|---|
 | **K1** | Accept the §3 table as written? Edit any row's Yes/No here. | Accept. |
@@ -306,7 +308,9 @@ alone exposes nothing (codex r5). **Not** the aggregate stats (C12).
 
 ---
 
-## 7. Implementation tickets — NOT STARTED, gated on §6
+## 7. Implementation tickets — §6 signed 2026-08-15; T1 lock + T2a + T7 IN A PR (deploy steps 1–2)
+
+> **Status 2026-08-15:** the first PR carries **T2a** (functions blind to `coManagers`; `assertPoolOwnerOrSuperAdmin` is a disjunction; `assertPoolOwnerOrManagerNoCo` gates cancel/close; `updatePoolSettings` bypass gone), **T1's lock half** (`coManagers` + `coManagersRevision` in `protectedFieldsUnchanged()` and `PRIVILEGED_POOL_FIELDS`; `arrayRemove` in both S8 helpers; `coManagers.rules.test.mjs`; `coManagersIgnored.emulator.test.ts`), and **T7** as the `clearLegacyCoManagers` Operations-tab action (dry-run = the census; live = the audited clear). **T1's callable half (`setPoolCoCommissioner`), T2b, T3, T4, T5, T6 are the NEXT PR — deploy step 3 — and must not merge until the clear has been run and re-censused to 0.**
 
 | T | What | Files | Evidence required |
 |---|---|---|---|

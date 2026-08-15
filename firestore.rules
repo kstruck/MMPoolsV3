@@ -114,6 +114,21 @@ service cloud.firestore {
           // updates still pass, because a same-value write is not an
           // affectedKey — the same reasoning as `type` below.
           'participantIds',
+          // 🛑 `coManagers` IS AN AUTHORIZATION INPUT TOO, SO IT IS SERVER-OWNED
+          // (PLAN-CO-COMMISSIONERS T1, deploy step 2 of D2). Three callable gates
+          // used to trust this array while it sat OUTSIDE this list — an owner
+          // could `updateDoc({coManagers:[uid]})` from a browser and hand that
+          // uid scoreNFLWeek / recordPoolPayouts / cancelPool. Same hole as
+          // `participantIds` above, one field over. `coManagersRevision` rides
+          // along: it is the add-vs-remove race fence for the setter callable,
+          // and a client-writable revision lets a current co-manager reset it
+          // after a remove and slip a stale add through (codex r3).
+          //
+          // ⚠️ THIS IS A LOCK ONLY. No rule in this file READS `coManagers` yet
+          // — the reading predicates ship in T3, in the SAME deploy as the
+          // callable that writes it, never in this one. Reading before the
+          // audited clear has run would honour a legacy forged array.
+          'coManagers', 'coManagersRevision',
           'billing', // Billing status managed exclusively by Cloud Functions
           // Frozen weekly pick deadlines for Survivor/Margin. The server only ever
           // moves these EARLIER; a manager who could clear the map would erase the
