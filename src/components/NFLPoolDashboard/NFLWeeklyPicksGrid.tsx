@@ -72,7 +72,8 @@ export const NFLWeeklyPicksGrid: React.FC<NFLWeeklyPicksGridProps> = ({
 
   // Row identity is the ENTRY (`row.id`); `ownerUid` only decides "is this me"
   // (PLAN-MULTI-ENTRY §0b — the invariant test forbids a uid-keyed lookup).
-  const isMe = (row: any): boolean => !!viewerUid && row?.ownerUid === viewerUid;
+  // `?? row.id` = legacy-row fallback for "is this me", not a key (see NFLPicksGrid).
+  const isMe = (row: any): boolean => !!viewerUid && (row?.ownerUid ?? row?.id) === viewerUid;
   const ownPicksKnown = (row: any): boolean => isMe(row) && ownEntryLoaded;
 
   const dash = <span className="text-faint">—</span>;

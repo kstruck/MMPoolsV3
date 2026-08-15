@@ -121,7 +121,11 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
   // and a uid-keyed lookup would merge one player's entries into one row.
   // A source invariant in tests/nfl-surface-invariants.test.ts forbids the
   // uid-keyed form here.
-  const isMe = (row: any): boolean => !!viewerUid && row?.ownerUid === viewerUid;
+  // `?? row.id` here is the legacy-row fallback (an entry written before
+  // `ownerUid` was stamped) — NOT a key: under multi-entry an extra entry's id
+  // never equals a uid, so the fallback can only ever match entry #1. Same
+  // shape NFLStandings uses. (qodo on #438.)
+  const isMe = (row: any): boolean => !!viewerUid && (row?.ownerUid ?? row?.id) === viewerUid;
   // Their own entry is the source for their own picks, and it is the only one
   // that is right the instant they save — the same rule the Standings
   // completeness column uses. It is authoritative only ONCE IT HAS LOADED; see
