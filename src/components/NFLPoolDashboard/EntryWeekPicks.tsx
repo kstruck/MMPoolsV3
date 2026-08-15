@@ -53,7 +53,11 @@ export const EntryWeekPicks: React.FC<{
   const games = [...weekGames].sort((a, b) => a.startTime - b.startTime);
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-2 text-[12px] font-body">
-      {games.length === 0 && <span className="text-faint">No games this week.</span>}
+      {games.length === 0 && (
+        <span className="text-faint" title="The schedule for this week is not loaded, or the week has no games — this strip cannot tell which">
+          Slate unavailable
+        </span>
+      )}
       {games.map(g => {
         const cell = picksGridCell({
           game: g,

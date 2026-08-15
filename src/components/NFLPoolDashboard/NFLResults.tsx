@@ -236,10 +236,10 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                   <React.Fragment key={row.id}>
                   <tr
                     className={`cursor-pointer ${rowClass(row)}`}
-                    onClick={e => { if ((e.target as HTMLElement).closest('button,a')) return; setOpenRowId(isOpen ? null : row.id); }}
+                    onClick={e => { if ((e.target as HTMLElement).closest('button,a')) return; setOpenRowId(prev => (prev === row.id ? null : row.id)); }}
                     tabIndex={0}
                     role="button"
-                    onKeyDown={e => { if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenRowId(isOpen ? null : row.id); } }}
+                    onKeyDown={e => { if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenRowId(prev => (prev === row.id ? null : row.id)); } }}
                     aria-expanded={isOpen}
                     title={isOpen ? 'Hide picks' : `Show ${nflWeekLabel(seasonType, week)} picks`}
                   >
