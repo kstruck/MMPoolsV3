@@ -13,7 +13,7 @@ import { withHeartbeat } from "./lib/heartbeat";
 type Check = { ok: boolean; latencyMs: number; detail: string };
 
 const NFL_SCOREBOARD =
-  "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
+  "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
 
 async function timed(fn: () => Promise<string>): Promise<Check> {
   const started = Date.now();

@@ -14,7 +14,7 @@ interface WinProbPoint { homePct: number; at: number }
 /** Fetch the latest home win probability (0-100) for one ESPN event, or null. */
 async function fetchHomeWinPct(eventId: string): Promise<number | null> {
   try {
-    const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${eventId}`);
+    const res = await fetch(`https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${eventId}`);
     if (!res.ok) return null;
     const data: any = await res.json();
     const wp = data?.winprobability;
