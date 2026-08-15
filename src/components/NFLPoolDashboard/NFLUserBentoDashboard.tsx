@@ -302,10 +302,16 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   // (the same trap WeekChecklist documents).
   const lockMode: 'WEEKLY' | 'PER_GAME' =
     castPool.settings?.confidenceMode || castPool.settings?.lockMode === 'WEEKLY' ? 'WEEKLY' : 'PER_GAME';
+  // A commissioner's extendWeekDeadline (`settings.weekLockOverrides[week]`)
+  // is honoured server-side on Pick'em only; pass it so the button cannot say
+  // "Picks Locked" during an extension the server still accepts.
+  const weekLockOverrideMs: number | undefined =
+    _pool.type === 'NFL_PICKEM' ? castPool.settings?.weekLockOverrides?.[selectedWeek] : undefined;
   const weekLocked = isWeekLockedNow(
     weeklyGames,
     effectiveBufferMinutesForWeek(castPool, selectedWeek, weeklyGames.map(g => g.startTime)),
     _pool.type === 'NFL_PICKEM' ? lockMode : 'WEEKLY',
+    typeof weekLockOverrideMs === 'number' ? weekLockOverrideMs : undefined,
   );
   const hasAnyPickThisWeek = !!myEntry && (
     _pool.type === 'NFL_PICKEM'
