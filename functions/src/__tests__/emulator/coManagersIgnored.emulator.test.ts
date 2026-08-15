@@ -115,3 +115,18 @@ describe('the legitimate principals still pass (no collateral, and the D3 manage
     await expect(wrappedCancel({ data: cancelData, auth: auth(MANAGER) } as never)).resolves.toBeTruthy();
   });
 });
+
+describe('ownerId is canonical; createdByUid is a fallback ONLY when ownerId is absent (D3, codex r1)', () => {
+  const CREATOR = 'cmi-stale-creator';
+
+  it('when both exist and disagree, ownerId is admitted and the stale createdByUid is refused', async () => {
+    await db.collection('pools').doc(POOL).update({ createdByUid: CREATOR });
+    await expect(wrappedPayouts({ data: payoutsData, auth: auth(OWNER) } as never)).resolves.toBeTruthy();
+    await expect(wrappedPayouts({ data: payoutsData, auth: auth(CREATOR) } as never)).rejects.toThrow(/permission|only the pool/i);
+  });
+
+  it('when ownerId is absent, createdByUid is the owner', async () => {
+    await db.collection('pools').doc(POOL).update({ ownerId: admin.firestore.FieldValue.delete(), createdByUid: CREATOR });
+    await expect(wrappedPayouts({ data: payoutsData, auth: auth(CREATOR) } as never)).resolves.toBeTruthy();
+  });
+});

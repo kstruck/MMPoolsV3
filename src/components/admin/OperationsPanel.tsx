@@ -405,7 +405,7 @@ const ACTIONS: OpAction[] = [
     id: 'clearLegacyCoManagers:dry',
     label: 'Audit legacy coManagers (dry run)',
     description: 'PLAN-CO-COMMISSIONERS D2 step 2. Count pools still carrying a coManagers array (expected 0 non-empty). The field was client-writable until the rules lock; nothing may read it again until this reports zero. Writes nothing.',
-    blastRadius: 'Read-only — no writes. Reports scanned / withField / nonEmpty / malformed + samples.',
+    blastRadius: 'Read-only — no writes. Reports scanned / withField / nonEmpty / malformed + samples, plus the D3 ownerId≠createdByUid census (ownerMismatch, expected 0).',
     destructive: false,
     icon: CheckCircle2,
     run: () => call('clearLegacyCoManagers', { dryRun: true }),

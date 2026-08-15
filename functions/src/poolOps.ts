@@ -26,11 +26,16 @@ import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } fr
 /**
  * Is `uid` the pool's owner or its legacy designated manager?
  *
- * A DISJUNCTION over `createdByUid` / `ownerId` / `managerUid`, not the old
- * `createdByUid || ownerId || managerUid` precedence chain — that chain
- * resolved ONE owner and so silently dropped a distinct `managerUid` whenever
- * an owner was present (PLAN-CO-COMMISSIONERS D3, Table 2 note 1), which is
- * why `updatePoolSettings` used to carry a hand-rolled bypass.
+ * `ownerId` is CANONICAL; `createdByUid` is a functions-only fallback used ONLY
+ * when `ownerId` is absent (PLAN-CO-COMMISSIONERS D3 — rules and the client
+ * never read `createdByUid`, so treating it as a coequal principal would keep
+ * a phantom who can call callables but sees no Commissioner tab; codex r1 on
+ * the T1 PR). `managerUid` is a SEPARATE principal, or'd in — the old
+ * `createdByUid || ownerId || managerUid` chain resolved ONE owner and silently
+ * dropped a distinct `managerUid` whenever an owner was present (Table 2 note
+ * 1), which is why `updatePoolSettings` used to carry a hand-rolled bypass.
+ * Pools where `ownerId` and `createdByUid` disagree are COUNTED by the
+ * clearLegacyCoManagers dry run (`ownerMismatch`), expected 0, listed for Kevin.
  *
  * 🛑 `coManagers` is DELIBERATELY NOT READ HERE (PLAN-CO-COMMISSIONERS T2a,
  * deploy step 1 of D2). The field is client-writable until the rules lock in
@@ -39,8 +44,10 @@ import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } fr
  * nothing. T2b re-adds it behind an NFL-type guard, in `isPoolCommissioner`,
  * only after the field is server-owned and the audited clear has run.
  */
-export const isPoolOwnerOrManager = (pool: any, uid: string): boolean =>
-    [pool?.createdByUid, pool?.ownerId, pool?.managerUid].includes(uid);
+export const isPoolOwnerOrManager = (pool: any, uid: string): boolean => {
+    const owner = pool?.ownerId ?? pool?.createdByUid;
+    return uid === owner || (pool?.managerUid !== undefined && uid === pool.managerUid);
+};
 
 // Helper to determine if user can manage pool
 export const assertPoolOwnerOrSuperAdmin = (pool: any, uid: string, userRole?: string) => {
@@ -798,10 +805,20 @@ export const clearLegacyCoManagers = validated(
     let nonEmpty = 0;
     let malformed = 0;
     let cleared = 0;
+    // D3 census: pools whose ownerId and createdByUid both exist and DISAGREE.
+    // Expected 0 (creation writes both from one uid). Any hit is listed for
+    // Kevin, not reinterpreted — ownerId is canonical from this deploy on.
+    let ownerMismatch = 0;
+    const mismatchSamples: Array<{ poolId: string; ownerId: string; createdByUid: string }> = [];
     const samples: Array<{ poolId: string; value: unknown }> = [];
 
     for (const doc of poolsSnap.docs) {
-        const raw = doc.data().coManagers;
+        const data = doc.data();
+        if (typeof data.ownerId === 'string' && typeof data.createdByUid === 'string' && data.ownerId !== data.createdByUid) {
+            ownerMismatch++;
+            if (mismatchSamples.length < 20) mismatchSamples.push({ poolId: doc.id, ownerId: data.ownerId, createdByUid: data.createdByUid });
+        }
+        const raw = data.coManagers;
         if (raw === undefined) continue;
         withField++;
         const isStringArray = Array.isArray(raw) && raw.every((v: unknown) => typeof v === 'string');
@@ -814,7 +831,7 @@ export const clearLegacyCoManagers = validated(
         }
     }
 
-    const summary = { scanned: poolsSnap.size, withField, nonEmpty, malformed, cleared, dryRun, samples };
+    const summary = { scanned: poolsSnap.size, withField, nonEmpty, malformed, cleared, dryRun, samples, ownerMismatch, mismatchSamples };
     await writeAdminAudit({
         actorUid: request.auth!.uid,
         actorEmail: request.auth!.token.email as string | undefined,
