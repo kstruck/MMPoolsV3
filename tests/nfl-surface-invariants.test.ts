@@ -894,6 +894,6 @@ describe('standings tiebreaker column — a prediction, described by the shared 
     const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
     expect(code).toContain('Tiebreaker Guess');
     expect(code).not.toContain('MNF Score');
-    expect(code).toMatch(/tiebreakerCopy\(tiebreakerRule\)/);
+    expect(code).toMatch(/tiebreakerCopy\(\s*tiebreakerRule\s*\)/);
   });
 });
