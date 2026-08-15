@@ -281,6 +281,9 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                   Majority
                 </td>
                 <td className="py-3 px-3 text-center">{dash}</td>
+                {/* Week Pts has no majority — placeholder keeps the game cells
+                    under their own headers (codex r2 on items 11/12). */}
+                <td className="py-3 px-3 text-center">{dash}</td>
                 {weekGames.map(g => {
                   const m = majorityFor(splits?.[g.id], g);
                   return (
