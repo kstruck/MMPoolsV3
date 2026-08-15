@@ -28,8 +28,6 @@
 > firestore:rules` (the lock) → **"Clear legacy coManagers"** (live) → dry run again
 > = 0. Only then may the step-3 PR merge.
 
-> ## ✅ DEPLOY STATE 2026-08-13 (evening) — #420–#423 all merged AND deployed by Kevin
-
 > ## ✅ DEPLOY STATE 2026-08-14 — #426–#432 ALL MERGED AND DEPLOYED, ALL THREE SURFACES VERIFIED
 >
 > Per surface, each verified independently rather than inferred from a
