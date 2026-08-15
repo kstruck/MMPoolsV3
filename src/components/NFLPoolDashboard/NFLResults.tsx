@@ -234,6 +234,9 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                   <tr
                     className={`cursor-pointer ${rowClass(row)}`}
                     onClick={() => setOpenRowId(isOpen ? null : row.id)}
+                    tabIndex={0}
+                    role="button"
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenRowId(isOpen ? null : row.id); } }}
                     aria-expanded={isOpen}
                     title={isOpen ? 'Hide picks' : `Show ${nflWeekLabel(seasonType, week)} picks`}
                   >

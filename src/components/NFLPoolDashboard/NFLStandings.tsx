@@ -287,6 +287,9 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                   <React.Fragment key={entry.id}>
                   <tr
                     onClick={() => setOpenRowId(isOpen ? null : entry.id)}
+                    tabIndex={0}
+                    role="button"
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenRowId(isOpen ? null : entry.id); } }}
                     aria-expanded={isOpen}
                     title={isOpen ? 'Hide picks' : `Show ${nflWeekLabel(poolSeasonType(pool), week)} picks`}
                     className={`cursor-pointer transition-colors hover:bg-[color:var(--page)] ${
