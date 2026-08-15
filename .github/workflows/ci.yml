@@ -97,6 +97,17 @@ jobs:
         run: npm run test:emulator
         working-directory: functions
 
+      # REQUIRED: the eight Firestore RULES tests (functions/scripts/*.rules.test.mjs)
+      # — participantIds lock (#432), simBackdoors, monetization, payoutRecords,
+      # squarePrivate PII, entries/standings, profileAchievements, survivor parity.
+      # Until 2026-08-15 these were hand-run only: `test:emulator` above is vitest
+      # and never touched them, so every authorization guard they carry ran on NO
+      # pull request. Same emulator, one boot, wiped between files; the runner
+      # fails on fewer than 8 files so a broken glob cannot pass as green.
+      - name: Firestore rules tests
+        run: npm run test:rules
+        working-directory: functions
+
   # Validate the nginx config used by the Docker/Coolify production deploy.
   # A syntax error here would fail the container start, so gate it on every PR.
   nginx-validate:

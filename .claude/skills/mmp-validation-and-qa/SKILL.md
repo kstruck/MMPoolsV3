@@ -67,7 +67,7 @@ Counted by running the suites, not by grepping docs (numbers below are the
 | Root vitest (`npm test`) | 23 | **216** | YES (required) |
 | Functions mocked vitest (`npm --prefix functions test`) | 8 | **96** | YES (required) |
 | Functions emulator vitest (`test:emulator`) | 1 | 4 | NO |
-| Firestore rules tests (`functions/scripts/*.rules.test.mjs`) | 1 (+1 pure-node) | script-style asserts | NO |
+| Firestore rules tests (`functions/scripts/*.rules.test.mjs`) | 8 | script-style asserts | YES since 2026-08-15 — `npm --prefix functions run test:rules` (runner `functions/scripts/run-rules-tests.mjs`, emulator-tests job) |
 | Playwright e2e (`tests/e2e/`) | 2 specs | 8 | NO |
 | In-app admin Test Suite (manual, prod data) | 15 scenario JSONs | assertion-based | NO (human-driven) |
 
@@ -110,6 +110,8 @@ Command: `npm --prefix functions test` (= `node scripts/copy-shared.mjs && vites
 Command: `npm --prefix functions run test:emulator` (= `firebase emulators:exec --only firestore --project demo-mmp "vitest run --config vitest.emulator.config.ts"`). File: `functions/src/__tests__/emulator/poolCreation.emulator.test.ts`, with `admin.initializeApp` in `emulator/setup.ts`. **Requires Java** (Firestore emulator is a JVM process — see `mmp-build-and-env`). UNVERIFIED on 2026-07-06: not run in this session (Java availability not checked); pass state and duration unconfirmed.
 
 ### 3d. Firestore rules tests — script-style, not in any vitest config
+
+- **All eight run in CI since 2026-08-15** via `npm --prefix functions run test:rules` — one emulator boot, each file in its own Node process, emulator wiped between files, runner fails on fewer than 8 files (`functions/scripts/run-rules-tests.mjs`). Before that they were hand-run only and the `participantIds` guard from #432 ran on no PR. Add a new `<topic>.rules.test.mjs` and bump `MIN_FILES` in the runner.
 
 - `functions/scripts/squarePrivate.rules.test.mjs` — verifies the `squarePrivate` PII subcollection rules (non-owner cannot read, owner can, no client writes, guests can still `get` the pool doc). Run per its own header:
 
