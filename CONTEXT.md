@@ -133,6 +133,24 @@ Consensus over the entries of one Pool: of the members who picked a given game, 
 
 > 🔨 **Kevin's ruling, 2026-08-11** (`PLAN-COMMISSIONER-BLIND-PICKS` Q4, overruling that plan's own recommendation). This entry previously read *"revealed per game only after that game's effective lock"*, and the client enforced that in `PickDistribution`. Both are gone: a live crowd split is a product feature, and what commissioner-blind picks protects is an **individual's** pick, which an aggregate cannot express. Known and accepted consequence: in a very small Pool the split is close to identifying. Reopening that is a product decision, not a bug.
 
+### Pick Reveal
+When one Member's actual pick becomes visible to another. Enforced **server-side only**, by the `getPoolPicks` callable — no client re-derives it, and raw entry documents stay unreadable until the Pool is `FINAL`/`COMPLETED`.
+
+The boundary is the **same instant the picker's own deadline was**, so nobody is shown a pick the picker could still change:
+
+| Pool shape | A pick reveals |
+|---|---|
+| Pick'em, per-game lock | per GAME, as each kicks off |
+| Pick'em in confidence or weekly-lock mode, Survivor, Margin | the whole WEEK at once, at its single deadline |
+
+**Who may read a reveal:** any **proven Member** of the Pool (Kevin's ruling, 2026-08-14 — *"make it visible for all users if pool is locked"*), the Commissioner, and Super Admin. A non-member is refused. Membership for THIS read is a **canonical Member Record** — one carrying a server-stamped `joinedAt`, which no client path can write. `participantIds` is deliberately **not** accepted here, and is separately server-owned in `firestore.rules` because it is an authorization input.
+
+> ⚠️ **Both halves are needed and they do different jobs.** The rules lock stops FUTURE manager writes; requiring a canonical record ignores the ones already there, since a pool created before that lock carries an array a manager could already have added anyone to. Locking a door does not evict who is inside. Cost, accepted by Kevin 2026-08-14: a member on a legacy pool with no server-written record sees no picks until a join path writes them one.
+
+> ⚠️ **This SUPERSEDES `PLAN-COMMISSIONER-BLIND-PICKS` Q5**, which read *"Does anything change for ordinary members? **No.**"* Members now see the same reveal a Commissioner does. What did **not** change is the TIMING — the widening is about **who**, never **when**.
+
+**One Commissioner-only exception:** the per-Member *completeness count* ("14 of 16 Picks Set") is returned live, before any reveal, because chasing missing picks is the Commissioner's job. Members receive it only once the week reveals — otherwise the whole Pool could watch each other's sheets fill in before kickoff. A Member who has left the Pool is filtered out of a Member's view entirely, though the Commissioner still sees their entry.
+
 ### Site-Wide Consensus
 Consensus aggregated across every Pool on the platform for a given game/week: of all players site-wide who picked that game, the percentage on each team. Maintained by a server aggregation (no client may read every Pool's entries) built from per-Pool shards and rolled up idempotently. Scoped by Pool type (never one blended figure across types) and **published live**, as aggregate counts only — individual picks are never exposed. The client reads the resulting projection. Same ruling as Pool Consensus above: the former "only after a game's effective lock" wording is superseded.
 

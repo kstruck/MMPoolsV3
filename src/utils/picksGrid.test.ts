@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { picksGridCell, majorityFor } from './picksGrid';
+import { picksGridCell, weeklyPickCell, majorityFor } from './picksGrid';
 import type { NFLGame } from '../types';
 
 /**
@@ -118,5 +118,38 @@ describe('majorityFor', () => {
         expect(majorityFor(undefined, G1)).toBeNull();
         expect(majorityFor({ total: 0 }, G1)).toBeNull();
         expect(majorityFor({ awayPct: 60, total: 5 }, G1)).toBeNull();
+    });
+});
+
+describe('weeklyPickCell — Survivor/Margin, where weekRevealed is the allowlist', () => {
+    const entry = { picks: { '1': 'KC', '2': 'SF' } };
+
+    it('renders a pick only when THIS week is fully revealed', () => {
+        expect(weeklyPickCell({ week: 1, entry, isOwnRow: false, reveal: { week: 1, weekRevealed: true } }))
+            .toEqual({ kind: 'PICK', team: 'KC', result: null });
+        expect(weeklyPickCell({ week: 1, entry, isOwnRow: false, reveal: { week: 1, weekRevealed: false } }))
+            .toEqual({ kind: 'HIDDEN' });
+    });
+
+    it("🛑 ANOTHER week's response can never admit this one", () => {
+        // The exact multi-week leak: week 1 revealed, week 2 open. Handing the
+        // week-2 column week 1's response must NOT print SF.
+        expect(weeklyPickCell({ week: 2, entry, isOwnRow: false, reveal: { week: 1, weekRevealed: true } }))
+            .toEqual({ kind: 'HIDDEN' });
+    });
+
+    it('a missing response is HIDDEN, never a pick and never a no-pick', () => {
+        expect(weeklyPickCell({ week: 1, entry, isOwnRow: false, reveal: undefined }))
+            .toEqual({ kind: 'HIDDEN' });
+    });
+
+    it("the viewer's own row is never gated", () => {
+        expect(weeklyPickCell({ week: 2, entry, isOwnRow: true, reveal: undefined }))
+            .toEqual({ kind: 'PICK', team: 'SF', result: null });
+    });
+
+    it('a revealed week with no pick is NO_PICK, and it never carries a grade', () => {
+        expect(weeklyPickCell({ week: 3, entry, isOwnRow: false, reveal: { week: 3, weekRevealed: true } }))
+            .toEqual({ kind: 'NO_PICK' });
     });
 });

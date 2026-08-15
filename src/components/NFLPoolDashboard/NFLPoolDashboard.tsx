@@ -23,7 +23,7 @@ import { AICommissioner } from '../AICommissioner';
 import { useToast } from '../ui/Toast';
 import { Button } from '../ui';
 import { now as serverNow } from '../../utils/serverClock';
-import { gamesForPoolWeek, poolSeasonType, currentSlateWeek } from '../../utils/nflPending';
+import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks } from '../../utils/nflPending';
 import { buildMemberStandings } from '../../utils/memberStandings';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes, resolveHardWeekLock, frozenHardLockFor } from '@shared/weeklyHardLock';
 import { WeekChecklist } from './WeekChecklist';
@@ -32,6 +32,7 @@ import { PaymentsPanel } from '../PaymentsPanel';
 // conflicted when they didn't (measured).
 import { NFLResults } from './NFLResults';
 import { NFLPicksGrid } from './NFLPicksGrid';
+import { NFLWeeklyPicksGrid } from './NFLWeeklyPicksGrid';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -65,15 +66,21 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   type TabType = 'dashboard' | 'picks' | 'grid' | 'standings' | 'results' | 'recaps' | 'rules' | 'payments' | 'manager';
   const VALID_TABS: TabType[] = ['dashboard', 'picks', 'grid', 'standings', 'results', 'recaps', 'rules', 'payments', 'manager'];
   const showResultsTab = pool.type !== 'NFL_SURVIVOR';
-  // CURRENT PICKS (Kevin's A2). Pick'em only — Survivor and Margin store one
-  // pick per week keyed by the week number, so they have no games-across axis.
+  // CURRENT PICKS (Kevin's A2, widened by PLAN-MEMBER-PICKS-VISIBILITY).
   //
-  // 🛑 `isManager` here is an AUTHORIZATION fact, not a layout preference:
-  // `getPoolPicks` refuses anyone who is not the pool's owner, manager or
-  // SUPER_ADMIN (functions/src/nflPickReveal.ts, #414 Q5), so a member opening
-  // this tab would get a grid of "?" and nothing else. Admitting members is a
-  // plan-gated functions change; when it lands, this condition is what relaxes.
-  const showPicksGridTab = pool.type === 'NFL_PICKEM' && isManager;
+  // 🛑 THE `isManager` HALF IS GONE, AND THAT IS THE POINT OF THIS CHANGE.
+  // It was an authorization fact, not a layout preference: `getPoolPicks` used
+  // to refuse anyone who was not the owner, manager or SUPER_ADMIN, so a member
+  // opening this tab got a grid of "?" and nothing else. The callable now admits
+  // a proven member (`assertPickReader`), so the tab is offered to everyone
+  // signed in — and a NON-member still gets a refusal from the server and a grid
+  // of "?", which is the honest answer rather than a crash.
+  //
+  // ⚠️ ALL THREE NFL TYPES. An earlier draft said "drop isManager, keep the
+  // pool-type gate", which removes the wrong half and leaves Margin and Survivor
+  // with no tab at all — the exact contradiction codex found in the plan. The
+  // pool TYPE now selects the COMPONENT, not whether the tab exists.
+  const showPicksGridTab = !!user && ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'].includes(pool.type);
   const tabParam = searchParams.get('tab') as TabType | null;
   const requestedTab: TabType = tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'dashboard';
   // A tab the pool does not offer falls back to the dashboard, exactly as an
@@ -176,10 +183,27 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // correctly refused to hand them back before the boundary.
   const [standingsRows, setStandingsRows] = useState<any[]>([]);
   const [ownEntry, setOwnEntry] = useState<any | null>(null);
-  // Stamped with the pool it came from. `PoolRoute` reuses this component across
-  // pool navigation, so the response outlives the pool that asked for it — see
-  // the `weekReveal` note below for why the week check alone is not enough.
-  const [reveal, setReveal] = useState<{ poolId: string; data: PoolPicksReveal } | null>(null);
+  // Stamped with the pool it came from, and keyed BY WEEK.
+  //
+  // `PoolRoute` reuses this component across pool navigation, so a response
+  // outlives the pool that asked for it — see the `weekReveal` note below for
+  // why the week check alone is not enough.
+  //
+  // 🛑 THE WEEK KEY IS NOT A CACHE OPTIMISATION, IT IS THE ALLOWLIST BOUNDARY.
+  // The Survivor/Margin grid draws many weeks at once, and those pool types key
+  // a pick by the WEEK NUMBER — so `weekRevealed`, not `revealedGameIds`, is
+  // what admits a cell. One shared response across columns would render week 2's
+  // pick using week 1's `weekRevealed`, leaking a week that has not locked.
+  // Each week therefore keeps its OWN WHOLE response. (Plan D6/T9, codex r2.)
+  //
+  // 🛑 STAMPED WITH THE VIEWER TOO, NOT JUST THE POOL. The response is
+  // per-principal now — a member sees other members' picks, a non-member sees
+  // nothing — so a cache keyed only by pool would survive a sign-out,
+  // account switch, or removal from the roster and keep rendering the previous
+  // viewer's revealed picks to someone no longer entitled to them. (codex P1.)
+  const [reveal, setReveal] = useState<{ poolId: string; uid: string; byWeek: Record<number, PoolPicksReveal> }>(
+    { poolId: pool.id, uid: user?.id || '', byWeek: {} },
+  );
 
   useEffect(() => {
     const unsubStandings = dbService.subscribeToNFLStandings(pool.id, setStandingsRows);
@@ -194,20 +218,187 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // write behind it, so nothing would push. Refetched when the week changes, when
   // a Member Record moves (every submit writes one), and on a slow poll so a
   // kickoff opens the window without a page reload.
+  // Which weeks the grid needs. The selected week always; for Survivor and
+  // Margin — whose grid is players × WEEKS — every week of the pool's own slate
+  // up to and including it. Never a hardcoded 18: a preseason pool has four, and
+  // the schedule is the only thing that knows (plan K7).
+  const gridWeeks = useMemo(() => {
+    if (pool.type === 'NFL_PICKEM') return [selectedWeek];
+    return poolSeasonWeeks(games, pool).filter(w => w <= selectedWeek);
+  }, [games, pool, selectedWeek]);
+
+  // Shared fetch-and-merge. A response for another pool is discarded rather
+  // than merged, which is the #430 cross-pool guard generalised to a map.
+  const viewerUid = user?.id || '';
+  // Every read of the cache goes through this — pool AND viewer must both match.
+  const revealsForPool = reveal.poolId === pool.id && reveal.uid === viewerUid ? reveal.byWeek : {};
+  const cachedWeeks = revealsForPool;
+  // Grid columns still waiting on their deadline. These are the only weeks
+  // besides the selected one whose answer can still change, so they are the
+  // only ones the poll below re-requests.
+  const openWeeks = gridWeeks.filter(w => w !== selectedWeek && !cachedWeeks[w]?.weekRevealed).join(',');
+  // 🛑 AUTHORIZATION GENERATION. Bumped the moment the server declines this
+  // viewer, and captured by every request before it goes out.
+  //
+  // Without it the denial handler below is defeated by ordering alone: a member
+  // removed mid-flight can have an EARLIER successful response resolve AFTER
+  // the denial that cleared the cache, quietly repopulating it — and, on the
+  // participant's five-minute timer, leaving them looking at picks they are no
+  // longer entitled to for the rest of that interval. A response from a
+  // superseded generation is dropped rather than merged. (codex P1, r5.)
+  const authGen = React.useRef(0);
+  // A VIEWER CHANGE SUPERSEDES EVERYTHING IN FLIGHT, for the same reason a
+  // denial does. Without this, a request issued as the previous user resolves
+  // after the new user's and overwrites the cache with the OLD stamp — the
+  // render guard then rejects it as mismatched and the new viewer sees "?"
+  // everywhere until the next poll, which for a member is five minutes away.
+  // Not a leak (the stamp holds), but a self-inflicted blackout. (codex P2, r6.)
+  useEffect(() => { authGen.current += 1; }, [viewerUid, pool.id]);
+  const loadWeek = React.useCallback((w: number) => {
+    const gen = authGen.current;
+    dbService.getPoolPicks(pool.id, w)
+      .then(r => {
+        // The request outlived its own entitlement — discard it.
+        if (authGen.current !== gen) return;
+        setReveal(prev => prev.poolId === pool.id && prev.uid === viewerUid
+          ? { poolId: pool.id, uid: viewerUid, byWeek: { ...prev.byWeek, [w]: r } }
+          : { poolId: pool.id, uid: viewerUid, byWeek: { [w]: r } });
+      })
+      // A refusal is not a crash — a non-member gets one and every surface then
+      // renders "?", which is the honest answer — but the responses already in
+      // hand were fetched under an entitlement the server has just declined to
+      // renew. Keeping them would show a removed member the picks they could
+      // see a minute ago, so the cache is EMPTIED and every in-flight request
+      // is invalidated with it.
+      .catch(err => {
+        const denied = (err as { code?: string })?.code === 'functions/permission-denied';
+        // 🛑 A DENIAL IS AN EXPECTED OUTCOME NOW, SO IT IS NOT A WARNING.
+        // The tab is offered to every signed-in viewer, and a NON-member is
+        // refused by the server by design — that is the whole shape of the
+        // feature. Logging it at warn would put a recurring line in production
+        // logs on a normal user path, every poll, and drown the failures that
+        // do mean something. Classified BEFORE logging, not after. (qodo #9.)
+        if (denied) logger.debug('[NFLPoolDashboard] getPoolPicks denied (not a member)');
+        else logger.warn('[NFLPoolDashboard] getPoolPicks failed', err);
+        // ⚠️ THE SAME GENERATION CHECK AS THE SUCCESS PATH, and it was missing
+        // here — an asymmetry that inverted the guard's purpose. A denial from
+        // a PREVIOUS pool or viewer, rejecting after navigation, would bump the
+        // generation and stamp the old identity into state, invalidating the
+        // NEW view's in-flight successful request and blanking a grid the
+        // current viewer is fully entitled to. A superseded failure is as stale
+        // as a superseded success. (codex P2, r7.)
+        if (authGen.current !== gen) return;
+        if (denied) {
+          authGen.current += 1;
+          setReveal({ poolId: pool.id, uid: viewerUid, byWeek: {} });
+        }
+      });
+  }, [pool.id, viewerUid]);
+
+  // (a) THE SELECTED WEEK — the only one whose answer can still change, so the
+  // only one that polls or reacts to a `members` snapshot.
+  //
+  // Members poll five times slower than the commissioner: after this change
+  // EVERY member of every pool polls this callable, where before only the
+  // commissioner did, and the commissioner is the only one who needs
+  // minute-fresh completeness to chase missing picks.
+  //
+  // 🛑 AND ONLY ON A TAB THAT ACTUALLY RENDERS IT. Three do: the picks grid,
+  // the standings (its completeness column and the Survivor/Margin pick cell)
+  // and the commissioner view. On Pool Home, My Entry, Recaps, Rules or
+  // Payments the response is fetched and thrown away — which was free while one
+  // commissioner did it and is not now that every member does. (codex P2, r3.)
+  //
+  // ⚠️ `members` DRIVES A REFRESH FOR THE COMMISSIONER ONLY. It changes on every
+  // member-record write, i.e. every pick submission in the pool, and each call
+  // scans the pool's entries — so leaving it in for participants makes one
+  // submission fan out into a full-pool read per connected member. The
+  // commissioner keeps it because their roster's "who still owes a pick" column
+  // is the thing that has to be fresh the moment someone submits; a member's
+  // view gains nothing before the reveal, and the timer covers it after.
+  const revealTabs: TabType[] = ['grid', 'standings', 'manager'];
+  const wantsReveal = revealTabs.includes(activeTab);
+  const commissionerRosterDep = isManager ? members : null;
+
+  // 🛑 REMOVAL FROM THE ROSTER EMPTIES THE CACHE IMMEDIATELY.
+  //
+  // This closes a hole the `commissionerRosterDep` line above opens: dropping
+  // `members` from a participant's dependencies stops the read fan-out, but it
+  // also means a member removed WHILE VIEWING keeps rendering already-revealed
+  // picks until the poll happens to collect a denial. The server refuses the
+  // next call either way — but the cache is held HERE, so it is dropped here.
+  //
+  // ⚠️ THE SIGNAL IS `pool.participantIds`, AND THE OBVIOUS ONE DOES NOT WORK.
+  // An earlier revision derived this from the `members` snapshot and skipped
+  // the check when that array was empty, reading empty as "not loaded yet".
+  // But `subscribeToPoolMembers` reports a PERMISSION ERROR by calling back
+  // with `[]` (`dbService.ts:455`) — and losing the read is exactly what
+  // removal causes. So the guard went quiet in the one case it was written
+  // for: a guard that looks like a guard and is not. (qodo, re-review.)
+  //
+  // The pool document stays world-readable, removal does `arrayRemove(uid)` on
+  // it, and K9 made it server-owned — so it keeps arriving and can be trusted.
+  // Used ONLY to REVOKE cached data, never to grant access: admission is still
+  // the canonical Member Record, server-side.
+  const viewerStillMember = isManager || !viewerUid
+    || !Array.isArray(castPool.participantIds)
+    || castPool.participantIds.includes(viewerUid);
   useEffect(() => {
-    if (!isManager) { setReveal(null); return; }
-    let cancelled = false;
-    const load = () => {
-      dbService.getPoolPicks(pool.id, selectedWeek)
-        .then(r => { if (!cancelled) setReveal({ poolId: pool.id, data: r }); })
-        // A refusal is not a crash: the standings simply keep rendering
-        // Hidden / No selection, which is the correct pre-boundary answer.
-        .catch(err => { logger.warn('[NFLPoolDashboard] getPoolPicks failed', err); });
+    if (viewerStillMember) return;
+    authGen.current += 1;
+    setReveal({ poolId: pool.id, uid: viewerUid, byWeek: {} });
+  }, [viewerStillMember, pool.id, viewerUid]);
+  useEffect(() => {
+    if (!user || !wantsReveal) return;
+    // The selected week, plus any grid column still waiting on its deadline —
+    // those are the only weeks whose answer can still change. A revealed week
+    // is a passed clock boundary and is never re-fetched.
+    loadWeek(selectedWeek);
+    const id = setInterval(() => loadWeek(selectedWeek), isManager ? 60_000 : 300_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isManager, selectedWeek, commissionerRosterDep, user?.id, loadWeek, wantsReveal]);
+
+  // (b) THE HISTORICAL COLUMNS of the Survivor/Margin grid — fetched ONCE each,
+  // and only while that grid is actually on screen.
+  //
+  // 🛑 `members` IS DELIBERATELY NOT A DEPENDENCY HERE, and that is a cost fix
+  // rather than a style choice. It changes on every member-record write, i.e.
+  // every pick submission in the pool — and each participant call scans the
+  // pool's members and entries. Sharing one effect with (a) turned a single
+  // submission into one full-pool read per historical week PER CONNECTED
+  // VIEWER: on a week-18 pool, eighteen. A past week's reveal is a clock
+  // boundary that has already passed and cannot change, so it is fetched once
+  // and kept. (codex P2.)
+  // 🛑 "CACHED" MEANS REVEALED, NOT MERELY FETCHED. A viewer can select a LATER
+  // week, which pulls earlier columns that have not reached their deadline yet
+  // — and a `weekRevealed: false` response is a snapshot of a clock that is
+  // still running.
+  //
+  // ⚠️ AND KEEPING THEM ON THE "MISSING" LIST IS NOT ENOUGH ON ITS OWN, which
+  // is what an earlier revision of this fix got wrong: re-fetching an
+  // unrevealed week returns another unrevealed response, so this string never
+  // changes and the effect never re-runs. The column would still sit at "?"
+  // after the deadline passed. They are therefore added to the POLL below —
+  // the only thing here that fires on a clock. (codex r9, then r10 on r9's own
+  // fix.)
+  useEffect(() => {
+    if (!user || activeTab !== 'grid' || pool.type === 'NFL_PICKEM') return;
+    // 🛑 THE SINGLE OWNER of historical-column requests, including their retry.
+    //
+    // An earlier revision put the open-week loop in the poll above instead, and
+    // that was wrong twice over: it ran on Standings and Manager, which consume
+    // only the SELECTED week, and on the grid tab it duplicated this effect —
+    // every historical callable issued twice, each one scanning the pool's
+    // members and entries. Requests for these columns start and repeat here and
+    // nowhere else. (codex r11.)
+    const tick = () => {
+      for (const w of openWeeks.split(',').filter(Boolean)) loadWeek(Number(w));
     };
-    load();
-    const id = setInterval(load, 60_000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [isManager, pool.id, selectedWeek, members]);
+    tick();
+    const id = setInterval(tick, isManager ? 60_000 : 300_000);
+    return () => clearInterval(id);
+  }, [user?.id, activeTab, pool.type, openWeeks, loadWeek, isManager]);
 
   // ⚠️ ONLY EVER USE THE REVEAL THAT MATCHES THE POOL AND THE WEEK ON SCREEN.
   // `reveal` holds the previous answer for the moment between changing either
@@ -224,8 +415,9 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // Pick CONTENT from a pool that is no longer on screen. Clearing the state in
   // the effect instead would blank the grid on every `members` snapshot, which
   // is every submit — hence a stamp rather than a reset. (codex r1.)
-  const weekReveal =
-    reveal && reveal.poolId === pool.id && reveal.data.week === selectedWeek ? reveal.data : null;
+  const weekReveal = revealsForPool[selectedWeek]?.week === selectedWeek
+    ? revealsForPool[selectedWeek]
+    : null;
 
   // Roster from Member Records, stats from the scored projection, own picks from
   // the own-entry doc, other members' picks only where the SERVER revealed them.
@@ -246,9 +438,16 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // buildMemberStandings reads from the pool, and a snapshot re-instantiating the
   // doc should not re-run this. (qodo.)
   const entries = useMemo(
-    () => buildMemberStandings({ pool: castPool, members, standingsRows, ownEntry, reveal: weekReveal }),
+    () => buildMemberStandings({
+      pool: castPool, members, standingsRows, ownEntry, reveal: weekReveal,
+      // Survivor and Margin draw many weeks at once, so their rows need every
+      // cached week's revealed picks — not just the selected week's, which
+      // would render every earlier column as "made no pick". The per-column
+      // reveal gate still lives in the cell. (codex P1.)
+      weeklyReveals: pool.type === 'NFL_PICKEM' ? undefined : Object.values(revealsForPool),
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [standingsRows, ownEntry, members, weekReveal, castPool.participantIds],
+    [standingsRows, ownEntry, members, weekReveal, castPool.participantIds, pool.type, revealsForPool],
   );
 
   // 2b. Subscribe to Member Records (roster truth — everyone who joined, ADR 0003)
@@ -690,15 +889,31 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   is already normalized above, so this can only be true on a
                   Pick'em pool with a commissioner viewing it. */}
               {activeTab === 'grid' && (
-                <NFLPicksGrid
-                  pool={pool}
-                  entries={entries}
-                  games={games}
-                  week={selectedWeek}
-                  viewerUid={user?.id}
-                  reveal={weekReveal}
-                  ownEntryLoaded={!!ownEntry}
-                />
+                pool.type === 'NFL_PICKEM' ? (
+                  <NFLPicksGrid
+                    pool={pool}
+                    entries={entries}
+                    games={games}
+                    week={selectedWeek}
+                    viewerUid={user?.id}
+                    reveal={weekReveal}
+                    ownEntryLoaded={!!ownEntry}
+                  />
+                ) : (
+                  /* Survivor and Margin: one pick per WEEK, so the axis is weeks
+                     rather than the week's slate. Each column is handed the whole
+                     per-week reveal map and picks out ITS OWN — see the
+                     component header for why that is a security property. */
+                  <NFLWeeklyPicksGrid
+                    pool={pool}
+                    entries={entries}
+                    games={games}
+                    week={selectedWeek}
+                    viewerUid={user?.id}
+                    revealsByWeek={revealsForPool}
+                    ownEntryLoaded={!!ownEntry}
+                  />
+                )
               )}
 
               {/* TAB 2: STANDINGS */}

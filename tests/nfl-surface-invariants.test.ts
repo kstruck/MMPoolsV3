@@ -616,13 +616,23 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
   const grid = src('src/components/NFLPoolDashboard/NFLPicksGrid.tsx');
   const dash = src('src/components/NFLPoolDashboard/NFLPoolDashboard.tsx');
 
-  it('the tab is offered only to a commissioner, and only on Pick\'em', () => {
-    // NOT cosmetic: `getPoolPicks` throws permission-denied for a participant
-    // (functions/src/nflPickReveal.ts), so dropping either half of this gate
-    // gives members a grid of "?" — or, if the callable is ever widened without
-    // a plan, gives them pick content the plan-gate exists to decide on.
-    expect(dash).toContain("const showPicksGridTab = pool.type === 'NFL_PICKEM' && isManager;");
+  it('the tab is offered to any signed-in viewer, on all three NFL types', () => {
+    // ⚠️ DELIBERATELY REVERSED. This used to assert
+    // `pool.type === 'NFL_PICKEM' && isManager`, and BOTH halves were removed on
+    // purpose (PLAN-MEMBER-PICKS-VISIBILITY, Kevin 2026-08-14):
+    //
+    //   * `isManager` was an AUTHORIZATION fact — `getPoolPicks` refused
+    //     participants — and the callable now admits a proven member, so the
+    //     client gate would be the only thing still refusing them.
+    //   * `NFL_PICKEM` alone left Margin and Survivor with no tab at all, which
+    //     contradicted the ticket that adds their grid.
+    //
+    // What still holds: a NON-member is refused BY THE SERVER and sees "?", and
+    // the pool type now selects the COMPONENT rather than whether the tab exists.
+    expect(dash).toContain("const showPicksGridTab = !!user && ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'].includes(pool.type);");
     expect(dash).toContain('grid: showPicksGridTab');
+    expect(dash).toContain("pool.type === 'NFL_PICKEM' ? (");
+    expect(dash).toContain('<NFLWeeklyPicksGrid');
   });
 
   it('the grid derives no reveal rule of its own — it consumes revealedGameIds', () => {
@@ -646,8 +656,26 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     // navigating between two pools the same commissioner runs leaves the
     // previous pool's response matching by week, and buildMemberStandings
     // grafts its picks onto any uid present in both rosters. (codex r1.)
-    expect(dash).toContain('setReveal({ poolId: pool.id, data: r })');
-    expect(dash).toContain('reveal.poolId === pool.id && reveal.data.week === selectedWeek');
+    // Now week-KEYED as well as pool-stamped: the Survivor/Margin grid draws
+    // many weeks at once, so one response per pool is no longer enough.
+    expect(dash).toContain('prev.poolId === pool.id');
+    expect(dash).toContain('reveal.poolId === pool.id && reveal.uid === viewerUid ? reveal.byWeek : {}');
+    // The response is per-principal now, so a cache keyed only by pool would
+    // survive a sign-out or a removal and keep serving the previous viewer's
+    // revealed picks. A denial empties it rather than being logged. (codex P1.)
+    expect(dash).toContain("err as { code?: string })?.code === 'functions/permission-denied'");
+    expect(dash).toContain('setReveal({ poolId: pool.id, uid: viewerUid, byWeek: {} });');
+    // ...and an in-flight success must not repopulate it AFTER that denial,
+    // which ordering alone would otherwise allow. (codex P1, r5.)
+    expect(dash).toContain('authGen.current += 1;');
+    // A viewer change supersedes in-flight requests too, or the new user's
+    // cache is overwritten with the old stamp and they see "?" for a whole
+    // poll interval. (codex r6.)
+    expect(dash).toContain('useEffect(() => { authGen.current += 1; }, [viewerUid, pool.id]);');
+    // BOTH paths check it — a superseded failure is as stale as a superseded
+    // success, and only guarding one inverts the purpose of the guard.
+    expect(dash.match(/if \(authGen\.current !== gen\) return;/g) || []).toHaveLength(2);
+    expect(dash).toContain('revealsForPool[selectedWeek]?.week === selectedWeek');
     // Same rule for the Majority row's aggregate, checked at RENDER time —
     // clearing it in the effect leaves one frame of the previous pool's splits,
     // because effects run after the render that changed the pool. (codex r2.)
@@ -661,6 +689,56 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     // "made no pick" — and corrected a frame later. (codex r6.)
     expect(dash).toContain('const entries = useMemo(');
     expect(dash).not.toContain('setEntries(');
+  });
+
+  it('a REVEALED grid week is fetched once; an open one is re-polled', () => {
+    // `members` changes on every member-record write — i.e. every pick
+    // submission in the pool — and each participant call scans the pool's
+    // members and entries. One shared effect turned a single submission into
+    // one full-pool read per historical week PER CONNECTED VIEWER. (codex P2.)
+    //
+    // The selected week still reacts to `members`; the historical columns must
+    // not, and must only load while their grid is on screen.
+    expect(dash).toContain('[isManager, selectedWeek, commissionerRosterDep, user?.id, loadWeek, wantsReveal]');
+    // The members-driven refresh is the COMMISSIONER's, and the fetch only runs
+    // on a tab that renders the response.
+    expect(dash).toContain('const commissionerRosterDep = isManager ? members : null;');
+    // ...and dropping that dependency must not let a REMOVED member keep
+    // rendering cached picks until the poll collects a denial. (codex r12.)
+    // 🛑 The revoke signal is `participantIds`, NOT the members snapshot:
+    // `subscribeToPoolMembers` reports a permission error as `[]`, and losing
+    // that read is exactly what removal causes — so a members-derived guard
+    // went quiet in the one case it existed for. (qodo re-review.)
+    expect(dash).toContain('|| castPool.participantIds.includes(viewerUid);');
+    expect(dash).not.toContain('members.length === 0');
+    expect(dash).toContain('if (viewerStillMember) return;');
+    expect(dash).toContain("const revealTabs: TabType[] = ['grid', 'standings', 'manager'];");
+    expect(dash).toContain('if (!user || !wantsReveal) return;');
+    expect(dash).toContain('[user?.id, activeTab, pool.type, openWeeks, loadWeek, isManager]');
+    expect(dash).toContain("activeTab !== 'grid'");
+    // 'Cached' must mean REVEALED. An unrevealed response is a snapshot of a
+    // clock still running; caching it as final left the column at "?" forever
+    // once that week locked. (codex r9.)
+    // An unrevealed column is re-requested BY THE POLL, not merely left on a
+    // to-fetch list — re-fetching it returns another unrevealed response, so a
+    // list keyed on that predicate never changes and never fires again.
+    expect(dash).toContain('const openWeeks = gridWeeks.filter(w => w !== selectedWeek && !cachedWeeks[w]?.weekRevealed)');
+    // ONE owner for the historical columns — issuing them from the poll too
+    // ran them on Standings/Manager and doubled them on the grid. (codex r11.)
+    expect(dash.match(/for \(const w of openWeeks/g) || []).toHaveLength(1);
+  });
+
+  it('a weekly-pool column is admitted by ITS OWN weekRevealed, never a shared one', () => {
+    // Survivor and Margin key a pick by the WEEK NUMBER, so `weekRevealed` — not
+    // `revealedGameIds` — is what admits a cell. A multi-week grid reading one
+    // selected week's flag would render week 2's pick on a week where only week
+    // 1 had locked. The rule is unit-tested in `picksGrid.test.ts`; this pins
+    // that the COMPONENT still routes each column to its own response.
+    const weekly = src('src/components/NFLPoolDashboard/NFLWeeklyPicksGrid.tsx');
+    expect(weekly).toContain('reveal: revealsByWeek[w]');
+    expect(weekly).toContain('weeklyPickCell');
+    const util = src('src/utils/picksGrid.ts');
+    expect(util).toContain('reveal?.week === week && reveal?.weekRevealed === true');
   });
 
   it('the dashboard is keyed on the pool, so no subscribed state survives navigation', () => {

@@ -94,6 +94,26 @@ service cloud.firestore {
         return !changed.hasAny([
           'managerUid', 'ownerId', 'createdAt', 'createdBy',
           'axisNumbers', 'squares', 'participants',
+          // 🛑 THE ROSTER IS AN AUTHORIZATION INPUT, SO IT IS SERVER-OWNED.
+          //
+          // `participantIds` decides who may read a pool's PICKS
+          // (PLAN-MEMBER-PICKS-VISIBILITY, Kevin's K9 ruling 2026-08-14) via
+          // `isProvableMember`. While it stayed client-writable, a manager could
+          // add any uid and hand that account a DURABLE, self-refreshing feed of
+          // every future pick reveal — not a one-time disclosure they could have
+          // made verbally anyway, but a standing capability that outlives their
+          // interest in granting it. `participants` was already protected here;
+          // `participantIds` — the one every membership check actually reads —
+          // was not.
+          //
+          // Nothing legitimate loses a capability. Pool CREATE is server-only,
+          // and every join / rebuy / removal path writes this array through the
+          // Admin SDK (`lib/memberRecord.ts`), which bypasses rules entirely.
+          // Measured before shipping: ZERO client writes anywhere in `src/`
+          // (PLAN-MEMBER-PICKS-VISIBILITY-SWEEPS S4). The wizards' full-object
+          // updates still pass, because a same-value write is not an
+          // affectedKey — the same reasoning as `type` below.
+          'participantIds',
           'billing', // Billing status managed exclusively by Cloud Functions
           // Frozen weekly pick deadlines for Survivor/Margin. The server only ever
           // moves these EARLIER; a manager who could clear the map would erase the
