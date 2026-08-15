@@ -897,3 +897,38 @@ describe('standings tiebreaker column — a prediction, described by the shared 
     expect(code).toMatch(/tiebreakerCopy\(\s*tiebreakerRule\s*\)/);
   });
 });
+
+
+/**
+ * Items 11/12: the Pick'em grid gained a Week Pts column. Every row — including
+ * the Majority summary row — must carry a cell for it, or the game cells shift
+ * one column left under the wrong headers (codex r2 caught the Majority row).
+ * Coarse: count the header cells before the game map against the fixed cells
+ * on the Majority row before ITS game map.
+ */
+describe('current picks grid — the Majority row has a cell for every fixed column', () => {
+  it('Player, Set, Week Pts headers ↔ label, dash, dash before weekGames.map', () => {
+    const src = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLPicksGrid.tsx'), 'utf8');
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+    // Every marker is asserted present before it is used to slice, so a
+    // refactor fails HERE with a name, not downstream with a wrong count.
+    // (qodo on #440.)
+    const theadOpen = code.indexOf('<thead>');
+    const theadClose = code.indexOf('</thead>');
+    expect(theadOpen, '<thead> marker').toBeGreaterThan(0);
+    expect(theadClose, '</thead> marker').toBeGreaterThan(theadOpen);
+    const headerBlock = code.slice(theadOpen, theadClose);
+    const headerGamesMap = headerBlock.indexOf('{weekGames.map');
+    expect(headerGamesMap, 'header {weekGames.map marker').toBeGreaterThan(0);
+    const fixedHeaders = (headerBlock.slice(0, headerGamesMap).match(/<th\b/g) ?? []).length;
+    const majorityStart = code.search(/\bMajority\s*<\/td>/);
+    expect(majorityStart, 'Majority label marker').toBeGreaterThan(0);
+    const majorityGamesMap = code.indexOf('{weekGames.map', majorityStart);
+    expect(majorityGamesMap, 'Majority-row {weekGames.map marker').toBeGreaterThan(majorityStart);
+    const majorityBlock = code.slice(majorityStart, majorityGamesMap);
+    // label cell is the <td> that wraps "Majority" itself, opened before the marker
+    const fixedMajorityCells = 1 + (majorityBlock.match(/<td\b/g) ?? []).length;
+    expect(fixedHeaders).toBe(3);
+    expect(fixedMajorityCells).toBe(fixedHeaders);
+  });
+});

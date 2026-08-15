@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Grid3X3 } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
@@ -6,6 +6,8 @@ import type { PoolPicksReveal } from '../../services/dbService';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType, poolSeasonWeeks } from '../../utils/nflPending';
 import { weeklyPickCell } from '../../utils/picksGrid';
+import { sortGridRows, gridWeekValue, type GridSort } from '../../utils/picksGridSort';
+import { GridSortToggle } from './GridSortToggle';
 
 /**
  * CURRENT PICKS for Survivor and Margin — players down, WEEKS across.
@@ -65,10 +67,18 @@ export const NFLWeeklyPicksGrid: React.FC<NFLWeeklyPicksGridProps> = ({
     [games, pool, week],
   );
 
-  const rows = useMemo(
-    () => [...entries].sort((a, b) => (a.userName || '').localeCompare(b.userName || '')),
-    [entries],
-  );
+  // Item 12: A–Z (default) or this week's Margin score. Survivor has no numeric
+  // weekly score, so it keeps alphabetical only — the toggle is not offered.
+  const isMargin = pool.type === 'NFL_MARGIN';
+  // The sort choice is SCOPED TO THE POOL, in one state value read during
+  // render — not a `useEffect` reset, which only lands after the first render
+  // of the new pool has already committed the previous pool's order (codex on
+  // the rebased #440). PoolRoute reuses this component across pools; the
+  // documented default is alphabetical.
+  const [sortState, setSortState] = useState<{ poolId: string; sort: GridSort }>({ poolId: pool.id, sort: 'name' });
+  const sort: GridSort = sortState.poolId === pool.id ? sortState.sort : 'name';
+  const setSort = (s: GridSort) => setSortState({ poolId: pool.id, sort: s });
+  const rows = useMemo(() => sortGridRows(entries, isMargin ? sort : 'name', week, isMargin), [entries, sort, week, isMargin]);
 
   // Row identity is the ENTRY (`row.id`); `ownerUid` only decides "is this me"
   // (PLAN-MULTI-ENTRY §0b — the invariant test forbids a uid-keyed lookup).
@@ -85,9 +95,12 @@ export const NFLWeeklyPicksGrid: React.FC<NFLWeeklyPicksGridProps> = ({
           <Grid3X3 size={18} className="text-gold-600 dark:text-gold-400" aria-hidden="true" />
           Current Picks
         </h3>
-        <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted bg-page border border-line px-3 py-1 rounded-full num">
-          {entries.length} Entries
-        </span>
+        <div className="flex items-center gap-2">
+          {isMargin && <GridSortToggle value={sort} onChange={setSort} scoreLabel="Week Margin" />}
+          <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted bg-page border border-line px-3 py-1 rounded-full num">
+            {entries.length} Entries
+          </span>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -104,6 +117,7 @@ export const NFLWeeklyPicksGrid: React.FC<NFLWeeklyPicksGridProps> = ({
             <thead>
               <tr className="border-b border-line bg-surface">
                 <th className={`sticky left-0 z-10 bg-card ${TH}`}>Player</th>
+                {isMargin && <th className={`${TH} text-center whitespace-nowrap`} title="This week's margin from the scorer — blank until the week is scored">Week Margin</th>}
                 {weeks.map(w => (
                   <th key={w} className={`${TH} text-center whitespace-nowrap`}>
                     {nflWeekLabel(seasonType, w)}
@@ -138,6 +152,14 @@ export const NFLWeeklyPicksGrid: React.FC<NFLWeeklyPicksGridProps> = ({
                         )}
                       </span>
                     </td>
+                    {/* Item 11 (Margin only): this week's margin, per row; `—` = not
+                        scored yet, never a 0. Survivor's weekly outcome is not a
+                        number — it lives in Standings. */}
+                    {isMargin && (
+                      <td className="py-3 px-3 text-center text-[12px] num font-bold text-[color:var(--text)]">
+                        {(() => { const v = gridWeekValue(row, week, true); return v === null ? <span className="text-faint">—</span> : (v > 0 ? `+${v}` : `${v}`); })()}
+                      </td>
+                    )}
                     {weeks.map(w => {
                       // 🛑 `revealsByWeek[w]` — THIS column's own response, never
                       // the selected week's. See the header.

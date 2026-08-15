@@ -7,6 +7,8 @@ import { dbService } from '../../services/dbService';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType, gamesForPoolWeek } from '../../utils/nflPending';
 import { picksGridCell, majorityFor, type ConsensusSplit } from '../../utils/picksGrid';
+import { sortGridRows, gridWeekValue, type GridSort } from '../../utils/picksGridSort';
+import { GridSortToggle } from './GridSortToggle';
 
 /**
  * CURRENT PICKS (Kevin's A2) — the page that did not exist.
@@ -91,13 +93,20 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
     [games, pool, week],
   );
 
-  // Alphabetical, not by rank. A commissioner uses this grid to find one
-  // person's row, and a leaderboard order moves that row every time a week is
-  // scored. The ranked view is one tab over.
-  const rows = useMemo(
-    () => [...entries].sort((a, b) => (a.userName || '').localeCompare(b.userName || '')),
-    [entries],
-  );
+  // Alphabetical by default — a commissioner uses this grid to find one
+  // person's row, and a rank order moves that row every time a week is scored.
+  // Item 12: a toggle offers this week's score order too (`sortGridRows`,
+  // per ROW, unit-tested). Item 11: the score itself is a column — the same
+  // projection field the Results tab ranks by, no new read.
+  // The sort choice is SCOPED TO THE POOL, in one state value read during
+  // render — not a `useEffect` reset, which only lands after the first render
+  // of the new pool has already committed the previous pool's order (codex on
+  // the rebased #440). PoolRoute reuses this component across pools; the
+  // documented default is alphabetical.
+  const [sortState, setSortState] = useState<{ poolId: string; sort: GridSort }>({ poolId: pool.id, sort: 'name' });
+  const sort: GridSort = sortState.poolId === pool.id ? sortState.sort : 'name';
+  const setSort = (s: GridSort) => setSortState({ poolId: pool.id, sort: s });
+  const rows = useMemo(() => sortGridRows(entries, sort, week, false), [entries, sort, week]);
 
   // ⚠️ Only the reveal that matches the week on screen. The dashboard already
   // drops a stale one, and this is the second guard on the same rule: last
@@ -147,9 +156,12 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
           <Grid3X3 size={18} className="text-gold-600 dark:text-gold-400" aria-hidden="true" />
           {nflWeekLabel(seasonType, week)} Current Picks
         </h3>
-        <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted bg-page border border-line px-3 py-1 rounded-full num">
-          {entries.length} Entries
-        </span>
+        <div className="flex items-center gap-2">
+          <GridSortToggle value={sort} onChange={setSort} scoreLabel="Week Pts" />
+          <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted bg-page border border-line px-3 py-1 rounded-full num">
+            {entries.length} Entries
+          </span>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -167,6 +179,7 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
               <tr className="border-b border-line bg-surface">
                 <th className={`sticky left-0 z-10 bg-card ${TH}`}>Player</th>
                 <th className={`${TH} text-center w-20`}>Set</th>
+                <th className={`${TH} text-center w-20`} title="This week's points from the scorer — blank until the week is scored">Week Pts</th>
                 {weekGames.map(g => (
                   <th key={g.id} className={`${TH} text-center whitespace-nowrap`}>
                     {g.awayTeam.abbreviation}/{g.homeTeam.abbreviation}
@@ -222,6 +235,11 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                     >
                       {set === undefined ? '?' : `${set}/${weekGames.length}`}
                     </td>
+                    {/* Item 11: this week's score, per row. `—` = not scored yet
+                        (the repo's unavailable marker), never a 0. */}
+                    <td className="py-3 px-3 text-center text-[12px] num font-bold text-[color:var(--text)]">
+                      {gridWeekValue(row, week, false) ?? <span className="text-faint">—</span>}
+                    </td>
                     {weekGames.map(g => {
                       const cell = picksGridCell({
                         game: g,
@@ -269,6 +287,9 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                 <td className="sticky left-0 z-10 bg-surface py-3 px-3 font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted">
                   Majority
                 </td>
+                <td className="py-3 px-3 text-center">{dash}</td>
+                {/* Week Pts has no majority — placeholder keeps the game cells
+                    under their own headers (codex r2 on items 11/12). */}
                 <td className="py-3 px-3 text-center">{dash}</td>
                 {weekGames.map(g => {
                   const m = majorityFor(splits?.[g.id], g);
