@@ -114,8 +114,18 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
   // caption then says nothing about timing rather than guessing.
   const revealMode = wk?.mode;
 
-  const uidOf = (row: any): string => row?.ownerUid ?? row?.id;
-  const isMe = (row: any): boolean => !!viewerUid && uidOf(row) === viewerUid;
+  // ROW IDENTITY IS THE ENTRY (`row.id`), NOT THE PLAYER. `ownerUid` is for
+  // exactly two things — "is this me" and the profile link. Every lookup into
+  // the reveal (`counts`, `picks`, …) is keyed by `row.id`. Today an NFL entry
+  // id IS the uid so the two agree; under PLAN-MULTI-ENTRY §0b they will not,
+  // and a uid-keyed lookup would merge one player's entries into one row.
+  // A source invariant in tests/nfl-surface-invariants.test.ts forbids the
+  // uid-keyed form here.
+  // `?? row.id` here is the legacy-row fallback (an entry written before
+  // `ownerUid` was stamped) — NOT a key: under multi-entry an extra entry's id
+  // never equals a uid, so the fallback can only ever match entry #1. Same
+  // shape NFLStandings uses. (qodo on #438.)
+  const isMe = (row: any): boolean => !!viewerUid && (row?.ownerUid ?? row?.id) === viewerUid;
   // Their own entry is the source for their own picks, and it is the only one
   // that is right the instant they save — the same rule the Standings
   // completeness column uses. It is authoritative only ONCE IT HAS LOADED; see
@@ -125,7 +135,7 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
     if (ownPicksKnown(row)) return weekGames.filter(g => !!row?.picks?.[g.id]).length;
     // Everyone else, and the viewer before their entry lands: the server's
     // count, which carries no pick content and is available at any time.
-    return wk?.counts?.[uidOf(row)];
+    return wk?.counts?.[row?.id];
   };
 
   const dash = <span className="text-faint">—</span>;
