@@ -188,6 +188,11 @@ export function voidMemberRecord(tx: Transaction, db: Firestore, poolId: string,
   // A departed member must never keep a co-commissioner grant
   // (PLAN-CO-COMMISSIONERS D2, sweeps S8): both removal helpers drop the uid
   // from `coManagers` too, so whichever removal callable is wired later inherits it.
+  // ponytail: on a pool with NO `coManagers` field this transform materialises an
+  // EMPTY array (Firestore arrayRemove semantics — codex r2). Accepted: an empty
+  // array grants nothing anywhere, and the clear's invariant is "no NON-EMPTY
+  // array" (`nonEmpty === 0`), not field absence. Guarding it would cost a pool
+  // read inside every removal transaction for a cosmetic property.
   tx.update(db.collection('pools').doc(poolId), {
     participantIds: FieldValue.arrayRemove(uid),
     coManagers: FieldValue.arrayRemove(uid),

@@ -1,5 +1,6 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { ESPN_SITE_API } from './lib/espnHost';
+import { isPoolOwnerOrManager } from './poolOps';
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
@@ -1322,7 +1323,7 @@ export const simulateGameUpdate = onCall({
             // `coManagers` is NOT consulted here (PLAN-CO-COMMISSIONERS D3: the
             // sim tools narrow to owner / managerUid / SUPER_ADMIN; a forged
             // array must reach nothing while the field is being locked).
-            const owns = [authPool.createdByUid, authPool.ownerId, authPool.managerUid].includes(uid);
+            const owns = isPoolOwnerOrManager(authPool, uid);
             if (!isSuperAdmin && !owns) {
                 throw new HttpsError('permission-denied', 'You do not have permission to simulate scores for this pool.');
             }

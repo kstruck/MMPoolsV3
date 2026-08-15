@@ -404,7 +404,7 @@ const ACTIONS: OpAction[] = [
   {
     id: 'clearLegacyCoManagers:dry',
     label: 'Audit legacy coManagers (dry run)',
-    description: 'PLAN-CO-COMMISSIONERS D2 step 2. Count pools still carrying a coManagers array (expected 0 non-empty). The field was client-writable until the rules lock; nothing may read it again until this reports zero. Writes nothing.',
+    description: 'PLAN-CO-COMMISSIONERS D2 step 2. Count pools still carrying a coManagers array (invariant: nonEmpty 0 and malformed 0; an empty array grants nothing). The field was client-writable until the rules lock; nothing may read it again until this reports zero. Writes nothing.',
     blastRadius: 'Read-only — no writes. Reports scanned / withField / nonEmpty / malformed + samples, plus the D3 ownerId≠createdByUid census (ownerMismatch, expected 0).',
     destructive: false,
     icon: CheckCircle2,
@@ -413,7 +413,7 @@ const ACTIONS: OpAction[] = [
   {
     id: 'clearLegacyCoManagers',
     label: 'Clear legacy coManagers',
-    description: 'Delete the coManagers field from every pool that carries one. Idempotent — a second run reports zero. Run once after the rules lock deploys, before T2b/T3.',
+    description: 'Delete the coManagers field from every pool that carries one. Idempotent — a second run reports nonEmpty 0. Run once after the rules lock deploys, before T2b/T3.',
     blastRadius: 'Deletes pool.coManagers on affected pools. Nothing else on the doc. Writes one admin_audit row (CLEAR_LEGACY_CO_MANAGERS).',
     destructive: true,
     icon: Wrench,

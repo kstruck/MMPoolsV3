@@ -24,7 +24,7 @@
 > **Deploy runbook for the lock PR (order is the control — D2):** merge →
 > `npm --prefix functions ci` → `npx firebase deploy --only functions` (functions
 > are now BLIND to `coManagers`) → SuperAdmin → Operations → **"Audit legacy
-> coManagers (dry run)"** (expected `nonEmpty: 0`) → `npx firebase deploy --only
+> coManagers (dry run)"** (the invariant is `nonEmpty: 0` and `malformed: 0` — an EMPTY array may exist and grants nothing) → `npx firebase deploy --only
 > firestore:rules` (the lock) → **"Clear legacy coManagers"** (live) → dry run again
 > = 0. Only then may the step-3 PR merge.
 

@@ -826,11 +826,11 @@ describe('coManagers — a departed member is dropped from the array (PLAN-CO-CO
     expect(pool.coManagers).toEqual(['cm_y']);
   });
 
-  it('is a no-op on a pool with no coManagers field (arrayRemove on absent field writes nothing surprising)', async () => {
+  it('on a pool with no coManagers field, arrayRemove materialises an EMPTY array — stated, accepted (grants nothing; the clear invariant is nonEmpty === 0)', async () => {
     await db.collection('pools').doc('cm_pool_c').set({ type: 'NFL_PICKEM', ownerId: 'cm_boss', participantIds: ['cm_boss', 'cm_x'], status: 'OPEN' });
     await db.runTransaction(async (tx) => { voidMemberRecord(tx, db, 'cm_pool_c', 'cm_x'); });
     const pool = (await db.collection('pools').doc('cm_pool_c').get()).data()!;
     expect(pool.participantIds).toEqual(['cm_boss']);
-    expect(pool.coManagers ?? []).toEqual([]);
+    expect(pool.coManagers).toEqual([]);
   });
 });

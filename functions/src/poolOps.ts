@@ -790,8 +790,11 @@ export const fixParticipantIds = validated(
  * One-off, audited, idempotent: delete the `coManagers` field from every pool
  * that carries one. Run AFTER the rules lock deploys and BEFORE anything reads
  * the field again (T2b/T3). Expected 0 non-empty arrays — the number goes in
- * the PR body. A re-run finds nothing and writes nothing, which is what makes
- * it resumable: an interrupted run is simply run again.
+ * the PR body. A re-run finds no NON-EMPTY array, which is what makes it
+ * resumable: an interrupted run is simply run again. ⚠️ The invariant is
+ * `nonEmpty === 0 && malformed === 0`, NOT `withField === 0`: the S8 removal
+ * helpers' `arrayRemove` legitimately materialises an EMPTY array on a pool
+ * that had none (codex r2), and an empty array grants nothing anywhere.
  *
  * ponytail: `coManagersRevision` is NOT stamped here — the T2b setter treats an
  * absent revision as 0, so stamping every pool doc buys nothing.
