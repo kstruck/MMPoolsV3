@@ -28,6 +28,7 @@ describe('poolTypeLabel / poolOptionLabels — a My Entries card can tell pools 
         expect(poolOptionLabels({ type: 'NFL_SURVIVOR', settings: { maxStrikes: 0, maxRebuys: 0 } })).toEqual(['Sudden death']);
         expect(poolOptionLabels({ type: 'NFL_SURVIVOR', settings: { maxStrikes: 1, maxRebuys: 2 } })).toEqual(['1 strike', 'Rebuys']);
         expect(poolOptionLabels({ type: 'NFL_SURVIVOR', settings: { maxStrikes: 2 } })).toEqual(['2 strikes']);
+        expect(poolOptionLabels({ type: 'NFL_SURVIVOR', settings: { pickLosersMode: true, maxStrikes: 0 } })).toEqual(['Pick losers', 'Sudden death']);
     });
 
     it('Margin: payout mode only; other types have no settings-driven options', () => {

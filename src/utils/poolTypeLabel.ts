@@ -53,6 +53,9 @@ export function poolOptionLabels(pool: PoolLike): string[] {
             if (PAYOUT_LABEL[s.payoutMode]) out.push(PAYOUT_LABEL[s.payoutMode]);
             break;
         case 'NFL_SURVIVOR': {
+            // Reverse survivor (pick the LOSER) inverts the whole game — say so
+            // first (codex on #437).
+            if (s.pickLosersMode) out.push('Pick losers');
             const strikes = Number(s.maxStrikes ?? 0);
             out.push(strikes > 0 ? `${strikes} strike${strikes === 1 ? '' : 's'}` : 'Sudden death');
             if (Number(s.maxRebuys ?? 0) > 0) out.push('Rebuys');
