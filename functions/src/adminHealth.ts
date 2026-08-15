@@ -1,4 +1,5 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { ESPN_SITE_API } from './lib/espnHost';
 import * as admin from "firebase-admin";
 import { validated } from "./lib/validated";
 import { getAdminHealthSnapshotSchema } from "./schemas/noInputAdmin";
@@ -13,7 +14,7 @@ import { withHeartbeat } from "./lib/heartbeat";
 type Check = { ok: boolean; latencyMs: number; detail: string };
 
 const NFL_SCOREBOARD =
-  "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
+  `${ESPN_SITE_API}/football/nfl/scoreboard`;
 
 async function timed(fn: () => Promise<string>): Promise<Check> {
   const started = Date.now();
