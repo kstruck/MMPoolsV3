@@ -94,7 +94,7 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
                         onClick={() => onPickNow(nextDue.week)}
                         className="shrink-0"
                     >
-                        Make picks <ArrowRight size={13} aria-hidden="true" />
+                        Make Picks <ArrowRight size={13} aria-hidden="true" />
                     </Button>
                 </div>
             )}

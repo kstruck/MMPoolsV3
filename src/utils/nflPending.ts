@@ -91,12 +91,32 @@ export function isWeekComplete(poolType: string, entry: any, weekGames: NFLGame[
     return !!entry.picks?.[week];
 }
 
-export function isWeekLockedNow(weekGames: NFLGame[], lockBufferMinutes: number, lockMode: 'WEEKLY' | 'PER_GAME' = 'WEEKLY'): boolean {
+/**
+ * Is this week past the point where the member can still change a pick?
+ * PER_GAME (Pick'em default): the last game's lock — earlier games are already
+ * frozen individually, but the sheet is still editable. WEEKLY (Survivor,
+ * Margin, confidence Pick'em): the first game's lock.
+ *
+ * `weekLockOverrideMs` is a commissioner's `extendWeekDeadline` for this week
+ * (`settings.weekLockOverrides[week]`, epoch ms). The server applies it with
+ * Math.max on Pick'em (`functions/src/lib/effectiveLock.ts`), so a client that
+ * ignored it would call the week locked — and disable the picks button — while
+ * the server still accepts submissions. Hard-lock pools (Survivor/Margin) drop
+ * overrides server-side, so callers pass it only for Pick'em. (codex on item 8.)
+ */
+export function isWeekLockedNow(
+    weekGames: NFLGame[],
+    lockBufferMinutes: number,
+    lockMode: 'WEEKLY' | 'PER_GAME' = 'WEEKLY',
+    weekLockOverrideMs?: number,
+): boolean {
     if (weekGames.length === 0) return false;
     const bufferMs = lockBufferMinutes * 60 * 1000;
     const kickoffs = weekGames.map(g => g.startTime);
     const reference = lockMode === 'PER_GAME' ? Math.max(...kickoffs) : Math.min(...kickoffs);
-    return serverNow() >= (reference - bufferMs);
+    const base = reference - bufferMs;
+    const deadline = typeof weekLockOverrideMs === 'number' ? Math.max(base, weekLockOverrideMs) : base;
+    return serverNow() >= deadline;
 }
 
 export function getWeekStatus(

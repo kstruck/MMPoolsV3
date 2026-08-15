@@ -3,7 +3,9 @@ import { useSearchParams } from 'react-router';
 import type { User as UserType, Pool, NFLGame, WeeklyRecap } from '../../types';
 import { NFLGameTicker } from './NFLGameTicker';
 import { dbService } from '../../services/dbService';
-import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
+import { gamesForPoolWeek, poolSeasonType, isWeekComplete, isWeekLockedNow } from '../../utils/nflPending';
+import { pickCtaFor } from '../../utils/pickCta';
+import { effectiveBufferMinutesForWeek } from '@shared/weeklyHardLock';
 import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { 
@@ -280,17 +282,43 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   const focusSiteC = focusGame ? siteConsensus[focusGame.id] : null;
 
   // Are THIS week's picks in? Pick'em is a sheet, so "in" means every game on
-  // the slate has a pick — a half-filled sheet must still say "Make My Picks".
+  // the slate has a pick — a half-filled sheet must still say "Make Picks".
   // Survivor and Margin are one pick per week, keyed by week number.
   // `weeklyGames.length > 0` matters: an empty slate makes `every()` vacuously
   // true and would label a pool with no games as already picked.
+  // `isWeekComplete` (utils/nflPending) is that exact rule, shared with the
+  // week checklist — one implementation so the banner and this card agree.
   const weekPicksComplete = useMemo(() => {
     if (!myEntry || weeklyGames.length === 0) return false;
-    if (_pool.type === 'NFL_PICKEM') {
-      return weeklyGames.every(g => !!myEntry.picks?.[g.id]);
-    }
-    return !!myEntry.picks?.[selectedWeek];
+    return isWeekComplete(_pool.type, myEntry, weeklyGames, selectedWeek);
   }, [myEntry, weeklyGames, _pool.type, selectedWeek]);
+
+  // ONE label for every picks button on this page (item 8, Kevin 2026-08-14):
+  // the two red CTAs used to disagree — the banner said "Make picks" for the
+  // current week while this card said "Edit My Picks" for a week whose deadline
+  // had already passed. Both now derive from the member's own entry and the
+  // pool's lock rule, via `pickCtaFor`. NOT memoized: `isWeekLockedNow` reads
+  // the server clock, and a memo would freeze the label across a deadline
+  // (the same trap WeekChecklist documents).
+  const lockMode: 'WEEKLY' | 'PER_GAME' =
+    castPool.settings?.confidenceMode || castPool.settings?.lockMode === 'WEEKLY' ? 'WEEKLY' : 'PER_GAME';
+  // A commissioner's extendWeekDeadline (`settings.weekLockOverrides[week]`)
+  // is honoured server-side on Pick'em only; pass it so the button cannot say
+  // "Picks Locked" during an extension the server still accepts.
+  const weekLockOverrideMs: number | undefined =
+    _pool.type === 'NFL_PICKEM' ? castPool.settings?.weekLockOverrides?.[selectedWeek] : undefined;
+  const weekLocked = isWeekLockedNow(
+    weeklyGames,
+    effectiveBufferMinutesForWeek(castPool, selectedWeek, weeklyGames.map(g => g.startTime)),
+    _pool.type === 'NFL_PICKEM' ? lockMode : 'WEEKLY',
+    typeof weekLockOverrideMs === 'number' ? weekLockOverrideMs : undefined,
+  );
+  const hasAnyPickThisWeek = !!myEntry && (
+    _pool.type === 'NFL_PICKEM'
+      ? weeklyGames.some(g => !!myEntry.picks?.[g.id])
+      : !!myEntry.picks?.[selectedWeek]
+  );
+  const picksCta = pickCtaFor({ locked: weekLocked, complete: weekPicksComplete, hasAnyPick: hasAnyPickThisWeek });
 
   const myPick = useMemo(() => {
     if (!myEntry || !focusGame) return null;
@@ -607,7 +635,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                 size="md"
                 onClick={() => onSelectTab('picks')}
               >
-                {weekPicksComplete ? 'Edit My Picks' : 'Make My Picks'} <ChevronRight size={14} />
+                {picksCta.label} <ChevronRight size={14} />
               </Button>
             </div>
 
@@ -1261,7 +1289,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
               onClick={() => onSelectTab('picks')}
               className="w-full sm:w-auto"
             >
-              Submit My Picks Now
+              {picksCta.label}
             </Button>
           </div>
         </div>

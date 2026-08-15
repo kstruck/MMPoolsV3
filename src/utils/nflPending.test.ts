@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 // Firebase out of the import graph entirely.
 vi.mock('./serverClock', () => ({ now: () => 0 }));
 
-import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks } from './nflPending';
+import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks, isWeekLockedNow } from './nflPending';
 import type { NFLGame } from '../types';
 
 /**
@@ -160,5 +160,31 @@ describe('poolSeasonWeeks', () => {
     it('is empty while the schedule is still loading, so the grid renders empty rather than fabricated', () => {
         expect(poolSeasonWeeks([], { seasonType: 2 })).toEqual([]);
         expect(poolSeasonWeeks(SCHEDULE, { seasonType: 3 })).toEqual([]);
+    });
+});
+
+/**
+ * The picks-CTA lock (item 8). `serverClock.now` is mocked to 0 above, so a
+ * kickoff at t=1000 with a 5-minute buffer is in the future and the week is
+ * open; a kickoff in the past is locked. The override is a commissioner's
+ * `extendWeekDeadline`, which the server applies with Math.max on Pick'em.
+ */
+describe('isWeekLockedNow', () => {
+    const at = (id: string, startTime: number) => ({ ...game(id, 1, 2), startTime } as NFLGame);
+    it('empty slate is never locked', () => {
+        expect(isWeekLockedNow([], 5)).toBe(false);
+    });
+    it('WEEKLY locks at the FIRST kickoff, PER_GAME at the LAST', () => {
+        const slate = [at('a', -10_000_000), at('b', 10_000_000)]; // one past, one future
+        expect(isWeekLockedNow(slate, 0, 'WEEKLY')).toBe(true);
+        expect(isWeekLockedNow(slate, 0, 'PER_GAME')).toBe(false);
+    });
+    it('a commissioner extension pushes the deadline later (Math.max, never earlier)', () => {
+        const slate = [at('a', -10_000_000)]; // kicked off long ago
+        expect(isWeekLockedNow(slate, 0, 'PER_GAME')).toBe(true);
+        expect(isWeekLockedNow(slate, 0, 'PER_GAME', 60_000)).toBe(false); // extended to t=60s, now is 0
+        // An override EARLIER than the natural deadline changes nothing.
+        const future = [at('b', 10_000_000)];
+        expect(isWeekLockedNow(future, 0, 'PER_GAME', -1)).toBe(false);
     });
 });
