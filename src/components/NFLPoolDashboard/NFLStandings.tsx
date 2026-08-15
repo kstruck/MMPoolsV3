@@ -5,7 +5,7 @@ import type { Pool, NFLGame } from '../../types';
 import { RankChip } from '../ui';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType, gamesForPoolWeek } from '../../utils/nflPending';
-import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction } from '@shared/nflTiebreaker';
+import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction, tiebreakerCopy } from '@shared/nflTiebreaker';
 
 interface NFLStandingsProps {
   pool: Pool;
@@ -51,9 +51,14 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
   // would print a tiebreaker figure for a pool whose rules page says it has
   // none — the display contradicting the rules. Nothing is deleted, so a switch
   // back before anyone submits loses no data. (codex R8.1.)
-  const showTiebreakerColumn = tiebreakerAsksForPrediction(
-    effectiveWeeklyTiebreaker((pool as { settings?: { weeklyTiebreaker?: unknown } }).settings),
-  );
+  const tiebreakerRule = effectiveWeeklyTiebreaker((pool as { settings?: { weeklyTiebreaker?: unknown } }).settings);
+  const showTiebreakerColumn = tiebreakerAsksForPrediction(tiebreakerRule);
+  // Item 10 (Kevin, 2026-08-14): "MNF Score" was opaque to a passive
+  // participant — it is the member's tiebreaker PREDICTION, not a score. The
+  // header now says what it is and the hover carries the pool's own rule
+  // sentence (tiebreakerCopy — one definition shared with the sheet and the
+  // rules page, so the column cannot describe a rule the pool is not playing).
+  const tiebreakerHint = tiebreakerCopy(tiebreakerRule)?.hint;
 
   // This week's slate — the denominator for the Pick'em completeness column, and
   // the key set a pick'em entry's picks are stored under.
@@ -206,7 +211,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                 {type === 'NFL_PICKEM' && (
                   <>
                     <th className={`${TH} text-center`}>{nflWeekLabel(poolSeasonType(pool), week)} Pick</th>
-                    {showTiebreakerColumn && <th className={`${TH} text-center`}>MNF Score</th>}
+                    {showTiebreakerColumn && <th className={`${TH} text-center`} title={tiebreakerHint}>Tiebreaker Guess<span className="sr-only"> — {tiebreakerHint}</span></th>}
                     <th className={`${TH} text-right w-24`}>Total Points</th>
                   </>
                 )}
