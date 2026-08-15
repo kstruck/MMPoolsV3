@@ -1,4 +1,5 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { ESPN_SITE_API } from './lib/espnHost';
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
@@ -91,7 +92,7 @@ const swapScores = (scores: { home: number, away: number } | undefined): { home:
 async function fetchESPNScores(gameId: string, league: string): Promise<any | null> {
     try {
         const leaguePath = league === 'college' || league === 'ncaa' ? 'college-football' : 'nfl';
-        const url = `https://site.api.espn.com/apis/site/v2/sports/football/${leaguePath}/summary?event=${gameId}`;
+        const url = `${ESPN_SITE_API}/football/${leaguePath}/summary?event=${gameId}`;
 
         // Bounded fetch: an 8s timeout so one hung socket can't burn the whole
         // scheduler budget, plus one retry with backoff for transient failures.

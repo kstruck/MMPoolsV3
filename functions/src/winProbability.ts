@@ -3,6 +3,7 @@
 // failure here never blocks scores. Stored per-game at nfl_games/{id}/winprob/current so the
 // season-wide score subscription isn't bloated. Best-effort: absent -> clients show empty state.
 import * as admin from "firebase-admin";
+import { ESPN_SITE_API } from './lib/espnHost';
 import { FieldValue } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { withHeartbeat } from "./lib/heartbeat";
@@ -14,7 +15,7 @@ interface WinProbPoint { homePct: number; at: number }
 /** Fetch the latest home win probability (0-100) for one ESPN event, or null. */
 async function fetchHomeWinPct(eventId: string): Promise<number | null> {
   try {
-    const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${eventId}`);
+    const res = await fetch(`${ESPN_SITE_API}/football/nfl/summary?event=${eventId}`);
     if (!res.ok) return null;
     const data: any = await res.json();
     const wp = data?.winprobability;

@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { ESPN_SITE_API } from './lib/espnHost';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { writeAuditEvent } from './audit';
 import { NFLGame } from './types';
@@ -123,12 +124,13 @@ async function resolveScoreboardUrl(
   season: string,
   seasonType: 1 | 2 | 3,
 ): Promise<string> {
-    let url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week=${week}&season=${season}&seasontype=${seasonType}`;
+    // Host lives in lib/espnHost.ts — read its comment before touching it.
+    let url = `${ESPN_SITE_API}/football/nfl/scoreboard?week=${week}&season=${season}&seasontype=${seasonType}`;
 
     try {
       // 1. Fetch calendar to extract precise date range for the specified week of 2026 season.
       // This prevents ESPN's scoreboard API from falling back to 2025 games during the off-season.
-      const calendarUrl = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?season=${season}`;
+      const calendarUrl = `${ESPN_SITE_API}/football/nfl/scoreboard?season=${season}`;
       const calendarResp = await fetch(calendarUrl);
       if (calendarResp.ok) {
         const calendarData = await calendarResp.json();
@@ -149,7 +151,7 @@ async function resolveScoreboardUrl(
             };
             
             const dateQuery = `${formatDate(start)}-${formatDate(end)}`;
-            url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${dateQuery}`;
+            url = `${ESPN_SITE_API}/football/nfl/scoreboard?dates=${dateQuery}`;
             console.log(`[nflSchedule] Resolved Week ${week} (Type: ${seasonType}) to dates: ${dateQuery}`);
           }
         }

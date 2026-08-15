@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { ESPN_SITE_API } from './lib/espnHost';
 import { FieldValue } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
@@ -387,7 +388,7 @@ export const checkPlayoffScores = onSchedule("every 30 minutes", withHeartbeat('
     logger.info("Checking ESPN Playoff Scores...");
 
     try {
-        const resp = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard');
+        const resp = await fetch(`${ESPN_SITE_API}/football/nfl/scoreboard`);
         // A 429 or 5xx used to return undefined, which the wrapper reads as
         // success — so a sustained ESPN outage would keep stamping fresh healthy
         // beats while playoff results were never propagated.

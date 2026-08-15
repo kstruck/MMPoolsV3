@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { ESPN_SITE_API } from './lib/espnHost';
 import { FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -1150,7 +1151,7 @@ async function fetchESPNTournamentData(seasonYear: number): Promise<ESPNEvent[]>
     const end = `${seasonYear}0410`;
     const limit = 200; // Should cover all 67 games
 
-    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${start}-${end}&limit=${limit}&groups=100`; // group 100 is typically NCAA Tournament
+    const url = `${ESPN_SITE_API}/basketball/mens-college-basketball/scoreboard?dates=${start}-${end}&limit=${limit}&groups=100`; // group 100 is typically NCAA Tournament
 
     try {
         const response = await fetch(url);
@@ -1169,7 +1170,7 @@ async function fetchESPNConferenceTournamentData(seasonYear: number, groupId: nu
     const end = `${seasonYear}0318`; // Includes selection sunday margin
     const limit = 50;
 
-    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${start}-${end}&limit=${limit}&groups=${groupId}`;
+    const url = `${ESPN_SITE_API}/basketball/mens-college-basketball/scoreboard?dates=${start}-${end}&limit=${limit}&groups=${groupId}`;
 
     try {
         const response = await fetch(url);
