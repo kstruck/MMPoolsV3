@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Trophy, Heart, ShieldAlert } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
@@ -6,6 +6,8 @@ import { RankChip } from '../ui';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType, gamesForPoolWeek } from '../../utils/nflPending';
 import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction, tiebreakerCopy } from '@shared/nflTiebreaker';
+import type { PoolPicksReveal } from '../../services/dbService';
+import { EntryWeekPicks } from './EntryWeekPicks';
 
 interface NFLStandingsProps {
   pool: Pool;
@@ -22,6 +24,16 @@ interface NFLStandingsProps {
    * column falls back to the Hidden / No selection marker.
    */
   pickCounts?: Record<string, number>;
+  /**
+   * The week's `getPoolPicks` response (item 9). Clicking a row opens that
+   * entry's picks for the selected week, rendered by `EntryWeekPicks` through
+   * the SAME cell rules the Current Picks grid uses — nothing here decides what
+   * is revealed; the server did. Optional so callers without a reveal (or a
+   * pool that never fetched one) still render the table.
+   */
+  reveal?: PoolPicksReveal | null;
+  /** The viewer's own entry has loaded — the own-row reveal bypass. */
+  ownEntryLoaded?: boolean;
 }
 
 export const NFLStandings: React.FC<NFLStandingsProps> = ({
@@ -30,10 +42,18 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
   games,
   week,
   viewerUid,
-  pickCounts
+  pickCounts,
+  reveal,
+  ownEntryLoaded = false,
 }) => {
   const navigate = useNavigate();
   const type = pool.type;
+  // Item 9: which ROW (entry id, never uid — PLAN-MULTI-ENTRY §0b) is expanded.
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
+  // PoolRoute reuses this component across pools and entry ids repeat across
+  // pools (today they ARE uids), so an open row would follow the viewer to the
+  // next pool and show stale picks until the new snapshot lands (codex r3).
+  useEffect(() => { setOpenRowId(null); }, [pool.id, week]);
 
   // SEASON ONLY. #422 put a Season/Week toggle here; Kevin's 2026-08-13 ruling
   // moves the weekly view to its own Results page, so this table is the season
@@ -62,10 +82,8 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
 
   // This week's slate — the denominator for the Pick'em completeness column, and
   // the key set a pick'em entry's picks are stored under.
-  const weekGameIds = useMemo(
-    () => gamesForPoolWeek(games || [], pool as any, week).map(g => g.id),
-    [games, pool, week],
-  );
+  const weekGames = useMemo(() => gamesForPoolWeek(games || [], pool as any, week), [games, pool, week]);
+  const weekGameIds = useMemo(() => weekGames.map(g => g.id), [weekGames]);
   const ownWeekPickCount = (entry: any): number =>
     weekGameIds.filter(id => !!entry?.picks?.[id]).length;
 
@@ -268,10 +286,17 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                 );
                 const pickCell = entry.picks?.[week] || faint(marker());
 
+                const isOpen = openRowId === entry.id;
                 return (
+                  <React.Fragment key={entry.id}>
                   <tr
-                    key={entry.id}
-                    className={`transition-colors hover:bg-[color:var(--page)] ${
+                    onClick={e => { if ((e.target as HTMLElement).closest('button,a')) return; setOpenRowId(prev => (prev === entry.id ? null : entry.id)); }}
+                    tabIndex={0}
+                    role="button"
+                    onKeyDown={e => { if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenRowId(prev => (prev === entry.id ? null : entry.id)); } }}
+                    aria-expanded={isOpen}
+                    title={isOpen ? 'Hide picks' : `Show ${nflWeekLabel(poolSeasonType(pool), week)} picks`}
+                    className={`cursor-pointer transition-colors hover:bg-[color:var(--page)] ${
                       isMyEntry ? 'bg-brandred-600/[0.07] hover:bg-brandred-600/10' : ''
                     }`}
                   >
@@ -280,14 +305,21 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
 
                     {/* Username */}
                     <td className="sticky left-16 z-10 bg-card py-4 px-6 font-display font-bold text-[color:var(--text)] text-sm">
-                      {/* Player Profile entry point (ADR 0005): every member name links to their public profile */}
-                      <button
-                        onClick={() => entry.ownerUid && navigate(`/profile/${entry.ownerUid}`)}
-                        className="hover:text-gold-700 dark:hover:text-gold-400 hover:underline underline-offset-2 transition-colors text-left"
-                        title="View player profile"
-                      >
-                        {entry.userName}
-                      </button>
+                      {/* Player Profile entry point (ADR 0005): every member name links to their public profile.
+                          A legacy row with no `ownerUid` has no profile to open, so it renders as TEXT —
+                          a no-op <button> there would swallow the click AND be skipped by the row's
+                          expand handler, leaving the name inert. (qodo on #442.) */}
+                      {entry.ownerUid ? (
+                        <button
+                          onClick={() => navigate(`/profile/${entry.ownerUid}`)}
+                          className="hover:text-gold-700 dark:hover:text-gold-400 hover:underline underline-offset-2 transition-colors text-left"
+                          title="View player profile"
+                        >
+                          {entry.userName}
+                        </button>
+                      ) : (
+                        entry.userName
+                      )}
                       {isMyEntry && (
                         <span className="ml-1.5 inline-flex items-center rounded-full bg-brandred-600 px-2 py-0.5 leading-none font-display font-bold uppercase text-[11px] tracking-[0.08em] text-white">
                           Me
@@ -369,6 +401,21 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                       </>
                     )}
                   </tr>
+                  {isOpen && (
+                    <tr className="bg-surface">
+                      <td colSpan={99} className="py-3 px-6">
+                        <EntryWeekPicks
+                          pool={pool}
+                          row={entry}
+                          weekGames={weekGames}
+                          week={week}
+                          reveal={reveal}
+                          isOwnRow={isMyEntry && ownEntryLoaded}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </tbody>

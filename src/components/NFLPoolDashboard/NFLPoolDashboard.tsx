@@ -316,7 +316,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // commissioner keeps it because their roster's "who still owes a pick" column
   // is the thing that has to be fresh the moment someone submits; a member's
   // view gains nothing before the reveal, and the timer covers it after.
-  const revealTabs: TabType[] = ['grid', 'standings', 'manager'];
+  // Item 9: Results now opens a row's picks, so it wants the reveal too.
+  const revealTabs: TabType[] = ['grid', 'standings', 'results', 'manager'];
   const wantsReveal = revealTabs.includes(activeTab);
   const commissionerRosterDep = isManager ? members : null;
 
@@ -925,6 +926,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   week={selectedWeek}
                   viewerUid={user?.id}
                   pickCounts={weekReveal?.counts}
+                  reveal={weekReveal}
+                  ownEntryLoaded={!!ownEntry}
                 />
               )}
 
@@ -939,6 +942,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   games={games}
                   week={selectedWeek}
                   viewerUid={user?.id}
+                  reveal={weekReveal}
+                  ownEntryLoaded={!!ownEntry}
                 />
               )}
 
