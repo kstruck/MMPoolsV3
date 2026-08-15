@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Trophy, Heart, ShieldAlert } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
@@ -50,6 +50,10 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
   const type = pool.type;
   // Item 9: which ROW (entry id, never uid — PLAN-MULTI-ENTRY §0b) is expanded.
   const [openRowId, setOpenRowId] = useState<string | null>(null);
+  // PoolRoute reuses this component across pools and entry ids repeat across
+  // pools (today they ARE uids), so an open row would follow the viewer to the
+  // next pool and show stale picks until the new snapshot lands (codex r3).
+  useEffect(() => { setOpenRowId(null); }, [pool.id, week]);
 
   // SEASON ONLY. #422 put a Season/Week toggle here; Kevin's 2026-08-13 ruling
   // moves the weekly view to its own Results page, so this table is the season

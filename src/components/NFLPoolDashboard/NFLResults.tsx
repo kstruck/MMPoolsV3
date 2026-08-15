@@ -77,6 +77,9 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
   const [view, setView] = useState<PickemView | MarginView>('WEEKLY');
   // Item 9: the expanded row on the WEEKLY table (entry id — PLAN-MULTI-ENTRY §0b).
   const [openRowId, setOpenRowId] = useState<string | null>(null);
+  // Reset with the pool (PoolRoute reuses this component; ids repeat across
+  // pools) and with the week — the strip is per week (codex r3).
+  useEffect(() => { setOpenRowId(null); }, [pool.id, week]);
   const weekGames = useMemo(() => gamesForPoolWeek(games || [], pool as any, week), [games, pool, week]);
   useEffect(() => { setView('WEEKLY'); }, [pool.id]);
 
