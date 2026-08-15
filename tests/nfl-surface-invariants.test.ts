@@ -255,13 +255,29 @@ describe('saved-pick visibility — all three member sheets, one definition', ()
     expect(dialogCode).not.toContain('onApply(plan)');
   });
 
-  it('the pool-home CTA names the action it will actually perform', () => {
+  it('the pool-home CTAs share ONE label rule and name the action they will perform', () => {
+    // Item 8 (Kevin, 2026-08-14): the two red buttons must agree. Every picks
+    // CTA on the pool home derives its label from `pickCtaFor` — no button
+    // carries its own hardcoded verb any more ("Submit My Picks Now" was one).
     const src = readFileSync(
       resolve(root, 'src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx'),
       'utf8',
     );
-    expect(src).toContain('Edit My Picks');
-    expect(src).toContain('Make My Picks');
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+    expect(code).toContain("from '../../utils/pickCta'");
+    expect(code.match(/picksCta\.label/g)?.length).toBe(2);
+    expect(code).not.toContain('Submit My Picks Now');
+    expect(code).not.toContain("'Make My Picks'");
+    // The labels themselves live in the util (and its test) — Kevin's words.
+    const util = readFileSync(resolve(root, 'src/utils/pickCta.ts'), 'utf8');
+    expect(util).toContain("'Edit My Picks'");
+    expect(util).toContain("'Make Picks'");
+    // The banner uses the same words.
+    const checklist = readFileSync(
+      resolve(root, 'src/components/NFLPoolDashboard/WeekChecklist.tsx'),
+      'utf8',
+    );
+    expect(checklist).toContain('Make Picks <ArrowRight');
     // Vacuous-true guard: an empty slate makes `every()` true, which would
     // label a pool with no games as already picked.
     expect(src).toMatch(/weeklyGames\.length === 0\) return false/);
