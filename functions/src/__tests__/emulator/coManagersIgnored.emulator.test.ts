@@ -5,7 +5,7 @@ import { recordPoolPayouts } from '../../payoutRecords';
 import { simulateGameUpdate } from '../../scoreUpdates';
 import { simFillSquares } from '../../simLegacy';
 import { cancelPool } from '../../poolExceptions';
-import { clearLegacyCoManagers } from '../../poolOps';
+import { clearLegacyCoManagers, CLEAR_CO_MANAGERS_MAX_WRITES } from '../../poolOps';
 
 /**
  * PLAN-CO-COMMISSIONERS T1 / T2a — deploy step 1 of D2.
@@ -171,4 +171,31 @@ describe('clearLegacyCoManagers — the T7 census + D2 step-2 audited clear', ()
   it('refuses a non-SUPER_ADMIN', async () => {
     await expect(wrappedClear({ data: { dryRun: true }, auth: auth(OWNER) } as never)).rejects.toThrow();
   });
+});
+
+describe('clearLegacyCoManagers — per-run write cap (qodo #1)', () => {
+  const wrappedClear = test.wrap(clearLegacyCoManagers);
+  const SA = 'cmi-sa2';
+  const saAuth = { uid: SA, token: { role: 'SUPER_ADMIN' } } as any;
+
+  it('stops at CLEAR_CO_MANAGERS_MAX_WRITES, reports capped, and a re-run finishes the rest', async () => {
+    await db.collection('users').doc(SA).set({ role: 'SUPER_ADMIN' });
+    const N = CLEAR_CO_MANAGERS_MAX_WRITES + 3;
+    let batch = db.batch(); let n = 0;
+    for (let i = 0; i < N; i++) {
+      batch.set(db.collection('pools').doc(`cap-${i}`), { ownerId: OWNER, coManagers: ['z'] });
+      if (++n === 400) { await batch.commit(); batch = db.batch(); n = 0; }
+    }
+    if (n) await batch.commit();
+    const first: any = await wrappedClear({ data: { dryRun: false }, auth: saAuth } as never);
+    expect(first.capped).toBe(true);
+    expect(first.cleared).toBe(CLEAR_CO_MANAGERS_MAX_WRITES);
+    const second: any = await wrappedClear({ data: { dryRun: false }, auth: saAuth } as never);
+    expect(second.capped).toBe(false);
+    // N seeded here + the beforeEach POOL - the cap already taken.
+    expect(second.cleared).toBe(N + 1 - CLEAR_CO_MANAGERS_MAX_WRITES);
+    const audit = (await db.collection('admin_audit').where('action', '==', 'CLEAR_LEGACY_CO_MANAGERS').get()).docs.map((d) => d.data());
+    expect(audit.some((a) => a.metadata?.capped === true)).toBe(true);
+    expect(typeof audit[0].metadata?.samplePoolIds).toBe('string');
+  }, 60000);
 });

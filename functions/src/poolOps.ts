@@ -802,15 +802,23 @@ export const fixParticipantIds = validated(
  * The T2b setter treats an absent revision as 0, so deletion IS the zero
  * baseline; stamping `0` onto every pool doc would buy nothing beyond that.
  */
+// Per-run write cap (qodo #1 on the T1 PR; same convention as autoClosePools /
+// PR #205 / #231). Expected 0 pools carry the field, so this never binds in the
+// intended run — it exists so a surprise cannot become thousands of writes in
+// one callable. `capped: true` in the result means: run it again.
+export const CLEAR_CO_MANAGERS_MAX_WRITES = 200;
+
 export const clearLegacyCoManagers = validated(
     { schema: clearLegacyCoManagersSchema, label: "clearLegacyCoManagers", role: "SUPER_ADMIN", appCheck: "monitor" },
     async ({ dryRun }, request) => {
     const db = admin.firestore();
-    const poolsSnap = await db.collection('pools').get();
+    const actor = { actorUid: request.auth!.uid, actorEmail: request.auth!.token.email as string | undefined };
     let withField = 0;
     let nonEmpty = 0;
     let malformed = 0;
     let cleared = 0;
+    let capped = false;
+    let scanned = 0;
     // D3 census: pools whose ownerId and createdByUid both exist and DISAGREE.
     // Expected 0 (creation writes both from one uid). Any hit is listed for
     // Kevin, not reinterpreted — ownerId is canonical from this deploy on.
@@ -818,39 +826,51 @@ export const clearLegacyCoManagers = validated(
     let ownerMismatch = 0;
     const mismatchSamples: Array<{ poolId: string; ownerId: string; createdByUid: string }> = [];
     const samples: Array<{ poolId: string; value: unknown; revision?: unknown }> = [];
+    // `capMetadata` flattens arrays to "[array]", so the audit row carries the
+    // pool ids as ONE string (qodo #5); the full samples go back to the UI.
+    const auditMeta = () => ({
+        dryRun, scanned, withField, withRevision, nonEmpty, malformed, cleared, capped, ownerMismatch,
+        samplePoolIds: samples.map((x) => x.poolId).join(','),
+        mismatchPoolIds: mismatchSamples.map((x) => x.poolId).join(','),
+    });
 
-    for (const doc of poolsSnap.docs) {
-        const data = doc.data();
-        if (typeof data.ownerId === 'string' && typeof data.createdByUid === 'string' && data.ownerId !== data.createdByUid) {
-            ownerMismatch++;
-            if (mismatchSamples.length < 20) mismatchSamples.push({ poolId: doc.id, ownerId: data.ownerId, createdByUid: data.createdByUid });
+    try {
+        const poolsSnap = await db.collection('pools').get();
+        scanned = poolsSnap.size;
+        for (const doc of poolsSnap.docs) {
+            const data = doc.data();
+            if (typeof data.ownerId === 'string' && typeof data.createdByUid === 'string' && data.ownerId !== data.createdByUid) {
+                ownerMismatch++;
+                if (mismatchSamples.length < 20) mismatchSamples.push({ poolId: doc.id, ownerId: data.ownerId, createdByUid: data.createdByUid });
+            }
+            const hasRevision = data.coManagersRevision !== undefined;
+            if (hasRevision) withRevision++;
+            const raw = data.coManagers;
+            if (raw === undefined && !hasRevision) continue;
+            if (raw !== undefined) withField++;
+            const isStringArray = raw === undefined || (Array.isArray(raw) && raw.every((v: unknown) => typeof v === 'string'));
+            if (!isStringArray) malformed++;
+            else if (Array.isArray(raw) && raw.length > 0) nonEmpty++;
+            if (samples.length < 20 && (!isStringArray || (Array.isArray(raw) && raw.length > 0) || hasRevision)) {
+                samples.push({ poolId: doc.id, value: raw, revision: data.coManagersRevision });
+            }
+            if (!dryRun) {
+                if (cleared >= CLEAR_CO_MANAGERS_MAX_WRITES) { capped = true; continue; }
+                await doc.ref.update({ coManagers: FieldValue.delete(), coManagersRevision: FieldValue.delete() });
+                cleared++;
+            }
         }
-        const hasRevision = data.coManagersRevision !== undefined;
-        if (hasRevision) withRevision++;
-        const raw = data.coManagers;
-        if (raw === undefined && !hasRevision) continue;
-        if (raw !== undefined) withField++;
-        const isStringArray = raw === undefined || (Array.isArray(raw) && raw.every((v: unknown) => typeof v === 'string'));
-        if (!isStringArray) malformed++;
-        else if (Array.isArray(raw) && raw.length > 0) nonEmpty++;
-        if (samples.length < 20 && (!isStringArray || (Array.isArray(raw) && raw.length > 0) || hasRevision)) {
-            samples.push({ poolId: doc.id, value: raw, revision: data.coManagersRevision });
-        }
-        if (!dryRun) {
-            await doc.ref.update({ coManagers: FieldValue.delete(), coManagersRevision: FieldValue.delete() });
-            cleared++;
-        }
+    } catch (err) {
+        // A destructive one-off that dies mid-run must still leave a row saying
+        // it was attempted and how far it got (qodo #4). Then rethrow.
+        await writeAdminAudit({
+            ...actor, action: 'CLEAR_LEGACY_CO_MANAGERS', targetType: 'pools',
+            metadata: auditMeta(), status: 'error', error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
     }
 
-    const summary = { scanned: poolsSnap.size, withField, withRevision, nonEmpty, malformed, cleared, dryRun, samples, ownerMismatch, mismatchSamples };
-    await writeAdminAudit({
-        actorUid: request.auth!.uid,
-        actorEmail: request.auth!.token.email as string | undefined,
-        action: 'CLEAR_LEGACY_CO_MANAGERS',
-        targetType: 'pools',
-        metadata: summary,
-        status: 'success',
-    });
-    return { success: true, ...summary };
+    await writeAdminAudit({ ...actor, action: 'CLEAR_LEGACY_CO_MANAGERS', targetType: 'pools', metadata: auditMeta(), status: 'success' });
+    return { success: true, scanned, withField, withRevision, nonEmpty, malformed, cleared, capped, dryRun, samples, ownerMismatch, mismatchSamples };
     },
 );
