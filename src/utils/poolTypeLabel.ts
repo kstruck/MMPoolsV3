@@ -22,8 +22,11 @@ const TYPE_LABEL: Record<string, string> = {
     PROPS: 'Props',
 };
 
+// An unknown or missing type is SAID to be unknown — never a plausible-looking
+// substitute (qodo on #437; the repo's data-integrity rule). A new pool type
+// gets its label added to TYPE_LABEL, not a silent generic.
 export function poolTypeLabel(pool: PoolLike): string {
-    return (pool?.type && TYPE_LABEL[pool.type]) || 'Pool';
+    return (pool?.type && TYPE_LABEL[pool.type]) || 'Unknown type';
 }
 
 const PAYOUT_LABEL: Record<string, string> = {

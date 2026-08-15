@@ -10,8 +10,9 @@ describe('poolTypeLabel / poolOptionLabels — a My Entries card can tell pools 
         expect(poolTypeLabel({ type: 'BRACKET' })).toBe('Bracket');
         expect(poolTypeLabel({ type: 'NFL_PLAYOFFS' })).toBe('Playoff');
         expect(poolTypeLabel({ type: 'PROPS' })).toBe('Props');
-        expect(poolTypeLabel({ type: 'SOMETHING_NEW' })).toBe('Pool');
-        expect(poolTypeLabel(null)).toBe('Pool');
+        // Unknown is said to be unknown, never dressed as a generic "Pool".
+        expect(poolTypeLabel({ type: 'SOMETHING_NEW' })).toBe('Unknown type');
+        expect(poolTypeLabel(null)).toBe('Unknown type');
     });
 
     it("Pick'em: straight-up vs ATS, confidence, payout mode — in a fixed order", () => {
