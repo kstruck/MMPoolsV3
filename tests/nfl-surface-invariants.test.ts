@@ -878,3 +878,22 @@ describe('NFL row/reveal surfaces key by ENTRY id, never by owner uid (PLAN-MULT
     expect(FORBIDDEN[4][1].test("pickCounts?.[entry.id]")).toBe(false);
   });
 });
+
+
+/**
+ * Item 10 (Kevin, 2026-08-14): the standings tiebreaker column names what it
+ * IS — the member's prediction — and explains the pool's rule via the ONE
+ * shared sentence (`tiebreakerCopy`), never a hardcoded "MNF Score".
+ */
+describe('standings tiebreaker column — a prediction, described by the shared rule copy', () => {
+  it('NFLStandings says "Tiebreaker Guess" and reads tiebreakerCopy for the hint', () => {
+    const src = readFileSync(
+      resolve(root, 'src/components/NFLPoolDashboard/NFLStandings.tsx'),
+      'utf8',
+    );
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+    expect(code).toContain('Tiebreaker Guess');
+    expect(code).not.toContain('MNF Score');
+    expect(code).toMatch(/tiebreakerCopy\(\s*tiebreakerRule\s*\)/);
+  });
+});
