@@ -44,6 +44,7 @@ import { Footer } from './Footer';
 import { GlobalStandingsCard } from './Dashboards/GlobalStandingsCard';
 import { GlobalCommissionerDashboard } from './Dashboards/GlobalCommissionerDashboard';
 import { Badge, Button } from './ui';
+import { poolTypeLabel, poolOptionLabels } from '../utils/poolTypeLabel';
 
 const BRAND = {
   emeraldGlow: 'rgba(201, 168, 103, 0.15)',
@@ -750,7 +751,19 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                 userEntryCount = bracketEntryCounts[pool.id] || 0;
                                 percentFull = 0;
                                 costDisplay = bPool.settings?.entryFee ? `$${bPool.settings.entryFee} Entry` : 'Free';
+                            } else if (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') {
+                                const fee = (pool as any).settings?.entryFee;
+                                costDisplay = fee ? `$${fee} Entry` : 'Free';
                             }
+                            // The card never reads NFL entry docs (commissioner-blind picks; and
+                            // under PLAN-MULTI-ENTRY a member may hold several), so it cannot
+                            // honestly print "Your Entries N" for the three NFL season types —
+                            // it printed 0 for a player ranked #1. Hide the line rather than
+                            // fabricate a count.
+                            const showEntryCount = !(pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN');
+                            // Item 14 (Kevin, 2026-08-14): testers could not tell pools apart.
+                            const typeLabel = poolTypeLabel(pool as any);
+                            const optionLabels = poolOptionLabels(pool as any);
 
                             return (
                                 <div
@@ -783,6 +796,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                                         {getStatusBadge(pool)}
                                                         <span className="text-[10px] text-muted font-display font-bold num">{costDisplay}</span>
                                                     </div>
+                                                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap" data-testid="pool-card-type">
+                                                        <span className="text-[10px] font-display font-bold uppercase tracking-[0.06em] px-2 py-0.5 rounded-full border border-line bg-cream text-[color:var(--text)]">{typeLabel}</span>
+                                                        {optionLabels.map(o => (
+                                                            <span key={o} className="text-[10px] font-body text-muted">{o}</span>
+                                                        ))}
+                                                    </div>
                                                     {pendingByPool[pool.id] && (
                                                         <div className="flex items-center gap-1 mt-1.5 bg-brandred-600/10 border border-brandred-600/40 text-brandred-600 text-[10px] font-display font-bold px-2 py-0.5 rounded-full w-fit">
                                                             <AlertTriangle size={10} aria-hidden="true" />
@@ -800,10 +819,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                         </div>
 
                                         <div className="space-y-2 mb-4">
+                                            {showEntryCount && (
                                             <div className="flex justify-between text-[11px] font-bold">
                                                 <span className="text-muted font-body">{isSquares ? 'Your Squares' : 'Your Entries'}</span>
                                                 <span className="text-[color:var(--text)] font-display font-bold num">{userEntryCount}</span>
                                             </div>
+                                            )}
                                             {isSquares && (
                                                 <div className="h-1.5 w-full bg-line rounded-full overflow-hidden">
                                                     <div
