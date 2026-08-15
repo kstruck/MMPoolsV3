@@ -305,14 +305,21 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
 
                     {/* Username */}
                     <td className="sticky left-16 z-10 bg-card py-4 px-6 font-display font-bold text-[color:var(--text)] text-sm">
-                      {/* Player Profile entry point (ADR 0005): every member name links to their public profile */}
-                      <button
-                        onClick={() => entry.ownerUid && navigate(`/profile/${entry.ownerUid}`)}
-                        className="hover:text-gold-700 dark:hover:text-gold-400 hover:underline underline-offset-2 transition-colors text-left"
-                        title="View player profile"
-                      >
-                        {entry.userName}
-                      </button>
+                      {/* Player Profile entry point (ADR 0005): every member name links to their public profile.
+                          A legacy row with no `ownerUid` has no profile to open, so it renders as TEXT —
+                          a no-op <button> there would swallow the click AND be skipped by the row's
+                          expand handler, leaving the name inert. (qodo on #442.) */}
+                      {entry.ownerUid ? (
+                        <button
+                          onClick={() => navigate(`/profile/${entry.ownerUid}`)}
+                          className="hover:text-gold-700 dark:hover:text-gold-400 hover:underline underline-offset-2 transition-colors text-left"
+                          title="View player profile"
+                        >
+                          {entry.userName}
+                        </button>
+                      ) : (
+                        entry.userName
+                      )}
                       {isMyEntry && (
                         <span className="ml-1.5 inline-flex items-center rounded-full bg-brandred-600 px-2 py-0.5 leading-none font-display font-bold uppercase text-[11px] tracking-[0.08em] text-white">
                           Me
