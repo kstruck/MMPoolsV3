@@ -6,8 +6,7 @@ import type { PoolPicksReveal } from '../../services/dbService';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType, poolSeasonWeeks } from '../../utils/nflPending';
 import { weeklyPickCell } from '../../utils/picksGrid';
-import { sortGridRows, type GridSort } from '../../utils/picksGridSort';
-import { weekValueFor } from '../../utils/nflResults';
+import { sortGridRows, gridWeekValue, type GridSort } from '../../utils/picksGridSort';
 import { GridSortToggle } from './GridSortToggle';
 
 /**
@@ -151,7 +150,7 @@ export const NFLWeeklyPicksGrid: React.FC<NFLWeeklyPicksGridProps> = ({
                         number — it lives in Standings. */}
                     {isMargin && (
                       <td className="py-3 px-3 text-center text-[12px] num font-bold text-[color:var(--text)]">
-                        {(() => { const v = weekValueFor(row, week, true); return v === null ? <span className="text-faint">—</span> : (v > 0 ? `+${v}` : `${v}`); })()}
+                        {(() => { const v = gridWeekValue(row, week, true); return v === null ? <span className="text-faint">—</span> : (v > 0 ? `+${v}` : `${v}`); })()}
                       </td>
                     )}
                     {weeks.map(w => {

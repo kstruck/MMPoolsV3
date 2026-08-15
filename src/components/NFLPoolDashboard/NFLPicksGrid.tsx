@@ -7,8 +7,7 @@ import { dbService } from '../../services/dbService';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType, gamesForPoolWeek } from '../../utils/nflPending';
 import { picksGridCell, majorityFor, type ConsensusSplit } from '../../utils/picksGrid';
-import { sortGridRows, type GridSort } from '../../utils/picksGridSort';
-import { weekValueFor } from '../../utils/nflResults';
+import { sortGridRows, gridWeekValue, type GridSort } from '../../utils/picksGridSort';
 import { GridSortToggle } from './GridSortToggle';
 
 /**
@@ -232,7 +231,7 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                     {/* Item 11: this week's score, per row. `—` = not scored yet
                         (the repo's unavailable marker), never a 0. */}
                     <td className="py-3 px-3 text-center text-[12px] num font-bold text-[color:var(--text)]">
-                      {weekValueFor(row, week, false) ?? <span className="text-faint">—</span>}
+                      {gridWeekValue(row, week, false) ?? <span className="text-faint">—</span>}
                     </td>
                     {weekGames.map(g => {
                       const cell = picksGridCell({

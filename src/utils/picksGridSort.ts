@@ -17,6 +17,17 @@ import { weekValueFor, type ResultsRow } from './nflResults';
  */
 export type GridSort = 'name' | 'score';
 
+/**
+ * The week value a GRID may show or sort by. A row `buildMemberStandings`
+ * marks `unscored` (its own-entry fallback while the projection is unavailable)
+ * may still carry stale `weeklyPoints`/`weeklyScores` from the raw entry —
+ * `rankByWeek` excludes those, and so does this (codex on items 11/12).
+ */
+export function gridWeekValue(row: ResultsRow, week: number, isMargin: boolean): number | null {
+    if (row.unscored) return null;
+    return weekValueFor(row, week, isMargin);
+}
+
 export function sortGridRows<T extends ResultsRow & { userName?: string }>(
     rows: readonly T[],
     mode: GridSort,
@@ -26,8 +37,8 @@ export function sortGridRows<T extends ResultsRow & { userName?: string }>(
     const byName = (a: T, b: T) => (a.userName || '').localeCompare(b.userName || '');
     if (mode === 'name') return [...rows].sort(byName);
     return [...rows].sort((a, b) => {
-        const va = weekValueFor(a, week, isMargin);
-        const vb = weekValueFor(b, week, isMargin);
+        const va = gridWeekValue(a, week, isMargin);
+        const vb = gridWeekValue(b, week, isMargin);
         if (va === null && vb === null) return byName(a, b);
         if (va === null) return 1;
         if (vb === null) return -1;

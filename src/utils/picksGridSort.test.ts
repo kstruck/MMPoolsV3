@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sortGridRows } from './picksGridSort';
+import { sortGridRows, gridWeekValue } from './picksGridSort';
 
 const rows = [
     { id: 'c', userName: 'Cara', weeklyPoints: { 2: 12 } },
@@ -24,6 +24,11 @@ describe('sortGridRows', () => {
             { id: 'q', userName: 'Q', weeklyScores: { 1: 20 } },
         ] as any[];
         expect(sortGridRows(m, 'score', 1, true).map(r => r.id)).toEqual(['q', 'p']);
+    });
+    it('a row marked unscored sorts LAST and shows no value, even with stale points on it', () => {
+        const stale = { id: 's', userName: 'Aaron', unscored: true, weeklyPoints: { 2: 99 } } as any;
+        expect(gridWeekValue(stale, 2, false)).toBeNull();
+        expect(sortGridRows([...rows, stale], 'score', 2, false).map(r => r.id)).toEqual(['b', 'c', 'a', 's', 'z']);
     });
     it('does not mutate the input', () => {
         const copy = [...rows];
