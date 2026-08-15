@@ -98,11 +98,14 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
   // Item 12: a toggle offers this week's score order too (`sortGridRows`,
   // per ROW, unit-tested). Item 11: the score itself is a column — the same
   // projection field the Results tab ranks by, no new read.
-  const [sort, setSort] = useState<GridSort>('name');
-  // PoolRoute reuses this component across pools; the documented default is
-  // alphabetical, so a score sort chosen on one pool must not follow the
-  // viewer to the next (codex r4 on items 11/12).
-  useEffect(() => { setSort('name'); }, [pool.id]);
+  // The sort choice is SCOPED TO THE POOL, in one state value read during
+  // render — not a `useEffect` reset, which only lands after the first render
+  // of the new pool has already committed the previous pool's order (codex on
+  // the rebased #440). PoolRoute reuses this component across pools; the
+  // documented default is alphabetical.
+  const [sortState, setSortState] = useState<{ poolId: string; sort: GridSort }>({ poolId: pool.id, sort: 'name' });
+  const sort: GridSort = sortState.poolId === pool.id ? sortState.sort : 'name';
+  const setSort = (s: GridSort) => setSortState({ poolId: pool.id, sort: s });
   const rows = useMemo(() => sortGridRows(entries, sort, week, false), [entries, sort, week]);
 
   // ⚠️ Only the reveal that matches the week on screen. The dashboard already
