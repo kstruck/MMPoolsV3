@@ -104,11 +104,11 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 <NavLink to="/features" active={isActive('/features')} onClick={() => navigate('/features')}>
                                     Features
                                 </NavLink>
+                                {/* Item 7 (Kevin, 2026-08-14): "Pool Guides" was a second nav door onto
+                                    THIS page (`?view=strategy`); the page's own sub-tabs carry the
+                                    Strategy Guide, so one door is enough. */}
                                 <NavLink to="/how-it-works" active={isActive('/how-it-works')} onClick={() => navigate('/how-it-works')}>
                                     How it Works
-                                </NavLink>
-                                <NavLink to="/how-it-works?view=strategy" onClick={() => navigate('/how-it-works?view=strategy')}>
-                                    Pool Guides
                                 </NavLink>
                                 <NavLink to="/browse" active={isActive('/browse')} onClick={() => navigate('/browse')}>
                                     Public Pools
@@ -139,9 +139,6 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                             <div className="flex items-center gap-4 flex-wrap justify-center">
                                 <NavLink to="/how-it-works" active={isActive('/how-it-works')} onClick={() => navigate('/how-it-works')}>
                                     How it Works
-                                </NavLink>
-                                <NavLink to="/how-it-works?view=strategy" onClick={() => navigate('/how-it-works?view=strategy')}>
-                                    Pool Guides
                                 </NavLink>
                                 <NavLink to="/browse" active={isActive('/browse')} onClick={() => navigate('/browse')}>
                                     Public Pools
