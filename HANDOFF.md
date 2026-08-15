@@ -1,6 +1,99 @@
 # HANDOFF — Session entry point
 
-> ## ✅ DEPLOY STATE 2026-08-13 (evening) — #420–#423 all merged AND deployed by Kevin
+> ## ✅ DEPLOY STATE 2026-08-14 — #426–#432 ALL MERGED AND DEPLOYED, ALL THREE SURFACES VERIFIED
+>
+> Per surface, each verified independently rather than inferred from a
+> `Deploy complete!`:
+>
+> | Surface | Deployed from | Evidence |
+> |---|---|---|
+> | **functions** | `23acf54b` (post-#432) | a follow-up full-fleet deploy reported **every function `Skipped (No changes detected)`** — prod is byte-identical to that commit, `getPoolPicks` included |
+> | **rules** | `23acf54b` (post-#432) | `latest version of firestore.rules already up to date, skipping upload` + `released rules firestore.rules to cloud.firestore` |
+> | **frontend** | **`index-CYXZR3Wk.js`** (was `index-Cc8fotw3.js`) | chunk-graph crawl, **107 assets**, three #432 sentinels at exact counts |
+>
+> ✅ **NOTHING IS OWED ON ANY DEPLOY QUEUE.** #425 merged after all three and is
+> **docs-only** — verified, it touches no `functions/`, `shared/`,
+> `firestore.rules`, `firestore.indexes.json` or `src/`, so it owes no rebuild.
+>
+> 🆕 **THE HEADLINE: MEMBERS CAN NOW SEE EACH OTHER'S PICKS.** Kevin's ruling of
+> 2026-08-14 — *"make it visible for all users if pool is locked. Add same to
+> Margin and Survivor."* It closes the audit line this file carried for weeks
+> (*"no surface anywhere shows a per-pick ✓/✗ for other players"*), which was
+> literally true: `NFLStandings`' `pickCell` was wired only into the Survivor and
+> Margin columns, and Pick'em picks are keyed by gameId so it could not have
+> rendered them anyway.
+>
+> | PR | What | Surface |
+> |---|---|---|
+> | #426–#429 | Results-tab work; #429 fixed a caption describing columns that were not on screen | `src/**` |
+> | #430 | **Current Picks grid** — commissioner-facing, Pick'em, players × the week's games | `src/**` |
+> | #431 | `PLAN-MEMBER-PICKS-VISIBILITY` + review log + sweeps | docs |
+> | #432 | **members admitted; Margin/Survivor weekly grid; `participantIds` locked** | **functions + rules + `src/**`** |
+>
+> 🔴 **WHAT IS DIFFERENT IN PRODUCTION, AND IT IS AN AUTHORIZATION CHANGE.**
+> `getPoolPicks` now admits a **proven member**, where #414 admitted only
+> `ownerId` / `managerUid` / SUPER_ADMIN. **This REVERSES
+> `PLAN-COMMISSIONER-BLIND-PICKS` Q5** (*"Does anything change for ordinary
+> members? No."*) — do not read that plan as current on this point.
+>
+> ⚠️ **What did NOT change is the TIMING.** The widening is about **WHO**, never
+> **WHEN**: a member is handed the same `weekRevealFor` result a commissioner
+> gets, from the same call. There is still exactly ONE definition of "locked" in
+> the system, and no client re-derives it.
+>
+> **Three things ride with it, and each is load-bearing:**
+>
+> - **Membership here is a CANONICAL Member Record** (server-stamped `joinedAt`),
+>   **not** `isProvableMember`. That predicate also accepts `participantIds`,
+>   which was manager-writable until this deploy — so on any pool created before
+>   it, a uid a manager had already added would otherwise have gained a durable,
+>   self-refreshing feed of every future reveal. Locking the field is
+>   prospective; requiring the record is retrospective. **Both are needed.**
+>   Cost, accepted by Kevin: a member on a legacy pool with no server-written
+>   record sees no picks until a join path writes them one.
+> - **`participantIds` is now server-owned** (`protectedFieldsUnchanged()`).
+>   Joining, leaving and removal are unaffected — every one goes through the
+>   Admin SDK, which bypasses rules. Measured before shipping: zero client
+>   writes anywhere in `src/`.
+> - **Members get no live pick COUNTS** until a week reveals. The commissioner
+>   keeps them, because chasing missing picks is their job. Withheld
+>   server-side, which is what also covers `NFLStandings` — that column was
+>   already wired to the same field and would have started printing
+>   "14 of 16 Picks Set" to every member with no client change at all.
+>
+> ⚠️ **NONE OF #430 OR #432 HAS BEEN THROUGH A FULL BROWSER PASS.** Kevin
+> confirmed #430's grid in prod (visible, alphabetical, week dropdown works,
+> SUPER_ADMIN sees it, a regular member did not, absent on Margin/Survivor).
+> **#432's member-facing behaviour has never been looked at** — a member seeing
+> `?` before kickoff and picks after it, and the Margin/Survivor weekly grid,
+> are both unverified in a browser.
+>
+> 🐞 **TWO PROCESS GAPS FOUND WHILE SHIPPING THIS, BOTH STILL OPEN:**
+>
+> 1. **CI runs NONE of the eight `functions/scripts/*.rules.test.mjs` files.**
+>    `npm --prefix functions run test:emulator` runs *vitest* under the emulator;
+>    the rules scripts are invoked only by hand. So #432's 5/5 `participantIds`
+>    test — the guard on an authorization rule — will not run on any future PR.
+>    Pre-existing, not introduced here, and now it guards something that matters.
+> 2. **The `mmp-qodo-cycle` watcher reports clean too early.** On #432 it printed
+>    `QODO REPORTED — 0 inline finding(s)` **twice**, and both times qodo's actual
+>    code review landed ~15 minutes after its summary, carrying 7 findings between
+>    them. The `FLOOR` is anchored on the FIRST artifact (the summary); it needs
+>    anchoring on the `Code Review by Qodo` comment. Both rounds' findings were
+>    only caught by hand-polling. **Treat a clean watcher verdict as unproven
+>    until that is fixed.**
+>
+> 📌 **Review effort on #432, for calibration:** 14 codex rounds (12 findings,
+> all fixed) and 2 qodo rounds (7 findings; 4 fixed, 3 rejected in writing).
+> ⚠️ That **exceeded the 10-round codex ceiling** in CLAUDE.md §2c without asking
+> Kevin first. Rounds 11–14 each reviewed new authorization code written to close
+> the previous round's finding, and 11, 12 and 13 each found a real defect — two
+> P1 — so the rounds earned their keep, but the rule says ask before the 11th.
+>
+> ⬇️ The 2026-08-13 box below is HISTORY. Its deploy facts are superseded by the
+> table above; keep it for the Cloud Run flake diagnosis.
+
+> ## ⚠️ SUPERSEDED (2026-08-13 evening) — #420–#423 all merged AND deployed by Kevin
 >
 > Per surface, so no two SHAs can be read as contradicting (qodo, on #425 —
 > the previous phrasing said functions were at `d851b329` in one paragraph and
