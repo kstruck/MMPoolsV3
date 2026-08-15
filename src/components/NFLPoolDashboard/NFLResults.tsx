@@ -5,6 +5,8 @@ import type { Pool, NFLGame } from '../../types';
 import { RankChip } from '../ui';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType, gamesForPoolWeek, poolSeasonWeeks } from '../../utils/nflPending';
+import type { PoolPicksReveal } from '../../services/dbService';
+import { EntryWeekPicks } from './EntryWeekPicks';
 import {
   rankByWeek,
   rankBySeason,
@@ -46,6 +48,14 @@ interface NFLResultsProps {
   /** The pool-wide selected week (the header's `?week=` selector). */
   week: number;
   viewerUid?: string;
+  /**
+   * The week's `getPoolPicks` response (item 9): clicking a row on the WEEKLY
+   * table opens that entry's picks for the week via `EntryWeekPicks` — the same
+   * cell rules as the Current Picks grid, nothing re-derived here. Optional so
+   * the tables render without one.
+   */
+  reveal?: PoolPicksReveal | null;
+  ownEntryLoaded?: boolean;
 }
 
 type PickemView = 'WEEKLY' | 'SEASON';
@@ -54,7 +64,7 @@ type MarginView = 'WEEKLY' | 'SUMMARY' | 'STANDINGS';
 const TH = 'py-3 px-4 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted';
 const TD = 'py-3 px-4 text-[13px] num';
 
-export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, week, viewerUid }) => {
+export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, week, viewerUid, reveal, ownEntryLoaded = false }) => {
   const navigate = useNavigate();
   const type = pool.type;
   const isMargin = type === 'NFL_MARGIN';
@@ -65,6 +75,9 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
   // PoolRoute reuses this component across pool navigation, so a view chosen in
   // one pool would otherwise leak into the next one.
   const [view, setView] = useState<PickemView | MarginView>('WEEKLY');
+  // Item 9: the expanded row on the WEEKLY table (entry id — PLAN-MULTI-ENTRY §0b).
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
+  const weekGames = useMemo(() => gamesForPoolWeek(games || [], pool as any, week), [games, pool, week]);
   useEffect(() => { setView('WEEKLY'); }, [pool.id]);
 
   const weeks = useMemo(() => poolSeasonWeeks(games, pool), [games, pool]);
@@ -214,8 +227,16 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                 // column "Incorrect" — named in the PR for his ruling.)
                 const noPoints =
                   typeof correct === 'number' && typeof total === 'number' ? total - correct : null;
+                const isOpen = openRowId === row.id;
+                const isMine = !!viewerUid && (row.ownerUid ?? row.id) === viewerUid;
                 return (
-                  <tr key={row.id} className={rowClass(row)}>
+                  <React.Fragment key={row.id}>
+                  <tr
+                    className={`cursor-pointer ${rowClass(row)}`}
+                    onClick={() => setOpenRowId(isOpen ? null : row.id)}
+                    aria-expanded={isOpen}
+                    title={isOpen ? 'Hide picks' : `Show ${nflWeekLabel(seasonType, week)} picks`}
+                  >
                     <td className={`${TD} font-bold`}>{placeCell(place)}</td>
                     <td className="py-3 px-4">{playerCell(row)}</td>
                     {isMargin ? (
@@ -237,6 +258,21 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                       </>
                     )}
                   </tr>
+                  {isOpen && (
+                    <tr className="bg-surface">
+                      <td colSpan={99} className="py-3 px-4">
+                        <EntryWeekPicks
+                          pool={pool}
+                          row={row}
+                          weekGames={weekGames}
+                          week={week}
+                          reveal={reveal}
+                          isOwnRow={isMine && ownEntryLoaded}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </tbody>

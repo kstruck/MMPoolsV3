@@ -728,7 +728,9 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     expect(dash).toContain('|| castPool.participantIds.includes(viewerUid);');
     expect(dash).not.toContain('members.length === 0');
     expect(dash).toContain('if (viewerStillMember) return;');
-    expect(dash).toContain("const revealTabs: TabType[] = ['grid', 'standings', 'manager'];");
+    // Item 9 (2026-08-15) added 'results' DELIBERATELY: Results opens a row's
+    // picks via EntryWeekPicks, so it consumes the same reveal Standings does.
+    expect(dash).toContain("const revealTabs: TabType[] = ['grid', 'standings', 'results', 'manager'];");
     expect(dash).toContain('if (!user || !wantsReveal) return;');
     expect(dash).toContain('[user?.id, activeTab, pool.type, openWeeks, loadWeek, isManager]');
     expect(dash).toContain("activeTab !== 'grid'");
@@ -930,5 +932,35 @@ describe('current picks grid — the Majority row has a cell for every fixed col
     const fixedMajorityCells = 1 + (majorityBlock.match(/<td\b/g) ?? []).length;
     expect(fixedHeaders).toBe(3);
     expect(fixedMajorityCells).toBe(fixedHeaders);
+  });
+});
+
+/**
+ * Item 9: the row-click picks strip on Standings and Results is a THIRD
+ * consumer of the reveal, and it obeys the same rule as the two grids — it
+ * derives no lock of its own, and it renders through the shared cell rules.
+ */
+describe('row-click picks (EntryWeekPicks) — the reveal boundary stays the server\'s', () => {
+  const strip = (s: string) => s
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const code = strip(readFileSync(resolve(root, 'src/components/NFLPoolDashboard/EntryWeekPicks.tsx'), 'utf8'));
+  it('renders through picksGridCell / weeklyPickCell and re-derives no lock', () => {
+    expect(code).toContain('picksGridCell(');
+    expect(code).toContain('weeklyPickCell(');
+    expect(code).not.toContain('startTime <');
+    expect(code).not.toContain('lockBufferMinutes');
+    expect(code).not.toContain('serverNow');
+  });
+  it('Standings and Results both mount it and take the reveal as a prop', () => {
+    for (const f of ['NFLStandings.tsx', 'NFLResults.tsx']) {
+      const src = strip(readFileSync(resolve(root, `src/components/NFLPoolDashboard/${f}`), 'utf8'));
+      expect(src, f).toContain('<EntryWeekPicks');
+      expect(src, f).toContain('reveal={reveal}');
+      expect(src, f).toContain('setOpenRowId(');
+    }
+    const dash = strip(readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLPoolDashboard.tsx'), 'utf8'));
+    expect((dash.match(/reveal=\{weekReveal\}/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 });
