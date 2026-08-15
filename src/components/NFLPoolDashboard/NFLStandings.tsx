@@ -302,8 +302,8 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                               is a count only: no pick content rides with it. */}
                           {isMyEntry
                             ? `${ownWeekPickCount(entry)} of ${weekGameIds.length} Picks Set`
-                            : pickCounts?.[entry.ownerUid ?? entry.id] !== undefined
-                              ? `${pickCounts[entry.ownerUid ?? entry.id]} of ${weekGameIds.length} Picks Set`
+                            : pickCounts?.[entry.id] !== undefined
+                              ? `${pickCounts[entry.id]} of ${weekGameIds.length} Picks Set`
                               : faint(marker())}
                         </td>
                         {showTiebreakerColumn && (

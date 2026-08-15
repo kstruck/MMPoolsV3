@@ -775,3 +775,90 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     expect(grid).toContain('{mine && (');
   });
 });
+
+/**
+ * ROW IDENTITY IS THE ENTRY, NOT THE PLAYER (PLAN-MULTI-ENTRY §0b, ticket T0).
+ *
+ * Today every NFL entry id IS the owner's uid, so `reveal.counts[row.ownerUid]`
+ * and `reveal.counts[row.id]` return the same thing — which is exactly why the
+ * uid-keyed form kept getting written. Under multi-entry one player owns
+ * several rows and a uid-keyed lookup silently merges them. This guard makes
+ * the rule a test rather than prose: on the NFL row/reveal surfaces, `ownerUid`
+ * may decide "is this me" and the profile link, and nothing else.
+ *
+ * Coarse regexes over comment-stripped source, same convention as the rest of
+ * this file. It is NOT an AST rule — an alias (`const k = row.ownerUid`) can
+ * slip past it; the behaviour test on `buildMemberStandings` with two rows
+ * sharing an owner (PLAN-MULTI-ENTRY T4) is the compensating check.
+ *
+ * The allow-list below is PER SYMBOL, each with the plan ticket that deletes
+ * it. Adding a line here is a plan decision, not a convenience.
+ */
+describe('NFL row/reveal surfaces key by ENTRY id, never by owner uid (PLAN-MULTI-ENTRY §0b)', () => {
+  const strip = (s: string) => s
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const FILES = [
+    'src/components/NFLPoolDashboard/NFLPicksGrid.tsx',
+    'src/components/NFLPoolDashboard/NFLWeeklyPicksGrid.tsx',
+    'src/components/NFLPoolDashboard/NFLStandings.tsx',
+    'src/components/NFLPoolDashboard/NFLResults.tsx',
+    'src/components/NFLPoolDashboard/NFLPoolDashboard.tsx',
+    'src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx',
+    'src/components/NFLPoolDashboard/NFLManagerView.tsx',
+    'src/components/PaymentsPanel.tsx',
+    'src/utils/memberStandings.ts',
+    'src/utils/poolRoster.ts',
+  ];
+  // Residue the plan's T4/T5 remove. Exact symbol per file; nothing else in
+  // that file is exempt.
+  const ALLOW: Record<string, RegExp[]> = {
+    'src/components/NFLPoolDashboard/NFLPoolDashboard.tsx': [/entries\.find\(e => e\.ownerUid === user\.id/],  // myEntry — T5
+    'src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx': [/entries\.find\(e => e\.ownerUid === user\.id/], // myEntry — T5
+    'src/components/PaymentsPanel.tsx': [/entries\.find\(e => e\.ownerUid === user\.id/],                     // myEntry — T6
+    'src/utils/memberStandings.ts': [/const uidOf = /, /scoredByUid/, /r\.picks\?\.\[uid\]/, /reveal\.picks\?\.\[uid\]/, /reveal\.confidence\?\.\[uid\]/, /reveal\.tiebreakers\?\.\[uid\]/], // the fold — T4
+    'src/utils/poolRoster.ts': [/const uidOf = /, /entryByUid/],                                              // dues per MEMBER are correct; renamed by T6
+    'src/components/NFLPoolDashboard/NFLManagerView.tsx': [/const targetUidOf = /],                           // proxy/remind TARGET is a person — T2 adds entryIndex
+  };
+  const FORBIDDEN: Array<[string, RegExp]> = [
+    ['`ownerUid ?? …` used as a key',            /ownerUid \?\? [\w.]+\]/],
+    ['`ownerUid || …` used as a key',            /ownerUid \|\| [\w.]+\]/],
+    ['a `uidOf` helper',                         /const uidOf = /],
+    ['reveal map indexed by an owner/uid name',  /\.(picks|counts|confidence|tiebreakers)\??\.\[[^\]]*(ownerUid|uid)\b[^\]]*\]/],
+    ['`pickCounts` indexed by an owner/uid name', /pickCounts\??\.\[[^\]]*(ownerUid|uid)\b[^\]]*\]/],
+    ['singular `entries.find` on ownerUid',      /entries\.find\([^)]*ownerUid/],
+  ];
+
+  it.each(FILES)('%s', file => {
+    // Allowed residue is REMOVED from the source before the forbidden shapes
+    // are matched — so an allow entry exempts exactly the text it names.
+    const raw = strip(readFileSync(resolve(root, file), 'utf8'));
+    const code = (ALLOW[file] ?? []).reduce((c, a) => c.replace(new RegExp(a.source, 'g'), ''), raw);
+    for (const [label, re] of FORBIDDEN) {
+      const bad = code.match(new RegExp(re.source, 'g')) ?? [];
+      expect(bad, `${file}: ${label} → ${JSON.stringify(bad)}`).toEqual([]);
+    }
+  });
+
+  it('the allow-list names only files that still carry residue (delete the line when the ticket lands)', () => {
+    for (const [file, patterns] of Object.entries(ALLOW)) {
+      const code = strip(readFileSync(resolve(root, file), 'utf8'));
+      for (const p of patterns) {
+        expect(p.test(code), `${file}: allow-list entry ${p} matches nothing — remove it`).toBe(true);
+      }
+    }
+  });
+
+  it('the forbidden regexes match the shapes they were written to catch', () => {
+    // A guard that matches nothing is indistinguishable from one that passes.
+    expect(FORBIDDEN[0][1].test("wk?.counts?.[row.ownerUid ?? row.id]")).toBe(true);
+    expect(FORBIDDEN[2][1].test("const uidOf = (row: any) => row?.ownerUid ?? row?.id;")).toBe(true);
+    expect(FORBIDDEN[3][1].test("reveal.picks?.[uid]")).toBe(true);
+    expect(FORBIDDEN[4][1].test("pickCounts?.[entry.ownerUid ?? entry.id]")).toBe(true);
+    expect(FORBIDDEN[5][1].test("entries.find(e => e.ownerUid === user.id)")).toBe(true);
+    // And the entry-keyed forms pass.
+    expect(FORBIDDEN[3][1].test("reveal.picks?.[row.id]")).toBe(false);
+    expect(FORBIDDEN[4][1].test("pickCounts?.[entry.id]")).toBe(false);
+  });
+});
