@@ -28,19 +28,21 @@ export interface PickCtaInput {
 
 export interface PickCta {
     label: string;
-    /** No useful action behind the button — render it disabled, do not hide it. */
-    disabled: boolean;
 }
 
+/**
+ * The button is NEVER disabled. It always goes to My Entry — a locked week is
+ * still worth looking at, and the viewer's own entry can arrive a beat after
+ * the standings rows (qodo on #435: `hasAnyPick` reads `myEntry.picks`, which
+ * is grafted only once `ownEntry` loads, so a disabled state would have flashed
+ * on every locked week during load). The LABEL is allowed to be provisional
+ * for that beat; the ACTION is not.
+ */
 export function pickCtaFor({ locked, complete, hasAnyPick }: PickCtaInput): PickCta {
     if (!locked) {
-        return complete
-            ? { label: 'Edit My Picks', disabled: false }
-            : { label: 'Make Picks', disabled: false };
+        return complete ? { label: 'Edit My Picks' } : { label: 'Make Picks' };
     }
     // Locked: nothing can change. There is still something to look at if a
     // pick exists; otherwise the honest state is "you missed it".
-    return hasAnyPick
-        ? { label: 'View My Picks', disabled: false }
-        : { label: 'Picks Locked', disabled: true };
+    return hasAnyPick ? { label: 'View My Picks' } : { label: 'Picks Locked' };
 }

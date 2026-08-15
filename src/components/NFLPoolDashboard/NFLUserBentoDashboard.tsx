@@ -633,7 +633,6 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
               <Button
                 variant="primary"
                 size="md"
-                disabled={picksCta.disabled}
                 onClick={() => onSelectTab('picks')}
               >
                 {picksCta.label} <ChevronRight size={14} />
@@ -1287,7 +1286,6 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             <Button
               variant="primary"
               size="sm"
-              disabled={picksCta.disabled}
               onClick={() => onSelectTab('picks')}
               className="w-full sm:w-auto"
             >
