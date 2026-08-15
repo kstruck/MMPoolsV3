@@ -2,10 +2,15 @@
 
 > ## ✅ DEPLOY STATE 2026-08-13 (evening) — #420–#423 all merged AND deployed by Kevin
 >
-> **Functions and rules are deployed from post-#423 `main`** (head at deploy
-> time: `d851b329`), in the required order functions → rules → Coolify.
-> **Live frontend bundle: `index-IDWl1xhV.js`** (was `index-B9wxtmFx.js`),
-> read off the prod HTML after Kevin's Coolify rebuild.
+> Per surface, so no two SHAs can be read as contradicting (qodo, on #425 —
+> the previous phrasing said functions were at `d851b329` in one paragraph and
+> `427adcbd` in another):
+>
+> | Surface | Deployed from | When |
+> |---|---|---|
+> | **functions** | `427adcbd` (post-#424) | late evening, after the flake retry below |
+> | **rules** | `d851b329` (post-#423; #424 touched no rules) | evening, functions → rules order |
+> | **frontend** | `index-IDWl1xhV.js`, built from `d851b329` | evening Coolify rebuild; #424 touched no `src/**` |
 >
 > **What is LIVE in production as of this deploy:** the confidence-weight
 > graying (#420), the weekly tie-breaker setting + tie-broken weekly winner in
@@ -14,10 +19,16 @@
 > the graying and the tie-breaker select in prod; the rest of the browser
 > checklist is `MORNING-2026-08-13-PART2.md` §1 step 5.
 >
-> **Open PR:** [#424](https://github.com/kstruck/MMPoolsV3/pull/424) — the
-> hybrid gate strips no-op keys instead of transacting on every settings save
-> (qodo #12 fix-forward; codex r2 clean; CI 7/7). Owes a **functions deploy
-> only** on merge.
+> **#424 is MERGED AND DEPLOYED** (2026-08-13 late evening) — the hybrid gate
+> strips no-op keys instead of transacting on every settings save; the table
+> above is the per-surface state after it. **The queue is EMPTY — nothing is
+> owed on any deploy surface.**
+>
+> ⚠️ That deploy hit a **Cloud Run healthcheck flake**: 7 of ~180 functions
+> failed `Container Healthcheck failed` on the full-fleet pass, 5 again on an
+> immediate retry, and all 5 passed after a ten-minute wait. No outage at any
+> point — Cloud Run kept each last good revision serving. The diagnostic
+> signature and the retry procedure are now §1c of `mmp-deploy-and-operate`.
 >
 > **Next build wave:** `PROMPT-NEXT-SESSION-WEEKLY-PRIZES.md` — tiebreaker
 > option change (last/first Monday game, remove combined, no-Monday → final
