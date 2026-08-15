@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Grid3X3 } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
@@ -71,6 +71,10 @@ export const NFLWeeklyPicksGrid: React.FC<NFLWeeklyPicksGridProps> = ({
   // weekly score, so it keeps alphabetical only — the toggle is not offered.
   const isMargin = pool.type === 'NFL_MARGIN';
   const [sort, setSort] = useState<GridSort>('name');
+  // PoolRoute reuses this component across pools; the documented default is
+  // alphabetical, so a score sort chosen on one pool must not follow the
+  // viewer to the next (codex r4 on items 11/12).
+  useEffect(() => { setSort('name'); }, [pool.id]);
   const rows = useMemo(() => sortGridRows(entries, isMargin ? sort : 'name', week, isMargin), [entries, sort, week, isMargin]);
 
   // Row identity is the ENTRY (`row.id`); `ownerUid` only decides "is this me"

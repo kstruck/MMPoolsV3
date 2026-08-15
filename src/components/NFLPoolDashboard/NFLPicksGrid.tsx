@@ -99,6 +99,10 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
   // per ROW, unit-tested). Item 11: the score itself is a column — the same
   // projection field the Results tab ranks by, no new read.
   const [sort, setSort] = useState<GridSort>('name');
+  // PoolRoute reuses this component across pools; the documented default is
+  // alphabetical, so a score sort chosen on one pool must not follow the
+  // viewer to the next (codex r4 on items 11/12).
+  useEffect(() => { setSort('name'); }, [pool.id]);
   const rows = useMemo(() => sortGridRows(entries, sort, week, false), [entries, sort, week]);
 
   // ⚠️ Only the reveal that matches the week on screen. The dashboard already

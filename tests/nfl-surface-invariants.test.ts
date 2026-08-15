@@ -920,8 +920,8 @@ describe('current picks grid — the Majority row has a cell for every fixed col
     const headerBlock = code.slice(theadOpen, theadClose);
     const headerGamesMap = headerBlock.indexOf('{weekGames.map');
     expect(headerGamesMap, 'header {weekGames.map marker').toBeGreaterThan(0);
-    const fixedHeaders = (headerBlock.slice(0, headerGamesMap).match(/<th/g) ?? []).length;
-    const majorityStart = code.search(/Majority\s*<\/td>/);
+    const fixedHeaders = (headerBlock.slice(0, headerGamesMap).match(/<th\b/g) ?? []).length;
+    const majorityStart = code.search(/\bMajority\s*<\/td>/);
     expect(majorityStart, 'Majority label marker').toBeGreaterThan(0);
     const majorityGamesMap = code.indexOf('{weekGames.map', majorityStart);
     expect(majorityGamesMap, 'Majority-row {weekGames.map marker').toBeGreaterThan(majorityStart);
