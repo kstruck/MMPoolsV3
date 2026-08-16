@@ -864,7 +864,10 @@ export async function submitNFLPicksInternal(
     // write changed about the member's liability (0 on an ordinary resubmit).
     const countPatch = entryCountWrite(poolInTx, membersForCount, stamp.liabilityDelta);
     if (Object.keys(countPatch).length > 0) transaction.update(poolRef, countPatch);
-    if (frozenTargetWrite) transaction.update(poolRef, frozenTargetWrite);
+    // Only a submission that actually PLAYED the week freezes its target — an
+    // empty / wrong-week submission (schema-valid, PLAN-EMPTY-SUBMISSION-FEE)
+    // must not pin a target before any real entrant has one (codex r3 on #452).
+    if (frozenTargetWrite && committedPickForWeek) transaction.update(poolRef, frozenTargetWrite);
     // K11: a PAID member whose dues just rose is UNPAID again — mirrored onto
     // every entry they own, with a ledger line saying why.
     if (stamp.paidReset) {
