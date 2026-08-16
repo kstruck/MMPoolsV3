@@ -1876,8 +1876,22 @@ async function scoreWeekPass(
       const frozenPrize: WeeklyPrizeSnapshot | null | undefined =
         priorRecap && Object.prototype.hasOwnProperty.call(priorRecap, 'weeklyPrize') ? (priorRecap.weeklyPrize ?? null) : undefined;
       // Schedule-derived, so it can be read outside the transaction; only used
-      // when the in-tx pool has no stored `weeksInSeason`.
-      const derivedWeeks = frozenPrize === undefined ? await weeksInSeasonFor(db, pool) : undefined;
+      // when the in-tx pool has no stored `weeksInSeason`, and only needed on a
+      // priced mode. Wrapped so a query failure lands as `weeklyPlacesError`
+      // (fail-closed) instead of failing the scoring run (qodo #7 on #453).
+      const needsWeeks = frozenPrize === undefined
+        && (pool?.settings?.payoutMode === 'WEEKLY' || pool?.settings?.payoutMode === 'HYBRID')
+        && !(Number.isInteger(pool?.weeksInSeason) && pool.weeksInSeason >= 1);
+      let derivedWeeks: number | undefined;
+      let weeksQueryError: string | undefined;
+      if (needsWeeks) {
+        try {
+          derivedWeeks = await weeksInSeasonFor(db, pool);
+        } catch (e) {
+          weeksQueryError = 'WEEKS_QUERY_FAILED';
+          console.warn(`[scoreNFLWeek] weeksInSeason query failed for ${poolId} week ${week}:`, e);
+        }
+      }
       const voidWeek = isVoidWeek(games);
       // Fenced: creating this doc fires onWeeklyRecapCreated → AI trash-talk, and
       // the later authoritative pass only UPDATEs it, so a recap created from a
@@ -1891,9 +1905,11 @@ async function scoreWeekPass(
         // Prices from the pool doc read IN this transaction (codex r2): an edit
         // to fee / payouts / charity / mode that committed after the pre-lease
         // read is seen here, so what is frozen is what was saved.
-        const publication = weeklyPlacesPublication(
-          { ...(freshPool ?? {}), id: poolId }, week, winnerCandidates, voidWeek, frozenPrize, entriesSnap.size, derivedWeeks,
-        );
+        const publication = weeksQueryError
+          ? { recap: { weeklyPlacesError: weeksQueryError } }
+          : weeklyPlacesPublication(
+            { ...(freshPool ?? {}), id: poolId }, week, winnerCandidates, voidWeek, frozenPrize, entriesSnap.size, derivedWeeks,
+          );
         const recapDoc = buildWeeklyRecap({
           poolId, week, poolType: pool.type, sharpUser, closestTie, aliveCount,
           weeklyWinners,

@@ -116,6 +116,7 @@ Because Margin pools often result in similar total scores, a strict 5-level casc
    | Pick'em | `sharpOfWeek` — the highest weekly POINT total; plus `closestTiebreaker` when the MNF tiebreaker resolved |
    | Margin | `sharpOfWeek` — the largest MARGIN OF VICTORY, among entries that actually submitted |
    | Survivor | `attritionCount` — how many entries are still alive |
+   | Pick'em + Margin | `weeklyWinners` (the tie-broken rank-1 group), and — PLAN-WEEKLY-PRIZES — **`weeklyPlaces`**: EVERY scored entry, competition-ranked (1,1,3), keyed by `entryId` with `userId`/`userName`/`entryName?`, `points`, `tiebreakDiff?`, and `prize` (whole dollars) on paid ranks of a priced week; **`weeklyPrize`**: the FROZEN `{pot, places, entryCount, weeksInSeason, payoutMode, frozenAt}` the prizes came from — written at first publication and re-read verbatim on every rescore (a rescore re-ranks players against a pot that does not move), or `null` = published UNPRICED (SEASON mode / no pot; never re-priced later); **`weeklyPlacesError`**: publication failed CLOSED (e.g. `PRIZE_SPLIT_DUPLICATE_RANK`) — the week still scores. `weeklyPlaces` ABSENT means "not published" (older recap, void week), never "nobody placed". A pool with no `weeksInSeason` gets it written once, on its first priced publication. |
 
    `sharpOfWeek.score` therefore means different things in different pool types
    — points in Pick'em, a signed margin in Margin — and the client formats it
