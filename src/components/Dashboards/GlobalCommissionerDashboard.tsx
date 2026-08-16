@@ -4,6 +4,7 @@ import { Crown, DollarSign, Users, Settings, ArrowRight, Trophy } from 'lucide-r
 import type { User, Pool } from '../../types';
 import { Button } from '../ui';
 import { isActiveManagedPool, isNFLSeasonPoolType } from '../../utils/poolSport';
+import { isPoolOwner } from '../../utils/auth';
 
 interface GlobalCommissionerDashboardProps {
   user: User;
@@ -46,16 +47,22 @@ export const GlobalCommissionerDashboard: React.FC<GlobalCommissionerDashboardPr
 
   // Client-computed honest baseline (Dues Expected always provable). Dues Collected + Payouts
   // come from the server aggregate once deployed+backfilled; until then they read "—".
+  // OWNER-scoped, deliberately (PLAN-CO-COMMISSIONERS C12/D7; codex r4 on
+  // PR-B): `user.commissionerAggregate` is computed server-side from ownerId
+  // pools only, so the tiles must count the same set or "Pools managed" would
+  // include a co-managed pool whose dues/payouts the money tiles omit. The
+  // LIST below still shows co-managed pools — that is the whole point of D7.
+  const ownedActive = useMemo(() => activePools.filter(p => isPoolOwner(user, p)), [activePools, user]);
   const computed = useMemo(() => {
     let participants = 0;
     let duesExpected = 0;
-    for (const p of activePools) {
+    for (const p of ownedActive) {
       const n = realParticipants(p).length;
       participants += n;
       duesExpected += feeOf(p) * n;
     }
-    return { poolsManaged: activePools.length, participants, duesExpected };
-  }, [activePools]);
+    return { poolsManaged: ownedActive.length, participants, duesExpected };
+  }, [ownedActive]);
 
   // Prefer the server aggregate when present; fall back to the provable client baseline.
   const agg = user.commissionerAggregate;
@@ -93,7 +100,10 @@ export const GlobalCommissionerDashboard: React.FC<GlobalCommissionerDashboardPr
     return (
       <div className="bg-surface border border-line rounded-2xl p-4 flex items-center justify-between group hover:border-gold-500/40 transition-colors">
         <div className="min-w-0">
-          <h4 className="text-[color:var(--text)] font-display font-bold uppercase truncate">{pool.name}</h4>
+          <h4 className="text-[color:var(--text)] font-display font-bold uppercase truncate">
+            {pool.name}
+            {!isPoolOwner(user, pool) && <span className="ml-2 align-middle px-1.5 py-0.5 rounded-full text-[8px] font-display font-bold tracking-[0.08em] bg-gold-500/15 text-gold-700 dark:text-gold-400 border border-gold-500/30">Co-Commissioner</span>}
+          </h4>
           <p className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em]">
             <span className="num">{players}</span> Players{dues > 0 && <> • <span className="num">{money(dues)}</span> dues</>}
           </p>
