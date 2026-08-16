@@ -18,15 +18,18 @@ const pickemBase: Record<string, unknown> = {
 describe('buildNFLPayload', () => {
   // PLAN-MULTI-ENTRY D8 / T1. The toggle is a wizard-only key; the builder folds
   // it into settings.maxEntriesPerUser and the schema keeps (does not strip) it.
-  it('multi-entry: toggle off ⇒ 1 even if a value was typed; on ⇒ the value survives the schema; out of range is REFUSED, not clamped', () => {
+  it('multi-entry: toggle off ⇒ 1 even if a value was typed; on ⇒ at least 2 and the value survives the schema; above the cap is REFUSED, not clamped', () => {
     const off = buildNFLPayload({ ...pickemBase, multiEntry: false, settings: { ...(pickemBase.settings as object), maxEntriesPerUser: 5 } }, 'NFL_PICKEM');
     expect((off.settings as { maxEntriesPerUser?: number }).maxEntriesPerUser).toBe(1);
     const on = buildNFLPayload({ ...pickemBase, multiEntry: true, settings: { ...(pickemBase.settings as object), maxEntriesPerUser: 4 } }, 'NFL_PICKEM');
     const parsed = pickemCreateInputSchema.safeParse(on);
     expect(parsed.success).toBe(true);
     if (parsed.success) expect(parsed.data.settings.maxEntriesPerUser).toBe(4);
+    // Toggle ON ⇒ at least 2, whatever the field holds (untouched NaN, or the form default 1).
     const untouched = buildNFLPayload({ ...pickemBase, multiEntry: true, settings: { ...(pickemBase.settings as object), maxEntriesPerUser: NaN } }, 'NFL_PICKEM');
-    expect((untouched.settings as { maxEntriesPerUser?: number }).maxEntriesPerUser).toBe(1);
+    expect((untouched.settings as { maxEntriesPerUser?: number }).maxEntriesPerUser).toBe(2);
+    const stillOne = buildNFLPayload({ ...pickemBase, multiEntry: true, settings: { ...(pickemBase.settings as object), maxEntriesPerUser: 1 } }, 'NFL_PICKEM');
+    expect((stillOne.settings as { maxEntriesPerUser?: number }).maxEntriesPerUser).toBe(2);
     const tooMany = buildNFLPayload({ ...pickemBase, multiEntry: true, settings: { ...(pickemBase.settings as object), maxEntriesPerUser: 11 } }, 'NFL_PICKEM');
     expect(pickemCreateInputSchema.safeParse(tooMany).success).toBe(false);
     // Absent entirely (a payload from before this setting) still defaults to 1 at the schema.

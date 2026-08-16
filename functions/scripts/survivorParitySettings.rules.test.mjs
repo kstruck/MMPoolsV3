@@ -60,6 +60,16 @@ async function seed() {
             publishedWeeks: { 1: true },
             settings: { ...BASE_SETTINGS },
         });
+        // A BRACKET pool: carries the SAME maxEntriesPerUser key and saves it by
+        // direct updateDoc (BracketPoolDashboard handleSaveSettings), so the
+        // NFL-only scoping of that key is what keeps this write working.
+        await setDoc(doc(db, 'pools', 'br1'), {
+            type: 'BRACKET', status: 'OPEN',
+            ownerId: OWNER, managerUid: OWNER,
+            participantIds: [OWNER],
+            name: 'Bracket Pool',
+            settings: { entryFee: 0, maxEntriesPerUser: 1, maxEntriesTotal: 100 },
+        });
     });
 }
 await seed();
@@ -118,6 +128,9 @@ await check('SUPER_ADMIN still updates an UNRELATED settings field', assertSucce
 ));
 await check('SUPER_ADMIN still updates a top-level pool field', assertSucceeds(
     updateDoc(doc(admin, 'pools', 'sv1'), { name: 'Renamed' }),
+));
+await check('a BRACKET owner still writes settings.maxEntriesPerUser directly (the key is NFL-scoped — qodo #1 on #449)', assertSucceeds(
+    updateDoc(doc(owner, 'pools', 'br1'), { 'settings.maxEntriesPerUser': 3 }),
 ));
 await check('a same-value settings write is not a change, so it passes', assertSucceeds(
     // The manager UI submits a COMPLETE settings object on every save. If an

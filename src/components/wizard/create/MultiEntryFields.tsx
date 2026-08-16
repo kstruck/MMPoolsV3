@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { CheckboxField, NumberField } from '../fields';
-import { MAX_ENTRIES_PER_USER_CAP } from '@shared/multiEntry';
+import { MAX_ENTRIES_PER_USER_CAP, MULTI_ENTRY_WIZARD_ENABLED } from '@shared/multiEntry';
 
 /**
  * Multiple entries per player (PLAN-MULTI-ENTRY D8, K2/K6). A Yes/No toggle;
@@ -26,6 +26,7 @@ export function MultiEntryFields() {
     const cur = Number(getValues('settings.maxEntriesPerUser'));
     if (!Number.isFinite(cur) || cur < 2) setValue('settings.maxEntriesPerUser', 2, { shouldValidate: false });
   }, [on, setValue, getValues]);
+  if (!MULTI_ENTRY_WIZARD_ENABLED) return null;
   return (
     <div className="mb-4 rounded-lg border border-line bg-page p-3">
       <CheckboxField name="multiEntry" label="Allow more than one entry per player" />
