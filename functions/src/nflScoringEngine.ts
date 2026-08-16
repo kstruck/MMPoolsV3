@@ -16,6 +16,7 @@ import {
 } from './shared/survivorReuse';
 import type { WeeklyTiebreaker } from './shared/nflTiebreaker';
 import { resolveTiebreakTargetIds } from './shared/nflTiebreaker';
+import type { WeeklyPlace, WeeklyPrizeSnapshot } from './shared/weeklyPrizes';
 
 // ============================================================================
 // Feed-integrity predicates — what the scorer is allowed to treat as played
@@ -542,8 +543,12 @@ export function computeMNFTiebreakerTotal(
 
 /** One entry's claim on the week, as the winner computation sees it. */
 export interface WeeklyWinnerCandidate {
+  /** The entry DOCUMENT id (`{uid}` for entry #1, `e{n}:{uid}` for extras) — PLAN-WEEKLY-PRIZES §9 A1. */
+  entryId: string;
   userId: string;
   userName: string;
+  /** The entry's own name when named (multi-entry K5); rows display `entryName ?? userName`. */
+  entryName?: string;
   points: number;
   /**
    * `|prediction − target|`, or `undefined` when this member made no
@@ -554,6 +559,8 @@ export interface WeeklyWinnerCandidate {
 }
 
 export interface WeeklyWinner {
+  /** Entry doc id (PLAN-WEEKLY-PRIZES §9 A1). Absent on recaps written before it. */
+  entryId?: string;
   userId: string;
   userName: string;
   points: number;
@@ -608,7 +615,7 @@ function toWinner(c: WeeklyWinnerCandidate): WeeklyWinner {
   // Rebuilt field by field rather than spread: `tiebreakDiff: undefined` is a
   // LITERAL undefined to Firestore's `set()`, which throws on it (the same trap
   // buildWeeklyRecap documents). Omitting the key is not the same as setting it.
-  const w: WeeklyWinner = { userId: c.userId, userName: c.userName, points: c.points };
+  const w: WeeklyWinner = { entryId: c.entryId, userId: c.userId, userName: c.userName, points: c.points };
   if (typeof c.tiebreakDiff === 'number') w.tiebreakDiff = c.tiebreakDiff;
   return w;
 }
@@ -892,9 +899,24 @@ export function buildWeeklyRecap(params: {
    * with no weekly winner, or a week nobody entered).
    */
   weeklyWinners?: WeeklyWinner[];
+  /**
+   * The Weekly Winners List (PLAN-WEEKLY-PRIZES §3, §9 A1–A2): EVERY scored
+   * entry, competition-ranked, `prize` on paid ranks of a priced week. Omitted
+   * when not computed (older recap, void week, Survivor).
+   */
+  weeklyPlaces?: WeeklyPlace[];
+  /**
+   * The frozen pot/places/entryCount/weeks the prizes were computed from
+   * (§3b-i), or `null` = published UNPRICED (SEASON / no pot at first
+   * publication) — an explicit sentinel so a later edit cannot retroactively
+   * price an already-published week. Absent = not published by this feature.
+   */
+  weeklyPrize?: WeeklyPrizeSnapshot | null;
+  /** Publication failed CLOSED (§9 A5) — the code, never a crash. */
+  weeklyPlacesError?: string;
   nowMs?: number;
 }): WeeklyRecap {
-  const { poolId, week, poolType, sharpUser, closestTie, aliveCount, weeklyWinners, nowMs = Date.now() } = params;
+  const { poolId, week, poolType, sharpUser, closestTie, aliveCount, weeklyWinners, weeklyPlaces, weeklyPrize, weeklyPlacesError, nowMs = Date.now() } = params;
   const recap: WeeklyRecap = {
     id: `week_${week}`,
     poolId,
@@ -909,6 +931,15 @@ export function buildWeeklyRecap(params: {
   }
   if (weeklyWinners && weeklyWinners.length > 0) {
     recap.weeklyWinners = weeklyWinners;
+  }
+  if (weeklyPlaces && weeklyPlaces.length > 0) {
+    recap.weeklyPlaces = weeklyPlaces;
+  }
+  if (weeklyPrize !== undefined) {
+    recap.weeklyPrize = weeklyPrize;
+  }
+  if (weeklyPlacesError) {
+    recap.weeklyPlacesError = weeklyPlacesError;
   }
   if (poolType === 'NFL_SURVIVOR') {
     recap.attritionCount = aliveCount;
