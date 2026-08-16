@@ -1,4 +1,5 @@
 import type { PayoutSettings } from './index';
+import type { WeeklyPlace, WeeklyPrizeSnapshot } from '@shared/weeklyPrizes';
 import type { WeeklyTiebreaker } from '@shared/nflTiebreaker';
 
 export interface NFLGame {
@@ -325,7 +326,17 @@ export interface WeeklyRecap {
    * older recap, a Survivor pool, a week with no scored entries) and never
    * "nobody won" — so a renderer must not print an empty-state for it.
    */
-  weeklyWinners?: Array<{ userId: string; userName: string; points: number; tiebreakDiff?: number }>;
+  weeklyWinners?: Array<{ entryId?: string; userId: string; userName: string; points: number; tiebreakDiff?: number }>;
+  /**
+   * The Weekly Winners List (PLAN-WEEKLY-PRIZES §3): EVERY scored entry,
+   * competition-ranked (1,1,3), `prize` on paid ranks of a priced week.
+   * ABSENT = not computed (older recap, void week, Survivor) — never "nobody".
+   */
+  weeklyPlaces?: WeeklyPlace[];
+  /** The frozen pot/places/entryCount/weeks the prizes came from (§3b-i). */
+  weeklyPrize?: WeeklyPrizeSnapshot;
+  /** Publication failed closed (§9 A5): an error code, e.g. PRIZE_SPLIT_DUPLICATE_RANK. */
+  weeklyPlacesError?: string;
   attritionCount?: number; // Survivor remaining alive count
   recapText?: string; // AI generated context
   createdAt: number;

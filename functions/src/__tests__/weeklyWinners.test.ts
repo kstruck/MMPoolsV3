@@ -22,6 +22,7 @@ const cand = (
   points: number,
   tiebreakDiff?: number,
 ): WeeklyWinnerCandidate => ({
+  entryId: userId,
   userId,
   userName: userId.toUpperCase(),
   points,

@@ -169,7 +169,7 @@ describe('wiring — no surface re-derives the rule or hard-codes the copy', () 
 
   it('both hand-duplicated WeeklyRecap types carry weeklyWinners', () => {
     for (const f of ['src/types/nflPoolTypes.ts', 'functions/src/nflPoolTypes.ts']) {
-      expect(read(f)).toContain('weeklyWinners?: Array<{ userId: string; userName: string; points: number; tiebreakDiff?: number }>');
+      expect(read(f)).toContain('weeklyWinners?: Array<{ entryId?: string; userId: string; userName: string; points: number; tiebreakDiff?: number }>');
     }
   });
 });

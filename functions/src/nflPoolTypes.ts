@@ -1,4 +1,5 @@
 import type { WeeklyTiebreaker } from './shared/nflTiebreaker';
+import type { WeeklyPlace, WeeklyPrizeSnapshot } from './shared/weeklyPrizes';
 
 export interface PayoutSettings {
   places: { rank: number; percentage: number }[];
@@ -307,7 +308,17 @@ export interface WeeklyRecap {
    * ABSENT means "not computed" — an older recap, a Survivor pool, or a week
    * with no scored entries. It never means "nobody won".
    */
-  weeklyWinners?: Array<{ userId: string; userName: string; points: number; tiebreakDiff?: number }>;
+  weeklyWinners?: Array<{ entryId?: string; userId: string; userName: string; points: number; tiebreakDiff?: number }>;
+  /**
+   * The Weekly Winners List (PLAN-WEEKLY-PRIZES §3): EVERY scored entry,
+   * competition-ranked (1,1,3), `prize` on paid ranks of a priced week.
+   * ABSENT = not computed (older recap, void week, Survivor) — never "nobody".
+   */
+  weeklyPlaces?: WeeklyPlace[];
+  /** The frozen pot/places/entryCount/weeks the prizes came from (§3b-i). */
+  weeklyPrize?: WeeklyPrizeSnapshot;
+  /** Publication failed closed (§9 A5): an error code, e.g. PRIZE_SPLIT_DUPLICATE_RANK. */
+  weeklyPlacesError?: string;
   attritionCount?: number;
   recapText?: string;
   createdAt: number;

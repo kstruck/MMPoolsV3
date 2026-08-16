@@ -47,6 +47,7 @@ import {
   type WeeklyWinnerCandidate
 } from './nflScoringEngine';
 import { effectiveWeeklyTiebreaker, frozenTiebreakTargetFor, resolveTiebreakTargetIds, sameTargetIds, tiebreakerAsksForPrediction } from './shared/nflTiebreaker';
+import { computeWeeklyPrizeSnapshot, priceWeeklyPlaces, rankWeeklyPlaces, type WeeklyPrizeSnapshot } from './shared/weeklyPrizes';
 import { maybeFinalizeNFLPool } from './nflFinalize';
 import {
   acquireScoringLease,
@@ -1110,6 +1111,69 @@ export interface ScoreWeekOptions {
   now?: number;
 }
 
+// ---------------------------------------------------------------------------
+// PLAN-WEEKLY-PRIZES §3 — the Weekly Winners List and the frozen weekly prize
+// ---------------------------------------------------------------------------
+
+/**
+ * How many weeks this pool's season has — the divisor of the weekly pot (D5).
+ * `pool.weeksInSeason` when present (frozen at creation — a later PR writes it
+ * from the wizard); else derived ONCE from `nfl_games` for the pool's season +
+ * season type and frozen into the recap snapshot with the pot, so a published
+ * week's figure never moves even if the schedule import changes later.
+ * Undefined when the schedule is empty (nothing to price against).
+ */
+async function weeksInSeasonFor(db: admin.firestore.Firestore, pool: any): Promise<number | undefined> {
+  const stored = pool?.weeksInSeason;
+  if (Number.isInteger(stored) && stored >= 1) return stored;
+  const snap = await db.collection('nfl_games')
+    .where('season', '==', pool.season)
+    .where('seasonType', '==', Number(pool.seasonType || 2))
+    .select('week')
+    .get();
+  const weeks = new Set<number>();
+  for (const d of snap.docs) {
+    const w = Number((d.data() as { week?: unknown }).week);
+    if (Number.isInteger(w) && w >= 1) weeks.add(w);
+  }
+  return weeks.size > 0 ? weeks.size : undefined;
+}
+
+/**
+ * Compute what the recap should carry for the week's places and prize.
+ * Returns the recap fields to spread into `buildWeeklyRecap` — never throws.
+ */
+export async function publishWeeklyPlaces(
+  db: admin.firestore.Firestore,
+  pool: any,
+  week: number,
+  candidates: WeeklyWinnerCandidate[],
+  voidWeek: boolean,
+  frozen: WeeklyPrizeSnapshot | undefined,
+  entryDocCount: number,
+): Promise<{ weeklyPlaces?: ReturnType<typeof rankWeeklyPlaces>; weeklyPrize?: WeeklyPrizeSnapshot; weeklyPlacesError?: string }> {
+  try {
+    if (voidWeek || candidates.length === 0) return {};
+    const ranked = rankWeeklyPlaces(candidates);
+    // The frozen snapshot wins over live settings on every later pass.
+    let snapshot = frozen;
+    if (!snapshot) {
+      // A3: `pool.entryCount` (server-maintained since multi-entry T2), derived
+      // by counting entry docs when a legacy pool lacks the field.
+      const entryCount = Number.isInteger(pool?.entryCount) && pool.entryCount >= 0 ? pool.entryCount : entryDocCount;
+      const weeks = await weeksInSeasonFor(db, pool);
+      snapshot = computeWeeklyPrizeSnapshot(pool?.settings ?? {}, entryCount, weeks, Date.now());
+    }
+    if (!snapshot) return { weeklyPlaces: ranked };
+    const priced = priceWeeklyPlaces(ranked, snapshot);
+    return { weeklyPlaces: priced.rows, weeklyPrize: snapshot };
+  } catch (e) {
+    const code = e instanceof Error ? (e.message.split(':')[0] || 'WEEKLY_PLACES_ERROR') : 'WEEKLY_PLACES_ERROR';
+    console.warn(`[scoreNFLWeek] weekly places not published for ${pool?.id ?? '?'} week ${week}: ${code}`, e);
+    return { weeklyPlacesError: code };
+  }
+}
+
 /**
  * Scores one NFL week, extracted verbatim from the scoreNFLWeek callable. Auth,
  * the ACTIVE_GAMES gate and the pool/games reads stay in the wrapper — the pool
@@ -1477,6 +1541,7 @@ async function scoreWeekPass(
       if (picksThisWeek > 0) {
         const ownPrediction = entry.weeklyTiebreakers?.[week];
         winnerCandidates.push({
+          entryId: doc.id,
           userId: entry.ownerUid,
           userName: entry.userName,
           points,
@@ -1631,7 +1696,7 @@ async function scoreWeekPass(
       // SHARE. Passing the Pick'em diff here would be worse than useless — it
       // would rank Margin players on a number their sheet never collected.
       if (pick) {
-        winnerCandidates.push({ userId: entry.ownerUid, userName: entry.userName, points: weekScore });
+        winnerCandidates.push({ entryId: doc.id, userId: entry.ownerUid, userName: entry.userName, points: weekScore });
       }
     }
   }
@@ -1771,9 +1836,23 @@ async function scoreWeekPass(
       // everyone". `isVoidWeek` is all-cancelled only, so a week with one
       // cancelled game still has a real winner and still gets one.
       const weeklyWinners = isVoidWeek(games) ? [] : computeWeeklyWinners(winnerCandidates);
+
+      // 4b. The Weekly Winners List + frozen weekly prize (PLAN-WEEKLY-PRIZES
+      // §3, §9 A1–A5). Same reveal-safety argument as `weeklyWinners`: this
+      // branch is `!provisional`. The FULL ranking is published (A2); the pot,
+      // the place list, the entry count and the weeks divisor are FROZEN in the
+      // recap at first publication and re-read verbatim on every later pass
+      // (§3b-i) — a rescore re-ranks players against a pot that does not move,
+      // and a commissioner editing settings afterwards affects future weeks
+      // only. Fails CLOSED (A5): any error here leaves the recap without
+      // `weeklyPlaces`, stamps `weeklyPlacesError`, and the week still scores.
+      const priorRecap = (await recapRef.get()).data() as { weeklyPrize?: WeeklyPrizeSnapshot } | undefined;
+      const weeklyPublication = await publishWeeklyPlaces(db, pool, week, winnerCandidates, isVoidWeek(games), priorRecap?.weeklyPrize, entriesSnap.size);
+
       const recapDoc = buildWeeklyRecap({
         poolId, week, poolType: pool.type, sharpUser, closestTie, aliveCount,
         weeklyWinners,
+        ...weeklyPublication,
       });
       // Fenced: creating this doc fires onWeeklyRecapCreated → AI trash-talk, and
       // the later authoritative pass only UPDATEs it, so a recap created from a
