@@ -4,7 +4,7 @@ import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import type { Pool, WeeklyRecap } from '../../types';
 import { weeklyAwardId, type PayoutRecord, type PayoutRecordPrivate } from '@shared/payoutRecords';
-import { buildPoolRoster } from '../../utils/poolRoster';
+import { buildPoolRoster, duesRates } from '../../utils/poolRoster';
 
 /**
  * The commissioner's payment LEDGER (PLAN-PAYMENT-LEDGER T5 — D3/D4/D5/D6,
@@ -113,8 +113,13 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
    */
   const memberRows = useMemo(() => {
     const byUid = new Map<string, { uid: string; name: string; feeOwed: number; paid: boolean; owed: number; settled: number }>();
+    // Same fallback the manager's payment controls use: a legacy Member Record
+    // (or a participant/entry-only row) with no `feeOwed` stamp owes the pool's
+    // entry fee, not $0 (codex r5 on T5).
+    const fallbackFee = duesRates(pool).entryFee;
     for (const r of buildPoolRoster({ pool, members, entries })) {
-      byUid.set(r.uid, { uid: r.uid, name: r.userName ?? r.uid, feeOwed: Number(r.feeOwed ?? 0), paid: r.paidStatus === 'PAID', owed: 0, settled: 0 });
+      const feeOwed = typeof r.feeOwed === 'number' ? r.feeOwed : fallbackFee;
+      byUid.set(r.uid, { uid: r.uid, name: r.userName ?? r.uid, feeOwed, paid: r.paidStatus === 'PAID', owed: 0, settled: 0 });
     }
     for (const r of prizeRows) {
       const row = byUid.get(r.uid) ?? { uid: r.uid, name: r.name, feeOwed: 0, paid: false, owed: 0, settled: 0 };
