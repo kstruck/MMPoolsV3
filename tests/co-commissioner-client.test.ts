@@ -66,6 +66,14 @@ describe('source pins', () => {
     expect(body).toMatch(/where\("type",\s*"in",\s*\["NFL_PICKEM",\s*"NFL_SURVIVOR",\s*"NFL_MARGIN"\]\)/);
   });
 
+  it('the Hub feed has its composite index (array-contains + type) — this repo has shipped two silently missing indexes', () => {
+    const idx = JSON.parse(read('firestore.indexes.json')).indexes as { collectionGroup: string; queryScope: string; fields: { fieldPath: string; arrayConfig?: string; order?: string }[] }[];
+    const hit = idx.find(i => i.collectionGroup === 'pools' && i.queryScope === 'COLLECTION'
+      && i.fields[0]?.fieldPath === 'coManagers' && i.fields[0]?.arrayConfig === 'CONTAINS'
+      && i.fields[1]?.fieldPath === 'type');
+    expect(hit).toBeTruthy();
+  });
+
   it('PoolRoute widens isManager on the NFL branch only', () => {
     const src = read('src/components/routes/PoolRoute.tsx');
     const nflStart = src.indexOf("if (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') {");
@@ -78,9 +86,10 @@ describe('source pins', () => {
     expect(nflBranch).not.toMatch(/isManager=\{isManager\}/);
   });
 
-  it('the members-tab toggle is gated on strict isPoolOwner and sends ONE uid per call (D6)', () => {
+  it('the members-tab toggle is gated on STRICT isPoolManager (owner/managerUid/SA, never coManagers) and sends ONE uid per call (D6/C10)', () => {
     const src = read('src/components/NFLPoolDashboard/NFLManagerView.tsx');
-    expect(src).toMatch(/const viewerIsOwner = isPoolOwner\(user, pool\)/);
+    expect(src).toMatch(/const viewerIsOwner = isPoolManager\(user, pool\)/);
+    expect(src).not.toMatch(/const viewerIsOwner = isNFLPoolCommissioner/);
     expect(src).toMatch(/dbService\.setPoolCoCommissioner\(/);
     expect(src).not.toMatch(/coManagers:\s*\[/); // never a full-array write from the client
   });

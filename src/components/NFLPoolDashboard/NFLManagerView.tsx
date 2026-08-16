@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { getUserMessage } from '../../utils/errorMessages';
-import { isPoolOwner, poolCoManagers } from '../../utils/auth';
+import { isPoolManager, poolCoManagers } from '../../utils/auth';
 import { logger } from '../../utils/logger';
 import type { Pool, NFLGame, User } from '../../types';
 import { NFLManagerBentoDashboard } from './NFLManagerBentoDashboard';
@@ -381,7 +381,10 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // 0); if another tab moved it the server refuses and the snapshot re-renders
   // the row from truth. `remove` presents nothing and always wins.
   const coManagers = poolCoManagers(pool);
-  const viewerIsOwner = isPoolOwner(user, pool);
+  // STRICT isPoolManager: owner / managerUid / SUPER_ADMIN — exactly the set the
+  // callable admits (C10; SA per codex r3) — and NEVER a co-commissioner, since
+  // the strict helper does not read coManagers (D3/D4).
+  const viewerIsOwner = isPoolManager(user, pool);
   const handleToggleCoCommissioner = async (uid: string) => {
     setSavingCoCommissioner(uid);
     setFeedback(null);

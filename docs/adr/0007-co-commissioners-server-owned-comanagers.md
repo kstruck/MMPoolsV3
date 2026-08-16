@@ -29,8 +29,9 @@ day-to-day running of an NFL pool.
   (type-guarded to `NFL_PICKEM`/`NFL_SURVIVOR`/`NFL_MARGIN`); functions
   `isPoolCommissioner(pool, uid)`; client `isNFLPoolCommissioner(user, pool)`.
   Owner-only actions (cancel/close/delete, billing, naming co-commissioners) are
-  gated on helpers that say *owner* by name (`assertPoolOwnerOrManagerNoCo`,
-  `isPoolOwner`), never on "the helper that happens not to know about
+  gated on helpers that say *owner* by name (`assertPoolOwnerOrManagerNoCo`;
+  on the client the strict `isPoolManager`, which admits SUPER_ADMIN exactly as
+  the callable does and never reads `coManagers`), never on "the helper that happens not to know about
   `coManagers`".
 - **Deploy order was the control:** functions went blind to the field first
   (#444), the rules lock landed and every legacy array was audited and cleared
@@ -40,6 +41,10 @@ day-to-day running of an NFL pool.
   `isManager` for the three NFL dashboards and where the Commissioner Hub
   decides what to list; `isPoolOwner` / `isPoolManager` / `canManageEntries`
   stay strict because Bracket, Playoff and Squares surfaces read them.
+- **The Hub feed has a composite index** (`coManagers` CONTAINS + `type` ASC in
+  `firestore.indexes.json`) — Firestore can merge single-field indexes for this
+  shape, but the docs recommend the index for `array-contains` + other clauses
+  and this repo has twice shipped a query whose index was silently missing.
 - **The Hub query shape is load-bearing:** a Firestore LIST rule is proved from
   the query, so `where('coManagers','array-contains',uid)` alone is denied; the
   client also pins `where('type','in', <the three NFL types>)`.
