@@ -10,8 +10,7 @@ import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } 
 import { isPoolType, type PoolType } from "./shared/poolTypes";
 import { nflWeekLabel } from "./shared/nflWeekLabel";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
-import { applyPaidReset, assertEntryAdmitted, assertEntryNameFree, entryCountWrite, entryHasPick, ownerStateAfter, resolveOwnedEntry } from "./lib/multiEntry";
-import { defaultEntryName } from "./shared/multiEntry";
+import { applyPaidReset, assertEntryAdmitted, assertEntryNameFree, entryCountWrite, entryHasPick, freeDefaultEntryName, ownerStateAfter, resolveOwnedEntry } from "./lib/multiEntry";
 import type { MemberRecord } from "./shared/memberRecord";
 import { effectiveWeekLockAt, isGameLocked as isGameLockedAt, effectiveLockSettings, usesWeeklyHardLock, weekLockDecision, ensureHardLockFreeze } from "./lib/effectiveLock";
 import { isTerminalGame, isWeekComplete } from "./lib/weekCompletion";
@@ -524,7 +523,7 @@ export async function submitNFLPicksInternal(
     const entryName: string | undefined = requestedEntryName !== undefined
       ? assertEntryNameFree(requestedEntryName, target)
       : (typeof existingEntry?.entryName === 'string' ? existingEntry.entryName
-        : (existingEntry === null ? defaultEntryName(ownerDisplayName, entryIndex) : undefined));
+        : (existingEntry === null ? freeDefaultEntryName(ownerDisplayName, entryIndex, target) : undefined));
     // The picks map as this write leaves it — `playableEntryCount` is derived
     // from post-write entry state, never from a stored counter (D2).
     let writtenPicks: Record<string, unknown> = {};

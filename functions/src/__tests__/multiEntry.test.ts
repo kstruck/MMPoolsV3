@@ -209,3 +209,13 @@ describe('planMembershipWrite × multi-entry', () => {
     expect(plan.member.data.hasPlayableEntry).toBe(true);
   });
 });
+
+describe('K5 — generated default names are unique too (codex r1 P2)', () => {
+  it('"Kev #3" already taken by an explicitly named entry 2 → entry 3 gets "Kev #3 (2)"', async () => {
+    const { freeDefaultEntryName } = await import('../lib/multiEntry');
+    const owned = [{ id: 'u1', data: {} }, { id: 'e2:u1', data: { entryName: 'kev #3' } }];
+    expect(freeDefaultEntryName('Kev', 3, { owned, ref: { id: 'e3:u1' } })).toBe('Kev #3 (2)');
+    expect(freeDefaultEntryName('Kev', 2, { owned, ref: { id: 'e2:u1' } })).toBe('Kev #2');
+    expect(freeDefaultEntryName('Kev', 1, { owned, ref: { id: 'u1' } })).toBeUndefined();
+  });
+});

@@ -17,8 +17,7 @@ import {
 } from "./schemas/poolExceptions";
 import { usesWeeklyHardLock, normalizeLockBufferMinutes, ensureHardLockFreezeForPoolDoc } from "./lib/effectiveLock";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
-import { applyPaidReset, assertEntryAdmitted, entryCountWrite, entryHasPick, ownerStateAfter, resolveOwnedEntry } from "./lib/multiEntry";
-import { defaultEntryName } from "./shared/multiEntry";
+import { applyPaidReset, assertEntryAdmitted, entryCountWrite, entryHasPick, freeDefaultEntryName, ownerStateAfter, resolveOwnedEntry } from "./lib/multiEntry";
 import type { MemberRecord } from "./shared/memberRecord";
 import {
     assertNoScoringInProgress,
@@ -328,7 +327,7 @@ export const proxyPick = validated(
         // K5 default name for a NEW extra entry; entry #1 shows userName.
         const entryName: string | undefined = typeof existingEntry?.entryName === 'string'
             ? existingEntry.entryName
-            : (existingEntry === null ? defaultEntryName(existingMember?.userName || targetName, entryIndex) : undefined);
+            : (existingEntry === null ? freeDefaultEntryName(existingMember?.userName || targetName, entryIndex, target) : undefined);
         let writtenPicks: Record<string, unknown> = {};
         // Did this call actually commit a selection? Only then may the latch move.
         let committedPick = false;

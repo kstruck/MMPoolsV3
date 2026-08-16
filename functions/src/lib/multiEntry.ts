@@ -19,7 +19,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import type { DocumentReference, Transaction } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
-import { entryIdFor, effectiveMaxEntriesPerUser, ENTRY_NAME_MAX } from "../shared/multiEntry";
+import { defaultEntryName, entryIdFor, effectiveMaxEntriesPerUser, ENTRY_NAME_MAX } from "../shared/multiEntry";
 import { deriveEntryCount } from "../shared/memberRecord";
 
 export interface OwnedEntry { id: string; data: Record<string, any> }
@@ -119,6 +119,30 @@ export function assertEntryNameFree(
     && typeof e.data.entryName === 'string' && e.data.entryName.trim().toLowerCase() === name.toLowerCase());
   if (clash) {
     throw new HttpsError('already-exists', `ENTRY_NAME_TAKEN: you already have an entry named "${clash.data.entryName}".`);
+  }
+  return name;
+}
+
+/**
+ * K5 default for a NEW extra entry — `"Name #n"`, made unique against the
+ * owner's other entries by construction (codex r1: an owner who explicitly
+ * named entry 2 "Kev #3" and then creates entry 3 would otherwise get a
+ * duplicate default). Appends a small suffix until free. Undefined for entry #1.
+ */
+export function freeDefaultEntryName(
+  userName: string,
+  entryIndex: number,
+  target: Pick<EntryTarget, 'owned'> & { ref: { id: string } },
+): string | undefined {
+  const base = defaultEntryName(userName, entryIndex);
+  if (!base) return undefined;
+  const taken = new Set(target.owned
+    .filter(e => e.id !== target.ref.id && typeof e.data.entryName === 'string')
+    .map(e => (e.data.entryName as string).trim().toLowerCase()));
+  let name = base.slice(0, ENTRY_NAME_MAX);
+  for (let k = 2; taken.has(name.toLowerCase()); k++) {
+    const suffix = ` (${k})`;
+    name = base.slice(0, ENTRY_NAME_MAX - suffix.length) + suffix;
   }
   return name;
 }
