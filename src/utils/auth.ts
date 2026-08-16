@@ -36,8 +36,10 @@ export const NFL_CO_COMMISSIONER_POOL_TYPES: readonly string[] = ['NFL_PICKEM', 
  * absent on every non-NFL pool and on any pool where nobody has been named.
  * Never trust its shape blindly: it was client-writable before the T1 lock.
  */
-export const poolCoManagers = (pool: { coManagers?: unknown } | null | undefined): string[] => {
-    const raw = pool?.coManagers;
+export const poolCoManagers = (pool: object | null | undefined): string[] => {
+    // `object`, not `{ coManagers?: unknown }` — the `Pool` union's non-NFL
+    // members declare no such field and weak-type checking refuses them (tsc -b).
+    const raw = (pool as { coManagers?: unknown } | null | undefined)?.coManagers;
     return Array.isArray(raw) ? raw.filter((u): u is string => typeof u === 'string') : [];
 };
 
@@ -51,7 +53,7 @@ export const poolCoManagers = (pool: { coManagers?: unknown } | null | undefined
  */
 export const isNFLPoolCommissioner = (
     user: User | null | undefined,
-    pool: { ownerId?: string; managerUid?: string; type?: string; coManagers?: unknown } | null | undefined,
+    pool: { ownerId?: string; managerUid?: string; type?: string } | null | undefined,
 ): boolean => {
     if (isPoolManager(user, pool)) return true;
     if (!user || !pool) return false;
