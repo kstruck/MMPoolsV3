@@ -248,6 +248,13 @@ export const recordPoolPayouts = onCall(async (request) => {
         }
         throw new HttpsError('failed-precondition', `STALE_AWARD_SUPERSEDED: ${a.staleAwardId} was already re-recorded; the live award is ${chainLive.id} and it no longer matches the recap — re-record with staleAwardId=${chainLive.id}.`);
       }
+      // The clicked id IS the live award and it already matches the recap —
+      // nothing to correct; a retry / second tab must not grow the chain
+      // (qodo #8 on #455).
+      if (liveMatches && live && live.id === chainLive.id) {
+        out.push({ awardRef: chainLive.ref, a, write: false });
+        continue;
+      }
       // Supersede the live stale award with a fresh record at the current base
       // (the base itself when the place changed and it is free, else ~k).
       let k = 1;

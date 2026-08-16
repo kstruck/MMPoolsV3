@@ -167,6 +167,10 @@ describe('PLAN-PAYMENT-LEDGER T4 — recordPoolPayouts weekly awards + setPayout
     const r4 = await record(HOST, [{ uid: ALICE, entryId: ALICE, amount: 18, kind: 'PLACE', week: 1, settled: true, staleAwardId: 'wk1-pl-alice-p1' }]);
     expect(r4.awardIds).toEqual(['wk1-pl-alice-p1~2']);
     expect(r4.written).toBe(0);
+    // Re-recording against the LIVE id when it already matches does not grow the chain (qodo #8 on #455).
+    const r5 = await record(HOST, [{ uid: ALICE, entryId: ALICE, amount: 18, kind: 'PLACE', week: 1, settled: true, staleAwardId: 'wk1-pl-alice-p1~2' }]);
+    expect(r5.awardIds).toEqual(['wk1-pl-alice-p1~2']);
+    expect(r5.written).toBe(0);
     // Profit-side invariant: exactly one LIVE record for Alice.
     const live = (await poolRef().collection('payoutRecords').where('uid', '==', ALICE).get()).docs.filter(d => !d.data().supersededBy);
     expect(live.map(d => d.id)).toEqual(['wk1-pl-alice-p1~2']);
