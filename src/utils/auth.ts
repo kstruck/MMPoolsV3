@@ -54,8 +54,18 @@ export const poolCoManagers = (pool: object | null | undefined): string[] => {
 export const isNFLPoolCommissioner = (
     user: User | null | undefined,
     pool: { ownerId?: string; managerUid?: string; type?: string } | null | undefined,
+): boolean => isPoolManager(user, pool) || isNamedNFLCoCommissioner(user, pool);
+
+/**
+ * True ONLY for a uid actually named in `coManagers` on an NFL pool — no owner,
+ * manager or SUPER_ADMIN implication. This is what the Commissioner Hub and its
+ * "Co-Commissioner" chip key on: the Hub lists pools you OWN or are NAMED on,
+ * never every pool a super admin could administer (codex r6 on PR-B).
+ */
+export const isNamedNFLCoCommissioner = (
+    user: User | null | undefined,
+    pool: { type?: string } | null | undefined,
 ): boolean => {
-    if (isPoolManager(user, pool)) return true;
     if (!user || !pool) return false;
     return NFL_CO_COMMISSIONER_POOL_TYPES.includes(pool.type ?? '') && poolCoManagers(pool).includes(user.id);
 };

@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { isNFLPoolCommissioner, isPoolOwner, isPoolManager, canManageEntries, poolCoManagers } from '../src/utils/auth';
+import { isNFLPoolCommissioner, isNamedNFLCoCommissioner, isPoolOwner, isPoolManager, canManageEntries, poolCoManagers } from '../src/utils/auth';
 import type { User } from '../src/types';
 
 const root = resolve(__dirname, '..');
@@ -47,6 +47,19 @@ describe('isNFLPoolCommissioner (D3 — the ONE widened client predicate)', () =
     expect(isNFLPoolCommissioner(co, { ...nfl, coManagers: 'co' as unknown as string[] })).toBe(false);
     expect(poolCoManagers({ coManagers: ['a', 7, null, 'b'] })).toEqual(['a', 'b']);
     expect(poolCoManagers(null)).toEqual([]);
+  });
+
+  it('isNamedNFLCoCommissioner is membership in coManagers ONLY — no owner, manager or SUPER_ADMIN implication (the Hub keys on it)', () => {
+    expect(isNamedNFLCoCommissioner(co, nfl)).toBe(true);
+    expect(isNamedNFLCoCommissioner(owner, nfl)).toBe(false);
+    expect(isNamedNFLCoCommissioner(sa, nfl)).toBe(false);
+    expect(isNamedNFLCoCommissioner(co, { ...nfl, type: 'SQUARES' })).toBe(false);
+  });
+
+  it('the Hub filters on owner OR named co-commissioner, never the SUPER_ADMIN-admitting helper', () => {
+    const src = read('src/components/ParticipantDashboard.tsx');
+    expect(src).not.toMatch(/isNFLPoolCommissioner/);
+    expect((src.match(/isPoolOwner\(user, p\) \|\| isNamedNFLCoCommissioner\(user, p\)/g) ?? []).length).toBe(3);
   });
 
   it('leaves the strict helpers strict — a co-manager is NOT an owner/manager/entry-manager', () => {

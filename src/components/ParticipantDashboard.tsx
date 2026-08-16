@@ -6,7 +6,7 @@ import { isNFLSeasonPool, getMyNFLEntry, subscribeToSeasonGames, computePendingS
 import { formatDeadline } from '../utils/formatTime';
 import { nflWeekLabel } from '../utils/nflWeekLabel';
 import { poolSeasonType } from '../utils/nflPending';
-import { isSuperAdmin, isNFLPoolCommissioner } from '../utils/auth';
+import { isSuperAdmin, isPoolOwner, isNamedNFLCoCommissioner } from '../utils/auth';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
@@ -139,8 +139,10 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         // Helper to process and filter pools
         const processPools = (allPools: Pool[]) => {
             const participating = allPools.filter(p => {
-                // PLAN-CO-COMMISSIONERS D7: an NFL co-commissioner is listed as one.
-                const isOwner = isNFLPoolCommissioner(user, p);
+                // PLAN-CO-COMMISSIONERS D7: owner/managerUid OR NAMED NFL co-commissioner —
+                // deliberately NOT the SUPER_ADMIN-admitting helper, or a super admin's
+                // "my pools" would become every pool (codex r6).
+                const isOwner = isPoolOwner(user, p) || isNamedNFLCoCommissioner(user, p);
 
                 // Squares Logic - Only show if user currently owns at least one square
                 if (p.type === 'SQUARES') {
@@ -512,7 +514,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                     {[
                         { id: 'insights', label: 'Empire Overview', icon: Activity },
                         { id: 'entries', label: 'My Entries', icon: LayoutGrid, count: counts.entries },
-                        ...(myPools.filter(p => isNFLPoolCommissioner(user, p)).length > 0 ? [{ id: 'commissioner', label: 'Commissioner Hub', icon: Crown }] : []),
+                        ...(myPools.filter(p => isPoolOwner(user, p) || isNamedNFLCoCommissioner(user, p)).length > 0 ? [{ id: 'commissioner', label: 'Commissioner Hub', icon: Crown }] : []),
                         { id: 'live', label: 'Live Pools', count: counts.live },
                         { id: 'open', label: 'Open', count: counts.open },
                         { id: 'completed', label: 'Completed', count: counts.completed },
@@ -544,7 +546,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                         <p className="text-muted text-xs font-display font-bold uppercase tracking-[0.08em]">Loading active roster...</p>
                     </div>
                 ) : activeTab === 'commissioner' ? (
-                    <GlobalCommissionerDashboard user={user} managedPools={myPools.filter(p => isNFLPoolCommissioner(user, p))} />
+                    <GlobalCommissionerDashboard user={user} managedPools={myPools.filter(p => isPoolOwner(user, p) || isNamedNFLCoCommissioner(user, p))} />
                 ) : activeTab === 'insights' ? (
                     /* INSIGHTS TAB - PREMIUM RECHARTS DASHBOARD */
                     <div className="space-y-8 animate-in fade-in duration-300">

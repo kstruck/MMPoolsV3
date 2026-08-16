@@ -4,7 +4,7 @@ import { Crown, DollarSign, Users, Settings, ArrowRight, Trophy } from 'lucide-r
 import type { User, Pool } from '../../types';
 import { Button } from '../ui';
 import { isActiveManagedPool, isNFLSeasonPoolType } from '../../utils/poolSport';
-import { isPoolOwner } from '../../utils/auth';
+import { isPoolOwner, isNamedNFLCoCommissioner } from '../../utils/auth';
 
 interface GlobalCommissionerDashboardProps {
   user: User;
@@ -105,7 +105,7 @@ export const GlobalCommissionerDashboard: React.FC<GlobalCommissionerDashboardPr
         <div className="min-w-0">
           <h4 className="text-[color:var(--text)] font-display font-bold uppercase truncate">
             {pool.name}
-            {!isPoolOwner(user, pool) && <span className="ml-2 align-middle px-1.5 py-0.5 rounded-full text-[8px] font-display font-bold tracking-[0.08em] bg-gold-500/15 text-gold-700 dark:text-gold-400 border border-gold-500/30">Co-Commissioner</span>}
+            {!isPoolOwner(user, pool) && isNamedNFLCoCommissioner(user, pool) && <span className="ml-2 align-middle px-1.5 py-0.5 rounded-full text-[8px] font-display font-bold tracking-[0.08em] bg-gold-500/15 text-gold-700 dark:text-gold-400 border border-gold-500/30">Co-Commissioner</span>}
           </h4>
           <p className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em]">
             <span className="num">{players}</span> Players{dues > 0 && <> • <span className="num">{money(dues)}</span> dues</>}
