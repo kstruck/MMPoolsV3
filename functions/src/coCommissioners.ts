@@ -60,6 +60,14 @@ export const setPoolCoCommissioner = validated(
             const snap = await tx.get(poolRef);
             if (!snap.exists) throw new HttpsError('not-found', 'Pool not found.');
             const pool = snap.data() as any;
+            // Re-check authority on the EXACT version being written (codex r1):
+            // ownership can move between the pre-read and this commit, and a
+            // just-revoked owner/manager must not slip a change onto the new
+            // owner's pool. The pre-read gate above only spares an unauthorized
+            // caller the transaction; this is the one that binds.
+            if (claimRole !== 'SUPER_ADMIN' && !isPoolOwnerOrManager(pool, actorUid)) {
+                throw new HttpsError('permission-denied', 'Only the pool owner can name co-commissioners.');
+            }
             if (!isCoCommissionerPoolType(pool.type)) {
                 throw new HttpsError('failed-precondition', 'Co-commissioners are available on NFL pools only.');
             }
