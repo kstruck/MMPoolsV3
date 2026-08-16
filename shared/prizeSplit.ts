@@ -131,7 +131,10 @@ export function splitPrizes(input: PrizeSplitInput): PrizeSplitResult {
     throw new Error('PRIZE_SPLIT_DUPLICATE_ID: an entry id appears more than once in ranked');
   }
 
-  const awards: Record<string, number> = {};
+  // Null-prototype: an entry id is a Firestore doc id and `__proto__` is a legal
+  // one — on a plain object that assignment hits the inherited setter and the
+  // award vanishes (codex r2 on #451).
+  const awards: Record<string, number> = Object.create(null);
   let awarded = 0;
   for (const [rank, ids] of groups) {
     const k = ids.length;

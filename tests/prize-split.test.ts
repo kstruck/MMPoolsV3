@@ -117,6 +117,11 @@ describe('splitPrizes — refuses ambiguous input (§4b: throw, never guess)', (
     // Gaps are fine (a subset of the ranking): 1 then 5.
     expect(splitPrizes({ places: P3, pot: 100, ranked: [{ id: 'a', rank: 1 }, { id: 'e', rank: 5 }] }).awards).toEqual({ a: 50, e: 0 });
   });
+  it('an entry id of __proto__ (a legal Firestore doc id) keeps its award — codex r2 on #451', () => {
+    const r = splitPrizes({ places: P3, pot: 100, ranked: [{ id: '__proto__', rank: 1 }, { id: 'b', rank: 2 }] });
+    expect(r.awards['__proto__']).toBe(50);
+    expect(Object.keys(r.awards)).toEqual(['__proto__', 'b']);
+  });
   it('a duplicate entry id throws', () => {
     expect(() => splitPrizes({ places: P3, pot: 100, ranked: [{ id: 'a', rank: 1 }, { id: 'a', rank: 1 }] })).toThrow(/DUPLICATE_ID/);
   });
