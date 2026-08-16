@@ -174,13 +174,28 @@ export const recordPoolPayouts = onCall(async (request) => {
       if (!places || !places.length || !prize) {
         throw new HttpsError('failed-precondition', `WEEK_NOT_PUBLISHED: week ${a.week} has no published weekly places/prize yet.`);
       }
-      const row = places.find(p => p.entryId === a.entryId);
+      const foundRow = places.find(p => p.entryId === a.entryId);
+      // A REVERSAL (codex r6): after a rescore the entry may have dropped out of
+      // the paid places entirely (or below any prize). The old award is still
+      // live and counts in Profit; the ledger corrects it by re-recording a
+      // ZERO weekly award via staleAwardId, which supersedes the old one. Only
+      // this path accepts amount 0 / a missing row, and only WITH a stale id.
+      const reversal = a.staleAwardId !== undefined && (foundRow === undefined || (foundRow.prize ?? 0) <= 0);
+      if (reversal) {
+        if (a.amount !== 0) throw new HttpsError('failed-precondition', `NO_PRIZE: entry ${a.entryId} has no prize in week ${a.week} any more — re-record with amount 0 to reverse the old award.`);
+        if (foundRow && foundRow.userId !== a.uid) throw new HttpsError('failed-precondition', `ENTRY_NOT_OWNED: entry ${a.entryId} is not owned by ${a.uid}.`);
+      }
+      const row = reversal
+        ? { entryId: a.entryId!, userId: a.uid, rank: foundRow?.rank ?? 0, prize: 0 }
+        : foundRow;
       if (!row) throw new HttpsError('failed-precondition', `NOT_IN_WEEKLY_PLACES: entry ${a.entryId} is not in week ${a.week}'s published places.`);
       if (row.userId !== a.uid) throw new HttpsError('failed-precondition', `ENTRY_NOT_OWNED: entry ${a.entryId} is not owned by ${a.uid}.`);
-      if (a.place !== undefined && a.place !== row.rank) throw new HttpsError('failed-precondition', `PLACE_MISMATCH: entry ${a.entryId} finished ${row.rank} in week ${a.week}, not ${a.place}.`);
-      const frozenPrize = row.prize ?? 0;
-      if (frozenPrize <= 0) throw new HttpsError('failed-precondition', `NO_PRIZE: entry ${a.entryId} has no prize at place ${row.rank} in week ${a.week}.`);
-      if (a.amount !== frozenPrize) throw new HttpsError('failed-precondition', `AMOUNT_MISMATCH: the published prize for entry ${a.entryId} in week ${a.week} is $${frozenPrize}; record a BONUS/ADJUSTMENT for a different figure.`);
+      if (!reversal) {
+        if (a.place !== undefined && a.place !== row.rank) throw new HttpsError('failed-precondition', `PLACE_MISMATCH: entry ${a.entryId} finished ${row.rank} in week ${a.week}, not ${a.place}.`);
+        const frozenPrize = row.prize ?? 0;
+        if (frozenPrize <= 0) throw new HttpsError('failed-precondition', `NO_PRIZE: entry ${a.entryId} has no prize at place ${row.rank} in week ${a.week}.`);
+        if (a.amount !== frozenPrize) throw new HttpsError('failed-precondition', `AMOUNT_MISMATCH: the published prize for entry ${a.entryId} in week ${a.week} is $${frozenPrize}; record a BONUS/ADJUSTMENT for a different figure.`);
+      }
       a.place = row.rank;
 
       const base = weeklyAwardId(a.week, a.entryId!, row.rank);

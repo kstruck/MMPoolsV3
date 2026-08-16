@@ -174,6 +174,23 @@ describe('PLAN-PAYMENT-LEDGER T4 — recordPoolPayouts weekly awards + setPayout
     // Profit-side invariant: exactly one LIVE record for Alice.
     const live = (await poolRef().collection('payoutRecords').where('uid', '==', ALICE).get()).docs.filter(d => !d.data().supersededBy);
     expect(live.map(d => d.id)).toEqual(['wk1-pl-alice-p1~2']);
+    // A third rescore drops Alice out of the paid places entirely: a plain re-record with the old figure is refused,
+    // and a REVERSAL (amount 0 + staleAwardId) supersedes the live award so Profit no longer counts it (codex r6).
+    await poolRef().collection('weekly_recaps').doc('week_1').update({
+      weeklyPlaces: [
+        { entryId: BOB, userId: BOB, userName: BOB, points: 3, rank: 1, prize: 18 },
+        { entryId: HOST, userId: HOST, userName: HOST, points: 2, rank: 2, prize: 12 },
+        { entryId: ALICE, userId: ALICE, userName: ALICE, points: 0, rank: 3 },
+      ],
+    });
+    await expect(record(HOST, [{ uid: ALICE, entryId: ALICE, amount: 18, kind: 'PLACE', week: 1, settled: true, staleAwardId: 'wk1-pl-alice-p1~2' }])).rejects.toThrow(/NO_PRIZE/);
+    const r6 = await record(HOST, [{ uid: ALICE, entryId: ALICE, amount: 0, kind: 'PLACE', week: 1, settled: true, staleAwardId: 'wk1-pl-alice-p1~2' }]);
+    expect(r6.awardIds).toEqual(['wk1-pl-alice-p3']);
+    expect((await rec('wk1-pl-alice-p1~2')).data()!.supersededBy).toBe('wk1-pl-alice-p3');
+    const live2 = (await poolRef().collection('payoutRecords').where('uid', '==', ALICE).get()).docs.filter(d => !d.data().supersededBy);
+    expect(live2.map(d => [d.id, d.data().amount])).toEqual([['wk1-pl-alice-p3', 0]]);
+    // A plain (no stale id) zero record is still refused — reversal needs the stale id.
+    await expect(record(HOST, [{ uid: HOST, entryId: HOST, amount: 0, kind: 'PLACE', week: 1, settled: true }])).rejects.toThrow(/AMOUNT_MISMATCH/);
     // Two identical weekly awards in one batch are refused (codex r1).
     await expect(record(HOST, [
       { uid: BOB, entryId: BOB, amount: 12, kind: 'PLACE', week: 1, settled: true },
