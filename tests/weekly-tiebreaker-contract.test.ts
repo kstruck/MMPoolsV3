@@ -3,10 +3,17 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   effectiveWeeklyTiebreaker,
+  frozenTiebreakTargetFor,
+  PICKABLE_WEEKLY_TIEBREAKERS,
+  DEFAULT_NEW_POOL_TIEBREAKER,
+  resolveTiebreakTargetIds,
+  sameTargetIds,
+  tiebreakTargetSentence,
   tiebreakerAsksForPrediction,
   tiebreakerCopy,
   WEEKLY_TIEBREAKER_VALUES,
 } from '../shared/nflTiebreaker';
+import { WEEKLY_TIEBREAKER_OPTIONS } from '../shared/nflTiebreakerOptions';
 
 /**
  * The weekly tie-breaker contract (PLAN-WEEKLY-TIEBREAKERS §3–§4).
@@ -109,7 +116,11 @@ describe('wiring — no surface re-derives the rule or hard-codes the copy', () 
   it('the scorer reads the rule and passes it to the target computation', () => {
     const src = read('functions/src/nflPools.ts');
     expect(src).toContain('effectiveWeeklyTiebreaker');
-    expect(src).toContain('computeMNFTiebreakerTotal(games, tiebreakerRule)');
+    // ...and the FROZEN target beside it (PLAN-WEEKLY-PRIZES §2b): the first
+    // submission of a week pins the game(s) the sheet named, and the scorer
+    // must judge against that pin, not the live schedule.
+    expect(src).toContain('computeMNFTiebreakerTotal(games, tiebreakerRule, frozenTarget)');
+    expect(src).toContain('frozenTiebreakTargetFor(');
   });
 
   it('only entries that PLAYED the week become weekly-winner candidates', () => {
@@ -160,5 +171,99 @@ describe('wiring — no surface re-derives the rule or hard-codes the copy', () 
     for (const f of ['src/types/nflPoolTypes.ts', 'functions/src/nflPoolTypes.ts']) {
       expect(read(f)).toContain('weeklyWinners?: Array<{ userId: string; userName: string; points: number; tiebreakDiff?: number }>');
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PLAN-WEEKLY-PRIZES B1 (§2a–§2b, D1–D3; signed 2026-08-15)
+// ---------------------------------------------------------------------------
+
+describe('B1 — the option set (§2a)', () => {
+  it('MNF_FIRST_GAME is a value; MNF_COMBINED is accepted but NOT pickable; the new-pool default is MNF_LAST_GAME (D1)', () => {
+    expect(WEEKLY_TIEBREAKER_VALUES).toContain('MNF_FIRST_GAME');
+    expect(WEEKLY_TIEBREAKER_VALUES).toContain('MNF_COMBINED');
+    expect(PICKABLE_WEEKLY_TIEBREAKERS).not.toContain('MNF_COMBINED');
+    expect(PICKABLE_WEEKLY_TIEBREAKERS).toEqual(['MNF_LAST_GAME', 'MNF_FIRST_GAME', 'NONE']);
+    expect(DEFAULT_NEW_POOL_TIEBREAKER).toBe('MNF_LAST_GAME');
+    expect(WEEKLY_TIEBREAKER_OPTIONS.map(o => o.value)).toEqual([...PICKABLE_WEEKLY_TIEBREAKERS]);
+  });
+  it('absent STILL resolves to MNF_COMBINED (D1 — nothing moves under an in-flight week); MNF_FIRST_GAME passes through', () => {
+    expect(effectiveWeeklyTiebreaker({})).toBe('MNF_COMBINED');
+    expect(effectiveWeeklyTiebreaker({ weeklyTiebreaker: 'MNF_FIRST_GAME' })).toBe('MNF_FIRST_GAME');
+  });
+  it('the rules page names every rule, including MNF_FIRST_GAME (codex r2 on #452)', () => {
+    const rules = read('src/components/NFLPoolDashboard/NFLPoolRules.tsx');
+    expect(rules).toContain("tiebreakerRule === 'MNF_FIRST_GAME' ? 'Closest to the FIRST Monday game total'");
+  });
+  it('the wizard writes the default explicitly and offers only the pickable list; the manager select renders legacy MNF_COMBINED read-only', () => {
+    const wizard = read('src/components/wizard/create/CreateNFLPickemPool.tsx');
+    expect(wizard).toContain('weeklyTiebreaker: DEFAULT_NEW_POOL_TIEBREAKER');
+    expect(wizard).toContain('options={[...WEEKLY_TIEBREAKER_OPTIONS]}');
+    expect(wizard).not.toMatch(/value: 'MNF_COMBINED'/);
+    const manager = read('src/components/NFLPoolDashboard/NFLManagerView.tsx');
+    expect(manager).toContain("weeklyTiebreaker === 'MNF_COMBINED' && (");
+    expect(manager).toContain('WEEKLY_TIEBREAKER_OPTIONS.map(');
+  });
+});
+
+describe('B1 — resolveTiebreakTargetIds (§2b): one function for the sheet, the freeze and the scorer', () => {
+  const sun = { id: 'sun', startTime: 100, isMonday: false };
+  const mon1 = { id: 'mon1', startTime: 300, isMonday: true };
+  const mon2 = { id: 'mon2', startTime: 400, isMonday: true };
+  const wk = [mon2, sun, mon1]; // deliberately unordered
+
+  it('LAST → last Monday game to kick off; FIRST → first; COMBINED → every Monday game in kickoff order; NONE → []', () => {
+    expect(resolveTiebreakTargetIds(wk, 'MNF_LAST_GAME')).toEqual(['mon2']);
+    expect(resolveTiebreakTargetIds(wk, 'MNF_FIRST_GAME')).toEqual(['mon1']);
+    expect(resolveTiebreakTargetIds(wk, 'MNF_COMBINED')).toEqual(['mon1', 'mon2']);
+    expect(resolveTiebreakTargetIds(wk, 'NONE')).toEqual([]);
+  });
+  it('same start time → id decides, deterministically (two passes cannot pick different games)', () => {
+    const a = { id: 'a', startTime: 300, isMonday: true };
+    const b = { id: 'b', startTime: 300, isMonday: true };
+    expect(resolveTiebreakTargetIds([b, a], 'MNF_LAST_GAME')).toEqual(['b']);
+    expect(resolveTiebreakTargetIds([b, a], 'MNF_FIRST_GAME')).toEqual(['a']);
+  });
+  it('Monday-less week: LAST and FIRST fall back to the FINAL game of the week; legacy COMBINED does NOT (§0: an in-flight legacy week keeps its meaning)', () => {
+    const early = { id: 'early', startTime: 50, isMonday: false };
+    expect(resolveTiebreakTargetIds([sun, early], 'MNF_LAST_GAME')).toEqual(['sun']);
+    expect(resolveTiebreakTargetIds([sun, early], 'MNF_FIRST_GAME')).toEqual(['sun']);
+    expect(resolveTiebreakTargetIds([sun, early], 'MNF_COMBINED')).toEqual([]);
+  });
+  it('empty schedule → []', () => {
+    expect(resolveTiebreakTargetIds([], 'MNF_LAST_GAME')).toEqual([]);
+  });
+  it('sameTargetIds is order-sensitive equality; frozenTiebreakTargetFor reads the pool-week map and treats junk as absent', () => {
+    expect(sameTargetIds(['a', 'b'], ['a', 'b'])).toBe(true);
+    expect(sameTargetIds(['a', 'b'], ['b', 'a'])).toBe(false);
+    expect(sameTargetIds(undefined, ['a'])).toBe(false);
+    expect(frozenTiebreakTargetFor({ frozenTiebreakTargets: { 3: ['x'] } }, 3)).toEqual(['x']);
+    expect(frozenTiebreakTargetFor({ frozenTiebreakTargets: { '3': ['x'] } }, 3)).toEqual(['x']);
+    // An EMPTY list is a real frozen state ("no target this week"), not absence (qodo #9 on #452).
+    expect(frozenTiebreakTargetFor({ frozenTiebreakTargets: { 3: [] } }, 3)).toEqual([]);
+    expect(frozenTiebreakTargetFor({ frozenTiebreakTargets: { 3: 'x' } }, 3)).toBeUndefined();
+    expect(frozenTiebreakTargetFor({}, 3)).toBeUndefined();
+  });
+  it('tiebreakTargetSentence names the actual game(s), and says so when the fallback is in play (§2b(2))', () => {
+    const games = [
+      { id: 'sun', isMonday: false, homeTeam: { abbreviation: 'MIA' }, awayTeam: { abbreviation: 'BUF' } },
+      { id: 'mon1', isMonday: true, homeTeam: { abbreviation: 'DAL' }, awayTeam: { abbreviation: 'NYG' } },
+      { id: 'mon2', isMonday: true, homeTeam: { abbreviation: 'SF' }, awayTeam: { abbreviation: 'SEA' } },
+    ];
+    expect(tiebreakTargetSentence(['mon2'], games)).toBe("This week's tiebreaker game: SEA at SF.");
+    expect(tiebreakTargetSentence(['mon1', 'mon2'], games)).toBe("This week's tiebreaker games: NYG at DAL + SEA at SF.");
+    expect(tiebreakTargetSentence(['sun'], games)).toBe('No Monday game this week — the tiebreaker is the final game of the week: BUF at MIA.');
+    expect(tiebreakTargetSentence([], games)).toBeNull();
+    expect(tiebreakTargetSentence(['gone'], games)).toBeNull();
+  });
+  it('the sheet, the submit path and the scorer all read the ONE resolver + the frozen map', () => {
+    expect(read('src/components/NFLPoolDashboard/PickemPickEntry.tsx')).toContain('resolveTiebreakTargetIds(games, tiebreakerRule)');
+    expect(read('src/components/NFLPoolDashboard/PickemPickEntry.tsx')).toContain('displayedTiebreakTargetIds: showTiebreaker ? tiebreakTargetIds : undefined');
+    const fn = read('functions/src/nflPools.ts');
+    expect(fn).toContain('resolveTiebreakTargetIds(games, tiebreakRule)');
+    expect(fn).toContain('TIEBREAK_TARGET_STALE');
+    expect(fn).toContain('frozenTiebreakTargets.' + '${week}');
+    expect(read('functions/src/schemas/poolCore.ts')).toContain('displayedTiebreakTargetIds');
+    expect(read('firestore.rules')).toContain("'frozenTiebreakTargets'");
   });
 });

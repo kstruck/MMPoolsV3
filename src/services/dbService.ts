@@ -1485,7 +1485,7 @@ export const dbService = {
     },
 
     /** `entryIndex` (1..max, default 1) + `entryName` — PLAN-MULTI-ENTRY T2; the server derives the entry id from the caller's uid. */
-    submitNFLPicks: async (data: { poolId: string; week: number; picks: Record<string, string>; confidence?: Record<string, number>; tiebreakerPrediction?: number; requestId?: string; entryIndex?: number; entryName?: string }): Promise<void> => {
+    submitNFLPicks: async (data: { poolId: string; week: number; picks: Record<string, string>; confidence?: Record<string, number>; tiebreakerPrediction?: number; requestId?: string; entryIndex?: number; entryName?: string; displayedTiebreakTargetIds?: string[] }): Promise<void> => {
         try {
             const submitNFLPicksFn = httpsCallable(functions, 'submitNFLPicks');
             await submitNFLPicksFn(withCorrelationId(data));

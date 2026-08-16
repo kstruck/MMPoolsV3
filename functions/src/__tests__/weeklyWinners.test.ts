@@ -162,10 +162,38 @@ describe('computeMNFTiebreakerTotal — the rule chooses the target', () => {
     expect(computeMNFTiebreakerTotal([early, late], 'NONE')).toBeNull();
   });
 
-  it('no Monday game means no target, under every rule', () => {
-    const sunday = game('g_sun', { isMonday: false, scores: { home: 10, away: 7 } });
-    expect(computeMNFTiebreakerTotal([sunday], 'MNF_COMBINED')).toBeNull();
-    expect(computeMNFTiebreakerTotal([sunday], 'MNF_LAST_GAME')).toBeNull();
+  it('no Monday game: legacy MNF_COMBINED has no target; LAST/FIRST fall back to the final game of the week (PLAN-WEEKLY-PRIZES §2b)', () => {
+    const early = game('g_early', { isMonday: false, startTime: 100, scores: { home: 3, away: 3 } });
+    const sunday = game('g_sun', { isMonday: false, startTime: 200, scores: { home: 10, away: 7 } });
+    expect(computeMNFTiebreakerTotal([early, sunday], 'MNF_COMBINED')).toBeNull();
+    expect(computeMNFTiebreakerTotal([early, sunday], 'MNF_LAST_GAME')).toBe(17);
+    expect(computeMNFTiebreakerTotal([early, sunday], 'MNF_FIRST_GAME')).toBe(17);
+  });
+
+  it('MNF_FIRST_GAME sums only the FIRST Monday game to kick off — the exact mirror of MNF_LAST_GAME', () => {
+    expect(computeMNFTiebreakerTotal([early, late], 'MNF_FIRST_GAME')).toBe(
+      (early.scores!.home) + (early.scores!.away),
+    );
+  });
+
+  it('a FROZEN target list wins over the live schedule, and a frozen game that is CANCELLED or gone yields null (D3: tie shared)', () => {
+    // Frozen to the early game only, even though the rule would pick the late one.
+    expect(computeMNFTiebreakerTotal([early, late], 'MNF_LAST_GAME', [early.id])).toBe(
+      (early.scores!.home) + (early.scores!.away),
+    );
+    // Legacy combined pool frozen to BOTH Monday games sums both.
+    expect(computeMNFTiebreakerTotal([early, late], 'MNF_COMBINED', [early.id, late.id])).toBe(51);
+    // Frozen game no longer in the schedule → no target.
+    expect(computeMNFTiebreakerTotal([late], 'MNF_LAST_GAME', [early.id])).toBeNull();
+    // Frozen game cancelled → no target.
+    const cancelled = game(early.id, { ...early, status: 'CANCELLED' } as never);
+    expect(computeMNFTiebreakerTotal([cancelled, late], 'MNF_LAST_GAME', [early.id])).toBeNull();
+    // An EMPTY frozen list is a real frozen state — "no target this week" — and
+    // does NOT fall through to the rule (qodo #9 on #452); only undefined does.
+    expect(computeMNFTiebreakerTotal([early, late], 'MNF_LAST_GAME', [])).toBeNull();
+    expect(computeMNFTiebreakerTotal([early, late], 'MNF_LAST_GAME', undefined)).toBe(
+      (late.scores!.home) + (late.scores!.away),
+    );
   });
 
   it('MNF_COMBINED waits for EVERY Monday game', () => {

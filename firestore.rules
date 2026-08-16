@@ -164,6 +164,11 @@ service cloud.firestore {
           // record of a deadline that already passed and reopen that week by
           // widening the lock buffer.
           'hardLockByWeek',
+          // Frozen weekly tiebreak TARGET game ids (PLAN-WEEKLY-PRIZES §2b).
+          // Written once per pool-week by the first submitNFLPicks of that week
+          // and read by every later sheet and by the scorer; a manager who could
+          // rewrite the map could re-point predictions members already made.
+          'frozenTiebreakTargets',
           // Scorer-owned state (PLAN-REALTIME-SCORING §3a, PR-B′). Every one of
           // these is a field a manager could otherwise use to undo the reveal
           // guarantee or the scoring mutex:

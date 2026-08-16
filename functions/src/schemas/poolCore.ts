@@ -44,6 +44,13 @@ export const submitNFLPicksSchema = z.strictObject({
     // client only ever sends a small integer, so the id is not forgeable.
     entryIndex: nullish(z.number().int().min(1).max(MAX_ENTRIES_PER_USER_CAP)),
     entryName: nullish(z.string().trim().min(1).max(ENTRY_NAME_MAX)),
+    // PLAN-WEEKLY-PRIZES §2b / §9 A6. The tiebreak target game id(s) the pick
+    // sheet DISPLAYED. The server never stores this list — it computes the
+    // canonical target in the transaction and requires equality (frozen value
+    // first, else canonical), refusing with TIEBREAK_TARGET_STALE otherwise.
+    // Optional: proxy, sim and legacy clients send nothing and are judged
+    // against the (then-frozen) canonical target.
+    displayedTiebreakTargetIds: nullish(z.array(z.string().min(1).max(100)).max(10)),
 });
 
 export type UpdatePoolSettingsInput = z.infer<typeof updatePoolSettingsSchema>;
