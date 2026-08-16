@@ -130,6 +130,14 @@ describe('PLAN-WEEKLY-PRIZES §2b — frozen tiebreak target', () => {
     expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [MON2] });
   }, 30000);
 
+  it('3b. an EMPTY submission (no pick for this week) does not freeze the target (codex r3 on #452)', async () => {
+    await seedPool({ weeklyTiebreaker: 'MNF_LAST_GAME' });
+    await submit(ALICE, { picks: {} });
+    expect((await pool()).frozenTiebreakTargets).toBeUndefined();
+    await submit(ALICE, { picks: { [SUN]: 'KC' } });
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [MON2] });
+  }, 30000);
+
   it('4. under NONE nothing is frozen and a displayed list is ignored', async () => {
     await seedPool({ weeklyTiebreaker: 'NONE' });
     await submit(ALICE, { picks: { [SUN]: 'KC' }, displayedTiebreakTargetIds: [MON1] });
