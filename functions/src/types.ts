@@ -127,6 +127,10 @@ export interface GameState {
     contactEmail: string;
     managerName: string; // Name of the pool manager
     managerUid?: string; // UID of the pool manager
+    // PLAN-CO-COMMISSIONERS: server-owned (rules lock #444); ONLY writer is
+    // setPoolCoCommissioner. Honoured on NFL types only (isPoolCommissioner).
+    coManagers?: string[];
+    coManagersRevision?: number;
     paymentInstructions: string; // Instructions for payment (Venmo, etc.)
     theme: string;
 
@@ -276,7 +280,10 @@ export type AuditEventType =
     | 'DEADLINE_EXTENDED'
     | 'PROXY_PICK_SUBMITTED'
     | 'POOL_CANCELED'
-    | 'POOL_CLOSED';
+    | 'POOL_CLOSED'
+    // PLAN-CO-COMMISSIONERS D2: {op, uid, before, after, revision} — the pool's own
+    // audit trail, not admin_audit (that is the SUPER_ADMIN actor log).
+    | 'CO_COMMISSIONER_CHANGED';
 
 export interface AuditLogEvent {
     id: string;

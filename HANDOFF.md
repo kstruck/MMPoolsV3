@@ -21,6 +21,16 @@
 > → co-comm step 3 (callable + T2b/T3/T4/T5/T6) → multi-entry T1… → item 5 →
 > WEEKLY-PRIZES → ledger. One PR at a time.
 >
+> **✅ DEPLOY STATE 2026-08-15 late:** functions certified byte-identical to
+> `7efadbdf` (second full-fleet pass all `Skipped`) → then #445 merged at
+> `0684ac43` and functions redeployed from it (Kevin). Rules at `7efadbdf`
+> *(Kevin reports the rules deploy + live clear done — UNVERIFIED by this
+> session; the census before it: 135 pools, 0 carrying `coManagers`, 0
+> `ownerMismatch`)*. Frontend: Coolify rebuilt for the Operations buttons.
+> ESPN sync healthy since 23:15Z. Next: co-comm step 3 PR-A (server) then
+> PR-B (client); the WEEKLY-lock foreign-key lock bypass found by qodo on
+> #445 awaits Kevin's yes (scoring class).
+>
 > **Deploy runbook for the lock PR (order is the control — D2):** merge →
 > `npm --prefix functions ci` → `npx firebase deploy --only functions` (functions
 > are now BLIND to `coManagers`) → SuperAdmin → Operations → **"Audit legacy

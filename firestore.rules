@@ -72,7 +72,16 @@ service cloud.firestore {
                      (request.auth != null && (
                         resource.data.ownerId == request.auth.uid || 
                         resource.data.managerUid == request.auth.uid || 
-                        request.auth.uid in resource.data.participantIds
+                        request.auth.uid in resource.data.participantIds ||
+                        // Commissioner Hub (PLAN-CO-COMMISSIONERS D7). A LIST rule must be
+                        // PROVABLE from the query's own filters, so this is written with
+                        // plain field access (no `.get()`), and the Hub query MUST carry
+                        // BOTH `where('coManagers','array-contains',uid)` AND
+                        // `where('type','in',[the three NFL types])` — the type filter is
+                        // what lets the prover discharge the type guard. Measured: the
+                        // array-contains filter alone is DENIED (coManagers.rules.test.mjs).
+                        (resource.data.type in ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'] &&
+                         request.auth.uid in resource.data.coManagers)
                      )) || 
                      isSuperAdmin();
 
@@ -83,9 +92,29 @@ service cloud.firestore {
         isSuperAdmin()
       );
       
-      // Helper: is user the pool owner or manager?
+      // PLAN-CO-COMMISSIONERS T3 (deploy step 3 — ships WITH the setter callable,
+      // never before it): a uid named in a server-owned `coManagers` array is a
+      // commissioner of an NFL pool. The type guard is enforced here exactly as
+      // in functions `isPoolCommissioner` and the client `isNFLPoolCommissioner`
+      // — a `coManagers` array on a Squares/Bracket/Props/Playoff pool grants
+      // nothing in any layer (codex r3 on the plan). Takes the pool DATA so the
+      // subcollection rows can pass their `get()` result.
+      function isNFLCoManagerOf(pool) {
+        return request.auth != null
+          && pool.get('type', '') in ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN']
+          && pool.get('coManagers', []) != null
+          && request.auth.uid in pool.get('coManagers', []);
+      }
+
+      // Helper: is user the pool owner, manager, or (NFL) co-commissioner?
+      // ⚠️ WIDENED by PLAN-CO-COMMISSIONERS T3. Callers: the pool `update` rule
+      // (co-commissioners edit settings under the SAME protectedFieldsUnchanged /
+      // nflSettingsWriteBlocked chain — R2) and nothing else; `delete` below is
+      // deliberately inline ownerId/managerUid (C8: destructive stays owner-only).
       function isPoolManager() {
-        return request.auth.uid == resource.data.ownerId || request.auth.uid == resource.data.managerUid;
+        return request.auth.uid == resource.data.ownerId
+          || request.auth.uid == resource.data.managerUid
+          || isNFLCoManagerOf(resource.data);
       }
 
       // Protected fields that ONLY the Admin SDK (cloud functions) can write.
@@ -380,6 +409,8 @@ service cloud.firestore {
       // Readable only by the pool owner/manager or a SuperAdmin. Writes are
       // Cloud Functions only (reserveSquare / updatePlayer / releaseSquares).
       match /squarePrivate/{squareId} {
+        // Squares PII stays owner/managerUid/SA — PLAN-CO-COMMISSIONERS K7 = No
+        // (and co-commissioners are NFL-only in v1 anyway, C13).
         allow read: if request.auth != null && (
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
@@ -394,6 +425,7 @@ service cloud.firestore {
         allow read: if request.auth != null && (
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isNFLCoManagerOf(get(/databases/$(database)/documents/pools/$(poolId)).data) ||
           isSuperAdmin()
         );
         allow write, delete: if false; 
@@ -419,6 +451,7 @@ service cloud.firestore {
         allow create, update, delete: if request.auth != null && (
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isNFLCoManagerOf(get(/databases/$(database)/documents/pools/$(poolId)).data) ||
           isSuperAdmin()
         );
       }
@@ -551,6 +584,7 @@ service cloud.firestore {
           request.auth.uid == resource.data.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isNFLCoManagerOf(get(/databases/$(database)/documents/pools/$(poolId)).data) ||
           isSuperAdmin()
         );
         allow write: if false;
@@ -587,6 +621,7 @@ service cloud.firestore {
         allow read: if request.auth != null && (
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isNFLCoManagerOf(get(/databases/$(database)/documents/pools/$(poolId)).data) ||
           isSuperAdmin()
         );
         allow create: if request.auth != null;

@@ -8,13 +8,11 @@ import { cancelPool } from '../../poolExceptions';
 import { clearLegacyCoManagers, CLEAR_CO_MANAGERS_MAX_WRITES } from '../../poolOps';
 
 /**
- * PLAN-CO-COMMISSIONERS T1 / T2a — deploy step 1 of D2.
- *
- * `coManagers` was client-writable and three functions gates trusted it. This
- * pins that, as of this deploy, a hand-written `coManagers` array grants NOTHING
- * on any callable that used to honour it — so a forged array written during the
- * lock's migration window is inert, and the audited clear can erase it before
- * T2b makes the field mean something again (behind the setter + rules lock).
+ * PLAN-CO-COMMISSIONERS — written for T2a (deploy step 1: functions BLIND to
+ * `coManagers`), re-aimed for T2b (deploy step 3: the widened helper reads it
+ * again, NFL-only, behind the rules lock + setter). What it pins now:
+ *   - the DESTRUCTIVE / sim callables never honour `coManagers` (D4, C8, C13);
+ *   - the widened helper honours it on NFL callables and on NFL pools ONLY;
  *
  * Also pins the D3 side effect: `assertPoolOwnerOrSuperAdmin` is now a
  * disjunction, so a distinct `managerUid` is admitted even when `ownerId` is
@@ -47,7 +45,7 @@ async function seedPool() {
     status: 'FINAL',
     isFinal: true,
     participantIds: [OWNER, MANAGER, FORGED],
-    // The forged grant. Written "by the client" — nothing legitimate does this.
+    // Seeded directly (Admin SDK) — in prod only setPoolCoCommissioner writes this.
     coManagers: [FORGED],
     squares: [],
     scores: {
@@ -79,8 +77,11 @@ const simulateData = {
 const fillData = { poolId: POOL, blanksToLeave: 0 };
 const cancelData = { poolId: POOL, reason: 'test' };
 
-const CALLABLES: Array<[string, any, any]> = [
-  ['recordPoolPayouts', wrappedPayouts, payoutsData],
+// Deploy step 3 (PLAN-CO-COMMISSIONERS T2b): the WIDENED helper admits a
+// co-commissioner on the NFL callables; the DESTRUCTIVE / sim set stays
+// owner-only by name (D4). recordPoolPayouts moved from the first list to the
+// second when the readers shipped — see the C6 test below.
+const NO_CO_CALLABLES: Array<[string, any, any]> = [
   ['simulateGameUpdate', wrappedSimulate, simulateData],
   ['simFillSquares', wrappedFill, fillData],
   ['cancelPool', wrappedCancel, cancelData],
@@ -94,13 +95,28 @@ beforeEach(async () => {
   await seedPool();
 });
 
-describe('a uid that is ONLY in a hand-written coManagers array is refused everywhere', () => {
-  for (const [name, fn, data] of CALLABLES) {
-    it(`${name} refuses the forged co-manager`, async () => {
+describe('a co-commissioner is refused on the DESTRUCTIVE / sim callables (D4, C8, C13)', () => {
+  for (const [name, fn, data] of NO_CO_CALLABLES) {
+    it(`${name} refuses a uid whose only claim is coManagers`, async () => {
       // simulateGameUpdate re-wraps its transaction error, so match the message, not the code.
       await expect(fn({ data, auth: auth(FORGED) } as never)).rejects.toThrow(/permission|only the pool/i);
     });
   }
+});
+
+describe('the WIDENED helper (T2b): coManagers is honoured on NFL callables, and ONLY on NFL pools', () => {
+  it('C6 — recordPoolPayouts admits a co-commissioner of an NFL pool', async () => {
+    await expect(wrappedPayouts({ data: payoutsData, auth: auth(FORGED) } as never)).resolves.toBeTruthy();
+  });
+
+  it('type guard — the same array on a SQUARES pool grants nothing', async () => {
+    await db.collection('pools').doc(POOL).update({ type: 'SQUARES' });
+    await expect(wrappedPayouts({ data: payoutsData, auth: auth(FORGED) } as never)).rejects.toThrow(/permission|only the pool/i);
+  });
+
+  it('a uid NOT in the array is still refused', async () => {
+    await expect(wrappedPayouts({ data: payoutsData, auth: auth('cmi-nobody') } as never)).rejects.toThrow(/permission|only the pool/i);
+  });
 });
 
 describe('the legitimate principals still pass (no collateral, and the D3 managerUid fix)', () => {
