@@ -163,7 +163,12 @@ export const setPaidStatus = validated(
         if (dueEvents.size > 0) {
           owed = fromLedger;
         } else {
-          const rebuysUsed: number = rebuyDocs.reduce((n, d) => n + ((d.data() as any).rebuysUsed ?? 0), 0);
+          // Same guard as the ledger sum above: untyped Firestore data, and
+          // this derived figure is persisted as `rebuyOwed` (qodo re-review on #450).
+          const rebuysUsed: number = rebuyDocs.reduce((n, d) => {
+            const v = (d.data() as any).rebuysUsed;
+            return n + (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+          }, 0);
           const rebuyCost: number = pool.settings?.rebuyCost ?? pool.settings?.entryFee ?? 0;
           owed = rebuysUsed * rebuyCost;
         }
