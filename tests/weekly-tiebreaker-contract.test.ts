@@ -191,6 +191,10 @@ describe('B1 — the option set (§2a)', () => {
     expect(effectiveWeeklyTiebreaker({})).toBe('MNF_COMBINED');
     expect(effectiveWeeklyTiebreaker({ weeklyTiebreaker: 'MNF_FIRST_GAME' })).toBe('MNF_FIRST_GAME');
   });
+  it('the rules page names every rule, including MNF_FIRST_GAME (codex r2 on #452)', () => {
+    const rules = read('src/components/NFLPoolDashboard/NFLPoolRules.tsx');
+    expect(rules).toContain("tiebreakerRule === 'MNF_FIRST_GAME' ? 'Closest to the FIRST Monday game total'");
+  });
   it('the wizard writes the default explicitly and offers only the pickable list; the manager select renders legacy MNF_COMBINED read-only', () => {
     const wizard = read('src/components/wizard/create/CreateNFLPickemPool.tsx');
     expect(wizard).toContain('weeklyTiebreaker: DEFAULT_NEW_POOL_TIEBREAKER');
