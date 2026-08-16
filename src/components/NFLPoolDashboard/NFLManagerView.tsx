@@ -11,6 +11,7 @@ import { logger } from '../../utils/logger';
 import type { Pool, NFLGame, User } from '../../types';
 import { NFLManagerBentoDashboard } from './NFLManagerBentoDashboard';
 import { RecordPayoutsCard } from './RecordPayoutsCard';
+import { PaymentLedgerNFL } from './PaymentLedgerNFL';
 import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
@@ -745,7 +746,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         onSelectTab={onSelectTab}
       />
 
-      {/* Record Payouts (ADR 0005 Phase 4) — renders only once the pool is finalized */}
+      {/* Record Payouts (ADR 0005 Phase 4) — season awards + adjustments; renders only once the pool is finalized */}
       <RecordPayoutsCard pool={pool} entries={entries} />
 
       {/* Control Room Header */}
@@ -1383,6 +1384,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       ═══════════════════════════════════════════ */}
       {commishTab === 'members' && (
         <div className="space-y-6">
+          {/* The payment LEDGER (PLAN-PAYMENT-LEDGER T5): fee status per member +
+              every published weekly prize with its "paid" checkbox. Lives on
+              the Members & Payments sub-tab — where a commissioner looks for
+              money (Kevin, 2026-08-16). */}
+          <PaymentLedgerNFL pool={pool} members={members} entries={entries} />
           <div className="bg-card border border-line shadow-card rounded-xl overflow-hidden">
             <div className="p-5 border-b border-line bg-surface space-y-3">
               <div className="flex justify-between items-center">

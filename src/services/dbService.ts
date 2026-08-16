@@ -1711,6 +1711,22 @@ export const dbService = {
         });
     },
 
+    // PLAN-PAYMENT-LEDGER T5: settlement state for the ledger. Rules admit the
+    // commissioner/manager/co-commissioner/SA and the recipient of each doc; a
+    // member's query is naturally limited to their own rows by `where uid`.
+    // `onError` lets the ledger say "settlement state unavailable" instead of
+    // rendering every award unpaid on a permission/offline error (qodo #10 on #456).
+    subscribeToPayoutRecordsPrivate: (poolId: string, callback: (records: any[]) => void, uid?: string, onError?: (error: unknown) => void) => {
+        const col = collection(db, 'pools', poolId, 'payoutRecordsPrivate');
+        const q = uid ? query(col, where('uid', '==', uid)) : query(col);
+        return onSnapshot(q, (snap) => {
+            callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (error) => {
+            logger.error("Error subscribing to payout records (private):", error);
+            if (onError) onError(error); else callback([]);
+        });
+    },
+
     // Commissioner records who won what (server validates ownership + finalized pool).
     // PLAN-PAYMENT-LEDGER T4: a WEEKLY PLACE award carries `entryId` + `week` and
     // is bound server-side to the recap's published place + frozen prize

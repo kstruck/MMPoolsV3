@@ -1,5 +1,7 @@
 # MORNING 2026-08-17 — takeover: THE PAYMENT LEDGER (PLAN-WEEKLY-PRIZES steps 1/2/4/5 + PLAN-PAYMENT-LEDGER T3/T4/T5) — six stacked PRs + one docs PR
 
+> **SUPERSEDES `MORNING-2026-08-17.md`** (the multi-entry T2 takeover — #450 is merged AND deployed; that doc is history). This is the live one.
+
 Overnight 2026-08-16 (session started from `origin/main` @ `42906ecc`, post-#450).
 Nothing merged, nothing deployed, no prod data touched. Every PR is stacked on
 the one before it, so **the merge order is fixed** and GitHub retargets each
