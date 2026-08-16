@@ -82,7 +82,7 @@ export const WeeklyWinnersList: React.FC<{ recap: WeeklyRecap; poolType: string;
           {' '}Amounts are approximate; your commissioner settles the exact figures — March Melee Pools moves no money. This list is visible to anyone with the pool link.
         </p>
       )}
-      {!showPrize && (
+      {!showPrize && !recap.weeklyPlacesError && (
         <p className="text-[10px] font-body text-faint leading-relaxed">
           Places and scores only — this pool has no weekly prize pot. This list is visible to anyone with the pool link.
         </p>
