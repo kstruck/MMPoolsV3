@@ -750,7 +750,14 @@ export async function submitNFLPicksInternal(
       poolType: type,
       present: true,
       entryFee: Number(pool.settings?.entryFee ?? 0),
-      hasPlayableEntry: true,
+      // Only a submission that actually stored a pick starts fee liability
+      // (PLAN-EMPTY-SUBMISSION-FEE, Q1–Q3). `picks: {}` is schema-legal on a
+      // pick'em pool and reaches here; passing `true` unconditionally upgraded a
+      // seeded MANAGER's feeOwed 0 -> fee for a pick nobody made. Survivor and
+      // Margin throw on a missing team before this line, so for them the
+      // predicate is always true and nothing changes. One predicate, shared
+      // with `pickedWeek` below, so the latch and the marker cannot disagree.
+      hasPlayableEntry: committedPickForWeek,
       // Pick marker (PLAN-COMMISSIONER-BLIND-PICKS T1). Rides the write that is
       // already here, in the same transaction as the entry, so the marker can
       // never disagree with the pick it describes. `undefined` when this
