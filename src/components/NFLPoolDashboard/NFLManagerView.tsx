@@ -11,6 +11,7 @@ import { logger } from '../../utils/logger';
 import type { Pool, NFLGame, User } from '../../types';
 import { NFLManagerBentoDashboard } from './NFLManagerBentoDashboard';
 import { RecordPayoutsCard } from './RecordPayoutsCard';
+import { PaymentLedgerNFL } from './PaymentLedgerNFL';
 import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
@@ -745,7 +746,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         onSelectTab={onSelectTab}
       />
 
-      {/* Record Payouts (ADR 0005 Phase 4) — renders only once the pool is finalized */}
+      {/* The payment LEDGER (PLAN-PAYMENT-LEDGER T5): fee status per member +
+          every published weekly prize with its "paid" checkbox. */}
+      <PaymentLedgerNFL pool={pool} members={members} />
+
+      {/* Record Payouts (ADR 0005 Phase 4) — season awards + adjustments; renders only once the pool is finalized */}
       <RecordPayoutsCard pool={pool} entries={entries} />
 
       {/* Control Room Header */}
