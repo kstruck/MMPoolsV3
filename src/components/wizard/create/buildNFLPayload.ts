@@ -26,6 +26,16 @@ function hybridSplitFrom(settings: Record<string, unknown> | undefined): { weekl
   return { weeklyPerEntry: num(w), seasonPerEntry: num(se) };
 }
 
+// Toggle off ⇒ 1. Toggle on ⇒ at least 2 — the toggle's own meaning, enforced
+// HERE, not only in the field's effect (qodo #4 on #449). Above the cap is NOT
+// clamped: an out-of-range value must be REFUSED by the schema (with its message
+// on the field), not silently reinterpreted — same rule as maxTeamUses.
+function maxEntriesFrom(v: Record<string, unknown>): number {
+  if (!v.multiEntry) return 1;
+  const n = Number((v.settings as { maxEntriesPerUser?: unknown } | undefined)?.maxEntriesPerUser);
+  return Number.isFinite(n) && n >= 2 ? n : 2;
+}
+
 export function buildNFLPayload(
   values: Record<string, unknown>,
   poolType: Extract<PoolType, 'NFL_PICKEM' | 'NFL_SURVIVOR' | 'NFL_MARGIN'>,
@@ -70,6 +80,11 @@ export function buildNFLPayload(
       // input as NaN; normalizing to 0 here lets the schema's mismatch message
       // (the useful one) fire instead of a bare "expected number, got nan".
       hybridSplit: hybridSplitFrom(v.settings),
+      // PLAN-MULTI-ENTRY D8. Toggle off ⇒ 1 regardless of what was typed (the
+      // field is unmounted but react-hook-form keeps its value); toggle on with
+      // an untouched field (NaN) ⇒ 1 too, so the schema's 1..CAP check is the
+      // only refusal a commissioner can hit, and it says why.
+      maxEntriesPerUser: maxEntriesFrom(values),
     },
   });
 }

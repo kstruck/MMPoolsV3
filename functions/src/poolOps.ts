@@ -21,6 +21,7 @@ import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } fr
 import { parityEditNeedsEntries, survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
 import { tiebreakerEditNeedsEntries, touchesWeeklyTiebreakerSetting, weeklyTiebreakerRefusal } from './lib/weeklyTiebreakerGate';
 import { hybridNoOpKeys, hybridSplitNeedsClearing, hybridSplitRefusal, touchesHybridSplitSettings } from './lib/hybridSplitGate';
+import { maxEntriesNoOpKeys, maxEntriesRefusal, touchesMaxEntriesSetting } from './lib/multiEntryGate';
 import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } from './lib/scoringLease';
 
 /**
@@ -532,7 +533,15 @@ export const updatePoolSettings = validated(
         delete patch[k];
     }
     const hybridTouched = touchesHybridSplitSettings(patch);
-    if (touchesLockSettings(patch) || parityTouched || tiebreakerTouched || hybridTouched) {
+    // maxEntriesPerUser (PLAN-MULTI-ENTRY D8, K6): raise-only, judged inside
+    // the transaction so two concurrent saves cannot land the smaller value
+    // last. Same no-op stripping as the hybrid trio — the manager UI re-sends
+    // the whole settings map, and a re-sent 1 on a legacy pool is not a change.
+    for (const k of maxEntriesNoOpKeys(pool as Record<string, unknown>, patch)) {
+        delete patch[k];
+    }
+    const maxEntriesTouched = touchesMaxEntriesSetting(patch);
+    if (touchesLockSettings(patch) || parityTouched || tiebreakerTouched || hybridTouched || maxEntriesTouched) {
         const bumpsLockRevision = touchesLockSettings(patch);
         await retryWhileScoring(() => db.runTransaction(async (tx) => {
             const current = (await tx.get(poolRef)).data() as Record<string, unknown> | undefined;
@@ -564,6 +573,10 @@ export const updatePoolSettings = validated(
             }
             if (hybridTouched) {
                 const problem = hybridSplitRefusal(current, patch);
+                if (problem) throw new HttpsError('failed-precondition', problem);
+            }
+            if (maxEntriesTouched) {
+                const problem = maxEntriesRefusal(current, patch);
                 if (problem) throw new HttpsError('failed-precondition', problem);
             }
             tx.update(poolRef, {

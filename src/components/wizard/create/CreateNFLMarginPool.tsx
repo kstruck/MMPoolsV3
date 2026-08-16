@@ -6,6 +6,7 @@ import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep } 
 import { StepPayouts } from '../steps/StepPayouts';
 import { ReadOnlyField, SelectField } from '../fields';
 import { HybridSplitFields } from './HybridSplitFields';
+import { MultiEntryFields } from './MultiEntryFields';
 import { CURRENT_SEASON } from './currentSeason';
 import type { WizardStepDef } from '../types';
 import { prefillFromUser } from './profilePrefill';
@@ -45,6 +46,7 @@ function StepMarginRules() {
         ]}
       />
       <HybridSplitFields />
+      <MultiEntryFields />
     </div>
   );
 }
@@ -62,6 +64,7 @@ const defaultValues: Record<string, unknown> = {
   addons: { aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: false },
   settings: {
     entryFee: 0, isListedPublic: true, payoutMode: 'SEASON',
+    maxEntriesPerUser: 1,
     payouts: { places: [{ rank: 1, percentage: 100 }], bonuses: [] },
   },
   _tosAccepted: false,

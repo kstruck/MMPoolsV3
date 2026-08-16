@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { MAX_TEAM_USES, TIE_COUNTS_AS_VALUES } from '../survivorReuse';
 import { WEEKLY_TIEBREAKER_VALUES } from '../nflTiebreaker';
 import { hybridSplitProblem } from '../hybridSplit';
+import { MAX_ENTRIES_PER_USER_CAP } from '../multiEntry';
 import { contactFieldsSchema, brandingSchema, payoutsSchema } from './common';
 
 const nflBase = contactFieldsSchema.extend({
@@ -23,6 +24,12 @@ const nflSettingsBase = {
   paymentInstructions: z.string().optional(),
   isListedPublic: z.boolean().optional(),
   payouts: payoutsSchema,
+  // PLAN-MULTI-ENTRY D8. Declared HERE because these are z.objects, which STRIP
+  // unknown keys — without this line the wizard's choice would be silently
+  // dropped at create and every new pool would play single-entry. Raise-only
+  // after create (updatePoolSettings), and a client may never write it directly
+  // (firestore.rules callableOnlySettingsUnchanged).
+  maxEntriesPerUser: z.number().int().min(1).max(MAX_ENTRIES_PER_USER_CAP).default(1),
 };
 
 const hybridSplitCoherent = (settings: { payoutMode?: unknown; entryFee?: unknown; hybridSplit?: unknown }, ctx: z.RefinementCtx) => {

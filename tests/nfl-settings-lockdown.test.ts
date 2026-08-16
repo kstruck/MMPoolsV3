@@ -214,6 +214,16 @@ describe('firestore.rules — callable-only settings bind SUPER_ADMIN too', () =
     expect(body).toContain(`'${field}'`);
   });
 
+  it('lists maxEntriesPerUser in the NFL-ONLY clause — Bracket/Playoff carry the same key and save it by direct updateDoc (PLAN-MULTI-ENTRY D8; qodo on #449)', () => {
+    const fn = rules.slice(rules.indexOf('function callableOnlySettingsUnchanged()'));
+    const body = fn.slice(0, fn.indexOf('\n      }'));
+    const nflClause = body.slice(body.indexOf('!isNfl ||'));
+    expect(nflClause).toContain("'maxEntriesPerUser'");
+    // and NOT in the unscoped list
+    const unscoped = body.slice(body.indexOf('!changed.hasAny(['), body.indexOf('!isNfl ||'));
+    expect(unscoped).not.toContain('maxEntriesPerUser');
+  });
+
   it('diffs the settings MAP, not the root — a root diff would guard nothing', () => {
     // Root `affectedKeys()` reports only the top-level `settings` key, so a
     // per-field check against it never fires.

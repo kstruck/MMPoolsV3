@@ -11,6 +11,7 @@ import {
 import { writePaymentHandles, CLEAR, LEGACY_TOP_LEVEL_HANDLE_KEYS } from '../shared/paymentHandles';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '../shared/weeklyHardLock';
 import { MAX_TEAM_USES } from '../shared/survivorReuse';
+import { MAX_ENTRIES_PER_USER_CAP } from '../shared/multiEntry';
 
 export interface PoolSettingsUpdatePlan {
   // Fields to set on the pool doc.
@@ -217,6 +218,19 @@ export function flattenSettingsPatch(
         continue;
       }
       out['settings.maxTeamUses'] = n;
+      continue;
+    }
+    if (key === 'maxEntriesPerUser') {
+      // PLAN-MULTI-ENTRY D8. Same reasoning as maxTeamUses: `updates` arrives
+      // unvalidated, and a coerced value would be silently reinterpreted.
+      // Raise-only is judged in updatePoolSettings' transaction (multiEntryGate);
+      // this is only the shape.
+      const n = value;
+      if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > MAX_ENTRIES_PER_USER_CAP) {
+        rejected.push(`settings.maxEntriesPerUser (must be a whole number from 1 to ${MAX_ENTRIES_PER_USER_CAP})`);
+        continue;
+      }
+      out['settings.maxEntriesPerUser'] = n;
       continue;
     }
     out[`settings.${key}`] = value;

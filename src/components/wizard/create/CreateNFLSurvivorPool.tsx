@@ -6,6 +6,7 @@ import { MAX_TEAM_USES } from '@shared/survivorReuse';
 import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
 import { ReadOnlyField, NumberField, CheckboxField, SelectField } from '../fields';
+import { MultiEntryFields } from './MultiEntryFields';
 import { CURRENT_SEASON } from './currentSeason';
 import type { WizardStepDef } from '../types';
 import { prefillFromUser } from './profilePrefill';
@@ -54,6 +55,7 @@ function StepSurvivorRules() {
       </div>
       <CheckboxField name="settings.pickLosersMode" label="Pick teams to LOSE (reverse survivor)" />
       <CheckboxField name="settings.autoSurviveExemptionEnabled" label="Auto-survive when no eligible teams remain" />
+      <MultiEntryFields />
     </div>
   );
 }
@@ -76,6 +78,7 @@ const defaultValues: Record<string, unknown> = {
     // Today's rules, spelled out. Both are also the read-site defaults, so a
     // pool created before these existed behaves identically.
     tieCountsAs: 'LOSS', maxTeamUses: 1,
+    maxEntriesPerUser: 1,
     payouts: { places: [{ rank: 1, percentage: 100 }], bonuses: [] },
   },
   _tosAccepted: false,

@@ -81,6 +81,8 @@ export interface NFLPickemPool {
   entryCount?: number;
 
   settings: {
+    /** PLAN-MULTI-ENTRY D8: entries one player may hold. Absent on every pool created before the setting ⇒ 1; read via `effectiveMaxEntriesPerUser` (`@shared/multiEntry`), never raw. Raise-only after create. */
+    maxEntriesPerUser?: number;
     entryFee: number;
     paymentInstructions: string;
     isListedPublic: boolean;
@@ -150,6 +152,8 @@ export interface NFLSurvivorPool {
   entryCount?: number;
 
   settings: {
+    /** PLAN-MULTI-ENTRY D8: entries one player may hold. Absent on every pool created before the setting ⇒ 1; read via `effectiveMaxEntriesPerUser` (`@shared/multiEntry`), never raw. Raise-only after create. */
+    maxEntriesPerUser?: number;
     entryFee: number;
     paymentInstructions: string;
     isListedPublic: boolean;
@@ -211,6 +215,8 @@ export interface NFLMarginPool {
   entryCount?: number;
 
   settings: {
+    /** PLAN-MULTI-ENTRY D8: entries one player may hold. Absent on every pool created before the setting ⇒ 1; read via `effectiveMaxEntriesPerUser` (`@shared/multiEntry`), never raw. Raise-only after create. */
+    maxEntriesPerUser?: number;
     entryFee: number;
     paymentInstructions: string;
     isListedPublic: boolean;
