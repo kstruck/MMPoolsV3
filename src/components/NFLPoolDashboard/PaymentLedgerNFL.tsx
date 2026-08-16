@@ -51,11 +51,12 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
   // (permissions, offline) every box would read "unpaid" — say so and disable
   // the boxes instead (qodo #10 on #456).
   const [privUnavailable, setPrivUnavailable] = useState(false);
+  const [privLoaded, setPrivLoaded] = useState(false);
 
   useEffect(() => {
     const u1 = dbService.subscribeToWeeklyRecaps(pool.id, setRecaps);
     const u2 = dbService.subscribeToPayoutRecords(pool.id, setRecords as never);
-    const u3 = dbService.subscribeToPayoutRecordsPrivate(pool.id, (rows) => { setPriv(rows as never); setPrivUnavailable(false); }, undefined, () => setPrivUnavailable(true));
+    const u3 = dbService.subscribeToPayoutRecordsPrivate(pool.id, (rows) => { setPriv(rows as never); setPrivUnavailable(false); setPrivLoaded(true); }, undefined, () => setPrivUnavailable(true));
     return () => { u1(); u2(); u3(); };
   }, [pool.id]);
 
@@ -144,6 +145,9 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
         // First record: the deterministic id makes this safe to double-click.
         await dbService.recordPoolPayouts(pool.id, [{ uid: r.uid, entryId: r.entryId, amount: r.owed, kind: 'PLACE', place: r.rank, week: r.week, settled: checked }]);
       } else if (r.stale) {
+        // Never re-record from an unknown settlement state (codex r8): a paid
+        // award must not come back as unpaid because the listener had not loaded.
+        if (!privLoaded || privUnavailable) throw new Error('Settlement state has not loaded yet — try again in a moment.');
         // K12: re-record by supersession against the live id we are looking
         // at. Settlement CARRIES OVER from the record being replaced — a
         // correction is not a payment (codex r3 on T5); the checkbox on the
@@ -245,7 +249,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
                       {r.stale ? (
                         <button
                           type="button"
-                          disabled={busy === r.key}
+                          disabled={busy === r.key || privUnavailable || !privLoaded}
                           onClick={() => toggle(r, false)}
                           className="text-[10px] font-display font-bold uppercase tracking-[0.06em] px-2 py-1 rounded-md border border-brandred-600 text-brandred-600 dark:text-brandred-500 hover:bg-brandred-600/10 disabled:opacity-50"
                           aria-label={r.owed > 0 ? `Re-record week ${r.week} prize for ${r.name} at ${money(r.owed)}` : `Reverse the week ${r.week} award for ${r.name}`}
@@ -257,7 +261,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
                           type="checkbox"
                           aria-label={`Week ${r.week} prize for ${r.name} paid`}
                           checked={r.settled}
-                          disabled={busy === r.key || privUnavailable}
+                          disabled={busy === r.key || privUnavailable || !privLoaded}
                           onChange={e => toggle(r, e.target.checked)}
                           className="h-4 w-4 accent-navy-600 dark:accent-gold-500"
                         />
