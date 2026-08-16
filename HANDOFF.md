@@ -1,5 +1,13 @@
 # HANDOFF — Session entry point
 
+> ## 🛑 2026-08-15 (late) — co-commissioners: #446 (server, step 3) OPEN, PR-B (client, T5+T6) STACKED on it
+
+>
+
+> **PR-B is a stacked PR** — its base is `claude/co-comm-step3-server` (#446's branch), not `main`, so its diff shows only the client half. GitHub retargets it to `main` when #446 merges; **merge #446 first, deploy it (functions → rules), THEN merge PR-B.** PR-B adds ONE deploy surface #446 did not have: `firestore.indexes.json` (composite `coManagers` CONTAINS + `type` for the Hub feed) → `npx firebase deploy --only firestore:indexes`, plus a Coolify rebuild (it is all `src/**`). Client facts: the widened predicate `isNFLPoolCommissioner` is applied ONLY at PoolRoute's NFL `isManager` gate; the Hub keys on owner OR *named* co-commissioner (`isNamedNFLCoCommissioner`), never the SUPER_ADMIN-admitting helper; the members-tab toggle is strict `isPoolManager` (owner/managerUid/SA), one uid per call, `add` carries the observed `coManagersRevision`. Codex on PR-B: 7 rounds (r1 Hub→/admin route, r2 tsc -b build break, r3 index + SA toggle, r4 owner-scoped tiles, r5 toggle eligibility, r6 SA-scope regression in the Hub — a real one — r7 clean).
+
+>
+
 > ## 🛑 2026-08-15 (evening) — ESPN 403 incident + all five plans SIGNED + co-commissioner LOCK PR
 >
 > **Incident:** `site.api.espn.com` began answering every server-side fetch with
