@@ -130,14 +130,20 @@ export function sameTargetIds(a: ReadonlyArray<string> | undefined, b: ReadonlyA
  * The frozen target for a week, if the pool has one. `pool.frozenTiebreakTargets`
  * is a pool-week map `{ [week]: string[] }` written ONCE by the first
  * submission of the week and never rewritten (§2b) — server-only in
- * `firestore.rules`. Junk (not a non-empty array of strings) reads as absent.
+ * `firestore.rules`.
+ *
+ * An EMPTY array is a real frozen state — "this week has no target" (a legacy
+ * `MNF_COMBINED` pool on a Monday-less week) — and must stay frozen: if a
+ * Monday game were added to the schedule later, members who already submitted
+ * had no chance to predict it (qodo #9 on #452). Only junk (not an array of
+ * strings) reads as absent.
  */
 export function frozenTiebreakTargetFor(
   pool: { frozenTiebreakTargets?: Record<string | number, unknown> } | null | undefined,
   week: number,
 ): string[] | undefined {
   const v = pool?.frozenTiebreakTargets?.[week] ?? pool?.frozenTiebreakTargets?.[String(week)];
-  if (!Array.isArray(v) || v.length === 0 || !v.every(x => typeof x === 'string')) return undefined;
+  if (!Array.isArray(v) || !v.every(x => typeof x === 'string')) return undefined;
   return v as string[];
 }
 

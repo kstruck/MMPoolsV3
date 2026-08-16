@@ -585,7 +585,10 @@ export async function submitNFLPicksInternal(
           throw new HttpsError('failed-precondition',
             'TIEBREAK_TARGET_STALE: the tiebreaker game shown on your sheet no longer matches the schedule for this week. Reload the page and submit again.');
         }
-        if (!frozenTarget && canonicalTarget.length > 0) {
+        // Freeze even an EMPTY canonical list: "no target this week" is a
+        // state that must not change under members who already submitted
+        // (qodo #9 on #452).
+        if (frozenTarget === undefined) {
           frozenTargetWrite = { [`frozenTiebreakTargets.${week}`]: canonicalTarget };
         }
       }

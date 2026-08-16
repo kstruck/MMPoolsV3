@@ -235,7 +235,8 @@ describe('B1 — resolveTiebreakTargetIds (§2b): one function for the sheet, th
     expect(sameTargetIds(undefined, ['a'])).toBe(false);
     expect(frozenTiebreakTargetFor({ frozenTiebreakTargets: { 3: ['x'] } }, 3)).toEqual(['x']);
     expect(frozenTiebreakTargetFor({ frozenTiebreakTargets: { '3': ['x'] } }, 3)).toEqual(['x']);
-    expect(frozenTiebreakTargetFor({ frozenTiebreakTargets: { 3: [] } }, 3)).toBeUndefined();
+    // An EMPTY list is a real frozen state ("no target this week"), not absence (qodo #9 on #452).
+    expect(frozenTiebreakTargetFor({ frozenTiebreakTargets: { 3: [] } }, 3)).toEqual([]);
     expect(frozenTiebreakTargetFor({ frozenTiebreakTargets: { 3: 'x' } }, 3)).toBeUndefined();
     expect(frozenTiebreakTargetFor({}, 3)).toBeUndefined();
   });

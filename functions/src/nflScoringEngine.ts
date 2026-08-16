@@ -508,7 +508,7 @@ export function sortMarginLeaderboard(entries: MarginEntry[]): MarginEntry[] {
  *  - `NONE`           — the pool does not use a tiebreaker.
  *
  * `null` means "no target", and every caller must already handle it (no game
- * qualifies, or the games are not final yet). A frozen game that is CANCELLED
+ * qualifies, an EMPTY frozen list, or the games are not final yet). A frozen game that is CANCELLED
  * — or no longer in the schedule at all — also yields `null`: there is no
  * combined score to compare against, so the tie is shared (D3), the same
  * outcome as "nobody answered".
@@ -525,7 +525,10 @@ export function computeMNFTiebreakerTotal(
   frozenTargetIds?: ReadonlyArray<string>,
 ): number | null {
   if (rule === 'NONE') return null;
-  const targetIds = frozenTargetIds && frozenTargetIds.length > 0
+  // A frozen list — INCLUDING an empty one, which means "this week has no
+  // target" — wins over the live schedule; only `undefined` (nothing frozen)
+  // falls through to the rule.
+  const targetIds = frozenTargetIds !== undefined
     ? frozenTargetIds
     : resolveTiebreakTargetIds(games, rule);
   if (targetIds.length === 0) return null;

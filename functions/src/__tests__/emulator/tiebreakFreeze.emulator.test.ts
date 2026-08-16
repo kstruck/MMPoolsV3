@@ -142,6 +142,21 @@ describe('PLAN-WEEKLY-PRIZES §2b — frozen tiebreak target', () => {
     expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [MON1, MON2] });
   }, 30000);
 
+  it('5b. a LEGACY pool on a Monday-less week freezes an EMPTY list, and a Monday game added later does not become a target (qodo #9 on #452)', async () => {
+    await seedGames({ includeMondays: false });
+    await seedPool();
+    await submit(ALICE, { picks: { [SUN]: 'KC' } });
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [] });
+    // The schedule gains Monday games after Alice submitted…
+    await seedGames();
+    // …Bob's sheet (which reads the frozen value) sends no target; accepted; still frozen empty.
+    await submit(BOB, { picks: { [SUN]: 'BUF' } });
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [] });
+    // A sheet that ignored the freeze and displayed the new Monday set is refused.
+    await expect(submit(BOB, { picks: { [SUN]: 'BUF' }, displayedTiebreakTargetIds: [MON1, MON2] }))
+      .rejects.toThrow(/TIEBREAK_TARGET_STALE/);
+  }, 30000);
+
   it('6. a Monday-less week under MNF_FIRST_GAME freezes the final game of the week', async () => {
     await seedGames({ includeMondays: false });
     await seedPool({ weeklyTiebreaker: 'MNF_FIRST_GAME' });
