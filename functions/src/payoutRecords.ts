@@ -232,6 +232,8 @@ export const recordPoolPayouts = onCall(async (request) => {
         cursor = await tx.get(recordsCol.doc(String((cursor.data() as any).supersededBy)));
         hops += 1;
       }
+      // A bounded walk that did not reach a live end must not be treated as live (codex r4).
+      if ((cursor.data() as any)?.supersededBy) throw new HttpsError('failed-precondition', 'RE_RECORD_CHAIN_TOO_LONG');
       const chainLive = cursor;
       if (chainLive.id !== a.staleAwardId) {
         // Someone already re-recorded past the id the caller clicked. If the
