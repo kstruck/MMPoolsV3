@@ -110,6 +110,12 @@ const PRIVILEGED_POOL_FIELDS = [
     // in their create call and keep their pool's money out of every published
     // figure. Only the server (console / Admin SDK) sets this field.
     'isTestPool',
+    // Scorer-owned pool-week maps (PLAN-WEEKLY-PRIZES §2b / D5). Set by the
+    // week's first submitNFLPicks and by the scorer; a creator who could seed
+    // them in the create payload would pick which game(s) the server treats as
+    // the tiebreak target, or the weeks divisor of every weekly prize. (qodo #10
+    // on #452.) `hardLockByWeek` rides along for the same reason.
+    'frozenTiebreakTargets', 'weeksInSeason', 'hardLockByWeek',
 ];
 
 // Sim harness trust anchor (PLAN-TEST-SUITE 8f): simRunId is stripped from

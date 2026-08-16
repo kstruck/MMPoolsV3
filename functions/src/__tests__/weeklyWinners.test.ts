@@ -188,8 +188,10 @@ describe('computeMNFTiebreakerTotal — the rule chooses the target', () => {
     // Frozen game cancelled → no target.
     const cancelled = game(early.id, { ...early, status: 'CANCELLED' } as never);
     expect(computeMNFTiebreakerTotal([cancelled, late], 'MNF_LAST_GAME', [early.id])).toBeNull();
-    // An EMPTY frozen list is "nothing frozen" — falls through to the rule.
-    expect(computeMNFTiebreakerTotal([early, late], 'MNF_LAST_GAME', [])).toBe(
+    // An EMPTY frozen list is a real frozen state — "no target this week" — and
+    // does NOT fall through to the rule (qodo #9 on #452); only undefined does.
+    expect(computeMNFTiebreakerTotal([early, late], 'MNF_LAST_GAME', [])).toBeNull();
+    expect(computeMNFTiebreakerTotal([early, late], 'MNF_LAST_GAME', undefined)).toBe(
       (late.scores!.home) + (late.scores!.away),
     );
   });

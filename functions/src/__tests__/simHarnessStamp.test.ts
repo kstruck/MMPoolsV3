@@ -32,6 +32,11 @@ describe('simRunId trust anchor', () => {
         expect(clean.name).toBe('x');
     });
 
+    it('strips the scorer-owned pool-week maps a creator must not seed (qodo #10 on #452)', () => {
+        const clean = stripPrivilegedPoolFields({ name: 'x', frozenTiebreakTargets: { 1: ['g'] }, weeksInSeason: 3, hardLockByWeek: { 1: 5 } }) as Record<string, unknown>;
+        expect(clean).toEqual({ name: 'x' });
+    });
+
     it('stamps only for SUPER_ADMIN', () => {
         expect(simRunIdForCreate({ simRunId: 'run-12345' }, 'SUPER_ADMIN')).toBe('run-12345');
         expect(simRunIdForCreate({ simRunId: 'run-12345' }, 'COMMISSIONER')).toBeUndefined();
