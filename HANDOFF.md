@@ -1,6 +1,10 @@
 # HANDOFF — Session entry point
 
-> ## 🛑 2026-08-15 (late) — co-commissioners: #446 (server, step 3) OPEN, PR-B (client, T5+T6) STACKED on it
+> ## ✅ 2026-08-16 — CO-COMMISSIONERS FULLY LIVE: #446 + #447 MERGED, ALL FOUR SURFACES DEPLOYED, SMOKE PASSED
+>
+> Kevin deployed in D2 order: #446 functions (every 429 retried to `Successful`; `setPoolCoCommissioner` created) → #446 rules (`released rules`) → #447 `firestore.indexes` (`coManagers` CONTAINS + `type`) → Coolify rebuild. **Kevin's browser smoke passed** (owner: Members-tab `Make co-comm` → badge live; member: Commissioner tab + Hub card + no Cancel/billing). Nothing is owed on any deploy queue. PLAN-CO-COMMISSIONERS T1–T7 are all shipped; still open from that plan: nothing. Next per build order: **PLAN-MULTI-ENTRY T1**.
+>
+> ## ⬇️ HISTORY — 2026-08-15 (late) — co-commissioners: #446 (server, step 3) OPEN, PR-B (client, T5+T6) STACKED on it
 
 >
 
