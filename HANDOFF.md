@@ -1,5 +1,33 @@
 # HANDOFF — Session entry point
 
+> ## 🛑 2026-08-15 (evening) — ESPN 403 incident + all five plans SIGNED + co-commissioner LOCK PR
+>
+> **Incident:** `site.api.espn.com` began answering every server-side fetch with
+> HTTP 403 between 2026-08-14 01:40Z and 2026-08-15 09:30Z (Akamai bot rule on
+> the client fingerprint; browsers unaffected). `syncNFLScoresJob` was dark for a
+> game day while `nflAutoScoreJob` reported healthy passes over frozen `nfl_games`.
+> Fix = [#443](https://github.com/kstruck/MMPoolsV3/pull/443): every server ESPN
+> URL now builds from `functions/src/lib/espnHost.ts` (`site.web.api.espn.com`),
+> guarded by `functions/src/__tests__/espnHost.test.ts`. **Functions deploy only.**
+> Verify: the next `syncnflscoresjob` log line says `Resolved Week …`, not `403`.
+> Read `MORNING-2026-08-15.md` §3 for the decision tables; state below.
+>
+> **Sign-off:** Kevin answered "all recommendations" on PLAN-CO-COMMISSIONERS
+> K1–K8, PLAN-EMPTY-SUBMISSION-FEE Q1–Q4, PLAN-MULTI-ENTRY K1–K11,
+> PLAN-WEEKLY-PRIZES D1–D8, PLAN-PAYMENT-LEDGER K1–K12; item 13 = **A**; item 7 =
+> **a + b + c**. Item 15 still unknown. Each plan's §6 carries the stamp.
+>
+> **Build order:** co-comm T1 lock (this PR, deploy steps 1–2 of D2) → EMPTY-SUBMISSION-FEE
+> → co-comm step 3 (callable + T2b/T3/T4/T5/T6) → multi-entry T1… → item 5 →
+> WEEKLY-PRIZES → ledger. One PR at a time.
+>
+> **Deploy runbook for the lock PR (order is the control — D2):** merge →
+> `npm --prefix functions ci` → `npx firebase deploy --only functions` (functions
+> are now BLIND to `coManagers`) → SuperAdmin → Operations → **"Audit legacy
+> coManagers (dry run)"** (the invariant is `nonEmpty: 0`, `malformed: 0`, `withRevision: 0` — an EMPTY array may exist and grants nothing) → `npx firebase deploy --only
+> firestore:rules` (the lock) → **"Clear legacy coManagers"** (live) → dry run again
+> = 0. Only then may the step-3 PR merge.
+
 > ## ✅ DEPLOY STATE 2026-08-14 — #426–#432 ALL MERGED AND DEPLOYED, ALL THREE SURFACES VERIFIED
 >
 > Per surface, each verified independently rather than inferred from a

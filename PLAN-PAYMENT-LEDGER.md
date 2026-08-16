@@ -291,6 +291,8 @@ weekly rows. Out of scope to add weekly Survivor prizes.
 
 ## 6. 🛑 DECISIONS NEEDED FROM KEVIN — no code until these are answered
 
+> ✅ **SIGNED 2026-08-15 by Kevin — "all recommendations"** (asked and answered in the session that opened the T1 lock PR; every row below stands as recommended).
+
 | # | Question | Recommendation |
 |---|---|---|
 | **K1** | 🛑 **Sign `PLAN-WEEKLY-PRIZES.md` D1–D8 first** (its review log + sweeps still owed) — the ledger reads its `weeklyPlaces` + frozen pot. Do both plans go together? | **Yes.** Its recommendations stand; nothing here changes them. |
