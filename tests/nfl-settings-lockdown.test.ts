@@ -37,6 +37,8 @@ describe('firestore.rules — scorer-owned pool fields are server-only', () => {
     // Frozen weekly tiebreak target game ids (PLAN-WEEKLY-PRIZES §2b): rewriting
     // the map would re-point predictions members already made.
     'frozenTiebreakTargets',
+    // The frozen weeks divisor of the weekly prize pot (PLAN-WEEKLY-PRIZES D5).
+    'weeksInSeason',
     // The stats discriminator (PLAN-STATS-INTEGRITY §8.1 arm 3). Writable by a
     // manager, it hides their own pool's volume; clearable, it pushes a test
     // pool's fake pot into the world-readable stats/global document.

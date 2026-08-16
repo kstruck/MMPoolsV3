@@ -169,6 +169,11 @@ service cloud.firestore {
           // and read by every later sheet and by the scorer; a manager who could
           // rewrite the map could re-point predictions members already made.
           'frozenTiebreakTargets',
+          // The frozen weeks divisor of the weekly prize pot (PLAN-WEEKLY-PRIZES
+          // D5): written by createPool or set-once by the scorer at first prize
+          // publication; a manager who could rewrite it would re-price every
+          // future weekly prize.
+          'weeksInSeason',
           // Scorer-owned state (PLAN-REALTIME-SCORING §3a, PR-B′). Every one of
           // these is a field a manager could otherwise use to undo the reveal
           // guarantee or the scoring mutex:

@@ -1440,6 +1440,25 @@ describe('Weekly Winners List — weeklyPlaces + frozen weeklyPrize', () => {
     ]);
     expect(recap.weeklyWinners).toEqual([{ entryId: A, userId: A, userName: A, points: 2 }]);
     expect(recap.weeklyPlacesError).toBeUndefined();
+    // D5: the derived divisor is frozen ON THE POOL in the same write, set-once.
+    expect((await poolDoc(poolId)).weeksInSeason).toBe(2);
+  });
+
+  it('a pool with a stored weeksInSeason uses it (never re-derived); a named extra entry keeps its entryName on its row', async () => {
+    await setup([{ rank: 1, percentage: 100 }], { weeksInSeason: 4 });
+    await db.collection('pools').doc(poolId).collection('entries').doc(`e2:${A}`).set({
+      id: `e2:${A}`, poolId, ownerUid: A, entryIndex: 2, entryName: 'A second', userName: A, submittedAt: 0, paidStatus: 'PAID',
+      picks: { 'wp-g1': 'KC', 'wp-g2': 'SF' }, weeklyPoints: {}, totalScore: 0,
+    });
+    await scoreComplete();
+    const recap = (await recapDoc())!;
+    // WEEKLY net 60 ÷ 4 = 15; A and e2:A tied at 2 correct → 100% of 15 split → 7 each, $1 remainder named.
+    expect(recap.weeklyPrize).toMatchObject({ pot: 15, weeksInSeason: 4 });
+    expect((await poolDoc(poolId)).weeksInSeason).toBe(4);
+    const rows = recap.weeklyPlaces as any[];
+    expect(rows.find(r => r.entryId === `e2:${A}`)).toMatchObject({ userId: A, userName: A, entryName: 'A second', rank: 1, prize: 7 });
+    expect(rows.find(r => r.entryId === A)).toMatchObject({ rank: 1, prize: 7 });
+    expect('entryName' in rows.find(r => r.entryId === A)).toBe(false);
   });
 
   it('a rescore after the commissioner edits the fee re-ranks against the FROZEN pot — the published figure never moves (§3b-i)', async () => {

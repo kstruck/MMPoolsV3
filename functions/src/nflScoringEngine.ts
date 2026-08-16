@@ -547,6 +547,8 @@ export interface WeeklyWinnerCandidate {
   entryId: string;
   userId: string;
   userName: string;
+  /** The entry's own name when named (multi-entry K5); rows display `entryName ?? userName`. */
+  entryName?: string;
   points: number;
   /**
    * `|prediction − target|`, or `undefined` when this member made no

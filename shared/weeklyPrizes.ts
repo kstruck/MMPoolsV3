@@ -16,7 +16,10 @@ import { perWeekPrizePot, potBreakdown, weeklyPlacesFor } from './prizePot';
 export interface WeeklyPlaceCandidate {
   entryId: string;
   userId: string;
+  /** The OWNER's display name. */
   userName: string;
+  /** The entry's own name when the owner named it (multi-entry T2/K5); display `entryName ?? userName`. */
+  entryName?: string;
   points: number;
   /** `|prediction − target|`; undefined = no prediction. NEVER coerce to 0. */
   tiebreakDiff?: number;
@@ -72,6 +75,7 @@ export function rankWeeklyPlaces(candidates: ReadonlyArray<WeeklyPlaceCandidate>
     const rank = tied ? out[i - 1].rank : i + 1;
     // Rebuilt field by field: a literal `undefined` value throws in Firestore set().
     const row: WeeklyPlace = { entryId: c.entryId, userId: c.userId, userName: c.userName, points: c.points, rank };
+    if (typeof c.entryName === 'string' && c.entryName) row.entryName = c.entryName;
     if (typeof c.tiebreakDiff === 'number') row.tiebreakDiff = c.tiebreakDiff;
     out.push(row);
   }

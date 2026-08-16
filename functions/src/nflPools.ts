@@ -1151,26 +1151,39 @@ export async function publishWeeklyPlaces(
   voidWeek: boolean,
   frozen: WeeklyPrizeSnapshot | undefined,
   entryDocCount: number,
-): Promise<{ weeklyPlaces?: ReturnType<typeof rankWeeklyPlaces>; weeklyPrize?: WeeklyPrizeSnapshot; weeklyPlacesError?: string }> {
+): Promise<{
+  recap: { weeklyPlaces?: ReturnType<typeof rankWeeklyPlaces>; weeklyPrize?: WeeklyPrizeSnapshot; weeklyPlacesError?: string };
+  /**
+   * Set when the divisor was DERIVED (the pool has no `weeksInSeason`): the
+   * caller freezes it on the pool doc in the same fenced write as the recap
+   * (D5), so every later week of this pool prices against the SAME divisor
+   * even if the schedule import changes (codex r1 on the step-4 PR).
+   */
+  poolPatch?: { weeksInSeason: number };
+}> {
   try {
-    if (voidWeek || candidates.length === 0) return {};
+    if (voidWeek || candidates.length === 0) return { recap: {} };
     const ranked = rankWeeklyPlaces(candidates);
     // The frozen snapshot wins over live settings on every later pass.
     let snapshot = frozen;
+    let poolPatch: { weeksInSeason: number } | undefined;
     if (!snapshot) {
       // A3: `pool.entryCount` (server-maintained since multi-entry T2), derived
       // by counting entry docs when a legacy pool lacks the field.
       const entryCount = Number.isInteger(pool?.entryCount) && pool.entryCount >= 0 ? pool.entryCount : entryDocCount;
       const weeks = await weeksInSeasonFor(db, pool);
       snapshot = computeWeeklyPrizeSnapshot(pool?.settings ?? {}, entryCount, weeks, Date.now());
+      if (snapshot && !(Number.isInteger(pool?.weeksInSeason) && pool.weeksInSeason >= 1)) {
+        poolPatch = { weeksInSeason: snapshot.weeksInSeason };
+      }
     }
-    if (!snapshot) return { weeklyPlaces: ranked };
+    if (!snapshot) return { recap: { weeklyPlaces: ranked } };
     const priced = priceWeeklyPlaces(ranked, snapshot);
-    return { weeklyPlaces: priced.rows, weeklyPrize: snapshot };
+    return { recap: { weeklyPlaces: priced.rows, weeklyPrize: snapshot }, poolPatch };
   } catch (e) {
     const code = e instanceof Error ? (e.message.split(':')[0] || 'WEEKLY_PLACES_ERROR') : 'WEEKLY_PLACES_ERROR';
     console.warn(`[scoreNFLWeek] weekly places not published for ${pool?.id ?? '?'} week ${week}: ${code}`, e);
-    return { weeklyPlacesError: code };
+    return { recap: { weeklyPlacesError: code } };
   }
 }
 
@@ -1544,6 +1557,7 @@ async function scoreWeekPass(
           entryId: doc.id,
           userId: entry.ownerUid,
           userName: entry.userName,
+          ...(typeof entry.entryName === 'string' && entry.entryName ? { entryName: entry.entryName } : {}),
           points,
           ...(mnfTotalScore !== null && typeof ownPrediction === 'number'
             ? { tiebreakDiff: Math.abs(ownPrediction - mnfTotalScore) }
@@ -1696,7 +1710,10 @@ async function scoreWeekPass(
       // SHARE. Passing the Pick'em diff here would be worse than useless — it
       // would rank Margin players on a number their sheet never collected.
       if (pick) {
-        winnerCandidates.push({ entryId: doc.id, userId: entry.ownerUid, userName: entry.userName, points: weekScore });
+        winnerCandidates.push({
+          entryId: doc.id, userId: entry.ownerUid, userName: entry.userName, points: weekScore,
+          ...(typeof entry.entryName === 'string' && entry.entryName ? { entryName: entry.entryName } : {}),
+        });
       }
     }
   }
@@ -1852,12 +1869,17 @@ async function scoreWeekPass(
       const recapDoc = buildWeeklyRecap({
         poolId, week, poolType: pool.type, sharpUser, closestTie, aliveCount,
         weeklyWinners,
-        ...weeklyPublication,
+        ...weeklyPublication.recap,
       });
       // Fenced: creating this doc fires onWeeklyRecapCreated → AI trash-talk, and
       // the later authoritative pass only UPDATEs it, so a recap created from a
       // pass that lost its lease can never be regenerated on correct standings.
-      await fencedWrite(db, poolRef, fence!, (tx) => { tx.set(recapRef, recapDoc); });
+      // The derived weeks divisor (if any) is frozen on the pool in the SAME
+      // fenced write — set once, only when absent (D5). This is the one
+      // production write PLAN-WEEKLY-PRIZES §5 names; it rides the scorer's
+      // existing kill-switch + dryRun (`system/config.nflAutoScore`) and this
+      // `!dryRun && !provisional` branch, like every other pool patch here.
+      await fencedWrite(db, poolRef, fence!, (tx) => { tx.set(recapRef, recapDoc); }, weeklyPublication.poolPatch);
 
       await writeAuditEvent({
         poolId,
