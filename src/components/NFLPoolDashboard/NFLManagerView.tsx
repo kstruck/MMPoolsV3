@@ -1392,7 +1392,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                         <span>{row.userName}</span>
                         {row.isOwner && <span className="ml-2 align-middle px-1.5 py-0.5 rounded-full text-[8px] font-display font-bold uppercase tracking-[0.08em] bg-gold-500/15 text-gold-700 dark:text-gold-400 border border-gold-500/30">Commissioner</span>}
                         {!row.isOwner && coManagers.includes(row.uid) && <span className="ml-2 align-middle px-1.5 py-0.5 rounded-full text-[8px] font-display font-bold uppercase tracking-[0.08em] bg-gold-500/15 text-gold-700 dark:text-gold-400 border border-gold-500/30">Co-Commissioner</span>}
-                        {viewerIsOwner && !row.isOwner && (
+                        {/* Offer the toggle only where the callable can succeed: not the
+                            owner, not a distinct managerUid (already a commissioner), and only
+                            a row with a Member Record (K6). Removal is always offered for a
+                            uid already in the array so a stale one can be cleared. */}
+                        {viewerIsOwner && !row.isOwner && row.uid !== pool.managerUid && (row.hasMember || coManagers.includes(row.uid)) && (
                           <button
                             onClick={() => handleToggleCoCommissioner(row.uid)}
                             disabled={savingCoCommissioner === row.uid}

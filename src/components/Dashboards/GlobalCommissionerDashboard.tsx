@@ -47,11 +47,14 @@ export const GlobalCommissionerDashboard: React.FC<GlobalCommissionerDashboardPr
 
   // Client-computed honest baseline (Dues Expected always provable). Dues Collected + Payouts
   // come from the server aggregate once deployed+backfilled; until then they read "—".
-  // OWNER-scoped, deliberately (PLAN-CO-COMMISSIONERS C12/D7; codex r4 on
-  // PR-B): `user.commissionerAggregate` is computed server-side from ownerId
-  // pools only, so the tiles must count the same set or "Pools managed" would
-  // include a co-managed pool whose dues/payouts the money tiles omit. The
-  // LIST below still shows co-managed pools — that is the whole point of D7.
+  // The tiles keep their PRE-co-commissioner scope (owner ∨ managerUid — what
+  // `managedPools` was before PLAN-CO-COMMISSIONERS D7) and deliberately EXCLUDE
+  // co-managed pools (C12; codex r4 on PR-B): `user.commissionerAggregate` is an
+  // owner-keyed rollup, so counting a co-managed pool in "Pools managed" would
+  // pair it with money tiles that omit it. The LIST below still shows co-managed
+  // pools — that is the whole point of D7. (Pre-existing and out of scope here:
+  // the server aggregate keys on `ownerId` alone, so a distinct `managerUid`
+  // was already counted by these tiles and not by the aggregate — codex r5.)
   const ownedActive = useMemo(() => activePools.filter(p => isPoolOwner(user, p)), [activePools, user]);
   const computed = useMemo(() => {
     let participants = 0;
