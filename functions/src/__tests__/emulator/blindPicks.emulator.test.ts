@@ -486,29 +486,32 @@ describe('T2 — getPoolPicks, PER_GAME pick\'em', () => {
     }, 30000);
 
     /**
-     * ⚠️ THE WIDENING TEST. `assertPoolOwnerOrSuperAdmin` — the obvious helper to
-     * reach for here — also admits `createdByUid` and a participant listed in
-     * `coManagers`. The removed firestore.rules clause admitted neither, so using
-     * it would make this callable a WIDER door to pick data than the raw read it
-     * replaces. codex r1 on this PR.
+     * ⚠️ FLIPPED DELIBERATELY — PLAN-CO-COMMISSIONERS C7 (Kevin K4 = Yes,
+     * 2026-08-15; plan D5 names this exact test). It used to assert that a uid
+     * in `coManagers` got the PARTICIPANT view only, because the array was
+     * client-writable and admitting it would have widened the door (codex r1 on
+     * #414). The array is server-owned now (#444) and its only writer is
+     * setPoolCoCommissioner, so a co-commissioner IS a commissioner here.
+     * The two things that must NOT have widened are asserted alongside:
+     * `createdByUid` on its own still buys nothing; the NON-NFL type guard is
+     * pinned in coManagersIgnored.emulator.test.ts and coManagers.rules.test.mjs
+     * (getPoolPicks itself refuses non-NFL pools before the auth question).
      */
-    it('a co-manager gets the PARTICIPANT view, never the commissioner one', async () => {
-        // ⚠️ ADJUSTED, NOT WEAKENED. BOB is a seeded member, so after the
-        // 2026-08-14 widening he is admitted — as a PARTICIPANT. The invariant
-        // that matters is unchanged and is now asserted directly: being listed
-        // in `coManagers` (or as `createdByUid`) must not buy the commissioner's
-        // pre-reveal `counts`, which is the capability the helper would have
-        // handed over.
-        await db.collection('pools').doc(POOL).update({
-            coManagers: [BOB], createdByUid: 'someone-else-entirely',
-        });
+    it('a co-commissioner on an NFL pool gets the COMMISSIONER view (pre-lock counts) — C7', async () => {
+        await db.collection('pools').doc(POOL).update({ coManagers: [BOB] });
         const asCo: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: { uid: BOB, token: {} } as any } as never);
-        expect(asCo.counts).toEqual({});
-        expect(asCo.revealedGameIds).toEqual([LOCKED_GAME]);
-        // ...and the real owner is unaffected by a createdByUid that disagrees.
+        expect(asCo.counts[ALICE]).toBe(2);
+        await db.collection('pools').doc(POOL).update({ coManagers: [] });
+    }, 30000);
+
+    it('createdByUid alone still buys nothing (the type guard on coManagers is pinned in coManagersIgnored + the rules test — getPoolPicks refuses non-NFL pools before auth)', async () => {
+        await db.collection('pools').doc(POOL).update({ createdByUid: BOB });
+        const asCreator: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: { uid: BOB, token: {} } as any } as never);
+        expect(asCreator.counts).toEqual({});
+        await db.collection('pools').doc(POOL).update({ createdByUid: OWNER });
+        // ...and the real owner is unaffected.
         const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asOwner } as never);
         expect(res.revealedGameIds).toEqual([LOCKED_GAME]);
-        await db.collection('pools').doc(POOL).update({ coManagers: [], createdByUid: OWNER });
     }, 30000);
 
     it('a distinct managerUid IS admitted — the rule named them', async () => {

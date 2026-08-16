@@ -37,7 +37,7 @@ import {
     assertFails,
     assertSucceeds,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, collection, query, where } from 'firebase/firestore';
 
 const PROJECT_ID = 'gridiron-gamble-uzuqo';
 
@@ -142,6 +142,59 @@ await check(
     'an owner CANNOT introduce coManagers on a pool that never had it',
     assertFails(updateDoc(doc(owner, 'pools', BARE_POOL), { coManagers: [BOB] })),
 );
+
+// ---------------------------------------------------------------------------
+// T3 — the READERS (deploy step 3, shipped with the setter callable). ALICE is
+// a co-commissioner of the NFL pool. Each row of the capability table that
+// touches rules is pinned, plus the two negatives that matter most: the type
+// guard (a coManagers array on a SQUARES pool grants nothing) and C8 (delete
+// stays owner/managerUid).
+// ---------------------------------------------------------------------------
+console.log('coManagers readers (PLAN-CO-COMMISSIONERS T3)');
+const SQ_POOL = 'cm-pool-squares';
+await env.withSecurityRulesDisabled(async (ctx) => {
+    const f = ctx.firestore();
+    await setDoc(doc(f, 'pools', POOL), { ...BASE, isPublic: false });
+    await setDoc(doc(f, 'pools', SQ_POOL), { ...BASE, id: SQ_POOL, type: 'SQUARES', league: 'NFL', isPublic: false });
+    await setDoc(doc(f, 'pools', POOL, 'payoutRecordsPrivate', 'award-bob'), { uid: BOB, amount: 10 });
+    await setDoc(doc(f, 'pools', POOL, 'audit', 'a1'), { type: 'POOL_CREATED' });
+    await setDoc(doc(f, 'pools', POOL, 'squarePrivate', 's1'), { name: 'pii' });
+    await setDoc(doc(f, 'pools', POOL, 'shareClicks', 'c1'), { at: 1 });
+    await setDoc(doc(f, 'pools', SQ_POOL, 'audit', 'a1'), { type: 'POOL_CREATED' });
+});
+const alice = env.authenticatedContext(ALICE).firestore();
+
+await check('C2 — a co-commissioner CAN update an ordinary field on the NFL pool',
+    assertSucceeds(updateDoc(doc(alice, 'pools', POOL), { name: 'Co-comm renamed' })));
+await check('C10 — a co-commissioner still CANNOT write coManagers (the lock binds them too)',
+    assertFails(updateDoc(doc(alice, 'pools', POOL), { coManagers: [ALICE, BOB] })));
+await check('C8 — a co-commissioner CANNOT delete the pool',
+    assertFails(deleteDoc(doc(alice, 'pools', POOL))));
+await check('type guard — the same uid in a coManagers array on a SQUARES pool CANNOT update it',
+    assertFails(updateDoc(doc(alice, 'pools', SQ_POOL), { name: 'forged' })));
+await check('type guard — ...nor read its audit',
+    assertFails(getDoc(doc(alice, 'pools', SQ_POOL, 'audit', 'a1'))));
+// A list rule is proved from the QUERY, not the documents: `array-contains` alone
+// cannot discharge the type guard, so the Hub query carries the type filter too.
+await check('D7 — the Hub query (coManagers array-contains uid AND type in NFL) succeeds for a co-commissioner',
+    assertSucceeds(getDocs(query(collection(alice, 'pools'),
+        where('coManagers', 'array-contains', ALICE),
+        where('type', 'in', ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'])))));
+await check('D7 — the array-contains query WITHOUT the type filter is refused (not provable)',
+    assertFails(getDocs(query(collection(alice, 'pools'), where('coManagers', 'array-contains', ALICE)))));
+await check('C6 (K3 Yes) — a co-commissioner CAN read another member private payout record',
+    assertSucceeds(getDoc(doc(alice, 'pools', POOL, 'payoutRecordsPrivate', 'award-bob'))));
+await check('C11 — a co-commissioner CAN read audit',
+    assertSucceeds(getDoc(doc(alice, 'pools', POOL, 'audit', 'a1'))));
+await check('C11 — a co-commissioner CAN read shareClicks',
+    assertSucceeds(getDoc(doc(alice, 'pools', POOL, 'shareClicks', 'c1'))));
+await check('C11 — a co-commissioner CAN write an announcement',
+    assertSucceeds(setDoc(doc(alice, 'pools', POOL, 'announcements', 'n1'), { text: 'hi', authorUid: ALICE })));
+await check('K7 — a co-commissioner CANNOT read squarePrivate',
+    assertFails(getDoc(doc(alice, 'pools', POOL, 'squarePrivate', 's1'))));
+const bobCtx = env.authenticatedContext(BOB).firestore();
+await check('a plain member (not in coManagers) still CANNOT read audit',
+    assertFails(getDoc(doc(bobCtx, 'pools', POOL, 'audit', 'a1'))));
 
 await env.cleanup();
 

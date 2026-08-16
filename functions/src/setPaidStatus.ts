@@ -2,6 +2,7 @@
 // paidStatus writes (removed in the deferred wiring commit). Commissioner/owner/admin set the
 // authoritative paidStatus; a member may set only their OWN honor-system claim, never paidStatus.
 import * as admin from "firebase-admin";
+import { isPoolCommissioner } from './poolOps';
 import { FieldValue } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
@@ -100,9 +101,10 @@ export const setPaidStatus = validated(
   }
 
   // --- Authoritative paid mark: commissioner/owner/admin only ---
-  const isOwner =
-    pool.ownerId === uid || pool.managerUid === uid || pool.createdByUid === uid ||
-    request.auth!.token?.role === 'SUPER_ADMIN';
+  // PLAN-CO-COMMISSIONERS C6 (K3 = Yes): a co-commissioner may mark members
+  // paid — one helper, same principal set as every other NFL commissioner
+  // callable, so the ledger and the tab agree on who is a commissioner.
+  const isOwner = isPoolCommissioner(pool, uid) || request.auth!.token?.role === 'SUPER_ADMIN';
   if (!isOwner) throw new HttpsError("permission-denied", "Only the commissioner can set paid status.");
 
   // --- Rebuy settlement (PLAN-PAYMENT-TRUTH P3, Q2 = option B) ---

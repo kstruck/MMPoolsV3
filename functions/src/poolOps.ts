@@ -29,20 +29,13 @@ import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } fr
  * `ownerId` is CANONICAL; `createdByUid` is a functions-only fallback used ONLY
  * when `ownerId` is absent (PLAN-CO-COMMISSIONERS D3 — rules and the client
  * never read `createdByUid`, so treating it as a coequal principal would keep
- * a phantom who can call callables but sees no Commissioner tab; codex r1 on
- * the T1 PR). `managerUid` is a SEPARATE principal, or'd in — the old
- * `createdByUid || ownerId || managerUid` chain resolved ONE owner and silently
- * dropped a distinct `managerUid` whenever an owner was present (Table 2 note
- * 1), which is why `updatePoolSettings` used to carry a hand-rolled bypass.
- * Pools where `ownerId` and `createdByUid` disagree are COUNTED by the
- * clearLegacyCoManagers dry run (`ownerMismatch`), expected 0, listed for Kevin.
+ * a phantom who can call callables but sees no Commissioner tab). `managerUid`
+ * is a SEPARATE principal, or'd in — the old `createdByUid || ownerId ||
+ * managerUid` chain resolved ONE owner and silently dropped a distinct
+ * `managerUid` whenever an owner was present (Table 2 note 1).
  *
- * 🛑 `coManagers` is DELIBERATELY NOT READ HERE (PLAN-CO-COMMISSIONERS T2a,
- * deploy step 1 of D2). The field is client-writable until the rules lock in
- * the same PR deploys, and every functions gate must be blind to it BEFORE the
- * lock ships, so a forged array written during the migration window grants
- * nothing. T2b re-adds it behind an NFL-type guard, in `isPoolCommissioner`,
- * only after the field is server-owned and the audited clear has run.
+ * This is the DESTRUCTIVE / owner-only principal set (D4). It never reads
+ * `coManagers` — see isPoolCommissioner for the widened one.
  */
 export const isPoolOwnerOrManager = (pool: any, uid: string): boolean => {
     // `||`, not `??`: a legacy empty-string ownerId must still fall back (self-review).
@@ -50,22 +43,43 @@ export const isPoolOwnerOrManager = (pool: any, uid: string): boolean => {
     return uid === owner || uid === pool?.managerUid;
 };
 
-// Helper to determine if user can manage pool
+/** The three pool types co-commissioners exist for in v1 (PLAN-CO-COMMISSIONERS C13). */
+export const CO_COMMISSIONER_POOL_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'] as const;
+export const isCoCommissionerPoolType = (type: unknown): boolean =>
+    (CO_COMMISSIONER_POOL_TYPES as readonly string[]).includes(String(type));
+
+/**
+ * Is `uid` a commissioner of this pool — owner, legacy manager, OR a named
+ * co-commissioner? ONE definition for the functions layer (D3); firestore.rules
+ * `isPoolManager()` and the client's `isNFLPoolCommissioner` mirror it.
+ *
+ * `coManagers` is read again here as of deploy step 3 of D2: the field is
+ * server-owned (rules lock, #444) and the only writer is setPoolCoCommissioner,
+ * which admits canonical members of NFL pools only. The type guard is NOT
+ * implied — a `coManagers` array on a Squares/Bracket/Props/Playoff pool grants
+ * nothing here, in the rules, or in the client (codex r3 on the plan).
+ */
+export const isPoolCommissioner = (pool: any, uid: string): boolean => {
+    if (isPoolOwnerOrManager(pool, uid)) return true;
+    return isCoCommissionerPoolType(pool?.type)
+        && Array.isArray(pool?.coManagers)
+        && pool.coManagers.includes(uid);
+};
+
+// Helper to determine if user can manage pool — the WIDENED set (co-commissioners in).
 export const assertPoolOwnerOrSuperAdmin = (pool: any, uid: string, userRole?: string) => {
     // If Super Admin, allow
     if (userRole === 'SUPER_ADMIN') return;
-    if (!isPoolOwnerOrManager(pool, uid)) {
+    if (!isPoolCommissioner(pool, uid)) {
         throw new HttpsError('permission-denied', 'You do not have permission to manage this pool.');
     }
 };
 
 /**
  * The DESTRUCTIVE principal set (PLAN-CO-COMMISSIONERS D4: owner-only by NAME,
- * not by omission) — cancel / close / delete. Today identical to
- * `assertPoolOwnerOrSuperAdmin`; it exists so that when T2b widens the general
- * helper to co-commissioners, these callables are gated on a helper that says
- * so and are not widened by accident. It keeps `managerUid`, which rules `:82`
- * and `closePool`'s own doc already admit for delete/close (codex r3).
+ * not by omission) — cancel / close / delete and the simulation tools. Never
+ * reads `coManagers`. It keeps `managerUid`, which rules `:82` and `closePool`'s
+ * own doc already admit for delete/close (codex r3).
  */
 export const assertPoolOwnerOrManagerNoCo = (pool: any, uid: string, userRole?: string) => {
     if (userRole === 'SUPER_ADMIN') return;

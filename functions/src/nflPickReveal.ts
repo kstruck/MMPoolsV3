@@ -37,6 +37,7 @@
  */
 
 import * as admin from "firebase-admin";
+import { isPoolCommissioner } from './poolOps';
 import { HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
 import { assertCallerRole } from "./lib/assertRole";
@@ -90,12 +91,19 @@ export interface PoolPicksResponse {
  * commissioner gets, from the same call — there is deliberately no second
  * definition of "locked" anywhere in this function or on the client.
  *
- * ⚠️ Do NOT reach for `assertPoolOwnerOrSuperAdmin` here, tempting as it is.
- * That helper also admits `createdByUid` and a participant listed in
- * `coManagers` — neither of which the removed rule granted. Using it would make
- * this callable a WIDER door to pick data than the one it replaces: a
- * co-manager would gain per-member completion COUNTS before lock, which is the
- * commissioner capability K1 exists to keep scarce. (codex r1 on #414.)
+ * ⚠️ THE COMMISSIONER BRANCH IS `isPoolCommissioner` — DELIBERATELY, AS OF
+ * PLAN-CO-COMMISSIONERS C7 (Kevin, K4 = Yes, 2026-08-15). This header used to
+ * forbid exactly that: `coManagers` was an unvetted, client-writable array, so
+ * admitting it would have been a WIDER door to pre-lock completion COUNTS than
+ * the rule this callable replaced (codex r1 on #414). That objection is
+ * answered, not overruled: the array is server-owned now (rules lock, #444) and
+ * its ONLY writer is `setPoolCoCommissioner`, which the owner calls per uid,
+ * for canonical members of NFL pools only. A co-commissioner named that way IS
+ * a commissioner for the purpose CONTEXT.md §Pick Reveal names — "chasing
+ * missing picks is the Commissioner's job" — so they see "14 of 16 Picks Set"
+ * before lock, and departed members' entries, exactly as the owner does. What
+ * they still do NOT get: anything on WHEN a pick is revealed (`weekRevealFor`
+ * is untouched), and `createdByUid` on its own still buys nothing here.
  *
  * 🛑 MEMBERSHIP HERE IS A **CANONICAL MEMBER RECORD**, NOT `isProvableMember`.
  *
@@ -155,7 +163,7 @@ async function assertPickReader(
         }
     }
 
-    if (pool.ownerId === uid || pool.managerUid === uid) {
+    if (isPoolCommissioner(pool, uid)) {
         return { kind: 'COMMISSIONER', isSuperAdmin: false };
     }
 

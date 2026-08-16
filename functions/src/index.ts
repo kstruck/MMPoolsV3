@@ -20,6 +20,7 @@ export { autoClosePools } from "./autoClosePools"; // T2: daily stuck-pool close
 export { onPoolLocked, recalculateGlobalStats, recomputeGlobalStatsDaily } from "./statsTrigger";
 export { onUserCreated as createParticipantProfile, createClaimCode, claimMySquares, claimByCode, syncParticipantIndices } from "./participant";
 export { createPool, updatePoolSettings, recalculatePoolWinners, toggleWinnerPaid, fixParticipantIds, clearLegacyCoManagers } from "./poolOps";
+export { setPoolCoCommissioner } from "./coCommissioners";
 export { backfillPools } from "./backfill";
 export { createBracketPool, publishBracketPool, joinBracketPool } from "./bracketPools";
 export { createBracketEntry, updateBracketEntry, submitBracketEntry, deleteBracketEntry, updateEntryPayment, adminUpdateEntryOverrides, adminDeleteEntry } from "./bracketEntries";
