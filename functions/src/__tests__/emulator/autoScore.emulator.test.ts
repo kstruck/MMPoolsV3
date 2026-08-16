@@ -1489,12 +1489,18 @@ describe('Weekly Winners List — weeklyPlaces + frozen weeklyPrize', () => {
     expect((await entryDoc(poolId, A)).weeklyPoints[1]).toBe(2);
   });
 
-  it('SEASON mode publishes places and scores with NO prize and NO snapshot (D7)', async () => {
+  it('SEASON mode publishes places and scores with NO prize and the UNPRICED sentinel (D7) — and a later switch to WEEKLY does not retroactively price the week', async () => {
     await setup([{ rank: 1, percentage: 100 }]);
     await db.collection('pools').doc(poolId).update({ 'settings.payoutMode': 'SEASON' });
     await scoreComplete();
-    const recap = (await recapDoc())!;
-    expect(recap.weeklyPrize).toBeUndefined();
+    let recap = (await recapDoc())!;
+    expect(recap.weeklyPrize).toBeNull();
     expect(recap.weeklyPlaces.map((p: any) => [p.entryId, p.rank, 'prize' in p])).toEqual([[A, 1, false], [B, 2, false], [C, 2, false]]);
+    // The commissioner flips to WEEKLY and rescores: the published week stays unpriced (codex r2).
+    await db.collection('pools').doc(poolId).update({ 'settings.payoutMode': 'WEEKLY' });
+    await scoreComplete();
+    recap = (await recapDoc())!;
+    expect(recap.weeklyPrize).toBeNull();
+    expect(recap.weeklyPlaces.every((p: any) => !('prize' in p))).toBe(true);
   });
 });

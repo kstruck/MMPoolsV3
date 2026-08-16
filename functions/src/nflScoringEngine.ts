@@ -905,8 +905,13 @@ export function buildWeeklyRecap(params: {
    * when not computed (older recap, void week, Survivor).
    */
   weeklyPlaces?: WeeklyPlace[];
-  /** The frozen pot/places/entryCount/weeks the prizes were computed from (§3b-i). */
-  weeklyPrize?: WeeklyPrizeSnapshot;
+  /**
+   * The frozen pot/places/entryCount/weeks the prizes were computed from
+   * (§3b-i), or `null` = published UNPRICED (SEASON / no pot at first
+   * publication) — an explicit sentinel so a later edit cannot retroactively
+   * price an already-published week. Absent = not published by this feature.
+   */
+  weeklyPrize?: WeeklyPrizeSnapshot | null;
   /** Publication failed CLOSED (§9 A5) — the code, never a crash. */
   weeklyPlacesError?: string;
   nowMs?: number;
@@ -930,7 +935,7 @@ export function buildWeeklyRecap(params: {
   if (weeklyPlaces && weeklyPlaces.length > 0) {
     recap.weeklyPlaces = weeklyPlaces;
   }
-  if (weeklyPrize) {
+  if (weeklyPrize !== undefined) {
     recap.weeklyPrize = weeklyPrize;
   }
   if (weeklyPlacesError) {

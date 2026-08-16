@@ -333,8 +333,12 @@ export interface WeeklyRecap {
    * ABSENT = not computed (older recap, void week, Survivor) — never "nobody".
    */
   weeklyPlaces?: WeeklyPlace[];
-  /** The frozen pot/places/entryCount/weeks the prizes came from (§3b-i). */
-  weeklyPrize?: WeeklyPrizeSnapshot;
+  /**
+   * The frozen pot/places/entryCount/weeks the prizes came from (§3b-i), or
+   * `null` = published UNPRICED (SEASON mode / no pot) — never re-priced.
+   * Absent = not published by this feature.
+   */
+  weeklyPrize?: WeeklyPrizeSnapshot | null;
   /** Publication failed closed (§9 A5): an error code, e.g. PRIZE_SPLIT_DUPLICATE_RANK. */
   weeklyPlacesError?: string;
   attritionCount?: number; // Survivor remaining alive count
