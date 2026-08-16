@@ -108,6 +108,7 @@ export const recordPoolPayouts = onCall(async (request) => {
     if (week !== undefined && a.kind !== 'PLACE') throw new HttpsError('invalid-argument', `awards[${i}].week is only valid on a PLACE award.`);
     if (week !== undefined && (typeof a.entryId !== 'string' || !a.entryId)) throw new HttpsError('invalid-argument', `awards[${i}].entryId is required on a weekly award.`);
     if (week !== undefined && a.supersedes !== undefined) throw new HttpsError('invalid-argument', `awards[${i}]: a weekly award re-records via staleAwardId, not supersedes.`);
+    if (week === undefined && a.staleAwardId !== undefined) throw new HttpsError('invalid-argument', `awards[${i}]: staleAwardId is only valid on a weekly award — a season award corrects via supersedes.`);
     return {
       uid: a.uid,
       entryId: typeof a.entryId === 'string' ? a.entryId : undefined,
@@ -189,7 +190,8 @@ export const recordPoolPayouts = onCall(async (request) => {
       const liveDocs = liveSnap.docs.filter(d => !(d.data() as any).supersededBy);
       if (liveDocs.length > 1) throw new HttpsError('failed-precondition', `LEDGER_INCONSISTENT: more than one live weekly award for entry ${a.entryId} week ${a.week}.`);
       const live = liveDocs[0];
-      const liveMatches = live !== undefined && live.id === base && Number((live.data() as any).amount) === a.amount;
+      // "Matches" = same place and same amount as the recap now says (the id may carry a ~k suffix after earlier corrections).
+      const liveMatches = live !== undefined && Number((live.data() as any).place) === row.rank && Number((live.data() as any).amount) === a.amount;
 
       if (!a.staleAwardId) {
         if (live && liveMatches) {
@@ -238,7 +240,7 @@ export const recordPoolPayouts = onCall(async (request) => {
         // caller re-records against what is actually live rather than being
         // told a stale figure was corrected (codex r2 on T4).
         const liveData = chainLive.data() as any;
-        if (chainLive.id === base && Number(liveData.amount) === a.amount) {
+        if (Number(liveData.place) === row.rank && Number(liveData.amount) === a.amount) {
           out.push({ awardRef: chainLive.ref, a, write: false });
           continue;
         }
