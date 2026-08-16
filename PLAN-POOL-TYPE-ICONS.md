@@ -465,3 +465,9 @@ pure derivation module and its test.
 - [x] Act 2 — 4 Codex rounds run (cap); 19 findings, 16 absorbed, 2 rejected with evidence, 1 → K13. **Round 4 was REVISE (2 small findings), absorbed after the round and not re-reviewed** — see review log Resolution. Not labelled CONVERGED.
 - [ ] §6 signed by Kevin (K1–K13)
 - [ ] Code (T1–T5), each PR through codex + qodo + CI
+
+---
+
+## § Board memo (2026-08-16)
+
+Simulated advisory board (`ask-the-board`, 6 seats + Chair, unanimous, medium confidence): **do not open T1 now** — ship the two §1.3 mislabels (`JoinPool.tsx:197`, `ManagerDashboard.tsx:725`) as ordinary one-file fixes this week, no taxonomy; ICONS is the plan the board would build FIRST if a trigger fires and no hand-over request has appeared (it is the only one of the three that deletes code, and the lowest-maintenance). §6 rows the board would overturn: **K8** → No in v1 (Theo, Ras Mic — adds render sites without deleting anything); K10 → No in v1 (Theo alone); K4 → not before the mislabels ship (Cuban alone); K1 → defer until members demonstrably confuse variants (Kapoor alone). All other rows left standing. Full memo: [BOARD-MEMO-2026-08-16-transfer-icons-help.md](BOARD-MEMO-2026-08-16-transfer-icons-help.md). Simulation, not approval — Kevin decides.

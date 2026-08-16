@@ -860,3 +860,9 @@ then require mirrors for them.
 - UNVERIFIED: whether `.github/PULL_REQUEST_TEMPLATE.md` exists (T14).
 - UNVERIFIED: Spectrum's `OnboardingTour` (named in `help-content.ts:3`) — not
   read; out of scope.
+
+---
+
+## § Board memo (2026-08-16)
+
+Simulated advisory board (`ask-the-board`, 6 seats + Chair, unanimous, medium confidence): **do not start this plan during the live season** — 17 tickets with "writing is the long pole", zero measured "what does this option mean" requests, and Duke's pre-mortem predicts a stalled empty skeleton; it re-opens (T0–T2 in a smaller shape) if support tickets asking what a setting means appear. §6 rows the board would overturn: **K4** → v1 scope smaller than (ii) — five seats, shape contested (wizard tooltips only / T0–T2 + ONE pool type with a kill point / (i) only / only fields commissioners ask about / glossary + summaries with no tooltips); **K12** → No — delete/deprecate legacy wizards first (Theo, Ras Mic); K13 → `?tab=` adoption is its own tiny PR, not this plan's (Ras Mic alone). Theo also flags "mimic Spectrum exactly" as an inherited constraint to re-test on a phone on game day. Full memo: [BOARD-MEMO-2026-08-16-transfer-icons-help.md](BOARD-MEMO-2026-08-16-transfer-icons-help.md). Simulation, not approval — Kevin decides.

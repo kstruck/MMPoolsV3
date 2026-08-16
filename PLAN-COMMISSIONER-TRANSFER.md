@@ -644,3 +644,9 @@ another Member (Commissioner Transfer)."*
 - It does not flip Member Record roles or move any dues (D5).
 - It does not build the invite → accept flow (K14) or a cooling-off period.
 - It does not change how Bundles, Coupons or Billing Charges are owned or shown.
+
+---
+
+## § Board memo (2026-08-16)
+
+Simulated advisory board (`ask-the-board`, 6 seats + Chair, unanimous, medium confidence): **do not build this plan now** — no measured hand-over demand, review stopped with K18 open, and every functions deploy lands in a live scorer. Ship the K17 `createCheckoutSession` ownership gate NOW as its own small plan-gated PR, decoupled from this plan; re-open TRANSFER on the first hand-over the co-commissioner path cannot satisfy. §6 rows the board would overturn: **K14** → invite→accept (4 seats; codex's HIGH stands); **K17** → keep "yes", drop "inside this plan" (all seats); **K18** → do not ship T2c as written — majority takes the plan's own alternative (refuse on ANY `pendingSessionId`) and instruments first, minority says land the webhook guard before any callable ships; K1 → owner-only v1 (Willison alone). Full memo, split, experiment and framing audit: [BOARD-MEMO-2026-08-16-transfer-icons-help.md](BOARD-MEMO-2026-08-16-transfer-icons-help.md). Simulation, not approval — Kevin decides.
