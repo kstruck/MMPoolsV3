@@ -588,6 +588,9 @@ service cloud.firestore {
           request.auth.uid in get(/databases/$(database)/documents/pools/$(poolId)).data.participantIds ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          // A named NFL co-commissioner runs the ledger (PLAN-PAYMENT-LEDGER T5;
+          // the callable admits them) — same predicate the private records use.
+          isNFLCoManagerOf(get(/databases/$(database)/documents/pools/$(poolId)).data) ||
           isSuperAdmin()
         );
         allow write: if false;
