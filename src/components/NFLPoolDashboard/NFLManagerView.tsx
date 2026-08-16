@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { getUserMessage } from '../../utils/errorMessages';
+import { isPoolManager, poolCoManagers } from '../../utils/auth';
 import { logger } from '../../utils/logger';
 import type { Pool, NFLGame, User } from '../../types';
 import { NFLManagerBentoDashboard } from './NFLManagerBentoDashboard';
@@ -119,6 +120,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
   const [isScoring, setIsScoring] = useState(false);
   const [isSavingPayment, setIsSavingPayment] = useState<string | null>(null);
+  const [savingCoCommissioner, setSavingCoCommissioner] = useState<string | null>(null);
   const [remindingUid, setRemindingUid] = useState<string | null>(null);
   const [bulkReminding, setBulkReminding] = useState<'PICKS' | 'PAYMENT' | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -370,6 +372,32 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       setFeedback({ type: 'error', message: err.message || 'Scoring failed. Ensure all games are final.' });
     } finally {
       setIsScoring(false);
+    }
+  };
+
+  // PLAN-CO-COMMISSIONERS D6/C10: owner-only, ONE uid per call, THIS ROW ONLY.
+  // Never a full array: that would reinstate the stale-tab race the revision
+  // fence closes. `add` presents the coManagersRevision this tab SAW (absent =
+  // 0); if another tab moved it the server refuses and the snapshot re-renders
+  // the row from truth. `remove` presents nothing and always wins.
+  const coManagers = poolCoManagers(pool);
+  // STRICT isPoolManager: owner / managerUid / SUPER_ADMIN — exactly the set the
+  // callable admits (C10; SA per codex r3) — and NEVER a co-commissioner, since
+  // the strict helper does not read coManagers (D3/D4).
+  const viewerIsOwner = isPoolManager(user, pool);
+  const handleToggleCoCommissioner = async (uid: string) => {
+    setSavingCoCommissioner(uid);
+    setFeedback(null);
+    const isCo = coManagers.includes(uid);
+    try {
+      await dbService.setPoolCoCommissioner(isCo
+        ? { poolId: pool.id, uid, op: 'remove' }
+        : { poolId: pool.id, uid, op: 'add', revision: (pool as { coManagersRevision?: number }).coManagersRevision ?? 0 });
+    } catch (err: unknown) {
+      logger.error(`Failed to ${isCo ? 'remove' : 'add'} co-commissioner ${uid}:`, err);
+      setFeedback({ type: 'error', message: getUserMessage(err, 'Failed to update co-commissioners.') });
+    } finally {
+      setSavingCoCommissioner(null);
     }
   };
 
@@ -1363,6 +1391,22 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       <td className="py-3.5 px-5 font-body font-bold text-[color:var(--text)]">
                         <span>{row.userName}</span>
                         {row.isOwner && <span className="ml-2 align-middle px-1.5 py-0.5 rounded-full text-[8px] font-display font-bold uppercase tracking-[0.08em] bg-gold-500/15 text-gold-700 dark:text-gold-400 border border-gold-500/30">Commissioner</span>}
+                        {!row.isOwner && coManagers.includes(row.uid) && <span className="ml-2 align-middle px-1.5 py-0.5 rounded-full text-[8px] font-display font-bold uppercase tracking-[0.08em] bg-gold-500/15 text-gold-700 dark:text-gold-400 border border-gold-500/30">Co-Commissioner</span>}
+                        {/* Offer the toggle only where the callable can succeed: not the
+                            owner, not a distinct managerUid (already a commissioner), and only
+                            a row with a Member Record (K6). Removal is always offered for a
+                            uid already in the array so a stale one can be cleared. */}
+                        {viewerIsOwner && !row.isOwner && row.uid !== pool.managerUid && (row.hasMember || coManagers.includes(row.uid)) && (
+                          <button
+                            onClick={() => handleToggleCoCommissioner(row.uid)}
+                            disabled={savingCoCommissioner === row.uid}
+                            title={coManagers.includes(row.uid) ? 'Remove as co-commissioner' : 'Name as co-commissioner (up to 3)'}
+                            className="ml-2 align-middle inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-display font-bold uppercase text-[9px] tracking-[0.08em] border border-line text-muted hover:border-gold-500/40 hover:text-gold-700 dark:hover:text-gold-400 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 cursor-pointer"
+                          >
+                            <UserCog size={10} />
+                            {savingCoCommissioner === row.uid ? 'Saving...' : coManagers.includes(row.uid) ? 'Remove co-comm' : 'Make co-comm'}
+                          </button>
+                        )}
                         {!row.hasEntry && <span className="ml-2 align-middle px-1.5 py-0.5 rounded-full text-[8px] font-display font-bold uppercase tracking-[0.08em] bg-surface text-faint border border-line">No entry yet</span>}
                       </td>
 
@@ -1647,7 +1691,10 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               )}
             </div>
 
-            {/* ── Cancel Pool ── */}
+            {/* ── Cancel Pool ── owner/managerUid/SA ONLY (PLAN-CO-COMMISSIONERS C8/D4):
+                `cancelPool` refuses a co-commissioner server-side, so do not walk them
+                through two destructive confirmations into a permission error. */}
+            {viewerIsOwner && (
             <div className="bg-brandred-600/5 border border-brandred-600/25 rounded-lg p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <Ban size={14} className="text-brandred-600" />
@@ -1679,6 +1726,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 </button>
               </div>
             </div>
+            )}
           </div>
         )}
       </div>

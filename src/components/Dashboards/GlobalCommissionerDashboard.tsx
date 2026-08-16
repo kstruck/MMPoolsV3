@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router';
 import { Crown, DollarSign, Users, Settings, ArrowRight, Trophy } from 'lucide-react';
 import type { User, Pool } from '../../types';
 import { Button } from '../ui';
-import { isActiveManagedPool } from '../../utils/poolSport';
+import { isActiveManagedPool, isNFLSeasonPoolType } from '../../utils/poolSport';
+import { isPoolOwner, isNamedNFLCoCommissioner } from '../../utils/auth';
 
 interface GlobalCommissionerDashboardProps {
   user: User;
@@ -46,16 +47,25 @@ export const GlobalCommissionerDashboard: React.FC<GlobalCommissionerDashboardPr
 
   // Client-computed honest baseline (Dues Expected always provable). Dues Collected + Payouts
   // come from the server aggregate once deployed+backfilled; until then they read "—".
+  // The tiles keep their PRE-co-commissioner scope (owner ∨ managerUid — what
+  // `managedPools` was before PLAN-CO-COMMISSIONERS D7) and deliberately EXCLUDE
+  // co-managed pools (C12; codex r4 on PR-B): `user.commissionerAggregate` is an
+  // owner-keyed rollup, so counting a co-managed pool in "Pools managed" would
+  // pair it with money tiles that omit it. The LIST below still shows co-managed
+  // pools — that is the whole point of D7. (Pre-existing and out of scope here:
+  // the server aggregate keys on `ownerId` alone, so a distinct `managerUid`
+  // was already counted by these tiles and not by the aggregate — codex r5.)
+  const ownedActive = useMemo(() => activePools.filter(p => isPoolOwner(user, p)), [activePools, user]);
   const computed = useMemo(() => {
     let participants = 0;
     let duesExpected = 0;
-    for (const p of activePools) {
+    for (const p of ownedActive) {
       const n = realParticipants(p).length;
       participants += n;
       duesExpected += feeOf(p) * n;
     }
-    return { poolsManaged: activePools.length, participants, duesExpected };
-  }, [activePools]);
+    return { poolsManaged: ownedActive.length, participants, duesExpected };
+  }, [ownedActive]);
 
   // Prefer the server aggregate when present; fall back to the provable client baseline.
   const agg = user.commissionerAggregate;
@@ -93,13 +103,20 @@ export const GlobalCommissionerDashboard: React.FC<GlobalCommissionerDashboardPr
     return (
       <div className="bg-surface border border-line rounded-2xl p-4 flex items-center justify-between group hover:border-gold-500/40 transition-colors">
         <div className="min-w-0">
-          <h4 className="text-[color:var(--text)] font-display font-bold uppercase truncate">{pool.name}</h4>
+          <h4 className="text-[color:var(--text)] font-display font-bold uppercase truncate">
+            {pool.name}
+            {!isPoolOwner(user, pool) && isNamedNFLCoCommissioner(user, pool) && <span className="ml-2 align-middle px-1.5 py-0.5 rounded-full text-[8px] font-display font-bold tracking-[0.08em] bg-gold-500/15 text-gold-700 dark:text-gold-400 border border-gold-500/30">Co-Commissioner</span>}
+          </h4>
           <p className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em]">
             <span className="num">{players}</span> Players{dues > 0 && <> • <span className="num">{money(dues)}</span> dues</>}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button onClick={() => navigate(`/admin/${pool.id}`)} className="bg-card border border-line hover:border-navy-600 text-muted hover:text-[color:var(--text)] p-2 rounded-lg transition-colors" title="Admin Dashboard">
+          {/* NFL pools have no /admin surface — AdminRoute only redirects them to
+              ?tab=manager AFTER a strict owner/managerUid guard, which would refuse a
+              co-commissioner (PLAN-CO-COMMISSIONERS D7; codex r1 on PR-B). Go straight
+              to the manager tab, where PoolRoute computes the NFL-widened isManager. */}
+          <button onClick={() => navigate(isNFLSeasonPoolType(pool.type) ? `/pool/${pool.id}?tab=manager` : `/admin/${pool.id}`)} className="bg-card border border-line hover:border-navy-600 text-muted hover:text-[color:var(--text)] p-2 rounded-lg transition-colors" title="Admin Dashboard">
             <Settings size={16} />
           </button>
           <button onClick={() => navigate(`/pool/${(pool as any).slug || pool.id}`)} className="bg-navy-800 hover:bg-navy-700 text-white p-2 rounded-lg transition-colors flex items-center justify-center" title="View Pool">

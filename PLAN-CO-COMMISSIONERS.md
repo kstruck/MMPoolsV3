@@ -310,6 +310,8 @@ alone exposes nothing (codex r5). **Not** the aggregate stats (C12).
 
 ## 7. Implementation tickets — §6 signed 2026-08-15; T1 lock + T2a + T7 IN A PR (deploy steps 1–2)
 
+> **Status 2026-08-15 (late):** #444 (steps 1–2) MERGED + deployed; #446 (step 3 server: T1 callable, T2b, T3, T4) OPEN, codex r2 clean; **PR-B #447 (T5 + T6, client) OPEN, stacked on #446** — merge order #446 → #447; #447 adds `firestore.indexes.json` (Hub feed composite) + Coolify as deploy surfaces. Client facts recorded in HANDOFF top box.
+>
 > **Status 2026-08-15:** the first PR carries **T2a** (functions blind to `coManagers`; `assertPoolOwnerOrSuperAdmin` is a disjunction; `assertPoolOwnerOrManagerNoCo` gates cancel/close; `updatePoolSettings` bypass gone), **T1's lock half** (`coManagers` + `coManagersRevision` in `protectedFieldsUnchanged()` and `PRIVILEGED_POOL_FIELDS`; `arrayRemove` in both S8 helpers; `coManagers.rules.test.mjs`; `coManagersIgnored.emulator.test.ts`), and **T7** as the `clearLegacyCoManagers` Operations-tab action (dry-run = the census; live = the audited clear). **Deploy steps 1–2 shipped as #444 (functions + rules at `7efadbdf`; census 135 pools / 0 carrying the field / 0 ownerMismatch, live clear a no-op).** Deploy step 3 is split: **PR-A (server)** = `setPoolCoCommissioner` + `isPoolCommissioner` (T2b, NFL-guarded) + T3 rules readers + T4 (C7, the pinned reveal test flipped) + `setPaidStatus` C6; **PR-B (client)** = T5 UI (members-tab toggle, Hub query with the type filter, `isNFLPoolCommissioner`) + T6 docs. ⚠️ D7 measured: a Firestore LIST rule is proved from the QUERY, so the Hub query must carry `where('type','in',[NFL types])` alongside `array-contains` or it is denied.
 
 | T | What | Files | Evidence required |

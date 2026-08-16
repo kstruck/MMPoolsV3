@@ -33,10 +33,13 @@ Activity event types (exhaustive for v1):
 A top-level `admin_audit` collection keyed by actor UID and timestamp. Records every administrative action (role changes, emails sent, password resets) from the actor's perspective. Enables forensic queries like "what did moderator X do today?" without scanning per-user activity subcollections. Written by the same Cloud Functions that write to the target User's Activity Log.
 
 ### Pool
-A contest (bracket, squares grid, pick'em, survivor, margin, prop bet) managed by a Commissioner or Super Admin. A Pool has one owner (`ownerId`) and optionally a separate manager (`managerUid`).
+A contest (bracket, squares grid, pick'em, survivor, margin, prop bet) managed by a Commissioner or Super Admin. A Pool has one owner (`ownerId`), optionally a separate manager (`managerUid`), and — on the three NFL types only — up to three named Co-Commissioners (`coManagers`).
 
 ### Commissioner
 A User with Role `COMMISSIONER`. Can create Pools and manage their own Pools. Corresponds to the existing `POOL_MANAGER` role value being renamed.
+
+### Co-Commissioner
+A Member of an NFL Pool (Pick'em, Survivor, Margin) whom the Pool's owner has named to help run it. Stored as a uid in the SERVER-OWNED `pools/{id}.coManagers` array (max 3), written only by the `setPoolCoCommissioner` callable; a Co-Commissioner must hold a Member Record. Can do the day-to-day work — edit settings, lock, extend a deadline, proxy-pick, score a week, send invites and reminders, mark members paid, record payouts, and see pre-lock pick counts. Cannot cancel, close or delete the Pool, touch Billing, or name other Co-Commissioners. Not a Role — the User keeps `MEMBER`; the grant is per Pool. Non-NFL formats have no Co-Commissioners. See `PLAN-CO-COMMISSIONERS.md` §3.
 
 ### Member
 A User with Role `MEMBER`. The default role assigned on registration. Formerly called `Participant` in code.

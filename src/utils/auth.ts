@@ -28,6 +28,48 @@ export const isPoolManager = (user: User | null | undefined, pool: { ownerId?: s
     return isPoolOwner(user, pool) || isSuperAdmin(user);
 };
 
+/** The pool types on which co-commissioners exist (PLAN-CO-COMMISSIONERS C13). */
+export const NFL_CO_COMMISSIONER_POOL_TYPES: readonly string[] = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
+
+/**
+ * The server-owned co-commissioner list, read defensively — the field is
+ * absent on every non-NFL pool and on any pool where nobody has been named.
+ * Never trust its shape blindly: it was client-writable before the T1 lock.
+ */
+export const poolCoManagers = (pool: object | null | undefined): string[] => {
+    // `object`, not `{ coManagers?: unknown }` — the `Pool` union's non-NFL
+    // members declare no such field and weak-type checking refuses them (tsc -b).
+    const raw = (pool as { coManagers?: unknown } | null | undefined)?.coManagers;
+    return Array.isArray(raw) ? raw.filter((u): u is string => typeof u === 'string') : [];
+};
+
+/**
+ * Owner / manager / super admin, OR a named co-commissioner on an NFL pool
+ * (PLAN-CO-COMMISSIONERS D3). This is the ONLY widened predicate on the client
+ * and it is used ONLY where `PoolRoute` computes `isManager` for the three NFL
+ * dashboards and where the Commissioner Hub decides what to list. `isPoolOwner`,
+ * `isPoolManager` and `canManageEntries` stay strict — Bracket/Playoff/Squares
+ * surfaces and the owner-only co-commissioner toggle read them.
+ */
+export const isNFLPoolCommissioner = (
+    user: User | null | undefined,
+    pool: { ownerId?: string; managerUid?: string; type?: string } | null | undefined,
+): boolean => isPoolManager(user, pool) || isNamedNFLCoCommissioner(user, pool);
+
+/**
+ * True ONLY for a uid actually named in `coManagers` on an NFL pool — no owner,
+ * manager or SUPER_ADMIN implication. This is what the Commissioner Hub and its
+ * "Co-Commissioner" chip key on: the Hub lists pools you OWN or are NAMED on,
+ * never every pool a super admin could administer (codex r6 on PR-B).
+ */
+export const isNamedNFLCoCommissioner = (
+    user: User | null | undefined,
+    pool: { type?: string } | null | undefined,
+): boolean => {
+    if (!user || !pool) return false;
+    return NFL_CO_COMMISSIONER_POOL_TYPES.includes(pool.type ?? '') && poolCoManagers(pool).includes(user.id);
+};
+
 /** Check if a user can create pools (COMMISSIONER and above, incl. legacy POOL_MANAGER) */
 export const canCreatePool = (user: User | null | undefined): boolean => {
     if (!user) return false;

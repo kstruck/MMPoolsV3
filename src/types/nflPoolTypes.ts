@@ -61,6 +61,13 @@ export interface NFLPickemPool {
   name: string;
   ownerId: string;
   managerUid: string;
+  /**
+   * SERVER-OWNED (PLAN-CO-COMMISSIONERS D2). Written only by the
+   * `setPoolCoCommissioner` callable; `firestore.rules` refuses every client
+   * write. `coManagersRevision` is the fence an `add` must present.
+   */
+  coManagers?: string[];
+  coManagersRevision?: number;
   participantIds?: string[];
   urlSlug?: string;
   season: string;
@@ -123,6 +130,13 @@ export interface NFLSurvivorPool {
   name: string;
   ownerId: string;
   managerUid: string;
+  /**
+   * SERVER-OWNED (PLAN-CO-COMMISSIONERS D2). Written only by the
+   * `setPoolCoCommissioner` callable; `firestore.rules` refuses every client
+   * write. `coManagersRevision` is the fence an `add` must present.
+   */
+  coManagers?: string[];
+  coManagersRevision?: number;
   participantIds?: string[];
   urlSlug?: string;
   season: string;
@@ -177,6 +191,13 @@ export interface NFLMarginPool {
   name: string;
   ownerId: string;
   managerUid: string;
+  /**
+   * SERVER-OWNED (PLAN-CO-COMMISSIONERS D2). Written only by the
+   * `setPoolCoCommissioner` callable; `firestore.rules` refuses every client
+   * write. `coManagersRevision` is the fence an `add` must present.
+   */
+  coManagers?: string[];
+  coManagersRevision?: number;
   participantIds?: string[];
   urlSlug?: string;
   season: string;
