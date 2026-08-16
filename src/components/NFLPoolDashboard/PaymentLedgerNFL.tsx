@@ -54,6 +54,10 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
   const [privLoaded, setPrivLoaded] = useState(false);
 
   useEffect(() => {
+    // Pool switch without remount: drop the previous pool's data before the
+    // new snapshots arrive — award ids are deterministic and could collide
+    // across pools (codex r9).
+    setRecaps([]); setRecords([]); setPriv([]); setPrivLoaded(false); setPrivUnavailable(false); setError(null);
     const u1 = dbService.subscribeToWeeklyRecaps(pool.id, setRecaps);
     const u2 = dbService.subscribeToPayoutRecords(pool.id, setRecords as never);
     const u3 = dbService.subscribeToPayoutRecordsPrivate(pool.id, (rows) => { setPriv(rows as never); setPrivUnavailable(false); setPrivLoaded(true); }, undefined, () => setPrivUnavailable(true));
