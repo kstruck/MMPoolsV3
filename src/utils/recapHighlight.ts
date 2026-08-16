@@ -32,6 +32,8 @@ export function formatSharpScore(poolType: string | undefined, score: number): s
 export function recapHasHighlights(recap: WeeklyRecap): boolean {
   return (
     Boolean(recap.weeklyWinners?.length) ||
+    Boolean(recap.weeklyPlaces?.length) ||
+    Boolean(recap.weeklyPlacesError) ||
     Boolean(recap.sharpOfWeek) ||
     Boolean(recap.closestTiebreaker) ||
     recap.attritionCount !== undefined
