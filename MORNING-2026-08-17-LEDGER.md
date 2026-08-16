@@ -14,7 +14,7 @@ PR to `main` as its base merges. **Merge nothing until you have read §3.**
 | 3 | https://github.com/kstruck/MMPoolsV3/pull/453 | `claude/weekly-prizes-step4` | scorer publishes **`weeklyPlaces`** (full entry-keyed ranking) + **frozen `weeklyPrize`** (or `null` = unpriced) on `weekly_recaps/week_N`; fail-closed `weeklyPlacesError`; `pool.weeksInSeason` set-once | **functions (LIVE scorer) → rules → Coolify** | 5 rounds (r3 clean; r5's only finding = "no UI yet", rejected as scope — it is #454) | 1 bug absorbed, docs absorbed, style rejected — verdict comment |
 | 4 | https://github.com/kstruck/MMPoolsV3/pull/454 | `claude/weekly-prizes-step5` | **Weekly Winners List** on the recap card (Place / Player / Score / Tie Break Diff / Prize) | Coolify | 5 rounds (r5 clean) | 3 bugs absorbed, 1 rejected — verdict comment |
 | 5 | https://github.com/kstruck/MMPoolsV3/pull/455 | `claude/payment-ledger-t4` | **T4**: `recordPoolPayouts` weekly PLACE awards bound to the recap (deterministic id, idempotent, re-record by supersession, reversal), per-award gating; **new callable `setPayoutSettled`**; `payoutRecords` composite index | **functions → indexes → Coolify** | 8 rounds (r5, r7, r8 clean) | 3 bugs (2 absorbed, 1 rejected as cross-cutting), rule absorbed, style rejected — verdict comment |
-| 6 | https://github.com/kstruck/MMPoolsV3/pull/456 | `claude/payment-ledger-t5` | **T5: THE LEDGER** — `PaymentLedgerNFL` on the NFL manager view: fee status per member + every published weekly prize with a **Paid ☐**; STALE → Re-record / Reverse | **rules → Coolify** | 7 rounds (r2, r7 clean) | **PENDING at hand-off** — see §4 |
+| 6 | https://github.com/kstruck/MMPoolsV3/pull/456 | `claude/payment-ledger-t5` | **T5: THE LEDGER** — `PaymentLedgerNFL` on the NFL manager view: fee status per member + every published weekly prize with a **Paid ☐**; STALE → Re-record / Reverse | **rules → Coolify** | **10 rounds = the cap** (r7 clean; r8/r9 post-qodo absorbed; r10 rejected with evidence — a co-commissioner is a member by construction) | 1 bug + 2 display findings absorbed, 2 rejected — verdict comment |
 | docs | https://github.com/kstruck/MMPoolsV3/pull/457 | `claude/plans-transfer-icons-help` | PLAN-COMMISSIONER-TRANSFER / PLAN-POOL-TYPE-ICONS / PLAN-HELP-SYSTEM (unsigned) + logs + sweeps + **board memo** | none | plans reviewed 6/4/5 rounds each | not run (docs) |
 | docs | this file + HANDOFF top box | `claude/handoff-ledger-2026-08-17` | — | none | — | — |
 
@@ -37,9 +37,9 @@ Older open docs PR unchanged: #448 (co-commissioners fully live).
 6. **qodo #10 on #455 rejected as cross-cutting**: "SUPER_ADMIN claim trusted without re-reading `users/{uid}.role`" — same gate every commissioner callable uses; changing it is a repo-wide authorization plan, not a payouts PR. Worth a ticket.
 7. **The board (PR #457) says: build NONE of the three new plans during the live weeks** — ship the two ICONS card mislabels + the `createCheckoutSession` ownership gate (`stripe.ts:189-193`, K17) as small standalone PRs, measure requests 3–4 weeks. Read the memo; it is a simulation and says so.
 
-## 4. Before merging #456 — qodo may still be reviewing
+## 4. #456 — qodo DONE (absorbed, verdict comment on the PR); codex hit the 10-round cap
 
-At hand-off qodo had not yet posted findings on #456 (opened last). Check:
+Nothing to wait for. Codex on #456 stopped at the §2c ceiling with its last finding REJECTED with evidence (co-commissioners must hold a Member Record — `coCommissioners.ts:93-95`); the residual it points at (a legacy Member Record without `participantIds` cannot read `members` as a co-commissioner) is a PLAN-CO-COMMISSIONERS follow-up affecting the whole manager view, not this PR. If you want an r11, say so — it is a paid run past the cap. The commands below are only if you want to re-check qodo yourself:
 
 ```powershell
 gh api --paginate repos/kstruck/MMPoolsV3/pulls/456/comments
@@ -125,7 +125,7 @@ Functions rollback = redeploy from the previous commit (`git checkout 42906ecc -
 
 ## 6. Open after this (next session, one PR at a time)
 
-1. qodo on #456 (§4) if it posted after hand-off.
+1. Co-commissioners follow-up: `members` read rule + `isNFLCoManagerOf` `is list` guard for the legacy Member-Record-without-`participantIds` shape (codex r10 / qodo #11 on #456).
 2. T6 — member "My prizes" in `PaymentsPanel` (own rows only, K7).
 3. WEEKLY-PRIZES step 3 — season-tie cascade (Pick'em Σ correct, Margin full standings cascade) → season prize rows in the ledger; rules-page copy.
 4. T7 — CONTEXT.md **Weekly Prize / Season Prize** entries, Payout Record "may name a week", ADR "displayed until recorded", fold Record Payouts into the ledger.

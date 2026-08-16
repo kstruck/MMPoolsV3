@@ -27,7 +27,7 @@
 > Ledger** (`PaymentLedgerNFL` on the NFL manager view: fee status per member +
 > every published weekly prize with a Paid ☐ that RECORDS a settled Payout Record;
 > STALE → Re-record / Reverse) + one rules read for co-commissioners.
-> **qodo on #456 was still pending at hand-off** (§4 of the MORNING doc).
+> qodo + codex done on all six (#456 codex hit the 10-round cap; last finding rejected with evidence — MORNING §4).
 >
 > **Not built (named, next in order):** T6 member "My prizes"; WEEKLY-PRIZES
 > step 3 (season-tie cascade → season prize rows); T7 docs/CONTEXT/ADR;
