@@ -208,6 +208,9 @@ describe('firestore.rules — callable-only settings bind SUPER_ADMIN too', () =
     // entryFee/payoutMode around a valid one, making "site-verified" decorative
     // for exactly the principal most likely to hand-fix money fields.
     'hybridSplit',
+    // Raise-only after create (PLAN-MULTI-ENTRY D8): a direct write could lower
+    // it under a member who already holds more entries than the new value.
+    'maxEntriesPerUser',
   ])('callableOnlySettingsUnchanged() lists %s', (field) => {
     const fn = rules.slice(rules.indexOf('function callableOnlySettingsUnchanged()'));
     const body = fn.slice(0, fn.indexOf('\n      }'));

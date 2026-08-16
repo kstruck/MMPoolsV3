@@ -91,6 +91,16 @@ await check('SUPER_ADMIN cannot smuggle it inside a WHOLESALE settings replaceme
     // shows as affected, and the changed field is buried inside the map.
     updateDoc(doc(admin, 'pools', 'sv1'), { settings: { ...BASE_SETTINGS, tieCountsAs: 'WIN' } }),
 ));
+// PLAN-MULTI-ENTRY D8: same guard, one more key — raise-only through the callable.
+await check('SUPER_ADMIN cannot dotted-update settings.maxEntriesPerUser', assertFails(
+    updateDoc(doc(admin, 'pools', 'sv1'), { 'settings.maxEntriesPerUser': 3 }),
+));
+await check('SUPER_ADMIN cannot smuggle maxEntriesPerUser inside a WHOLESALE settings replacement', assertFails(
+    updateDoc(doc(admin, 'pools', 'sv1'), { settings: { ...BASE_SETTINGS, maxEntriesPerUser: 3 } }),
+));
+await check('the pool OWNER cannot write settings.maxEntriesPerUser', assertFails(
+    updateDoc(doc(owner, 'pools', 'sv1'), { 'settings.maxEntriesPerUser': 3 }),
+));
 await check('SUPER_ADMIN cannot DELETE either field', assertFails(
     updateDoc(doc(admin, 'pools', 'sv1'), { 'settings.maxTeamUses': deleteField() }),
 ));

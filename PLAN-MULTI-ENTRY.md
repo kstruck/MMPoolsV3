@@ -377,7 +377,9 @@ back-compat) and its test covers two entries + one fee (codex r3).
 
 ---
 
-## 7. Implementation tickets — NOT STARTED, gated on §6
+## 7. Implementation tickets — §6 signed 2026-08-15; T0 shipped; T1 IN A PR (2026-08-16)
+
+> **Status 2026-08-16:** **T0** shipped earlier (the §0b invariant is in `tests/nfl-surface-invariants.test.ts`); **K9** shipped as #445. **T1** is its own PR: `maxEntriesPerUser` in `shared/multiEntry.ts` + the three create schemas (default 1, 1..10), `callableOnlySettingsUnchanged()` gains the key, `updatePoolSettings` raise-only inside the transaction (`lib/multiEntryGate.ts`, no-op stripping like the hybrid trio), `flattenSettingsPatch` shape check, wizard Yes/No toggle + number field on all three NFL rules steps, client types `?? 1`. **Deliberately NOT in T1:** the manager-side control to raise the max on an existing pool (until T2 the submit path ignores the setting, so raising it does nothing) and D8's `entryCount` initialisation (T2). T2 is next.
 
 Order matters: T1–T3 are server and ship together (functions deploy **into a
 LIVE scorer** — say so); T4–T7 client; T8–T10 cross-cutting.

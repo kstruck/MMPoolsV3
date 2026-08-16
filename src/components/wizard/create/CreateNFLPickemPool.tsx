@@ -9,6 +9,7 @@ import {
 import { StepPayouts } from '../steps/StepPayouts';
 import { ReadOnlyField, SelectField, CheckboxField } from '../fields';
 import { HybridSplitFields } from './HybridSplitFields';
+import { MultiEntryFields } from './MultiEntryFields';
 import { CURRENT_SEASON } from './currentSeason';
 import type { WizardStepDef } from '../types';
 import { prefillFromUser } from './profilePrefill';
@@ -78,6 +79,7 @@ function StepPickemRules() {
         hint="Decides who wins a week when two players score the same. Players predict the number on their pick sheet. It cannot be changed once anyone has submitted picks, so pick it now."
       />
       <CheckboxField name="settings.confidenceMode" label="Confidence points (rank picks; forces weekly lock)" />
+      <MultiEntryFields />
     </div>
   );
 }
@@ -139,6 +141,7 @@ const defaultValues: Record<string, unknown> = {
     weeklyTiebreaker: 'MNF_COMBINED',
     lockBufferMinutes: 5,
     confidenceMode: false,
+    maxEntriesPerUser: 1,
     payouts: { places: [{ rank: 1, percentage: 100 }], bonuses: [] },
   },
   _tosAccepted: false,

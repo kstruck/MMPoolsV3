@@ -16,6 +16,24 @@ const pickemBase: Record<string, unknown> = {
 };
 
 describe('buildNFLPayload', () => {
+  // PLAN-MULTI-ENTRY D8 / T1. The toggle is a wizard-only key; the builder folds
+  // it into settings.maxEntriesPerUser and the schema keeps (does not strip) it.
+  it('multi-entry: toggle off ⇒ 1 even if a value was typed; on ⇒ the value survives the schema; out of range is REFUSED, not clamped', () => {
+    const off = buildNFLPayload({ ...pickemBase, multiEntry: false, settings: { ...(pickemBase.settings as object), maxEntriesPerUser: 5 } }, 'NFL_PICKEM');
+    expect((off.settings as { maxEntriesPerUser?: number }).maxEntriesPerUser).toBe(1);
+    const on = buildNFLPayload({ ...pickemBase, multiEntry: true, settings: { ...(pickemBase.settings as object), maxEntriesPerUser: 4 } }, 'NFL_PICKEM');
+    const parsed = pickemCreateInputSchema.safeParse(on);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.settings.maxEntriesPerUser).toBe(4);
+    const untouched = buildNFLPayload({ ...pickemBase, multiEntry: true, settings: { ...(pickemBase.settings as object), maxEntriesPerUser: NaN } }, 'NFL_PICKEM');
+    expect((untouched.settings as { maxEntriesPerUser?: number }).maxEntriesPerUser).toBe(1);
+    const tooMany = buildNFLPayload({ ...pickemBase, multiEntry: true, settings: { ...(pickemBase.settings as object), maxEntriesPerUser: 11 } }, 'NFL_PICKEM');
+    expect(pickemCreateInputSchema.safeParse(tooMany).success).toBe(false);
+    // Absent entirely (a payload from before this setting) still defaults to 1 at the schema.
+    const legacy = pickemCreateInputSchema.safeParse(buildNFLPayload(pickemBase, 'NFL_PICKEM'));
+    if (legacy.success) expect(legacy.data.settings.maxEntriesPerUser).toBe(1);
+  });
+
   it('builds a pickem payload that passes the server schema gate', () => {
     const p = buildNFLPayload(pickemBase, 'NFL_PICKEM');
     expect(p.type).toBe('NFL_PICKEM');
