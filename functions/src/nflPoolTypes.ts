@@ -210,6 +210,8 @@ export interface NFLPickemEntry {
   ownerUid: string;
   userName: string;
   entryName?: string;
+  /** PLAN-MULTI-ENTRY D1 — 1 for `entries/{uid}` (absent on legacy docs ⇒ 1), n for `e${n}:${uid}`. */
+  entryIndex?: number;
   picks: Record<string, string>; // gameId -> pickedTeamId
   confidence?: Record<string, number>; // gameId -> confidence rank [1-16]
   weeklyTiebreakers?: Record<number, number>; // week -> predicted MNF combined score
@@ -236,6 +238,8 @@ export interface SurvivorEntry {
   ownerUid: string;
   userName: string;
   entryName?: string;
+  /** PLAN-MULTI-ENTRY D1 — 1 for `entries/{uid}` (absent on legacy docs ⇒ 1), n for `e${n}:${uid}`. */
+  entryIndex?: number;
   status: 'ALIVE' | 'ELIMINATED';
   strikesUsed: number;
   // Per-week strike ledger: scoreNFLWeek recomputes strikesUsed =
@@ -266,6 +270,8 @@ export interface MarginEntry {
   ownerUid: string;
   userName: string;
   entryName?: string;
+  /** PLAN-MULTI-ENTRY D1 — 1 for `entries/{uid}` (absent on legacy docs ⇒ 1), n for `e${n}:${uid}`. */
+  entryIndex?: number;
   picks: Record<number, string>; // week -> pickedTeamId
   usedTeams: string[];
   weeklyScores: Record<number, number>; // week -> score differential

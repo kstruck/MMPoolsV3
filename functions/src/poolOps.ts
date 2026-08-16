@@ -22,6 +22,8 @@ import { parityEditNeedsEntries, survivorParitySettingsRefusal, touchesSurvivorP
 import { tiebreakerEditNeedsEntries, touchesWeeklyTiebreakerSetting, weeklyTiebreakerRefusal } from './lib/weeklyTiebreakerGate';
 import { hybridNoOpKeys, hybridSplitNeedsClearing, hybridSplitRefusal, touchesHybridSplitSettings } from './lib/hybridSplitGate';
 import { maxEntriesNoOpKeys, maxEntriesRefusal, touchesMaxEntriesSetting } from './lib/multiEntryGate';
+import { entryCountWrite } from './lib/multiEntry';
+import { memberLiableEntries } from './shared/memberRecord';
 import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } from './lib/scoringLease';
 
 /**
@@ -575,12 +577,22 @@ export const updatePoolSettings = validated(
                 const problem = hybridSplitRefusal(current, patch);
                 if (problem) throw new HttpsError('failed-precondition', problem);
             }
+            let entryCountInit: Record<string, unknown> = {};
             if (maxEntriesTouched) {
                 const problem = maxEntriesRefusal(current, patch);
                 if (problem) throw new HttpsError('failed-precondition', problem);
+                // D8 (codex r3 on the plan): the first time multi-entry is enabled
+                // on a pool with no `entryCount`, initialise it from the Member
+                // Records' liabilities in this same transaction — otherwise the
+                // pot is unknown until somebody submits again.
+                if (typeof current?.entryCount !== 'number') {
+                    const members = (await tx.get(poolRef.collection('members'))).docs.map(d => d.data() as Record<string, unknown>);
+                    entryCountInit = entryCountWrite(current, members, 0);
+                }
             }
             tx.update(poolRef, {
                 ...patch,
+                ...entryCountInit,
                 // Leaving HYBRID deletes the stored split in the SAME write —
                 // the per-key merge would otherwise strand it, and the gate
                 // above would then refuse every later save as "split on a
@@ -614,10 +626,12 @@ export const updatePoolSettings = validated(
         let batch = db.batch();
         let ops = 0;
         for (const m of membersSnap.docs) {
-            const rec = m.data() as { role?: string; feeOwed?: number };
+            const rec = m.data() as { role?: string; feeOwed?: number; hasPlayableEntry?: boolean; playableEntryCount?: number };
             const seededOwnerNeverPlayed = rec.role === 'MANAGER' && (rec.feeOwed ?? 0) === 0;
             if (seededOwnerNeverPlayed) continue;
-            batch.update(m.ref, { feeOwed: newFee, feeOwedSource: 'LIVE' });
+            // PLAN-MULTI-ENTRY D2: `newFee × liable entries`, not `newFee` — a
+            // member holding two playable entries owes two fees at the new price.
+            batch.update(m.ref, { feeOwed: newFee * memberLiableEntries(rec), feeOwedSource: 'LIVE' });
             if (++ops >= 400) { await batch.commit(); batch = db.batch(); ops = 0; }
         }
         if (ops > 0) await batch.commit();

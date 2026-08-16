@@ -12,6 +12,7 @@
 
 import { z } from "zod";
 import { nullish } from "../lib/zodHelpers";
+import { ENTRY_NAME_MAX, MAX_ENTRIES_PER_USER_CAP } from "../shared/multiEntry";
 
 const poolId = z.string().trim().min(1).max(200);
 
@@ -37,6 +38,12 @@ export const submitNFLPicksSchema = z.strictObject({
     ),
     tiebreakerPrediction: nullish(z.number().finite()),
     requestId: nullish(z.string().max(200)),
+    // PLAN-MULTI-ENTRY T2 (D1/D7). Which of the caller's entries this write
+    // addresses — 1..max, default 1 — and an optional display name for it (K5).
+    // The server derives the entry id from ctx.subjectUid + entryIndex; the
+    // client only ever sends a small integer, so the id is not forgeable.
+    entryIndex: nullish(z.number().int().min(1).max(MAX_ENTRIES_PER_USER_CAP)),
+    entryName: nullish(z.string().trim().min(1).max(ENTRY_NAME_MAX)),
 });
 
 export type UpdatePoolSettingsInput = z.infer<typeof updatePoolSettingsSchema>;

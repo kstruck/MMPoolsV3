@@ -10,6 +10,7 @@ import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } 
 import { isPoolType, type PoolType } from "./shared/poolTypes";
 import { nflWeekLabel } from "./shared/nflWeekLabel";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
+import { applyPaidReset, assertEntryAdmitted, assertEntryNameFree, entryCountWrite, entryHasPick, freeDefaultEntryName, ownerStateAfter, resolveOwnedEntry } from "./lib/multiEntry";
 import type { MemberRecord } from "./shared/memberRecord";
 import { effectiveWeekLockAt, isGameLocked as isGameLockedAt, effectiveLockSettings, usesWeeklyHardLock, weekLockDecision, ensureHardLockFreeze } from "./lib/effectiveLock";
 import { isTerminalGame, isWeekComplete } from "./lib/weekCompletion";
@@ -149,6 +150,9 @@ export const createNFLPool = validated(
       status: 'OPEN',
       isLocked: false,
       participantIds: [uid],
+      // PLAN-MULTI-ENTRY D8: liable-entry count, server-maintained from t=0.
+      // The seeded host owes nothing until they play, so it starts at 0.
+      entryCount: 0,
       // free or trial per server-computed launch mode (server-authoritative)
       billing: billingForLaunch(launchMode, billingConfig.trialDays, now),
     };
@@ -262,15 +266,24 @@ export async function joinNFLPoolInternal(
     const poolData = poolDoc.data();
     if (!poolData) throw new HttpsError('not-found', 'Pool data not found');
 
+    // PLAN-MULTI-ENTRY D8: `pool.entryCount` counts LIABLE entries and an
+    // ordinary member's join is one — derived from the Member Records when the
+    // field is absent (legacy pool), read here because reads precede writes.
+    const membersForCount = typeof poolData.entryCount === 'number'
+      ? null
+      : (await transaction.get(membersCol(db, poolId))).docs.map(d => d.data() as Record<string, unknown>);
+
     const participantIds = poolData.participantIds || [];
     if (participantIds.includes(uid)) {
       // Already a participant — still ensure a Member Record exists (backfill-on-touch).
-      ensureMemberRecord(transaction, db, poolId, uid,
+      const stamp = ensureMemberRecord(transaction, db, poolId, uid,
         {
           userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true,
           entryFee: Number(poolData.settings?.entryFee ?? 0),
         },
         memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
+      const countPatch = entryCountWrite(poolData, membersForCount, stamp.liabilityDelta);
+      if (Object.keys(countPatch).length > 0) transaction.update(poolRef, countPatch);
       return;
     }
 
@@ -282,23 +295,10 @@ export async function joinNFLPoolInternal(
     // its purchased participant ceiling. No-op for free/trial pools.
     assertPaidParticipantCeiling(poolData.billing, participantIds.length);
 
-    // 1. Add participant to pool collection
-    transaction.update(poolRef, {
-      participantIds: FieldValue.arrayUnion(uid)
-    });
-
-    // 2. Add participation to user profile
-    transaction.set(userRef.collection('participations').doc(poolId), {
-      poolId,
-      joinedAt: Date.now(),
-      name: poolData.name,
-      type: poolData.type,
-      role: 'PARTICIPANT'
-    });
-
-    // 3. Seed the Member Record (roster + payment truth, ADR 0003) — additive.
+    // 3 (moved up so its liability delta can ride the pool write below).
+    // Seed the Member Record (roster + payment truth, ADR 0003) — additive.
     // feeOwed stamped at join: dues are owed from membership, not from playing (ADR 0005).
-    ensureMemberRecord(transaction, db, poolId, uid,
+    const stamp = ensureMemberRecord(transaction, db, poolId, uid,
       {
         userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true,
         entryFee: Number(poolData.settings?.entryFee ?? 0),
@@ -311,6 +311,21 @@ export async function joinNFLPoolInternal(
         // later non-submit touch. Omitting it preserves the documented UNKNOWN.
       },
       memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
+
+    // 1. Add participant to pool collection (+ the liable-entry count, D8)
+    transaction.update(poolRef, {
+      participantIds: FieldValue.arrayUnion(uid),
+      ...entryCountWrite(poolData, membersForCount, stamp.liabilityDelta),
+    });
+
+    // 2. Add participation to user profile
+    transaction.set(userRef.collection('participations').doc(poolId), {
+      poolId,
+      joinedAt: Date.now(),
+      name: poolData.name,
+      type: poolData.type,
+      role: 'PARTICIPANT'
+    });
   });
 
   await writeAuditEvent({
@@ -364,13 +379,17 @@ export function assertNFLPickMembership(
 export async function submitNFLPicksInternal(
   db: admin.firestore.Firestore,
   ctx: MemberActionContext,
-  payload: { poolId?: string; week?: number; picks?: any; confidence?: any; tiebreakerPrediction?: number },
+  payload: { poolId?: string; week?: number; picks?: any; confidence?: any; tiebreakerPrediction?: number; entryIndex?: number; entryName?: string },
 ): Promise<{ success: true }> {
   const uid = ctx.subjectUid;
   // deep clean input
   const data = JSON.parse(JSON.stringify(payload || {}));
   const { poolId, week, picks, confidence, tiebreakerPrediction } = data;
   const requestId = ctx.requestId;
+  // PLAN-MULTI-ENTRY T2 (D1): which of the caller's entries. Default 1 keeps
+  // every existing client byte-identical — entry #1's id IS the uid.
+  const entryIndex: number = Number.isInteger(data.entryIndex) && data.entryIndex >= 1 ? data.entryIndex : 1;
+  const requestedEntryName: string | undefined = typeof data.entryName === 'string' ? data.entryName : undefined;
 
   if (!poolId || !week || !picks) {
     throw new HttpsError('invalid-argument', 'Missing poolId, week, or picks.');
@@ -469,9 +488,6 @@ export async function submitNFLPicksInternal(
   // `effectiveWeekLock` is a fixed instant, so only the clock has to move.
   let weekLocked = now >= effectiveWeekLock;
 
-  // Write variables inside transactions
-  const entryRef = poolRef.collection('entries').doc(uid);
-
   await retryWhileScoring(() => db.runTransaction(async (transaction) => {
     // Reads first (Firestore requires it) and the lease read first of all: a
     // submission must not interleave with a scoring pass, and putting the pool
@@ -482,11 +498,35 @@ export async function submitNFLPicksInternal(
     now = Date.now();
     weekLocked = now >= effectiveWeekLock;
     await assertNoScoringInProgress(transaction, poolRef, now);
-    const entrySnap = await transaction.get(entryRef);
-    const existingEntry = entrySnap.exists ? entrySnap.data() : null;
+    // The pool doc as of THIS attempt: the max is judged against it (raise-only,
+    // so a concurrent raise can only admit more) and `entryCount` is read off it.
+    const poolInTx = (await transaction.get(poolRef)).data() as Record<string, any> | undefined;
+    if (!poolInTx) throw new HttpsError('not-found', 'Pool not found.');
+    // Which doc is "entry n of uid" — deterministic id, owned-entries set, and
+    // the auto-id fallback, all read in this transaction (lib/multiEntry.ts).
+    const target = await resolveOwnedEntry(transaction, poolRef, uid, entryIndex);
+    assertEntryAdmitted(poolInTx.settings, target);
+    const entryRef = target.ref;
+    const existingEntry = target.existing;
     // Member Record read (before any writes) for the base-dues stamp below (ADR 0005).
     const memberSnap = await transaction.get(membersCol(db, poolId).doc(uid));
     const existingMember = memberSnap.exists ? (memberSnap.data() as MemberRecord) : null;
+    // D8: a legacy pool has no `entryCount`; derive it from the Member Records
+    // (read now — Firestore forbids a read after a write) before incrementing.
+    const membersForCount = typeof poolInTx.entryCount === 'number'
+      ? null
+      : (await transaction.get(membersCol(db, poolId))).docs.map(d => d.data() as Record<string, unknown>);
+    // K5: the entry's display name. Explicit name (unique per owner, checked
+    // against the owned set), else the stored one, else "Name #n" for a NEW
+    // extra entry. Entry #1 has none by default — it shows `userName`.
+    const ownerDisplayName = subjectName || existingMember?.userName || existingEntry?.userName || 'Participant';
+    const entryName: string | undefined = requestedEntryName !== undefined
+      ? assertEntryNameFree(requestedEntryName, target)
+      : (typeof existingEntry?.entryName === 'string' ? existingEntry.entryName
+        : (existingEntry === null ? freeDefaultEntryName(ownerDisplayName, entryIndex, target) : undefined));
+    // The picks map as this write leaves it — `playableEntryCount` is derived
+    // from post-write entry state, never from a stored counter (D2).
+    let writtenPicks: Record<string, unknown> = {};
 
     // Idempotency: a retried submit (client resend after a lost response) whose
     // requestId already landed is a no-op success, not a duplicate write
@@ -550,9 +590,11 @@ export async function submitNFLPicksInternal(
       // found by the first real-path Golden Scenario (PLAN-NFL-SIM-HARNESS Phase 2)
       // — same bug class as the weekly-recap P0 in PR #152.
       const pickemEntry: NFLPickemEntry = {
-        id: uid,
+        id: entryRef.id,
         poolId,
         ownerUid: uid,
+        entryIndex,
+        ...(entryName ? { entryName } : {}),
         userName: subjectName || existingEntry?.userName || 'Participant',
         picks: { ...(existingEntry?.picks || {}), ...picks },
         ...(settings.confidenceMode && confidence ? { confidence } : {}),
@@ -575,12 +617,14 @@ export async function submitNFLPicksInternal(
       }, { merge: true });
 
       committedPickForWeek = Object.keys(picks).some(gameId => weekGameIds.has(gameId));
+      writtenPicks = pickemEntry.picks;
 
     } else if (type === 'NFL_SURVIVOR') {
       const survivorEntry = (existingEntry as SurvivorEntry) || {
-        id: uid,
+        id: entryRef.id,
         poolId,
         ownerUid: uid,
+        entryIndex,
         userName: subjectName || 'Participant',
         status: 'ALIVE',
         strikesUsed: 0,
@@ -673,17 +717,21 @@ export async function submitNFLPicksInternal(
       // never revisits the field. Never downgrades a stored name to the placeholder.
       survivorEntry.userName = subjectName || survivorEntry.userName || 'Participant';
 
+      writtenPicks = survivorEntry.picks;
       transaction.set(entryRef, {
         ...survivorEntry,
+        entryIndex,
+        ...(entryName ? { entryName } : {}),
         ...(requestId ? { lastRequestId: requestId } : {}),
         [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
       }, { merge: true });
 
     } else if (type === 'NFL_MARGIN') {
       const marginEntry = (existingEntry as MarginEntry) || {
-        id: uid,
+        id: entryRef.id,
         poolId,
         ownerUid: uid,
+        entryIndex,
         userName: subjectName || 'Participant',
         picks: {},
         usedTeams: [],
@@ -734,8 +782,11 @@ export async function submitNFLPicksInternal(
       // Heal-on-touch — twin of the Survivor line above.
       marginEntry.userName = subjectName || marginEntry.userName || 'Participant';
 
+      writtenPicks = marginEntry.picks;
       transaction.set(entryRef, {
         ...marginEntry,
+        entryIndex,
+        ...(entryName ? { entryName } : {}),
         ...(requestId ? { lastRequestId: requestId } : {}),
         [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
       }, { merge: true });
@@ -744,12 +795,20 @@ export async function submitNFLPicksInternal(
     // Base-dues stamp (ADR 0005 Phase 4): submitting a playable entry starts fee
     // liability — this is the moment a seeded owner's feeOwed upgrades 0 -> fee,
     // and it heals records that predate the feeOwed field (fill-on-touch).
-    ensureMemberRecord(transaction, db, poolId, uid, {
+    // PLAN-MULTI-ENTRY D2: the owner's post-write state — how many of their
+    // entries hold a pick, and the id → {index, name} roster — counted from the
+    // entry docs in this transaction (the doc just written included).
+    const ownerState = ownerStateAfter(target.owned, {
+      id: entryRef.id, entryIndex, ...(entryName ? { entryName } : {}), hasPick: entryHasPick({ picks: writtenPicks }),
+    });
+    const stamp = ensureMemberRecord(transaction, db, poolId, uid, {
       userName: subjectName || existingMember?.userName || 'Participant',
       role: existingMember?.role ?? (pool.ownerId === uid ? 'MANAGER' : 'PARTICIPANT'),
       poolType: type,
       present: true,
-      entryFee: Number(pool.settings?.entryFee ?? 0),
+      entryFee: Number(poolInTx.settings?.entryFee ?? 0),
+      playableEntryCount: ownerState.playableEntryCount,
+      entries: ownerState.entries,
       // Only a submission that actually stored a pick starts fee liability
       // (PLAN-EMPTY-SUBMISSION-FEE, Q1–Q3). `picks: {}` is schema-legal on a
       // pick'em pool and reaches here; passing `true` unconditionally upgraded a
@@ -764,6 +823,17 @@ export async function submitNFLPicksInternal(
       // submission stored no pick for this week — see committedPickForWeek.
       ...(committedPickForWeek ? { pickedWeek: week } : {}),
     }, existingMember, now);
+    // D8: `pool.entryCount` counts LIABLE entries — moved by exactly what this
+    // write changed about the member's liability (0 on an ordinary resubmit).
+    const countPatch = entryCountWrite(poolInTx, membersForCount, stamp.liabilityDelta);
+    if (Object.keys(countPatch).length > 0) transaction.update(poolRef, countPatch);
+    // K11: a PAID member whose dues just rose is UNPAID again — mirrored onto
+    // every entry they own, with a ledger line saying why.
+    if (stamp.paidReset) {
+      applyPaidReset(transaction, poolRef, uid, existingMember?.userName,
+        [...new Set([...target.owned.map(e => e.id), entryRef.id])],
+        stamp.paidReset, `Entry #${entryIndex} added`, now);
+    }
   }));
 
   // Fully-open live consensus (2026-07-09): refresh this pool's week immediately so the crowd
@@ -809,10 +879,12 @@ export const submitNFLPicks = validated(
 export async function executeSurvivorRebuyInternal(
   db: admin.firestore.Firestore,
   ctx: MemberActionContext,
-  payload: { poolId?: string; week?: number },
+  payload: { poolId?: string; week?: number; entryIndex?: number },
 ): Promise<{ success: true }> {
   const uid = ctx.subjectUid;
   const { poolId, week } = payload || {};
+  // PLAN-MULTI-ENTRY D3: each entry is its own Survivor life — a rebuy names one.
+  const entryIndex = Number.isInteger(payload?.entryIndex) && (payload!.entryIndex as number) >= 1 ? (payload!.entryIndex as number) : 1;
 
   if (!poolId || !week) {
     throw new HttpsError('invalid-argument', 'poolId and week are required.');
@@ -836,23 +908,26 @@ export async function executeSurvivorRebuyInternal(
     throw new HttpsError('failed-precondition', `PAST_DEADLINE: Rebuys are blocked after week ${settings.rebuyDeadlineWeek}.`);
   }
 
-  const entryRef = poolRef.collection('entries').doc(uid);
   const memberRef = membersCol(db, poolId).doc(uid);
   const rebuyAmt = settings.rebuyCost ?? settings.entryFee ?? 0;
+  let rebuyEntryId = uid;
 
   await retryWhileScoring(() => db.runTransaction(async (transaction) => {
     // Same mutex as pick submission: a rebuy flips ELIMINATED → ALIVE and wipes
     // the strike ledger, so interleaving it with a scoring pass that is writing
     // strikes from a pre-rebuy snapshot re-eliminates the player who just paid.
     await assertNoScoringInProgress(transaction, poolRef, Date.now());
-    const entrySnap = await transaction.get(entryRef);
+    // Entry n of uid (lib/multiEntry.ts) — a rebuy never CREATES an entry.
+    const target = await resolveOwnedEntry(transaction, poolRef, uid, entryIndex);
+    const entryRef = target.ref;
     // Member Record read (before writes) so rebuy dues land on the roster (ADR 0003).
     const memberSnap = await transaction.get(memberRef);
-    if (!entrySnap.exists) {
+    if (!target.existing) {
       throw new HttpsError('not-found', 'Participant entry not found.');
     }
+    rebuyEntryId = entryRef.id;
 
-    const entry = entrySnap.data() as SurvivorEntry;
+    const entry = target.existing as SurvivorEntry;
     if (entry.status !== 'ELIMINATED') {
       throw new HttpsError('failed-precondition', 'NOT_ELIMINATED: Player is still alive.');
     }
@@ -907,7 +982,7 @@ export async function executeSurvivorRebuyInternal(
   await writeLedgerEvent(db, poolId, {
     type: 'REBUY_DUE',
     uid,
-    entryId: uid,
+    entryId: rebuyEntryId,
     amount: typeof rebuyAmount === 'number' ? rebuyAmount : undefined,
     note: `Survivor rebuy (week ${week})`,
     actorUid: uid,

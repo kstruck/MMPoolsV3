@@ -1,6 +1,6 @@
 # PLAN — multiple entries per player (NFL Pick'em / Survivor / Margin)
 
-> **STATUS: PLAN ONLY, AWAITING KEVIN'S SIGN-OFF ON §6. No code has been written.**
+> **STATUS: §6 SIGNED 2026-08-15. T0, K9 (#445), T1 (#449) shipped; T2 in a PR (see §7).**
 > This is a **MONEY + SCORING** change (`mmp-change-control` Rule 3): dues become
 > a multiple of the entry fee, and every scoring, standings, reveal and finalize
 > path re-keys from a uid to an entry. Plan → adversarial review log
@@ -377,19 +377,29 @@ back-compat) and its test covers two entries + one fee (codex r3).
 
 ---
 
-## 7. Implementation tickets — §6 signed 2026-08-15; T0 shipped; T1 IN A PR (2026-08-16)
+## 7. Implementation tickets — §6 signed 2026-08-15; T0 + K9 + T1 shipped; T2 IN A PR (2026-08-17)
 
-> **Status 2026-08-16:** **T0** shipped earlier (the §0b invariant is in
-> `tests/nfl-surface-invariants.test.ts`); **K9** shipped as #445. **T1** is its own PR:
-> `maxEntriesPerUser` in `shared/multiEntry.ts` + the three create schemas (default 1, 1..10),
-> `callableOnlySettingsUnchanged()` gains the key, `updatePoolSettings` raise-only inside the
-> transaction (`lib/multiEntryGate.ts`, no-op stripping like the hybrid trio),
-> `flattenSettingsPatch` shape check, wizard Yes/No toggle + number field on all three NFL rules
-> steps, client types `?? 1`. **Deliberately NOT in T1:** the manager-side control to raise the
-> max on an existing pool (until T2 the submit path ignores the setting, so raising it does
-> nothing) and D8's `entryCount` initialisation (T2). T2 is next. **Until T2 the wizard does
-> NOT render the toggle** (`MULTI_ENTRY_WIZARD_ENABLED = false` in `shared/multiEntry.ts`) —
-> the submit path still ignores the setting, so offering it would mislead; T2 flips it.
+> **Status 2026-08-17:** **T0** shipped (the §0b invariant is in
+> `tests/nfl-surface-invariants.test.ts`); **K9** shipped as #445; **T1** shipped + deployed as
+> #449 (`maxEntriesPerUser` in `shared/multiEntry.ts` + the three create schemas, rules
+> callable-only key, `updatePoolSettings` raise-only gate in `lib/multiEntryGate.ts`, wizard
+> toggle hidden). **T2 is its own PR** — the submit path: `submitNFLPicks` takes `entryIndex?`
+> (1..max, default 1) + `entryName?`; entry id = uid for #1, `e${n}:${uid}` for n ≥ 2 with the
+> §0a auto-id fallback (`lib/multiEntry.ts` — `resolveOwnedEntry`); every entry doc carries
+> `ownerUid` + `entryIndex`; the cap is enforced from entry EXISTENCE inside the transaction;
+> the Member Record gains `playableEntryCount` + `entries` map (never picks); `feeOwed = fee ×
+> max(joinLiability, count)` (`memberLiableEntries`, K3); fee-edit cascade × count;
+> `setPaidStatus` mirrors onto every owned entry and ledgers `feeOwed`; a PAID member who adds
+> an entry flips UNPAID with a `MARKED_UNPAID` ledger line (K11); `pool.entryCount` is
+> server-maintained (0 at create; derived from Member Record liabilities when absent; the join
+> path, submit, proxyPick and `updatePoolSettings`' first raise all keep it); `proxyPick` +
+> `executeSurvivorRebuy` take `entryIndex`; `NFLManagerView` proxies by ENTRY and gains the
+> manager-side raise control (rendered only when the flag is on or the pool already has max > 1). **`MULTI_ENTRY_WIZARD_ENABLED` STAYS `false`** — the T2 row said flip it, but codex r1+r2 on the T2 PR made the T1 argument again and harder: a member has NO UI to address entry #2 until T5 (the three `*PickEntry` components send no `entryIndex`), so the toggle would advertise entries nobody can play; the T3/T4/T5 PR flips it. Emulator suite:
+> `emulator/multiEntry.emulator.test.ts` (13 cases). **T3 is next** — until it lands, the
+> scorer already grades every entry doc, but winner/sharp candidates, the Margin rank
+> write-back, `getPoolPicks` maps, `seasonHistory` and `userProfile` are still keyed by uid
+> (the T2 PR body names each site), and the client fold (T4) still drops a second row per
+> uid — so the toggle stays hidden until T3/T4/T5 land together.
 
 Order matters: T1–T3 are server and ship together (functions deploy **into a
 LIVE scorer** — say so); T4–T7 client; T8–T10 cross-cutting.
