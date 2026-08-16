@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 import { executeSurvivorRebuyInternal, joinNFLPoolInternal, submitNFLPicksInternal } from '../../nflPools';
@@ -46,6 +46,7 @@ const auth = (uid: string, role?: string) => ({ uid, token: role ? { role } : {}
 
 let n = 0;
 let POOL = '';
+const createdPools: string[] = [];
 const poolRef = () => db.collection('pools').doc(POOL);
 const pool = async () => (await poolRef().get()).data()!;
 const member = async (uid: string) => (await poolRef().collection('members').doc(uid).get()).data()!;
@@ -59,6 +60,7 @@ const submit = (uid: string, payload: Record<string, unknown>) =>
 async function seedPool(opts: { type?: string; max?: number; entryCount?: number | null; alicePaid?: boolean } = {}) {
   n += 1;
   POOL = `pool-me-${n}`;
+  createdPools.push(POOL);
   const type = opts.type ?? 'NFL_PICKEM';
   await poolRef().set({
     name: 'Multi', type, league: 'NFL', season: SEASON, seasonType: 1,
@@ -99,6 +101,18 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
       homeTeam: T('DAL'), awayTeam: T('NYG'), scores: { home: 0, away: 0 }, spread: { value: -1, locked: true },
     });
   }, 30000);
+
+  // Teardown (qodo #3 on #450): every doc this suite created, best-effort.
+  afterAll(async () => {
+    try {
+      for (const id of createdPools) await db.recursiveDelete(db.collection('pools').doc(id));
+      for (const id of [G1, G2]) await db.collection('nfl_games').doc(id).delete();
+      for (const uid of [HOST, ALICE, BOB, 'me-carol']) await db.recursiveDelete(db.collection('users').doc(uid));
+    } catch (e) {
+      console.warn('[multiEntry.emulator] teardown incomplete:', e);
+    }
+    test.cleanup();
+  }, 60000);
 
   it('1. entry 2 lands at e2:uid; Member Record count 2 + roster; feeOwed 25 → 50; entryCount follows', async () => {
     await seedPool({ max: 3, entryCount: 2 });

@@ -128,6 +128,11 @@ export const setPaidStatus = validated(
       // on the plan) — entries/{uid} plus any `e${n}:${uid}` / auto-id doc.
       const [snap, ownedSnap] = await Promise.all([tx.get(mRef), tx.get(ownedEntriesQuery(poolRef, memberUid))]);
       if (!snap.exists) throw new HttpsError("not-found", "MEMBER_NOT_ON_ROSTER: Member is not on this pool's roster.");
+      // A legacy entries/{uid} doc may carry no `ownerUid` and so miss the
+      // query — read it too, as the paid mirror below does (qodo #2 on #450).
+      const legacyRebuySnap = ownedSnap.docs.some(d => d.id === memberUid)
+        ? null : await tx.get(poolRef.collection('entries').doc(memberUid));
+      const rebuyDocs = [...ownedSnap.docs, ...(legacyRebuySnap?.exists ? [legacyRebuySnap] : [])];
       const m: any = snap.data();
       // LEGACY FALLBACK (codex r2): survivor pools have existed since
       // 2026-05-25 but the rebuyOwed writer only since 2026-07-08 (1bb7e89),
@@ -158,7 +163,7 @@ export const setPaidStatus = validated(
         if (dueEvents.size > 0) {
           owed = fromLedger;
         } else {
-          const rebuysUsed: number = ownedSnap.docs.reduce((n, d) => n + ((d.data() as any).rebuysUsed ?? 0), 0);
+          const rebuysUsed: number = rebuyDocs.reduce((n, d) => n + ((d.data() as any).rebuysUsed ?? 0), 0);
           const rebuyCost: number = pool.settings?.rebuyCost ?? pool.settings?.entryFee ?? 0;
           owed = rebuysUsed * rebuyCost;
         }

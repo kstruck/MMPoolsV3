@@ -594,7 +594,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
   // One row per ENTRY (PLAN-MULTI-ENTRY §0b.4): `entryName ?? userName`, with
   // the index appended so two entries of one member are distinguishable.
-  const entryLabel = (e: any): string => {
+  const entryLabel = (e: { id: string; userName?: string; entryName?: string; entryIndex?: number }): string => {
     const base = e.entryName || e.userName || e.id;
     const idx = e.entryIndex ?? 1;
     return idx > 1 && !e.entryName ? `${base} (Entry ${idx})` : base;
