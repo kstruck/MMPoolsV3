@@ -4,6 +4,8 @@ import { resolve } from 'node:path';
 import { recapHasHighlights } from '../src/utils/recapHighlight';
 
 const read = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8');
+// Comments stripped, so a guard cannot be satisfied by commented-out code (qodo #8 on #454).
+const code = (p: string) => read(p).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 /**
  * PLAN-WEEKLY-PRIZES B2 (§3, D6–D8, K10) — the Weekly Winners List renders what
@@ -12,7 +14,7 @@ const read = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8');
  */
 describe('Weekly Winners List — wiring', () => {
   it('the recap card renders WeeklyWinnersList from recap.weeklyPlaces and never re-ranks or re-prices', () => {
-    const list = read('src/components/NFLPoolDashboard/WeeklyWinnersList.tsx');
+    const list = code('src/components/NFLPoolDashboard/WeeklyWinnersList.tsx');
     expect(list).toContain('recap.weeklyPlaces');
     expect(list).toContain('recap.weeklyPrize');
     expect(list).toContain('recap.weeklyPlacesError');
@@ -23,8 +25,8 @@ describe('Weekly Winners List — wiring', () => {
     expect(list).toContain('visible to anyone with the pool link');
     expect(list).toContain('moves no money');
     // §3a: absent = "not published", never a fabricated list (codex r2 on step 5).
-    expect(list).toContain('Weekly places were not published for this week');
-    const dash = read('src/components/NFLPoolDashboard/NFLPoolDashboard.tsx');
+    expect(list).toContain('No weekly ranking was published for this week');
+    const dash = code('src/components/NFLPoolDashboard/NFLPoolDashboard.tsx');
     expect(dash).toContain("import { WeeklyWinnersList } from './WeeklyWinnersList'");
     expect(dash).toContain('<WeeklyWinnersList recap={recap} poolType={pool.type} />');
   });
