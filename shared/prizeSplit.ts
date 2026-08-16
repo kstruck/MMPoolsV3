@@ -115,6 +115,22 @@ export function splitPrizes(input: PrizeSplitInput): PrizeSplitResult {
     else groups.set(r.rank, [r.id]);
   }
 
+  // The groups must be a coherent COMPETITION ranking — a group at rank p with
+  // k members consumes places p..p+k-1, so the next group must start at or
+  // after p+k. Dense ranks (1,2,2,3) or any overlap would double-consume a paid
+  // place and award more than the pot; refuse rather than guess (qodo #6 on
+  // #451). Gaps are tolerated: a caller may split a SUBSET of the ranking.
+  let nextFree = 1;
+  for (const rank of [...groups.keys()].sort((a, b) => a - b)) {
+    if (rank < nextFree) {
+      throw new Error(`PRIZE_SPLIT_RANK_OVERLAP: rank ${rank} overlaps the places consumed by the group before it (next free place is ${nextFree})`);
+    }
+    nextFree = rank + groups.get(rank)!.length;
+  }
+  if (new Set(ranked.map(r => r.id)).size !== ranked.length) {
+    throw new Error('PRIZE_SPLIT_DUPLICATE_ID: an entry id appears more than once in ranked');
+  }
+
   const awards: Record<string, number> = {};
   let awarded = 0;
   for (const [rank, ids] of groups) {
@@ -127,5 +143,7 @@ export function splitPrizes(input: PrizeSplitInput): PrizeSplitResult {
       awarded += each;
     }
   }
+  // Belt and braces: the invariant this module promises, checked at the exit.
+  if (awarded > pot) throw new Error(`PRIZE_SPLIT_OVER_POT: awarded ${awarded} exceeds pot ${pot}`);
   return { awards, awarded, remainder: pot - awarded };
 }

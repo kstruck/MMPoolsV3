@@ -111,6 +111,15 @@ describe('splitPrizes — refuses ambiguous input (§4b: throw, never guess)', (
     expect(() => splitPrizes({ places: P3, pot: -1, ranked: [] })).toThrow(/BAD_POT/);
     expect(() => splitPrizes({ places: P3, pot: NaN, ranked: [] })).toThrow(/BAD_POT/);
   });
+  it('a malformed ranking that would double-consume a place throws (dense 1,2,2,3; overlap 1,1,2) — qodo #6 on #451', () => {
+    expect(() => splitPrizes({ places: P3, pot: 100, ranked: [{ id: 'a', rank: 1 }, { id: 'b', rank: 2 }, { id: 'c', rank: 2 }, { id: 'd', rank: 3 }] })).toThrow(/RANK_OVERLAP/);
+    expect(() => splitPrizes({ places: P3, pot: 100, ranked: [{ id: 'a', rank: 1 }, { id: 'b', rank: 1 }, { id: 'c', rank: 2 }] })).toThrow(/RANK_OVERLAP/);
+    // Gaps are fine (a subset of the ranking): 1 then 5.
+    expect(splitPrizes({ places: P3, pot: 100, ranked: [{ id: 'a', rank: 1 }, { id: 'e', rank: 5 }] }).awards).toEqual({ a: 50, e: 0 });
+  });
+  it('a duplicate entry id throws', () => {
+    expect(() => splitPrizes({ places: P3, pot: 100, ranked: [{ id: 'a', rank: 1 }, { id: 'a', rank: 1 }] })).toThrow(/DUPLICATE_ID/);
+  });
   it('a non-positive-integer rank in places or in ranked throws', () => {
     expect(() => splitPrizes({ places: [{ rank: 0, percentage: 10 }], pot: 10, ranked: [] })).toThrow(/BAD_RANK/);
     expect(() => splitPrizes({ places: P3, pot: 10, ranked: [{ id: 'a', rank: 1.5 }] })).toThrow(/BAD_ENTRY_RANK/);
