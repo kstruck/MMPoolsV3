@@ -174,6 +174,8 @@ section is rewritten before implementation.
 
 ## 7. Implementation order, once signed off
 
+> **Status 2026-08-15:** implemented in one PR. M2 confirmed (`proxyPick` stores a concrete `teamPicked` — never an empty pick); M3 confirmed (`memberRecord.ts` is the only reader: `feeOwed` for a MANAGER, the standings latch, the one-way latch on update — an absent/false value keeps a manager at $0, which is today's behaviour). **M1 (has it fired in prod?) is still Kevin's to run** — needs credentials this machine does not have; §5 (fix-forward, no repair) stands until it says otherwise.
+
 1. Run M1/M2/M3. If M1 finds affected records, rewrite §5 and re-gate.
 2. Write the failing test first: `submitNFLPicksInternal` with `picks: {}` on an
    `NFL_PICKEM` pool, actor = seeded MANAGER with `feeOwed: 0`, asserting
