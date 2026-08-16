@@ -1,5 +1,9 @@
 # HANDOFF — Session entry point
 
+> ## ✅ 2026-08-16 (later) — MULTI-ENTRY T1 LIVE (#449): `settings.maxEntriesPerUser` exists, NFL-only callable-only, raise-only; WIZARD TOGGLE HIDDEN UNTIL T2
+>
+> #449 merged; Kevin deployed functions (all `Successful`) → rules (`released`). No Coolify owed (the wizard control renders null behind `MULTI_ENTRY_WIZARD_ENABLED = false` in `shared/multiEntry.ts`; T2 flips it in the PR that makes `submitNFLPicks` honour the setting). Rules key is in the NFL-only clause — Bracket/Playoff carry the same key and save it by direct `updateDoc` (qodo caught the unscoped first cut). **Next: PLAN-MULTI-ENTRY T2** (submit path, `e${n}:${uid}` ids, dues × entries, entryCount, wizard flag on).
+>
 > ## ✅ 2026-08-16 — CO-COMMISSIONERS FULLY LIVE: #446 + #447 MERGED, ALL FOUR SURFACES DEPLOYED, SMOKE PASSED
 >
 > Kevin deployed in D2 order: #446 functions (every 429 retried to `Successful`; `setPoolCoCommissioner` created) → #446 rules (`released rules`) → #447 `firestore.indexes` (`coManagers` CONTAINS + `type`) → Coolify rebuild. **Kevin's browser smoke passed** (owner: Members-tab `Make co-comm` → badge live; member: Commissioner tab + Hub card + no Cancel/billing). Nothing is owed on any deploy queue. PLAN-CO-COMMISSIONERS T1–T7 are all shipped; still open from that plan: nothing. Next per build order: **PLAN-MULTI-ENTRY T1**.

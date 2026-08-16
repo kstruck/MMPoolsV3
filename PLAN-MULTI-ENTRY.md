@@ -377,7 +377,7 @@ back-compat) and its test covers two entries + one fee (codex r3).
 
 ---
 
-## 7. Implementation tickets — §6 signed 2026-08-15; T0 shipped; T1 IN A PR (2026-08-16)
+## 7. Implementation tickets — §6 signed 2026-08-15; T0 shipped; T1 SHIPPED + DEPLOYED (#449, 2026-08-16)
 
 > **Status 2026-08-16:** **T0** shipped earlier (the §0b invariant is in
 > `tests/nfl-surface-invariants.test.ts`); **K9** shipped as #445. **T1** is its own PR:
