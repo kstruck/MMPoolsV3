@@ -96,7 +96,15 @@ export const recordPoolPayouts = onCall(async (request) => {
   const participantIds: string[] = pool.participantIds || [];
   const validated: AwardInput[] = awards.map((a: any, i: number) => {
     if (!a || typeof a.uid !== 'string' || !a.uid) throw new HttpsError('invalid-argument', `awards[${i}].uid is required — every award needs an explicit recipient.`);
-    if (!participantIds.includes(a.uid)) throw new HttpsError('invalid-argument', `awards[${i}].uid is not a member of this pool.`);
+    const weekly = a.week !== undefined && a.week !== null;
+    // Season/bonus/adjustment awards are gated on the participant list as today.
+    // A WEEKLY award is bound to the recap row instead (below): the row's
+    // `userId` came from the entry document the scorer ranked, which is a
+    // stronger membership proof than `participantIds` — and a legacy roster
+    // can hold a canonical Member Record + entry that `participantIds` never
+    // listed (codex r4 on T5); refusing those would leave a published prize
+    // that can never be recorded.
+    if (!weekly && !participantIds.includes(a.uid)) throw new HttpsError('invalid-argument', `awards[${i}].uid is not a member of this pool.`);
     const amount = Number(a.amount);
     if (!Number.isFinite(amount)) throw new HttpsError('invalid-argument', `awards[${i}].amount must be a number.`);
     if (!KINDS.includes(a.kind)) throw new HttpsError('invalid-argument', `awards[${i}].kind must be one of ${KINDS.join('/')}.`);

@@ -88,6 +88,16 @@ describe('PLAN-PAYMENT-LEDGER T4 — recordPoolPayouts weekly awards + setPayout
 
   it('2. refuses a wrong amount, a wrong owner, an entry not in the places, an unprized place, and an unpublished week', async () => {
     await seedPool();
+    // A weekly award is bound to the recap row, not to participantIds: a legacy member absent from the list can still be recorded (codex r4 on T5)…
+    await poolRef().update({ participantIds: [HOST] });
+    const legacy = await record(HOST, [{ uid: BOB, entryId: BOB, amount: 12, kind: 'PLACE', week: 1, settled: false }]);
+    expect(legacy.awardIds).toEqual(['wk1-pl-bob-p2']);
+    // …while a season award still needs the participant list.
+    await poolRef().update({ status: 'FINAL', finalizedAt: Date.now() });
+    await expect(record(HOST, [{ uid: BOB, amount: 5, kind: 'BONUS', settled: false }])).rejects.toThrow(/not a member/);
+    await poolRef().update({ status: 'OPEN', finalizedAt: null, participantIds: [HOST, ALICE, BOB] });
+    await poolRef().collection('payoutRecords').doc('wk1-pl-bob-p2').delete();
+    await poolRef().collection('payoutRecordsPrivate').doc('wk1-pl-bob-p2').delete();
     await expect(record(HOST, [{ uid: ALICE, entryId: ALICE, amount: 20, kind: 'PLACE', week: 1, settled: true }])).rejects.toThrow(/AMOUNT_MISMATCH/);
     await expect(record(HOST, [{ uid: BOB, entryId: ALICE, amount: 18, kind: 'PLACE', week: 1, settled: true }])).rejects.toThrow(/ENTRY_NOT_OWNED/);
     await expect(record(HOST, [{ uid: ALICE, entryId: 'e2:pl-alice', amount: 18, kind: 'PLACE', week: 1, settled: true }])).rejects.toThrow(/NOT_IN_WEEKLY_PLACES/);
