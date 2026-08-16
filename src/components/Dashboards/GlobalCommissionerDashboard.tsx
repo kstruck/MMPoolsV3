@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { Crown, DollarSign, Users, Settings, ArrowRight, Trophy } from 'lucide-react';
 import type { User, Pool } from '../../types';
 import { Button } from '../ui';
-import { isActiveManagedPool } from '../../utils/poolSport';
+import { isActiveManagedPool, isNFLSeasonPoolType } from '../../utils/poolSport';
 
 interface GlobalCommissionerDashboardProps {
   user: User;
@@ -99,7 +99,11 @@ export const GlobalCommissionerDashboard: React.FC<GlobalCommissionerDashboardPr
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button onClick={() => navigate(`/admin/${pool.id}`)} className="bg-card border border-line hover:border-navy-600 text-muted hover:text-[color:var(--text)] p-2 rounded-lg transition-colors" title="Admin Dashboard">
+          {/* NFL pools have no /admin surface — AdminRoute only redirects them to
+              ?tab=manager AFTER a strict owner/managerUid guard, which would refuse a
+              co-commissioner (PLAN-CO-COMMISSIONERS D7; codex r1 on PR-B). Go straight
+              to the manager tab, where PoolRoute computes the NFL-widened isManager. */}
+          <button onClick={() => navigate(isNFLSeasonPoolType(pool.type) ? `/pool/${pool.id}?tab=manager` : `/admin/${pool.id}`)} className="bg-card border border-line hover:border-navy-600 text-muted hover:text-[color:var(--text)] p-2 rounded-lg transition-colors" title="Admin Dashboard">
             <Settings size={16} />
           </button>
           <button onClick={() => navigate(`/pool/${(pool as any).slug || pool.id}`)} className="bg-navy-800 hover:bg-navy-700 text-white p-2 rounded-lg transition-colors flex items-center justify-center" title="View Pool">
