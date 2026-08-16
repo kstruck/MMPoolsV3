@@ -1712,10 +1712,21 @@ export const dbService = {
     },
 
     // Commissioner records who won what (server validates ownership + finalized pool).
-    recordPoolPayouts: async (poolId: string, awards: Array<{ uid: string; amount: number; kind: string; place?: number; settled: boolean; note?: string; supersedes?: string }>) => {
+    // PLAN-PAYMENT-LEDGER T4: a WEEKLY PLACE award carries `entryId` + `week` and
+    // is bound server-side to the recap's published place + frozen prize
+    // (deterministic id, idempotent); `staleAwardId` re-records after a rescore.
+    recordPoolPayouts: async (poolId: string, awards: Array<{ uid: string; entryId?: string; amount: number; kind: string; place?: number; week?: number; settled: boolean; note?: string; supersedes?: string; staleAwardId?: string }>) => {
         const fn = httpsCallable(functions, 'recordPoolPayouts');
         const res = await fn(withCorrelationId({ poolId, awards }));
-        return res.data as { success: boolean; awardIds: string[] };
+        return res.data as { success: boolean; awardIds: string[]; written?: number };
+    },
+
+    // PLAN-PAYMENT-LEDGER T4 (K5): the ledger's un-tick / re-tick. Flips
+    // `settled` on the private record only; the amount is immutable.
+    setPayoutSettled: async (poolId: string, awardId: string, settled: boolean) => {
+        const fn = httpsCallable(functions, 'setPayoutSettled');
+        const res = await fn(withCorrelationId({ poolId, awardId, settled }));
+        return res.data as { success: boolean; changed: boolean };
     },
 
     // A member's own entry doc (NFL types key entries by uid). Own reads are always
