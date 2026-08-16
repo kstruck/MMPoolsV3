@@ -1,5 +1,54 @@
 # HANDOFF — Session entry point
 
+> ## 🛑 2026-08-17 (overnight 08-16) — THE PAYMENT LEDGER: SIX STACKED PRs OPEN (#451→#456), NOTHING MERGED OR DEPLOYED; three new PLANs + board memo in #457
+>
+> **Read `MORNING-2026-08-17-LEDGER.md` first** — it is the merge-order + deploy
+> runbook (functions → rules → indexes → Coolify) and lists the decisions/deviations.
+> **State before this:** #438/#449/#450 (multi-entry T0/T1/T2) and #444/#446/#447
+> (co-commissioners) merged AND deployed; `MULTI_ENTRY_WIZARD_ENABLED` still
+> `false` (Kevin's ruling). PLAN-WEEKLY-PRIZES + PLAN-PAYMENT-LEDGER were signed
+> 2026-08-15; WEEKLY-PRIZES owed its review log + sweeps — **paid tonight** (#451:
+> rounds 1–9 reconstructed from the plan's citations, r10 live → REVISE → plan §9
+> addenda; sweeps S1–S11). Multi-entry T3 stays deferred behind the ledger.
+>
+> **What the stack ships (merge in order; each retargets to `main`):**
+> #451 `shared/prizeSplit` + `shared/prizePot` (PayoutsPanel on the shared maths) ·
+> #452 B1: `MNF_FIRST_GAME`, `MNF_COMBINED` unpickable (absent still ⇒ combined —
+> D1), Monday-less fallback, **`pool.frozenTiebreakTargets[week]` frozen on the
+> week's first submission + `displayedTiebreakTargetIds` handshake
+> (`TIEBREAK_TARGET_STALE`)** — LIVE scorer · #453 scorer publishes
+> **`recap.weeklyPlaces` (full entry-keyed ranking) + frozen `weeklyPrize`** (or
+> `null` = unpriced), fail-closed `weeklyPlacesError`, `pool.weeksInSeason`
+> set-once — LIVE scorer · #454 **Weekly Winners List** on the recap card ·
+> #455 **T4** `recordPoolPayouts` weekly PLACE awards bound to the recap
+> (deterministic id `wk{week}-{entryId}-p{place}`, idempotent, re-record by
+> supersession, reversal), per-award gating, **new callable `setPayoutSettled`**,
+> `payoutRecords (entryId, week)` composite index · #456 **T5 — the Payment
+> Ledger** (`PaymentLedgerNFL` on the NFL manager view: fee status per member +
+> every published weekly prize with a Paid ☐ that RECORDS a settled Payout Record;
+> STALE → Re-record / Reverse) + one rules read for co-commissioners.
+> qodo + codex done on all six (#456 codex hit the 10-round cap; last finding rejected with evidence — MORNING §4).
+>
+> **Not built (named, next in order):** T6 member "My prizes"; WEEKLY-PRIZES
+> step 3 (season-tie cascade → season prize rows); T7 docs/CONTEXT/ADR;
+> T0/T1/T2 (`weeklyPayouts` + wizard — the ledger prices correctly without them:
+> absent ⇒ `payouts` for both pots). Record Payouts card KEPT beside the ledger.
+>
+> **Priority-2 plans (docs PR #457, unsigned):** `PLAN-COMMISSIONER-TRANSFER.md`
+> (auth, K1–K18, one codex finding open at cap: K18 webhook race),
+> `PLAN-POOL-TYPE-ICONS.md` (K1–K13), `PLAN-HELP-SYSTEM.md` (K1–K13, ported from
+> spectrum-price-intel's HelpTooltip/HelpPanel), each with review log + sweeps, +
+> `BOARD-MEMO-2026-08-16-transfer-icons-help.md` — **board says build none during
+> the live weeks; ship the two ICONS mislabels + the `createCheckoutSession`
+> ownership gate (`stripe.ts:189-193`) standalone; measure 3–4 weeks.** Kevin's §6
+> calls on all three.
+>
+> **Deploy state:** unchanged from #450 until the stack merges (functions + rules
+> at `42906ecc`-era; nothing owed on any queue). Worktrees used tonight:
+> `.claude/worktrees/weekly-prizes` (all six PR branches), `plans-docs`,
+> `handoff-ledger`, `plan-*` ×3 (mergeable / removable after #457).
+
+
 > ## 🛑 2026-08-17 (overnight) — PLAN-MULTI-ENTRY T2 (submit path + dues) IN A PR; T1 (#449) + co-commissioners (#446/#447) + #445 are LIVE
 >
 > **State before this PR:** T0 (row-identity invariant), K9 (#445), T1 (#449 —
