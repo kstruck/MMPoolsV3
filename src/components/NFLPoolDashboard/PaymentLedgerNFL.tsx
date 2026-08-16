@@ -47,11 +47,15 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
   const [priv, setPriv] = useState<Priv[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Settlement state comes from the PRIVATE records; if that listener fails
+  // (permissions, offline) every box would read "unpaid" — say so and disable
+  // the boxes instead (qodo #10 on #456).
+  const [privUnavailable, setPrivUnavailable] = useState(false);
 
   useEffect(() => {
     const u1 = dbService.subscribeToWeeklyRecaps(pool.id, setRecaps);
     const u2 = dbService.subscribeToPayoutRecords(pool.id, setRecords as never);
-    const u3 = dbService.subscribeToPayoutRecordsPrivate(pool.id, setPriv as never);
+    const u3 = dbService.subscribeToPayoutRecordsPrivate(pool.id, (rows) => { setPriv(rows as never); setPrivUnavailable(false); }, undefined, () => setPrivUnavailable(true));
     return () => { u1(); u2(); u3(); };
   }, [pool.id]);
 
@@ -98,10 +102,11 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
       rows.push({
         key: `${live.week}|${live.entryId}`, week: live.week!, entryId: live.entryId!, uid: live.uid,
         name: row ? (row.entryName ? `${row.entryName} · ${row.userName}` : row.userName) : live.entryId!,
-        rank: row?.rank ?? 0, owed: 0, live, settled: false, stale: true,
+        // NaN = place unknown (entry no longer in the recap) — rendered as "—", never 0 (qodo #8 on #456).
+        rank: row?.rank ?? Number.NaN, owed: 0, live, settled: false, stale: true,
       });
     }
-    return rows.sort((a, b) => a.week - b.week || a.rank - b.rank || a.name.localeCompare(b.name));
+    return rows.sort((a, b) => a.week - b.week || ((Number.isNaN(a.rank) ? 1e9 : a.rank) - (Number.isNaN(b.rank) ? 1e9 : b.rank)) || a.name.localeCompare(b.name));
   }, [recaps, liveWeekly, privById]);
 
   /**
@@ -112,7 +117,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
    * status the rest of the manager view shows (codex r1 on T5).
    */
   const memberRows = useMemo(() => {
-    const byUid = new Map<string, { uid: string; name: string; feeOwed: number; paid: boolean; owed: number; settled: number }>();
+    const byUid = new Map<string, { uid: string; name: string; feeOwed: number | null; paid: boolean | null; owed: number; settled: number }>();
     // Same fallback the manager's payment controls use: a legacy Member Record
     // (or a participant/entry-only row) with no `feeOwed` stamp owes the pool's
     // entry fee, not $0 (codex r5 on T5).
@@ -122,7 +127,9 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
       byUid.set(r.uid, { uid: r.uid, name: r.userName ?? r.uid, feeOwed, paid: r.paidStatus === 'PAID', owed: 0, settled: 0 });
     }
     for (const r of prizeRows) {
-      const row = byUid.get(r.uid) ?? { uid: r.uid, name: r.name, feeOwed: 0, paid: false, owed: 0, settled: 0 };
+      // A prize recipient outside the roster (should not happen — the roster
+      // includes entries): fee/status UNKNOWN, rendered "—", never $0 (qodo #9).
+      const row = byUid.get(r.uid) ?? { uid: r.uid, name: r.name, feeOwed: null, paid: null, owed: 0, settled: 0 };
       row.owed += r.owed;
       if (r.settled) row.settled += r.owed;
       byUid.set(r.uid, row);
@@ -182,9 +189,11 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
             {memberRows.map(m => (
               <tr key={m.uid} className="border-t border-line">
                 <td className="py-1 pr-2 text-[color:var(--text)]">{m.name}</td>
-                <td className="py-1 pr-2 text-right num">{money(m.feeOwed)}</td>
+                <td className="py-1 pr-2 text-right num">{m.feeOwed === null ? <span className="text-faint">—</span> : money(m.feeOwed)}</td>
                 <td className="py-1 pr-2">
-                  <span className={`text-[10px] font-display font-bold uppercase ${m.paid ? 'text-green-600 dark:text-green-400' : 'text-brandred-600 dark:text-brandred-500'}`}>{m.paid ? 'Paid' : 'Unpaid'}</span>
+                  {m.paid === null
+                    ? <span className="text-faint text-[10px]">unknown</span>
+                    : <span className={`text-[10px] font-display font-bold uppercase ${m.paid ? 'text-green-600 dark:text-green-400' : 'text-brandred-600 dark:text-brandred-500'}`}>{m.paid ? 'Paid' : 'Unpaid'}</span>}
                 </td>
                 <td className="py-1 pr-2 text-right num">{m.owed > 0 ? money(m.owed) : <span className="text-faint">—</span>}</td>
                 <td className="py-1 text-right num">{m.owed > 0 ? money(m.settled) : <span className="text-faint">—</span>}</td>
@@ -221,7 +230,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
                   <tr key={r.key} className="border-t border-line">
                     <td className="py-1 pr-2 num">{r.week}</td>
                     <td className="py-1 pr-2 text-[color:var(--text)]">{r.name}</td>
-                    <td className="py-1 pr-2 text-right num">{r.rank}</td>
+                    <td className="py-1 pr-2 text-right num">{Number.isNaN(r.rank) ? <span className="text-faint">—</span> : r.rank}</td>
                     <td className="py-1 pr-2 text-right num font-bold text-gold-700 dark:text-gold-400">{r.owed > 0 ? money(r.owed) : <span className="text-faint font-normal">no longer owed</span>}</td>
                     <td className="py-1 pr-2 text-[11px]">
                       {!r.live && <span className="text-faint">not recorded</span>}
@@ -248,7 +257,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
                           type="checkbox"
                           aria-label={`Week ${r.week} prize for ${r.name} paid`}
                           checked={r.settled}
-                          disabled={busy === r.key}
+                          disabled={busy === r.key || privUnavailable}
                           onChange={e => toggle(r, e.target.checked)}
                           className="h-4 w-4 accent-navy-600 dark:accent-gold-500"
                         />
@@ -260,6 +269,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
             </table>
           </div>
         )}
+        {privUnavailable && <p className="mt-2 text-[11px] font-body text-brandred-600 dark:text-brandred-500">Settlement state unavailable (could not read the private payout records) — the Paid boxes are disabled until it loads. Reload the page; if it persists, tell support.</p>}
         {error && <p className="mt-2 text-[11px] font-body text-brandred-600 dark:text-brandred-500">{error}</p>}
         <p className="mt-2 text-[10px] font-body text-faint leading-relaxed">
           A ticked box is a settled Payout Record (`{weeklyAwardId(1, 'entry', 1)}`-style id, one per entry per week). Un-ticking marks it unpaid; the recorded amount never changes. After a rescore a line can show STALE — Re-record writes the new figure (or Reverse writes $0) and supersedes the old one, keeping its paid/unpaid state. Season prizes and one-off adjustments: use Record Payouts once the season is finalized.
