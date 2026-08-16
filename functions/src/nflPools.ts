@@ -1182,6 +1182,14 @@ export function weeklyPlacesPublication(
       const entryCount = Number.isInteger(freshPool?.entryCount) && freshPool.entryCount >= 0 ? freshPool.entryCount : entryDocCount;
       const storedWeeks = Number.isInteger(freshPool?.weeksInSeason) && freshPool.weeksInSeason >= 1 ? freshPool.weeksInSeason as number : undefined;
       const weeks = storedWeeks ?? derivedWeeksInSeason;
+      const mode = freshPool?.settings?.payoutMode;
+      if ((mode === 'WEEKLY' || mode === 'HYBRID') && weeks === undefined) {
+        // A priced mode with no divisor is NOT "unpriced" — it is "cannot price
+        // yet" (the schedule query was skipped or failed, or the mode changed
+        // during this pass — codex r4). Fail closed WITHOUT the null sentinel so
+        // the next pass prices it.
+        return { recap: { weeklyPlaces: ranked, weeklyPlacesError: 'WEEKS_UNKNOWN' } };
+      }
       snapshot = computeWeeklyPrizeSnapshot(freshPool?.settings ?? {}, entryCount, weeks, Date.now()) ?? null;
       if (snapshot && storedWeeks === undefined) poolPatch = { weeksInSeason: snapshot.weeksInSeason };
     }
@@ -1879,6 +1887,9 @@ async function scoreWeekPass(
       // when the in-tx pool has no stored `weeksInSeason`, and only needed on a
       // priced mode. Wrapped so a query failure lands as `weeklyPlacesError`
       // (fail-closed) instead of failing the scoring run (qodo #7 on #453).
+      // The mode is read from the pre-lease snapshot; if it flips to a priced
+      // mode during the pass, `weeklyPlacesPublication` fails closed with
+      // WEEKS_UNKNOWN (no null sentinel) and the next pass prices the week.
       const needsWeeks = frozenPrize === undefined
         && (pool?.settings?.payoutMode === 'WEEKLY' || pool?.settings?.payoutMode === 'HYBRID')
         && !(Number.isInteger(pool?.weeksInSeason) && pool.weeksInSeason >= 1);
