@@ -393,7 +393,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       await dbService.setPoolCoCommissioner(isCo
         ? { poolId: pool.id, uid, op: 'remove' }
         : { poolId: pool.id, uid, op: 'add', revision: (pool as { coManagersRevision?: number }).coManagersRevision ?? 0 });
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.error(`Failed to ${isCo ? 'remove' : 'add'} co-commissioner ${uid}:`, err);
       setFeedback({ type: 'error', message: getUserMessage(err, 'Failed to update co-commissioners.') });
     } finally {

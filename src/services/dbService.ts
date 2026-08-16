@@ -23,6 +23,11 @@ import { poolRepository } from "./poolRepository";
 import { userRepository } from "./userRepository";
 import { errorHandler, ErrorSeverity } from "./errorHandler";
 import { withCorrelationId } from "../utils/correlationId";
+
+// Mirrors functions/src/schemas/coCommissioners.ts (discriminated on `op`; `revision` only on add).
+export type SetPoolCoCommissionerInput =
+    | { poolId: string; uid: string; op: 'add'; revision: number }
+    | { poolId: string; uid: string; op: 'remove' };
 import { stripEmptyCallableFields } from "./callableParams";
 export { db };
 import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament, BanterMessage, NFLGame, WeeklyRecap } from "../types";
@@ -477,10 +482,8 @@ export const dbService = {
     // race the revision fence closes. `add` presents the coManagersRevision the
     // caller SAW (absent = 0) and fails `failed-precondition` if it has moved;
     // `remove` presents nothing and always wins.
-    setPoolCoCommissioner: async (
-        input: { poolId: string; uid: string; op: 'add'; revision: number } | { poolId: string; uid: string; op: 'remove' },
-    ): Promise<void> => {
-        const fn = httpsCallable(functions, 'setPoolCoCommissioner');
+    setPoolCoCommissioner: async (input: SetPoolCoCommissionerInput): Promise<void> => {
+        const fn = httpsCallable<SetPoolCoCommissionerInput & { _correlationId?: string }, { success: true; coManagers: string[]; coManagersRevision: number }>(functions, 'setPoolCoCommissioner');
         await fn(withCorrelationId(input));
     },
 
