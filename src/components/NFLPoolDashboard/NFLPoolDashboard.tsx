@@ -9,6 +9,7 @@ import { logger } from '../../utils/logger';
 import type { User, Pool, NFLGame, WeeklyRecap } from '../../types';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { formatSharpScore, recapHasHighlights, weeklyWinnerLabel } from '../../utils/recapHighlight';
+import { WeeklyWinnersList } from './WeeklyWinnersList';
 import { CountdownTo } from '../common/CountdownTo';
 
 // Lazy load or import sub-views (we will create them next!)
@@ -1030,6 +1031,16 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                               <span className="text-[color:var(--text)] font-display font-bold num">
                                 {recap.closestTiebreaker.userName} (diff: {recap.closestTiebreaker.diff})
                               </span>
+                            </div>
+                          )}
+
+                          {/* The Weekly Winners List (PLAN-WEEKLY-PRIZES B2):
+                              every place, straight off the recap — the client
+                              never re-ranks or re-prices (§3a). Absent on
+                              recaps written before it existed. */}
+                          {pool.type !== 'NFL_SURVIVOR' && (
+                            <div className="pt-2 border-b border-line pb-2">
+                              <WeeklyWinnersList recap={recap} poolType={pool.type} />
                             </div>
                           )}
 
