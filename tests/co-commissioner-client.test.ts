@@ -106,4 +106,14 @@ describe('source pins', () => {
     expect(src).toMatch(/dbService\.setPoolCoCommissioner\(/);
     expect(src).not.toMatch(/coManagers:\s*\[/); // never a full-array write from the client
   });
+
+  it('owner-only UI stays behind the STRICT helper: Cancel Pool (C8) and BillingGate (C9) never read the widened flag', () => {
+    const mv = read('src/components/NFLPoolDashboard/NFLManagerView.tsx');
+    const cancel = mv.indexOf('Cancel Pool ──');
+    expect(cancel).toBeGreaterThan(-1);
+    expect(mv.slice(cancel, cancel + 600)).toMatch(/\{viewerIsOwner && \(/);
+    const dash = read('src/components/NFLPoolDashboard/NFLPoolDashboard.tsx');
+    expect(dash).toContain('<BillingGate pool={pool as any} isCommissioner={isPoolManager(user, pool)}>');
+    expect(dash).not.toMatch(/isCommissioner=\{isManager\}/);
+  });
 });

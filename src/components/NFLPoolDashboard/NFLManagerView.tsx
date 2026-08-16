@@ -1691,7 +1691,10 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               )}
             </div>
 
-            {/* ── Cancel Pool ── */}
+            {/* ── Cancel Pool ── owner/managerUid/SA ONLY (PLAN-CO-COMMISSIONERS C8/D4):
+                `cancelPool` refuses a co-commissioner server-side, so do not walk them
+                through two destructive confirmations into a permission error. */}
+            {viewerIsOwner && (
             <div className="bg-brandred-600/5 border border-brandred-600/25 rounded-lg p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <Ban size={14} className="text-brandred-600" />
@@ -1723,6 +1726,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 </button>
               </div>
             </div>
+            )}
           </div>
         )}
       </div>

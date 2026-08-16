@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { BillingGate } from '../billing';
+import { isPoolManager } from '../../utils/auth';
 import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { PoolPicksReveal } from '../../services/dbService';
@@ -549,8 +550,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   const branding = castPool.branding || {};
   const accentHex = branding.secondaryColor || '#C9A867';
 
+  // Billing is C9: owner-only, never a co-commissioner — so the gate reads the
+  // STRICT helper, not the NFL-widened `isManager` prop (codex r8 on PR-B).
   return (
-    <BillingGate pool={pool as any} isCommissioner={isManager}>
+    <BillingGate pool={pool as any} isCommissioner={isPoolManager(user, pool)}>
     <div
       className="min-h-screen bg-page text-[color:var(--text)] font-body pb-20 relative transition-colors duration-500"
       style={{ backgroundColor: branding.bgColor || undefined }}
