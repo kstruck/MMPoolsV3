@@ -1,6 +1,6 @@
 # PLAN — weekly prize lists, tiebreaker option change, tie prize-splitting
 
-**Status: AWAITING KEVIN'S SIGN-OFF. No code written.**
+**Status: ✅ SIGNED 2026-08-15 (D1–D8, "all recommendations"). Review log + sweeps written 2026-08-16; §9 carries the round-10 addenda. Implementation under way — see §8.**
 Classification: **money + scoring** → plan-gated (`mmp-change-control` §1).
 Written 2026-08-14 (overnight). Supersedes the scope notes in
 `PROMPT-NEXT-SESSION-WEEKLY-PRIZES.md`, whose "state when written" section
@@ -521,7 +521,25 @@ one that owes a functions deploy.
 ## 8. Gate status
 
 - [x] Plan written
-- [ ] Adversarial review log (`PLAN-WEEKLY-PRIZES-REVIEW-LOG.md`)
-- [ ] Sweep pass (`PLAN-WEEKLY-PRIZES-SWEEPS.md`) — complete instance lists for `MNF_COMBINED`, `weeklyTiebreaker`, `WEEKLY_TIEBREAKER_VALUES`, `showTiebreaker`, `payouts.places`
-- [ ] **Kevin's sign-off on D1–D8**
-- [ ] Implementation
+- [x] Adversarial review log (`PLAN-WEEKLY-PRIZES-REVIEW-LOG.md`) — rounds 1–9 (2026-08-14, reconstructed from the inline citations) + round 10 live 2026-08-16 (REVISE, 10 findings, all absorbed into §9; the §2c cap of 10 is now spent — an r11 is Kevin's call)
+- [x] Sweep pass (`PLAN-WEEKLY-PRIZES-SWEEPS.md`) — S1–S11
+- [x] **Kevin's sign-off on D1–D8** — 2026-08-15, "all recommendations"
+- [ ] Implementation — step 1 (`shared/prizeSplit.ts` + `shared/prizePot.ts`) in PR; steps 2–5 follow, one PR each
+
+---
+
+## 9. Round-10 addenda (2026-08-16, after #427–#450 merged) — these BIND the implementation
+
+The live codex round on the signed plan found the multi-entry merges (T1/T2,
+#449/#450) had moved the ground under three of the plan's nouns. Nothing here
+re-opens D1–D8; each row is a specification the signed decisions already imply.
+
+| # | Addendum | Why |
+|---|---|---|
+| A1 | **`weeklyPlaces` rows are keyed by `entryId`** (`entries/{docId}` — `{uid}` for entry #1, `e{n}:{uid}` for extras), and carry `ownerUid`, `entryName ?? userName`, `points`, `tiebreakDiff?`, `rank`, and (paid ranks only) `prize`. `WeeklyWinnerCandidate` gains `entryId`. | Post-T2 one owner can hold several entries; a uid-keyed list would merge them and mis-award. |
+| A2 | **A pure full-ranking function** in `functions/src/nflScoringEngine.ts` (`rankWeeklyPlaces`) ranks EVERY scored entry: points desc → tiebreakDiff asc (undefined = no prediction, ranks BELOW any prediction, never coerced to 0 — the `computeWeeklyWinners` rule) → residual ties SHARE a rank, next rank skips (1,1,3). `weeklyWinners` stays = the rank-1 group, computed as today. Publishing the FULL ranking removes the "how deep" question (§3a's `max(rank)` is a subset of it) and lets an empty `places` list still publish places and scores (SEASON mode, D7). | Ambiguity in §3a about depth and about empty/zero-percent payout lists. |
+| A3 | **`entries` in the pot formula = `pool.entryCount`** as it stands at first publication (server-maintained since T2; derived by counting entry docs in the transaction when the field is absent on a legacy pool), and it is FROZEN into the recap with the pot (§3b-i). | `entryCount` now has a precise meaning (liable/playable entries) and a maintainer; "entries" no longer does. |
+| A4 | **HYBRID snapshot uses `settings.weeklyPayouts ?? settings.payouts`** for the weekly places list (PLAN-PAYMENT-LEDGER D1: absent `weeklyPayouts` ⇒ `payouts` applies to both pots — today's behaviour). WEEKLY uses `payouts`. The selector is one function in `shared/prizePot.ts` (`weeklyPlacesFor(settings)`); LEDGER T1 adds the field later without touching the scorer. | Two plans named two lists for the same pot. |
+| A5 | **Publication fails CLOSED, never crashes the scorer.** Duplicate ranks / >100 % / a `splitPrizes` throw → the recap is written WITHOUT `weeklyPlaces`, with `weeklyPlacesError: '<CODE>'` (string), the week scores normally, and the manager surface shows the error. LEDGER K9's duplicate-rank census + update validation are prerequisites for the DISPLAY, not for the scorer. | `nflAutoScoreJob` is live; a throw inside it is an outage. |
+| A6 | **The frozen-target handshake is a contract change on `submitNFLPicks`:** `submitNFLPicksSchema` (`functions/src/schemas/poolCore.ts:29`, strict) gains optional `displayedTiebreakTargetIds: string[]` (max 10, unique); the internal payload type (`nflPools.ts:382`), `dbService.submitNFLPicks` (`src/services/dbService.ts:1488`), `PickemPickEntry`, `proxyPick`, and the sim/harness callers are enumerated in sweeps S11 and ALL updated in the same PR. Server rule, in the transaction: compute the canonical target from the schedule read IN the transaction; if `pool.frozenTiebreakTargets[week]` exists → require the client list to equal it (else `TIEBREAK_TARGET_STALE`, reload); else require the client list to equal the canonical list (else `TIEBREAK_TARGET_STALE`), then freeze the canonical list. A submission that sends NO list (proxy, sim harness, a legacy client) is accepted and, when nothing is frozen yet, freezes the CANONICAL list — the client's list is never what gets stored, so an absent list cannot freeze a favourable game; the r7 render-vs-submit risk applies only to a client that displayed a target, and such a client sends its list. Only the `MNF_COMBINED`/`MNF_LAST_GAME`/`MNF_FIRST_GAME` rules freeze anything; `NONE` never does. | The plan's handshake trusted the client's list; a first submitter could freeze a favourable game. |
+| A7 | Sweeps gain **S10** (entry identity — every weekly-place/payout key is `entryId`) and **S11** (every submit path — schema, payload, dbService, UI, proxy, sim). | Codex r10 on the sweeps. |
