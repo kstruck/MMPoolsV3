@@ -18,6 +18,7 @@ import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { buildPoolRoster, hasCompletePicks, memberOutstanding, duesRates } from '../../utils/poolRoster';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
 import { effectiveWeeklyTiebreaker } from '@shared/nflTiebreaker';
+import { WEEKLY_TIEBREAKER_OPTIONS } from '@shared/nflTiebreakerOptions';
 import { hybridSplitProblem } from '@shared/hybridSplit';
 import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReuse';
 import { effectiveMaxEntriesPerUser, MAX_ENTRIES_PER_USER_CAP, MULTI_ENTRY_WIZARD_ENABLED } from '@shared/multiEntry';
@@ -1060,9 +1061,16 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   onChange={e => setWeeklyTiebreaker(e.target.value)}
                   className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                 >
-                  <option value="MNF_COMBINED">Monday night — combined score of ALL Monday games</option>
-                  <option value="MNF_LAST_GAME">Monday night — combined score of the LAST Monday game</option>
-                  <option value="NONE">None — tied weeks are shared</option>
+                  {/* MNF_COMBINED is LEGACY (PLAN-WEEKLY-PRIZES §0/D1): not
+                      offered, still honoured. A pool already on it must still
+                      SEE its own value here — otherwise the select would show
+                      the first option and an untouched save would be a change. */}
+                  {weeklyTiebreaker === 'MNF_COMBINED' && (
+                    <option value="MNF_COMBINED">Monday night — combined score of ALL Monday games (legacy — this pool's current rule)</option>
+                  )}
+                  {WEEKLY_TIEBREAKER_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
                 </select>
                 {/* The server refuses the change once anyone has submitted, and
                     it refuses it in a transaction that also reads the entries —

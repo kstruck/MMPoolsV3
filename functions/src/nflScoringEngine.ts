@@ -15,6 +15,7 @@ import {
   UNLIMITED_TEAM_USES,
 } from './shared/survivorReuse';
 import type { WeeklyTiebreaker } from './shared/nflTiebreaker';
+import { resolveTiebreakTargetIds } from './shared/nflTiebreaker';
 
 // ============================================================================
 // Feed-integrity predicates — what the scorer is allowed to treat as played
@@ -491,14 +492,26 @@ export function sortMarginLeaderboard(entries: MarginEntry[]): MarginEntry[] {
  * never heard of this setting computes exactly what it always did
  * (PLAN-WEEKLY-TIEBREAKERS §4, no migration).
  *
- *  - `MNF_COMBINED` — the combined score of ALL Monday games in the week
- *    (docs/NFL_POOLS_README.md), not just the first one found.
- *  - `MNF_LAST_GAME` — the combined score of the LAST Monday game to kick off.
- *  - `NONE` — the pool does not use a tiebreaker.
+ * WHICH game(s) are summed comes from ONE place — `resolveTiebreakTargetIds`
+ * (`shared/nflTiebreaker.ts`), the same function the pick sheet used to tell
+ * the member what they were predicting — OR, when the pool has a FROZEN target
+ * for the week (`pool.frozenTiebreakTargets[week]`, set by the week's first
+ * submission — PLAN-WEEKLY-PRIZES §2b), from that frozen list verbatim. The
+ * frozen list wins: a flex move, a postponement, or a game gaining or losing
+ * `isMonday` after members have submitted must not re-point their prediction.
  *
- * `null` means "no target", and every caller must already handle it (the pool
- * has no Monday game, or the games are not final yet). That is why `NONE` can
- * simply return `null` rather than needing a new branch downstream.
+ *  - `MNF_COMBINED`   — every Monday game (legacy; no Monday game → no target).
+ *  - `MNF_LAST_GAME`  — the LAST Monday game to kick off; Monday-less → the
+ *    week's final game.
+ *  - `MNF_FIRST_GAME` — the FIRST Monday game to kick off; Monday-less → the
+ *    week's final game.
+ *  - `NONE`           — the pool does not use a tiebreaker.
+ *
+ * `null` means "no target", and every caller must already handle it (no game
+ * qualifies, or the games are not final yet). A frozen game that is CANCELLED
+ * — or no longer in the schedule at all — also yields `null`: there is no
+ * combined score to compare against, so the tie is shared (D3), the same
+ * outcome as "nobody answered".
  *
  * ⚠️ Returns null until the games it reads are FINAL — a mid-Monday scoring run
  * must not freeze a partial total into the tiebreak; a rescore recomputes it.
@@ -509,36 +522,19 @@ export function sortMarginLeaderboard(entries: MarginEntry[]): MarginEntry[] {
 export function computeMNFTiebreakerTotal(
   games: NFLGame[],
   rule: WeeklyTiebreaker = 'MNF_COMBINED',
+  frozenTargetIds?: ReadonlyArray<string>,
 ): number | null {
   if (rule === 'NONE') return null;
-  const mondayGames = games.filter(g => g.isMonday);
-  if (mondayGames.length === 0) return null;
-
-  const counted = rule === 'MNF_LAST_GAME' ? [lastMondayGame(mondayGames)!] : mondayGames;
-  if (!counted.every(g => g.status === 'FINAL')) return null;
+  const targetIds = frozenTargetIds && frozenTargetIds.length > 0
+    ? frozenTargetIds
+    : resolveTiebreakTargetIds(games, rule);
+  if (targetIds.length === 0) return null;
+  const counted = targetIds.map(id => games.find(g => String(g.id) === id));
+  if (!counted.every((g): g is NFLGame => Boolean(g) && g!.status === 'FINAL')) return null;
   return counted.reduce(
     (sum, g) => sum + (g.scores?.home ?? 0) + (g.scores?.away ?? 0),
     0,
   );
-}
-
-/**
- * The last Monday game to KICK OFF — latest `startTime`, ties broken by `id`
- * descending.
- *
- * Kickoff order, not finish order: the sheet has to ask the question days
- * before anyone knows which game ends last, so finish order is not information
- * the member could have had. The `id` tiebreak exists because two Monday games
- * CAN share a start time and Firestore query order is not a promise — without
- * it the same week could resolve to different games on two scoring passes, and
- * a tiebreak target that moves is worse than one that is arbitrary.
- *
- * Caller guarantees a non-empty list.
- */
-function lastMondayGame(mondayGames: NFLGame[]): NFLGame | undefined {
-  return [...mondayGames].sort(
-    (a, b) => (b.startTime - a.startTime) || String(b.id).localeCompare(String(a.id)),
-  )[0];
 }
 
 /** One entry's claim on the week, as the winner computation sees it. */

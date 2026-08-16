@@ -46,7 +46,7 @@ import {
   computeWeeklyWinners,
   type WeeklyWinnerCandidate
 } from './nflScoringEngine';
-import { effectiveWeeklyTiebreaker } from './shared/nflTiebreaker';
+import { effectiveWeeklyTiebreaker, frozenTiebreakTargetFor, resolveTiebreakTargetIds, sameTargetIds, tiebreakerAsksForPrediction } from './shared/nflTiebreaker';
 import { maybeFinalizeNFLPool } from './nflFinalize';
 import {
   acquireScoringLease,
@@ -379,7 +379,7 @@ export function assertNFLPickMembership(
 export async function submitNFLPicksInternal(
   db: admin.firestore.Firestore,
   ctx: MemberActionContext,
-  payload: { poolId?: string; week?: number; picks?: any; confidence?: any; tiebreakerPrediction?: number; entryIndex?: number; entryName?: string },
+  payload: { poolId?: string; week?: number; picks?: any; confidence?: any; tiebreakerPrediction?: number; entryIndex?: number; entryName?: string; displayedTiebreakTargetIds?: string[] },
 ): Promise<{ success: true }> {
   const uid = ctx.subjectUid;
   // deep clean input
@@ -390,6 +390,11 @@ export async function submitNFLPicksInternal(
   // every existing client byte-identical — entry #1's id IS the uid.
   const entryIndex: number = Number.isInteger(data.entryIndex) && data.entryIndex >= 1 ? data.entryIndex : 1;
   const requestedEntryName: string | undefined = typeof data.entryName === 'string' ? data.entryName : undefined;
+  // PLAN-WEEKLY-PRIZES §9 A6: the target the sheet displayed, if the client
+  // sent one. Never stored — compared against the frozen/canonical list in-tx.
+  const displayedTargetIds: string[] | undefined = Array.isArray(data.displayedTiebreakTargetIds)
+    ? data.displayedTiebreakTargetIds.filter((x: unknown) => typeof x === 'string')
+    : undefined;
 
   if (!poolId || !week || !picks) {
     throw new HttpsError('invalid-argument', 'Missing poolId, week, or picks.');
@@ -551,10 +556,39 @@ export async function submitNFLPicksInternal(
     // Testing against this week's slate answers both at once.
     const weekGameIds = new Set(games.map(g => g.id));
     let committedPickForWeek = false;
+    let frozenTargetWrite: Record<string, string[]> | null = null;
 
     if (type === 'NFL_PICKEM') {
       const settings = pool.settings;
       const weeklyLockMode = settings.confidenceMode || settings.lockMode === 'WEEKLY';
+
+      // PLAN-WEEKLY-PRIZES §2b / §9 A6 — freeze the week's tiebreak TARGET on
+      // the first submission, once per pool-week, and hold every later
+      // submission to it. The canonical list is computed HERE from the schedule
+      // read for this request (`resolveTiebreakTargetIds`, the same function
+      // the sheet used); a client-supplied list is only ever COMPARED, never
+      // stored, so a first submitter cannot freeze a favourable game (codex r10
+      // on the plan). Rejecting on mismatch is the right failure: the
+      // alternative is accepting a prediction about a game the member never
+      // agreed to answer — the client reloads and re-renders the sheet.
+      // `NONE` freezes nothing; `MNF_COMBINED` (legacy) freezes the Monday set
+      // so a later schedule change cannot re-target an in-flight week either.
+      // The freeze is written even when this submission carries no prediction:
+      // it is the WEEK's target, not this member's, and the next member's sheet
+      // reads it.
+      const tiebreakRule = effectiveWeeklyTiebreaker(poolInTx.settings as { weeklyTiebreaker?: unknown } | undefined);
+      if (tiebreakerAsksForPrediction(tiebreakRule)) {
+        const frozenTarget = frozenTiebreakTargetFor(poolInTx as { frozenTiebreakTargets?: Record<string, unknown> }, week);
+        const canonicalTarget = resolveTiebreakTargetIds(games, tiebreakRule);
+        const authoritative = frozenTarget ?? canonicalTarget;
+        if (displayedTargetIds !== undefined && !sameTargetIds(displayedTargetIds, authoritative)) {
+          throw new HttpsError('failed-precondition',
+            'TIEBREAK_TARGET_STALE: the tiebreaker game shown on your sheet no longer matches the schedule for this week. Reload the page and submit again.');
+        }
+        if (!frozenTarget && canonicalTarget.length > 0) {
+          frozenTargetWrite = { [`frozenTiebreakTargets.${week}`]: canonicalTarget };
+        }
+      }
 
       if (weeklyLockMode) {
         if (weekLocked) {
@@ -827,6 +861,7 @@ export async function submitNFLPicksInternal(
     // write changed about the member's liability (0 on an ordinary resubmit).
     const countPatch = entryCountWrite(poolInTx, membersForCount, stamp.liabilityDelta);
     if (Object.keys(countPatch).length > 0) transaction.update(poolRef, countPatch);
+    if (frozenTargetWrite) transaction.update(poolRef, frozenTargetWrite);
     // K11: a PAID member whose dues just rose is UNPAID again — mirrored onto
     // every entry they own, with a ledger line saying why.
     if (stamp.paidReset) {
@@ -1351,7 +1386,13 @@ async function scoreWeekPass(
   // only once the game(s) it names are FINAL; mid-Monday admin scoring stays
   // provisional and a rescore recomputes it.
   const tiebreakerRule = effectiveWeeklyTiebreaker(pool?.settings as { weeklyTiebreaker?: unknown } | undefined);
-  const mnfTotalScore = computeMNFTiebreakerTotal(games, tiebreakerRule);
+  // The FROZEN target wins over the live schedule (PLAN-WEEKLY-PRIZES §2b): set
+  // by the week's first submission, so a flex move or a postponement after
+  // members submitted cannot re-point their prediction. Absent (a week nobody
+  // has submitted for yet, or a pool from before the freeze existed) → the
+  // canonical resolution from the current schedule, exactly as before.
+  const frozenTarget = frozenTiebreakTargetFor(pool as { frozenTiebreakTargets?: Record<string, unknown> } | undefined, week);
+  const mnfTotalScore = computeMNFTiebreakerTotal(games, tiebreakerRule, frozenTarget);
 
   // Survivor tracking
   let aliveCount = 0;

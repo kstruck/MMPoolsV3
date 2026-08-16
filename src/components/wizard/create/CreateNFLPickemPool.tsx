@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { DEFAULT_NEW_POOL_TIEBREAKER, WEEKLY_TIEBREAKER_OPTIONS } from '@shared/nflTiebreakerOptions';
 import { useFormContext } from 'react-hook-form';
 import type { User } from '../../../types';
 import { dbService } from '../../../services/dbService';
@@ -71,12 +72,8 @@ function StepPickemRules() {
       <SelectField
         name="settings.weeklyTiebreaker"
         label="Weekly tie-breaker"
-        options={[
-          { value: 'MNF_COMBINED', label: 'Monday night — combined score of ALL Monday games' },
-          { value: 'MNF_LAST_GAME', label: 'Monday night — combined score of the LAST Monday game' },
-          { value: 'NONE', label: 'None — tied weeks are shared' },
-        ]}
-        hint="Decides who wins a week when two players score the same. Players predict the number on their pick sheet. It cannot be changed once anyone has submitted picks, so pick it now."
+        options={[...WEEKLY_TIEBREAKER_OPTIONS]}
+        hint="Decides who wins a week when two players score the same. Players predict the combined score of the tiebreaker game on their pick sheet; on a week with no Monday game, the final game of the week is used. It cannot be changed once anyone has submitted picks, so pick it now."
       />
       <CheckboxField name="settings.confidenceMode" label="Confidence points (rank picks; forces weekly lock)" />
       <MultiEntryFields />
@@ -136,9 +133,10 @@ const defaultValues: Record<string, unknown> = {
     lockMode: 'PER_GAME',
     payoutMode: 'SEASON',
     pickMode: 'STRAIGHT',
-    // The historical rule, so a commissioner who never touches the control
-    // creates the pool everyone already understands.
-    weeklyTiebreaker: 'MNF_COMBINED',
+    // PLAN-WEEKLY-PRIZES D1: written EXPLICITLY at create, so a new pool never
+    // relies on the resolver's legacy default (absent ⇒ MNF_COMBINED, which is
+    // no longer offered — pools already playing it keep playing it).
+    weeklyTiebreaker: DEFAULT_NEW_POOL_TIEBREAKER,
     lockBufferMinutes: 5,
     confidenceMode: false,
     maxEntriesPerUser: 1,

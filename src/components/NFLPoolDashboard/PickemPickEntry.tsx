@@ -21,7 +21,7 @@ import { useSiteConsensus } from './pickSheet/useSiteConsensus';
 import { QuickPicksDialog } from './pickSheet/QuickPicksDialog';
 import { planQuickPicks, type QuickPickStrategy } from './pickSheet/quickPicks';
 import type { User, Pool, NFLGame } from '../../types';
-import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction, tiebreakerCopy } from '@shared/nflTiebreaker';
+import { effectiveWeeklyTiebreaker, frozenTiebreakTargetFor, resolveTiebreakTargetIds, tiebreakTargetSentence, tiebreakerAsksForPrediction, tiebreakerCopy } from '@shared/nflTiebreaker';
 
 interface PickemDraft {
   picks: Record<string, string>;
@@ -327,6 +327,8 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
       // server rather than a contract change, and an older client that still
       // sends one keeps working.
       tiebreakerPrediction: showTiebreaker ? tiebreakerPrediction : undefined,
+      // The target the sheet DISPLAYED — the server compares, never stores it.
+      displayedTiebreakTargetIds: showTiebreaker ? tiebreakTargetIds : undefined,
       requestId: crypto.randomUUID()
     };
 
@@ -368,13 +370,25 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   const tiebreakerRule = effectiveWeeklyTiebreaker(castPool.settings);
   const tiebreakerText = tiebreakerCopy(tiebreakerRule);
 
-  // Ask for the prediction only when the rule uses one AND the week actually has
-  // a Monday game. Under `NONE` the sheet asks nothing — the alternative is
-  // collecting a number that decides nothing, which is worse than not asking.
-  const showTiebreaker = useMemo(() => {
-    if (!tiebreakerAsksForPrediction(tiebreakerRule)) return false;
-    return games.some(g => g.isMonday);
-  }, [games, tiebreakerRule]);
+  // The game(s) this week's prediction is judged against — the FROZEN target
+  // once the week has one (set by its first submission; PLAN-WEEKLY-PRIZES
+  // §2b), else the canonical resolution from the schedule — the SAME function
+  // the server uses, so what the sheet says and what the scorer sums cannot
+  // disagree. Sent with the submission so the server can refuse a sheet that
+  // was rendered before a schedule change (TIEBREAK_TARGET_STALE).
+  const tiebreakTargetIds = useMemo(() => {
+    if (!tiebreakerAsksForPrediction(tiebreakerRule)) return [] as string[];
+    return frozenTiebreakTargetFor(castPool as { frozenTiebreakTargets?: Record<string, unknown> }, week)
+      ?? resolveTiebreakTargetIds(games, tiebreakerRule);
+  }, [castPool, games, tiebreakerRule, week]);
+  const tiebreakTargetText = useMemo(() => tiebreakTargetSentence(tiebreakTargetIds, games), [tiebreakTargetIds, games]);
+
+  // Ask for the prediction only when the rule uses one AND the week has a
+  // target game under that rule (a Monday game, or — for the last/first-game
+  // rules — the week's final game on a Monday-less week). Under `NONE`, or a
+  // legacy MNF_COMBINED pool on a Monday-less week, the sheet asks nothing —
+  // the alternative is collecting a number that decides nothing.
+  const showTiebreaker = tiebreakTargetIds.length > 0;
 
   // Spreads block the sheet ONLY on a pool whose scoring reads them — i.e. an
   // ATS pick'em. Mirrors the server's own precondition, which was scoped the
@@ -672,6 +686,11 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
             <p className="text-[10px] font-body text-muted leading-normal text-center">
               {tiebreakerText?.hint}
             </p>
+            {tiebreakTargetText && (
+              <p className="text-[10px] font-body font-bold text-[color:var(--text)] leading-normal text-center">
+                {tiebreakTargetText}
+              </p>
+            )}
           </div>
         </div>
       )}
