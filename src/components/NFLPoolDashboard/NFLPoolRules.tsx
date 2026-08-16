@@ -77,6 +77,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
             <h3 className="font-display font-bold uppercase text-lg leading-none text-[color:var(--text)] mb-2">NFL Pools Rules &amp; Specifications</h3>
             <p className="font-body text-muted text-[13px] leading-relaxed">
               Welcome to the pool dashboard! Below are the official configuration and scoring rules initialized by your commissioner. Ensure you submit and lock selections prior to weekly deadlines.
+              The commissioner may name up to three co-commissioners to help run the pool (scoring, reminders, payments); only the commissioner can cancel or close it. A co-commissioner who also plays is bound by the same rules and deadlines as every other member.
             </p>
           </div>
         </div>

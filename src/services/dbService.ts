@@ -472,6 +472,18 @@ export const dbService = {
         }));
     },
 
+    // The ONLY writer of pool.coManagers (PLAN-CO-COMMISSIONERS D2). ONE uid per
+    // call, never an array — a full replacement would reinstate the stale-tab
+    // race the revision fence closes. `add` presents the coManagersRevision the
+    // caller SAW (absent = 0) and fails `failed-precondition` if it has moved;
+    // `remove` presents nothing and always wins.
+    setPoolCoCommissioner: async (
+        input: { poolId: string; uid: string; op: 'add'; revision: number } | { poolId: string; uid: string; op: 'remove' },
+    ): Promise<void> => {
+        const fn = httpsCallable(functions, 'setPoolCoCommissioner');
+        await fn(withCorrelationId(input));
+    },
+
     // Rebuy settlement (PLAN-PAYMENT-TRUTH P3): commissioner marks a member's
     // rebuy dues settled (rebuyPaid := rebuyOwed) or reverses it. Same callable,
     // third exclusive mode.
@@ -878,6 +890,26 @@ export const dbService = {
             callback(pools);
         }, (error) => {
             logger.error("Pool Subscription Error:", error);
+            if (onError) onError(error);
+        });
+    },
+
+    // Commissioner Hub feed for NFL co-commissioners (PLAN-CO-COMMISSIONERS D7).
+    // ⚠️ SHAPE IS LOAD-BEARING: a Firestore LIST rule is proved from the QUERY.
+    // `array-contains` alone is DENIED — the rule can only prove the caller is
+    // a co-manager if the query also pins the NFL types. Both shapes are pinned
+    // in functions/scripts/coManagers.rules.test.mjs; change one, change both.
+    subscribeToCoCommissionedPools: (userId: string, callback: (pools: Pool[]) => void, onError?: (error: Error) => void) => {
+        const CAP = 100;
+        const q = query(collection(db, "pools"),
+            where("coManagers", "array-contains", userId),
+            where("type", "in", ["NFL_PICKEM", "NFL_SURVIVOR", "NFL_MARGIN"]),
+            limit(CAP));
+        return onSnapshot(q, (snapshot) => {
+            if (snapshot.size >= CAP) logger.warn(`subscribeToCoCommissionedPools hit the ${CAP}-pool cap for a user; results truncated.`);
+            callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Pool)));
+        }, (error) => {
+            logger.error("Co-commissioned Pool Subscription Error:", error);
             if (onError) onError(error);
         });
     },

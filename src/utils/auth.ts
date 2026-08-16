@@ -28,6 +28,36 @@ export const isPoolManager = (user: User | null | undefined, pool: { ownerId?: s
     return isPoolOwner(user, pool) || isSuperAdmin(user);
 };
 
+/** The pool types on which co-commissioners exist (PLAN-CO-COMMISSIONERS C13). */
+export const NFL_CO_COMMISSIONER_POOL_TYPES: readonly string[] = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
+
+/**
+ * The server-owned co-commissioner list, read defensively — the field is
+ * absent on every non-NFL pool and on any pool where nobody has been named.
+ * Never trust its shape blindly: it was client-writable before the T1 lock.
+ */
+export const poolCoManagers = (pool: { coManagers?: unknown } | null | undefined): string[] => {
+    const raw = pool?.coManagers;
+    return Array.isArray(raw) ? raw.filter((u): u is string => typeof u === 'string') : [];
+};
+
+/**
+ * Owner / manager / super admin, OR a named co-commissioner on an NFL pool
+ * (PLAN-CO-COMMISSIONERS D3). This is the ONLY widened predicate on the client
+ * and it is used ONLY where `PoolRoute` computes `isManager` for the three NFL
+ * dashboards and where the Commissioner Hub decides what to list. `isPoolOwner`,
+ * `isPoolManager` and `canManageEntries` stay strict — Bracket/Playoff/Squares
+ * surfaces and the owner-only co-commissioner toggle read them.
+ */
+export const isNFLPoolCommissioner = (
+    user: User | null | undefined,
+    pool: { ownerId?: string; managerUid?: string; type?: string; coManagers?: unknown } | null | undefined,
+): boolean => {
+    if (isPoolManager(user, pool)) return true;
+    if (!user || !pool) return false;
+    return NFL_CO_COMMISSIONER_POOL_TYPES.includes(pool.type ?? '') && poolCoManagers(pool).includes(user.id);
+};
+
 /** Check if a user can create pools (COMMISSIONER and above, incl. legacy POOL_MANAGER) */
 export const canCreatePool = (user: User | null | undefined): boolean => {
     if (!user) return false;

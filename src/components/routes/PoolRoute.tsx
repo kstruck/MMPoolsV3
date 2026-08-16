@@ -22,7 +22,7 @@ import { calculateScenarioWinners, getLastDigit } from '../../services/gameLogic
 import { shareTrackingService } from '../../services/shareTrackingService';
 import { getTeamLogo } from '../../constants';
 import { calculateQuarterlyPayouts } from '../../utils/payouts';
-import { isSuperAdmin, isPoolManager } from '../../utils/auth';
+import { isSuperAdmin, isPoolManager, isNFLPoolCommissioner } from '../../utils/auth';
 import { logger } from '../../utils/logger';
 import { useToast } from '../ui/Toast';
 import { Button, Badge } from '../ui';
@@ -108,6 +108,11 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         if (!user || !pool) return false;
         return isPoolManager(user, pool);
     }, [user, pool]);
+
+    // PLAN-CO-COMMISSIONERS D3: the ONE place the client widens `isManager` to
+    // a named NFL co-commissioner. Used ONLY by the NFL branch below (its Header
+    // and NFLPoolDashboard); Bracket/Playoff/Props/Squares keep the strict value.
+    const nflIsManager = useMemo(() => isNFLPoolCommissioner(user, pool), [user, pool]);
 
     // State moved from App.tsx
     const [statusTab, setStatusTab] = useState<'overview' | 'rules' | 'payment'>('overview');
@@ -247,7 +252,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
             <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
                 <Header
                     user={user}
-                    isManager={isManager}
+                    isManager={nflIsManager}
                     onOpenAuth={onOpenAuth}
                     onLogout={onLogout}
                     onCreatePool={onCreatePool}
@@ -271,7 +276,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                         key={pool.id}
                         pool={pool}
                         user={user}
-                        isManager={isManager}
+                        isManager={nflIsManager}
                         onBack={() => navigate('/')}
                         onOpenAuth={onOpenAuth}
                     />
