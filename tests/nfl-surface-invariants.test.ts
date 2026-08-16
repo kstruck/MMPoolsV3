@@ -837,7 +837,6 @@ describe('NFL row/reveal surfaces key by ENTRY id, never by owner uid (PLAN-MULT
     'src/components/PaymentsPanel.tsx': [/entries\.find\(e => e\.ownerUid === user\.id/],                     // myEntry — T6
     'src/utils/memberStandings.ts': [/const uidOf = /, /scoredByUid/, /r\.picks\?\.\[uid\]/, /reveal\.picks\?\.\[uid\]/, /reveal\.confidence\?\.\[uid\]/, /reveal\.tiebreakers\?\.\[uid\]/], // the fold — T4
     'src/utils/poolRoster.ts': [/const uidOf = /, /entryByUid/],                                              // dues per MEMBER are correct; renamed by T6
-    'src/components/NFLPoolDashboard/NFLManagerView.tsx': [/const targetUidOf = /],                           // proxy/remind TARGET is a person — T2 adds entryIndex
   };
   const FORBIDDEN: Array<[string, RegExp]> = [
     ['`ownerUid ?? …` used as a key',            /ownerUid \?\? [\w.]+\]/],

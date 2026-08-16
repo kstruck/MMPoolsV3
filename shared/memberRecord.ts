@@ -74,6 +74,70 @@ export interface MemberRecord {
    * submit lands they read "No selection".
    */
   pickedWeeks?: number[];
+  /**
+   * PLAN-MULTI-ENTRY D2. How many of this member's entries have committed at
+   * least one pick — the multiplier on `feeOwed` (K3). A one-way COUNTER,
+   * derived transactionally from the owner's entry docs (never trusted from a
+   * stored value under retries) and never lowered (deleting an entry is out of
+   * scope — K7). `hasPlayableEntry` stays `count > 0` so every reader is
+   * unchanged. ABSENT on every record written before T2: readers treat
+   * `undefined` as `hasPlayableEntry ? 1 : 0` (`memberLiableEntries`).
+   */
+  playableEntryCount?: number;
+  /**
+   * PLAN-MULTI-ENTRY D2/D6 — the authorization-safe roster of this member's
+   * entries: existence + index + display name, NEVER picks and never per-entry
+   * weeks (a participant-readable record must not say which entry has a pick
+   * for an unrevealed week — that completeness is the commissioner's, via
+   * `getPoolPicks.counts`). Keyed by entry id (`entryIdFor`). Rebuilt from the
+   * owner's entry docs on every submit that touches them, so a legacy record
+   * gains entry #1 the first time its owner submits under multi-entry.
+   */
+  entries?: Record<string, { entryIndex: number; name?: string }>;
+}
+
+/**
+ * How many entries this member is LIABLE for — the multiplier on the entry
+ * fee (PLAN-MULTI-ENTRY D2) and the unit `pool.entryCount` sums (D8).
+ *
+ * `max(joinLiability, playableEntryCount)`: an ordinary member owes ONE fee
+ * from the moment they join, whether or not they ever pick (today's contract —
+ * `feeOwed` is stamped at join, never inferred from entry existence); a seeded
+ * MANAGER owes 0 until their first playable entry (hosting is not playing).
+ * Additional entries count only once they have committed a pick.
+ *
+ * Legacy defaults: `playableEntryCount` absent ⇒ `hasPlayableEntry ? 1 : 0`;
+ * a MANAGER whose record predates the latch but carries `feeOwed > 0` was
+ * charged for playing, so counts 1.
+ */
+export function memberLiableEntries(
+  m: Pick<MemberRecord, 'role' | 'feeOwed' | 'hasPlayableEntry' | 'playableEntryCount'>,
+): number {
+  const joinLiability = m.role === 'MANAGER' ? 0 : 1;
+  return Math.max(joinLiability, memberPlayedEntries(m));
+}
+
+/** The "played" half of `memberLiableEntries`: entries that have committed a pick, with the legacy defaults above. */
+export function memberPlayedEntries(
+  m: Pick<MemberRecord, 'role' | 'feeOwed' | 'hasPlayableEntry' | 'playableEntryCount'>,
+): number {
+  return typeof m.playableEntryCount === 'number'
+    ? m.playableEntryCount
+    : (m.hasPlayableEntry === true || (m.role === 'MANAGER' && (m.feeOwed ?? 0) > 0) ? 1 : 0);
+}
+
+/**
+ * D8 — `pool.entryCount` for an NFL pool that never had one, derived from the
+ * Member Records' liabilities. Only CANONICAL records count: a forged
+ * `{memberReportedPaid}` doc (#344) is not a member and owes nothing.
+ */
+export function deriveEntryCount(members: Array<Record<string, unknown>>): number {
+  let n = 0;
+  for (const m of members) {
+    if (!isCanonicalMemberRecord(m as { joinedAt?: unknown })) continue;
+    n += memberLiableEntries(m as unknown as MemberRecord);
+  }
+  return n;
 }
 
 export interface RosterSummary {

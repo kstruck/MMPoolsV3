@@ -1484,7 +1484,8 @@ export const dbService = {
         }
     },
 
-    submitNFLPicks: async (data: { poolId: string; week: number; picks: Record<string, string>; confidence?: Record<string, number>; tiebreakerPrediction?: number; requestId?: string }): Promise<void> => {
+    /** `entryIndex` (1..max, default 1) + `entryName` — PLAN-MULTI-ENTRY T2; the server derives the entry id from the caller's uid. */
+    submitNFLPicks: async (data: { poolId: string; week: number; picks: Record<string, string>; confidence?: Record<string, number>; tiebreakerPrediction?: number; requestId?: string; entryIndex?: number; entryName?: string }): Promise<void> => {
         try {
             const submitNFLPicksFn = httpsCallable(functions, 'submitNFLPicks');
             await submitNFLPicksFn(withCorrelationId(data));
@@ -1497,10 +1498,10 @@ export const dbService = {
         }
     },
 
-    executeSurvivorRebuy: async (poolId: string, week: number): Promise<void> => {
+    executeSurvivorRebuy: async (poolId: string, week: number, entryIndex?: number): Promise<void> => {
         try {
             const executeSurvivorRebuyFn = httpsCallable(functions, 'executeSurvivorRebuy');
-            await executeSurvivorRebuyFn(withCorrelationId({ poolId, week }));
+            await executeSurvivorRebuyFn(withCorrelationId({ poolId, week, ...(entryIndex && entryIndex > 1 ? { entryIndex } : {}) }));
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.MEDIUM,
@@ -1584,10 +1585,10 @@ export const dbService = {
     },
 
     /** Commissioner exception: submit picks on behalf of a member. Picks shape matches submitNFLPicks (pick'em: gameId->team; survivor/margin: { [week]: team }). */
-    proxyPick: async (poolId: string, week: number, targetUid: string, picks: Record<string | number, string>, reason: string): Promise<{ success: boolean }> => {
+    proxyPick: async (poolId: string, week: number, targetUid: string, picks: Record<string | number, string>, reason: string, entryIndex?: number): Promise<{ success: boolean }> => {
         try {
-            const fn = httpsCallable<{ poolId: string; week: number; targetUid: string; picks: Record<string | number, string>; reason: string }, { success: boolean }>(functions, 'proxyPick');
-            const result = await fn({ poolId, week, targetUid, picks, reason });
+            const fn = httpsCallable<{ poolId: string; week: number; targetUid: string; picks: Record<string | number, string>; reason: string; entryIndex?: number }, { success: boolean }>(functions, 'proxyPick');
+            const result = await fn({ poolId, week, targetUid, picks, reason, ...(entryIndex && entryIndex > 1 ? { entryIndex } : {}) });
             return result.data;
         } catch (error) {
             await errorHandler.handleError(error, {

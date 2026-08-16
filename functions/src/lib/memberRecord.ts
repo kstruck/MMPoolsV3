@@ -8,7 +8,7 @@
 // merged AFTER the Test Suite NFL wave, so this file does not modify those hot paths.
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { ROSTER_SCHEMA_VERSION, type MemberRecord } from "../shared/memberRecord";
+import { ROSTER_SCHEMA_VERSION, memberLiableEntries, memberPlayedEntries, type MemberRecord } from "../shared/memberRecord";
 
 export type Firestore = admin.firestore.Firestore;
 export type Transaction = admin.firestore.Transaction;
@@ -38,11 +38,37 @@ export interface MembershipFacts {
    * backfill-on-touch, a payment edit — and leaves the stored array alone.
    */
   pickedWeek?: number;
+  /**
+   * PLAN-MULTI-ENTRY D2. The number of this owner's entries that have committed
+   * a pick, counted by the caller from the entry docs INSIDE its transaction
+   * (after applying its own write). `undefined` = "not reporting" — join,
+   * backfill-on-touch, payment edit — and the stored counter is left alone.
+   * When supplied it must be ≥ 1 for a submit that latched play; it is folded
+   * with `hasPlayableEntry` so the two cannot disagree (`count > 0`).
+   */
+  playableEntryCount?: number;
+  /** D2/D6 — the owner's entry roster (id → index + name), rebuilt by the caller. `undefined` = leave alone. */
+  entries?: Record<string, { entryIndex: number; name?: string }>;
+}
+
+/**
+ * K11 — an entry added under a PAID mark. `feeOwed` rose, so the member is
+ * no longer paid in full; the record flips to UNPAID in the same transaction
+ * and the caller ledgers it (`MARKED_UNPAID` with the new `feeOwed`) and
+ * mirrors it onto every entry the member owns.
+ */
+export interface PaidReset {
+  previousFeeOwed: number;
+  feeOwed: number;
+  paidAt?: number;
+  paymentMethod?: string;
 }
 
 export type MembershipPlan =
   | { participant: 'remove'; member: { op: 'delete' } }
-  | { participant: 'add'; member: { op: 'set'; data: Partial<MemberRecord>; merge: boolean } };
+  | { participant: 'add'; member: { op: 'set'; data: Partial<MemberRecord>; merge: boolean; paidReset?: PaidReset;
+      /** D8 — how much this write raised the member's liable-entry count (feeds `pool.entryCount`). */
+      liabilityDelta: number } };
 
 /**
  * Pure decision for one uid's post-write membership state. Never clobbers
@@ -68,12 +94,29 @@ export function planMembershipWrite(
   if (facts.role) data.role = facts.role;
   if (facts.poolType === 'SQUARES') data.unitsOwned = facts.unitsOwned ?? 0;
 
-  // Base-dues liability (ADR 0005 Phase 4): a seeded MANAGER owes 0 until they
-  // commit a playable entry; everyone else owes the pool fee from the moment
-  // they join. Only computed when the caller supplied entryFee.
-  const liableFee = facts.entryFee === undefined
-    ? undefined
-    : (facts.role === 'MANAGER' && !facts.hasPlayableEntry ? 0 : facts.entryFee);
+  // Base-dues liability (ADR 0005 Phase 4 × PLAN-MULTI-ENTRY D2): a seeded
+  // MANAGER owes 0 until they commit a playable entry; everyone else owes the
+  // pool fee from the moment they join; and every ADDITIONAL entry that has
+  // committed a pick adds one more fee — `fee × max(joinLiability, count)`
+  // (`memberLiableEntries`). Only computed when the caller supplied entryFee.
+  //
+  // The count this write establishes: the caller's transactional count when it
+  // reported one, else the latch (`hasPlayableEntry ? 1 : 0`), else — on an
+  // existing record — whatever the record already knows. A caller that is not
+  // reporting play never LOWERS the count (one-way, K7).
+  const reportedCount = facts.playableEntryCount !== undefined
+    ? facts.playableEntryCount
+    : (facts.hasPlayableEntry === true ? 1 : (facts.hasPlayableEntry === false ? 0 : undefined));
+  const storedCount = existing ? memberPlayedEntries(existing) : 0;
+  const nextCount = Math.max(storedCount, reportedCount ?? 0);
+  const role = facts.role ?? existing?.role;
+  const liableEntries = memberLiableEntries({ role, playableEntryCount: nextCount });
+  const priorLiableEntries = existing ? memberLiableEntries({ ...existing, role }) : 0;
+  const liableFee = facts.entryFee === undefined ? undefined : facts.entryFee * liableEntries;
+  // Persist the counter whenever a caller reports one and it differs from what
+  // is stored — this also heals a legacy record (latch only) to an explicit count.
+  if (facts.playableEntryCount !== undefined && existing?.playableEntryCount !== nextCount) data.playableEntryCount = nextCount;
+  if (facts.entries !== undefined) data.entries = facts.entries;
 
   if (!existing) {
     // First write: seed payment defaults. Merge=false so the doc is well-formed.
@@ -94,8 +137,9 @@ export function planMembershipWrite(
     //
     // Absent is the honest value when the caller does not know. Readers fall back
     // to entry evidence, and the latch fills in on the next submit.
-    if (facts.hasPlayableEntry !== undefined) {
-      data.hasPlayableEntry = facts.hasPlayableEntry;
+    if (facts.hasPlayableEntry !== undefined || nextCount > 0) {
+      // `count > 0` and the latch can never disagree (PLAN-MULTI-ENTRY D2).
+      data.hasPlayableEntry = facts.hasPlayableEntry === true || nextCount > 0;
     }
     // Same unknown-is-not-false discipline as `hasPlayableEntry` directly above,
     // and for the same reason: THIS CREATE BRANCH IS ALSO THE BACKFILL-ON-TOUCH
@@ -115,22 +159,45 @@ export function planMembershipWrite(
     // `hasPlayableEntry` latch, so a joined-and-never-picked member has no cell
     // to render either way.
     if (facts.pickedWeek !== undefined) data.pickedWeeks = [facts.pickedWeek];
-    return { participant: 'add', member: { op: 'set', data, merge: false } };
+    return { participant: 'add', member: { op: 'set', data, merge: false, liabilityDelta: liableEntries } };
   }
   // Update: merge identity/units only; preserve paidStatus + claim. feeOwed is
-  // filled when missing (heal-on-touch) or upgraded 0 -> fee when an owner who
-  // previously hadn't played now has a playable entry. Never lowered here —
-  // fee changes cascade through the entryFee-edit path instead.
-  if (liableFee !== undefined && (existing.feeOwed === undefined || (existing.feeOwed === 0 && liableFee > 0))) {
+  // filled when missing (heal-on-touch), upgraded 0 -> fee when an owner who
+  // previously hadn't played now has a playable entry, and RE-STAMPED at
+  // fee × liable entries when this write raises the member's liability (a
+  // second entry's first committed pick — PLAN-MULTI-ENTRY D2). Never lowered
+  // here — fee changes cascade through the entryFee-edit path instead, and a
+  // legacy record whose stamp predates a fee change is deliberately left alone
+  // when liability is unchanged (that is the cascade's job, not a submit's).
+  let paidReset: PaidReset | undefined;
+  if (liableFee !== undefined && (
+    existing.feeOwed === undefined
+    || (existing.feeOwed === 0 && liableFee > 0)
+    || liableEntries > priorLiableEntries
+  )) {
     data.feeOwed = liableFee;
     data.feeOwedSource = 'LIVE';
+    // K11: a PAID member whose dues just rose is no longer paid in full. The
+    // alternative — reporting the new fee as collected — is a money lie.
+    // Applied by `ensureMemberRecord` (it needs FieldValue.delete for the
+    // payment details) and ledgered + mirrored by the caller.
+    if (existing.paidStatus === 'PAID' && liableFee > (existing.feeOwed ?? 0)) {
+      paidReset = {
+        previousFeeOwed: existing.feeOwed ?? 0,
+        feeOwed: liableFee,
+        ...(typeof existing.paidAt === 'number' ? { paidAt: existing.paidAt } : {}),
+        ...(typeof (existing as { paymentMethod?: unknown }).paymentMethod === 'string'
+          ? { paymentMethod: (existing as { paymentMethod?: string }).paymentMethod } : {}),
+      };
+      data.paidStatus = 'UNPAID';
+    }
   }
   // The latch only ever goes UP. Join/backfill touches pass `undefined`, and
   // writing `!!undefined` here would clear the flag on a member who has already
   // submitted — the join path at nflPools.ts:238 touches existing records on
   // every re-join, so that would not be a rare case. It also heals records
   // written before the field existed, without a backfill.
-  if (facts.hasPlayableEntry === true && existing.hasPlayableEntry !== true) {
+  if ((facts.hasPlayableEntry === true || nextCount > 0) && existing.hasPlayableEntry !== true) {
     data.hasPlayableEntry = true;
   }
   // Union-only, and written ONLY when this caller is actually reporting a pick.
@@ -143,7 +210,7 @@ export function planMembershipWrite(
       data.pickedWeeks = [...stored, facts.pickedWeek].sort((a, b) => a - b);
     }
   }
-  return { participant: 'add', member: { op: 'set', data, merge: true } };
+  return { participant: 'add', member: { op: 'set', data, merge: true, liabilityDelta: liableEntries - priorLiableEntries, ...(paidReset ? { paidReset } : {}) } };
 }
 
 /**
@@ -176,11 +243,18 @@ export function ensureMemberRecord(
   facts: MembershipFacts,
   existing: MemberRecord | null,
   now: number,
-): boolean {
+): { wrote: boolean; paidReset?: PaidReset; liabilityDelta: number } {
   const plan = planMembershipWrite(poolId, uid, facts, existing, now);
-  if (plan.participant !== 'add') return false;
-  tx.set(membersCol(db, poolId).doc(uid), plan.member.data, { merge: plan.member.merge });
-  return true;
+  if (plan.participant !== 'add') return { wrote: false, liabilityDelta: 0 };
+  const reset = plan.member.paidReset;
+  tx.set(membersCol(db, poolId).doc(uid), {
+    ...plan.member.data,
+    // K11 — same clear as setPaidStatus's UNPAID transition: stale
+    // method/date/note on an unpaid member misreads as a payment record. The
+    // details survive in the caller's ledger line.
+    ...(reset ? { paidAt: FieldValue.delete(), paymentMethod: FieldValue.delete(), paymentNote: FieldValue.delete() } : {}),
+  }, { merge: plan.member.merge });
+  return { wrote: true, liabilityDelta: plan.member.liabilityDelta, ...(reset ? { paidReset: reset } : {}) };
 }
 
 /** Remove a Member Record + drop the uid from participantIds (leave/last-entry-removal). */

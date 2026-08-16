@@ -20,6 +20,7 @@ import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHa
 import { effectiveWeeklyTiebreaker } from '@shared/nflTiebreaker';
 import { hybridSplitProblem } from '@shared/hybridSplit';
 import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReuse';
+import { effectiveMaxEntriesPerUser, MAX_ENTRIES_PER_USER_CAP } from '@shared/multiEntry';
 
 /**
  * The save control, repeated at the end of every settings section (E6, #281).
@@ -152,6 +153,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // ---- Local settings state (initialized from pool) ----
   const [poolName, setPoolName] = useState(pool.name || '');
   const [entryFee, setEntryFee] = useState<number>(settings.entryFee ?? 0);
+  // PLAN-MULTI-ENTRY D8/K6 — the manager-side raise control. Raise-only, and
+  // only while the pool accepts entries; the server refuses a lower value
+  // (MAX_ENTRIES_RAISE_ONLY) so the input's floor is the current effective max.
+  const currentMaxEntries = effectiveMaxEntriesPerUser(settings);
+  const [maxEntriesPerUser, setMaxEntriesPerUser] = useState<number>(currentMaxEntries);
   const [paymentInstructions, setPaymentInstructions] = useState<string>(settings.paymentInstructions || '');
   const [isListedPublic, setIsListedPublic] = useState<boolean>(settings.isListedPublic ?? false);
 
@@ -212,7 +218,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const [extendMinutes, setExtendMinutes] = useState<number>(60);
   const [extendReason, setExtendReason] = useState('');
   const [isExtending, setIsExtending] = useState(false);
-  const [proxyTargetUid, setProxyTargetUid] = useState('');
+  // The proxy target is an ENTRY (id), not a person: under multi-entry one
+  // member may hold several, and the callable addresses one by {uid, entryIndex}.
+  const [proxyTargetEntryId, setProxyTargetEntryId] = useState('');
   const [proxyTeam, setProxyTeam] = useState('');
   const [proxyWeek, setProxyWeek] = useState<number>(week);
   const [proxyReason, setProxyReason] = useState('');
@@ -236,7 +244,6 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
   // --- Roster status ---
   // Entry doc id == owner uid for NFL pools, but prefer ownerUid when present.
-  const targetUidOf = (entry: any): string => entry.ownerUid || entry.id;
 
   // Roster = everyone who JOINED (participantIds) enriched with Member Records (name +
   // authoritative paidStatus) and entries (picks/status/score). Members without an entry —
@@ -461,6 +468,10 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         entryFee,
         paymentInstructions,
         isListedPublic,
+        // Sent on every save; the server strips a value equal to the pool's
+        // effective max (absent ⇒ 1) as a no-op, so this costs nothing until
+        // it is actually raised (PLAN-MULTI-ENTRY D8).
+        maxEntriesPerUser,
       };
 
       if (type === 'NFL_PICKEM') {
@@ -581,11 +592,24 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     }
   };
 
+  // One row per ENTRY (PLAN-MULTI-ENTRY §0b.4): `entryName ?? userName`, with
+  // the index appended so two entries of one member are distinguishable.
+  const entryLabel = (e: any): string => {
+    const base = e.entryName || e.userName || e.id;
+    const idx = e.entryIndex ?? 1;
+    return idx > 1 && !e.entryName ? `${base} (Entry ${idx})` : base;
+  };
+
   const handleProxyPick = async () => {
-    if (!proxyTargetUid) {
+    const targetEntry = entries.find(e => e.id === proxyTargetEntryId);
+    if (!targetEntry) {
       toast.error('Select a member to pick for.');
       return;
     }
+    // The proxy TARGET is a person (their uid) plus which of their entries;
+    // entry #1's id is the uid, extras carry an explicit entryIndex.
+    const targetUid: string = targetEntry.ownerUid ?? targetEntry.id;
+    const targetEntryIndex: number = targetEntry.entryIndex ?? 1;
     if (!proxyTeam) {
       toast.error('Select a team.');
       return;
@@ -594,17 +618,17 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       toast.error('Please provide a reason (3–200 characters).');
       return;
     }
-    const targetEntry = entries.find(e => targetUidOf(e) === proxyTargetUid);
+    const targetLabel = entryLabel(targetEntry);
     const ok = await toast.confirm({
       title: 'Submit pick on their behalf?',
-      message: `${nflWeekLabel(poolSeasonType(pool), Number(proxyWeek))}: ${proxyTeam} for ${targetEntry?.userName || 'this member'}. This is recorded in the pool audit log with your name and reason.`,
+      message: `${nflWeekLabel(poolSeasonType(pool), Number(proxyWeek))}: ${proxyTeam} for ${targetLabel}. This is recorded in the pool audit log with your name and reason.`,
       confirmLabel: 'Submit Proxy Pick'
     });
     if (!ok) return;
     setIsProxying(true);
     try {
-      await dbService.proxyPick(pool.id, proxyWeek, proxyTargetUid, { [proxyWeek]: proxyTeam }, proxyReason.trim());
-      toast.success(`Proxy pick saved: ${proxyTeam} (${nflWeekLabel(poolSeasonType(pool), Number(proxyWeek))}) for ${targetEntry?.userName || 'member'}.`);
+      await dbService.proxyPick(pool.id, proxyWeek, targetUid, { [proxyWeek]: proxyTeam }, proxyReason.trim(), targetEntryIndex);
+      toast.success(`Proxy pick saved: ${proxyTeam} (${nflWeekLabel(poolSeasonType(pool), Number(proxyWeek))}) for ${targetLabel}.`);
       setProxyTeam('');
       setProxyReason('');
     } catch (err) {
@@ -825,6 +849,20 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   onChange={e => setEntryFee(Math.max(0, parseInt(e.target.value) || 0))}
                   className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                 />
+              </div>
+              <div>
+                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Entries per Player</label>
+                <input
+                  type="number"
+                  value={maxEntriesPerUser}
+                  min={currentMaxEntries}
+                  max={MAX_ENTRIES_PER_USER_CAP}
+                  onChange={e => setMaxEntriesPerUser(Math.min(MAX_ENTRIES_PER_USER_CAP, Math.max(currentMaxEntries, parseInt(e.target.value) || currentMaxEntries)))}
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                />
+                <p className="font-body text-[10px] text-faint mt-1">
+                  {currentMaxEntries > 1 ? `Currently ${currentMaxEntries}. ` : ''}Each entry pays the entry fee and competes on its own. Can be raised while the pool is open, never lowered.
+                </p>
               </div>
             </div>
 
@@ -1625,15 +1663,15 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
-                      <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Member</label>
+                      <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">{currentMaxEntries > 1 ? 'Entry' : 'Member'}</label>
                       <select
-                        value={proxyTargetUid}
-                        onChange={e => setProxyTargetUid(e.target.value)}
+                        value={proxyTargetEntryId}
+                        onChange={e => setProxyTargetEntryId(e.target.value)}
                         className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all cursor-pointer"
                       >
-                        <option value="">Select member...</option>
+                        <option value="">{currentMaxEntries > 1 ? 'Select entry...' : 'Select member...'}</option>
                         {entries.map(entry => (
-                          <option key={entry.id} value={targetUidOf(entry)}>{entry.userName || entry.id}</option>
+                          <option key={entry.id} value={entry.id}>{entryLabel(entry)}</option>
                         ))}
                       </select>
                     </div>

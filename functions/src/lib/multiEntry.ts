@@ -1,0 +1,203 @@
+// PLAN-MULTI-ENTRY T2 — the server half of "an entry is a row, not a uid".
+//
+// Three concerns, each used by every entry mutator (submitNFLPicks, proxyPick,
+// executeSurvivorRebuy) so they cannot drift:
+//
+//   1. resolveOwnedEntry — which doc IS "entry n of uid" (D1/K1). Deterministic
+//      id `entryIdFor(uid, n)`, read INSIDE the caller's transaction together
+//      with every entry the uid owns; falls back to an auto-id when the
+//      deterministic doc exists under a different owner (§0a). Readers never
+//      parse ids — every doc carries `ownerUid` + `entryIndex`.
+//   2. the cap — from entry EXISTENCE in the transaction, never a stored
+//      counter (two concurrent first-submits of entry 2 and 3 → count 3, never
+//      4: the owned-entries query is in both read sets, so the loser retries).
+//   3. liability after the write (D2/D8) — `playableEntryCount` for the Member
+//      Record, the `entries` roster map, and the `pool.entryCount` delta.
+//
+// Pure pieces are exported separately so they are unit-testable without an
+// emulator; the Firestore pieces are thin.
+import { FieldValue } from "firebase-admin/firestore";
+import type { DocumentReference, Transaction } from "firebase-admin/firestore";
+import { HttpsError } from "firebase-functions/v2/https";
+import { entryIdFor, effectiveMaxEntriesPerUser, ENTRY_NAME_MAX } from "../shared/multiEntry";
+import { deriveEntryCount } from "../shared/memberRecord";
+
+export interface OwnedEntry { id: string; data: Record<string, any> }
+
+export interface EntryTarget {
+  ref: DocumentReference;
+  /** The target doc's data, or null when this write creates it. */
+  existing: Record<string, any> | null;
+  /** Every entry doc this uid owns, BEFORE the write (the target included when it exists). */
+  owned: OwnedEntry[];
+  entryIndex: number;
+}
+
+/** Does this entry doc hold at least one committed pick? (Pick'em: gameId→team; Survivor/Margin: week→team.) */
+export function entryHasPick(data: Record<string, any> | null | undefined): boolean {
+  const picks = data?.picks;
+  return !!picks && typeof picks === 'object' && Object.keys(picks).length > 0;
+}
+
+/**
+ * Which existing owned doc is "entry n"? The deterministic id when it exists
+ * and is ours; otherwise a doc whose stored `entryIndex` is n (an earlier
+ * auto-id fallback). Legacy `entries/{uid}` docs carry no `entryIndex` and are
+ * entry #1. Pure, so the fallback order is a unit test.
+ */
+export function pickOwnedEntry(
+  uid: string,
+  entryIndex: number,
+  owned: OwnedEntry[],
+): { id: string; data: Record<string, any> } | null {
+  const detId = entryIdFor(uid, entryIndex);
+  const detOwned = owned.find(e => e.id === detId);
+  if (detOwned) return detOwned;
+  const byIndex = owned.find(e => (typeof e.data.entryIndex === 'number' ? e.data.entryIndex : 1) === entryIndex);
+  return byIndex ?? null;
+}
+
+/**
+ * Reads (transactionally) everything the caller needs to address entry n of
+ * uid: the owned-entries set and the deterministic doc. All reads, no writes.
+ */
+export async function resolveOwnedEntry(
+  tx: Transaction,
+  poolRef: DocumentReference,
+  uid: string,
+  entryIndex: number,
+): Promise<EntryTarget> {
+  const col = poolRef.collection('entries');
+  const detRef = col.doc(entryIdFor(uid, entryIndex));
+  const [ownedSnap, detSnap] = await Promise.all([
+    tx.get(col.where('ownerUid', '==', uid)),
+    tx.get(detRef),
+  ]);
+  const owned: OwnedEntry[] = ownedSnap.docs.map(d => ({ id: d.id, data: d.data() as Record<string, any> }));
+  const det = detSnap.exists ? (detSnap.data() as Record<string, any>) : null;
+  // Legacy entry #1 with no ownerUid stamped: ours, and not in the query.
+  if (det && entryIndex === 1 && det.ownerUid === undefined && !owned.some(e => e.id === detRef.id)) {
+    owned.push({ id: detRef.id, data: det });
+    return { ref: detRef, existing: det, owned, entryIndex };
+  }
+  const hit = pickOwnedEntry(uid, entryIndex, owned);
+  if (hit) return { ref: col.doc(hit.id), existing: hit.data, owned, entryIndex };
+  // Create. The deterministic id unless a doc already sits there under another
+  // owner (a uid that literally is `e2:alice` — impossible for Firebase Auth,
+  // not for a hand-made one) — then an auto-id; nothing downstream parses ids.
+  return { ref: det ? col.doc() : detRef, existing: null, owned, entryIndex };
+}
+
+/**
+ * The cap, from existence: creating a NEW entry is refused once the owner
+ * already holds `max` docs, and an index beyond the pool's max is refused
+ * outright. Pure — throws HttpsError like every other gate.
+ */
+export function assertEntryAdmitted(
+  settings: { maxEntriesPerUser?: unknown } | undefined,
+  target: Pick<EntryTarget, 'existing' | 'owned' | 'entryIndex'>,
+): void {
+  const max = effectiveMaxEntriesPerUser(settings);
+  if (target.entryIndex > max) {
+    throw new HttpsError('failed-precondition',
+      `ENTRY_INDEX_EXCEEDS_MAX: this pool allows ${max} entr${max === 1 ? 'y' : 'ies'} per player.`);
+  }
+  if (target.existing === null && target.owned.length >= max) {
+    throw new HttpsError('failed-precondition',
+      `MAX_ENTRIES_REACHED: you already hold ${target.owned.length} of ${max} entries in this pool.`);
+  }
+}
+
+/** K5 — an `entryName` must be unique per owner (case-insensitive, trimmed). Returns the normalized name. */
+export function assertEntryNameFree(
+  entryName: string,
+  target: Pick<EntryTarget, 'owned'> & { ref: { id: string } },
+): string {
+  const name = entryName.trim().slice(0, ENTRY_NAME_MAX);
+  if (!name) throw new HttpsError('invalid-argument', 'ENTRY_NAME_EMPTY: entry name cannot be blank.');
+  const clash = target.owned.find(e => e.id !== target.ref.id
+    && typeof e.data.entryName === 'string' && e.data.entryName.trim().toLowerCase() === name.toLowerCase());
+  if (clash) {
+    throw new HttpsError('already-exists', `ENTRY_NAME_TAKEN: you already have an entry named "${clash.data.entryName}".`);
+  }
+  return name;
+}
+
+/**
+ * The owner's state AFTER this write, for the Member Record: how many of their
+ * entries have committed a pick, and the id → {index, name} roster (D2/D6).
+ * `written` is the doc this transaction is setting; its post-write shape is
+ * what counts, not its pre-write one.
+ */
+export function ownerStateAfter(
+  owned: OwnedEntry[],
+  written: { id: string; entryIndex: number; entryName?: string; hasPick: boolean },
+): { playableEntryCount: number; entries: Record<string, { entryIndex: number; name?: string }> } {
+  let playableEntryCount = written.hasPick ? 1 : 0;
+  const entries: Record<string, { entryIndex: number; name?: string }> = {
+    [written.id]: { entryIndex: written.entryIndex, ...(written.entryName ? { name: written.entryName } : {}) },
+  };
+  for (const e of owned) {
+    if (e.id === written.id) continue;
+    if (entryHasPick(e.data)) playableEntryCount++;
+    const idx = typeof e.data.entryIndex === 'number' ? e.data.entryIndex : 1;
+    entries[e.id] = { entryIndex: idx, ...(typeof e.data.entryName === 'string' && e.data.entryName ? { name: e.data.entryName } : {}) };
+  }
+  return { playableEntryCount, entries };
+}
+
+/**
+ * D8 — `pool.entryCount` counts LIABLE entries and is server-maintained. When
+ * the field is ABSENT (every NFL pool created before T2) it is derived from the
+ * Member Records read in this same transaction — a from-zero increment would
+ * make the pot denominator 1 on a populated pool. `members` may be null when
+ * the caller saw the field present and skipped the read.
+ */
+export function entryCountWrite(
+  pool: { entryCount?: unknown } | undefined,
+  members: Array<Record<string, unknown>> | null,
+  delta: number,
+): Record<string, unknown> {
+  if (typeof pool?.entryCount === 'number') {
+    return delta === 0 ? {} : { entryCount: FieldValue.increment(delta) };
+  }
+  if (members === null) return {};
+  return { entryCount: deriveEntryCount(members) + delta };
+}
+
+/**
+ * K11 — after `ensureMemberRecord` reported a paid reset: mirror UNPAID onto
+ * every entry the member owns (same field conventions as setPaidStatus's
+ * UNPAID transition) and append the ledger line that says why.
+ */
+export function applyPaidReset(
+  tx: Transaction,
+  poolRef: DocumentReference,
+  uid: string,
+  memberName: string | undefined,
+  ownedIds: string[],
+  reset: { previousFeeOwed: number; feeOwed: number; paidAt?: number; paymentMethod?: string },
+  reason: string,
+  now: number,
+): void {
+  for (const id of ownedIds) {
+    tx.set(poolRef.collection('entries').doc(id), {
+      paidStatus: 'UNPAID', paymentMethod: FieldValue.delete(), paidAt: null, paymentNote: null, updatedAt: now,
+    }, { merge: true });
+  }
+  const paidDetail = [
+    reset.paidAt ? `marked paid ${new Date(reset.paidAt).toISOString().slice(0, 10)}` : 'marked paid',
+    reset.paymentMethod ? `via ${reset.paymentMethod}` : undefined,
+    `at $${reset.previousFeeOwed}`,
+  ].filter(Boolean).join(' ');
+  tx.set(poolRef.collection('payments').doc(), {
+    type: 'MARKED_UNPAID',
+    uid,
+    ...(memberName !== undefined ? { entryName: memberName } : {}),
+    amount: reset.feeOwed,
+    actorUid: 'system',
+    at: now,
+    createdAt: FieldValue.serverTimestamp(),
+    note: `${reason} — dues rose from $${reset.previousFeeOwed} to $${reset.feeOwed}; previously ${paidDetail}. Mark paid again once the difference is collected.`,
+  });
+}

@@ -17,6 +17,8 @@ import {
 } from "./schemas/poolExceptions";
 import { usesWeeklyHardLock, normalizeLockBufferMinutes, ensureHardLockFreezeForPoolDoc } from "./lib/effectiveLock";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
+import { applyPaidReset, assertEntryAdmitted, entryCountWrite, entryHasPick, ownerStateAfter, resolveOwnedEntry } from "./lib/multiEntry";
+import { defaultEntryName } from "./shared/multiEntry";
 import type { MemberRecord } from "./shared/memberRecord";
 import {
     assertNoScoringInProgress,
@@ -233,6 +235,8 @@ export const proxyPick = validated(
     const uid = request.auth!.uid;
     const db = admin.firestore();
     const { poolId, week: weekNum, targetUid, picks, reason } = input;
+    // PLAN-MULTI-ENTRY T2: which of the target's entries (default 1 = entries/{uid}).
+    const entryIndex = input.entryIndex ?? 1;
 
     const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth!.token.role as string | undefined);
     const type = pool.type;
@@ -241,10 +245,10 @@ export const proxyPick = validated(
     }
 
     // Target must be a pool member (participant or existing entry).
-    const entryRef = poolRef.collection("entries").doc(targetUid);
     const isParticipant = Array.isArray(pool.participantIds) && pool.participantIds.includes(targetUid);
-    const preEntrySnap = await entryRef.get();
-    if (!isParticipant && !preEntrySnap.exists) {
+    const preOwned = await poolRef.collection("entries").where("ownerUid", "==", targetUid).limit(1).get();
+    const preLegacy = preOwned.empty ? await poolRef.collection("entries").doc(targetUid).get() : null;
+    if (!isParticipant && preOwned.empty && !(preLegacy?.exists)) {
         throw new HttpsError("failed-precondition", "Target user is not a member of this pool.");
     }
 
@@ -303,13 +307,29 @@ export const proxyPick = validated(
         now = Date.now();
         weekLocked = now >= weekLockAt;
         await assertNoScoringInProgress(transaction, poolRef, now);
-        const entrySnap = await transaction.get(entryRef);
-        const existingEntry = entrySnap.exists ? entrySnap.data() : null;
+        const poolInTx = (await transaction.get(poolRef)).data() as Record<string, any> | undefined;
+        if (!poolInTx) throw new HttpsError("not-found", "Pool not found.");
+        // Entry n of the target (lib/multiEntry.ts): same resolution, same cap
+        // as the member's own submit — a commissioner cannot proxy a fourth
+        // entry into a three-entry pool.
+        const target = await resolveOwnedEntry(transaction, poolRef, targetUid, entryIndex);
+        assertEntryAdmitted(poolInTx.settings, target);
+        const entryRef = target.ref;
+        const existingEntry = target.existing;
         // Read the Member Record HERE, with the other reads: Firestore forbids a
         // read after a write in a transaction, and this one exists to advance the
         // playable-entry latch below.
         const memberSnap = await transaction.get(membersCol(db, pool.id).doc(targetUid));
         const existingMember = memberSnap.exists ? (memberSnap.data() as MemberRecord) : null;
+        // D8 — `entryCount` derivation read, only when the field is absent.
+        const membersForCount = typeof poolInTx.entryCount === 'number'
+            ? null
+            : (await transaction.get(membersCol(db, pool.id))).docs.map(d => d.data() as Record<string, unknown>);
+        // K5 default name for a NEW extra entry; entry #1 shows userName.
+        const entryName: string | undefined = typeof existingEntry?.entryName === 'string'
+            ? existingEntry.entryName
+            : (existingEntry === null ? defaultEntryName(existingMember?.userName || targetName, entryIndex) : undefined);
+        let writtenPicks: Record<string, unknown> = {};
         // Did this call actually commit a selection? Only then may the latch move.
         let committedPick = false;
 
@@ -349,12 +369,15 @@ export const proxyPick = validated(
             // every existing caller, which is a bigger blast radius than the bug.
             committedPick = Object.keys(picks as Record<string, string>).length > 0;
 
+            writtenPicks = { ...(existingEntry?.picks || {}), ...picks };
             transaction.set(entryRef, {
-                id: targetUid,
+                id: entryRef.id,
                 poolId: pool.id,
                 ownerUid: targetUid,
+                entryIndex,
+                ...(entryName ? { entryName } : {}),
                 userName: existingEntry?.userName || targetName,
-                picks: { ...(existingEntry?.picks || {}), ...picks },
+                picks: writtenPicks,
                 totalScore: existingEntry?.totalScore ?? 0,
                 submittedAt: now,
                 paidStatus: existingEntry?.paidStatus ?? "UNPAID",
@@ -375,12 +398,12 @@ export const proxyPick = validated(
 
             const entry: any = existingEntry || (type === "NFL_SURVIVOR"
                 ? {
-                    id: targetUid, poolId: pool.id, ownerUid: targetUid, userName: targetName,
+                    id: entryRef.id, poolId: pool.id, ownerUid: targetUid, entryIndex, userName: targetName,
                     status: "ALIVE", strikesUsed: 0, rebuysUsed: 0, usedTeams: [], picks: {},
                     exemptWeeks: [], submittedAt: now, paidStatus: "UNPAID",
                 } as SurvivorEntry
                 : {
-                    id: targetUid, poolId: pool.id, ownerUid: targetUid, userName: targetName,
+                    id: entryRef.id, poolId: pool.id, ownerUid: targetUid, entryIndex, userName: targetName,
                     picks: {}, usedTeams: [], weeklyScores: {}, seasonTotal: 0,
                     negativeBurden: 0, positiveWeeks: 0, bestWeek: 0, submittedAt: now, paidStatus: "UNPAID",
                 } as MarginEntry);
@@ -443,8 +466,11 @@ export const proxyPick = validated(
             // another week, so under reuse derive it from the resulting picks.
             const nextPicks = { ...(entry.picks || {}), [weekNum]: teamPicked };
             const oldUsed = usedTeams.filter((t: string) => t !== oldPick);
+            writtenPicks = nextPicks;
             transaction.set(entryRef, {
                 ...entry,
+                entryIndex,
+                ...(entryName ? { entryName } : {}),
                 picks: nextPicks,
                 usedTeams: maxTeamUses === 1
                     ? [...new Set([...oldUsed, teamPicked])]
@@ -475,20 +501,36 @@ export const proxyPick = validated(
         // over the entry — silently marking a paid member unpaid and adding their
         // fee back to outstanding dues. Advancing a latch must not be able to move
         // money. Creating the record stays with the join/submit paths that know.
-        if (existingMember && committedPick) ensureMemberRecord(transaction, db, pool.id, targetUid, {
+        if (existingMember && committedPick) {
+            // PLAN-MULTI-ENTRY D2: post-write owner state, counted from the entry
+            // docs read in this transaction (the one just written included).
+            const ownerState = ownerStateAfter(target.owned, {
+                id: entryRef.id, entryIndex, ...(entryName ? { entryName } : {}), hasPick: entryHasPick({ picks: writtenPicks }),
+            });
+            const stamp = ensureMemberRecord(transaction, db, pool.id, targetUid, {
             userName: existingMember?.userName || existingEntry?.userName as string || targetName,
             role: existingMember?.role ?? (pool.ownerId === targetUid ? 'MANAGER' : 'PARTICIPANT'),
             poolType: type,
             present: true,
-            entryFee: Number(pool.settings?.entryFee ?? 0),
+            entryFee: Number(poolInTx.settings?.entryFee ?? 0),
             hasPlayableEntry: true,
+            playableEntryCount: ownerState.playableEntryCount,
+            entries: ownerState.entries,
             // Pick marker (PLAN-COMMISSIONER-BLIND-PICKS T1). Without it a
             // proxy-picked member's own standings cell reads "No selection" for
             // a pick that exists. The `existingMember &&` guard above still
             // holds: a member with NO record gets no marker and no record, which
             // is the money-safety behaviour, not an oversight.
             pickedWeek: weekNum,
-        }, existingMember, now);
+            }, existingMember, now);
+            const countPatch = entryCountWrite(poolInTx, membersForCount, stamp.liabilityDelta);
+            if (Object.keys(countPatch).length > 0) transaction.update(poolRef, countPatch);
+            if (stamp.paidReset) {
+                applyPaidReset(transaction, poolRef, targetUid, existingMember.userName,
+                    [...new Set([...target.owned.map(e => e.id), entryRef.id])],
+                    stamp.paidReset, `Entry #${entryIndex} added by proxy`, now);
+            }
+        }
     }));
 
     await writeAuditEvent({
@@ -497,7 +539,7 @@ export const proxyPick = validated(
         message: `Commissioner submitted Week ${weekNum} picks on behalf of ${targetName} (${targetUid}). Reason: ${reason}`,
         severity: "WARNING",
         actor: { uid, role: "ADMIN", label: "Commissioner" },
-        payload: { targetUid, week: weekNum, picks, reason },
+        payload: { targetUid, entryIndex, week: weekNum, picks, reason },
     });
 
     return { success: true };

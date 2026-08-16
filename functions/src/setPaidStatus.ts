@@ -11,6 +11,10 @@ import { isProvableMember, membersCol } from "./lib/memberRecord";
 import { isCanonicalMemberRecord } from "./shared/memberRecord";
 import { refreshProjectionsBestEffort } from "./lib/refreshProjections";
 
+/** Every entry doc this member owns (PLAN-MULTI-ENTRY D1: readers never parse ids). */
+const ownedEntriesQuery = (poolRef: admin.firestore.DocumentReference, memberUid: string) =>
+  poolRef.collection('entries').where('ownerUid', '==', memberUid);
+
 export const setPaidStatus = validated(
   // Dual-mode contract preserved: claim present = member self-report; claim
   // absent = authoritative mark (owner/commissioner/SUPER_ADMIN check below).
@@ -119,8 +123,10 @@ export const setPaidStatus = validated(
   // rejected in the plan.
   if (settleRebuys !== undefined) {
     await db.runTransaction(async (tx) => {
-      const entryRef = poolRef.collection('entries').doc(memberUid);
-      const [snap, entrySnap] = await Promise.all([tx.get(mRef), tx.get(entryRef)]);
+      // PLAN-MULTI-ENTRY D3: rebuyOwed is the SUM across every entry the
+      // member owns, so the legacy derivation below reads them all (codex r2
+      // on the plan) — entries/{uid} plus any `e${n}:${uid}` / auto-id doc.
+      const [snap, ownedSnap] = await Promise.all([tx.get(mRef), tx.get(ownedEntriesQuery(poolRef, memberUid))]);
       if (!snap.exists) throw new HttpsError("not-found", "MEMBER_NOT_ON_ROSTER: Member is not on this pool's roster.");
       const m: any = snap.data();
       // LEGACY FALLBACK (codex r2): survivor pools have existed since
@@ -152,7 +158,7 @@ export const setPaidStatus = validated(
         if (dueEvents.size > 0) {
           owed = fromLedger;
         } else {
-          const rebuysUsed: number = entrySnap.exists ? ((entrySnap.data() as any).rebuysUsed ?? 0) : 0;
+          const rebuysUsed: number = ownedSnap.docs.reduce((n, d) => n + ((d.data() as any).rebuysUsed ?? 0), 0);
           const rebuyCost: number = pool.settings?.rebuyCost ?? pool.settings?.entryFee ?? 0;
           owed = rebuysUsed * rebuyCost;
         }
@@ -186,6 +192,7 @@ export const setPaidStatus = validated(
 
   const entryFee: number | undefined = pool.settings?.entryFee;
   let memberName: string | undefined;
+  let memberFeeOwed: number | undefined;
   // Member Record mutation + ledger append + entry-doc mirror in ONE transaction
   // (ADR 0003 item 5; PLAN-PAYMENT-TRUTH P1).
   //
@@ -199,13 +206,22 @@ export const setPaidStatus = validated(
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(mRef);
     if (!snap.exists) throw new HttpsError("not-found", "MEMBER_NOT_ON_ROSTER: Member is not on this pool's roster.");
-    // NFL entry docs are keyed by uid (nflPools), so the member's entry — when
-    // they have one — lives at entries/{memberUid}. Members without an entry
-    // (e.g. the commissioner, or joined-not-yet-picked) simply have no doc to
+    // PLAN-MULTI-ENTRY D2: Paid Status is ONE flag per member, so the mirror
+    // lands on EVERY entry the member owns — entries/{uid} (entry #1, and every
+    // legacy doc) plus any `e${n}:${uid}` / auto-id extra. Members without an
+    // entry (the commissioner, or joined-not-yet-picked) simply have no doc to
     // mirror onto. Read inside the tx (all reads before writes).
-    const entryRef = poolRef.collection('entries').doc(memberUid);
-    const entrySnap = await tx.get(entryRef);
+    const ownedSnap = await tx.get(ownedEntriesQuery(poolRef, memberUid));
+    const legacyRef = poolRef.collection('entries').doc(memberUid);
+    const legacySnap = ownedSnap.docs.some(d => d.id === memberUid) ? null : await tx.get(legacyRef);
+    const entryRefs = [
+      ...ownedSnap.docs.map(d => d.ref),
+      ...(legacySnap?.exists ? [legacyRef] : []),
+    ];
     memberName = snap.data()?.userName;
+    // The ledger amount is what this member OWES — `feeOwed`, the fee × liable
+    // entries figure (D2) — not the per-entry pool fee.
+    memberFeeOwed = typeof snap.data()?.feeOwed === 'number' ? snap.data()!.feeOwed : undefined;
     // paidAt: number = commissioner-chosen date, null = explicit clear-the-date
     // (paid, but no date on record — codex r2), absent = stamp now.
     const stampedPaidAt =
@@ -231,7 +247,7 @@ export const setPaidStatus = validated(
         paymentNote: FieldValue.delete(),
       }, { merge: true });
     }
-    if (entrySnap.exists) {
+    for (const entryRef of entryRefs) {
       // Mirror keeps updateEntryPayment's field conventions (method
       // overwritten-or-cleared, literal-null clears for date/note) so the
       // entry-backed panel displays exactly what it used to — with two
@@ -283,7 +299,7 @@ export const setPaidStatus = validated(
         type: isPaid ? 'MARKED_PAID' : 'MARKED_UNPAID',
         uid: memberUid,
         ...(memberName !== undefined ? { entryName: memberName } : {}),
-        ...(typeof entryFee === 'number' ? { amount: entryFee } : {}),
+        ...(typeof (memberFeeOwed ?? entryFee) === 'number' ? { amount: memberFeeOwed ?? entryFee } : {}),
         actorUid: uid,
         at: Date.now(),
         createdAt: FieldValue.serverTimestamp(),

@@ -1,5 +1,42 @@
 # HANDOFF — Session entry point
 
+> ## 🛑 2026-08-17 (overnight) — PLAN-MULTI-ENTRY T2 (submit path + dues) IN A PR; T1 (#449) + co-commissioners (#446/#447) + #445 are LIVE
+>
+> **State before this PR:** T0 (row-identity invariant), K9 (#445), T1 (#449 —
+> `settings.maxEntriesPerUser`, rules callable-only key, raise-only gate, wizard
+> toggle HIDDEN) and co-commissioners PR-A/PR-B (#446/#447) are all merged and
+> deployed (functions + rules + Coolify). Read `MORNING-2026-08-17.md` for the
+> T2 merge + deploy runbook — **this one needs all three surfaces: functions →
+> rules (unchanged, but redeploy is harmless) → Coolify** (it touches
+> `shared/`, `functions/`, `src/`).
+>
+> **What T2 ships (one PR):** `submitNFLPicks` takes `entryIndex?` (1..max,
+> default 1) + `entryName?`; entry #1 keeps `entries/{uid}`, extras are
+> `e${n}:${uid}` (auto-id fallback if the doc exists under another owner);
+> every entry doc carries `ownerUid` + `entryIndex`; the cap comes from entry
+> EXISTENCE inside the transaction; the Member Record gains
+> `playableEntryCount` + `entries` map (never picks); `feeOwed = fee ×
+> liable entries` (`memberLiableEntries` in `shared/memberRecord.ts`); fee-edit
+> cascade × count; `setPaidStatus` mirrors onto every owned entry + ledgers
+> `feeOwed`; PAID member adding an entry → UNPAID + `MARKED_UNPAID` ledger line
+> (K11); `pool.entryCount` server-maintained (create 0 / derive-when-absent /
+> join / submit / proxy / first raise); `proxyPick` + `executeSurvivorRebuy`
+> take `entryIndex`; `NFLManagerView` proxies by ENTRY and has the raise
+> control; `MULTI_ENTRY_WIZARD_ENABLED = true`. New helper module
+> `functions/src/lib/multiEntry.ts`; emulator suite
+> `functions/src/__tests__/emulator/multiEntry.emulator.test.ts` (13 cases).
+>
+> ⚠️ **KNOWN GAP UNTIL T3/T4 (deliberate, per plan order):** the scorer grades
+> every entry doc, but winner/sharp candidates, the Margin rank write-back,
+> `getPoolPicks` reveal maps, `seasonHistory` and `userProfile` are still keyed
+> by uid, and the client standings fold drops a second row per uid — so a pool
+> that turns multi-entry ON today shows entry #1 only in Standings/Results.
+> The wizard flag is flipped because the plan's T2 row says so; **Kevin may
+> choose to keep it false at merge time** (one constant in
+> `shared/multiEntry.ts`) until T3/T4 land. Named in the PR body.
+>
+> **Deploy state:** unchanged from #449 until this merges. Nothing else on any queue.
+
 > ## 🛑 2026-08-15 (late) — co-commissioners: #446 (server, step 3) OPEN, PR-B (client, T5+T6) STACKED on it
 
 >
