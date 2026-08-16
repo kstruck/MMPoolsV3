@@ -135,20 +135,42 @@ describe('PLAN-PAYMENT-LEDGER T4 — recordPoolPayouts weekly awards + setPayout
     });
     // The old figure is refused now (recap wins)…
     await expect(record(HOST, [{ uid: ALICE, entryId: ALICE, amount: 18, kind: 'PLACE', week: 1, settled: true }])).rejects.toThrow(/AMOUNT_MISMATCH/);
+    // …and a plain record at the NEW figure is refused too while the old award is live (codex r1: never two live records).
+    await expect(record(HOST, [{ uid: ALICE, entryId: ALICE, amount: 12, kind: 'PLACE', week: 1, settled: true }])).rejects.toThrow(/LIVE_AWARD_EXISTS/);
     // …and the re-record supersedes.
     const r = await record(HOST, [{ uid: ALICE, entryId: ALICE, amount: 12, kind: 'PLACE', week: 1, settled: true, staleAwardId: 'wk1-pl-alice-p1' }]);
-    expect(r.awardIds).toEqual(['wk1-pl-alice-p2~2']);
+    // The place changed, so the new deterministic base is free — used directly.
+    expect(r.awardIds).toEqual(['wk1-pl-alice-p2']);
     expect(r.written).toBe(1);
-    expect((await rec('wk1-pl-alice-p1')).data()!.supersededBy).toBe('wk1-pl-alice-p2~2');
-    expect((await rec('wk1-pl-alice-p2~2')).data()).toMatchObject({ amount: 12, place: 2, week: 1 });
+    expect((await rec('wk1-pl-alice-p1')).data()!.supersededBy).toBe('wk1-pl-alice-p2');
+    expect((await rec('wk1-pl-alice-p2')).data()).toMatchObject({ amount: 12, place: 2, week: 1 });
     // Two tabs: the second re-record against the already-superseded id returns the live award, writes nothing.
     const r2 = await record(HOST, [{ uid: ALICE, entryId: ALICE, amount: 12, kind: 'PLACE', week: 1, settled: true, staleAwardId: 'wk1-pl-alice-p1' }]);
-    expect(r2.awardIds).toEqual(['wk1-pl-alice-p2~2']);
+    expect(r2.awardIds).toEqual(['wk1-pl-alice-p2']);
     expect(r2.written).toBe(0);
     // Settling the superseded record is refused.
     await expect(settle(HOST, 'wk1-pl-alice-p1', false)).rejects.toThrow(/AWARD_SUPERSEDED/);
+    // A second rescore back to 1st for $18: re-record from the live id lands at ~2 (base p1 is taken by the superseded doc)…
+    await poolRef().collection('weekly_recaps').doc('week_1').update({
+      weeklyPlaces: [
+        { entryId: ALICE, userId: ALICE, userName: ALICE, points: 3, rank: 1, prize: 18 },
+        { entryId: BOB, userId: BOB, userName: BOB, points: 2, rank: 2, prize: 12 },
+        { entryId: HOST, userId: HOST, userName: HOST, points: 0, rank: 3 },
+      ],
+    });
+    const r3 = await record(HOST, [{ uid: ALICE, entryId: ALICE, amount: 18, kind: 'PLACE', week: 1, settled: true, staleAwardId: 'wk1-pl-alice-p2' }]);
+    expect(r3.awardIds).toEqual(['wk1-pl-alice-p1~2']);
+    // …and the ORIGINAL stale id now resolves the FULL chain to the live end (codex r1), writing nothing.
+    const r4 = await record(HOST, [{ uid: ALICE, entryId: ALICE, amount: 18, kind: 'PLACE', week: 1, settled: true, staleAwardId: 'wk1-pl-alice-p1' }]);
+    expect(r4.awardIds).toEqual(['wk1-pl-alice-p1~2']);
+    expect(r4.written).toBe(0);
     // Profit-side invariant: exactly one LIVE record for Alice.
     const live = (await poolRef().collection('payoutRecords').where('uid', '==', ALICE).get()).docs.filter(d => !d.data().supersededBy);
-    expect(live.map(d => d.id)).toEqual(['wk1-pl-alice-p2~2']);
+    expect(live.map(d => d.id)).toEqual(['wk1-pl-alice-p1~2']);
+    // Two identical weekly awards in one batch are refused (codex r1).
+    await expect(record(HOST, [
+      { uid: BOB, entryId: BOB, amount: 12, kind: 'PLACE', week: 1, settled: true },
+      { uid: BOB, entryId: BOB, amount: 12, kind: 'PLACE', week: 1, settled: false },
+    ])).rejects.toThrow(/DUPLICATE_WEEKLY_AWARD/);
   }, 30000);
 });

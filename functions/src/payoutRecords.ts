@@ -77,12 +77,6 @@ export async function assertPayoutAuthority(pool: any, uid: string, claimRole: s
 const isSettledPool = (pool: any): boolean =>
   !!pool.finalizedAt || pool.status === 'FINAL' || pool.status === 'COMPLETED' || pool.isFinal === true;
 
-/** Parse the k in `${base}~${k}` (1 when there is no suffix). */
-const suffixK = (id: string, base: string): number => {
-  if (id === base) return 1;
-  const m = id.startsWith(`${base}~`) ? Number(id.slice(base.length + 1)) : NaN;
-  return Number.isInteger(m) && m >= 2 ? m : 0;
-};
 
 export const recordPoolPayouts = onCall(async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Must be logged in.');
@@ -127,6 +121,17 @@ export const recordPoolPayouts = onCall(async (request) => {
       staleAwardId: a.staleAwardId,
     };
   });
+
+  // Two weekly awards for the same (entry, week) in one call would race each
+  // other inside the transaction (both read "absent", both plan a write — codex
+  // r1). Refuse the batch; the ledger sends one award per row.
+  const weeklyKeys = new Set<string>();
+  for (const a of validated) {
+    if (a.week === undefined) continue;
+    const key = `${a.entryId}|${a.week}`;
+    if (weeklyKeys.has(key)) throw new HttpsError('invalid-argument', `DUPLICATE_WEEKLY_AWARD: entry ${a.entryId} week ${a.week} appears more than once in awards[].`);
+    weeklyKeys.add(key);
+  }
 
   // Per-award eligibility BEFORE any write (D4). Non-weekly awards keep the
   // pool-must-be-settled gate; weekly awards are gated on their recap below,
@@ -178,50 +183,71 @@ export const recordPoolPayouts = onCall(async (request) => {
       a.place = row.rank;
 
       const base = weeklyAwardId(a.week, a.entryId!, row.rank);
-      if (a.staleAwardId) {
-        // K12 re-record by supersession.
-        const stale = await tx.get(recordsCol.doc(a.staleAwardId));
-        if (!stale.exists) throw new HttpsError('invalid-argument', `staleAwardId ${a.staleAwardId} not found.`);
-        const staleData = stale.data() as any;
-        if (staleData.entryId !== a.entryId || staleData.week !== a.week) {
-          throw new HttpsError('invalid-argument', `staleAwardId ${a.staleAwardId} is not a weekly award for entry ${a.entryId} week ${a.week}.`);
-        }
-        if (staleData.supersededBy) {
-          // Someone else already re-recorded — return the live matching award, write nothing.
-          out.push({ awardRef: recordsCol.doc(String(staleData.supersededBy)), a, write: false });
+      // The LIVE weekly award for this (entry, week), if any — read in-tx. There
+      // is at most one by construction (every path below keeps it so).
+      const liveSnap = await tx.get(recordsCol.where('entryId', '==', a.entryId).where('week', '==', a.week));
+      const liveDocs = liveSnap.docs.filter(d => !(d.data() as any).supersededBy);
+      if (liveDocs.length > 1) throw new HttpsError('failed-precondition', `LEDGER_INCONSISTENT: more than one live weekly award for entry ${a.entryId} week ${a.week}.`);
+      const live = liveDocs[0];
+      const liveMatches = live !== undefined && live.id === base && Number((live.data() as any).amount) === a.amount;
+
+      if (!a.staleAwardId) {
+        if (live && liveMatches) {
+          // Idempotent: the same win is already recorded — return it, write nothing.
+          out.push({ awardRef: live.ref, a, write: false });
           continue;
         }
-        // The stale id may be `wk..-p{oldPlace}` (a different place) or `${base}~k`.
-        const staleBaseK = suffixK(a.staleAwardId, weeklyAwardId(a.week, a.entryId!, Number(staleData.place ?? row.rank)));
-        // Next free k at THIS base: probe upward from max(2, staleK+1).
-        let k = Math.max(2, staleBaseK + 1);
+        if (live) {
+          // The recap moved (rescore) and a live award at the OLD place/amount
+          // exists — a plain record would leave two live records and double
+          // Profit (codex r1). The ledger must re-record via staleAwardId.
+          throw new HttpsError('failed-precondition', `LIVE_AWARD_EXISTS: entry ${a.entryId} already has a live weekly award for week ${a.week} (${live.id}); re-record it with staleAwardId.`);
+        }
+        // Nothing live: create at the deterministic id (a superseded doc may
+        // already sit at `base` after an earlier chain — then take the next k).
+        let k = 1;
         // eslint-disable-next-line no-constant-condition
         while (true) {
           const candidate = recordsCol.doc(weeklyAwardId(a.week, a.entryId!, row.rank, k));
-          const snap = await tx.get(candidate);
-          if (!snap.exists) { out.push({ awardRef: candidate, a, supersedes: a.staleAwardId, write: true }); break; }
+          if (!(await tx.get(candidate)).exists) { out.push({ awardRef: candidate, a, write: true }); break; }
           k += 1;
           if (k > 50) throw new HttpsError('failed-precondition', 'RE_RECORD_CHAIN_TOO_LONG');
         }
         continue;
       }
-      // Idempotent create-if-absent at the deterministic id.
-      const existing = await tx.get(recordsCol.doc(base));
-      if (existing.exists) {
-        const data = existing.data() as any;
-        // Follow the supersession chain to the live record and return it.
-        let liveId = base;
-        let cur = data;
-        let hops = 0;
-        while (cur?.supersededBy && hops < 50) {
-          liveId = String(cur.supersededBy);
-          cur = (await tx.get(recordsCol.doc(liveId))).data();
-          hops += 1;
-        }
-        out.push({ awardRef: recordsCol.doc(liveId), a, write: false });
+
+      // K12 re-record by supersession. Resolve the FULL chain from the stale id
+      // to its live end (codex r1): a stale id that was already re-recorded —
+      // possibly more than once — returns the current live award, writes nothing.
+      let cursor = await tx.get(recordsCol.doc(a.staleAwardId));
+      if (!cursor.exists) throw new HttpsError('invalid-argument', `staleAwardId ${a.staleAwardId} not found.`);
+      const staleData = cursor.data() as any;
+      if (staleData.entryId !== a.entryId || staleData.week !== a.week) {
+        throw new HttpsError('invalid-argument', `staleAwardId ${a.staleAwardId} is not a weekly award for entry ${a.entryId} week ${a.week}.`);
+      }
+      let hops = 0;
+      while ((cursor.data() as any)?.supersededBy && hops < 50) {
+        cursor = await tx.get(recordsCol.doc(String((cursor.data() as any).supersededBy)));
+        hops += 1;
+      }
+      const chainLive = cursor;
+      if (chainLive.id !== a.staleAwardId) {
+        // Someone already re-recorded. If the live end already matches the recap
+        // return it; if it does not (a further rescore), the caller re-records
+        // against THAT id — never silently chain past what they clicked.
+        out.push({ awardRef: chainLive.ref, a, write: false });
         continue;
       }
-      out.push({ awardRef: recordsCol.doc(base), a, write: true });
+      // Supersede the live stale award with a fresh record at the current base
+      // (the base itself when the place changed and it is free, else ~k).
+      let k = 1;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const candidate = recordsCol.doc(weeklyAwardId(a.week, a.entryId!, row.rank, k));
+        if (!(await tx.get(candidate)).exists) { out.push({ awardRef: candidate, a, supersedes: a.staleAwardId, write: true }); break; }
+        k += 1;
+        if (k > 50) throw new HttpsError('failed-precondition', 'RE_RECORD_CHAIN_TOO_LONG');
+      }
     }
     // ---- writes ----
     let wrote = 0;
