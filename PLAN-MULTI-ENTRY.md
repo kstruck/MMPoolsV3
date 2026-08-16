@@ -394,12 +394,12 @@ back-compat) and its test covers two entries + one fee (codex r3).
 > server-maintained (0 at create; derived from Member Record liabilities when absent; the join
 > path, submit, proxyPick and `updatePoolSettings`' first raise all keep it); `proxyPick` +
 > `executeSurvivorRebuy` take `entryIndex`; `NFLManagerView` proxies by ENTRY and gains the
-> manager-side raise control; `MULTI_ENTRY_WIZARD_ENABLED = true`. Emulator suite:
+> manager-side raise control (rendered only when the flag is on or the pool already has max > 1). **`MULTI_ENTRY_WIZARD_ENABLED` STAYS `false`** — the T2 row said flip it, but codex r1+r2 on the T2 PR made the T1 argument again and harder: a member has NO UI to address entry #2 until T5 (the three `*PickEntry` components send no `entryIndex`), so the toggle would advertise entries nobody can play; the T3/T4/T5 PR flips it. Emulator suite:
 > `emulator/multiEntry.emulator.test.ts` (13 cases). **T3 is next** — until it lands, the
 > scorer already grades every entry doc, but winner/sharp candidates, the Margin rank
 > write-back, `getPoolPicks` maps, `seasonHistory` and `userProfile` are still keyed by uid
 > (the T2 PR body names each site), and the client fold (T4) still drops a second row per
-> uid — so a pool that enables multi-entry today shows entry #1 only in Standings until T3/T4.
+> uid — so the toggle stays hidden until T3/T4/T5 land together.
 
 Order matters: T1–T3 are server and ship together (functions deploy **into a
 LIVE scorer** — say so); T4–T7 client; T8–T10 cross-cutting.

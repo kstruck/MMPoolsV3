@@ -22,18 +22,23 @@
 > (K11); `pool.entryCount` server-maintained (create 0 / derive-when-absent /
 > join / submit / proxy / first raise); `proxyPick` + `executeSurvivorRebuy`
 > take `entryIndex`; `NFLManagerView` proxies by ENTRY and has the raise
-> control; `MULTI_ENTRY_WIZARD_ENABLED = true`. New helper module
+> control (hidden behind the flag). **`MULTI_ENTRY_WIZARD_ENABLED` STAYS
+> `false` — a DEVIATION from the overnight prompt, see below.** New helper module
 > `functions/src/lib/multiEntry.ts`; emulator suite
 > `functions/src/__tests__/emulator/multiEntry.emulator.test.ts` (13 cases).
 >
-> ⚠️ **KNOWN GAP UNTIL T3/T4 (deliberate, per plan order):** the scorer grades
-> every entry doc, but winner/sharp candidates, the Margin rank write-back,
-> `getPoolPicks` reveal maps, `seasonHistory` and `userProfile` are still keyed
-> by uid, and the client standings fold drops a second row per uid — so a pool
-> that turns multi-entry ON today shows entry #1 only in Standings/Results.
-> The wizard flag is flipped because the plan's T2 row says so; **Kevin may
-> choose to keep it false at merge time** (one constant in
-> `shared/multiEntry.ts`) until T3/T4 land. Named in the PR body.
+> ⚠️ **DEVIATION — the wizard flag was NOT flipped.** The prompt (and the plan's
+> T2 row) said flip `MULTI_ENTRY_WIZARD_ENABLED` to true. Codex r1 and r2 on the
+> PR both refused it as P1, and r2 added the decisive fact: **members have no UI
+> to address entry #2 until T5** (`PickemPickEntry`/`SurvivorPickEntry`/
+> `MarginPickEntry` send no `entryIndex`), while T3/T4 still key
+> scoring-candidates/Margin rank write-back/reveal/finalize/standings by uid.
+> Offering the toggle would let a commissioner advertise entries nobody can
+> play — T1's exact reasoning (qodo #3 on #449). So the constant stays `false`
+> and the manager raise control is gated on it too. **Everything server-side
+> is live and tested regardless** (`entryIndex` honoured, dues ×, entryCount).
+> One line flips it (`shared/multiEntry.ts`) if Kevin disagrees; the T3/T4/T5
+> PR flips it otherwise. Named in the PR body and `MORNING-2026-08-17.md` §3.
 >
 > **Deploy state:** unchanged from #449 until this merges. Nothing else on any queue.
 

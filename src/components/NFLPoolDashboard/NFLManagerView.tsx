@@ -20,7 +20,7 @@ import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHa
 import { effectiveWeeklyTiebreaker } from '@shared/nflTiebreaker';
 import { hybridSplitProblem } from '@shared/hybridSplit';
 import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReuse';
-import { effectiveMaxEntriesPerUser, MAX_ENTRIES_PER_USER_CAP } from '@shared/multiEntry';
+import { effectiveMaxEntriesPerUser, MAX_ENTRIES_PER_USER_CAP, MULTI_ENTRY_WIZARD_ENABLED } from '@shared/multiEntry';
 
 /**
  * The save control, repeated at the end of every settings section (E6, #281).
@@ -850,6 +850,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                 />
               </div>
+              {(MULTI_ENTRY_WIZARD_ENABLED || currentMaxEntries > 1) && (
               <div>
                 <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Entries per Player</label>
                 <input
@@ -864,6 +865,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   {currentMaxEntries > 1 ? `Currently ${currentMaxEntries}. ` : ''}Each entry pays the entry fee and competes on its own. Can be raised while the pool is open, never lowered.
                 </p>
               </div>
+              )}
             </div>
 
             <div>

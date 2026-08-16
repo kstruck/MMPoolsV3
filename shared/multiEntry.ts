@@ -8,12 +8,18 @@
 export const MAX_ENTRIES_PER_USER_CAP = 10;
 
 /**
- * Whether the wizard OFFERS multi-entry. Flipped to true by T2 — the PR that
- * made `submitNFLPicks` honour `entryIndex`, so a pool created at max 3 really
- * admits three entries per player. (T1 shipped it false because the submit
- * path still wrote `entries/{uid}` and the option would have been a lie.)
+ * Whether the wizard (and the manager settings form) OFFERS multi-entry.
+ *
+ * STILL FALSE after T2. T2 made the SERVER honour `entryIndex` (submit, proxy,
+ * rebuy, dues, entryCount), but a member has no UI to address entry #2 until
+ * T5 (`PickemPickEntry`/`SurvivorPickEntry`/`MarginPickEntry` send no
+ * `entryIndex`), and standings/reveal/finalize still key by uid until T3/T4.
+ * Offering the toggle now would let a commissioner advertise entries nobody
+ * can play — the same lie T1 hid it for (qodo #3 on #449; codex r1+r2 on the
+ * T2 PR). The T3/T4/T5 PR that closes the read side flips this to true.
+ * The submit path is exercised end-to-end regardless (emulator suite).
  */
-export const MULTI_ENTRY_WIZARD_ENABLED = true;
+export const MULTI_ENTRY_WIZARD_ENABLED = false;
 
 /** K5 — `entryName` on `submitNFLPicks`, trimmed, ≤ 30 chars. */
 export const ENTRY_NAME_MAX = 30;
