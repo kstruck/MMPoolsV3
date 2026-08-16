@@ -86,6 +86,21 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
         });
       }
     }
+    // Reversals (K12, codex r6 on T4): a LIVE weekly award whose entry no longer
+    // holds a prize in that week's recap — the recap wins, so the ledger shows
+    // it as STALE / no longer owed and the checkbox records a $0 supersession.
+    const seen = new Set(rows.map(r => `${r.entryId}|${r.week}`));
+    for (const [key, live] of liveWeekly) {
+      if (seen.has(key) || Number(live.amount) === 0) continue;
+      const recap = recaps.find(r => r.week === live.week);
+      if (!recap?.weeklyPlaces || !recap.weeklyPrize) continue; // week not (re)published — leave it
+      const row = recap.weeklyPlaces.find(p => p.entryId === live.entryId);
+      rows.push({
+        key: `${live.week}|${live.entryId}`, week: live.week!, entryId: live.entryId!, uid: live.uid,
+        name: row ? (row.entryName ? `${row.entryName} · ${row.userName}` : row.userName) : live.entryId!,
+        rank: row?.rank ?? 0, owed: 0, live, settled: false, stale: true,
+      });
+    }
     return rows.sort((a, b) => a.week - b.week || a.rank - b.rank || a.name.localeCompare(b.name));
   }, [recaps, liveWeekly, privById]);
 
@@ -197,12 +212,12 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
                     <td className="py-1 pr-2 num">{r.week}</td>
                     <td className="py-1 pr-2 text-[color:var(--text)]">{r.name}</td>
                     <td className="py-1 pr-2 text-right num">{r.rank}</td>
-                    <td className="py-1 pr-2 text-right num font-bold text-gold-700 dark:text-gold-400">{money(r.owed)}</td>
+                    <td className="py-1 pr-2 text-right num font-bold text-gold-700 dark:text-gold-400">{r.owed > 0 ? money(r.owed) : <span className="text-faint font-normal">no longer owed</span>}</td>
                     <td className="py-1 pr-2 text-[11px]">
                       {!r.live && <span className="text-faint">not recorded</span>}
                       {r.live && !r.stale && <span className="text-muted">{money(Number(r.live.amount))} recorded</span>}
                       {r.live && r.stale && (
-                        <span className="text-brandred-600 dark:text-brandred-500 font-bold" title={`Recorded ${money(Number(r.live.amount))} at place ${r.live.place}; the recap now says ${money(r.owed)} at place ${r.rank}. Tick to re-record.`}>
+                        <span className="text-brandred-600 dark:text-brandred-500 font-bold" title={r.owed > 0 ? `Recorded ${money(Number(r.live.amount))} at place ${r.live.place}; the recap now says ${money(r.owed)} at place ${r.rank}. Tick to re-record.` : `Recorded ${money(Number(r.live.amount))} at place ${r.live.place}; after the rescore this entry has no prize. Tick to reverse it ($0).`}>
                           STALE — recorded {money(Number(r.live.amount))} (place {r.live.place})
                         </span>
                       )}
@@ -210,7 +225,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
                     <td className="py-1 text-center">
                       <input
                         type="checkbox"
-                        aria-label={r.stale ? `Re-record week ${r.week} prize for ${r.name} as paid` : `Week ${r.week} prize for ${r.name} paid`}
+                        aria-label={r.stale ? (r.owed > 0 ? `Re-record week ${r.week} prize for ${r.name} as paid` : `Reverse the week ${r.week} award for ${r.name}`) : `Week ${r.week} prize for ${r.name} paid`}
                         checked={r.settled}
                         disabled={busy === r.key}
                         onChange={e => toggle(r, e.target.checked)}
