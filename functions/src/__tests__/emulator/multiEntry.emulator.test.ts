@@ -284,6 +284,24 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
     expect(p.entryCount).toBe(2);   // host 0 + Alice 1 + Bob 1
   }, 60000);
 
+  it('13. a legacy entries/{uid} doc with NO ownerUid still counts when entry 2 is created (codex r4 on #450)', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    // Pre-T2 shape: no ownerUid, no entryIndex, one real pick.
+    await poolRef().collection('entries').doc(ALICE).set({
+      id: ALICE, poolId: POOL, userName: ALICE, picks: { [G1]: 'KC' }, totalScore: 0, submittedAt: 1, paidStatus: 'UNPAID',
+    });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    const m = await member(ALICE);
+    expect(m.playableEntryCount).toBe(2);
+    expect(m.feeOwed).toBe(50);
+    expect(Object.keys(m.entries).sort()).toEqual([ALICE, `e2:${ALICE}`].sort());
+    expect((await pool()).entryCount).toBe(3);
+    // …and the cap sees it: a third is refused on a max-2 pool.
+    await expect(submit(ALICE, { picks: { [G1]: 'KC' }, entryIndex: 3 })).rejects.toThrow(/ENTRY_INDEX_EXCEEDS_MAX/);
+    // Legacy doc untouched except nothing — entry 1 keeps its pick.
+    expect((await entry(ALICE)).data()!.picks[G1]).toBe('KC');
+  }, 60000);
+
   it('12. an existing single-entry pool is unchanged: no entryIndex from the client, entry id === uid, feeOwed 25', async () => {
     await seedPool({ entryCount: null });
     await submit(ALICE, { picks: { [G1]: 'KC' } });

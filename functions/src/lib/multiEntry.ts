@@ -69,16 +69,22 @@ export async function resolveOwnedEntry(
 ): Promise<EntryTarget> {
   const col = poolRef.collection('entries');
   const detRef = col.doc(entryIdFor(uid, entryIndex));
-  const [ownedSnap, detSnap] = await Promise.all([
+  const legacyRef = col.doc(uid);
+  // The legacy `entries/{uid}` doc is read REGARDLESS of the requested index
+  // (codex r4 on #450): a pre-T2 primary entry may carry no `ownerUid` and so
+  // miss the query — without it, creating entry 2 would count as the owner's
+  // ONLY entry (count 1, no fee rise, roster without #1).
+  const [ownedSnap, detSnap, legacySnap] = await Promise.all([
     tx.get(col.where('ownerUid', '==', uid)),
     tx.get(detRef),
+    entryIndex === 1 ? Promise.resolve(null) : tx.get(legacyRef),
   ]);
   const owned: OwnedEntry[] = ownedSnap.docs.map(d => ({ id: d.id, data: d.data() as Record<string, any> }));
   const det = detSnap.exists ? (detSnap.data() as Record<string, any>) : null;
+  const legacy = entryIndex === 1 ? det : (legacySnap?.exists ? (legacySnap.data() as Record<string, any>) : null);
   // Legacy entry #1 with no ownerUid stamped: ours, and not in the query.
-  if (det && entryIndex === 1 && det.ownerUid === undefined && !owned.some(e => e.id === detRef.id)) {
-    owned.push({ id: detRef.id, data: det });
-    return { ref: detRef, existing: det, owned, entryIndex };
+  if (legacy && legacy.ownerUid === undefined && !owned.some(e => e.id === uid)) {
+    owned.push({ id: uid, data: legacy });
   }
   const hit = pickOwnedEntry(uid, entryIndex, owned);
   if (hit) return { ref: col.doc(hit.id), existing: hit.data, owned, entryIndex };
