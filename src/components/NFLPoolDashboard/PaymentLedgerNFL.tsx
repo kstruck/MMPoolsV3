@@ -132,8 +132,13 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
         // First record: the deterministic id makes this safe to double-click.
         await dbService.recordPoolPayouts(pool.id, [{ uid: r.uid, entryId: r.entryId, amount: r.owed, kind: 'PLACE', place: r.rank, week: r.week, settled: checked }]);
       } else if (r.stale) {
-        // K12: re-record by supersession against the live id we are looking at.
-        await dbService.recordPoolPayouts(pool.id, [{ uid: r.uid, entryId: r.entryId, amount: r.owed, kind: 'PLACE', place: r.rank, week: r.week, settled: checked, staleAwardId: r.live.id }]);
+        // K12: re-record by supersession against the live id we are looking
+        // at. Settlement CARRIES OVER from the record being replaced — a
+        // correction is not a payment (codex r3 on T5); the checkbox on the
+        // fresh record then flips it as usual.
+        const wasSettled = privById.get(r.live.id)?.settled === true;
+        await dbService.recordPoolPayouts(pool.id, [{ uid: r.uid, entryId: r.entryId, amount: r.owed, kind: 'PLACE', place: r.rank, week: r.week, settled: wasSettled, staleAwardId: r.live.id }]);
+        void checked;
       } else {
         await dbService.setPayoutSettled(pool.id, r.live.id, checked);
       }
@@ -223,14 +228,26 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
                       )}
                     </td>
                     <td className="py-1 text-center">
-                      <input
-                        type="checkbox"
-                        aria-label={r.stale ? (r.owed > 0 ? `Re-record week ${r.week} prize for ${r.name} as paid` : `Reverse the week ${r.week} award for ${r.name}`) : `Week ${r.week} prize for ${r.name} paid`}
-                        checked={r.settled}
-                        disabled={busy === r.key}
-                        onChange={e => toggle(r, e.target.checked)}
-                        className="h-4 w-4 accent-navy-600 dark:accent-gold-500"
-                      />
+                      {r.stale ? (
+                        <button
+                          type="button"
+                          disabled={busy === r.key}
+                          onClick={() => toggle(r, false)}
+                          className="text-[10px] font-display font-bold uppercase tracking-[0.06em] px-2 py-1 rounded-md border border-brandred-600 text-brandred-600 dark:text-brandred-500 hover:bg-brandred-600/10 disabled:opacity-50"
+                          aria-label={r.owed > 0 ? `Re-record week ${r.week} prize for ${r.name} at ${money(r.owed)}` : `Reverse the week ${r.week} award for ${r.name}`}
+                        >
+                          {r.owed > 0 ? 'Re-record' : 'Reverse'}
+                        </button>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          aria-label={`Week ${r.week} prize for ${r.name} paid`}
+                          checked={r.settled}
+                          disabled={busy === r.key}
+                          onChange={e => toggle(r, e.target.checked)}
+                          className="h-4 w-4 accent-navy-600 dark:accent-gold-500"
+                        />
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -240,7 +257,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) =>
         )}
         {error && <p className="mt-2 text-[11px] font-body text-brandred-600 dark:text-brandred-500">{error}</p>}
         <p className="mt-2 text-[10px] font-body text-faint leading-relaxed">
-          A ticked box is a settled Payout Record (`{weeklyAwardId(1, 'entry', 1)}`-style id, one per entry per week). Un-ticking marks it unpaid; the recorded amount never changes. After a rescore a line can show STALE — ticking it records the new figure and supersedes the old one. Season prizes and one-off adjustments: use Record Payouts once the season is finalized.
+          A ticked box is a settled Payout Record (`{weeklyAwardId(1, 'entry', 1)}`-style id, one per entry per week). Un-ticking marks it unpaid; the recorded amount never changes. After a rescore a line can show STALE — Re-record writes the new figure (or Reverse writes $0) and supersedes the old one, keeping its paid/unpaid state. Season prizes and one-off adjustments: use Record Payouts once the season is finalized.
         </p>
       </div>
     </div>

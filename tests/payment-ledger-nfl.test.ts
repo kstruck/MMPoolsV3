@@ -31,6 +31,8 @@ describe('PaymentLedgerNFL — wiring (T5)', () => {
   it('a live award that no longer matches the recap is STALE and re-records via staleAwardId (K12)', () => {
     expect(ledger).toContain('Number(live.amount) !== p.prize || Number(live.place) !== p.rank');
     expect(ledger).toContain('staleAwardId: r.live.id');
+    // A correction is not a payment: settlement carries over from the replaced record (codex r3 on T5).
+    expect(ledger).toContain('settled: wasSettled, staleAwardId: r.live.id');
     expect(ledger).toContain('STALE');
   });
   it('fee status comes from the Member Record, read-only here (setPaidStatus stays where it is)', () => {
