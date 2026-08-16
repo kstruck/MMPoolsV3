@@ -1,6 +1,7 @@
 import React from 'react';
 import { DollarSign, Heart, Trophy, Zap } from 'lucide-react';
 import type { Pool, GameState, CharityConfig, PayoutSettings } from '../types';
+import { potBreakdown } from '@shared/prizePot';
 
 interface PayoutsPanelProps {
     pool: Pool;
@@ -296,36 +297,22 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
     const entryNoun = pool.type === 'BRACKET' ? 'bracket' : 'entry';
 
     // Pot math: only when we actually know the entry count. Never guess.
+    // ONE set of maths for this panel, the weekly prize list and the payment
+    // ledger — `shared/prizePot.ts` (PLAN-WEEKLY-PRIZES §3b, PLAN-PAYMENT-LEDGER
+    // R5). Whole dollars, floor, charity off BEFORE percentages; under HYBRID the
+    // weekly pot floors and the season pot absorbs the remainder (codex r4/r5 on
+    // #423). Amounts are approximations by design; the commissioner settles cents.
     const knownEntries: number | undefined =
         entryCount ?? (typeof anyPool.entryCount === 'number' ? anyPool.entryCount : undefined);
-    const grossPot = entryFee > 0 && knownEntries !== undefined && knownEntries > 0
-        ? entryFee * knownEntries
-        : undefined;
-    const charityCut = charity?.enabled && grossPot !== undefined
-        ? Math.floor(grossPot * (charity.percentage / 100))
-        : 0;
-    const netPot = grossPot !== undefined ? grossPot - charityCut : undefined;
-
-    // HYBRID split (PLAN-HYBRID-SPLIT): when declared, the fee is two pots and
-    // the place percentages apply to EACH. Absent split = pre-existing hybrid
-    // pool keeps the honest "ask your commissioner" copy below. Amounts are
-    // whole-dollar approximations by design; the commissioner settles cents.
     const split = payoutMode === 'HYBRID' ? (settings.hybridSplit as { weeklyPerEntry?: number; seasonPerEntry?: number } | undefined) : undefined;
-    // Charity comes off each pot proportionally BEFORE percentages — the
-    // PotBreakdown says donations are removed before payouts, so gross pots
-    // here would overstate every award by the donated share. Same Math.floor
-    // convention as the charity line itself. (codex r4.)
-    const charityFactor = charity?.enabled ? 1 - charity.percentage / 100 : 1;
-    // The two pots must reconcile with the displayed post-donation total, so
-    // ONE pot is derived by subtraction rather than both floored — flooring
-    // each separately can lose a dollar between them ($23 net showing $16+$6;
-    // codex r5). The weekly pot floors; the season pot absorbs the remainder,
-    // deterministically.
-    const splitPots = (() => {
-        if (!split || knownEntries === undefined || knownEntries <= 0 || netPot === undefined) return undefined;
-        const weekly = Math.floor((split.weeklyPerEntry ?? 0) * knownEntries * charityFactor);
-        return { weekly, season: netPot - weekly };
-    })();
+    const pots = potBreakdown(settings, knownEntries);
+    const grossPot = pots?.gross;
+    const netPot = pots?.net;
+    // Absent split = pre-existing hybrid pool keeps the honest "ask your
+    // commissioner" copy below.
+    const splitPots = pots && payoutMode === 'HYBRID' && pots.weeklySeasonAllocation !== undefined && pots.seasonPot !== undefined
+        ? { weekly: pots.weeklySeasonAllocation, season: pots.seasonPot }
+        : undefined;
 
     // Under a declared HYBRID split the percentages apply to EACH pot, so one
     // combined figure would overstate every place (a 50% place on a $250 pot is
