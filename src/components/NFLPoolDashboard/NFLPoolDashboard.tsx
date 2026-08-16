@@ -1038,7 +1038,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                               every place, straight off the recap — the client
                               never re-ranks or re-prices (§3a). Absent on
                               recaps written before it existed. */}
-                          {(recap.weeklyPlaces?.length || recap.weeklyPlacesError) && (
+                          {pool.type !== 'NFL_SURVIVOR' && (
                             <div className="pt-2 border-b border-line pb-2">
                               <WeeklyWinnersList recap={recap} poolType={pool.type} />
                             </div>

@@ -22,6 +22,8 @@ describe('Weekly Winners List — wiring', () => {
     expect(list).toContain('rounding remainder is unallocated');
     expect(list).toContain('visible to anyone with the pool link');
     expect(list).toContain('moves no money');
+    // §3a: absent = "not published", never a fabricated list (codex r2 on step 5).
+    expect(list).toContain('Weekly places were not published for this week');
     const dash = read('src/components/NFLPoolDashboard/NFLPoolDashboard.tsx');
     expect(dash).toContain("import { WeeklyWinnersList } from './WeeklyWinnersList'");
     expect(dash).toContain('<WeeklyWinnersList recap={recap} poolType={pool.type} />');

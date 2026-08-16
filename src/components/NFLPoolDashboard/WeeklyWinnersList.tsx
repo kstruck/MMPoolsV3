@@ -23,7 +23,16 @@ export const WeeklyWinnersList: React.FC<{ recap: WeeklyRecap; poolType: string;
       </p>
     );
   }
-  if (!places || places.length === 0) return null;
+  if (!places || places.length === 0) {
+    // ABSENT ≠ "nobody placed": an older recap, a void week, or a pool type
+    // with no weekly ranking. Say so; never fabricate a list (§3a).
+    if (poolType === 'NFL_SURVIVOR') return null;
+    return (
+      <p className="text-[11px] font-body text-faint leading-relaxed">
+        Weekly places were not published for this week (it was scored before the Weekly Winners List existed, or every game was cancelled).
+      </p>
+    );
+  }
   const prize = recap.weeklyPrize ?? null;
   const showPrize = prize !== null;
   const showDiff = places.some(p => typeof p.tiebreakDiff === 'number');
