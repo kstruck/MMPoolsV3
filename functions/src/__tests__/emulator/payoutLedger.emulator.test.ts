@@ -158,6 +158,9 @@ describe('PLAN-PAYMENT-LEDGER T4 — recordPoolPayouts weekly awards + setPayout
         { entryId: HOST, userId: HOST, userName: HOST, points: 0, rank: 3 },
       ],
     });
+    // Re-recording from the ORIGINAL (already-superseded) id when the live end no longer matches is refused and names the live id (codex r2).
+    await expect(record(HOST, [{ uid: ALICE, entryId: ALICE, amount: 18, kind: 'PLACE', week: 1, settled: true, staleAwardId: 'wk1-pl-alice-p1' }]))
+      .rejects.toThrow(/STALE_AWARD_SUPERSEDED.*wk1-pl-alice-p2/);
     const r3 = await record(HOST, [{ uid: ALICE, entryId: ALICE, amount: 18, kind: 'PLACE', week: 1, settled: true, staleAwardId: 'wk1-pl-alice-p2' }]);
     expect(r3.awardIds).toEqual(['wk1-pl-alice-p1~2']);
     // …and the ORIGINAL stale id now resolves the FULL chain to the live end (codex r1), writing nothing.

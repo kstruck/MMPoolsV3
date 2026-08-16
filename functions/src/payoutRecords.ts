@@ -232,11 +232,17 @@ export const recordPoolPayouts = onCall(async (request) => {
       }
       const chainLive = cursor;
       if (chainLive.id !== a.staleAwardId) {
-        // Someone already re-recorded. If the live end already matches the recap
-        // return it; if it does not (a further rescore), the caller re-records
-        // against THAT id — never silently chain past what they clicked.
-        out.push({ awardRef: chainLive.ref, a, write: false });
-        continue;
+        // Someone already re-recorded past the id the caller clicked. If the
+        // live end already matches the recap, return it (write nothing); if it
+        // does not — a further rescore — REFUSE and name the live id, so the
+        // caller re-records against what is actually live rather than being
+        // told a stale figure was corrected (codex r2 on T4).
+        const liveData = chainLive.data() as any;
+        if (chainLive.id === base && Number(liveData.amount) === a.amount) {
+          out.push({ awardRef: chainLive.ref, a, write: false });
+          continue;
+        }
+        throw new HttpsError('failed-precondition', `STALE_AWARD_SUPERSEDED: ${a.staleAwardId} was already re-recorded; the live award is ${chainLive.id} and it no longer matches the recap — re-record with staleAwardId=${chainLive.id}.`);
       }
       // Supersede the live stale award with a fresh record at the current base
       // (the base itself when the place changed and it is free, else ~k).
