@@ -9,7 +9,21 @@
 // The platform records these figures; the money itself moves peer-to-peer.
 // This file is framework-free so both client and functions import it.
 
-export const PAYOUT_SCHEMA_VERSION = 1;
+// schemaVersion 2 (PLAN-PAYMENT-LEDGER T4): a PLACE record may name a `week`
+// — a WEEKLY award bound to the recap's published `weeklyPlaces` row and its
+// frozen prize (K11). Additive; `reduceAwards` ignores the field.
+export const PAYOUT_SCHEMA_VERSION = 2;
+
+/**
+ * Deterministic id of a weekly PLACE award (K11): one live record per
+ * (entry, week, place), so a double-click, a retry or two commissioner tabs
+ * cannot record the same win twice. A re-record after a rescore (K12) is
+ * `${base}~${k}` (k = 2, 3, …) superseding the previous one.
+ */
+export function weeklyAwardId(week: number, entryId: string, place: number, k = 1): string {
+  const base = `wk${week}-${entryId}-p${place}`;
+  return k <= 1 ? base : `${base}~${k}`;
+}
 
 export type PayoutKind = 'PLACE' | 'BONUS' | 'ADJUSTMENT';
 
@@ -21,6 +35,8 @@ export interface PayoutRecord {
   kind: PayoutKind;
   /** Rank the award was for, when kind is PLACE (display convenience). */
   place?: number;
+  /** The NFL week, when this PLACE award is a WEEKLY prize (schemaVersion 2). Absent = season award. */
+  week?: number;
   recordedAt: number; // epoch millis
   supersededBy?: string; // awardId of the correcting record
   schemaVersion: number;

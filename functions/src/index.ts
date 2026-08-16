@@ -134,7 +134,7 @@ export { nflFinalizeSweepJob } from "./nflFinalize";
 export { replayFeedSnapshot } from "./feedReplay";
 
 // --- PAYOUT RECORDS (ADR 0005 Phase 4) — commissioner-recorded prize truth ---
-export { recordPoolPayouts } from "./payoutRecords";
+export { recordPoolPayouts, setPayoutSettled } from "./payoutRecords";
 
 // --- SITE AVERAGES — real league-average line for the profile Performance Chart ---
 export { siteAveragesJob, refreshSiteAverages } from "./siteAverages";
