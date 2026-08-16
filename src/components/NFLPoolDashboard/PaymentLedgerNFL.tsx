@@ -4,6 +4,7 @@ import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import type { Pool, WeeklyRecap } from '../../types';
 import { weeklyAwardId, type PayoutRecord, type PayoutRecordPrivate } from '@shared/payoutRecords';
+import { buildPoolRoster } from '../../utils/poolRoster';
 
 /**
  * The commissioner's payment LEDGER (PLAN-PAYMENT-LEDGER T5 — D3/D4/D5/D6,
@@ -35,11 +36,12 @@ type Priv = PayoutRecordPrivate & { id: string };
 interface Props {
   pool: Pool;
   members: any[];
+  entries: any[];
 }
 
 const money = (n: number) => `$${Math.floor(n).toLocaleString()}`;
 
-export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members }) => {
+export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries }) => {
   const [recaps, setRecaps] = useState<WeeklyRecap[]>([]);
   const [records, setRecords] = useState<Rec[]>([]);
   const [priv, setPriv] = useState<Priv[]>([]);
@@ -87,11 +89,17 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members }) => {
     return rows.sort((a, b) => a.week - b.week || a.rank - b.rank || a.name.localeCompare(b.name));
   }, [recaps, liveWeekly, privById]);
 
-  /** Per-member roll-up: fee owed / paid, prizes owed / recorded-settled. */
+  /**
+   * Per-member roll-up: fee owed / paid, prizes owed / recorded-settled. Rows
+   * come from the CANONICAL roster (`buildPoolRoster`: participantIds ∪ Member
+   * Records ∪ entries, with the Member Record authoritative when it exists) so
+   * a legacy participant without a Member Record is still listed with the
+   * status the rest of the manager view shows (codex r1 on T5).
+   */
   const memberRows = useMemo(() => {
     const byUid = new Map<string, { uid: string; name: string; feeOwed: number; paid: boolean; owed: number; settled: number }>();
-    for (const m of members) {
-      byUid.set(m.uid, { uid: m.uid, name: m.userName ?? m.uid, feeOwed: Number(m.feeOwed ?? 0), paid: m.paidStatus === 'PAID', owed: 0, settled: 0 });
+    for (const r of buildPoolRoster({ pool, members, entries })) {
+      byUid.set(r.uid, { uid: r.uid, name: r.userName ?? r.uid, feeOwed: Number(r.feeOwed ?? 0), paid: r.paidStatus === 'PAID', owed: 0, settled: 0 });
     }
     for (const r of prizeRows) {
       const row = byUid.get(r.uid) ?? { uid: r.uid, name: r.name, feeOwed: 0, paid: false, owed: 0, settled: 0 };
@@ -100,7 +108,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members }) => {
       byUid.set(r.uid, row);
     }
     return [...byUid.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [members, prizeRows]);
+  }, [pool, members, entries, prizeRows]);
 
   const toggle = async (r: (typeof prizeRows)[number], checked: boolean) => {
     setBusy(r.key); setError(null);

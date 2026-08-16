@@ -748,7 +748,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
       {/* The payment LEDGER (PLAN-PAYMENT-LEDGER T5): fee status per member +
           every published weekly prize with its "paid" checkbox. */}
-      <PaymentLedgerNFL pool={pool} members={members} />
+      <PaymentLedgerNFL pool={pool} members={members} entries={entries} />
 
       {/* Record Payouts (ADR 0005 Phase 4) — season awards + adjustments; renders only once the pool is finalized */}
       <RecordPayoutsCard pool={pool} entries={entries} />

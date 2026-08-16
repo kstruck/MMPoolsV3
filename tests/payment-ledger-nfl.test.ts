@@ -15,7 +15,7 @@ describe('PaymentLedgerNFL — wiring (T5)', () => {
   it('is mounted on the NFL manager view beside (not instead of) Record Payouts', () => {
     const mgr = code('src/components/NFLPoolDashboard/NFLManagerView.tsx');
     expect(mgr).toContain("import { PaymentLedgerNFL } from './PaymentLedgerNFL'");
-    expect(mgr).toContain('<PaymentLedgerNFL pool={pool} members={members} />');
+    expect(mgr).toContain('<PaymentLedgerNFL pool={pool} members={members} entries={entries} />');
     expect(mgr).toContain('<RecordPayoutsCard pool={pool} entries={entries} />');
   });
   it('reads ONLY published recap prizes (weeklyPlaces × weeklyPrize) — never re-ranks or re-prices', () => {
@@ -34,7 +34,8 @@ describe('PaymentLedgerNFL — wiring (T5)', () => {
     expect(ledger).toContain('STALE');
   });
   it('fee status comes from the Member Record, read-only here (setPaidStatus stays where it is)', () => {
-    expect(ledger).toContain("m.paidStatus === 'PAID'");
+    expect(ledger).toContain('buildPoolRoster({ pool, members, entries })');
+    expect(ledger).toContain("r.paidStatus === 'PAID'");
     expect(ledger).not.toContain('setPaidStatus');
     expect(ledger).not.toContain('updateEntryPayment');
   });
