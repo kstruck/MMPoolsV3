@@ -61,7 +61,7 @@ export const WeeklyWinnersList: React.FC<{ recap: WeeklyRecap; poolType: string;
       </div>
       {showPrize && (
         <p className="text-[10px] font-body text-faint leading-relaxed">
-          Weekly pot ${prize.pot} — {prize.payoutMode === 'HYBRID' ? 'the weekly share of the entry fee' : 'the entry fee'} × {prize.entryCount} {prize.entryCount === 1 ? 'entry' : 'entries'} (every entry, paid or not) ÷ {prize.weeksInSeason} weeks, whole dollars, frozen when this week was first published.
+          Weekly pot ${prize.pot} — {prize.payoutMode === 'HYBRID' ? 'the weekly share of the entry fee' : 'the entry fee'} × {prize.entryCount} {prize.entryCount === 1 ? 'entry' : 'entries'} (every entry, paid or not), after any charity donation, ÷ {prize.weeksInSeason} weeks, whole dollars, frozen when this week was first published.
           Tied places split the prizes for the places they cover evenly.
           {remainder > 0 ? ` $${remainder} rounding remainder is unallocated — commissioner's call.` : ''}
           {' '}Amounts are approximate; your commissioner settles the exact figures — March Melee Pools moves no money. This list is visible to anyone with the pool link.
