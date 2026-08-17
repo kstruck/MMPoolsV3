@@ -9,7 +9,6 @@ import {
 } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
 import { ReadOnlyField, SelectField, CheckboxField } from '../fields';
-import { HybridSplitFields } from './HybridSplitFields';
 import { MultiEntryFields } from './MultiEntryFields';
 import { CURRENT_SEASON } from './currentSeason';
 import type { WizardStepDef } from '../types';
@@ -67,7 +66,6 @@ function StepPickemRules() {
         ]}
         hint="Straight up is the default and needs no betting lines. ATS grades every pick against the game's spread, with a push scoring zero."
       />
-      <HybridSplitFields />
       <AtsWarning />
       <SelectField
         name="settings.weeklyTiebreaker"

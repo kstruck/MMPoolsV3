@@ -255,3 +255,29 @@ describe('the Terms of Service gate links to the terms', () => {
     expect(launch).toMatch(/Please accept the Terms of Service to launch\./);
   });
 });
+
+describe('the HYBRID split renders under the entry fee, not on the rules step (PLAN-PAYMENT-LEDGER T0 / D0)', () => {
+  const src = (f: string) => readFileSync(resolve(root, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  it('StepFeeAndPayment imports and renders HybridSplitFields directly after the fee NumberField', () => {
+    const s = src('src/components/wizard/steps/StepFeeAndPayment.tsx');
+    expect(s).toContain("import { HybridSplitFields } from '../create/HybridSplitFields'");
+    const fee = s.indexOf('<NumberField name={feeField}');
+    const split = s.indexOf('<HybridSplitFields />');
+    expect(fee).toBeGreaterThan(-1);
+    expect(split).toBeGreaterThan(fee);
+    // …and before the "How players pay you" block: the split belongs to the fee, not to the handles.
+    expect(split).toBeLessThan(s.indexOf('How players pay you'));
+  });
+  it('NO rules step renders it any more', () => {
+    for (const f of ['src/components/wizard/create/CreateNFLPickemPool.tsx', 'src/components/wizard/create/CreateNFLMarginPool.tsx']) {
+      expect(src(f), f).not.toContain('HybridSplitFields');
+    }
+  });
+  it('the field names and the shared check are untouched (display-only move — D0: any validation change is plan-gated)', () => {
+    const s = src('src/components/wizard/create/HybridSplitFields.tsx');
+    expect(s).toContain("name=\"settings.hybridSplit.weeklyPerEntry\"");
+    expect(s).toContain("name=\"settings.hybridSplit.seasonPerEntry\"");
+    expect(s).toContain("watch('settings.payoutMode') !== 'HYBRID'");
+    expect(s).toContain("import { hybridSplitProblem } from '@shared/hybridSplit'");
+  });
+});

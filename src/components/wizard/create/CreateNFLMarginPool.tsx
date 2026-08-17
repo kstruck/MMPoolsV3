@@ -5,7 +5,6 @@ import { marginCreateInputSchema } from '@shared/schemas';
 import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
 import { ReadOnlyField, SelectField } from '../fields';
-import { HybridSplitFields } from './HybridSplitFields';
 import { MultiEntryFields } from './MultiEntryFields';
 import { CURRENT_SEASON } from './currentSeason';
 import type { WizardStepDef } from '../types';
@@ -45,7 +44,6 @@ function StepMarginRules() {
           { value: 'HYBRID', label: 'Hybrid' },
         ]}
       />
-      <HybridSplitFields />
       <MultiEntryFields />
     </div>
   );
