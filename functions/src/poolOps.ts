@@ -21,7 +21,7 @@ import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } fr
 import { parityEditNeedsEntries, survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
 import { tiebreakerEditNeedsEntries, touchesWeeklyTiebreakerSetting, weeklyTiebreakerRefusal } from './lib/weeklyTiebreakerGate';
 import { hybridNoOpKeys, hybridSplitNeedsClearing, hybridSplitRefusal, touchesHybridSplitSettings } from './lib/hybridSplitGate';
-import { payoutListsNoOpKeys, payoutListsRefusal, touchesPayoutLists, weeklyPayoutsNeedsClearing } from './lib/weeklyPayoutsGate';
+import { normalizePayoutListsPatch, payoutListsNoOpKeys, payoutListsRefusal, touchesPayoutLists, weeklyPayoutsNeedsClearing } from './lib/weeklyPayoutsGate';
 import { maxEntriesNoOpKeys, maxEntriesRefusal, touchesMaxEntriesSetting } from './lib/multiEntryGate';
 import { entryCountWrite } from './lib/multiEntry';
 import { memberLiableEntries } from './shared/memberRecord';
@@ -595,6 +595,8 @@ export const updatePoolSettings = validated(
             if (payoutListsTouched) {
                 const problem = payoutListsRefusal(current, patch);
                 if (problem) throw new HttpsError('failed-precondition', problem);
+                // Store the VALIDATED shape, not the raw input (codex r3 on #470).
+                normalizePayoutListsPatch(patch);
             }
             let entryCountInit: Record<string, unknown> = {};
             if (maxEntriesTouched) {

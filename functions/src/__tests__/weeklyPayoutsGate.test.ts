@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { payoutsSchema, weeklyPayoutsSchema } from '../shared/schemas/common';
 import { pickemCreateInputSchema, marginCreateInputSchema, survivorCreateInputSchema } from '../shared/schemas/nfl';
-import { payoutListsNoOpKeys, payoutListsRefusal, touchesPayoutLists, weeklyPayoutsNeedsClearing } from '../lib/weeklyPayoutsGate';
+import { normalizePayoutListsPatch, payoutListsNoOpKeys, payoutListsRefusal, touchesPayoutLists, weeklyPayoutsNeedsClearing } from '../lib/weeklyPayoutsGate';
 
 /**
  * PLAN-PAYMENT-LEDGER T1 (D1, K9): `settings.weeklyPayouts` schema, unique
@@ -94,5 +94,14 @@ describe('payoutListsNoOpKeys — an unchanged re-sent list is not a change', ()
     expect(payoutListsNoOpKeys(pool, { 'settings.payouts': { places: [P(2, 40), P(1, 60)], bonuses: [] }, 'settings.weeklyPayouts': { places: [P(1, 100)] } })).toEqual(['settings.payouts', 'settings.weeklyPayouts']);
     expect(payoutListsNoOpKeys(pool, { 'settings.payouts': { places: [P(1, 70), P(2, 30)], bonuses: [] } })).toEqual([]);
     expect(payoutListsNoOpKeys({ settings: {} }, { 'settings.weeklyPayouts': null })).toEqual(['settings.weeklyPayouts']);
+  });
+});
+
+describe('normalizePayoutListsPatch — what is stored is what was validated (codex r3 on #470)', () => {
+  it('weeklyPayouts: {} becomes { places: [] } (an explicit EMPTY weekly list, not a fall-through to payouts); unknown keys stripped', () => {
+    const patch: Record<string, unknown> = { 'settings.weeklyPayouts': {}, 'settings.payouts': { places: [P(1, 100)], bonuses: [], junk: 1 } };
+    normalizePayoutListsPatch(patch);
+    expect(patch['settings.weeklyPayouts']).toEqual({ places: [] });
+    expect(patch['settings.payouts']).toEqual({ places: [P(1, 100)], bonuses: [] });
   });
 });

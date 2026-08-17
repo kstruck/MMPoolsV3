@@ -32,6 +32,9 @@ describe('updatePoolSettings — weeklyPayouts (T1)', () => {
     await seed({ payoutMode: 'HYBRID', hybridSplit: { weeklyPerEntry: 10, seasonPerEntry: 10 } });
     await save({ ...BASE, payoutMode: 'HYBRID', hybridSplit: { weeklyPerEntry: 10, seasonPerEntry: 10 }, weeklyPayouts: { places: [P(1, 70), P(2, 30)] } });
     expect((await stored()).weeklyPayouts).toEqual({ places: [P(1, 70), P(2, 30)] });
+    // `weeklyPayouts: {}` is stored as the parsed `{ places: [] }` — an explicit empty weekly list (codex r3).
+    await save({ ...BASE, payoutMode: 'HYBRID', hybridSplit: { weeklyPerEntry: 10, seasonPerEntry: 10 }, weeklyPayouts: {} });
+    expect((await stored()).weeklyPayouts).toEqual({ places: [] });
     await seed({ payoutMode: 'SEASON' });
     await expect(save({ ...BASE, payoutMode: 'SEASON', weeklyPayouts: { places: [P(1, 100)] } })).rejects.toThrow(/WEEKLY_PAYOUTS_WRONG_MODE/);
     expect((await stored()).weeklyPayouts).toBeUndefined();

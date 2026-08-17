@@ -88,3 +88,22 @@ export function payoutListsRefusal(pool: Record<string, unknown> | undefined, pa
   }
   return null;
 }
+
+/**
+ * Replace the list values in the patch with their PARSED shape (defaults
+ * applied, unknown keys stripped) so what is stored is exactly what was
+ * validated — `weeklyPayouts: {}` becomes `{ places: [] }`, never a shapeless
+ * object that `weeklyPlacesFor` would fall through to `payouts` on (codex r3
+ * on #470). Call AFTER `payoutListsRefusal` returned null; invalid values are
+ * left alone (the refusal already threw).
+ */
+export function normalizePayoutListsPatch(patch: Record<string, unknown>): void {
+  if ('settings.payouts' in patch && patch['settings.payouts'] !== null && patch['settings.payouts'] !== undefined) {
+    const r = payoutsSchema.safeParse(patch['settings.payouts']);
+    if (r.success) patch['settings.payouts'] = r.data;
+  }
+  if ('settings.weeklyPayouts' in patch && patch['settings.weeklyPayouts'] !== null && patch['settings.weeklyPayouts'] !== undefined) {
+    const r = weeklyPayoutsSchema.safeParse(patch['settings.weeklyPayouts']);
+    if (r.success) patch['settings.weeklyPayouts'] = r.data;
+  }
+}
