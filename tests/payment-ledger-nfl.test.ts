@@ -63,6 +63,15 @@ describe('PaymentLedgerNFL — wiring (T5)', () => {
     expect(ledger).not.toContain('setPaidStatus');
     expect(ledger).not.toContain('updateEntryPayment');
   });
+  it('Season $ column (PLAN-WEEKLY-PRIZES step 3): reads ONLY the published pool.seasonPlaces prize; the box records a season PLACE award (entryId, no week) or flips settlement', () => {
+    expect(ledger).toContain('.seasonPlaces');
+    // Season rows ride the same prizeRows/toggle path with `week: undefined` — the callable binds them to pool.seasonPlaces.
+    expect(ledger).toContain("key: `season|${p.entryId}`, week: undefined");
+    expect(ledger).toContain("r.kind !== 'PLACE' || r.week !== undefined || !r.entryId || !r.id.startsWith('season-')");
+    expect(ledger).toContain("renderPrizeCell(r.entryId, 'season')");
+    // The season half is priced on the server at finalization — never here.
+    expect(ledger).not.toMatch(/computeSeasonPrizeSnapshot|priceSeasonPlaces|seasonPot/);
+  });
   it('dbService exposes the private-record subscription the ledger needs', () => {
     expect(code('src/services/dbService.ts')).toContain('subscribeToPayoutRecordsPrivate:');
   });

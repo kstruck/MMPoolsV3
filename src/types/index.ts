@@ -1057,4 +1057,4 @@ export interface ReferralRecord {
   createdAt: number;
   confirmedAt?: number;
   creditAwarded: boolean;
-}
+}
