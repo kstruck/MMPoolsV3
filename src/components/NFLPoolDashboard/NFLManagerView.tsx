@@ -77,8 +77,8 @@ const SaveSettingsControl: React.FC<{ onSave: () => void; isSaving: boolean; jus
 type CommishTab = 'overview' | 'members' | 'settings' | 'scoring';
 
 const COMMISH_TABS: { id: CommishTab; label: string; hint: string }[] = [
-  { id: 'overview', label: 'Overview', hint: 'Submission health, buy-in ledger, payouts' },
-  { id: 'members', label: 'Members & Payments', hint: 'Roster, paid status, reminders' },
+  { id: 'overview', label: 'Overview', hint: 'Submission health, payouts' },
+  { id: 'members', label: 'Members & Payments', hint: 'Payment Ledger, roster, reminders' },
   { id: 'scoring', label: 'Scoring', hint: 'Score and recap the week' },
   { id: 'settings', label: 'Settings', hint: 'Pool rules, deadlines, exceptions' },
 ];
@@ -99,6 +99,12 @@ interface NFLManagerViewProps {
    */
   pickCounts?: Record<string, number>;
   onSelectTab?: (tab: 'picks' | 'standings' | 'recaps' | 'rules' | 'manager') => void;
+  /**
+   * Which commissioner section to open on MOUNT — the member Payments tab's
+   * "Open Payment Ledger" deep-links to `members` (Kevin, 2026-08-16: it used
+   * to land on Overview). Read once; `commishTab` stays local after that.
+   */
+  initialSection?: string | null;
 }
 
 export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
@@ -109,7 +115,8 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   week,
   user,
   pickCounts,
-  onSelectTab = () => {}
+  onSelectTab = () => {},
+  initialSection = null,
 }) => {
   const toast = useToast();
   // Which commissioner section is showing. The page was ~870 lines of JSX in one
@@ -119,7 +126,8 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // people rely on. Local state on purpose: `activeTab` already rides in the URL
   // for the pool page (see AdminRoute's redirect to `?tab=manager`), and adding a
   // second URL-backed tab would give this surface two sources of truth.
-  const [commishTab, setCommishTab] = useState<CommishTab>('overview');
+  const [commishTab, setCommishTab] = useState<CommishTab>(() =>
+    COMMISH_TABS.some(t => t.id === initialSection) ? (initialSection as CommishTab) : 'overview');
 
   const [isScoring, setIsScoring] = useState(false);
   const [isSavingPayment, setIsSavingPayment] = useState<string | null>(null);
@@ -744,6 +752,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         user={user}
         pickCounts={pickCounts}
         onSelectTab={onSelectTab}
+        onOpenLedger={() => setCommishTab('members')}
       />
 
       {/* Record Payouts (ADR 0005 Phase 4) — season awards + adjustments; renders only once the pool is finalized */}
@@ -1388,12 +1397,12 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               every published weekly prize with its "paid" checkbox. Lives on
               the Members & Payments sub-tab — where a commissioner looks for
               money (Kevin, 2026-08-16). */}
-          <PaymentLedgerNFL pool={pool} members={members} entries={entries} />
+          <PaymentLedgerNFL pool={pool} members={members} entries={entries} onTogglePaid={handleTogglePayment} onSettleRebuys={handleSettleRebuys} savingFeeUid={isSavingPayment} />
           <div className="bg-card border border-line shadow-card rounded-xl overflow-hidden">
             <div className="p-5 border-b border-line bg-surface space-y-3">
               <div className="flex justify-between items-center">
                 <h4 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted flex items-center gap-2">
-                  <Users size={14} className="text-navy-700 dark:text-gold-400" /> Member Roster & Payments
+                  <Users size={14} className="text-navy-700 dark:text-gold-400" /> Member Roster
                 </h4>
                 <span className="num font-display font-bold uppercase text-[10px] tracking-[0.08em] text-muted bg-page px-2 py-0.5 border border-line rounded-full">
                   {roster.length} members
@@ -1435,7 +1444,6 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-right">Margin Score</th>
                     )}
                     <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-center">{nflWeekChip(poolSeasonType(pool), week)} Picks</th>
-                    <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-right w-36">Payment</th>
                     <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-right w-32">Remind</th>
                   </tr>
                 </thead>
@@ -1500,58 +1508,8 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                         )}
                       </td>
 
-                      <td className="py-3.5 px-5 text-right">
-                        <button
-                          onClick={() => handleTogglePayment(row.uid, row.paidStatus)}
-                          disabled={isSavingPayment === row.uid}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-all duration-150 hover:-translate-y-px cursor-pointer ${
-                            row.paidStatus === 'PAID'
-                              ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
-                              : 'bg-brandred-600/10 border border-brandred-600/25 text-brandred-600 hover:bg-brandred-600/[0.15]'
-                          }`}
-                        >
-                          <DollarSign size={10} />
-                          {isSavingPayment === row.uid ? 'Saving...' : row.paidStatus || 'UNPAID'}
-                        </button>
-                        {(() => {
-                          // Rebuy dues are a SEPARATE settlement from base dues
-                          // (P3, Q2 option B) — the member was told "$X due to
-                          // the commissioner" at rebuy time, and this is where
-                          // the commissioner records collecting it. Legacy
-                          // members (rebuy pre-dates the 2026-07-08 rebuyOwed
-                          // writer) derive the debt from the entry's rebuysUsed
-                          // — the server stamps it properly on settle.
-                          const owed = typeof row.rebuyOwed === 'number'
-                            ? row.rebuyOwed
-                            : (row.rebuysUsed ?? 0) * rebuyCost;
-                          // The callable requires a Member Record (it throws
-                          // "not on this pool's roster") — offering the button
-                          // to a record-less row is an action that can never
-                          // succeed (codex r4). The backfill creates the record.
-                          if (!(owed > 0) || !row.hasMember) return null;
-                          const settled = (row.rebuyPaid ?? 0) >= owed;
-                          // The label shows what REMAINS to collect (codex r5):
-                          // after settling $20 and a fresh $20 rebuy, owed 40 /
-                          // paid 20 means $20 outstanding — and that is the
-                          // delta the callable will record.
-                          const outstanding = Math.max(0, owed - (row.rebuyPaid ?? 0));
-                          return (
-                            <button
-                              onClick={() => handleSettleRebuys(row.uid, !settled)}
-                              disabled={isSavingPayment === row.uid}
-                              title={settled ? 'Rebuy dues settled — click to reverse' : 'Click when the rebuy money is collected'}
-                              className={`mt-1.5 block ml-auto px-3 py-1 rounded-md font-display font-bold uppercase text-[9px] tracking-[0.08em] transition-all duration-150 hover:-translate-y-px cursor-pointer ${
-                                settled
-                                  ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
-                                  : 'bg-gold-500/15 border border-gold-500/30 text-gold-700 dark:text-gold-400 hover:bg-gold-500/25'
-                              }`}
-                            >
-                              {settled ? `Rebuys $${owed} settled` : `Rebuys $${outstanding} owed`}
-                            </button>
-                          );
-                        })()}
-                      </td>
-
+                      {/* Money (fee paid, rebuys) moved to the Payment Ledger above — this
+                          card is picks status / remind / co-comm only (Kevin, 2026-08-16). */}
                       <td className="py-3.5 px-5 text-right">
                         <button
                           onClick={() => handleRemindOne(row.uid, !row.picked ? 'PICKS' : 'PAYMENT')}

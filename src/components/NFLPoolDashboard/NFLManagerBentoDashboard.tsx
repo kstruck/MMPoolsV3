@@ -10,11 +10,6 @@ import {
   Activity,
   CheckCircle,
   AlertCircle,
-  Search,
-  DollarSign,
-  X,
-  Edit,
-  Save,
   PartyPopper,
   Megaphone
 } from 'lucide-react';
@@ -32,7 +27,7 @@ import {
 import { gamesForPoolWeek, weekDeadline, poolSeasonType } from '../../utils/nflPending';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { effectiveBufferMinutesForWeek, usesWeeklyHardLock } from '@shared/weeklyHardLock';
-import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate, duesRates, memberOutstanding, unsubmittedRoster } from '../../utils/poolRoster';
+import { buildPoolRoster, rosterPotStats, outstandingDue, duesRates, memberOutstanding, unsubmittedRoster } from '../../utils/poolRoster';
 import { formatDeadline } from '../../utils/formatTime';
 
 interface NFLManagerBentoDashboardProps {
@@ -52,6 +47,8 @@ interface NFLManagerBentoDashboardProps {
    */
   pickCounts?: Record<string, number>;
   onSelectTab: (tab: 'picks' | 'standings' | 'recaps' | 'rules' | 'manager') => void;
+  /** "View full ledger" opens THE Payment Ledger (Members & Payments) — one ledger, one door (Kevin, 2026-08-16). */
+  onOpenLedger?: () => void;
 }
 
 export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> = ({
@@ -62,7 +59,8 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   week,
   user: _user,
   pickCounts,
-  onSelectTab: _onSelectTab
+  onSelectTab: _onSelectTab,
+  onOpenLedger,
 }) => {
   const castPool = pool as any;
   const toast = useToast();
@@ -82,20 +80,6 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
   const [isNudging, setIsNudging] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [savingLedgerId, setSavingLedgerId] = useState<string | null>(null);
-
-  // Modal State for full payment ledger
-  const [isLedgerOpen, setIsLedgerOpen] = useState(false);
-  const [ledgerSearch, setLedgerSearch] = useState('');
-  const [ledgerFilter, setLedgerFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL');
-
-  // Local state for editing payment details in ledger
-  // Keyed by member UID, not entry id — the ledger's rows are roster rows now.
-  const [editingUid, setEditingUid] = useState<string | null>(null);
-  const [editPaidStatus, setEditPaidStatus] = useState<'PAID' | 'UNPAID'>('UNPAID');
-  const [editMethod, setEditMethod] = useState('Venmo');
-  const [editDate, setEditDate] = useState('');
-  const [editNote, setEditNote] = useState('');
 
   // Both payment writes go through setPaidStatus — the AUTHORITATIVE path
   // (PLAN-PAYMENT-TRUTH P1 / D13). The old updateEntryPayment callable wrote
@@ -148,28 +132,6 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
       toast.error(paymentError(err, hasMember, 'Failed to update payment status. Please try again.'));
     } finally {
       setTogglingId(null);
-    }
-  };
-
-  const saveDetailedPayment = async (uid: string, hasMember: boolean) => {
-    setSavingLedgerId(uid);
-    try {
-      const timestamp = editDate ? new Date(editDate).getTime() : Date.now();
-      // Details ride only with PAID; an UNPAID save is a full clear server-side
-      // (the schema refuses details with it — an unpaid member must not display
-      // a payment method and transaction note).
-      await dbService.setPaidStatus(
-        pool.id, uid, editPaidStatus === 'PAID',
-        editPaidStatus === 'PAID'
-          ? { paymentMethod: editMethod, paidAt: timestamp, paymentNote: editNote || null }
-          : undefined,
-      );
-      setEditingUid(null);
-    } catch (err) {
-      console.error("Failed to update detailed payment:", err);
-      toast.error(paymentError(err, hasMember, 'Failed to save the payment details. Please try again.'));
-    } finally {
-      setSavingLedgerId(null);
     }
   };
 
@@ -251,23 +213,6 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
   // Unpaid members shown on the summary card (MAX 10)
   const dashboardUnpaidPlayers = useMemo(() => unpaidRoster.slice(0, 10), [unpaidRoster]);
-
-  // Filtered roster for the full Payment Ledger Modal
-  const ledgerFilteredPlayers = useMemo(() => {
-    const query = ledgerSearch.toLowerCase();
-    return roster.filter(p => {
-      const matchesSearch =
-        p.displayName.toLowerCase().includes(query) ||
-        (p.email || '').toLowerCase().includes(query) ||
-        (p.paymentNote || '').toLowerCase().includes(query);
-
-      const matchesFilter = ledgerFilter === 'ALL' ||
-                            (ledgerFilter === 'PAID' && p.paidStatus === 'PAID') ||
-                            (ledgerFilter === 'UNPAID' && p.paidStatus !== 'PAID');
-
-      return matchesSearch && matchesFilter;
-    });
-  }, [roster, ledgerSearch, ledgerFilter]);
 
   // The deadline the SERVER actually enforces for this week — and ONLY for pool
   // types that genuinely have one. It used to render a hardcoded sixteen-hour
@@ -506,14 +451,14 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
         <div>
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Buy-In Ledger</h3>
-              <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint mt-0.5">Member Financial Tracking</p>
+              <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Buy-ins at a glance</h3>
+              <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint mt-0.5">Full detail in the Payment Ledger</p>
             </div>
             <button
-              onClick={() => setIsLedgerOpen(true)}
+              onClick={onOpenLedger}
               className="bg-navy-800 hover:bg-navy-700 transition-all duration-150 hover:-translate-y-px text-white font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 py-1.5 rounded-md shadow-card"
             >
-              View Full Ledger
+              Open Payment Ledger
             </button>
           </div>
 
@@ -559,7 +504,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                 // dues, which settle independently (P3). "Mark Paid" would toggle
                 // them to UNPAID — the opposite of what a commissioner clicking it
                 // wants — and rebuy settlement is a different callable mode
-                // (settleRebuys) that lives on the member roster below. So the row
+                // (settleRebuys) that lives on the Payment Ledger. So the row
                 // names the debt and offers no misleading action.
                 //
                 // This branch is why codex r1's separate "base cleared, rebuy
@@ -590,7 +535,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
                     {baseDuesPaid ? (
                       <span className="font-display font-bold text-[9px] uppercase tracking-[0.08em] text-gold-700 dark:text-gold-400 bg-gold-400/10 border border-gold-500/40 px-2.5 py-1.5 rounded-md text-center leading-tight">
-                        Rebuy dues<br />settle below
+                        Rebuy dues<br />settle in the ledger
                       </span>
                     ) : (
                       <button
@@ -727,237 +672,6 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
           (pools/{id}/payments) with real timestamps, for the commissioner too.
           A second copy here would be a duplicate reader, so this card is
           removed rather than rebuilt. */}
-
-      {/* FULL FEATURED PAYMENT LEDGER MODAL */}
-      {isLedgerOpen && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-card border border-line rounded-xl w-full max-w-4xl max-h-[85vh] overflow-hidden shadow-panel flex flex-col text-[color:var(--text)]">
-            {/* Header */}
-            <div className="p-6 border-b border-line flex justify-between items-center bg-surface">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 rounded-lg">
-                  <DollarSign size={20} />
-                </div>
-                <div>
-                  <h3 className="font-display font-bold text-lg text-[color:var(--text)] uppercase tracking-[0.05em]">Advanced Payment Ledger</h3>
-                  <p className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-faint mt-0.5">{pool.name} Roster Financials</p>
-                </div>
-              </div>
-              <button
-                onClick={() => { setIsLedgerOpen(false); setEditingUid(null); }}
-                className="p-2 hover:bg-page rounded-md text-muted hover:text-[color:var(--text)] transition-all duration-150"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Sub-Header stats panels & Filters */}
-            <div className="p-6 bg-surface border-b border-line space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {[
-                  { title: 'Total Projected', value: `$${pot.expected}`, color: 'text-[color:var(--text)]' },
-                  { title: 'Total Collected', value: `$${pot.collected}`, color: 'text-[#0F7B4A]' },
-                  { title: 'Outstanding Due', value: `$${outstandingDue(pot)}`, color: 'text-gold-600 dark:text-gold-400' },
-                  // Denominator is everyone who JOINED, not everyone with an entry —
-                  // the old figure read 100% on a pool where only the one entry
-                  // holder had paid and three other members had not.
-                  { title: 'Clearing Rate', value: `${clearingRate(pot)}%`, color: 'text-navy-700 dark:text-gold-400' }
-                ].map((stat, idx) => (
-                  <div key={idx} className="bg-page border border-line p-3 rounded-lg text-center">
-                    <span className="font-display font-bold uppercase text-[8px] tracking-[0.08em] text-faint block mb-0.5">{stat.title}</span>
-                    <span className={`font-display font-bold text-sm ${stat.color} num`}>{stat.value}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Filtering & Search Row */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    placeholder="Search player name, email, note..."
-                    value={ledgerSearch}
-                    onChange={(e) => setLedgerSearch(e.target.value)}
-                    className="w-full bg-page border border-line rounded-md py-2.5 px-4 pl-10 font-body text-xs text-[color:var(--text)] placeholder:text-faint focus:ring-1 focus:ring-navy-600 dark:focus:ring-gold-500 focus:outline-none"
-                  />
-                  <Search className="absolute left-3 top-3 text-faint" size={14} />
-                </div>
-
-                <div className="flex gap-1 bg-page p-1 border border-line rounded-md">
-                  {['ALL', 'PAID', 'UNPAID'].map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => setLedgerFilter(type as any)}
-                      className={`px-3 py-1.5 rounded-sm text-[9px] font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 ${
-                        ledgerFilter === type
-                          ? 'bg-navy-800 text-white shadow-card'
-                          : 'text-muted hover:text-[color:var(--text)]'
-                      }`}
-                    >
-                      {type}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Table Area */}
-            <div className="flex-1 overflow-auto p-6">
-              <table className="w-full text-left border-collapse text-[11px]">
-                <thead>
-                  <tr className="border-b border-line font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">
-                    <th className="pb-3 px-2">Player / Contact</th>
-                    <th className="pb-3 px-2 text-center w-28">Status</th>
-                    <th className="pb-3 px-2 w-32">Method</th>
-                    <th className="pb-3 px-2 w-36">Paid Date</th>
-                    <th className="pb-3 px-2">Transaction ID / Notes</th>
-                    <th className="pb-3 px-2 text-right w-24">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {ledgerFilteredPlayers.length > 0 ? (
-                    ledgerFilteredPlayers.map((player) => {
-                      const rowUid = player.uid;
-                      const isEditing = editingUid === rowUid;
-                      const isPaid = player.paidStatus === 'PAID';
-
-                      return (
-                        <tr key={rowUid} className="hover:bg-page transition-colors duration-150">
-                          {/* Name / Email */}
-                          <td className="py-3 px-2">
-                            <span className="font-display font-bold text-[color:var(--text)] block uppercase">{player.displayName}</span>
-                            <span className="font-body text-[9px] text-faint">{player.email || 'Email not shown here'}</span>
-                          </td>
-
-                          {/* Status */}
-                          <td className="py-3 px-2 text-center">
-                            {isEditing ? (
-                              <select
-                                value={editPaidStatus}
-                                onChange={(e) => setEditPaidStatus(e.target.value as any)}
-                                className="bg-page border border-line rounded-sm px-2 py-1 font-body text-[color:var(--text)] font-bold"
-                              >
-                                <option value="PAID">PAID</option>
-                                <option value="UNPAID">UNPAID</option>
-                              </select>
-                            ) : (
-                              <Badge status={isPaid ? 'paid' : 'unpaid'} className="text-[10px] px-2 py-1">
-                                {player.paidStatus || 'UNPAID'}
-                              </Badge>
-                            )}
-                          </td>
-
-                          {/* Payment Method */}
-                          <td className="py-3 px-2 font-body text-muted font-semibold">
-                            {isEditing ? (
-                              <select
-                                value={editMethod}
-                                onChange={(e) => setEditMethod(e.target.value)}
-                                className="bg-page border border-line rounded-sm px-2 py-1 font-body text-[color:var(--text)]"
-                              >
-                                <option value="Venmo">Venmo</option>
-                                <option value="Zelle">Zelle</option>
-                                <option value="PayPal">PayPal</option>
-                                <option value="Cash">Cash</option>
-                                <option value="Card">Credit Card</option>
-                                <option value="Other">Other</option>
-                              </select>
-                            ) : (
-                              player.paymentMethod || <span className="text-faint italic">N/A</span>
-                            )}
-                          </td>
-
-                          {/* Paid Date */}
-                          <td className="py-3 px-2 font-body text-muted num">
-                            {isEditing ? (
-                              <input
-                                type="date"
-                                value={editDate}
-                                onChange={(e) => setEditDate(e.target.value)}
-                                className="bg-page border border-line rounded-sm px-2 py-1 font-body text-[color:var(--text)]"
-                              />
-                            ) : (
-                              player.paidAt ? new Date(player.paidAt).toLocaleDateString() : <span className="text-faint italic">N/A</span>
-                            )}
-                          </td>
-
-                          {/* Notes */}
-                          <td className="py-3 px-2 font-body text-muted">
-                            {isEditing ? (
-                              <input
-                                type="text"
-                                placeholder="Tx ID or comments..."
-                                value={editNote}
-                                onChange={(e) => setEditNote(e.target.value)}
-                                className="w-full bg-page border border-line rounded-sm px-2 py-1 font-body text-[color:var(--text)] placeholder:text-faint"
-                              />
-                            ) : (
-                              player.paymentNote || <span className="text-faint italic">None</span>
-                            )}
-                          </td>
-
-                          {/* Actions */}
-                          <td className="py-3 px-2 text-right">
-                            {isEditing ? (
-                              <div className="flex justify-end gap-1.5">
-                                <button
-                                  onClick={() => saveDetailedPayment(rowUid, player.hasMember)}
-                                  disabled={savingLedgerId === rowUid}
-                                  className="p-1 bg-navy-800 text-white hover:bg-navy-700 rounded-sm transition-all duration-150 disabled:opacity-50"
-                                >
-                                  <Save size={14} />
-                                </button>
-                                <button
-                                  onClick={() => setEditingUid(null)}
-                                  className="p-1 bg-page text-muted border border-line hover:bg-surface rounded-sm transition-all duration-150"
-                                >
-                                  <X size={14} />
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  setEditingUid(rowUid);
-                                  setEditPaidStatus(player.paidStatus || 'UNPAID');
-                                  setEditMethod(player.paymentMethod || 'Venmo');
-                                  setEditDate(player.paidAt ? new Date(player.paidAt).toISOString().split('T')[0] : '');
-                                  setEditNote(player.paymentNote || '');
-                                }}
-                                className="p-1 bg-page hover:bg-surface border border-line rounded-sm text-muted hover:text-[color:var(--text)] transition-all duration-150"
-                              >
-                                <Edit size={14} />
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={6} className="text-center py-10 text-faint font-body font-bold">
-                        {/* An empty ROSTER and an empty FILTER are different facts. The
-                            old table said "no members matching filter criteria" for
-                            both, which read as a filter problem on a pool that simply
-                            had nobody in it — and, before the roster fix, on pools that
-                            did. */}
-                        {roster.length === 0
-                          ? 'No members have joined this pool yet.'
-                          : 'No members match the current search or filter.'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-line bg-surface flex justify-between items-center text-[10px] text-faint font-display font-bold uppercase tracking-[0.08em]">
-              <span>Platform TLS Accreditation: Secure</span>
-              <span>Clearing Ledger Logs v2.4</span>
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   );
