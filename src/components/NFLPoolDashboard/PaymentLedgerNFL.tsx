@@ -320,7 +320,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
 
   const seasonType = poolSeasonType(pool);
   const chip = (week: number) => nflWeekChip(seasonType, week);
-  const finalized = !!(pool as any).finalizedAt || pool.status === 'FINAL' || pool.status === 'COMPLETED';
+  const finalized = !!(pool as any).finalizedAt || (pool as any).status === 'FINAL' || (pool as any).status === 'COMPLETED';
   /** Live records that are NOT bound weekly/season PLACE awards: BONUS, ADJUSTMENT, legacy free-form PLACE. */
   const otherAwards = useMemo(() => records
     .filter(r => !r.supersededBy && !(r.kind === 'PLACE' && r.entryId && (typeof r.week === 'number' || r.id.startsWith('season-'))))
