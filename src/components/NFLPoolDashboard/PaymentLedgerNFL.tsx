@@ -255,7 +255,9 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
     // that member (fee columns blank, `first: false`); (b) a recipient outside
     // the roster entirely (should not happen): fee/status UNKNOWN, rendered
     // "—", never $0 (qodo #9 on #456).
-    for (const p of prizeRows) {
+    // Season winners get the same treatment (codex r2 on step 3).
+    const prized = [...prizeRows, ...seasonRows.values()];
+    for (const p of prized) {
       if (rows.some(r => r.entryId === p.entryId)) continue;
       const known = rosterUids.has(p.uid);
       const row = { key: p.entryId, uid: p.uid, entryId: p.entryId, name: p.name, first: !known, hasMember: false, feeOwed: null as number | null, paidStatus: null as 'PAID' | 'UNPAID' | null, rebuyOwed: 0, rebuyPaid: 0 };
@@ -263,7 +265,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       if (last >= 0) rows.splice(last + 1, 0, row); else rows.push(row);
     }
     return rows;
-  }, [pool, members, entries, prizeRows]);
+  }, [pool, members, entries, prizeRows, seasonRows]);
 
   const totals = useMemo(() => {
     let owedIn = 0, paidIn = 0, owedOut = 0, paidOut = 0;
