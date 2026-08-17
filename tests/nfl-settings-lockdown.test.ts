@@ -216,6 +216,8 @@ describe('firestore.rules — callable-only settings bind SUPER_ADMIN too', () =
     // entryFee/payoutMode around a valid one, making "site-verified" decorative
     // for exactly the principal most likely to hand-fix money fields.
     'hybridSplit',
+    // PLAN-PAYMENT-LEDGER T1: the HYBRID weekly place list — validated in the callable only.
+    'weeklyPayouts',
   ])('callableOnlySettingsUnchanged() lists %s', (field) => {
     const fn = rules.slice(rules.indexOf('function callableOnlySettingsUnchanged()'));
     const body = fn.slice(0, fn.indexOf('\n      }'));

@@ -108,6 +108,13 @@ await check('SUPER_ADMIN cannot dotted-update settings.maxEntriesPerUser', asser
 await check('SUPER_ADMIN cannot smuggle maxEntriesPerUser inside a WHOLESALE settings replacement', assertFails(
     updateDoc(doc(admin, 'pools', 'sv1'), { settings: { ...BASE_SETTINGS, maxEntriesPerUser: 3 } }),
 ));
+// PLAN-PAYMENT-LEDGER T1: the HYBRID weekly place list is validated in the callable only.
+await check('SUPER_ADMIN cannot dotted-update settings.weeklyPayouts', assertFails(
+    updateDoc(doc(admin, 'pools', 'sv1'), { 'settings.weeklyPayouts': { places: [{ rank: 1, percentage: 100 }] } }),
+));
+await check('SUPER_ADMIN cannot smuggle weeklyPayouts inside a WHOLESALE settings replacement', assertFails(
+    updateDoc(doc(admin, 'pools', 'sv1'), { settings: { ...BASE_SETTINGS, weeklyPayouts: { places: [{ rank: 1, percentage: 100 }] } } }),
+));
 await check('the pool OWNER cannot write settings.maxEntriesPerUser', assertFails(
     updateDoc(doc(owner, 'pools', 'sv1'), { 'settings.maxEntriesPerUser': 3 }),
 ));

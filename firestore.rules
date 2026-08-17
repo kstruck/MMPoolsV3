@@ -360,7 +360,9 @@ service cloud.firestore {
         // and Playoff carry the SAME key and save it by direct updateDoc
         // (BracketPoolDashboard handleSaveSettings, SuperAdmin) — an unscoped
         // deny broke every Bracket settings save (qodo #1 on #449).
-        return !changed.hasAny(['tieCountsAs', 'maxTeamUses', 'weeklyTiebreaker', 'hybridSplit'])
+        // `weeklyPayouts` (PLAN-PAYMENT-LEDGER T1): the validator lives in the
+        // callable, so no direct write — SUPER_ADMIN clients included — may bypass it.
+        return !changed.hasAny(['tieCountsAs', 'maxTeamUses', 'weeklyTiebreaker', 'hybridSplit', 'weeklyPayouts'])
                && (!isNfl || !changed.hasAny(['entryFee', 'payoutMode', 'maxEntriesPerUser']));
       }
 

@@ -21,6 +21,7 @@ import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } fr
 import { parityEditNeedsEntries, survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
 import { tiebreakerEditNeedsEntries, touchesWeeklyTiebreakerSetting, weeklyTiebreakerRefusal } from './lib/weeklyTiebreakerGate';
 import { hybridNoOpKeys, hybridSplitNeedsClearing, hybridSplitRefusal, touchesHybridSplitSettings } from './lib/hybridSplitGate';
+import { payoutListsRefusal, touchesPayoutLists, weeklyPayoutsNeedsClearing } from './lib/weeklyPayoutsGate';
 import { maxEntriesNoOpKeys, maxEntriesRefusal, touchesMaxEntriesSetting } from './lib/multiEntryGate';
 import { entryCountWrite } from './lib/multiEntry';
 import { memberLiableEntries } from './shared/memberRecord';
@@ -549,7 +550,11 @@ export const updatePoolSettings = validated(
         delete patch[k];
     }
     const maxEntriesTouched = touchesMaxEntriesSetting(patch);
-    if (touchesLockSettings(patch) || parityTouched || tiebreakerTouched || hybridTouched || maxEntriesTouched) {
+    // The payout place lists (PLAN-PAYMENT-LEDGER T1): `weeklyPayouts` is only
+    // meaningful on HYBRID and leaving HYBRID deletes it in the same write —
+    // judged in the transaction for the same reason as the split.
+    const payoutListsTouched = touchesPayoutLists(patch);
+    if (touchesLockSettings(patch) || parityTouched || tiebreakerTouched || hybridTouched || maxEntriesTouched || payoutListsTouched) {
         const bumpsLockRevision = touchesLockSettings(patch);
         await retryWhileScoring(() => db.runTransaction(async (tx) => {
             const current = (await tx.get(poolRef)).data() as Record<string, unknown> | undefined;
@@ -583,6 +588,10 @@ export const updatePoolSettings = validated(
                 const problem = hybridSplitRefusal(current, patch);
                 if (problem) throw new HttpsError('failed-precondition', problem);
             }
+            if (payoutListsTouched) {
+                const problem = payoutListsRefusal(current, patch);
+                if (problem) throw new HttpsError('failed-precondition', problem);
+            }
             let entryCountInit: Record<string, unknown> = {};
             if (maxEntriesTouched) {
                 const problem = maxEntriesRefusal(current, patch);
@@ -605,6 +614,9 @@ export const updatePoolSettings = validated(
                 // non-hybrid pool": a validation deadlock. (codex P2, plan r1.)
                 ...(hybridTouched && hybridSplitNeedsClearing(current, patch)
                     ? { 'settings.hybridSplit': FieldValue.delete() } : {}),
+                // Same for the weekly place list (T1 / D1 mode transitions).
+                ...(payoutListsTouched && weeklyPayoutsNeedsClearing(current, patch)
+                    ? { 'settings.weeklyPayouts': FieldValue.delete() } : {}),
                 // Invalidates any pass that captured the old value — the backstop
                 // for a scorer that acquired its lease between our read and here.
                 // Scoped to lock edits: a parity-only save changes no deadline, and
