@@ -181,11 +181,18 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
         });
       });
     }
-    // A prize recipient outside the roster (should not happen — the roster
-    // includes entries): fee/status UNKNOWN, rendered "—", never $0 (qodo #9).
+    // A prize row whose ENTRY has no ledger row yet. Two cases (codex r1 on
+    // this PR): (a) an extra entry of a known member — `entries` here can be
+    // the per-OWNER standings fold, which hides entry #2+ — so add it under
+    // that member (fee columns blank, `first: false`); (b) a recipient outside
+    // the roster entirely (should not happen): fee/status UNKNOWN, rendered
+    // "—", never $0 (qodo #9 on #456).
     for (const p of prizeRows) {
-      if (rosterUids.has(p.uid) || rows.some(r => r.entryId === p.entryId)) continue;
-      rows.push({ key: p.entryId, uid: p.uid, entryId: p.entryId, name: p.name, first: true, hasMember: false, feeOwed: null, paidStatus: null, rebuyOwed: 0, rebuyPaid: 0 });
+      if (rows.some(r => r.entryId === p.entryId)) continue;
+      const known = rosterUids.has(p.uid);
+      const row = { key: p.entryId, uid: p.uid, entryId: p.entryId, name: p.name, first: !known, hasMember: false, feeOwed: null, paidStatus: null, rebuyOwed: 0, rebuyPaid: 0 };
+      const last = known ? rows.map(r => r.uid).lastIndexOf(p.uid) : -1;
+      if (last >= 0) rows.splice(last + 1, 0, row); else rows.push(row);
     }
     return rows;
   }, [pool, members, entries, prizeRows]);
