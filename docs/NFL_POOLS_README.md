@@ -78,7 +78,7 @@ Because Margin pools often result in similar total scores, a strict 5-level casc
 2. **Lowest Negative Burden:** Sum of the absolute values of all losing weeks. (e.g., A player who lost by -3 beats a player who lost by -14).
 3. **Most Positive Weeks:** Total number of weeks the player scored > 0.
 4. **Highest Single-Week Score:** The single best week margin in the season.
-5. **Coin Flip (Random):** Assigned if all metrics above are identical.
+5. **Still level:** the entries SHARE the rank (and split any season prize per the payout places — PLAN-WEEKLY-PRIZES §2c/§4). The leaderboard orders shared rows by id for a stable display; that never separates a rank or a prize.
 
 ---
 
