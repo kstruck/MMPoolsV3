@@ -457,14 +457,16 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // modal's saveDetailedPayment, now reached from the Payment Ledger's fee cell.
   // Details ride only with PAID (the schema refuses them otherwise), so this
   // also marks the member paid. Same authoritative callable, no fallback.
-  const handleSavePaidDetails = async (uid: string, details: { paymentMethod: string; paidAt: number; paymentNote: string | null }) => {
+  const handleSavePaidDetails = async (uid: string, details: { paymentMethod: string; paidAt: number; paymentNote: string | null }): Promise<boolean> => {
     setIsSavingPayment(uid);
     setFeedback(null);
     try {
       await dbService.setPaidStatus(pool.id, uid, true, details);
+      return true; // the ledger closes its editor only on success (codex r7)
     } catch (err: any) {
       logger.error(`Failed to save payment details for ${uid}:`, err);
       setFeedback({ type: 'error', message: getUserMessage(err, 'Failed to save the payment details.') });
+      return false;
     } finally {
       setIsSavingPayment(null);
     }

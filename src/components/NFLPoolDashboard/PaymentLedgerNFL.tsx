@@ -53,7 +53,7 @@ interface Props {
    * Ledger's editor, folded in — codex r2/r6 on #460). Same setPaidStatus
    * callable, `isPaid: true` + details; the writer stays in NFLManagerView.
    */
-  onSavePaidDetails?: (uid: string, details: { paymentMethod: string; paidAt: number; paymentNote: string | null }) => Promise<void> | void;
+  onSavePaidDetails?: (uid: string, details: { paymentMethod: string; paidAt: number; paymentNote: string | null }) => Promise<boolean>;
   /** uid currently being written by either fee handler — disables that row's fee controls. */
   savingFeeUid?: string | null;
 }
@@ -358,7 +358,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
                           <input type="text" value={draft.note} placeholder="Tx id / note" onChange={e => setDraft(d => ({ ...d, note: e.target.value }))} className="bg-page border border-line rounded px-1 py-0.5 text-[10px] w-28" aria-label="Payment note" />
                           <span className="flex gap-1 justify-center">
                             <button type="button" disabled={savingFeeUid === r.uid} className="text-[9px] font-display font-bold uppercase px-2 py-0.5 rounded bg-navy-800 text-white disabled:opacity-50"
-                              onClick={async () => { await onSavePaidDetails(r.uid, { paymentMethod: draft.method, paidAt: draft.date ? new Date(draft.date).getTime() : Date.now(), paymentNote: draft.note || null }); setEditUid(null); }}>
+                              onClick={async () => { const ok = await onSavePaidDetails(r.uid, { paymentMethod: draft.method, paidAt: draft.date ? new Date(draft.date).getTime() : Date.now(), paymentNote: draft.note || null }); if (ok) setEditUid(null); /* on failure keep the draft (codex r7) */ }}>
                               {savingFeeUid === r.uid ? 'Saving…' : 'Save'}
                             </button>
                             <button type="button" className="text-[9px] font-display font-bold uppercase px-2 py-0.5 rounded border border-line text-muted" onClick={() => setEditUid(null)}>Cancel</button>
