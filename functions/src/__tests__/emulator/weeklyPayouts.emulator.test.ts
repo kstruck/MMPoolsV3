@@ -25,7 +25,10 @@ async function seed(settings: Record<string, unknown>) {
 const save = (settings: Record<string, unknown>) => wUpdate({ data: { poolId: POOL, updates: { settings } }, auth: auth(HOST) } as never);
 const stored = async () => ((await poolRef().get()).data() as any).settings;
 
-afterAll(async () => { for (const id of created) await db.recursiveDelete(db.collection('pools').doc(id)); });
+afterAll(async () => {
+  await Promise.all(created.map(id => db.recursiveDelete(db.collection('pools').doc(id))));
+  test.cleanup();
+});
 
 describe('updatePoolSettings — weeklyPayouts (T1)', () => {
   it('HYBRID pool: sets weeklyPayouts; SEASON pool: refused WRONG_MODE', async () => {

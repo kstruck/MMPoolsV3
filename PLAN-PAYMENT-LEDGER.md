@@ -1,6 +1,6 @@
 # PLAN — the payment ledger, and weekly + season prizes on a HYBRID pool
 
-> **STATUS: ✅ SIGNED 2026-08-15 (K1–K12, "all recommendations"). IMPLEMENTATION IN FLIGHT 2026-08-16 — T3 (shared maths, in #451), T4 (weekly awards + `setPayoutSettled`, #455), T5 (commissioner ledger, next PR). T0/T1/T2 (`weeklyPayouts` + wizard) deferred behind the ledger — the ledger reads correctly without them (`weeklyPlacesFor`: absent `weeklyPayouts` ⇒ `payouts` prices both pots). T6/T7 pending.**
+> **STATUS: ✅ SIGNED 2026-08-15 (K1–K12, "all recommendations"). SHIPPED: T3 (#451), T4 (#455), T5 (#456; ledger UX #460), T6 (#465), T7 (#466), T0 (#469). T1 (`weeklyPayouts` schema + validator + rules; K9 census script) in PR #470. T2 (wizard second editor + PayoutsPanel) next. Absent `weeklyPayouts` ⇒ `payouts` prices both pots (`weeklyPlacesFor`).**
 > This is a **MONEY** change (`mmp-change-control` Rule 3). Plan → adversarial
 > review log (`PLAN-PAYMENT-LEDGER-REVIEW-LOG.md`) → sweeps
 > (`PLAN-PAYMENT-LEDGER-SWEEPS.md`) → Kevin's sign-off → code.

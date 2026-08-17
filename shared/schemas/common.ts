@@ -67,8 +67,9 @@ export const payoutBonusSchema = z.object({
  * Unique ranks on a place list (PLAN-PAYMENT-LEDGER T1 / K9). Two rows for the
  * same rank is a money defect: `splitPrizes` refuses it and the scorer then
  * publishes a week with `weeklyPlacesError: PRIZE_SPLIT_DUPLICATE_RANK` and no
- * prizes. Refused at the door instead. (K9 census before this shipped:
- * `functions/scripts/censusPayoutRanks.mjs`.)
+ * prizes. Refused at the door instead. K9 asks for a census of existing pools
+ * with a duplicate rank BEFORE this ships — `functions/scripts/censusPayoutRanks.mjs`
+ * (read-only); the prod count is whatever that run reports, not assumed here.
  */
 export const uniqueRanks = (places: ReadonlyArray<{ rank: number }>): boolean =>
   new Set(places.map((p) => p.rank)).size === places.length;

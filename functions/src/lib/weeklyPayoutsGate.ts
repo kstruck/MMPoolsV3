@@ -67,6 +67,13 @@ export function weeklyPayoutsNeedsClearing(pool: Record<string, unknown> | undef
 /** The refusal, or null to allow. Judged AFTER the clearing decision above. */
 export function payoutListsRefusal(pool: Record<string, unknown> | undefined, patch: Record<string, unknown>): string | null {
   if (!touchesPayoutLists(patch)) return null;
+  // The permissive update schema would let `payoutMode: 'BOGUS'` through, and
+  // the clearing rule below would then delete a stored weekly list on a value
+  // that is not a mode at all (qodo #4 on #470). Refuse anything but the three.
+  if ('settings.payoutMode' in patch && patch['settings.payoutMode'] !== undefined && patch['settings.payoutMode'] !== null
+      && !['SEASON', 'WEEKLY', 'HYBRID'].includes(String(patch['settings.payoutMode']))) {
+    return 'PAYOUT_MODE_INVALID: payoutMode must be SEASON, WEEKLY or HYBRID.';
+  }
   const merged = mergedSettings(pool, patch);
   if (weeklyPayoutsNeedsClearing(pool, patch)) merged.weeklyPayouts = undefined;
   // `payouts` — only when the patch carries it (a mode-only save must not be

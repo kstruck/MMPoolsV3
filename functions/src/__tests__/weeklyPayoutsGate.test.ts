@@ -45,7 +45,7 @@ describe('create schemas — weeklyPayouts is HYBRID-only (D1)', () => {
       expect(JSON.stringify(r.success ? '' : r.error.issues)).toMatch(/WEEKLY_PAYOUTS_WRONG_MODE/);
     }
   });
-  it('Margin: same', () => {
+  it('Margin: weeklyPayouts on a WEEKLY-mode pool is refused (WRONG_MODE)', () => {
     const m = { name: 'm', type: 'NFL_MARGIN' as const, season: '2026', settings: { entryFee: 20, payouts: { places: [P(1, 100)], bonuses: [] }, payoutMode: 'WEEKLY', weeklyPayouts: { places: [P(1, 100)] } } };
     expect(marginCreateInputSchema.safeParse(m).success).toBe(false);
   });
@@ -58,6 +58,10 @@ describe('create schemas — weeklyPayouts is HYBRID-only (D1)', () => {
 
 describe('payoutListsRefusal — updatePoolSettings (T1)', () => {
   const pool = (settings: Record<string, unknown>, type = 'NFL_PICKEM') => ({ type, settings });
+  it('an unknown payoutMode is refused, never used to clear a stored weekly list (qodo #4 on #470)', () => {
+    const stored = pool({ payoutMode: 'HYBRID', weeklyPayouts: { places: [P(1, 100)] } });
+    expect(payoutListsRefusal(stored, { 'settings.payoutMode': 'BOGUS' })).toMatch(/PAYOUT_MODE_INVALID/);
+  });
   it('touches: any of payouts / weeklyPayouts / payoutMode', () => {
     expect(touchesPayoutLists({ 'settings.entryFee': 5 })).toBe(false);
     expect(touchesPayoutLists({ 'settings.weeklyPayouts': { places: [] } })).toBe(true);
