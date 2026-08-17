@@ -48,4 +48,4 @@ would count in Profit.
   perform (tick).
 - Known gap: the `null` (unpriced) sentinel is sticky by design; a Commissioner
   who fixes the payout settings after a week published unpriced has no in-app
-  re-price. Ticketed 2026-08-17.
+  re-price. Named as ticket-worthy on 2026-08-17 (MORNING-2026-08-17-LEDGER-UX §1b); no ticket filed yet.

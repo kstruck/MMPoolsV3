@@ -539,7 +539,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       )}
 
       {pool.type === 'NFL_SURVIVOR' ? (
-        <p className="text-[11px] font-body text-faint">Survivor pools have no weekly prizes — the season prize is recorded from Record Payouts after finalization.</p>
+        <p className="text-[11px] font-body text-faint">Survivor pools have no weekly prizes — the season prize is published to the Season $ column at finalization.</p>
       ) : weeks.length === 0 && (
         <p className="text-[11px] font-body text-faint">No weeks scored yet — prize columns appear here after a week is scored on a pool with a weekly prize pot.</p>
       )}
