@@ -15,7 +15,7 @@ describe('PaymentLedgerNFL — wiring (T5)', () => {
   it('is mounted on the NFL manager view beside (not instead of) Record Payouts, and owns the fee toggle', () => {
     const mgr = code('src/components/NFLPoolDashboard/NFLManagerView.tsx');
     expect(mgr).toContain("import { PaymentLedgerNFL } from './PaymentLedgerNFL'");
-    expect(mgr).toContain('<PaymentLedgerNFL pool={pool} members={members} entries={entries} onTogglePaid={handleTogglePayment} onSettleRebuys={handleSettleRebuys} savingFeeUid={isSavingPayment} />');
+    expect(mgr).toContain('<PaymentLedgerNFL pool={pool} members={members} entries={entries} onTogglePaid={handleTogglePayment} onSettleRebuys={handleSettleRebuys} onSavePaidDetails={handleSavePaidDetails} savingFeeUid={isSavingPayment} />');
     expect(mgr).toContain('<RecordPayoutsCard pool={pool} entries={entries} />');
     // The roster card is picks / remind / co-comm only — the fee toggle moved INTO the ledger (Kevin, 2026-08-16).
     expect(mgr).not.toMatch(/onClick=\{\(\) => handleTogglePayment\(row\.uid/);
@@ -24,6 +24,9 @@ describe('PaymentLedgerNFL — wiring (T5)', () => {
     const dash = code('src/components/NFLPoolDashboard/NFLPoolDashboard.tsx');
     expect(dash).toContain("onManagePayments={() => setActiveTab('manager', 'members')}");
     expect(dash).toContain("initialSection={searchParams.get('section')}");
+    // The modal's method/date/note editor is folded into the ledger's fee cell; the writer is the same callable, details ride only with PAID.
+    expect(mgr).toContain('dbService.setPaidStatus(pool.id, uid, true, details)');
+    expect(ledger).toContain('onSavePaidDetails(r.uid, { paymentMethod: draft.method');
     const bento = code('src/components/NFLPoolDashboard/NFLManagerBentoDashboard.tsx');
     expect(bento).toContain('onClick={onOpenLedger}');
     expect(bento).not.toContain('Advanced Payment Ledger');

@@ -453,6 +453,23 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     }
   };
 
+  // Fee payment DETAILS (method / date / note) — the old Advanced Payment Ledger
+  // modal's saveDetailedPayment, now reached from the Payment Ledger's fee cell.
+  // Details ride only with PAID (the schema refuses them otherwise), so this
+  // also marks the member paid. Same authoritative callable, no fallback.
+  const handleSavePaidDetails = async (uid: string, details: { paymentMethod: string; paidAt: number; paymentNote: string | null }) => {
+    setIsSavingPayment(uid);
+    setFeedback(null);
+    try {
+      await dbService.setPaidStatus(pool.id, uid, true, details);
+    } catch (err: any) {
+      logger.error(`Failed to save payment details for ${uid}:`, err);
+      setFeedback({ type: 'error', message: getUserMessage(err, 'Failed to save the payment details.') });
+    } finally {
+      setIsSavingPayment(null);
+    }
+  };
+
   // Rebuy settlement (PLAN-PAYMENT-TRUTH P3): a member's rebuy dues are owed
   // and settled INDEPENDENTLY of base dues — the same button state machine as
   // the paid toggle, against the settleRebuys mode of the same callable.
@@ -1397,7 +1414,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               every published weekly prize with its "paid" checkbox. Lives on
               the Members & Payments sub-tab — where a commissioner looks for
               money (Kevin, 2026-08-16). */}
-          <PaymentLedgerNFL pool={pool} members={members} entries={entries} onTogglePaid={handleTogglePayment} onSettleRebuys={handleSettleRebuys} savingFeeUid={isSavingPayment} />
+          <PaymentLedgerNFL pool={pool} members={members} entries={entries} onTogglePaid={handleTogglePayment} onSettleRebuys={handleSettleRebuys} onSavePaidDetails={handleSavePaidDetails} savingFeeUid={isSavingPayment} />
           <div className="bg-card border border-line shadow-card rounded-xl overflow-hidden">
             <div className="p-5 border-b border-line bg-surface space-y-3">
               <div className="flex justify-between items-center">

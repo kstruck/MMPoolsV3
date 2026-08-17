@@ -48,6 +48,12 @@ interface Props {
   onTogglePaid?: (uid: string, currentStatus: string) => void;
   /** Survivor rebuy dues settle independently of base dues (P3). */
   onSettleRebuys?: (uid: string, settle: boolean) => void;
+  /**
+   * Payment method / date / note on a PAID fee (the old Advanced Payment
+   * Ledger's editor, folded in — codex r2/r6 on #460). Same setPaidStatus
+   * callable, `isPaid: true` + details; the writer stays in NFLManagerView.
+   */
+  onSavePaidDetails?: (uid: string, details: { paymentMethod: string; paidAt: number; paymentNote: string | null }) => Promise<void> | void;
   /** uid currently being written by either fee handler — disables that row's fee controls. */
   savingFeeUid?: string | null;
 }
@@ -57,7 +63,10 @@ const money = (n: number) => `$${Math.floor(n).toLocaleString()}`;
 /** Owner uid of an entry doc: entry #1's id IS the uid; extras carry `ownerUid`. */
 const entryOwner = (e: any): string => e?.ownerUid || e?.id;
 
-export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTogglePaid, onSettleRebuys, savingFeeUid = null }) => {
+export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTogglePaid, onSettleRebuys, onSavePaidDetails, savingFeeUid = null }) => {
+  // Inline fee-details editor: which uid is open + its draft.
+  const [editUid, setEditUid] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ method: string; date: string; note: string }>({ method: 'Venmo', date: '', note: '' });
   const [recaps, setRecaps] = useState<WeeklyRecap[]>([]);
   const [records, setRecords] = useState<Rec[]>([]);
   const [priv, setPriv] = useState<Priv[]>([]);
@@ -167,8 +176,8 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       key: string; uid: string; entryId: string; name: string; first: boolean;
       hasMember: boolean; feeOwed: number | null; paidStatus: 'PAID' | 'UNPAID' | null;
       rebuyOwed: number; rebuyPaid: number;
-      /** Payment metadata the old modal wrote (method / date / note) — shown read-only under the fee box. */
-      paidMeta?: string;
+      /** Payment metadata (method / date / note) — shown under the fee box, editable via onSavePaidDetails. */
+      paidMeta?: string; paymentMethod?: string; paidAt?: number | null; paymentNote?: string | null;
     }> = [];
     const membersByUid = new Map<string, any>((members ?? []).map((m: any) => [m.uid, m]));
     const roster = buildPoolRoster({ pool, members, entries }).sort((a, b) => (a.userName ?? a.uid).localeCompare(b.userName ?? b.uid));
@@ -194,6 +203,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
           key: entryId, uid: r.uid, entryId, name: i > 0 && !e?.entryName ? `${label} (Entry ${e?.entryIndex ?? i + 1})` : label, first: i === 0,
           hasMember: r.hasMember, feeOwed, paidStatus: r.paidStatus, rebuyOwed, rebuyPaid: r.rebuyPaid ?? 0,
           paidMeta: r.paidStatus === 'PAID' ? [r.paymentMethod, r.paidAt ? new Date(r.paidAt).toLocaleDateString() : null, r.paymentNote].filter(Boolean).join(' · ') || undefined : undefined,
+          paymentMethod: r.paymentMethod, paidAt: r.paidAt, paymentNote: r.paymentNote,
         });
       });
     }
@@ -332,7 +342,29 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
                         onChange={() => onTogglePaid?.(r.uid, r.paidStatus ?? 'UNPAID')}
                         className="h-4 w-4 accent-navy-600 dark:accent-gold-500"
                       />
-                      {r.paidMeta && <span className="text-[9px] text-faint max-w-[10rem] truncate" title={r.paidMeta}>{r.paidMeta}</span>}
+                      {r.paidMeta && editUid !== r.uid && <span className="text-[9px] text-faint max-w-[10rem] truncate" title={r.paidMeta}>{r.paidMeta}</span>}
+                      {onSavePaidDetails && r.hasMember && editUid !== r.uid && (
+                        <button type="button" className="text-[9px] text-muted underline hover:text-[color:var(--text)]" title="Record how / when this fee was paid (marks it paid)"
+                          onClick={() => { setEditUid(r.uid); setDraft({ method: r.paymentMethod || 'Venmo', date: r.paidAt ? new Date(r.paidAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10), note: r.paymentNote || '' }); }}>
+                          {r.paidMeta ? 'edit details' : 'add details'}
+                        </button>
+                      )}
+                      {onSavePaidDetails && editUid === r.uid && (
+                        <span className="flex flex-col gap-1 items-stretch text-left">
+                          <select value={draft.method} onChange={e => setDraft(d => ({ ...d, method: e.target.value }))} className="bg-page border border-line rounded px-1 py-0.5 text-[10px]" aria-label="Payment method">
+                            {['Venmo', 'Zelle', 'PayPal', 'Cash', 'Card', 'Other'].map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                          <input type="date" value={draft.date} onChange={e => setDraft(d => ({ ...d, date: e.target.value }))} className="bg-page border border-line rounded px-1 py-0.5 text-[10px]" aria-label="Paid date" />
+                          <input type="text" value={draft.note} placeholder="Tx id / note" onChange={e => setDraft(d => ({ ...d, note: e.target.value }))} className="bg-page border border-line rounded px-1 py-0.5 text-[10px] w-28" aria-label="Payment note" />
+                          <span className="flex gap-1 justify-center">
+                            <button type="button" disabled={savingFeeUid === r.uid} className="text-[9px] font-display font-bold uppercase px-2 py-0.5 rounded bg-navy-800 text-white disabled:opacity-50"
+                              onClick={async () => { await onSavePaidDetails(r.uid, { paymentMethod: draft.method, paidAt: draft.date ? new Date(draft.date).getTime() : Date.now(), paymentNote: draft.note || null }); setEditUid(null); }}>
+                              {savingFeeUid === r.uid ? 'Saving…' : 'Save'}
+                            </button>
+                            <button type="button" className="text-[9px] font-display font-bold uppercase px-2 py-0.5 rounded border border-line text-muted" onClick={() => setEditUid(null)}>Cancel</button>
+                          </span>
+                        </span>
+                      )}
                       {/* Rebuy dues are a SEPARATE settlement from base dues (P3): the callable needs a Member Record. */}
                       {r.rebuyOwed > 0 && r.hasMember && onSettleRebuys && (() => {
                         const settled = r.rebuyPaid >= r.rebuyOwed;
