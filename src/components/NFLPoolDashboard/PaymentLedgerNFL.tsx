@@ -166,12 +166,19 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       /** Payment metadata the old modal wrote (method / date / note) — shown read-only under the fee box. */
       paidMeta?: string;
     }> = [];
+    const membersByUid = new Map<string, any>((members ?? []).map((m: any) => [m.uid, m]));
     const roster = buildPoolRoster({ pool, members, entries }).sort((a, b) => (a.userName ?? a.uid).localeCompare(b.userName ?? b.uid));
     const rosterUids = new Set<string>();
     for (const r of roster) {
       rosterUids.add(r.uid);
-      const own = (entriesByUid.get(r.uid) ?? []).sort((a, b) => (a.entryIndex ?? 1) - (b.entryIndex ?? 1));
-      const ids = own.length ? own.map(e => e.id as string) : [r.uid]; // entry #1's id is the uid
+      // Entry roster = the Member Record's `entries` map (existence + index +
+      // name, reveal-safe — PLAN-MULTI-ENTRY) ∪ the entry docs we were given,
+      // which can be the per-OWNER standings fold and hide entry #2+ (codex r4).
+      const byId = new Map<string, { id: string; entryIndex?: number; entryName?: string }>();
+      for (const [id, v] of Object.entries((membersByUid.get(r.uid)?.entries ?? {}) as Record<string, { entryIndex?: number; name?: string }>)) byId.set(id, { id, entryIndex: v?.entryIndex, entryName: v?.name });
+      for (const e of entriesByUid.get(r.uid) ?? []) byId.set(e.id, { id: e.id, entryIndex: e.entryIndex ?? byId.get(e.id)?.entryIndex, entryName: e.entryName ?? byId.get(e.id)?.entryName });
+      const own = [...byId.values()].sort((a, b) => (a.entryIndex ?? 1) - (b.entryIndex ?? 1));
+      const ids = own.length ? own.map(e => e.id) : [r.uid]; // entry #1's id is the uid
       // Fallback is per LIABLE entry (feeOwed = fee × entries, shared/memberRecord) — an
       // unstamped member with two entries owes two fees, not one (codex r3 on this PR).
       const feeOwed = typeof r.feeOwed === 'number' ? r.feeOwed : rates.entryFee * Math.max(1, own.length);
