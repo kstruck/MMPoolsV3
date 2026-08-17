@@ -246,11 +246,13 @@ describe('commissioner Buy-In Ledger is roster-backed, not entry-backed', () => 
     // the server's prose, which would break the day it is reworded.
     expect(bento).toContain('const paymentError =');
     expect(bento).toMatch(/paymentError\([^)]*hasMember/);
-    // Both write paths must use it — one of the two is easy to miss.
-    expect(bento.match(/paymentError\(err, hasMember/g) ?? []).toHaveLength(2);
-    // ...and both call sites must actually pass the row's flag through.
+    // The one remaining write path here (the "Advanced Payment Ledger" modal
+    // and its saveDetailedPayment went with the ledger unification, 2026-08-16
+    // — fee writes now live in PaymentLedgerNFL via NFLManagerView) must use it.
+    expect(bento.match(/paymentError\(err, hasMember/g) ?? []).toHaveLength(1);
+    expect(bento).not.toContain('saveDetailedPayment');
+    // ...and the call site must actually pass the row's flag through.
     expect(bento).toContain('togglePayment(player.uid, false, player.hasMember)');
-    expect(bento).toContain('saveDetailedPayment(rowUid, player.hasMember)');
 
     // And the decision must not be made by reading the server's sentence. Scoped
     // to the FUNCTION BODY, not the file: the comment above it necessarily quotes

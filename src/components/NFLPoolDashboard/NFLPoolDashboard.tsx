@@ -99,10 +99,15 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     payments: !!user, results: showResultsTab, grid: showPicksGridTab,
   };
   const activeTab: TabType = tabOffered[requestedTab] ? requestedTab : 'dashboard';
-  const setActiveTab = (tab: TabType) => {
+  // `section` = which commissioner sub-tab the manager view opens on (only
+  // `?tab=manager&section=members` is used today — the member Payments tab's
+  // "Open Payment Ledger"). Cleared on every other tab change so a later click
+  // on the Manager tab lands on Overview, not on the last deep-link.
+  const setActiveTab = (tab: TabType, section?: string) => {
     setSearchParams(prev => {
       const p = new URLSearchParams(prev);
       p.set('tab', tab);
+      if (section) p.set('section', section); else p.delete('section');
       return p;
     });
   };
@@ -1071,7 +1076,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 
               {/* TAB 5: PAYMENTS — member money view (status, pot, ledger) */}
               {activeTab === 'payments' && user && (
-                <PaymentsPanel pool={pool} user={user} entries={entries} members={members} isManager={isManager} onManagePayments={() => setActiveTab('manager')} />
+                <PaymentsPanel pool={pool} user={user} entries={entries} members={members} isManager={isManager} onManagePayments={() => setActiveTab('manager', 'members')} />
               )}
 
               {/* TAB 5: COMMISSIONER */}
@@ -1085,6 +1090,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   user={user}
                   pickCounts={weekReveal?.counts}
                   onSelectTab={(tab) => setActiveTab(tab)}
+                  initialSection={searchParams.get('section')}
                 />
               )}
             </>

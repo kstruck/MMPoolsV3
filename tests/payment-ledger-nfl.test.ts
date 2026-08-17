@@ -12,11 +12,33 @@ const code = (p: string) => read(p).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\
  */
 describe('PaymentLedgerNFL — wiring (T5)', () => {
   const ledger = code('src/components/NFLPoolDashboard/PaymentLedgerNFL.tsx');
-  it('is mounted on the NFL manager view beside (not instead of) Record Payouts', () => {
+  it('is mounted on the NFL manager view beside (not instead of) Record Payouts, and owns the fee toggle', () => {
     const mgr = code('src/components/NFLPoolDashboard/NFLManagerView.tsx');
     expect(mgr).toContain("import { PaymentLedgerNFL } from './PaymentLedgerNFL'");
-    expect(mgr).toContain('<PaymentLedgerNFL pool={pool} members={members} entries={entries} />');
+    expect(mgr).toContain('<PaymentLedgerNFL pool={pool} members={members} entries={entries} onTogglePaid={handleTogglePayment} onSettleRebuys={handleSettleRebuys} onSavePaidDetails={handleSavePaidDetails} savingFeeUid={isSavingPayment} />');
     expect(mgr).toContain('<RecordPayoutsCard pool={pool} entries={entries} />');
+    // The roster card is picks / remind / co-comm only — the fee toggle moved INTO the ledger (Kevin, 2026-08-16).
+    expect(mgr).not.toMatch(/onClick=\{\(\) => handleTogglePayment\(row\.uid/);
+    // "View full ledger" on the Overview and "Open Payment Ledger" on the member Payments tab both land on it.
+    expect(mgr).toContain("onOpenLedger={() => setCommishTab('members')}");
+    const dash = code('src/components/NFLPoolDashboard/NFLPoolDashboard.tsx');
+    expect(dash).toContain("onManagePayments={() => setActiveTab('manager', 'members')}");
+    expect(dash).toContain("initialSection={searchParams.get('section')}");
+    // The modal's method/date/note editor is folded into the ledger's fee cell; the writer is the same callable, details ride only with PAID.
+    expect(mgr).toContain('dbService.setPaidStatus(pool.id, uid, true, details)');
+    expect(ledger).toContain('onSavePaidDetails(r.uid, { paymentMethod: draft.method');
+    const bento = code('src/components/NFLPoolDashboard/NFLManagerBentoDashboard.tsx');
+    expect(bento).toContain('onClick={onOpenLedger}');
+    expect(bento).not.toContain('Advanced Payment Ledger');
+  });
+  it('is one spreadsheet: a column per scored week, fee paid checkbox, totals', () => {
+    expect(ledger).toContain('nflWeekChip(seasonType, week)');
+    expect(ledger).toContain("aria-label={`${r.name} entry fee paid`}");
+    expect(ledger).toContain('onTogglePaid?.(r.uid, r.paidStatus');
+    expect(ledger).toMatch(/Owed in[\s\S]*Paid in[\s\S]*Owed out[\s\S]*Paid out/);
+    // Weeks scored before weekly prizes existed name the fix (rescore), not a bare empty state.
+    expect(ledger).toContain('scored before weekly prizes existed');
+    expect(ledger).toContain('Score Week');
   });
   it('reads ONLY published recap prizes (weeklyPlaces × weeklyPrize) — never re-ranks or re-prices', () => {
     expect(ledger).toContain('recap.weeklyPlaces');
@@ -35,7 +57,7 @@ describe('PaymentLedgerNFL — wiring (T5)', () => {
     expect(ledger).toContain('settled: wasSettled, staleAwardId: r.live.id');
     expect(ledger).toContain('STALE');
   });
-  it('fee status comes from the Member Record, read-only here (setPaidStatus stays where it is)', () => {
+  it('fee status comes from the Member Record; the WRITER (setPaidStatus) stays in NFLManagerView and arrives as a prop', () => {
     expect(ledger).toContain('buildPoolRoster({ pool, members, entries })');
     expect(ledger).toContain("r.paidStatus === 'PAID'");
     expect(ledger).not.toContain('setPaidStatus');
