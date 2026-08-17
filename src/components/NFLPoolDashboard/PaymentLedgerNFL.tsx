@@ -329,7 +329,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
   const submitOther = async () => {
     if (!otherDraft) return;
     const amount = Number(otherDraft.amount);
-    if (!otherDraft.uid || !Number.isFinite(amount) || (otherDraft.kind === 'BONUS' && amount <= 0)) { setError('Pick a member and a whole-dollar amount (bonus > 0; an adjustment may be negative).'); return; }
+    if (!otherDraft.uid || !Number.isInteger(amount) || (otherDraft.kind === 'BONUS' && amount <= 0)) { setError('Pick a member and a WHOLE-dollar amount (bonus > 0; an adjustment may be negative).'); return; }
     setBusy('other'); setError(null);
     try {
       await dbService.recordPoolPayouts(pool.id, [{ uid: otherDraft.uid, amount, kind: otherDraft.kind, settled: otherDraft.settled, ...(otherDraft.note.trim() ? { note: otherDraft.note.trim() } : {}) }]);
