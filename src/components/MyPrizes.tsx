@@ -37,11 +37,14 @@ export const MyPrizes: React.FC<Props> = ({ pool, uid }) => {
   const [priv, setPriv] = useState<Priv[]>([]);
   const [loaded, setLoaded] = useState({ recaps: false, records: false, priv: false });
   const [privUnavailable, setPrivUnavailable] = useState(false);
+  // "No prizes for you" and "could not read the prizes" are different facts;
+  // an errored public listener must not render the definitive empty state (qodo #2 on #465).
+  const [publicUnavailable, setPublicUnavailable] = useState(false);
 
   useEffect(() => {
-    setRecaps([]); setRecords([]); setPriv([]); setLoaded({ recaps: false, records: false, priv: false }); setPrivUnavailable(false);
-    const u1 = dbService.subscribeToWeeklyRecaps(pool.id, rows => { setRecaps(rows); setLoaded(l => ({ ...l, recaps: true })); });
-    const u2 = dbService.subscribeToPayoutRecords(pool.id, rows => { setRecords(rows as Rec[]); setLoaded(l => ({ ...l, records: true })); });
+    setRecaps([]); setRecords([]); setPriv([]); setLoaded({ recaps: false, records: false, priv: false }); setPrivUnavailable(false); setPublicUnavailable(false);
+    const u1 = dbService.subscribeToWeeklyRecaps(pool.id, rows => { setRecaps(rows); setLoaded(l => ({ ...l, recaps: true })); }, () => setPublicUnavailable(true));
+    const u2 = dbService.subscribeToPayoutRecords(pool.id, rows => { setRecords(rows as Rec[]); setLoaded(l => ({ ...l, records: true })); }, () => setPublicUnavailable(true));
     // OWN private rows only (K7) — the query is uid-scoped, so rules admit it for any member.
     const u3 = dbService.subscribeToPayoutRecordsPrivate(pool.id, rows => { setPriv(rows as Priv[]); setLoaded(l => ({ ...l, priv: true })); }, uid, () => setPrivUnavailable(true));
     return () => { u1(); u2(); u3(); };
@@ -102,11 +105,12 @@ export const MyPrizes: React.FC<Props> = ({ pool, uid }) => {
           </span>
         )}
       </div>
-      {!ready && <p className="text-sm font-body text-faint">Loading…</p>}
-      {ready && rows.length === 0 && (
+      {publicUnavailable && <p className="text-sm font-body text-brandred-600 dark:text-brandred-500">Prize data unavailable right now — could not read the recaps or payout records. Reload the page; if it persists, tell your commissioner.</p>}
+      {!publicUnavailable && !ready && <p className="text-sm font-body text-faint">Loading…</p>}
+      {!publicUnavailable && ready && rows.length === 0 && (
         <p className="text-sm font-body text-muted">No prizes published for you yet. Weekly prizes appear here after a week is scored on a pool with a weekly pot; the season prize after finalization.</p>
       )}
-      {ready && rows.length > 0 && (
+      {!publicUnavailable && ready && rows.length > 0 && (
         <ul className="divide-y divide-line">
           {rows.map(r => (
             <li key={r.key} className="py-2 flex items-center justify-between gap-3 text-[13px] font-body">

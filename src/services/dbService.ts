@@ -1701,13 +1701,16 @@ export const dbService = {
     },
 
     // Payout Records (ADR 0005 Phase 4) — who-won-what truth, participant-readable.
-    subscribeToPayoutRecords: (poolId: string, callback: (records: any[]) => void) => {
+    // `onError` (optional): a caller that renders an empty state must be able to
+    // tell "no records" from "could not read records" (qodo #2 on #465). Without
+    // it the legacy behaviour stands: an error delivers [] to `callback`.
+    subscribeToPayoutRecords: (poolId: string, callback: (records: any[]) => void, onError?: (error: unknown) => void) => {
         const q = query(collection(db, 'pools', poolId, 'payoutRecords'));
         return onSnapshot(q, (snap) => {
             callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         }, (error) => {
             logger.error("Error subscribing to payout records:", error);
-            callback([]);
+            if (onError) onError(error); else callback([]);
         });
     },
 
@@ -1757,14 +1760,15 @@ export const dbService = {
         });
     },
 
-    subscribeToWeeklyRecaps: (poolId: string, callback: (recaps: WeeklyRecap[]) => void) => {
+    // `onError` (optional) — same reason as subscribeToPayoutRecords above.
+    subscribeToWeeklyRecaps: (poolId: string, callback: (recaps: WeeklyRecap[]) => void, onError?: (error: unknown) => void) => {
         const q = query(collection(db, "pools", poolId, "weekly_recaps"), orderBy("week", "asc"));
         return onSnapshot(q, (snapshot) => {
             const recaps = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as WeeklyRecap));
             callback(recaps);
         }, (error) => {
             logger.error("Error subscribing to Weekly Recaps:", error);
-            callback([]);
+            if (onError) onError(error); else callback([]);
         });
     },
 
