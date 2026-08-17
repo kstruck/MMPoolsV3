@@ -68,14 +68,18 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
   // the boxes instead (qodo #10 on #456).
   const [privUnavailable, setPrivUnavailable] = useState(false);
   const [privLoaded, setPrivLoaded] = useState(false);
+  // Prize totals are unknown until BOTH public listeners have delivered once —
+  // "$0" before load is a plausible-looking substitute, not a figure (qodo #1 on #460).
+  const [recapsLoaded, setRecapsLoaded] = useState(false);
+  const [recordsLoaded, setRecordsLoaded] = useState(false);
 
   useEffect(() => {
     // Pool switch without remount: drop the previous pool's data before the
     // new snapshots arrive — award ids are deterministic and could collide
     // across pools (codex r9).
-    setRecaps([]); setRecords([]); setPriv([]); setPrivLoaded(false); setPrivUnavailable(false); setError(null);
-    const u1 = dbService.subscribeToWeeklyRecaps(pool.id, setRecaps);
-    const u2 = dbService.subscribeToPayoutRecords(pool.id, setRecords as never);
+    setRecaps([]); setRecords([]); setPriv([]); setPrivLoaded(false); setPrivUnavailable(false); setError(null); setRecapsLoaded(false); setRecordsLoaded(false);
+    const u1 = dbService.subscribeToWeeklyRecaps(pool.id, (rows) => { setRecaps(rows); setRecapsLoaded(true); });
+    const u2 = dbService.subscribeToPayoutRecords(pool.id, (rows) => { setRecords(rows as Rec[]); setRecordsLoaded(true); });
     const u3 = dbService.subscribeToPayoutRecordsPrivate(pool.id, (rows) => { setPriv(rows as never); setPrivUnavailable(false); setPrivLoaded(true); }, undefined, () => setPrivUnavailable(true));
     return () => { u1(); u2(); u3(); };
   }, [pool.id]);
@@ -254,7 +258,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
   const renderPrizeCell = (entryId: string, recap: WeeklyRecap) => {
     const r = prizeByCell.get(`${entryId}|${recap.week}`);
     if (!r) {
-      if (!recap.weeklyPlaces) return <span className="text-faint" title={recap.weeklyPlacesError ? `Not published: ${recap.weeklyPlacesError}` : 'Scored before weekly prizes existed — Score Week again to publish.'}>?</span>;
+      if (!recap.weeklyPlaces) return <span className="text-faint text-[9px] uppercase" title={recap.weeklyPlacesError ? `Not published: ${recap.weeklyPlacesError}` : 'Scored before weekly prizes existed — Score Week again to publish.'}>unpublished</span>;
       return <span className="text-faint">—</span>;
     }
     const disabled = busy === r.key || privUnavailable || !privLoaded;
@@ -362,8 +366,9 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-[11px] font-body border-t border-line pt-3">
         <span className="text-muted">Owed in <span className="num font-bold text-[color:var(--text)]">{money(totals.owedIn)}</span></span>
         <span className="text-muted">Paid in <span className="num font-bold text-green-700 dark:text-green-400">{money(totals.paidIn)}</span></span>
-        <span className="text-muted">Owed out <span className="num font-bold text-[color:var(--text)]">{money(totals.owedOut)}</span></span>
-        <span className="text-muted">Paid out <span className="num font-bold text-green-700 dark:text-green-400">{money(totals.paidOut)}</span></span>
+        {/* Prize totals: unknown until recaps + records + settlement have loaded (never a placeholder $0). */}
+        <span className="text-muted">Owed out <span className="num font-bold text-[color:var(--text)]">{recapsLoaded && recordsLoaded ? money(totals.owedOut) : <span className="text-faint" title="Loading…">—</span>}</span></span>
+        <span className="text-muted">Paid out <span className="num font-bold text-green-700 dark:text-green-400">{recapsLoaded && recordsLoaded && privLoaded ? money(totals.paidOut) : <span className="text-faint" title={privUnavailable ? 'Settlement state unavailable' : 'Loading…'}>—</span>}</span></span>
       </div>
 
       {pool.type === 'NFL_SURVIVOR' ? (
