@@ -1,5 +1,6 @@
 import type { PayoutSettings } from './index';
 import type { WeeklyPlace, WeeklyPrizeSnapshot } from '@shared/weeklyPrizes';
+import type { SeasonPlace, SeasonPrizeSnapshot } from '@shared/seasonPrizes';
 import type { WeeklyTiebreaker } from '@shared/nflTiebreaker';
 
 export interface NFLGame {
@@ -80,6 +81,16 @@ export interface NFLPickemPool {
   status?: 'OPEN' | 'LOCKED' | 'LIVE' | 'FINAL' | 'CANCELED' | 'COMPLETED' | 'archived';
   isPublic?: boolean;
   entryCount?: number;
+  /**
+   * Published at finalization (PLAN-WEEKLY-PRIZES step 3): the season ranking
+   * after the §2c tie cascade + the frozen season prize (`null` = unpriced), or
+   * `seasonPlacesError` when the place list was malformed (fail-closed). Server-
+   * owned (firestore.rules protectedFieldsUnchanged); recordPoolPayouts binds
+   * season PLACE awards to `seasonPlaces`.
+   */
+  seasonPlaces?: SeasonPlace[];
+  seasonPrize?: SeasonPrizeSnapshot | null;
+  seasonPlacesError?: string;
 
   settings: {
     /** PLAN-MULTI-ENTRY D8: entries one player may hold. Absent on every pool created before the setting ⇒ 1; read via `effectiveMaxEntriesPerUser` (`@shared/multiEntry`), never raw. Raise-only after create. */
@@ -151,6 +162,16 @@ export interface NFLSurvivorPool {
   status?: 'OPEN' | 'LOCKED' | 'LIVE' | 'FINAL' | 'CANCELED' | 'COMPLETED' | 'archived';
   isPublic?: boolean;
   entryCount?: number;
+  /**
+   * Published at finalization (PLAN-WEEKLY-PRIZES step 3): the season ranking
+   * after the §2c tie cascade + the frozen season prize (`null` = unpriced), or
+   * `seasonPlacesError` when the place list was malformed (fail-closed). Server-
+   * owned (firestore.rules protectedFieldsUnchanged); recordPoolPayouts binds
+   * season PLACE awards to `seasonPlaces`.
+   */
+  seasonPlaces?: SeasonPlace[];
+  seasonPrize?: SeasonPrizeSnapshot | null;
+  seasonPlacesError?: string;
 
   settings: {
     /** PLAN-MULTI-ENTRY D8: entries one player may hold. Absent on every pool created before the setting ⇒ 1; read via `effectiveMaxEntriesPerUser` (`@shared/multiEntry`), never raw. Raise-only after create. */
@@ -214,6 +235,16 @@ export interface NFLMarginPool {
   status?: 'OPEN' | 'LOCKED' | 'LIVE' | 'FINAL' | 'CANCELED' | 'COMPLETED' | 'archived';
   isPublic?: boolean;
   entryCount?: number;
+  /**
+   * Published at finalization (PLAN-WEEKLY-PRIZES step 3): the season ranking
+   * after the §2c tie cascade + the frozen season prize (`null` = unpriced), or
+   * `seasonPlacesError` when the place list was malformed (fail-closed). Server-
+   * owned (firestore.rules protectedFieldsUnchanged); recordPoolPayouts binds
+   * season PLACE awards to `seasonPlaces`.
+   */
+  seasonPlaces?: SeasonPlace[];
+  seasonPrize?: SeasonPrizeSnapshot | null;
+  seasonPlacesError?: string;
 
   settings: {
     /** PLAN-MULTI-ENTRY D8: entries one player may hold. Absent on every pool created before the setting ⇒ 1; read via `effectiveMaxEntriesPerUser` (`@shared/multiEntry`), never raw. Raise-only after create. */

@@ -79,6 +79,121 @@ const isSettledPool = (pool: any): boolean =>
   !!pool.finalizedAt || pool.status === 'FINAL' || pool.status === 'COMPLETED' || pool.isFinal === true;
 
 
+type PublishedRow = { entryId: string; userId: string; rank: number; prize?: number };
+type Planned = { awardRef: FirebaseFirestore.DocumentReference; a: AwardInput; supersedes?: string; write: boolean };
+
+/**
+ * Bind a PLACE award to the row a publication holds for its entry (the recap's
+ * `weeklyPlaces` or the pool's `seasonPlaces`): the entry must be listed and
+ * owned by `uid`, `place` (when given) must be the published rank, `amount`
+ * must EQUAL the published prize — or, WITH a `staleAwardId`, the entry may have
+ * dropped out of the paid places, in which case only `amount: 0` (a REVERSAL)
+ * is accepted. Returns the row the award binds to (rank/prize as published, or
+ * a synthetic zero row for a reversal). Throws HttpsError otherwise.
+ */
+function bindToPublishedRow(a: AwardInput, foundRow: PublishedRow | undefined, scope: string): PublishedRow {
+  // A REVERSAL (codex r6 on T4): after a rescore / re-finalization the entry may
+  // have dropped out of the paid places entirely (or below any prize). The old
+  // award is still live and counts in Profit; the ledger corrects it by
+  // re-recording a ZERO award via staleAwardId, which supersedes the old one.
+  // Only this path accepts amount 0 / a missing row, and only WITH a stale id.
+  const reversal = a.staleAwardId !== undefined && (foundRow === undefined || (foundRow.prize ?? 0) <= 0);
+  if (reversal) {
+    if (a.amount !== 0) throw new HttpsError('failed-precondition', `NO_PRIZE: entry ${a.entryId} has no prize in ${scope} any more — re-record with amount 0 to reverse the old award.`);
+    if (foundRow && foundRow.userId !== a.uid) throw new HttpsError('failed-precondition', `ENTRY_NOT_OWNED: entry ${a.entryId} is not owned by ${a.uid}.`);
+  }
+  const row: PublishedRow | undefined = reversal
+    ? { entryId: a.entryId!, userId: a.uid, rank: foundRow?.rank ?? 0, prize: 0 }
+    : foundRow;
+  if (!row) throw new HttpsError('failed-precondition', `${scope.startsWith('week') ? 'NOT_IN_WEEKLY_PLACES' : 'NOT_IN_SEASON_PLACES'}: entry ${a.entryId} is not in ${scope}'s published places.`);
+  if (row.userId !== a.uid) throw new HttpsError('failed-precondition', `ENTRY_NOT_OWNED: entry ${a.entryId} is not owned by ${a.uid}.`);
+  if (!reversal) {
+    if (a.place !== undefined && a.place !== row.rank) throw new HttpsError('failed-precondition', `PLACE_MISMATCH: entry ${a.entryId} finished ${row.rank} in ${scope}, not ${a.place}.`);
+    const frozenPrize = row.prize ?? 0;
+    if (frozenPrize <= 0) throw new HttpsError('failed-precondition', `NO_PRIZE: entry ${a.entryId} has no prize at place ${row.rank} in ${scope}.`);
+    if (a.amount !== frozenPrize) throw new HttpsError('failed-precondition', `AMOUNT_MISMATCH: the published prize for entry ${a.entryId} in ${scope} is $${frozenPrize}; record a BONUS/ADJUSTMENT for a different figure.`);
+  }
+  a.place = row.rank;
+  return row;
+}
+
+/**
+ * Plan ONE bound PLACE award against the live record set for its (entry, scope):
+ * idempotent at the deterministic id; refuses a plain record while a mismatched
+ * live award exists (LIVE_AWARD_EXISTS — the ledger must re-record via
+ * staleAwardId); K12 re-record by supersession walks the chain from the stale
+ * id to its live end. `idFor(k)` yields the deterministic id, `~k` for k ≥ 2.
+ * Shared by the weekly (recap-bound) and season (pool-bound) awards.
+ */
+async function planBoundAward(
+  tx: FirebaseFirestore.Transaction,
+  recordsCol: FirebaseFirestore.CollectionReference,
+  a: AwardInput,
+  row: PublishedRow,
+  liveDocs: FirebaseFirestore.QueryDocumentSnapshot[],
+  idFor: (k: number) => string,
+  scope: string,
+): Promise<Planned> {
+  if (liveDocs.length > 1) throw new HttpsError('failed-precondition', `LEDGER_INCONSISTENT: more than one live award for entry ${a.entryId} in ${scope}.`);
+  const live = liveDocs[0];
+  // "Matches" = same place and same amount as the publication now says (the id may carry a ~k suffix after earlier corrections).
+  const liveMatches = live !== undefined && Number((live.data() as any).place) === row.rank && Number((live.data() as any).amount) === a.amount;
+  const freeSlot = async (supersedes?: string): Promise<Planned> => {
+    let k = 1;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const candidate = recordsCol.doc(idFor(k));
+      if (!(await tx.get(candidate)).exists) return { awardRef: candidate, a, ...(supersedes ? { supersedes } : {}), write: true };
+      k += 1;
+      if (k > 50) throw new HttpsError('failed-precondition', 'RE_RECORD_CHAIN_TOO_LONG');
+    }
+  };
+
+  if (!a.staleAwardId) {
+    // Idempotent: the same win is already recorded — return it, write nothing.
+    if (live && liveMatches) return { awardRef: live.ref, a, write: false };
+    // The publication moved and a live award at the OLD place/amount exists — a
+    // plain record would leave two live records and double Profit (codex r1 on
+    // T4). The ledger must re-record via staleAwardId.
+    if (live) throw new HttpsError('failed-precondition', `LIVE_AWARD_EXISTS: entry ${a.entryId} already has a live award for ${scope} (${live.id}); re-record it with staleAwardId.`);
+    // Nothing live: create at the deterministic id (a superseded doc may already
+    // sit at the base after an earlier chain — then take the next k).
+    return freeSlot();
+  }
+
+  // K12 re-record by supersession. Resolve the FULL chain from the stale id to
+  // its live end (codex r1 on T4): a stale id that was already re-recorded —
+  // possibly more than once — returns the current live award, writes nothing.
+  let cursor = await tx.get(recordsCol.doc(a.staleAwardId));
+  if (!cursor.exists) throw new HttpsError('invalid-argument', `staleAwardId ${a.staleAwardId} not found.`);
+  const staleData = cursor.data() as any;
+  if (staleData.entryId !== a.entryId || (staleData.week ?? undefined) !== (a.week ?? undefined)) {
+    throw new HttpsError('invalid-argument', `staleAwardId ${a.staleAwardId} is not a bound award for entry ${a.entryId} in ${scope}.`);
+  }
+  let hops = 0;
+  while ((cursor.data() as any)?.supersededBy && hops < 50) {
+    cursor = await tx.get(recordsCol.doc(String((cursor.data() as any).supersededBy)));
+    hops += 1;
+  }
+  // A bounded walk that did not reach a live end must not be treated as live (codex r4 on T4).
+  if ((cursor.data() as any)?.supersededBy) throw new HttpsError('failed-precondition', 'RE_RECORD_CHAIN_TOO_LONG');
+  const chainLive = cursor;
+  if (chainLive.id !== a.staleAwardId) {
+    // Someone already re-recorded past the id the caller clicked. If the live
+    // end already matches the publication, return it (write nothing); if it does
+    // not — a further rescore — REFUSE and name the live id (codex r2 on T4).
+    const liveData = chainLive.data() as any;
+    if (Number(liveData.place) === row.rank && Number(liveData.amount) === a.amount) return { awardRef: chainLive.ref, a, write: false };
+    throw new HttpsError('failed-precondition', `STALE_AWARD_SUPERSEDED: ${a.staleAwardId} was already re-recorded; the live award is ${chainLive.id} and it no longer matches — re-record with staleAwardId=${chainLive.id}.`);
+  }
+  // The clicked id IS the live award and it already matches — nothing to
+  // correct; a retry / second tab must not grow the chain (qodo #8 on #455).
+  if (liveMatches && live && live.id === chainLive.id) return { awardRef: chainLive.ref, a, write: false };
+  // Supersede the live stale award with a fresh record at the current base (the
+  // base itself when the place changed and it is free, else ~k).
+  return freeSlot(a.staleAwardId);
+}
+
 export const recordPoolPayouts = onCall(async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Must be logged in.');
   const actorUid = request.auth.uid;
@@ -122,7 +237,8 @@ export const recordPoolPayouts = onCall(async (request) => {
     if (week !== undefined && a.kind !== 'PLACE') throw new HttpsError('invalid-argument', `awards[${i}].week is only valid on a PLACE award.`);
     if (week !== undefined && (typeof a.entryId !== 'string' || !a.entryId)) throw new HttpsError('invalid-argument', `awards[${i}].entryId is required on a weekly award.`);
     if (week !== undefined && a.supersedes !== undefined) throw new HttpsError('invalid-argument', `awards[${i}]: a weekly award re-records via staleAwardId, not supersedes.`);
-    if (week === undefined && a.staleAwardId !== undefined) throw new HttpsError('invalid-argument', `awards[${i}]: staleAwardId is only valid on a weekly award — a season award corrects via supersedes.`);
+    if (week === undefined && a.staleAwardId !== undefined && !boundSeason) throw new HttpsError('invalid-argument', `awards[${i}]: staleAwardId is only valid on a weekly award or a bound season award — a free-form season award corrects via supersedes.`);
+    if (boundSeason && a.supersedes !== undefined) throw new HttpsError('invalid-argument', `awards[${i}]: a bound season award re-records via staleAwardId, not supersedes.`);
     return {
       uid: a.uid,
       entryId: typeof a.entryId === 'string' ? a.entryId : undefined,
@@ -169,7 +285,6 @@ export const recordPoolPayouts = onCall(async (request) => {
   const recordsCol = poolRef.collection('payoutRecords');
   const privateCol = poolRef.collection('payoutRecordsPrivate');
 
-  type Planned = { awardRef: FirebaseFirestore.DocumentReference; a: AwardInput; supersedes?: string; write: boolean };
   const planned = await db.runTransaction(async (tx): Promise<Planned[]> => {
     const out: Planned[] = [];
     // ---- reads ----
@@ -191,31 +306,20 @@ export const recordPoolPayouts = onCall(async (request) => {
       // Once the pool carries `seasonPlaces` (finalization publishes them), a
       // PLACE award that names an ENTRY is bound to that list exactly as a weekly
       // award is bound to its recap: the entry must hold a prize, `place` is the
-      // published rank, `amount` EQUALS the published prize, and the id is
-      // DETERMINISTIC (`seasonAwardId`) so a double-click cannot double-pay.
-      // Season places are published once (finalization is terminal), so there is
-      // no rescore path here — a different figure is a BONUS/ADJUSTMENT.
-      // PLACE awards WITHOUT an entryId (the Record Payouts card) keep the free path below.
+      // published rank, `amount` EQUALS the published prize, the id is
+      // DETERMINISTIC (`seasonAwardId`), and after a re-finalization (a rescored
+      // FINAL pool republishes the places) a live award that no longer matches is
+      // re-recorded by supersession via `staleAwardId` — the same K12 rule as the
+      // weekly half (codex r3 on #464). PLACE awards WITHOUT an entryId (the Record
+      // Payouts card) keep the free path below.
       if (a.week === undefined && a.kind === 'PLACE' && a.entryId && seasonPublished) {
         if (!seasonPlaces) throw new HttpsError('failed-precondition', 'SEASON_NOT_PUBLISHED: the pool no longer carries published season places.');
-        const row = seasonPlaces.find(r => r.entryId === a.entryId);
-        if (!row) throw new HttpsError('failed-precondition', `NOT_IN_SEASON_PLACES: entry ${a.entryId} is not in the published season places.`);
-        if (row.userId !== a.uid) throw new HttpsError('failed-precondition', `ENTRY_OWNER_MISMATCH: entry ${a.entryId} is not owned by ${a.uid}.`);
-        if (a.place !== undefined && a.place !== row.rank) throw new HttpsError('failed-precondition', `PLACE_MISMATCH: entry ${a.entryId} finished ${row.rank}, not ${a.place}.`);
-        const frozenPrize = row.prize ?? 0;
-        if (frozenPrize <= 0) throw new HttpsError('failed-precondition', `NO_PRIZE: entry ${a.entryId} has no season prize at place ${row.rank}.`);
-        if (a.amount !== frozenPrize) throw new HttpsError('failed-precondition', `AMOUNT_MISMATCH: the published season prize for entry ${a.entryId} is $${frozenPrize}; record a BONUS/ADJUSTMENT for a different figure.`);
-        if (a.supersedes !== undefined) throw new HttpsError('invalid-argument', `awards[]: a bound season award is idempotent at its deterministic id; nothing to supersede.`);
-        a.place = row.rank;
-        const awardRef = recordsCol.doc(seasonAwardId(a.entryId, row.rank));
-        const existing = await tx.get(awardRef);
-        if (existing.exists) {
-          // Idempotent: the same win is already recorded — return it, write nothing
-          // (settlement flips via setPayoutSettled).
-          out.push({ awardRef, a, write: false });
-          continue;
-        }
-        out.push({ awardRef, a, write: true });
+        const row = bindToPublishedRow(a, seasonPlaces.find(r => r.entryId === a.entryId), 'season');
+        const liveSnap = await tx.get(recordsCol.where('entryId', '==', a.entryId));
+        // Season awards carry no `week`; the deterministic prefix keeps free-form
+        // (random-id) season PLACE records out of the live set.
+        const liveDocs = liveSnap.docs.filter(d => { const x = d.data() as any; return !x.supersededBy && x.kind === 'PLACE' && x.week === undefined && d.id.startsWith('season-'); });
+        out.push(await planBoundAward(tx, recordsCol, a, row, liveDocs, k => seasonAwardId(a.entryId!, row.rank, k), 'season'));
         continue;
       }
       if (a.week === undefined) {
@@ -235,112 +339,12 @@ export const recordPoolPayouts = onCall(async (request) => {
       if (!places || !places.length || !prize) {
         throw new HttpsError('failed-precondition', `WEEK_NOT_PUBLISHED: week ${a.week} has no published weekly places/prize yet.`);
       }
-      const foundRow = places.find(p => p.entryId === a.entryId);
-      // A REVERSAL (codex r6): after a rescore the entry may have dropped out of
-      // the paid places entirely (or below any prize). The old award is still
-      // live and counts in Profit; the ledger corrects it by re-recording a
-      // ZERO weekly award via staleAwardId, which supersedes the old one. Only
-      // this path accepts amount 0 / a missing row, and only WITH a stale id.
-      const reversal = a.staleAwardId !== undefined && (foundRow === undefined || (foundRow.prize ?? 0) <= 0);
-      if (reversal) {
-        if (a.amount !== 0) throw new HttpsError('failed-precondition', `NO_PRIZE: entry ${a.entryId} has no prize in week ${a.week} any more — re-record with amount 0 to reverse the old award.`);
-        if (foundRow && foundRow.userId !== a.uid) throw new HttpsError('failed-precondition', `ENTRY_NOT_OWNED: entry ${a.entryId} is not owned by ${a.uid}.`);
-      }
-      const row = reversal
-        ? { entryId: a.entryId!, userId: a.uid, rank: foundRow?.rank ?? 0, prize: 0 }
-        : foundRow;
-      if (!row) throw new HttpsError('failed-precondition', `NOT_IN_WEEKLY_PLACES: entry ${a.entryId} is not in week ${a.week}'s published places.`);
-      if (row.userId !== a.uid) throw new HttpsError('failed-precondition', `ENTRY_NOT_OWNED: entry ${a.entryId} is not owned by ${a.uid}.`);
-      if (!reversal) {
-        if (a.place !== undefined && a.place !== row.rank) throw new HttpsError('failed-precondition', `PLACE_MISMATCH: entry ${a.entryId} finished ${row.rank} in week ${a.week}, not ${a.place}.`);
-        const frozenPrize = row.prize ?? 0;
-        if (frozenPrize <= 0) throw new HttpsError('failed-precondition', `NO_PRIZE: entry ${a.entryId} has no prize at place ${row.rank} in week ${a.week}.`);
-        if (a.amount !== frozenPrize) throw new HttpsError('failed-precondition', `AMOUNT_MISMATCH: the published prize for entry ${a.entryId} in week ${a.week} is $${frozenPrize}; record a BONUS/ADJUSTMENT for a different figure.`);
-      }
-      a.place = row.rank;
-
-      const base = weeklyAwardId(a.week, a.entryId!, row.rank);
+      const row = bindToPublishedRow(a, places.find(p => p.entryId === a.entryId), `week ${a.week}`);
       // The LIVE weekly award for this (entry, week), if any — read in-tx. There
       // is at most one by construction (every path below keeps it so).
       const liveSnap = await tx.get(recordsCol.where('entryId', '==', a.entryId).where('week', '==', a.week));
       const liveDocs = liveSnap.docs.filter(d => !(d.data() as any).supersededBy);
-      if (liveDocs.length > 1) throw new HttpsError('failed-precondition', `LEDGER_INCONSISTENT: more than one live weekly award for entry ${a.entryId} week ${a.week}.`);
-      const live = liveDocs[0];
-      // "Matches" = same place and same amount as the recap now says (the id may carry a ~k suffix after earlier corrections).
-      const liveMatches = live !== undefined && Number((live.data() as any).place) === row.rank && Number((live.data() as any).amount) === a.amount;
-
-      if (!a.staleAwardId) {
-        if (live && liveMatches) {
-          // Idempotent: the same win is already recorded — return it, write nothing.
-          out.push({ awardRef: live.ref, a, write: false });
-          continue;
-        }
-        if (live) {
-          // The recap moved (rescore) and a live award at the OLD place/amount
-          // exists — a plain record would leave two live records and double
-          // Profit (codex r1). The ledger must re-record via staleAwardId.
-          throw new HttpsError('failed-precondition', `LIVE_AWARD_EXISTS: entry ${a.entryId} already has a live weekly award for week ${a.week} (${live.id}); re-record it with staleAwardId.`);
-        }
-        // Nothing live: create at the deterministic id (a superseded doc may
-        // already sit at `base` after an earlier chain — then take the next k).
-        let k = 1;
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-          const candidate = recordsCol.doc(weeklyAwardId(a.week, a.entryId!, row.rank, k));
-          if (!(await tx.get(candidate)).exists) { out.push({ awardRef: candidate, a, write: true }); break; }
-          k += 1;
-          if (k > 50) throw new HttpsError('failed-precondition', 'RE_RECORD_CHAIN_TOO_LONG');
-        }
-        continue;
-      }
-
-      // K12 re-record by supersession. Resolve the FULL chain from the stale id
-      // to its live end (codex r1): a stale id that was already re-recorded —
-      // possibly more than once — returns the current live award, writes nothing.
-      let cursor = await tx.get(recordsCol.doc(a.staleAwardId));
-      if (!cursor.exists) throw new HttpsError('invalid-argument', `staleAwardId ${a.staleAwardId} not found.`);
-      const staleData = cursor.data() as any;
-      if (staleData.entryId !== a.entryId || staleData.week !== a.week) {
-        throw new HttpsError('invalid-argument', `staleAwardId ${a.staleAwardId} is not a weekly award for entry ${a.entryId} week ${a.week}.`);
-      }
-      let hops = 0;
-      while ((cursor.data() as any)?.supersededBy && hops < 50) {
-        cursor = await tx.get(recordsCol.doc(String((cursor.data() as any).supersededBy)));
-        hops += 1;
-      }
-      // A bounded walk that did not reach a live end must not be treated as live (codex r4).
-      if ((cursor.data() as any)?.supersededBy) throw new HttpsError('failed-precondition', 'RE_RECORD_CHAIN_TOO_LONG');
-      const chainLive = cursor;
-      if (chainLive.id !== a.staleAwardId) {
-        // Someone already re-recorded past the id the caller clicked. If the
-        // live end already matches the recap, return it (write nothing); if it
-        // does not — a further rescore — REFUSE and name the live id, so the
-        // caller re-records against what is actually live rather than being
-        // told a stale figure was corrected (codex r2 on T4).
-        const liveData = chainLive.data() as any;
-        if (Number(liveData.place) === row.rank && Number(liveData.amount) === a.amount) {
-          out.push({ awardRef: chainLive.ref, a, write: false });
-          continue;
-        }
-        throw new HttpsError('failed-precondition', `STALE_AWARD_SUPERSEDED: ${a.staleAwardId} was already re-recorded; the live award is ${chainLive.id} and it no longer matches the recap — re-record with staleAwardId=${chainLive.id}.`);
-      }
-      // The clicked id IS the live award and it already matches the recap —
-      // nothing to correct; a retry / second tab must not grow the chain
-      // (qodo #8 on #455).
-      if (liveMatches && live && live.id === chainLive.id) {
-        out.push({ awardRef: chainLive.ref, a, write: false });
-        continue;
-      }
-      // Supersede the live stale award with a fresh record at the current base
-      // (the base itself when the place changed and it is free, else ~k).
-      let k = 1;
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const candidate = recordsCol.doc(weeklyAwardId(a.week, a.entryId!, row.rank, k));
-        if (!(await tx.get(candidate)).exists) { out.push({ awardRef: candidate, a, supersedes: a.staleAwardId, write: true }); break; }
-        k += 1;
-        if (k > 50) throw new HttpsError('failed-precondition', 'RE_RECORD_CHAIN_TOO_LONG');
-      }
+      out.push(await planBoundAward(tx, recordsCol, a, row, liveDocs, k => weeklyAwardId(a.week!, a.entryId!, row.rank, k), `week ${a.week}`));
     }
     // ---- writes ----
     let wrote = 0;

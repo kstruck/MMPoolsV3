@@ -65,10 +65,10 @@ describe('PaymentLedgerNFL — wiring (T5)', () => {
   });
   it('Season $ column (PLAN-WEEKLY-PRIZES step 3): reads ONLY the published pool.seasonPlaces prize; the box records a season PLACE award (entryId, no week) or flips settlement', () => {
     expect(ledger).toContain('.seasonPlaces');
-    expect(ledger).toContain("aria-label={`Season prize for ${s.name} paid`}");
-    expect(ledger).toContain("kind: 'PLACE', place: r.rank, settled: checked }]);");
-    expect(ledger).toContain("r.kind !== 'PLACE' || r.week !== undefined || !r.entryId");
-    expect(ledger).toContain('seasonAwardId(p.entryId, p.rank)');
+    // Season rows ride the same prizeRows/toggle path with `week: undefined` — the callable binds them to pool.seasonPlaces.
+    expect(ledger).toContain("key: `season|${p.entryId}`, week: undefined");
+    expect(ledger).toContain("r.kind !== 'PLACE' || r.week !== undefined || !r.entryId || !r.id.startsWith('season-')");
+    expect(ledger).toContain("renderPrizeCell(r.entryId, 'season')");
     // The season half is priced on the server at finalization — never here.
     expect(ledger).not.toMatch(/computeSeasonPrizeSnapshot|priceSeasonPlaces|seasonPot/);
   });

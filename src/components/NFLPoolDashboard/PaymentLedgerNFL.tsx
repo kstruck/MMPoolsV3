@@ -4,7 +4,6 @@ import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import type { Pool, WeeklyRecap } from '../../types';
 import { weeklyAwardId, type PayoutRecord, type PayoutRecordPrivate } from '@shared/payoutRecords';
-import { seasonAwardId } from '@shared/seasonPrizes';
 import { buildPoolRoster, duesRates } from '../../utils/poolRoster';
 import { nflWeekChip } from '../../utils/nflWeekLabel';
 import { poolSeasonType } from '../../utils/nflPending';
@@ -121,7 +120,8 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
   /** One line per (entry, week) with a published prize — or a live award the recap no longer backs. */
   const prizeRows = useMemo(() => {
     const rows: Array<{
-      key: string; week: number; entryId: string; uid: string; name: string; rank: number; owed: number;
+      /** The NFL week, or undefined for the SEASON prize (PLAN-WEEKLY-PRIZES step 3). */
+      key: string; week: number | undefined; entryId: string; uid: string; name: string; rank: number; owed: number;
       live?: Rec; settled: boolean; stale: boolean;
     }> = [];
     for (const recap of recaps) {
@@ -153,45 +153,50 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
         rank: row?.rank ?? Number.NaN, owed: 0, live, settled: false, stale: true,
       });
     }
-    return rows;
-  }, [recaps, liveWeekly, privById]);
-
-  const prizeByCell = useMemo(() => new Map(prizeRows.map(r => [`${r.entryId}|${r.week}`, r])), [prizeRows]);
-
-  /**
-   * Season prize per entry (PLAN-WEEKLY-PRIZES step 3): the pool's published
-   * `seasonPlaces` rows with a `prize` (frozen at finalization, never re-priced
-   * here), joined to the LIVE season PLACE award for that entry — a PLACE record
-   * with an entryId and NO week. Season places publish once, so there is no
-   * STALE/re-record path; the checkbox records (deterministic id, idempotent) or
-   * flips settlement.
-   */
-  const seasonRows = useMemo(() => {
-    const places = (pool as any).seasonPlaces as Array<{ entryId: string; userId: string; userName: string; entryName?: string; rank: number; prize?: number }> | undefined;
-    const rows = new Map<string, { key: string; entryId: string; uid: string; name: string; rank: number; owed: number; live?: Rec; settled: boolean }>();
-    if (!Array.isArray(places)) return rows;
-    // Only the BOUND award counts — the deterministic id at the published rank
-    // with the published amount. A free-form season PLACE record (Record Payouts
-    // card, or one written before seasonPlaces existed) must not satisfy the
-    // published prize (codex r1 on step 3).
-    const byId = new Map<string, Rec>();
-    for (const r of records) {
-      if (r.supersededBy || r.kind !== 'PLACE' || r.week !== undefined || !r.entryId) continue;
-      byId.set(r.id, r);
+    // ---- SEASON prize (PLAN-WEEKLY-PRIZES step 3): the pool's published
+    // `seasonPlaces` (frozen prize at finalization, never re-priced here) joined
+    // to the LIVE bound season award — a PLACE record at a `season-…` id with an
+    // entryId and NO week. A free-form season PLACE record (Record Payouts card,
+    // or one written before seasonPlaces existed) never satisfies the published
+    // prize (codex r1 on #464). A re-finalized (rescored) pool republishes the
+    // places, so the same STALE / Re-record / Reverse rule as the weeks applies
+    // (codex r3 on #464).
+    const seasonPlaces = pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_PICKEM' || pool.type === 'NFL_MARGIN' ? pool.seasonPlaces : undefined;
+    if (Array.isArray(seasonPlaces)) {
+      const liveSeason = new Map<string, Rec>();
+      for (const r of records) {
+        if (r.supersededBy || r.kind !== 'PLACE' || r.week !== undefined || !r.entryId || !r.id.startsWith('season-')) continue;
+        liveSeason.set(r.entryId, r);
+      }
+      const seenSeason = new Set<string>();
+      for (const p of seasonPlaces) {
+        if (typeof p.prize !== 'number' || p.prize <= 0) continue;
+        seenSeason.add(p.entryId);
+        const live = liveSeason.get(p.entryId);
+        const stale = !!live && (Number(live.amount) !== p.prize || Number(live.place) !== p.rank);
+        rows.push({
+          key: `season|${p.entryId}`, week: undefined, entryId: p.entryId, uid: p.userId,
+          name: p.entryName ? `${p.entryName} · ${p.userName}` : p.userName,
+          rank: p.rank, owed: p.prize, live, settled: !!live && !stale && privById.get(live.id)?.settled === true, stale,
+        });
+      }
+      for (const [entryId, live] of liveSeason) {
+        if (seenSeason.has(entryId) || Number(live.amount) === 0) continue;
+        const row = seasonPlaces.find(p => p.entryId === entryId);
+        rows.push({
+          key: `season|${entryId}`, week: undefined, entryId, uid: live.uid,
+          name: row ? (row.entryName ? `${row.entryName} · ${row.userName}` : row.userName) : entryId,
+          rank: row?.rank ?? Number.NaN, owed: 0, live, settled: false, stale: true,
+        });
+      }
     }
-    for (const p of places) {
-      if (typeof p.prize !== 'number' || p.prize <= 0) continue;
-      const candidate = byId.get(seasonAwardId(p.entryId, p.rank));
-      const live = candidate && Number(candidate.amount) === p.prize ? candidate : undefined;
-      rows.set(p.entryId, {
-        key: `season|${p.entryId}`, entryId: p.entryId, uid: p.userId,
-        name: p.entryName ? `${p.entryName} · ${p.userName}` : p.userName,
-        rank: p.rank, owed: p.prize, live, settled: !!live && privById.get(live.id)?.settled === true,
-      });
-    }
     return rows;
-  }, [pool, records, privById]);
-  const seasonPublished = Array.isArray((pool as any).seasonPlaces);
+  }, [recaps, liveWeekly, privById, pool, records]);
+
+  const prizeByCell = useMemo(() => new Map(prizeRows.map(r => [`${r.entryId}|${r.week ?? 'season'}`, r])), [prizeRows]);
+
+  const nflPool = pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_PICKEM' || pool.type === 'NFL_MARGIN' ? pool : undefined;
+  const seasonPublished = Array.isArray(nflPool?.seasonPlaces);
 
   /**
    * Ledger rows: one per ENTRY, grouped under the member. Rows come from the
@@ -255,9 +260,8 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
     // that member (fee columns blank, `first: false`); (b) a recipient outside
     // the roster entirely (should not happen): fee/status UNKNOWN, rendered
     // "—", never $0 (qodo #9 on #456).
-    // Season winners get the same treatment (codex r2 on step 3).
-    const prized = [...prizeRows, ...seasonRows.values()];
-    for (const p of prized) {
+    // Season winners are in prizeRows too (week undefined) — same treatment (codex r2 on #464).
+    for (const p of prizeRows) {
       if (rows.some(r => r.entryId === p.entryId)) continue;
       const known = rosterUids.has(p.uid);
       const row = { key: p.entryId, uid: p.uid, entryId: p.entryId, name: p.name, first: !known, hasMember: false, feeOwed: null as number | null, paidStatus: null as 'PAID' | 'UNPAID' | null, rebuyOwed: 0, rebuyPaid: 0 };
@@ -265,7 +269,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       if (last >= 0) rows.splice(last + 1, 0, row); else rows.push(row);
     }
     return rows;
-  }, [pool, members, entries, prizeRows, seasonRows]);
+  }, [pool, members, entries, prizeRows]);
 
   const totals = useMemo(() => {
     let owedIn = 0, paidIn = 0, owedOut = 0, paidOut = 0;
@@ -273,26 +277,8 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       if (r.first && r.feeOwed !== null) { owedIn += r.feeOwed + r.rebuyOwed; if (r.paidStatus === 'PAID') paidIn += r.feeOwed; paidIn += Math.min(r.rebuyPaid, r.rebuyOwed); }
     }
     for (const p of prizeRows) { owedOut += p.owed; if (p.settled) paidOut += p.owed; }
-    for (const s of seasonRows.values()) { owedOut += s.owed; if (s.settled) paidOut += s.owed; }
     return { owedIn, paidIn, owedOut, paidOut };
-  }, [ledgerRows, prizeRows, seasonRows]);
-
-  /** Season PLACE award: record at the deterministic id (idempotent) or flip settlement. */
-  const toggleSeason = async (r: NonNullable<ReturnType<typeof seasonRows.get>>, checked: boolean) => {
-    setBusy(r.key); setError(null);
-    try {
-      if (!r.live) {
-        await dbService.recordPoolPayouts(pool.id, [{ uid: r.uid, entryId: r.entryId, amount: r.owed, kind: 'PLACE', place: r.rank, settled: checked }]);
-      } else {
-        await dbService.setPayoutSettled(pool.id, r.live.id, checked);
-      }
-    } catch (e: any) {
-      logger.error('ledger season update failed', e);
-      setError(String(e?.message ?? e));
-    } finally {
-      setBusy(null);
-    }
-  };
+  }, [ledgerRows, prizeRows]);
 
   const toggle = async (r: (typeof prizeRows)[number], checked: boolean) => {
     setBusy(r.key); setError(null);
@@ -327,9 +313,11 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
   const th = 'py-2 px-2 font-display font-bold uppercase text-[10px] tracking-[0.06em] text-muted whitespace-nowrap';
   const td = 'py-2 px-2 whitespace-nowrap';
 
-  const renderPrizeCell = (entryId: string, recap: WeeklyRecap) => {
-    const r = prizeByCell.get(`${entryId}|${recap.week}`);
+  const chipOf = (week: number | undefined) => week === undefined ? 'Season' : chip(week);
+  const renderPrizeCell = (entryId: string, recap: WeeklyRecap | 'season') => {
+    const r = prizeByCell.get(`${entryId}|${recap === 'season' ? 'season' : recap.week}`);
     if (!r) {
+      if (recap === 'season') return <span className="text-faint" title={seasonPublished ? 'No season prize for this entry' : 'Published when the season is finalized'}>—</span>;
       if (!recap.weeklyPlaces) return <span className="text-faint text-[9px] uppercase" title={recap.weeklyPlacesError ? `Not published: ${recap.weeklyPlacesError}` : 'Scored before weekly prizes existed — Score Week again to publish.'}>unpublished</span>;
       return <span className="text-faint">—</span>;
     }
@@ -346,14 +334,14 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
             disabled={disabled}
             onClick={() => toggle(r, false)}
             className="text-[9px] font-display font-bold uppercase tracking-[0.06em] px-1.5 py-0.5 rounded border border-brandred-600 text-brandred-600 dark:text-brandred-500 hover:bg-brandred-600/10 disabled:opacity-50"
-            aria-label={r.owed > 0 ? `Re-record ${chip(r.week)} prize for ${r.name} at ${money(r.owed)}` : `Reverse the ${chip(r.week)} award for ${r.name}`}
+            aria-label={r.owed > 0 ? `Re-record ${chipOf(r.week)} prize for ${r.name} at ${money(r.owed)}` : `Reverse the ${chipOf(r.week)} award for ${r.name}`}
           >
             {r.owed > 0 ? 'Re-record' : 'Reverse'}
           </button>
         ) : (
           <input
             type="checkbox"
-            aria-label={`${chip(r.week)} prize for ${r.name} paid`}
+            aria-label={`${chipOf(r.week)} prize for ${r.name} paid`}
             checked={r.settled}
             disabled={disabled}
             onChange={e => toggle(r, e.target.checked)}
@@ -385,7 +373,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
                   {chip(w.week)}
                 </th>
               ))}
-              <th className={`${th} text-center`} title={seasonPublished ? ((pool as any).seasonPrize ? `Season pot ${money((pool as any).seasonPrize.pot)} — published at finalization` : 'Season places published unpriced (no season pot)') : 'Published when the season is finalized.'}>Season $</th>
+              <th className={`${th} text-center`} title={seasonPublished ? (nflPool?.seasonPrize ? `Season pot ${money(nflPool.seasonPrize.pot)} — published at finalization` : nflPool?.seasonPlacesError ? `Not priced: ${nflPool.seasonPlacesError}` : 'Season places published unpriced (no season pot)') : 'Published when the season is finalized.'}>Season $</th>
             </tr>
           </thead>
           <tbody>
@@ -447,24 +435,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
                   ))}
                 </td>
                 {weeks.map(w => <td key={w.week} className={`${td} text-center`}>{renderPrizeCell(r.entryId, w)}</td>)}
-                <td className={`${td} text-center`}>{(() => {
-                  const s = seasonRows.get(r.entryId);
-                  if (!s) return <span className="text-faint" title={seasonPublished ? 'No season prize for this entry' : 'After finalization'}>—</span>;
-                  const disabled = busy === s.key || privUnavailable || !privLoaded;
-                  return (
-                    <span className="inline-flex items-center gap-1.5" title={s.live ? `${money(Number(s.live.amount))} recorded (place ${s.rank})` : `Place ${s.rank} — not recorded yet; tick to record as paid.`}>
-                      <span className="num font-bold text-gold-700 dark:text-gold-400">{money(s.owed)}</span>
-                      <input
-                        type="checkbox"
-                        aria-label={`Season prize for ${s.name} paid`}
-                        checked={s.settled}
-                        disabled={disabled}
-                        onChange={e => toggleSeason(s, e.target.checked)}
-                        className="h-4 w-4 accent-navy-600 dark:accent-gold-500"
-                      />
-                    </span>
-                  );
-                })()}</td>
+                <td className={`${td} text-center`}>{renderPrizeCell(r.entryId, 'season')}</td>
               </tr>
             ))}
             {ledgerRows.length === 0 && (

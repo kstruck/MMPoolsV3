@@ -128,10 +128,6 @@ export interface PlayoffPool {
   lockDate?: number;
   billing?: PoolBilling;
   entryCount?: number;
-  /** Published at finalization (PLAN-WEEKLY-PRIZES step 3) — see shared/seasonPrizes. */
-  seasonPlaces?: import('@shared/seasonPrizes').SeasonPlace[];
-  seasonPrize?: import('@shared/seasonPrizes').SeasonPrizeSnapshot | null;
-  seasonPlacesError?: string;
 }
 
 export interface PropsPool {

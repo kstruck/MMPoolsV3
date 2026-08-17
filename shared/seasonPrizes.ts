@@ -46,11 +46,13 @@ export interface SeasonPrizeSnapshot {
 /**
  * Deterministic id of a season PLACE award: one live record per (entry, place),
  * so a double-click or two commissioner tabs cannot record the same win twice.
- * Season places are published once (finalization is terminal), so unlike
- * `weeklyAwardId` there is no `~k` re-record suffix.
+ * A re-record after a re-finalization (a rescored FINAL pool republishes the
+ * places — same K12 rule as the weekly half) is `${base}~${k}` superseding the
+ * previous one.
  */
-export function seasonAwardId(entryId: string, place: number): string {
-  return `season-${entryId}-p${place}`;
+export function seasonAwardId(entryId: string, place: number, k = 1): string {
+  const base = `season-${entryId}-p${place}`;
+  return k <= 1 ? base : `${base}~${k}`;
 }
 
 /**
