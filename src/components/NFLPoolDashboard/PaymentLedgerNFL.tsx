@@ -172,7 +172,9 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       rosterUids.add(r.uid);
       const own = (entriesByUid.get(r.uid) ?? []).sort((a, b) => (a.entryIndex ?? 1) - (b.entryIndex ?? 1));
       const ids = own.length ? own.map(e => e.id as string) : [r.uid]; // entry #1's id is the uid
-      const feeOwed = typeof r.feeOwed === 'number' ? r.feeOwed : rates.entryFee;
+      // Fallback is per LIABLE entry (feeOwed = fee × entries, shared/memberRecord) — an
+      // unstamped member with two entries owes two fees, not one (codex r3 on this PR).
+      const feeOwed = typeof r.feeOwed === 'number' ? r.feeOwed : rates.entryFee * Math.max(1, own.length);
       const rebuyOwed = typeof r.rebuyOwed === 'number' ? r.rebuyOwed : (r.rebuysUsed ?? 0) * rates.rebuyCost;
       ids.forEach((entryId, i) => {
         const e = own[i];
@@ -357,7 +359,9 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
         <span className="text-muted">Paid out <span className="num font-bold text-green-700 dark:text-green-400">{money(totals.paidOut)}</span></span>
       </div>
 
-      {weeks.length === 0 && (
+      {pool.type === 'NFL_SURVIVOR' ? (
+        <p className="text-[11px] font-body text-faint">Survivor pools have no weekly prizes — the season prize is recorded from Record Payouts after finalization.</p>
+      ) : weeks.length === 0 && (
         <p className="text-[11px] font-body text-faint">No weeks scored yet — prize columns appear here after a week is scored on a pool with a weekly prize pot.</p>
       )}
       {unpublishedWeeks.length > 0 && (
