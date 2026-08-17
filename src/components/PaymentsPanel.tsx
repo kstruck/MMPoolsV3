@@ -5,6 +5,7 @@ import { subscribeToPaymentLedger, type PaymentLedgerEvent } from '../services/p
 import { formatDeadline } from '../utils/formatTime';
 import { rosterPotStats } from '../utils/poolRoster';
 import { Badge } from './ui';
+import { MyPrizes } from './MyPrizes';
 
 interface PaymentsPanelProps {
     pool: Pool;
@@ -184,6 +185,9 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
                     Dues are collected and prizes paid out by your commissioner, not by March Melee Pools.
                 </p>
             </div>
+
+            {/* My prizes — own published prize rows only (PLAN-PAYMENT-LEDGER T6, K7) */}
+            <MyPrizes pool={pool} uid={user.id} />
 
             {/* Ledger */}
             <div className="bg-card border border-line rounded-3xl p-6 shadow-card">
