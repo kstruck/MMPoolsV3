@@ -197,6 +197,13 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                         ? 'Level on points? The player whose predicted score is closest wins the week. Still level after that, and it is shared.'
                         : 'Level on points? The player whose predicted score is closest wins the week. On a week with no Monday game, the final game of the week is the target. Still level after that, and it is shared.'}
                   </p>
+                  {/* Season-prize tie (PLAN-WEEKLY-PRIZES §2c / D4): pick record first, then split. */}
+                  <p className="text-[11px] text-muted leading-relaxed mt-2">
+                    <span className="font-bold">Season Tie:</span>{' '}
+                    {settings.confidenceMode
+                      ? 'Level on season points at the end? Most correct picks over the season ranks higher. Still level after that, and the season prize is shared.'
+                      : 'Level on season points at the end? In standard scoring points are the correct-pick count, so there is nothing further to break — the season prize is shared.'}
+                  </p>
                 </div>
               </div>
 
@@ -295,8 +302,12 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                   <li>Lowest Negative Burden (sum of absolute values of negative margins).</li>
                   <li>Most Positive Weeks (winning selections &gt; 0 margin).</li>
                   <li>Highest Single-Week margin score.</li>
-                  <li>Deterministic ID comparison.</li>
+                  <li>Deterministic ID comparison (display order only).</li>
                 </ol>
+                {/* PLAN-WEEKLY-PRIZES D4: the season prize uses the same cascade IN FULL AND IN ORDER; the ID step never separates a prize. */}
+                <p className="text-[11px] text-muted leading-relaxed">
+                  <span className="font-bold">Season prize ties</span> break on levels 1–4 above, in that order — the same cascade the standings show. Still level after level 4, and the prize is shared.
+                </p>
               </div>
             </div>
           </div>

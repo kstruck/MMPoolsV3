@@ -63,6 +63,14 @@ describe('PaymentLedgerNFL — wiring (T5)', () => {
     expect(ledger).not.toContain('setPaidStatus');
     expect(ledger).not.toContain('updateEntryPayment');
   });
+  it('Season $ column (PLAN-WEEKLY-PRIZES step 3): reads ONLY the published pool.seasonPlaces prize; the box records a season PLACE award (entryId, no week) or flips settlement', () => {
+    expect(ledger).toContain('.seasonPlaces');
+    expect(ledger).toContain("aria-label={`Season prize for ${s.name} paid`}");
+    expect(ledger).toContain("kind: 'PLACE', place: r.rank, settled: checked }]);");
+    expect(ledger).toContain("r.kind !== 'PLACE' || r.week !== undefined || !r.entryId");
+    // The season half is priced on the server at finalization — never here.
+    expect(ledger).not.toMatch(/computeSeasonPrizeSnapshot|priceSeasonPlaces|seasonPot/);
+  });
   it('dbService exposes the private-record subscription the ledger needs', () => {
     expect(code('src/services/dbService.ts')).toContain('subscribeToPayoutRecordsPrivate:');
   });

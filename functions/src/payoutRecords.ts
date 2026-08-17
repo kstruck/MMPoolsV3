@@ -7,6 +7,7 @@ import { assertNotBannedLive } from "./lib/systemGuards";
 import { recomputeUserProfile } from "./userProfile";
 import { PAYOUT_SCHEMA_VERSION, weeklyAwardId, type PayoutKind } from "./shared/payoutRecords";
 import type { WeeklyPlace, WeeklyPrizeSnapshot } from "./shared/weeklyPrizes";
+import { seasonAwardId, type SeasonPlace } from "./shared/seasonPrizes";
 import { writeAuditEvent } from "./audit";
 
 /**
@@ -165,6 +166,37 @@ export const recordPoolPayouts = onCall(async (request) => {
       }
     }
     for (const a of validated) {
+      // ---- SEASON PLACE award bound to the published Season Places (PLAN-WEEKLY-PRIZES step 3) ----
+      // Once the pool carries `seasonPlaces` (finalization publishes them), a
+      // PLACE award that names an ENTRY is bound to that list exactly as a weekly
+      // award is bound to its recap: the entry must hold a prize, `place` is the
+      // published rank, `amount` EQUALS the published prize, and the id is
+      // DETERMINISTIC (`seasonAwardId`) so a double-click cannot double-pay.
+      // Season places are published once (finalization is terminal), so there is
+      // no rescore path here — a different figure is a BONUS/ADJUSTMENT.
+      // PLACE awards WITHOUT an entryId (the Record Payouts card) keep the free path below.
+      const seasonPlaces: SeasonPlace[] | undefined = Array.isArray(pool.seasonPlaces) ? pool.seasonPlaces : undefined;
+      if (a.week === undefined && a.kind === 'PLACE' && a.entryId && seasonPlaces) {
+        const row = seasonPlaces.find(r => r.entryId === a.entryId);
+        if (!row) throw new HttpsError('failed-precondition', `NOT_IN_SEASON_PLACES: entry ${a.entryId} is not in the published season places.`);
+        if (row.userId !== a.uid) throw new HttpsError('failed-precondition', `ENTRY_OWNER_MISMATCH: entry ${a.entryId} is not owned by ${a.uid}.`);
+        if (a.place !== undefined && a.place !== row.rank) throw new HttpsError('failed-precondition', `PLACE_MISMATCH: entry ${a.entryId} finished ${row.rank}, not ${a.place}.`);
+        const frozenPrize = row.prize ?? 0;
+        if (frozenPrize <= 0) throw new HttpsError('failed-precondition', `NO_PRIZE: entry ${a.entryId} has no season prize at place ${row.rank}.`);
+        if (a.amount !== frozenPrize) throw new HttpsError('failed-precondition', `AMOUNT_MISMATCH: the published season prize for entry ${a.entryId} is $${frozenPrize}; record a BONUS/ADJUSTMENT for a different figure.`);
+        if (a.supersedes !== undefined) throw new HttpsError('invalid-argument', `awards[]: a bound season award is idempotent at its deterministic id; nothing to supersede.`);
+        a.place = row.rank;
+        const awardRef = recordsCol.doc(seasonAwardId(a.entryId, row.rank));
+        const existing = await tx.get(awardRef);
+        if (existing.exists) {
+          // Idempotent: the same win is already recorded — return it, write nothing
+          // (settlement flips via setPayoutSettled).
+          out.push({ awardRef, a, write: false });
+          continue;
+        }
+        out.push({ awardRef, a, write: true });
+        continue;
+      }
       if (a.week === undefined) {
         // Season / bonus / adjustment — today's path, random id, optional supersession.
         if (a.supersedes) {

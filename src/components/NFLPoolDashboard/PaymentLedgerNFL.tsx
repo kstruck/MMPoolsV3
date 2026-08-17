@@ -158,6 +158,36 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
   const prizeByCell = useMemo(() => new Map(prizeRows.map(r => [`${r.entryId}|${r.week}`, r])), [prizeRows]);
 
   /**
+   * Season prize per entry (PLAN-WEEKLY-PRIZES step 3): the pool's published
+   * `seasonPlaces` rows with a `prize` (frozen at finalization, never re-priced
+   * here), joined to the LIVE season PLACE award for that entry — a PLACE record
+   * with an entryId and NO week. Season places publish once, so there is no
+   * STALE/re-record path; the checkbox records (deterministic id, idempotent) or
+   * flips settlement.
+   */
+  const seasonRows = useMemo(() => {
+    const places = (pool as any).seasonPlaces as Array<{ entryId: string; userId: string; userName: string; entryName?: string; rank: number; prize?: number }> | undefined;
+    const rows = new Map<string, { key: string; entryId: string; uid: string; name: string; rank: number; owed: number; live?: Rec; settled: boolean }>();
+    if (!Array.isArray(places)) return rows;
+    const liveSeason = new Map<string, Rec>();
+    for (const r of records) {
+      if (r.supersededBy || r.kind !== 'PLACE' || r.week !== undefined || !r.entryId) continue;
+      liveSeason.set(r.entryId, r);
+    }
+    for (const p of places) {
+      if (typeof p.prize !== 'number' || p.prize <= 0) continue;
+      const live = liveSeason.get(p.entryId);
+      rows.set(p.entryId, {
+        key: `season|${p.entryId}`, entryId: p.entryId, uid: p.userId,
+        name: p.entryName ? `${p.entryName} · ${p.userName}` : p.userName,
+        rank: p.rank, owed: p.prize, live, settled: !!live && privById.get(live.id)?.settled === true,
+      });
+    }
+    return rows;
+  }, [pool, records, privById]);
+  const seasonPublished = Array.isArray((pool as any).seasonPlaces);
+
+  /**
    * Ledger rows: one per ENTRY, grouped under the member. Rows come from the
    * CANONICAL roster (`buildPoolRoster`: participantIds ∪ Member Records ∪
    * entries, Member Record authoritative) so a legacy participant without a
@@ -235,8 +265,26 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       if (r.first && r.feeOwed !== null) { owedIn += r.feeOwed + r.rebuyOwed; if (r.paidStatus === 'PAID') paidIn += r.feeOwed; paidIn += Math.min(r.rebuyPaid, r.rebuyOwed); }
     }
     for (const p of prizeRows) { owedOut += p.owed; if (p.settled) paidOut += p.owed; }
+    for (const s of seasonRows.values()) { owedOut += s.owed; if (s.settled) paidOut += s.owed; }
     return { owedIn, paidIn, owedOut, paidOut };
-  }, [ledgerRows, prizeRows]);
+  }, [ledgerRows, prizeRows, seasonRows]);
+
+  /** Season PLACE award: record at the deterministic id (idempotent) or flip settlement. */
+  const toggleSeason = async (r: NonNullable<ReturnType<typeof seasonRows.get>>, checked: boolean) => {
+    setBusy(r.key); setError(null);
+    try {
+      if (!r.live) {
+        await dbService.recordPoolPayouts(pool.id, [{ uid: r.uid, entryId: r.entryId, amount: r.owed, kind: 'PLACE', place: r.rank, settled: checked }]);
+      } else {
+        await dbService.setPayoutSettled(pool.id, r.live.id, checked);
+      }
+    } catch (e: any) {
+      logger.error('ledger season update failed', e);
+      setError(String(e?.message ?? e));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const toggle = async (r: (typeof prizeRows)[number], checked: boolean) => {
     setBusy(r.key); setError(null);
@@ -329,7 +377,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
                   {chip(w.week)}
                 </th>
               ))}
-              <th className={`${th} text-center`} title="After finalization — season prizes are recorded from the Record Payouts card until the season-prize column lands.">Season $</th>
+              <th className={`${th} text-center`} title={seasonPublished ? ((pool as any).seasonPrize ? `Season pot ${money((pool as any).seasonPrize.pot)} — published at finalization` : 'Season places published unpriced (no season pot)') : 'Published when the season is finalized.'}>Season $</th>
             </tr>
           </thead>
           <tbody>
@@ -391,7 +439,24 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
                   ))}
                 </td>
                 {weeks.map(w => <td key={w.week} className={`${td} text-center`}>{renderPrizeCell(r.entryId, w)}</td>)}
-                <td className={`${td} text-center text-faint`}>—</td>
+                <td className={`${td} text-center`}>{(() => {
+                  const s = seasonRows.get(r.entryId);
+                  if (!s) return <span className="text-faint" title={seasonPublished ? 'No season prize for this entry' : 'After finalization'}>—</span>;
+                  const disabled = busy === s.key || privUnavailable || !privLoaded;
+                  return (
+                    <span className="inline-flex items-center gap-1.5" title={s.live ? `${money(Number(s.live.amount))} recorded (place ${s.rank})` : `Place ${s.rank} — not recorded yet; tick to record as paid.`}>
+                      <span className="num font-bold text-gold-700 dark:text-gold-400">{money(s.owed)}</span>
+                      <input
+                        type="checkbox"
+                        aria-label={`Season prize for ${s.name} paid`}
+                        checked={s.settled}
+                        disabled={disabled}
+                        onChange={e => toggleSeason(s, e.target.checked)}
+                        className="h-4 w-4 accent-navy-600 dark:accent-gold-500"
+                      />
+                    </span>
+                  );
+                })()}</td>
               </tr>
             ))}
             {ledgerRows.length === 0 && (
@@ -427,7 +492,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       {privUnavailable && <p className="text-[11px] font-body text-brandred-600 dark:text-brandred-500">Settlement state unavailable (could not read the private payout records) — the prize boxes are disabled until it loads. Reload the page; if it persists, tell support.</p>}
       {error && <p className="text-[11px] font-body text-brandred-600 dark:text-brandred-500">{error}</p>}
       <p className="text-[10px] font-body text-faint leading-relaxed">
-        A ticked prize box is a settled Payout Record (`{weeklyAwardId(1, 'entry', 1)}`-style id, one per entry per week). Un-ticking marks it unpaid; the recorded amount never changes. After a rescore a cell can show Re-record (writes the new figure) or Reverse (writes $0), superseding the old record and keeping its paid/unpaid state. Season prizes and one-off adjustments: Record Payouts once the season is finalized.
+        A ticked prize box is a settled Payout Record (`{weeklyAwardId(1, 'entry', 1)}`-style id, one per entry per week; `season-…` for the season prize). Un-ticking marks it unpaid; the recorded amount never changes. After a rescore a weekly cell can show Re-record (writes the new figure) or Reverse (writes $0), superseding the old record and keeping its paid/unpaid state. Season prizes appear once the season is finalized (ties break on the pick-record cascade, then split); one-off adjustments: Record Payouts.
       </p>
     </div>
   );

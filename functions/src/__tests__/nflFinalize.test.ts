@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeFinalRanks } from '../nflFinalize';
+import { computeFinalRanks, seasonPlacesPublication } from '../nflFinalize';
 
 // PLAN-PLAYER-PROFILES Phase 3 (ADR 0005 decision 2): final rank derivation per
 // NFL pool type. Pure-function coverage; the finalize write path + sweep run
@@ -72,6 +72,60 @@ describe('computeFinalRanks — NFL_MARGIN', () => {
     expect(rows.map(r => r.entry.ownerUid)).toEqual(['cleanest', 'highBurden', 'low']);
     expect(rows.map(r => r.rank)).toEqual([1, 2, 3]);
     expect(rows[0].record).toEqual({ seasonTotal: 40 });
+  });
+});
+
+describe('computeFinalRanks — season-tie cascade (PLAN-WEEKLY-PRIZES §2c / D4, step 3)', () => {
+  it("Pick'em: level on totalScore → most correct picks ranks higher; still level → SHARE the rank, next rank skips", () => {
+    const rows = computeFinalRanks('NFL_PICKEM', [
+      pickem('fewer', 30, { 1: { correct: 8, total: 16 }, 2: { correct: 9, total: 16 } }),
+      pickem('more', 30, { 1: { correct: 10, total: 16 }, 2: { correct: 10, total: 16 } }),
+      pickem('twin', 30, { 1: { correct: 10, total: 16 }, 2: { correct: 10, total: 16 } }),
+      pickem('last', 5, { 1: { correct: 5, total: 16 } }),
+    ]);
+    expect(rows.map(r => [r.entry.ownerUid, r.rank])).toEqual([['more', 1], ['twin', 1], ['fewer', 3], ['last', 4]]);
+    // The tie-break never re-orders across a points gap.
+    expect(rows[3].points).toBe(5);
+  });
+  it('Margin: negativeBurden → positiveWeeks → bestWeek in that order; the uid step orders rows but never separates a rank', () => {
+    const margin = (uid: string, over: any) => ({ id: uid, ownerUid: uid, userName: uid, seasonTotal: 40, negativeBurden: 5, positiveWeeks: 3, bestWeek: 20, ...over });
+    const rows = computeFinalRanks('NFL_MARGIN', [
+      margin('z-twin', {}),
+      margin('a-twin', {}),
+      margin('fewerPos', { positiveWeeks: 2 }),
+      margin('lowerBest', { bestWeek: 10 }),
+      margin('burden', { negativeBurden: 9, positiveWeeks: 9, bestWeek: 99 }),
+    ]);
+    expect(rows.map(r => [r.entry.ownerUid, r.rank])).toEqual([['a-twin', 1], ['z-twin', 1], ['lowerBest', 3], ['fewerPos', 4], ['burden', 5]]);
+  });
+});
+
+describe('seasonPlacesPublication — the pool-doc publication at finalization (step 3)', () => {
+  const ranked = (uids: Array<[string, number, number]>) => uids.map(([uid, rank, points]) => ({ entry: { id: uid, ownerUid: uid, userName: uid.toUpperCase() }, rank, points }));
+  it('SEASON pool: prices from settings.payouts.places on the season pot; ties split; frozen snapshot carried', () => {
+    const pool = { entryCount: 4, settings: { payoutMode: 'SEASON', entryFee: 20, payouts: { places: [{ rank: 1, percentage: 60 }, { rank: 2, percentage: 40 }] } } };
+    const pub = seasonPlacesPublication(pool, ranked([['a', 1, 100], ['b', 1, 100], ['c', 3, 50]]), 4);
+    expect(pub.seasonPlacesError).toBeUndefined();
+    expect(pub.seasonPrize).toMatchObject({ pot: 80, entryCount: 4, payoutMode: 'SEASON' });
+    // 60% + 40% of $80 = $80 shared by the two rank-1 entries → $40 each; rank 3 unpaid.
+    expect(pub.seasonPlaces.map(p => [p.entryId, p.rank, p.prize])).toEqual([['a', 1, 40], ['b', 1, 40], ['c', 3, undefined]]);
+  });
+  it('WEEKLY pool: publishes the ranking UNPRICED (seasonPrize null)', () => {
+    const pub = seasonPlacesPublication({ entryCount: 3, settings: { payoutMode: 'WEEKLY', entryFee: 20, payouts: { places: [{ rank: 1, percentage: 100 }] } } }, ranked([['a', 1, 9]]), 3);
+    expect(pub.seasonPrize).toBeNull();
+    expect(pub.seasonPlaces[0].prize).toBeUndefined();
+  });
+  it('an existing seasonPrize on the pool is reused verbatim — never re-priced', () => {
+    const frozen = { pot: 10, places: [{ rank: 1, percentage: 100 }], entryCount: 1, payoutMode: 'SEASON' as const, frozenAt: 1 };
+    const pub = seasonPlacesPublication({ seasonPrize: frozen, entryCount: 99, settings: { payoutMode: 'SEASON', entryFee: 500, payouts: { places: [{ rank: 1, percentage: 100 }] } } }, ranked([['a', 1, 9]]), 99);
+    expect(pub.seasonPrize).toBe(frozen);
+    expect(pub.seasonPlaces[0].prize).toBe(10);
+  });
+  it('a malformed place list publishes the ranking with seasonPlacesError and no prize (fail-closed)', () => {
+    const pub = seasonPlacesPublication({ entryCount: 2, settings: { payoutMode: 'SEASON', entryFee: 20, payouts: { places: [{ rank: 1, percentage: 60 }, { rank: 1, percentage: 40 }] } } }, ranked([['a', 1, 9], ['b', 2, 8]]), 2);
+    expect(pub.seasonPlacesError).toBeTruthy();
+    expect(pub.seasonPrize).toBeUndefined();
+    expect(pub.seasonPlaces.every(p => p.prize === undefined)).toBe(true);
   });
 });
 

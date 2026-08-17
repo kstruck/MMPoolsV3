@@ -207,4 +207,37 @@ describe('PLAN-PAYMENT-LEDGER T4 — recordPoolPayouts weekly awards + setPayout
       { uid: BOB, entryId: BOB, amount: 12, kind: 'PLACE', week: 1, settled: false },
     ])).rejects.toThrow(/DUPLICATE_WEEKLY_AWARD/);
   }, 30000);
+
+  it('6. PLAN-WEEKLY-PRIZES step 3: a season PLACE award naming an ENTRY is BOUND to pool.seasonPlaces at a deterministic id; free-form season awards keep the old path', async () => {
+    await seedPool({ finalized: true });
+    await poolRef().update({
+      seasonPlaces: [
+        { entryId: ALICE, userId: ALICE, userName: ALICE, rank: 1, points: 90, prize: 36 },
+        { entryId: BOB, userId: BOB, userName: BOB, rank: 2, points: 80, prize: 24 },
+        { entryId: HOST, userId: HOST, userName: HOST, rank: 3, points: 10 },
+      ],
+      seasonPrize: { pot: 60, places: [{ rank: 1, percentage: 60 }, { rank: 2, percentage: 40 }], entryCount: 3, payoutMode: 'SEASON', frozenAt: Date.now() },
+    });
+    // Bound: deterministic id, idempotent on repeat.
+    const r1 = await record(HOST, [{ uid: ALICE, entryId: ALICE, amount: 36, kind: 'PLACE', place: 1, settled: true }]);
+    expect(r1.awardIds).toEqual(['season-pl-alice-p1']);
+    expect(r1.written).toBe(1);
+    expect((await rec('season-pl-alice-p1')).data()).toMatchObject({ uid: ALICE, entryId: ALICE, amount: 36, kind: 'PLACE', place: 1 });
+    expect((await rec('season-pl-alice-p1')).data()!.week).toBeUndefined();
+    const r2 = await record(HOST, [{ uid: ALICE, entryId: ALICE, amount: 36, kind: 'PLACE', settled: false }]);
+    expect(r2.awardIds).toEqual(['season-pl-alice-p1']);
+    expect(r2.written).toBe(0);
+    expect((await priv('season-pl-alice-p1')).data()!.settled).toBe(true); // repeat did not flip settlement
+    // Bound: refuses a wrong amount, a wrong place, an unprized entry, a stranger, a wrong owner.
+    await expect(record(HOST, [{ uid: BOB, entryId: BOB, amount: 25, kind: 'PLACE', settled: true }])).rejects.toThrow(/AMOUNT_MISMATCH/);
+    await expect(record(HOST, [{ uid: BOB, entryId: BOB, amount: 24, kind: 'PLACE', place: 1, settled: true }])).rejects.toThrow(/PLACE_MISMATCH/);
+    await expect(record(HOST, [{ uid: HOST, entryId: HOST, amount: 5, kind: 'PLACE', settled: true }])).rejects.toThrow(/NO_PRIZE/);
+    await expect(record(HOST, [{ uid: ALICE, entryId: 'nobody', amount: 5, kind: 'PLACE', settled: true }])).rejects.toThrow(/NOT_IN_SEASON_PLACES/);
+    await expect(record(HOST, [{ uid: BOB, entryId: ALICE, amount: 36, kind: 'PLACE', settled: true }])).rejects.toThrow(/ENTRY_OWNER_MISMATCH/);
+    // Free-form (no entryId) season PLACE / BONUS keep today's random-id path.
+    const r3 = await record(HOST, [{ uid: BOB, amount: 5, kind: 'BONUS', settled: false, note: 'most improved' }]);
+    expect(r3.written).toBe(1);
+    expect(r3.awardIds[0]).not.toMatch(/^season-/);
+    expect((await poolRef().collection('payoutRecords').get()).size).toBe(2);
+  }, 30000);
 });
