@@ -13,9 +13,12 @@ import { hybridSplitProblem } from '@shared/hybridSplit';
  * refusal message, and money copy that disagrees with money enforcement is
  * how commissioners stop trusting either.
  *
- * ⚠️ The entry fee lives on a LATER wizard step (`StepFeeAndPayment`), so the
- * check line has three states, not two: fee not set yet (explain, don't
- * scold), mismatch (the server's own words), and balanced (the sum, affirmed).
+ * Rendered under the entry-fee field on `StepFeeAndPayment` (PLAN-PAYMENT-LEDGER
+ * T0 / D0 — it used to sit on the rules step, one step BEFORE the fee it must
+ * sum to). The check line still has three states: fee not set yet (explain,
+ * don't scold), mismatch (the server's own words), and balanced (the sum,
+ * affirmed). Field names, `hybridSplitProblem`, and every validation line are
+ * unchanged — the move is display only.
  */
 export function HybridSplitFields() {
   const { watch } = useFormContext();
@@ -45,7 +48,7 @@ export function HybridSplitFields() {
       </div>
       {entryFee <= 0 ? (
         <p role="status" className="mt-2 text-xs text-muted">
-          Set the entry fee on the Fee &amp; Payment step — the split must add up to it, and it is not set yet.
+          Set the entry fee above — the split must add up to it, and it is not set yet.
         </p>
       ) : problem ? (
         <p role="alert" className="mt-2 text-xs font-semibold text-brandred-600">
