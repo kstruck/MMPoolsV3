@@ -107,3 +107,26 @@ export function normalizePayoutListsPatch(patch: Record<string, unknown>): void 
     if (r.success) patch['settings.weeklyPayouts'] = r.data;
   }
 }
+
+/**
+ * The create-path twin (codex r4 on #470): createNFLPool persists the create
+ * envelope as given after `validateCreateInput` GATES it, so the parsed
+ * defaults/stripping never reach the document. Normalize the two lists on the
+ * settings object in place, and drop `weeklyPayouts` on the types whose schema
+ * strips it (everything but Pick'em / Margin).
+ */
+export function normalizeCreatePayoutLists(type: unknown, settings: Record<string, unknown> | undefined): void {
+  if (!settings || typeof settings !== 'object') return;
+  if (settings.payouts !== undefined && settings.payouts !== null) {
+    const r = payoutsSchema.safeParse(settings.payouts);
+    if (r.success) settings.payouts = r.data;
+  }
+  if (type !== 'NFL_PICKEM' && type !== 'NFL_MARGIN') {
+    delete settings.weeklyPayouts;
+    return;
+  }
+  if (settings.weeklyPayouts !== undefined && settings.weeklyPayouts !== null) {
+    const r = weeklyPayoutsSchema.safeParse(settings.weeklyPayouts);
+    if (r.success) settings.weeklyPayouts = r.data;
+  }
+}

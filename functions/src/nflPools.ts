@@ -20,6 +20,7 @@ import {
   billingForLaunch,
   writePoolCreationSideEffects,
 } from "./lib/poolCreation";
+import { normalizeCreatePayoutLists } from './lib/weeklyPayoutsGate';
 import {
   NFLGame,
   NFLPickemPool,
@@ -119,6 +120,9 @@ export const createNFLPool = validated(
     // Shared validation gate + ban check (poolType already narrowed above).
     const poolType: PoolType = isPoolType(type) ? type : 'NFL_PICKEM';
     validateCreateInput(poolType, data);
+    // The envelope is persisted as given below, so the parsed shape of the two
+    // payout lists is applied here explicitly (PLAN-PAYMENT-LEDGER T1; codex r4 on #470).
+    normalizeCreatePayoutLists(poolType, (data as { settings?: Record<string, unknown> }).settings);
     assertNotBanned(claimRole, undefined);
 
     const poolRef = db.collection('pools').doc();

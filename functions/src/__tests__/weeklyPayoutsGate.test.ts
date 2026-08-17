@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { payoutsSchema, weeklyPayoutsSchema } from '../shared/schemas/common';
 import { pickemCreateInputSchema, marginCreateInputSchema, survivorCreateInputSchema } from '../shared/schemas/nfl';
-import { normalizePayoutListsPatch, payoutListsNoOpKeys, payoutListsRefusal, touchesPayoutLists, weeklyPayoutsNeedsClearing } from '../lib/weeklyPayoutsGate';
+import { normalizeCreatePayoutLists, normalizePayoutListsPatch, payoutListsNoOpKeys, payoutListsRefusal, touchesPayoutLists, weeklyPayoutsNeedsClearing } from '../lib/weeklyPayoutsGate';
 
 /**
  * PLAN-PAYMENT-LEDGER T1 (D1, K9): `settings.weeklyPayouts` schema, unique
@@ -103,5 +103,16 @@ describe('normalizePayoutListsPatch — what is stored is what was validated (co
     normalizePayoutListsPatch(patch);
     expect(patch['settings.weeklyPayouts']).toEqual({ places: [] });
     expect(patch['settings.payouts']).toEqual({ places: [P(1, 100)], bonuses: [] });
+  });
+});
+
+describe('normalizeCreatePayoutLists — the create twin (codex r4 on #470)', () => {
+  it("Pick'em: weeklyPayouts {} → { places: [] }; Survivor: weeklyPayouts dropped; payouts normalized on both", () => {
+    const pk: Record<string, unknown> = { payouts: { places: [P(1, 100)], bonuses: [], junk: 1 }, weeklyPayouts: {} };
+    normalizeCreatePayoutLists('NFL_PICKEM', pk);
+    expect(pk).toEqual({ payouts: { places: [P(1, 100)], bonuses: [] }, weeklyPayouts: { places: [] } });
+    const sv: Record<string, unknown> = { payouts: { places: [P(1, 100)] }, weeklyPayouts: { places: [P(1, 100)] } };
+    normalizeCreatePayoutLists('NFL_SURVIVOR', sv);
+    expect(sv).toEqual({ payouts: { places: [P(1, 100)], bonuses: [] } });
   });
 });
