@@ -363,7 +363,13 @@ service cloud.firestore {
         // `weeklyPayouts` (PLAN-PAYMENT-LEDGER T1): the validator lives in the
         // callable, so no direct write — SUPER_ADMIN clients included — may bypass it.
         return !changed.hasAny(['tieCountsAs', 'maxTeamUses', 'weeklyTiebreaker', 'hybridSplit', 'weeklyPayouts'])
-               && (!isNfl || !changed.hasAny(['entryFee', 'payoutMode', 'maxEntriesPerUser']));
+               // `payouts` (PLAN-PAYMENT-LEDGER T1 / K9): the unique-rank + ≤100 %
+               // validation lives in updatePoolSettings; a SUPER_ADMIN client
+               // bypasses nflSettingsWriteBlocked(), so without this line a
+               // direct write could persist a duplicate rank the scorer then
+               // fails closed on (codex r2 on #470). NFL only — Bracket/Playoff
+               // managers still edit payouts directly.
+               && (!isNfl || !changed.hasAny(['entryFee', 'payoutMode', 'maxEntriesPerUser', 'payouts']));
       }
 
       // Pool is in an editable state.
