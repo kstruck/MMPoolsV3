@@ -234,10 +234,20 @@ describe('PLAN-PAYMENT-LEDGER T4 — recordPoolPayouts weekly awards + setPayout
     await expect(record(HOST, [{ uid: HOST, entryId: HOST, amount: 5, kind: 'PLACE', settled: true }])).rejects.toThrow(/NO_PRIZE/);
     await expect(record(HOST, [{ uid: ALICE, entryId: 'nobody', amount: 5, kind: 'PLACE', settled: true }])).rejects.toThrow(/NOT_IN_SEASON_PLACES/);
     await expect(record(HOST, [{ uid: BOB, entryId: ALICE, amount: 36, kind: 'PLACE', settled: true }])).rejects.toThrow(/ENTRY_OWNER_MISMATCH/);
+    // Two bound awards for one entry in a batch are refused (codex r1 on step 3).
+    await expect(record(HOST, [
+      { uid: BOB, entryId: BOB, amount: 24, kind: 'PLACE', settled: true },
+      { uid: BOB, entryId: BOB, amount: 24, kind: 'PLACE', settled: false },
+    ])).rejects.toThrow(/DUPLICATE_SEASON_AWARD/);
+    // A ranked entry missing from participantIds (legacy) can still be paid — ownership comes from the published row.
+    await poolRef().update({ participantIds: [HOST] });
+    const r4 = await record(HOST, [{ uid: BOB, entryId: BOB, amount: 24, kind: 'PLACE', settled: true }]);
+    expect(r4.awardIds).toEqual(['season-pl-bob-p2']);
+    await poolRef().update({ participantIds: [HOST, ALICE, BOB] });
     // Free-form (no entryId) season PLACE / BONUS keep today's random-id path.
     const r3 = await record(HOST, [{ uid: BOB, amount: 5, kind: 'BONUS', settled: false, note: 'most improved' }]);
     expect(r3.written).toBe(1);
     expect(r3.awardIds[0]).not.toMatch(/^season-/);
-    expect((await poolRef().collection('payoutRecords').get()).size).toBe(2);
+    expect((await poolRef().collection('payoutRecords').get()).size).toBe(3);
   }, 30000);
 });

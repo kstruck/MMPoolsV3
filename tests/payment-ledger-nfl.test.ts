@@ -68,6 +68,7 @@ describe('PaymentLedgerNFL — wiring (T5)', () => {
     expect(ledger).toContain("aria-label={`Season prize for ${s.name} paid`}");
     expect(ledger).toContain("kind: 'PLACE', place: r.rank, settled: checked }]);");
     expect(ledger).toContain("r.kind !== 'PLACE' || r.week !== undefined || !r.entryId");
+    expect(ledger).toContain('seasonAwardId(p.entryId, p.rank)');
     // The season half is priced on the server at finalization — never here.
     expect(ledger).not.toMatch(/computeSeasonPrizeSnapshot|priceSeasonPlaces|seasonPot/);
   });

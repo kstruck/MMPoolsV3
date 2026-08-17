@@ -98,6 +98,11 @@ export const recordPoolPayouts = onCall(async (request) => {
   const validated: AwardInput[] = awards.map((a: any, i: number) => {
     if (!a || typeof a.uid !== 'string' || !a.uid) throw new HttpsError('invalid-argument', `awards[${i}].uid is required — every award needs an explicit recipient.`);
     const weekly = a.week !== undefined && a.week !== null;
+    // A season PLACE award naming an ENTRY on a pool with published season places
+    // is BOUND to that list (below, in-tx) — ownership comes from the published
+    // row's userId, not participantIds, exactly as weekly awards do (codex r1 on
+    // step 3: a legacy ranked entry can be missing from participantIds).
+    const boundSeason = !weekly && a.kind === 'PLACE' && typeof a.entryId === 'string' && !!a.entryId && Array.isArray(pool.seasonPlaces);
     // Season/bonus/adjustment awards are gated on the participant list as today.
     // A WEEKLY award is bound to the recap row instead (below): the row's
     // `userId` came from the entry document the scorer ranked, which is a
@@ -105,7 +110,7 @@ export const recordPoolPayouts = onCall(async (request) => {
     // can hold a canonical Member Record + entry that `participantIds` never
     // listed (codex r4 on T5); refusing those would leave a published prize
     // that can never be recorded.
-    if (!weekly && !participantIds.includes(a.uid)) throw new HttpsError('invalid-argument', `awards[${i}].uid is not a member of this pool.`);
+    if (!weekly && !boundSeason && !participantIds.includes(a.uid)) throw new HttpsError('invalid-argument', `awards[${i}].uid is not a member of this pool.`);
     const amount = Number(a.amount);
     if (!Number.isFinite(amount)) throw new HttpsError('invalid-argument', `awards[${i}].amount must be a number.`);
     if (!KINDS.includes(a.kind)) throw new HttpsError('invalid-argument', `awards[${i}].kind must be one of ${KINDS.join('/')}.`);
@@ -136,8 +141,18 @@ export const recordPoolPayouts = onCall(async (request) => {
   // other inside the transaction (both read "absent", both plan a write — codex
   // r1). Refuse the batch; the ledger sends one award per row.
   const weeklyKeys = new Set<string>();
+  const seasonKeys = new Set<string>();
+  const seasonPublished = Array.isArray(pool.seasonPlaces);
   for (const a of validated) {
-    if (a.week === undefined) continue;
+    if (a.week === undefined) {
+      // Two bound season awards for the same entry in one call would plan two
+      // writes to one deterministic doc (codex r1 on step 3).
+      if (a.kind === 'PLACE' && a.entryId && seasonPublished) {
+        if (seasonKeys.has(a.entryId)) throw new HttpsError('invalid-argument', `DUPLICATE_SEASON_AWARD: entry ${a.entryId} appears more than once in awards[].`);
+        seasonKeys.add(a.entryId);
+      }
+      continue;
+    }
     const key = `${a.entryId}|${a.week}`;
     if (weeklyKeys.has(key)) throw new HttpsError('invalid-argument', `DUPLICATE_WEEKLY_AWARD: entry ${a.entryId} week ${a.week} appears more than once in awards[].`);
     weeklyKeys.add(key);
@@ -159,6 +174,12 @@ export const recordPoolPayouts = onCall(async (request) => {
     const out: Planned[] = [];
     // ---- reads ----
     const recapCache = new Map<number, { weeklyPlaces?: WeeklyPlace[]; weeklyPrize?: WeeklyPrizeSnapshot | null } | undefined>();
+    // Season places are validated against the pool AS READ IN THIS TRANSACTION,
+    // not the pre-tx snapshot — a finalization landing between the two reads must
+    // make this transaction retry, not bind an award to an obsolete list (codex r1).
+    const wantsSeason = validated.some(a => a.week === undefined && a.kind === 'PLACE' && !!a.entryId && seasonPublished);
+    const freshPool = wantsSeason ? ((await tx.get(poolRef)).data() as any) : pool;
+    const seasonPlaces: SeasonPlace[] | undefined = Array.isArray(freshPool?.seasonPlaces) ? freshPool.seasonPlaces : undefined;
     for (const a of validated) {
       if (a.week === undefined) continue;
       if (!recapCache.has(a.week)) {
@@ -175,8 +196,8 @@ export const recordPoolPayouts = onCall(async (request) => {
       // Season places are published once (finalization is terminal), so there is
       // no rescore path here — a different figure is a BONUS/ADJUSTMENT.
       // PLACE awards WITHOUT an entryId (the Record Payouts card) keep the free path below.
-      const seasonPlaces: SeasonPlace[] | undefined = Array.isArray(pool.seasonPlaces) ? pool.seasonPlaces : undefined;
-      if (a.week === undefined && a.kind === 'PLACE' && a.entryId && seasonPlaces) {
+      if (a.week === undefined && a.kind === 'PLACE' && a.entryId && seasonPublished) {
+        if (!seasonPlaces) throw new HttpsError('failed-precondition', 'SEASON_NOT_PUBLISHED: the pool no longer carries published season places.');
         const row = seasonPlaces.find(r => r.entryId === a.entryId);
         if (!row) throw new HttpsError('failed-precondition', `NOT_IN_SEASON_PLACES: entry ${a.entryId} is not in the published season places.`);
         if (row.userId !== a.uid) throw new HttpsError('failed-precondition', `ENTRY_OWNER_MISMATCH: entry ${a.entryId} is not owned by ${a.uid}.`);

@@ -4,6 +4,7 @@ import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import type { Pool, WeeklyRecap } from '../../types';
 import { weeklyAwardId, type PayoutRecord, type PayoutRecordPrivate } from '@shared/payoutRecords';
+import { seasonAwardId } from '@shared/seasonPrizes';
 import { buildPoolRoster, duesRates } from '../../utils/poolRoster';
 import { nflWeekChip } from '../../utils/nflWeekLabel';
 import { poolSeasonType } from '../../utils/nflPending';
@@ -169,14 +170,19 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
     const places = (pool as any).seasonPlaces as Array<{ entryId: string; userId: string; userName: string; entryName?: string; rank: number; prize?: number }> | undefined;
     const rows = new Map<string, { key: string; entryId: string; uid: string; name: string; rank: number; owed: number; live?: Rec; settled: boolean }>();
     if (!Array.isArray(places)) return rows;
-    const liveSeason = new Map<string, Rec>();
+    // Only the BOUND award counts — the deterministic id at the published rank
+    // with the published amount. A free-form season PLACE record (Record Payouts
+    // card, or one written before seasonPlaces existed) must not satisfy the
+    // published prize (codex r1 on step 3).
+    const byId = new Map<string, Rec>();
     for (const r of records) {
       if (r.supersededBy || r.kind !== 'PLACE' || r.week !== undefined || !r.entryId) continue;
-      liveSeason.set(r.entryId, r);
+      byId.set(r.id, r);
     }
     for (const p of places) {
       if (typeof p.prize !== 'number' || p.prize <= 0) continue;
-      const live = liveSeason.get(p.entryId);
+      const candidate = byId.get(seasonAwardId(p.entryId, p.rank));
+      const live = candidate && Number(candidate.amount) === p.prize ? candidate : undefined;
       rows.set(p.entryId, {
         key: `season|${p.entryId}`, entryId: p.entryId, uid: p.userId,
         name: p.entryName ? `${p.entryName} · ${p.userName}` : p.userName,
