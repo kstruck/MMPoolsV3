@@ -266,7 +266,9 @@ describe('the HYBRID split renders under the entry fee, not on the rules step (P
     expect(fee).toBeGreaterThan(-1);
     expect(split).toBeGreaterThan(fee);
     // …and before the "How players pay you" block: the split belongs to the fee, not to the handles.
-    expect(split).toBeLessThan(s.indexOf('How players pay you'));
+    const handles = s.indexOf('How players pay you');
+    expect(handles, 'the payment-handles block heading moved — re-anchor this test').toBeGreaterThan(-1);
+    expect(split).toBeLessThan(handles);
   });
   it('NO rules step renders it any more', () => {
     for (const f of ['src/components/wizard/create/CreateNFLPickemPool.tsx', 'src/components/wizard/create/CreateNFLMarginPool.tsx']) {
