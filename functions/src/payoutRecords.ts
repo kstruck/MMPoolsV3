@@ -257,18 +257,8 @@ export const recordPoolPayouts = onCall(async (request) => {
   // other inside the transaction (both read "absent", both plan a write — codex
   // r1). Refuse the batch; the ledger sends one award per row.
   const weeklyKeys = new Set<string>();
-  const seasonKeys = new Set<string>();
-  const seasonPublished = Array.isArray(pool.seasonPlaces);
   for (const a of validated) {
-    if (a.week === undefined) {
-      // Two bound season awards for the same entry in one call would plan two
-      // writes to one deterministic doc (codex r1 on step 3).
-      if (a.kind === 'PLACE' && a.entryId && seasonPublished) {
-        if (seasonKeys.has(a.entryId)) throw new HttpsError('invalid-argument', `DUPLICATE_SEASON_AWARD: entry ${a.entryId} appears more than once in awards[].`);
-        seasonKeys.add(a.entryId);
-      }
-      continue;
-    }
+    if (a.week === undefined) continue;
     const key = `${a.entryId}|${a.week}`;
     if (weeklyKeys.has(key)) throw new HttpsError('invalid-argument', `DUPLICATE_WEEKLY_AWARD: entry ${a.entryId} week ${a.week} appears more than once in awards[].`);
     weeklyKeys.add(key);
@@ -289,12 +279,22 @@ export const recordPoolPayouts = onCall(async (request) => {
     const out: Planned[] = [];
     // ---- reads ----
     const recapCache = new Map<number, { weeklyPlaces?: WeeklyPlace[]; weeklyPrize?: WeeklyPrizeSnapshot | null } | undefined>();
-    // Season places are validated against the pool AS READ IN THIS TRANSACTION,
-    // not the pre-tx snapshot — a finalization landing between the two reads must
-    // make this transaction retry, not bind an award to an obsolete list (codex r1).
-    const wantsSeason = validated.some(a => a.week === undefined && a.kind === 'PLACE' && !!a.entryId && seasonPublished);
+    // Season places — AND the decision to bind at all — come from the pool AS
+    // READ IN THIS TRANSACTION, not the pre-tx snapshot: a finalization landing
+    // between the two reads must make this transaction retry and bind, never
+    // slip a free-form PLACE past the newly published list (codex r1/r4 on #464).
+    const wantsSeason = validated.some(a => a.week === undefined && a.kind === 'PLACE' && !!a.entryId);
     const freshPool = wantsSeason ? ((await tx.get(poolRef)).data() as any) : pool;
     const seasonPlaces: SeasonPlace[] | undefined = Array.isArray(freshPool?.seasonPlaces) ? freshPool.seasonPlaces : undefined;
+    const seasonPublished = seasonPlaces !== undefined;
+    // Two bound season awards for the same entry in one call would plan two
+    // writes to one deterministic doc (codex r1 on #464).
+    const seasonKeys = new Set<string>();
+    for (const a of validated) {
+      if (a.week !== undefined || a.kind !== 'PLACE' || !a.entryId || !seasonPublished) continue;
+      if (seasonKeys.has(a.entryId)) throw new HttpsError('invalid-argument', `DUPLICATE_SEASON_AWARD: entry ${a.entryId} appears more than once in awards[].`);
+      seasonKeys.add(a.entryId);
+    }
     for (const a of validated) {
       if (a.week === undefined) continue;
       if (!recapCache.has(a.week)) {
@@ -312,8 +312,7 @@ export const recordPoolPayouts = onCall(async (request) => {
       // re-recorded by supersession via `staleAwardId` — the same K12 rule as the
       // weekly half (codex r3 on #464). PLACE awards WITHOUT an entryId (the Record
       // Payouts card) keep the free path below.
-      if (a.week === undefined && a.kind === 'PLACE' && a.entryId && seasonPublished) {
-        if (!seasonPlaces) throw new HttpsError('failed-precondition', 'SEASON_NOT_PUBLISHED: the pool no longer carries published season places.');
+      if (a.week === undefined && a.kind === 'PLACE' && a.entryId && seasonPlaces) {
         const row = bindToPublishedRow(a, seasonPlaces.find(r => r.entryId === a.entryId), 'season');
         const liveSnap = await tx.get(recordsCol.where('entryId', '==', a.entryId));
         // Season awards carry no `week`; the deterministic prefix keeps free-form
