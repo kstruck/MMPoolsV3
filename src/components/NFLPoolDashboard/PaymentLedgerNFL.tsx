@@ -96,7 +96,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
     // new snapshots arrive — award ids are deterministic and could collide
     // across pools (codex r9).
     setRecaps([]); setRecords([]); setPriv([]); setPrivLoaded(false); setPrivUnavailable(false); setError(null); setRecapsLoaded(false); setRecordsLoaded(false);
-    setBusy(null); setEditUid(null); // an in-flight toggle or open editor belongs to the previous pool (qodo #5 on #460)
+    setBusy(null); setEditUid(null); setOtherDraft(null); // an in-flight toggle, open editor or award draft belongs to the previous pool (qodo #5 on #460, codex r2 on #466)
     const u1 = dbService.subscribeToWeeklyRecaps(pool.id, (rows) => { setRecaps(rows); setRecapsLoaded(true); });
     const u2 = dbService.subscribeToPayoutRecords(pool.id, (rows) => { setRecords(rows as Rec[]); setRecordsLoaded(true); });
     const u3 = dbService.subscribeToPayoutRecordsPrivate(pool.id, (rows) => { setPriv(rows as never); setPrivUnavailable(false); setPrivLoaded(true); }, undefined, () => setPrivUnavailable(true));
@@ -329,7 +329,8 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
   const submitOther = async () => {
     if (!otherDraft) return;
     const amount = Number(otherDraft.amount);
-    if (!otherDraft.uid || !Number.isInteger(amount) || (otherDraft.kind === 'BONUS' && amount <= 0)) { setError('Pick a member and a WHOLE-dollar amount (bonus > 0; an adjustment may be negative).'); return; }
+    // Blank → Number('') === 0 — refuse blanks and zero outright (codex r2 on #466); a bonus is positive, an adjustment may be negative.
+    if (!otherDraft.uid || otherDraft.amount.trim() === '' || !Number.isInteger(amount) || amount === 0 || (otherDraft.kind === 'BONUS' && amount < 0)) { setError('Pick a member and a non-zero WHOLE-dollar amount (bonus > 0; an adjustment may be negative).'); return; }
     setBusy('other'); setError(null);
     try {
       await dbService.recordPoolPayouts(pool.id, [{ uid: otherDraft.uid, amount, kind: otherDraft.kind, settled: otherDraft.settled, ...(otherDraft.note.trim() ? { note: otherDraft.note.trim() } : {}) }]);
