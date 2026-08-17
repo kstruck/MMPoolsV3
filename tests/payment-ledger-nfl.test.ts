@@ -12,11 +12,14 @@ const code = (p: string) => read(p).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\
  */
 describe('PaymentLedgerNFL — wiring (T5)', () => {
   const ledger = code('src/components/NFLPoolDashboard/PaymentLedgerNFL.tsx');
-  it('is mounted on the NFL manager view beside (not instead of) Record Payouts, and owns the fee toggle', () => {
+  it('is mounted on the NFL manager view (Record Payouts card folded in — T7), and owns the fee toggle', () => {
     const mgr = code('src/components/NFLPoolDashboard/NFLManagerView.tsx');
     expect(mgr).toContain("import { PaymentLedgerNFL } from './PaymentLedgerNFL'");
     expect(mgr).toContain('<PaymentLedgerNFL pool={pool} members={members} entries={entries} onTogglePaid={handleTogglePayment} onSettleRebuys={handleSettleRebuys} onSavePaidDetails={handleSavePaidDetails} savingFeeUid={isSavingPayment} />');
-    expect(mgr).toContain('<RecordPayoutsCard pool={pool} entries={entries} />');
+    // T7: the card is gone; free-form BONUS/ADJUSTMENT live in the ledger's "Other awards" block.
+    expect(mgr).not.toContain('RecordPayoutsCard');
+    expect(ledger).toContain("kind: otherDraft.kind, settled: otherDraft.settled");
+    expect(ledger).toContain('Other awards');
     // The roster card is picks / remind / co-comm only — the fee toggle moved INTO the ledger (Kevin, 2026-08-16).
     expect(mgr).not.toMatch(/onClick=\{\(\) => handleTogglePayment\(row\.uid/);
     // "View full ledger" on the Overview and "Open Payment Ledger" on the member Payments tab both land on it.

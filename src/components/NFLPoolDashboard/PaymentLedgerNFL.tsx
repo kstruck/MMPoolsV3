@@ -77,6 +77,10 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
   const [priv, setPriv] = useState<Priv[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // "Other awards" (PLAN-PAYMENT-LEDGER T7 — the Record Payouts card folded in):
+  // free-form BONUS / ADJUSTMENT rows the commissioner adds after finalization,
+  // plus any legacy free-form PLACE record. Draft for the add form.
+  const [otherDraft, setOtherDraft] = useState<{ uid: string; kind: 'BONUS' | 'ADJUSTMENT'; amount: string; note: string; settled: boolean } | null>(null);
   // Settlement state comes from the PRIVATE records; if that listener fails
   // (permissions, offline) every box would read "unpaid" — say so and disable
   // the boxes instead (qodo #10 on #456).
@@ -277,8 +281,14 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       if (r.first && r.feeOwed !== null) { owedIn += r.feeOwed + r.rebuyOwed; if (r.paidStatus === 'PAID') paidIn += r.feeOwed; paidIn += Math.min(r.rebuyPaid, r.rebuyOwed); }
     }
     for (const p of prizeRows) { owedOut += p.owed; if (p.settled) paidOut += p.owed; }
+    // Other awards (BONUS / ADJUSTMENT / legacy free-form PLACE) count in the
+    // out totals too — an adjustment may be negative (T7).
+    for (const r of records) {
+      if (r.supersededBy || (r.kind === 'PLACE' && r.entryId && (typeof r.week === 'number' || r.id.startsWith('season-')))) continue;
+      owedOut += Number(r.amount); if (privById.get(r.id)?.settled === true) paidOut += Number(r.amount);
+    }
     return { owedIn, paidIn, owedOut, paidOut };
-  }, [ledgerRows, prizeRows]);
+  }, [ledgerRows, prizeRows, records, privById]);
 
   const toggle = async (r: (typeof prizeRows)[number], checked: boolean) => {
     setBusy(r.key); setError(null);
@@ -310,6 +320,33 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
 
   const seasonType = poolSeasonType(pool);
   const chip = (week: number) => nflWeekChip(seasonType, week);
+  const finalized = !!(pool as any).finalizedAt || pool.status === 'FINAL' || pool.status === 'COMPLETED';
+  /** Live records that are NOT bound weekly/season PLACE awards: BONUS, ADJUSTMENT, legacy free-form PLACE. */
+  const otherAwards = useMemo(() => records
+    .filter(r => !r.supersededBy && !(r.kind === 'PLACE' && r.entryId && (typeof r.week === 'number' || r.id.startsWith('season-'))))
+    .sort((a, b) => Number(b.recordedAt) - Number(a.recordedAt)), [records]);
+  const nameOf = (uid: string) => ledgerRows.find(r => r.uid === uid)?.name.split(' · ').pop() ?? uid;
+  const submitOther = async () => {
+    if (!otherDraft) return;
+    const amount = Number(otherDraft.amount);
+    if (!otherDraft.uid || !Number.isFinite(amount) || (otherDraft.kind === 'BONUS' && amount <= 0)) { setError('Pick a member and a whole-dollar amount (bonus > 0; an adjustment may be negative).'); return; }
+    setBusy('other'); setError(null);
+    try {
+      await dbService.recordPoolPayouts(pool.id, [{ uid: otherDraft.uid, amount, kind: otherDraft.kind, settled: otherDraft.settled, ...(otherDraft.note.trim() ? { note: otherDraft.note.trim() } : {}) }]);
+      setOtherDraft(null);
+    } catch (e: any) {
+      logger.error('ledger other-award failed', e);
+      setError(String(e?.message ?? e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const settleOther = async (r: Rec, checked: boolean) => {
+    setBusy(r.id); setError(null);
+    try { await dbService.setPayoutSettled(pool.id, r.id, checked); }
+    catch (e: any) { logger.error('ledger other-award settle failed', e); setError(String(e?.message ?? e)); }
+    finally { setBusy(null); }
+  };
   const th = 'py-2 px-2 font-display font-bold uppercase text-[10px] tracking-[0.06em] text-muted whitespace-nowrap';
   const td = 'py-2 px-2 whitespace-nowrap';
 
@@ -453,6 +490,50 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
         <span className="text-muted">Paid out <span className="num font-bold text-green-700 dark:text-green-400">{recapsLoaded && recordsLoaded && privLoaded ? money(totals.paidOut) : <span className="text-faint" title={privUnavailable ? 'Settlement state unavailable' : 'Loading…'}>—</span>}</span></span>
       </div>
 
+      {/* Other awards — the Record Payouts card folded into the ledger (T7): free-form BONUS / ADJUSTMENT after finalization; legacy free-form PLACE records listed for settlement. */}
+      {(finalized || otherAwards.length > 0) && (
+        <div className="border-t border-line pt-3 space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h4 className="font-display font-bold uppercase text-[11px] tracking-[0.06em] text-muted">Other awards</h4>
+            {finalized && !otherDraft && (
+              <button type="button" onClick={() => setOtherDraft({ uid: ledgerRows.find(r => r.first)?.uid ?? '', kind: 'BONUS', amount: '', note: '', settled: false })} className="text-[10px] font-display font-bold uppercase tracking-[0.06em] px-2 py-1 rounded-md border border-line text-muted hover:text-[color:var(--text)]">
+                + Bonus / adjustment
+              </button>
+            )}
+          </div>
+          {otherAwards.length === 0 && !otherDraft && <p className="text-[11px] font-body text-faint">None recorded. Weekly and season prizes live in the table above; use this only for a bonus or a correction.</p>}
+          {otherAwards.length > 0 && (
+            <ul className="divide-y divide-line text-[12px] font-body">
+              {otherAwards.map(r => (
+                <li key={r.id} className="py-1 flex items-center justify-between gap-3">
+                  <span className="text-[color:var(--text)]">{nameOf(r.uid)} <span className="text-muted text-[10px] uppercase font-display font-bold ml-1">{r.kind === 'PLACE' ? `place ${r.place ?? '?'} (legacy)` : r.kind.toLowerCase()}</span></span>
+                  <span className="flex items-center gap-2">
+                    <span className={`num font-bold ${Number(r.amount) < 0 ? 'text-brandred-600 dark:text-brandred-500' : 'text-gold-700 dark:text-gold-400'}`}>{Number(r.amount) < 0 ? `−${money(-Number(r.amount))}` : money(Number(r.amount))}</span>
+                    <input type="checkbox" aria-label={`${r.kind} award for ${nameOf(r.uid)} paid`} checked={privById.get(r.id)?.settled === true} disabled={busy === r.id || privUnavailable || !privLoaded} onChange={e => settleOther(r, e.target.checked)} className="h-4 w-4 accent-navy-600 dark:accent-gold-500" />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {otherDraft && (
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-body">
+              <select value={otherDraft.uid} onChange={e => setOtherDraft(d => d && ({ ...d, uid: e.target.value }))} className="bg-page border border-line rounded px-1 py-0.5" aria-label="Recipient">
+                {ledgerRows.filter(r => r.first).map(r => <option key={r.uid} value={r.uid}>{nameOf(r.uid)}</option>)}
+              </select>
+              <select value={otherDraft.kind} onChange={e => setOtherDraft(d => d && ({ ...d, kind: e.target.value as 'BONUS' | 'ADJUSTMENT' }))} className="bg-page border border-line rounded px-1 py-0.5" aria-label="Kind">
+                <option value="BONUS">Bonus</option>
+                <option value="ADJUSTMENT">Adjustment</option>
+              </select>
+              <input type="number" step="1" value={otherDraft.amount} onChange={e => setOtherDraft(d => d && ({ ...d, amount: e.target.value }))} placeholder="$" className="bg-page border border-line rounded px-1 py-0.5 w-20" aria-label="Amount (whole dollars)" />
+              <input type="text" value={otherDraft.note} onChange={e => setOtherDraft(d => d && ({ ...d, note: e.target.value }))} placeholder="Note" className="bg-page border border-line rounded px-1 py-0.5 w-40" aria-label="Note" />
+              <label className="inline-flex items-center gap-1"><input type="checkbox" checked={otherDraft.settled} onChange={e => setOtherDraft(d => d && ({ ...d, settled: e.target.checked }))} className="h-4 w-4 accent-navy-600 dark:accent-gold-500" /> paid</label>
+              <button type="button" disabled={busy === 'other'} onClick={submitOther} className="text-[10px] font-display font-bold uppercase px-2 py-1 rounded bg-navy-800 text-white disabled:opacity-50">{busy === 'other' ? 'Recording…' : 'Record'}</button>
+              <button type="button" onClick={() => setOtherDraft(null)} className="text-[10px] font-display font-bold uppercase px-2 py-1 rounded border border-line text-muted">Cancel</button>
+            </div>
+          )}
+        </div>
+      )}
+
       {pool.type === 'NFL_SURVIVOR' ? (
         <p className="text-[11px] font-body text-faint">Survivor pools have no weekly prizes — the season prize is recorded from Record Payouts after finalization.</p>
       ) : weeks.length === 0 && (
@@ -471,7 +552,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       {privUnavailable && <p className="text-[11px] font-body text-brandred-600 dark:text-brandred-500">Settlement state unavailable (could not read the private payout records) — the prize boxes are disabled until it loads. Reload the page; if it persists, tell support.</p>}
       {error && <p className="text-[11px] font-body text-brandred-600 dark:text-brandred-500">{error}</p>}
       <p className="text-[10px] font-body text-faint leading-relaxed">
-        A ticked prize box is a settled Payout Record (`{weeklyAwardId(1, 'entry', 1)}`-style id, one per entry per week; `season-…` for the season prize). Un-ticking marks it unpaid; the recorded amount never changes. After a rescore a weekly cell can show Re-record (writes the new figure) or Reverse (writes $0), superseding the old record and keeping its paid/unpaid state. Season prizes appear once the season is finalized (ties break on the pick-record cascade, then split); one-off adjustments: Record Payouts.
+        A ticked prize box is a settled Payout Record (`{weeklyAwardId(1, 'entry', 1)}`-style id, one per entry per week; `season-…` for the season prize). Un-ticking marks it unpaid; the recorded amount never changes. After a rescore a weekly cell can show Re-record (writes the new figure) or Reverse (writes $0), superseding the old record and keeping its paid/unpaid state. Season prizes appear once the season is finalized (ties break on the pick-record cascade, then split). A bonus or a correction is an "Other award" below the table — also a Payout Record, also settled by ticking. Every prize is DISPLAYED from the published figures until you record it; nothing is recorded for you (ADR 0008).
       </p>
     </div>
   );

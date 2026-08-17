@@ -344,9 +344,8 @@ describe('commissioner tabs — every section is reachable and nothing was dropp
     const scoring = at("commishTab === 'scoring'");
     const members = at("commishTab === 'members'");
 
-    // Overview owns the bento and the payouts card.
+    // Overview owns the bento (the payouts card folded into the ledger — T7).
     expect(at('<NFLManagerBentoDashboard')).toBeGreaterThan(overview);
-    expect(at('<RecordPayoutsCard')).toBeGreaterThan(overview);
     expect(at('<NFLManagerBentoDashboard')).toBeLessThan(settings);
 
     // Anchored on the JSX USE SITE, not the handler name: every handler is
