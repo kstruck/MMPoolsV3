@@ -50,6 +50,7 @@ export const MyPrizes: React.FC<Props> = ({ pool, uid }) => {
   const seasonType = poolSeasonType(pool);
   const nflPool = pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN' ? pool : undefined;
 
+  const privReady = loaded.priv && !privUnavailable;
   const rows = useMemo(() => {
     const privById = new Map(priv.map(p => [p.id, p]));
     // My LIVE bound PLACE awards: weekly keyed by `${entryId}|${week}`, season by `${entryId}|season` (deterministic `season-` ids only).
@@ -59,10 +60,13 @@ export const MyPrizes: React.FC<Props> = ({ pool, uid }) => {
       if (typeof r.week === 'number') live.set(`${r.entryId}|${r.week}`, r);
       else if (r.id.startsWith('season-')) live.set(`${r.entryId}|season`, r);
     }
-    const out: Array<{ key: string; label: string; entryName?: string; rank: number; prize: number; state: 'unrecorded' | 'unpaid' | 'paid' | 'stale' }> = [];
-    const stateOf = (rec: Rec | undefined, prize: number, rank: number): 'unrecorded' | 'unpaid' | 'paid' | 'stale' => {
+    const out: Array<{ key: string; label: string; entryName?: string; rank: number; prize: number; state: 'unrecorded' | 'unpaid' | 'paid' | 'stale' | 'unknown' }> = [];
+    const stateOf = (rec: Rec | undefined, prize: number, rank: number): 'unrecorded' | 'unpaid' | 'paid' | 'stale' | 'unknown' => {
       if (!rec) return 'unrecorded';
       if (Number(rec.amount) !== prize || Number(rec.place) !== rank) return 'stale';
+      // Settlement comes from the private listener; until it has delivered (or if
+      // it failed) "unpaid" would be a plausible-looking guess, not a fact (codex r1 on #465).
+      if (!privReady) return 'unknown';
       return privById.get(rec.id)?.settled === true ? 'paid' : 'unpaid';
     };
     for (const recap of [...recaps].sort((a, b) => a.week - b.week)) {
@@ -77,7 +81,7 @@ export const MyPrizes: React.FC<Props> = ({ pool, uid }) => {
       out.push({ key: `season|${p.entryId}`, label: 'Season', entryName: p.entryName, rank: p.rank, prize: p.prize, state: stateOf(live.get(`${p.entryId}|season`), p.prize, p.rank) });
     }
     return out;
-  }, [recaps, records, priv, uid, seasonType, nflPool]);
+  }, [recaps, records, priv, uid, seasonType, nflPool, privReady]);
 
   const ready = loaded.recaps && loaded.records;
   const totals = useMemo(() => ({ won: rows.reduce((s, r) => s + r.prize, 0), paid: rows.filter(r => r.state === 'paid').reduce((s, r) => s + r.prize, 0) }), [rows]);
@@ -114,7 +118,7 @@ export const MyPrizes: React.FC<Props> = ({ pool, uid }) => {
               <span className="flex items-center gap-3">
                 <span className="num font-bold text-gold-700 dark:text-gold-400">{money(r.prize)}</span>
                 <span className={`text-[10px] font-display font-bold uppercase tracking-[0.06em] ${r.state === 'paid' ? 'text-green-700 dark:text-green-400' : r.state === 'stale' ? 'text-brandred-600 dark:text-brandred-500' : 'text-muted'}`}>
-                  {r.state === 'paid' ? 'Paid' : r.state === 'unpaid' ? 'Recorded — not paid yet' : r.state === 'stale' ? 'Being corrected' : 'Awaiting commissioner'}
+                  {r.state === 'paid' ? 'Paid' : r.state === 'unpaid' ? 'Recorded — not paid yet' : r.state === 'unknown' ? 'Recorded — payment status unavailable' : r.state === 'stale' ? 'Being corrected' : 'Awaiting commissioner'}
                 </span>
               </span>
             </li>
