@@ -163,6 +163,8 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       key: string; uid: string; entryId: string; name: string; first: boolean;
       hasMember: boolean; feeOwed: number | null; paidStatus: 'PAID' | 'UNPAID' | null;
       rebuyOwed: number; rebuyPaid: number;
+      /** Payment metadata the old modal wrote (method / date / note) — shown read-only under the fee box. */
+      paidMeta?: string;
     }> = [];
     const roster = buildPoolRoster({ pool, members, entries }).sort((a, b) => (a.userName ?? a.uid).localeCompare(b.userName ?? b.uid));
     const rosterUids = new Set<string>();
@@ -178,6 +180,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
         rows.push({
           key: entryId, uid: r.uid, entryId, name: i > 0 && !e?.entryName ? `${label} (Entry ${e?.entryIndex ?? i + 1})` : label, first: i === 0,
           hasMember: r.hasMember, feeOwed, paidStatus: r.paidStatus, rebuyOwed, rebuyPaid: r.rebuyPaid ?? 0,
+          paidMeta: r.paidStatus === 'PAID' ? [r.paymentMethod, r.paidAt ? new Date(r.paidAt).toLocaleDateString() : null, r.paymentNote].filter(Boolean).join(' · ') || undefined : undefined,
         });
       });
     }
@@ -190,7 +193,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
     for (const p of prizeRows) {
       if (rows.some(r => r.entryId === p.entryId)) continue;
       const known = rosterUids.has(p.uid);
-      const row = { key: p.entryId, uid: p.uid, entryId: p.entryId, name: p.name, first: !known, hasMember: false, feeOwed: null, paidStatus: null, rebuyOwed: 0, rebuyPaid: 0 };
+      const row = { key: p.entryId, uid: p.uid, entryId: p.entryId, name: p.name, first: !known, hasMember: false, feeOwed: null as number | null, paidStatus: null as 'PAID' | 'UNPAID' | null, rebuyOwed: 0, rebuyPaid: 0 };
       const last = known ? rows.map(r => r.uid).lastIndexOf(p.uid) : -1;
       if (last >= 0) rows.splice(last + 1, 0, row); else rows.push(row);
     }
@@ -316,6 +319,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
                         onChange={() => onTogglePaid?.(r.uid, r.paidStatus ?? 'UNPAID')}
                         className="h-4 w-4 accent-navy-600 dark:accent-gold-500"
                       />
+                      {r.paidMeta && <span className="text-[9px] text-faint max-w-[10rem] truncate" title={r.paidMeta}>{r.paidMeta}</span>}
                       {/* Rebuy dues are a SEPARATE settlement from base dues (P3): the callable needs a Member Record. */}
                       {r.rebuyOwed > 0 && r.hasMember && onSettleRebuys && (() => {
                         const settled = r.rebuyPaid >= r.rebuyOwed;
