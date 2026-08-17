@@ -1,6 +1,24 @@
 # HANDOFF — Session entry point
 
-> ## 🛑 2026-08-17 (overnight 08-16) — THE PAYMENT LEDGER: SIX STACKED PRs OPEN (#451→#456), NOTHING MERGED OR DEPLOYED; three new PLANs + board memo in #457
+> ## 🛑 2026-08-17 (late 08-16) — LEDGER UX FIX IN PR #460 (Coolify-only); the six-PR ledger stack #451→#456 + docs #457/#458 are MERGED AND DEPLOYED (functions + rules + indexes + Coolify)
+>
+> **Read `MORNING-2026-08-17-LEDGER-UX.md` first** — merge/deploy/verify runbook
+> for #460 and the next-PR order. Kevin's feedback with screenshots (2026-08-16
+> late): three surfaces were called "ledger" and their doors did not line up.
+> #460 makes Manager → Members & Payments ONE **Payment Ledger** spreadsheet
+> (Member | Entry fee | Fee paid ☐ | HOF/W1… | Season $ | totals; the fee toggle
+> MOVED here from the roster row; the old modal's method/date/note editor folded
+> into the fee cell), the roster card is picks/remind/co-comm only, the member
+> Payments tab says **Payment History** + **Open Payment Ledger** (deep-links to
+> `?tab=manager&section=members`), Overview's card links to the same ledger, and
+> the empty state names the rescore ("scored before weekly prizes existed —
+> Score Week again"). No money logic changed. codex 9 rounds (r5 + r9 clean);
+> qodo verdicts on the PR. **HOF + Wk1 on Kevin's HYBRID pool need a rescore**
+> (Manager → Scoring) to publish `weeklyPlaces` — MORNING §3.
+> `MULTI_ENTRY_WIZARD_ENABLED` still `false`. Next in order: WEEKLY-PRIZES step 3
+> → T6 → T7 → T0/T1/T2 (MORNING §5).
+
+> ## 🛑 2026-08-17 (overnight 08-16) — THE PAYMENT LEDGER: SIX STACKED PRs OPEN (#451→#456), NOTHING MERGED OR DEPLOYED; three new PLANs + board memo in #457 — **SUPERSEDED: all merged + deployed 2026-08-16 late (Kevin)**
 >
 > **Read `MORNING-2026-08-17-LEDGER.md` first** — it is the merge-order + deploy
 > runbook (functions → rules → indexes → Coolify) and lists the decisions/deviations.
