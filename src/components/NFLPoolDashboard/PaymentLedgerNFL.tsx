@@ -92,6 +92,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
     // new snapshots arrive — award ids are deterministic and could collide
     // across pools (codex r9).
     setRecaps([]); setRecords([]); setPriv([]); setPrivLoaded(false); setPrivUnavailable(false); setError(null); setRecapsLoaded(false); setRecordsLoaded(false);
+    setBusy(null); setEditUid(null); // an in-flight toggle or open editor belongs to the previous pool (qodo #5 on #460)
     const u1 = dbService.subscribeToWeeklyRecaps(pool.id, (rows) => { setRecaps(rows); setRecapsLoaded(true); });
     const u2 = dbService.subscribeToPayoutRecords(pool.id, (rows) => { setRecords(rows as Rec[]); setRecordsLoaded(true); });
     const u3 = dbService.subscribeToPayoutRecordsPrivate(pool.id, (rows) => { setPriv(rows as never); setPrivUnavailable(false); setPrivLoaded(true); }, undefined, () => setPrivUnavailable(true));
