@@ -80,7 +80,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
   // "Other awards" (PLAN-PAYMENT-LEDGER T7 — the Record Payouts card folded in):
   // free-form BONUS / ADJUSTMENT rows the commissioner adds after finalization,
   // plus any legacy free-form PLACE record. Draft for the add form.
-  const [otherDraft, setOtherDraft] = useState<{ uid: string; kind: 'BONUS' | 'ADJUSTMENT'; amount: string; note: string; settled: boolean } | null>(null);
+  const [otherDraft, setOtherDraft] = useState<{ uid: string; kind: 'BONUS' | 'ADJUSTMENT'; amount: string; note: string; settled: boolean; /** correcting this live award by supersession (ADR 0008) */ supersedes?: string } | null>(null);
   // Settlement state comes from the PRIVATE records; if that listener fails
   // (permissions, offline) every box would read "unpaid" — say so and disable
   // the boxes instead (qodo #10 on #456).
@@ -333,7 +333,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
     if (!otherDraft.uid || otherDraft.amount.trim() === '' || !Number.isInteger(amount) || amount === 0 || (otherDraft.kind === 'BONUS' && amount < 0)) { setError('Pick a member and a non-zero WHOLE-dollar amount (bonus > 0; an adjustment may be negative).'); return; }
     setBusy('other'); setError(null);
     try {
-      await dbService.recordPoolPayouts(pool.id, [{ uid: otherDraft.uid, amount, kind: otherDraft.kind, settled: otherDraft.settled, ...(otherDraft.note.trim() ? { note: otherDraft.note.trim() } : {}) }]);
+      await dbService.recordPoolPayouts(pool.id, [{ uid: otherDraft.uid, amount, kind: otherDraft.kind, settled: otherDraft.settled, ...(otherDraft.note.trim() ? { note: otherDraft.note.trim() } : {}), ...(otherDraft.supersedes ? { supersedes: otherDraft.supersedes } : {}) }]);
       setOtherDraft(null);
     } catch (e: any) {
       logger.error('ledger other-award failed', e);
@@ -511,6 +511,8 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
                   <span className="flex items-center gap-2">
                     <span className={`num font-bold ${Number(r.amount) < 0 ? 'text-brandred-600 dark:text-brandred-500' : 'text-gold-700 dark:text-gold-400'}`}>{Number(r.amount) < 0 ? `−${money(-Number(r.amount))}` : money(Number(r.amount))}</span>
                     <input type="checkbox" aria-label={`${r.kind} award for ${nameOf(r.uid)} paid`} checked={privById.get(r.id)?.settled === true} disabled={busy === r.id || privUnavailable || !privLoaded} onChange={e => settleOther(r, e.target.checked)} className="h-4 w-4 accent-navy-600 dark:accent-gold-500" />
+                    {/* Correction by supersession (ADR 0008): the new record replaces this one; the old stays in the audit trail as superseded (codex r3 on #466). */}
+                    <button type="button" disabled={!!otherDraft} onClick={() => setOtherDraft({ uid: r.uid, kind: r.kind === 'ADJUSTMENT' ? 'ADJUSTMENT' : 'BONUS', amount: String(r.amount), note: '', settled: privById.get(r.id)?.settled === true, supersedes: r.id })} className="text-[9px] font-display font-bold uppercase tracking-[0.06em] px-1.5 py-0.5 rounded border border-line text-muted hover:text-[color:var(--text)] disabled:opacity-40" title="Record a corrected figure that replaces this award">Correct</button>
                   </span>
                 </li>
               ))}
@@ -518,7 +520,8 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
           )}
           {otherDraft && (
             <div className="flex flex-wrap items-center gap-2 text-[11px] font-body">
-              <select value={otherDraft.uid} onChange={e => setOtherDraft(d => d && ({ ...d, uid: e.target.value }))} className="bg-page border border-line rounded px-1 py-0.5" aria-label="Recipient">
+              {otherDraft.supersedes && <span className="text-[10px] font-display font-bold uppercase text-brandred-600 dark:text-brandred-500">Correcting {nameOf(otherDraft.uid)}'s award —</span>}
+              <select value={otherDraft.uid} disabled={!!otherDraft.supersedes} onChange={e => setOtherDraft(d => d && ({ ...d, uid: e.target.value }))} className="bg-page border border-line rounded px-1 py-0.5 disabled:opacity-60" aria-label="Recipient">
                 {ledgerRows.filter(r => r.first).map(r => <option key={r.uid} value={r.uid}>{nameOf(r.uid)}</option>)}
               </select>
               <select value={otherDraft.kind} onChange={e => setOtherDraft(d => d && ({ ...d, kind: e.target.value as 'BONUS' | 'ADJUSTMENT' }))} className="bg-page border border-line rounded px-1 py-0.5" aria-label="Kind">
