@@ -59,6 +59,11 @@ interface Props {
 }
 
 const money = (n: number) => `$${Math.floor(n).toLocaleString()}`;
+// LOCAL calendar date <-> <input type="date"> value. `toISOString()` is UTC and
+// pre-fills tomorrow after ~6pm in US time zones; `new Date('YYYY-MM-DD')` parses
+// as UTC midnight and displays as yesterday (codex r8 on #460).
+const localYmd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const fromYmd = (ymd: string): number => { const [y, m, d] = ymd.split('-').map(Number); return new Date(y, m - 1, d, 12).getTime(); };
 
 /** Owner uid of an entry doc: entry #1's id IS the uid; extras carry `ownerUid`. */
 const entryOwner = (e: any): string => e?.ownerUid || e?.id;
@@ -345,7 +350,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
                       {r.paidMeta && editUid !== r.uid && <span className="text-[9px] text-faint max-w-[10rem] truncate" title={r.paidMeta}>{r.paidMeta}</span>}
                       {onSavePaidDetails && r.hasMember && editUid !== r.uid && (
                         <button type="button" className="text-[9px] text-muted underline hover:text-[color:var(--text)]" title="Record how / when this fee was paid (marks it paid)"
-                          onClick={() => { setEditUid(r.uid); setDraft({ method: r.paymentMethod || 'Venmo', date: r.paidAt ? new Date(r.paidAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10), note: r.paymentNote || '' }); }}>
+                          onClick={() => { setEditUid(r.uid); setDraft({ method: r.paymentMethod || 'Venmo', date: localYmd(r.paidAt ? new Date(r.paidAt) : new Date()), note: r.paymentNote || '' }); }}>
                           {r.paidMeta ? 'edit details' : 'add details'}
                         </button>
                       )}
@@ -358,7 +363,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
                           <input type="text" value={draft.note} placeholder="Tx id / note" onChange={e => setDraft(d => ({ ...d, note: e.target.value }))} className="bg-page border border-line rounded px-1 py-0.5 text-[10px] w-28" aria-label="Payment note" />
                           <span className="flex gap-1 justify-center">
                             <button type="button" disabled={savingFeeUid === r.uid} className="text-[9px] font-display font-bold uppercase px-2 py-0.5 rounded bg-navy-800 text-white disabled:opacity-50"
-                              onClick={async () => { const ok = await onSavePaidDetails(r.uid, { paymentMethod: draft.method, paidAt: draft.date ? new Date(draft.date).getTime() : Date.now(), paymentNote: draft.note || null }); if (ok) setEditUid(null); /* on failure keep the draft (codex r7) */ }}>
+                              onClick={async () => { const ok = await onSavePaidDetails(r.uid, { paymentMethod: draft.method, paidAt: draft.date ? fromYmd(draft.date) : Date.now(), paymentNote: draft.note || null }); if (ok) setEditUid(null); /* on failure keep the draft (codex r7) */ }}>
                               {savingFeeUid === r.uid ? 'Saving…' : 'Save'}
                             </button>
                             <button type="button" className="text-[9px] font-display font-bold uppercase px-2 py-0.5 rounded border border-line text-muted" onClick={() => setEditUid(null)}>Cancel</button>
