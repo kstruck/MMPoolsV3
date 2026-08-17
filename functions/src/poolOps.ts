@@ -21,7 +21,7 @@ import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } fr
 import { parityEditNeedsEntries, survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
 import { tiebreakerEditNeedsEntries, touchesWeeklyTiebreakerSetting, weeklyTiebreakerRefusal } from './lib/weeklyTiebreakerGate';
 import { hybridNoOpKeys, hybridSplitNeedsClearing, hybridSplitRefusal, touchesHybridSplitSettings } from './lib/hybridSplitGate';
-import { payoutListsRefusal, touchesPayoutLists, weeklyPayoutsNeedsClearing } from './lib/weeklyPayoutsGate';
+import { payoutListsNoOpKeys, payoutListsRefusal, touchesPayoutLists, weeklyPayoutsNeedsClearing } from './lib/weeklyPayoutsGate';
 import { maxEntriesNoOpKeys, maxEntriesRefusal, touchesMaxEntriesSetting } from './lib/multiEntryGate';
 import { entryCountWrite } from './lib/multiEntry';
 import { memberLiableEntries } from './shared/memberRecord';
@@ -553,6 +553,10 @@ export const updatePoolSettings = validated(
     // The payout place lists (PLAN-PAYMENT-LEDGER T1): `weeklyPayouts` is only
     // meaningful on HYBRID and leaving HYBRID deletes it in the same write —
     // judged in the transaction for the same reason as the split.
+    // Same no-op stripping as the hybrid trio: an unchanged re-sent list is not a change.
+    for (const k of payoutListsNoOpKeys(pool as Record<string, unknown>, patch)) {
+        delete patch[k];
+    }
     const payoutListsTouched = touchesPayoutLists(patch);
     if (touchesLockSettings(patch) || parityTouched || tiebreakerTouched || hybridTouched || maxEntriesTouched || payoutListsTouched) {
         const bumpsLockRevision = touchesLockSettings(patch);

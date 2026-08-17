@@ -21,6 +21,30 @@ export function touchesPayoutLists(patch: Record<string, unknown>): boolean {
   return KEYS.some((k) => k in patch);
 }
 
+/** Two place lists are the same setting when their (rank, percentage) rows match, order-insensitively; bonuses compared by (name, percentage). null/undefined = the same absence. */
+function sameList(a: unknown, b: unknown): boolean {
+  const norm = (v: unknown): string | null => {
+    if (v === null || v === undefined) return null;
+    const o = v as { places?: Array<{ rank?: unknown; percentage?: unknown }>; bonuses?: Array<{ name?: unknown; percentage?: unknown }> };
+    const places = [...(o.places ?? [])].map(p => `${p.rank}:${p.percentage}`).sort();
+    const bonuses = [...(o.bonuses ?? [])].map(b => `${b.name ?? ''}:${b.percentage}`).sort();
+    return JSON.stringify([places, bonuses]);
+  };
+  return norm(a) === norm(b);
+}
+
+/**
+ * The list keys this patch carries whose value EQUALS what is stored — the
+ * keys the caller should DELETE from the patch before writing (the manager UI
+ * re-sends the whole settings map on every save; an unchanged `payouts` must
+ * not route a contact-email edit through the transaction — same reasoning as
+ * `hybridNoOpKeys`, and a key never written cannot clobber anything).
+ */
+export function payoutListsNoOpKeys(pool: Record<string, unknown> | undefined, patch: Record<string, unknown>): string[] {
+  const stored = (pool?.settings ?? {}) as Record<string, unknown>;
+  return (['settings.payouts', 'settings.weeklyPayouts'] as const).filter(k => k in patch && sameList(patch[k], stored[k.slice('settings.'.length)]));
+}
+
 function mergedSettings(pool: Record<string, unknown> | undefined, patch: Record<string, unknown>): { payoutMode?: unknown; payouts?: unknown; weeklyPayouts?: unknown } {
   const stored = (pool?.settings ?? {}) as Record<string, unknown>;
   const pick = (key: string) => (`settings.${key}` in patch ? patch[`settings.${key}`] : stored[key]);

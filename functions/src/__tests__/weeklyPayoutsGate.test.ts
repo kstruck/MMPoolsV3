@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { payoutsSchema, weeklyPayoutsSchema } from '../shared/schemas/common';
 import { pickemCreateInputSchema, marginCreateInputSchema, survivorCreateInputSchema } from '../shared/schemas/nfl';
-import { payoutListsRefusal, touchesPayoutLists, weeklyPayoutsNeedsClearing } from '../lib/weeklyPayoutsGate';
+import { payoutListsNoOpKeys, payoutListsRefusal, touchesPayoutLists, weeklyPayoutsNeedsClearing } from '../lib/weeklyPayoutsGate';
 
 /**
  * PLAN-PAYMENT-LEDGER T1 (D1, K9): `settings.weeklyPayouts` schema, unique
@@ -85,5 +85,14 @@ describe('payoutListsRefusal — updatePoolSettings (T1)', () => {
     expect(weeklyPayoutsNeedsClearing(pool({ payoutMode: 'SEASON' }), { 'settings.payoutMode': 'HYBRID' })).toBe(false);
     // caller replacing the list decides its own fate
     expect(weeklyPayoutsNeedsClearing(stored, { 'settings.payoutMode': 'SEASON', 'settings.weeklyPayouts': null })).toBe(false);
+  });
+});
+
+describe('payoutListsNoOpKeys — an unchanged re-sent list is not a change', () => {
+  it('strips payouts / weeklyPayouts equal to the stored value (order-insensitive), keeps a real change', () => {
+    const pool = { settings: { payouts: { places: [P(1, 60), P(2, 40)], bonuses: [] }, weeklyPayouts: { places: [P(1, 100)] } } };
+    expect(payoutListsNoOpKeys(pool, { 'settings.payouts': { places: [P(2, 40), P(1, 60)], bonuses: [] }, 'settings.weeklyPayouts': { places: [P(1, 100)] } })).toEqual(['settings.payouts', 'settings.weeklyPayouts']);
+    expect(payoutListsNoOpKeys(pool, { 'settings.payouts': { places: [P(1, 70), P(2, 30)], bonuses: [] } })).toEqual([]);
+    expect(payoutListsNoOpKeys({ settings: {} }, { 'settings.weeklyPayouts': null })).toEqual(['settings.weeklyPayouts']);
   });
 });
