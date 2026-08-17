@@ -25,6 +25,8 @@ import { HttpsError } from "firebase-functions/v2/https";
 
 import Stripe from "stripe";
 import { validated } from "./lib/validated";
+import { isPoolOwnerOrManager } from "./poolOps";
+import { normalizeRole } from "./lib/roles";
 import { withHeartbeat } from "./lib/heartbeat";
 import { createCheckoutSessionSchema } from "./schemas/billingCheckout";
 import { decideEventClaim, shouldAlertOnFailure, type WebhookEventDoc } from "./lib/webhookDurability";
@@ -158,6 +160,34 @@ const PENDING_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 // 1. createCheckoutSession — Callable Function (onCall v2)
 // =============================================================================
 
+/**
+ * PLAN-COMMISSIONER-TRANSFER K17 (shipped standalone per the 2026-08-16 board
+ * memo, Kevin 2026-08-17): the POOL-purchase path of createCheckoutSession is
+ * owner/manager-only — or a SUPER_ADMIN whose claim AND live users/{uid}.role
+ * agree (the same claim+doc guard assertCallerRole applies). Before this, any
+ * signed-in user could start a hosting checkout for any pool. Bundle purchases
+ * are per-person and untouched.
+ *
+ * `poolData` is whatever the caller has in hand — the pre-read for the fast
+ * refusal, and the IN-TRANSACTION read inside both write transactions (the $0 /
+ * credit activation and the paid reservation), so a checkout racing an
+ * ownership change is refused against the pool as it is being written, not as
+ * it was a moment ago. `userDoc` likewise: the SA path re-reads users/{uid} in
+ * each transaction.
+ */
+export function assertCheckoutOwnership(
+    poolData: any,
+    uid: string,
+    claimRole: unknown,
+    userDocRole: unknown,
+): void {
+    if (isPoolOwnerOrManager(poolData, uid)) return;
+    const claimIsSA = normalizeRole((claimRole as string) ?? null) === "SUPER_ADMIN";
+    const docIsSA = normalizeRole((userDocRole as string) ?? null) === "SUPER_ADMIN";
+    if (claimIsSA && docIsSA) return;
+    throw new HttpsError("permission-denied", "Only the pool commissioner can buy or upgrade hosting for this pool.");
+}
+
 export const createCheckoutSession = validated(
     // Union: { bundleType } (bundle purchase) | checkoutPoolInputSchema (pool
     // purchase) — the same two shapes the old head accepted, now parsed at the
@@ -191,6 +221,14 @@ export const createCheckoutSession = validated(
         throw new HttpsError("not-found", "Pool not found.");
     }
     const poolData = poolDoc.data() as any;
+
+    // --- Ownership gate (K17): owner/manager, or a claim+doc-verified SUPER_ADMIN ---
+    const claimRole = request.auth!.token?.role;
+    const readCallerRole = async (getter: (ref: FirebaseFirestore.DocumentReference) => Promise<FirebaseFirestore.DocumentSnapshot>): Promise<unknown> =>
+        normalizeRole((claimRole as string) ?? null) === "SUPER_ADMIN"
+            ? (await getter(db.collection("users").doc(userId))).data()?.role
+            : undefined; // not claiming SA — no doc read needed, the owner check decides
+    assertCheckoutOwnership(poolData, userId, claimRole, await readCallerRole(ref => ref.get()));
 
     // --- Authoritative quote (single price authority; client price never trusted) ---
     const config = await loadBillingConfig(db);
@@ -275,6 +313,8 @@ export const createCheckoutSession = validated(
         await db.runTransaction(async (txn) => {
             const poolRef = db.collection("pools").doc(poolId);
             const freshPool = await txn.get(poolRef);
+            // K17: re-check ownership against the pool AS READ IN THIS TRANSACTION.
+            assertCheckoutOwnership(freshPool.data(), userId, claimRole, await readCallerRole(ref => txn.get(ref)));
             const freshBilling = (freshPool.data() as any)?.billing;
             // No-op if already active (idempotency; avoid double credit spend).
             if (freshBilling?.status === "active") {
@@ -364,6 +404,8 @@ export const createCheckoutSession = validated(
     await db.runTransaction(async (txn) => {
         const poolRef = db.collection("pools").doc(poolId);
         const freshPool = await txn.get(poolRef);
+        // K17: re-check ownership against the pool AS READ IN THIS TRANSACTION.
+        assertCheckoutOwnership(freshPool.data(), userId, claimRole, await readCallerRole(ref => txn.get(ref)));
         const freshBilling = (freshPool.data() as any)?.billing;
 
         // Reject a second live checkout on this pool (idempotency).
