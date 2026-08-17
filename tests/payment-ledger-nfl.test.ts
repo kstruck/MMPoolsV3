@@ -76,3 +76,22 @@ describe('PaymentLedgerNFL — wiring (T5)', () => {
     expect(code('src/services/dbService.ts')).toContain('subscribeToPayoutRecordsPrivate:');
   });
 });
+
+/**
+ * PLAN-PAYMENT-LEDGER T6 (K7) — the member's "My prizes": own rows only, reads
+ * only, private settlement scoped to the viewer's uid.
+ */
+describe('MyPrizes — member view (T6, K7)', () => {
+  const my = code('src/components/MyPrizes.tsx');
+  it('is mounted on the member Payments tab with the viewer uid', () => {
+    expect(code('src/components/PaymentsPanel.tsx')).toContain('<MyPrizes pool={pool} uid={user.id} />');
+  });
+  it('filters EVERY row to the viewer (published rows and records) and scopes the private subscription to the viewer uid', () => {
+    expect(my).toContain('p.userId !== uid');
+    expect(my).toContain('r.uid !== uid');
+    expect(my).toContain('dbService.subscribeToPayoutRecordsPrivate(pool.id, rows => { setPriv(rows as Priv[]); setLoaded(l => ({ ...l, priv: true })); }, uid,');
+  });
+  it('never writes and never re-prices', () => {
+    expect(my).not.toMatch(/recordPoolPayouts|setPayoutSettled|setPaidStatus|splitPrizes|priceWeeklyPlaces|priceSeasonPlaces|potBreakdown/);
+  });
+});
