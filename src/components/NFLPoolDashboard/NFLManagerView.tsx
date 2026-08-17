@@ -10,7 +10,6 @@ import { isPoolManager, poolCoManagers } from '../../utils/auth';
 import { logger } from '../../utils/logger';
 import type { Pool, NFLGame, User } from '../../types';
 import { NFLManagerBentoDashboard } from './NFLManagerBentoDashboard';
-import { RecordPayoutsCard } from './RecordPayoutsCard';
 import { PaymentLedgerNFL } from './PaymentLedgerNFL';
 import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
@@ -774,8 +773,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         onOpenLedger={() => setCommishTab('members')}
       />
 
-      {/* Record Payouts (ADR 0005 Phase 4) — season awards + adjustments; renders only once the pool is finalized */}
-      <RecordPayoutsCard pool={pool} entries={entries} />
+      {/* Record Payouts card (ADR 0005 Phase 4) folded into the Payment Ledger on
+          Members & Payments (PLAN-PAYMENT-LEDGER T7 / ADR 0008): season prizes are
+          published rows there, bonuses/adjustments its "Other awards" block. */}
 
       {/* Control Room Header */}
       <div className="bg-card border border-line shadow-card rounded-xl p-6 relative overflow-hidden">
