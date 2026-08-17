@@ -287,6 +287,10 @@ describe('PLAN-PAYMENT-LEDGER T4 — recordPoolPayouts weekly awards + setPayout
     expect(r4.written).toBe(1);
     const liveAlice = (await poolRef().collection('payoutRecords').where('entryId', '==', ALICE).get()).docs.filter(d => !d.data().supersededBy);
     expect(liveAlice.map(d => d.data().amount)).toEqual([0]);
+    // A no-week BONUS for the same entry can NOT be named as the stale id of a season re-record (codex r5).
+    const bonus = await record(HOST, [{ uid: BOB, entryId: BOB, amount: 5, kind: 'BONUS', settled: false }]);
+    await expect(record(HOST, [{ uid: BOB, entryId: BOB, amount: 36, kind: 'PLACE', settled: false, staleAwardId: bonus.awardIds[0] }])).rejects.toThrow(/not a bound PLACE award/);
+    expect((await rec(bonus.awardIds[0])).data()!.supersededBy).toBeUndefined();
     // Exactly one live award per entry, and the live season total never exceeds the frozen pot.
     const live = (await poolRef().collection('payoutRecords').get()).docs.filter(d => !d.data().supersededBy && d.id.startsWith('season-'));
     expect(live.map(d => [d.data().entryId, d.data().amount]).sort()).toEqual([[ALICE, 0], [BOB, 36]]);

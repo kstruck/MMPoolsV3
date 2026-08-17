@@ -133,6 +133,8 @@ async function planBoundAward(
   liveDocs: FirebaseFirestore.QueryDocumentSnapshot[],
   idFor: (k: number) => string,
   scope: string,
+  /** Is this doc id a bound award of THIS scope (`wk…` / `season-…`)? A stale id must be one, and so must every hop of its chain. */
+  isBoundId: (id: string) => boolean,
 ): Promise<Planned> {
   if (liveDocs.length > 1) throw new HttpsError('failed-precondition', `LEDGER_INCONSISTENT: more than one live award for entry ${a.entryId} in ${scope}.`);
   const live = liveDocs[0];
@@ -166,14 +168,19 @@ async function planBoundAward(
   // possibly more than once — returns the current live award, writes nothing.
   let cursor = await tx.get(recordsCol.doc(a.staleAwardId));
   if (!cursor.exists) throw new HttpsError('invalid-argument', `staleAwardId ${a.staleAwardId} not found.`);
-  const staleData = cursor.data() as any;
-  if (staleData.entryId !== a.entryId || (staleData.week ?? undefined) !== (a.week ?? undefined)) {
-    throw new HttpsError('invalid-argument', `staleAwardId ${a.staleAwardId} is not a bound award for entry ${a.entryId} in ${scope}.`);
+  // The stale id — and every hop of its chain — must be a bound PLACE award of
+  // THIS entry and scope. Otherwise a season re-record could name an unrelated
+  // no-week BONUS/ADJUSTMENT for the same entry and supersede it out of the
+  // ledger (codex r5 on #464).
+  const isOurs = (id: string, d: any) => d?.kind === 'PLACE' && d?.entryId === a.entryId && (d?.week ?? undefined) === (a.week ?? undefined) && isBoundId(id);
+  if (!isOurs(cursor.id, cursor.data())) {
+    throw new HttpsError('invalid-argument', `staleAwardId ${a.staleAwardId} is not a bound PLACE award for entry ${a.entryId} in ${scope}.`);
   }
   let hops = 0;
   while ((cursor.data() as any)?.supersededBy && hops < 50) {
     cursor = await tx.get(recordsCol.doc(String((cursor.data() as any).supersededBy)));
     hops += 1;
+    if (!cursor.exists || !isOurs(cursor.id, cursor.data())) throw new HttpsError('failed-precondition', `RE_RECORD_CHAIN_BROKEN: ${a.staleAwardId}'s chain leaves ${scope}'s bound awards.`);
   }
   // A bounded walk that did not reach a live end must not be treated as live (codex r4 on T4).
   if ((cursor.data() as any)?.supersededBy) throw new HttpsError('failed-precondition', 'RE_RECORD_CHAIN_TOO_LONG');
@@ -318,7 +325,7 @@ export const recordPoolPayouts = onCall(async (request) => {
         // Season awards carry no `week`; the deterministic prefix keeps free-form
         // (random-id) season PLACE records out of the live set.
         const liveDocs = liveSnap.docs.filter(d => { const x = d.data() as any; return !x.supersededBy && x.kind === 'PLACE' && x.week === undefined && d.id.startsWith('season-'); });
-        out.push(await planBoundAward(tx, recordsCol, a, row, liveDocs, k => seasonAwardId(a.entryId!, row.rank, k), 'season'));
+        out.push(await planBoundAward(tx, recordsCol, a, row, liveDocs, k => seasonAwardId(a.entryId!, row.rank, k), 'season', id => id.startsWith('season-')));
         continue;
       }
       if (a.week === undefined) {
@@ -343,7 +350,7 @@ export const recordPoolPayouts = onCall(async (request) => {
       // is at most one by construction (every path below keeps it so).
       const liveSnap = await tx.get(recordsCol.where('entryId', '==', a.entryId).where('week', '==', a.week));
       const liveDocs = liveSnap.docs.filter(d => !(d.data() as any).supersededBy);
-      out.push(await planBoundAward(tx, recordsCol, a, row, liveDocs, k => weeklyAwardId(a.week!, a.entryId!, row.rank, k), `week ${a.week}`));
+      out.push(await planBoundAward(tx, recordsCol, a, row, liveDocs, k => weeklyAwardId(a.week!, a.entryId!, row.rank, k), `week ${a.week}`, id => id.startsWith(`wk${a.week}-`)));
     }
     // ---- writes ----
     let wrote = 0;

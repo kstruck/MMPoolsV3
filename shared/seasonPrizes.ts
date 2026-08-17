@@ -59,7 +59,8 @@ export function seasonAwardId(entryId: string, place: number, k = 1): string {
  * The season pot + place list to freeze, or `undefined` when the pool has no
  * priceable season pot: WEEKLY mode, a HYBRID pool without a declared split,
  * no fee, no entries, or no place list. The list still publishes in those
- * cases, with no Prize column (D7).
+ * cases, with no Prize column (D7). An absent `payoutMode` (Survivor, legacy
+ * pools) is a single season pot.
  */
 export function computeSeasonPrizeSnapshot(
   settings: Parameters<typeof potBreakdown>[0] & { payouts?: { places?: ReadonlyArray<PayoutPlace> } | null } | null | undefined,
@@ -67,9 +68,13 @@ export function computeSeasonPrizeSnapshot(
   nowMs: number,
 ): SeasonPrizeSnapshot | undefined {
   const mode = settings?.payoutMode;
-  if (mode !== 'SEASON' && mode !== 'HYBRID') return undefined;
+  if (mode === 'WEEKLY') return undefined;
   const pots = potBreakdown(settings, entryCount);
-  const pot = pots?.seasonPot;
+  // HYBRID: the season half of the split. SEASON — and an ABSENT mode, which is
+  // what every Survivor pool and every legacy pool stores (their wizards never
+  // wrote payoutMode) — is one pot: `net`, exactly as PayoutsPanel prices the
+  // places today (codex r5 on #464).
+  const pot = mode === 'HYBRID' ? pots?.seasonPot : pots?.net;
   if (pot === undefined || entryCount === undefined) return undefined;
   const places = settings?.payouts?.places ?? [];
   if (places.length === 0) return undefined;
@@ -77,7 +82,7 @@ export function computeSeasonPrizeSnapshot(
     pot,
     places: places.map(p => ({ rank: p.rank, percentage: p.percentage })),
     entryCount,
-    payoutMode: mode,
+    payoutMode: mode === 'HYBRID' ? 'HYBRID' : 'SEASON',
     frozenAt: nowMs,
   };
 }

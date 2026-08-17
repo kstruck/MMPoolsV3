@@ -20,6 +20,9 @@ describe('computeSeasonPrizeSnapshot', () => {
     expect(computeSeasonPrizeSnapshot({ payoutMode: 'SEASON', entryFee: 20, payouts: { places: [] } }, 4, 1)).toBeUndefined();
     expect(computeSeasonPrizeSnapshot({ payoutMode: 'SEASON', entryFee: 20, payouts: places }, undefined, 1)).toBeUndefined();
   });
+  it('an ABSENT payoutMode (Survivor / legacy pools) is one season pot = net, published as SEASON (codex r5 on #464)', () => {
+    expect(computeSeasonPrizeSnapshot({ entryFee: 25, payouts: { places: [{ rank: 1, percentage: 100 }] } }, 4, 1)).toMatchObject({ pot: 100, payoutMode: 'SEASON' });
+  });
   it('charity comes off first', () => {
     expect(computeSeasonPrizeSnapshot({ payoutMode: 'SEASON', entryFee: 20, charity: { enabled: true, percentage: 10 }, payouts: { places: [{ rank: 1, percentage: 100 }] } }, 4, 1)?.pot).toBe(72);
   });
