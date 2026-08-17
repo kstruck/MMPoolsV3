@@ -25,9 +25,15 @@ export function touchesPayoutLists(patch: Record<string, unknown>): boolean {
 function sameList(a: unknown, b: unknown): boolean {
   const norm = (v: unknown): string | null => {
     if (v === null || v === undefined) return null;
-    const o = v as { places?: Array<{ rank?: unknown; percentage?: unknown }>; bonuses?: Array<{ name?: unknown; percentage?: unknown }> };
-    const places = [...(o.places ?? [])].map(p => `${p.rank}:${p.percentage}`).sort();
-    const bonuses = [...(o.bonuses ?? [])].map(b => `${b.name ?? ''}:${b.percentage}`).sort();
+    // Runs BEFORE schema validation, so the shape is untrusted: a non-object,
+    // non-array `places`, or a null row must compare as "different" and fall
+    // through to the validator's PAYOUTS_INVALID — never throw (qodo on #470).
+    if (typeof v !== 'object') return `raw:${String(v)}`;
+    const o = v as { places?: unknown; bonuses?: unknown };
+    const rows = (x: unknown, f: (r: Record<string, unknown>) => string) =>
+      Array.isArray(x) ? x.map(r => (r && typeof r === 'object' ? f(r as Record<string, unknown>) : `bad:${String(r)}`)).sort() : [`notarray:${typeof x}`];
+    const places = rows(o.places, p => `${p.rank}:${p.percentage}`);
+    const bonuses = rows(o.bonuses ?? [], b => `${b.name ?? ''}:${b.percentage}`);
     return JSON.stringify([places, bonuses]);
   };
   return norm(a) === norm(b);

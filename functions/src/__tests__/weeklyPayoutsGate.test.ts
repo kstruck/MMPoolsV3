@@ -99,6 +99,14 @@ describe('payoutListsNoOpKeys — an unchanged re-sent list is not a change', ()
     expect(payoutListsNoOpKeys(pool, { 'settings.payouts': { places: [P(1, 70), P(2, 30)], bonuses: [] } })).toEqual([]);
     expect(payoutListsNoOpKeys({ settings: {} }, { 'settings.weeklyPayouts': null })).toEqual(['settings.weeklyPayouts']);
   });
+  it('malformed shapes never throw here — they are "different" and fall through to the validator', () => {
+    const pool = { settings: { payouts: { places: [P(1, 100)], bonuses: [] } } };
+    for (const bad of [{ places: 1 }, { places: {} }, { places: [null] }, 7, 'x']) {
+      expect(() => payoutListsNoOpKeys(pool, { 'settings.payouts': bad })).not.toThrow();
+      expect(payoutListsNoOpKeys(pool, { 'settings.payouts': bad })).toEqual([]);
+    }
+    expect(payoutListsRefusal(pool, { 'settings.payouts': { places: 1 } })).toMatch(/PAYOUTS_INVALID/);
+  });
 });
 
 describe('normalizePayoutListsPatch — what is stored is what was validated (codex r3 on #470)', () => {
