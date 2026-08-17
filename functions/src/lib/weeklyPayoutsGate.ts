@@ -76,8 +76,10 @@ export function payoutListsRefusal(pool: Record<string, unknown> | undefined, pa
   // The permissive update schema would let `payoutMode: 'BOGUS'` through, and
   // the clearing rule below would then delete a stored weekly list on a value
   // that is not a mode at all (qodo #4 on #470). Refuse anything but the three.
-  if ('settings.payoutMode' in patch && patch['settings.payoutMode'] !== undefined && patch['settings.payoutMode'] !== null
-      && !['SEASON', 'WEEKLY', 'HYBRID'].includes(String(patch['settings.payoutMode']))) {
+  // An explicit `payoutMode: null` would clear the split AND the weekly list and
+  // leave a pool with no mode at all (codex r7 on #470) — a patch that CARRIES
+  // the key must carry one of the three.
+  if ('settings.payoutMode' in patch && !['SEASON', 'WEEKLY', 'HYBRID'].includes(String(patch['settings.payoutMode']))) {
     return 'PAYOUT_MODE_INVALID: payoutMode must be SEASON, WEEKLY or HYBRID.';
   }
   const merged = mergedSettings(pool, patch);
@@ -85,7 +87,10 @@ export function payoutListsRefusal(pool: Record<string, unknown> | undefined, pa
   // `payouts` — only when the patch carries it (a mode-only save must not be
   // refused for a legacy list it did not touch; the census says there are none,
   // but the gate is judged on what THIS save writes).
-  if ('settings.payouts' in patch && merged.payouts !== undefined && merged.payouts !== null) {
+  if ('settings.payouts' in patch) {
+    // `payouts` is REQUIRED on every NFL pool (create schema); a patch that
+    // carries it may not clear it (codex r7 on #470).
+    if (merged.payouts === undefined || merged.payouts === null) return 'PAYOUTS_INVALID: payouts is required and cannot be cleared.';
     const r = payoutsSchema.safeParse(merged.payouts);
     if (!r.success) return `PAYOUTS_INVALID: ${r.error.issues[0]?.message ?? 'malformed payouts'}`;
   }

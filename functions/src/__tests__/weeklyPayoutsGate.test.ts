@@ -62,6 +62,13 @@ describe('payoutListsRefusal — updatePoolSettings (T1)', () => {
     const stored = pool({ payoutMode: 'HYBRID', weeklyPayouts: { places: [P(1, 100)] } });
     expect(payoutListsRefusal(stored, { 'settings.payoutMode': 'BOGUS' })).toMatch(/PAYOUT_MODE_INVALID/);
   });
+  it('an explicit payoutMode: null and an explicit payouts: null are refused (codex r7 on #470)', () => {
+    const stored = pool({ payoutMode: 'HYBRID', weeklyPayouts: { places: [P(1, 100)] }, payouts: { places: [P(1, 100)], bonuses: [] } });
+    expect(payoutListsRefusal(stored, { 'settings.payoutMode': null })).toMatch(/PAYOUT_MODE_INVALID/);
+    expect(payoutListsRefusal(stored, { 'settings.payouts': null })).toMatch(/PAYOUTS_INVALID/);
+    // …but a legacy pool with NO stored mode saving something else is untouched (the key is absent from the patch)
+    expect(payoutListsRefusal(pool({}), { 'settings.weeklyPayouts': null })).toBeNull();
+  });
   it('touches: any of payouts / weeklyPayouts / payoutMode', () => {
     expect(touchesPayoutLists({ 'settings.entryFee': 5 })).toBe(false);
     expect(touchesPayoutLists({ 'settings.weeklyPayouts': { places: [] } })).toBe(true);
