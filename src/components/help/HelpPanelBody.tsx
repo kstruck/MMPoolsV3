@@ -40,9 +40,22 @@ export function HelpPanelBody({ state, searchInputRef }: {
   const [showAllPoolTypes, setShowAllPoolTypes] = useState(false);
   const scrolledFor = useRef<string | undefined>(undefined);
 
+  /**
+   * Search hits, minus anything that lands on a screen this pool has no tab for
+   * (codex R5). A Survivor member searching "Results" would otherwise be handed
+   * a row for the NFL Results page, and the click could only show a page they
+   * cannot open. `registry.search` cannot do this filtering itself — it knows
+   * the reader's audience and pool type, not which tabs the surface rendered.
+   */
   const results = useMemo<HelpSearchResult[]>(
-    () => (query.trim() ? registry.search(query, scope) : []),
-    [registry, query, scope],
+    () =>
+      query.trim()
+        ? registry.search(query, scope).filter((hit) => {
+            const hitPage = hit.pageId ? registry.getPage(hit.pageId) : undefined;
+            return !hitPage || isPageOffered(hitPage, routeContext);
+          })
+        : [],
+    [registry, query, scope, routeContext],
   );
 
   const sections = useMemo(

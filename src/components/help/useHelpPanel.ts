@@ -15,7 +15,7 @@ import type { Registry, TopicScope } from '../../help/registry';
 import { baseTopicId } from '../../help/registry';
 import { baseRegistry, loadAdminRegistry } from '../../help/admin';
 import { usePublishedRoute } from '../../help/publish';
-import { hrefForPage, resolveHelpPage } from '../../help/route-match';
+import { hrefForPage, isPageOffered, resolveHelpPage } from '../../help/route-match';
 
 /**
  * What the header button needs: whether the panel is open, and how to toggle
@@ -191,6 +191,15 @@ export function useHelpPanelState(options: { isAdmin: boolean; defaultAudience?:
         setActiveTopicId(undefined);
         setForcedPageId(undefined);
         navigate(href);
+        return;
+      }
+      // A page whose tab this surface is not offering must never be forced into
+      // view: the reader cannot get to that screen, so a guide for it is a
+      // description of somewhere they are not (codex R5). The panel's search
+      // already drops those hits, so this is the same rule stated where the
+      // navigation happens rather than only where the list is built.
+      if (!isPageOffered(next, routeContext)) {
+        setActiveTopicId(undefined);
         return;
       }
       // Same route, or a page with no link (K13 — the super-admin sub-tabs and

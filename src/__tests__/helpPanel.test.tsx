@@ -373,6 +373,52 @@ describe('a tab this pool does not have (codex R3)', () => {
   });
 });
 
+describe('search never offers a screen this pool has no tab for (codex R5)', () => {
+  it('drops the Results page for a Survivor pool, and keeps it for a Pick’em one', async () => {
+    const results = helpRegistry.getPage('pool.nfl.results')!;
+    // A phrase from that page's own summary, so nothing else in the registry
+    // matches it — which makes the Survivor half a clean "nothing found" rather
+    // than an absence hidden among unrelated hits.
+    const phrase = results.summary.split(':')[0];
+
+    render(
+      <MemoryRouter initialEntries={['/pool/abc?tab=dashboard']}>
+        <HelpProvider isAdmin={false}>
+          <HelpScopeProvider poolType="NFL_SURVIVOR" audience="member">
+            <HelpRoutePublisher
+              tab="dashboard"
+              offeredTabs={['dashboard', 'picks', 'standings', 'recaps', 'rules']}
+            />
+          </HelpScopeProvider>
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: phrase } });
+    await waitFor(() => expect(screen.getByText(/Nothing in Help matches/i)).toBeTruthy());
+    expect(screen.queryByText(results.title)).toBeNull();
+    cleanup();
+
+    render(
+      <MemoryRouter initialEntries={['/pool/abc?tab=dashboard']}>
+        <HelpProvider isAdmin={false}>
+          <HelpScopeProvider poolType="NFL_PICKEM" audience="member">
+            <HelpRoutePublisher
+              tab="dashboard"
+              offeredTabs={['dashboard', 'picks', 'standings', 'results', 'recaps', 'rules']}
+            />
+          </HelpScopeProvider>
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: phrase } });
+    await waitFor(() => expect(screen.getByText(results.title)).toBeTruthy());
+  });
+});
+
 describe('navigating from "All pages" to another tab', () => {
   /**
    * The case the pending-target machinery exists for. The publishers under the
