@@ -340,7 +340,12 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const weeklyPayoutsPatch = (): Record<string, unknown> => {
     if (!weeklyPlacesTouched) return {};
     if (weeklyPlaces.length > 0) return { weeklyPayouts: { places: weeklyPlaces } };
-    return settings.weeklyPayouts ? { weeklyPayouts: null } : {};
+    // "Is there a stored list?" is answered by what THIS component last saved
+    // first, and only then by the realtime prop, which lags a save it has not
+    // received yet: add places, save, remove them all, save again — a prop-only
+    // check would send nothing and leave the just-saved list pricing every week
+    // behind an empty editor. (codex r5, the same lag lastKnownSplitRef exists for.)
+    return (lastKnownWeeklyPlacesRef.current || settings.weeklyPayouts) ? { weeklyPayouts: null } : {};
   };
   const [pointsPerPick, setPointsPerPick] = useState<number>(settings.pointsPerPick ?? 1);
   const [thursdayBonus, setThursdayBonus] = useState<number>(settings.primetimeBonus?.thursday ?? 0);

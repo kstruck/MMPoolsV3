@@ -135,7 +135,7 @@ describe('manager Settings — the HYBRID weekly place list (T2)', () => {
    */
   it('an emptied editor CLEARS a stored list and stores nothing when there was none — never an empty list', () => {
     expect(mgr).toContain('if (weeklyPlaces.length > 0) return { weeklyPayouts: { places: weeklyPlaces } };');
-    expect(mgr).toContain('return settings.weeklyPayouts ? { weeklyPayouts: null } : {};');
+    expect(mgr).toContain('return (lastKnownWeeklyPlacesRef.current || settings.weeklyPayouts) ? { weeklyPayouts: null } : {};');
     expect(mgr).toContain('if (!weeklyPlacesTouched) return {};');
     // `{ places: [] }` must never be constructed by this file.
     expect(mgr).not.toMatch(/weeklyPayouts: \{ places: \[\] \}/);
