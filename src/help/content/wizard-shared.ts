@@ -388,25 +388,21 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
     title: 'Weekly tie-breaker',
     short: 'Decides who wins a week when two players score the same. It cannot be changed once anyone has submitted picks, so choose it now.',
     long: [
-      'Players predict the combined score of the tiebreaker game on their pick sheet. On a week with no Monday game, the last game of the week is used instead.',
-      // `resolveTiebreakTargetIds` (shared/nflTiebreaker.ts:111-121): the
-      // last-game fallback on line 119 is reached only by MNF_LAST_GAME and
-      // MNF_FIRST_GAME. MNF_COMBINED returns the Monday list, which is EMPTY on
-      // a Monday-less week — no target, no prediction field. It is not offered
-      // to new pools (PICKABLE_WEEKLY_TIEBREAKERS) but existing pools play it,
-      // and T9 puts this topic in front of them (codex R9-2).
-      'A few older pools instead ask about every Monday game together. On a week with no Monday game those pools ask for nothing, and a level week is shared.',
-      // NOT "what happens if two players are equally close" (qodo #9 on #480).
-      // Nothing configures that: `computeWeeklyWinners` returns every
-      // equally-close leader and the recap renders "(shared)". What the rule
-      // actually chooses is the TARGET game.
-      'Whoever is closest takes the week, and two players equally close share it. The rule you pick here decides which game is asked about.',
-      // NONE IS ONE OF THE CHOICES (codex R8-2). tiebreakerAsksForPrediction
-      // is false for it and the sheet renders no prediction field, so the
-      // paragraphs above describe a pool this one is not. T9 places this topic
-      // on the rules page, standings, recaps and the manager settings tab,
-      // where a NONE pool reads it too.
-      'One of the choices is no tie-breaker at all. Then nothing is predicted, and players level at the top of a week share it.',
+      // WRITTEN AS A LIST OF THE FOUR RULES, not as a claim plus caveats
+      // (codex R13). Two earlier drafts opened with an unconditional sentence
+      // and then contradicted it two paragraphs later, because MNF_COMBINED and
+      // NONE do not behave like the two pickable Monday rules.
+      //
+      // The model's own answer to this is `HelpCopy.template` — and it is NOT
+      // available: `TopicScope` is `Pick<HelpScope, 'poolType' | 'audience'>`,
+      // so no surface publishes a pool's settings and a template here would
+      // render its fallback forever. Recorded in MORNING-2026-08-18-HELP-T9.md.
+      // Until then the copy covers every rule instead of assuming one.
+      'Your pool can settle a level week by asking each player to predict the combined score of one game. What you choose here is which game — or whether it asks at all.',
+      'Monday night is the usual choice, either the last Monday game or the first. On a week with no Monday game, those two use the last game of the week instead.',
+      'A few older pools ask about every Monday game together. Those ask for nothing on a week with no Monday game.',
+      'You can also choose no tie-breaker. Then nothing is predicted.',
+      'Whoever is closest takes the week, and two players equally close share it.',
       'Set it before you launch. Once any player has submitted picks, it is fixed for the life of the pool.',
     ].join('\n\n'),
     poolTypes: ['NFL_PICKEM'],
