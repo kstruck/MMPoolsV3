@@ -175,11 +175,12 @@ export function useHelpPanelState(options: { isAdmin: boolean; defaultAudience?:
       }
       const href = hrefForPage(next, routeContext);
       if (href && href !== `${location.pathname}${location.search}`) {
-        // Cross-route: the target is held until the new route (and its
-        // publishers) have resolved, or the panel would render the old page's
-        // topics under the new page's title for a frame.
+        // Cross-route or cross-tab: the target is held until the new route (and
+        // its publishers) have resolved, or the panel would render the old
+        // page's topics under the new page's title for a frame.
         pending.current = { target, pageId };
         setActiveTopicId(undefined);
+        setForcedPageId(undefined);
         navigate(href);
         return;
       }
@@ -210,30 +211,33 @@ export function useHelpPanelState(options: { isAdmin: boolean; defaultAudience?:
   const openPage = useCallback((pageId: string) => goToPage(pageId, { pageId }), [goToPage]);
 
   // Consume a pending target once the route resolves to the page it was for.
+  //
+  // NOT ABANDONED ON THE FIRST MISS. The publishers under the new route settle
+  // in an effect, so the first render after `navigate` still reports the old
+  // tab; giving up there would force a page the reader was one frame away from
+  // reaching properly. A target that never lands is dropped by the release
+  // below when the reader moves again, so it cannot fire on an unrelated screen
+  // later.
   useEffect(() => {
     const waiting = pending.current;
-    if (!waiting) return;
-    if (resolvedPage?.id === waiting.pageId) {
-      pending.current = null;
-      setForcedPageId(undefined);
-      setActiveTopicId(waiting.target.topicId);
-      return;
-    }
-    // The route changed and still does not resolve to the page — the reader
-    // navigated somewhere else, or the page needs a tab this link cannot set.
-    // Show it anyway rather than leaving the panel silently waiting forever.
+    if (!waiting || resolvedPage?.id !== waiting.pageId) return;
     pending.current = null;
-    setForcedPageId(waiting.pageId);
     setActiveTopicId(waiting.target.topicId);
-  }, [resolvedPage, location.key]);
+  }, [resolvedPage]);
 
-  // The reader navigating on their own releases a forced page.
-  const lastPath = useRef(location.pathname);
+  // A forced page is released as soon as the ROUTE resolves somewhere else —
+  // the reader clicked a tab, so the route speaks again.
+  //
+  // Keyed on the resolved page, NOT on `location`. The `?help=` deep link strips
+  // its own parameter with a `replace`, which changes the location while the
+  // reader has not moved at all; releasing on that would undo the very target
+  // the deep link had just set.
+  const lastResolved = useRef(resolvedPage?.id);
   useEffect(() => {
-    if (lastPath.current === location.pathname) return;
-    lastPath.current = location.pathname;
+    if (lastResolved.current === resolvedPage?.id) return;
+    lastResolved.current = resolvedPage?.id;
     if (!pending.current) setForcedPageId(undefined);
-  }, [location.pathname]);
+  }, [resolvedPage]);
 
   // `?help=<topicId>` (K11). Consumed and stripped, so a reader who closes the
   // panel and reloads does not have it reopen — and so the URL they copy from

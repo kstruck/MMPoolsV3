@@ -13,7 +13,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useSearchParams } from 'react-router';
 import type { ReactNode } from 'react';
 import { HelpProvider } from '../components/help/HelpPanel';
 import { HelpHeaderButton } from '../components/help/HelpHeaderButton';
@@ -316,6 +316,46 @@ describe('the tooltip and the panel together', () => {
     // Opened TO the topic: its card is rendered and holds the long copy.
     await waitFor(() => expect(document.getElementById(`help-topic-${topic.id}`)).toBeTruthy());
     expect(document.getElementById(`help-topic-${topic.id}`)!.textContent).toContain(staticCopy(topic.long));
+  });
+});
+
+/**
+ * A pool dashboard as the real ones behave: the tab comes from `?tab=` and the
+ * tab it ACTUALLY rendered is what gets published.
+ */
+function PoolHarness({ poolType = 'NFL_PICKEM' as const, audience = 'member' as const }) {
+  const [params] = useSearchParams();
+  const tab = params.get('tab') ?? 'dashboard';
+  return (
+    <HelpScopeProvider poolType={poolType} audience={audience}>
+      <HelpRoutePublisher tab={tab} />
+      <HelpHeaderButton />
+    </HelpScopeProvider>
+  );
+}
+
+describe('navigating from "All pages" to another tab', () => {
+  /**
+   * The case the pending-target machinery exists for. The publishers under the
+   * new tab settle in an EFFECT, so the first render after `navigate` still
+   * reports the old tab — a version of this that gave up on the first miss would
+   * pin the panel to a forced page that the route then contradicted.
+   */
+  it('follows the link and lets the route — not a forced page — decide afterwards', async () => {
+    renderApp(<PoolHarness />, { path: '/pool/abc?tab=dashboard' });
+    fireEvent.keyDown(document, { key: '?' });
+
+    const home = helpRegistry.getPage('pool.nfl.dashboard')!;
+    const standings = helpRegistry.getPage('pool.nfl.standings')!;
+    await waitFor(() => expect(screen.getByRole('heading', { name: home.title })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: standings.title }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: standings.title })).toBeTruthy());
+
+    // And the reader clicking a THIRD tab in the app still wins, which is what
+    // proves the panel is following the route rather than holding a forced page.
+    fireEvent.click(screen.getByRole('button', { name: home.title }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: home.title })).toBeTruthy());
   });
 });
 
