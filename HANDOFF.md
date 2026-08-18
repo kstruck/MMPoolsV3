@@ -1,56 +1,97 @@
 # HANDOFF — Session entry point
 
-> ## 🛑 2026-08-18 — PLAN-HELP-SYSTEM **T0 + T1 MERGED**; ⚠️ **A COOLIFY REDEPLOY IS OWED**
+> ## 🛑 2026-08-18 — PLAN-HELP-SYSTEM **T0 + T1 + T2 MERGED**; ⚠️ **T2's DEPLOY IS KEVIN'S CALL**
 >
 > **Read `MORNING-2026-08-18-HELP.md` first** for this effort;
 > `MORNING-2026-08-18.md` remains the entry point for the PLAN-PAYMENT-LEDGER
 > T2 work and neither supersedes the other.
 >
-> ⚠️ **T1 (#475, `a1ee5faa`) is the first help work that changes the shipped
-> bundle, and the frontend does NOT auto-deploy on a push to `main`.** Nothing
-> in production has tooltips until Kevin redeploys `www` in Coolify. Numbered
-> steps in `MORNING-2026-08-18-HELP.md` §7.
+> **T1 IS DEPLOYED AND VERIFIED** (Kevin, 2026-08-18): tooltips render on the
+> create wizard and playoff pools still list correctly in Browse. Closed — do not
+> ask him to check it again.
+>
+> ⚠️ **T2 (#477, `557ba2ad`) IS NOT DEPLOYED, AND WHETHER IT SHOULD BE IS AN OPEN
+> QUESTION FOR KEVIN.** The signed plan makes **T16 a prerequisite of T15
+> (deploy)** because the `?` shortcut falls back to a CSS-class heuristic for ~35
+> un-migrated overlay shells — so a runbook that simply said "press Redeploy"
+> would overrule a signed decision (codex caught that as a P1 on the docs PR).
+> `MORNING-2026-08-18-HELP.md` §7 step 2 puts three options and a measurement in
+> front of him: all 41 current backdrops carry the `fixed inset-0` pair the
+> fallback matches, so the heuristic covers today's overlays, and the panel and
+> header button carry none of that risk. **Do not deploy `www` for T2 without his
+> answer, and do not re-ask if the doc records one.**
 >
 > **§6 of `PLAN-HELP-SYSTEM.md` is SIGNED** — K1–K13 taken exactly as each
 > Recommendation column reads, on Kevin's 2026-08-17 "start building". That
 > instruction also **overrides the board memo's "build none during the live
 > weeks"**; the memo stays on file as the dissent.
 >
-> **#472 (T0)** shipped the content model and its guards: `docs/help-voice.md`
-> (K8), `src/help/{types,registry,glossary,voice,pages,coverage-allowlist}.ts`,
-> and three invariant suites. Nothing read it, so nothing was owed.
+> **#472 (T0)** shipped the content model and its guards. **#475 (T1)** put the
+> first thing on screen — `HelpTip` (takes an id and nothing else, ever),
+> `src/help/scope.tsx`, 30 topics, `fields.tsx` gaining `helpId` and losing
+> `hint`, and `tests/help-ui-coverage.test.ts` as the primary coverage guard. It
+> also fixed a production defect it uncovered: `BrowsePools` treated every NFL
+> playoff pool as public regardless of the stored setting, now
+> `src/utils/publicListing.ts` with 7 regression tests (counted from a run of
+> `npx vitest run`, 2026-08-18).
 >
-> **#475 (T1)** put the first thing on screen: `src/components/ui/HelpTip.tsx`
-> (takes an id and nothing else — no `text` prop, ever), `src/help/scope.tsx`
-> published by `WizardShell`/`PoolRoute`/`AdminRoute`, 30 topics and the seven
-> `/create/*` help pages, `fields.tsx` gaining `helpId` and **losing `hint`**,
-> and `tests/help-ui-coverage.test.ts` as the primary coverage guard. 24 schema
-> allowlist rows and 7 route rows came out.
+> **#477 (T2) is the panel.** `?` or a header button beside the theme toggle
+> (K3) opens a right-side drawer with the current screen's guide, search, the
+> glossary, and every page the reader can reach (K5-filtered). Title "Help" (K6),
+> open state NOT persisted (K7), `?help=<topic>` deep link (K11), and a lazy admin
+> chunk on the same predicate `/super-admin` uses.
 >
-> **It also fixed a production defect it uncovered.** `BrowsePools` treated
-> every NFL playoff pool as public regardless of the stored setting, so a host
-> who unticked "List this pool publicly" was still listed — while the wizard had
-> been persisting the choice all along. Found by qodo, against T1's new copy
-> promising the option works. Now `src/utils/publicListing.ts` with 7 regression
-> tests. It is LISTING, not access, and can only hide a pool whose host asked
-> for it to be hidden. Live only after the redeploy above.
+> ⚠️ **THE LOAD-BEARING DESIGN FACT, for anyone touching a dashboard.** The panel
+> is mounted once in `App.tsx`, ABOVE every surface that knows which tab is
+> showing, and React context flows only downward. So surfaces **publish** —
+> `useHelpRoute` / `<HelpRoutePublisher>` in `src/help/publish.tsx`. **Each
+> publisher owns different FIELDS**: a dashboard publishes `tab`, the manager view
+> nested inside it publishes `subTab`. Two live publishers writing the same field
+> is ambiguous and the field split is the contract. Eleven surfaces publish today,
+> including ones whose copy is unwritten, so T3 and T14 add content only.
 >
-> Review: **codex 3 rounds, all clean** · **qodo reported 8 findings — 6 fixed,
-> 2 rejected with evidence on the PR** · **4 more from self-review that neither
-> reviewer raised**, three of them copy naming a default the wizard does not
-> have, including one inherited verbatim from the hint it replaced. No §2c
-> overage. `PLAN-HELP-SYSTEM.md` §3 D2 carries the measured corrections — the
-> load-bearing one being that **`ui/FieldLabel` already exists, so T4–T6 must
-> extend it rather than create it.**
+> ⚠️ **K13 MOVED FOUR SURFACES' TABS INTO `?tab=`** — Props, Playoff, the Squares
+> manager panel, and the NFL commissioner sections (as `?section=`, the parameter
+> already live in shared ledger links). **The valid URL tab set is the OFFERED set,
+> never the static list.** codex found this as two P1s: those tabs had never been
+> URL-reachable, and their render branches gate on the BUTTON being hidden rather
+> than on the permission, so validating against the full list would have shown any
+> member the props commissioner panel via `?tab=admin` and the AI tab in a pool
+> that has not unlocked it. `src/__tests__/useUrlTab.test.tsx` is the guard.
+> **If you add a conditional tab to any of those surfaces, add it to that
+> surface's offered list or it becomes unreachable — and never widen the list to
+> the static one.**
 >
-> **Two things are unverified and said so on the PR:** there are no hover/blur/
-> Escape tests (no jsdom in this repo; T2 needs one anyway and buys it there),
-> and there is no browser walkthrough of the wizard, because `/create/*` is
-> behind a login. Kevin's redeploy check in §7 step 3 is the first real look.
+> ⚠️ **`canOpenPage` in `src/help/route-match.ts` is the ONE answer to "can the
+> reader get there from here"**, read by both "All pages" and `goToPage`. It says
+> no three ways: out of scope, tab not offered, and no usable link while not on
+> this route. Three separate codex rounds each added one of those; do not add a
+> fourth check somewhere else instead of extending it.
 >
-> **T2–T16 are unstarted.** Order is fixed: T2 next (panel, `?` shortcut, header
-> button, search, route→page matching), then T9 (NFL Pick'em content — this
-> week's invites are Pick'em), then T4, T3, T10/T11.
+> **This repo now has DOM tests.** `jsdom` + `@testing-library/react` are
+> devDependencies, opted in **per file** with a `// @vitest-environment jsdom`
+> docblock so the other node-env suites are untouched. ⚠️ **`jsdom` is pinned to
+> `^26` because CI's `build-and-test` job runs Node 20 and jsdom 30 requires 22.**
+> `tests/dom-test-deps-node-parity.test.ts` fails if a DOM dependency stops
+> supporting CI's lowest Node — do not bump past it without bumping CI.
+>
+> Review: **codex 13 rounds** — 11–13 forced by §2b and recorded in the PR body,
+> 3 of the 5 the §2c exception allows, and both paid rounds found real defects ·
+> **qodo reported 13 findings — 2 absorbed, 11 style findings rejected with
+> measurements on the PR** · **5 more from self-review that neither reviewer
+> raised**, including two member-facing copy claims that described behaviour
+> nobody had checked (a Payments tab that is read-only for members, and a
+> per-game rather than per-week pick reveal).
+>
+> **Unverified and said so on the PR: there is no browser walkthrough of the
+> panel.** Every help route is behind a login and the preview server serves the
+> primary checkout, not a worktree. Keyboard and focus behaviour is covered by 22
+> DOM tests; how it LOOKS is not. Kevin's redeploy check is the first real look.
+>
+> **T9 is next and is NOT started** — NFL Pick'em option copy, and this week's
+> invites are Pick'em. Order after it is unchanged: T4, T3, T10/T11. **T16 remains
+> a prerequisite of T15**: ~35 overlay shells still have no accessibility role, so
+> the `?` key's modal check falls back to a CSS-class heuristic for them.
 
 > ## 🛑 2026-08-18 — PLAN-PAYMENT-LEDGER **T2** IS OPEN (Coolify-only); the whole ledger stack through T1 is MERGED AND DEPLOYED
 >
