@@ -28,6 +28,10 @@ function PlacesEditor(props: { payoutsField: string; title?: string; blurb?: str
     .filter((p) => Number.isFinite(Number(p?.rank)))
     .map((p) => ({ rank: Number(p?.rank) }));
   const duplicateRank = !uniqueRanks(ranked);
+  // One past the highest rank present, NOT `fields.length + 1`: remove rank 1
+  // from [1, 2] and `length + 1` hands out a second rank 2, so the editor's own
+  // controls build a list the create schema refuses (codex r3 on T2).
+  const nextRank = ranked.reduce((max, p) => Math.max(max, p.rank), 0) + 1;
 
   const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500';
 
@@ -54,7 +58,7 @@ function PlacesEditor(props: { payoutsField: string; title?: string; blurb?: str
 
       <button
         type="button"
-        onClick={() => append({ rank: fields.length + 1, percentage: 0 })}
+        onClick={() => append({ rank: nextRank, percentage: 0 })}
         className="mt-2 rounded-md border border-slate-700 px-4 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-800"
       >
         + Add place

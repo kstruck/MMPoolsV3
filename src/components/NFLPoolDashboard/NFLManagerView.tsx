@@ -66,6 +66,10 @@ const WeeklyPlacesEditor: React.FC<{ places: PlaceRow[]; onChange: (next: PlaceR
   const over = total > 100;
   const duplicate = !uniqueRanks(places);
   const patch = (i: number, next: Partial<PlaceRow>) => onChange(places.map((p, j) => (j === i ? { ...p, ...next } : p)));
+  // One past the highest rank present, NOT `length + 1`: remove rank 1 from
+  // [1, 2] and `length + 1` hands out a second rank 2, so the editor's own
+  // controls build a list the server refuses (codex r3).
+  const nextRank = places.reduce((max, p) => Math.max(max, Number(p.rank) || 0), 0) + 1;
 
   return (
     <div className="bg-page border border-line rounded-lg p-4 space-y-3">
@@ -96,7 +100,7 @@ const WeeklyPlacesEditor: React.FC<{ places: PlaceRow[]; onChange: (next: PlaceR
         </div>
       ))}
       <button type="button"
-        onClick={() => onChange([...places, { rank: places.length + 1, percentage: 0 }])}
+        onClick={() => onChange([...places, { rank: nextRank, percentage: 0 }])}
         className="font-body text-sm font-bold border border-line rounded-md px-4 py-1.5 text-[color:var(--text)] hover:bg-card">
         + Add place
       </button>

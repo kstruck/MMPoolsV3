@@ -167,6 +167,11 @@ describe('manager Settings — the HYBRID weekly place list (T2)', () => {
     expect(mgr).toContain("if (storedMode !== 'HYBRID' || selectedMode === 'HYBRID') return null;");
   });
 
+  it('+ Add place cannot mint a duplicate rank — the next rank is one past the highest present', () => {
+    expect(mgr).toContain('const nextRank = places.reduce((max, p) => Math.max(max, Number(p.rank) || 0), 0) + 1;');
+    expect(mgr).not.toContain('rank: places.length + 1');
+  });
+
   it('the live checks reuse the schema predicate — one definition of "ranks must be unique"', () => {
     expect(mgr).toContain("import { DUPLICATE_RANK_MESSAGE, uniqueRanks } from '@shared/schemas/common'");
     expect(mgr).toContain('uniqueRanks(places)');

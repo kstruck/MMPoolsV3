@@ -325,5 +325,9 @@ describe('the Payouts step renders two editors on HYBRID and one everywhere else
   it('the live duplicate-rank check reuses the schema predicate rather than restating the rule', () => {
     expect(step).toContain("import { DUPLICATE_RANK_MESSAGE, uniqueRanks } from '@shared/schemas/common'");
     expect(step).toContain('uniqueRanks(ranked)');
+    // …and the editor's own "+ Add place" cannot mint the duplicate it would
+    // then warn about: one past the highest rank present, not `length + 1`.
+    expect(step).toContain('const nextRank = ranked.reduce((max, p) => Math.max(max, p.rank), 0) + 1;');
+    expect(step).not.toContain('rank: fields.length + 1');
   });
 });
