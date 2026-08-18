@@ -68,14 +68,19 @@ export interface HelpPanelState {
  * so the base one is returned until it does — the panel is useful immediately
  * and gains the admin pages a moment later, rather than rendering nothing.
  */
-function useRegistry(isAdmin: boolean): Registry {
+function useRegistry(isAdmin: boolean, retryOn: boolean): Registry {
   // Only the LOADED registry is state, and it is only ever written from the
   // chunk's resolution. Which one a reader gets is then derived, so there is no
   // synchronous state write in the effect and losing admin rights mid-session
   // reverts to the base registry with no extra render.
   const [loaded, setLoaded] = useState<Registry | null>(null);
+  // `retryOn` is the panel's open state (codex R8). `loadAdminRegistry` clears
+  // its cache on failure precisely so that a flaky connection can be retried —
+  // but an effect keyed on `isAdmin` alone never runs again, so that retry was
+  // unreachable and an admin who lost the chunk once lost admin help for the
+  // whole session. Every time the panel opens is the natural second chance.
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin || loaded) return;
     let live = true;
     loadAdminRegistry()
       .then((next) => {
@@ -88,7 +93,7 @@ function useRegistry(isAdmin: boolean): Registry {
     return () => {
       live = false;
     };
-  }, [isAdmin]);
+  }, [isAdmin, retryOn, loaded]);
   return isAdmin ? loaded ?? baseRegistry : baseRegistry;
 }
 
@@ -98,9 +103,9 @@ export function useHelpPanelState(options: { isAdmin: boolean; defaultAudience?:
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const published = usePublishedRoute();
-  const registry = useRegistry(isAdmin);
 
   const [isOpen, setIsOpen] = useState(false);
+  const registry = useRegistry(isAdmin, isOpen);
   const [activeTopicId, setActiveTopicId] = useState<string | undefined>(undefined);
   const [forcedPageId, setForcedPageId] = useState<string | undefined>(undefined);
   // A target waiting for a route change to land. Held in a ref because it is
