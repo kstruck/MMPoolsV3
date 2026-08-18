@@ -4,7 +4,9 @@
 > "plan only" — do not read it as one.** §6 was signed by Kevin on 2026-08-17
 > ("start building"), K1–K13 exactly as each Recommendation column reads. **T0
 > (#472), T1 (#475) and T2 (#477) are merged; T2 is deployed and
-> production-verified.** T3–T16 are unstarted. `HANDOFF.md` is the authority on
+> production-verified.** T3–T14 and T16 are unstarted; **T15 is PARTIALLY done —
+> its deploy half happened, none of its four smoke checks has run** (gate status
+> below). `HANDOFF.md` is the authority on
 > live state and wins over anything below; this document is the DESIGN, and its
 > §3 and §7 stay current and are what a ticket is built from. Where the design
 > and the shipped code disagree, §3 D2 and D3 carry the measured corrections.
