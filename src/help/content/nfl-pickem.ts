@@ -94,9 +94,12 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
       // `PickemPickEntry.tsx:105-120` — an unsubmitted sheet is kept in the
       // browser via `draftStore` and restored with a toast on the next visit.
       'What you tap is kept on this device as you go, so leaving the page does not lose it. It is not in the pool until you submit.',
-      // `functions/src/nflPools.ts:618-624` — a resubmission is refused only for
-      // a game that is locked AND whose pick changed.
-      'You can submit as many times as you like. The last submission before a game locks is the one that counts.',
+      // TWO DIFFERENT REFUSALS, and the first version of this note described
+      // only one (qodo #7). Per-game pools refuse a locked game whose pick
+      // CHANGED (`functions/src/nflPools.ts:618-624`); weekly and confidence
+      // pools refuse EVERY submission once the week is locked, before any
+      // comparison (`:601-604`). "Before the deadline" is true of both.
+      'You can submit as many times as you like before the deadline. The last one that lands is the one that counts.',
       'A game whose deadline has passed is shown read-only, and there is no way to reopen it for one player.',
     ].join('\n\n'),
     fields: [],
@@ -141,7 +144,11 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
       // asked for (codex R1-1).
       'Your commissioner chooses the tie-break rule, and one of the choices is none at all. When it is none, the sheet asks for no prediction and a level week stays level.',
       'When it does ask, the sheet names what it is asking about — the Monday game, or the last game of the week when there is no Monday game. Some older pools ask about every Monday game together.',
-      'Add the final scores together and enter that one number. Closest takes the week; your commissioner chose what happens when two players are equally close.',
+      // NO SETTING DECIDES AN EXACT TIE (qodo #9). `computeWeeklyWinners`
+      // (functions/src/nflScoringEngine.ts:597-611) returns EVERY remaining
+      // equally-close leader, and the recap renders "(shared)". The weekly
+      // tie-break rule chooses which GAME is asked about, nothing more.
+      'Add the final scores together and enter that one number. Closest takes the week. Two players equally close share it.',
       'The game being asked about is fixed for everyone as soon as the first player submits, so a schedule change later in the week cannot move it.',
     ].join('\n\n'),
     fields: [],

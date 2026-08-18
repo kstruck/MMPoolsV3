@@ -389,7 +389,11 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
     short: 'Decides who wins a week when two players score the same. It cannot be changed once anyone has submitted picks, so choose it now.',
     long: [
       'Players predict the combined score of the tiebreaker game on their pick sheet. On a week with no Monday game, the final game of the week is used.',
-      'Whoever is closest takes the week. The rule you pick here decides what "closest" means and what happens if two players are equally close.',
+      // NOT "what happens if two players are equally close" (qodo #9 on #480).
+      // Nothing configures that: `computeWeeklyWinners` returns every
+      // equally-close leader and the recap renders "(shared)". What the rule
+      // actually chooses is the TARGET game.
+      'Whoever is closest takes the week, and two players equally close share it. The rule you pick here decides which game is asked about.',
       'Set it before you launch. Once any player has submitted picks, it is fixed for the life of the pool.',
     ].join('\n\n'),
     poolTypes: ['NFL_PICKEM'],
