@@ -160,8 +160,8 @@ describe('manager Settings — the HYBRID weekly place list (T2)', () => {
 
   it('renders the editor on both HYBRID surfaces and warns on the way out (D1)', () => {
     expect(count(/<WeeklyPlacesEditor/g)).toBe(2);
-    expect(mgr).toContain('<HybridExitNotice storedMode={storedPayoutMode} selectedMode={payoutMode} />');
-    expect(mgr).toContain('<HybridExitNotice storedMode={storedPayoutMode} selectedMode={marginPayoutMode} />');
+    expect(mgr).toContain('<HybridExitNotice storedMode={storedPayoutMode} selectedMode={payoutMode} hasWeeklyList={!!settings.weeklyPayouts?.places?.length} />');
+    expect(mgr).toContain('<HybridExitNotice storedMode={storedPayoutMode} selectedMode={marginPayoutMode} hasWeeklyList={!!settings.weeklyPayouts?.places?.length} />');
     expect(mgr).toContain('review your prize places before you save');
     // The notice only fires on the way OUT of a pool that IS hybrid today.
     expect(mgr).toContain("if (storedMode !== 'HYBRID' || selectedMode === 'HYBRID') return null;");

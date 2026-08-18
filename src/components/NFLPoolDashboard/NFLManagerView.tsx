@@ -34,11 +34,14 @@ type PlaceRow = { rank: number; percentage: number };
  * commissioner is told before they save, not after a week is scored on it.
  * Shown only while the STORED mode is HYBRID and the selected one is not.
  */
-const HybridExitNotice: React.FC<{ storedMode?: string; selectedMode: string }> = ({ storedMode, selectedMode }) => {
+const HybridExitNotice: React.FC<{ storedMode?: string; selectedMode: string; hasWeeklyList: boolean }> = ({ storedMode, selectedMode, hasWeeklyList }) => {
   if (storedMode !== 'HYBRID' || selectedMode === 'HYBRID') return null;
   return (
     <p role="status" className="text-[11px] font-body font-bold text-brandred-600 leading-normal">
-      Leaving Hybrid deletes this pool's weekly prize places.{' '}
+      {/* Only claim a deletion when there is something to delete — a HYBRID pool
+          that never declared a weekly list would otherwise be told it is losing
+          one. The sentence that follows is true either way. */}
+      {hasWeeklyList ? "Leaving Hybrid deletes this pool's weekly prize places. " : ''}
       {selectedMode === 'WEEKLY'
         ? 'Your SEASON places become the list that prices every week — review your prize places before you save.'
         : 'Only the season places remain — review your prize places before you save.'}
@@ -297,7 +300,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // numbers the commissioner deliberately removed. (codex r7.)
   const lastKnownSplitRef = useRef<{ weeklyPerEntry: number; seasonPerEntry: number } | null>(settings.hybridSplit ?? null);
   // HYBRID weekly place list (PLAN-PAYMENT-LEDGER T2 / D1). Same three-part
-  // shape as the split — value, "declared", and a last-known ref — because the
+  // shape as the split — value, "touched", and a last-known ref — because the
   // server deletes `weeklyPayouts` when a pool leaves HYBRID, so leaving must
   // forget it locally too or re-selecting HYBRID silently resurrects the old
   // list on the next save, and re-hydrating from the realtime `settings` prop
@@ -1207,7 +1210,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 </select>
               </div>
 
-              <HybridExitNotice storedMode={storedPayoutMode} selectedMode={payoutMode} />
+              <HybridExitNotice storedMode={storedPayoutMode} selectedMode={payoutMode} hasWeeklyList={!!settings.weeklyPayouts?.places?.length} />
 
               {payoutMode === 'HYBRID' && (
                 <div className="bg-page border border-line rounded-lg p-4 space-y-3">
@@ -1486,7 +1489,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 </select>
               </div>
 
-              <HybridExitNotice storedMode={storedPayoutMode} selectedMode={marginPayoutMode} />
+              <HybridExitNotice storedMode={storedPayoutMode} selectedMode={marginPayoutMode} hasWeeklyList={!!settings.weeklyPayouts?.places?.length} />
 
               {/* Same split editor as Pick'em — the wizard can declare a Margin
                   split, so the editor must be able to view and adjust it, or an
