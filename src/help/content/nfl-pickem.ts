@@ -16,31 +16,25 @@ import { EVERYONE } from './nfl-shared';
 const PICKEM = ['NFL_PICKEM'] as const;
 
 export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
-  // ---- Rules the wizard and the manager settings form both set ------------
-  {
-    id: 'settings.lockMode',
-    title: 'Lock mode',
-    short: 'Choose whether each pick locks at its own game’s deadline, or the whole week locks at the first game’s. Per game is the default.',
-    long: [
-      'Per game is the default. Each pick stays editable until shortly before its own game starts, so a Sunday-night pick can be changed all Sunday afternoon. The lock buffer sets how much earlier than kickoff that is.',
-      'Weekly locks every pick in the week at one moment, worked out from the first game of the week the same way. Choose it when you want everyone playing the same slate on the same information.',
-      // NOT unconditional (codex R1-2). `effectiveGameLockAt` takes
-      // `max(base, override)`, so a week extension moves EVERY game in that
-      // week later — including games that had already locked. The first draft
-      // said a locked pick can never change, which is false for the supported
-      // extension flow this file's lock-buffer topic describes.
-      'Members see the deadline on their pick sheet either way. Once a pick locks nobody can change it, including you — unless you extend that whole week’s deadline, which reopens every game in it.',
-      // `functions/src/nflPools.ts:568` — the submission path derives weekly
-      // locking as `settings.confidenceMode || settings.lockMode === 'WEEKLY'`,
-      // and the manager form disables the control while confidence is on
-      // (`NFLManagerView.tsx:1190-1197`).
-      'Confidence points lock the whole week whatever you choose here, so turning them on overrides this.',
-    ].join('\n\n'),
-    poolTypes: PICKEM,
-    audience: EVERYONE,
-    terms: ['pick-reveal'],
-    related: ['settings.confidenceMode', 'settings.lockBufferMinutes'],
-  },
+  // ---- HELD: settings.lockMode and settings.lockBufferMinutes ------------
+  //
+  // ⚠️ NOT AUTHORED, AND NOT BECAUSE THE COPY WAS HARD. Both topics were
+  // written, reviewed over six codex rounds, and then withdrawn when codex R7
+  // showed the claim they rest on is false in the shipped client.
+  //
+  // `NFLPoolDashboard.tsx:515-534` computes `weekLock` from the week's EARLIEST
+  // kickoff for every NFL type, ignoring `lockMode`, and
+  // `PickemPickEntry.tsx:138-141` returns `true` from `isGameLocked` for every
+  // game the moment that prop is set. So a PER_GAME Pick'em pool — the wizard
+  // default — locks its WHOLE SHEET at the first kickoff of the week, while the
+  // server (`nflPools.ts:568,618-624`) would still accept a Sunday pick. The
+  // same gate also swallows an approved week extension.
+  //
+  // Any copy for these two settings would therefore describe either the setting
+  // (false on screen) or the screen (documenting the bug, and wrong again the
+  // day it is fixed). Their allowlist rows carry the finding; the topics land
+  // with the fix. See MORNING-2026-08-18-HELP-T9.md.
+
   {
     id: 'settings.confidenceMode',
     title: 'Confidence points',
@@ -57,34 +51,8 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
     ].join('\n\n'),
     poolTypes: PICKEM,
     audience: EVERYONE,
-    related: ['settings.lockMode', 'pickem.picksheet'],
+    related: ['pickem.picksheet'],
   },
-  {
-    id: 'settings.lockBufferMinutes',
-    title: 'Lock buffer',
-    short: 'How many minutes before kickoff a pick stops being editable. Five minutes is the default.',
-    long: [
-      // `functions/src/lib/effectiveLock.ts:13` — `(lockBufferMinutes ?? 5)`,
-      // and `effectiveGameLockAt` computes `kickoff - buffer`. The manager form
-      // offers 0, 5 and 10 (`NFLManagerView.tsx:1199-1206`); the server accepts
-      // 0 to 1440 for Pick'em and refuses a negative value outright
-      // (`functions/src/lib/poolUpdate.ts:180-192`).
-      'A pick locks this many minutes before its game starts, so nobody is still editing while the ball is in the air.',
-      'Five minutes is the default. Zero locks exactly at kickoff. Widening it brings the deadline forward for everyone.',
-      'On a weekly-lock pool the same number applies once, to the first kickoff of the week.',
-      // `extendWeekDeadline` (functions/src/poolExceptions.ts:122-190) writes a
-      // per-week override, and `effectiveGameLockAt` takes `max(base, override)`
-      // — later only. It is refused once that week's results have been shown
-      // (WEEK_ALREADY_PUBLISHED). Pick'em keeps extensions; Survivor and Margin
-      // are refused outright (HARD_WEEKLY_LOCK), which is why this topic is
-      // Pick'em-scoped.
-      'Your commissioner can extend one week’s deadline on its own. An extension only ever moves a deadline later, and it is refused once that week’s results have been shown.',
-    ].join('\n\n'),
-    poolTypes: PICKEM,
-    audience: EVERYONE,
-    related: ['settings.lockMode'],
-  },
-
   // ---- The pick sheet ----------------------------------------------------
   {
     id: 'pickem.picksheet',
@@ -106,7 +74,7 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
     poolTypes: PICKEM,
     audience: EVERYONE,
     terms: ['entry'],
-    related: ['settings.lockMode', 'pickem.quickPicks', 'pickem.tiebreakerPrediction'],
+    related: ['pickem.quickPicks', 'pickem.tiebreakerPrediction'],
   },
   {
     id: 'pickem.quickPicks',
@@ -170,17 +138,9 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
  */
 export const NFL_PICKEM_PLACEMENTS: readonly HelpPlacement[] = [
   // Create wizard — the rules step.
-  { topic: 'settings.lockMode', page: 'wizard.pickem.rules', section: 'rules', order: 10 },
-  // NOT settings.lockBufferMinutes (codex R3). The wizard's rules step has no
-  // control for it — `CreateNFLPickemPool.tsx` only seeds the default of 5 —
-  // and a wizard STEP page lists the options on that step. Its help lives on
-  // the read-only surfaces where the deadline matters and on the manager
-  // settings tab, which is the one screen that can change it.
   { topic: 'settings.confidenceMode', page: 'wizard.pickem.rules', section: 'rules', order: 12 },
 
   // What a member reads to find out what they joined.
-  { topic: 'settings.lockMode', page: 'pool.nfl.rules', section: 'picks', order: 10 },
-  { topic: 'settings.lockBufferMinutes', page: 'pool.nfl.rules', section: 'picks', order: 11 },
   { topic: 'settings.confidenceMode', page: 'pool.nfl.rules', section: 'picks', order: 12 },
   { topic: 'settings.pickMode', page: 'pool.nfl.rules', section: 'picks', order: 13 },
   { topic: 'settings.weeklyTiebreaker', page: 'pool.nfl.rules', section: 'picks', order: 14 },
@@ -190,11 +150,8 @@ export const NFL_PICKEM_PLACEMENTS: readonly HelpPlacement[] = [
   { topic: 'pickem.quickPicks', page: 'pool.nfl.picks', section: 'picks', order: 1 },
   { topic: 'pickem.tiebreakerPrediction', page: 'pool.nfl.picks', section: 'picks', order: 2 },
   { topic: 'settings.confidenceMode', page: 'pool.nfl.picks', section: 'picks', order: 3 },
-  { topic: 'settings.lockMode', page: 'pool.nfl.picks', section: 'deadlines', order: 0 },
-  { topic: 'settings.lockBufferMinutes', page: 'pool.nfl.picks', section: 'deadlines', order: 1 },
 
   // The all-picks grid: the question it raises is when a pick appears.
-  { topic: 'settings.lockMode', page: 'pool.nfl.grid', section: 'deadlines', order: 0 },
 
   // Standings and results: what a number on the row is worth.
   { topic: 'settings.confidenceMode', page: 'pool.nfl.standings', section: 'scoring', order: 0 },
@@ -204,12 +161,8 @@ export const NFL_PICKEM_PLACEMENTS: readonly HelpPlacement[] = [
   { topic: 'settings.weeklyTiebreaker', page: 'pool.nfl.recaps', section: 'scoring', order: 0 },
 
   // The dashboard's own question is "when do I have to pick by".
-  { topic: 'settings.lockMode', page: 'pool.nfl.dashboard', section: 'deadlines', order: 0 },
-  { topic: 'settings.lockBufferMinutes', page: 'pool.nfl.dashboard', section: 'deadlines', order: 1 },
 
   // Commissioner settings tab.
-  { topic: 'settings.lockMode', page: 'pool.nfl.manager.settings', section: 'picks', order: 10 },
-  { topic: 'settings.lockBufferMinutes', page: 'pool.nfl.manager.settings', section: 'picks', order: 11 },
   { topic: 'settings.confidenceMode', page: 'pool.nfl.manager.settings', section: 'picks', order: 12 },
   { topic: 'settings.pickMode', page: 'pool.nfl.manager.settings', section: 'picks', order: 13 },
   { topic: 'settings.weeklyTiebreaker', page: 'pool.nfl.manager.settings', section: 'picks', order: 14 },

@@ -85,9 +85,9 @@ describe("T9 — Pick'em copy is scoped to Pick'em", () => {
   it("a Pick'em reader does see it — the check above is not passing by emptiness", () => {
     const onPickSheet = visibleOn('pool.nfl.picks', 'NFL_PICKEM', 'member');
     expect(onPickSheet).toContain('pickem.picksheet');
-    expect(onPickSheet).toContain('settings.lockMode');
+    expect(onPickSheet).toContain('pickem.quickPicks');
     expect(onPickSheet).toContain('settings.confidenceMode');
-    expect(visibleOn('pool.nfl.rules', 'NFL_PICKEM', 'member')).toContain('settings.lockBufferMinutes');
+    expect(visibleOn('pool.nfl.rules', 'NFL_PICKEM', 'member')).toContain('settings.weeklyTiebreaker');
   });
 
   it('the scope filter discriminates: widening a topic WOULD leak it', () => {
@@ -99,7 +99,7 @@ describe("T9 — Pick'em copy is scoped to Pick'em", () => {
       'settings.maxEntriesPerUser', // authored `poolTypes: 'all'` in T1
     );
     expect(widened?.id).toBe('settings.maxEntriesPerUser');
-    const scoped = helpRegistry.resolveTopic({ poolType: 'NFL_SURVIVOR', ...MEMBER }, 'settings.lockMode');
+    const scoped = helpRegistry.resolveTopic({ poolType: 'NFL_SURVIVOR', ...MEMBER }, 'settings.confidenceMode');
     expect(scoped).toBeUndefined();
   });
 });
@@ -156,7 +156,7 @@ describe('T9 — commissioner copy stays on the commissioner side', () => {
   it('a commissioner sees them — and also sees the member copy', () => {
     const settings = visibleOn('pool.nfl.manager.settings', 'NFL_PICKEM', 'commissioner');
     expect(settings).toContain('nfl.manager.settingsLock');
-    expect(settings).toContain('settings.lockMode'); // audience ['member','commissioner']
+    expect(settings).toContain('settings.confidenceMode'); // audience ['member','commissioner']
     expect(helpRegistry.resolveTopic({ poolType: 'NFL_PICKEM', ...HOST }, 'nfl.manager.ledger')?.id)
       .toBe('nfl.manager.ledger');
     expect(helpRegistry.resolveTopic({ poolType: 'NFL_PICKEM', ...MEMBER }, 'nfl.manager.ledger'))
@@ -165,21 +165,33 @@ describe('T9 — commissioner copy stays on the commissioner side', () => {
 });
 
 describe('T9 — the allowlist rows it closed are closed', () => {
-  it("the four Pick'em schema rows are gone", () => {
-    for (const path of [
-      'settings.lockMode',
-      'settings.confidenceMode',
-      'settings.lockBufferMinutes',
-      'settings.isListedPublic',
-    ]) {
+  it("the two Pick'em schema rows T9 closed are gone", () => {
+    for (const path of ['settings.confidenceMode', 'settings.isListedPublic']) {
       expect(path in SCHEMA_PATH_ALLOWLIST, `${path} should no longer be allowlisted`).toBe(false);
     }
   });
 
-  it('the two wizard-field rows are gone', () => {
-    for (const path of ['settings.lockMode', 'settings.confidenceMode']) {
-      expect(path in WIZARD_FIELD_ALLOWLIST, `${path} should no longer be allowlisted`).toBe(false);
+  it('the confidence wizard-field row is gone', () => {
+    expect('settings.confidenceMode' in WIZARD_FIELD_ALLOWLIST).toBe(false);
+  });
+
+  /**
+   * The two rows T9 WITHDREW, and why, pinned so the reason cannot be lost.
+   *
+   * `NFLPoolDashboard.tsx:515-534` derives the week lock from the earliest
+   * kickoff for every NFL type and `PickemPickEntry.tsx:138-141` locks every
+   * game once that flag is set — so a PER_GAME Pick'em pool locks its whole
+   * sheet at the first kickoff, while the server would accept a later pick.
+   * Copy for either setting would have been false on screen. Delete this test
+   * when the client fix lands and the topics are authored.
+   */
+  it('records the lock topics it withdrew, with their reason', () => {
+    for (const list of [SCHEMA_PATH_ALLOWLIST, WIZARD_FIELD_ALLOWLIST]) {
+      expect(list['settings.lockMode']).toMatch(/^T9-BLOCKED:/);
     }
+    expect(SCHEMA_PATH_ALLOWLIST['settings.lockBufferMinutes']).toMatch(/^T9-BLOCKED:/);
+    expect(helpRegistry.getTopic('settings.lockMode')).toBeUndefined();
+    expect(helpRegistry.getTopic('settings.lockBufferMinutes')).toBeUndefined();
   });
 
   /**

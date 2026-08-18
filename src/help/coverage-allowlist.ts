@@ -68,7 +68,10 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
 
   // ---- PENDING: NFL Pick'em (T9) -----------------------------------------
   seasonType: 'T13: explained for the three NFL season types by the seasonType topic (T1). SQUARES and PROPS also carry the field and have no control for it, so the row stays until their content ticket accounts for it.',
-  // T9 removed lockMode, confidenceMode, lockBufferMinutes and isListedPublic.
+  // T9 removed confidenceMode and isListedPublic. lockMode and
+  // lockBufferMinutes were WITHDRAWN mid-review — see their rows.
+  'settings.lockMode': 'T9-BLOCKED: withdrawn after codex found the claim false in the shipped client. NFLPoolDashboard.tsx:515-534 computes the week lock from the EARLIEST kickoff for every NFL type, ignoring lockMode, and PickemPickEntry.tsx:138-141 locks every game once that flag is set — so a PER_GAME pool (the wizard default) locks its whole sheet at the first kickoff while nflPools.ts:568,618-624 would still accept a later pick. Copy would describe either the setting (false on screen) or the screen (documenting the bug). Lands with the client fix; see MORNING-2026-08-18-HELP-T9.md.',
+  'settings.lockBufferMinutes': 'T9-BLOCKED: withdrawn after codex found the claim false in the shipped client. NFLPoolDashboard.tsx:515-534 computes the week lock from the EARLIEST kickoff for every NFL type, ignoring lockMode, and PickemPickEntry.tsx:138-141 locks every game once that flag is set — so a PER_GAME pool (the wizard default) locks its whole sheet at the first kickoff while nflPools.ts:568,618-624 would still accept a later pick. Copy would describe either the setting (false on screen) or the screen (documenting the bug). Lands with the client fix; see MORNING-2026-08-18-HELP-T9.md.',
   // `settings.pointsPerPick` is the one row T9 could NOT close, and the reason
   // is a product defect rather than missing copy — see below.
   'settings.pointsPerPick': "T9-BLOCKED: the value is INERT. `scorePickemEntry` (functions/src/nflScoringEngine.ts:174-178) awards exactly 1 per correct pick on a non-confidence pool and never reads this field, while NFLManagerView.tsx:1336 lets a commissioner set 1-10 and NFLPoolRules.tsx:158,220 shows the chosen number to members as what a pick is worth. Any help copy here would either repeat that claim or document the bug. Kevin's call: honour it in the scorer, or drop the control. Raised in the T9 PR body and MORNING-2026-08-18-HELP-T9.md.",
@@ -194,8 +197,10 @@ export const WIZARD_FIELD_ALLOWLIST: Readonly<Record<string, string>> = Object.f
   '*.places.*.rank': 'PERMANENT: the payouts editor binds its rows to a path passed in as a prop, so this register() call cannot name a topic. It carries an explicit helpId to settings.payouts.places.*.rank.',
   '*.places.*.percentage': 'PERMANENT: same editor, same reason; explicit helpId to settings.payouts.places.*.percentage.',
 
-  // ---- NFL Pick'em: DONE (T9). Both rows removed — the wizard's lock-mode and
-  // confidence controls resolve to topics in `content/nfl-pickem.ts`.
+  // ---- NFL Pick'em (T9): the confidence control resolves to a topic in
+  // `content/nfl-pickem.ts`. The lock-mode row came back — see the schema
+  // allowlist above for why.
+  'settings.lockMode': 'T9-BLOCKED: withdrawn after codex found the claim false in the shipped client. NFLPoolDashboard.tsx:515-534 computes the week lock from the EARLIEST kickoff for every NFL type, ignoring lockMode, and PickemPickEntry.tsx:138-141 locks every game once that flag is set — so a PER_GAME pool (the wizard default) locks its whole sheet at the first kickoff while nflPools.ts:568,618-624 would still accept a later pick. Copy would describe either the setting (false on screen) or the screen (documenting the bug). Lands with the client fix; see MORNING-2026-08-18-HELP-T9.md.',
 
   // ---- PENDING: NFL Survivor (T10) ---------------------------------------
   'settings.maxStrikes': 'T10: how many wrong picks before elimination.',
