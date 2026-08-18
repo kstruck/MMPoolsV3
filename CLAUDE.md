@@ -246,6 +246,16 @@ report, that mandate and this cap contradict each other, and the PR cannot
 satisfy both. Kevin's ruling: **run up to 5 additional rounds in that case** —
 so 15 is the ceiling when §2b forces the overage, 10 otherwise. Past 15, ask.
 
+**Record every over-cap round in the PR body** — the artifact, the round count,
+and the §2b finding that forced it. Kevin's ruling removes the *ask*, not the
+*audit*: a paid overage nobody can see afterwards is indistinguishable from a
+counter nobody was keeping. One line is enough ("13 rounds; 11–13 forced by §2b
+after qodo's report"). This is the reviewable half of qodo's objection on #474,
+which asked for a per-artifact approval gate — that half is rejected, because
+Kevin's ruling is explicitly "no ask needed" and the §2b mandate is
+unconditional, so a gate would make the rule unsatisfiable exactly when it
+fires.
+
 The exception earns its keep: it was written after #472 stopped at 11 and
 merged three glossary lines un-reviewed. The round Kevin then authorised found
 a real defect — `poolTypes: []` type-checks, makes a topic permanently
