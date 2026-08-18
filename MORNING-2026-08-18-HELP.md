@@ -33,7 +33,7 @@ wizard.
 |---|---|
 | `src/components/ui/HelpTip.tsx` | The `?` affordance. Takes an id and **nothing else**. Portalled `role="tooltip"` bubble, positioned from `getBoundingClientRect` with a scroll/resize re-measure. |
 | `src/help/scope.tsx` | `HelpScopeProvider` / `useHelpScope`, plus the typed `HelpPanelContext` the click reads. Published by `WizardShell`, `PoolRoute` and `AdminRoute`. |
-| `src/help/content/wizard-shared.ts` | 32 topics — every shared wizard step, and the 14 hint strings that used to live at call sites. |
+| `src/help/content/wizard-shared.ts` | 30 topics, 120 placements — every shared wizard step, and the 14 hint strings that used to live at call sites. |
 | `src/help/content/wizard-pages.ts` | The seven `/create/*` help pages. |
 | `src/components/wizard/fields.tsx` | `helpId` defaulting to `name`; **the `hint` prop is gone**. |
 | `src/utils/publicListing.ts` | New. See the production defect in §3. |
@@ -41,10 +41,16 @@ wizard.
 | `src/__tests__/helpTip.test.tsx` | 22 tests. The rendered contract and the placement maths. |
 | `src/__tests__/browsePublicListing.test.ts` | 7 tests. Regression cover for §3. |
 
-Those three counts were measured on 2026-08-18 with
-`npx vitest run --reporter=json`, not read off the diff. The first draft of this
-table said 23 and 8 — qodo caught both, which is the second time in two PRs that
-a number I had not run was wrong.
+Every number in that table was measured on 2026-08-18 — test counts with
+`npx vitest run --reporter=json`, registry counts by reading `helpRegistry` in a
+throwaway test. None was read off the diff.
+
+**Three of them were wrong in the first draft**, all because I counted by eye:
+helpTip 23 (really 22) and browsePublicListing 8 (really 7), both caught by
+qodo, and **topics 32 (really 30)**, caught by codex on the round §2b required
+after the qodo fixes. The merged PR #475 body carries the same wrong "32
+topics"; nothing depends on it, but it is wrong there and this is the
+correction. The lesson is the cheap one: a count nobody ran is a guess.
 
 **What a commissioner now sees:** a small `?` beside every field on all seven
 create wizards that has copy written. Hover or focus shows the short copy; a

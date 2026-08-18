@@ -22,7 +22,7 @@
 >
 > **#475 (T1)** put the first thing on screen: `src/components/ui/HelpTip.tsx`
 > (takes an id and nothing else — no `text` prop, ever), `src/help/scope.tsx`
-> published by `WizardShell`/`PoolRoute`/`AdminRoute`, 32 topics and the seven
+> published by `WizardShell`/`PoolRoute`/`AdminRoute`, 30 topics and the seven
 > `/create/*` help pages, `fields.tsx` gaining `helpId` and **losing `hint`**,
 > and `tests/help-ui-coverage.test.ts` as the primary coverage guard. 24 schema
 > allowlist rows and 7 route rows came out.
