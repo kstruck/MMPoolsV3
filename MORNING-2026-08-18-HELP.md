@@ -1,16 +1,25 @@
-# MORNING 2026-08-18 (help system) — T0, T1 and T2 merged; T2 needs a Coolify redeploy
+# MORNING 2026-08-18 (help system) — T0, T1, T2 merged, deployed and prod-verified
 
 This file continues `MORNING-2026-08-18.md` for a different effort and supersedes nothing in it.
 
 That doc remains the entry point for the PLAN-PAYMENT-LEDGER T2 work; this one
 covers only `PLAN-HELP-SYSTEM.md`. Read whichever matches what you are doing.
 
-> 🔴 **ONE THING NEEDS YOU, AND IT IS A DECISION, NOT A BUTTON.** T2 changes the
-> shipped bundle, so nothing is live until `www` is redeployed — but the signed
-> plan makes **T16 a prerequisite of T15 (deploy)**, because the `?` key still
-> falls back to a CSS-class heuristic for ~35 overlays. So I am **not** telling you
-> to redeploy. §7 step 2 lays out the two options, what I measured, and which one
-> I would take. Nothing else here is blocking.
+> ✅ **THE DEPLOY AND THE GUARD CHECK ARE DONE.** You took §7 step 2's option A,
+> redeployed `www`, opened the panel with `?` on the live site, and confirmed the
+> privilege guard on a real props pool. Steps 1–5 below are the record of that,
+> not a to-do list.
+>
+> ⚠️ **BUT T15 IS NOT FINISHED, AND DO NOT LET THIS DOC CONVINCE ANYONE IT IS.**
+> T15 is "Coolify deploy + prod smoke". The DEPLOY half is done. **Its smoke list
+> in `PLAN-HELP-SYSTEM.md` §7 has four checks and NONE of them has been run** —
+> what you did was `?` on `/create/pickem`, the privilege guard, and the Back
+> button, and not one of those three is on the list. All four are in §7 step 7.
+> None is urgent, none blocks anything, and together they are about three minutes.
+>
+> ⚠️ **And T16 is still owed.** You knowingly took T15 before it, so the `?`
+> shortcut is live resting on the CSS-class fallback for ~35 overlay shells.
+> See §5.
 
 **Three PRs merged: #472 (T0), #475 (T1) and #477 (T2).** You already deployed and
 verified T1 — tooltips on the create wizard, playoff pools still listing correctly
@@ -115,12 +124,15 @@ path you were on, so a commissioner in the create wizard got
 `/create/pickem?tab=picks`, which is not a pool. Round 13 is clean. Three of the
 five rounds the exception allows.
 
-## 5. One question for you, and two things I decided
+## 5. The decision that was taken, and two I made alone
 
-**THE QUESTION — §7 step 2: do we deploy T2 before T16?** The plan makes T16 a
-prerequisite of T15 and T2's `?` key is the reason. I measured the heuristic as
-covering all 41 current overlays and I would deploy now, but it is a signed plan
-and the decision is yours. Three options and a recommendation are in §7 step 2.
+✅ **ANSWERED — §7 step 2: deploy T2 before T16? Kevin took option A on
+2026-08-18.** T2 is live. **T16 is therefore OVERDUE, not pending**: T15's
+prerequisite was consciously skipped, so the `?` shortcut is in production resting
+on the CSS-class fallback for ~35 overlay shells. All 41 current backdrops carry
+the class pair it matches, so nothing slips through today — but a new overlay
+written without it would, and nothing fails when one is. **T16 is the highest
+priority non-content ticket in this plan.**
 
 The two below needed no decision from you, but are written down so you can
 overrule them.
@@ -139,14 +151,18 @@ overrule them.
 
 ## 6. What I could not verify — stated, not skipped
 
-- **There is no browser walkthrough of the panel.** `/create/*`, `/pool/:id` and
-  `/admin/:id` are all behind a login and the preview server serves the primary
-  checkout rather than the worktree. The keyboard and focus behaviour is covered by
-  22 real DOM tests in `src/__tests__/helpPanel.test.tsx` — `?` toggling, Escape
-  returning focus, the tooltip's ARIA, the search, the pool-type filtering (count
-  taken from `npx vitest run` on the merge commit, 2026-08-18, not from reading the
-  file). **How it looks is unverified.** Your redeploy in
-  §7 is the first real look, which is why §7 step 3 asks you to press one key.
+- ✅ **RESOLVED — the browser walkthrough happened.** This section was written
+  before the deploy and said *I* had not looked: `/create/*`, `/pool/:id` and
+  `/admin/:id` are behind a login and the preview server serves the primary
+  checkout rather than the worktree, so I could only prove behaviour, not
+  appearance. **Kevin closed that gap on 2026-08-18** — he opened the panel with
+  `?` on the live site and confirmed the privilege guard on a real props pool.
+  What I had in hand at merge time was 22 DOM tests in
+  `src/__tests__/helpPanel.test.tsx` covering `?` toggling, Escape returning
+  focus, the tooltip's ARIA, the search and the pool-type filtering (count from
+  `npx vitest run` on the merge commit, 2026-08-18). **Still not covered by anyone:
+  a phone.** Nobody has opened the panel on a small screen, where it renders as a
+  modal with a backdrop rather than a drawer — that branch is untested and unseen.
 - The admin chunk's retry-after-a-failed-download path is proved by its cache
   contract and by reading the code, not by a test that makes a download fail.
 
@@ -177,9 +193,15 @@ force anything.
 > has moved past T2 — this document itself is a later commit. What matters is that
 > the revision being deployed CONTAINS T2, which is what the `--grep` above asks.
 
-### Step 2 — DECIDE whether to redeploy `www` yet ⚠️ YOUR CALL, NOT MINE
+### Step 2 — DECIDE whether to redeploy `www` yet ✅ ANSWERED: OPTION A
 
-**I am not asking you to press Redeploy, because the plan you signed says not to
+> ✅ **CLOSED 2026-08-18. Kevin chose A and redeployed.** Verified independently by
+> fetching the live bundle: `/assets/index-CDG-Ki-M.js` contains `help-panel`,
+> `Search help` and `Press … to toggle`. **Do not re-ask this.** What it leaves
+> owed is T16 — see §5. The reasoning is kept below because the trade is worth
+> re-reading when T16 is scheduled.
+
+**I did not ask you to press Redeploy, because the plan you signed said not to
 yet.** `PLAN-HELP-SYSTEM.md` §3 D3 makes **T16 a prerequisite of T15**: *"the
 shortcut does not ship to prod on the class heuristic alone."* T2's `?` key uses
 exactly that heuristic for the ~35 overlay shells that carry no accessibility
@@ -230,7 +252,7 @@ is yours. **If you want A, do this:**
 **If you want B or C, reply with which one and stop here** — steps 3 to 5 below all
 require the deploy, so skip them.
 
-### Step 3 — press one key, in about 30 seconds *(only if you chose A)*
+### Step 3 — press one key ✅ DONE
 
 1. Go to **https://marchmeleepools.com/create/pickem** and sign in if asked.
 2. **Press the `?` key.** A panel should slide in from the right, titled **Help**,
@@ -241,44 +263,113 @@ require the deploy, so skip them.
 5. **If the panel opens but is empty below the title**, tell me. That means the
    content did not ship with the bundle.
 
-### Step 4 — check the guard that matters, in about 30 seconds *(only if you chose A)*
+### Step 4 — check the guard that matters ✅ DONE, AND IT HOLDS
 
-This is the P1 from §3, and it is worth seeing with your own eyes.
+> ✅ **Verified by Kevin on the live site, 2026-08-18: signed in as neither the
+> commissioner nor an admin, `?tab=admin` does NOT show the admin panel.** The P1
+> codex found on round 4 is confirmed fixed against the deployed build, not only
+> against its test.
+>
+> ⚠️ **The step below asked for a test account IN the pool. That was wrong and the
+> requirement is dropped.** Membership is irrelevant to this guard: `PoolRoute` has
+> no membership check before `PropsPoolDashboard`, and the unlock is
+> `isManager || isAdmin`. So a **signed-out window is a sufficient test**, and a
+> **SUPER_ADMIN account is not a valid one** — it unlocks the panel by design, so
+> using it would look like a failure while the code is correct.
+
+**The procedure as it should have been written, and as it was actually run:**
 
 1. Open one of your own **props** pools as yourself (you are its commissioner):
    **https://marchmeleepools.com/pool/&lt;that pool's id or slug&gt;**
 2. In the address bar, add **`?tab=admin`** to the end and press Enter.
 3. **You should see** the props commissioner panel, because you ARE the
-   commissioner. That is correct.
-4. Now do the same thing while signed in as a **non-commissioner** — if you have a
-   second test account, use it; if not, skip this and tell me and I will script it.
-5. **You should see** the ordinary Overview tab, **not** the admin panel. **If a
-   non-commissioner sees the admin panel**, stop and tell me immediately — that is
-   the exposure codex caught and it would mean the fix did not ship.
+   commissioner. That is correct — and it is the half that proves the check is
+   live rather than the tab simply not existing.
+4. Now open **the same URL in a private / incognito window**, where you are signed
+   out. No second account and no pool membership needed.
+5. **You should see** the ordinary Overview tab, **not** the admin panel. Repeat
+   with **`?tab=grading`**.
+6. **If a signed-out viewer sees the admin panel**, stop and tell me immediately —
+   that is the exposure codex caught and it would mean the fix did not ship.
 
-### Step 5 — the type-a-tab check, and Back *(only if you chose A)*
+⚠️ **Do not run step 4 as a SUPER_ADMIN.** `isAdmin` unlocks the panel too, by
+design, so a super-admin account seeing it is correct behaviour and would read as
+a failure. Incognito sidesteps the question entirely.
+
+### Step 5 — the type-a-tab check, and Back ✅ DONE
 
 1. Still in a pool, click through two or three tabs.
 2. **Press the browser Back button.** You should return to the previous tab rather
    than leaving the pool. Before T2 this worked on NFL and Bracket only; it now
    works on Props, Playoff and the Squares manager panel too.
 
-### Step 6 — nothing else needs you
+### Step 6 — nothing needs a deploy
 
 No `functions/` deploy, no `firestore.rules` deploy, no indexes, no production data
 migration. T2 touched none of them.
 
+### Step 7 — T15's four smoke checks ⬜ ALL FOUR STILL OPEN
+
+T15's smoke list, verbatim from `PLAN-HELP-SYSTEM.md` §7: *"`?` on `/pool/:id` for
+each type, tooltip on a phone, search 'tiebreaker', `?` while a modal is open"*.
+
+⚠️ **NONE of the four has been run.** What you did was `?` on `/create/pickem`
+(a create route, not `/pool/:id`), the privilege guard, and the Back button —
+useful, and none of them on this list. I could not run these myself: one needs a
+phone and all four need production.
+
+None blocks anything. Do them when convenient, or say so and I will carry them
+into the next morning doc.
+
+1. **`?` on a real pool, for each type you have.** Open a pool — NFL, then Bracket,
+   Props, Playoff, Squares if you have one of each — and press `?` on each.
+   **You should see** a panel whose title matches that pool and tab, e.g. **"NFL
+   pool — My picks"**, not a generic one. **If two different pool types show the
+   same title**, tell me which two: that is route→page matching failing.
+2. **Search for `tiebreaker`.** With the panel open anywhere, type **tiebreaker**
+   in the Search help box. **You should see** at least one result. **If you see
+   "Nothing in Help matches"**, tell me — the search index is not reaching the
+   content.
+3. **A tooltip on your phone.** ⚠️ This is a HelpTip, **not** the header button —
+   they are different code paths and only the tooltip has touch behaviour. Open
+   **https://marchmeleepools.com/create/pickem** on your phone and **tap the small
+   `?` next to "Pool name"**. **You should see** the Help panel open on that topic,
+   full-width with a dark backdrop — on a phone the panel is a modal, not the side
+   drawer you saw on desktop, and **nobody has ever seen that branch of the
+   layout**. If it looks wrong, screenshot it and send it to me.
+4. **`?` while a dialog is open.** On desktop, open any pool, open a dialog (Share
+   is easiest), and **press `?`**. **You should see nothing happen** — the panel
+   must stay shut while a dialog owns the screen. Close the dialog, press `?`
+   again, and now it should open. **If the panel opens over the dialog**, tell me:
+   that is the overlay arbitration failing, and it is what T16 exists to make
+   robust.
+
 ## 8. What is NOT done
 
-- **T9 is next and is NOT started.** It is the NFL Pick'em option copy — every
-  `settings.*` on the wizard rules step, the dashboard tabs, the manager sub-tabs
-  and the pick sheet. This week's invites are Pick'em, so it is the highest-value
-  content ticket. I stopped rather than start it half-built; the order after it is
-  unchanged (T4, T3, T10/T11).
-- **T3–T8 and T10–T16 unstarted.** The pool and admin pages have summaries but no
-  per-option copy, the site and account pages have neither (T3), and manager
+⚠️ **T9 AND T16 BOTH CLAIM TO BE NEXT, AND THAT IS A DECISION FOR YOU, NOT A
+CONTRADICTION TO RESOLVE IN A DOC.** The signed order says T9. §5 says T16 is now
+overdue. They are ranked on different things and both rankings are honest:
+
+- **T9 — NFL Pick'em option copy.** Every `settings.*` on the wizard rules step,
+  the dashboard tabs, the manager sub-tabs, the pick sheet. **Highest value**:
+  this week's invites are Pick'em, so it is the copy real players will read
+  first. It is also the plan's stated order (T2 → T9 → T4 → T3 → T10/T11).
+- **T16 — the ~35 overlay shells.** **Highest risk**, because T15 was taken
+  before it: the `?` shortcut is live in production on a CSS-class fallback, and
+  nothing fails if a future overlay is written without that class pair.
+  Mechanical, one PR, and it fixes those shells' missing Escape and focus
+  handling as a side effect.
+
+**My recommendation: T9 first.** The measured risk from T16 is *future* overlays,
+not current ones — all 41 today carry the class the fallback matches — and Pick'em
+copy has a deadline that T16 does not. But say the word and I will flip it.
+
+- **T3–T8, T10–T14 and T16 unstarted.** The pool and admin pages have summaries but
+  no per-option copy, the site and account pages have neither (T3), and manager
   settings, pick sheets and rules pages still have no tooltips (T4–T7).
-- **T16 before T15**, per §5 above.
+- **T15 is PARTIALLY done and is deliberately not in that range.** Its deploy half
+  happened; **none of its four smoke checks has run** — §7 step 7. Do not redeploy
+  for it, and do not treat it as finished.
 - The per-pool-type rules copy is still named in `WIZARD_FIELD_ALLOWLIST` with its
   ticket, field by field. A ticket is done when its rows are gone.
 

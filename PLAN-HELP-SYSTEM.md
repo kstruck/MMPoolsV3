@@ -1,6 +1,18 @@
 # PLAN — Tooltips + Dashboard Help panel (ported from Spectrum Price Intel)
 
-**PLAN ONLY, AWAITING KEVIN'S SIGN-OFF ON §6. No code written. Classification: ordinary, large.**
+> 🛑 **STATUS 2026-08-18: SIGNED AND PARTLY BUILT. This header is no longer
+> "plan only" — do not read it as one.** §6 was signed by Kevin on 2026-08-17
+> ("start building"), K1–K13 exactly as each Recommendation column reads. **T0
+> (#472), T1 (#475) and T2 (#477) are merged; T2 is deployed and
+> production-verified.** T3–T14 and T16 are unstarted; **T15 is PARTIALLY done —
+> its deploy half happened, none of its four smoke checks has run** (gate status
+> below). `HANDOFF.md` is the authority on
+> live state and wins over anything below; this document is the DESIGN, and its
+> §3 and §7 stay current and are what a ticket is built from. Where the design
+> and the shipped code disagree, §3 D2 and D3 carry the measured corrections.
+
+**Classification: ordinary, large.** Originally written as PLAN ONLY, awaiting
+sign-off on §6; that sign-off has since been given — see the status box above.
 
 Written 2026-08-16 on branch `claude/plan-help-system` (worktree
 `.claude/worktrees/plan-help-system`, based on `origin/main` = `42906ecc`).
@@ -21,8 +33,22 @@ inventories), `PLAN-HELP-SYSTEM-REVIEW-LOG.md` (codex rounds).
       fixes are un-reviewed. Status: **cap reached, all findings resolved,
       not APPROVED** (review log "Resolution"). Kevin decides whether to buy
       round 6 before signing.
-- [ ] Kevin's sign-off on §6
-- [ ] Implementation (T-tickets §7) — not started
+- [x] Kevin's sign-off on §6 — **given 2026-08-17** ("start building"), K1–K13 as
+      recommended. Round 6 was never bought; he signed on the round-5 state.
+- [~] Implementation (T-tickets §7) — **T0, T1, T2 done and merged. T3–T14 and
+      T16 unstarted.**
+- [~] **T15 is PARTIALLY done, not unstarted.** Its definition is "Coolify deploy
+      + prod smoke". The deploy half happened 2026-08-18: Kevin redeployed `www`,
+      opened the panel with `?`, and verified the K13 privilege guard on a live
+      props pool. **NONE of its four smoke checks has been run** — the checks
+      Kevin did (`?` on `/create/pickem`, the K13 privilege guard, the Back button)
+      are useful and are not on the list. All four are listed with expected results
+      in `MORNING-2026-08-18-HELP.md` §7 step 7; the phone one is a HelpTip tap,
+      not the header button, and the panel's mobile modal branch has been seen by
+      nobody.
+- [ ] **T16 is OVERDUE rather than pending** — a stated prerequisite of T15, and
+      T15's deploy half was taken first knowingly, so the `?` shortcut is live in
+      production on the CSS-class fallback for ~35 un-migrated overlay shells.
 
 ## 0. What Kevin asked for, verbatim, and what it means precisely
 

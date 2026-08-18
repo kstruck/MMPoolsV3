@@ -1,6 +1,6 @@
 # HANDOFF — Session entry point
 
-> ## 🛑 2026-08-18 — PLAN-HELP-SYSTEM **T0 + T1 + T2 MERGED**; ⚠️ **T2's DEPLOY IS KEVIN'S CALL**
+> ## 🛑 2026-08-18 — PLAN-HELP-SYSTEM **T0 + T1 + T2 MERGED, DEPLOYED AND PROD-VERIFIED**
 >
 > **Read `MORNING-2026-08-18-HELP.md` first** for this effort;
 > `MORNING-2026-08-18.md` remains the entry point for the PLAN-PAYMENT-LEDGER
@@ -10,16 +10,29 @@
 > create wizard and playoff pools still list correctly in Browse. Closed — do not
 > ask him to check it again.
 >
-> ⚠️ **T2 (#477, `557ba2ad`) IS NOT DEPLOYED, AND WHETHER IT SHOULD BE IS AN OPEN
-> QUESTION FOR KEVIN.** The signed plan makes **T16 a prerequisite of T15
-> (deploy)** because the `?` shortcut falls back to a CSS-class heuristic for ~35
-> un-migrated overlay shells — so a runbook that simply said "press Redeploy"
-> would overrule a signed decision (codex caught that as a P1 on the docs PR).
-> `MORNING-2026-08-18-HELP.md` §7 step 2 puts three options and a measurement in
-> front of him: all 41 current backdrops carry the `fixed inset-0` pair the
-> fallback matches, so the heuristic covers today's overlays, and the panel and
-> header button carry none of that risk. **Do not deploy `www` for T2 without his
-> answer, and do not re-ask if the doc records one.**
+> ✅ **T2 (#477, `557ba2ad`) IS DEPLOYED AND PROD-VERIFIED (Kevin, 2026-08-18).
+> THE DEPLOY QUESTION IS CLOSED — DO NOT RE-ASK IT.** The doc that raised it
+> offered three options because the signed plan makes T16 a prerequisite of T15;
+> **Kevin took option A: ship T2 now, T16 still owed.** Confirmed independently by
+> fetching the live bundle — `/assets/index-CDG-Ki-M.js` contains `help-panel`,
+> `Search help` and `Press … to toggle`.
+>
+> ✅ **The K13 privilege guard is verified in production, by Kevin, on the real
+> site.** `?tab=admin` and `?tab=grading` on a props pool, signed out: the
+> ordinary Overview tab, not the commissioner panel. That is the P1 codex found on
+> round 4, checked against the deployed build rather than only against its test.
+> **Membership is irrelevant to that guard** — `PoolRoute` has no membership check
+> before `PropsPoolDashboard`, and the unlock is `isManager || isAdmin` — so a
+> signed-out window is a sufficient test and a SUPER_ADMIN account is *not* (it
+> unlocks the panel by design).
+>
+> ⚠️ **T16 IS STILL OWED AND IS NOW OVERDUE RATHER THAN PENDING.** T15's
+> prerequisite was consciously taken early, so the `?` shortcut is live in
+> production resting on the CSS-class fallback for ~35 un-migrated overlay shells.
+> Measured: all 41 current backdrops carry the `fixed inset-0` pair that fallback
+> matches, so nothing slips through *today* — but any new overlay written without
+> that class pair would, and nothing fails when one is. **Treat T16 as the highest
+> priority non-content ticket in this plan.**
 >
 > **§6 of `PLAN-HELP-SYSTEM.md` is SIGNED** — K1–K13 taken exactly as each
 > Recommendation column reads, on Kevin's 2026-08-17 "start building". That
@@ -83,10 +96,22 @@
 > nobody had checked (a Payments tab that is read-only for members, and a
 > per-game rather than per-week pick reveal).
 >
-> **Unverified and said so on the PR: there is no browser walkthrough of the
-> panel.** Every help route is behind a login and the preview server serves the
-> primary checkout, not a worktree. Keyboard and focus behaviour is covered by 22
-> DOM tests; how it LOOKS is not. Kevin's redeploy check is the first real look.
+> ✅ **The desktop walkthrough is DONE (Kevin, 2026-08-18)** — this paragraph used
+> to say there had been none, which was true at merge and is not now. Every help
+> route is behind a login and the preview server serves the primary checkout, so I
+> could only prove behaviour (22 DOM tests: `?` toggling, Escape returning focus,
+> the tooltip's ARIA, search, pool-type filtering) and not appearance. Kevin
+> closed that on the live site.
+>
+> ⬜ **T15's FOUR SMOKE CHECKS ARE ALL STILL OPEN.** What Kevin ran — `?` on
+> `/create/pickem`, the privilege guard, the Back button — is none of them. The
+> list is *"`?` on `/pool/:id` for each type, tooltip on a phone, search
+> 'tiebreaker', `?` while a modal is open"*, and the phone one is a **HelpTip tap,
+> not the header button** (different code path; only the tooltip has touch
+> behaviour). **The panel's mobile modal branch has been seen by nobody.** Steps
+> with expected results in `MORNING-2026-08-18-HELP.md` §7 step 7. **T15 is
+> therefore PARTIALLY done — deploy yes, smoke no** — do not record it either way
+> without that distinction.
 >
 > **T9 is next and is NOT started** — NFL Pick'em option copy, and this week's
 > invites are Pick'em. Order after it is unchanged: T4, T3, T10/T11. **T16 remains
