@@ -35,7 +35,7 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   date: 'PERMANENT: derived from the chosen game.',
   gameTime: 'PERMANENT: derived from the chosen game.',
   week: 'PERMANENT: derived from the chosen game.',
-  theme: 'PERMANENT: legacy single-string theme, superseded by the branding fields. No wizard control writes it.',
+  theme: "PERMANENT: legacy single-string theme, superseded by the branding fields. No control offers it — the squares and props wizards send the constant 'default' (CreateSquaresPool.tsx:41, CreatePropsPool.tsx:81).",
 
   // ---- PERMANENT: legacy aliases kept for older payloads ------------------
   venmo: 'PERMANENT: legacy top-level alias of paymentHandles.venmo, reconciled on write. One control, one topic — the nested path is the one readers meet.',
@@ -44,7 +44,6 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   paypal: 'PERMANENT: legacy top-level alias of paymentHandles.paypal.',
   'branding.logo': 'PERMANENT: legacy alias of branding.logoUrl.',
   'branding.bgColor': 'PERMANENT: legacy alias of branding.backgroundColor.',
-  'branding.backgroundColor': 'PERMANENT: accepted on write but no wizard control sets it; the two colour controls are primaryColor and secondaryColor.',
   'settings.paymentHandles.venmo': 'PERMANENT: bracket-only nested duplicate of paymentHandles.venmo; the same control writes both.',
   'settings.paymentHandles.zelle': 'PERMANENT: bracket-only nested duplicate of paymentHandles.zelle.',
   'settings.paymentHandles.cashapp': 'PERMANENT: bracket-only nested duplicate of paymentHandles.cashapp.',
@@ -53,12 +52,10 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   'settings.paymentInstructions': 'PERMANENT: nested duplicate of paymentInstructions written by the same control.',
 
   // ---- PERMANENT: accepted by the schema, no surface at all ---------------
-  'settings.customScoring': 'PERMANENT: accepted for a CUSTOM bracket scoring system that no shipped screen authors. Give it a topic when a screen offers it.',
   'props.payouts.*': 'PERMANENT: legacy per-place prop payout array; the props wizard has no control for it.',
   'props.questions.*.id': 'PERMANENT: generated per question, never entered.',
   'props.questions.*.points': 'PERMANENT: accepted but not offered by the props wizard, which scores every question equally.',
   'props.questions.*.type': 'PERMANENT: accepted but not offered by the props wizard.',
-  'settings.maxEntriesTotal': 'PERMANENT: accepted on bracket and playoff create, but no wizard or settings control writes it today. Becomes T12 if a control appears.',
 
   // ---- PENDING: shared wizard steps (T1 moves the existing hints) ---------
   name: 'T1: shared basics step — the pool name control.',
@@ -73,6 +70,7 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   'paymentHandles.paypal': 'T1: shared fee step.',
   'paymentHandles.googlePay': 'T1: shared fee step.',
   'branding.logoUrl': 'T1: shared branding step — carries an existing hint= string to move.',
+  'branding.backgroundColor': 'T5: the legacy branding step has a colour picker for it (admin/WizardStepBranding.tsx:97), reached from the squares manager and the props edit wizard. The unified wizard offers only primaryColor and secondaryColor.',
   'branding.primaryColor': 'T1: shared branding step.',
   'branding.secondaryColor': 'T1: shared branding step.',
   'settings.entryFee': 'T1: shared fee step — carries an existing hint= string to move. Money copy, so voice rule 8 applies.',
@@ -110,6 +108,8 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   'settings.maxEntriesPerUser': 'T11: how many entries one person may hold. The wizard control is behind MULTI_ENTRY_WIZARD_ENABLED, which is false; the topic is written anyway because the manager settings form shows it.',
 
   // ---- PENDING: Bracket and Playoff (T12) --------------------------------
+  'settings.maxEntriesTotal': 'T12: the cap on entries in the whole pool. The bracket manager tab edits it (BracketPoolDashboard.tsx:109 editMaxTotal, written at :350); -1 means unlimited, which the copy has to say.',
+  'settings.customScoring': 'T12: the bracket manager tab authors the per-round point values when the scoring system is CUSTOM (BracketPoolDashboard.tsx:112 editCustomScoring, written at :353).',
   seasonYear: 'T12: which tournament year a bracket pool covers.',
   gender: 'T12: mens or womens tournament.',
   tournamentType: 'T12: which tournament the bracket follows.',
