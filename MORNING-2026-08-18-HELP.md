@@ -134,8 +134,10 @@ Neither needed you, but both are written down so you can overrule them.
 - **There is no browser walkthrough of the panel.** `/create/*`, `/pool/:id` and
   `/admin/:id` are all behind a login and the preview server serves the primary
   checkout rather than the worktree. The keyboard and focus behaviour is covered by
-  22 real DOM tests — `?` toggling, Escape returning focus, the tooltip's ARIA, the
-  search, the pool-type filtering. **How it looks is unverified.** Your redeploy in
+  22 real DOM tests in `src/__tests__/helpPanel.test.tsx` — `?` toggling, Escape
+  returning focus, the tooltip's ARIA, the search, the pool-type filtering (count
+  taken from `npx vitest run` on the merge commit, 2026-08-18, not from reading the
+  file). **How it looks is unverified.** Your redeploy in
   §7 is the first real look, which is why §7 step 3 asks you to press one key.
 - The admin chunk's retry-after-a-failed-download path is proved by its cache
   contract and by reading the code, not by a test that makes a download fail.

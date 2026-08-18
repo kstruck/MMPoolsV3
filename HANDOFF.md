@@ -1,6 +1,6 @@
 # HANDOFF — Session entry point
 
-> ## 🛑 2026-08-18 — PLAN-HELP-SYSTEM **T0 + T1 + T2 MERGED**; ⚠️ **A COOLIFY REDEPLOY IS OWED FOR T2**
+> ## 🛑 2026-08-18 — PLAN-HELP-SYSTEM **T0 + T1 + T2 MERGED**; ⚠️ **T2 NEEDS A COOLIFY REDEPLOY**
 >
 > **Read `MORNING-2026-08-18-HELP.md` first** for this effort;
 > `MORNING-2026-08-18.md` remains the entry point for the PLAN-PAYMENT-LEDGER
@@ -23,7 +23,8 @@
 > `hint`, and `tests/help-ui-coverage.test.ts` as the primary coverage guard. It
 > also fixed a production defect it uncovered: `BrowsePools` treated every NFL
 > playoff pool as public regardless of the stored setting, now
-> `src/utils/publicListing.ts` with 7 regression tests.
+> `src/utils/publicListing.ts` with 7 regression tests (counted from a run of
+> `npx vitest run`, 2026-08-18).
 >
 > **#477 (T2) is the panel.** `?` or a header button beside the theme toggle
 > (K3) opens a right-side drawer with the current screen's guide, search, the
