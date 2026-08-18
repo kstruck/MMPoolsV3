@@ -42,14 +42,14 @@ function StepPropsSetup() {
               <span className="text-xs font-semibold text-slate-400">Question {i + 1}</span>
               <button type="button" onClick={() => remove(i)} className="text-xs font-semibold text-rose-400 hover:text-rose-300">Remove</button>
             </div>
-            <Field label="Prompt" htmlFor={`q-${i}-text`}>
+            <Field label="Prompt" htmlFor={`q-${i}-text`} helpId="props.questions.*.text">
               <input id={`q-${i}-text`} className={inputCls} placeholder="Who wins the coin toss?" {...register(`props.questions.${i}.text`)} />
             </Field>
             <Controller
               control={control}
               name={`props.questions.${i}.options`}
               render={({ field }) => (
-                <Field label="Options (comma-separated, 2–4)" htmlFor={`q-${i}-opts`} hint="e.g. Heads, Tails">
+                <Field label="Options (comma-separated, 2–4)" htmlFor={`q-${i}-opts`} helpId="props.questions.*.options">
                   <input
                     id={`q-${i}-opts`}
                     className={inputCls}

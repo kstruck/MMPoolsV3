@@ -332,12 +332,31 @@ describe('every schema path is explained or allowlisted', () => {
     expect(vague).toEqual([]);
   });
 
-  // T0's state, asserted rather than assumed: the allowlist is the whole
-  // schema. When T9–T13 write the copy, these rows come out and this number
-  // falls — and if a ticket claims to be done while its rows remain, the count
-  // says otherwise.
-  it('T0 state: every path is pending or permanent, none explained yet', () => {
-    expect(realTopics).toEqual([]);
-    expect(Object.keys(SCHEMA_PATH_ALLOWLIST).length).toBe(allLeaves.size);
+  // T1's state, asserted rather than assumed. The allowlist started as the
+  // whole schema; every ticket that writes copy takes rows out of it, so the
+  // gap between the two numbers is the measure of what is covered. If a ticket
+  // claims to be done while its rows remain, this says otherwise.
+  it('T1 state: the shared wizard paths are explained and the rest are still pending', () => {
+    const explained = new Set(POOL_TYPES.flatMap((t) => [...explainedPathsFor(t, realTopics)]));
+    for (const path of [
+      'name',
+      'contactEmail',
+      'settings.entryFee',
+      'costPerSquare',
+      'props.cost',
+      'paymentHandles.venmo',
+      'paymentHandles.googlePay',
+      'settings.payouts.places.*.rank',
+      'branding.logoUrl',
+      'lockDate',
+      'settings.weeklyTiebreaker',
+    ]) {
+      expect(explained.has(path), `${path} is T1 copy and should be explained`).toBe(true);
+      expect(path in SCHEMA_PATH_ALLOWLIST, `${path} should no longer be allowlisted`).toBe(false);
+    }
+    expect(Object.keys(SCHEMA_PATH_ALLOWLIST).length).toBeLessThan(allLeaves.size);
+    for (const path of ['settings.maxStrikes', 'settings.scoringSystem', 'numberSets', 'settings.payoutMode']) {
+      expect(path in SCHEMA_PATH_ALLOWLIST, `${path} is T9-T13 content and should still be pending`).toBe(true);
+    }
   });
 });

@@ -29,14 +29,13 @@ export function MultiEntryFields() {
   if (!MULTI_ENTRY_WIZARD_ENABLED) return null;
   return (
     <div className="mb-4 rounded-lg border border-line bg-page p-3">
-      <CheckboxField name="multiEntry" label="Allow more than one entry per player" />
+      <CheckboxField name="multiEntry" label="Allow more than one entry per player" helpId="settings.maxEntriesPerUser" />
       {on && (
         <NumberField
           name="settings.maxEntriesPerUser"
           label="Max entries per player"
           min={2}
           max={MAX_ENTRIES_PER_USER_CAP}
-          hint={`2 to ${MAX_ENTRIES_PER_USER_CAP}. Each entry pays the entry fee and competes on its own. You can raise this later while the pool is open, but never lower it.`}
         />
       )}
     </div>

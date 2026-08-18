@@ -906,12 +906,41 @@ describe('the real registry — content rules', () => {
     expect(violations).toEqual([]);
   });
 
-  // T0 ships the mechanism and the glossary; the copy lands with the
-  // components that read it. This asserts the SHAPE of that state rather than
-  // letting an accidentally-empty registry look like a passing one later.
-  it('T0 state: no topics or pages yet, and a full glossary', () => {
-    expect(topics).toEqual([]);
-    expect(PAGES).toEqual([]);
+  // T1 ships the create wizard's copy and the seven wizard pages; T2/T3/T14
+  // bring the rest. Asserted as a SHAPE, not a count, so it does not have to be
+  // edited on every content ticket — but an accidentally-empty registry still
+  // fails here rather than looking like a pass.
+  it('T1 state: the create wizard has copy and pages, and the glossary is full', () => {
+    expect(topics.length).toBeGreaterThan(20);
+    expect([...PAGES].map((p) => p.route).sort()).toEqual([
+      '/create/bracket',
+      '/create/margin',
+      '/create/pickem',
+      '/create/playoff',
+      '/create/props',
+      '/create/squares',
+      '/create/survivor',
+    ]);
     expect(helpRegistry.glossary.length).toBeGreaterThan(30);
+  });
+
+  /**
+   * The scoped-variant path, exercised on the REAL content rather than only on
+   * fixtures. `wizard.season` exists twice — a shared NFL-season wording and a
+   * playoff one — and both are placed under the one base id, so this is the
+   * first live proof that a reader gets the variant their pool type is in.
+   */
+  it('resolves the pool-type variant of the season note on the playoff wizard', () => {
+    const playoff = helpRegistry.resolveTopic({ poolType: 'NFL_PLAYOFFS', audience: 'commissioner' }, 'wizard.season');
+    const pickem = helpRegistry.resolveTopic({ poolType: 'NFL_PICKEM', audience: 'commissioner' }, 'wizard.season');
+    expect(playoff?.id).toBe('NFL_PLAYOFFS:wizard.season');
+    expect(pickem?.id).toBe('wizard.season');
+    // And the panel agrees with the tooltip, because both go through the same
+    // function: the placement is written unqualified on both pages.
+    const onPlayoffPage = helpRegistry
+      .placementsForPage('wizard.playoff', { poolType: 'NFL_PLAYOFFS', audience: 'commissioner' })
+      .flatMap((s) => s.topics);
+    expect(onPlayoffPage).toContain(playoff);
+    expect(onPlayoffPage).not.toContain(pickem);
   });
 });

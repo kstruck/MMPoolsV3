@@ -6,15 +6,16 @@
 // here that does not exist there, and on a route there that appears neither
 // here nor in `ROUTE_ALLOWLIST`.
 //
-// EMPTY IN T0, BY DESIGN. Every route currently sits in `ROUTE_ALLOWLIST` with
-// the ticket that will move it here — T2 for the pool surfaces and wizards, T3
-// for the site and account pages, T14 for the admin tabs. The guard is not a
-// no-op meanwhile: a route added to App.tsx tomorrow is in neither list and
-// fails.
+// T1 adds the seven `/create/*` wizard routes, because the registry refuses a
+// topic nothing places and a placement needs a page. Every other route is
+// still in `ROUTE_ALLOWLIST` with the ticket that will move it here — T2 for
+// the pool surfaces, T3 for the site and account pages, T14 for the admin
+// tabs. A route added to App.tsx tomorrow is in neither list and fails.
 //
 // Route MATCHING (which page the reader is on) is T2's job and deliberately
-// not built here — with no pages to match, it would be untested code.
+// not built here.
 
 import type { HelpPage } from './types';
+import { WIZARD_PAGES } from './content/wizard-pages';
 
-export const PAGES: readonly HelpPage[] = [];
+export const PAGES: readonly HelpPage[] = [...WIZARD_PAGES];
