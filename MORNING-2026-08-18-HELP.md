@@ -38,8 +38,13 @@ wizard.
 | `src/components/wizard/fields.tsx` | `helpId` defaulting to `name`; **the `hint` prop is gone**. |
 | `src/utils/publicListing.ts` | New. See the production defect in §3. |
 | `tests/help-ui-coverage.test.ts` | 27 tests. The primary coverage guard. |
-| `src/__tests__/helpTip.test.tsx` | 23 tests. The rendered contract and the placement maths. |
-| `src/__tests__/browsePublicListing.test.ts` | 8 tests. Regression cover for §3. |
+| `src/__tests__/helpTip.test.tsx` | 22 tests. The rendered contract and the placement maths. |
+| `src/__tests__/browsePublicListing.test.ts` | 7 tests. Regression cover for §3. |
+
+Those three counts were measured on 2026-08-18 with
+`npx vitest run --reporter=json`, not read off the diff. The first draft of this
+table said 23 and 8 — qodo caught both, which is the second time in two PRs that
+a number I had not run was wrong.
 
 **What a commissioner now sees:** a small `?` beside every field on all seven
 create wizards that has copy written. Hover or focus shows the short copy; a
@@ -68,7 +73,7 @@ The host had no way to tell.
 
 It surfaced **only because T1 wrote copy promising the option works.** The copy
 was right about what the option means and the code was wrong, so the code moved:
-the predicate is now `src/utils/publicListing.ts` with 8 regression tests.
+the predicate is now `src/utils/publicListing.ts` with 7 regression tests.
 
 It can only ever hide a pool whose host explicitly asked for it to be hidden —
 every wizard defaults `isPublic` to `true`, and a legacy playoff pool carrying
@@ -170,10 +175,25 @@ Open a terminal. You do not need to be in any particular folder.
 git -C D:/march-melee-pools pull
 ```
 
-**You should see** `Updating 0090af09..a1ee5faa` (or `Already up to date.` if you
-have pulled since). **If it errors** about local changes, run
-`git -C D:/march-melee-pools status` and tell me what it says — do not force
-anything.
+**You should see** either a list of updated files or `Already up to date.`
+
+Then confirm T1 is actually in what you just pulled:
+
+```bash
+git -C D:/march-melee-pools log --oneline --grep="PLAN-HELP-SYSTEM T1" -1
+```
+
+**You should see** one line ending `(#475)`. **If you see nothing**, the pull did
+not bring T1 down — tell me before deploying. **If the pull errors** about local
+changes, run `git -C D:/march-melee-pools status` and tell me what it says; do
+not force anything.
+
+> ⚠️ **Do not check for the exact commit `a1ee5faa`.** By the time you read this,
+> `main` has moved past it — this document itself is a later commit. What
+> matters is that the revision being deployed CONTAINS T1, which is what the
+> `--grep` above asks. (Pinning a runbook to a SHA that the runbook's own merge
+> invalidates is a mistake this repo has made before; qodo caught this one
+> before it reached you.)
 
 ### Step 2 — redeploy the frontend in Coolify ⚠️ THE ONE THING THAT NEEDS YOU
 
@@ -184,8 +204,9 @@ auto-deploy the frontend.
 1. Open your browser and go to the **Coolify dashboard**.
 2. Select the **`www` / march-melee-pools frontend** application (the same one
    you redeploy after any frontend PR — not a Firebase Function).
-3. Confirm the branch shown is **`main`** and the commit is **`a1ee5faa`**. If
-   it shows an older commit, click **Refresh** or reload the page first.
+3. Confirm the branch shown is **`main`**. Do **not** try to match a specific
+   commit — `main` moves, and the newest commit on it is the right one. If the
+   commit shown looks stale, click **Refresh** or reload the page first.
 4. Click **Redeploy** (some versions label it **Deploy**).
 5. **You should see** the build log start streaming, then finish with a success
    state after roughly 2–5 minutes.

@@ -31,7 +31,7 @@
 > every NFL playoff pool as public regardless of the stored setting, so a host
 > who unticked "List this pool publicly" was still listed — while the wizard had
 > been persisting the choice all along. Found by qodo, against T1's new copy
-> promising the option works. Now `src/utils/publicListing.ts` with 8 regression
+> promising the option works. Now `src/utils/publicListing.ts` with 7 regression
 > tests. It is LISTING, not access, and can only hide a pool whose host asked
 > for it to be hidden. Live only after the redeploy above.
 >
