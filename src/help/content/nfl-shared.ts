@@ -50,7 +50,7 @@ export const NFL_SHARED_TOPICS: readonly HelpTopic[] = [
     short: 'One sheet for the money: what each member owes, what you have marked paid, and every prize you have published.',
     long: [
       'You mark a member paid once their money reaches you. Nothing on this screen moves money — it records what already happened between the two of you.',
-      'Prizes work the same way. A published weekly or season prize appears here with its own paid box, so what you still owe your players is one list rather than a memory.',
+      'Prizes work the same way. Any prize you have published — a week’s or the season’s — appears here with its own paid box, so what you still owe your players is one list rather than a memory.',
       'A member sees their own row on their Payments tab and cannot change it.',
     ].join('\n\n'),
     fields: [],
@@ -93,7 +93,7 @@ export const NFL_SHARED_TOPICS: readonly HelpTopic[] = [
     long: [
       'While the pool is open you can change the entry fee, the prize split and the pool rules, and every member sees the new version on the rules page.',
       'Once the pool is locked, only the name, your contact details, the pay-to handles, the branding and the reminders can still be changed. The fee, the split and the rules are fixed from then on, so nobody’s finished week is rewritten under them.',
-      'Some single settings freeze earlier than that, and each one says so where you set it.',
+      'A few settings freeze earlier still. The weekly tie-break rule is fixed as soon as anyone has submitted picks, because changing it would re-decide weeks that are already over.',
     ].join('\n\n'),
     fields: [],
     poolTypes: NFL_SEASON_TYPES,
@@ -118,7 +118,6 @@ export const NFL_SHARED_PLACEMENTS: readonly HelpPlacement[] = [
   { topic: 'settings.entryFee', page: 'pool.nfl.rules', section: 'money', order: 0 },
   { topic: 'paymentHandles', page: 'pool.nfl.rules', section: 'money', order: 1 },
   { topic: 'paymentInstructions', page: 'pool.nfl.rules', section: 'money', order: 2 },
-  { topic: 'settings.maxEntriesPerUser', page: 'pool.nfl.rules', section: 'entries', order: 0 },
 
   { topic: 'nfl.manager.ledger', page: 'pool.nfl.manager.members', section: 'money', order: 0 },
   { topic: 'settings.entryFee', page: 'pool.nfl.manager.members', section: 'money', order: 1 },
