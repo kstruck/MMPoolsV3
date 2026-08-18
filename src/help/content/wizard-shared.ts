@@ -85,6 +85,18 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
     // top-level flag AND to `settings.isListedPublic`; nothing offers the two
     // separately. Voice rule 10 — one concept, one topic — so the second path
     // is claimed here rather than given a duplicate explanation. (T9)
+    //
+    // ⚠️ NOT PLACED ON `pool.nfl.manager.settings`, and codex asked twice why
+    // (R5). The reason is a defect, not an oversight: NFLManagerView's
+    // "List Pool Publicly" toggle sends `settings.isListedPublic` and NOTHING
+    // else (`NFLManagerView.tsx:665,733-739`), while Browse decides an NFL
+    // pool's listing from the TOP-LEVEL `isPublic`
+    // (`src/utils/publicListing.ts:34`), which that save never touches. So the
+    // toggle does not change what this copy promises, and placing the topic
+    // beside it would be the copy claim voice rule 5 exists to stop. Same
+    // family as the playoff listing bug qodo found on #475. The manager form
+    // is T4's file and carries no help affordance at all today; the fix is
+    // Kevin's call because `isPublic` is read by firestore.rules.
     fields: ['isPublic', 'settings.isListedPublic'],
     poolTypes: 'all',
     audience: HOST_ONLY,
