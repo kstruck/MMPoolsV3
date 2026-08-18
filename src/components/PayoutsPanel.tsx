@@ -478,7 +478,10 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
                 </ul>
             )}
 
-            {grossPot === undefined && entryFee > 0 && (places.length > 0 || bonuses.length > 0) && (
+            {/* `weeklyPlaces` counts too (codex r4): a HYBRID pool whose only
+                paid places are weekly would otherwise print percentages with no
+                word about why there are no dollars beside them. */}
+            {grossPot === undefined && entryFee > 0 && (places.length > 0 || weeklyPlaces.length > 0 || bonuses.length > 0) && (
                 <p className="text-[11px] font-body text-faint leading-relaxed">
                     Dollar amounts depend on how many entries join — percentages above are guaranteed by the pool's rules.
                 </p>
