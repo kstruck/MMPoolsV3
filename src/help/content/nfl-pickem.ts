@@ -47,7 +47,11 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
       // "1 to 16" would be wrong on any week shorter than sixteen games.
       'On, a player gives every game in the week a different rank, the highest being 16 for the game they are surest of. A correct pick earns its rank; a wrong one earns nothing. On a short week the ranks start higher, and the sheet shows the range.',
       'Every game has to be ranked before a sheet can be submitted, and no rank can be used twice.',
-      'Turning it on also locks the whole week at the first kickoff, whatever lock mode says.',
+      // NOT "at the first kickoff" (codex R9-1). `NFLPoolDashboard.tsx:526-531`
+      // locks the week at `earliestKickoff - lockBufferMinutes`, default five,
+      // so naming kickoff hands the reader a five-minute window the sheet has
+      // already closed.
+      'Turning it on also locks the whole week at one deadline, shortly before the week’s first game, whatever lock mode says.',
     ].join('\n\n'),
     poolTypes: PICKEM,
     audience: EVERYONE,

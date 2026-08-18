@@ -388,7 +388,14 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
     title: 'Weekly tie-breaker',
     short: 'Decides who wins a week when two players score the same. It cannot be changed once anyone has submitted picks, so choose it now.',
     long: [
-      'Players predict the combined score of the tiebreaker game on their pick sheet. On a week with no Monday game, the final game of the week is used.',
+      'Players predict the combined score of the tiebreaker game on their pick sheet. On a week with no Monday game, the last game of the week is used instead.',
+      // `resolveTiebreakTargetIds` (shared/nflTiebreaker.ts:111-121): the
+      // last-game fallback on line 119 is reached only by MNF_LAST_GAME and
+      // MNF_FIRST_GAME. MNF_COMBINED returns the Monday list, which is EMPTY on
+      // a Monday-less week — no target, no prediction field. It is not offered
+      // to new pools (PICKABLE_WEEKLY_TIEBREAKERS) but existing pools play it,
+      // and T9 puts this topic in front of them (codex R9-2).
+      'A few older pools instead ask about every Monday game together. On a week with no Monday game those pools ask for nothing, and a level week is shared.',
       // NOT "what happens if two players are equally close" (qodo #9 on #480).
       // Nothing configures that: `computeWeeklyWinners` returns every
       // equally-close leader and the recap renders "(shared)". What the rule
