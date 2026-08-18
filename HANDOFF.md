@@ -1,6 +1,6 @@
 # HANDOFF — Session entry point
 
-> ## 🛑 2026-08-18 — PLAN-HELP-SYSTEM **T0 + T1 + T2 MERGED**; ⚠️ **T2's DEPLOY IS KEVIN'S CALL**
+> ## 🛑 2026-08-18 — PLAN-HELP-SYSTEM **T0 + T1 + T2 MERGED, DEPLOYED AND PROD-VERIFIED**
 >
 > **Read `MORNING-2026-08-18-HELP.md` first** for this effort;
 > `MORNING-2026-08-18.md` remains the entry point for the PLAN-PAYMENT-LEDGER
@@ -10,16 +10,29 @@
 > create wizard and playoff pools still list correctly in Browse. Closed — do not
 > ask him to check it again.
 >
-> ⚠️ **T2 (#477, `557ba2ad`) IS NOT DEPLOYED, AND WHETHER IT SHOULD BE IS AN OPEN
-> QUESTION FOR KEVIN.** The signed plan makes **T16 a prerequisite of T15
-> (deploy)** because the `?` shortcut falls back to a CSS-class heuristic for ~35
-> un-migrated overlay shells — so a runbook that simply said "press Redeploy"
-> would overrule a signed decision (codex caught that as a P1 on the docs PR).
-> `MORNING-2026-08-18-HELP.md` §7 step 2 puts three options and a measurement in
-> front of him: all 41 current backdrops carry the `fixed inset-0` pair the
-> fallback matches, so the heuristic covers today's overlays, and the panel and
-> header button carry none of that risk. **Do not deploy `www` for T2 without his
-> answer, and do not re-ask if the doc records one.**
+> ✅ **T2 (#477, `557ba2ad`) IS DEPLOYED AND PROD-VERIFIED (Kevin, 2026-08-18).
+> THE DEPLOY QUESTION IS CLOSED — DO NOT RE-ASK IT.** The doc that raised it
+> offered three options because the signed plan makes T16 a prerequisite of T15;
+> **Kevin took option A: ship T2 now, T16 still owed.** Confirmed independently by
+> fetching the live bundle — `/assets/index-CDG-Ki-M.js` contains `help-panel`,
+> `Search help` and `Press … to toggle`.
+>
+> ✅ **The K13 privilege guard is verified in production, by Kevin, on the real
+> site.** `?tab=admin` and `?tab=grading` on a props pool, signed out: the
+> ordinary Overview tab, not the commissioner panel. That is the P1 codex found on
+> round 4, checked against the deployed build rather than only against its test.
+> **Membership is irrelevant to that guard** — `PoolRoute` has no membership check
+> before `PropsPoolDashboard`, and the unlock is `isManager || isAdmin` — so a
+> signed-out window is a sufficient test and a SUPER_ADMIN account is *not* (it
+> unlocks the panel by design).
+>
+> ⚠️ **T16 IS STILL OWED AND IS NOW OVERDUE RATHER THAN PENDING.** T15's
+> prerequisite was consciously taken early, so the `?` shortcut is live in
+> production resting on the CSS-class fallback for ~35 un-migrated overlay shells.
+> Measured: all 41 current backdrops carry the `fixed inset-0` pair that fallback
+> matches, so nothing slips through *today* — but any new overlay written without
+> that class pair would, and nothing fails when one is. **Treat T16 as the highest
+> priority non-content ticket in this plan.**
 >
 > **§6 of `PLAN-HELP-SYSTEM.md` is SIGNED** — K1–K13 taken exactly as each
 > Recommendation column reads, on Kevin's 2026-08-17 "start building". That

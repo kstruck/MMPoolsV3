@@ -1,16 +1,18 @@
-# MORNING 2026-08-18 (help system) — T0, T1 and T2 merged; T2 needs a Coolify redeploy
+# MORNING 2026-08-18 (help system) — T0, T1, T2 merged, deployed and prod-verified
 
 This file continues `MORNING-2026-08-18.md` for a different effort and supersedes nothing in it.
 
 That doc remains the entry point for the PLAN-PAYMENT-LEDGER T2 work; this one
 covers only `PLAN-HELP-SYSTEM.md`. Read whichever matches what you are doing.
 
-> 🔴 **ONE THING NEEDS YOU, AND IT IS A DECISION, NOT A BUTTON.** T2 changes the
-> shipped bundle, so nothing is live until `www` is redeployed — but the signed
-> plan makes **T16 a prerequisite of T15 (deploy)**, because the `?` key still
-> falls back to a CSS-class heuristic for ~35 overlays. So I am **not** telling you
-> to redeploy. §7 step 2 lays out the two options, what I measured, and which one
-> I would take. Nothing else here is blocking.
+> ✅ **NOTHING NEEDS YOU. This whole runbook is DONE.** You took §7 step 2's
+> option A, redeployed `www`, and verified the panel and the privilege guard on
+> the live site. Kept as the record of what shipped and what was checked — the
+> steps below are history, not a to-do list.
+>
+> ⚠️ **What that decision leaves owed: T16.** You knowingly took T15 before it, so
+> the `?` shortcut is live resting on the CSS-class fallback for ~35 overlay
+> shells. See §5.
 
 **Three PRs merged: #472 (T0), #475 (T1) and #477 (T2).** You already deployed and
 verified T1 — tooltips on the create wizard, playoff pools still listing correctly
@@ -115,12 +117,15 @@ path you were on, so a commissioner in the create wizard got
 `/create/pickem?tab=picks`, which is not a pool. Round 13 is clean. Three of the
 five rounds the exception allows.
 
-## 5. One question for you, and two things I decided
+## 5. The decision that was taken, and two I made alone
 
-**THE QUESTION — §7 step 2: do we deploy T2 before T16?** The plan makes T16 a
-prerequisite of T15 and T2's `?` key is the reason. I measured the heuristic as
-covering all 41 current overlays and I would deploy now, but it is a signed plan
-and the decision is yours. Three options and a recommendation are in §7 step 2.
+✅ **ANSWERED — §7 step 2: deploy T2 before T16? Kevin took option A on
+2026-08-18.** T2 is live. **T16 is therefore OVERDUE, not pending**: T15's
+prerequisite was consciously skipped, so the `?` shortcut is in production resting
+on the CSS-class fallback for ~35 overlay shells. All 41 current backdrops carry
+the class pair it matches, so nothing slips through today — but a new overlay
+written without it would, and nothing fails when one is. **T16 is the highest
+priority non-content ticket in this plan.**
 
 The two below needed no decision from you, but are written down so you can
 overrule them.
@@ -177,9 +182,15 @@ force anything.
 > has moved past T2 — this document itself is a later commit. What matters is that
 > the revision being deployed CONTAINS T2, which is what the `--grep` above asks.
 
-### Step 2 — DECIDE whether to redeploy `www` yet ⚠️ YOUR CALL, NOT MINE
+### Step 2 — DECIDE whether to redeploy `www` yet ✅ ANSWERED: OPTION A
 
-**I am not asking you to press Redeploy, because the plan you signed says not to
+> ✅ **CLOSED 2026-08-18. Kevin chose A and redeployed.** Verified independently by
+> fetching the live bundle: `/assets/index-CDG-Ki-M.js` contains `help-panel`,
+> `Search help` and `Press … to toggle`. **Do not re-ask this.** What it leaves
+> owed is T16 — see §5. The reasoning is kept below because the trade is worth
+> re-reading when T16 is scheduled.
+
+**I did not ask you to press Redeploy, because the plan you signed said not to
 yet.** `PLAN-HELP-SYSTEM.md` §3 D3 makes **T16 a prerequisite of T15**: *"the
 shortcut does not ship to prod on the class heuristic alone."* T2's `?` key uses
 exactly that heuristic for the ~35 overlay shells that carry no accessibility
@@ -230,7 +241,7 @@ is yours. **If you want A, do this:**
 **If you want B or C, reply with which one and stop here** — steps 3 to 5 below all
 require the deploy, so skip them.
 
-### Step 3 — press one key, in about 30 seconds *(only if you chose A)*
+### Step 3 — press one key ✅ DONE
 
 1. Go to **https://marchmeleepools.com/create/pickem** and sign in if asked.
 2. **Press the `?` key.** A panel should slide in from the right, titled **Help**,
@@ -241,9 +252,19 @@ require the deploy, so skip them.
 5. **If the panel opens but is empty below the title**, tell me. That means the
    content did not ship with the bundle.
 
-### Step 4 — check the guard that matters, in about 30 seconds *(only if you chose A)*
+### Step 4 — check the guard that matters ✅ DONE, AND IT HOLDS
 
-This is the P1 from §3, and it is worth seeing with your own eyes.
+> ✅ **Verified by Kevin on the live site, 2026-08-18: signed in as neither the
+> commissioner nor an admin, `?tab=admin` does NOT show the admin panel.** The P1
+> codex found on round 4 is confirmed fixed against the deployed build, not only
+> against its test.
+>
+> ⚠️ **The step below asked for a test account IN the pool. That was wrong and the
+> requirement is dropped.** Membership is irrelevant to this guard: `PoolRoute` has
+> no membership check before `PropsPoolDashboard`, and the unlock is
+> `isManager || isAdmin`. So a **signed-out window is a sufficient test**, and a
+> **SUPER_ADMIN account is not a valid one** — it unlocks the panel by design, so
+> using it would look like a failure while the code is correct.
 
 1. Open one of your own **props** pools as yourself (you are its commissioner):
    **https://marchmeleepools.com/pool/&lt;that pool's id or slug&gt;**
@@ -256,7 +277,7 @@ This is the P1 from §3, and it is worth seeing with your own eyes.
    non-commissioner sees the admin panel**, stop and tell me immediately — that is
    the exposure codex caught and it would mean the fix did not ship.
 
-### Step 5 — the type-a-tab check, and Back *(only if you chose A)*
+### Step 5 — the type-a-tab check, and Back ✅ DONE
 
 1. Still in a pool, click through two or three tabs.
 2. **Press the browser Back button.** You should return to the previous tab rather
