@@ -1217,8 +1217,15 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       setSplitDeclared(true);
                     }
                     if (e.target.value === 'HYBRID' && lastKnownWeeklyPlacesRef.current) {
+                      // Re-hydrating is NOT editing (codex r8). Marking it
+                      // touched made a bare toggle away-and-back eligible to
+                      // re-send this list, so a weekly list another session
+                      // saved after this page loaded would be overwritten by a
+                      // later unrelated save here. The stored list survives an
+                      // omitted key, and only a HYBRID-EXIT save deletes it —
+                      // which nulls the ref, so this branch never runs against
+                      // a list the server no longer has.
                       setWeeklyPlaces(lastKnownWeeklyPlacesRef.current);
-                      setWeeklyPlacesTouched(true);
                     }
                   }}
                   className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
@@ -1496,8 +1503,15 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       setSplitDeclared(true);
                     }
                     if (e.target.value === 'HYBRID' && lastKnownWeeklyPlacesRef.current) {
+                      // Re-hydrating is NOT editing (codex r8). Marking it
+                      // touched made a bare toggle away-and-back eligible to
+                      // re-send this list, so a weekly list another session
+                      // saved after this page loaded would be overwritten by a
+                      // later unrelated save here. The stored list survives an
+                      // omitted key, and only a HYBRID-EXIT save deletes it —
+                      // which nulls the ref, so this branch never runs against
+                      // a list the server no longer has.
                       setWeeklyPlaces(lastKnownWeeklyPlacesRef.current);
-                      setWeeklyPlacesTouched(true);
                     }
                   }}
                   className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"

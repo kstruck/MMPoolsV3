@@ -155,6 +155,12 @@ describe('manager Settings — the HYBRID weekly place list (T2)', () => {
   it('leaving HYBRID clears the list locally and returning re-hydrates from the last KNOWN-STORED one, never the lagging prop', () => {
     expect(count(/if \(e\.target\.value !== 'HYBRID'\) \{ setWeeklyPlacesTouched\(false\); setWeeklyPlaces\(\[\]\); \}/g)).toBe(2);
     expect(count(/setWeeklyPlaces\(lastKnownWeeklyPlacesRef\.current\);/g)).toBe(2);
+    // Re-hydrating is NOT editing (codex r8): a bare toggle away-and-back must
+    // not make this list eligible to re-send over a newer one from another session.
+    expect(mgr).not.toMatch(/setWeeklyPlaces\(lastKnownWeeklyPlacesRef\.current\);\s*setWeeklyPlacesTouched\(true\)/);
+    // The ONLY things that mark it touched are the two editors' onChange props.
+    expect(count(/setWeeklyPlacesTouched\(true\)/g)).toBe(2);
+    expect(count(/onChange=\{next => \{ setWeeklyPlacesTouched\(true\); setWeeklyPlaces\(next\); \}\}/g)).toBe(2);
     expect(mgr).toContain("lastKnownWeeklyPlacesRef.current = activeMode === 'HYBRID' && weeklyPlaces.length > 0 ? weeklyPlaces : null;");
   });
 
