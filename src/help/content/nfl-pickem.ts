@@ -20,10 +20,10 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
   {
     id: 'settings.lockMode',
     title: 'Lock mode',
-    short: 'Choose whether each pick locks at its own kickoff or the whole week locks at the first kickoff. Per game is the default.',
+    short: 'Choose whether each pick locks at its own game’s deadline, or the whole week locks at the first game’s. Per game is the default.',
     long: [
-      'Per game is the default. Each pick stays editable until that game kicks off, so a Sunday-night pick can be changed all Sunday afternoon.',
-      'Weekly locks every pick in the week at the first kickoff. Choose it when you want everyone playing the same slate on the same information.',
+      'Per game is the default. Each pick stays editable until shortly before its own game starts, so a Sunday-night pick can be changed all Sunday afternoon. The lock buffer sets how much earlier than kickoff that is.',
+      'Weekly locks every pick in the week at one moment, worked out from the first game of the week the same way. Choose it when you want everyone playing the same slate on the same information.',
       // NOT unconditional (codex R1-2). `effectiveGameLockAt` takes
       // `max(base, override)`, so a week extension moves EVERY game in that
       // week later — including games that had already locked. The first draft

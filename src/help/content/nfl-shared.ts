@@ -93,7 +93,6 @@ export const NFL_SHARED_TOPICS: readonly HelpTopic[] = [
     long: [
       'While the pool is open you can change the entry fee, the prize split and the pool rules, and every member sees the new version on the rules page.',
       'Once the pool is locked, only the name, your contact details, the pay-to handles, the branding and the reminders can still be changed. The fee, the split and the rules are fixed from then on, so nobody’s finished week is rewritten under them.',
-      'A few settings freeze earlier still. The weekly tie-break rule is fixed as soon as anyone has submitted picks, because changing it would re-decide weeks that are already over.',
     ].join('\n\n'),
     fields: [],
     poolTypes: NFL_SEASON_TYPES,
