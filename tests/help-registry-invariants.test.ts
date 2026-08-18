@@ -142,6 +142,36 @@ describe('buildRegistry — refuses invalid content', () => {
     expect(() => buildRegistry({ ...base, topics: [topic({ related: ['nope'] })] })).toThrow(/unknown related topic/);
   });
 
+  /**
+   * `related` accepts the same two spellings a placement does. A link to a
+   * Survivor-only setting written as its base path must resolve, or the same
+   * inconsistency that made scoped-only topics unplaceable reappears one code
+   * path over.
+   */
+  it('accepts a related link by base id to a topic that exists only scoped', () => {
+    expect(() =>
+      buildRegistry({
+        ...base,
+        topics: [
+          topic({ id: 'settings.entryFee', related: ['settings.maxStrikes'] }),
+          topic({ id: 'NFL_SURVIVOR:settings.maxStrikes', poolTypes: ['NFL_SURVIVOR'] }),
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it('accepts a related link naming one exact variant', () => {
+    expect(() =>
+      buildRegistry({
+        ...base,
+        topics: [
+          topic({ id: 'settings.entryFee', related: ['NFL_SURVIVOR:settings.maxStrikes'] }),
+          topic({ id: 'NFL_SURVIVOR:settings.maxStrikes', poolTypes: ['NFL_SURVIVOR'] }),
+        ],
+      }),
+    ).not.toThrow();
+  });
+
   it('rejects a scoped variant naming a different pool type', () => {
     expect(() =>
       buildRegistry({

@@ -269,7 +269,12 @@ class RegistryImpl implements Registry {
         }
       }
       for (const relatedId of topic.related ?? []) {
-        if (!topics.has(normalizePath(relatedId))) {
+        // Same two spellings a placement accepts: the exact id (a `related`
+        // entry may deliberately name one variant, which `resolveTopic`
+        // honours) or the base id, which may exist only in qualified form.
+        // Requiring an exact match here would reject a link to a Survivor-only
+        // setting for the same reason placements used to reject one.
+        if (!topics.has(normalizePath(relatedId)) && !baseIds.has(baseTopicId(relatedId))) {
           throw new Error(`help: topic "${topic.id}" references unknown related topic "${relatedId}"`);
         }
       }
