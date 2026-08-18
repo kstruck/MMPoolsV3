@@ -394,6 +394,12 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
       // equally-close leader and the recap renders "(shared)". What the rule
       // actually chooses is the TARGET game.
       'Whoever is closest takes the week, and two players equally close share it. The rule you pick here decides which game is asked about.',
+      // NONE IS ONE OF THE CHOICES (codex R8-2). tiebreakerAsksForPrediction
+      // is false for it and the sheet renders no prediction field, so the
+      // paragraphs above describe a pool this one is not. T9 places this topic
+      // on the rules page, standings, recaps and the manager settings tab,
+      // where a NONE pool reads it too.
+      'One of the choices is no tie-breaker at all. Then nothing is predicted, and players level at the top of a week share it.',
       'Set it before you launch. Once any player has submitted picks, it is fixed for the life of the pool.',
     ].join('\n\n'),
     poolTypes: ['NFL_PICKEM'],

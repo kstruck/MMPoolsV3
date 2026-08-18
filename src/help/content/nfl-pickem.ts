@@ -57,18 +57,23 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
   {
     id: 'pickem.picksheet',
     title: 'Making your picks',
-    short: 'Tap a team in every game, then submit. Nothing counts until you submit, and you can submit again until a pick locks.',
+    short: 'Tap the team you think wins in each game, then submit. Nothing counts until you submit.',
     long: [
       // `PickemPickEntry.tsx:105-120` — an unsubmitted sheet is kept in the
       // browser via `draftStore` and restored with a toast on the next visit.
       'What you tap is kept on this device as you go, so leaving the page does not lose it. It is not in the pool until you submit.',
-      // TWO DIFFERENT REFUSALS, and the first version of this note described
-      // only one (qodo #7). Per-game pools refuse a locked game whose pick
-      // CHANGED (`functions/src/nflPools.ts:618-624`); weekly and confidence
-      // pools refuse EVERY submission once the week is locked, before any
-      // comparison (`:601-604`). "Before the deadline" is true of both.
-      'You can submit as many times as you like before the deadline. The last one that lands is the one that counts.',
-      'A game whose deadline has passed is shown read-only, and there is no way to reopen it for one player.',
+      // DELIBERATELY SAYS NOTHING ABOUT *WHEN* A PICK CLOSES (codex R8-1).
+      // Three behaviours are in play and no one sentence covers them: the
+      // server closes a per-game pool game by game and refuses only a CHANGED
+      // pick (`nflPools.ts:618-624`); a weekly or confidence pool refuses every
+      // submission once the week locks (`:601-604`); and the shipped client
+      // closes the WHOLE sheet at the first kickoff whatever the mode (the
+      // defect recorded at the top of this file). 'While the sheet is still
+      // open' is true under all three, and the sheet is what tells the reader
+      // which games those are. Earlier drafts named kickoff, then the deadline,
+      // and both were false for some pool.
+      'You can submit again as often as you like while the sheet is still open. The last one that lands is the one that counts.',
+      'The sheet shows which games are still open. Once a pick has closed nobody can reopen it for you — only your commissioner can extend a week, and only before that week’s results have been shown.',
     ].join('\n\n'),
     fields: [],
     poolTypes: PICKEM,
