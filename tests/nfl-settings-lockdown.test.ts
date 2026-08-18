@@ -216,6 +216,8 @@ describe('firestore.rules — callable-only settings bind SUPER_ADMIN too', () =
     // entryFee/payoutMode around a valid one, making "site-verified" decorative
     // for exactly the principal most likely to hand-fix money fields.
     'hybridSplit',
+    // PLAN-PAYMENT-LEDGER T1: the HYBRID weekly place list — validated in the callable only.
+    'weeklyPayouts',
   ])('callableOnlySettingsUnchanged() lists %s', (field) => {
     const fn = rules.slice(rules.indexOf('function callableOnlySettingsUnchanged()'));
     const body = fn.slice(0, fn.indexOf('\n      }'));
@@ -230,6 +232,14 @@ describe('firestore.rules — callable-only settings bind SUPER_ADMIN too', () =
     // and NOT in the unscoped list
     const unscoped = body.slice(body.indexOf('!changed.hasAny(['), body.indexOf('!isNfl ||'));
     expect(unscoped).not.toContain('maxEntriesPerUser');
+  });
+  it("lists payouts in the NFL-ONLY clause — validated in updatePoolSettings (unique ranks, ≤100 %); Bracket/Playoff still edit it directly (PLAN-PAYMENT-LEDGER T1; codex r2 on #470)", () => {
+    const fn = rules.slice(rules.indexOf('function callableOnlySettingsUnchanged()'));
+    const body = fn.slice(0, fn.indexOf('\n      }'));
+    const nflClause = body.slice(body.indexOf('!isNfl ||'));
+    expect(nflClause).toContain("'payouts'");
+    const unscoped = body.slice(body.indexOf('!changed.hasAny(['), body.indexOf('!isNfl ||'));
+    expect(unscoped).not.toMatch(/'payouts'/);
   });
 
   it('diffs the settings MAP, not the root — a root diff would guard nothing', () => {

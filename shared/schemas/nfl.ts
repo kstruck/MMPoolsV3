@@ -6,7 +6,7 @@ import { MAX_TEAM_USES, TIE_COUNTS_AS_VALUES } from '../survivorReuse';
 import { WEEKLY_TIEBREAKER_VALUES } from '../nflTiebreaker';
 import { hybridSplitProblem } from '../hybridSplit';
 import { MAX_ENTRIES_PER_USER_CAP } from '../multiEntry';
-import { contactFieldsSchema, brandingSchema, payoutsSchema } from './common';
+import { contactFieldsSchema, brandingSchema, payoutsSchema, weeklyPayoutsSchema } from './common';
 
 const nflBase = contactFieldsSchema.extend({
   name: z.string().trim().min(1, 'Pool name is required.'),
@@ -32,9 +32,19 @@ const nflSettingsBase = {
   maxEntriesPerUser: z.number().int().min(1).max(MAX_ENTRIES_PER_USER_CAP).default(1),
 };
 
-const hybridSplitCoherent = (settings: { payoutMode?: unknown; entryFee?: unknown; hybridSplit?: unknown }, ctx: z.RefinementCtx) => {
+const hybridSplitCoherent = (settings: { payoutMode?: unknown; entryFee?: unknown; hybridSplit?: unknown; weeklyPayouts?: unknown }, ctx: z.RefinementCtx) => {
   const problem = hybridSplitProblem(settings);
   if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem, path: ['hybridSplit'] });
+  const wp = weeklyPayoutsProblem(settings);
+  if (wp) ctx.addIssue({ code: z.ZodIssueCode.custom, message: wp, path: ['weeklyPayouts'] });
+};
+
+/** `weeklyPayouts` on a non-HYBRID mode is a stored lie (D1): the same shape of check as the split. Exported for the update gate. */
+export const weeklyPayoutsProblem = (settings: { payoutMode?: unknown; weeklyPayouts?: unknown }): string | null => {
+  const wp = settings.weeklyPayouts;
+  if (wp === undefined || wp === null) return null;
+  if (settings.payoutMode !== 'HYBRID') return 'WEEKLY_PAYOUTS_WRONG_MODE: a separate weekly place list only exists on a Hybrid pool.';
+  return null;
 };
 
 export const pickemCreateInputSchema = nflBase.extend({
@@ -45,6 +55,8 @@ export const pickemCreateInputSchema = nflBase.extend({
     lockMode: z.enum(['PER_GAME', 'WEEKLY']).optional(),
     lockBufferMinutes: z.number().optional(),
     payoutMode: z.enum(['SEASON', 'WEEKLY', 'HYBRID']).optional(),
+    // PLAN-PAYMENT-LEDGER D1/T1: the HYBRID weekly place list — only the two types that carry payoutMode; refused on a non-HYBRID mode by hybridSplitCoherent.
+    weeklyPayouts: weeklyPayoutsSchema.optional(),
     pickMode: z.enum(['STRAIGHT', 'ATS']).optional(),
     // This is a z.object, so it STRIPS unknown keys — without this line the
     // wizard's choice would be silently dropped at create and every new pool
@@ -84,6 +96,8 @@ export const marginCreateInputSchema = nflBase.extend({
   settings: z.object({
     ...nflSettingsBase,
     payoutMode: z.enum(['SEASON', 'WEEKLY', 'HYBRID']).optional(),
+    // PLAN-PAYMENT-LEDGER D1/T1: the HYBRID weekly place list — only the two types that carry payoutMode; refused on a non-HYBRID mode by hybridSplitCoherent.
+    weeklyPayouts: weeklyPayoutsSchema.optional(),
     hybridSplit: z.object({
       weeklyPerEntry: z.number().int().min(0),
       seasonPerEntry: z.number().int().min(0),

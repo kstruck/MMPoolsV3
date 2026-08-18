@@ -63,6 +63,18 @@ export const payoutBonusSchema = z.object({
   percentage: z.number().min(0).max(100),
 });
 
+/**
+ * Unique ranks on a place list (PLAN-PAYMENT-LEDGER T1 / K9). Two rows for the
+ * same rank is a money defect: `splitPrizes` refuses it and the scorer then
+ * publishes a week with `weeklyPlacesError: PRIZE_SPLIT_DUPLICATE_RANK` and no
+ * prizes. Refused at the door instead. K9 asks for a census of existing pools
+ * with a duplicate rank BEFORE this ships — `functions/scripts/censusPayoutRanks.mjs`
+ * (read-only); the prod count is whatever that run reports, not assumed here.
+ */
+export const uniqueRanks = (places: ReadonlyArray<{ rank: number }>): boolean =>
+  new Set(places.map((p) => p.rank)).size === places.length;
+export const DUPLICATE_RANK_MESSAGE = 'PAYOUT_DUPLICATE_RANK: each place rank may appear once.';
+
 // places + bonuses must not distribute more than 100% of the pot.
 export const payoutsSchema = z
   .object({
@@ -78,7 +90,23 @@ export const payoutsSchema = z
       return total <= 100 + 1e-9;
     },
     { message: 'Payout percentages exceed 100%.' },
-  );
+  )
+  .refine((p) => uniqueRanks(p.places), { message: DUPLICATE_RANK_MESSAGE, path: ['places'] });
+
+/**
+ * The HYBRID weekly place list (PLAN-PAYMENT-LEDGER D1 / T1): `settings.weeklyPayouts`.
+ * Places only — a weekly prize is a place, there are no weekly bonuses. Same
+ * `payoutPlaceSchema`, ≤ 100 %, unique ranks. Optional everywhere: absent ⇒
+ * `payouts` prices both pots (today's behaviour, byte-for-byte — `weeklyPlacesFor`).
+ * Only meaningful on `payoutMode: 'HYBRID'` — the create superRefine and the
+ * update gate refuse it on any other mode.
+ */
+export const weeklyPayoutsSchema = z
+  .object({
+    places: z.array(payoutPlaceSchema).default([]),
+  })
+  .refine((p) => p.places.reduce((sum, x) => sum + (x.percentage || 0), 0) <= 100 + 1e-9, { message: 'Weekly payout percentages exceed 100%.' })
+  .refine((p) => uniqueRanks(p.places), { message: DUPLICATE_RANK_MESSAGE, path: ['places'] });
 
 export const basicsSchema = z.object({
   name: z.string().trim().min(1, 'Pool name is required.'),
