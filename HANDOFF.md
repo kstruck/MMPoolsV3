@@ -1,10 +1,15 @@
 # HANDOFF — Session entry point
 
-> ## 🛑 2026-08-18 — PLAN-HELP-SYSTEM **T0 IS MERGED** (#472); nothing deployed, no Coolify redeploy owed
+> ## 🛑 2026-08-18 — PLAN-HELP-SYSTEM **T0 + T1 MERGED**; ⚠️ **A COOLIFY REDEPLOY IS OWED**
 >
 > **Read `MORNING-2026-08-18-HELP.md` first** for this effort;
 > `MORNING-2026-08-18.md` remains the entry point for the PLAN-PAYMENT-LEDGER
 > T2 work and neither supersedes the other.
+>
+> ⚠️ **T1 (#475, `a1ee5faa`) is the first help work that changes the shipped
+> bundle, and the frontend does NOT auto-deploy on a push to `main`.** Nothing
+> in production has tooltips until Kevin redeploys `www` in Coolify. Numbered
+> steps in `MORNING-2026-08-18-HELP.md` §7.
 >
 > **§6 of `PLAN-HELP-SYSTEM.md` is SIGNED** — K1–K13 taken exactly as each
 > Recommendation column reads, on Kevin's 2026-08-17 "start building". That
@@ -13,30 +18,39 @@
 >
 > **#472 (T0)** shipped the content model and its guards: `docs/help-voice.md`
 > (K8), `src/help/{types,registry,glossary,voice,pages,coverage-allowlist}.ts`,
-> and three invariant suites — registry mechanism + route coverage against
-> `App.tsx`, the K1 glossary mirror against `CONTEXT.md` (38 mirrored, 18
-> allowlisted), and a per-pool-type schema audit over all 87 create-input leaf
-> paths. **No component reads any of it yet**, so the shipped bundle is
-> unchanged and **no Coolify redeploy is owed**. No `functions/`, no
-> `firestore.rules`, no indexes, no prod data.
+> and three invariant suites. Nothing read it, so nothing was owed.
 >
-> Review: **codex 11 rounds / 11 findings / 0 rejected** (rounds 8 and 10
-> clean), **qodo reported with 10 findings — 6 fixed, 4 rejected with reasoning
-> on the PR**, plus **4 findings from self-review** that neither reviewer
-> raised. Highest-value catch: `resolveTopic` ignored audience, and that is the
-> tooltip's only path with no filter after it.
+> **#475 (T1)** put the first thing on screen: `src/components/ui/HelpTip.tsx`
+> (takes an id and nothing else — no `text` prop, ever), `src/help/scope.tsx`
+> published by `WizardShell`/`PoolRoute`/`AdminRoute`, 30 topics and the seven
+> `/create/*` help pages, `fields.tsx` gaining `helpId` and **losing `hint`**,
+> and `tests/help-ui-coverage.test.ts` as the primary coverage guard. 24 schema
+> allowlist rows and 7 route rows came out.
 >
-> **Two things want Kevin (both in `MORNING-2026-08-18-HELP.md` §4):** (a) §2c's
-> 10-round codex cap and §2b's "a qodo fix earns its own round" collide once a
-> PR hits ten rounds — round 11 was mandated and put this PR one past the cap;
-> the last three lines (glossary copy only) are merged un-reviewed and said so
-> in the PR body. (b) The K1 guard proves a `CONTEXT.md` term HAS a mirror, not
-> that the mirror says everything the source does — three findings were exactly
-> that, and the gap applies to every content ticket T9–T13.
+> **It also fixed a production defect it uncovered.** `BrowsePools` treated
+> every NFL playoff pool as public regardless of the stored setting, so a host
+> who unticked "List this pool publicly" was still listed — while the wizard had
+> been persisting the choice all along. Found by qodo, against T1's new copy
+> promising the option works. Now `src/utils/publicListing.ts` with 7 regression
+> tests. It is LISTING, not access, and can only hide a pool whose host asked
+> for it to be hidden. Live only after the redeploy above.
 >
-> **T1–T16 are unstarted.** Order is fixed: T0 → T1 → T2 strictly, then T9 (NFL
-> Pick'em content — this week's invites are Pick'em), then T4, T3, T10/T11. The
-> first redeploy this feature needs is after T1.
+> Review: **codex 3 rounds, all clean** · **qodo reported 8 findings — 6 fixed,
+> 2 rejected with evidence on the PR** · **4 more from self-review that neither
+> reviewer raised**, three of them copy naming a default the wizard does not
+> have, including one inherited verbatim from the hint it replaced. No §2c
+> overage. `PLAN-HELP-SYSTEM.md` §3 D2 carries the measured corrections — the
+> load-bearing one being that **`ui/FieldLabel` already exists, so T4–T6 must
+> extend it rather than create it.**
+>
+> **Two things are unverified and said so on the PR:** there are no hover/blur/
+> Escape tests (no jsdom in this repo; T2 needs one anyway and buys it there),
+> and there is no browser walkthrough of the wizard, because `/create/*` is
+> behind a login. Kevin's redeploy check in §7 step 3 is the first real look.
+>
+> **T2–T16 are unstarted.** Order is fixed: T2 next (panel, `?` shortcut, header
+> button, search, route→page matching), then T9 (NFL Pick'em content — this
+> week's invites are Pick'em), then T4, T3, T10/T11.
 
 > ## 🛑 2026-08-18 — PLAN-PAYMENT-LEDGER **T2** IS OPEN (Coolify-only); the whole ledger stack through T1 is MERGED AND DEPLOYED
 >
