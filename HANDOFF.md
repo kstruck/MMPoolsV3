@@ -1,5 +1,43 @@
 # HANDOFF — Session entry point
 
+> ## 🛑 2026-08-18 — PLAN-HELP-SYSTEM **T0 IS MERGED** (#472); nothing deployed, no Coolify redeploy owed
+>
+> **Read `MORNING-2026-08-18-HELP.md` first** for this effort;
+> `MORNING-2026-08-18.md` remains the entry point for the PLAN-PAYMENT-LEDGER
+> T2 work and neither supersedes the other.
+>
+> **§6 of `PLAN-HELP-SYSTEM.md` is SIGNED** — K1–K13 taken exactly as each
+> Recommendation column reads, on Kevin's 2026-08-17 "start building". That
+> instruction also **overrides the board memo's "build none during the live
+> weeks"**; the memo stays on file as the dissent.
+>
+> **#472 (T0)** shipped the content model and its guards: `docs/help-voice.md`
+> (K8), `src/help/{types,registry,glossary,voice,pages,coverage-allowlist}.ts`,
+> and three invariant suites — registry mechanism + route coverage against
+> `App.tsx`, the K1 glossary mirror against `CONTEXT.md` (38 mirrored, 18
+> allowlisted), and a per-pool-type schema audit over all 87 create-input leaf
+> paths. **No component reads any of it yet**, so the shipped bundle is
+> unchanged and **no Coolify redeploy is owed**. No `functions/`, no
+> `firestore.rules`, no indexes, no prod data.
+>
+> Review: **codex 11 rounds / 11 findings / 0 rejected** (rounds 8 and 10
+> clean), **qodo reported with 10 findings — 6 fixed, 4 rejected with reasoning
+> on the PR**, plus **4 findings from self-review** that neither reviewer
+> raised. Highest-value catch: `resolveTopic` ignored audience, and that is the
+> tooltip's only path with no filter after it.
+>
+> **Two things want Kevin (both in `MORNING-2026-08-18-HELP.md` §4):** (a) §2c's
+> 10-round codex cap and §2b's "a qodo fix earns its own round" collide once a
+> PR hits ten rounds — round 11 was mandated and put this PR one past the cap;
+> the last three lines (glossary copy only) are merged un-reviewed and said so
+> in the PR body. (b) The K1 guard proves a `CONTEXT.md` term HAS a mirror, not
+> that the mirror says everything the source does — three findings were exactly
+> that, and the gap applies to every content ticket T9–T13.
+>
+> **T1–T16 are unstarted.** Order is fixed: T0 → T1 → T2 strictly, then T9 (NFL
+> Pick'em content — this week's invites are Pick'em), then T4, T3, T10/T11. The
+> first redeploy this feature needs is after T1.
+
 > ## 🛑 2026-08-18 — PLAN-PAYMENT-LEDGER **T2** IS OPEN (Coolify-only); the whole ledger stack through T1 is MERGED AND DEPLOYED
 >
 > **Read `MORNING-2026-08-18.md` first** — merge/deploy/verify runbook and the
