@@ -31,9 +31,64 @@ const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 
 const APP = read('src/App.tsx');
 
-/** Every `<Route path="…">` in App.tsx, in source order. */
+/**
+ * Every route declared in a source string, in source order.
+ *
+ * Deliberately tolerant of how the declaration is written — `path` need not be
+ * the first prop, and the value may be a double-quoted, single-quoted or
+ * braced string literal. The first version required `<Route path="…"` exactly,
+ * so `<Route element={…} path="/x">` or `path={'/x'}` parsed as nothing and
+ * that route would ship with neither a HelpPage nor an allowlist decision —
+ * silently, because the ">30" plausibility check would still pass on the other
+ * 38.
+ *
+ * The real protection is `parseRoutes` returning the count of `<Route`
+ * openings it FAILED to parse; a scanner that quietly skips a declaration is
+ * the failure this guard exists to prevent, so it is reported rather than
+ * absorbed.
+ */
+export function parseRoutes(source: string): { paths: string[]; unparsed: string[] } {
+  // Strip comments first: a commented-out <Route> is not a route, and its text
+  // would otherwise be counted as an opening that failed to parse.
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const paths: string[] = [];
+  const unparsed: string[] = [];
+  const open = /<Route\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = open.exec(code)) !== null) {
+    // Find where this tag ends. A plain `[^>]*` stops at the FIRST `>`, which
+    // in this codebase is usually the one inside `element={<Foo />}` — so the
+    // props string got truncated before `path=` and the route vanished. Walk
+    // forward instead, tracking quotes and brace depth, and end the tag at the
+    // first `>` that is outside both.
+    let i = m.index + m[0].length;
+    let depth = 0;
+    let quote: string | null = null;
+    for (; i < code.length; i++) {
+      const c = code[i];
+      if (quote) {
+        if (c === quote && code[i - 1] !== '\\') quote = null;
+        continue;
+      }
+      if (c === '"' || c === "'" || c === '`') quote = c;
+      else if (c === '{') depth++;
+      else if (c === '}') depth--;
+      else if (c === '>' && depth === 0) break;
+    }
+    const props = code.slice(m.index + m[0].length, i);
+    open.lastIndex = i;
+
+    const p = /\bpath\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*(?:"([^"]*)"|'([^']*)'|`([^`]*)`)\s*\})/.exec(props);
+    if (p) paths.push(p[1] ?? p[2] ?? p[3] ?? p[4] ?? p[5]);
+    // A <Route> with no `path` is a layout/index route, not a missed parse.
+    else if (/\bpath\s*=/.test(props)) unparsed.push(`<Route${props}>`.slice(0, 80));
+  }
+  return { paths, unparsed };
+}
+
+/** Every `path=` route in App.tsx, in source order. */
 function appRoutes(): string[] {
-  return [...APP.matchAll(/<Route\s+path="([^"]+)"/g)].map((m) => m[1]);
+  return parseRoutes(APP).paths;
 }
 
 const topic = (over: Partial<HelpTopic> = {}): HelpTopic => ({
@@ -308,25 +363,61 @@ describe('resolveTopic — one lookup for the tooltip and the panel', () => {
   });
 
   it('prefers the pool-type variant when the viewer is in that type', () => {
-    expect(registry.resolveTopic({ poolType: 'NFL_SURVIVOR' }, 'settings.entryFee')?.title)
+    expect(registry.resolveTopic({ poolType: 'NFL_SURVIVOR', audience: 'member' }, 'settings.entryFee')?.title)
       .toBe('Entry fee and buy-backs');
   });
 
   it('falls back to the unqualified topic for another pool type', () => {
-    expect(registry.resolveTopic({ poolType: 'NFL_PICKEM' }, 'settings.entryFee')?.title).toBe('Entry fee');
+    expect(registry.resolveTopic({ poolType: 'NFL_PICKEM', audience: 'member' }, 'settings.entryFee')?.title).toBe('Entry fee');
   });
 
   it('falls back to the unqualified topic with no pool in scope', () => {
-    expect(registry.resolveTopic({}, 'settings.entryFee')?.title).toBe('Entry fee');
+    expect(registry.resolveTopic({ audience: 'member' }, 'settings.entryFee')?.title).toBe('Entry fee');
   });
 
-  it('honours an explicitly qualified id regardless of scope', () => {
-    expect(registry.resolveTopic({ poolType: 'NFL_PICKEM' }, 'NFL_SURVIVOR:settings.entryFee')?.title)
+  /**
+   * A qualified id names WHICH variant; it does not grant permission to see
+   * it. An earlier version returned it regardless of scope, on the reasoning
+   * that a caller holding one (a ?help= deep link, a `related` entry) means
+   * that exact variant — true, but it was quietly answering the second
+   * question with the answer to the first, and this is the tooltip's path with
+   * no filter after it.
+   */
+  it('honours an explicitly qualified id inside its own pool type', () => {
+    expect(registry.resolveTopic({ poolType: 'NFL_SURVIVOR', audience: 'member' }, 'NFL_SURVIVOR:settings.entryFee')?.title)
       .toBe('Entry fee and buy-backs');
   });
 
+  it('refuses a qualified id from another pool type', () => {
+    expect(registry.resolveTopic({ poolType: 'NFL_PICKEM', audience: 'member' }, 'NFL_SURVIVOR:settings.entryFee'))
+      .toBeUndefined();
+  });
+
+  /**
+   * The audience half of the same hole. A member must not be handed
+   * commissioner copy just because the control they hovered shares an id.
+   */
+  it('refuses a topic whose audience does not include the reader', () => {
+    const gated = buildRegistry({
+      topics: [topic({ id: 'settings.lockBufferMinutes', audience: ['commissioner'] })],
+      placements: [],
+      pages: [],
+      glossary: [],
+    });
+    expect(gated.resolveTopic({ audience: 'commissioner' }, 'settings.lockBufferMinutes')).toBeDefined();
+    expect(gated.resolveTopic({ audience: 'member' }, 'settings.lockBufferMinutes')).toBeUndefined();
+    // A commissioner still reads member copy — K9's widening is unchanged.
+    const shared = buildRegistry({
+      topics: [topic({ id: 'settings.entryFee', audience: ['member'] })],
+      placements: [],
+      pages: [],
+      glossary: [],
+    });
+    expect(shared.resolveTopic({ audience: 'commissioner' }, 'settings.entryFee')).toBeDefined();
+  });
+
   it('returns undefined rather than a wrong topic when nothing matches', () => {
-    expect(registry.resolveTopic({ poolType: 'SQUARES' }, 'settings.nothing')).toBeUndefined();
+    expect(registry.resolveTopic({ poolType: 'SQUARES', audience: 'member' }, 'settings.nothing')).toBeUndefined();
   });
 
   /**
@@ -342,11 +433,11 @@ describe('resolveTopic — one lookup for the tooltip and the panel', () => {
       pages: [],
       glossary: [],
     });
-    expect(limited.resolveTopic({ poolType: 'NFL_PICKEM' }, 'settings.lockMode')).toBeDefined();
-    expect(limited.resolveTopic({ poolType: 'SQUARES' }, 'settings.lockMode')).toBeUndefined();
+    expect(limited.resolveTopic({ poolType: 'NFL_PICKEM', audience: 'member' }, 'settings.lockMode')).toBeDefined();
+    expect(limited.resolveTopic({ poolType: 'SQUARES', audience: 'member' }, 'settings.lockMode')).toBeUndefined();
     // No pool in scope (the wizard picker, a site page) is not that pool type
     // either, so a type-limited topic stays hidden there too.
-    expect(limited.resolveTopic({}, 'settings.lockMode')).toBeUndefined();
+    expect(limited.resolveTopic({ audience: 'member' }, 'settings.lockMode')).toBeUndefined();
   });
 
   /**
@@ -365,7 +456,7 @@ describe('resolveTopic — one lookup for the tooltip and the panel', () => {
       placements: [{ topic: 'settings.entryFee', page: 'pool.survivor' }],
       glossary: [],
     });
-    const fromTooltip = scoped.resolveTopic({ poolType: 'NFL_SURVIVOR' }, 'settings.entryFee');
+    const fromTooltip = scoped.resolveTopic({ poolType: 'NFL_SURVIVOR', audience: 'member' }, 'settings.entryFee');
     const fromPanel = scoped.placementsForPage('pool.survivor', {
       poolType: 'NFL_SURVIVOR',
       audience: 'member',
@@ -649,6 +740,39 @@ describe('search', () => {
   });
 });
 
+describe('parseRoutes — the scanner itself', () => {
+  it('reads path as the first prop', () => {
+    expect(parseRoutes('<Route path="/a" element={<A />} />').paths).toEqual(['/a']);
+  });
+
+  it('reads path after another prop', () => {
+    expect(parseRoutes('<Route element={<A />} path="/b" />').paths).toEqual(['/b']);
+  });
+
+  it('reads single-quoted and braced literals', () => {
+    expect(parseRoutes("<Route path='/c' />").paths).toEqual(['/c']);
+    expect(parseRoutes("<Route path={'/d'} />").paths).toEqual(['/d']);
+    expect(parseRoutes('<Route path={`/e`} />').paths).toEqual(['/e']);
+  });
+
+  it('treats a path it cannot read as UNPARSED, never as absent', () => {
+    const out = parseRoutes('<Route path={ROUTES.home} element={<A />} />');
+    expect(out.paths).toEqual([]);
+    expect(out.unparsed).toHaveLength(1);
+  });
+
+  it('ignores a Route with no path at all', () => {
+    const out = parseRoutes('<Route element={<Layout />}>');
+    expect(out.paths).toEqual([]);
+    expect(out.unparsed).toEqual([]);
+  });
+
+  it('ignores commented-out declarations', () => {
+    expect(parseRoutes('// <Route path="/old" />').paths).toEqual([]);
+    expect(parseRoutes('/* <Route path="/old" /> */').paths).toEqual([]);
+  });
+});
+
 describe('the real registry — route coverage against src/App.tsx', () => {
   const routes = appRoutes();
 
@@ -658,6 +782,15 @@ describe('the real registry — route coverage against src/App.tsx', () => {
     expect(routes.length).toBeGreaterThan(30);
     expect(routes).toContain('/pool/:id');
     expect(routes).toContain('*');
+  });
+
+  /**
+   * The one that matters. A route the scanner cannot read is a route with no
+   * help decision, and it would otherwise be indistinguishable from a route
+   * that does not exist. Reported, never absorbed.
+   */
+  it('parses every route declaration it finds, with none skipped', () => {
+    expect(parseRoutes(APP).unparsed).toEqual([]);
   });
 
   it('every HelpPage route exists in App.tsx', () => {
@@ -690,7 +823,7 @@ describe('the real registry — route coverage against src/App.tsx', () => {
 });
 
 describe('the real registry — content rules', () => {
-  const topics = [...helpRegistry.topics.values()];
+  const topics = [...helpRegistry.topics];
 
   it('every topic has at least one placement', () => {
     expect(orphanTopics(topics, helpRegistry.placements)).toEqual([]);

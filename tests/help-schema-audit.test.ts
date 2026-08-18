@@ -34,45 +34,101 @@ import type { HelpTopic } from '../src/help/types';
  * reading "container" and weaken the signal from the rows that mean something.
  */
 
-/** Array indices are already `*` in a JSON Schema walk; this is belt and braces. */
-function flattenLeaves(node: unknown, prefix: string, out: Set<string>): void {
-  if (!node || typeof node !== 'object') return;
+/**
+ * Flatten a JSON Schema to the dotted paths of its LEAVES.
+ *
+ * `root` is the whole generated document, so a local `$ref` can be resolved:
+ * zod emits `$ref` into `$defs` when a sub-schema is reused, and every pool
+ * type's payout place list is a reuse candidate. Treating a `$ref` node as a
+ * leaf (its own shape has no `properties`, `items` or `anyOf`) would credit
+ * `settings.payouts.places.*` as one audited path and silently stop auditing
+ * `rank` and `percentage` underneath it — coverage would appear complete at
+ * the moment it was lost.
+ *
+ * Anything this walker does not understand is REPORTED in `unhandled`, never
+ * absorbed as a leaf, so a future schema construct fails loudly here instead
+ * of quietly shrinking the audit.
+ */
+export function flattenLeaves(
+  node: unknown,
+  prefix: string,
+  out: Set<string>,
+  root: unknown,
+  unhandled: string[] = [],
+  seen: ReadonlySet<string> = new Set(),
+): string[] {
+  if (!node || typeof node !== 'object') return unhandled;
   const n = node as Record<string, unknown>;
+
+  // Local $ref, resolved against the document root.
+  if (typeof n.$ref === 'string') {
+    const ref = n.$ref;
+    if (!ref.startsWith('#/')) {
+      unhandled.push(`${prefix || '<root>'}: external $ref ${ref}`);
+      return unhandled;
+    }
+    // A self-referential schema would otherwise recurse forever.
+    if (seen.has(ref)) return unhandled;
+    let target: unknown = root;
+    for (const segment of ref.slice(2).split('/')) {
+      target = target && typeof target === 'object'
+        ? (target as Record<string, unknown>)[segment.replace(/~1/g, '/').replace(/~0/g, '~')]
+        : undefined;
+    }
+    if (target === undefined) {
+      unhandled.push(`${prefix || '<root>'}: unresolvable $ref ${ref}`);
+      return unhandled;
+    }
+    return flattenLeaves(target, prefix, out, root, unhandled, new Set([...seen, ref]));
+  }
 
   // A union contributes every branch's paths — an optional field is
   // `anyOf: [T, undefined]`, and a `z.union` genuinely has two shapes.
   const branches = (n.anyOf ?? n.oneOf ?? n.allOf) as unknown[] | undefined;
   if (Array.isArray(branches)) {
-    for (const branch of branches) flattenLeaves(branch, prefix, out);
-    return;
+    for (const branch of branches) flattenLeaves(branch, prefix, out, root, unhandled, seen);
+    return unhandled;
   }
 
   if (n.type === 'array' || n.items) {
-    flattenLeaves(n.items, prefix ? `${prefix}.*` : '*', out);
-    return;
+    flattenLeaves(n.items, prefix ? `${prefix}.*` : '*', out, root, unhandled, seen);
+    return unhandled;
   }
 
   if (n.properties) {
     for (const [key, child] of Object.entries(n.properties as Record<string, unknown>)) {
-      flattenLeaves(child, prefix ? `${prefix}.${key}` : key, out);
+      flattenLeaves(child, prefix ? `${prefix}.${key}` : key, out, root, unhandled, seen);
     }
-    return;
+    // A record — `additionalProperties` as a schema — has open-ended keys, so
+    // its VALUE shape is audited under a `*` segment, the same convention
+    // arrays use.
+    if (n.additionalProperties && typeof n.additionalProperties === 'object') {
+      flattenLeaves(n.additionalProperties, prefix ? `${prefix}.*` : '*', out, root, unhandled, seen);
+    }
+    return unhandled;
+  }
+
+  // A bare record with no declared properties.
+  if (n.additionalProperties && typeof n.additionalProperties === 'object') {
+    flattenLeaves(n.additionalProperties, prefix ? `${prefix}.*` : '*', out, root, unhandled, seen);
+    return unhandled;
   }
 
   if (prefix) out.add(prefix);
+  return unhandled;
 }
 
-/** Every leaf path of one pool type's create-input schema. */
-function leavesFor(type: PoolType): Set<string> {
+/** Every leaf path of one pool type's create-input schema, plus anything the walker could not read. */
+function leavesFor(type: PoolType): { leaves: Set<string>; unhandled: string[] } {
   const schema = getCreateInputSchema(type);
   if (!schema) throw new Error(`no create-input schema for ${type}`);
   // `io: 'input'` is what the wizard actually submits (before coercion), and
   // `unrepresentable: 'any'` keeps the preprocessed fields (optionalText,
   // optionalDateMillis) from throwing instead of yielding their path.
   const json = z.toJSONSchema(schema as never, { unrepresentable: 'any', io: 'input' } as never);
-  const out = new Set<string>();
-  flattenLeaves(json, '', out);
-  return out;
+  const leaves = new Set<string>();
+  const unhandled = flattenLeaves(json, '', leaves, json);
+  return { leaves, unhandled };
 }
 
 /**
@@ -102,9 +158,55 @@ function uncoveredFor(
   return [...leaves].filter((p) => !explained.has(p) && !(p in allowlist)).sort();
 }
 
-const leavesByType = new Map<PoolType, Set<string>>(POOL_TYPES.map((t) => [t, leavesFor(t)]));
+const walked = new Map(POOL_TYPES.map((t) => [t, leavesFor(t)] as const));
+const leavesByType = new Map<PoolType, Set<string>>([...walked].map(([t, w]) => [t, w.leaves]));
 const allLeaves = new Set<string>([...leavesByType.values()].flatMap((s) => [...s]));
-const realTopics = [...helpRegistry.topics.values()];
+const realTopics = [...helpRegistry.topics];
+
+describe('flattenLeaves — the walker, on fixtures', () => {
+  const walk = (doc: unknown) => {
+    const out = new Set<string>();
+    const unhandled = flattenLeaves(doc, '', out, doc);
+    return { paths: [...out].sort(), unhandled };
+  };
+
+  it('follows a local $ref into $defs instead of counting it as a leaf', () => {
+    const doc = {
+      type: 'object',
+      properties: { places: { type: 'array', items: { $ref: '#/$defs/place' } } },
+      $defs: { place: { type: 'object', properties: { rank: { type: 'number' }, pct: { type: 'number' } } } },
+    };
+    expect(walk(doc).paths).toEqual(['places.*.pct', 'places.*.rank']);
+  });
+
+  it('audits record values under a * segment', () => {
+    const doc = {
+      type: 'object',
+      properties: { handles: { type: 'object', additionalProperties: { type: 'object', properties: { tag: { type: 'string' } } } } },
+    };
+    expect(walk(doc).paths).toEqual(['handles.*.tag']);
+  });
+
+  it('reports an unresolvable $ref rather than swallowing it', () => {
+    const out = walk({ type: 'object', properties: { a: { $ref: '#/$defs/missing' } } });
+    expect(out.paths).toEqual([]);
+    expect(out.unhandled).toHaveLength(1);
+  });
+
+  it('reports an external $ref', () => {
+    const out = walk({ type: 'object', properties: { a: { $ref: 'https://example.com/s.json' } } });
+    expect(out.unhandled).toHaveLength(1);
+  });
+
+  it('does not hang on a self-referential schema', () => {
+    const doc = {
+      type: 'object',
+      properties: { node: { $ref: '#/$defs/node' } },
+      $defs: { node: { type: 'object', properties: { child: { $ref: '#/$defs/node' }, name: { type: 'string' } } } },
+    };
+    expect(walk(doc).paths).toContain('node.name');
+  });
+});
 
 describe('the schema walk itself', () => {
   it('reaches every pool type', () => {
@@ -120,6 +222,18 @@ describe('the schema walk itself', () => {
     expect(allLeaves).toContain('settings.scoring.roundMultipliers.SUPER_BOWL');
     expect(allLeaves).toContain('props.questions.*.text');
     expect(allLeaves).toContain('paymentHandles.venmo');
+  });
+
+  /**
+   * The walker reports what it cannot read rather than absorbing it as a leaf.
+   * A `$ref` node has no properties, items or anyOf of its own, so the first
+   * version added it as a leaf — crediting `settings.payouts.places.*` as one
+   * audited path and silently dropping `rank` and `percentage` beneath it.
+   * Coverage would have looked complete at the moment it was lost.
+   */
+  it('understands every node in every live schema', () => {
+    const problems = [...walked].flatMap(([type, w]) => w.unhandled.map((u) => `${type}: ${u}`));
+    expect(problems).toEqual([]);
   });
 
   it('emits leaves, not containers', () => {

@@ -130,8 +130,11 @@ about to confuse without making them look it up.
 
 The banned-word list in rule 9 (`simply`, `just`, `easily`, `powerful`) and
 the implementation words in rule 7 (`Firestore`, `callable`, `server-side`,
-`uid`, `subcollection`) are checked mechanically by the registry invariant
-test. Everything else on this page is a reviewer's job.
+`uid`, `subcollection`) live in `src/help/voice.ts` and are checked
+mechanically by **two** tests, each over the copy it owns:
+`tests/help-registry-invariants.test.ts` for topic and page copy, and
+`tests/help-glossary-invariants.test.ts` for glossary copy. Everything else on
+this page is a reviewer's job.
 
 ---
 

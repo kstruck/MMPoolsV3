@@ -140,8 +140,8 @@ export const GLOSSARY: readonly GlossaryTerm[] = [
   {
     id: 'paid-status',
     term: 'Paid',
-    short: 'The commissioner’s confirmation that a member has paid the entry fee. Only the commissioner can set it.',
-    long: 'This is the figure the pool runs on. Some pool types will not let an unpaid member submit an entry, so it has to be the commissioner’s word rather than the member’s.\n\nIf you have paid and it still shows unpaid, tell your commissioner — or mark it yourself as a payment claim, which lets them confirm it in one tap.',
+    short: 'The commissioner’s confirmation that a member has paid the entry fee. A member can never set it themselves.',
+    long: 'This is the figure the pool runs on. Some pool types will not let an unpaid member submit an entry, so it has to be the commissioner’s word rather than the member’s.\n\nYour commissioner sets it. Site staff can also set it, which is how a mistake gets put right when a commissioner is unreachable.\n\nIf you have paid and it still shows unpaid, tell your commissioner — or mark it yourself as a payment claim, which lets them confirm it in one tap.',
     contextHeading: 'Paid Status',
     audience: ['member', 'commissioner', 'admin'],
     related: ['member-payment-claim', 'entry-fee'],

@@ -28,6 +28,13 @@ import { DEFAULT_SECTION } from './types';
 import { PAGES } from './pages';
 import { GLOSSARY } from './glossary';
 
+/**
+ * What `resolveTopic` needs in order to answer BOTH questions it is asked:
+ * which variant of a topic this reader gets, and whether they may see it at
+ * all. Audience is not optional — the tooltip has no second filter.
+ */
+export type TopicScope = Pick<HelpScope, 'poolType' | 'audience'>;
+
 /** Max results returned by `search`, matching the Spectrum reference. */
 export const SEARCH_RESULT_LIMIT = 20;
 /** Characters of context either side of a search match. */
@@ -133,9 +140,36 @@ function extractSnippet(haystack: string, needle: string): string {
   return `${start > 0 ? '…' : ''}${haystack.slice(start, end).trim()}${end < haystack.length ? '…' : ''}`;
 }
 
+/**
+ * Recursively freeze content so the registry's promise is real.
+ *
+ * `ReadonlyMap` and `readonly` are TypeScript views only — they vanish at
+ * runtime, and a single `as` cast (or any plain-JS consumer) could rewrite a
+ * topic's `short` after `buildRegistry` had validated it. Validation that can
+ * be undone afterwards is not validation.
+ *
+ * Content is a few hundred small static objects built once at import, so the
+ * cost is not worth measuring. Applied to the INPUT before anything indexes
+ * it, so the maps and the arrays hand out the same frozen objects.
+ */
+function deepFreeze<T>(value: T): T {
+  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  for (const key of Object.getOwnPropertyNames(value)) {
+    deepFreeze((value as Record<string, unknown>)[key]);
+  }
+  return value;
+}
+
 export interface Registry {
-  readonly topics: ReadonlyMap<string, HelpTopic>;
-  readonly pages: ReadonlyMap<string, HelpPage>;
+  // FROZEN ARRAYS, not Maps. A `ReadonlyMap` is a compile-time view of a fully
+  // mutable object: one `as` cast, or any plain-JS consumer, could `.set()` on
+  // the live index and corrupt lookups for everyone else — validation undone
+  // after the fact. Handing out a copy each access would hide that rather than
+  // fix it (the copy is not the index the registry reads). So the indexes stay
+  // private and the public surface is frozen arrays plus lookup methods.
+  readonly topics: readonly HelpTopic[];
+  readonly pages: readonly HelpPage[];
   readonly glossary: readonly GlossaryTerm[];
   readonly placements: readonly ResolvedPlacement[];
 
@@ -150,7 +184,7 @@ export interface Registry {
    * Survivor viewer on both surfaces. That is the whole point of it being one
    * function rather than two lookups.
    */
-  resolveTopic(scope: Pick<HelpScope, 'poolType'>, id: string): HelpTopic | undefined;
+  resolveTopic(scope: TopicScope, id: string): HelpTopic | undefined;
 
   getPage(id: string): HelpPage | undefined;
   getTerm(id: string): GlossaryTerm | undefined;
@@ -159,24 +193,27 @@ export interface Registry {
    * Every placement on a page, resolved through `scope` and filtered to what
    * the viewer may see, grouped by section in `order` then insertion order.
    */
-  placementsForPage(
-    pageId: string,
-    scope: Pick<HelpScope, 'poolType' | 'audience'>,
-  ): { section: string; topics: HelpTopic[] }[];
+  placementsForPage(pageId: string, scope: TopicScope): { section: string; topics: HelpTopic[] }[];
 
   /** Case-insensitive substring search, capped at `SEARCH_RESULT_LIMIT`. */
-  search(query: string, scope: Pick<HelpScope, 'poolType' | 'audience'>): HelpSearchResult[];
+  search(query: string, scope: TopicScope): HelpSearchResult[];
 }
 
 class RegistryImpl implements Registry {
-  readonly topics: ReadonlyMap<string, HelpTopic>;
-  readonly pages: ReadonlyMap<string, HelpPage>;
+  readonly topics: readonly HelpTopic[];
+  readonly pages: readonly HelpPage[];
   readonly glossary: readonly GlossaryTerm[];
   readonly placements: readonly ResolvedPlacement[];
+  private readonly topicIndex: ReadonlyMap<string, HelpTopic>;
+  private readonly pageIndex: ReadonlyMap<string, HelpPage>;
   private readonly terms: ReadonlyMap<string, GlossaryTerm>;
   private readonly byPage: ReadonlyMap<string, ResolvedPlacement[]>;
 
-  constructor(input: HelpContentInput) {
+  constructor(rawInput: HelpContentInput) {
+    // Frozen BEFORE indexing, so every map value and every array element below
+    // is the same immutable object a caller receives.
+    const input = deepFreeze(rawInput);
+
     const topics = new Map<string, HelpTopic>();
     for (const topic of input.topics) {
       const id = normalizePath(topic.id);
@@ -295,57 +332,65 @@ class RegistryImpl implements Registry {
     }
     for (const list of byPage.values()) list.sort((a, b) => a.order - b.order);
 
-    this.topics = topics;
-    this.pages = pages;
+    // The Maps stay mutable objects at runtime whatever their declared type,
+    // so hand out copies rather than the instances this constructor holds:
+    // `registry.topics` is what a consumer touches, and a `.set()` through a
+    // cast on the live index would corrupt lookups for every other caller.
+    // The VALUES are already deep-frozen, so a copy is cheap and total.
+    this.topicIndex = topics;
+    this.pageIndex = pages;
     this.terms = terms;
+    this.topics = Object.freeze([...topics.values()]);
+    this.pages = Object.freeze([...pages.values()]);
     this.glossary = Object.freeze([...input.glossary]);
-    this.placements = Object.freeze(placements);
+    this.placements = Object.freeze(placements.map(deepFreeze));
     this.byPage = byPage;
   }
 
   getTopic(id: string): HelpTopic | undefined {
-    return this.topics.get(normalizePath(id));
+    return this.topicIndex.get(normalizePath(id));
   }
 
-  resolveTopic(scope: Pick<HelpScope, 'poolType'>, id: string): HelpTopic | undefined {
-    // An id that already names a type is used as written — callers that hold a
-    // qualified id (a deep link, a `related` entry) mean that exact variant.
+  resolveTopic(scope: TopicScope, id: string): HelpTopic | undefined {
+    // EVERY return path is filtered through the same visibility rule the panel
+    // and search apply. This is the TOOLTIP's path and nothing filters after
+    // it — a `HelpTip` renders whatever it is handed — so a topic that reaches
+    // here unchecked is shown to a reader who may not be its audience and may
+    // not be in its pool type.
+    //
+    // Including the explicitly-qualified branch. An earlier version honoured a
+    // qualified id as written, on the reasoning that a caller holding one (a
+    // ?help= deep link, a `related` entry) means that exact variant. It does —
+    // but "which variant" and "may this reader see it" are different
+    // questions, and answering the first was quietly answering the second.
+    const visible = (topic: HelpTopic | undefined): HelpTopic | undefined =>
+      topic && isVisible(topic.poolTypes, topic.audience, scope) ? topic : undefined;
+
     const { poolType: qualified, base } = splitQualifiedId(normalizePath(id));
-    if (qualified) return this.topics.get(`${qualified}:${base}`);
+    if (qualified) return visible(this.topicIndex.get(`${qualified}:${base}`));
     if (scope.poolType) {
-      // A variant's poolTypes is exactly its own qualifier (enforced at build),
-      // so a hit here is always right for this reader.
-      const scoped = this.topics.get(`${scope.poolType}:${base}`);
+      const scoped = visible(this.topicIndex.get(`${scope.poolType}:${base}`));
       if (scoped) return scoped;
     }
-    const fallback = this.topics.get(base);
-    if (!fallback) return undefined;
-    // The unqualified topic may still be limited to some pool types. THIS is
-    // the tooltip's path and nothing filters after it — `placementsForPage`
-    // and `search` apply visibility themselves, a `HelpTip` renders whatever
-    // it gets. Without this check a Pick'em-only `settings.lockMode` topic
-    // would appear on a Squares control that happens to share the id.
-    return scopeIncludesPoolType(fallback.poolTypes, scope.poolType) ? fallback : undefined;
+    return visible(this.topicIndex.get(base));
   }
 
   getPage(id: string): HelpPage | undefined {
-    return this.pages.get(id);
+    return this.pageIndex.get(id);
   }
 
   getTerm(id: string): GlossaryTerm | undefined {
     return this.terms.get(id);
   }
 
-  placementsForPage(
-    pageId: string,
-    scope: Pick<HelpScope, 'poolType' | 'audience'>,
-  ): { section: string; topics: HelpTopic[] }[] {
+  placementsForPage(pageId: string, scope: TopicScope): { section: string; topics: HelpTopic[] }[] {
     const sections: { section: string; topics: HelpTopic[] }[] = [];
     const index = new Map<string, HelpTopic[]>();
     for (const placement of this.byPage.get(pageId) ?? []) {
+      // resolveTopic filters visibility itself, so there is no second check
+      // here — one rule, one place.
       const topic = this.resolveTopic(scope, placement.topic);
       if (!topic) continue;
-      if (!isVisible(topic.poolTypes, topic.audience, scope)) continue;
       let bucket = index.get(placement.section);
       if (!bucket) {
         bucket = [];
@@ -358,7 +403,7 @@ class RegistryImpl implements Registry {
     return sections;
   }
 
-  search(query: string, scope: Pick<HelpScope, 'poolType' | 'audience'>): HelpSearchResult[] {
+  search(query: string, scope: TopicScope): HelpSearchResult[] {
     const needle = query.trim().toLowerCase();
     if (!needle) return [];
     const results: HelpSearchResult[] = [];
@@ -378,7 +423,7 @@ class RegistryImpl implements Registry {
       const base = baseTopicId(topicId);
       const candidates = this.placements.filter((p) => p.topic === topicId || p.topic === base);
       for (const placement of candidates) {
-        const page = this.pages.get(placement.page);
+        const page = this.pageIndex.get(placement.page);
         if (page && isVisible(page.poolTypes, page.audience, scope)) return placement.page;
       }
       return undefined;
@@ -388,7 +433,7 @@ class RegistryImpl implements Registry {
     const pageHits: HelpSearchResult[] = [];
     const glossaryHits: HelpSearchResult[] = [];
 
-    for (const [id, topic] of this.topics) {
+    for (const [id, topic] of this.topicIndex) {
       if (!isVisible(topic.poolTypes, topic.audience, scope)) continue;
       // Both `settings.entryFee` and `NFL_SURVIVOR:settings.entryFee` are
       // visible to a Survivor reader, and a query matching both would return
@@ -412,7 +457,7 @@ class RegistryImpl implements Registry {
       });
     }
 
-    for (const [id, page] of this.pages) {
+    for (const [id, page] of this.pageIndex) {
       if (!isVisible(page.poolTypes, page.audience, scope)) continue;
       const haystack = `${page.title}\n${page.summary}`;
       if (!haystack.toLowerCase().includes(needle)) continue;
@@ -443,11 +488,7 @@ class RegistryImpl implements Registry {
   }
 }
 
-function isVisible(
-  poolTypes: PoolTypeScope,
-  audience: readonly Audience[],
-  scope: Pick<HelpScope, 'poolType' | 'audience'>,
-): boolean {
+function isVisible(poolTypes: PoolTypeScope, audience: readonly Audience[], scope: TopicScope): boolean {
   return scopeIncludesPoolType(poolTypes, scope.poolType) && audienceSatisfies(audience, scope.audience);
 }
 
