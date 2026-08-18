@@ -112,6 +112,19 @@ describe('PayoutsPanel reads the shared helper (R5 — one implementation)', () 
   });
 
   /**
+   * qodo #1 on #471, and the rule the repo accepted on #456: never print a
+   * plausible substitute for data that is not there. A legacy HYBRID pool that
+   * declared only one half of its split would have read as a real zero-dollar
+   * allocation on the other half.
+   */
+  it('a MISSING half of the hybrid split is named, never printed as $0 (T2)', () => {
+    expect(src).toContain('const perEntry = (n: number | undefined) =>');
+    expect(src).toContain('an amount your commissioner has not set');
+    expect(src).not.toContain('split.weeklyPerEntry ?? 0');
+    expect(src).not.toContain('split.seasonPerEntry ?? 0');
+  });
+
+  /**
    * The #423 example under T2: $25 = $18 weekly + $7 season, 10 entries, and a
    * weekly list that is NOT the season list. Each place resolves against its
    * own pot — the figures the panel prints.

@@ -329,5 +329,8 @@ describe('the Payouts step renders two editors on HYBRID and one everywhere else
     // then warn about: one past the highest rank present, not `length + 1`.
     expect(step).toContain('const nextRank = ranked.reduce((max, p) => Math.max(max, p.rank), 0) + 1;');
     expect(step).not.toContain('rank: fields.length + 1');
+    // Percentages are z.number().min(0).max(100), not integers — a bare number
+    // input defaults to step=1 and marks a 33.3 invalid (qodo #2 on #471).
+    expect(step).toContain('<input type="number" min={0} max={100} step="any"');
   });
 });

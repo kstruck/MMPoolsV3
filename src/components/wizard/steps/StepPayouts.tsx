@@ -47,7 +47,10 @@ function PlacesEditor(props: { payoutsField: string; title?: string; blurb?: str
               <input type="number" min={1} className={inputCls} {...register(`${payoutsField}.places.${i}.rank`, { valueAsNumber: true })} />
             </Field>
             <Field label="Percentage">
-              <input type="number" min={0} max={100} className={inputCls} {...register(`${payoutsField}.places.${i}.percentage`, { valueAsNumber: true })} />
+              {/* `step="any"`: percentages are `z.number().min(0).max(100)`, not
+                  integers, and a bare number input defaults to step=1 and marks
+                  a 33.3 invalid. Same as the manager editor (qodo #2). */}
+              <input type="number" min={0} max={100} step="any" className={inputCls} {...register(`${payoutsField}.places.${i}.percentage`, { valueAsNumber: true })} />
             </Field>
             <button type="button" onClick={() => remove(i)} className="mb-4 rounded-md px-3 py-2 text-sm font-semibold text-rose-400 hover:text-rose-300">
               Remove

@@ -92,19 +92,26 @@ const WeeklyPlacesEditor: React.FC<{ places: PlaceRow[]; onChange: (next: PlaceR
           </div>
           <div className="flex-1">
             <label className="block font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted mb-1">% of the weekly pot</label>
-            <input type="number" min={0} max={100} value={p.percentage}
-              onChange={e => patch(i, { percentage: Math.max(0, Math.min(100, Math.floor(Number(e.target.value) || 0))) })}
+            {/* NOT floored (qodo #2): `payoutPlaceSchema` is
+                `z.number().min(0).max(100)` and `splitPrizes` has a test for a
+                33.3 / 33.3 / 33.4 split, so rounding here would silently
+                re-allocate a pot the schema and the scorer both accept. `rank`
+                stays integral — that one IS `z.number().int()`. `step="any"`
+                because a bare number input defaults to step=1 and would mark a
+                decimal invalid. */}
+            <input type="number" min={0} max={100} step="any" value={p.percentage}
+              onChange={e => patch(i, { percentage: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
               className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
           </div>
           <button type="button" onClick={() => onChange(places.filter((_, j) => j !== i))}
-            className="mb-1 px-3 py-2 font-body text-sm font-bold text-brandred-600 hover:underline">
+            className="mb-1 px-3 py-2 font-display text-sm font-bold uppercase tracking-[0.05em] text-brandred-600 hover:underline">
             Remove
           </button>
         </div>
       ))}
       <button type="button"
         onClick={() => onChange([...places, { rank: nextRank, percentage: 0 }])}
-        className="font-body text-sm font-bold border border-line rounded-md px-4 py-1.5 text-[color:var(--text)] hover:bg-card">
+        className="font-display text-sm font-bold uppercase tracking-[0.05em] border border-line rounded-md px-4 py-1.5 text-[color:var(--text)] hover:bg-card">
         + Add place
       </button>
       {places.length > 0 && (
@@ -335,7 +342,8 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
    *
    * An UNTOUCHED editor sends nothing at all, so a stored `{ places: [] }` — a
    * deliberate "no weekly prizes" — survives every unrelated settings save
-   * (codex r2).
+   * (codex r2), and a save CLEARS the flag (qodo #3) so later unrelated saves
+   * cannot re-send a list another session has since replaced.
    */
   const weeklyPayoutsPatch = (): Record<string, unknown> => {
     if (!weeklyPlacesTouched) return {};
@@ -730,6 +738,12 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       // The last list this component knows to be STORED — an emptied editor
       // cleared it, so there is nothing to re-hydrate on a later return to HYBRID.
       lastKnownWeeklyPlacesRef.current = activeMode === 'HYBRID' && weeklyPlaces.length > 0 ? weeklyPlaces : null;
+      // …and the editor is no longer dirty (qodo #3). The flag means "edited
+      // since the last save"; leaving it latched made every LATER unrelated save
+      // re-send this list, which would overwrite a newer weekly list saved from
+      // another session between the two saves. What was just written is now the
+      // stored truth, so the next save has nothing of its own to say.
+      setWeeklyPlacesTouched(false);
       toast.success('Pool settings saved!');
       // Drives the per-section buttons' green "Saved!" state. Cleared on a timer
       // rather than left latched, so the NEXT save is visibly a new event —

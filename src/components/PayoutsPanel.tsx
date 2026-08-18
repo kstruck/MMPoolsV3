@@ -17,6 +17,15 @@ interface PayoutsPanelProps {
 
 const money = (n: number) => `$${Math.floor(n).toLocaleString()}`;
 
+/**
+ * One half of a declared HYBRID split, for the explanation copy. A MISSING half
+ * is named, never printed as `$0` (qodo #1, the rule the repo accepted on #456):
+ * a legacy pool that declared only one side would otherwise read as a real
+ * zero-dollar allocation, which is a money claim nobody made. A genuine numeric
+ * 0 still prints as `$0`.
+ */
+const perEntry = (n: number | undefined) => (typeof n === 'number' && Number.isFinite(n) ? `$${n}` : 'an amount your commissioner has not set');
+
 const ordinal = (n: number) => {
     const s = ['th', 'st', 'nd', 'rd'];
     const v = n % 100;
@@ -412,7 +421,7 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
                     </div>
                     <p className="text-[11px] font-body text-muted leading-relaxed">
                         {split
-                            ? `The entry fee splits $${split.weeklyPerEntry ?? 0} into the weekly prize pots and $${split.seasonPerEntry ?? 0} into the season pot, per entry. ${separateWeekly ? 'Each pot has its own prize places, listed below.' : 'The place percentages below apply to both pots.'} Dollar figures are rounded to whole dollars — your commissioner settles exact amounts.`
+                            ? `The entry fee splits ${perEntry(split.weeklyPerEntry)} into the weekly prize pots and ${perEntry(split.seasonPerEntry)} into the season pot, per entry. ${separateWeekly ? 'Each pot has its own prize places, listed below.' : 'The place percentages below apply to both pots.'} Dollar figures are rounded to whole dollars — your commissioner settles exact amounts.`
                             : modeCopy.explanation}
                     </p>
                     {splitPots && (

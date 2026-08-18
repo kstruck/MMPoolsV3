@@ -177,3 +177,42 @@ describe('manager Settings — the HYBRID weekly place list (T2)', () => {
     expect(mgr).toContain('uniqueRanks(places)');
   });
 });
+
+/**
+ * PLAN-PAYMENT-LEDGER T2 — the three qodo findings absorbed on #471. Each is a
+ * money or lost-update defect, not a style note; the other nine findings were
+ * rejected on the PR with evidence.
+ */
+describe('manager weekly-place editor — qodo #471 absorptions (T2)', () => {
+  const mgr = code('src/components/NFLPoolDashboard/NFLManagerView.tsx');
+
+  /**
+   * qodo #2. `payoutPlaceSchema.percentage` is `z.number().min(0).max(100)` and
+   * `splitPrizes` has a test for a 33.3 / 33.3 / 33.4 split, so flooring here
+   * silently re-allocated a pot the schema and the scorer both accept. `rank`
+   * stays integral — that one IS `z.number().int()`.
+   */
+  it('percentages are NOT floored, and the input allows a decimal step; rank still is', () => {
+    expect(mgr).toContain('percentage: Math.max(0, Math.min(100, Number(e.target.value) || 0))');
+    expect(mgr).not.toMatch(/percentage: Math\.max\(0, Math\.min\(100, Math\.floor/);
+    expect(mgr).toContain('<input type="number" min={0} max={100} step="any" value={p.percentage}');
+    expect(mgr).toContain('rank: Math.max(1, Math.floor(Number(e.target.value) || 1))');
+  });
+
+  /**
+   * qodo #3. The flag means "edited since the last save". Left latched, every
+   * LATER unrelated save re-sent this list and would overwrite a newer weekly
+   * list saved from another session between the two saves.
+   */
+  it('a successful save clears the touched flag, so a later unrelated save re-sends nothing', () => {
+    expect(mgr).toContain('setWeeklyPlacesTouched(false);');
+    const save = mgr.slice(mgr.indexOf('lastKnownWeeklyPlacesRef.current = activeMode'));
+    expect(save.slice(0, 400)).toContain('setWeeklyPlacesTouched(false);');
+  });
+
+  /** qodo #5 — this file's own button convention, used by every other button in it. */
+  it('the editor buttons carry the file\'s uppercase display typography', () => {
+    expect(mgr).toContain('font-display text-sm font-bold uppercase tracking-[0.05em] text-brandred-600');
+    expect(mgr).toContain('font-display text-sm font-bold uppercase tracking-[0.05em] border border-line');
+  });
+});
