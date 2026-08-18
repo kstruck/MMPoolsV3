@@ -26,6 +26,22 @@ function hybridSplitFrom(settings: Record<string, unknown> | undefined): { weekl
   return { weeklyPerEntry: num(w), seasonPerEntry: num(se) };
 }
 
+// PLAN-PAYMENT-LEDGER T2 / D1: the HYBRID weekly place list survives ONLY on a
+// HYBRID pool, for the same reason the split does — react-hook-form keeps the
+// values of unmounted fields, so a commissioner who tried HYBRID, typed weekly
+// places, then settled on SEASON would submit a list the create schema rightly
+// refuses (WEEKLY_PAYOUTS_WRONG_MODE) from a screen where the editor is gone.
+// An EMPTY list is dropped too: absent ⇒ `payouts` prices both pots (today's
+// behaviour, `weeklyPlacesFor`), whereas a stored `{ places: [] }` would mean
+// "this pool pays no weekly prizes at all" — never what an untouched editor said.
+function weeklyPayoutsFrom(settings: Record<string, unknown> | undefined): { places: unknown[] } | undefined {
+  if (settings?.payoutMode !== 'HYBRID') return undefined;
+  const raw = settings?.weeklyPayouts as { places?: unknown } | undefined;
+  const places = raw?.places;
+  if (!Array.isArray(places) || places.length === 0) return undefined;
+  return { places };
+}
+
 // Toggle off ⇒ 1. Toggle on ⇒ at least 2 — the toggle's own meaning, enforced
 // HERE, not only in the field's effect (qodo #4 on #449). Above the cap is NOT
 // clamped: an out-of-range value must be REFUSED by the schema (with its message
@@ -80,6 +96,7 @@ export function buildNFLPayload(
       // input as NaN; normalizing to 0 here lets the schema's mismatch message
       // (the useful one) fire instead of a bare "expected number, got nan".
       hybridSplit: hybridSplitFrom(v.settings),
+      weeklyPayouts: weeklyPayoutsFrom(v.settings),
       // PLAN-MULTI-ENTRY D8. Toggle off ⇒ 1 regardless of what was typed (the
       // field is unmounted but react-hook-form keeps its value); toggle on with
       // an untouched field (NaN) ⇒ 1 too, so the schema's 1..CAP check is the

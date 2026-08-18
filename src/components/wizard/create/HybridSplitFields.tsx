@@ -39,8 +39,8 @@ export function HybridSplitFields() {
       <p className="text-sm font-semibold mb-1">Hybrid entry-fee split</p>
       <p className="text-xs text-muted mb-3">
         How each entry fee divides between the weekly prize pots and the season pot.
-        Whole dollars, and the two must add up to the entry fee exactly — the same
-        payout percentages apply to both pots.
+        Whole dollars, and the two must add up to the entry fee exactly. Each pot
+        gets its own prize places on the Payouts step.
       </p>
       <div className="grid grid-cols-2 gap-3">
         <NumberField name="settings.hybridSplit.weeklyPerEntry" label="Weekly pots ($ per entry)" min={0} />

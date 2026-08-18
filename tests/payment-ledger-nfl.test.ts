@@ -98,3 +98,127 @@ describe('MyPrizes — member view (T6, K7)', () => {
     expect(my).not.toMatch(/recordPoolPayouts|setPayoutSettled|setPaidStatus|splitPrizes|priceWeeklyPlaces|priceSeasonPlaces|potBreakdown/);
   });
 });
+
+/**
+ * PLAN-PAYMENT-LEDGER T2 (D1/D2) — the HYBRID weekly place list is editable in
+ * manager Settings, not only at create time. Two things must hold, and neither
+ * is visible from the callable's own tests:
+ *
+ *  1. `weeklyPayouts` is sent ONLY on a HYBRID save. `updatePoolSettings`
+ *     merge-writes, so a list sent alongside a non-HYBRID mode is refused
+ *     (WEEKLY_PAYOUTS_WRONG_MODE) — and leaving HYBRID must forget it locally
+ *     too, or re-selecting HYBRID resurrects a list the server has deleted.
+ *  2. The commissioner is TOLD before they save that leaving HYBRID promotes
+ *     the season places to price every week (D1's "review your prize places").
+ *
+ * Assertions stay single-line: the working tree is CRLF, so a multi-line
+ * `toContain` would pass on one checkout and fail on another.
+ */
+describe('manager Settings — the HYBRID weekly place list (T2)', () => {
+  const mgr = code('src/components/NFLPoolDashboard/NFLManagerView.tsx');
+  const count = (re: RegExp) => mgr.match(re)?.length ?? 0;
+
+  it("sends weeklyPayouts only while HYBRID — on Pick'em AND on Margin", () => {
+    expect(mgr).toContain("...(payoutMode === 'HYBRID' ? weeklyPayoutsPatch() : {}),");
+    expect(mgr).toContain("...(marginPayoutMode === 'HYBRID' ? weeklyPayoutsPatch() : {}),");
+    // One send per pool type, and nowhere else — a third would be a save path
+    // that has not been mode-gated.
+    expect(count(/weeklyPayoutsPatch\(\)/g)).toBe(2);
+    expect(mgr).toContain('const weeklyPayoutsPatch = (): Record<string, unknown> => {');
+  });
+
+  /**
+   * The editor promises "leave the list empty and the season places price both
+   * pots". An emptied editor that stored `{ places: [] }` would break that
+   * promise the expensive way: `weeklyPlacesFor` reads an empty list as "no
+   * weekly prizes", leaving the whole weekly pot unassigned. (codex r1.)
+   */
+  it('an emptied editor CLEARS a stored list and stores nothing when there was none — never an empty list', () => {
+    expect(mgr).toContain('if (weeklyPlaces.length > 0) return { weeklyPayouts: { places: weeklyPlaces } };');
+    expect(mgr).toContain('return (lastKnownWeeklyPlacesRef.current || settings.weeklyPayouts) ? { weeklyPayouts: null } : {};');
+    expect(mgr).toContain('if (!weeklyPlacesTouched) return {};');
+    // `{ places: [] }` must never be constructed by this file.
+    expect(mgr).not.toMatch(/weeklyPayouts: \{ places: \[\] \}/);
+  });
+
+  /**
+   * A stored `{ places: [] }` is a VALID, deliberate configuration (T1 keeps it
+   * distinct from absent on purpose): this pool pays no weekly prizes. Seeding
+   * "touched" from the stored value made every unrelated settings save rewrite
+   * it to the fallback where the SEASON places price every week. (codex r2.)
+   */
+  it('an untouched editor never speaks — a deliberate empty stored list survives an unrelated save', () => {
+    expect(mgr).toContain('const [weeklyPlacesTouched, setWeeklyPlacesTouched] = useState<boolean>(false);');
+    expect(mgr).toContain('settings.weeklyPayouts?.places?.length ? settings.weeklyPayouts.places : null,');
+  });
+
+  it('leaving HYBRID clears the list locally and returning re-hydrates from the last KNOWN-STORED one, never the lagging prop', () => {
+    expect(count(/if \(e\.target\.value !== 'HYBRID'\) \{ setWeeklyPlacesTouched\(false\); setWeeklyPlaces\(\[\]\); \}/g)).toBe(2);
+    expect(count(/setWeeklyPlaces\(lastKnownWeeklyPlacesRef\.current\);/g)).toBe(2);
+    // Re-hydrating is NOT editing (codex r8): a bare toggle away-and-back must
+    // not make this list eligible to re-send over a newer one from another session.
+    expect(mgr).not.toMatch(/setWeeklyPlaces\(lastKnownWeeklyPlacesRef\.current\);\s*setWeeklyPlacesTouched\(true\)/);
+    // The ONLY things that mark it touched are the two editors' onChange props.
+    expect(count(/setWeeklyPlacesTouched\(true\)/g)).toBe(2);
+    expect(count(/onChange=\{next => \{ setWeeklyPlacesTouched\(true\); setWeeklyPlaces\(next\); \}\}/g)).toBe(2);
+    expect(mgr).toContain("lastKnownWeeklyPlacesRef.current = activeMode === 'HYBRID' && weeklyPlaces.length > 0 ? weeklyPlaces : null;");
+  });
+
+  it('renders the editor on both HYBRID surfaces and warns on the way out (D1)', () => {
+    expect(count(/<WeeklyPlacesEditor/g)).toBe(2);
+    expect(mgr).toContain('<HybridExitNotice storedMode={storedPayoutMode} selectedMode={payoutMode} hasWeeklyList={!!settings.weeklyPayouts?.places?.length} />');
+    expect(mgr).toContain('<HybridExitNotice storedMode={storedPayoutMode} selectedMode={marginPayoutMode} hasWeeklyList={!!settings.weeklyPayouts?.places?.length} />');
+    expect(mgr).toContain('review your prize places before you save');
+    // The notice only fires on the way OUT of a pool that IS hybrid today.
+    expect(mgr).toContain("if (storedMode !== 'HYBRID' || selectedMode === 'HYBRID') return null;");
+  });
+
+  it('+ Add place cannot mint a duplicate rank — the next rank is one past the highest present', () => {
+    expect(mgr).toContain('const nextRank = places.reduce((max, p) => Math.max(max, Number(p.rank) || 0), 0) + 1;');
+    expect(mgr).not.toContain('rank: places.length + 1');
+  });
+
+  it('the live checks reuse the schema predicate — one definition of "ranks must be unique"', () => {
+    expect(mgr).toContain("import { DUPLICATE_RANK_MESSAGE, uniqueRanks } from '@shared/schemas/common'");
+    expect(mgr).toContain('uniqueRanks(places)');
+  });
+});
+
+/**
+ * PLAN-PAYMENT-LEDGER T2 — the three qodo findings absorbed on #471. Each is a
+ * money or lost-update defect, not a style note; the other nine findings were
+ * rejected on the PR with evidence.
+ */
+describe('manager weekly-place editor — qodo #471 absorptions (T2)', () => {
+  const mgr = code('src/components/NFLPoolDashboard/NFLManagerView.tsx');
+
+  /**
+   * qodo #2. `payoutPlaceSchema.percentage` is `z.number().min(0).max(100)` and
+   * `splitPrizes` has a test for a 33.3 / 33.3 / 33.4 split, so flooring here
+   * silently re-allocated a pot the schema and the scorer both accept. `rank`
+   * stays integral — that one IS `z.number().int()`.
+   */
+  it('percentages are NOT floored, and the input allows a decimal step; rank still is', () => {
+    expect(mgr).toContain('percentage: Math.max(0, Math.min(100, Number(e.target.value) || 0))');
+    expect(mgr).not.toMatch(/percentage: Math\.max\(0, Math\.min\(100, Math\.floor/);
+    expect(mgr).toContain('<input type="number" min={0} max={100} step="any" value={p.percentage}');
+    expect(mgr).toContain('rank: Math.max(1, Math.floor(Number(e.target.value) || 1))');
+  });
+
+  /**
+   * qodo #3. The flag means "edited since the last save". Left latched, every
+   * LATER unrelated save re-sent this list and would overwrite a newer weekly
+   * list saved from another session between the two saves.
+   */
+  it('a successful save clears the touched flag, so a later unrelated save re-sends nothing', () => {
+    expect(mgr).toContain('setWeeklyPlacesTouched(false);');
+    const save = mgr.slice(mgr.indexOf('lastKnownWeeklyPlacesRef.current = activeMode'));
+    expect(save.slice(0, 400)).toContain('setWeeklyPlacesTouched(false);');
+  });
+
+  /** qodo #5 — this file's own button convention, used by every other button in it. */
+  it('the editor buttons carry the file\'s uppercase display typography', () => {
+    expect(mgr).toContain('font-display text-sm font-bold uppercase tracking-[0.05em] text-brandred-600');
+    expect(mgr).toContain('font-display text-sm font-bold uppercase tracking-[0.05em] border border-line');
+  });
+});

@@ -20,8 +20,113 @@ import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHa
 import { effectiveWeeklyTiebreaker } from '@shared/nflTiebreaker';
 import { WEEKLY_TIEBREAKER_OPTIONS } from '@shared/nflTiebreakerOptions';
 import { hybridSplitProblem } from '@shared/hybridSplit';
+import { DUPLICATE_RANK_MESSAGE, uniqueRanks } from '@shared/schemas/common';
 import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReuse';
 import { effectiveMaxEntriesPerUser, MAX_ENTRIES_PER_USER_CAP, MULTI_ENTRY_WIZARD_ENABLED } from '@shared/multiEntry';
+
+type PlaceRow = { rank: number; percentage: number };
+
+/**
+ * PLAN-PAYMENT-LEDGER T2 / D1 — the HYBRID exit notice. Leaving HYBRID deletes
+ * `settings.weeklyPayouts` in the same write, and on HYBRID → WEEKLY the pool's
+ * SEASON places (`settings.payouts`, untouched by the move) silently become the
+ * list that prices every week. That is a money change nobody asked for, so the
+ * commissioner is told before they save, not after a week is scored on it.
+ * Shown only while the STORED mode is HYBRID and the selected one is not.
+ */
+const HybridExitNotice: React.FC<{ storedMode?: string; selectedMode: string; hasWeeklyList: boolean }> = ({ storedMode, selectedMode, hasWeeklyList }) => {
+  if (storedMode !== 'HYBRID' || selectedMode === 'HYBRID') return null;
+  return (
+    <p role="status" className="text-[11px] font-body font-bold text-brandred-600 leading-normal">
+      {/* Only claim a deletion when there is something to delete — a HYBRID pool
+          that never declared a weekly list would otherwise be told it is losing
+          one. The sentence that follows is true either way. */}
+      {hasWeeklyList ? "Leaving Hybrid deletes this pool's weekly prize places. " : ''}
+      {selectedMode === 'WEEKLY'
+        ? 'Your SEASON places become the list that prices every week — review your prize places before you save.'
+        : 'Only the season places remain — review your prize places before you save.'}
+    </p>
+  );
+};
+
+/**
+ * The HYBRID weekly place list (PLAN-PAYMENT-LEDGER T2 / D1) — the manager-side
+ * twin of the wizard's second Payouts editor. Rendered only while the selected
+ * payout mode is HYBRID, exactly like the entry-fee split above it.
+ *
+ * The live checks run the SAME `uniqueRanks` predicate and the SAME
+ * `DUPLICATE_RANK_MESSAGE` the create schema and `updatePoolSettings` enforce.
+ * A friendlier local phrasing would eventually disagree with the refusal, and
+ * money copy that disagrees with money enforcement is how commissioners stop
+ * trusting either (the rule HybridSplitFields was written under).
+ *
+ * Editing this list never re-prices a week that has already been scored: the
+ * scorer freezes the prize into the recap and the ledger reads the frozen
+ * snapshot, never live settings.
+ */
+const WeeklyPlacesEditor: React.FC<{ places: PlaceRow[]; onChange: (next: PlaceRow[]) => void }> = ({ places, onChange }) => {
+  const total = places.reduce((sum, p) => sum + (Number(p.percentage) || 0), 0);
+  const over = total > 100;
+  const duplicate = !uniqueRanks(places);
+  const patch = (i: number, next: Partial<PlaceRow>) => onChange(places.map((p, j) => (j === i ? { ...p, ...next } : p)));
+  // One past the highest rank present, NOT `length + 1`: remove rank 1 from
+  // [1, 2] and `length + 1` hands out a second rank 2, so the editor's own
+  // controls build a list the server refuses (codex r3).
+  const nextRank = places.reduce((max, p) => Math.max(max, Number(p.rank) || 0), 0) + 1;
+
+  return (
+    <div className="bg-page border border-line rounded-lg p-4 space-y-3">
+      <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Weekly Prize Places</p>
+      <p className="text-[11px] font-body text-muted leading-normal">
+        Percentages of EACH week's pot. Leave this list empty to use the season places for both
+        pots — what a hybrid pool does today. Weeks already scored keep the prizes they were
+        published with; changes apply to weeks not yet scored.
+      </p>
+      {places.map((p, i) => (
+        <div key={i} className="flex items-end gap-2">
+          <div className="w-24">
+            <label className="block font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted mb-1">Rank</label>
+            <input type="number" min={1} value={p.rank}
+              onChange={e => patch(i, { rank: Math.max(1, Math.floor(Number(e.target.value) || 1)) })}
+              className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
+          </div>
+          <div className="flex-1">
+            <label className="block font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted mb-1">% of the weekly pot</label>
+            {/* NOT floored (qodo #2): `payoutPlaceSchema` is
+                `z.number().min(0).max(100)` and `splitPrizes` has a test for a
+                33.3 / 33.3 / 33.4 split, so rounding here would silently
+                re-allocate a pot the schema and the scorer both accept. `rank`
+                stays integral — that one IS `z.number().int()`. `step="any"`
+                because a bare number input defaults to step=1 and would mark a
+                decimal invalid. */}
+            <input type="number" min={0} max={100} step="any" value={p.percentage}
+              onChange={e => patch(i, { percentage: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+              className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
+          </div>
+          <button type="button" onClick={() => onChange(places.filter((_, j) => j !== i))}
+            className="mb-1 px-3 py-2 font-display text-sm font-bold uppercase tracking-[0.05em] text-brandred-600 hover:underline">
+            Remove
+          </button>
+        </div>
+      ))}
+      <button type="button"
+        onClick={() => onChange([...places, { rank: nextRank, percentage: 0 }])}
+        className="font-display text-sm font-bold uppercase tracking-[0.05em] border border-line rounded-md px-4 py-1.5 text-[color:var(--text)] hover:bg-card">
+        + Add place
+      </button>
+      {places.length > 0 && (
+        over
+          ? <p role="alert" className="text-[11px] font-body font-bold text-brandred-600">✗ Weekly payout percentages exceed 100% (total {total}%).</p>
+          : <p role="status" className="text-[11px] font-body font-bold text-[#0F7B4A]">✓ Weekly total: {total}% of each week's pot.</p>
+      )}
+      {duplicate && (
+        <p role="alert" className="text-[11px] font-body font-bold text-brandred-600">
+          ✗ {DUPLICATE_RANK_MESSAGE.split(': ').slice(1).join(': ')}
+        </p>
+      )}
+    </div>
+  );
+};
 
 /**
  * The save control, repeated at the end of every settings section (E6, #281).
@@ -201,6 +306,55 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // just deleted the split, and re-hydrating from a stale prop would resurrect
   // numbers the commissioner deliberately removed. (codex r7.)
   const lastKnownSplitRef = useRef<{ weeklyPerEntry: number; seasonPerEntry: number } | null>(settings.hybridSplit ?? null);
+  // HYBRID weekly place list (PLAN-PAYMENT-LEDGER T2 / D1). Same three-part
+  // shape as the split — value, "touched", and a last-known ref — because the
+  // server deletes `weeklyPayouts` when a pool leaves HYBRID, so leaving must
+  // forget it locally too or re-selecting HYBRID silently resurrects the old
+  // list on the next save, and re-hydrating from the realtime `settings` prop
+  // would read a copy that lags the delete. (The codex r3/r6 pair on the split.)
+  const [weeklyPlaces, setWeeklyPlaces] = useState<PlaceRow[]>(settings.weeklyPayouts?.places ?? []);
+  // "Touched", NOT "the pool has one" (codex r2). A stored `{ places: [] }` is a
+  // VALID, deliberate configuration — this pool pays no weekly prizes — and
+  // seeding this from the stored value made every unrelated settings save
+  // rewrite it to the fallback. Only an edit in THIS session sends the key.
+  const [weeklyPlacesTouched, setWeeklyPlacesTouched] = useState<boolean>(false);
+  // Non-empty only, for the same reason: re-hydrating an empty stored list on a
+  // return to HYBRID would mark it touched and clear a deliberate empty list.
+  const lastKnownWeeklyPlacesRef = useRef<PlaceRow[] | null>(
+    settings.weeklyPayouts?.places?.length ? settings.weeklyPayouts.places : null,
+  );
+  // The pool's STORED mode, for the HYBRID → WEEKLY notice (D1): leaving HYBRID
+  // deletes the weekly list and promotes the season list to be the weekly one.
+  const storedPayoutMode: string | undefined = settings.payoutMode;
+  /**
+   * What this save should say about `weeklyPayouts`, on a HYBRID save only.
+   *
+   * The editor's own promise is "leave the list empty and the season places
+   * price both pots" — so an emptied editor must not store `{ places: [] }`,
+   * which `weeklyPlacesFor` reads as "this pool pays NO weekly prizes" and
+   * would leave the whole weekly pot unassigned. (codex r1.)
+   *
+   * Emptying a list the pool ALREADY HAS is the same instruction, so it has to
+   * reach the server: omitting the key would leave the stored list pricing
+   * every week while the screen shows an empty editor. `null` is the clear —
+   * `weeklyPlacesFor` reads a stored null exactly like an absent field, and the
+   * callable's own gate treats null as "not a list to validate".
+   *
+   * An UNTOUCHED editor sends nothing at all, so a stored `{ places: [] }` — a
+   * deliberate "no weekly prizes" — survives every unrelated settings save
+   * (codex r2), and a save CLEARS the flag (qodo #3) so later unrelated saves
+   * cannot re-send a list another session has since replaced.
+   */
+  const weeklyPayoutsPatch = (): Record<string, unknown> => {
+    if (!weeklyPlacesTouched) return {};
+    if (weeklyPlaces.length > 0) return { weeklyPayouts: { places: weeklyPlaces } };
+    // "Is there a stored list?" is answered by what THIS component last saved
+    // first, and only then by the realtime prop, which lags a save it has not
+    // received yet: add places, save, remove them all, save again — a prop-only
+    // check would send nothing and leave the just-saved list pricing every week
+    // behind an empty editor. (codex r5, the same lag lastKnownSplitRef exists for.)
+    return (lastKnownWeeklyPlacesRef.current || settings.weeklyPayouts) ? { weeklyPayouts: null } : {};
+  };
   const [pointsPerPick, setPointsPerPick] = useState<number>(settings.pointsPerPick ?? 1);
   const [thursdayBonus, setThursdayBonus] = useState<number>(settings.primetimeBonus?.thursday ?? 0);
   const [sundayNightBonus, setSundayNightBonus] = useState<number>(settings.primetimeBonus?.sundayNight ?? 0);
@@ -519,6 +673,12 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           // it on a non-hybrid save would be refused (HYBRID_SPLIT_WRONG_MODE).
           ...(payoutMode === 'HYBRID' && splitDeclared
             ? { hybridSplit: { weeklyPerEntry: splitWeekly, seasonPerEntry: splitSeason } } : {}),
+          // Same rule as the split (PLAN-PAYMENT-LEDGER T2 / D1): sent only while
+          // HYBRID. Leaving HYBRID omits it and the callable deletes the stored
+          // copy in the same write; sending it on a non-hybrid save would be
+          // refused (WEEKLY_PAYOUTS_WRONG_MODE). See weeklyPayoutsPatch for what
+          // an emptied editor sends.
+          ...(payoutMode === 'HYBRID' ? weeklyPayoutsPatch() : {}),
           weeklyTiebreaker,
           pointsPerPick,
           ...(Object.keys(primetimeBonus).length > 0 ? { primetimeBonus } : { primetimeBonus: null }),
@@ -546,6 +706,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           lockBufferMinutes,
           ...(marginPayoutMode === 'HYBRID' && splitDeclared
             ? { hybridSplit: { weeklyPerEntry: splitWeekly, seasonPerEntry: splitSeason } } : {}),
+          ...(marginPayoutMode === 'HYBRID' ? weeklyPayoutsPatch() : {}),
         };
       }
 
@@ -574,6 +735,15 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       lastKnownSplitRef.current = activeMode === 'HYBRID' && splitDeclared
         ? { weeklyPerEntry: splitWeekly, seasonPerEntry: splitSeason }
         : null;
+      // The last list this component knows to be STORED — an emptied editor
+      // cleared it, so there is nothing to re-hydrate on a later return to HYBRID.
+      lastKnownWeeklyPlacesRef.current = activeMode === 'HYBRID' && weeklyPlaces.length > 0 ? weeklyPlaces : null;
+      // …and the editor is no longer dirty (qodo #3). The flag means "edited
+      // since the last save"; leaving it latched made every LATER unrelated save
+      // re-send this list, which would overwrite a newer weekly list saved from
+      // another session between the two saves. What was just written is now the
+      // stored truth, so the next save has nothing of its own to say.
+      setWeeklyPlacesTouched(false);
       toast.success('Pool settings saved!');
       // Drives the per-section buttons' green "Saved!" state. Cleared on a timer
       // rather than left latched, so the NEXT save is visibly a new event —
@@ -1033,6 +1203,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     // silently resurrects the old numbers on the next save.
                     // (codex r3.)
                     if (e.target.value !== 'HYBRID') { setSplitDeclared(false); setSplitWeekly(0); setSplitSeason(0); }
+                    // The weekly place list follows the split exactly — the server
+                    // deletes it on the way out of HYBRID (PLAN-PAYMENT-LEDGER T2 / D1).
+                    if (e.target.value !== 'HYBRID') { setWeeklyPlacesTouched(false); setWeeklyPlaces([]); }
                     // Returning to HYBRID re-hydrates from the STORED split, so
                     // the editor shows what the pool actually has rather than an
                     // undeclared 0/0 sitting on top of live stored numbers — the
@@ -1043,6 +1216,17 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       setSplitSeason(lastKnownSplitRef.current.seasonPerEntry ?? 0);
                       setSplitDeclared(true);
                     }
+                    if (e.target.value === 'HYBRID' && lastKnownWeeklyPlacesRef.current) {
+                      // Re-hydrating is NOT editing (codex r8). Marking it
+                      // touched made a bare toggle away-and-back eligible to
+                      // re-send this list, so a weekly list another session
+                      // saved after this page loaded would be overwritten by a
+                      // later unrelated save here. The stored list survives an
+                      // omitted key, and only a HYBRID-EXIT save deletes it —
+                      // which nulls the ref, so this branch never runs against
+                      // a list the server no longer has.
+                      setWeeklyPlaces(lastKnownWeeklyPlacesRef.current);
+                    }
                   }}
                   className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                 >
@@ -1052,11 +1236,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 </select>
               </div>
 
+              <HybridExitNotice storedMode={storedPayoutMode} selectedMode={payoutMode} hasWeeklyList={!!settings.weeklyPayouts?.places?.length} />
+
               {payoutMode === 'HYBRID' && (
                 <div className="bg-page border border-line rounded-lg p-4 space-y-3">
                   <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Hybrid Entry-Fee Split</p>
                   <p className="text-[11px] font-body text-muted leading-normal">
-                    Whole dollars per entry into each pot — the two must add up to the entry fee exactly. The payout percentages apply to both pots.
+                    Whole dollars per entry into each pot — the two must add up to the entry fee exactly. Each pot gets its own prize places below.
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -1081,6 +1267,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       : <p role="status" className="text-[11px] font-body font-bold text-[#0F7B4A]">✓ ${splitWeekly} weekly + ${splitSeason} season = ${Number(entryFee)} entry fee</p>;
                   })()}
                 </div>
+              )}
+
+              {payoutMode === 'HYBRID' && (
+                <WeeklyPlacesEditor
+                  places={weeklyPlaces}
+                  onChange={next => { setWeeklyPlacesTouched(true); setWeeklyPlaces(next); }}
+                />
               )}
 
               <div>
@@ -1298,6 +1491,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   onChange={e => {
                     setMarginPayoutMode(e.target.value);
                     if (e.target.value !== 'HYBRID') { setSplitDeclared(false); setSplitWeekly(0); setSplitSeason(0); }
+                    if (e.target.value !== 'HYBRID') { setWeeklyPlacesTouched(false); setWeeklyPlaces([]); }
                     // Returning to HYBRID re-hydrates from the STORED split, so
                     // the editor shows what the pool actually has rather than an
                     // undeclared 0/0 sitting on top of live stored numbers — the
@@ -1308,6 +1502,17 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       setSplitSeason(lastKnownSplitRef.current.seasonPerEntry ?? 0);
                       setSplitDeclared(true);
                     }
+                    if (e.target.value === 'HYBRID' && lastKnownWeeklyPlacesRef.current) {
+                      // Re-hydrating is NOT editing (codex r8). Marking it
+                      // touched made a bare toggle away-and-back eligible to
+                      // re-send this list, so a weekly list another session
+                      // saved after this page loaded would be overwritten by a
+                      // later unrelated save here. The stored list survives an
+                      // omitted key, and only a HYBRID-EXIT save deletes it —
+                      // which nulls the ref, so this branch never runs against
+                      // a list the server no longer has.
+                      setWeeklyPlaces(lastKnownWeeklyPlacesRef.current);
+                    }
                   }}
                   className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                 >
@@ -1316,6 +1521,8 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <option value="HYBRID">Hybrid (Season-End + Weekly)</option>
                 </select>
               </div>
+
+              <HybridExitNotice storedMode={storedPayoutMode} selectedMode={marginPayoutMode} hasWeeklyList={!!settings.weeklyPayouts?.places?.length} />
 
               {/* Same split editor as Pick'em — the wizard can declare a Margin
                   split, so the editor must be able to view and adjust it, or an
@@ -1348,6 +1555,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       : <p role="status" className="text-[11px] font-body font-bold text-[#0F7B4A]">✓ ${splitWeekly} weekly + ${splitSeason} season = ${Number(entryFee)} entry fee</p>;
                   })()}
                 </div>
+              )}
+
+              {marginPayoutMode === 'HYBRID' && (
+                <WeeklyPlacesEditor
+                  places={weeklyPlaces}
+                  onChange={next => { setWeeklyPlacesTouched(true); setWeeklyPlaces(next); }}
+                />
               )}
             </div>
           )}

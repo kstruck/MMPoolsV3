@@ -89,10 +89,60 @@ describe('weeklyPlacesFor — the selector (§9 A4 / LEDGER D1 mode matrix)', ()
 });
 
 describe('PayoutsPanel reads the shared helper (R5 — one implementation)', () => {
+  const src = readFileSync(resolve(__dirname, '../src/components/PayoutsPanel.tsx'), 'utf8');
   it('imports potBreakdown from @shared/prizePot and no longer floors its own pots', () => {
-    const src = readFileSync(resolve(__dirname, '../src/components/PayoutsPanel.tsx'), 'utf8');
-    expect(src).toContain("import { potBreakdown } from '@shared/prizePot'");
+    expect(src).toContain("import { potBreakdown, weeklyPlacesFor } from '@shared/prizePot'");
     // The entry-fee block must not carry a private copy of the HYBRID split maths.
     expect(src).not.toMatch(/Math\.floor\(\(split\.weeklyPerEntry/);
+  });
+
+  /**
+   * PLAN-PAYMENT-LEDGER T2 / D1. The panel must not re-derive "which list
+   * prices the weekly pot" — that is `weeklyPlacesFor`'s whole job, and a
+   * second copy of the rule is how the join page and the ledger start printing
+   * different prizes for the same pool.
+   */
+  it('picks the weekly places with weeklyPlacesFor and prices each pot from its OWN list (T2)', () => {
+    expect(src).toContain('weeklyPlacesFor(settings)');
+    // Two lists ⇒ two pot nouns; the combined "weekly total / season" line is
+    // only correct while ONE list prices both pots.
+    expect(src).toContain('potNoun="the weekly pot"');
+    expect(src).toContain('potNoun="the season pot"');
+    expect(src).toContain("separateWeekly = payoutMode === 'HYBRID' && Array.isArray(settings.weeklyPayouts?.places)");
+  });
+
+  /**
+   * qodo #1 on #471, and the rule the repo accepted on #456: never print a
+   * plausible substitute for data that is not there. A legacy HYBRID pool that
+   * declared only one half of its split would have read as a real zero-dollar
+   * allocation on the other half.
+   */
+  it('a MISSING half of the hybrid split is named, never printed as $0 (T2)', () => {
+    expect(src).toContain('const perEntry = (n: number | undefined) =>');
+    expect(src).toContain('an amount your commissioner has not set');
+    expect(src).not.toContain('split.weeklyPerEntry ?? 0');
+    expect(src).not.toContain('split.seasonPerEntry ?? 0');
+  });
+
+  /**
+   * The #423 example under T2: $25 = $18 weekly + $7 season, 10 entries, and a
+   * weekly list that is NOT the season list. Each place resolves against its
+   * own pot — the figures the panel prints.
+   */
+  it('the #423 example with separate lists: $180 weekly pot 60/40, $70 season pot 100 (T2)', () => {
+    const settings = {
+      payoutMode: 'HYBRID' as const,
+      entryFee: 25,
+      hybridSplit: { weeklyPerEntry: 18, seasonPerEntry: 7 },
+      payouts: { places: [{ rank: 1, percentage: 100 }] },
+      weeklyPayouts: { places: [{ rank: 1, percentage: 60 }, { rank: 2, percentage: 40 }] },
+    };
+    const pots = potBreakdown(settings, 10)!;
+    expect(pots.weeklySeasonAllocation).toBe(180);
+    expect(pots.seasonPot).toBe(70);
+    const weekly = weeklyPlacesFor(settings).map(p => Math.floor(pots.weeklySeasonAllocation! * (p.percentage / 100)));
+    expect(weekly).toEqual([108, 72]);
+    const season = settings.payouts.places.map(p => Math.floor(pots.seasonPot! * (p.percentage / 100)));
+    expect(season).toEqual([70]);
   });
 });

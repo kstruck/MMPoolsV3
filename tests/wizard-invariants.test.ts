@@ -283,3 +283,54 @@ describe('the HYBRID split renders under the entry fee, not on the rules step (P
     expect(s).toContain("import { hybridSplitProblem } from '@shared/hybridSplit'");
   });
 });
+
+/**
+ * PLAN-PAYMENT-LEDGER T2 / D2 — the Payouts step grows a SECOND places editor
+ * on HYBRID, because a HYBRID pool has two pots and the D1 matrix gives each
+ * its own list. The trap the plan names (codex r2 on the draft): binding
+ * WEEKLY's single editor to `weeklyPayouts`. `weeklyPayouts` is HYBRID-ONLY —
+ * every other mode reads `settings.payouts`, and the create schema refuses a
+ * weekly list anywhere else.
+ */
+describe('the Payouts step renders two editors on HYBRID and one everywhere else (PLAN-PAYMENT-LEDGER T2 / D2)', () => {
+  const src = (f: string) => readFileSync(resolve(root, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const step = src('src/components/wizard/steps/StepPayouts.tsx');
+
+  it('gates on settings.payoutMode === HYBRID — the same field HybridSplitFields watches', () => {
+    expect(step).toContain("watch('settings.payoutMode') === 'HYBRID'");
+  });
+
+  it('the HYBRID branch binds the weekly editor to settings.weeklyPayouts and the season editor to the payoutsField prop', () => {
+    const hybridBranch = step.slice(step.indexOf('hybrid ? ('), step.indexOf(') : ('));
+    expect(hybridBranch).toContain('payoutsField="settings.weeklyPayouts"');
+    expect(hybridBranch).toContain('payoutsField={payoutsField}');
+    expect(hybridBranch).toContain('Weekly prizes');
+    expect(hybridBranch).toContain('Season prizes');
+  });
+
+  it('the NON-hybrid branch binds ONE editor to the payoutsField prop and never mentions weeklyPayouts', () => {
+    const single = step.slice(step.indexOf(') : ('));
+    expect(single).toContain('<PlacesEditor payoutsField={payoutsField} />');
+    expect(single).not.toContain('weeklyPayouts');
+  });
+
+  it('every wizard that uses the step still passes settings.payouts — T2 did not move the season list', () => {
+    const users = WIZARDS.filter(f => src(f).includes('<StepPayouts'));
+    expect(users.length, 'no wizard renders StepPayouts — re-anchor this test').toBeGreaterThan(0);
+    for (const f of users) {
+      expect(src(f), f).toContain('<StepPayouts payoutsField="settings.payouts" />');
+    }
+  });
+
+  it('the live duplicate-rank check reuses the schema predicate rather than restating the rule', () => {
+    expect(step).toContain("import { DUPLICATE_RANK_MESSAGE, uniqueRanks } from '@shared/schemas/common'");
+    expect(step).toContain('uniqueRanks(ranked)');
+    // …and the editor's own "+ Add place" cannot mint the duplicate it would
+    // then warn about: one past the highest rank present, not `length + 1`.
+    expect(step).toContain('const nextRank = ranked.reduce((max, p) => Math.max(max, p.rank), 0) + 1;');
+    expect(step).not.toContain('rank: fields.length + 1');
+    // Percentages are z.number().min(0).max(100), not integers — a bare number
+    // input defaults to step=1 and marks a 33.3 invalid (qodo #2 on #471).
+    expect(step).toContain('<input type="number" min={0} max={100} step="any"');
+  });
+});
