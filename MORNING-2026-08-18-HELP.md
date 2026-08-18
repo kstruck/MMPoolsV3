@@ -277,16 +277,24 @@ require the deploy, so skip them.
 > **SUPER_ADMIN account is not a valid one** — it unlocks the panel by design, so
 > using it would look like a failure while the code is correct.
 
+**The procedure as it should have been written, and as it was actually run:**
+
 1. Open one of your own **props** pools as yourself (you are its commissioner):
    **https://marchmeleepools.com/pool/&lt;that pool's id or slug&gt;**
 2. In the address bar, add **`?tab=admin`** to the end and press Enter.
 3. **You should see** the props commissioner panel, because you ARE the
-   commissioner. That is correct.
-4. Now do the same thing while signed in as a **non-commissioner** — if you have a
-   second test account, use it; if not, skip this and tell me and I will script it.
-5. **You should see** the ordinary Overview tab, **not** the admin panel. **If a
-   non-commissioner sees the admin panel**, stop and tell me immediately — that is
-   the exposure codex caught and it would mean the fix did not ship.
+   commissioner. That is correct — and it is the half that proves the check is
+   live rather than the tab simply not existing.
+4. Now open **the same URL in a private / incognito window**, where you are signed
+   out. No second account and no pool membership needed.
+5. **You should see** the ordinary Overview tab, **not** the admin panel. Repeat
+   with **`?tab=grading`**.
+6. **If a signed-out viewer sees the admin panel**, stop and tell me immediately —
+   that is the exposure codex caught and it would mean the fix did not ship.
+
+⚠️ **Do not run step 4 as a SUPER_ADMIN.** `isAdmin` unlocks the panel too, by
+design, so a super-admin account seeing it is correct behaviour and would read as
+a failure. Incognito sidesteps the question entirely.
 
 ### Step 5 — the type-a-tab check, and Back ✅ DONE
 
