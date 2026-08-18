@@ -304,6 +304,25 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // The pool's STORED mode, for the HYBRID → WEEKLY notice (D1): leaving HYBRID
   // deletes the weekly list and promotes the season list to be the weekly one.
   const storedPayoutMode: string | undefined = settings.payoutMode;
+  /**
+   * What this save should say about `weeklyPayouts`, on a HYBRID save only.
+   *
+   * The editor's own promise is "leave the list empty and the season places
+   * price both pots" — so an emptied editor must not store `{ places: [] }`,
+   * which `weeklyPlacesFor` reads as "this pool pays NO weekly prizes" and
+   * would leave the whole weekly pot unassigned. (codex r1.)
+   *
+   * Emptying a list the pool ALREADY HAS is the same instruction, so it has to
+   * reach the server: omitting the key would leave the stored list pricing
+   * every week while the screen shows an empty editor. `null` is the clear —
+   * `weeklyPlacesFor` reads a stored null exactly like an absent field, and the
+   * callable's own gate treats null as "not a list to validate".
+   */
+  const weeklyPayoutsPatch = (): Record<string, unknown> => {
+    if (!weeklyPlacesDeclared) return {};
+    if (weeklyPlaces.length > 0) return { weeklyPayouts: { places: weeklyPlaces } };
+    return settings.weeklyPayouts ? { weeklyPayouts: null } : {};
+  };
   const [pointsPerPick, setPointsPerPick] = useState<number>(settings.pointsPerPick ?? 1);
   const [thursdayBonus, setThursdayBonus] = useState<number>(settings.primetimeBonus?.thursday ?? 0);
   const [sundayNightBonus, setSundayNightBonus] = useState<number>(settings.primetimeBonus?.sundayNight ?? 0);
@@ -623,11 +642,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           ...(payoutMode === 'HYBRID' && splitDeclared
             ? { hybridSplit: { weeklyPerEntry: splitWeekly, seasonPerEntry: splitSeason } } : {}),
           // Same rule as the split (PLAN-PAYMENT-LEDGER T2 / D1): sent only while
-          // HYBRID and declared. Leaving HYBRID omits it and the callable deletes
-          // the stored copy in the same write; sending it on a non-hybrid save
-          // would be refused (WEEKLY_PAYOUTS_WRONG_MODE).
-          ...(payoutMode === 'HYBRID' && weeklyPlacesDeclared
-            ? { weeklyPayouts: { places: weeklyPlaces } } : {}),
+          // HYBRID. Leaving HYBRID omits it and the callable deletes the stored
+          // copy in the same write; sending it on a non-hybrid save would be
+          // refused (WEEKLY_PAYOUTS_WRONG_MODE). See weeklyPayoutsPatch for what
+          // an emptied editor sends.
+          ...(payoutMode === 'HYBRID' ? weeklyPayoutsPatch() : {}),
           weeklyTiebreaker,
           pointsPerPick,
           ...(Object.keys(primetimeBonus).length > 0 ? { primetimeBonus } : { primetimeBonus: null }),
@@ -655,8 +674,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           lockBufferMinutes,
           ...(marginPayoutMode === 'HYBRID' && splitDeclared
             ? { hybridSplit: { weeklyPerEntry: splitWeekly, seasonPerEntry: splitSeason } } : {}),
-          ...(marginPayoutMode === 'HYBRID' && weeklyPlacesDeclared
-            ? { weeklyPayouts: { places: weeklyPlaces } } : {}),
+          ...(marginPayoutMode === 'HYBRID' ? weeklyPayoutsPatch() : {}),
         };
       }
 
@@ -685,7 +703,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       lastKnownSplitRef.current = activeMode === 'HYBRID' && splitDeclared
         ? { weeklyPerEntry: splitWeekly, seasonPerEntry: splitSeason }
         : null;
-      lastKnownWeeklyPlacesRef.current = activeMode === 'HYBRID' && weeklyPlacesDeclared ? weeklyPlaces : null;
+      // The last list this component knows to be STORED — an emptied editor
+      // cleared it, so there is nothing to re-hydrate on a later return to HYBRID.
+      lastKnownWeeklyPlacesRef.current = activeMode === 'HYBRID' && weeklyPlaces.length > 0 ? weeklyPlaces : null;
       toast.success('Pool settings saved!');
       // Drives the per-section buttons' green "Saved!" state. Cleared on a timer
       // rather than left latched, so the NEXT save is visibly a new event —

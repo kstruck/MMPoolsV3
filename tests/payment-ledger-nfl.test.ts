@@ -118,18 +118,33 @@ describe('manager Settings — the HYBRID weekly place list (T2)', () => {
   const mgr = code('src/components/NFLPoolDashboard/NFLManagerView.tsx');
   const count = (re: RegExp) => mgr.match(re)?.length ?? 0;
 
-  it("sends weeklyPayouts only while HYBRID and declared — on Pick'em AND on Margin", () => {
-    expect(mgr).toContain("...(payoutMode === 'HYBRID' && weeklyPlacesDeclared");
-    expect(mgr).toContain("...(marginPayoutMode === 'HYBRID' && weeklyPlacesDeclared");
+  it("sends weeklyPayouts only while HYBRID — on Pick'em AND on Margin", () => {
+    expect(mgr).toContain("...(payoutMode === 'HYBRID' ? weeklyPayoutsPatch() : {}),");
+    expect(mgr).toContain("...(marginPayoutMode === 'HYBRID' ? weeklyPayoutsPatch() : {}),");
     // One send per pool type, and nowhere else — a third would be a save path
     // that has not been mode-gated.
-    expect(count(/\{ weeklyPayouts: \{ places: weeklyPlaces \} \}/g)).toBe(2);
+    expect(count(/weeklyPayoutsPatch\(\)/g)).toBe(2);
+    expect(mgr).toContain('const weeklyPayoutsPatch = (): Record<string, unknown> => {');
+  });
+
+  /**
+   * The editor promises "leave the list empty and the season places price both
+   * pots". An emptied editor that stored `{ places: [] }` would break that
+   * promise the expensive way: `weeklyPlacesFor` reads an empty list as "no
+   * weekly prizes", leaving the whole weekly pot unassigned. (codex r1.)
+   */
+  it('an emptied editor CLEARS a stored list and stores nothing when there was none — never an empty list', () => {
+    expect(mgr).toContain('if (weeklyPlaces.length > 0) return { weeklyPayouts: { places: weeklyPlaces } };');
+    expect(mgr).toContain('return settings.weeklyPayouts ? { weeklyPayouts: null } : {};');
+    expect(mgr).toContain('if (!weeklyPlacesDeclared) return {};');
+    // `{ places: [] }` must never be constructed by this file.
+    expect(mgr).not.toMatch(/weeklyPayouts: \{ places: \[\] \}/);
   });
 
   it('leaving HYBRID clears the list locally and returning re-hydrates from the last KNOWN-STORED one, never the lagging prop', () => {
     expect(count(/if \(e\.target\.value !== 'HYBRID'\) \{ setWeeklyPlacesDeclared\(false\); setWeeklyPlaces\(\[\]\); \}/g)).toBe(2);
     expect(count(/setWeeklyPlaces\(lastKnownWeeklyPlacesRef\.current\);/g)).toBe(2);
-    expect(mgr).toContain("lastKnownWeeklyPlacesRef.current = activeMode === 'HYBRID' && weeklyPlacesDeclared ? weeklyPlaces : null;");
+    expect(mgr).toContain("lastKnownWeeklyPlacesRef.current = activeMode === 'HYBRID' && weeklyPlaces.length > 0 ? weeklyPlaces : null;");
   });
 
   it('renders the editor on both HYBRID surfaces and warns on the way out (D1)', () => {
