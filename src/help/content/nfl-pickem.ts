@@ -85,7 +85,17 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
       // which games those are. Earlier drafts named kickoff, then the deadline,
       // and both were false for some pool.
       'You can submit again as often as you like while the sheet is still open. The last one that lands is the one that counts.',
-      'The sheet shows which games are still open. Once a pick has closed nobody can reopen it for you — only your commissioner can extend a week, and only before that week’s results have been shown.',
+      // THE EXTENSION CLAUSE IS GONE (codex R11), and only half its reasoning
+      // was right. The SERVER does honour an override: `submitNFLPicks` builds
+      // `lockSettings` from `effectiveLockSettings(pool.settings, type)`
+      // (`nflPools.ts:481`), which passes `weekLockOverrides` straight through
+      // for Pick'em, and `effectiveGameLockAt` takes `max(base, override)`. But
+      // the CLIENT never reads it — `NFLPoolDashboard.tsx:515-534` computes the
+      // sheet's lock from the earliest kickoff and the buffer alone — so the
+      // member's sheet stays closed and the extension only reaches them through
+      // a commissioner proxy pick. Promising it would be promising a door the
+      // reader cannot open. Same root cause as the withdrawn lock topics.
+      'The sheet shows which games are still open. Once a pick has closed nobody can reopen it for you.',
     ].join('\n\n'),
     fields: [],
     poolTypes: PICKEM,
