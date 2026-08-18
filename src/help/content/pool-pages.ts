@@ -206,7 +206,12 @@ const NFL_PAGES = poolPages({
       subTab: 'scoring',
       title: 'NFL commissioner — Scoring',
       summary:
-        'Scores come in automatically as games finish. This is where you check a week, re-run it, or correct a result the feed got wrong.',
+      // NARROWED IN T9. The tab's only control is "Score & Recap <week>"
+      // (`NFLManagerView.tsx:1596-1640`) and `scoreNFLWeek` refuses it while any
+      // game is unfinished unless the caller is a SUPER_ADMIN — so there is no
+      // per-result correction here, and a commissioner cannot score early. The
+      // first draft implied both.
+        'Scores come in automatically as games finish. This is where you check a week and run it again after a result changes.',
       audience: HOST,
     },
     {

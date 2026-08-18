@@ -80,6 +80,12 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
       'Off, the only way in is the link you send. Anyone holding that link can still join: this controls listing, not access.',
       'You can change it later without affecting anyone who has already joined.',
     ].join('\n\n'),
+    // ONE control, TWO stored paths. `buildNFLPayload.ts:84,88` and
+    // `buildPlayoffPayload.ts:45` both write this checkbox's value to the
+    // top-level flag AND to `settings.isListedPublic`; nothing offers the two
+    // separately. Voice rule 10 — one concept, one topic — so the second path
+    // is claimed here rather than given a duplicate explanation. (T9)
+    fields: ['isPublic', 'settings.isListedPublic'],
     poolTypes: 'all',
     audience: HOST_ONLY,
   },

@@ -68,11 +68,10 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
 
   // ---- PENDING: NFL Pick'em (T9) -----------------------------------------
   seasonType: 'T13: explained for the three NFL season types by the seasonType topic (T1). SQUARES and PROPS also carry the field and have no control for it, so the row stays until their content ticket accounts for it.',
-  'settings.lockMode': 'T9: per-game or weekly lock.',
-  'settings.confidenceMode': 'T9: confidence points mode.',
-  'settings.pointsPerPick': 'T9: base points per correct pick — manager settings only, no wizard control.',
-  'settings.lockBufferMinutes': 'T9: lock buffer — manager settings only, no wizard control.',
-  'settings.isListedPublic': 'T9: whether an NFL pool appears in the public browse list.',
+  // T9 removed lockMode, confidenceMode, lockBufferMinutes and isListedPublic.
+  // `settings.pointsPerPick` is the one row T9 could NOT close, and the reason
+  // is a product defect rather than missing copy — see below.
+  'settings.pointsPerPick': "T9-BLOCKED: the value is INERT. `scorePickemEntry` (functions/src/nflScoringEngine.ts:174-178) awards exactly 1 per correct pick on a non-confidence pool and never reads this field, while NFLManagerView.tsx:1336 lets a commissioner set 1-10 and NFLPoolRules.tsx:158,220 shows the chosen number to members as what a pick is worth. Any help copy here would either repeat that claim or document the bug. Kevin's call: honour it in the scorer, or drop the control. Raised in the T9 PR body and MORNING-2026-08-18-HELP-T9.md.",
 
   // ---- PENDING: NFL Survivor (T10) ---------------------------------------
   'settings.maxStrikes': 'T10: how many wrong picks before elimination.',
@@ -195,9 +194,8 @@ export const WIZARD_FIELD_ALLOWLIST: Readonly<Record<string, string>> = Object.f
   '*.places.*.rank': 'PERMANENT: the payouts editor binds its rows to a path passed in as a prop, so this register() call cannot name a topic. It carries an explicit helpId to settings.payouts.places.*.rank.',
   '*.places.*.percentage': 'PERMANENT: same editor, same reason; explicit helpId to settings.payouts.places.*.percentage.',
 
-  // ---- PENDING: NFL Pick'em (T9) -----------------------------------------
-  'settings.lockMode': 'T9: per-game or weekly lock.',
-  'settings.confidenceMode': 'T9: confidence points mode.',
+  // ---- NFL Pick'em: DONE (T9). Both rows removed — the wizard's lock-mode and
+  // confidence controls resolve to topics in `content/nfl-pickem.ts`.
 
   // ---- PENDING: NFL Survivor (T10) ---------------------------------------
   'settings.maxStrikes': 'T10: how many wrong picks before elimination.',
