@@ -164,7 +164,11 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
 export const NFL_PICKEM_PLACEMENTS: readonly HelpPlacement[] = [
   // Create wizard — the rules step.
   { topic: 'settings.lockMode', page: 'wizard.pickem.rules', section: 'rules', order: 10 },
-  { topic: 'settings.lockBufferMinutes', page: 'wizard.pickem.rules', section: 'rules', order: 11 },
+  // NOT settings.lockBufferMinutes (codex R3). The wizard's rules step has no
+  // control for it — `CreateNFLPickemPool.tsx` only seeds the default of 5 —
+  // and a wizard STEP page lists the options on that step. Its help lives on
+  // the read-only surfaces where the deadline matters and on the manager
+  // settings tab, which is the one screen that can change it.
   { topic: 'settings.confidenceMode', page: 'wizard.pickem.rules', section: 'rules', order: 12 },
 
   // What a member reads to find out what they joined.
