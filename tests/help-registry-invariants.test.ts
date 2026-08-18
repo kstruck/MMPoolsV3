@@ -56,6 +56,38 @@ const page = (over: Partial<HelpPage> = {}): HelpPage => ({
   ...over,
 });
 
+/**
+ * Topics with no placement — nothing in the panel would ever show them.
+ *
+ * Matched on the BASE id: a scoped variant (`NFL_SURVIVOR:settings.entryFee`)
+ * is placed under `settings.entryFee`, because both variants explain the same
+ * setting in the same place. Comparing the qualified id would report every
+ * scoped variant as an orphan and make the feature's own scoping model
+ * unusable in real content.
+ */
+function orphanTopics(
+  topics: readonly HelpTopic[],
+  placements: readonly { topic: string }[],
+): string[] {
+  const placed = new Set(placements.map((p) => p.topic));
+  return topics.filter((t) => !placed.has(baseTopicId(t.id))).map((t) => t.id);
+}
+
+describe('orphanTopics', () => {
+  it('accepts a scoped variant placed under its base id', () => {
+    const topics = [topic({ id: 'NFL_SURVIVOR:settings.entryFee' })];
+    expect(orphanTopics(topics, [{ topic: 'settings.entryFee' }])).toEqual([]);
+  });
+
+  it('still reports a topic nothing places', () => {
+    expect(orphanTopics([topic({ id: 'settings.lonely' })], [])).toEqual(['settings.lonely']);
+  });
+
+  it('matches an indexed placement to its normalised topic', () => {
+    expect(orphanTopics([topic({ id: 'props.questions.*.text' })], [{ topic: 'props.questions.*.text' }])).toEqual([]);
+  });
+});
+
 describe('normalizePath', () => {
   it('collapses array indices so one topic covers every row', () => {
     expect(normalizePath('props.questions.3.text')).toBe('props.questions.*.text');
@@ -458,9 +490,7 @@ describe('the real registry — content rules', () => {
   const topics = [...helpRegistry.topics.values()];
 
   it('every topic has at least one placement', () => {
-    const placed = new Set(helpRegistry.placements.map((p) => p.topic));
-    const orphans = topics.filter((t) => !placed.has(normalizePath(t.id))).map((t) => t.id);
-    expect(orphans).toEqual([]);
+    expect(orphanTopics(topics, helpRegistry.placements)).toEqual([]);
   });
 
   it('every topic pool-type scope names real pool types', () => {
