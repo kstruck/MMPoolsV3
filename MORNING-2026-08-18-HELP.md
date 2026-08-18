@@ -5,14 +5,19 @@ This file continues `MORNING-2026-08-18.md` for a different effort and supersede
 That doc remains the entry point for the PLAN-PAYMENT-LEDGER T2 work; this one
 covers only `PLAN-HELP-SYSTEM.md`. Read whichever matches what you are doing.
 
-> ✅ **NOTHING NEEDS YOU. This whole runbook is DONE.** You took §7 step 2's
-> option A, redeployed `www`, and verified the panel and the privilege guard on
-> the live site. Kept as the record of what shipped and what was checked — the
-> steps below are history, not a to-do list.
+> ✅ **THE DEPLOY AND THE GUARD CHECK ARE DONE.** You took §7 step 2's option A,
+> redeployed `www`, opened the panel with `?` on the live site, and confirmed the
+> privilege guard on a real props pool. Steps 1–5 below are the record of that,
+> not a to-do list.
 >
-> ⚠️ **What that decision leaves owed: T16.** You knowingly took T15 before it, so
-> the `?` shortcut is live resting on the CSS-class fallback for ~35 overlay
-> shells. See §5.
+> ⚠️ **BUT T15 IS NOT FINISHED, AND DO NOT LET THIS DOC CONVINCE ANYONE IT IS.**
+> T15 is "Coolify deploy + prod smoke", and its smoke list in `PLAN-HELP-SYSTEM.md`
+> §7 has four checks. **Two are done and two have never been run** — see §7 step 7.
+> Neither is urgent and neither blocks anything; both take about a minute.
+>
+> ⚠️ **And T16 is still owed.** You knowingly took T15 before it, so the `?`
+> shortcut is live resting on the CSS-class fallback for ~35 overlay shells.
+> See §5.
 
 **Three PRs merged: #472 (T0), #475 (T1) and #477 (T2).** You already deployed and
 verified T1 — tooltips on the create wizard, playoff pools still listing correctly
@@ -288,10 +293,31 @@ require the deploy, so skip them.
    than leaving the pool. Before T2 this worked on NFL and Bracket only; it now
    works on Props, Playoff and the Squares manager panel too.
 
-### Step 6 — nothing else needs you
+### Step 6 — nothing needs a deploy
 
 No `functions/` deploy, no `firestore.rules` deploy, no indexes, no production data
 migration. T2 touched none of them.
+
+### Step 7 — the two T15 smoke checks nobody has run ⬜ OPEN
+
+T15's smoke list is *"`?` on `/pool/:id` for each type, tooltip on a phone, search
+'tiebreaker', `?` while a modal is open"*. The deploy is done and the panel opens.
+**These two have never been run by anyone**, and I could not run them — one needs a
+phone, both need production.
+
+Neither blocks anything. Do them when convenient, or say so and I will carry them
+into the next morning doc.
+
+1. **On your phone**, open **https://marchmeleepools.com/create/pickem** and tap
+   the `?` button in the header. **You should see** the panel cover the full width
+   of the screen with a dark backdrop behind it — on a phone it is a modal, not
+   the side drawer you saw on desktop. **Nobody has ever seen that branch of the
+   layout.** If it looks wrong, screenshot it and send it to me.
+2. **On desktop**, open any pool, open a dialog (Share is easiest), and **press `?`
+   while it is open**. **You should see nothing happen** — the panel must stay shut
+   while a dialog owns the screen. Close the dialog, press `?` again, and now it
+   should open. **If the panel opens over the dialog**, tell me: that is the
+   overlay arbitration failing, and it is exactly what T16 exists to make robust.
 
 ## 8. What is NOT done
 

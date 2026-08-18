@@ -33,11 +33,18 @@ inventories), `PLAN-HELP-SYSTEM-REVIEW-LOG.md` (codex rounds).
       round 6 before signing.
 - [x] Kevin's sign-off on §6 — **given 2026-08-17** ("start building"), K1–K13 as
       recommended. Round 6 was never bought; he signed on the round-5 state.
-- [~] Implementation (T-tickets §7) — **T0, T1, T2 done and merged; T2 deployed
-      and prod-verified 2026-08-18. T3–T16 outstanding.** T16 is OVERDUE rather
-      than pending: it is a stated prerequisite of T15, and T15 was taken first
-      knowingly, so the `?` shortcut is live on the CSS-class fallback for ~35
-      un-migrated overlay shells.
+- [~] Implementation (T-tickets §7) — **T0, T1, T2 done and merged. T3–T14 and
+      T16 unstarted.**
+- [~] **T15 is PARTIALLY done, not unstarted.** Its definition is "Coolify deploy
+      + prod smoke". The deploy half happened 2026-08-18: Kevin redeployed `www`,
+      opened the panel with `?`, and verified the K13 privilege guard on a live
+      props pool. **Two of its four smoke checks have never been run** — the
+      tooltip on a phone (the panel's mobile modal branch has been seen by nobody)
+      and `?` while a modal is open. Listed in `MORNING-2026-08-18-HELP.md` §7
+      step 7.
+- [ ] **T16 is OVERDUE rather than pending** — a stated prerequisite of T15, and
+      T15's deploy half was taken first knowingly, so the `?` shortcut is live in
+      production on the CSS-class fallback for ~35 un-migrated overlay shells.
 
 ## 0. What Kevin asked for, verbatim, and what it means precisely
 

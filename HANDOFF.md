@@ -96,10 +96,18 @@
 > nobody had checked (a Payments tab that is read-only for members, and a
 > per-game rather than per-week pick reveal).
 >
-> **Unverified and said so on the PR: there is no browser walkthrough of the
-> panel.** Every help route is behind a login and the preview server serves the
-> primary checkout, not a worktree. Keyboard and focus behaviour is covered by 22
-> DOM tests; how it LOOKS is not. Kevin's redeploy check is the first real look.
+> ✅ **The desktop walkthrough is DONE (Kevin, 2026-08-18)** — this paragraph used
+> to say there had been none, which was true at merge and is not now. Every help
+> route is behind a login and the preview server serves the primary checkout, so I
+> could only prove behaviour (22 DOM tests: `?` toggling, Escape returning focus,
+> the tooltip's ARIA, search, pool-type filtering) and not appearance. Kevin
+> closed that on the live site.
+>
+> ⬜ **STILL UNSEEN BY ANYONE: the panel on a PHONE**, where it renders as a modal
+> with a backdrop rather than a side drawer — and `?` while a dialog is open. Both
+> are T15 smoke checks, both are open, and both are one minute each. Steps in
+> `MORNING-2026-08-18-HELP.md` §7 step 7. **T15 is therefore PARTIALLY done, not
+> unstarted** — do not record it either way without that distinction.
 >
 > **T9 is next and is NOT started** — NFL Pick'em option copy, and this week's
 > invites are Pick'em. Order after it is unchanged: T4, T3, T10/T11. **T16 remains
