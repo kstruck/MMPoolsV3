@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hrefForPage, isPageOffered, pageSpecificity, resolveHelpPage } from '../src/help/route-match';
+import { canOpenPage, hrefForPage, isPageOffered, pageSpecificity, resolveHelpPage } from '../src/help/route-match';
 import { helpRegistry } from '../src/help/registry';
 import type { HelpPage, HelpRouteContext } from '../src/help/types';
 
@@ -170,6 +170,47 @@ describe('offeredTabs — a tab this pool does not have is not a screen', () => 
 
   it('never filters the page with no tab at all', () => {
     expect(isPageOffered(helpRegistry.getPage('pool.nfl')!, survivor())).toBe(true);
+  });
+});
+
+describe('canOpenPage — reachable from where the reader is standing (codex R12)', () => {
+  /**
+   * The live case. A commissioner in `/create/pickem` has `NFL_PICKEM` in scope,
+   * because the wizard publishes the pool type — so every NFL pool page is
+   * VISIBLE. None of them is REACHABLE: their links are built from
+   * `ctx.pathname` (a pool's id lives in the URL and the content cannot know it),
+   * so from the wizard route the builder would produce `/create/pickem?tab=picks`,
+   * which is not a pool.
+   */
+  const inWizard = ctx({ pathname: '/create/pickem', poolType: 'NFL_PICKEM' });
+  const inPool = ctx({ pathname: '/pool/abc', poolType: 'NFL_PICKEM' });
+  const picks = () => helpRegistry.getPage('pool.nfl.picks')!;
+
+  it('a pool page builds no link from a wizard path, and is not openable there', () => {
+    expect(hrefForPage(picks(), inWizard)).toBeNull();
+    expect(canOpenPage(picks(), inWizard, HOST)).toBe(false);
+  });
+
+  it('the same page IS openable from the pool route', () => {
+    expect(hrefForPage(picks(), inPool)).toBe('/pool/abc?tab=picks');
+    expect(canOpenPage(picks(), inPool, MEMBER)).toBe(true);
+  });
+
+  it('a wizard STEP page is openable in place — no link, but it is this route', () => {
+    // The K13 unlinked case must stay reachable: `href` is null by design and the
+    // panel shows it where the reader already is.
+    const step = helpRegistry.getPage('wizard.pickem.rules')!;
+    expect(hrefForPage(step, inWizard)).toBeNull();
+    expect(canOpenPage(step, inWizard, HOST)).toBe(true);
+  });
+
+  it('refuses a page for another pool type, and one whose tab is not offered', () => {
+    const bracket = helpRegistry.getPage('pool.bracket.standings')!;
+    expect(canOpenPage(bracket, inPool, MEMBER)).toBe(false);
+    const results = helpRegistry.getPage('pool.nfl.results')!;
+    expect(canOpenPage(results, { ...inPool, offeredTabs: ['picks', 'standings'] }, MEMBER)).toBe(false);
+    // Discriminating: offered, and it opens.
+    expect(canOpenPage(results, { ...inPool, offeredTabs: ['picks', 'results'] }, MEMBER)).toBe(true);
   });
 });
 

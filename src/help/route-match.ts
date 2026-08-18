@@ -58,7 +58,7 @@ export function resolveHelpPage(
 }
 
 /** Is this page on the route the reader is currently on? */
-function onCurrentRoute(page: HelpPage, ctx: HelpRouteContext): boolean {
+export function onCurrentRoute(page: HelpPage, ctx: HelpRouteContext): boolean {
   return (
     matchPath(page.route, ctx.pathname) !== null ||
     (page.altRoutes ?? []).some((route) => matchPath(route, ctx.pathname) !== null)
@@ -94,4 +94,26 @@ export function isPageOffered(page: HelpPage, ctx: HelpRouteContext): boolean {
 export function hrefForPage(page: HelpPage, ctx: HelpRouteContext): string | null {
   if (!isPageOffered(page, ctx)) return null;
   return page.href ? page.href(ctx) : null;
+}
+
+/**
+ * Can the reader open this page from where they are standing?
+ *
+ * ONE predicate, three readers — "All pages" decides whether to render a row as a
+ * button, `goToPage` refuses anything it says no to, and the two therefore cannot
+ * disagree about what is reachable. Three ways it says no:
+ *
+ *   - the page is outside the reader's scope (another pool type, another
+ *     audience) — codex R7;
+ *   - its tab is one this surface is not offering — codex R5;
+ *   - it has no usable link AND is not on the route the reader is on, so neither
+ *     navigating nor showing it in place would be honest — codex R12. A pool page
+ *     listed while the reader is in a create wizard is the live case: the wizard
+ *     publishes the pool type, so the page is in scope, but there is no pool id
+ *     to build a URL from.
+ */
+export function canOpenPage(page: HelpPage, ctx: HelpRouteContext, audience: Audience): boolean {
+  if (!isEntryVisible(page.poolTypes, page.audience, { poolType: ctx.poolType, audience })) return false;
+  if (!isPageOffered(page, ctx)) return false;
+  return hrefForPage(page, ctx) !== null || onCurrentRoute(page, ctx);
 }

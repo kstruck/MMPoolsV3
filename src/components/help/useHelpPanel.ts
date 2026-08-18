@@ -15,8 +15,7 @@ import type { Registry, TopicScope } from '../../help/registry';
 import { baseTopicId } from '../../help/registry';
 import { baseRegistry, loadAdminRegistry } from '../../help/admin';
 import { usePublishedRoute } from '../../help/publish';
-import { hrefForPage, isPageOffered, resolveHelpPage } from '../../help/route-match';
-import { isEntryVisible } from '../../help/visibility';
+import { canOpenPage, hrefForPage, resolveHelpPage } from '../../help/route-match';
 
 /**
  * What the header button needs: whether the panel is open, and how to toggle
@@ -213,8 +212,7 @@ export function useHelpPanelState(options: { isAdmin: boolean; defaultAudience?:
       // Stated here as well as in the list, so a caller that reaches this by any
       // other door (a `related` link, a `?help=` deep link someone pasted) gets
       // the same answer.
-      const inScope = isEntryVisible(next.poolTypes, next.audience, scope);
-      if (!inScope || !isPageOffered(next, routeContext)) {
+      if (!canOpenPage(next, routeContext, scope.audience)) {
         setActiveTopicId(undefined);
         return;
       }

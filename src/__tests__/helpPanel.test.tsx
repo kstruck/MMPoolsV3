@@ -293,6 +293,24 @@ describe('the panel contents', () => {
   });
 });
 
+describe('a pool page listed from the create wizard (codex R12)', () => {
+  it('is text, not a button — the wizard route cannot build a pool link', async () => {
+    const picks = helpRegistry.getPage('pool.nfl.picks')!;
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    // Listed, because the wizard publishes NFL_PICKEM and the page is in scope…
+    expect(screen.getByText(picks.title)).toBeTruthy();
+    // …and not linked, because `/create/pickem?tab=picks` is not a pool.
+    expect(screen.queryByRole('button', { name: picks.title })).toBeNull();
+    // Discriminating: a page on THIS route is a button.
+    expect(
+      screen.getByRole('button', { name: helpRegistry.getPage('wizard.pickem.fee')!.title }),
+    ).toBeTruthy();
+  });
+});
+
 describe('a glossary search hit (codex R9)', () => {
   it('opens the definition it names, wherever the card lives', async () => {
     // A term NOT referenced by this page's topics, so its card sits inside the

@@ -20,6 +20,7 @@
 // the reader is actually in would take them to a tab that pool has no idea
 // about.
 
+import { matchPath } from 'react-router';
 import type { Audience, HelpPage, HelpRouteContext } from '../types';
 import type { PoolType } from '@shared/poolTypes';
 
@@ -59,7 +60,15 @@ function poolPages(args: {
    * setters preserve it. A help link that dropped it would quietly reset the
    * reader's week, which is worse than not linking at all.
    */
-  const withTab = (ctx: { pathname: string; search?: string }, tab?: string, subTab?: string) => {
+  const ownRoutes = [route, ...(altRoutes ?? [])];
+  const withTab = (ctx: HelpRouteContext, tab?: string, subTab?: string) => {
+    // ONLY from a path this page actually lives on (codex R12). These links are
+    // built from `ctx.pathname` because a pool's id is in the URL and this file
+    // cannot know it — so from anywhere else the result is a URL for the wrong
+    // screen. A commissioner in `/create/pickem` sees these pages listed, because
+    // the wizard publishes the pool type; `?tab=picks` on the wizard route is not
+    // a pool. Unlinked is the honest answer, and `canOpenPage` renders it as text.
+    if (!ownRoutes.some((r) => matchPath(r, ctx.pathname))) return null;
     const params = new URLSearchParams(ctx.search ?? '');
     if (tab === undefined) params.delete('tab');
     else params.set('tab', tab);

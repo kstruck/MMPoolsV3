@@ -13,7 +13,7 @@ import { Search } from 'lucide-react';
 import type { HelpSearchResult } from '../../help/types';
 import { SEARCH_RESULT_LIMIT } from '../../help/registry';
 import { audienceSatisfies, isEntryVisible } from '../../help/visibility';
-import { isPageOffered } from '../../help/route-match';
+import { canOpenPage, isPageOffered } from '../../help/route-match';
 import type { HelpPanelState } from './useHelpPanel';
 import {
   AllPages,
@@ -259,8 +259,8 @@ export function HelpPanelBody({ state, searchInputRef }: {
             <AllPages
               pages={allPages}
               currentPageId={page?.id}
-              // A page outside the reader's current scope is listed, not linked.
-              isReachable={(p) => isEntryVisible(p.poolTypes, p.audience, scope)}
+              // Listed, not linked, unless the reader can actually get there.
+              isReachable={(p) => canOpenPage(p, routeContext, scope.audience)}
               onSelect={openPage}
             />
             {hasOtherPoolTypes ? (
