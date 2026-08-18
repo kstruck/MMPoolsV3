@@ -299,8 +299,16 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // list on the next save, and re-hydrating from the realtime `settings` prop
   // would read a copy that lags the delete. (The codex r3/r6 pair on the split.)
   const [weeklyPlaces, setWeeklyPlaces] = useState<PlaceRow[]>(settings.weeklyPayouts?.places ?? []);
-  const [weeklyPlacesDeclared, setWeeklyPlacesDeclared] = useState<boolean>(!!settings.weeklyPayouts);
-  const lastKnownWeeklyPlacesRef = useRef<PlaceRow[] | null>(settings.weeklyPayouts?.places ?? null);
+  // "Touched", NOT "the pool has one" (codex r2). A stored `{ places: [] }` is a
+  // VALID, deliberate configuration — this pool pays no weekly prizes — and
+  // seeding this from the stored value made every unrelated settings save
+  // rewrite it to the fallback. Only an edit in THIS session sends the key.
+  const [weeklyPlacesTouched, setWeeklyPlacesTouched] = useState<boolean>(false);
+  // Non-empty only, for the same reason: re-hydrating an empty stored list on a
+  // return to HYBRID would mark it touched and clear a deliberate empty list.
+  const lastKnownWeeklyPlacesRef = useRef<PlaceRow[] | null>(
+    settings.weeklyPayouts?.places?.length ? settings.weeklyPayouts.places : null,
+  );
   // The pool's STORED mode, for the HYBRID → WEEKLY notice (D1): leaving HYBRID
   // deletes the weekly list and promotes the season list to be the weekly one.
   const storedPayoutMode: string | undefined = settings.payoutMode;
@@ -317,9 +325,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
    * every week while the screen shows an empty editor. `null` is the clear —
    * `weeklyPlacesFor` reads a stored null exactly like an absent field, and the
    * callable's own gate treats null as "not a list to validate".
+   *
+   * An UNTOUCHED editor sends nothing at all, so a stored `{ places: [] }` — a
+   * deliberate "no weekly prizes" — survives every unrelated settings save
+   * (codex r2).
    */
   const weeklyPayoutsPatch = (): Record<string, unknown> => {
-    if (!weeklyPlacesDeclared) return {};
+    if (!weeklyPlacesTouched) return {};
     if (weeklyPlaces.length > 0) return { weeklyPayouts: { places: weeklyPlaces } };
     return settings.weeklyPayouts ? { weeklyPayouts: null } : {};
   };
@@ -1167,7 +1179,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     if (e.target.value !== 'HYBRID') { setSplitDeclared(false); setSplitWeekly(0); setSplitSeason(0); }
                     // The weekly place list follows the split exactly — the server
                     // deletes it on the way out of HYBRID (PLAN-PAYMENT-LEDGER T2 / D1).
-                    if (e.target.value !== 'HYBRID') { setWeeklyPlacesDeclared(false); setWeeklyPlaces([]); }
+                    if (e.target.value !== 'HYBRID') { setWeeklyPlacesTouched(false); setWeeklyPlaces([]); }
                     // Returning to HYBRID re-hydrates from the STORED split, so
                     // the editor shows what the pool actually has rather than an
                     // undeclared 0/0 sitting on top of live stored numbers — the
@@ -1180,7 +1192,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     }
                     if (e.target.value === 'HYBRID' && lastKnownWeeklyPlacesRef.current) {
                       setWeeklyPlaces(lastKnownWeeklyPlacesRef.current);
-                      setWeeklyPlacesDeclared(true);
+                      setWeeklyPlacesTouched(true);
                     }
                   }}
                   className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
@@ -1227,7 +1239,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               {payoutMode === 'HYBRID' && (
                 <WeeklyPlacesEditor
                   places={weeklyPlaces}
-                  onChange={next => { setWeeklyPlacesDeclared(true); setWeeklyPlaces(next); }}
+                  onChange={next => { setWeeklyPlacesTouched(true); setWeeklyPlaces(next); }}
                 />
               )}
 
@@ -1446,7 +1458,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   onChange={e => {
                     setMarginPayoutMode(e.target.value);
                     if (e.target.value !== 'HYBRID') { setSplitDeclared(false); setSplitWeekly(0); setSplitSeason(0); }
-                    if (e.target.value !== 'HYBRID') { setWeeklyPlacesDeclared(false); setWeeklyPlaces([]); }
+                    if (e.target.value !== 'HYBRID') { setWeeklyPlacesTouched(false); setWeeklyPlaces([]); }
                     // Returning to HYBRID re-hydrates from the STORED split, so
                     // the editor shows what the pool actually has rather than an
                     // undeclared 0/0 sitting on top of live stored numbers — the
@@ -1459,7 +1471,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     }
                     if (e.target.value === 'HYBRID' && lastKnownWeeklyPlacesRef.current) {
                       setWeeklyPlaces(lastKnownWeeklyPlacesRef.current);
-                      setWeeklyPlacesDeclared(true);
+                      setWeeklyPlacesTouched(true);
                     }
                   }}
                   className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
@@ -1508,7 +1520,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               {marginPayoutMode === 'HYBRID' && (
                 <WeeklyPlacesEditor
                   places={weeklyPlaces}
-                  onChange={next => { setWeeklyPlacesDeclared(true); setWeeklyPlaces(next); }}
+                  onChange={next => { setWeeklyPlacesTouched(true); setWeeklyPlaces(next); }}
                 />
               )}
             </div>

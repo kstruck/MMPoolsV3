@@ -136,13 +136,24 @@ describe('manager Settings — the HYBRID weekly place list (T2)', () => {
   it('an emptied editor CLEARS a stored list and stores nothing when there was none — never an empty list', () => {
     expect(mgr).toContain('if (weeklyPlaces.length > 0) return { weeklyPayouts: { places: weeklyPlaces } };');
     expect(mgr).toContain('return settings.weeklyPayouts ? { weeklyPayouts: null } : {};');
-    expect(mgr).toContain('if (!weeklyPlacesDeclared) return {};');
+    expect(mgr).toContain('if (!weeklyPlacesTouched) return {};');
     // `{ places: [] }` must never be constructed by this file.
     expect(mgr).not.toMatch(/weeklyPayouts: \{ places: \[\] \}/);
   });
 
+  /**
+   * A stored `{ places: [] }` is a VALID, deliberate configuration (T1 keeps it
+   * distinct from absent on purpose): this pool pays no weekly prizes. Seeding
+   * "touched" from the stored value made every unrelated settings save rewrite
+   * it to the fallback where the SEASON places price every week. (codex r2.)
+   */
+  it('an untouched editor never speaks — a deliberate empty stored list survives an unrelated save', () => {
+    expect(mgr).toContain('const [weeklyPlacesTouched, setWeeklyPlacesTouched] = useState<boolean>(false);');
+    expect(mgr).toContain('settings.weeklyPayouts?.places?.length ? settings.weeklyPayouts.places : null,');
+  });
+
   it('leaving HYBRID clears the list locally and returning re-hydrates from the last KNOWN-STORED one, never the lagging prop', () => {
-    expect(count(/if \(e\.target\.value !== 'HYBRID'\) \{ setWeeklyPlacesDeclared\(false\); setWeeklyPlaces\(\[\]\); \}/g)).toBe(2);
+    expect(count(/if \(e\.target\.value !== 'HYBRID'\) \{ setWeeklyPlacesTouched\(false\); setWeeklyPlaces\(\[\]\); \}/g)).toBe(2);
     expect(count(/setWeeklyPlaces\(lastKnownWeeklyPlacesRef\.current\);/g)).toBe(2);
     expect(mgr).toContain("lastKnownWeeklyPlacesRef.current = activeMode === 'HYBRID' && weeklyPlaces.length > 0 ? weeklyPlaces : null;");
   });
