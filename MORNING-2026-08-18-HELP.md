@@ -11,9 +11,11 @@ covers only `PLAN-HELP-SYSTEM.md`. Read whichever matches what you are doing.
 > not a to-do list.
 >
 > ⚠️ **BUT T15 IS NOT FINISHED, AND DO NOT LET THIS DOC CONVINCE ANYONE IT IS.**
-> T15 is "Coolify deploy + prod smoke", and its smoke list in `PLAN-HELP-SYSTEM.md`
-> §7 has four checks. **Two are done and two have never been run** — see §7 step 7.
-> Neither is urgent and neither blocks anything; both take about a minute.
+> T15 is "Coolify deploy + prod smoke". The DEPLOY half is done. **Its smoke list
+> in `PLAN-HELP-SYSTEM.md` §7 has four checks and NONE of them has been run** —
+> what you did was `?` on `/create/pickem`, the privilege guard, and the Back
+> button, and not one of those three is on the list. All four are in §7 step 7.
+> None is urgent, none blocks anything, and together they are about three minutes.
 >
 > ⚠️ **And T16 is still owed.** You knowingly took T15 before it, so the `?`
 > shortcut is live resting on the CSS-class fallback for ~35 overlay shells.
@@ -298,26 +300,41 @@ require the deploy, so skip them.
 No `functions/` deploy, no `firestore.rules` deploy, no indexes, no production data
 migration. T2 touched none of them.
 
-### Step 7 — the two T15 smoke checks nobody has run ⬜ OPEN
+### Step 7 — T15's four smoke checks ⬜ ALL FOUR STILL OPEN
 
-T15's smoke list is *"`?` on `/pool/:id` for each type, tooltip on a phone, search
-'tiebreaker', `?` while a modal is open"*. The deploy is done and the panel opens.
-**These two have never been run by anyone**, and I could not run them — one needs a
-phone, both need production.
+T15's smoke list, verbatim from `PLAN-HELP-SYSTEM.md` §7: *"`?` on `/pool/:id` for
+each type, tooltip on a phone, search 'tiebreaker', `?` while a modal is open"*.
 
-Neither blocks anything. Do them when convenient, or say so and I will carry them
+⚠️ **NONE of the four has been run.** What you did was `?` on `/create/pickem`
+(a create route, not `/pool/:id`), the privilege guard, and the Back button —
+useful, and none of them on this list. I could not run these myself: one needs a
+phone and all four need production.
+
+None blocks anything. Do them when convenient, or say so and I will carry them
 into the next morning doc.
 
-1. **On your phone**, open **https://marchmeleepools.com/create/pickem** and tap
-   the `?` button in the header. **You should see** the panel cover the full width
-   of the screen with a dark backdrop behind it — on a phone it is a modal, not
-   the side drawer you saw on desktop. **Nobody has ever seen that branch of the
-   layout.** If it looks wrong, screenshot it and send it to me.
-2. **On desktop**, open any pool, open a dialog (Share is easiest), and **press `?`
-   while it is open**. **You should see nothing happen** — the panel must stay shut
-   while a dialog owns the screen. Close the dialog, press `?` again, and now it
-   should open. **If the panel opens over the dialog**, tell me: that is the
-   overlay arbitration failing, and it is exactly what T16 exists to make robust.
+1. **`?` on a real pool, for each type you have.** Open a pool — NFL, then Bracket,
+   Props, Playoff, Squares if you have one of each — and press `?` on each.
+   **You should see** a panel whose title matches that pool and tab, e.g. **"NFL
+   pool — My picks"**, not a generic one. **If two different pool types show the
+   same title**, tell me which two: that is route→page matching failing.
+2. **Search for `tiebreaker`.** With the panel open anywhere, type **tiebreaker**
+   in the Search help box. **You should see** at least one result. **If you see
+   "Nothing in Help matches"**, tell me — the search index is not reaching the
+   content.
+3. **A tooltip on your phone.** ⚠️ This is a HelpTip, **not** the header button —
+   they are different code paths and only the tooltip has touch behaviour. Open
+   **https://marchmeleepools.com/create/pickem** on your phone and **tap the small
+   `?` next to "Pool name"**. **You should see** the Help panel open on that topic,
+   full-width with a dark backdrop — on a phone the panel is a modal, not the side
+   drawer you saw on desktop, and **nobody has ever seen that branch of the
+   layout**. If it looks wrong, screenshot it and send it to me.
+4. **`?` while a dialog is open.** On desktop, open any pool, open a dialog (Share
+   is easiest), and **press `?`**. **You should see nothing happen** — the panel
+   must stay shut while a dialog owns the screen. Close the dialog, press `?`
+   again, and now it should open. **If the panel opens over the dialog**, tell me:
+   that is the overlay arbitration failing, and it is what T16 exists to make
+   robust.
 
 ## 8. What is NOT done
 

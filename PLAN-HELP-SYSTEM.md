@@ -38,10 +38,12 @@ inventories), `PLAN-HELP-SYSTEM-REVIEW-LOG.md` (codex rounds).
 - [~] **T15 is PARTIALLY done, not unstarted.** Its definition is "Coolify deploy
       + prod smoke". The deploy half happened 2026-08-18: Kevin redeployed `www`,
       opened the panel with `?`, and verified the K13 privilege guard on a live
-      props pool. **Two of its four smoke checks have never been run** — the
-      tooltip on a phone (the panel's mobile modal branch has been seen by nobody)
-      and `?` while a modal is open. Listed in `MORNING-2026-08-18-HELP.md` §7
-      step 7.
+      props pool. **NONE of its four smoke checks has been run** — the checks
+      Kevin did (`?` on `/create/pickem`, the K13 privilege guard, the Back button)
+      are useful and are not on the list. All four are listed with expected results
+      in `MORNING-2026-08-18-HELP.md` §7 step 7; the phone one is a HelpTip tap,
+      not the header button, and the panel's mobile modal branch has been seen by
+      nobody.
 - [ ] **T16 is OVERDUE rather than pending** — a stated prerequisite of T15, and
       T15's deploy half was taken first knowingly, so the `?` shortcut is live in
       production on the CSS-class fallback for ~35 un-migrated overlay shells.

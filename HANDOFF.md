@@ -103,11 +103,15 @@
 > the tooltip's ARIA, search, pool-type filtering) and not appearance. Kevin
 > closed that on the live site.
 >
-> ⬜ **STILL UNSEEN BY ANYONE: the panel on a PHONE**, where it renders as a modal
-> with a backdrop rather than a side drawer — and `?` while a dialog is open. Both
-> are T15 smoke checks, both are open, and both are one minute each. Steps in
-> `MORNING-2026-08-18-HELP.md` §7 step 7. **T15 is therefore PARTIALLY done, not
-> unstarted** — do not record it either way without that distinction.
+> ⬜ **T15's FOUR SMOKE CHECKS ARE ALL STILL OPEN.** What Kevin ran — `?` on
+> `/create/pickem`, the privilege guard, the Back button — is none of them. The
+> list is *"`?` on `/pool/:id` for each type, tooltip on a phone, search
+> 'tiebreaker', `?` while a modal is open"*, and the phone one is a **HelpTip tap,
+> not the header button** (different code path; only the tooltip has touch
+> behaviour). **The panel's mobile modal branch has been seen by nobody.** Steps
+> with expected results in `MORNING-2026-08-18-HELP.md` §7 step 7. **T15 is
+> therefore PARTIALLY done — deploy yes, smoke no** — do not record it either way
+> without that distinction.
 >
 > **T9 is next and is NOT started** — NFL Pick'em option copy, and this week's
 > invites are Pick'em. Order after it is unchanged: T4, T3, T10/T11. **T16 remains
