@@ -1,6 +1,6 @@
 # HANDOFF — Session entry point
 
-> ## 🛑 2026-08-18 — PLAN-HELP-SYSTEM **T0 + T1 + T2 MERGED**; ⚠️ **T2 NEEDS A COOLIFY REDEPLOY**
+> ## 🛑 2026-08-18 — PLAN-HELP-SYSTEM **T0 + T1 + T2 MERGED**; ⚠️ **T2's DEPLOY IS KEVIN'S CALL**
 >
 > **Read `MORNING-2026-08-18-HELP.md` first** for this effort;
 > `MORNING-2026-08-18.md` remains the entry point for the PLAN-PAYMENT-LEDGER
@@ -8,9 +8,18 @@
 >
 > **T1 IS DEPLOYED AND VERIFIED** (Kevin, 2026-08-18): tooltips render on the
 > create wizard and playoff pools still list correctly in Browse. Closed — do not
-> ask him to check it again. **T2 (#477, `557ba2ad`) is NOT deployed**; it changes
-> the shipped bundle and the frontend does not auto-deploy on a push to `main`.
-> Numbered steps in `MORNING-2026-08-18-HELP.md` §7.
+> ask him to check it again.
+>
+> ⚠️ **T2 (#477, `557ba2ad`) IS NOT DEPLOYED, AND WHETHER IT SHOULD BE IS AN OPEN
+> QUESTION FOR KEVIN.** The signed plan makes **T16 a prerequisite of T15
+> (deploy)** because the `?` shortcut falls back to a CSS-class heuristic for ~35
+> un-migrated overlay shells — so a runbook that simply said "press Redeploy"
+> would overrule a signed decision (codex caught that as a P1 on the docs PR).
+> `MORNING-2026-08-18-HELP.md` §7 step 2 puts three options and a measurement in
+> front of him: all 41 current backdrops carry the `fixed inset-0` pair the
+> fallback matches, so the heuristic covers today's overlays, and the panel and
+> header button carry none of that risk. **Do not deploy `www` for T2 without his
+> answer, and do not re-ask if the doc records one.**
 >
 > **§6 of `PLAN-HELP-SYSTEM.md` is SIGNED** — K1–K13 taken exactly as each
 > Recommendation column reads, on Kevin's 2026-08-17 "start building". That

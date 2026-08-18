@@ -5,10 +5,12 @@ This file continues `MORNING-2026-08-18.md` for a different effort and supersede
 That doc remains the entry point for the PLAN-PAYMENT-LEDGER T2 work; this one
 covers only `PLAN-HELP-SYSTEM.md`. Read whichever matches what you are doing.
 
-> 🔴 **ONE THING NEEDS YOU: redeploy the frontend in Coolify.** T2 (#477) changes
-> the shipped bundle and Coolify has no CLI path from this machine, so the Help
-> panel is not in production until you press the button. Nothing else here is
-> blocking. Numbered steps in §7.
+> 🔴 **ONE THING NEEDS YOU, AND IT IS A DECISION, NOT A BUTTON.** T2 changes the
+> shipped bundle, so nothing is live until `www` is redeployed — but the signed
+> plan makes **T16 a prerequisite of T15 (deploy)**, because the `?` key still
+> falls back to a CSS-class heuristic for ~35 overlays. So I am **not** telling you
+> to redeploy. §7 step 2 lays out the two options, what I measured, and which one
+> I would take. Nothing else here is blocking.
 
 **Three PRs merged: #472 (T0), #475 (T1) and #477 (T2).** You already deployed and
 verified T1 — tooltips on the create wizard, playoff pools still listing correctly
@@ -113,9 +115,15 @@ path you were on, so a commissioner in the create wizard got
 `/create/pickem?tab=picks`, which is not a pool. Round 13 is clean. Three of the
 five rounds the exception allows.
 
-## 5. Two things I decided rather than asking
+## 5. One question for you, and two things I decided
 
-Neither needed you, but both are written down so you can overrule them.
+**THE QUESTION — §7 step 2: do we deploy T2 before T16?** The plan makes T16 a
+prerequisite of T15 and T2's `?` key is the reason. I measured the heuristic as
+covering all 41 current overlays and I would deploy now, but it is a signed plan
+and the decision is yours. Three options and a recommendation are in §7 step 2.
+
+The two below needed no decision from you, but are written down so you can
+overrule them.
 
 1. **The monetization dashboard's own six tabs do not publish to the help panel.**
    They are a third level down (admin tab → billing sub-tab → money tab) and the
@@ -142,7 +150,7 @@ Neither needed you, but both are written down so you can overrule them.
 - The admin chunk's retry-after-a-failed-download path is proved by its cache
   contract and by reading the code, not by a test that makes a download fail.
 
-## 7. Runbook — do these in order
+## 7. Runbook — step 2 is a decision; the rest follow from it
 
 ### Step 1 — pull, so your checkout has T2
 
@@ -169,10 +177,43 @@ force anything.
 > has moved past T2 — this document itself is a later commit. What matters is that
 > the revision being deployed CONTAINS T2, which is what the `--grep` above asks.
 
-### Step 2 — redeploy the frontend in Coolify ⚠️ THE ONE THING THAT NEEDS YOU
+### Step 2 — DECIDE whether to redeploy `www` yet ⚠️ YOUR CALL, NOT MINE
 
-Nothing you see in production has a Help panel until this runs. Pushing to `main`
-does **not** auto-deploy the frontend.
+**I am not asking you to press Redeploy, because the plan you signed says not to
+yet.** `PLAN-HELP-SYSTEM.md` §3 D3 makes **T16 a prerequisite of T15**: *"the
+shortcut does not ship to prod on the class heuristic alone."* T2's `?` key uses
+exactly that heuristic for the ~35 overlay shells that carry no accessibility
+role. Telling you to deploy anyway — which an earlier draft of this document did —
+would be me quietly overruling a signed decision in a runbook step. codex caught
+it as a P1 on the docs review.
+
+**What I actually measured, so you can weigh it rather than guess:**
+
+- All **41** overlay backdrops in `src/` carry the literal `fixed inset-0` class
+  pair, and that pair is one clause of the fallback selector. So today the
+  heuristic **does** cover every one of them, and the `?` key stays quiet behind
+  each. The plan's objection is that a class name is a fragile thing to depend on —
+  a future overlay written differently would slip through — not that a current
+  overlay slips through.
+- The **panel and the header button carry none of that risk.** They are ordinary
+  UI. The only thing T16 protects is the keyboard shortcut.
+- T16 is described in the plan as **mechanical, one PR**: give ~35 shells
+  `role="dialog"` + `data-overlay-root` + `useOverlayOwner`. It also fixes their
+  missing Escape and focus behaviour as a side effect, which is a real
+  accessibility gain independent of help.
+
+**Your three options.**
+
+| | Option | What you get | What you carry |
+|---|---|---|---|
+| **A** | **Redeploy now** (recommended) | The panel, the header button and the `?` key live today, before this week's Pick'em invites go out | A shortcut resting on a class heuristic that I measured as covering all 41 current overlays. You are consciously taking T15 before T16 |
+| **B** | Hold the redeploy until T16 lands | The plan's bar met exactly as written | T2 sits on `main` undeployed — and the next unrelated frontend deploy ships it anyway, so this is a delay rather than a control |
+| **C** | Have me do T16 next instead of T9 | The bar met properly, then deploy both together | Pick'em option copy (T9) slips, and this week's invites are Pick'em |
+
+**I would take A**, and say so on the record: the measurement says the heuristic
+covers today's overlays, the panel is where the value is, and B does not actually
+prevent the thing it looks like it prevents. But it is a signed plan and the call
+is yours. **If you want A, do this:**
 
 1. Open your browser and go to the **Coolify dashboard**.
 2. Select the **`www` / march-melee-pools frontend** application — the same one you
@@ -186,7 +227,10 @@ does **not** auto-deploy the frontend.
 6. **If the build fails**, copy the last ~30 lines of the log and send them to me.
    Do not retry more than once — the same failure twice is a real failure.
 
-### Step 3 — press one key, in about 30 seconds
+**If you want B or C, reply with which one and stop here** — steps 3 to 5 below all
+require the deploy, so skip them.
+
+### Step 3 — press one key, in about 30 seconds *(only if you chose A)*
 
 1. Go to **https://marchmeleepools.com/create/pickem** and sign in if asked.
 2. **Press the `?` key.** A panel should slide in from the right, titled **Help**,
@@ -197,7 +241,7 @@ does **not** auto-deploy the frontend.
 5. **If the panel opens but is empty below the title**, tell me. That means the
    content did not ship with the bundle.
 
-### Step 4 — check the guard that matters, in about 30 seconds
+### Step 4 — check the guard that matters, in about 30 seconds *(only if you chose A)*
 
 This is the P1 from §3, and it is worth seeing with your own eyes.
 
@@ -212,7 +256,7 @@ This is the P1 from §3, and it is worth seeing with your own eyes.
    non-commissioner sees the admin panel**, stop and tell me immediately — that is
    the exposure codex caught and it would mean the fix did not ship.
 
-### Step 5 — the type-a-tab check, and Back
+### Step 5 — the type-a-tab check, and Back *(only if you chose A)*
 
 1. Still in a pool, click through two or three tabs.
 2. **Press the browser Back button.** You should return to the previous tab rather
