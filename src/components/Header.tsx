@@ -7,6 +7,10 @@ import { isSuperAdmin, canCreatePool, canAccessPoolCreation } from '../utils/aut
 import { logger } from '../utils/logger';
 import { useNavigate, useLocation } from 'react-router';
 import { ThemeToggle } from './ui/ThemeToggle';
+// PLAN-HELP-SYSTEM T2 / K3: the Help button sits in the right cluster next to
+// the theme toggle, in BOTH branches of this header — a signed-out reader on
+// the wizard or a public pool needs it as much as a signed-in one.
+import { HelpHeaderButton } from './help/HelpHeaderButton';
 import { cn } from './ui/cn';
 
 interface HeaderProps {
@@ -121,6 +125,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 </NavLink>
                                 <div className="flex items-center gap-2">
                                     <ThemeToggle />
+                                    <HelpHeaderButton />
                                     <button
                                         onClick={onOpenAuth}
                                         className={cn(chromeBtn, 'text-white/80 hover:text-white')}
@@ -192,6 +197,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 )}
 
                                 <ThemeToggle />
+                                <HelpHeaderButton />
 
                                 <button
                                     onClick={() => navigate(`/profile/${user.id}`)}

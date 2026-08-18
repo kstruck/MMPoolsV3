@@ -16,6 +16,16 @@ import { PropsWizard as PropWizard } from '../PropsWizard/PropsWizard';
 import { dbService } from '../../services/dbService';
 import { ShareModal } from '../modals/ShareModal';
 import { useToast } from '../ui/Toast';
+import { HelpRoutePublisher } from '../../help/publish';
+import { useUrlTab } from '../help/useUrlTab';
+
+/**
+ * The tab ids, as one list. `useUrlTab` needs it to reject a stale `?tab=`
+ * value, and `src/help/content/pool-pages.ts` names the same ids — a tab
+ * renamed here without its help page fails `help-registry-invariants`.
+ */
+const PROPS_TABS = ['cards', 'leaderboard', 'stats', 'admin', 'grading', 'ai'] as const;
+export type PropsTab = (typeof PROPS_TABS)[number];
 import { getUserMessage } from '../../utils/errorMessages';
 import { Badge, Button, Tag } from '../ui';
 
@@ -25,13 +35,16 @@ interface PropsPoolDashboardProps {
     isManager?: boolean;
     isAdmin?: boolean;
     onBack: () => void;
-    initialTab?: 'cards' | 'leaderboard' | 'stats' | 'admin' | 'grading' | 'ai';
+    initialTab?: PropsTab;
     onOpenAuth?: () => void;
 }
 
 export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, user, isManager, isAdmin, onBack, initialTab = 'cards', onOpenAuth }) => {
     const toast = useToast();
-    const [activeTab, setActiveTab] = useState<'cards' | 'leaderboard' | 'stats' | 'admin' | 'grading' | 'ai'>(initialTab);
+    // T2 / K13: the tab moved into `?tab=`, the convention NFL and Bracket
+    // already use — so a help search result can link to it and Back works.
+    // `initialTab` stays the fallback for a URL that names none.
+    const [activeTab, setActiveTab] = useUrlTab('tab', PROPS_TABS, initialTab);
     const [allCards, setAllCards] = useState<PropCard[]>([]);
     const [showShareModal, setShowShareModal] = useState(false);
 
@@ -50,6 +63,7 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
 
     return (
         <BillingGate pool={pool as any} isCommissioner={!!isManager}>
+        <HelpRoutePublisher tab={activeTab} isManager={!!isManager} />
         <div
             className="min-h-screen bg-page text-[color:var(--text)] font-body pb-20 transition-colors duration-500"
             style={{ backgroundColor: pool.branding?.backgroundColor || undefined }}

@@ -27,6 +27,17 @@ import Download from 'lucide-react/dist/esm/icons/download';
 import TrendingUp from 'lucide-react/dist/esm/icons/trending-up';
 import Hammer from 'lucide-react/dist/esm/icons/hammer';
 import Dices from 'lucide-react/dist/esm/icons/dices';
+import { HelpRoutePublisher } from '../help/publish';
+import { useUrlTab } from './help/useUrlTab';
+
+/**
+ * The squares manager tabs, as one list. `useUrlTab` needs it to reject a stale
+ * `?tab=`, and `src/help/content/pool-pages.ts` names the same ids.
+ */
+const ADMIN_PANEL_TABS = [
+  'settings', 'reminders', 'players', 'scoring', 'game',
+  'payouts', 'communications', 'stats', 'props', 'grading',
+] as const;
 
 import { Badge, Button, StatTile } from './ui';
 
@@ -71,7 +82,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
 
   // Updated Tab Order and Default
-  const [activeTab, setActiveTab] = useState<'settings' | 'reminders' | 'players' | 'scoring' | 'game' | 'payouts' | 'communications' | 'stats' | 'props' | 'grading'>('settings');
+  // T2 / K13: the tab moved into `?tab=` so help search results can link to it
+  // and Back works. Same list the squares admin help pages name.
+  const [activeTab, setActiveTab] = useUrlTab('tab', ADMIN_PANEL_TABS, 'settings');
 
   const toast = useToast();
 
@@ -551,6 +564,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   return (
     <div className="min-h-screen bg-page text-[color:var(--text)] pb-20">
+      {/* T2: the squares manager's tab and its player sub-tab, for the Help panel. */}
+      <HelpRoutePublisher tab={activeTab} subTab={activeTab === 'players' ? playerTab : undefined} isManager />
       <div className="bg-surface border-b border-line sticky top-0 z-20 shadow-panel">
         <div className="max-w-5xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">

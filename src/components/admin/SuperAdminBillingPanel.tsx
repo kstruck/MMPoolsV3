@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../ui/Toast';
 import { MonetizationDashboard } from './monetization/MonetizationDashboard';
+import { HelpRoutePublisher } from '../../help/publish';
 
 // Canonical default (matches shared/schemas/billingConfig BillingConfigSchema so
 // the auto-seed below passes the adminSaveBillingConfig validation gate): now
@@ -435,6 +436,18 @@ export const SuperAdminBillingPanel: React.FC = () => {
 
     return (
         <div className="bg-card border border-line rounded-3xl p-6 md:p-8 space-y-6 relative overflow-hidden backdrop-blur-md">
+            {/* T2: the billing panel's sub-tab. The parent SuperAdmin publishes
+                `tab`; this publishes `subTab` only, because two live publishers
+                writing one field would be ambiguous.
+
+                THE MONETIZATION DASHBOARD NESTED UNDER `monetization` DOES NOT
+                PUBLISH. Its own `MoneyTab` would be a THIRD level, and
+                `HelpRouteContext` is two deep by design (PLAN §3 D3 defines
+                `tab` and `subTab`). No help page in T2's scope or T14's — which
+                is page-level summaries for the seventeen admin tabs (K4 scope
+                ii) — tells those six views apart, so a third level would be a
+                field nothing reads. Written exemption, not an oversight. */}
+            <HelpRoutePublisher subTab={subTab} />
             <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center border-b border-line pb-4 gap-4">
                 <div className="space-y-1">
                     <h2 className="text-2xl font-display font-extrabold uppercase tracking-[0.03em] text-[color:var(--text)] flex items-center gap-2">

@@ -1,6 +1,7 @@
 import { logger } from '../utils/logger';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router';
+import { HelpRoutePublisher } from '../help/publish';
 import type { User, GameState, Winner, Pool, PlayoffPool, BracketPool, SystemSettings, PoolType, NFLGame } from '../types';
 import { isNFLSeasonPool, getMyNFLEntry, subscribeToSeasonGames, computePendingStatus, type PoolPendingStatus } from '../services/nflStatusService';
 import { formatDeadline } from '../utils/formatTime';
@@ -443,6 +444,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
     return (
         <div className="min-h-screen bg-page text-[color:var(--text)] font-body flex flex-col selection:bg-gold-500 selection:text-navy-950">
+            {/* T2: My Entries' tab is in memory. Published so the Help panel can
+                tell the six lists apart. The page copy is T3. */}
+            <HelpRoutePublisher tab={activeTab} />
             <Header user={user} onOpenAuth={() => { }} onLogout={onLogout} onCreatePool={onCreatePool} />
 
             <main className="flex-grow max-w-7xl mx-auto w-full p-4 md:p-8">

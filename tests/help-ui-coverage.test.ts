@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { helpRegistry, normalizePath } from '../src/help/registry';
 import { WIZARD_FIELD_ALLOWLIST } from '../src/help/coverage-allowlist';
+import { WIZARDS } from '../src/help/content/wizard-pages';
 import { POOL_TYPES } from '../shared/poolTypes';
 import type { PoolType } from '../shared/poolTypes';
 
@@ -421,5 +422,64 @@ describe('the hint prop is gone', () => {
   it('the field primitives declare no hint prop', () => {
     const fields = stripComments(readFileSync(join(WIZARD_DIR, 'fields.tsx'), 'utf8'));
     expect(fields).not.toMatch(/\bhint\s*\??:/);
+  });
+});
+
+/**
+ * The wizard STEP ids in the source, against the step lists in
+ * `src/help/content/wizard-pages.ts` — PLAN-HELP-SYSTEM.md T2.
+ *
+ * WHY THIS IS A GUARD AND NOT A COMMENT. T2 gives every wizard step its own
+ * `HelpPage` with `tab: <stepId>`, and `WizardShell` publishes `step.id`. A
+ * step renamed in the wizard therefore makes its help page permanently
+ * unreachable: nothing throws, nothing logs, the panel silently falls back to
+ * the wizard's route-level page and the step's copy is never shown again. That
+ * is the "guard that looks like it guards" failure this repo keeps producing,
+ * so the two lists are compared rather than trusted.
+ */
+describe('wizard step ids match the help pages that describe them', () => {
+  const CREATE_DIR = join(WIZARD_DIR, 'create');
+
+  /** `{ id: 'basics', ... }` entries of a `WizardStepDef[]`, in source order. */
+  function stepIdsIn(source: string): string[] {
+    const clean = stripComments(source);
+    return [...clean.matchAll(/\{\s*id:\s*'([a-z]+)'\s*,\s*title:/g)].map((m) => m[1]);
+  }
+
+  const byRoute = new Map(WIZARDS.map((w) => [w.route, w] as const));
+  // The wizard file for each route, read from `App.tsx`'s own lazy imports so a
+  // renamed file cannot leave this suite silently scanning nothing.
+  const APP = readFileSync(resolve(__dirname, '../src/App.tsx'), 'utf8');
+
+  it('finds a create-wizard source file for every wizard in the help content', () => {
+    const missing = [...byRoute.keys()].filter((route) => wizardSourceFor(route) === undefined);
+    expect(missing).toEqual([]);
+  });
+
+  function wizardSourceFor(route: string): string | undefined {
+    // `<Route path="/create/pickem" ... <CreateNFLPickemPool` — take the
+    // component name App.tsx renders for the route, then read that file.
+    const at = APP.indexOf(`path="${route}"`);
+    if (at === -1) return undefined;
+    const name = APP.slice(at, at + 400).match(/<(Create[A-Za-z]+)/)?.[1];
+    if (!name) return undefined;
+    const file = join(CREATE_DIR, `${name}.tsx`);
+    return existsSync(file) ? readFileSync(file, 'utf8') : undefined;
+  }
+
+  it.each([...byRoute.keys()])('%s declares exactly the steps its help pages name', (route) => {
+    const source = wizardSourceFor(route);
+    expect(source).toBeDefined();
+    expect(stepIdsIn(source!)).toEqual([...byRoute.get(route)!.steps]);
+  });
+
+  it('the step reader discriminates: it does not match a renamed step', () => {
+    // The fixture a real guard needs. Without it, a regex that matched nothing
+    // would pass every assertion above by comparing [] to [].
+    const real = `const steps = [{ id: 'basics', title: 'Basics' }, { id: 'fee', title: 'Fee' }];`;
+    expect(stepIdsIn(real)).toEqual(['basics', 'fee']);
+    const renamed = real.replace("'fee'", "'payment'");
+    expect(stepIdsIn(renamed)).toEqual(['basics', 'payment']);
+    expect(stepIdsIn(renamed)).not.toEqual(['basics', 'fee']);
   });
 });

@@ -10,6 +10,10 @@ import { RouteSEO } from './components/RouteSEO';
 import { AuthModal } from './components/modals';
 import { OfflineBanner } from './components/ui/OfflineBanner';
 import { useToast } from './components/ui/Toast';
+// PLAN-HELP-SYSTEM T2. Mounted once, here, next to the router and inside the
+// providers — so the panel can read the route and the auth state, and every
+// surface below it publishes where the reader is (`src/help/publish.tsx`).
+import { HelpProvider } from './components/help/HelpPanel';
 
 // Lazy-loaded route components (loaded on demand)
 const GamedaySquaresLanding = React.lazy(() => import('./components/GamedaySquaresLanding').then(m => ({ default: m.GamedaySquaresLanding })));
@@ -204,7 +208,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <>
+    <HelpProvider isAdmin={isAdmin}>
       <LegacyHashHandler />
       <RouteSEO />
       <OfflineBanner />
@@ -491,7 +495,7 @@ const App: React.FC = () => {
           }
         }}
       />
-    </>
+    </HelpProvider>
   );
 };
 

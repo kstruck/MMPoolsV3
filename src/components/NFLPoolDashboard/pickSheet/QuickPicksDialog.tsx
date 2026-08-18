@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useOverlayOwner } from '../../ui/overlayStack';
 import { Zap, Home, Plane, TrendingUp, TrendingDown, X } from 'lucide-react';
 import type { NFLGame } from '../../../types';
 import { planQuickPicks, type QuickPickStrategy } from './quickPicks';
@@ -66,6 +67,12 @@ export const QuickPicksDialog: React.FC<QuickPicksDialogProps> = ({
   onClose,
 }) => {
   const firstRef = useRef<HTMLButtonElement>(null);
+
+  // PLAN-HELP-SYSTEM T2: this one is rendered only while open (the caller
+  // mounts it), so `active` is unconditionally true and the entry retracts with
+  // the unmount. Escape still runs `onClose` — through the stack, so the Help
+  // panel over the top of it closes alone.
+  useOverlayOwner('quick-picks-dialog', { active: true, onEscape: onClose });
 
   useEffect(() => {
     firstRef.current?.focus();

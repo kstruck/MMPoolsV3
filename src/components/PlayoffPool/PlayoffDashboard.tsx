@@ -11,6 +11,11 @@ import { AnnouncementManager } from '../AnnouncementManager'; // [NEW]
 import { AICommissioner } from '../AICommissioner';
 import { useToast } from '../ui/Toast';
 import { Badge, Button, RankChip, Tag, YouPill } from '../ui';
+import { HelpRoutePublisher } from '../../help/publish';
+import { useUrlTab } from '../help/useUrlTab';
+
+/** The tab ids, as one list — shared with `src/help/content/pool-pages.ts`. */
+const PLAYOFF_TABS = ['picks', 'leaderboard', 'rules', 'ai', 'commissioner'] as const;
 
 interface PlayoffDashboardProps {
     pool: PlayoffPool;
@@ -20,7 +25,9 @@ interface PlayoffDashboardProps {
 
 export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, onBack }) => {
     const toast = useToast();
-    const [activeTab, setActiveTab] = useState<'picks' | 'leaderboard' | 'rules' | 'commissioner' | 'ai'>('picks'); // [MODIFIED] Added 'commissioner'
+    // T2 / K13: the tab moved into `?tab=` so help search results can link to
+    // it and Back works. Same list the playoff help pages name.
+    const [activeTab, setActiveTab] = useUrlTab('tab', PLAYOFF_TABS, 'picks');
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [isAddingNew, setIsAddingNew] = useState(false);
     const [viewingEntry, setViewingEntry] = useState<PlayoffEntry | null>(null);
@@ -78,6 +85,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     return (
         <BillingGate pool={pool as any} isCommissioner={isManager}>
         <div className="min-h-screen bg-page text-[color:var(--text)] font-body pb-20 duration-300" style={{ backgroundColor: pool.branding?.bgColor || undefined }}>
+            <HelpRoutePublisher tab={activeTab} isManager={isManager} />
             {/* Main Content */}
             <div className="max-w-6xl mx-auto p-4 md:p-6">
                 {/* Pool Header */}

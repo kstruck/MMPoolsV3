@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useOverlayOwner } from '../ui/overlayStack';
 import { AlertTriangle, X } from 'lucide-react';
 
 /**
@@ -37,6 +38,10 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
   useEffect(() => {
     if (open) setTyped('');
   }, [open]);
+
+  // PLAN-HELP-SYSTEM T2: own the screen while open, so the `?` shortcut stays
+  // quiet and Escape closes exactly one overlay. On `open`, not on mount.
+  useOverlayOwner('confirm-action-modal', { active: open, onEscape: onCancel });
 
   if (!open) return null;
 

@@ -4,6 +4,7 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
 import type { User } from '../types';
+import { HelpRoutePublisher } from '../help/publish';
 
 interface Game {
     id: string;
@@ -407,6 +408,9 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
 
     return (
         <div className="min-h-screen bg-navy-950 text-[#EDF1F8] font-body">
+            {/* T2: the sport tab is in memory. Published so the Help panel can
+                tell the three scoreboards apart. The page copy is T3. */}
+            <HelpRoutePublisher tab={activeTab} />
             <Header
                 user={user}
                 isManager={false}
