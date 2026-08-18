@@ -132,7 +132,13 @@ const NFL_PAGES = poolPages({
       tab: 'picks',
       title: 'NFL pool — My picks',
       summary:
-        'Make and change your picks for the current week. You can edit them until they lock, and the lock time is shown beside each game. Once a game starts, its pick is fixed.',
+      // NARROWED IN T9. The first version promised per-game editing and
+      // "once a game starts", and neither survives contact with the code: the
+      // lock is kickoff MINUS the buffer, and the shipped client closes the
+      // whole sheet at the week's first kickoff whatever `lockMode` says
+      // (`NFLPoolDashboard.tsx:515-534`, `PickemPickEntry.tsx:138-141`). This
+      // says what is true of every pool and lets the sheet be the authority.
+        'Make and change your picks for the week, then submit them. The sheet shows which games are still open and when the next deadline falls. A pick that has closed cannot be changed by anyone.',
     },
     {
       tab: 'grid',
