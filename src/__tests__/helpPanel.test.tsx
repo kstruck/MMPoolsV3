@@ -293,6 +293,52 @@ describe('the panel contents', () => {
   });
 });
 
+describe('a glossary search hit (codex R9)', () => {
+  it('opens the definition it names, wherever the card lives', async () => {
+    // A term NOT referenced by this page's topics, so its card sits inside the
+    // collapsed "All terms" accordion — the case where clicking the result used
+    // to clear the search and reveal nothing.
+    const scope = { poolType: 'NFL_PICKEM', audience: 'commissioner' } as const;
+    const onPage = new Set(
+      helpRegistry
+        .placementsForPage('wizard.pickem.rules', scope)
+        .flatMap((s) => s.topics)
+        .flatMap((t) => t.terms ?? []),
+    );
+    // Chosen so the query returns EXACTLY one hit, and that hit is this term:
+    // searching a term's NAME can also match a topic ("User" matches the
+    // manager-name topic), and clicking the wrong row would prove nothing.
+    const picked = helpRegistry.glossary
+      .filter((t) => !onPage.has(t.id) && t.long.length > 60)
+      .map((t) => ({ term: t, query: t.long.slice(0, 45) }))
+      .find(({ term, query }) => {
+        const hits = helpRegistry.search(query, scope);
+        return hits.length === 1 && hits[0].kind === 'glossary' && hits[0].id === term.id;
+      });
+    expect(picked).toBeDefined();
+    const { term, query } = picked!;
+
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    // Collapsed to begin with — this term is not referenced by any topic on the
+    // page, so its card sits inside the closed "All terms" accordion and its
+    // long copy is not rendered at all.
+    const longTail = (t: string) => t.slice(-45);
+    expect(screen.queryByText(longTail(term.long), { exact: false })).toBeNull();
+
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: query } });
+    const hit = await waitFor(() => screen.getByText(term.term));
+    fireEvent.click(hit.closest('button')!);
+
+    // Matched on a TAIL of the long copy, not the whole string: only the long
+    // form contains it (the card renders `short` above it either way), and
+    // substring matching sidesteps whitespace normalisation in the fixture copy.
+    await waitFor(() => expect(screen.getByText(longTail(term.long), { exact: false })).toBeTruthy());
+  });
+});
+
 describe('the tooltip and the panel together', () => {
   it('a tooltip opens on focus with the ARIA a screen reader needs', async () => {
     renderApp(

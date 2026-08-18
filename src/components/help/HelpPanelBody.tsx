@@ -22,6 +22,7 @@ import {
   SearchResults,
   SectionAccordion,
   TopicCard,
+  termAnchorId,
   topicAnchorId,
 } from './HelpPanel.components';
 
@@ -38,7 +39,12 @@ export function HelpPanelBody({ state, searchInputRef }: {
   const { registry, scope, page, activeTopicId, clearActiveTopic, openTo, openPage, routeContext } = state;
   const [query, setQuery] = useState('');
   const [showAllPoolTypes, setShowAllPoolTypes] = useState(false);
+  // The glossary term a search hit asked for: expanded, scrolled to, focused.
+  // Held here rather than in the panel state because it never survives a page
+  // change and nothing outside this body reads it.
+  const [activeTermId, setActiveTermId] = useState<string | undefined>(undefined);
   const scrolledFor = useRef<string | undefined>(undefined);
+  const scrolledForTerm = useRef<string | undefined>(undefined);
 
   /**
    * Search hits, minus anything that lands on a screen this pool has no tab for
@@ -119,6 +125,17 @@ export function HelpPanelBody({ state, searchInputRef }: {
     el.focus({ preventScroll: true });
   }, [activeTopicId, registry, scope, sections]);
 
+  // Same treatment for a glossary hit as for a topic hit: expand, scroll, focus,
+  // once per request.
+  useEffect(() => {
+    if (!activeTermId || scrolledForTerm.current === activeTermId) return;
+    const el = document.getElementById(termAnchorId(activeTermId));
+    if (!el) return;
+    scrolledForTerm.current = activeTermId;
+    el.scrollIntoView({ block: 'nearest' });
+    el.focus({ preventScroll: true });
+  }, [activeTermId, pageTerms, otherTerms]);
+
   const activeTopic = activeTopicId ? registry.resolveTopic(scope, activeTopicId) : undefined;
   // Which section holds the requested topic, so its accordion opens with it.
   const activeSection = activeTopic
@@ -158,9 +175,13 @@ export function HelpPanelBody({ state, searchInputRef }: {
               setQuery('');
               if (result.kind === 'topic') openTo({ topicId: result.id, pageId: result.pageId });
               else if (result.kind === 'page') openPage(result.id);
-              // A glossary hit has nowhere to navigate; clearing the query
-              // drops the reader back on the page with the term expanded
-              // below, which is where it already is.
+              // A glossary hit has nowhere to NAVIGATE, but it still has to be
+              // opened (codex R9). Clearing the query alone left the reader
+              // looking at a collapsed card — possibly inside the collapsed
+              // "All terms" accordion — so the result was clickable and did
+              // nothing. Naming the term expands it, scrolls to it and focuses
+              // it, the same treatment a topic hit gets.
+              else setActiveTermId(result.id);
             }}
           />
         </>
@@ -206,13 +227,28 @@ export function HelpPanelBody({ state, searchInputRef }: {
 
           <section className="space-y-2">
             <PanelSectionHeading>Key concepts &amp; glossary</PanelSectionHeading>
+            {/* The keys carry `activeTermId` so the selected card REMOUNTS and its
+                `defaultOpen` takes effect; the accordion is keyed for the same
+                reason, because a term the reader searched for may be inside it. */}
             {pageTerms.map((term) => (
-              <GlossaryCard key={term.id} term={term} />
+              <GlossaryCard
+                key={`${term.id}:${term.id === activeTermId}`}
+                term={term}
+                defaultOpen={term.id === activeTermId}
+              />
             ))}
             {otherTerms.length > 0 ? (
-              <SectionAccordion title={pageTerms.length > 0 ? 'All terms' : `All terms (${otherTerms.length})`}>
+              <SectionAccordion
+                key={`all-terms:${otherTerms.some((t) => t.id === activeTermId) ? activeTermId : ''}`}
+                title={pageTerms.length > 0 ? 'All terms' : `All terms (${otherTerms.length})`}
+                defaultOpen={otherTerms.some((t) => t.id === activeTermId)}
+              >
                 {otherTerms.map((term) => (
-                  <GlossaryCard key={term.id} term={term} />
+                  <GlossaryCard
+                    key={`${term.id}:${term.id === activeTermId}`}
+                    term={term}
+                    defaultOpen={term.id === activeTermId}
+                  />
                 ))}
               </SectionAccordion>
             ) : null}

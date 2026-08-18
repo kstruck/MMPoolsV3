@@ -136,11 +136,22 @@ export function SearchResults(props: {
   );
 }
 
-/** One glossary card: `short` always, `long` on click. */
-export function GlossaryCard({ term }: { term: GlossaryTerm }) {
-  const [open, setOpen] = useState(false);
+/** The DOM id a glossary term is anchored at, so a search hit can scroll to it. */
+export function termAnchorId(termId: string): string {
+  return `help-term-${termId}`;
+}
+
+/**
+ * One glossary card: `short` always, `long` on click.
+ *
+ * `defaultOpen` is honoured at MOUNT, so the caller remounts the card (by
+ * varying its key) when a search hit selects it — the alternative is a
+ * controlled/uncontrolled hybrid, and this card has exactly one piece of state.
+ */
+export function GlossaryCard({ term, defaultOpen = false }: { term: GlossaryTerm; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-lg border border-line bg-card px-3 py-2">
+    <div id={termAnchorId(term.id)} tabIndex={-1} className="scroll-mt-4 rounded-lg border border-line bg-card px-3 py-2">
       <button
         type="button"
         aria-expanded={open}
