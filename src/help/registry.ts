@@ -196,9 +196,20 @@ class RegistryImpl implements Registry {
       terms.set(term.id, term);
     }
 
+    // Placements are keyed by BASE id: a setting is explained in one place
+    // whether or not one pool type words it differently, and `resolveTopic`
+    // picks the variant at render time.
+    //
+    // So the target may be a topic that exists ONLY in qualified form — a
+    // Survivor-only setting like `settings.maxStrikes` has no unqualified
+    // topic to point at, and demanding one would make scoped-only content
+    // impossible to place. Writing the placement qualified instead does not
+    // help either: it would then never match the base id everything else
+    // joins on. Both spellings are accepted here and stored as the base.
+    const baseIds = new Set([...topics.keys()].map(baseTopicId));
     const placements: ResolvedPlacement[] = input.placements.map((p, i) => {
-      const topicId = normalizePath(p.topic);
-      if (!topics.has(topicId)) {
+      const topicId = baseTopicId(p.topic);
+      if (!topics.has(topicId) && !baseIds.has(topicId)) {
         throw new Error(`help: placement references unknown topic "${p.topic}"`);
       }
       if (!pages.has(p.page)) {

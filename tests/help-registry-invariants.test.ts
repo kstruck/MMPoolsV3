@@ -189,6 +189,56 @@ describe('buildRegistry — refuses invalid content', () => {
     ).not.toThrow();
   });
 
+  /**
+   * A Survivor-only setting has no unqualified topic to point a placement at.
+   * Demanding one would make scoped-only content impossible to place, and
+   * writing the placement qualified instead would stop it matching the base id
+   * that the orphan check, the panel and search all join on. Both spellings
+   * are accepted and stored as the base.
+   */
+  it('accepts a placement by base id for a topic that exists only scoped', () => {
+    const built = buildRegistry({
+      ...base,
+      topics: [topic({ id: 'NFL_SURVIVOR:settings.maxStrikes', poolTypes: ['NFL_SURVIVOR'] })],
+      pages: [page({ id: 'p' })],
+      placements: [{ topic: 'settings.maxStrikes', page: 'p' }],
+    });
+    expect(built.placements[0].topic).toBe('settings.maxStrikes');
+    const shown = built.placementsForPage('p', { poolType: 'NFL_SURVIVOR', audience: 'member' });
+    expect(shown[0].topics.map((t) => t.id)).toEqual(['NFL_SURVIVOR:settings.maxStrikes']);
+  });
+
+  it('stores a placement written in qualified form under its base id', () => {
+    const built = buildRegistry({
+      ...base,
+      topics: [topic({ id: 'NFL_SURVIVOR:settings.maxStrikes', poolTypes: ['NFL_SURVIVOR'] })],
+      pages: [page({ id: 'p' })],
+      placements: [{ topic: 'NFL_SURVIVOR:settings.maxStrikes', page: 'p' }],
+    });
+    expect(built.placements[0].topic).toBe('settings.maxStrikes');
+  });
+
+  it('shows nothing for a scoped-only topic outside its pool type', () => {
+    const built = buildRegistry({
+      ...base,
+      topics: [topic({ id: 'NFL_SURVIVOR:settings.maxStrikes', poolTypes: ['NFL_SURVIVOR'] })],
+      pages: [page({ id: 'p' })],
+      placements: [{ topic: 'settings.maxStrikes', page: 'p' }],
+    });
+    expect(built.placementsForPage('p', { poolType: 'NFL_PICKEM', audience: 'member' })).toEqual([]);
+  });
+
+  it('still rejects a placement for a topic that does not exist in any form', () => {
+    expect(() =>
+      buildRegistry({
+        ...base,
+        topics: [topic({ id: 'NFL_SURVIVOR:settings.maxStrikes', poolTypes: ['NFL_SURVIVOR'] })],
+        pages: [page({ id: 'p' })],
+        placements: [{ topic: 'settings.nothing', page: 'p' }],
+      }),
+    ).toThrow(/unknown topic/);
+  });
+
   it('accepts a scoped variant with no base topic of its own', () => {
     expect(() =>
       buildRegistry({
