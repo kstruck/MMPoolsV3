@@ -68,10 +68,10 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
   {
     id: 'isPublic',
     title: 'List this pool publicly',
-    short: 'Lists your pool on the public Browse page so anyone can find it. Off by default for private pools you share by link.',
+    short: 'Lists your pool on the public Browse page so anyone can find it. On by default. Turn it off for a pool you share only by link.',
     long: [
-      'On, your pool appears in Browse and strangers can find and join it.',
-      'Off, the only way in is the link you send. Anyone with the link can still join — this setting controls listing, not access.',
+      'On — the default — your pool appears in Browse and anyone can find and join it.',
+      'Off, the only way in is the link you send. Anyone holding that link can still join: this controls listing, not access.',
       'You can change it later without affecting anyone who has already joined.',
     ].join('\n\n'),
     poolTypes: 'all',
@@ -222,10 +222,10 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
   {
     id: 'reminders.auto24h',
     title: 'Remind 24 hours before lock',
-    short: 'Emails every member a day before picks lock, so anyone who has not entered still has time.',
+    short: 'Emails a day before picks lock, to members who have not entered yet. On by default.',
     long: [
-      'The reminder goes only to members who have not submitted yet, so nobody is nagged about something they have done.',
-      'It is sent once. If you would rather chase people yourself, leave it off.',
+      'The reminder goes only to members who have not submitted, so nobody is nagged about something they have already done.',
+      'It is sent once. Turn it off if you would rather chase people yourself.',
     ].join('\n\n'),
     poolTypes: 'all',
     audience: EVERYONE,
@@ -233,10 +233,10 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
   {
     id: 'reminders.auto1h',
     title: 'Remind 1 hour before lock',
-    short: 'A last call an hour before picks lock, to members who have still not entered.',
+    short: 'A last call an hour before picks lock, to members who have still not entered. On by default.',
     long: [
-      'This is the one that catches people. An hour is enough to open the pick sheet on a phone and finish.',
-      'You can turn both reminders on; a member who enters after the first one does not get the second.',
+      'An hour is enough to open the pick sheet on a phone and finish, which is why this is the one that catches people.',
+      'Both reminders are on by default; a member who enters after the first one does not get the second.',
     ].join('\n\n'),
     poolTypes: 'all',
     audience: EVERYONE,
@@ -244,10 +244,10 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
   {
     id: 'reminders.autoLock',
     title: 'Auto-lock at kickoff',
-    short: 'Locks the pool by itself at kickoff instead of waiting for you to do it. On is the safer choice.',
+    short: 'Locks the pool by itself at kickoff instead of waiting for you to do it. On by default.',
     long: [
-      'With it off, picks stay editable until you lock the pool yourself — which means a late pick can be made after the game has started.',
-      'With it on, the pool locks at kickoff whether you are watching or not.',
+      'With it on — the default — the pool locks at kickoff whether you are watching or not.',
+      'With it off, picks stay editable until you lock the pool yourself, which means a pick can still be made after the game has started.',
     ].join('\n\n'),
     poolTypes: 'all',
     audience: EVERYONE,
@@ -255,10 +255,10 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
   {
     id: 'reminders.announceWinner',
     title: 'Announce the winner',
-    short: 'Emails everyone the final standings once the pool is finished, without you having to write it.',
+    short: 'Emails everyone the final standings once the pool is finished. On by default.',
     long: [
-      'It names the winner and the finishing order. It does not say anything about who has been paid.',
-      'Leave it off if you would rather tell the group yourself.',
+      'It names the winner and the finishing order. It says nothing about who has been paid.',
+      'Turn it off if you would rather tell the group yourself.',
     ].join('\n\n'),
     poolTypes: 'all',
     audience: EVERYONE,
@@ -391,11 +391,16 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
   {
     id: 'lockDate',
     title: 'Lock date and time',
-    short: 'When picks stop being editable. It defaults to Wild Card kickoff. After it passes nobody can change a pick, including you.',
+    short: 'When picks stop being editable. Leave it empty and members see "Date TBD" until you set one.',
     long: [
-      'Up to this moment, members can change their picks as often as they like.',
-      'After it, the pick sheet is read-only for everyone. There is no way to reopen it for one player.',
-      'Members see the deadline on their pick sheet and get a reminder before it if you turned reminders on.',
+      'Up to this moment, members can change their picks as often as they like. After it the pick sheet is read-only for everyone, and there is no way to reopen it for one player.',
+      // The hint this replaced said "Picks lock at Wild Card kickoff by
+      // default". Nothing sets that: `lockDate` is optional, the wizard default
+      // is empty, and an unset value renders as "Date TBD"
+      // (ManagerDashboard.tsx:754). Voice rule 5 — name the default exactly, or
+      // do not claim one.
+      'There is no automatic value. Set it to the first playoff kickoff if you want everyone playing on the same information.',
+      'Members see the deadline on their pick sheet, and the reminders on the next step are timed from it.',
     ].join('\n\n'),
     poolTypes: ['NFL_PLAYOFFS'],
     audience: EVERYONE,

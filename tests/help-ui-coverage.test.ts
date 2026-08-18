@@ -274,6 +274,59 @@ describe('every wizard control has help or a written reason', () => {
   });
 });
 
+/**
+ * Voice rule 5 says to name the default exactly. Nothing checked that the name
+ * was RIGHT — and the first draft of this content shipped "Off by default" for
+ * a field the wizard defaults to `true`, and "defaults to Wild Card kickoff"
+ * for an optional field with no default at all.
+ *
+ * So each claim is pinned to the line that makes it true. Flip a wizard default
+ * and this fails on the copy, which is the only place the drift would otherwise
+ * be invisible.
+ */
+describe('copy that names a default matches the wizard', () => {
+  const CLAIMS: readonly { topic: string; file: string; defaultLine: RegExp; says: string }[] = [
+    { topic: 'reminders.auto24h', file: 'create/CreatePlayoffPool.tsx', defaultLine: /auto24h:\s*true/, says: 'On by default' },
+    { topic: 'reminders.auto1h', file: 'create/CreatePlayoffPool.tsx', defaultLine: /auto1h:\s*true/, says: 'On by default' },
+    { topic: 'reminders.autoLock', file: 'create/CreatePlayoffPool.tsx', defaultLine: /autoLock:\s*true/, says: 'On by default' },
+    { topic: 'reminders.announceWinner', file: 'create/CreatePlayoffPool.tsx', defaultLine: /announceWinner:\s*true/, says: 'On by default' },
+    { topic: 'seasonType', file: 'create/CreateNFLPickemPool.tsx', defaultLine: /seasonType:\s*'2'/, says: 'Regular season is the default' },
+    { topic: 'settings.pickMode', file: 'create/CreateNFLPickemPool.tsx', defaultLine: /pickMode:\s*'STRAIGHT'/, says: 'Straight up is the default' },
+  ];
+
+  // `isPublic` is set in all seven wizards, so its default is asserted where it
+  // is DECLARED for every one of them rather than in one file.
+  const ISPUBLIC_FILES = FILES.filter((f) => /Create\w+Pool\.tsx$/.test(f));
+
+  it('the isPublic copy matches the default in every create wizard', () => {
+    const wrong = ISPUBLIC_FILES.filter((f) => !/isPublic:\s*true/.test(readFileSync(f, 'utf8'))).map((f) =>
+      f.split(/[\\/]/).pop(),
+    );
+    expect(ISPUBLIC_FILES.length).toBe(7);
+    expect(wrong).toEqual([]);
+
+    const topic = helpRegistry.topics.find((t) => t.id === 'isPublic')!;
+    expect(typeof topic.short === 'string' ? topic.short : topic.short.fallback).toContain('On by default');
+  });
+
+  it.each(CLAIMS)('$topic — the wizard still makes "$says" true', ({ topic, file, defaultLine, says }) => {
+    const source = readFileSync(join(WIZARD_DIR, file), 'utf8');
+    expect(defaultLine.test(source), `${file} no longer matches ${defaultLine}`).toBe(true);
+
+    const found = helpRegistry.topics.find((t) => t.id === topic);
+    expect(found, `${topic} is missing from the registry`).toBeDefined();
+    const short = typeof found!.short === 'string' ? found!.short : found!.short.fallback;
+    expect(short).toContain(says);
+  });
+
+  it('no topic claims a default for lockDate, which has none', () => {
+    const lock = helpRegistry.topics.find((t) => t.id === 'lockDate')!;
+    const copy = [typeof lock.short === 'string' ? lock.short : lock.short.fallback,
+      typeof lock.long === 'string' ? lock.long : lock.long.fallback].join('\n');
+    expect(copy).not.toMatch(/by default|defaults to/i);
+  });
+});
+
 describe('the hint prop is gone', () => {
   /**
    * T1's actual deliverable, as a grep. A `hint=` string is a second place to

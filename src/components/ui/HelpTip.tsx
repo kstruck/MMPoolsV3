@@ -100,11 +100,18 @@ export function HelpTip({ helpId, side = 'top', className }: HelpTipProps) {
   // `pinned` survives a mouseleave; a hover does not.
   const [pinned, setPinned] = useState(false);
 
+  const open = placement !== null;
+
   // While the bubble is up, the page can still scroll under it (a wizard step
   // is taller than the viewport on a phone). `true` for the capture phase, so
   // a scroll inside any container is seen, not only the window's.
+  //
+  // Keyed on the BOOLEAN, not on `placement`. Depending on the object would
+  // re-run this effect on every scroll event — because the handler replaces
+  // `placement` with a new object — tearing both listeners down and adding
+  // them again on every frame of a scroll.
   useEffect(() => {
-    if (!placement) return;
+    if (!open) return;
     const remeasure = () => {
       if (triggerRef.current) setPlacement(measure(triggerRef.current));
     };
@@ -114,7 +121,7 @@ export function HelpTip({ helpId, side = 'top', className }: HelpTipProps) {
       window.removeEventListener('scroll', remeasure, true);
       window.removeEventListener('resize', remeasure);
     };
-  }, [placement]);
+  }, [open]);
 
   // Resolution is scoped: `resolveTopic` filters BOTH pool type and audience on
   // every return path, and nothing filters after it — this component renders
@@ -128,7 +135,6 @@ export function HelpTip({ helpId, side = 'top', className }: HelpTipProps) {
   // wizard field whose id is neither a topic nor an allowlist row fails there.
   if (!topic) return null;
 
-  const open = placement !== null;
   const show = () => {
     if (triggerRef.current) setPlacement(measure(triggerRef.current));
   };
