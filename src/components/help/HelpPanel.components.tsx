@@ -175,9 +175,18 @@ export function pageGroup(page: HelpPage): string {
 export function AllPages(props: {
   pages: readonly HelpPage[];
   currentPageId?: string;
+  /**
+   * Can the reader actually be taken to this page from here? A page for ANOTHER
+   * pool type, reached through the "Show all pool types" expander, cannot be:
+   * the reader is standing in a different pool. Those rows are LISTED and not
+   * linked — the same treatment K13 gives the super-admin sub-tabs — because
+   * showing them Bracket guidance while they look at an NFL screen is worse than
+   * showing them the title of a page they could visit from a Bracket pool.
+   */
+  isReachable: (page: HelpPage) => boolean;
   onSelect: (pageId: string) => void;
 }) {
-  const { pages, currentPageId, onSelect } = props;
+  const { pages, currentPageId, isReachable, onSelect } = props;
   return (
     <div className="space-y-3">
       {PAGE_GROUPS.map((group) => {
@@ -187,21 +196,27 @@ export function AllPages(props: {
           <div key={group.id}>
             <PanelSectionHeading>{group.label}</PanelSectionHeading>
             <ul className="mt-1 space-y-1">
-              {inGroup.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    onClick={() => onSelect(p.id)}
-                    aria-current={p.id === currentPageId ? 'true' : undefined}
-                    className={cn(
-                      'w-full rounded px-2 py-1 text-left font-body text-[12.5px] hover:bg-card',
-                      p.id === currentPageId ? 'text-[color:var(--text)]' : 'text-muted',
-                    )}
-                  >
+              {inGroup.map((p) =>
+                isReachable(p) ? (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onClick={() => onSelect(p.id)}
+                      aria-current={p.id === currentPageId ? 'true' : undefined}
+                      className={cn(
+                        'w-full rounded px-2 py-1 text-left font-body text-[12.5px] hover:bg-card',
+                        p.id === currentPageId ? 'text-[color:var(--text)]' : 'text-muted',
+                      )}
+                    >
+                      {p.title}
+                    </button>
+                  </li>
+                ) : (
+                  <li key={p.id} className="px-2 py-1 font-body text-[12.5px] text-faint">
                     {p.title}
-                  </button>
-                </li>
-              ))}
+                  </li>
+                ),
+              )}
             </ul>
           </div>
         );

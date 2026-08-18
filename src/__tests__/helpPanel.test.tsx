@@ -283,7 +283,13 @@ describe('the panel contents', () => {
     expect(screen.queryByRole('button', { name: bracketPage.title })).toBeNull();
 
     fireEvent.click(screen.getByText('Show all pool types'));
-    await waitFor(() => expect(screen.getByRole('button', { name: bracketPage.title })).toBeTruthy());
+    // LISTED, NOT LINKED (codex R7). The reader is standing in an NFL pool, so
+    // there is nowhere to take them; forcing Bracket guidance onto an NFL screen
+    // is worse than naming the page they could open from a Bracket pool.
+    await waitFor(() => expect(screen.getByText(bracketPage.title)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: bracketPage.title })).toBeNull();
+    // Discriminating half: a page for THIS pool type in the same list is a button.
+    expect(screen.getByRole('button', { name: helpRegistry.getPage('pool.nfl.standings')!.title })).toBeTruthy();
   });
 });
 

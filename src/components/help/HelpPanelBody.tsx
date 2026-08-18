@@ -220,7 +220,13 @@ export function HelpPanelBody({ state, searchInputRef }: {
 
           <section className="space-y-2">
             <PanelSectionHeading>All pages</PanelSectionHeading>
-            <AllPages pages={allPages} currentPageId={page?.id} onSelect={openPage} />
+            <AllPages
+              pages={allPages}
+              currentPageId={page?.id}
+              // A page outside the reader's current scope is listed, not linked.
+              isReachable={(p) => isEntryVisible(p.poolTypes, p.audience, scope)}
+              onSelect={openPage}
+            />
             {hasOtherPoolTypes ? (
               <button
                 type="button"

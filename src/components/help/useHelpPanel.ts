@@ -16,6 +16,7 @@ import { baseTopicId } from '../../help/registry';
 import { baseRegistry, loadAdminRegistry } from '../../help/admin';
 import { usePublishedRoute } from '../../help/publish';
 import { hrefForPage, isPageOffered, resolveHelpPage } from '../../help/route-match';
+import { isEntryVisible } from '../../help/visibility';
 
 /**
  * What the header button needs: whether the panel is open, and how to toggle
@@ -193,12 +194,20 @@ export function useHelpPanelState(options: { isAdmin: boolean; defaultAudience?:
         navigate(href);
         return;
       }
-      // A page whose tab this surface is not offering must never be forced into
-      // view: the reader cannot get to that screen, so a guide for it is a
-      // description of somewhere they are not (codex R5). The panel's search
-      // already drops those hits, so this is the same rule stated where the
-      // navigation happens rather than only where the list is built.
-      if (!isPageOffered(next, routeContext)) {
+      // Two ways a page must never be FORCED into view, both because the reader
+      // cannot get to that screen and a guide for it would describe somewhere
+      // they are not:
+      //
+      //   - its tab is not one this surface offers (codex R5), and
+      //   - it belongs to another pool type or another audience (codex R7) —
+      //     reachable in the list only through "Show all pool types", where it
+      //     is now rendered unlinked.
+      //
+      // Stated here as well as in the list, so a caller that reaches this by any
+      // other door (a `related` link, a `?help=` deep link someone pasted) gets
+      // the same answer.
+      const inScope = isEntryVisible(next.poolTypes, next.audience, scope);
+      if (!inScope || !isPageOffered(next, routeContext)) {
         setActiveTopicId(undefined);
         return;
       }
