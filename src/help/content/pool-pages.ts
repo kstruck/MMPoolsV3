@@ -110,8 +110,13 @@ const NFL_PAGES = poolPages({
     {
       tab: 'grid',
       title: 'NFL pool — All picks',
+      // PER GAME, not per week. `functions/src/lib/pickReveal.ts` reveals a pick
+      // at its own game's lock instant — the same instant the picker's own edit
+      // window closes — and the commissioner is on that same boundary. Copy that
+      // said "when the week locks" would describe a rule the code refused to
+      // implement on purpose.
       summary:
-        'Everyone’s picks for a week, side by side. Picks that have not locked yet show as hidden, so nobody can copy them before the deadline.',
+        'Everyone’s picks for a week, side by side. A pick appears once its own game locks, so nobody can copy anyone before the deadline.',
     },
     {
       tab: 'standings',
@@ -140,8 +145,12 @@ const NFL_PAGES = poolPages({
     {
       tab: 'payments',
       title: 'NFL pool — Payments',
+      // READ-ONLY for a member, and the first draft of this line said otherwise.
+      // `PaymentsPanel.tsx:91` renders its only control — "Open Payment Ledger" —
+      // behind `isManager`, so a member has nothing to mark. Voice rule 5: name
+      // what the screen does, and check the screen.
       summary:
-        'What you owe, what you have paid, and any prize owed to you. Marking a payment records what you say you sent; your commissioner confirms it.',
+        'What you owe, what you have paid, and any prize owed to you. Your commissioner records payments as they arrive, so this is a read-only view of what they have marked.',
     },
     {
       tab: 'manager',
