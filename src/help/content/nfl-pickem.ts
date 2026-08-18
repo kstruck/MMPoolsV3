@@ -24,7 +24,12 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
     long: [
       'Per game is the default. Each pick stays editable until that game kicks off, so a Sunday-night pick can be changed all Sunday afternoon.',
       'Weekly locks every pick in the week at the first kickoff. Choose it when you want everyone playing the same slate on the same information.',
-      'Members see the deadline on their pick sheet either way, and a locked pick cannot be changed by anyone — including you.',
+      // NOT unconditional (codex R1-2). `effectiveGameLockAt` takes
+      // `max(base, override)`, so a week extension moves EVERY game in that
+      // week later — including games that had already locked. The first draft
+      // said a locked pick can never change, which is false for the supported
+      // extension flow this file's lock-buffer topic describes.
+      'Members see the deadline on their pick sheet either way. Once a pick locks nobody can change it, including you — unless you extend that whole week’s deadline, which reopens every game in it.',
       // `functions/src/nflPools.ts:568` — the submission path derives weekly
       // locking as `settings.confidenceMode || settings.lockMode === 'WEEKLY'`,
       // and the manager form disables the control while confidence is on
@@ -103,11 +108,16 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
   {
     id: 'pickem.quickPicks',
     title: 'Quick picks',
-    short: 'Fills the games you have not picked yet, using one rule: favourites, underdogs, all home teams, or all away teams.',
+    short: 'Fills games you have not picked yet, by one rule: favourites, underdogs, all home teams, or all away teams.',
     long: [
       // `PickemPickEntry.tsx:287-298` — `planQuickPicks` is passed
       // `g => !isGameLocked(g)` and skips games already picked.
       'It leaves alone anything you have already picked and anything already locked, so it cannot undo a choice you made.',
+      // `planQuickPicks` (quickPicks.ts:85-96) skips a game whose
+      // `favouredSide` is null — no spread, or an even line — and counts it in
+      // `skipCount`, which the dialog surfaces. Preseason slates carry a line
+      // on almost nothing, so this is the common case, not the edge (codex R1-3).
+      'Favourites and underdogs need a betting line. A game with no line, or an even one, is left blank for you to fill in by hand, and the dialog says how many that is. All home and all away fill every game they can.',
       'Nothing is sent when it fills the sheet. Read it over, change what you want, and submit as usual.',
     ].join('\n\n'),
     fields: [],
@@ -118,14 +128,20 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
   {
     id: 'pickem.tiebreakerPrediction',
     title: 'Tie-breaker prediction',
-    short: 'Your guess at the combined score of the tie-break game. It decides the week when two players finish level.',
+    short: 'Your guess at the combined score of the tie-break game, when your pool asks for one. It decides a week two players finish level.',
     long: [
       // `shared/nflTiebreaker.ts:184-198` — the target is the Monday game(s),
       // and the sheet says so; with no Monday game it is the final game of the
       // week. `functions/src/nflPools.ts:585-601` freezes the week's target on
       // the first submission, so it cannot move under people who already played.
-      'The sheet names the game it is asking about — the Monday game, or the last game of the week when there is no Monday game.',
-      'Add the two teams’ final scores together and enter that one number. Closest takes the week; your commissioner chose what happens when two players are equally close.',
+      // `tiebreakerAsksForPrediction` (shared/nflTiebreaker.ts:63) is false for
+      // NONE, and the sheet renders no field at all then. `tiebreakTargetSentence`
+      // (:184-198) also handles MULTIPLE target games, which legacy
+      // MNF_COMBINED pools have. The first draft assumed one game, always
+      // asked for (codex R1-1).
+      'Your commissioner chooses the tie-break rule, and one of the choices is none at all. When it is none, the sheet asks for no prediction and a level week stays level.',
+      'When it does ask, the sheet names what it is asking about — the Monday game, or the last game of the week when there is no Monday game. Some older pools ask about every Monday game together.',
+      'Add the final scores together and enter that one number. Closest takes the week; your commissioner chose what happens when two players are equally close.',
       'The game being asked about is fixed for everyone as soon as the first player submits, so a schedule change later in the week cannot move it.',
     ].join('\n\n'),
     fields: [],
