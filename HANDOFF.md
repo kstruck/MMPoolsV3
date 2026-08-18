@@ -28,8 +28,15 @@
 > 60/40, $70 season at 100 %). **Absent `weeklyPayouts` is still today's
 > behaviour byte-for-byte** — `payouts` prices both pots.
 >
-> **Open item:** ask Kevin whether he ran `functions/scripts/censusPayoutRanks.mjs`
-> before merging #470 (K9). `MULTI_ENTRY_WIZARD_ENABLED` stays `false`. Issue
+> **K9 census: NOT run** (Kevin, 2026-08-17 — the #470 runbook let him skip it
+> with no service-account key). T1's unique-rank refinement therefore shipped
+> with the duplicate-rank count on existing pools UNKNOWN, not zero. Nothing
+> reachable is exposed today: `updatePoolSettings` has exactly one caller
+> (`NFLManagerView`) and it never sends `settings.payouts`, create refuses
+> duplicates, and a direct client write to it on an NFL pool is denied by rules.
+> It becomes real the moment a SEASON-places editor reaches the manager UI — T2
+> added only the weekly one — so **run the census before that ships**; steps in
+> `MORNING-2026-08-18.md` §4. `MULTI_ENTRY_WIZARD_ENABLED` stays `false`. Issue
 > #467 (SUPER_ADMIN stale-claim gate) is a ticket only. Next in order:
 > co-commissioner `members` read rule → sticky-null re-price (plan-gated) → #467.
 
