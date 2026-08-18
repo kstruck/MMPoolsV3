@@ -356,9 +356,12 @@ overdue. They are ranked on different things and both rankings are honest:
 not current ones — all 41 today carry the class the fallback matches — and Pick'em
 copy has a deadline that T16 does not. But say the word and I will flip it.
 
-- **T3–T8 and T10–T16 unstarted.** The pool and admin pages have summaries but no
-  per-option copy, the site and account pages have neither (T3), and manager
+- **T3–T8, T10–T14 and T16 unstarted.** The pool and admin pages have summaries but
+  no per-option copy, the site and account pages have neither (T3), and manager
   settings, pick sheets and rules pages still have no tooltips (T4–T7).
+- **T15 is PARTIALLY done and is deliberately not in that range.** Its deploy half
+  happened; **none of its four smoke checks has run** — §7 step 7. Do not redeploy
+  for it, and do not treat it as finished.
 - The per-pool-type rules copy is still named in `WIZARD_FIELD_ALLOWLIST` with its
   ticket, field by field. A ticket is done when its rows are gone.
 
