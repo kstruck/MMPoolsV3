@@ -95,14 +95,16 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
       // member's sheet stays closed and the extension only reaches them through
       // a commissioner proxy pick. Promising it would be promising a door the
       // reader cannot open. Same root cause as the withdrawn lock topics.
-      // "NOBODY" WAS TOO STRONG (qodo re-review #1). A commissioner CAN reopen
-      // a week that has not been scored: `extendWeekDeadline` moves the
-      // deadline later on an unpublished week, and `proxyPick`
-      // (`poolExceptions.ts:272-273`) reads that override and accepts a CHANGED
-      // selection. What the member cannot do is reach it from their own sheet —
-      // the client-lock defect at the top of this file — so the honest advice is
-      // to ask, not that the door is bolted.
-      'The sheet shows which games are still open. Once a pick has closed you cannot change it yourself — ask your commissioner, who can reopen a week that has not been scored.',
+      // CLAIMS THE LEAST, ON PURPOSE. Three rounds argued over this sentence:
+      // "nobody can reopen it" is false (a commissioner can extend an
+      // unpublished week), "ask your commissioner" is false too (codex R15 —
+      // `NFLManagerView.tsx:841` sends `proxyPick` a picks map keyed by the WEEK
+      // NUMBER, and the Pick'em branch at `poolExceptions.ts:340-344` looks each
+      // key up as a GAME id, so the call fails with "Game 3 not found"), and on
+      // Survivor and Margin an extension is refused outright (HARD_WEEKLY_LOCK).
+      // What is true of every pool, every type and every proxy state is what the
+      // reader is standing in front of: this sheet will not take it.
+      'The sheet shows which games are still open. Once a pick has closed you cannot change it from this sheet.',
     ].join('\n\n'),
     fields: [],
     poolTypes: PICKEM,
