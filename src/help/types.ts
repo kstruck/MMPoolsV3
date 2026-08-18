@@ -108,6 +108,14 @@ export const DEFAULT_SECTION = 'general';
  */
 export interface HelpRouteContext {
   pathname: string;
+  /**
+   * The current query string, so a page's `href` can REPLACE the tab rather than
+   * rebuild the query from nothing. An NFL reader on `?tab=results&week=3` who
+   * picks another page from Help must keep their week — the dashboard's own tab
+   * setter preserves other parameters, and Help must not be the one door that
+   * silently resets them (codex R11).
+   */
+  search?: string;
   routeParams?: Readonly<Record<string, string | undefined>>;
   tab?: string;
   subTab?: string;

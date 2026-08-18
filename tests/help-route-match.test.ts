@@ -289,6 +289,42 @@ describe('the real page list, resolved as a reader would meet it', () => {
     expect(hrefForPage(bracketStandings, ctx({ pathname: '/pool/abc', poolType: 'NFL_PICKEM' }))).toBeNull();
   });
 
+  /**
+   * codex R11. A pool URL carries state Help knows nothing about — `?week=3` on
+   * the NFL results tab, `?action=create` on the bracket dashboard — and the
+   * dashboards' own tab setters preserve it. A help link that rebuilt the query
+   * from scratch would silently reset the reader's week.
+   */
+  it('replaces the tab and keeps every other query parameter', () => {
+    const standings = helpRegistry.getPage('pool.nfl.standings')!;
+    const href = hrefForPage(
+      standings,
+      ctx({ pathname: '/pool/abc', search: '?tab=results&week=3', poolType: 'NFL_PICKEM' }),
+    );
+    expect(href).toContain('week=3');
+    expect(href).toContain('tab=standings');
+    expect(href).not.toContain('tab=results');
+  });
+
+  it('clears a sub-tab the destination does not have, so no section is deep-linked by accident', () => {
+    const standings = helpRegistry.getPage('pool.nfl.standings')!;
+    const href = hrefForPage(
+      standings,
+      ctx({ pathname: '/pool/abc', search: '?tab=manager&section=members', poolType: 'NFL_PICKEM' }),
+    );
+    expect(href).not.toContain('section=');
+    // …and a page that DOES name one still sets it, so the clear is a decision.
+    const members = helpRegistry.getPage('pool.nfl.manager.members')!;
+    expect(hrefForPage(members, ctx({ pathname: '/pool/abc', search: '?tab=picks', poolType: 'NFL_PICKEM' })))
+      .toContain('section=members');
+  });
+
+  it('the pool root link drops the tab but keeps the rest', () => {
+    const root = helpRegistry.getPage('pool.nfl')!;
+    const href = hrefForPage(root, ctx({ pathname: '/pool/abc', search: '?tab=results&week=3', poolType: 'NFL_PICKEM' }));
+    expect(href).toBe('/pool/abc?week=3');
+  });
+
   it('the NFL manager sections link with `section=`, the parameter already live in shared links', () => {
     const members = helpRegistry.getPage('pool.nfl.manager.members')!;
     expect(hrefForPage(members, ctx({ pathname: '/pool/abc', poolType: 'NFL_PICKEM' })))

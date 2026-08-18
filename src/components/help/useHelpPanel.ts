@@ -121,6 +121,7 @@ export function useHelpPanelState(options: { isAdmin: boolean; defaultAudience?:
   const routeContext = useMemo<HelpRouteContext>(
     () => ({
       pathname: location.pathname,
+      search: location.search,
       // PUBLISHED WINS OVER THE URL. A surface that reads `?tab=` publishes the
       // tab it actually rendered, which is not always the one asked for — an
       // NFL pool opened on `?tab=results` shows the dashboard when the type
@@ -137,6 +138,7 @@ export function useHelpPanelState(options: { isAdmin: boolean; defaultAudience?:
     }),
     [
       location.pathname,
+      location.search,
       published.tab,
       published.subTab,
       published.poolType,

@@ -20,7 +20,7 @@
 // the reader is actually in would take them to a tab that pool has no idea
 // about.
 
-import type { Audience, HelpPage } from '../types';
+import type { Audience, HelpPage, HelpRouteContext } from '../types';
 import type { PoolType } from '@shared/poolTypes';
 
 const NFL_TYPES: readonly PoolType[] = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
@@ -52,16 +52,34 @@ function poolPages(args: {
   tabs: readonly TabPageSpec[];
 }): HelpPage[] {
   const { idPrefix, route, altRoutes, poolTypes, rootTitle, rootSummary, tabs, subParam = 'sub' } = args;
-  const linkable = (tab: string, subTab?: string) => (ctx: { pathname: string; poolType?: PoolType }) => {
+  /**
+   * REPLACE the tab, do not rebuild the query (codex R11). A pool URL can carry
+   * state Help knows nothing about — `?week=3` on the NFL results tab,
+   * `?action=create` on the bracket dashboard — and the dashboards' own tab
+   * setters preserve it. A help link that dropped it would quietly reset the
+   * reader's week, which is worse than not linking at all.
+   */
+  const withTab = (ctx: { pathname: string; search?: string }, tab?: string, subTab?: string) => {
+    const params = new URLSearchParams(ctx.search ?? '');
+    if (tab === undefined) params.delete('tab');
+    else params.set('tab', tab);
+    // A page with no sub-tab CLEARS it, matching `NFLPoolDashboard`'s own setter:
+    // leaving `section=members` on a jump to the Standings tab would deep-link a
+    // commissioner section the reader did not ask for.
+    if (subTab === undefined) params.delete(subParam);
+    else params.set(subParam, subTab);
+    const query = params.toString();
+    return query ? `${ctx.pathname}?${query}` : ctx.pathname;
+  };
+  const linkable = (tab: string, subTab?: string) => (ctx: HelpRouteContext) => {
     if (!ctx.poolType || !poolTypes.includes(ctx.poolType)) return null;
-    const sub = subTab ? `&${subParam}=${subTab}` : '';
-    return `${ctx.pathname}?tab=${tab}${sub}`;
+    return withTab(ctx, tab, subTab);
   };
   const root: HelpPage = {
     id: idPrefix,
     route,
     altRoutes,
-    href: (ctx) => (ctx.poolType && poolTypes.includes(ctx.poolType) ? ctx.pathname : null),
+    href: (ctx) => (ctx.poolType && poolTypes.includes(ctx.poolType) ? withTab(ctx) : null),
     title: rootTitle,
     summary: rootSummary,
     poolTypes,
