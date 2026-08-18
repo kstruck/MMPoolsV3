@@ -239,6 +239,20 @@ unresolved on #311, and resolving them turned out to need six more rounds — th
 new code written to close a finding has never been reviewed, so it earns its own
 round. Codex runs are paid, so do not burn rounds on trivial diffs.
 
+⚠️ **EXCEPTION — a §2b-forced round may go up to 5 PAST the cap, no ask needed
+(Kevin, 2026-08-18).** §2b requires a codex round on any code written to close a
+**qodo** finding. On a PR that has already spent ten rounds and then gets a qodo
+report, that mandate and this cap contradict each other, and the PR cannot
+satisfy both. Kevin's ruling: **run up to 5 additional rounds in that case** —
+so 15 is the ceiling when §2b forces the overage, 10 otherwise. Past 15, ask.
+
+The exception earns its keep: it was written after #472 stopped at 11 and
+merged three glossary lines un-reviewed. The round Kevin then authorised found
+a real defect — `poolTypes: []` type-checks, makes a topic permanently
+unreachable, and `buildRegistry` accepted it. Do not treat the extra rounds as
+a formality to skip; the overage exists because the code most likely to be
+wrong is the code written last, to close somebody else's finding.
+
 **The stopping rule is evidence, not the counter**: stop when a codex round comes
 back clean **AND qodo is clean** (§2b — restored 2026-07-30, and it is required,
 not optional) **AND your own read of the diff agrees**. All three, not two. If you
