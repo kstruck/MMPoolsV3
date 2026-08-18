@@ -138,7 +138,7 @@ const NFL_PAGES = poolPages({
       // whole sheet at the week's first kickoff whatever `lockMode` says
       // (`NFLPoolDashboard.tsx:515-534`, `PickemPickEntry.tsx:138-141`). This
       // says what is true of every pool and lets the sheet be the authority.
-        'Make and change your picks for the week, then submit them. The sheet shows which games are still open and when the next deadline falls. A pick that has closed cannot be changed by anyone.',
+        'Make and change your picks for the week, then submit them. The sheet shows which games are still open and when the next deadline falls. A pick that has closed can only be changed by your commissioner.',
     },
     {
       tab: 'grid',

@@ -402,7 +402,11 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
       'Monday night is the usual choice, either the last Monday game or the first. On a week with no Monday game, those two use the last game of the week instead.',
       'A few older pools ask about every Monday game together. Those ask for nothing on a week with no Monday game.',
       'You can also choose no tie-breaker. Then nothing is predicted.',
-      'Whoever is closest takes the week, and two players equally close share it.',
+      // CONDITIONAL, because two of the four rules ask for nothing (qodo
+      // re-review #2): NONE always, and legacy MNF_COMBINED on a Monday-less
+      // week. `computeWeeklyWinners` returns every tied leader when no
+      // difference exists, so those weeks are shared outright.
+      'Where a prediction is asked for, whoever is closest takes the week, and two players equally close share it. Where none is asked for, everyone level at the top shares it.',
       'Set it before you launch. Once any player has submitted picks, it is fixed for the life of the pool.',
     ].join('\n\n'),
     poolTypes: ['NFL_PICKEM'],
