@@ -3,6 +3,7 @@ import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { WizardShellProps } from './types';
 import { useWizardDraft } from './useWizardDraft';
+import { HelpScopeProvider } from '../../help/scope';
 
 // Transient RHF field for the Review-step Terms acceptance. Underscore-prefixed
 // so it reads as non-persisted; zod strips unknown keys so it never reaches the
@@ -116,6 +117,11 @@ export function WizardShell(props: WizardShellProps) {
   };
 
   return (
+    // The wizard publishes the help scope for everything below it: it is the
+    // one place that knows the pool type before a pool exists, and `HelpTip`
+    // reads that rather than taking a pool type as a prop. Audience is always
+    // `commissioner` — nobody reaches a create wizard for someone else's pool.
+    <HelpScopeProvider poolType={poolType} audience="commissioner">
     <FormProvider {...methods}>
       <div className="mx-auto w-full max-w-2xl text-slate-100">
         {/* Draft resume prompt */}
@@ -216,5 +222,6 @@ export function WizardShell(props: WizardShellProps) {
         </div>
       </div>
     </FormProvider>
+    </HelpScopeProvider>
   );
 }

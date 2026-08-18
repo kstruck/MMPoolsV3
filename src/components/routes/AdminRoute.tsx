@@ -13,6 +13,7 @@ import { dbService } from '../../services/dbService';
 import { useToast } from '../ui/Toast';
 import type { User, Pool, GameState, PropsPool, PlayoffPool, BracketPool } from '../../types';
 import { isNflSeasonType, type PoolType } from '@shared/poolTypes';
+import { HelpScopeProvider } from '../../help/scope';
 
 interface AdminRouteProps {
     user: User | null;
@@ -81,6 +82,15 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
         return <div className="p-10 text-center text-brandred-500 font-display font-bold uppercase tracking-[0.05em]">You do not have permission to manage this pool.</div>;
     }
 
+    // PLAN-HELP-SYSTEM T1: the help scope for every manager surface this route
+    // dispatches to. It sits below the ownership guard above, so `commissioner`
+    // is the only audience that can reach any of it.
+    const withHelp = (node: React.ReactNode) => (
+        <HelpScopeProvider poolType={currentPool.type as PoolType} audience="commissioner">
+            {node}
+        </HelpScopeProvider>
+    );
+
     const openShare = (poolId: string) => {
         const identifier = (currentPool.type === 'BRACKET' ? currentPool.slug : (currentPool as any).urlSlug) || poolId;
         const url = `${window.location.origin}/pool/${identifier}`;
@@ -89,7 +99,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
     };
 
     if (currentPool.type === 'PROPS') {
-        return (
+        return withHelp(
             <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
                 <Header user={user} onOpenAuth={onOpenAuth} onLogout={onLogout} onCreatePool={onCreatePool} />
                 <div className="flex-grow">
@@ -109,7 +119,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
     }
 
     if (currentPool.type === 'NFL_PLAYOFFS') {
-        return (
+        return withHelp(
             <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
                 <Header user={user} onOpenAuth={onOpenAuth} onLogout={onLogout} onCreatePool={onCreatePool} />
                 <div className="flex-grow">
@@ -125,7 +135,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
     }
 
     if (currentPool.type === 'BRACKET') {
-        return (
+        return withHelp(
             <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
                 <Header user={user} onOpenAuth={onOpenAuth} onLogout={onLogout} onCreatePool={onCreatePool} />
                 <div className="flex-grow">
@@ -160,7 +170,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
     }
 
     // SQUARES ADMIN
-    return (
+    return withHelp(
         <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
             <Header user={user} onOpenAuth={onOpenAuth} onLogout={onLogout} onCreatePool={onCreatePool} />
             <AdminPanel

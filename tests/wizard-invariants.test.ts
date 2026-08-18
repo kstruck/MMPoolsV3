@@ -331,6 +331,10 @@ describe('the Payouts step renders two editors on HYBRID and one everywhere else
     expect(step).not.toContain('rank: fields.length + 1');
     // Percentages are z.number().min(0).max(100), not integers — a bare number
     // input defaults to step=1 and marks a 33.3 invalid (qodo #2 on #471).
-    expect(step).toContain('<input type="number" min={0} max={100} step="any"');
+    //
+    // Matched on the ATTRIBUTES rather than the literal opening tag: T1 added
+    // an `id` so the label has a control to point at, and a guard that breaks
+    // on an unrelated attribute teaches people to edit the guard.
+    expect(step).toMatch(/<input[^>]*type="number"[^>]*min=\{0\}[^>]*max=\{100\}[^>]*step="any"/);
   });
 });

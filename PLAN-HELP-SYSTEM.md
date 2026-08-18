@@ -504,6 +504,34 @@ convention):
 
 ### D2 — Tooltip component: `src/components/ui/HelpTip.tsx`
 
+> **Measured corrections from T1 (2026-08-18).** Four things this section
+> asserted turned out to be wrong when the code was written against it.
+>
+> 1. **`ui/FieldLabel` is not new — it already exists**, exported from
+>    `src/components/ui/Field.tsx` and used by `ContactPage`, `HowItWorksPage`,
+>    `SupportPage` and `PlayoffSettingsModal`. Creating
+>    `src/components/ui/FieldLabel.tsx` would collide with it in the `ui`
+>    barrel. **T4–T6 must EXTEND that component** with `helpId` /
+>    `data-help-exempt`, not add a second one. T1 did not touch it (nothing in
+>    the wizard uses it, and adding an unused prop is speculation): the wizard's
+>    own `fields.tsx` renders its label row internally, because the two have
+>    different label styling and merging them is a visual change no help ticket
+>    should smuggle in.
+> 2. **There are 14 literal `hint=` strings, not 13** (§7 T1 says 13):
+>    three seasonType notes, pickMode, weeklyTiebreaker, two season read-only
+>    notes, props options, two on `LaunchStep`, multi-entry, contactEmail,
+>    logoUrl, entry fee.
+> 3. **`HelpTip` renders nothing for an unknown id in dev as well as prod** —
+>    D1 says "throws in dev". Throwing would break the wizard for every field
+>    whose copy lands in T9–T13, which is most of them, and a `?` that opens on
+>    nothing is worse than no `?`. `tests/help-ui-coverage.test.ts` is the guard
+>    instead: an id that is neither a topic nor an allowlist row fails there.
+> 4. **The tooltip footer reads "More in Help", not "Tap for more" / "Click for
+>    more".** Choosing between those two needs a `(hover: none)` media query at
+>    render time, and this app is prerendered (`scripts/prerender.ts`), so the
+>    two would disagree. It is shown only when a panel is mounted to open.
+
+
 - Props: `{ helpId: string; side?: 'top'|'bottom'; size?: 'sm'|'md'; className? }`.
   Renders a lucide `HelpCircle` (14 px) trigger `<button type="button"
   aria-label={"About " + topic.title} aria-describedby={tipId}
@@ -804,6 +832,12 @@ Content tickets (T9–T13) are the bulk of the work and can be split further.
 
 | Ticket | Scope | Files | Done when |
 |---|---|---|---|
+> **T1 also added the seven `/create/*` `HelpPage` rows** (nominally T2's
+> column). The registry refuses a topic nothing places, and a placement needs a
+> page — so the ticket that authors the first topics has to author the pages
+> they sit on. T2 still owns route→page MATCHING, the panel, the per-step pages
+> inside a wizard, and search.
+
 | T0 | Voice guide + registry types + empty registry + allowlist that lists EVERY schema path (so CI is green from day one) | `docs/help-voice.md`, `src/help/{types,registry,pages,glossary,coverage-allowlist}.ts`, `tests/help-registry-invariants.test.ts`, `tests/help-glossary-invariants.test.ts` (with the engineer-only allowlist) | Tests green; glossary mirrors every CONTEXT.md term not allowlisted; K1/K8 reflected |
 | T1 | `HelpTip` + `ui/FieldLabel` components + `HelpScope` context (provided by `WizardShell`, `PoolRoute`, `AdminRoute`) + `fields.tsx` `helpId` (default `name`) + remove `hint` prop; move the 13 literal hints into `wizard-shared.ts` / per-type content; explicit HelpTips on the raw `register()` sites; component tests | `src/components/ui/{HelpTip,FieldLabel}.tsx`, `src/help/scope.tsx`, `wizard/{fields,WizardShell}.tsx`, `wizard/steps/*`, `wizard/create/*`, `routes/{PoolRoute,AdminRoute}.tsx` | Every unified-wizard field renders a HelpTip; `help-ui-coverage.test.ts` (wizard half) green with allowlist rows only for paths not yet authored |
 | T2 | Panel shell: provider, `?` shortcut (with dialog guard), header button, drawer, route→page match, `useHelpRoute` publishers for EVERY in-memory tab surface in SWEEPS §A2 (+ `Scoreboard.tsx:61`), `?tab=` adoption per K13, search, On-this-page with topic anchors, accordion, glossary section, All pages (`href` per page), deep link, lazy admin chunk | `src/components/help/*`, `App.tsx`, `Header.tsx`, the publisher files | Component tests in §3 D5 green; PR body lists every `HelpPage` with a `tab` and whether it is URL- or publisher-resolved; keyboard walkthrough recorded in PR |

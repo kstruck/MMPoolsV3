@@ -57,34 +57,19 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   'props.questions.*.points': 'PERMANENT: accepted but not offered by the props wizard, which scores every question equally.',
   'props.questions.*.type': 'PERMANENT: accepted but not offered by the props wizard.',
 
-  // ---- PENDING: shared wizard steps (T1 moves the existing hints) ---------
-  name: 'T1: shared basics step — the pool name control.',
-  managerName: 'T1: shared basics step — the host name shown to members.',
-  contactEmail: 'T1: shared basics step — carries an existing hint= string to move.',
-  contactPhone: 'T1: contact step control on the non-NFL types.',
-  isPublic: 'T1: shared basics step — whether the pool is listed publicly.',
-  paymentInstructions: 'T1: shared fee step — free-text instructions shown with the payment handles.',
-  'paymentHandles.venmo': 'T1: shared fee step.',
-  'paymentHandles.zelle': 'T1: shared fee step.',
-  'paymentHandles.cashapp': 'T1: shared fee step.',
-  'paymentHandles.paypal': 'T1: shared fee step.',
-  'paymentHandles.googlePay': 'T1: shared fee step.',
-  'branding.logoUrl': 'T1: shared branding step — carries an existing hint= string to move.',
+  // ---- PENDING: settings with no control in the create wizard -------------
+  // Re-ticketed in T1: measured against the wizard sources, none of these three
+  // has a control there, so T1 could not have written their copy. Each is edited
+  // on the manager surface named below, and moves with that surface's ticket.
+  contactPhone: 'T4: no create-wizard control. NFLManagerView.tsx:280 edits it on the NFL manager settings form.',
   'branding.backgroundColor': 'T5: the legacy branding step has a colour picker for it (admin/WizardStepBranding.tsx:97), reached from the squares manager and the props edit wizard. The unified wizard offers only primaryColor and secondaryColor.',
-  'branding.primaryColor': 'T1: shared branding step.',
-  'branding.secondaryColor': 'T1: shared branding step.',
-  'settings.entryFee': 'T1: shared fee step — carries an existing hint= string to move. Money copy, so voice rule 8 applies.',
-  'settings.payouts.places.*.rank': 'T1: shared payouts step, written by a raw register() call that needs an explicit helpId.',
-  'settings.payouts.places.*.percentage': 'T1: shared payouts step, same raw register() call.',
-  'settings.payouts.bonuses.*.name': 'T1: payout bonus rows.',
-  'settings.payouts.bonuses.*.percentage': 'T1: payout bonus rows.',
+  'settings.payouts.bonuses.*.name': 'T6: no create-wizard control — StepPayouts edits places only. BracketPoolDashboard.tsx:1556 is the bonus-row editor.',
+  'settings.payouts.bonuses.*.percentage': 'T6: no create-wizard control; same bonus-row editor as the name above.',
 
   // ---- PENDING: NFL Pick'em (T9) -----------------------------------------
-  seasonType: 'T9: preseason / regular / postseason. Carries an existing hint= string on all three NFL wizards.',
+  seasonType: 'T13: explained for the three NFL season types by the seasonType topic (T1). SQUARES and PROPS also carry the field and have no control for it, so the row stays until their content ticket accounts for it.',
   'settings.lockMode': 'T9: per-game or weekly lock.',
-  'settings.pickMode': 'T9: straight up or against the spread. Carries an existing hint= string.',
   'settings.confidenceMode': 'T9: confidence points mode.',
-  'settings.weeklyTiebreaker': 'T9: weekly tie-break rule. Its copy is tiebreakerCopy() in shared/nflTiebreaker.ts today and becomes this topic template.',
   'settings.pointsPerPick': 'T9: base points per correct pick — manager settings only, no wizard control.',
   'settings.lockBufferMinutes': 'T9: lock buffer — manager settings only, no wizard control.',
   'settings.isListedPublic': 'T9: whether an NFL pool appears in the public browse list.',
@@ -105,7 +90,6 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   'settings.hybridSplit.seasonPerEntry': 'T11: the season share of each entry fee on a hybrid pool.',
   'settings.weeklyPayouts.places.*.rank': 'T11: the separate weekly place list a hybrid pool may carry.',
   'settings.weeklyPayouts.places.*.percentage': 'T11: the separate weekly place list a hybrid pool may carry.',
-  'settings.maxEntriesPerUser': 'T11: how many entries one person may hold. The wizard control is behind MULTI_ENTRY_WIZARD_ENABLED, which is false; the topic is written anyway because the manager settings form shows it.',
 
   // ---- PENDING: Bracket and Playoff (T12) --------------------------------
   'settings.maxEntriesTotal': 'T12: the cap on entries in the whole pool. The bracket manager tab edits it (BracketPoolDashboard.tsx:109 editMaxTotal, written at :350); -1 means unlimited, which the copy has to say.',
@@ -116,22 +100,17 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   'settings.scoringSystem': 'T12: how bracket rounds are worth points. Its labels are SCORING_SYSTEM_LABELS in BracketRulesPanel today and become this topic.',
   'settings.tieBreakers.closestAbsolute': 'T12: tie-break on the closest total either way.',
   'settings.tieBreakers.closestUnder': 'T12: tie-break on the closest total without going over.',
-  lockDate: 'T12: when playoff picks lock. Carries an existing hint= string.',
   'settings.scoring.roundMultipliers.WILD_CARD': 'T12: playoff round weighting.',
   'settings.scoring.roundMultipliers.DIVISIONAL': 'T12: playoff round weighting.',
   'settings.scoring.roundMultipliers.CONF_CHAMP': 'T12: playoff round weighting.',
   'settings.scoring.roundMultipliers.SUPER_BOWL': 'T12: playoff round weighting.',
 
   // ---- PENDING: Squares and Props (T13) ----------------------------------
-  costPerSquare: 'T13: what one square costs. Money copy, so voice rule 8 applies.',
   maxSquaresPerPlayer: 'T13: cap on squares per person.',
   numberSets: 'T13: one set of numbers for the whole game, or a fresh set each quarter.',
   homeTeam: 'T13: the home team of the game a squares or props pool covers.',
   awayTeam: 'T13: the away team of the game a squares or props pool covers.',
-  'props.cost': 'T13: what one card costs. Money copy, so voice rule 8 applies.',
   'props.maxCards': 'T13: cap on cards per person.',
-  'props.questions.*.text': 'T13: the question a player answers.',
-  'props.questions.*.options.*': 'T13: the answers on offer. Carries an existing placeholder-like hint= string.',
 });
 
 /**
@@ -174,13 +153,6 @@ export const ROUTE_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
   '/participant': 'T3: My Entries, with six in-memory tabs.',
   '/create-pool': 'T3: the pool-type picker.',
   '/join/:poolId': 'T3: the join and pay screen.',
-  '/create/playoff': 'T2: wizard route; its per-step pages land with the wizard publisher.',
-  '/create/pickem': 'T2: wizard route.',
-  '/create/survivor': 'T2: wizard route.',
-  '/create/margin': 'T2: wizard route.',
-  '/create/bracket': 'T2: wizard route.',
-  '/create/squares': 'T2: wizard route.',
-  '/create/props': 'T2: wizard route.',
   '/pool/:id': 'T2: every pool dashboard and tab resolves through this one route.',
   '/admin/:id': 'T2: the squares manager panel and the redirect for the other types.',
   '/super-admin': 'T14: seventeen admin tabs get page-level summaries only (K4 scope ii).',
@@ -199,3 +171,65 @@ export const ROUTE_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
 export const UI_EXEMPTIONS: Readonly<
   Record<string, { file: string; control: string; reason: string }>
 > = Object.freeze({});
+/**
+ * Create-wizard form paths with no `HelpTopic` yet.
+ *
+ * `tests/help-ui-coverage.test.ts` reads every `name=`, `register(...)`,
+ * `feeField=` and `payoutsField=` literal under
+ * `src/components/wizard/**` and fails on one that neither resolves to a topic
+ * nor appears here. That is the PRIMARY coverage guard — the schema audit
+ * proves a setting is accounted for, this proves a rendered control is.
+ *
+ * A row here means the control renders with no `?` beside it. `HelpTip` returns
+ * null rather than throwing on an unknown id, precisely so content can land
+ * ticket by ticket without breaking the wizard in between; this list is what
+ * stops that from being silent.
+ */
+export const WIZARD_FIELD_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
+  // ---- PERMANENT: not an option, or already covered by an explicit helpId --
+  _tosAccepted: 'PERMANENT: the Terms gate. Its copy is the checkbox label itself and the linked Terms page; a tooltip would repeat it.',
+  multiEntry: 'PERMANENT: the yes/no toggle for settings.maxEntriesPerUser. It carries an explicit helpId to that topic — one concept, one topic (voice rule 10).',
+  'addons.*': 'PERMANENT: the four premium add-on checkboxes carry an explicit helpId to the launch.addons topic, which explains the group.',
+  'settings.payouts': 'PERMANENT: the payouts object path passed to StepPayouts, not a control. Its two controls carry explicit helpIds.',
+  'settings.weeklyPayouts': 'PERMANENT: the second payouts path a HYBRID pool binds the same editor to, not a control. Its two controls carry the same explicit helpIds.',
+  '*.places.*.rank': 'PERMANENT: the payouts editor binds its rows to a path passed in as a prop, so this register() call cannot name a topic. It carries an explicit helpId to settings.payouts.places.*.rank.',
+  '*.places.*.percentage': 'PERMANENT: same editor, same reason; explicit helpId to settings.payouts.places.*.percentage.',
+
+  // ---- PENDING: NFL Pick'em (T9) -----------------------------------------
+  'settings.lockMode': 'T9: per-game or weekly lock.',
+  'settings.confidenceMode': 'T9: confidence points mode.',
+
+  // ---- PENDING: NFL Survivor (T10) ---------------------------------------
+  'settings.maxStrikes': 'T10: how many wrong picks before elimination.',
+  'settings.maxRebuys': 'T10: how many buy-backs a player may take.',
+  'settings.rebuyDeadlineWeek': 'T10: last week a buy-back is allowed.',
+  'settings.rebuyCost': 'T10: what a buy-back costs.',
+  'settings.tieCountsAs': 'T10: whether a tied game survives.',
+  'settings.maxTeamUses': 'T10: how often one team may be picked.',
+  'settings.pickLosersMode': 'T10: pick the loser instead of the winner.',
+  'settings.autoSurviveExemptionEnabled': 'T10: whether a missed pick survives on an exemption.',
+
+  // ---- PENDING: NFL Margin and the hybrid split (T11) ---------------------
+  'settings.payoutMode': 'T11: season pot, weekly pot, or both.',
+  'settings.hybridSplit.weeklyPerEntry': 'T11: the weekly share of each entry fee on a hybrid pool.',
+  'settings.hybridSplit.seasonPerEntry': 'T11: the season share of each entry fee on a hybrid pool.',
+
+  // ---- PENDING: Bracket and Playoff (T12) --------------------------------
+  seasonYear: 'T12: which tournament year a bracket pool covers.',
+  gender: 'T12: mens or womens tournament.',
+  tournamentType: 'T12: which tournament the bracket follows.',
+  'settings.scoringSystem': 'T12: how bracket rounds are worth points.',
+  'settings.tieBreakers.closestAbsolute': 'T12: tie-break on the closest total either way.',
+  'settings.tieBreakers.closestUnder': 'T12: tie-break on the closest total without going over.',
+  'settings.scoring.roundMultipliers.WILD_CARD': 'T12: playoff round weighting.',
+  'settings.scoring.roundMultipliers.DIVISIONAL': 'T12: playoff round weighting.',
+  'settings.scoring.roundMultipliers.CONF_CHAMP': 'T12: playoff round weighting.',
+  'settings.scoring.roundMultipliers.SUPER_BOWL': 'T12: playoff round weighting.',
+
+  // ---- PENDING: Squares and Props (T13) ----------------------------------
+  homeTeam: 'T13: the home team of the game a squares or props pool covers.',
+  awayTeam: 'T13: the away team of the game a squares or props pool covers.',
+  maxSquaresPerPlayer: 'T13: cap on squares per person.',
+  numberSets: 'T13: one set of numbers for the whole game, or a fresh set each quarter.',
+  'props.maxCards': 'T13: cap on cards per person.',
+});

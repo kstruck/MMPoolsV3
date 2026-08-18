@@ -43,14 +43,20 @@ function PlacesEditor(props: { payoutsField: string; title?: string; blurb?: str
       <div className="space-y-3">
         {fields.map((f, i) => (
           <div key={f.id} className="flex items-end gap-3">
-            <Field label={`Place #${i + 1} rank`}>
-              <input type="number" min={1} className={inputCls} {...register(`${payoutsField}.places.${i}.rank`, { valueAsNumber: true })} />
+            {/* PLAN-HELP-SYSTEM T1: an explicit `helpId`, because these two
+                controls are bound to a payouts path passed in as a prop — the
+                register() call cannot name a topic, and the WEEKLY editor on a
+                HYBRID pool is the same two settings under another path. The
+                `htmlFor`/`id` pair is new too: the labels had no control to
+                point at, so they announced as loose text. */}
+            <Field label={`Place #${i + 1} rank`} htmlFor={`${payoutsField}.places.${i}.rank`} helpId="settings.payouts.places.*.rank">
+              <input id={`${payoutsField}.places.${i}.rank`} type="number" min={1} className={inputCls} {...register(`${payoutsField}.places.${i}.rank`, { valueAsNumber: true })} />
             </Field>
-            <Field label="Percentage">
+            <Field label="Percentage" htmlFor={`${payoutsField}.places.${i}.percentage`} helpId="settings.payouts.places.*.percentage">
               {/* `step="any"`: percentages are `z.number().min(0).max(100)`, not
                   integers, and a bare number input defaults to step=1 and marks
                   a 33.3 invalid. Same as the manager editor (qodo #2). */}
-              <input type="number" min={0} max={100} step="any" className={inputCls} {...register(`${payoutsField}.places.${i}.percentage`, { valueAsNumber: true })} />
+              <input id={`${payoutsField}.places.${i}.percentage`} type="number" min={0} max={100} step="any" className={inputCls} {...register(`${payoutsField}.places.${i}.percentage`, { valueAsNumber: true })} />
             </Field>
             <button type="button" onClick={() => remove(i)} className="mb-4 rounded-md px-3 py-2 text-sm font-semibold text-rose-400 hover:text-rose-300">
               Remove

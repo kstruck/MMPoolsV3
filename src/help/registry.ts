@@ -27,6 +27,7 @@ import type {
 import { DEFAULT_SECTION } from './types';
 import { PAGES } from './pages';
 import { GLOSSARY } from './glossary';
+import { PLACEMENTS, TOPICS } from './content';
 
 /**
  * What `resolveTopic` needs in order to answer BOTH questions it is asked:
@@ -523,15 +524,14 @@ export function buildRegistry(input: HelpContentInput): Registry {
 /**
  * The live registry.
  *
- * Topics and placements are empty in T0 — the content files land with the
- * components that read them (T1 onwards), and every schema path they will
- * cover is currently declared in `SCHEMA_PATH_ALLOWLIST` with its ticket. The
- * glossary is NOT empty: K1's invariant against CONTEXT.md is the one guard
- * that has content to guard from day one.
+ * T1 lands the create wizard's copy; the per-pool-type rules are T9–T13 and
+ * every schema path they will cover is still declared in
+ * `SCHEMA_PATH_ALLOWLIST` with its ticket. A ticket is done when its rows are
+ * gone, which is why the allowlist and the content move in opposite directions.
  */
 export const helpRegistry: Registry = buildRegistry({
-  topics: [],
-  placements: [],
+  topics: TOPICS,
+  placements: PLACEMENTS,
   pages: PAGES,
   glossary: GLOSSARY,
 });

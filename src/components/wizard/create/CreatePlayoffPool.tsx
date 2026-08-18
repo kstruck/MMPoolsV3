@@ -26,8 +26,8 @@ function StepPlayoffDetails() {
     <div>
       <h3 className="mb-1 text-lg font-bold text-white">Playoff details</h3>
       <p className="mb-5 text-sm text-slate-400">Season, lock time, and how each round scores.</p>
-      <ReadOnlyField label="Season" value={CURRENT_SEASON} hint="Playoff pools belong to the current NFL season, whose postseason is played the following January." />
-      <Field label="Lock date &amp; time" htmlFor="lockDate" hint="Picks lock at Wild Card kickoff by default.">
+      <ReadOnlyField label="Season" value={CURRENT_SEASON} helpId="wizard.season" />
+      <Field label="Lock date &amp; time" htmlFor="lockDate" helpId="lockDate">
         <input id="lockDate" type="datetime-local" className={inputCls} {...register('lockDate')} />
       </Field>
       <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Round multipliers</p>

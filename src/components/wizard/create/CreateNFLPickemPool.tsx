@@ -26,11 +26,7 @@ function StepPickemRules() {
     <div>
       <h3 className="mb-1 text-lg font-bold text-white">Pick&apos;em rules</h3>
       <p className="mb-5 text-sm text-slate-400">Season and how picks lock and score.</p>
-      <ReadOnlyField
-        label="Season"
-        value={CURRENT_SEASON}
-        hint="Pools are created for the current NFL season. Pick preseason, regular season or postseason below."
-      />
+      <ReadOnlyField label="Season" value={CURRENT_SEASON} helpId="wizard.season" />
       <SelectField
         name="seasonType"
         label="Season type"
@@ -64,14 +60,12 @@ function StepPickemRules() {
           { value: 'STRAIGHT', label: 'Straight up — pick the winner, no point spread' },
           { value: 'ATS', label: 'Against the spread (ATS) — picks graded against the line' },
         ]}
-        hint="Straight up is the default and needs no betting lines. ATS grades every pick against the game's spread, with a push scoring zero."
       />
       <AtsWarning />
       <SelectField
         name="settings.weeklyTiebreaker"
         label="Weekly tie-breaker"
         options={[...WEEKLY_TIEBREAKER_OPTIONS]}
-        hint="Decides who wins a week when two players score the same. Players predict the combined score of the tiebreaker game on their pick sheet; on a week with no Monday game, the final game of the week is used. It cannot be changed once anyone has submitted picks, so pick it now."
       />
       <CheckboxField name="settings.confidenceMode" label="Confidence points (rank picks; forces weekly lock)" />
       <MultiEntryFields />

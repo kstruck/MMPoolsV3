@@ -22,11 +22,7 @@ function StepSurvivorRules() {
     <div>
       <h3 className="mb-1 text-lg font-bold text-white">Survivor rules</h3>
       <p className="mb-5 text-sm text-slate-400">Season, strikes, and buy-backs.</p>
-      <ReadOnlyField
-        label="Season"
-        value={CURRENT_SEASON}
-        hint="Pools are created for the current NFL season. Pick preseason, regular season or postseason below."
-      />
+      <ReadOnlyField label="Season" value={CURRENT_SEASON} helpId="wizard.season" />
       <SelectField
         name="seasonType"
         label="Season type"

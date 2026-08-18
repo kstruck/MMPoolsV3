@@ -7,7 +7,7 @@ export function StepBasics() {
       <p className="mb-5 text-sm text-slate-400">Name your pool and how members reach you.</p>
       <TextField name="name" label="Pool name" placeholder="Office March Madness" />
       <TextField name="managerName" label="Your name (commissioner)" placeholder="Optional" />
-      <TextField name="contactEmail" label="Contact email" placeholder="you@example.com" hint="Shown to members who need to reach you." />
+      <TextField name="contactEmail" label="Contact email" placeholder="you@example.com" />
       <CheckboxField name="isPublic" label="List this pool publicly" />
     </div>
   );

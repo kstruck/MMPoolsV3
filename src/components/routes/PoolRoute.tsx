@@ -27,6 +27,8 @@ import { logger } from '../../utils/logger';
 import { useToast } from '../ui/Toast';
 import { Button, Badge } from '../ui';
 import type { User, Pool, GameState, PropsPool, PlayoffPool, Winner } from '../../types';
+import { HelpScopeProvider } from '../../help/scope';
+import type { PoolType } from '@shared/poolTypes';
 
 interface PoolRouteProps {
     user: User | null;
@@ -165,6 +167,22 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         );
     }
 
+    // PLAN-HELP-SYSTEM T1: the help scope for EVERY dispatched pool type,
+    // including the inline Squares grid below and the pre-tab landing state.
+    // Declared once here rather than per branch, because `pool` is known from
+    // this point on and a branch that forgot it would silently show a member
+    // the wrong pool type's copy. `nflIsManager` widens to a named NFL
+    // co-commissioner and is the value the NFL branch renders with, so the
+    // audience follows whichever one applies.
+    const withHelp = (node: React.ReactNode) => (
+        <HelpScopeProvider
+            poolType={pool.type as PoolType}
+            audience={isManager || nflIsManager ? 'commissioner' : 'member'}
+        >
+            {node}
+        </HelpScopeProvider>
+    );
+
     const openShare = (poolId: string) => {
         const identifier = (pool.type === 'BRACKET' ? pool.slug : pool.urlSlug) || poolId;
         const url = `${window.location.origin}/pool/${identifier}`;
@@ -173,7 +191,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     };
 
     if (pool.type === 'BRACKET') {
-        return (
+        return withHelp(
             <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
                 <Header
                     user={user}
@@ -201,7 +219,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     }
 
     if (pool.type === 'PROPS') {
-        return (
+        return withHelp(
             <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
                 <Header
                     user={user}
@@ -226,7 +244,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     }
 
     if (pool.type === 'NFL_PLAYOFFS') {
-        return (
+        return withHelp(
             <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
                 <Header
                     user={user}
@@ -248,7 +266,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     }
 
     if (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') {
-        return (
+        return withHelp(
             <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
                 <Header
                     user={user}
@@ -389,7 +407,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     );
 
     if (squaresPool.gridPassword && !isUnlocked && user?.id !== squaresPool.ownerId) {
-        return renderPasswordGate();
+        return withHelp(renderPasswordGate());
     }
 
     const homeLogo = squaresPool.homeTeamLogo || getTeamLogo(squaresPool.homeTeam);
@@ -399,7 +417,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     const squaresRemaining = 100 - (squaresPool.squares?.filter(s => s.owner).length || 0);
     const latestWinner = winners.length > 0 ? winners[winners.length - 1].owner : null;
 
-    return (
+    return withHelp(
         <div
             className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] pb-20 relative transition-colors duration-500"
             style={{ backgroundColor: squaresPool.branding?.backgroundColor || undefined }}

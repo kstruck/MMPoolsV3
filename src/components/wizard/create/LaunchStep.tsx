@@ -324,7 +324,6 @@ export function LaunchStep(props: LaunchStepProps) {
         label="Expected number of players"
         min={0}
         placeholder="e.g. 10"
-        hint="An estimate is fine. Small pools launch on the free plan; larger ones start a free trial."
       />
 
       {/* Premium add-ons — priced server-side; any paid add-on starts a trial. */}
@@ -337,12 +336,12 @@ export function LaunchStep(props: LaunchStepProps) {
           if (key === 'whatIfSimulator') return poolType.toUpperCase() === 'BRACKET';
           return true;
         }).map((key) => (
-          <CheckboxField key={key} name={`addons.${key}`} label={ADDON_LABELS[key]} />
+          <CheckboxField key={key} name={`addons.${key}`} label={ADDON_LABELS[key]} helpId="launch.addons" />
         ))}
       </div>
 
       {/* Coupon — feeds the quote for display AND the checkout call. */}
-      <Field label="Coupon code (optional)" htmlFor="launch-coupon" hint="Applied to the quote below and at checkout.">
+      <Field label="Coupon code (optional)" htmlFor="launch-coupon" helpId="launch.coupon">
         <input
           id="launch-coupon"
           className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white uppercase outline-none focus:ring-2 focus:ring-indigo-500"
