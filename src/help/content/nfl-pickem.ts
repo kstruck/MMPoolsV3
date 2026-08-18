@@ -40,7 +40,11 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
     title: 'Confidence points',
     short: 'Players rank the week’s games instead of picking flat, and a correct pick earns the rank they gave it. Off by default.',
     long: [
-      'Off is the default. Every correct pick is worth the same, and a player only says who wins.',
+      // NOT "who wins" (codex R10). An ATS pool asks who COVERS the spread
+      // (`settings.pickMode`, and `poolUsesSpreads` gates submission on it), so
+      // outcome language is wrong for half the supported pools. What is true of
+      // both is that the reader picks one side per game.
+      'Off is the default. Every correct pick is worth the same, and a player picks one side in each game.',
       // `validateConfidenceValues` (functions/src/nflScoringEngine.ts:187-224):
       // N games, weights uniquely in [17-N .. 16], every game assigned. So the
       // TOP weight is always 16 and the bottom moves with the week's size —
@@ -61,11 +65,15 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
   {
     id: 'pickem.picksheet',
     title: 'Making your picks',
-    short: 'Tap the team you think wins in each game, then submit. Nothing counts until you submit.',
+    short: 'Pick a side in each game, then submit. Nothing counts until you submit.',
     long: [
       // `PickemPickEntry.tsx:105-120` — an unsubmitted sheet is kept in the
       // browser via `draftStore` and restored with a toast on the next visit.
       'What you tap is kept on this device as you go, so leaving the page does not lose it. It is not in the pool until you submit.',
+      // Which side to pick is the SCORING MODE's question, not this topic's
+      // (codex R10): straight up asks who wins, against the spread asks who
+      // covers. One concept, one topic — so it is linked, not restated.
+      'Whether you are picking the winner or the team that covers the spread depends on how your pool scores. The sheet says which, next to each game.',
       // DELIBERATELY SAYS NOTHING ABOUT *WHEN* A PICK CLOSES (codex R8-1).
       // Three behaviours are in play and no one sentence covers them: the
       // server closes a per-game pool game by game and refuses only a CHANGED
@@ -83,7 +91,7 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
     poolTypes: PICKEM,
     audience: EVERYONE,
     terms: ['entry'],
-    related: ['pickem.quickPicks', 'pickem.tiebreakerPrediction'],
+    related: ['settings.pickMode', 'pickem.quickPicks', 'pickem.tiebreakerPrediction'],
   },
   {
     id: 'pickem.quickPicks',
@@ -156,6 +164,7 @@ export const NFL_PICKEM_PLACEMENTS: readonly HelpPlacement[] = [
 
   // The pick sheet itself.
   { topic: 'pickem.picksheet', page: 'pool.nfl.picks', section: 'picks', order: 0 },
+  { topic: 'settings.pickMode', page: 'pool.nfl.picks', section: 'picks', order: 4 },
   { topic: 'pickem.quickPicks', page: 'pool.nfl.picks', section: 'picks', order: 1 },
   { topic: 'pickem.tiebreakerPrediction', page: 'pool.nfl.picks', section: 'picks', order: 2 },
   { topic: 'settings.confidenceMode', page: 'pool.nfl.picks', section: 'picks', order: 3 },
