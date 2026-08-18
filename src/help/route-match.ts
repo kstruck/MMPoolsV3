@@ -16,10 +16,7 @@ import { isEntryVisible } from './visibility';
 
 /** Higher is more specific. `-1` means the page does not apply at all. */
 export function pageSpecificity(page: HelpPage, ctx: HelpRouteContext): number {
-  const onRoute =
-    matchPath(page.route, ctx.pathname) !== null ||
-    (page.altRoutes ?? []).some((route) => matchPath(route, ctx.pathname) !== null);
-  if (!onRoute) return -1;
+  if (!onCurrentRoute(page, ctx)) return -1;
   // A page that names a tab is only that tab's page. A page that names none is
   // the route's page and stays a candidate whatever tab the reader is on —
   // that is what makes it the fallback rather than a competitor.
@@ -60,6 +57,32 @@ export function resolveHelpPage(
   return best;
 }
 
+/** Is this page on the route the reader is currently on? */
+function onCurrentRoute(page: HelpPage, ctx: HelpRouteContext): boolean {
+  return (
+    matchPath(page.route, ctx.pathname) !== null ||
+    (page.altRoutes ?? []).some((route) => matchPath(route, ctx.pathname) !== null)
+  );
+}
+
+/**
+ * Does the surface the reader is on actually offer this page's tab?
+ *
+ * ONE predicate, used by both "All pages" and `hrefForPage`, so a page cannot be
+ * listed as reachable and then refuse to be reached (or the reverse). Judged
+ * only for pages on the CURRENT route: a wizard step page has nothing to do with
+ * whether a pool dashboard offers a Results tab.
+ *
+ * `offeredTabs` absent means the surface made no claim, so nothing is filtered —
+ * a surface with no conditional tabs does not have to publish a list.
+ */
+export function isPageOffered(page: HelpPage, ctx: HelpRouteContext): boolean {
+  if (page.tab === undefined) return true;
+  if (!ctx.offeredTabs) return true;
+  if (!onCurrentRoute(page, ctx)) return true;
+  return ctx.offeredTabs.includes(page.tab);
+}
+
 /**
  * Where "All pages" and a search result navigate to, or `null` when the page
  * is listed but not linkable (K13: the super-admin sub-tabs, and the wizard
@@ -69,5 +92,6 @@ export function resolveHelpPage(
  * the panel shows it and the click opens the topic in place.
  */
 export function hrefForPage(page: HelpPage, ctx: HelpRouteContext): string | null {
+  if (!isPageOffered(page, ctx)) return null;
   return page.href ? page.href(ctx) : null;
 }

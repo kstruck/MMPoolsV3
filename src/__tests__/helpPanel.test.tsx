@@ -334,6 +334,45 @@ function PoolHarness({ poolType = 'NFL_PICKEM' as const, audience = 'member' as 
   );
 }
 
+describe('a tab this pool does not have (codex R3)', () => {
+  it('is not listed in "All pages" for a Survivor pool, but is for a Pick’em one', async () => {
+    const results = helpRegistry.getPage('pool.nfl.results')!;
+
+    render(
+      <MemoryRouter initialEntries={['/pool/abc?tab=dashboard']}>
+        <HelpProvider isAdmin={false}>
+          <HelpScopeProvider poolType="NFL_SURVIVOR" audience="member">
+            {/* What NFLPoolDashboard publishes for a Survivor pool. */}
+            <HelpRoutePublisher
+              tab="dashboard"
+              offeredTabs={['dashboard', 'picks', 'standings', 'recaps', 'rules']}
+            />
+          </HelpScopeProvider>
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+    expect(screen.queryByRole('button', { name: results.title })).toBeNull();
+    cleanup();
+
+    render(
+      <MemoryRouter initialEntries={['/pool/abc?tab=dashboard']}>
+        <HelpProvider isAdmin={false}>
+          <HelpScopeProvider poolType="NFL_PICKEM" audience="member">
+            <HelpRoutePublisher
+              tab="dashboard"
+              offeredTabs={['dashboard', 'picks', 'standings', 'results', 'recaps', 'rules']}
+            />
+          </HelpScopeProvider>
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(screen.getByRole('button', { name: results.title })).toBeTruthy());
+  });
+});
+
 describe('navigating from "All pages" to another tab', () => {
   /**
    * The case the pending-target machinery exists for. The publishers under the

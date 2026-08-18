@@ -63,7 +63,18 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
 
     return (
         <BillingGate pool={pool as any} isCommissioner={!!isManager}>
-        <HelpRoutePublisher tab={activeTab} isManager={!!isManager} />
+        {/* T2: `ai` is behind a per-pool feature unlock, `stats` behind
+            `showStats`, and admin/grading need a manager — so the offered list
+            goes with the tab and Help lists only what this pool renders. */}
+        <HelpRoutePublisher
+            tab={activeTab}
+            isManager={!!isManager}
+            offeredTabs={PROPS_TABS.filter(t =>
+                (t !== 'ai' || !!(pool as any).billing?.featuresUnlocked?.aiCommissioner) &&
+                (t !== 'stats' || showStats) &&
+                ((t !== 'admin' && t !== 'grading') || isManager || isAdmin)
+            )}
+        />
         <div
             className="min-h-screen bg-page text-[color:var(--text)] font-body pb-20 transition-colors duration-500"
             style={{ backgroundColor: pool.branding?.backgroundColor || undefined }}

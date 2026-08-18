@@ -127,8 +127,17 @@ export function useHelpPanelState(options: { isAdmin: boolean; defaultAudience?:
       subTab: published.subTab ?? searchParams.get('sub') ?? searchParams.get('section') ?? undefined,
       poolType: published.poolType,
       isManager: published.isManager,
+      offeredTabs: published.offeredTabs,
     }),
-    [location.pathname, published.tab, published.subTab, published.poolType, published.isManager, searchParams],
+    [
+      location.pathname,
+      published.tab,
+      published.subTab,
+      published.poolType,
+      published.isManager,
+      published.offeredTabs,
+      searchParams,
+    ],
   );
 
   const resolvedPage = useMemo(

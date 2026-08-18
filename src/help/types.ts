@@ -113,6 +113,21 @@ export interface HelpRouteContext {
   subTab?: string;
   poolType?: PoolType;
   isManager?: boolean;
+  /**
+   * The tabs the CURRENT surface actually offers, when it knows.
+   *
+   * Several tabs exist for some pools and not others: a Survivor pool has no
+   * Results tab (`NFLPoolDashboard.tsx` `showResultsTab`), the picks grid and
+   * the payments tab need a signed-in reader, and the AI tabs are behind a
+   * per-pool feature unlock. A help page offered for a tab the reader cannot
+   * open is a dead link — the dashboard falls back and the panel is left
+   * describing a screen nobody reached. Rather than re-deriving each of those
+   * conditions in the content (a second copy of a rule that changes), the
+   * surface publishes the list it just rendered.
+   *
+   * `undefined` means the surface makes no claim, and nothing is filtered.
+   */
+  offeredTabs?: readonly string[];
 }
 
 /**

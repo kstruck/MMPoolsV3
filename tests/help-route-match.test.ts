@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hrefForPage, pageSpecificity, resolveHelpPage } from '../src/help/route-match';
+import { hrefForPage, isPageOffered, pageSpecificity, resolveHelpPage } from '../src/help/route-match';
 import { helpRegistry } from '../src/help/registry';
 import type { HelpPage, HelpRouteContext } from '../src/help/types';
 
@@ -116,6 +116,60 @@ describe('resolveHelpPage', () => {
 
   it('returns undefined when nothing covers the route', () => {
     expect(resolveHelpPage(pages, ctx({ pathname: '/privacy' }), MEMBER)).toBeUndefined();
+  });
+});
+
+describe('offeredTabs — a tab this pool does not have is not a screen', () => {
+  /**
+   * codex R3. A Survivor pool has no Results tab (`NFLPoolDashboard.tsx`
+   * `showResultsTab`), so listing "NFL pool — Results" for one produced a link
+   * that changed the URL and landed back on the dashboard. The condition lives
+   * in the dashboard, so the dashboard publishes the list rather than the help
+   * content re-deriving it.
+   */
+  const results = () => helpRegistry.getPage('pool.nfl.results')!;
+  const survivor = (over: Partial<HelpRouteContext> = {}) =>
+    ctx({
+      pathname: '/pool/abc',
+      poolType: 'NFL_SURVIVOR',
+      tab: 'dashboard',
+      // What `NFLPoolDashboard` publishes for a Survivor pool: no `results`.
+      offeredTabs: ['dashboard', 'picks', 'grid', 'standings', 'recaps', 'rules', 'payments'],
+      ...over,
+    });
+
+  it('is not offered, and therefore not linkable', () => {
+    expect(isPageOffered(results(), survivor())).toBe(false);
+    expect(hrefForPage(results(), survivor())).toBeNull();
+  });
+
+  it('IS offered to a Pick’em pool, which has the tab', () => {
+    const pickem = ctx({
+      pathname: '/pool/abc',
+      poolType: 'NFL_PICKEM',
+      tab: 'dashboard',
+      offeredTabs: ['dashboard', 'picks', 'standings', 'results', 'recaps', 'rules'],
+    });
+    expect(isPageOffered(results(), pickem)).toBe(true);
+    expect(hrefForPage(results(), pickem)).toBe('/pool/abc?tab=results');
+  });
+
+  it('makes no claim when the surface published none', () => {
+    // A surface with no conditional tabs does not have to publish a list, and
+    // absence must not hide every tab page it has.
+    expect(isPageOffered(results(), ctx({ pathname: '/pool/abc', poolType: 'NFL_PICKEM' }))).toBe(true);
+  });
+
+  it('does not judge a page on a DIFFERENT route by this surface’s tabs', () => {
+    // A wizard step page has nothing to do with which tabs a pool dashboard
+    // offers, and filtering it out here would empty "All pages" of everything
+    // but the current surface.
+    const step = helpRegistry.getPage('wizard.pickem.rules')!;
+    expect(isPageOffered(step, survivor())).toBe(true);
+  });
+
+  it('never filters the page with no tab at all', () => {
+    expect(isPageOffered(helpRegistry.getPage('pool.nfl')!, survivor())).toBe(true);
   });
 });
 

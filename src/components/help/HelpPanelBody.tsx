@@ -13,6 +13,7 @@ import { Search } from 'lucide-react';
 import type { HelpSearchResult } from '../../help/types';
 import { SEARCH_RESULT_LIMIT } from '../../help/registry';
 import { audienceSatisfies, isEntryVisible } from '../../help/visibility';
+import { isPageOffered } from '../../help/route-match';
 import type { HelpPanelState } from './useHelpPanel';
 import {
   AllPages,
@@ -34,7 +35,7 @@ export function HelpPanelBody({ state, searchInputRef }: {
   state: HelpPanelState;
   searchInputRef: React.RefObject<HTMLInputElement | null>;
 }) {
-  const { registry, scope, page, activeTopicId, clearActiveTopic, openTo, openPage } = state;
+  const { registry, scope, page, activeTopicId, clearActiveTopic, openTo, openPage, routeContext } = state;
   const [query, setQuery] = useState('');
   const [showAllPoolTypes, setShowAllPoolTypes] = useState(false);
   const scrolledFor = useRef<string | undefined>(undefined);
@@ -69,12 +70,17 @@ export function HelpPanelBody({ state, searchInputRef }: {
    */
   const allPages = useMemo(
     () =>
-      registry.pages.filter((p) =>
-        showAllPoolTypes
-          ? audienceSatisfies(p.audience, scope.audience)
-          : isEntryVisible(p.poolTypes, p.audience, scope),
-      ),
-    [registry, scope, showAllPoolTypes],
+      registry.pages
+        .filter((p) =>
+          showAllPoolTypes
+            ? audienceSatisfies(p.audience, scope.audience)
+            : isEntryVisible(p.poolTypes, p.audience, scope),
+        )
+        // A tab this pool does not offer is not a screen the reader can open —
+        // a Survivor pool has no Results tab. Same predicate `hrefForPage`
+        // uses, so listed and linkable cannot disagree.
+        .filter((p) => isPageOffered(p, routeContext)),
+    [registry, scope, showAllPoolTypes, routeContext],
   );
 
   /** Is there anything the K5 filter is currently hiding? Nothing to expand if not. */
