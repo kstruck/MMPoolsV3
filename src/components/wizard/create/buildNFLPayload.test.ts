@@ -37,6 +37,39 @@ describe('buildNFLPayload', () => {
     if (legacy.success) expect(legacy.data.settings.maxEntriesPerUser).toBe(1);
   });
 
+  /**
+   * PLAN-PAYMENT-LEDGER T2 / D1. `weeklyPayouts` is HYBRID-only, and the wizard
+   * keeps the values of unmounted fields — so the builder, not the commissioner,
+   * is what stops a stray weekly list reaching a SEASON pool's create call.
+   */
+  it('weeklyPayouts: carried on HYBRID, dropped on every other mode, dropped when empty (T2 / D1)', () => {
+    const weekly = { places: [{ rank: 1, percentage: 60 }, { rank: 2, percentage: 40 }] };
+    const hybrid = buildNFLPayload({
+      ...pickemBase,
+      settings: { ...(pickemBase.settings as object), payoutMode: 'HYBRID', hybridSplit: { weeklyPerEntry: 6, seasonPerEntry: 4 }, weeklyPayouts: weekly },
+    }, 'NFL_PICKEM');
+    expect((hybrid.settings as { weeklyPayouts?: unknown }).weeklyPayouts).toEqual(weekly);
+    const parsed = pickemCreateInputSchema.safeParse(hybrid);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.settings.weeklyPayouts).toEqual(weekly);
+
+    // Tried HYBRID, typed places, settled on SEASON/WEEKLY: the list is gone,
+    // and the payload still passes the gate that would have refused it.
+    for (const payoutMode of ['SEASON', 'WEEKLY'] as const) {
+      const stray = buildNFLPayload({ ...pickemBase, settings: { ...(pickemBase.settings as object), payoutMode, weeklyPayouts: weekly } }, 'NFL_PICKEM');
+      expect((stray.settings as { weeklyPayouts?: unknown }).weeklyPayouts, payoutMode).toBeUndefined();
+      expect(pickemCreateInputSchema.safeParse(stray).success, payoutMode).toBe(true);
+    }
+
+    // An untouched editor is ABSENT, never `{ places: [] }` — absent means
+    // "payouts prices both pots", empty would mean "no weekly prizes at all".
+    const empty = buildNFLPayload({
+      ...pickemBase,
+      settings: { ...(pickemBase.settings as object), payoutMode: 'HYBRID', hybridSplit: { weeklyPerEntry: 6, seasonPerEntry: 4 }, weeklyPayouts: { places: [] } },
+    }, 'NFL_PICKEM');
+    expect((empty.settings as { weeklyPayouts?: unknown }).weeklyPayouts).toBeUndefined();
+  });
+
   it('builds a pickem payload that passes the server schema gate', () => {
     const p = buildNFLPayload(pickemBase, 'NFL_PICKEM');
     expect(p.type).toBe('NFL_PICKEM');

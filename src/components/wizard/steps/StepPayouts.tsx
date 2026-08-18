@@ -1,24 +1,40 @@
 import { useFieldArray, useFormContext } from 'react-hook-form';
+import { DUPLICATE_RANK_MESSAGE, uniqueRanks } from '@shared/schemas/common';
 import { Field } from '../fields';
 
 // Shared payouts editor for the places/bonuses shape (Bracket/Playoff/NFL). The
 // payouts object path is a prop (e.g. "settings.payouts"). Live total warns when
 // the split exceeds 100% — the schema rejects it server-side too.
-export function StepPayouts(props: { payoutsField?: string }) {
-  const { payoutsField = 'settings.payouts' } = props;
+//
+// PLAN-PAYMENT-LEDGER T2 / D2: on HYBRID the step renders the editor TWICE —
+// "Weekly prizes" bound to `settings.weeklyPayouts`, "Season prizes" bound to
+// `settings.payouts` — because a HYBRID pool has two pots and the D1 matrix
+// gives each its own place list. WEEKLY and SEASON render ONE editor bound to
+// `settings.payouts`, exactly as before: `weeklyPayouts` is HYBRID-only and the
+// create schema refuses it on any other mode.
+function PlacesEditor(props: { payoutsField: string; title?: string; blurb?: string }) {
+  const { payoutsField, title, blurb } = props;
   const { control, register, watch } = useFormContext();
   const { fields, append, remove } = useFieldArray({ control, name: `${payoutsField}.places` });
 
-  const places = (watch(`${payoutsField}.places`) as Array<{ percentage?: number }> | undefined) ?? [];
+  const places = (watch(`${payoutsField}.places`) as Array<{ rank?: number; percentage?: number }> | undefined) ?? [];
   const total = places.reduce((sum, p) => sum + (Number(p?.percentage) || 0), 0);
   const over = total > 100;
+  // The SAME predicate the create schema and the update callable enforce — a
+  // second local phrasing of "ranks must be unique" would eventually disagree
+  // with the refusal. Blank rank inputs (NaN) are skipped: two untouched rows
+  // are incomplete, not duplicates, and the schema says so in its own words.
+  const ranked = places
+    .filter((p) => Number.isFinite(Number(p?.rank)))
+    .map((p) => ({ rank: Number(p?.rank) }));
+  const duplicateRank = !uniqueRanks(ranked);
 
   const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500';
 
   return (
     <div>
-      <h3 className="mb-1 text-lg font-bold text-white">Payouts</h3>
-      <p className="mb-5 text-sm text-slate-400">How the pot is split. Percentages must total 100% or less.</p>
+      {title && <p className="mb-1 text-sm font-bold text-white">{title}</p>}
+      {blurb && <p className="mb-4 text-xs text-slate-400">{blurb}</p>}
 
       <div className="space-y-3">
         {fields.map((f, i) => (
@@ -47,6 +63,49 @@ export function StepPayouts(props: { payoutsField?: string }) {
       <p className={`mt-4 text-sm font-semibold ${over ? 'text-rose-400' : 'text-slate-300'}`}>
         Total: {total}% {over && '— exceeds 100%'}
       </p>
+      {duplicateRank && (
+        <p role="alert" className="mt-1 text-sm font-semibold text-rose-400">
+          {DUPLICATE_RANK_MESSAGE.split(': ').slice(1).join(': ')}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function StepPayouts(props: { payoutsField?: string }) {
+  const { payoutsField = 'settings.payouts' } = props;
+  const { watch } = useFormContext();
+  // Self-gating on the same field HybridSplitFields watches, so every wizard
+  // that has no payout mode (Bracket, Playoff, Survivor) renders one editor.
+  const hybrid = watch('settings.payoutMode') === 'HYBRID';
+
+  return (
+    <div>
+      <h3 className="mb-1 text-lg font-bold text-white">Payouts</h3>
+      <p className="mb-5 text-sm text-slate-400">
+        {hybrid
+          ? 'This pool pays weekly AND on the final season standings, so each pot gets its own places. Percentages must total 100% or less within each list.'
+          : 'How the pot is split. Percentages must total 100% or less.'}
+      </p>
+
+      {hybrid ? (
+        <div className="space-y-8">
+          {/* `settings.weeklyPayouts` is literal: the HYBRID branch only ever runs
+              under `settings.payoutMode`, so both lists live under `settings`. */}
+          <PlacesEditor
+            payoutsField="settings.weeklyPayouts"
+            title="Weekly prizes — % of the weekly pot"
+            blurb="Applied to EACH week's pot. Leave this empty to use the season places for both pots (what a hybrid pool does today)."
+          />
+          <PlacesEditor
+            payoutsField={payoutsField}
+            title="Season prizes — % of the season pot"
+            blurb="Applied once, to the final season standings."
+          />
+        </div>
+      ) : (
+        <PlacesEditor payoutsField={payoutsField} />
+      )}
     </div>
   );
 }

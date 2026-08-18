@@ -1,5 +1,38 @@
 # HANDOFF — Session entry point
 
+> ## 🛑 2026-08-18 — PLAN-PAYMENT-LEDGER **T2** IS OPEN (Coolify-only); the whole ledger stack through T1 is MERGED AND DEPLOYED
+>
+> **Read `MORNING-2026-08-18.md` first** — merge/deploy/verify runbook and the
+> next-PR order. Merged AND deployed 2026-08-17 (functions + rules + Coolify as
+> each needed): **#460** ledger UX (one Payment Ledger spreadsheet, Payment
+> History, Open Payment Ledger deep-link, fee toggle + method/date/note editor
+> in the ledger) · **#464** WEEKLY-PRIZES step 3 (season-tie cascade,
+> `pool.seasonPlaces` + `seasonPrize` published at finalization, season PLACE
+> awards at `season-{entryId}-p{place}` with K12 supersession, rules protect the
+> three fields, ledger Season $ column) · **#465** T6 My Prizes (member Payments
+> tab, own rows only) · **#466** T7 (Record Payouts folded into the ledger as
+> "Other awards", CONTEXT.md prize glossary, ADR 0008) · **#468** Stripe
+> `createCheckoutSession` owner/manager-only (K17) · **#469** T0 (HYBRID split
+> under the Entry Fee) · **#470** T1 (`settings.weeklyPayouts` schema + unique
+> ranks on BOTH lists, `updatePoolSettings` validator, rules parity,
+> `censusPayoutRanks.mjs`). Verified on Kevin's HYBRID Pick'em test pool
+> `0ybpLzY7fJ3NJbDj0j1l`: recap prizes HOF $15 / P1 $7 + $7.
+>
+> **T2 (this PR) is the UI half of item 6 and touches NOTHING server-side** — no
+> `functions/`, no `firestore.rules`, no indexes, no prod data. The wizard's
+> Payouts step renders TWO editors on HYBRID (weekly → `settings.weeklyPayouts`,
+> season → `settings.payouts`) and ONE on WEEKLY/SEASON; `buildNFLPayload` drops
+> a stray or empty weekly list; manager Settings gets the same editor plus a
+> HYBRID-exit "review your prize places" notice (D1); `PayoutsPanel` prices each
+> pot from its own list via `weeklyPlacesFor` (#423 example: $180 weekly at
+> 60/40, $70 season at 100 %). **Absent `weeklyPayouts` is still today's
+> behaviour byte-for-byte** — `payouts` prices both pots.
+>
+> **Open item:** ask Kevin whether he ran `functions/scripts/censusPayoutRanks.mjs`
+> before merging #470 (K9). `MULTI_ENTRY_WIZARD_ENABLED` stays `false`. Issue
+> #467 (SUPER_ADMIN stale-claim gate) is a ticket only. Next in order:
+> co-commissioner `members` read rule → sticky-null re-price (plan-gated) → #467.
+
 > ## 🛑 2026-08-17 (late 08-16) — LEDGER UX FIX IN PR #460 (Coolify-only); the six-PR ledger stack #451→#456 + docs #457/#458 are MERGED AND DEPLOYED (functions + rules + indexes + Coolify)
 >
 > **Read `MORNING-2026-08-17-LEDGER-UX.md` first** — merge/deploy/verify runbook

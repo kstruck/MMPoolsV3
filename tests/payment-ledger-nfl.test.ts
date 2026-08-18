@@ -98,3 +98,51 @@ describe('MyPrizes — member view (T6, K7)', () => {
     expect(my).not.toMatch(/recordPoolPayouts|setPayoutSettled|setPaidStatus|splitPrizes|priceWeeklyPlaces|priceSeasonPlaces|potBreakdown/);
   });
 });
+
+/**
+ * PLAN-PAYMENT-LEDGER T2 (D1/D2) — the HYBRID weekly place list is editable in
+ * manager Settings, not only at create time. Two things must hold, and neither
+ * is visible from the callable's own tests:
+ *
+ *  1. `weeklyPayouts` is sent ONLY on a HYBRID save. `updatePoolSettings`
+ *     merge-writes, so a list sent alongside a non-HYBRID mode is refused
+ *     (WEEKLY_PAYOUTS_WRONG_MODE) — and leaving HYBRID must forget it locally
+ *     too, or re-selecting HYBRID resurrects a list the server has deleted.
+ *  2. The commissioner is TOLD before they save that leaving HYBRID promotes
+ *     the season places to price every week (D1's "review your prize places").
+ *
+ * Assertions stay single-line: the working tree is CRLF, so a multi-line
+ * `toContain` would pass on one checkout and fail on another.
+ */
+describe('manager Settings — the HYBRID weekly place list (T2)', () => {
+  const mgr = code('src/components/NFLPoolDashboard/NFLManagerView.tsx');
+  const count = (re: RegExp) => mgr.match(re)?.length ?? 0;
+
+  it("sends weeklyPayouts only while HYBRID and declared — on Pick'em AND on Margin", () => {
+    expect(mgr).toContain("...(payoutMode === 'HYBRID' && weeklyPlacesDeclared");
+    expect(mgr).toContain("...(marginPayoutMode === 'HYBRID' && weeklyPlacesDeclared");
+    // One send per pool type, and nowhere else — a third would be a save path
+    // that has not been mode-gated.
+    expect(count(/\{ weeklyPayouts: \{ places: weeklyPlaces \} \}/g)).toBe(2);
+  });
+
+  it('leaving HYBRID clears the list locally and returning re-hydrates from the last KNOWN-STORED one, never the lagging prop', () => {
+    expect(count(/if \(e\.target\.value !== 'HYBRID'\) \{ setWeeklyPlacesDeclared\(false\); setWeeklyPlaces\(\[\]\); \}/g)).toBe(2);
+    expect(count(/setWeeklyPlaces\(lastKnownWeeklyPlacesRef\.current\);/g)).toBe(2);
+    expect(mgr).toContain("lastKnownWeeklyPlacesRef.current = activeMode === 'HYBRID' && weeklyPlacesDeclared ? weeklyPlaces : null;");
+  });
+
+  it('renders the editor on both HYBRID surfaces and warns on the way out (D1)', () => {
+    expect(count(/<WeeklyPlacesEditor/g)).toBe(2);
+    expect(mgr).toContain('<HybridExitNotice storedMode={storedPayoutMode} selectedMode={payoutMode} />');
+    expect(mgr).toContain('<HybridExitNotice storedMode={storedPayoutMode} selectedMode={marginPayoutMode} />');
+    expect(mgr).toContain('review your prize places before you save');
+    // The notice only fires on the way OUT of a pool that IS hybrid today.
+    expect(mgr).toContain("if (storedMode !== 'HYBRID' || selectedMode === 'HYBRID') return null;");
+  });
+
+  it('the live checks reuse the schema predicate — one definition of "ranks must be unique"', () => {
+    expect(mgr).toContain("import { DUPLICATE_RANK_MESSAGE, uniqueRanks } from '@shared/schemas/common'");
+    expect(mgr).toContain('uniqueRanks(places)');
+  });
+});
