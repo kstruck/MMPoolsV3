@@ -330,6 +330,26 @@ describe('resolveTopic — one lookup for the tooltip and the panel', () => {
   });
 
   /**
+   * This is the TOOLTIP's path and nothing filters after it — the panel and
+   * search apply visibility themselves, a HelpTip renders whatever it is
+   * given. A topic limited to one pool type must not come back for another
+   * just because the two share a field name.
+   */
+  it('does not hand a type-limited topic to another pool type', () => {
+    const limited = buildRegistry({
+      topics: [topic({ id: 'settings.lockMode', poolTypes: ['NFL_PICKEM'] })],
+      placements: [],
+      pages: [],
+      glossary: [],
+    });
+    expect(limited.resolveTopic({ poolType: 'NFL_PICKEM' }, 'settings.lockMode')).toBeDefined();
+    expect(limited.resolveTopic({ poolType: 'SQUARES' }, 'settings.lockMode')).toBeUndefined();
+    // No pool in scope (the wizard picker, a site page) is not that pool type
+    // either, so a type-limited topic stays hidden there too.
+    expect(limited.resolveTopic({}, 'settings.lockMode')).toBeUndefined();
+  });
+
+  /**
    * The parity guard. The panel resolves placements through the SAME function
    * the tooltip uses, so a placement written unqualified renders the scoped
    * variant on both surfaces. If these two ever diverge, a Survivor member

@@ -313,10 +313,19 @@ class RegistryImpl implements Registry {
     const { poolType: qualified, base } = splitQualifiedId(normalizePath(id));
     if (qualified) return this.topics.get(`${qualified}:${base}`);
     if (scope.poolType) {
+      // A variant's poolTypes is exactly its own qualifier (enforced at build),
+      // so a hit here is always right for this reader.
       const scoped = this.topics.get(`${scope.poolType}:${base}`);
       if (scoped) return scoped;
     }
-    return this.topics.get(base);
+    const fallback = this.topics.get(base);
+    if (!fallback) return undefined;
+    // The unqualified topic may still be limited to some pool types. THIS is
+    // the tooltip's path and nothing filters after it — `placementsForPage`
+    // and `search` apply visibility themselves, a `HelpTip` renders whatever
+    // it gets. Without this check a Pick'em-only `settings.lockMode` topic
+    // would appear on a Squares control that happens to share the id.
+    return scopeIncludesPoolType(fallback.poolTypes, scope.poolType) ? fallback : undefined;
   }
 
   getPage(id: string): HelpPage | undefined {
