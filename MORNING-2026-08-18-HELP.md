@@ -73,7 +73,22 @@ night were:
   `branding.backgroundColor`). A `PERMANENT` row never comes back for review,
   so those would have buried three real options for good.
 
-## 4. Two things I want you to look at
+## 3b. ANSWERED by Kevin, 2026-08-18 — both questions in §4 are closed
+
+- **(a) The cap conflict is ruled.** *"If this happens run up to 5 additional in
+  this case."* Written into `CLAUDE.md` §2c as a named exception: a §2b-forced
+  round may go **up to 5 past the 10-round cap with no ask**, so 15 is the
+  ceiling when §2b forces the overage and 10 otherwise.
+  **The authorised round was then run against `main` and found a real defect** —
+  `poolTypes: []` type-checks, makes a topic permanently unreachable, and
+  `buildRegistry` accepted it. Fixed, with tests, in the same PR as this ruling.
+- **(b) Copy approved as written.** Kevin: *"I approve the help-voice.md and
+  src/help/glossary.ts as written."* The voice guide and all 38 glossary mirrors
+  are signed off. The §4(b) gap — the K1 guard proves a term HAS a mirror, not
+  that the mirror says everything the source does — is **not** closed by that
+  approval and still applies to every content ticket T9–T13.
+
+## 4. The two questions (now answered — see §3b)
 
 **(a) The codex cap versus §2b — a real rule conflict, your call.**
 

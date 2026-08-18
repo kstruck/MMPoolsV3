@@ -141,6 +141,26 @@ function extractSnippet(haystack: string, needle: string): string {
 }
 
 /**
+ * An entry nobody can ever be shown is a content bug, not a configuration.
+ *
+ * `poolTypes: []` and `audience: []` both type-check — an empty array is a
+ * valid `readonly PoolType[]` — and both make the entry permanently
+ * unreachable: `isVisible` can never pass. It would sit in the registry
+ * looking authored, satisfy the "every topic has a placement" check, and
+ * render nowhere. Refused at build, where every other unreachable-content rule
+ * already lives.
+ */
+function assertReachable(kind: string, id: string, poolTypes: PoolTypeScope, audience: readonly Audience[]): void {
+  if (poolTypes !== 'all' && poolTypes.length === 0) {
+    throw new Error(`help: ${kind} "${id}" has an empty poolTypes, so it can never be shown; use 'all' or name the types`);
+  }
+  if (audience.length === 0) {
+    throw new Error(`help: ${kind} "${id}" has an empty audience, so it can never be shown`);
+  }
+}
+
+
+/**
  * Recursively freeze content so the registry's promise is real.
  *
  * `ReadonlyMap` and `readonly` are TypeScript views only — they vanish at
@@ -218,18 +238,22 @@ class RegistryImpl implements Registry {
     for (const topic of input.topics) {
       const id = normalizePath(topic.id);
       if (topics.has(id)) throw new Error(`help: duplicate topic id "${id}"`);
+      assertReachable('topic', id, topic.poolTypes, topic.audience);
       topics.set(id, topic);
     }
 
     const pages = new Map<string, HelpPage>();
     for (const page of input.pages) {
       if (pages.has(page.id)) throw new Error(`help: duplicate page id "${page.id}"`);
+      assertReachable('page', page.id, page.poolTypes, page.audience);
       pages.set(page.id, page);
     }
 
     const terms = new Map<string, GlossaryTerm>();
     for (const term of input.glossary) {
       if (terms.has(term.id)) throw new Error(`help: duplicate glossary id "${term.id}"`);
+      // A glossary term is not pool-type scoped, so only the audience applies.
+      assertReachable('glossary term', term.id, 'all', term.audience);
       terms.set(term.id, term);
     }
 

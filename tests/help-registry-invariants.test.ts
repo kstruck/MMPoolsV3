@@ -189,6 +189,32 @@ describe('buildRegistry — refuses invalid content', () => {
     ).toThrow(/unknown page/);
   });
 
+  /**
+   * `poolTypes: []` and `audience: []` type-check — an empty array is a valid
+   * `readonly PoolType[]` — and both make an entry permanently unreachable.
+   * It would sit in the registry looking authored, satisfy "every topic has a
+   * placement", and render nowhere. Found by the codex round Kevin authorised
+   * past the §2c cap.
+   */
+  it('rejects an entry no reader could ever reach', () => {
+    expect(() => buildRegistry({ ...base, topics: [topic({ poolTypes: [] })] })).toThrow(/empty poolTypes/);
+    expect(() => buildRegistry({ ...base, topics: [topic({ audience: [] })] })).toThrow(/empty audience/);
+    expect(() =>
+      buildRegistry({ ...base, pages: [page({ poolTypes: [] })] }),
+    ).toThrow(/empty poolTypes/);
+    expect(() =>
+      buildRegistry({
+        ...base,
+        glossary: [{ id: 'g', term: 'T', short: 's', long: 'l', contextHeading: 'H', audience: [] }],
+      }),
+    ).toThrow(/empty audience/);
+  });
+
+  it('still accepts the reachable forms', () => {
+    expect(() => buildRegistry({ ...base, topics: [topic({ poolTypes: 'all' })] })).not.toThrow();
+    expect(() => buildRegistry({ ...base, topics: [topic({ poolTypes: ['SQUARES'] })] })).not.toThrow();
+  });
+
   it('rejects a topic linking an unknown glossary term', () => {
     expect(() => buildRegistry({ ...base, topics: [topic({ terms: ['nope'] })] })).toThrow(/unknown glossary term/);
   });
