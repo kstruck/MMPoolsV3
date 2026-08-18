@@ -207,6 +207,38 @@ class RegistryImpl implements Registry {
       return { ...p, topic: topicId, section: p.section ?? DEFAULT_SECTION, order: p.order ?? i };
     });
 
+    // A pool-type variant must be REACHABLE and must be visible to exactly the
+    // readers its base topic is.
+    //
+    // `resolveTopic` prefers the variant, and `placementsForPage` and `search`
+    // then drop anything the reader may not see. So a variant scoped to a
+    // narrower audience than its base does not fall back — it silently hides
+    // help the reader is entitled to, on every surface at once. Making
+    // resolution visibility-aware would spread that rule across three call
+    // sites; refusing the content is one rule in one place.
+    //
+    // A variant that needs a different audience is a different topic and gets
+    // its own id, not a variant of somebody else's.
+    for (const [id, topic] of topics) {
+      const { poolType: qualifier, base } = splitQualifiedId(id);
+      if (!qualifier) continue;
+      if (topic.poolTypes !== 'all' && !topic.poolTypes.includes(qualifier)) {
+        throw new Error(
+          `help: topic "${id}" is scoped to ${qualifier} but its poolTypes does not include it, so it can never be shown`,
+        );
+      }
+      const baseTopic = topics.get(base);
+      if (baseTopic) {
+        const a = [...topic.audience].sort().join(',');
+        const b = [...baseTopic.audience].sort().join(',');
+        if (a !== b) {
+          throw new Error(
+            `help: topic "${id}" has audience [${a}] but its base "${base}" has [${b}]; a variant would hide the base from readers it does not cover`,
+          );
+        }
+      }
+    }
+
     // Cross-references resolve, or the content is wrong.
     for (const topic of topics.values()) {
       for (const termId of topic.terms ?? []) {
@@ -316,6 +348,10 @@ class RegistryImpl implements Registry {
       return undefined;
     };
 
+    const topicHits: HelpSearchResult[] = [];
+    const pageHits: HelpSearchResult[] = [];
+    const glossaryHits: HelpSearchResult[] = [];
+
     for (const [id, topic] of this.topics) {
       if (!isVisible(topic.poolTypes, topic.audience, scope)) continue;
       // Both `settings.entryFee` and `NFL_SURVIVOR:settings.entryFee` are
@@ -331,7 +367,7 @@ class RegistryImpl implements Registry {
         ...(topic.tips ?? []),
       ].join('\n');
       if (!haystack.toLowerCase().includes(needle)) continue;
-      results.push({
+      topicHits.push({
         kind: 'topic',
         id,
         title: topic.title,
@@ -344,17 +380,30 @@ class RegistryImpl implements Registry {
       if (!isVisible(page.poolTypes, page.audience, scope)) continue;
       const haystack = `${page.title}\n${page.summary}`;
       if (!haystack.toLowerCase().includes(needle)) continue;
-      results.push({ kind: 'page', id, title: page.title, snippet: extractSnippet(haystack, needle), pageId: id });
+      pageHits.push({ kind: 'page', id, title: page.title, snippet: extractSnippet(haystack, needle), pageId: id });
     }
 
     for (const term of this.glossary) {
       if (!audienceSatisfies(term.audience, scope.audience)) continue;
       const haystack = `${term.term}\n${term.short}\n${term.long}`;
       if (!haystack.toLowerCase().includes(needle)) continue;
-      results.push({ kind: 'glossary', id: term.id, title: term.term, snippet: extractSnippet(haystack, needle) });
+      glossaryHits.push({ kind: 'glossary', id: term.id, title: term.term, snippet: extractSnippet(haystack, needle) });
     }
 
-    return results.slice(0, SEARCH_RESULT_LIMIT);
+    // Interleaved, NOT concatenated then truncated. Appending topics first and
+    // slicing at the end starves the other two kinds completely: once content
+    // lands, a broad query like "pool" matches more than the limit in topics
+    // alone, and the glossary and page results become unreachable — the
+    // glossary search would look broken while working perfectly.
+    const queues = [topicHits, pageHits, glossaryHits];
+    for (let i = 0; results.length < SEARCH_RESULT_LIMIT; i++) {
+      if (!queues.some((q) => q.length > i)) break;
+      for (const queue of queues) {
+        if (results.length >= SEARCH_RESULT_LIMIT) break;
+        if (queue.length > i) results.push(queue[i]);
+      }
+    }
+    return results;
   }
 }
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { POOL_TYPES } from '../shared/poolTypes';
-import { baseTopicId, buildRegistry, helpRegistry, normalizePath, resolveCopy, staticCopy } from '../src/help/registry';
+import { baseTopicId, buildRegistry, helpRegistry, normalizePath, resolveCopy, SEARCH_RESULT_LIMIT, staticCopy } from '../src/help/registry';
 import { PAGES } from '../src/help/pages';
 import { ROUTE_ALLOWLIST } from '../src/help/coverage-allowlist';
 import { BANNED_IMPLEMENTATION_WORDS, BANNED_SELLING_WORDS, COPY_LIMITS, findBannedWords } from '../src/help/voice';
@@ -140,6 +140,62 @@ describe('buildRegistry — refuses invalid content', () => {
 
   it('rejects a topic linking an unknown related topic', () => {
     expect(() => buildRegistry({ ...base, topics: [topic({ related: ['nope'] })] })).toThrow(/unknown related topic/);
+  });
+
+  it('rejects a scoped variant whose poolTypes cannot include its own scope', () => {
+    expect(() =>
+      buildRegistry({
+        ...base,
+        topics: [topic({ id: 'NFL_SURVIVOR:settings.entryFee', poolTypes: ['NFL_PICKEM'] })],
+      }),
+    ).toThrow(/can never be shown/);
+  });
+
+  /**
+   * The hole this closes: `resolveTopic` prefers the variant, then the panel
+   * and search drop what the reader may not see. A commissioner-only variant
+   * of a member topic therefore hides the member's help on every surface at
+   * once instead of falling back. Refused at the door.
+   */
+  it('rejects a scoped variant whose audience differs from its base', () => {
+    expect(() =>
+      buildRegistry({
+        ...base,
+        topics: [
+          topic({ id: 'settings.entryFee', audience: ['member'] }),
+          topic({
+            id: 'NFL_SURVIVOR:settings.entryFee',
+            poolTypes: ['NFL_SURVIVOR'],
+            audience: ['commissioner'],
+          }),
+        ],
+      }),
+    ).toThrow(/would hide the base/);
+  });
+
+  it('accepts a scoped variant with the same audience, in any order', () => {
+    expect(() =>
+      buildRegistry({
+        ...base,
+        topics: [
+          topic({ id: 'settings.entryFee', audience: ['commissioner', 'member'] }),
+          topic({
+            id: 'NFL_SURVIVOR:settings.entryFee',
+            poolTypes: ['NFL_SURVIVOR'],
+            audience: ['member', 'commissioner'],
+          }),
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it('accepts a scoped variant with no base topic of its own', () => {
+    expect(() =>
+      buildRegistry({
+        ...base,
+        topics: [topic({ id: 'NFL_SURVIVOR:settings.maxStrikes', poolTypes: ['NFL_SURVIVOR'] })],
+      }),
+    ).not.toThrow();
   });
 });
 
@@ -433,6 +489,36 @@ describe('search', () => {
     });
     expect(multi.search('dues', { audience: 'member' })[0].pageId).toBe('join');
     expect(multi.search('dues', { audience: 'commissioner' })[0].pageId).toBe('manager');
+  });
+
+  /**
+   * Topics are found first, so concatenating and truncating at the end would
+   * drop every page and glossary hit as soon as topic content is large enough
+   * to fill the limit on its own — the glossary search would look broken while
+   * working perfectly.
+   */
+  it('does not let a flood of topic matches starve pages and glossary', () => {
+    const many = Array.from({ length: SEARCH_RESULT_LIMIT + 10 }, (_, i) =>
+      topic({ id: `settings.field${i}`, title: `Field ${i}`, long: 'pool wording' }),
+    );
+    const flooded = buildRegistry({
+      topics: many,
+      pages: [page({ id: 'p', title: 'Pool page', summary: 'pool wording' })],
+      placements: many.map((t) => ({ topic: t.id, page: 'p' })),
+      glossary: [
+        { id: 'g', term: 'Pool', short: 'pool wording', long: 'Long.', contextHeading: 'Pool', audience: ['member'] },
+      ],
+    });
+    const hits = flooded.search('pool wording', { audience: 'member' });
+    expect(hits.length).toBe(SEARCH_RESULT_LIMIT);
+    expect(hits.some((h) => h.kind === 'page')).toBe(true);
+    expect(hits.some((h) => h.kind === 'glossary')).toBe(true);
+  });
+
+  it('still returns every kind it has when under the limit', () => {
+    const hits = registry.search('tie', { audience: 'member' });
+    expect(hits.length).toBeLessThanOrEqual(SEARCH_RESULT_LIMIT);
+    expect(new Set(hits.map((h) => h.kind))).toEqual(new Set(['topic', 'page', 'glossary']));
   });
 
   it('leaves pageId unset rather than naming a page the reader cannot open', () => {
