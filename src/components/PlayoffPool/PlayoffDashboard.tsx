@@ -25,9 +25,6 @@ interface PlayoffDashboardProps {
 
 export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, onBack }) => {
     const toast = useToast();
-    // T2 / K13: the tab moved into `?tab=` so help search results can link to
-    // it and Back works. Same list the playoff help pages name.
-    const [activeTab, setActiveTab] = useUrlTab('tab', PLAYOFF_TABS, 'picks');
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [isAddingNew, setIsAddingNew] = useState(false);
     const [viewingEntry, setViewingEntry] = useState<PlayoffEntry | null>(null);
@@ -38,6 +35,22 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
 
     const isManager = isPoolManager(user, pool);
     const canViewPicks = pool.isLocked || (pool.results && Object.values(pool.results).some(r => r && r.length > 0)) || isManager;
+
+    // T2 / K13: the tab moved into `?tab=` so help search results can link to it
+    // and Back works.
+    //
+    // ⚠️ THE VALID SET IS THE OFFERED SET, NOT THE STATIC LIST (codex R4, P1).
+    // The AI tab's button is hidden until the pool unlocks `aiCommissioner`, and
+    // the Commissioner tab's until the reader is a manager — but neither render
+    // branch re-checks, because the tab used to live in memory and a hidden
+    // button was the whole gate. Validating a URL against the full list would
+    // have made `/pool/<id>?tab=ai` render `AICommissioner` in a pool that has
+    // not unlocked it. Declared after `isManager` because it reads it.
+    const aiUnlocked = !!(pool as any).billing?.featuresUnlocked?.aiCommissioner;
+    const offeredTabs = PLAYOFF_TABS.filter((t) =>
+        (t !== 'ai' || aiUnlocked) && (t !== 'commissioner' || isManager)
+    );
+    const [activeTab, setActiveTab] = useUrlTab('tab', offeredTabs, 'picks');
 
     // --- My Entries Logic ---
     const myEntries = useMemo(() => {
@@ -85,17 +98,9 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     return (
         <BillingGate pool={pool as any} isCommissioner={isManager}>
         <div className="min-h-screen bg-page text-[color:var(--text)] font-body pb-20 duration-300" style={{ backgroundColor: pool.branding?.bgColor || undefined }}>
-            {/* T2: `ai` is behind a per-pool feature unlock and `commissioner`
-                needs a manager, so the offered list goes with the tab — Help must
-                not list a tab this pool does not render. */}
-            <HelpRoutePublisher
-                tab={activeTab}
-                isManager={isManager}
-                offeredTabs={PLAYOFF_TABS.filter(t =>
-                    (t !== 'ai' || !!(pool as any).billing?.featuresUnlocked?.aiCommissioner) &&
-                    (t !== 'commissioner' || isManager)
-                )}
-            />
+            {/* T2: the same offered list that gates the URL, so Help lists only
+                what this pool actually renders. One source, two readers. */}
+            <HelpRoutePublisher tab={activeTab} isManager={isManager} offeredTabs={offeredTabs} />
             {/* Main Content */}
             <div className="max-w-6xl mx-auto p-4 md:p-6">
                 {/* Pool Header */}

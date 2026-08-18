@@ -41,10 +41,31 @@ interface PropsPoolDashboardProps {
 
 export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, user, isManager, isAdmin, onBack, initialTab = 'cards', onOpenAuth }) => {
     const toast = useToast();
+
     // T2 / K13: the tab moved into `?tab=`, the convention NFL and Bracket
     // already use — so a help search result can link to it and Back works.
-    // `initialTab` stays the fallback for a URL that names none.
-    const [activeTab, setActiveTab] = useUrlTab('tab', PROPS_TABS, initialTab);
+    //
+    // ⚠️ THE VALID SET IS THE OFFERED SET, NOT THE STATIC LIST (codex R4, P1).
+    // These tabs were held in memory, so `admin`, `grading` and `stats` were
+    // unreachable to anyone the tab strip did not show a button to. Validating a
+    // URL against the full list would have made `/pool/<id>?tab=admin` render the
+    // commissioner panel — pool locking and grading controls — for any member,
+    // because the render branches below gate on the BUTTON being hidden and not
+    // on the permission. Computed once, above the hook, and reused as the list
+    // Help may link to; one source for "which tabs exist right now".
+    const canManage = !!isManager || !!isAdmin;
+    const aiUnlocked = !!(pool as any).billing?.featuresUnlocked?.aiCommissioner;
+    const showStats = !!pool.isLocked || canManage;
+    const offeredTabs = PROPS_TABS.filter((t) =>
+        (t !== 'ai' || aiUnlocked)
+        && (t !== 'stats' || showStats)
+        && ((t !== 'admin' && t !== 'grading') || canManage)
+    );
+    const [activeTab, setActiveTab] = useUrlTab(
+        'tab',
+        offeredTabs,
+        offeredTabs.includes(initialTab) ? initialTab : 'cards',
+    );
     const [allCards, setAllCards] = useState<PropCard[]>([]);
     const [showShareModal, setShowShareModal] = useState(false);
 
@@ -59,22 +80,11 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
 
     const [locking, setLocking] = useState(false); // Add state
 
-    const showStats = pool.isLocked || isManager || isAdmin;
-
     return (
         <BillingGate pool={pool as any} isCommissioner={!!isManager}>
-        {/* T2: `ai` is behind a per-pool feature unlock, `stats` behind
-            `showStats`, and admin/grading need a manager — so the offered list
-            goes with the tab and Help lists only what this pool renders. */}
-        <HelpRoutePublisher
-            tab={activeTab}
-            isManager={!!isManager}
-            offeredTabs={PROPS_TABS.filter(t =>
-                (t !== 'ai' || !!(pool as any).billing?.featuresUnlocked?.aiCommissioner) &&
-                (t !== 'stats' || showStats) &&
-                ((t !== 'admin' && t !== 'grading') || isManager || isAdmin)
-            )}
-        />
+        {/* T2: the same offered list that gates the URL, so Help lists only what
+            this pool actually renders. One source, two readers. */}
+        <HelpRoutePublisher tab={activeTab} isManager={!!isManager} offeredTabs={offeredTabs} />
         <div
             className="min-h-screen bg-page text-[color:var(--text)] font-body pb-20 transition-colors duration-500"
             style={{ backgroundColor: pool.branding?.backgroundColor || undefined }}
