@@ -257,18 +257,29 @@ export function useHelpPanelState(options: { isAdmin: boolean; defaultAudience?:
     setActiveTopicId(waiting.target.topicId);
   }, [resolvedPage]);
 
-  // A forced page is released as soon as the ROUTE resolves somewhere else —
-  // the reader clicked a tab, so the route speaks again.
+  // A forced page is released, AND A DIVERTED PENDING TARGET IS DROPPED, as soon
+  // as the ROUTE resolves somewhere else — the reader clicked a tab, so the route
+  // speaks again.
   //
   // Keyed on the resolved page, NOT on `location`. The `?help=` deep link strips
   // its own parameter with a `replace`, which changes the location while the
   // reader has not moved at all; releasing on that would undo the very target
   // the deep link had just set.
+  //
+  // ⚠️ `pending.current = null` HERE IS THE WHOLE POINT (qodo #1). The consume
+  // effect above runs first and clears `pending` on a match, so a target still
+  // sitting here means the route resolved somewhere ELSE. An earlier version
+  // skipped its cleanup whenever a pending target existed — on the reasoning that
+  // the consumer would deal with it — and nothing else ever cleared one, so a
+  // target the reader had navigated away from survived for the rest of the
+  // session and fired the next time that page happened to resolve. The comment
+  // one commit earlier claimed this effect dropped it. It did not.
   const lastResolved = useRef(resolvedPage?.id);
   useEffect(() => {
     if (lastResolved.current === resolvedPage?.id) return;
     lastResolved.current = resolvedPage?.id;
-    if (!pending.current) setForcedPageId(undefined);
+    pending.current = null;
+    setForcedPageId(undefined);
   }, [resolvedPage]);
 
   // `?help=<topicId>` (K11). Consumed and stripped, so a reader who closes the

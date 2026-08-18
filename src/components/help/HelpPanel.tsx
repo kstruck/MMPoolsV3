@@ -5,14 +5,7 @@
 // where the reader is (`src/help/publish.tsx`); nothing below it renders a
 // second panel.
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { HelpPanelContext, type HelpPanelHandle } from '../../help/scope';
@@ -132,15 +125,6 @@ export function HelpPanel({ state, onClose }: { state: HelpPanelState; onClose: 
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, [isOpen, onClose]);
 
-  const onKeyDown = useCallback(
-    (event: React.KeyboardEvent) => {
-      // Escape is handled by the overlay stack (capture phase) so it closes
-      // exactly one overlay. This only stops the key reaching the page behind.
-      if (event.key === 'Escape') event.stopPropagation();
-    },
-    [],
-  );
-
   if (typeof document === 'undefined') return null;
 
   return createPortal(
@@ -165,7 +149,17 @@ export function HelpPanel({ state, onClose }: { state: HelpPanelState; onClose: 
         aria-labelledby="help-panel-title"
         aria-hidden={isOpen ? undefined : true}
         inert={isOpen ? undefined : true}
-        onKeyDown={onKeyDown}
+        // Escape is handled by the overlay stack (capture phase) so it closes
+        // exactly one overlay; this only stops the key reaching the page behind.
+        // Inline, with no `useCallback`: the wrapper had an empty dependency list
+        // and this element is not memoised, so it stabilised a reference nothing
+        // compared (qodo #3 asked for `useEffectEvent` here — that hook exists in
+        // React 19.2, but it is for reading fresh values inside an Effect and
+        // React's own guidance is not to pass one as a prop. Deleting the
+        // indirection is the version of the finding that is actually right).
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') event.stopPropagation();
+        }}
         className={cn(
           'fixed inset-y-0 right-0 z-[60] flex w-full flex-col border-l border-line bg-page shadow-panel transition-transform duration-300 md:w-[440px]',
           isOpen ? 'translate-x-0' : 'translate-x-full',
