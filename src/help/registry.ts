@@ -70,14 +70,21 @@ export function baseTopicId(id: string): string {
 /**
  * Render a `HelpCopy` for a given pool context.
  *
- * With NO pool in scope — the wizard, the site pages, the search index — a
- * template has nothing to read, so the static fallback is returned instead of
- * a sentence containing `undefined`. That is what `fallback` is for; the type
- * says so and this is where it is honoured.
+ * A template runs only when the pool's `settings` are in scope. Everywhere
+ * else — the wizard, the site pages, the search index — the static `fallback`
+ * is returned, because a template with nothing to read renders the word
+ * "undefined" in front of a reader.
+ *
+ * KNOWING THE POOL TYPE IS NOT ENOUGH. The wizard knows the type from the
+ * moment the format is chosen and has no settings until the pool is created,
+ * which is exactly the surface `fallback` was written for. Every template this
+ * model is designed to absorb — `survivorModeRulesCopy`, `tieOutcomeRuleCopy`,
+ * `teamReuseRuleCopy`, `tiebreakerCopy` — reads settings, so `settings` is the
+ * honest gate.
  */
 export function resolveCopy(copy: HelpCopy, ctx: HelpCopyContext = {}): string {
   if (typeof copy === 'string') return copy;
-  if (ctx.poolType === undefined && ctx.settings === undefined) return copy.fallback;
+  if (ctx.settings === undefined) return copy.fallback;
   return copy.template(ctx);
 }
 
@@ -294,15 +301,29 @@ class RegistryImpl implements Registry {
     // exact id would return no page, and the search result would render with
     // nowhere to navigate — while the panel, resolving the same placement,
     // shows it correctly.
-    const firstPageOf = (topicId: string): string | undefined => {
-      const exact = this.placements.find((p) => p.topic === topicId);
-      if (exact) return exact.page;
+    //
+    // The chosen placement must also be on a page THIS reader can open. A
+    // topic explained on both a commissioner page and a member page would
+    // otherwise send a member to the page they cannot reach, purely because it
+    // was placed first.
+    const pageForResult = (topicId: string): string | undefined => {
       const base = baseTopicId(topicId);
-      return base === topicId ? undefined : this.placements.find((p) => p.topic === base)?.page;
+      const candidates = this.placements.filter((p) => p.topic === topicId || p.topic === base);
+      for (const placement of candidates) {
+        const page = this.pages.get(placement.page);
+        if (page && isVisible(page.poolTypes, page.audience, scope)) return placement.page;
+      }
+      return undefined;
     };
 
     for (const [id, topic] of this.topics) {
       if (!isVisible(topic.poolTypes, topic.audience, scope)) continue;
+      // Both `settings.entryFee` and `NFL_SURVIVOR:settings.entryFee` are
+      // visible to a Survivor reader, and a query matching both would return
+      // the same setting twice with two different explanations. Only the
+      // variant `resolveTopic` would pick — the one the tooltip and the panel
+      // show — is listed.
+      if (this.resolveTopic(scope, baseTopicId(id)) !== topic) continue;
       const haystack = [
         topic.title,
         staticCopy(topic.short),
@@ -315,7 +336,7 @@ class RegistryImpl implements Registry {
         id,
         title: topic.title,
         snippet: extractSnippet(haystack, needle),
-        pageId: firstPageOf(id),
+        pageId: pageForResult(id),
       });
     }
 

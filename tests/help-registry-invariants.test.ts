@@ -198,18 +198,23 @@ describe('copy resolution', () => {
     expect(resolveCopy(templated.short, { settings: { entryFee: 20 } })).toBe('Fee is 20.');
   });
 
-  it('renders a template when only the pool type is known', () => {
-    expect(resolveCopy(templated.short, { poolType: 'NFL_PICKEM' })).toBe('Fee is undefined.');
-  });
-
   /**
-   * The wizard, the site pages and the search index have no pool. A template
-   * run there would put the word "undefined" in front of a reader, which is
-   * exactly what `fallback` exists to prevent.
+   * The wizard, the site pages and the search index have no pool settings. A
+   * template run there would put the word "undefined" in front of a reader,
+   * which is exactly what `fallback` exists to prevent.
+   *
+   * Knowing the pool TYPE is not enough, and this is the case that matters:
+   * the wizard knows the type from the moment the format is chosen and has no
+   * settings until the pool is created.
    */
-  it('falls back when no pool is in scope', () => {
+  it('falls back when the pool settings are not in scope', () => {
     expect(resolveCopy(templated.short)).toBe('Your commissioner sets the fee.');
     expect(resolveCopy(templated.short, {})).toBe('Your commissioner sets the fee.');
+    expect(resolveCopy(templated.short, { poolType: 'NFL_PICKEM' })).toBe('Your commissioner sets the fee.');
+  });
+
+  it('renders the template as soon as settings arrive, even an empty object', () => {
+    expect(resolveCopy(templated.short, { settings: {} })).toBe('Fee is undefined.');
   });
 
   it('indexes the fallback', () => {
@@ -345,10 +350,67 @@ describe('search', () => {
       placements: [{ topic: 'settings.entryFee', page: 'pool.survivor' }],
       glossary: [],
     });
+    // Searched from INSIDE a Survivor pool — the only scope in which the
+    // variant is the one shown. With no pool in scope the unqualified topic is
+    // the right answer and the variant is not listed at all.
     const hit = scoped
-      .search('buy-backs', { audience: 'member' })
+      .search('buy-backs', { poolType: 'NFL_SURVIVOR', audience: 'member' })
       .find((h) => h.id === 'NFL_SURVIVOR:settings.entryFee');
     expect(hit?.pageId).toBe('pool.survivor');
+  });
+
+  /**
+   * Both variants are visible to a Survivor reader and both match a query on
+   * the shared wording. Listing both hands the reader the same setting twice
+   * with two different explanations — while the tooltip and the panel show
+   * only one of them. Search lists the variant `resolveTopic` picks.
+   */
+  it('lists one variant per setting, the one the other surfaces show', () => {
+    const scoped = buildRegistry({
+      topics: [
+        topic({ id: 'settings.entryFee', title: 'Entry fee', long: 'Dues wording.' }),
+        topic({ id: 'NFL_SURVIVOR:settings.entryFee', title: 'Entry fee and buy-backs', long: 'Dues wording.' }),
+      ],
+      pages: [page({ id: 'pool.survivor', route: '/pool/:id' })],
+      placements: [{ topic: 'settings.entryFee', page: 'pool.survivor' }],
+      glossary: [],
+    });
+    const survivor = scoped.search('dues wording', { poolType: 'NFL_SURVIVOR', audience: 'member' });
+    expect(survivor.map((h) => h.id)).toEqual(['NFL_SURVIVOR:settings.entryFee']);
+
+    const pickem = scoped.search('dues wording', { poolType: 'NFL_PICKEM', audience: 'member' });
+    expect(pickem.map((h) => h.id)).toEqual(['settings.entryFee']);
+  });
+
+  /**
+   * A topic placed on a commissioner page and a member page must send a member
+   * to the member page, not to the one that happens to be listed first.
+   */
+  it('points a result at a page the reader can actually open', () => {
+    const multi = buildRegistry({
+      topics: [topic({ id: 'settings.entryFee', long: 'Dues wording.' })],
+      pages: [
+        page({ id: 'manager', route: '/pool/:id', title: 'Manager', audience: ['commissioner'] }),
+        page({ id: 'join', route: '/join/:poolId', title: 'Join', audience: ['member'] }),
+      ],
+      placements: [
+        { topic: 'settings.entryFee', page: 'manager' },
+        { topic: 'settings.entryFee', page: 'join' },
+      ],
+      glossary: [],
+    });
+    expect(multi.search('dues', { audience: 'member' })[0].pageId).toBe('join');
+    expect(multi.search('dues', { audience: 'commissioner' })[0].pageId).toBe('manager');
+  });
+
+  it('leaves pageId unset rather than naming a page the reader cannot open', () => {
+    const hidden = buildRegistry({
+      topics: [topic({ id: 'settings.entryFee', long: 'Dues wording.' })],
+      pages: [page({ id: 'manager', route: '/pool/:id', title: 'Manager', audience: ['commissioner'] })],
+      placements: [{ topic: 'settings.entryFee', page: 'manager' }],
+      glossary: [],
+    });
+    expect(hidden.search('dues', { audience: 'member' })[0].pageId).toBeUndefined();
   });
 });
 
