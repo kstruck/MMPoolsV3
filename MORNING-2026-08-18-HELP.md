@@ -144,14 +144,18 @@ overrule them.
 
 ## 6. What I could not verify — stated, not skipped
 
-- **There is no browser walkthrough of the panel.** `/create/*`, `/pool/:id` and
-  `/admin/:id` are all behind a login and the preview server serves the primary
-  checkout rather than the worktree. The keyboard and focus behaviour is covered by
-  22 real DOM tests in `src/__tests__/helpPanel.test.tsx` — `?` toggling, Escape
-  returning focus, the tooltip's ARIA, the search, the pool-type filtering (count
-  taken from `npx vitest run` on the merge commit, 2026-08-18, not from reading the
-  file). **How it looks is unverified.** Your redeploy in
-  §7 is the first real look, which is why §7 step 3 asks you to press one key.
+- ✅ **RESOLVED — the browser walkthrough happened.** This section was written
+  before the deploy and said *I* had not looked: `/create/*`, `/pool/:id` and
+  `/admin/:id` are behind a login and the preview server serves the primary
+  checkout rather than the worktree, so I could only prove behaviour, not
+  appearance. **Kevin closed that gap on 2026-08-18** — he opened the panel with
+  `?` on the live site and confirmed the privilege guard on a real props pool.
+  What I had in hand at merge time was 22 DOM tests in
+  `src/__tests__/helpPanel.test.tsx` covering `?` toggling, Escape returning
+  focus, the tooltip's ARIA, the search and the pool-type filtering (count from
+  `npx vitest run` on the merge commit, 2026-08-18). **Still not covered by anyone:
+  a phone.** Nobody has opened the panel on a small screen, where it renders as a
+  modal with a backdrop rather than a drawer — that branch is untested and unseen.
 - The admin chunk's retry-after-a-failed-download path is proved by its cache
   contract and by reading the code, not by a test that makes a download fail.
 
@@ -291,15 +295,27 @@ migration. T2 touched none of them.
 
 ## 8. What is NOT done
 
-- **T9 is next and is NOT started.** It is the NFL Pick'em option copy — every
-  `settings.*` on the wizard rules step, the dashboard tabs, the manager sub-tabs
-  and the pick sheet. This week's invites are Pick'em, so it is the highest-value
-  content ticket. I stopped rather than start it half-built; the order after it is
-  unchanged (T4, T3, T10/T11).
+⚠️ **T9 AND T16 BOTH CLAIM TO BE NEXT, AND THAT IS A DECISION FOR YOU, NOT A
+CONTRADICTION TO RESOLVE IN A DOC.** The signed order says T9. §5 says T16 is now
+overdue. They are ranked on different things and both rankings are honest:
+
+- **T9 — NFL Pick'em option copy.** Every `settings.*` on the wizard rules step,
+  the dashboard tabs, the manager sub-tabs, the pick sheet. **Highest value**:
+  this week's invites are Pick'em, so it is the copy real players will read
+  first. It is also the plan's stated order (T2 → T9 → T4 → T3 → T10/T11).
+- **T16 — the ~35 overlay shells.** **Highest risk**, because T15 was taken
+  before it: the `?` shortcut is live in production on a CSS-class fallback, and
+  nothing fails if a future overlay is written without that class pair.
+  Mechanical, one PR, and it fixes those shells' missing Escape and focus
+  handling as a side effect.
+
+**My recommendation: T9 first.** The measured risk from T16 is *future* overlays,
+not current ones — all 41 today carry the class the fallback matches — and Pick'em
+copy has a deadline that T16 does not. But say the word and I will flip it.
+
 - **T3–T8 and T10–T16 unstarted.** The pool and admin pages have summaries but no
   per-option copy, the site and account pages have neither (T3), and manager
   settings, pick sheets and rules pages still have no tooltips (T4–T7).
-- **T16 before T15**, per §5 above.
 - The per-pool-type rules copy is still named in `WIZARD_FIELD_ALLOWLIST` with its
   ticket, field by field. A ticket is done when its rows are gone.
 
