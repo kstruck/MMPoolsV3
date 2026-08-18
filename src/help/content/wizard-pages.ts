@@ -54,7 +54,11 @@ export const WIZARD_PAGES: readonly HelpPage[] = [
     '/create/playoff',
     'NFL_PLAYOFFS',
     'Create an NFL Playoff pool',
-    'Set up a pool played across the playoff rounds, with picks locking once at Wild Card kickoff. Seven steps, ending with reminders and launch.',
+    // NOT "picks lock at Wild Card kickoff". Nothing sets that — `lockDate` is
+    // optional and the wizard default is empty. The first draft of this file
+    // fixed the same false claim in the lockDate TOPIC and left it standing
+    // here, in the page summary. (qodo #12 on PR #475.)
+    'Set up a pool played across the playoff rounds, with every pick locking at once on the date you choose. Seven steps, ending with reminders and launch.',
   ),
   wizardPage(
     'wizard.bracket',

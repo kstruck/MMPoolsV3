@@ -10,6 +10,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { HelpCircle } from 'lucide-react';
 import { helpRegistry, resolveCopy } from '../../help/registry';
+import { cn } from './cn';
 import { useHelpPanel, useHelpScope } from '../../help/scope';
 
 export type TipSide = 'top' | 'bottom';
@@ -27,7 +28,10 @@ export interface TipViewport {
   height: number;
 }
 
-/** Bubble width in px. Fixed so the position can be computed before it renders. */
+/**
+ * Preferred bubble width in px, so the position can be computed before it
+ * renders. It is a MAXIMUM, not a constant — see `tooltipStyle`.
+ */
 export const TOOLTIP_WIDTH = 260;
 /** Gap between the trigger and the bubble, and the minimum viewport margin. */
 const GAP = 8;
@@ -65,15 +69,17 @@ export function tooltipStyle(rect: TipRect, side: TipSide, viewport: TipViewport
   if (side === 'top' && roomAbove < needed && roomBelow >= needed) placed = 'bottom';
   if (side === 'bottom' && roomBelow < needed && roomAbove >= needed) placed = 'top';
 
-  const left = clamp(
-    rect.left + rect.width / 2 - TOOLTIP_WIDTH / 2,
-    GAP,
-    viewport.width - TOOLTIP_WIDTH - GAP,
-  );
+  // The WIDTH shrinks before the position does. Clamping only `left` on a
+  // viewport narrower than the bubble puts the left edge at the margin and the
+  // right edge off-screen — a 200px-wide split view would lose a third of the
+  // copy, and clamping alone cannot fix that because the overflow is width, not
+  // offset. (qodo #14 on PR #475.)
+  const width = Math.min(TOOLTIP_WIDTH, Math.max(0, viewport.width - GAP * 2));
+  const left = clamp(rect.left + rect.width / 2 - width / 2, GAP, viewport.width - width - GAP);
 
   return placed === 'top'
-    ? { position: 'fixed', left, bottom: viewport.height - rect.top + GAP, width: TOOLTIP_WIDTH }
-    : { position: 'fixed', left, top: rect.bottom + GAP, width: TOOLTIP_WIDTH };
+    ? { position: 'fixed', left, bottom: viewport.height - rect.top + GAP, width }
+    : { position: 'fixed', left, top: rect.bottom + GAP, width };
 }
 
 export interface HelpTipProps {
@@ -185,7 +191,10 @@ export function HelpTip({ helpId, side = 'top', className }: HelpTipProps) {
             hide();
           }
         }}
-        className={`inline-flex shrink-0 items-center text-faint transition-colors hover:text-[color:var(--text)] focus-visible:text-[color:var(--text)] print:hidden ${className ?? ''}`}
+        className={cn(
+          'inline-flex shrink-0 items-center text-faint transition-colors hover:text-[color:var(--text)] focus-visible:text-[color:var(--text)] print:hidden',
+          className,
+        )}
       >
         <HelpCircle size={14} aria-hidden="true" />
       </button>

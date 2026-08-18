@@ -195,10 +195,26 @@ describe('tooltipStyle', () => {
     expect(tooltipStyle(rect({ left: 995 }), 'top', viewport).left).toBe(1000 - TOOLTIP_WIDTH - 8);
   });
 
-  it('does not push the bubble off-screen on a viewport narrower than it is', () => {
-    // The clamp's own bounds cross over here; the minimum has to win, or a
-    // phone in a narrow split view gets a negative left.
-    expect(tooltipStyle(rect({ left: 100 }), 'top', { width: 200, height: 800 }).left).toBe(8);
+  /**
+   * BOTH EDGES. The first version asserted only that `left` was 8 — which it
+   * was, while the bubble kept its full 260px width and ran 68px past the right
+   * edge of a 200px viewport. A one-edge assertion on a two-edge problem passes
+   * on the bug. (qodo #14 on PR #475.)
+   */
+  it('shrinks the bubble rather than letting it overflow a narrow viewport', () => {
+    const narrow = { width: 200, height: 800 };
+    const style = tooltipStyle(rect({ left: 100 }), 'top', narrow);
+    expect(style.left).toBe(8);
+    expect(style.width).toBe(200 - 16);
+    expect(Number(style.left) + Number(style.width)).toBeLessThanOrEqual(narrow.width - 8);
+  });
+
+  it('keeps the full width when the viewport has room', () => {
+    expect(tooltipStyle(rect(), 'top', viewport).width).toBe(TOOLTIP_WIDTH);
+  });
+
+  it('never returns a negative width', () => {
+    expect(Number(tooltipStyle(rect(), 'top', { width: 10, height: 800 }).width)).toBeGreaterThanOrEqual(0);
   });
 });
 

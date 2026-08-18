@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { readdirSync, readFileSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, resolve, join } from 'node:path';
 import { helpRegistry, normalizePath } from '../src/help/registry';
-import type { TopicScope } from '../src/help/registry';
 import { WIZARD_FIELD_ALLOWLIST } from '../src/help/coverage-allowlist';
 import { POOL_TYPES } from '../shared/poolTypes';
+import type { PoolType } from '../shared/poolTypes';
 
 /**
  * UI coverage — PLAN-HELP-SYSTEM.md §3 D5, ticket T1 (the wizard half).
@@ -104,26 +104,6 @@ export function scanHelpIds(source: string): string[] {
   return [...source.matchAll(/\bhelpId="([^"]*)"/g)].map((m) => m[1]);
 }
 
-/**
- * Whether ANY pool type's reader can resolve this id.
- *
- * Per-type resolution is not asserted here on purpose: a wizard file is
- * type-specific, and mapping file → pool type by name would be a second,
- * weaker copy of the step lists. The registry invariants already refuse a
- * topic scoped to a type it is not placed for; this asks the question this
- * test exists for — does a reader ever see help for this control.
- */
-function resolvableAnywhere(id: string): boolean {
-  const scopes: TopicScope[] = [
-    { audience: 'commissioner' },
-    ...POOL_TYPES.map((poolType) => ({ poolType, audience: 'commissioner' as const })),
-  ];
-  return scopes.some((scope) => helpRegistry.resolveTopic(scope, id) !== undefined);
-}
-
-function explains(path: string): boolean {
-  return resolvableAnywhere(path) || CLAIMED_FIELDS.has(path);
-}
 
 const FILES = tsxFiles(WIZARD_DIR);
 const SOURCES = FILES.map((file) => ({ file, source: stripComments(readFileSync(file, 'utf8')) }));
@@ -157,6 +137,76 @@ const CLAIMED_FIELDS = new Set(
 const ALL_BINDINGS = SOURCES.flatMap(({ file, source }) =>
   scanBindings(source).paths.map((path) => ({ file, path })),
 );
+
+/**
+ * Which pool types actually render a given wizard file.
+ *
+ * THE FIRST VERSION OF THIS FILE ASKED THE WRONG QUESTION. It accepted an id
+ * that resolved under ANY pool type, which is not the question — `HelpTip`
+ * resolves under the scope `WizardShell` publishes, one concrete type. A topic
+ * scoped to Survivor would have satisfied coverage for a control that only
+ * ever renders in the Bracket wizard, where the tooltip shows nothing. A guard
+ * that passes on a control with no help is worse than no guard, and this repo
+ * has holed three of them the same way. (qodo #15 on PR #475.)
+ *
+ * The mapping is derived, not written down: each `Create*Pool.tsx` declares its
+ * type on `<WizardShell poolType="…">`, and the files it reaches through
+ * relative imports are the ones it renders. So a shared step is checked against
+ * every type that uses it, and a type-specific file against its own.
+ */
+function importsWithin(file: string, source: string): string[] {
+  const dir = dirname(file);
+  return [...source.matchAll(/from\s+'(\.[^']*)'/g)].flatMap((m) => {
+    const base = resolve(dir, m[1]);
+    return ['.tsx', '.ts', '/index.tsx', '/index.ts'].map((ext) => base + ext).filter(existsSync);
+  });
+}
+
+const SOURCE_BY_FILE = new Map(SOURCES.map(({ file, source }) => [file, source]));
+
+/** Every wizard file a create wizard reaches, itself included. */
+function reachableFrom(entry: string): Set<string> {
+  const seen = new Set<string>([entry]);
+  const queue = [entry];
+  while (queue.length) {
+    const current = queue.pop()!;
+    const source = SOURCE_BY_FILE.get(current) ?? (existsSync(current) ? readFileSync(current, 'utf8') : '');
+    for (const next of importsWithin(current, source)) {
+      if (next.startsWith(WIZARD_DIR) && !seen.has(next)) {
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  return seen;
+}
+
+const CREATE_WIZARDS = SOURCES.flatMap(({ file, source }) => {
+  const declared = source.match(/<WizardShell[\s\S]{0,400}?poolType="([A-Z_]+)"/);
+  return declared ? [{ file, poolType: declared[1] as PoolType, reaches: reachableFrom(file) }] : [];
+});
+
+/**
+ * The pool types whose wizard renders this file.
+ *
+ * A file no create wizard reaches is checked against EVERY type — the strictest
+ * reading, because an unreachable file's scope is unknown rather than empty.
+ */
+function typesRendering(file: string): PoolType[] {
+  const owners = CREATE_WIZARDS.filter((w) => w.reaches.has(file)).map((w) => w.poolType);
+  return owners.length ? owners : [...POOL_TYPES];
+}
+
+/** Does this id resolve under the scope every wizard that renders `file` publishes? */
+function resolvesForFile(id: string, file: string): boolean {
+  return typesRendering(file).every(
+    (poolType) => helpRegistry.resolveTopic({ poolType, audience: 'commissioner' }, id) !== undefined,
+  );
+}
+
+function explains(path: string, file: string): boolean {
+  return resolvesForFile(path, file) || CLAIMED_FIELDS.has(path);
+}
 
 describe('scanBindings — the scanner itself', () => {
   it('reads a quoted name', () => {
@@ -234,7 +284,7 @@ describe('the wizard sources', () => {
 describe('every wizard control has help or a written reason', () => {
   it('no bound field is both unexplained and unaccounted for', () => {
     const problems = ALL_BINDINGS.filter(
-      ({ path }) => !explains(path) && !(path in WIZARD_FIELD_ALLOWLIST),
+      ({ file, path }) => !explains(path, file) && !(path in WIZARD_FIELD_ALLOWLIST),
     ).map(({ file, path }) => `${file.split(/[\\/]/).pop()}: ${path}`);
     expect(problems).toEqual([]);
   });
@@ -247,10 +297,33 @@ describe('every wizard control has help or a written reason', () => {
   it('every explicit helpId resolves to a topic', () => {
     const problems = SOURCES.flatMap(({ file, source }) =>
       scanHelpIds(source)
-        .filter((id) => !resolvableAnywhere(id))
+        .filter((id) => !resolvesForFile(id, file))
         .map((id) => `${file.split(/[\\/]/).pop()}: helpId="${id}"`),
     );
     expect(problems).toEqual([]);
+  });
+
+  it('every create wizard declares a pool type the scan can read', () => {
+    // Without this the mapping silently empties, `typesRendering` falls back to
+    // every type for every file, and the per-wizard claim below goes vacuous.
+    expect(CREATE_WIZARDS.map((w) => w.poolType).sort()).toEqual([...POOL_TYPES].sort());
+  });
+
+  it('a shared step is attributed to every wizard that renders it', () => {
+    const feeStep = FILES.find((f) => f.endsWith('StepFeeAndPayment.tsx'))!;
+    expect(typesRendering(feeStep).sort()).toEqual([...POOL_TYPES].sort());
+    const props = FILES.find((f) => f.endsWith('CreatePropsPool.tsx'))!;
+    expect(typesRendering(props)).toEqual(['PROPS']);
+  });
+
+  it('a topic scoped to another pool type does not satisfy coverage', () => {
+    // `costPerSquare` is SQUARES-only. It resolves for the squares wizard and
+    // must NOT for the props one — which is exactly the pair the first version
+    // of this file could not tell apart.
+    const squares = FILES.find((f) => f.endsWith('CreateSquaresPool.tsx'))!;
+    const props = FILES.find((f) => f.endsWith('CreatePropsPool.tsx'))!;
+    expect(resolvesForFile('costPerSquare', squares)).toBe(true);
+    expect(resolvesForFile('costPerSquare', props)).toBe(false);
   });
 
   it('no allowlist row names a field the wizard no longer binds', () => {
@@ -260,9 +333,13 @@ describe('every wizard control has help or a written reason', () => {
   });
 
   it('no allowlist row survives once its field is explained', () => {
-    const dead = Object.keys(WIZARD_FIELD_ALLOWLIST).filter(
-      (path) => explains(path) && !WIZARD_FIELD_ALLOWLIST[path].startsWith('PERMANENT'),
-    );
+    const boundIn = new Map(ALL_BINDINGS.map((b) => [b.path, b.file]));
+    const dead = Object.keys(WIZARD_FIELD_ALLOWLIST).filter((path) => {
+      const file = boundIn.get(path);
+      return file !== undefined
+        && explains(path, file)
+        && !WIZARD_FIELD_ALLOWLIST[path].startsWith('PERMANENT');
+    });
     expect(dead).toEqual([]);
   });
 

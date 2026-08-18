@@ -45,10 +45,15 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
   {
     id: 'managerName',
     title: 'Your name as host',
-    short: 'The host name members see on the pool page and on the join screen. Leave it blank to use your account name.',
+    short: 'The host name members see on the pool page and on the join screen. Clear it and they see "Pool Host" instead.',
     long: [
-      'Members use this to know who is running the pool and who to pay.',
-      'It is separate from your account name, so you can run a pool as "Dave from Accounts" without renaming your profile.',
+      'Members use this to know who is running the pool and who to pay. It is filled in from your profile, and you can change it here.',
+      // The first draft said a blank field falls back to your account name. It
+      // does not: `buildNFLPayload` sends `v.managerName || undefined`, and the
+      // join screen and the dashboard render `pool.managerName || 'Pool Host'`
+      // / `|| 'Host'`. (qodo #13 on PR #475.)
+      'Clearing it does not fall back to your account name — members see a generic "Pool Host" label.',
+      'It is separate from your account name either way, so you can run a pool as "Dave from Accounts" without renaming your profile.',
     ].join('\n\n'),
     poolTypes: 'all',
     audience: HOST_ONLY,

@@ -7,6 +7,7 @@ import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
 import { getPoolTypeName } from '../utils/poolUtils';
 import { Badge } from './ui';
+import { isPubliclyListed } from '../utils/publicListing';
 
 interface BrowsePoolsProps {
     user: User | null;
@@ -34,9 +35,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
             const isSquares = !p.type || p.type === 'SQUARES';
             const isPlayoff = p.type === 'NFL_PLAYOFFS';
 
-            const isPublic = isBracket ? (p as BracketPool).isListedPublic : (isPlayoff ? true : (isProps ? (p as PropsPool).isPublic : (p as GameState).isPublic));
-
-            if (!isPublic) return false;
+            if (!isPubliclyListed(p)) return false;
 
             // Canceled pools never show in public discovery
             if ((p as any).status === 'CANCELED') return false;
