@@ -4,6 +4,7 @@ import { CANONICAL_ROLES, normalizeRole, roleBadge } from '../utils/roles';
 import { ConfirmActionModal } from './admin/ConfirmActionModal';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
+import { HelpRoutePublisher } from '../help/publish';
 import type { GameState, Pool, User, SystemSettings, PropSeed, PlayoffTeam, PoolTheme, LoyaltyTier } from '../types';
 import { dbService, type GlobalStats } from '../services/dbService';
 import { isTestPool } from '@shared/testPool';
@@ -1203,6 +1204,11 @@ export const SuperAdmin: React.FC = () => {
 
     return (
         <div className="w-[80%] mx-auto py-4 md:py-6 relative font-body text-[color:var(--text)]">
+            {/* T2: the admin tab, for the Help panel. K13 leaves these tabs
+                UNLINKED — an admin can click the tab — so the tab stays in
+                memory and is published rather than moved into the URL. The tab
+                summaries themselves are T14. */}
+            <HelpRoutePublisher tab={activeTab} audience="admin" />
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-display font-extrabold uppercase leading-none flex items-center gap-3">
                     <Shield className="text-gold-500" /> Super Admin Dashboard
@@ -3208,6 +3214,9 @@ export const SuperAdmin: React.FC = () => {
             {
                 viewingPool && (
                     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                        {/* T2: the pool-detail modal's sub-tab. Mounted only while
+                            the modal is open, so it retracts when it closes. */}
+                        <HelpRoutePublisher subTab={modalTab} />
                         <div className="bg-card border border-line rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-panel flex flex-col">
                             {/* Modal Header */}
                             <div className="p-6 border-b border-line flex justify-between items-start bg-surface">

@@ -35,6 +35,7 @@ import { PaymentsPanel } from '../PaymentsPanel';
 import { NFLResults } from './NFLResults';
 import { NFLPicksGrid } from './NFLPicksGrid';
 import { NFLWeeklyPicksGrid } from './NFLWeeklyPicksGrid';
+import { HelpRoutePublisher } from '../../help/publish';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -560,6 +561,19 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // STRICT helper, not the NFL-widened `isManager` prop (codex r8 on PR-B).
   return (
     <BillingGate pool={pool as any} isCommissioner={isPoolManager(user, pool)}>
+    {/* T2: `activeTab` — the tab the pool ACTUALLY rendered, which is not always
+        the one `?tab=` asked for (an unoffered tab falls back to dashboard). The
+        Help panel must describe the screen, not the link.
+
+        `tabOffered` goes with it, so Help never lists a screen this pool has no
+        tab for: Survivor has no Results, and the picks grid and payments need a
+        signed-in reader. Published rather than re-derived in the help content,
+        which would be a second copy of a rule that changes here. */}
+    <HelpRoutePublisher
+      tab={activeTab}
+      isManager={isManager}
+      offeredTabs={VALID_TABS.filter(t => tabOffered[t])}
+    />
     <div
       className="min-h-screen bg-page text-[color:var(--text)] font-body pb-20 relative transition-colors duration-500"
       style={{ backgroundColor: branding.bgColor || undefined }}

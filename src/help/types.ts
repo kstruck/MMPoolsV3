@@ -108,11 +108,34 @@ export const DEFAULT_SECTION = 'general';
  */
 export interface HelpRouteContext {
   pathname: string;
+  /**
+   * The current query string, so a page's `href` can REPLACE the tab rather than
+   * rebuild the query from nothing. An NFL reader on `?tab=results&week=3` who
+   * picks another page from Help must keep their week — the dashboard's own tab
+   * setter preserves other parameters, and Help must not be the one door that
+   * silently resets them (codex R11).
+   */
+  search?: string;
   routeParams?: Readonly<Record<string, string | undefined>>;
   tab?: string;
   subTab?: string;
   poolType?: PoolType;
   isManager?: boolean;
+  /**
+   * The tabs the CURRENT surface actually offers, when it knows.
+   *
+   * Several tabs exist for some pools and not others: a Survivor pool has no
+   * Results tab (`NFLPoolDashboard.tsx` `showResultsTab`), the picks grid and
+   * the payments tab need a signed-in reader, and the AI tabs are behind a
+   * per-pool feature unlock. A help page offered for a tab the reader cannot
+   * open is a dead link — the dashboard falls back and the panel is left
+   * describing a screen nobody reached. Rather than re-deriving each of those
+   * conditions in the content (a second copy of a rule that changes), the
+   * surface publishes the list it just rendered.
+   *
+   * `undefined` means the surface makes no claim, and nothing is filtered.
+   */
+  offeredTabs?: readonly string[];
 }
 
 /**
@@ -136,6 +159,20 @@ export interface HelpPage {
   id: string;
   /** react-router pattern, exactly as written in `src/App.tsx`. */
   route: string;
+  /**
+   * Other `src/App.tsx` routes that render THIS SAME screen.
+   *
+   * `/admin/:id` does not have a manager UI of its own for four of the seven
+   * pool types: `AdminRoute` renders the very same dashboard `/pool/:id` does
+   * (`AdminRoute.tsx:101,120,136` and the NFL branch). Without this, a
+   * commissioner who followed a "manage" link would be told there is no guide
+   * for a screen that has one. Squares is the exception — it really does have
+   * its own panel there — so its pages name `/admin/:id` as their `route`.
+   *
+   * Checked against App.tsx by `tests/help-registry-invariants.test.ts` exactly
+   * as `route` is, and it counts towards a route being covered.
+   */
+  altRoutes?: readonly string[];
   /** The `?tab=` value, or the in-memory tab id published by `useHelpRoute`. */
   tab?: string;
   subTab?: string;

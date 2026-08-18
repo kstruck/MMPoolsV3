@@ -13,6 +13,7 @@
 
 import { MAX_ENTRIES_PER_USER_CAP } from '@shared/multiEntry';
 import type { HelpPlacement, HelpTopic } from '../types';
+import { RULES_STEP } from './wizard-pages';
 
 const NFL_SEASON_WIZARDS = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'] as const;
 
@@ -444,9 +445,17 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
  * Placements name the BASE topic id — `resolveTopic` picks the pool-type
  * variant at render time, which is why `wizard.season` is written once and
  * shows the playoff wording on the playoff page.
+ *
+ * T2 MOVED THESE ONTO THE STEP PAGES. T1 placed every topic on the wizard's
+ * route-level page, which was right while nothing matched a route to a page:
+ * one page, everything on it. Now that `WizardShell` publishes its step, the
+ * panel resolves to `wizard.pickem.rules` rather than `wizard.pickem`, and a
+ * placement left on the route page would show nothing on every step. The page
+ * id is `${wizard}.${step}` and the SECTION heading inside it stays the step
+ * name, so a step with two groups of options can grow one later.
  */
-function place(page: string, section: string, topics: readonly string[]): HelpPlacement[] {
-  return topics.map((topic, i) => ({ topic, page, section, order: i }));
+function place(page: string, step: string, section: string, topics: readonly string[]): HelpPlacement[] {
+  return topics.map((topic, i) => ({ topic, page: `${page}.${step}`, section, order: i }));
 }
 
 const BASICS = ['name', 'managerName', 'contactEmail', 'isPublic'] as const;
@@ -463,14 +472,20 @@ function wizardPlacements(page: string, opts: {
   payouts: boolean;
   reminders?: boolean;
 }): HelpPlacement[] {
+  // The step that carries the type-specific rules copy is named by the wizard,
+  // not assumed: the playoff wizard calls it `details`, squares calls it
+  // `grid`, props calls it `setup`. `RULES_STEP` is the one list, shared with
+  // `wizard-pages.ts`, so a placement cannot land on a step page that the
+  // wizard does not have.
+  const rulesStep = RULES_STEP[page];
   return [
-    ...place(page, 'basics', BASICS),
-    ...(opts.rules ? place(page, 'rules', opts.rules) : []),
-    ...place(page, 'fee', [opts.fee, ...PAYMENT]),
-    ...(opts.payouts ? place(page, 'payouts', PAYOUTS) : []),
-    ...place(page, 'branding', BRANDING),
-    ...(opts.reminders ? place(page, 'reminders', REMINDERS) : []),
-    ...place(page, 'launch', LAUNCH),
+    ...place(page, 'basics', 'basics', BASICS),
+    ...(opts.rules ? place(page, rulesStep, 'rules', opts.rules) : []),
+    ...place(page, 'fee', 'fee', [opts.fee, ...PAYMENT]),
+    ...(opts.payouts ? place(page, 'payouts', 'payouts', PAYOUTS) : []),
+    ...place(page, 'branding', 'branding', BRANDING),
+    ...(opts.reminders ? place(page, 'reminders', 'reminders', REMINDERS) : []),
+    ...place(page, 'launch', 'launch', LAUNCH),
   ];
 }
 

@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react';
+import { useOverlayOwner } from './overlayStack';
 
 type ToastKind = 'success' | 'error' | 'info';
 
@@ -74,6 +75,15 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             return null;
         });
     }, []);
+
+    // PLAN-HELP-SYSTEM T2: the confirm modal that replaced `window.confirm()` is
+    // the sixth accessible dialog in `src/`. It owns the screen only while a
+    // confirmation is pending, so the `?` shortcut is quiet then and Escape
+    // closes exactly one overlay.
+    useOverlayOwner('toast-confirm', {
+        active: confirmState !== null,
+        onEscape: () => resolveConfirm(false),
+    });
 
     useEffect(() => {
         if (!confirmState) return;

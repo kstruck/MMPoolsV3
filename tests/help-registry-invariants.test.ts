@@ -5,6 +5,7 @@ import { POOL_TYPES } from '../shared/poolTypes';
 import { baseTopicId, buildRegistry, helpRegistry, normalizePath, resolveCopy, SEARCH_RESULT_LIMIT, staticCopy } from '../src/help/registry';
 import { PAGES } from '../src/help/pages';
 import { ROUTE_ALLOWLIST } from '../src/help/coverage-allowlist';
+import { WIZARDS } from '../src/help/content/wizard-pages';
 import { BANNED_IMPLEMENTATION_WORDS, BANNED_SELLING_WORDS, COPY_LIMITS, findBannedWords } from '../src/help/voice';
 import type { HelpPage, HelpTopic } from '../src/help/types';
 
@@ -824,8 +825,30 @@ describe('the real registry — route coverage against src/App.tsx', () => {
     expect(unknown).toEqual([]);
   });
 
+  /**
+   * `altRoutes` is a second route rendering the SAME screen (T2:
+   * `/admin/:id` shows the very same dashboard as `/pool/:id` for four pool
+   * types). It is checked exactly as `route` is — an altRoute naming a route
+   * App.tsx does not have would silently never match, which is the
+   * guard-that-does-not-guard shape this repo keeps producing.
+   */
+  it('every HelpPage altRoute exists in App.tsx', () => {
+    const unknown = PAGES.flatMap((p) =>
+      (p.altRoutes ?? []).filter((r) => !routes.includes(r)).map((r) => `${p.id} → ${r}`),
+    );
+    expect(unknown).toEqual([]);
+    // Discriminating half: the check would catch one that did not exist.
+    expect(
+      [{ id: 'planted', altRoutes: ['/no/such/route'] }].flatMap((p) =>
+        p.altRoutes.filter((r) => !routes.includes(r)),
+      ),
+    ).toEqual(['/no/such/route']);
+  });
+
   it('every App.tsx route has a HelpPage or an allowlist row', () => {
-    const covered = new Set(PAGES.map((p) => p.route));
+    // An altRoute counts: `/admin/:id` is covered for a bracket commissioner by
+    // the bracket dashboard's pages, which is the screen it renders.
+    const covered = new Set(PAGES.flatMap((p) => [p.route, ...(p.altRoutes ?? [])]));
     const uncovered = routes.filter((r) => !covered.has(r) && !(r in ROUTE_ALLOWLIST));
     expect(uncovered).toEqual([]);
   });
@@ -836,7 +859,9 @@ describe('the real registry — route coverage against src/App.tsx', () => {
   });
 
   it('no route is both given a page and allowlisted', () => {
-    const both = PAGES.filter((p) => p.route in ROUTE_ALLOWLIST).map((p) => p.route);
+    const both = PAGES.flatMap((p) =>
+      [p.route, ...(p.altRoutes ?? [])].filter((r) => r in ROUTE_ALLOWLIST),
+    );
     expect(both).toEqual([]);
   });
 
@@ -906,13 +931,16 @@ describe('the real registry — content rules', () => {
     expect(violations).toEqual([]);
   });
 
-  // T1 ships the create wizard's copy and the seven wizard pages; T2/T3/T14
-  // bring the rest. Asserted as a SHAPE, not a count, so it does not have to be
-  // edited on every content ticket — but an accidentally-empty registry still
-  // fails here rather than looking like a pass.
-  it('T1 state: the create wizard has copy and pages, and the glossary is full', () => {
+  // T1 shipped the create wizard's copy and the seven route-level wizard pages;
+  // T2 adds a page per wizard STEP and the two pool routes with their tabs.
+  // T3/T14 bring the rest. Asserted as a SHAPE plus the ROUTE SET, not as a
+  // page count, so it does not have to be edited on every content ticket — but
+  // an accidentally-empty registry still fails here rather than looking like a
+  // pass, and a route silently losing its pages does too.
+  it('T2 state: the wizard steps and the pool routes have pages, and the glossary is full', () => {
     expect(topics.length).toBeGreaterThan(20);
-    expect([...PAGES].map((p) => p.route).sort()).toEqual([
+    expect([...new Set(PAGES.map((p) => p.route))].sort()).toEqual([
+      '/admin/:id',
       '/create/bracket',
       '/create/margin',
       '/create/pickem',
@@ -920,8 +948,36 @@ describe('the real registry — content rules', () => {
       '/create/props',
       '/create/squares',
       '/create/survivor',
+      '/pool/:id',
     ]);
+    // Every wizard has its route-level page AND one page per step, and every
+    // pool route page names a tab or is the route's fallback.
+    for (const wizard of WIZARDS) {
+      const own = PAGES.filter((p) => p.route === wizard.route);
+      expect(own.filter((p) => p.tab === undefined).map((p) => p.id)).toEqual([wizard.id]);
+      expect(own.filter((p) => p.tab !== undefined).map((p) => p.tab)).toEqual([...wizard.steps]);
+    }
     expect(helpRegistry.glossary.length).toBeGreaterThan(30);
+  });
+
+  /**
+   * A page whose `tab` no wizard step is named for would be permanently
+   * unreachable — `resolveHelpPage` only returns it when the published tab
+   * equals it, and `WizardShell` publishes step ids. Discriminating fixture:
+   * a page carrying a tab that is not in its wizard's step list must be caught,
+   * which is what the second assertion proves the check can do.
+   */
+  it('no wizard page names a step its wizard does not have', () => {
+    const steps = new Map(WIZARDS.map((w) => [w.route, new Set(w.steps)]));
+    const orphans = PAGES.filter(
+      (p) => steps.has(p.route) && p.tab !== undefined && !steps.get(p.route)!.has(p.tab),
+    ).map((p) => `${p.id} → tab "${p.tab}"`);
+    expect(orphans).toEqual([]);
+    // The check discriminates: a made-up tab on a real wizard route IS caught.
+    const planted = [...PAGES, { ...PAGES[0], id: 'planted', tab: 'nope' }];
+    expect(
+      planted.filter((p) => steps.has(p.route) && p.tab !== undefined && !steps.get(p.route)!.has(p.tab)),
+    ).toHaveLength(1);
   });
 
   /**
@@ -936,9 +992,12 @@ describe('the real registry — content rules', () => {
     expect(playoff?.id).toBe('NFL_PLAYOFFS:wizard.season');
     expect(pickem?.id).toBe('wizard.season');
     // And the panel agrees with the tooltip, because both go through the same
-    // function: the placement is written unqualified on both pages.
+    // function: the placement is written unqualified on both pages. T2 moved
+    // the placements onto the STEP pages, so the playoff wizard's season note
+    // sits on `wizard.playoff.details` — the playoff wizard calls its rules
+    // step `details`.
     const onPlayoffPage = helpRegistry
-      .placementsForPage('wizard.playoff', { poolType: 'NFL_PLAYOFFS', audience: 'commissioner' })
+      .placementsForPage('wizard.playoff.details', { poolType: 'NFL_PLAYOFFS', audience: 'commissioner' })
       .flatMap((s) => s.topics);
     expect(onPlayoffPage).toContain(playoff);
     expect(onPlayoffPage).not.toContain(pickem);

@@ -2,6 +2,7 @@ import { logger } from '../../utils/logger';
 import { BillingGate } from '../billing';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
+import { HelpRoutePublisher } from '../../help/publish';
 import { createPortal } from 'react-dom';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
 import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock, ChevronDown, ChevronUp, Palette, Bell, CreditCard, Key, Globe, Trash2, ClipboardList, Mail, AlertTriangle } from 'lucide-react';
@@ -605,6 +606,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
     return (
         <BillingGate pool={pool as any} isCommissioner={isManager}>
+        {/* T2: `tab` already rides in `?tab=`; the reports sub-tab does not, so
+            it is published. Only meaningful on the reports tab. */}
+        <HelpRoutePublisher
+            tab={activeTab}
+            subTab={activeTab === 'reports' ? bracketSubTab : undefined}
+            isManager={isManager}
+        />
         <div className="min-h-screen bg-page pb-20">
             {/* Header */}
             <div className="bg-surface border-b border-line p-4 relative">

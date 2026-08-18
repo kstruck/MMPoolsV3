@@ -116,10 +116,12 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
 /**
  * Routes in `src/App.tsx` with no `HelpPage` yet.
  *
- * T0 ships every route pending because `pages.ts` is empty; T2 and T3 empty
- * this list down to the permanent rows. A route ADDED to `App.tsx` and not
- * listed here fails the registry invariant test, which is the guard: a new
- * page cannot ship with no help and no decision.
+ * T0 shipped every route pending because `pages.ts` was empty. T1 took the
+ * seven `/create/*` rows out; T2 takes `/pool/:id` and `/admin/:id` out. What
+ * remains is T3 (the site and account pages) and T14 (the two admin surfaces),
+ * plus the permanent rows. A route ADDED to `App.tsx` and not listed here fails
+ * the registry invariant test, which is the guard: a new page cannot ship with
+ * no help and no decision.
  */
 export const ROUTE_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
   // PERMANENT — these render no page a reader can be helped on.
@@ -153,8 +155,6 @@ export const ROUTE_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
   '/participant': 'T3: My Entries, with six in-memory tabs.',
   '/create-pool': 'T3: the pool-type picker.',
   '/join/:poolId': 'T3: the join and pay screen.',
-  '/pool/:id': 'T2: every pool dashboard and tab resolves through this one route.',
-  '/admin/:id': 'T2: the squares manager panel and the redirect for the other types.',
   '/super-admin': 'T14: seventeen admin tabs get page-level summaries only (K4 scope ii).',
   '/tournament-sim': 'T14: admin simulation surface.',
 });

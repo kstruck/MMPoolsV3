@@ -25,6 +25,9 @@ import type {
   ResolvedPlacement,
 } from './types';
 import { DEFAULT_SECTION } from './types';
+// The visibility rule lives in one file (T2): route→page matching, the "All
+// pages" list and the admin chunk all ask the same question this does.
+import { audienceSatisfies, isEntryVisible as isVisible } from './visibility';
 import { PAGES } from './pages';
 import { GLOSSARY } from './glossary';
 import { PLACEMENTS, TOPICS } from './content';
@@ -103,34 +106,6 @@ export function resolveCopy(copy: HelpCopy, ctx: HelpCopyContext = {}): string {
  */
 export function staticCopy(copy: HelpCopy): string {
   return typeof copy === 'string' ? copy : copy.fallback;
-}
-
-/**
- * What each viewer may read (K9: one registry, `audience[]`).
- *
- * A commissioner IS a member — they submit picks in their own pool — so
- * commissioner-scoped viewing includes member copy. An admin sees everything.
- * Without this widening, a commissioner reading their own pick sheet would get
- * no help on it, and every member-facing setting would need a duplicate
- * commissioner topic, which is the duplication K9 rejected.
- */
-const AUDIENCE_SEES: Readonly<Record<Audience, readonly Audience[]>> = {
-  member: ['member'],
-  commissioner: ['member', 'commissioner'],
-  admin: ['member', 'commissioner', 'admin'],
-};
-
-function audienceSatisfies(entry: readonly Audience[], viewer: Audience): boolean {
-  const visible = AUDIENCE_SEES[viewer];
-  return entry.some((a) => visible.includes(a));
-}
-
-function scopeIncludesPoolType(scope: PoolTypeScope, poolType: PoolType | undefined): boolean {
-  if (scope === 'all') return true;
-  // A viewer with no pool in scope (the wizard picker, site pages) sees only
-  // type-agnostic entries; a type-scoped one has no pool to be about.
-  if (!poolType) return false;
-  return scope.includes(poolType);
 }
 
 function extractSnippet(haystack: string, needle: string): string {
@@ -511,10 +486,6 @@ class RegistryImpl implements Registry {
     }
     return results;
   }
-}
-
-function isVisible(poolTypes: PoolTypeScope, audience: readonly Audience[], scope: TopicScope): boolean {
-  return scopeIncludesPoolType(poolTypes, scope.poolType) && audienceSatisfies(audience, scope.audience);
 }
 
 export function buildRegistry(input: HelpContentInput): Registry {

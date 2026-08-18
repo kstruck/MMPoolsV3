@@ -14,6 +14,7 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { PoolType } from '@shared/poolTypes';
 import type { Audience } from './types';
 import type { TopicScope } from './registry';
+import { useHelpRoute } from './publish';
 
 /**
  * What a reader outside any pool sees: type-agnostic member copy.
@@ -37,6 +38,11 @@ export function HelpScopeProvider(props: {
   // this every render of a 900-line route hands every HelpTip below it a new
   // context value.
   const value = useMemo<TopicScope>(() => ({ poolType, audience }), [poolType, audience]);
+  // T2: the same two facts go UPWARD as well. The Help panel is mounted above
+  // the router and cannot read this context, so the surface that knows the
+  // pool type is the surface that tells it — one publisher, not a second
+  // derivation of "which pool type is this" inside the panel.
+  useHelpRoute({ poolType, audience });
   return <HelpScopeContext.Provider value={value}>{children}</HelpScopeContext.Provider>;
 }
 
@@ -53,7 +59,14 @@ export function useHelpScope(): TopicScope {
  * rather than pretending; see the comment there.
  */
 export interface HelpPanelHandle {
-  openTo(target: { topicId: string }): void;
+  /**
+   * Open the panel on one topic. `pageId` names the page to show it on; with
+   * none, the panel prefers a placement on the reader's CURRENT page and falls
+   * back to the topic's first placement (D3).
+   */
+  openTo(target: { topicId: string; pageId?: string }): void;
+  /** Open the panel on a page, with no topic selected ("All pages"). */
+  openPage(pageId: string): void;
 }
 
 export const HelpPanelContext = createContext<HelpPanelHandle | null>(null);

@@ -23,6 +23,8 @@ import { hybridSplitProblem } from '@shared/hybridSplit';
 import { DUPLICATE_RANK_MESSAGE, uniqueRanks } from '@shared/schemas/common';
 import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReuse';
 import { effectiveMaxEntriesPerUser, MAX_ENTRIES_PER_USER_CAP, MULTI_ENTRY_WIZARD_ENABLED } from '@shared/multiEntry';
+import { HelpRoutePublisher } from '../../help/publish';
+import { useUrlTab } from '../help/useUrlTab';
 
 type PlaceRow = { rank: number; percentage: number };
 
@@ -180,6 +182,8 @@ const SaveSettingsControl: React.FC<{ onSave: () => void; isSaving: boolean; jus
  */
 type CommishTab = 'overview' | 'members' | 'settings' | 'scoring';
 
+const COMMISH_TAB_IDS: readonly CommishTab[] = ['overview', 'members', 'scoring', 'settings'];
+
 const COMMISH_TABS: { id: CommishTab; label: string; hint: string }[] = [
   { id: 'overview', label: 'Overview', hint: 'Submission health, payouts' },
   { id: 'members', label: 'Members & Payments', hint: 'Payment Ledger, roster, reminders' },
@@ -227,11 +231,20 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // scroll, which is why the same Save control had to be repeated five times —
   // the button was simply too far from whatever you had just edited. Splitting it
   // removes the reason those duplicates existed rather than deleting a control
-  // people rely on. Local state on purpose: `activeTab` already rides in the URL
-  // for the pool page (see AdminRoute's redirect to `?tab=manager`), and adding a
-  // second URL-backed tab would give this surface two sources of truth.
-  const [commishTab, setCommishTab] = useState<CommishTab>(() =>
-    COMMISH_TABS.some(t => t.id === initialSection) ? (initialSection as CommishTab) : 'overview');
+  // people rely on.
+  //
+  // T2 / K13 MOVED THIS INTO THE URL. It was local state on the reasoning that a
+  // second URL-backed tab would give the surface two sources of truth — but the
+  // deep link into it already existed (`?tab=manager&section=members`, from the
+  // member Payments tab's "Open Payment Ledger"), so the URL was ALREADY one of
+  // the two and the state was the copy. Reading it here makes the URL the only
+  // one, and Back now works across these sections. `section`, not `sub`: that
+  // parameter name is already live in links people have sent.
+  const [commishTab, setCommishTab] = useUrlTab(
+    'section',
+    COMMISH_TAB_IDS,
+    COMMISH_TAB_IDS.includes(initialSection as CommishTab) ? (initialSection as CommishTab) : 'overview',
+  );
 
   const [isScoring, setIsScoring] = useState(false);
   const [isSavingPayment, setIsSavingPayment] = useState<string | null>(null);
@@ -884,6 +897,10 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
+      {/* T2: the commissioner section, for the Help panel. `subTab` only — the
+          parent dashboard owns `tab`, and two publishers writing one field
+          would be ambiguous. */}
+      <HelpRoutePublisher subTab={commishTab} />
 
       {/* Feedback Alert — OUTSIDE the tab groups on purpose: a save started on
           Settings must still report its result if the tab changed underneath it. */}

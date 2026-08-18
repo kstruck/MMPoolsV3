@@ -6,16 +6,18 @@
 // here that does not exist there, and on a route there that appears neither
 // here nor in `ROUTE_ALLOWLIST`.
 //
-// T1 adds the seven `/create/*` wizard routes, because the registry refuses a
-// topic nothing places and a placement needs a page. Every other route is
-// still in `ROUTE_ALLOWLIST` with the ticket that will move it here — T2 for
-// the pool surfaces, T3 for the site and account pages, T14 for the admin
-// tabs. A route added to App.tsx tomorrow is in neither list and fails.
+// T1 added the seven `/create/*` wizard routes, because the registry refuses a
+// topic nothing places and a placement needs a page. T2 adds a page per wizard
+// STEP and the two pool routes with their tabs. What is left in
+// `ROUTE_ALLOWLIST` is T3 (site and account pages) and T14 (the admin tabs). A
+// route added to App.tsx tomorrow is in neither list and fails.
 //
-// Route MATCHING (which page the reader is on) is T2's job and deliberately
-// not built here.
+// Route MATCHING lives in `route-match.ts` (T2); ORDER matters here only as a
+// tie-break between two pages of equal specificity, so the list reads
+// wizards-then-pools rather than being sorted.
 
 import type { HelpPage } from './types';
 import { WIZARD_PAGES } from './content/wizard-pages';
+import { POOL_PAGES } from './content/pool-pages';
 
-export const PAGES: readonly HelpPage[] = [...WIZARD_PAGES];
+export const PAGES: readonly HelpPage[] = [...WIZARD_PAGES, ...POOL_PAGES];

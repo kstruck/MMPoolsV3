@@ -1,5 +1,6 @@
 import { logger } from '../../utils/logger';
 import React, { useState, useEffect, useRef } from 'react';
+import { useOverlayOwner } from '../ui/overlayStack';
 import { X, Lock, Unlock, Save, Loader } from 'lucide-react';
 import type { PlayoffPool } from '../../types';
 import { db } from '../../firebase';
@@ -22,6 +23,11 @@ export const PlayoffSettingsModal: React.FC<PlayoffSettingsModalProps> = ({ isOp
 
     // Escape closes; focus moves into the dialog on open. (No backdrop-click
     // close on this form modal — avoids losing unsaved edits by accident.)
+    // PLAN-HELP-SYSTEM T2: own the screen while open, so the `?` shortcut stays
+    // quiet and Escape closes exactly one overlay. Registered on `isOpen`, NOT
+    // on mount — this component stays mounted while closed, and pushing on
+    // mount would let it own the stack for the life of the app.
+    useOverlayOwner('playoff-settings-modal', { active: isOpen, onEscape: onClose });
     useEffect(() => {
         if (!isOpen) return;
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };

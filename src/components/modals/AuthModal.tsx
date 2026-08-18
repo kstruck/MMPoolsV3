@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useOverlayOwner } from '../ui/overlayStack';
 import { X } from 'lucide-react';
 import { Auth } from '../Auth';
 
@@ -15,6 +16,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
 
     // Hooks run unconditionally (before the isOpen early return). Escape closes;
     // focus moves into the dialog on open for keyboard/screen-reader users.
+    // PLAN-HELP-SYSTEM T2: own the screen while open, so the `?` shortcut stays
+    // quiet and Escape closes exactly one overlay. Registered on `isOpen`, NOT
+    // on mount — this component stays mounted while closed, and pushing on
+    // mount would let it own the stack for the life of the app.
+    useOverlayOwner('auth-modal', { active: isOpen, onEscape: onClose });
     useEffect(() => {
         if (!isOpen) return;
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
