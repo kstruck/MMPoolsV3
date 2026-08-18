@@ -233,9 +233,20 @@ class RegistryImpl implements Registry {
     for (const [id, topic] of topics) {
       const { poolType: qualifier, base } = splitQualifiedId(id);
       if (!qualifier) continue;
-      if (topic.poolTypes !== 'all' && !topic.poolTypes.includes(qualifier)) {
+      // EXACTLY its own type, not merely including it. `resolveTopic` selects
+      // a qualified topic only for its qualifier, so a wider `poolTypes` is a
+      // claim the registry will never honour — and the schema audit, which
+      // credits coverage from a topic's declared scope, would then report a
+      // setting as explained for pool types that in fact show nothing. That is
+      // the one way an allowlist row could be deleted while the option it
+      // covered stayed unexplained.
+      const scopedToItself =
+        topic.poolTypes !== 'all' &&
+        topic.poolTypes.length === 1 &&
+        topic.poolTypes[0] === qualifier;
+      if (!scopedToItself) {
         throw new Error(
-          `help: topic "${id}" is scoped to ${qualifier} but its poolTypes does not include it, so it can never be shown`,
+          `help: topic "${id}" is scoped to ${qualifier}, so its poolTypes must be exactly ["${qualifier}"] — it is never resolved for any other type`,
         );
       }
       const baseTopic = topics.get(base);

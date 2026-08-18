@@ -142,13 +142,30 @@ describe('buildRegistry — refuses invalid content', () => {
     expect(() => buildRegistry({ ...base, topics: [topic({ related: ['nope'] })] })).toThrow(/unknown related topic/);
   });
 
-  it('rejects a scoped variant whose poolTypes cannot include its own scope', () => {
+  it('rejects a scoped variant naming a different pool type', () => {
     expect(() =>
       buildRegistry({
         ...base,
         topics: [topic({ id: 'NFL_SURVIVOR:settings.entryFee', poolTypes: ['NFL_PICKEM'] })],
       }),
-    ).toThrow(/can never be shown/);
+    ).toThrow(/must be exactly/);
+  });
+
+  /**
+   * A wider scope is a claim the registry never honours: resolveTopic selects a
+   * qualified topic only for its own qualifier. Left accepted, the schema audit
+   * would credit it as coverage for the other types it names and let their
+   * allowlist rows be deleted while those readers still saw nothing.
+   */
+  it('rejects a scoped variant claiming more pool types than its qualifier', () => {
+    for (const poolTypes of [['NFL_SURVIVOR', 'NFL_PICKEM'] as const, 'all' as const]) {
+      expect(() =>
+        buildRegistry({
+          ...base,
+          topics: [topic({ id: 'NFL_SURVIVOR:settings.entryFee', poolTypes })],
+        }),
+      ).toThrow(/must be exactly/);
+    }
   });
 
   /**
@@ -253,7 +270,7 @@ describe('resolveTopic — one lookup for the tooltip and the panel', () => {
   const registry = buildRegistry({
     topics: [
       topic({ id: 'settings.entryFee', title: 'Entry fee' }),
-      topic({ id: 'NFL_SURVIVOR:settings.entryFee', title: 'Entry fee and buy-backs' }),
+      topic({ id: 'NFL_SURVIVOR:settings.entryFee', title: 'Entry fee and buy-backs', poolTypes: ['NFL_SURVIVOR'] }),
     ],
     placements: [],
     pages: [],
@@ -292,7 +309,7 @@ describe('resolveTopic — one lookup for the tooltip and the panel', () => {
     const scoped = buildRegistry({
       topics: [
         topic({ id: 'settings.entryFee', title: 'Entry fee' }),
-        topic({ id: 'NFL_SURVIVOR:settings.entryFee', title: 'Entry fee and buy-backs' }),
+        topic({ id: 'NFL_SURVIVOR:settings.entryFee', title: 'Entry fee and buy-backs', poolTypes: ['NFL_SURVIVOR'] }),
       ],
       pages: [page({ id: 'pool.survivor', route: '/pool/:id' })],
       placements: [{ topic: 'settings.entryFee', page: 'pool.survivor' }],
@@ -482,7 +499,7 @@ describe('search', () => {
     const scoped = buildRegistry({
       topics: [
         topic({ id: 'settings.entryFee', long: 'Dues wording.' }),
-        topic({ id: 'NFL_SURVIVOR:settings.entryFee', title: 'Entry fee and buy-backs', long: 'Dues wording plus buy-backs.' }),
+        topic({ id: 'NFL_SURVIVOR:settings.entryFee', title: 'Entry fee and buy-backs', long: 'Dues wording plus buy-backs.', poolTypes: ['NFL_SURVIVOR'] }),
       ],
       pages: [page({ id: 'pool.survivor', route: '/pool/:id' })],
       placements: [{ topic: 'settings.entryFee', page: 'pool.survivor' }],
@@ -507,7 +524,7 @@ describe('search', () => {
     const scoped = buildRegistry({
       topics: [
         topic({ id: 'settings.entryFee', title: 'Entry fee', long: 'Dues wording.' }),
-        topic({ id: 'NFL_SURVIVOR:settings.entryFee', title: 'Entry fee and buy-backs', long: 'Dues wording.' }),
+        topic({ id: 'NFL_SURVIVOR:settings.entryFee', title: 'Entry fee and buy-backs', long: 'Dues wording.', poolTypes: ['NFL_SURVIVOR'] }),
       ],
       pages: [page({ id: 'pool.survivor', route: '/pool/:id' })],
       placements: [{ topic: 'settings.entryFee', page: 'pool.survivor' }],
