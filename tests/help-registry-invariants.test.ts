@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { POOL_TYPES } from '../shared/poolTypes';
-import { buildRegistry, helpRegistry, normalizePath, resolveCopy, staticCopy } from '../src/help/registry';
+import { baseTopicId, buildRegistry, helpRegistry, normalizePath, resolveCopy, staticCopy } from '../src/help/registry';
 import { PAGES } from '../src/help/pages';
 import { ROUTE_ALLOWLIST } from '../src/help/coverage-allowlist';
 import { BANNED_IMPLEMENTATION_WORDS, BANNED_SELLING_WORDS, COPY_LIMITS, findBannedWords } from '../src/help/voice';
@@ -170,6 +170,25 @@ describe('resolveTopic — one lookup for the tooltip and the panel', () => {
   });
 });
 
+describe('baseTopicId', () => {
+  it('strips a pool-type qualifier', () => {
+    expect(baseTopicId('NFL_SURVIVOR:settings.entryFee')).toBe('settings.entryFee');
+  });
+
+  it('leaves an unqualified id alone', () => {
+    expect(baseTopicId('settings.entryFee')).toBe('settings.entryFee');
+  });
+
+  // Only a real pool type is a qualifier. A colon in a slug is not.
+  it('does not treat an arbitrary prefix as a qualifier', () => {
+    expect(baseTopicId('mystery:thing')).toBe('mystery:thing');
+  });
+
+  it('normalises array indices as well', () => {
+    expect(baseTopicId('PROPS:props.questions.2.text')).toBe('props.questions.*.text');
+  });
+});
+
 describe('copy resolution', () => {
   const templated = topic({
     short: { template: (ctx) => `Fee is ${ctx.settings?.entryFee}.`, fallback: 'Your commissioner sets the fee.' },
@@ -179,8 +198,27 @@ describe('copy resolution', () => {
     expect(resolveCopy(templated.short, { settings: { entryFee: 20 } })).toBe('Fee is 20.');
   });
 
-  it('indexes and shows the fallback where no pool exists', () => {
+  it('renders a template when only the pool type is known', () => {
+    expect(resolveCopy(templated.short, { poolType: 'NFL_PICKEM' })).toBe('Fee is undefined.');
+  });
+
+  /**
+   * The wizard, the site pages and the search index have no pool. A template
+   * run there would put the word "undefined" in front of a reader, which is
+   * exactly what `fallback` exists to prevent.
+   */
+  it('falls back when no pool is in scope', () => {
+    expect(resolveCopy(templated.short)).toBe('Your commissioner sets the fee.');
+    expect(resolveCopy(templated.short, {})).toBe('Your commissioner sets the fee.');
+  });
+
+  it('indexes the fallback', () => {
     expect(staticCopy(templated.short)).toBe('Your commissioner sets the fee.');
+  });
+
+  it('passes a plain string through either way', () => {
+    expect(resolveCopy('flat')).toBe('flat');
+    expect(staticCopy('flat')).toBe('flat');
   });
 });
 
@@ -289,6 +327,28 @@ describe('search', () => {
 
   it('returns nothing for an empty query rather than everything', () => {
     expect(registry.search('   ', { audience: 'member' })).toEqual([]);
+  });
+
+  /**
+   * A scoped variant is PLACED under its base id, because both variants
+   * explain the same setting in the same place. A search hit on the variant
+   * must still know where to open, or the result renders with nowhere to go
+   * while the panel resolves the same placement correctly.
+   */
+  it('gives a scoped variant the page its base id is placed on', () => {
+    const scoped = buildRegistry({
+      topics: [
+        topic({ id: 'settings.entryFee', long: 'Dues wording.' }),
+        topic({ id: 'NFL_SURVIVOR:settings.entryFee', title: 'Entry fee and buy-backs', long: 'Dues wording plus buy-backs.' }),
+      ],
+      pages: [page({ id: 'pool.survivor', route: '/pool/:id' })],
+      placements: [{ topic: 'settings.entryFee', page: 'pool.survivor' }],
+      glossary: [],
+    });
+    const hit = scoped
+      .search('buy-backs', { audience: 'member' })
+      .find((h) => h.id === 'NFL_SURVIVOR:settings.entryFee');
+    expect(hit?.pageId).toBe('pool.survivor');
   });
 });
 

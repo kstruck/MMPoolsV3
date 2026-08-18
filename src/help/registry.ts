@@ -53,9 +53,32 @@ function splitQualifiedId(id: string): { poolType?: PoolType; base: string } {
   return { poolType: prefix as PoolType, base: id.slice(colon + 1) };
 }
 
-/** Render a `HelpCopy` for a given pool context. */
+/**
+ * A topic id with any pool-type qualifier removed and array indices
+ * normalised: `NFL_SURVIVOR:settings.entryFee` → `settings.entryFee`.
+ *
+ * This is the id a PLACEMENT and a schema `fields[]` path are written in — a
+ * scoped variant explains the same setting as its unqualified sibling and is
+ * placed on the same pages. Anything joining a topic to a placement or to a
+ * schema path has to go through here, or a scoped variant silently matches
+ * nothing.
+ */
+export function baseTopicId(id: string): string {
+  return splitQualifiedId(normalizePath(id)).base;
+}
+
+/**
+ * Render a `HelpCopy` for a given pool context.
+ *
+ * With NO pool in scope — the wizard, the site pages, the search index — a
+ * template has nothing to read, so the static fallback is returned instead of
+ * a sentence containing `undefined`. That is what `fallback` is for; the type
+ * says so and this is where it is honoured.
+ */
 export function resolveCopy(copy: HelpCopy, ctx: HelpCopyContext = {}): string {
-  return typeof copy === 'string' ? copy : copy.template(ctx);
+  if (typeof copy === 'string') return copy;
+  if (ctx.poolType === undefined && ctx.settings === undefined) return copy.fallback;
+  return copy.template(ctx);
 }
 
 /**
@@ -265,8 +288,18 @@ class RegistryImpl implements Registry {
     if (!needle) return [];
     const results: HelpSearchResult[] = [];
 
-    const firstPageOf = (topicId: string): string | undefined =>
-      this.placements.find((p) => p.topic === topicId)?.page;
+    // A scoped variant (`NFL_SURVIVOR:settings.entryFee`) is placed under its
+    // BASE id, because the placement says where the setting is explained and
+    // both variants are explained in the same place. Looking only for the
+    // exact id would return no page, and the search result would render with
+    // nowhere to navigate — while the panel, resolving the same placement,
+    // shows it correctly.
+    const firstPageOf = (topicId: string): string | undefined => {
+      const exact = this.placements.find((p) => p.topic === topicId);
+      if (exact) return exact.page;
+      const base = baseTopicId(topicId);
+      return base === topicId ? undefined : this.placements.find((p) => p.topic === base)?.page;
+    };
 
     for (const [id, topic] of this.topics) {
       if (!isVisible(topic.poolTypes, topic.audience, scope)) continue;

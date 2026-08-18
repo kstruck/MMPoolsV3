@@ -3,8 +3,9 @@ import { z } from 'zod';
 import { POOL_TYPES } from '../shared/poolTypes';
 import type { PoolType } from '../shared/poolTypes';
 import { getCreateInputSchema } from '../shared/schemas/index';
-import { helpRegistry, normalizePath } from '../src/help/registry';
+import { baseTopicId, helpRegistry, normalizePath } from '../src/help/registry';
 import { SCHEMA_PATH_ALLOWLIST } from '../src/help/coverage-allowlist';
+import type { HelpTopic } from '../src/help/types';
 
 /**
  * Schema coverage audit — PLAN-HELP-SYSTEM.md §3 D5, ticket T0.
@@ -18,6 +19,14 @@ import { SCHEMA_PATH_ALLOWLIST } from '../src/help/coverage-allowlist';
  * by reading the components. Both are needed: a field can be in the schema and
  * on no screen, or on a screen and (for the raw `register()` call sites) in no
  * typed field component.
+ *
+ * WHY PER POOL TYPE. Checking the UNION of all seven schemas against the union
+ * of all topics passes as soon as ONE type explains a shared field. A
+ * Survivor-only topic for `settings.entryFee` would then let the allowlist row
+ * be deleted while Pick'em, Margin, Bracket, Playoff, Props and Squares still
+ * explain nothing — the guard would report full coverage at the exact moment
+ * six of seven types lost theirs. Each type is therefore audited against the
+ * topics VISIBLE to that type.
  *
  * WHY LEAVES ONLY. The walk emits leaf paths — `settings.payouts.places.*.rank`
  * but not `settings.payouts` or `settings`. A container is not something a
@@ -66,13 +75,36 @@ function leavesFor(type: PoolType): Set<string> {
   return out;
 }
 
+/**
+ * The schema paths a viewer of `type` would find explained.
+ *
+ * A topic's `fields[]` is the explicit list; failing that, its own id is taken
+ * as the path — through `baseTopicId`, so a scoped variant
+ * (`NFL_SURVIVOR:settings.entryFee`) claims `settings.entryFee` rather than a
+ * path no schema has.
+ */
+function explainedPathsFor(type: PoolType, topics: readonly HelpTopic[]): Set<string> {
+  return new Set(
+    topics
+      .filter((t) => t.poolTypes === 'all' || t.poolTypes.includes(type))
+      .flatMap((t) => (t.fields ?? [baseTopicId(t.id)]).map(normalizePath)),
+  );
+}
+
+/** Leaves of `type` that neither a visible topic nor the allowlist accounts for. */
+function uncoveredFor(
+  type: PoolType,
+  leaves: ReadonlySet<string>,
+  topics: readonly HelpTopic[],
+  allowlist: Readonly<Record<string, string>>,
+): string[] {
+  const explained = explainedPathsFor(type, topics);
+  return [...leaves].filter((p) => !explained.has(p) && !(p in allowlist)).sort();
+}
+
 const leavesByType = new Map<PoolType, Set<string>>(POOL_TYPES.map((t) => [t, leavesFor(t)]));
 const allLeaves = new Set<string>([...leavesByType.values()].flatMap((s) => [...s]));
-
-/** Paths a help topic claims to explain. */
-const explained = new Set(
-  [...helpRegistry.topics.values()].flatMap((t) => (t.fields ?? [t.id]).map(normalizePath)),
-);
+const realTopics = [...helpRegistry.topics.values()];
 
 describe('the schema walk itself', () => {
   it('reaches every pool type', () => {
@@ -97,10 +129,64 @@ describe('the schema walk itself', () => {
   });
 });
 
+/**
+ * The per-type rule, tested on fixtures. Without these the rule itself is
+ * unguarded while T0's real topic list is empty — and this is precisely the
+ * hole a cross-model review found in the first draft of this file.
+ */
+describe('coverage is judged per pool type, not across the union', () => {
+  const topic = (over: Partial<HelpTopic>): HelpTopic => ({
+    id: 'settings.entryFee',
+    title: 'Entry fee',
+    short: 'What each player pays.',
+    long: 'Long form.',
+    poolTypes: 'all',
+    audience: ['member'],
+    ...over,
+  });
+  const leaves = new Set(['settings.entryFee']);
+
+  it('a Survivor-only topic does not cover Pick’em', () => {
+    const topics = [topic({ poolTypes: ['NFL_SURVIVOR'] })];
+    expect(uncoveredFor('NFL_SURVIVOR', leaves, topics, {})).toEqual([]);
+    expect(uncoveredFor('NFL_PICKEM', leaves, topics, {})).toEqual(['settings.entryFee']);
+  });
+
+  it('an all-types topic covers every type', () => {
+    const topics = [topic({ poolTypes: 'all' })];
+    for (const type of POOL_TYPES) {
+      expect(uncoveredFor(type, leaves, topics, {})).toEqual([]);
+    }
+  });
+
+  it('a pool-type-qualified id claims the unqualified schema path', () => {
+    const topics = [topic({ id: 'NFL_SURVIVOR:settings.entryFee', poolTypes: ['NFL_SURVIVOR'] })];
+    expect(uncoveredFor('NFL_SURVIVOR', leaves, topics, {})).toEqual([]);
+  });
+
+  it('an explicit fields[] list overrides the id', () => {
+    const topics = [topic({ id: 'fee-explainer', fields: ['settings.entryFee'] })];
+    expect(uncoveredFor('NFL_PICKEM', leaves, topics, {})).toEqual([]);
+  });
+
+  it('normalises array indices on both sides', () => {
+    const topics = [topic({ id: 'rows', fields: ['a.0.b'] })];
+    expect(uncoveredFor('SQUARES', new Set(['a.*.b']), topics, {})).toEqual([]);
+  });
+
+  it('an allowlist row covers a path for every type', () => {
+    expect(uncoveredFor('BRACKET', leaves, [], { 'settings.entryFee': 'PERMANENT: test' })).toEqual([]);
+  });
+});
+
 describe('every schema path is explained or allowlisted', () => {
-  it('no create-input field is unaccounted for', () => {
-    const uncovered = [...allLeaves].filter((p) => !explained.has(p) && !(p in SCHEMA_PATH_ALLOWLIST)).sort();
-    expect(uncovered).toEqual([]);
+  it('no create-input field is unaccounted for, for any pool type', () => {
+    const problems = POOL_TYPES.flatMap((type) =>
+      uncoveredFor(type, leavesByType.get(type)!, realTopics, SCHEMA_PATH_ALLOWLIST).map(
+        (p) => `${type}: ${p}`,
+      ),
+    );
+    expect(problems).toEqual([]);
   });
 
   it('no allowlist row names a path that no schema has', () => {
@@ -108,9 +194,21 @@ describe('every schema path is explained or allowlisted', () => {
     expect(stale).toEqual([]);
   });
 
-  it('no path is both explained and allowlisted', () => {
-    const both = [...explained].filter((p) => p in SCHEMA_PATH_ALLOWLIST).sort();
-    expect(both).toEqual([]);
+  /**
+   * A path may legitimately be explained for one type and still allowlisted
+   * while the other types that carry it wait for their content ticket. The
+   * contradiction is a path allowlisted after EVERY type that carries it
+   * explains it — then the row is dead and its ticket is done.
+   */
+  it('no allowlist row survives once every type carrying that path explains it', () => {
+    const dead = Object.keys(SCHEMA_PATH_ALLOWLIST).filter((path) => {
+      const carriers = POOL_TYPES.filter((type) => leavesByType.get(type)!.has(path));
+      return (
+        carriers.length > 0 &&
+        carriers.every((type) => explainedPathsFor(type, realTopics).has(path))
+      );
+    });
+    expect(dead).toEqual([]);
   });
 
   it('every allowlist row carries a reason naming a ticket or PERMANENT', () => {
@@ -125,7 +223,7 @@ describe('every schema path is explained or allowlisted', () => {
   // falls — and if a ticket claims to be done while its rows remain, the count
   // says otherwise.
   it('T0 state: every path is pending or permanent, none explained yet', () => {
-    expect(explained.size).toBe(0);
+    expect(realTopics).toEqual([]);
     expect(Object.keys(SCHEMA_PATH_ALLOWLIST).length).toBe(allLeaves.size);
   });
 });
