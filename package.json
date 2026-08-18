@@ -58,7 +58,7 @@
     "firebase-tools": "^15.24.0",
     "globals": "^17.9.0",
     "husky": "^9.1.7",
-    "jsdom": "^30.0.1",
+    "jsdom": "^26.1.0",
     "postcss": "^8.5.26",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.23.10",
