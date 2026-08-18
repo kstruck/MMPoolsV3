@@ -825,8 +825,30 @@ describe('the real registry — route coverage against src/App.tsx', () => {
     expect(unknown).toEqual([]);
   });
 
+  /**
+   * `altRoutes` is a second route rendering the SAME screen (T2:
+   * `/admin/:id` shows the very same dashboard as `/pool/:id` for four pool
+   * types). It is checked exactly as `route` is — an altRoute naming a route
+   * App.tsx does not have would silently never match, which is the
+   * guard-that-does-not-guard shape this repo keeps producing.
+   */
+  it('every HelpPage altRoute exists in App.tsx', () => {
+    const unknown = PAGES.flatMap((p) =>
+      (p.altRoutes ?? []).filter((r) => !routes.includes(r)).map((r) => `${p.id} → ${r}`),
+    );
+    expect(unknown).toEqual([]);
+    // Discriminating half: the check would catch one that did not exist.
+    expect(
+      [{ id: 'planted', altRoutes: ['/no/such/route'] }].flatMap((p) =>
+        p.altRoutes.filter((r) => !routes.includes(r)),
+      ),
+    ).toEqual(['/no/such/route']);
+  });
+
   it('every App.tsx route has a HelpPage or an allowlist row', () => {
-    const covered = new Set(PAGES.map((p) => p.route));
+    // An altRoute counts: `/admin/:id` is covered for a bracket commissioner by
+    // the bracket dashboard's pages, which is the screen it renders.
+    const covered = new Set(PAGES.flatMap((p) => [p.route, ...(p.altRoutes ?? [])]));
     const uncovered = routes.filter((r) => !covered.has(r) && !(r in ROUTE_ALLOWLIST));
     expect(uncovered).toEqual([]);
   });
@@ -837,7 +859,9 @@ describe('the real registry — route coverage against src/App.tsx', () => {
   });
 
   it('no route is both given a page and allowlisted', () => {
-    const both = PAGES.filter((p) => p.route in ROUTE_ALLOWLIST).map((p) => p.route);
+    const both = PAGES.flatMap((p) =>
+      [p.route, ...(p.altRoutes ?? [])].filter((r) => r in ROUTE_ALLOWLIST),
+    );
     expect(both).toEqual([]);
   });
 

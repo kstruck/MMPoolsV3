@@ -119,6 +119,41 @@ describe('resolveHelpPage', () => {
   });
 });
 
+describe('altRoutes — the same screen under a second App.tsx route', () => {
+  /**
+   * `/admin/:id` renders the very same dashboard as `/pool/:id` for NFL,
+   * Playoff, Bracket and Props (`AdminRoute.tsx`). A commissioner who followed a
+   * "manage" link must not be told there is no guide for a screen that has one.
+   */
+  it('matches a page on its altRoute as well as its route', () => {
+    const found = resolveHelpPage(
+      helpRegistry.pages,
+      ctx({ pathname: '/admin/abc', tab: 'standings', poolType: 'BRACKET' }),
+      HOST,
+    );
+    expect(found?.id).toBe('pool.bracket.standings');
+  });
+
+  it('does NOT lend its altRoute to a type that has its own panel there', () => {
+    // Squares really does have a separate manager panel on `/admin/:id`, so its
+    // `/pool/:id` grid page must not follow the reader there.
+    const squaresGrid = helpRegistry.getPage('pool.squares')!;
+    expect(squaresGrid.altRoutes).toBeUndefined();
+    const found = resolveHelpPage(
+      helpRegistry.pages,
+      ctx({ pathname: '/admin/abc', tab: 'settings', poolType: 'SQUARES' }),
+      HOST,
+    );
+    expect(found?.id).toBe('admin.squares.settings');
+  });
+
+  it('the fixture discriminates: a page with no altRoute does not match the other route', () => {
+    const p = page({ id: 'a', route: '/pool/:id' });
+    expect(pageSpecificity(p, ctx({ pathname: '/admin/abc' }))).toBe(-1);
+    expect(pageSpecificity({ ...p, altRoutes: ['/admin/:id'] }, ctx({ pathname: '/admin/abc' }))).toBe(0);
+  });
+});
+
 describe('hrefForPage', () => {
   it('is null for a page that declares no href', () => {
     expect(hrefForPage(page({ id: 'a' }), ctx())).toBeNull();

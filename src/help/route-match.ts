@@ -16,7 +16,10 @@ import { isEntryVisible } from './visibility';
 
 /** Higher is more specific. `-1` means the page does not apply at all. */
 export function pageSpecificity(page: HelpPage, ctx: HelpRouteContext): number {
-  if (!matchPath(page.route, ctx.pathname)) return -1;
+  const onRoute =
+    matchPath(page.route, ctx.pathname) !== null ||
+    (page.altRoutes ?? []).some((route) => matchPath(route, ctx.pathname) !== null);
+  if (!onRoute) return -1;
   // A page that names a tab is only that tab's page. A page that names none is
   // the route's page and stays a candidate whatever tab the reader is on —
   // that is what makes it the fallback rather than a competitor.

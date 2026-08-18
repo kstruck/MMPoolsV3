@@ -38,6 +38,8 @@ interface TabPageSpec {
 function poolPages(args: {
   idPrefix: string;
   route: string;
+  /** See `HelpPage.altRoutes` — the same screen under a second App.tsx route. */
+  altRoutes?: readonly string[];
   poolTypes: readonly PoolType[];
   rootTitle: string;
   rootSummary: string;
@@ -49,7 +51,7 @@ function poolPages(args: {
   subParam?: string;
   tabs: readonly TabPageSpec[];
 }): HelpPage[] {
-  const { idPrefix, route, poolTypes, rootTitle, rootSummary, tabs, subParam = 'sub' } = args;
+  const { idPrefix, route, altRoutes, poolTypes, rootTitle, rootSummary, tabs, subParam = 'sub' } = args;
   const linkable = (tab: string, subTab?: string) => (ctx: { pathname: string; poolType?: PoolType }) => {
     if (!ctx.poolType || !poolTypes.includes(ctx.poolType)) return null;
     const sub = subTab ? `&${subParam}=${subTab}` : '';
@@ -58,6 +60,7 @@ function poolPages(args: {
   const root: HelpPage = {
     id: idPrefix,
     route,
+    altRoutes,
     href: (ctx) => (ctx.poolType && poolTypes.includes(ctx.poolType) ? ctx.pathname : null),
     title: rootTitle,
     summary: rootSummary,
@@ -69,6 +72,7 @@ function poolPages(args: {
     ...tabs.map<HelpPage>((spec) => ({
       id: `${idPrefix}.${spec.tab}${spec.subTab ? `.${spec.subTab}` : ''}`,
       route,
+      altRoutes,
       tab: spec.tab,
       subTab: spec.subTab,
       href: linkable(spec.tab, spec.subTab),
@@ -83,6 +87,8 @@ function poolPages(args: {
 const NFL_PAGES = poolPages({
   idPrefix: 'pool.nfl',
   route: '/pool/:id',
+  // `/admin/:id` renders this same dashboard for this type (AdminRoute).
+  altRoutes: ['/admin/:id'],
   poolTypes: NFL_TYPES,
   subParam: 'section',
   rootTitle: 'NFL pool',
@@ -181,6 +187,8 @@ const NFL_PAGES = poolPages({
 const PLAYOFF_PAGES = poolPages({
   idPrefix: 'pool.playoff',
   route: '/pool/:id',
+  // `/admin/:id` renders this same dashboard for this type (AdminRoute).
+  altRoutes: ['/admin/:id'],
   poolTypes: ['NFL_PLAYOFFS'],
   rootTitle: 'Playoff pool',
   rootSummary:
@@ -220,6 +228,8 @@ const PLAYOFF_PAGES = poolPages({
 const BRACKET_PAGES = poolPages({
   idPrefix: 'pool.bracket',
   route: '/pool/:id',
+  // `/admin/:id` renders this same dashboard for this type (AdminRoute).
+  altRoutes: ['/admin/:id'],
   poolTypes: ['BRACKET'],
   rootTitle: 'Bracket pool',
   rootSummary:
@@ -276,6 +286,8 @@ const BRACKET_PAGES = poolPages({
 const PROPS_PAGES = poolPages({
   idPrefix: 'pool.props',
   route: '/pool/:id',
+  // `/admin/:id` renders this same dashboard for this type (AdminRoute).
+  altRoutes: ['/admin/:id'],
   poolTypes: ['PROPS'],
   rootTitle: 'Props pool',
   rootSummary:

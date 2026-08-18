@@ -136,6 +136,20 @@ export interface HelpPage {
   id: string;
   /** react-router pattern, exactly as written in `src/App.tsx`. */
   route: string;
+  /**
+   * Other `src/App.tsx` routes that render THIS SAME screen.
+   *
+   * `/admin/:id` does not have a manager UI of its own for four of the seven
+   * pool types: `AdminRoute` renders the very same dashboard `/pool/:id` does
+   * (`AdminRoute.tsx:101,120,136` and the NFL branch). Without this, a
+   * commissioner who followed a "manage" link would be told there is no guide
+   * for a screen that has one. Squares is the exception — it really does have
+   * its own panel there — so its pages name `/admin/:id` as their `route`.
+   *
+   * Checked against App.tsx by `tests/help-registry-invariants.test.ts` exactly
+   * as `route` is, and it counts towards a route being covered.
+   */
+  altRoutes?: readonly string[];
   /** The `?tab=` value, or the in-memory tab id published by `useHelpRoute`. */
   tab?: string;
   subTab?: string;
