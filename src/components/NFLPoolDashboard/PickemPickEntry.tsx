@@ -11,7 +11,7 @@ import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { loadDraft, saveDraft, clearDraft } from '../../utils/draftStore';
 import { pickHighlightLabel } from '../../utils/pickHighlight';
 import { poolUsesSpreads } from '../../utils/poolUsesSpreads';
-import { nflLockMode, weekLockOverrideFor, gameLockAt } from '@shared/nflLockMode';
+import { nflLockMode, weekLockOverrideFor, gameLockAt, dropStaleLockedPicks } from '@shared/nflLockMode';
 import { gradePick } from '../../utils/pickemResult';
 import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
 import { confidenceValueOwners, isConfidenceValueTaken } from '../../utils/confidenceWeights';
@@ -364,12 +364,48 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     setIsSubmitting(true);
     setValidationError(null);
 
+    /**
+     * DROP A LOCKED GAME WHOSE PICK NEVER REACHED THE SERVER (codex P1).
+     *
+     * `submitNFLPicks` refuses a locked game whose pick CHANGED
+     * (nflPools.ts:618-624), and it refuses the WHOLE submission when it does.
+     * So a member who tapped Thursday, did not save, and came back on Sunday
+     * would have every open Sunday pick rejected because of one stale Thursday
+     * selection they can no longer edit.
+     *
+     * Before the per-game fix this was unreachable — the sheet closed entirely
+     * at the first kickoff. It is the ordinary path now, which is why it is
+     * handled here rather than left as a race.
+     *
+     * A locked pick that MATCHES the saved entry is kept: the server compares
+     * rather than rejects outright, and sending it costs nothing.
+     */
+    const lockedById = new Map(games.map(g => [g.id, isGameLocked(g)]));
+    const { picks: submittablePicks, droppedGameIds } = dropStaleLockedPicks(
+      games.map(g => g.id),
+      picks,
+      (entry?.picks ?? {}) as Record<string, string>,
+      id => lockedById.get(id) === true,
+    );
+    if (droppedGameIds.length > 0) {
+      // Never silently: the pick disappears off their sheet on the next load,
+      // and a member who is not told will read that as the app losing it.
+      toast.info(
+        droppedGameIds.length === 1
+          ? 'One game locked before you saved it, so that pick could not be counted. The rest are being saved.'
+          : `${droppedGameIds.length} games locked before you saved them, so those picks could not be counted. The rest are being saved.`,
+      );
+    }
+
     // Same requestId on retry — the server treats a resend as a no-op success,
     // so a lost response can never double-write
     const payload = {
       poolId: pool.id,
       week,
-      picks,
+      picks: submittablePicks,
+      // Confidence forces WEEKLY locking, so no game is ever individually
+      // locked while the week is open and `submittablePicks` is the whole map
+      // here. Kept aligned anyway rather than relying on that from a distance.
       confidence: confidenceMode ? confidence : undefined,
       // Omitted under NONE — the sheet never asked, so sending the default 40
       // would store a prediction the member did not make. `submitNFLPicks`

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { nflLockMode, usesWeeklyLock, weekLockOverrideFor, gameLockAt, weekLockAtFor, nextLockAtFor } from '../shared/nflLockMode';
+import { nflLockMode, usesWeeklyLock, weekLockOverrideFor, gameLockAt, weekLockAtFor, nextLockAtFor, dropStaleLockedPicks } from '../shared/nflLockMode';
 
 /**
  * The lock rule, and the guard that it stays the SAME rule on both sides.
@@ -262,5 +262,65 @@ describe('the client no longer computes the lock itself', () => {
     const src = read('src/components/NFLPoolDashboard/PickemPickEntry.tsx');
     expect(src).toContain("if (lockMode === 'WEEKLY' && isWeekLocked) return true;");
     expect(src).not.toMatch(/if \(isWeekLocked\) return true;/);
+  });
+});
+
+/**
+ * The submission payload, once per-game pools stay open.
+ *
+ * `submitNFLPicks` refuses a locked game whose pick CHANGED, and refuses the
+ * WHOLE submission when it does — so one stale Thursday selection would reject
+ * every open Sunday pick with it. Unreachable before the per-game fix, ordinary
+ * after it. (codex P1 on this PR.)
+ */
+describe('dropStaleLockedPicks', () => {
+  const IDS = ['thu', 'sun-a', 'sun-b'];
+  const lockedThursday = (id: string) => id === 'thu';
+
+  it('drops a locked pick the server never received', () => {
+    const out = dropStaleLockedPicks(
+      IDS, { thu: 'KC', 'sun-a': 'BUF' }, {}, lockedThursday,
+    );
+    expect(out.picks).toEqual({ 'sun-a': 'BUF' });
+    expect(out.droppedGameIds).toEqual(['thu']);
+  });
+
+  it('keeps a locked pick that matches what is already saved', () => {
+    const out = dropStaleLockedPicks(
+      IDS, { thu: 'KC', 'sun-a': 'BUF' }, { thu: 'KC' }, lockedThursday,
+    );
+    expect(out.picks).toEqual({ thu: 'KC', 'sun-a': 'BUF' });
+    expect(out.droppedGameIds).toEqual([]);
+  });
+
+  it('drops a locked pick that was EDITED away from the saved one', () => {
+    // The member changed their mind after kickoff. The server would refuse the
+    // whole submission over it.
+    const out = dropStaleLockedPicks(
+      IDS, { thu: 'DEN', 'sun-a': 'BUF' }, { thu: 'KC' }, lockedThursday,
+    );
+    expect(out.picks).toEqual({ 'sun-a': 'BUF' });
+    expect(out.droppedGameIds).toEqual(['thu']);
+  });
+
+  it('touches nothing when no game is locked', () => {
+    const picks = { thu: 'KC', 'sun-a': 'BUF' };
+    const out = dropStaleLockedPicks(IDS, picks, {}, () => false);
+    expect(out.picks).toEqual(picks);
+    expect(out.droppedGameIds).toEqual([]);
+  });
+
+  it('reports what it dropped, so the member can be told', () => {
+    const out = dropStaleLockedPicks(
+      IDS, { thu: 'KC', 'sun-a': 'BUF' }, {}, (id) => id !== 'sun-a',
+    );
+    expect(out.droppedGameIds).toEqual(['thu']);
+    expect(out.picks).toEqual({ 'sun-a': 'BUF' });
+  });
+
+  it('never invents a pick for a game the member left blank', () => {
+    const out = dropStaleLockedPicks(IDS, { 'sun-a': 'BUF' }, {}, lockedThursday);
+    expect(out.picks).toEqual({ 'sun-a': 'BUF' });
+    expect(out.droppedGameIds).toEqual([]);
   });
 });

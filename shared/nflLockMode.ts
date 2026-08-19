@@ -175,3 +175,35 @@ export function nextLockAtFor(
     .filter((at) => at > now);
   return upcoming.length > 0 ? Math.min(...upcoming) : weekLockAt;
 }
+
+/**
+ * The picks a submission may carry, with stale locked ones removed.
+ *
+ * `submitNFLPicks` refuses a locked game whose pick CHANGED, and it refuses the
+ * WHOLE submission when it does. So a member who selected a Thursday game,
+ * never saved it, and returns on Sunday would have every open Sunday pick
+ * rejected because of one selection they can no longer edit.
+ *
+ * A locked pick that MATCHES what the server already holds is kept — the server
+ * compares rather than rejects, so sending it costs nothing and keeping it makes
+ * the payload a straightforward picture of the sheet.
+ *
+ * Returns the ids that were dropped as well, because dropping one silently is
+ * indistinguishable to the member from the app losing their pick.
+ */
+export function dropStaleLockedPicks(
+  gameIds: readonly string[],
+  picks: Readonly<Record<string, string>>,
+  savedPicks: Readonly<Record<string, string>>,
+  isLocked: (gameId: string) => boolean,
+): { picks: Record<string, string>; droppedGameIds: string[] } {
+  const droppedGameIds = gameIds.filter(
+    (id) => isLocked(id) && picks[id] !== undefined && picks[id] !== savedPicks[id],
+  );
+  if (droppedGameIds.length === 0) return { picks: { ...picks }, droppedGameIds };
+  const dropped = new Set(droppedGameIds);
+  return {
+    picks: Object.fromEntries(Object.entries(picks).filter(([id]) => !dropped.has(id))),
+    droppedGameIds,
+  };
+}
