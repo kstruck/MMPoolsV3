@@ -250,6 +250,11 @@ Nothing below depends on your answer, so you can do steps 3 and 4 either way.
 T9 changes the shipped bundle, so the new copy is not live until `www` is
 redeployed. It is help copy: nothing breaks if this waits a day.
 
+> This step does **not** re-open the T16-before-T15 question. You settled that
+> on 2026-08-18 by shipping T2 with T16 still owed, and T9 adds no shortcut, no
+> overlay and no keyboard handling — only copy the already-deployed panel
+> reads. T16 is still owed for its own reasons (§5).
+
 1. Open your browser and go to the **Coolify dashboard**.
 2. Select the **`www` / march-melee-pools frontend** application — the same one
    you redeployed for T2, not a Firebase Function.
