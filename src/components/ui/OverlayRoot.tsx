@@ -96,6 +96,13 @@ export const OverlayRoot: React.FC<OverlayRootProps> = ({
     if (!active) return;
     if (!firstRender) opener.current = readOpener();
     return () => {
+      // HAND-OFF, NOT CLOSE. One overlay can be replaced by another in a single
+      // update — Grid's guest-details "Continue" closes that dialog and opens
+      // the reservation confirmation. Restoring focus then puts the keyboard on
+      // a control BEHIND an `aria-modal` dialog (codex round 5). The DOM has
+      // already been updated by the time this cleanup runs, so a marker still
+      // on screen means the screen still belongs to an overlay.
+      if (typeof document !== 'undefined' && document.querySelector('[data-overlay-root]')) return;
       // A node detached with the overlay cannot take focus back.
       if (opener.current?.isConnected) opener.current.focus();
     };

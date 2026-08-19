@@ -138,6 +138,44 @@ describe('OverlayRoot', () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it('does not drop focus behind the overlay that replaced it', () => {
+    // Grid's guest-details "Continue" closes that dialog and opens the
+    // reservation confirmation in one update. Restoring focus to the page
+    // control behind BOTH would put the keyboard underneath an `aria-modal`
+    // dialog (codex, round 5).
+    function Harness() {
+      const [step, setStep] = useState<'none' | 'first' | 'second'>('none');
+      return (
+        <>
+          <button onClick={() => setStep('first')}>Start</button>
+          {step === 'first' && (
+            <OverlayRoot id="first-modal" label="First" className="fixed inset-0">
+              <button onClick={() => setStep('second')}>Continue</button>
+            </OverlayRoot>
+          )}
+          {step === 'second' && (
+            <OverlayRoot id="second-modal" label="Second" className="fixed inset-0">
+              <p>confirm</p>
+            </OverlayRoot>
+          )}
+        </>
+      );
+    }
+    render(<Harness />);
+    const start = screen.getByRole('button', { name: 'Start' });
+    start.focus();
+    fireEvent.click(start);
+    // Focus has to be moved by hand: jsdom does not focus a button on click,
+    // so without this the assertion below would pass whether or not the
+    // restore ran.
+    const cont = screen.getByRole('button', { name: 'Continue' });
+    cont.focus();
+    fireEvent.click(cont);
+
+    expect(screen.getByRole('dialog', { name: 'Second' })).toBeDefined();
+    expect(document.activeElement).not.toBe(start);
+  });
+
   it('returns focus after being opened in place, not remounted', () => {
     // The SuperAdmin seed editor keeps the element mounted and flips `active`.
     // Its mount-time reading of focus predates the click that opened it, so the
