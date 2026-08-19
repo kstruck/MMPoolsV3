@@ -48,7 +48,7 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
   const tokenOk = !confirmToken || typed === confirmToken;
 
   return (
-    <div
+    <div data-overlay-root=""
       role="dialog"
       aria-modal="true"
       aria-label={title}

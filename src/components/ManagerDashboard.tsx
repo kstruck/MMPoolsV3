@@ -1,3 +1,4 @@
+import { OverlayRoot } from './ui/OverlayRoot';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
@@ -818,7 +819,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
             </main>
 
             {deleteModal.isOpen && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                <OverlayRoot id="manager-delete-pool" label="Delete pool" onEscape={() => { setDeleteModal({ isOpen: false, poolId: '', poolName: '' }); setDeleteConfirmText(''); }} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
                     <div className="bg-card border border-line p-6 rounded-3xl shadow-panel max-w-md w-full relative">
                         <button onClick={() => { setDeleteModal({ isOpen: false, poolId: '', poolName: '' }); setDeleteConfirmText(''); }} className="absolute top-4 right-4 text-muted hover:text-[color:var(--text)]">
                             <X size={20} />
@@ -874,7 +875,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                             </button>
                         </div>
                     </div>
-                </div>
+                </OverlayRoot>
             )}
             <Footer />
         </div>

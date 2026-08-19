@@ -1,3 +1,4 @@
+import { OverlayRoot } from './ui/OverlayRoot';
 import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, query } from 'firebase/firestore';
@@ -135,7 +136,7 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
 
     if (!selectedPoolId) {
         return (
-            <div className="fixed inset-0 bg-page z-50 overflow-auto p-8">
+            <OverlayRoot id="sim-dashboard-picker" dialog={false} className="fixed inset-0 bg-page z-50 overflow-auto p-8">
                 <div className="max-w-4xl mx-auto">
                     <div className="flex justify-between items-center mb-8">
                         <h1 className="text-3xl font-display font-extrabold uppercase leading-none text-[color:var(--text)] flex items-center gap-3">
@@ -163,12 +164,12 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                         </div>
                     </div>
                 </div>
-            </div>
+            </OverlayRoot>
         );
     }
 
     return (
-        <div className="fixed inset-0 bg-page z-50 overflow-auto flex flex-col">
+        <OverlayRoot id="sim-dashboard" dialog={false} className="fixed inset-0 bg-page z-50 overflow-auto flex flex-col">
             {/* Header */}
             <div className="bg-surface border-b border-line p-4 sticky top-0 z-10 shadow-panel">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
@@ -331,6 +332,6 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                 </div>
 
             </div>
-        </div>
+        </OverlayRoot>
     );
 };

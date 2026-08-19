@@ -89,7 +89,7 @@ export const QuickPicksDialog: React.FC<QuickPicksDialogProps> = ({
   }));
 
   return (
-    <div
+    <div data-overlay-root=""
       className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/70"
       onClick={onClose}
     >

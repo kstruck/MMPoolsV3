@@ -1,3 +1,4 @@
+import { OverlayRoot } from '../ui/OverlayRoot';
 import { logger } from '../../utils/logger';
 import { useState, useMemo, useEffect } from 'react';
 import { Plus, Trash2, Edit2, Check, Save, ChevronDown, ChevronUp, Search, Filter, X, Lightbulb } from 'lucide-react';
@@ -165,7 +166,7 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
         <div className="space-y-8 pb-20 relative font-body">
             {/* Inspiration Modal */}
             {showInspirationModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                <OverlayRoot id="props-question-library" label="Prop question library" onEscape={() => setShowInspirationModal(false)} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-card border border-line rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-panel">
                         <div className="p-6 border-b border-line flex items-center justify-between sticky top-0 bg-card backdrop-blur rounded-t-2xl z-10">
                             <div>
@@ -198,7 +199,7 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                             />
                         </div>
                     </div>
-                </div>
+                </OverlayRoot>
             )}
 
             {/* Header / Save Bar */}

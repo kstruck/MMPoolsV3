@@ -1,3 +1,4 @@
+import { OverlayRoot } from '../ui/OverlayRoot';
 import { logger } from '../../utils/logger';
 /**
  * Interactive Tournament Simulator
@@ -751,7 +752,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
 
                 {/* Entry View Modal */}
                 {viewingEntry && tournament && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                    <OverlayRoot id="sim-view-entry" label="Entry details" onEscape={() => setViewingEntry(null)} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
                         <div className="bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-2xl w-full max-w-7xl max-h-[95vh] flex flex-col shadow-panel">
                             <div className="flex items-center justify-between p-4 border-b border-[rgba(230,206,150,0.16)]">
                                 <div>
@@ -783,7 +784,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
                                 />
                             </div>
                         </div>
-                    </div>
+                    </OverlayRoot>
                 )}
             </div>
             <Footer />

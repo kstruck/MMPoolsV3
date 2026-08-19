@@ -1,3 +1,4 @@
+import { OverlayRoot } from '../ui/OverlayRoot';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { Loader, Shield, Edit2, ChevronUp, ChevronDown, Lock, Zap, HelpCircle, ExternalLink, Check, Copy, Heart, DollarSign } from 'lucide-react';
@@ -800,7 +801,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
             {/* Rule Modal */}
             {showRulesModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                <OverlayRoot id="pool-rules-modal" label="Pool rules and payouts" onEscape={() => setShowRulesModal(false)} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
                     <div className="bg-card border border-line rounded-xl max-w-2xl w-full relative shadow-card overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="p-6 border-b border-line bg-page flex justify-between items-center shrink-0">
                             <h3 className="text-xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
@@ -956,7 +957,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                             </p>
                         </div>
                     </div>
-                </div>
+                </OverlayRoot>
             )}
         </div>
     );

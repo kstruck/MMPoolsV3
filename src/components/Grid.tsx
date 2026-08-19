@@ -1,3 +1,4 @@
+import { OverlayRoot } from './ui/OverlayRoot';
 import { logger } from '../utils/logger';
 import { BillingGate } from './billing';
 import React, { useState, useEffect } from 'react';
@@ -694,7 +695,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
          {/* --- CONFIRMATION MODAL --- */}
          {isConfirming && (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+            <OverlayRoot id="squares-confirm-reservation" label="Confirm reservation" onEscape={() => { if (!isSubmitting) setIsConfirming(false); }} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
                <div className="bg-card border border-line p-6 rounded-xl shadow-card max-w-sm w-full">
                   <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-4 flex items-center gap-2">
                      {isSubmitting ? <Loader className="animate-spin text-gold-500" /> : <Check className="text-gold-500" />}
@@ -751,7 +752,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                      </button>
                   </div>
                </div>
-            </div>
+            </OverlayRoot>
          )}
 
 
@@ -759,7 +760,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          {/* --- GUEST DETAILS MODAL (In-Context Checkout) --- */}
          {
             showGuestModal && (
-               <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+               <OverlayRoot id="squares-guest-details" label="Guest details" onEscape={() => setShowGuestModal(false)} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
                   <div className="bg-card border border-line p-6 rounded-xl shadow-card max-w-sm w-full">
                      <div className="flex justify-between items-start mb-4">
                         <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
@@ -826,12 +827,12 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                         </button>
                      </div>
                   </div>
-               </div>
+               </OverlayRoot>
             )
          }
          {
             showWaitlistModal && (
-               <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+               <OverlayRoot id="squares-waitlist" label="Join the waitlist" onEscape={() => setShowWaitlistModal(false)} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
                   <div className="bg-card border border-line p-6 rounded-xl shadow-card max-w-sm w-full">
                      <div className="flex justify-between items-start mb-4">
                         <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
@@ -892,7 +893,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                         </button>
                      </div>
                   </div>
-               </div>
+               </OverlayRoot>
             )
          }
 

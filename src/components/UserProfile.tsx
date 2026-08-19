@@ -1,3 +1,4 @@
+import { OverlayRoot } from './ui/OverlayRoot';
 import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import type { User } from '../types';
@@ -665,7 +666,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
 
             {/* Email Change Modal */}
             {showEmailModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                <OverlayRoot id="profile-update-email" label="Update email address" onEscape={() => { setShowEmailModal(false); setPasswordError(''); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
                     <div className="bg-card border border-line rounded-xl p-6 max-w-md w-full shadow-panel relative overflow-hidden">
                         {/* Decorative glow */}
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gold-foil"></div>
@@ -727,7 +728,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                             </div>
                         </form>
                     </div>
-                </div>
+                </OverlayRoot>
             )}
         </div>
     );

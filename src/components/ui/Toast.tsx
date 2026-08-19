@@ -141,7 +141,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             {/* Confirm modal — replaces window.confirm() */}
             <AnimatePresence>
                 {confirmState && (
-                    <motion.div
+                    <motion.div data-overlay-root=""
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}

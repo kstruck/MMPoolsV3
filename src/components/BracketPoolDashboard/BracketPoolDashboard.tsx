@@ -1,3 +1,4 @@
+import { OverlayRoot } from '../ui/OverlayRoot';
 import { logger } from '../../utils/logger';
 import { BillingGate } from '../billing';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -909,7 +910,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
                 {/* ── Full-Screen Bracket Editor Portal ─────────────────────────────── */}
                 {isCreating && createPortal(
-                    <div className="fixed inset-0 z-[60] flex flex-col bg-page animate-in fade-in duration-150">
+                    <OverlayRoot id="bracket-entry-editor" dialog={false} className="fixed inset-0 z-[60] flex flex-col bg-page animate-in fade-in duration-150">
                         {/* ── Top bar ─────────────────────────────────────────────────── */}
                         <div className="flex-shrink-0 flex flex-wrap justify-between items-center gap-3 px-4 py-3 border-b border-line bg-card/95 backdrop-blur">
                             <div>
@@ -1026,7 +1027,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 </button>
                             </div>
                         </div>
-                    </div>,
+                    </OverlayRoot>,
                     document.body
                 )}
 
@@ -2041,7 +2042,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             </div>
             {/* Viewing Entry Modal */}
             {viewingEntry && tournament && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+                <OverlayRoot id="bracket-view-entry" label="Entry details" onEscape={() => setViewingEntry(null)} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-card border border-line rounded-2xl w-full max-w-[98vw] max-h-[95vh] flex flex-col shadow-card-hover">
                         <div className="flex items-center justify-between p-4 border-b border-line bg-surface rounded-t-2xl">
                             <div>
@@ -2109,7 +2110,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             )}
                         </div>
                     </div>
-                </div>
+                </OverlayRoot>
             )}
 
             {/* Payment Ledger Tab */}
@@ -2187,7 +2188,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 })() : '';
 
                 return (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+                    <OverlayRoot id="bracket-name-entry" label="Name your bracket" onEscape={() => setShowNameModal(false)} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
                         <div className="bg-card border border-line rounded-xl max-w-md w-full p-6 shadow-card-hover relative">
                             <button
                                 onClick={() => setShowNameModal(false)}
@@ -2253,7 +2254,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </OverlayRoot>
                 );
             })()}
         </div>

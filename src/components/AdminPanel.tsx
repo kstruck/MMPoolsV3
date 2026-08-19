@@ -1,3 +1,4 @@
+import { OverlayRoot } from './ui/OverlayRoot';
 import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
@@ -1309,7 +1310,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             {/* EDIT PLAYER MODAL */}
             {editingPlayer && (
-              <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <OverlayRoot id="squares-edit-player" label="Edit player details" onEscape={() => setEditingPlayer(null)} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                 <div className="bg-card border border-line p-6 rounded-xl shadow-panel max-w-md w-full">
                   <h3 className="text-xl font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Edit Player Details</h3>
                   <div className="space-y-4">
@@ -1346,7 +1347,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
                 </div>
-              </div>
+              </OverlayRoot>
             )}
 
           </div>
@@ -1371,7 +1372,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {/* RANDOMIZER OVERLAY */}
       {
         isRandomizing && (
-          <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center backdrop-blur-md cursor-wait">
+          <OverlayRoot id="squares-randomizer" dialog={false} className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center backdrop-blur-md cursor-wait">
             <h2 className="text-4xl md:text-6xl font-display font-extrabold uppercase leading-[0.9] text-white mb-8 animate-pulse text-center">PICKING A WINNER</h2>
             <div className="w-64 h-64 bg-navy-900 rounded-3xl border-4 border-gold-500 flex items-center justify-center shadow-[0_0_100px_rgba(201,168,103,0.5)]">
               <span className="text-8xl font-display font-bold text-white tabular-nums">
@@ -1379,7 +1380,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </span>
             </div>
             <p className="text-gold-400 mt-8 font-display font-bold uppercase animate-bounce tracking-widest">GOOD LUCK...</p>
-          </div>
+          </OverlayRoot>
         )
       }
     </div >

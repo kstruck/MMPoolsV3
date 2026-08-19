@@ -1,3 +1,4 @@
+import { OverlayRoot } from './ui/OverlayRoot';
 import { logger } from '../utils/logger';
 import { nflWeekLabel } from '../utils/nflWeekLabel';
 import { CANONICAL_ROLES, normalizeRole, roleBadge } from '../utils/roles';
@@ -2247,7 +2248,7 @@ export const SuperAdmin: React.FC = () => {
 
                     {/* MOCK PROMO SENDER MODAL */}
                     {(promoUser || promoBulkTier) && (
-                        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                        <OverlayRoot id="sa-promo-campaign" label="Mock promo campaign creator" onEscape={() => { setPromoUser(null); setPromoBulkTier(null); }} className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
                             <div className="bg-card border border-line rounded-3xl p-6 w-full max-w-lg shadow-panel flex flex-col justify-between relative">
                                 <button
                                     onClick={() => { setPromoUser(null); setPromoBulkTier(null); }}
@@ -2351,7 +2352,7 @@ export const SuperAdmin: React.FC = () => {
                                     </button>
                                 </div>
                             </div>
-                        </div>
+                        </OverlayRoot>
                     )}
                 </div>
             )}
@@ -2539,7 +2540,7 @@ export const SuperAdmin: React.FC = () => {
 
             {/* ============ THEME BUILDER MODAL ============ */}
             {showThemeBuilder && editingTheme && (
-                <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-auto">
+                <OverlayRoot id="sa-theme-builder" label="Theme builder" onEscape={() => { setShowThemeBuilder(false); setEditingTheme(null); }} className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-auto">
                     <div className="bg-card rounded-2xl border border-line w-full max-w-5xl max-h-[90vh] overflow-auto">
                         {/* Modal Header */}
                         <div className="p-4 border-b border-line flex justify-between items-center sticky top-0 bg-card z-10">
@@ -2747,7 +2748,7 @@ export const SuperAdmin: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                </div>
+                </OverlayRoot>
             )}
 
 
@@ -3213,7 +3214,7 @@ export const SuperAdmin: React.FC = () => {
             {/* POOL DETAILS MODAL */}
             {
                 viewingPool && (
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                    <OverlayRoot id="sa-pool-details" label="Pool details" onEscape={() => setViewingPool(null)} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
                         {/* T2: the pool-detail modal's sub-tab. Mounted only while
                             the modal is open, so it retracts when it closes. */}
                         <HelpRoutePublisher subTab={modalTab} />
@@ -3664,14 +3665,14 @@ export const SuperAdmin: React.FC = () => {
                                 )}
                             </div>
                         </div>
-                    </div>
+                    </OverlayRoot>
                 )
             }
 
             {/* EDIT USER MODAL (Existing logic preserved, just styling tweaks if needed) */}
             {
                 editingUser && (
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <OverlayRoot id="sa-edit-user" label="Edit user" onEscape={() => setEditingUser(null)} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                         <div className="bg-card p-6 rounded-xl border border-line w-full max-w-md shadow-panel">
                             <h3 className="text-xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4">Edit User</h3>
                             <div className="space-y-4 mb-6">
@@ -3689,14 +3690,14 @@ export const SuperAdmin: React.FC = () => {
                                 <button onClick={saveUserChanges} className="bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2 rounded font-display font-bold uppercase tracking-[0.05em] text-sm shadow-red-cta">Save Changes</button>
                             </div>
                         </div>
-                    </div>
+                    </OverlayRoot>
                 )
             }
 
             {/* VIEW USER MODAL (Existing logic preserved) */}
             {
                 viewingUser && (
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <OverlayRoot id="sa-view-user" label="User details" onEscape={() => setViewingUser(null)} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                         <div className="bg-card border border-line rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-panel flex flex-col">
                             <div className="p-6 border-b border-line flex justify-between items-start bg-surface rounded-t-2xl">
                                 <div>
@@ -3835,7 +3836,7 @@ export const SuperAdmin: React.FC = () => {
                                 )}
                             </div>
                         </div>
-                    </div>
+                    </OverlayRoot>
                 )
             }
 
@@ -3887,7 +3888,7 @@ export const SuperAdmin: React.FC = () => {
                         {/* When editing (gear clicked), the form floats as a modal so a
                             low seed in the list can be edited without scrolling to the top.
                             When adding, it stays inline. */}
-                        <div
+                        <OverlayRoot id="sa-edit-seed" label="Edit seed question" active={!!editingSeed} onEscape={() => { setEditingSeed(null); setSeedText(''); setSeedOpt1(''); setSeedOpt2(''); }}
                             className={editingSeed ? "fixed inset-0 z-50 bg-black/70 flex items-start justify-center overflow-y-auto p-6" : ""}
                             onClick={editingSeed ? (e) => { if (e.target === e.currentTarget) { setEditingSeed(null); setSeedText(''); setSeedOpt1(''); setSeedOpt2(''); } } : undefined}
                         >
@@ -3951,7 +3952,7 @@ export const SuperAdmin: React.FC = () => {
                                 </div>
                             </div>
                         </div>
-                        </div>
+                        </OverlayRoot>
 
                         <div className="bg-card rounded-xl border border-line overflow-hidden">
                             <div className="p-4 border-b border-line bg-surface flex flex-col md:flex-row gap-4 justify-between items-center">
