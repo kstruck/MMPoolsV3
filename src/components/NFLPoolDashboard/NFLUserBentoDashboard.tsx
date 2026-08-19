@@ -4,6 +4,7 @@ import type { User as UserType, Pool, NFLGame, WeeklyRecap } from '../../types';
 import { NFLGameTicker } from './NFLGameTicker';
 import { dbService } from '../../services/dbService';
 import { gamesForPoolWeek, poolSeasonType, isWeekComplete, isWeekLockedNow } from '../../utils/nflPending';
+import { nflLockMode, weekLockOverrideFor } from '@shared/nflLockMode';
 import { pickCtaFor } from '../../utils/pickCta';
 import { effectiveBufferMinutesForWeek } from '@shared/weeklyHardLock';
 import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
@@ -300,18 +301,21 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   // pool's lock rule, via `pickCtaFor`. NOT memoized: `isWeekLockedNow` reads
   // the server clock, and a memo would freeze the label across a deadline
   // (the same trap WeekChecklist documents).
-  const lockMode: 'WEEKLY' | 'PER_GAME' =
-    castPool.settings?.confidenceMode || castPool.settings?.lockMode === 'WEEKLY' ? 'WEEKLY' : 'PER_GAME';
+  // Both of these were spelled out by hand here, and the hand-written copy of
+  // the lock rule is what drifted in NFLPoolDashboard and closed a per-game
+  // sheet at the first kickoff. One definition now, in `shared/nflLockMode.ts`:
+  // it folds in the Survivor/Margin hard lock and the confidence-mode override,
+  // so the pool TYPE no longer has to be special-cased at the call site.
+  const lockMode = nflLockMode(_pool.type, castPool.settings);
   // A commissioner's extendWeekDeadline (`settings.weekLockOverrides[week]`)
   // is honoured server-side on Pick'em only; pass it so the button cannot say
   // "Picks Locked" during an extension the server still accepts.
-  const weekLockOverrideMs: number | undefined =
-    _pool.type === 'NFL_PICKEM' ? castPool.settings?.weekLockOverrides?.[selectedWeek] : undefined;
+  const weekLockOverrideMs = weekLockOverrideFor(castPool, selectedWeek);
   const weekLocked = isWeekLockedNow(
     weeklyGames,
     effectiveBufferMinutesForWeek(castPool, selectedWeek, weeklyGames.map(g => g.startTime)),
-    _pool.type === 'NFL_PICKEM' ? lockMode : 'WEEKLY',
-    typeof weekLockOverrideMs === 'number' ? weekLockOverrideMs : undefined,
+    lockMode,
+    weekLockOverrideMs,
   );
   const hasAnyPickThisWeek = !!myEntry && (
     _pool.type === 'NFL_PICKEM'
