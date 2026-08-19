@@ -25,6 +25,35 @@ export const HOST_ONLY = ['commissioner'] as const;
 
 export const NFL_SHARED_TOPICS: readonly HelpTopic[] = [
   {
+    // ---- RELEASED BY #482, same as `settings.lockMode` -------------------
+    //
+    // Lives here rather than in `nfl-pickem.ts` because ALL THREE season
+    // formats have this control: Pick'em labels it "Lock Buffer" and offers
+    // 0 / 5 / 10, Survivor and Margin label it "Weekly Deadline" and offer
+    // 60 / 30 / 5 (`NFLManagerView.tsx:1199` and `:1383`). One control, one
+    // topic (voice rule 10), so the copy has to be true of every one of those
+    // six values.
+    //
+    // Read off `shared/weeklyHardLock.ts` and `shared/nflLockMode.ts`:
+    //   `DEFAULT_LOCK_BUFFER_MINUTES` = 5 — the default, on all three
+    //   `gameLockAt()`                  — kickoff minus the buffer
+    //   `weekLockAtFor()`               — which kickoff that is
+    //   `resolveHardWeekLock()`         — `Math.min(frozen, computed)`, so on
+    //     Survivor and Margin a week's deadline may only ever move EARLIER
+    id: 'settings.lockBufferMinutes',
+    title: 'When picks close',
+    short: 'How long before kickoff picks close. Five minutes is the default.',
+    long: [
+      'A pick closes this many minutes before the kickoff it depends on, so nobody is still editing while the ball is in the air.',
+      'Which kickoff that is depends on the pool. A Pick\u2019em pool that locks per game counts from each game\u2019s own kickoff; a Pick\u2019em pool that locks weekly counts from the first kickoff of the week. Survivor and Margin always count from the first kickoff of the week, and their shortest setting is five minutes \u2014 those formats never leave a pick open once a game is running.',
+      'On Survivor and Margin, changing this later can only bring a week\u2019s deadline forward. It cannot push one back out, so a week that has closed stays closed.',
+      'Members see the deadline on their pick sheet, and a pick that has closed cannot be changed there.',
+    ].join('\n\n'),
+    poolTypes: NFL_SEASON_TYPES,
+    audience: EVERYONE,
+    related: ['settings.lockMode'],
+  },
+  {
     id: 'nfl.payments.yours',
     title: 'What you owe and what you paid',
     // READ-ONLY for a member. `PaymentsPanel.tsx:91` renders its only control —
@@ -118,12 +147,16 @@ export const NFL_SHARED_PLACEMENTS: readonly HelpPlacement[] = [
   { topic: 'paymentHandles', page: 'pool.nfl.rules', section: 'money', order: 1 },
   { topic: 'paymentInstructions', page: 'pool.nfl.rules', section: 'money', order: 2 },
 
+  { topic: 'settings.lockBufferMinutes', page: 'pool.nfl.rules', section: 'general', order: 0 },
+  { topic: 'settings.lockBufferMinutes', page: 'pool.nfl.picks', section: 'general', order: 0 },
+
   { topic: 'nfl.manager.ledger', page: 'pool.nfl.manager.members', section: 'money', order: 0 },
   { topic: 'settings.entryFee', page: 'pool.nfl.manager.members', section: 'money', order: 1 },
 
   { topic: 'nfl.manager.scoreWeek', page: 'pool.nfl.manager.scoring', section: 'scoring', order: 0 },
 
   { topic: 'nfl.manager.settingsLock', page: 'pool.nfl.manager.settings', section: 'settings', order: 0 },
+  { topic: 'settings.lockBufferMinutes', page: 'pool.nfl.manager.settings', section: 'settings', order: 3 },
   { topic: 'settings.entryFee', page: 'pool.nfl.manager.settings', section: 'settings', order: 1 },
   { topic: 'settings.maxEntriesPerUser', page: 'pool.nfl.manager.settings', section: 'settings', order: 2 },
 

@@ -4,7 +4,10 @@ import type { PoolType } from '../shared/poolTypes';
 import { helpRegistry } from '../src/help/registry';
 import { SCHEMA_PATH_ALLOWLIST, WIZARD_FIELD_ALLOWLIST } from '../src/help/coverage-allowlist';
 import { NFL_PICKEM_PLACEMENTS, NFL_PICKEM_TOPICS } from '../src/help/content/nfl-pickem';
-import { NFL_SHARED_TOPICS } from '../src/help/content/nfl-shared';
+import { NFL_SEASON_TYPES, NFL_SHARED_TOPICS } from '../src/help/content/nfl-shared';
+import { staticCopy } from '../src/help/registry';
+import { nflLockMode } from '../shared/nflLockMode';
+import { DEFAULT_LOCK_BUFFER_MINUTES, LOCK_BUFFER_PRESETS } from '../shared/weeklyHardLock';
 
 /**
  * T9 content guard — PLAN-HELP-SYSTEM.md §7.
@@ -176,22 +179,60 @@ describe('T9 — the allowlist rows it closed are closed', () => {
   });
 
   /**
-   * The two rows T9 WITHDREW, and why, pinned so the reason cannot be lost.
+   * The two topics T9 WITHDREW and 93f44bb2 (#482) released.
    *
-   * `NFLPoolDashboard.tsx:515-534` derives the week lock from the earliest
-   * kickoff for every NFL type and `PickemPickEntry.tsx:138-141` locks every
-   * game once that flag is set — so a PER_GAME Pick'em pool locks its whole
-   * sheet at the first kickoff, while the server would accept a later pick.
-   * Copy for either setting would have been false on screen. Delete this test
-   * when the client fix lands and the topics are authored.
+   * T9 wrote both, carried them through six codex rounds, and pulled them on
+   * round 7 because the shipped client ignored `lockMode` — a PER_GAME pool
+   * closed its whole sheet at the week's first kickoff, so copy describing the
+   * setting would have been false on screen. #482 made the client honour the
+   * setting and put the rule in `shared/nflLockMode.ts`.
+   *
+   * This is the same guard inverted: it now fails if either topic is dropped,
+   * or if either allowlist row comes back and quietly re-hides the setting.
    */
-  it('records the lock topics it withdrew, with their reason', () => {
+  it('the two lock topics T9 withheld are authored, and their rows are gone', () => {
     for (const list of [SCHEMA_PATH_ALLOWLIST, WIZARD_FIELD_ALLOWLIST]) {
-      expect(list['settings.lockMode']).toMatch(/^T9-BLOCKED:/);
+      expect('settings.lockMode' in list).toBe(false);
     }
-    expect(SCHEMA_PATH_ALLOWLIST['settings.lockBufferMinutes']).toMatch(/^T9-BLOCKED:/);
-    expect(helpRegistry.getTopic('settings.lockMode')).toBeUndefined();
-    expect(helpRegistry.getTopic('settings.lockBufferMinutes')).toBeUndefined();
+    expect('settings.lockBufferMinutes' in SCHEMA_PATH_ALLOWLIST).toBe(false);
+
+    const lockMode = helpRegistry.getTopic('settings.lockMode');
+    const buffer = helpRegistry.getTopic('settings.lockBufferMinutes');
+    expect(lockMode).toBeDefined();
+    expect(buffer).toBeDefined();
+
+    // Scope is what keeps the shared `pool.nfl.*` pages honest. `lockMode` is
+    // a Pick'em choice — Survivor and Margin are always weekly and have no
+    // such control — while the buffer exists on all three.
+    expect(lockMode!.poolTypes).toEqual(['NFL_PICKEM']);
+    expect(buffer!.poolTypes).toEqual([...NFL_SEASON_TYPES]);
+  });
+
+  /**
+   * The claims those two topics make, held to the code that implements them.
+   *
+   * Voice rule 5 is the rule this effort keeps breaking, and both of these
+   * sentences name a behaviour rather than a label — exactly the shape that
+   * broke ten times on #480. So the numbers are asserted against
+   * `shared/`, not trusted.
+   */
+  it('the lock copy agrees with shared/nflLockMode.ts', () => {
+    const buffer = helpRegistry.getTopic('settings.lockBufferMinutes')!;
+    // "Five minutes is the default."
+    expect(DEFAULT_LOCK_BUFFER_MINUTES).toBe(5);
+    expect(staticCopy(buffer.short)).toContain('Five minutes is the default');
+    // "their shortest setting is five minutes" — the narrowest Survivor/Margin
+    // preset. If a 0 or 1 preset were ever added this sentence goes false.
+    expect(Math.min(...LOCK_BUFFER_PRESETS)).toBe(5);
+
+    // "Confidence points force weekly whatever this says."
+    expect(nflLockMode('NFL_PICKEM', { lockMode: 'PER_GAME', confidenceMode: true })).toBe('WEEKLY');
+    // "Per game is the default."
+    expect(nflLockMode('NFL_PICKEM', {})).toBe('PER_GAME');
+    // Survivor and Margin are always weekly, which is why `lockMode` is scoped
+    // to Pick'em alone above.
+    expect(nflLockMode('NFL_SURVIVOR', { lockMode: 'PER_GAME' })).toBe('WEEKLY');
+    expect(nflLockMode('NFL_MARGIN', { lockMode: 'PER_GAME' })).toBe('WEEKLY');
   });
 
   /**
