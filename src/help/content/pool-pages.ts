@@ -142,7 +142,13 @@ const NFL_PAGES = poolPages({
       // rule would be false for some reader of this page, so the rule itself
       // is explained by the `settings.lockMode` and
       // `settings.lockBufferMinutes` topics, which are scoped.
-        'Make and change your picks for the week, then submit them. The sheet shows which games are still open and when the next deadline falls. A pick that has closed cannot be changed from this sheet.',
+      //
+      // It also no longer says the sheet shows "when the next deadline
+      // falls". It does not: the sheet renders kickoff times and a locked
+      // marker, and the buffer-adjusted instant is the pool-home countdown
+      // (`NFLPoolDashboard.tsx:895-905`). Third time that claim was made and
+      // corrected on this branch — codex rounds 3, 4 and 6.
+        'Make and change your picks for the week, then submit them. The sheet shows which games are still open, and a pick that has closed cannot be changed from it. The countdown to the next deadline is on your pool home.',
     },
     {
       tab: 'grid',
