@@ -23,7 +23,23 @@
 // a dialog with no accessible name is the other half of the same lie.
 
 import React, { useEffect, useRef, useState } from 'react';
-import { useOverlayOwner } from './overlayStack';
+import { overlayStackTop, useOverlayOwner } from './overlayStack';
+
+/** Controls a reader can Tab to. Order is DOM order, which is tab order here. */
+const FOCUSABLE = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(', ');
+
+function focusableWithin(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+    el => el.getAttribute('aria-hidden') !== 'true',
+  );
+}
 
 /**
  * Whatever has focus right now, if it is a real control.
@@ -109,13 +125,65 @@ export const OverlayRoot: React.FC<OverlayRootProps> = ({
   }, [active]);
 
   const isDialog = dialog && active;
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // `aria-modal="true"` tells a screen reader the rest of the page is inert.
+  // Leaving focus outside makes that a lie: Tab would start behind the dialog
+  // and walk obscured controls (codex round 5, P1). So focus moves in on open,
+  // and Tab wraps inside. A modal that focuses its own control keeps it —
+  // `autoFocus` fires during commit and a sibling's effect runs after this one,
+  // and both leave focus already inside the root, which this check respects.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!isDialog || !root) return;
+    if (root.contains(document.activeElement)) return;
+    // The dialog itself, not its first control: the first control is sometimes
+    // the destructive one, and APG's fallback for "no obviously right element"
+    // is the dialog. Tab from here goes to the first control anyway. It is also
+    // what `ShareModal` has always done.
+    root.focus();
+  }, [isDialog]);
+
+  useEffect(() => {
+    if (!isDialog) return;
+    const onKeydown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const root = rootRef.current;
+      // Only the overlay on top of the stack traps — a dialog underneath
+      // another one must not fight it for the keyboard.
+      if (!root || overlayStackTop() !== id) return;
+      const items = focusableWithin(root);
+      if (items.length === 0) {
+        event.preventDefault();
+        root.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const at = document.activeElement;
+      if (!root.contains(at)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && at === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && at === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeydown, true);
+    return () => document.removeEventListener('keydown', onKeydown, true);
+  }, [isDialog, id]);
 
   return (
     <div
+      ref={rootRef}
       data-overlay-root={active ? '' : undefined}
       role={isDialog ? 'dialog' : undefined}
       aria-modal={isDialog ? true : undefined}
       aria-label={isDialog ? label : undefined}
+      tabIndex={isDialog ? -1 : undefined}
       className={className}
       onClick={onClick}
     >

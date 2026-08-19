@@ -138,6 +138,42 @@ describe('OverlayRoot', () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it('moves focus into the dialog, and keeps Tab inside it', () => {
+    // `aria-modal="true"` says the rest of the page is inert. Leaving focus
+    // outside makes that a lie — Tab would start behind the dialog and walk
+    // obscured controls (codex, round 5, P1).
+    render(
+      <>
+        <button>Behind</button>
+        <OverlayRoot id="trap-modal" label="Trap modal" className="fixed inset-0">
+          <button>One</button>
+          <button>Two</button>
+        </OverlayRoot>
+      </>,
+    );
+    const shell = screen.getByRole('dialog', { name: 'Trap modal' });
+    expect(document.activeElement).toBe(shell);
+
+    screen.getByRole('button', { name: 'Two' }).focus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'One' }));
+
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Two' }));
+  });
+
+  it('leaves a non-dialog scrim out of the tab order entirely', () => {
+    render(
+      <>
+        <button>Behind</button>
+        <OverlayRoot id="scrim" dialog={false} className="fixed inset-0">loading</OverlayRoot>
+      </>,
+    );
+    const scrim = document.querySelector('[data-overlay-root]') as HTMLElement;
+    expect(scrim.hasAttribute('tabindex')).toBe(false);
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it('does not drop focus behind the overlay that replaced it', () => {
     // Grid's guest-details "Continue" closes that dialog and opens the
     // reservation confirmation in one update. Restoring focus to the page
