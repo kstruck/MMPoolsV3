@@ -1,18 +1,27 @@
 # HANDOFF — Session entry point
 
-> ## 🔴 2026-08-19 — **T16 AND THE TWO LOCK TOPICS ARE BUILT AND UNMERGED. qodo IS OUT OF CREDITS.**
+> ## 🔴 2026-08-19 — **T16 + THE LOCK TOPICS MERGED. qodo IS TURNED OFF. `www` NEEDS A REDEPLOY.**
 >
 > **Read `MORNING-2026-08-19-HELP.md` first** for this effort. It continues
 > `MORNING-2026-08-18-HELP-T9.md`, which continues `MORNING-2026-08-18-HELP.md`;
 > `MORNING-2026-08-18.md` remains the PLAN-PAYMENT-LEDGER entry point.
 >
-> 🔴 **qodo RAN OUT OF CREDITS PARTWAY THROUGH THE NIGHT.** It reviewed #482
-> normally at 03:33Z and by 05:04Z it was answering every new PR with
-> *"Qodo reviews are paused because your workspace is out of credits."*
-> `CLAUDE.md` §2b makes qodo half of the mandatory joint gate and
-> `mmp-qodo-cycle` §3 says a billing notice is a FAILED check, never a pass — so
-> **two finished PRs are open rather than merged.** Adding credits and toggling
-> each PR draft → ready is step 1 of the morning runbook and takes five minutes.
+> 🛑 **qodo IS DORMANT — Kevin, 2026-08-19: "Turn off the Qodo reviews for
+> now."** The workspace ran out of credits overnight and a billing notice is a
+> FAILED check rather than a clean one, so it blocked three finished PRs until
+> he ruled. **`CLAUDE.md` §2b now says DORMANT and §2c's stopping rule is TWO
+> conditions — a clean codex round and your own read of the diff.** Do not arm
+> the watcher, do not load `mmp-qodo-cycle`, and do not hold a PR for a review
+> that cannot arrive. The codex cap is 10, flat: the "5 past the cap" exception
+> exists only to serve a qodo finding. The bot is still INSTALLED and will keep
+> posting its billing notice — that is noise now, not a gate.
+>
+> 🔴 **`www` HAS NOT BEEN REDEPLOYED SINCE THESE MERGED.** T16 and the new lock
+> copy are on `main` and not in production. Coolify has no CLI path from this
+> machine, so it is Kevin's step — §7 step 1 of the morning doc.
+>
+> **Merged 2026-08-19 14:14Z:** `d4cad066` (#483), `893e921e` (#484),
+> `33377543` (#485).
 >
 > ⚠️ **#483 — PLAN-HELP-SYSTEM T16, the ticket that was overdue three mornings
 > running.** Every `fixed inset-0` overlay shell now registers with the overlay
@@ -24,9 +33,9 @@
 > these overlays and focus moves into a dialog, wraps inside it, and returns to
 > the opener — `aria-modal="true"` was claiming the page was inert for 27
 > dialogs where it was not. **7 codex rounds; rounds 2–6 each found a real
-> defect and four were in code written to close the round before.** The five
-> LOCAL gates and CI are green; **the qodo half of the joint gate is not — it is
-> failing, not passing**, so this is not clearance to merge.
+> defect and four were in code written to close the round before.** All five
+> local gates and CI green; qodo never saw it, which is what the ruling above
+> settled.
 >
 > ⚠️ **#484 — the two lock topics T9 withdrew, released by #482.**
 > `settings.lockMode` and `settings.lockBufferMinutes` land, and **two of T9's
@@ -40,7 +49,7 @@
 > Pick'em commissioner proxy pick keyed by week where the callable reads game
 > ids; the "List Pool Publicly" toggle writing a field Browse does not read; and
 > `HelpCopy.template` unable to render because nothing publishes a pool's
-> settings. The last one got more expensive tonight — #484 hit it four more
+> settings. The last one got more expensive overnight — #484 hit it four more
 > times.
 >
 > ⚠️ **T4 ITSELF IS NOT STARTED.** `NFLManagerView.tsx` still has 35 raw
