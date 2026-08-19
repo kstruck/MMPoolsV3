@@ -34,12 +34,12 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
     //   `gameLockAt()`      — kickoff minus the buffer
     id: 'settings.lockMode',
     title: 'Lock mode',
-    short: 'Choose whether each game closes at its own kickoff, or the whole week closes at the first one.',
+    short: 'Choose whether each game closes on its own deadline, or the whole week closes on the first game\u2019s.',
     long: [
       'Per game is the default. Each pick stays open until its own game\u2019s deadline, so you can still change a Sunday pick after the Thursday night game has started.',
-      'Weekly closes every pick in the week at the first kickoff. Choose it when you want everyone playing the same slate with the same information.',
+      'Weekly closes every pick in the week on the first game\u2019s deadline. Choose it when you want everyone playing the same slate with the same information.',
       'Confidence points force weekly whatever this says, because a confidence sheet spends each weight across the week\u2019s games exactly once. The control is greyed out while confidence points are on, and the pool plays weekly.',
-      'How far ahead of a kickoff a pick closes is the lock buffer, not this. Members see the deadline on their pick sheet either way.',
+      'A deadline falls a set number of minutes before the kickoff it counts from \u2014 five by default, and the lock buffer is where that number is set. Members see the deadline on their pick sheet either way.',
     ].join('\n\n'),
     poolTypes: PICKEM,
     audience: EVERYONE,

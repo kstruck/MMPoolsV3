@@ -38,17 +38,27 @@ export const NFL_SHARED_TOPICS: readonly HelpTopic[] = [
     //   `DEFAULT_LOCK_BUFFER_MINUTES` = 5 — the default, on all three
     //   `gameLockAt()`                  — kickoff minus the buffer
     //   `weekLockAtFor()`               — which kickoff that is
-    //   `resolveHardWeekLock()`         — `Math.min(frozen, computed)`, so on
-    //     Survivor and Margin a week's deadline may only ever move EARLIER
+    //
+    // NO GUARANTEE ABOUT MOVING A DEADLINE BACK OUT. `resolveHardWeekLock()`
+    // is `Math.min(frozen, computed)`, which reads like "a week's deadline may
+    // only ever move earlier" — and an earlier draft of this topic said
+    // exactly that. It is not reliably true: the KNOWN RESIDUAL in
+    // `functions/src/lib/effectiveLock.ts` records that `updatePoolSettings`
+    // bumps `lockRevision` but never calls `ensureHardLockFreezeForPoolDoc`, so
+    // a week nothing has frozen yet has no floor to be held to. The hole is
+    // narrow, and this copy simply does not go there — the tip below is
+    // advice, and it is true whatever the freeze did (codex round 1).
     id: 'settings.lockBufferMinutes',
     title: 'When picks close',
-    short: 'How long before kickoff picks close. Five minutes is the default.',
+    short: 'How long before kickoff picks close. Five minutes is the default; a Pick’em pool can set none.',
     long: [
-      'A pick closes this many minutes before the kickoff it depends on, so nobody is still editing while the ball is in the air.',
+      'A pick closes this many minutes before the kickoff it depends on, so nobody is still editing while the ball is in the air. A Pick’em pool can also set none, which closes the pick at kickoff itself.',
       'Which kickoff that is depends on the pool. A Pick\u2019em pool that locks per game counts from each game\u2019s own kickoff; a Pick\u2019em pool that locks weekly counts from the first kickoff of the week. Survivor and Margin always count from the first kickoff of the week, and their shortest setting is five minutes \u2014 those formats never leave a pick open once a game is running.',
-      'On Survivor and Margin, changing this later can only bring a week\u2019s deadline forward. It cannot push one back out, so a week that has closed stays closed.',
       'Members see the deadline on their pick sheet, and a pick that has closed cannot be changed there.',
     ].join('\n\n'),
+    tips: [
+      'Change it between weeks rather than during one. Members are shown the deadline on their pick sheet, so moving it while a week is running changes what some of them have already read.',
+    ],
     poolTypes: NFL_SEASON_TYPES,
     audience: EVERYONE,
     related: ['settings.lockMode'],
