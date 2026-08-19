@@ -38,6 +38,10 @@ export const NFL_SHARED_TOPICS: readonly HelpTopic[] = [
     //   `DEFAULT_LOCK_BUFFER_MINUTES` = 5 — the default, on all three
     //   `gameLockAt()`                  — kickoff minus the buffer
     //   `weekLockAtFor()`               — which kickoff that is
+    //   `weekLockOverrideFor()` + `gameLockAt()` — `Math.max(base, override)`,
+    //     so a commissioner's extension moves a Pick'em deadline LATER and can
+    //     put it past kickoff. Hard-lock types get `undefined` there and cannot
+    //     be extended at all (codex round 2).
     //
     // NO GUARANTEE ABOUT MOVING A DEADLINE BACK OUT. `resolveHardWeekLock()`
     // is `Math.min(frozen, computed)`, which reads like "a week's deadline may
@@ -52,9 +56,10 @@ export const NFL_SHARED_TOPICS: readonly HelpTopic[] = [
     title: 'When picks close',
     short: 'How long before kickoff picks close. Five minutes is the default; a Pick’em pool can set none.',
     long: [
-      'A pick closes this many minutes before the kickoff it depends on, so nobody is still editing while the ball is in the air. A Pick’em pool can also set none, which closes the pick at kickoff itself.',
+      'A pick closes this many minutes before the kickoff it depends on. A Pick’em pool can also set none, which closes the pick at kickoff itself.',
       'Which kickoff that is depends on the pool. A Pick\u2019em pool that locks per game counts from each game\u2019s own kickoff; a Pick\u2019em pool that locks weekly counts from the first kickoff of the week. Survivor and Margin always count from the first kickoff of the week, and their shortest setting is five minutes \u2014 those formats never leave a pick open once a game is running.',
-      'Members see the deadline on their pick sheet, and a pick that has closed cannot be changed there.',
+      'On a Pick’em pool your commissioner can extend a week, which moves that week’s deadline later — later than this setting says, and past kickoff if they choose. Survivor and Margin weeks cannot be extended.',
+      'Members see the deadline that applies on their pick sheet, and a pick that has closed cannot be changed there.',
     ].join('\n\n'),
     tips: [
       'Change it between weeks rather than during one. Members are shown the deadline on their pick sheet, so moving it while a week is running changes what some of them have already read.',
