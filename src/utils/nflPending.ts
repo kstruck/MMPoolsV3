@@ -81,11 +81,35 @@ export function poolSeasonWeeks(games: NFLGame[], pool: any): number[] {
     return [...weeks].filter(w => Number.isFinite(w)).sort((a, b) => a - b);
 }
 
-export function isWeekComplete(poolType: string, entry: any, weekGames: NFLGame[], week: number): boolean {
+export function isWeekComplete(
+    poolType: string,
+    entry: any,
+    weekGames: NFLGame[],
+    week: number,
+    /**
+     * Games already closed to this member, if the caller knows. A closed game
+     * they never picked can no longer BE picked, so counting it as outstanding
+     * leaves the week permanently incomplete — "Make Picks" forever on a sheet
+     * with nothing left to do (qodo #10). Omitted means "none closed", which is
+     * the old reading.
+     *
+     * This is the same rule `canSubmit` applies on the sheet: what matters is
+     * whether anything the member can still act on is unanswered.
+     */
+    isGameClosed?: (game: NFLGame) => boolean,
+): boolean {
     if (!entry) return false;
     if (poolType === 'NFL_PICKEM') {
         if (weekGames.length === 0) return false;
-        return weekGames.every(g => !!entry.picks?.[g.id]);
+        const answered = weekGames.filter(g => !!entry.picks?.[g.id]).length;
+        // A member who answered NOTHING all week did not complete it, however
+        // many games have since closed. Without this the exemption below turns
+        // a wholly missed slate into "picks submitted" the moment the last game
+        // kicks off — a false claim, and the opposite of what the member needs
+        // to see (codex R4). The exemption exists for a PARTIALLY answered
+        // week, which is the case it was written for.
+        if (answered === 0) return false;
+        return weekGames.every(g => !!entry.picks?.[g.id] || (isGameClosed?.(g) ?? false));
     }
     // Survivor / Margin: one pick per week keyed by week number
     return !!entry.picks?.[week];
@@ -119,18 +143,38 @@ export function isWeekLockedNow(
     return serverNow() >= deadline;
 }
 
+/**
+ * `lockMode` decides WHICH kickoff closes the week, and defaulting it to
+ * 'WEEKLY' was how this function said "missed" on a per-game week a member
+ * could still pick — the Thursday game starting does not close Sunday. Callers
+ * that know the pool should pass `nflLockMode(pool.type, pool.settings)`; the
+ * default keeps the old reading for any that do not.
+ */
 export function getWeekStatus(
     poolType: string,
     entry: any,
     weekGames: NFLGame[],
     week: number,
     lockBufferMinutes: number,
+    lockMode: 'WEEKLY' | 'PER_GAME' = 'WEEKLY',
+    /**
+     * A commissioner's `extendWeekDeadline` for this week. Without it an
+     * extended Pick'em week reads as missed at its ORIGINAL deadline while the
+     * server and the pick sheet both still accept picks (qodo #9) — the same
+     * half-fix this function had for `lockMode`.
+     */
+    weekLockOverrideMs?: number,
 ): WeekStatus {
     if (weekGames.length === 0) return 'no-games';
-    const complete = isWeekComplete(poolType, entry, weekGames, week);
     const bufferMs = lockBufferMinutes * 60 * 1000;
-    const earliest = Math.min(...weekGames.map(g => g.startTime));
-    const weekStarted = serverNow() >= (earliest - bufferMs);
+    const deadline = weekDeadline(weekGames, lockBufferMinutes, lockMode, weekLockOverrideMs)!;
+    // A game is closed to this member once its OWN lock has passed — per game,
+    // or all together on a weekly pool.
+    const gameClosed = (g: NFLGame) => lockMode === 'WEEKLY'
+        ? serverNow() >= deadline
+        : serverNow() >= Math.max(g.startTime - bufferMs, weekLockOverrideMs ?? Number.NEGATIVE_INFINITY);
+    const complete = isWeekComplete(poolType, entry, weekGames, week, gameClosed);
+    const weekStarted = serverNow() >= deadline;
 
     if (!weekStarted) {
         // Week is upcoming; "due" once it's the nearest unpicked week, "future" otherwise —
@@ -140,8 +184,23 @@ export function getWeekStatus(
     return complete ? 'locked-complete' : 'missed';
 }
 
-/** Earliest kickoff of the given week's games, or null. */
-export function weekDeadline(weekGames: NFLGame[], lockBufferMinutes: number): number | null {
+/**
+ * The moment this week closes, or null.
+ *
+ * Same rule as `getWeekStatus`: on a PER_GAME pool the week is not closed until
+ * its LAST game has started, so showing the earliest kickoff would put a
+ * deadline in front of a member hours before anything of theirs expires.
+ */
+export function weekDeadline(
+    weekGames: NFLGame[],
+    lockBufferMinutes: number,
+    lockMode: 'WEEKLY' | 'PER_GAME' = 'WEEKLY',
+    /** A commissioner's extension, which may only ever move the deadline LATER. */
+    weekLockOverrideMs?: number,
+): number | null {
     if (weekGames.length === 0) return null;
-    return Math.min(...weekGames.map(g => g.startTime)) - lockBufferMinutes * 60 * 1000;
+    const kickoffs = weekGames.map(g => g.startTime);
+    const reference = lockMode === 'PER_GAME' ? Math.max(...kickoffs) : Math.min(...kickoffs);
+    const base = reference - lockBufferMinutes * 60 * 1000;
+    return typeof weekLockOverrideMs === 'number' ? Math.max(base, weekLockOverrideMs) : base;
 }

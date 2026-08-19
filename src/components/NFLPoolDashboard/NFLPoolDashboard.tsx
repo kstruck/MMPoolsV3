@@ -27,7 +27,7 @@ import { Button } from '../ui';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks } from '../../utils/nflPending';
 import { buildMemberStandings } from '../../utils/memberStandings';
-import { usesWeeklyHardLock, normalizeLockBufferMinutes, resolveHardWeekLock, frozenHardLockFor } from '@shared/weeklyHardLock';
+import { nflLockMode, weekLockAtFor, nextLockAtFor } from '@shared/nflLockMode';
 import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
 // New imports go at the END of this block — #420 and #421 both appended here and
@@ -512,26 +512,26 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // Returns the deadline too, not just a boolean: several views render a "locks
   // at" time, and showing the first kickoff there would tell a Survivor/Margin
   // member they can pick up to 60 minutes later than the server allows.
+  // The whole computation is `shared/nflLockMode.ts` now — pure, shared with
+  // `functions/`, and unit-tested in `tests/nfl-lockmode-invariants.test.ts`. It
+  // used to be inline here, which is how it came to derive the week lock from
+  // the earliest kickoff for every pool type and ignore `lockMode` entirely.
   const weekLock = useMemo(() => {
     void lockTick;
-    if (weeklyGames.length === 0) return { deadline: null as number | null, locked: false };
-    // Survivor/Margin run a hard weekly deadline and the server snaps their buffer
-    // to an allowed preset — normalize here too, or the UI would disagree with the
-    // server on a legacy value (a stored 0 would show picks open past the deadline
-    // the server actually enforces).
-    const bufferMinutes = usesWeeklyHardLock(castPool.type)
-      ? normalizeLockBufferMinutes(castPool.settings?.lockBufferMinutes)
-      : (castPool.settings?.lockBufferMinutes ?? 5);
-    const bufferMs = bufferMinutes * 60 * 1000;
-    const earliestKickoff = Math.min(...weeklyGames.map(g => g.startTime));
-    const computed = earliestKickoff - bufferMs;
-    // The server enforces the earliest deadline it ever froze for this week, so a
-    // widened buffer must not make the UI show the week open for the gap.
-    const deadline = usesWeeklyHardLock(castPool.type)
-      ? resolveHardWeekLock(frozenHardLockFor(castPool, selectedWeek), computed)
-      : computed;
-    return { deadline, locked: serverNow() >= deadline };
-  }, [weeklyGames, castPool.settings?.lockBufferMinutes, castPool.type, castPool.hardLockByWeek, selectedWeek, lockTick]);
+    const deadline = weekLockAtFor(castPool, selectedWeek, weeklyGames.map(g => g.startTime));
+    return {
+      deadline,
+      locked: deadline !== null && serverNow() >= deadline,
+      mode: nflLockMode(castPool.type, castPool.settings),
+    };
+  }, [weeklyGames, castPool, selectedWeek, lockTick]);
+
+  /** The soonest lock still ahead of the member — what the countdown shows. */
+  const nextLockAt = useMemo(() => {
+    void lockTick;
+    return nextLockAtFor(castPool, selectedWeek, weeklyGames.map(g => g.startTime), serverNow());
+  }, [weeklyGames, castPool, selectedWeek, lockTick]);
+
   const isWeekLocked = weekLock.locked;
 
   // Time remaining to earliest game this week
@@ -884,15 +884,23 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                               </div>
                             </div>
 
-                            {weekLock.deadline !== null && !isWeekLocked && (
+                            {/* COUNTS DOWN TO THE NEXT LOCK, not the week's.
+                                On a PER_GAME pool the week deadline is the LAST
+                                game's, so counting down to it would tell a
+                                member they have until Sunday evening to make a
+                                Thursday pick. `nextLockAt` is the soonest lock
+                                still ahead of them, which is the one they are
+                                about to lose. On a weekly pool the two are the
+                                same value and the label is unchanged. */}
+                            {nextLockAt !== null && !isWeekLocked && (
                               <div className="bg-page p-3 rounded-lg text-center border border-line">
                                 <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted block mb-1">
-                                  Locks in
+                                  {weekLock.mode === 'PER_GAME' ? 'Next pick locks' : 'Locks in'}
                                 </span>
                                 <span className="text-gold-600 dark:text-gold-400 num font-bold text-sm">
-                                  {new Date(weekLock.deadline).toLocaleString()}
+                                  {new Date(nextLockAt).toLocaleString()}
                                 </span>
-                                <CountdownTo deadline={weekLock.deadline} onExpire={() => setLockTick(t => t + 1)} />
+                                <CountdownTo deadline={nextLockAt} onExpire={() => setLockTick(t => t + 1)} />
                               </div>
                             )}
                           </div>

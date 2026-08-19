@@ -11,6 +11,7 @@ import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { loadDraft, saveDraft, clearDraft } from '../../utils/draftStore';
 import { pickHighlightLabel } from '../../utils/pickHighlight';
 import { poolUsesSpreads } from '../../utils/poolUsesSpreads';
+import { nflLockMode, weekLockOverrideFor, gameLockAt, dropStaleLockedPicks } from '@shared/nflLockMode';
 import { gradePick } from '../../utils/pickemResult';
 import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
 import { confidenceValueOwners, isConfidenceValueTaken } from '../../utils/confidenceWeights';
@@ -72,11 +73,24 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
 
   const confidenceMode = castPool.settings?.confidenceMode ?? false;
   const bufferMinutes = castPool.settings?.lockBufferMinutes ?? 5;
+  // WEEKLY or PER_GAME, from the one shared definition (`shared/nflLockMode.ts`).
+  // Confidence mode forces WEEKLY whatever `lockMode` says, which is the clause
+  // that is easy to miss: such a pool's stored `lockMode` still reads PER_GAME.
+  const lockMode = nflLockMode(castPool.type, castPool.settings);
+  // A commissioner's extendWeekDeadline for this week. The server honours it on
+  // Pick'em (`effectiveGameLockAt` takes max(base, override)); before this
+  // change the sheet ignored it, so an approved extension never reopened
+  // anything for the member it was granted for.
+  const weekLockOverrideMs = weekLockOverrideFor(castPool, week);
   const draftKey = `pickem:${pool.id}:${week}`;
 
   // Re-evaluate lock state every 30s so the UI flips to locked in place at T-0
   // instead of accepting taps the server will reject
-  const [, setLockTick] = useState(0);
+  // The VALUE is read now, not only the setter: `canSubmit` and `openGames`
+  // are memos over `isGameLocked`, which reads the clock rather than props,
+  // so without this in their dependency lists they would freeze at whatever
+  // was locked when the sheet mounted. The re-render alone is not enough.
+  const [lockTick, setLockTick] = useState(0);
   useEffect(() => {
     const interval = setInterval(() => setLockTick(t => t + 1), 30_000);
     return () => clearInterval(interval);
@@ -135,10 +149,18 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   }, [N, minVal]);
 
   // Check if a game is locked (server-corrected clock — device time can drift)
+  //
+  // ⚠️ THE `isWeekLocked` SHORT-CIRCUIT IS WEEKLY-ONLY, and its being
+  // unconditional was the production defect this change fixes. The dashboard
+  // passes one week-level flag; taking it as "every game is locked" meant a
+  // PER_GAME pool — the wizard default — closed its whole sheet the moment any
+  // game kicked off, while `submitNFLPicks` (nflPools.ts:568,618-624) would
+  // still have accepted a Sunday pick. The per-game branch below it was
+  // unreachable. Kevin's ruling, 2026-08-18: the manager chooses the option and
+  // the site abides by it.
   const isGameLocked = (game: NFLGame): boolean => {
-    if (isWeekLocked) return true; // Whole week locks
-    const bufferMs = bufferMinutes * 60 * 1000;
-    return serverNow() >= (game.startTime - bufferMs);
+    if (lockMode === 'WEEKLY' && isWeekLocked) return true; // Whole week locks together
+    return serverNow() >= gameLockAt(game.startTime, bufferMinutes, weekLockOverrideMs);
   };
 
   // Records and the crowd split — the two things Kevin's testers asked to see
@@ -195,13 +217,33 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     [games, confidence, confidenceMode],
   );
 
-  // Validate form completeness before permitting submission
+  /**
+   * Validate form completeness before permitting submission.
+   *
+   * ⚠️ "EVERY GAME" MEANS EVERY GAME STILL OPEN, and this clause had to change
+   * with the per-game lock fix or the fix would have made things worse. The old
+   * rule required a pick on all N games. That was unreachable before, because
+   * the sheet closed entirely at the first kickoff — but once per-game pools
+   * stay open, a member who misses the Thursday game can never pick it, so an
+   * all-N rule would block their Sunday submission for the rest of the week
+   * with "Pick all 16 games to submit" beside a game they cannot touch.
+   *
+   * The server already accepts this: `submitNFLPicks` merges
+   * `{ ...existing, ...picks }` and refuses a locked game only when its pick
+   * CHANGED (nflPools.ts:618-624), so a sheet that omits a missed game is a
+   * valid submission rather than a partial one.
+   *
+   * Confidence mode is unaffected: it forces WEEKLY locking, so while the week
+   * is open no individual game is locked and this reads exactly as it did.
+   */
   const canSubmit = useMemo(() => {
+    void lockTick; // re-evaluate as games lock; isGameLocked reads the clock
     if (games.length === 0) return false;
 
-    // Check if every game has a pick
-    const allPicked = games.every(g => !!picks[g.id]);
-    if (!allPicked) return false;
+    const allOpenPicked = games.every(g => isGameLocked(g) || !!picks[g.id]);
+    if (!allOpenPicked) return false;
+    // A sheet whose every game has locked has nothing left to send.
+    if (games.every(g => isGameLocked(g))) return false;
 
     // In confidence mode, all values must be unique and set
     if (confidenceMode) {
@@ -211,7 +253,15 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     }
 
     return true;
-  }, [games, picks, confidence, confidenceMode, duplicateConfidenceValues]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [games, picks, confidence, confidenceMode, duplicateConfidenceValues, lockMode, isWeekLocked, bufferMinutes, weekLockOverrideMs, lockTick]);
+
+  /** Games still open for editing — what the blocked-reason message counts. */
+  const openGames = useMemo(() => {
+    void lockTick;
+    return games.filter(g => !isGameLocked(g));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [games, lockMode, isWeekLocked, bufferMinutes, weekLockOverrideMs, lockTick]);
 
   // How much of THIS week's slate the server already holds, and whether the
   // sheet on screen still matches it. Drives the submit button's three states.
@@ -314,12 +364,48 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     setIsSubmitting(true);
     setValidationError(null);
 
+    /**
+     * DROP A LOCKED GAME WHOSE PICK NEVER REACHED THE SERVER (codex P1).
+     *
+     * `submitNFLPicks` refuses a locked game whose pick CHANGED
+     * (nflPools.ts:618-624), and it refuses the WHOLE submission when it does.
+     * So a member who tapped Thursday, did not save, and came back on Sunday
+     * would have every open Sunday pick rejected because of one stale Thursday
+     * selection they can no longer edit.
+     *
+     * Before the per-game fix this was unreachable — the sheet closed entirely
+     * at the first kickoff. It is the ordinary path now, which is why it is
+     * handled here rather than left as a race.
+     *
+     * A locked pick that MATCHES the saved entry is kept: the server compares
+     * rather than rejects outright, and sending it costs nothing.
+     */
+    const lockedById = new Map(games.map(g => [g.id, isGameLocked(g)]));
+    const { picks: submittablePicks, droppedGameIds } = dropStaleLockedPicks(
+      games.map(g => g.id),
+      picks,
+      (entry?.picks ?? {}) as Record<string, string>,
+      id => lockedById.get(id) === true,
+    );
+    if (droppedGameIds.length > 0) {
+      // Never silently: the pick disappears off their sheet on the next load,
+      // and a member who is not told will read that as the app losing it.
+      toast.info(
+        droppedGameIds.length === 1
+          ? 'One game locked before you saved it, so that pick could not be counted. The rest are being saved.'
+          : `${droppedGameIds.length} games locked before you saved them, so those picks could not be counted. The rest are being saved.`,
+      );
+    }
+
     // Same requestId on retry — the server treats a resend as a no-op success,
     // so a lost response can never double-write
     const payload = {
       poolId: pool.id,
       week,
-      picks,
+      picks: submittablePicks,
+      // Confidence forces WEEKLY locking, so no game is ever individually
+      // locked while the week is open and `submittablePicks` is the whole map
+      // here. Kept aligned anyway rather than relying on that from a distance.
       confidence: confidenceMode ? confidence : undefined,
       // Omitted under NONE — the sheet never asked, so sending the default 40
       // would store a prediction the member did not make. `submitNFLPicks`
@@ -717,7 +803,8 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
             isWeekLocked ? 'Picks are locked for this week'
               : canSubmit ? null
                 : duplicateConfidenceValues.size > 0 ? 'Two games share a confidence weight'
-                  : pickedCount < games.length ? `Pick all ${games.length} games to submit`
+                  : openGames.some(g => !picks[g.id])
+                    ? `Pick all ${openGames.length} open ${openGames.length === 1 ? 'game' : 'games'} to submit`
                     : 'Set a confidence weight for every game'
           }
           onSave={handleSubmit}

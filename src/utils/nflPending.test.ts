@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 // Firebase out of the import graph entirely.
 vi.mock('./serverClock', () => ({ now: () => 0 }));
 
-import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks, isWeekLockedNow } from './nflPending';
+import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks, isWeekLockedNow, getWeekStatus, weekDeadline, isWeekComplete } from './nflPending';
 import type { NFLGame } from '../types';
 
 /**
@@ -186,5 +186,127 @@ describe('isWeekLockedNow', () => {
         // An override EARLIER than the natural deadline changes nothing.
         const future = [at('b', 10_000_000)];
         expect(isWeekLockedNow(future, 0, 'PER_GAME', -1)).toBe(false);
+    });
+});
+
+/**
+ * The week checklist and the "picks due" CTA shared the pick sheet's defect.
+ *
+ * `getWeekStatus` marked a week `missed` once the EARLIEST kickoff passed, so a
+ * per-game pool told a member the week was missed while their Sunday picks were
+ * still open and the sheet still accepted them. Same bug, different surface;
+ * found by self-review after the sheet was fixed. The stubbed clock is t=0, so
+ * a negative kickoff is in the past.
+ */
+describe('getWeekStatus follows the pool lock mode', () => {
+    const at = (id: string, startTime: number) => ({ ...game(id, 1, 2), startTime } as NFLGame);
+    // One game kicked off, one still to come.
+    const slate = [at('thu', -10_000_000), at('sun', 10_000_000)];
+
+    it('a per-game week is still DUE after the first kickoff', () => {
+        expect(getWeekStatus('NFL_PICKEM', null, slate, 1, 0, 'PER_GAME')).toBe('due');
+        // The discriminator: the same slate read as WEEKLY is already missed, so
+        // this does not pass merely because the clock is early.
+        expect(getWeekStatus('NFL_PICKEM', null, slate, 1, 0, 'WEEKLY')).toBe('missed');
+    });
+
+    it('a per-game week is missed once its LAST game has started', () => {
+        const allStarted = [at('thu', -10_000_000), at('sun', -1_000)];
+        expect(getWeekStatus('NFL_PICKEM', null, allStarted, 1, 0, 'PER_GAME')).toBe('missed');
+    });
+
+    it('defaults to WEEKLY, so an un-migrated caller keeps its old reading', () => {
+        expect(getWeekStatus('NFL_PICKEM', null, slate, 1, 0)).toBe('missed');
+    });
+});
+
+describe('weekDeadline follows the pool lock mode', () => {
+    const at = (id: string, startTime: number) => ({ ...game(id, 1, 2), startTime } as NFLGame);
+    const slate = [at('thu', 1_000), at('sun', 9_000)];
+
+    it('is the LAST kickoff on per-game and the FIRST on weekly', () => {
+        expect(weekDeadline(slate, 0, 'PER_GAME')).toBe(9_000);
+        expect(weekDeadline(slate, 0, 'WEEKLY')).toBe(1_000);
+    });
+
+    it('defaults to WEEKLY', () => {
+        expect(weekDeadline(slate, 0)).toBe(1_000);
+    });
+
+    it('is null for an empty slate', () => {
+        expect(weekDeadline([], 0, 'PER_GAME')).toBeNull();
+    });
+});
+
+/**
+ * The two halves the lock-mode fix left behind, both found by qodo on #482.
+ *
+ * Fixing the pick sheet without these left the checklist contradicting it: an
+ * extended week still read as missed at the ORIGINAL deadline, and a member who
+ * had saved every pick they could still make was told to "Make Picks" forever
+ * because completion counted a game they were never able to answer.
+ */
+describe('week status honours a commissioner extension', () => {
+    const at = (id: string, startTime: number) => ({ ...game(id, 1, 2), startTime } as NFLGame);
+    // Both kicked off; without an extension the week is over on any reading.
+    const slate = [at('thu', -10_000_000), at('sun', -1_000)];
+
+    it('an extended week is still DUE past its original deadline', () => {
+        // Clock is stubbed at 0; the extension runs to t=60s.
+        expect(getWeekStatus('NFL_PICKEM', null, slate, 1, 0, 'PER_GAME')).toBe('missed');
+        expect(getWeekStatus('NFL_PICKEM', null, slate, 1, 0, 'PER_GAME', 60_000)).toBe('due');
+    });
+
+    it('the deadline shown moves with it, and only ever later', () => {
+        expect(weekDeadline(slate, 0, 'PER_GAME', 60_000)).toBe(60_000);
+        // An override EARLIER than the natural deadline changes nothing.
+        expect(weekDeadline(slate, 0, 'PER_GAME', -9_999_999)).toBe(-1_000);
+    });
+});
+
+describe('a week is complete once nothing pickable is left', () => {
+    const at = (id: string, startTime: number) => ({ ...game(id, 1, 2), startTime } as NFLGame);
+    const slate = [at('thu', -10_000_000), at('sun', 10_000_000)];
+    // Missed Thursday entirely; picked the Sunday game that is still open.
+    const entry = { picks: { sun: 'BUF' } };
+
+    it('does not count a game the member can no longer pick', () => {
+        const closed = (g: NFLGame) => g.id === 'thu';
+        expect(isWeekComplete('NFL_PICKEM', entry, slate, 1, closed)).toBe(true);
+        // Without that knowledge it reads incomplete — which is the old
+        // behaviour, and why "Make Picks" never went away.
+        expect(isWeekComplete('NFL_PICKEM', entry, slate, 1)).toBe(false);
+    });
+
+    it('still reports incomplete while an OPEN game is unpicked', () => {
+        const closed = (g: NFLGame) => g.id === 'thu';
+        expect(isWeekComplete('NFL_PICKEM', { picks: {} }, slate, 1, closed)).toBe(false);
+    });
+
+    /**
+     * The over-correction, caught by codex on the fix for qodo #10.
+     *
+     * Exempting every closed game turns a WHOLLY missed slate into "picks
+     * submitted" the moment the last game kicks off — the checklist would tell
+     * a member who never played that their picks are in. The exemption is for a
+     * PARTIALLY answered week, which is the case it was written for.
+     */
+    it('a member who answered NOTHING has not completed the week', () => {
+        const allClosed = () => true;
+        expect(isWeekComplete('NFL_PICKEM', { picks: {} }, slate, 1, allClosed)).toBe(false);
+        // …while one answer plus closed remainder IS complete, so the rule is
+        // "answered something", not "closed games never count".
+        expect(isWeekComplete('NFL_PICKEM', { picks: { sun: 'BUF' } }, slate, 1, allClosed)).toBe(true);
+    });
+
+    it('a fully locked, wholly unanswered week reads as missed end to end', () => {
+        const bothStarted = [at('thu', -10_000_000), at('sun', -1_000)];
+        expect(getWeekStatus('NFL_PICKEM', { picks: {} }, bothStarted, 1, 0, 'PER_GAME')).toBe('missed');
+    });
+
+    it('the checklist stops nagging once the open games are saved', () => {
+        // End to end through getWeekStatus, which derives `closed` itself.
+        expect(getWeekStatus('NFL_PICKEM', entry, slate, 1, 0, 'PER_GAME')).toBe('complete');
+        expect(getWeekStatus('NFL_PICKEM', { picks: {} }, slate, 1, 0, 'PER_GAME')).toBe('due');
     });
 });

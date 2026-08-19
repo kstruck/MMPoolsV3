@@ -2,6 +2,7 @@ import React from 'react';
 import { AlertTriangle, ArrowRight, Check, X, Square, Dot, Minus } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
 import { gamesForPoolWeek, getWeekStatus, poolSeasonType, weekDeadline, type WeekStatus } from '../../utils/nflPending';
+import { nflLockMode, weekLockOverrideFor } from '@shared/nflLockMode';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { formatDeadline } from '../../utils/formatTime';
 import { now as serverNow } from '../../utils/serverClock';
@@ -58,8 +59,15 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
         // Per week, because a hard-lock pool's deadline is frozen per week — the
         // checklist must show the deadline the server actually enforces.
         const lockBufferMinutes = effectiveBufferMinutesForWeek(castPool, week, weekGames.map(g => g.startTime));
-        const status = getWeekStatus(pool.type, entry, weekGames, week, lockBufferMinutes);
-        return { week, status, deadline: weekDeadline(weekGames, lockBufferMinutes) };
+        // The pool's own lock rule, not an assumed weekly one: a PER_GAME week is
+        // not missed because its Thursday game started.
+        const lockMode = nflLockMode(castPool.type, castPool.settings);
+        // …and the commissioner's extension for THIS week, or an extended week
+        // reads as missed at its original deadline while the sheet still takes
+        // picks (qodo #9).
+        const overrideMs = weekLockOverrideFor(castPool, week);
+        const status = getWeekStatus(pool.type, entry, weekGames, week, lockBufferMinutes, lockMode, overrideMs);
+        return { week, status, deadline: weekDeadline(weekGames, lockBufferMinutes, lockMode, overrideMs) };
     });
 
     // The week the pool is IN: the earliest week whose deadline has not passed.
