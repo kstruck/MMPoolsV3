@@ -150,6 +150,20 @@ describe('overlay shells register with the overlay stack', () => {
     }
   });
 
+  it('no two overlays share an id', () => {
+    // The stack is keyed by id: `isForeignOverlayOpen` compares the top entry
+    // to the caller's id, so two overlays answering to one id make the Help
+    // panel think a foreign overlay is its own — or the reverse. Copy-pasting
+    // a shell and forgetting the id is exactly how that happens.
+    const ids: string[] = [];
+    for (const file of componentFiles()) {
+      const source = fs.readFileSync(path.join(COMPONENTS_DIR, file), 'utf8');
+      for (const m of source.matchAll(/<OverlayRoot\s+id="([^"]+)"/g)) ids.push(m[1]);
+    }
+    expect(ids.length).toBeGreaterThanOrEqual(30);
+    expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
+  });
+
   it('the six shells T2 migrated by hand still carry the marker', () => {
     const t2 = [
       'modals/AuthModal.tsx',
