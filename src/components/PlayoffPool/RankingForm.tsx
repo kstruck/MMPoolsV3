@@ -1,3 +1,4 @@
+import { OverlayRoot } from '../ui/OverlayRoot';
 import React, { useState, useEffect } from 'react';
 import { GripVertical, Check, Save, Loader, AlertTriangle, Lock, ChevronUp, ChevronDown } from 'lucide-react';
 import type { PlayoffPool, PlayoffTeam, User } from '../../types';
@@ -381,7 +382,7 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
 
             {/* CONFIRMATION MODAL */}
             {isConfirming && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                <OverlayRoot id="playoff-confirm-submission" label="Confirm submission" onEscape={() => { if (!isSubmitting) setIsConfirming(false); }} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
                     <div className="bg-card border border-line p-6 rounded-xl shadow-panel max-w-md w-full">
                         <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-4 flex items-center gap-2">
                             {isSubmitting ? <Loader className="animate-spin text-gold-500" /> : <Check className="text-[#0F7B4A]" />}
@@ -444,7 +445,7 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                             </Button>
                         </div>
                     </div>
-                </div>
+                </OverlayRoot>
             )}
 
             <AuthModal

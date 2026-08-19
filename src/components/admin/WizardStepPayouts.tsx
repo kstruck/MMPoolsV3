@@ -1,3 +1,4 @@
+import { OverlayRoot } from '../ui/OverlayRoot';
 import React, { useState } from 'react';
 import { Trophy, Zap, Users, Activity, CheckCircle, Shield, Heart, AlertTriangle } from 'lucide-react';
 import type { GameState, PayoutConfig } from '../../types';
@@ -435,7 +436,7 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
 
             {/* Random Draw Warning Modal */}
             {showRandomDrawWarning && (
-                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 animate-in fade-in">
+                <OverlayRoot id="squares-random-draw-warning" label="Random draw warning" onEscape={() => setShowRandomDrawWarning(false)} className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 animate-in fade-in">
                     <div className="bg-surface border border-gold-500/50 rounded-2xl p-6 max-w-md mx-4 shadow-panel animate-in zoom-in-95">
                         <div className="flex items-start gap-4 mb-4">
                             <div className="p-3 bg-gold-500/20 rounded-xl text-gold-700 dark:text-gold-400">
@@ -467,7 +468,7 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                             </button>
                         </div>
                     </div>
-                </div>
+                </OverlayRoot>
             )}
         </div>
     );

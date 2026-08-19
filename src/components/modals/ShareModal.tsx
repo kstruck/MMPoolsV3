@@ -59,7 +59,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUr
     };
 
     return (
-        <div
+        <div data-overlay-root=""
             className="fixed inset-0 bg-navy-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200"
             onClick={onClose}
         >

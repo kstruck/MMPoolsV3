@@ -1,3 +1,4 @@
+import { OverlayRoot } from '../ui/OverlayRoot';
 import React, { useState, useMemo } from 'react';
 import { BillingGate } from '../billing';
 import type { PlayoffPool, User } from '../../types';
@@ -576,7 +577,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
             </div>
             {/* View Picks Modal */}
             {viewingEntry && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+                <OverlayRoot id="playoff-view-entry" label="Player picks" onEscape={() => setViewingEntry(null)} className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
                     <div className="bg-card rounded-xl border border-line shadow-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
                         <div className="p-6 border-b border-line flex justify-between items-center sticky top-0 bg-card z-10">
                             <div>
@@ -635,7 +636,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                             </Button>
                         </div>
                     </div>
-                </div>
+                </OverlayRoot>
             )}
         </div >
         </BillingGate>

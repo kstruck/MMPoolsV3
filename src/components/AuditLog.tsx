@@ -1,3 +1,4 @@
+import { OverlayRoot } from './ui/OverlayRoot';
 import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
@@ -147,7 +148,7 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
     const counts = getCounts();
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex justify-end">
+        <OverlayRoot id="pool-audit-log" label="Audit log and disputes" onEscape={onClose} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex justify-end">
             <div className="w-full max-w-2xl bg-surface h-full border-l border-line shadow-panel flex flex-col animate-in slide-in-from-right duration-300">
                 {/* Header */}
                 <div className="p-6 border-b border-line flex justify-between items-center bg-page">
@@ -225,6 +226,6 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
                     ))}
                 </div>
             </div>
-        </div>
+        </OverlayRoot>
     );
 };

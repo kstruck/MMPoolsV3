@@ -1,3 +1,4 @@
+import { OverlayRoot } from '../ui/OverlayRoot';
 import { logger } from '../../utils/logger';
 import React, { useRef, useState, useEffect } from 'react';
 import type { BracketEntry, Tournament } from '../../types';
@@ -86,7 +87,7 @@ export const BracketShareModal: React.FC<BracketShareModalProps> = ({ entry, tou
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-navy-950/80 backdrop-blur-sm p-4">
+        <OverlayRoot id="bracket-share-card" label="Share your bracket" onEscape={onClose} className="fixed inset-0 z-[100] flex items-center justify-center bg-navy-950/80 backdrop-blur-sm p-4">
 
             {/* The Hidden Card to Capture */}
             <div className="absolute top-0 left-0 -z-50 overflow-hidden" style={{ opacity: 0, pointerEvents: 'none' }}>
@@ -203,6 +204,6 @@ export const BracketShareModal: React.FC<BracketShareModalProps> = ({ entry, tou
                     </div>
                 )}
             </div>
-        </div>
+        </OverlayRoot>
     );
 };

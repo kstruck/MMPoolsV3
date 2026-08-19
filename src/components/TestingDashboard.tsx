@@ -1,3 +1,4 @@
+import { OverlayRoot } from './ui/OverlayRoot';
 import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import {
@@ -354,7 +355,7 @@ export const TestingDashboard: React.FC = () => {
 const ReportModal = ({ isOpen, onClose, report }: { isOpen: boolean; onClose: () => void; report: any }) => {
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-sm">
+        <OverlayRoot id="test-suite-report" label="Full AI analysis" onEscape={onClose} className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-sm">
             <div className="bg-card w-full max-w-4xl max-h-[90vh] rounded-2xl border border-line shadow-panel flex flex-col">
                 <div className="p-6 border-b border-line flex justify-between items-center bg-surface rounded-t-2xl">
                     <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
@@ -380,6 +381,6 @@ const ReportModal = ({ isOpen, onClose, report }: { isOpen: boolean; onClose: ()
                     </button>
                 </div>
             </div>
-        </div>
+        </OverlayRoot>
     );
 };
