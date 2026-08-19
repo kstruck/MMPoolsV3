@@ -107,4 +107,34 @@ describe('OverlayRoot', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(document.activeElement).toBe(opener);
   });
+
+  it('returns focus to the opener even when a child autofocuses', () => {
+    // The regression codex found on round 3: React fires a child's `autoFocus`
+    // during commit, BEFORE effects run. Reading `document.activeElement` in an
+    // effect records that input, which is detached by the time the overlay
+    // closes — so focus went nowhere. Several migrated overlays autofocus a
+    // field (guest details, coupon mint, bracket name).
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>Open</button>
+          {open && (
+            <OverlayRoot id="autofocus-modal" label="Autofocus modal" className="fixed inset-0">
+              <input autoFocus aria-label="Name" />
+              <button onClick={() => setOpen(false)}>Close</button>
+            </OverlayRoot>
+          )}
+        </>
+      );
+    }
+    render(<Harness />);
+    const opener = screen.getByRole('button', { name: 'Open' });
+    opener.focus();
+    fireEvent.click(opener);
+    expect(document.activeElement).toBe(screen.getByLabelText('Name'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(document.activeElement).toBe(opener);
+  });
 });

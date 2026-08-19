@@ -22,7 +22,7 @@
 // The prop types below make `label` mandatory for the ones that DO claim it —
 // a dialog with no accessible name is the other half of the same lie.
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useOverlayOwner } from './overlayStack';
 
 interface OverlayRootBase {
@@ -62,18 +62,26 @@ export const OverlayRoot: React.FC<OverlayRootProps> = ({
   // moved INTO the overlay and NOT trapped inside it — that needs a per-modal
   // decision about which control should receive it, which this component
   // cannot make. The modals that already do it keep doing it.
-  const restoreTo = useRef<HTMLElement | null>(null);
+  //
+  // The opener is read in a state INITIALISER, which runs before the commit
+  // that fires a child's `autoFocus`. An effect runs after it, and would record
+  // the autofocused input inside the overlay instead — that input is detached
+  // by the time the cleanup runs, so focus would land on nothing at all (codex,
+  // round 3, naming the guest-details, coupon-mint and bracket-name overlays).
+  // `<body>` is not an opener: it is what `activeElement` reports when nothing
+  // is focused, and focusing it back is worse than leaving focus alone.
+  const [opener] = useState<HTMLElement | null>(() => {
+    if (typeof document === 'undefined') return null;
+    const el = document.activeElement;
+    return el instanceof HTMLElement && el !== document.body ? el : null;
+  });
   useEffect(() => {
     if (!active) return;
-    restoreTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     return () => {
-      const target = restoreTo.current;
-      restoreTo.current = null;
-      // A node detached with the overlay cannot take focus back; skip rather
-      // than dropping focus onto <body> and losing the reader's place.
-      if (target && target.isConnected) target.focus();
+      // A node detached with the overlay cannot take focus back.
+      if (opener?.isConnected) opener.focus();
     };
-  }, [active]);
+  }, [active, opener]);
 
   const isDialog = dialog && active;
 
