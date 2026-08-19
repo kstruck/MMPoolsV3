@@ -49,6 +49,14 @@ export const NFL_SHARED_TOPICS: readonly HelpTopic[] = [
     //     put it past kickoff. Hard-lock types get `undefined` there and cannot
     //     be extended at all (codex round 2).
     //
+    // NOTHING IS CLAIMED ABOUT CHANGING THE SETTING MID-WEEK, IN EITHER
+    // DIRECTION, and both halves of that were found by review. Narrowing a
+    // Survivor or Margin buffer does NOT move an already-frozen week later
+    // (`Math.min(frozen, computed)` keeps the frozen one — codex round 5), and
+    // widening one is not reliably held either, per the residual below. So the
+    // copy states the setting and the tip warns off mid-week changes, without
+    // describing a mechanism that is true in only one direction.
+    //
     // NO GUARANTEE ABOUT MOVING A DEADLINE BACK OUT. `resolveHardWeekLock()`
     // is `Math.min(frozen, computed)`, which reads like "a week's deadline may
     // only ever move earlier" — and an earlier draft of this topic said
@@ -62,13 +70,13 @@ export const NFL_SHARED_TOPICS: readonly HelpTopic[] = [
     title: 'When picks close',
     short: 'How long before kickoff picks close. Five minutes is the default; a Pick’em pool can set none.',
     long: [
-      'A pick closes this many minutes before the kickoff it depends on. A Pick’em pool can also set none, which closes the pick at kickoff itself.',
+      'This is how far ahead of a kickoff a pick closes. A Pick’em pool can also set none, which closes the pick at kickoff itself.',
       'Which kickoff that is depends on the pool. A Pick\u2019em pool that locks per game counts from each game\u2019s own kickoff; a Pick\u2019em pool that locks weekly counts from the first kickoff of the week. Survivor and Margin always count from the first kickoff of the week, and their shortest setting is five minutes \u2014 those formats never leave a pick open once a game is running.',
       'On a Pick’em pool your commissioner can extend a week, which moves that week’s deadline later — later than this setting says, and past kickoff if they choose. Survivor and Margin weeks cannot be extended.',
       'Your pool home counts down to the next deadline and names the date and time it falls on. The pick sheet marks a game whose pick has closed, and that pick cannot be changed.',
     ].join('\n\n'),
     tips: [
-      'Change it between weeks rather than during one. Your members read the deadline off the pool home, so moving it while a week is running changes what some of them have already been told.',
+      'Change it between weeks rather than during one. Changing it while a week is running is not a reliable way to move that week’s deadline, and your members read the deadline off the pool home — so some of them have already been told a different one.',
     ],
     poolTypes: NFL_SEASON_TYPES,
     audience: EVERYONE,
