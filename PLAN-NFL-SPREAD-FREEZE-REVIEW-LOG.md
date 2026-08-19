@@ -306,3 +306,60 @@ this artifact earned them: it is a plan whose entire subject is an invariant,
 and eight of the twelve findings were places the plan broke its own invariant.
 That is a good use of the budget on a document; it would be a bad sign on a
 diff.
+
+
+---
+
+# Revision 1 — the write-once store (2026-08-19)
+
+Kevin: *"Go with your recommendation for all."* Nine further codex rounds on the
+revision, under the §2c cap of 10. **Fourteen findings, all valid, all absorbed;
+nine were P1.** Round 9 clean.
+
+**What triggered the revision** was not codex but a hand read of the Spread
+Manager while planning Phase 2: `handleSave` (`:84-96`) writes **every game in
+the fetched list**, whole-map. Every operator Save would have erased `frozenAt`
+and `overrideId` on all sixteen games — the tool the plan tells you to use,
+wiping the markers the plan depends on. That made twenty findings of the same
+shape and settled the design question the previous section had only posed.
+
+## The rounds
+
+| # | Finding | Absorbed as |
+|---|---|---|
+| 1 | The pick sheet renders `nfl_games.spread` via `GameMeta`, so after a freeze a player could be **shown one number and graded on another** — breaking the requirement more directly than the original bug | one precedence rule, `frozen ?? working`, covering read AND display, with a component test |
+| 1 | `nflSpreadRescoreTrigger` watches `nfl_games`; the override now writes elsewhere, so an approved correction would never enqueue | enqueue follows the data |
+| 2 | Legacy locked slates have no frozen record, so reads fall back to a field the revision leaves fully mutable — **a live slate alterable at pick time and grading**, worse than today | backfill promoted from tidy-up to **precondition**, with the kill-switch + dry-run house shape |
+| 3 | Routing the enqueue through the callable covers one writer; the trigger it replaced covered **every** writer. A console write would leave standings stale — a regression | trigger on the frozen store, `retry: true`; audit exemption stays a separate question |
+| 4 | **The manual backstop dies.** The freeze fetches ESPN and the override only corrects; nothing could turn operator-entered values into frozen records, so a gap week blocks ATS submissions indefinitely | freeze takes the feed value per game, falling back to the stored working value; all-or-nothing over the union |
+| 4 | `nflLockWatch` counts coverage off `nfl_games.spread.locked` — it would page on **every successful freeze** | watcher resolves frozen records with the same precedence |
+| 5 | 1.1's once-per-slate test still read `nfl_games.spread.frozenAt`, which the revision no longer writes — resurrecting the round-7 re-freeze defect by moving the data | eligibility keys on frozen-record existence |
+| 5 | The revision dropped the override's CREATE shape, leaving a late-added game with no path to a frozen line — R3's remediation gone | both shapes restored against the new store |
+| 6 | A **delete** of a frozen record is a canonical-line change with no `after` document; the slate key exists only in `before` | key derived from `before.slate`; deletes always unapproved |
+| 6 | Every scheduled freeze creates records without an `overrideId`, so "no fresh id = unapproved" would file all sixteen games weekly as unauthorized | `source` discriminator |
+| 7 | The first `source` rule still demanded an `overrideId` from writes that by design never carry one | approval judged **per source**, as a table |
+| 8 | The backfill payload omitted `source: 'backfill'` | added |
+| 8 | The override payload omitted `source: 'override'` | added, both paths |
+
+## Own read
+
+**Three times in this plan a detector was aimed at the mechanism it exists to
+protect** — round 5 of the original (the freeze flagged itself), round 6 here
+(every freeze unapproved), round 8 here (every override unapproved). That is not
+carelessness repeated; it is what happens when the thing being watched and the
+thing doing the watching are specified in different paragraphs. The rule the
+plan now carries — *every writer declares itself, and every payload spec carries
+that declaration* — is the generalisation, and it is worth more than the three
+fixes.
+
+**The revision is a better design and the rounds say so in a specific way:**
+nine of fourteen findings were about wiring the new store into readers that
+already existed, not about the invariant leaking. The original's findings were
+the opposite — the invariant leaking through writers, endlessly. Wiring is
+finite and testable; leaking is not.
+
+## Verdict
+
+Revision 1 is fit to implement, and supersedes the shape of Phases 1 and 2.
+Nothing carried forward. **Implementation still waits on Kevin reading it** — it
+is a design he has not seen, arrived at by delegation.
