@@ -1,4 +1,4 @@
-# MORNING 2026-08-19 (help system) — T16 built, two topics released, and qodo is out of credits
+# MORNING 2026-08-19 (help system) — T16 shipped, the lock topics shipped, qodo turned off
 
 This file **continues** `MORNING-2026-08-18-HELP-T9.md`, which continues
 `MORNING-2026-08-18-HELP.md`. Both stay accurate; nothing here replaces either.
@@ -6,51 +6,63 @@ This file **continues** `MORNING-2026-08-18-HELP-T9.md`, which continues
 `MORNING-2026-08-18.md` remains the entry point for the PLAN-PAYMENT-LEDGER
 work and this does not touch it.
 
-> 🔴 **NOTHING MERGED TONIGHT, AND IT IS NOT BECAUSE THE WORK IS UNFINISHED.**
-> **qodo ran out of credits partway through the night.** It reviewed #482
-> normally at 03:33Z and by 05:04Z it was posting nothing but
-> *"Qodo reviews are paused because your workspace is out of credits."* on
-> every new PR. `CLAUDE.md` §2b makes qodo half of the mandatory joint gate, and
-> a billing block is the strongest possible form of "did not report" — so two
-> finished PRs are sitting open rather than merged. **Step 1 of the runbook is
-> yours and takes five minutes.**
+> ✅ **ALL THREE PRs ARE MERGED AND THE qodo QUESTION IS CLOSED.** This page was
+> written overnight saying the opposite, because at the time it was true: qodo
+> had run out of credits and `CLAUDE.md` §2b made it half of a mandatory gate,
+> so #483, #484 and #485 sat finished and unmerged. On 2026-08-19 Kevin ruled
+> **"Turn off the Qodo reviews for now"** and merged all three. §1 records the
+> ruling and what it changes; §7 is what is left, and it starts with a Coolify
+> redeploy.
 
 ---
 
-## 1. 🔴 qodo is out of credits — the one thing that needs you
+## 1. ✅ qodo is off, and all three PRs are in
 
-**What happened.** qodo reviewed #482 at 03:33Z tonight. Every PR opened after
-that got a single comment instead of a review:
+**The ruling.** Kevin, 2026-08-19: *"Turn off the Qodo reviews for now."*
 
-> ⓘ **Qodo reviews are paused because your workspace is out of credits.** Ask
-> your workspace admin to add credits to resume reviews.
+**What it changes — written into the rules rather than left on this page.**
 
-**Why it stopped the night's work rather than slowing it.** `CLAUDE.md` §2b
-says the stopping rule is joint — qodo clean **AND** codex clean **AND** my own
-read of the diff. `.claude/skills/mmp-qodo-cycle/SKILL.md` §3 is explicit that a
-billing notice is a FAILED check and must be reported to you as a subscription
-problem, never counted as a pass. So both PRs below are complete and unmerged.
+- `CLAUDE.md` §2b now says **DORMANT** rather than "check it on every PR". The
+  whole procedure is kept, folded into a `<details>` block, exactly as it was
+  during the 2026-07-25 → 2026-07-30 pause. This is a pause, not a deletion.
+- `CLAUDE.md` §2c's stopping rule is **two conditions, not three**: a clean
+  codex round AND your own read of the diff. A PR is never held waiting for a
+  review that cannot arrive.
+- **The codex cap is 10, flat.** The "5 past the cap" exception exists only to
+  serve a qodo finding, so with qodo off nothing can force one.
+- `.claude/skills/mmp-qodo-cycle/SKILL.md` is marked DORMANT and says not to
+  load it on a PR.
 
-### Your options
+**What it does NOT change.** CI still gates independently — it was never part of
+the qodo gate. And if the bot posts a real review anyway, read it: its defect
+findings were 5 for 5 valid across #480–#482. It is simply not something to wait
+for.
 
-| | Option | What you get | What you carry |
-|---|---|---|---|
-| **A** | **Add credits, then toggle each PR draft → ready** (recommended) | qodo re-reviews both within ~90 seconds, stamped at the current head. Absorb anything it finds and merge | Five minutes of your time, plus whatever the credits cost |
-| **B** | Merge both on codex + CI + self-review, and say so on each PR | Both land this morning with no further work | Half the mandatory gate was unavailable on a 30-file change that touches every modal in the app. It is a judgement call you are making, not a rule the PRs satisfy |
-| **C** | Leave both open until the subscription is sorted | Nothing to decide now | T16 has been overdue for three days and the `?` shortcut is in production without it |
+**Merged 2026-08-19 14:14Z:** `d4cad066` (#483, T16), `893e921e` (#484, the lock
+topics), `33377543` (#485, this document's first version).
 
-**I would take A.** If the credits are not a quick fix, take **B** for #484
-(five files, content only, seven codex rounds) and hold #483 until qodo can see
-it — that one is the 30-file change.
+### The bot itself is still installed
 
-⚠️ **One thing to fix in the watcher while you are there.** qodo's billing
-notice has no `<h3>` heading, and `mmp-qodo-cycle`'s `summary()` filter matches
-`NOISE` against the heading — so an empty heading passes the filter and the
-notice is **counted as a qodo artifact**. The watcher on #483 therefore reported
-`QODO PARTIAL` instead of `TIMEOUT`. PARTIAL is not a pass either, so nothing
-was mis-gated, but the skill should treat a `qodo:billing-blocked` HTML comment
-as noise regardless of heading. Not fixed tonight — it is a skill edit and it
-wants your eye.
+Turning the gate off is a rules change and it is done. **Removing the qodo
+GitHub App from the repository is a different thing and I cannot do it** — it
+lives in your GitHub account settings and needs your sign-in. Until you do, qodo
+will keep posting its billing notice on every new PR. That is noise now rather
+than a gate, and nothing waits on it.
+
+If you want it silent: **GitHub → your profile → Settings → Applications →
+Installed GitHub Apps → Qodo → Configure**, then either remove `MMPoolsV3` from
+its repository access or uninstall the app. **You should see** no new qodo
+comment on the next PR you open.
+
+### One bug this exposed, not fixed
+
+qodo's billing notice carries **no `<h3>` heading**, and the watcher in
+`mmp-qodo-cycle` §1 matches its `NOISE` filter against the heading — so an empty
+heading passes the filter and the notice is counted as a genuine qodo artifact.
+Measured on #483: the watcher reported `QODO PARTIAL` where it should have
+reported `TIMEOUT`. PARTIAL is not a pass, so nothing was mis-gated. The fix is
+one line — also reject a body containing `<!-- qodo:billing-blocked -->` — and it
+is written into the skill's dormancy note so a restore does not inherit it.
 
 ---
 
@@ -201,8 +213,9 @@ nothing.
   work is written up in §6 so the next session does not re-derive it.
 - **T3, T5–T8, T10–T15.** Unstarted. The order after T4 is unchanged: T3, then
   T10/T11.
-- **No deploy.** Nothing merged, so there is nothing new to deploy. See §7
-  step 4 — a Coolify redeploy is only needed once these PRs land.
+- **The deploy.** All three PRs are merged, so `main` now carries T16 and the
+  lock topics and **none of it is live until `www` is redeployed** — §7 step 1.
+  Coolify has no CLI path from this machine, so it is Kevin's step.
 
 ---
 
@@ -245,87 +258,13 @@ to. The plan's "34" predates the weekly-prize-places editor.
 
 ## 7. Runbook
 
-### Step 1 — add qodo credits *(the only blocking one)*
+Three steps of this were about qodo credits. They are gone: Kevin turned the
+gate off and merged all three PRs, so the list starts at the deploy.
 
-1. Open **https://app.qodo.ai/account/billing/manage-subscription** in a
-   browser and sign in.
-2. Add credits to the workspace. **You should see** the workspace credit balance
-   above zero when you are done.
-3. **If the page says the subscription itself has lapsed** rather than the
-   credits, that is a different problem — tell me and I will hold both PRs.
+### Step 1 — redeploy `www` in Coolify
 
-### Step 2 — make qodo re-review the two open PRs
-
-Run these one at a time. **PowerShell 5.1 rejects `&&`, so there is one command
-per box on purpose.**
-
-```bash
-gh pr ready 483 --undo
-```
-
-```bash
-gh pr ready 483
-```
-
-**You should see** `✓ Marked pull request #483 as a draft` and then
-`✓ Marked pull request #483 as ready for review`. Now the same for #484:
-
-```bash
-gh pr ready 484 --undo
-```
-
-```bash
-gh pr ready 484
-```
-
-**You should see** a qodo review appear on each PR within about 90 seconds —
-first a *"Qodo is busy working"* placeholder, then a **PR Summary by Qodo**
-comment, and then a **Code Review by Qodo** comment which can land ten or more
-minutes later. **The Code Review comment is the review**; the summary is not.
-
-**If nothing appears within 20 minutes**, stop and tell me — do not merge on a
-missing review.
-
-### Step 3 — merge, once qodo has actually reported AND SETTLED
-
-⚠️ **The first sight of a "Code Review by Qodo" comment is not the review.**
-qodo EDITS that comment in place afterwards, and on #346 it went from
-`Bugs (0)` to `Bugs (3)` minutes later — `created_at` never moved. Merging on
-first sight would satisfy the gate against findings qodo had not finished
-writing.
-
-**The safe move is to hand it back to me.** Paste both PR links into a session
-and say "run the qodo cycle" — the watcher in
-`.claude/skills/mmp-qodo-cycle/SKILL.md` settles on the comment's `updated_at`
-holding steady and will not report until it does.
-
-**If you would rather do it yourself:** wait until at least **fifteen minutes**
-after the Code Review comment first appears, reload the PR, and check the bug
-count in that comment is the same number you saw before. Only then is it the
-review.
-
-Then, and only then, with its findings either fixed or answered:
-
-1. Read the qodo findings on **#483** first — it is the 30-file change.
-2. If it found nothing, merge it:
-
-```bash
-gh pr merge 483 --squash
-```
-
-3. Then #484:
-
-```bash
-gh pr merge 484 --squash
-```
-
-4. **If qodo found something on either**, do not merge that one — paste the
-   finding to me and I will absorb it. Its defect findings have been 5 for 5
-   valid across #480–#482.
-
-### Step 4 — redeploy `www` in Coolify *(only after step 3)*
-
-Both PRs change the shipped bundle. Neither breaks anything while it waits.
+All three merged PRs change the shipped bundle. Nothing breaks while it waits,
+but none of last night's work is live until this runs.
 
 1. Open the **Coolify dashboard** in your browser.
 2. Select the **`www` / march-melee-pools frontend** application — the same one
@@ -339,7 +278,7 @@ Both PRs change the shipped bundle. Neither breaks anything while it waits.
 6. **If the build fails**, copy the last ~30 lines of the log and send them to
    me. Do not retry more than once — the same failure twice is a real failure.
 
-### Step 5 — check T16 in production, about two minutes *(after step 4)*
+### Step 2 — check T16 in production, about two minutes *(after step 1)*
 
 1. Go to **https://marchmeleepools.com** and sign in.
 2. Open one of your own pools and press the **`?`** key. The Help panel should
@@ -354,7 +293,7 @@ Both PRs change the shipped bundle. Neither breaks anything while it waits.
 7. **If any of 3, 5 or 6 misbehaves**, tell me which one and on which pool type.
    That is the whole point of T16 and I would rather hear it than not.
 
-### Step 6 — fix your local test suite, one minute
+### Step 3 — fix your local test suite, one minute
 
 Your untracked `MORNING-2026-08-13-PART2.md` breaks
 `tests/docs-state-invariants.test.ts` locally (§4). Decide what it is:
@@ -370,7 +309,7 @@ Then either commit it, delete it, or rename it so it does not start with
 npx vitest run tests/docs-state-invariants.test.ts
 ```
 
-### Step 7 — answer §3a when you have a minute
+### Step 4 — answer §3a when you have a minute
 
 Not blocking, but it is the last open T9 coverage row and it is the one where
 members are being shown a number the scorer does not use. Reply
@@ -380,14 +319,16 @@ members are being shown a number the scorer does not use. Reply
 
 ## 8. Questions I stopped on
 
-1. **§1 — A, B or C on the qodo credits?** The only blocking one. My answer is
-   **A**.
+1. ~~**§1 — A, B or C on the qodo credits?**~~ **ANSWERED 2026-08-19: neither.**
+   Kevin turned the qodo gate off and merged all three PRs.
 2. **§3a — `pointsPerPick` and `primetimeBonus`: honour them in the scorer, or
-   remove the controls?** Plan-gated either way.
+   remove the controls?** Plan-gated either way, and it is the last open T9
+   coverage row.
 3. **§3b, §3c, §3d — their own tickets, or handled when their surfaces are next
    touched?** T4 touches `NFLManagerView.tsx`, where §3a and §3c live.
 4. **§3d specifically — is it worth a small ticket now?** It cost four widened
    sentences on #480 and four more on #484. My answer is yes, before T10 and
    T11 add two more pool formats' worth of cases.
-5. **§1's watcher note — do you want the `mmp-qodo-cycle` skill fixed to treat
-   `qodo:billing-blocked` as noise?** One-line change, but it is a skill edit.
+5. **Do you want the qodo GitHub App removed from the repo as well as the gate
+   turned off?** §1 has the click-path. Leaving it installed costs nothing but a
+   billing-notice comment per PR.

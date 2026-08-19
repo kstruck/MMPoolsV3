@@ -1,25 +1,42 @@
 ---
 name: mmp-qodo-cycle
 description: >
-  LIVE again as of 2026-07-30 — Kevin's qodo subscription is active and he
-  asked for the check on every PR (CLAUDE.md §2b). **Load this the moment you
-  OPEN a PR or mark one ready for review — not when a report arrives.** The
-  watcher that detects the report lives in here, so waiting for a report
-  before loading the skill is circular and the check never runs. Covers
-  arming the watcher, pulling ALL three comment surfaces (any one can be
-  empty, so a report is not absent until all three are), making a validity
-  call on every finding BEFORE fixing, rerunning the full gate set, and
-  reporting a per-finding verdict table. Runs ALONGSIDE codex (CLAUDE.md
-  §2c), not instead of it.
+  DORMANT as of 2026-08-19 — Kevin: "Turn off the Qodo reviews for now."
+  **DO NOT LOAD THIS ON A PR.** The workspace ran out of credits and qodo now
+  answers every PR with a billing notice, which is a FAILED check rather than
+  a clean one; CLAUDE.md §2b says DORMANT and §2c's stopping rule is a clean
+  codex round plus your own read of the diff, TWO conditions rather than
+  three. Do not arm the watcher and never hold a PR for a qodo report. This
+  is the second pause (the first was 2026-07-25 to 2026-07-30) and the whole
+  procedure is kept intact inside for the day it is restored — arming the
+  watcher, pulling all three comment surfaces, making a validity call on
+  every finding BEFORE fixing, and reporting a per-finding verdict table.
+  Load it ONLY when Kevin says qodo is back on.
 ---
 
 # mmp-qodo-cycle — absorb a qodo.ai PR review autonomously
 
-> ✅ **LIVE as of 2026-07-30.** Kevin's subscription is active again and he asked
-> for the check on every PR. This skill was DORMANT from 2026-07-25 while the
-> trial was lapsed; that pause is over and everything below applies. It runs
-> ALONGSIDE codex, not instead of it — see CLAUDE.md §2b for the joint stopping
-> rule.
+> 🛑 **DORMANT as of 2026-08-19. DO NOT LOAD THIS ON A PR.** Kevin: "Turn off
+> the Qodo reviews for now." The workspace ran out of credits overnight on
+> 2026-08-18 and qodo now answers every PR with a billing notice, which is a
+> FAILED check rather than a clean one — it blocked three finished PRs before
+> the ruling. **Do not arm the watcher and do not wait for a report**;
+> `CLAUDE.md` §2c's stopping rule is codex-clean plus your own read of the diff,
+> two conditions rather than three.
+>
+> This is the second pause, not a deletion: the skill was DORMANT 2026-07-25 →
+> 2026-07-30 for the same reason and came back unchanged. Everything below is
+> the live procedure for the day it is restored. If qodo posts a REAL review
+> anyway, read it — its defect findings were 5 for 5 valid across #480–#482 —
+> but never hold a PR for one.
+>
+> ⚠️ **One defect to fix before the restore.** qodo's billing notice carries no
+> `<h3>` heading, and §1's `summary()` matches `NOISE` against the heading — so
+> an empty heading passes the filter and the notice is counted as a genuine
+> artifact. Measured on #483: the watcher reported `QODO PARTIAL` where it
+> should have reported `TIMEOUT`. PARTIAL is not a pass, so nothing was
+> mis-gated, but the filter should also reject a body containing
+> `<!-- qodo:billing-blocked -->`.
 
 Repo: `D:\march-melee-pools`. qodo.ai reviews PRs on this GitHub repo
 (kstruck/MMPoolsV3). Standing authorization from Kevin (2026-07-11, and the
