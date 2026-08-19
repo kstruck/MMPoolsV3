@@ -22,8 +22,20 @@
 // The prop types below make `label` mandatory for the ones that DO claim it —
 // a dialog with no accessible name is the other half of the same lie.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useOverlayOwner } from './overlayStack';
+
+/**
+ * Whatever has focus right now, if it is a real control.
+ *
+ * `<body>` is not one: it is what `activeElement` reports when nothing is
+ * focused, and focusing it back is worse than leaving focus alone.
+ */
+function readOpener(): HTMLElement | null {
+  if (typeof document === 'undefined') return null;
+  const el = document.activeElement;
+  return el instanceof HTMLElement && el !== document.body ? el : null;
+}
 
 interface OverlayRootBase {
   /** Stable, unique id for the overlay stack. Kebab-case, names the overlay. */
@@ -63,25 +75,31 @@ export const OverlayRoot: React.FC<OverlayRootProps> = ({
   // decision about which control should receive it, which this component
   // cannot make. The modals that already do it keep doing it.
   //
-  // The opener is read in a state INITIALISER, which runs before the commit
-  // that fires a child's `autoFocus`. An effect runs after it, and would record
-  // the autofocused input inside the overlay instead — that input is detached
-  // by the time the cleanup runs, so focus would land on nothing at all (codex,
-  // round 3, naming the guest-details, coupon-mint and bracket-name overlays).
-  // `<body>` is not an opener: it is what `activeElement` reports when nothing
-  // is focused, and focusing it back is worse than leaving focus alone.
-  const [opener] = useState<HTMLElement | null>(() => {
-    if (typeof document === 'undefined') return null;
-    const el = document.activeElement;
-    return el instanceof HTMLElement && el !== document.body ? el : null;
-  });
+  // WHEN THE OPENER IS READ depends on how the overlay arrived, and both
+  // readings are needed:
+  //
+  //  - MOUNTED OPEN (32 of the 33 shells): read in a state INITIALISER, which
+  //    runs before the commit that fires a child's `autoFocus`. An effect runs
+  //    after that commit and would record the autofocused input inside the
+  //    overlay — detached by the time the cleanup runs, so focus would land on
+  //    nothing (codex round 3: guest details, coupon mint, bracket name).
+  //  - MOUNTED CLOSED, then opened (the SuperAdmin seed editor): the mount-time
+  //    reading predates the click that opened it. Re-read on the transition,
+  //    where an effect is early enough because nothing autofocuses — the
+  //    element was already on the page (codex round 4).
+  const [openerAtMount] = useState(readOpener);
+  const opener = useRef<HTMLElement | null>(openerAtMount);
+  const mounting = useRef(true);
   useEffect(() => {
+    const firstRender = mounting.current;
+    mounting.current = false;
     if (!active) return;
+    if (!firstRender) opener.current = readOpener();
     return () => {
       // A node detached with the overlay cannot take focus back.
-      if (opener?.isConnected) opener.focus();
+      if (opener.current?.isConnected) opener.current.focus();
     };
-  }, [active, opener]);
+  }, [active]);
 
   const isDialog = dialog && active;
 

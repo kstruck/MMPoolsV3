@@ -137,4 +137,35 @@ describe('OverlayRoot', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(document.activeElement).toBe(opener);
   });
+
+  it('returns focus after being opened in place, not remounted', () => {
+    // The SuperAdmin seed editor keeps the element mounted and flips `active`.
+    // Its mount-time reading of focus predates the click that opened it, so the
+    // opener has to be re-read on the transition (codex, round 4).
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>Edit</button>
+          <OverlayRoot
+            id="inline-modal"
+            label="Inline modal"
+            active={open}
+            className={open ? 'fixed inset-0' : ''}
+          >
+            <button onClick={() => setOpen(false)}>Done</button>
+          </OverlayRoot>
+        </>
+      );
+    }
+    render(<Harness />);
+    const edit = screen.getByRole('button', { name: 'Edit' });
+    edit.focus();
+    fireEvent.click(edit);
+    expect(overlayStackTop()).toBe('inline-modal');
+
+    screen.getByRole('button', { name: 'Done' }).focus();
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(document.activeElement).toBe(edit);
+  });
 });
