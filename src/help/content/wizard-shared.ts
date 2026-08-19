@@ -80,6 +80,24 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
       'Off, the only way in is the link you send. Anyone holding that link can still join: this controls listing, not access.',
       'You can change it later without affecting anyone who has already joined.',
     ].join('\n\n'),
+    // ONE control, TWO stored paths. `buildNFLPayload.ts:84,88` and
+    // `buildPlayoffPayload.ts:45` both write this checkbox's value to the
+    // top-level flag AND to `settings.isListedPublic`; nothing offers the two
+    // separately. Voice rule 10 — one concept, one topic — so the second path
+    // is claimed here rather than given a duplicate explanation. (T9)
+    //
+    // ⚠️ NOT PLACED ON `pool.nfl.manager.settings`, and codex asked twice why
+    // (R5). The reason is a defect, not an oversight: NFLManagerView's
+    // "List Pool Publicly" toggle sends `settings.isListedPublic` and NOTHING
+    // else (`NFLManagerView.tsx:665,733-739`), while Browse decides an NFL
+    // pool's listing from the TOP-LEVEL `isPublic`
+    // (`src/utils/publicListing.ts:34`), which that save never touches. So the
+    // toggle does not change what this copy promises, and placing the topic
+    // beside it would be the copy claim voice rule 5 exists to stop. Same
+    // family as the playoff listing bug qodo found on #475. The manager form
+    // is T4's file and carries no help affordance at all today; the fix is
+    // Kevin's call because `isPublic` is read by firestore.rules.
+    fields: ['isPublic', 'settings.isListedPublic'],
     poolTypes: 'all',
     audience: HOST_ONLY,
   },
@@ -370,8 +388,25 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
     title: 'Weekly tie-breaker',
     short: 'Decides who wins a week when two players score the same. It cannot be changed once anyone has submitted picks, so choose it now.',
     long: [
-      'Players predict the combined score of the tiebreaker game on their pick sheet. On a week with no Monday game, the final game of the week is used.',
-      'Whoever is closest takes the week. The rule you pick here decides what "closest" means and what happens if two players are equally close.',
+      // WRITTEN AS A LIST OF THE FOUR RULES, not as a claim plus caveats
+      // (codex R13). Two earlier drafts opened with an unconditional sentence
+      // and then contradicted it two paragraphs later, because MNF_COMBINED and
+      // NONE do not behave like the two pickable Monday rules.
+      //
+      // The model's own answer to this is `HelpCopy.template` — and it is NOT
+      // available: `TopicScope` is `Pick<HelpScope, 'poolType' | 'audience'>`,
+      // so no surface publishes a pool's settings and a template here would
+      // render its fallback forever. Recorded in MORNING-2026-08-18-HELP-T9.md.
+      // Until then the copy covers every rule instead of assuming one.
+      'Your pool can settle a level week by asking each player to predict the combined score of one game. What you choose here is which game — or whether it asks at all.',
+      'Monday night is the usual choice, either the last Monday game or the first. On a week with no Monday game, those two use the last game of the week instead.',
+      'A few older pools ask about every Monday game together. Those ask for nothing on a week with no Monday game.',
+      'You can also choose no tie-breaker. Then nothing is predicted.',
+      // CONDITIONAL, because two of the four rules ask for nothing (qodo
+      // re-review #2): NONE always, and legacy MNF_COMBINED on a Monday-less
+      // week. `computeWeeklyWinners` returns every tied leader when no
+      // difference exists, so those weeks are shared outright.
+      'Where a prediction is asked for, whoever is closest takes the week, and two players equally close share it. Where none is asked for, everyone level at the top shares it.',
       'Set it before you launch. Once any player has submitted picks, it is fixed for the life of the pool.',
     ].join('\n\n'),
     poolTypes: ['NFL_PICKEM'],

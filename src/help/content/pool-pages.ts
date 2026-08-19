@@ -132,7 +132,13 @@ const NFL_PAGES = poolPages({
       tab: 'picks',
       title: 'NFL pool — My picks',
       summary:
-        'Make and change your picks for the current week. You can edit them until they lock, and the lock time is shown beside each game. Once a game starts, its pick is fixed.',
+      // NARROWED IN T9. The first version promised per-game editing and
+      // "once a game starts", and neither survives contact with the code: the
+      // lock is kickoff MINUS the buffer, and the shipped client closes the
+      // whole sheet at the week's first kickoff whatever `lockMode` says
+      // (`NFLPoolDashboard.tsx:515-534`, `PickemPickEntry.tsx:138-141`). This
+      // says what is true of every pool and lets the sheet be the authority.
+        'Make and change your picks for the week, then submit them. The sheet shows which games are still open and when the next deadline falls. A pick that has closed cannot be changed from this sheet.',
     },
     {
       tab: 'grid',
@@ -206,7 +212,12 @@ const NFL_PAGES = poolPages({
       subTab: 'scoring',
       title: 'NFL commissioner — Scoring',
       summary:
-        'Scores come in automatically as games finish. This is where you check a week, re-run it, or correct a result the feed got wrong.',
+      // NARROWED IN T9. The tab's only control is "Score & Recap <week>"
+      // (`NFLManagerView.tsx:1596-1640`) and `scoreNFLWeek` refuses it while any
+      // game is unfinished unless the caller is a SUPER_ADMIN — so there is no
+      // per-result correction here, and a commissioner cannot score early. The
+      // first draft implied both.
+        'Scores come in automatically as games finish. This is where you check a week and run it again after a result changes.',
       audience: HOST,
     },
     {
