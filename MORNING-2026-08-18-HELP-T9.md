@@ -218,26 +218,43 @@ would, and nothing fails when one is.
 
 Open a terminal. You do not need to be in any particular folder.
 
+First fetch, so your machine knows what `main` looks like on GitHub:
+
+```bash
+git -C D:/march-melee-pools fetch origin
+```
+
+**You should see** either a few lines about new refs, or nothing at all. Both are
+fine.
+
+Now confirm T9 is on **`origin/main`** — which is the branch Coolify builds:
+
+```bash
+git -C D:/march-melee-pools log origin/main --oneline --grep="PLAN-HELP-SYSTEM T9" -1
+```
+
+**You should see** one line ending `(#480)`. **If you see nothing**, T9 is not on
+`main` and there is nothing to deploy — tell me before going further.
+
+> ⚠️ **The branch matters, and an earlier draft of this step got it wrong.** It
+> checked whatever branch your checkout happened to be on, which can contain T9
+> while `main` does not — or the reverse. Coolify deploys `main`, so `main` is
+> what has to be checked. (qodo caught it on the PR that added this document.)
+
+> ⚠️ Do not check for a specific commit hash either. `main` has moved past T9 by
+> the time you read this — this document is a later commit on it. What matters is
+> that the revision being deployed CONTAINS T9, which is what the `--grep` asks.
+
+Updating your own working copy is optional and unrelated to the deploy — Coolify
+builds from GitHub, not from your disk. If you want it current anyway:
+
 ```bash
 git -C D:/march-melee-pools pull
 ```
 
-**You should see** either a list of updated files or `Already up to date.`
-
-Then confirm T9 is in what you pulled:
-
-```bash
-git -C D:/march-melee-pools log --oneline --grep="PLAN-HELP-SYSTEM T9" -1
-```
-
-**You should see** one line ending `(#480)`. **If you see nothing**, the pull did
-not bring T9 down — tell me before deploying. **If the pull errors** about local
-changes, run `git -C D:/march-melee-pools status` and tell me what it says. Do not
-force anything.
-
-> ⚠️ Do not check for a specific commit hash. `main` has moved past T9 by the time
-> you read this — this document is a later commit. What matters is that the
-> revision being deployed CONTAINS T9, which is what the `--grep` above asks.
+**If that errors** about local changes, run
+`git -C D:/march-melee-pools status` and tell me what it says. Do not force
+anything.
 
 ### Step 2 — answer §1, and it is the only thing that needs you
 
