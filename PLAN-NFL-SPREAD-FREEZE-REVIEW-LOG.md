@@ -191,15 +191,118 @@ Agrees. Three things worth recording:
   standings. It is written into this plan because the fix and the freeze share a
   predicate, but if the plan stalls it should be lifted out as its own change.
 
+## Rounds 11-14 — authorised past the cap
+
+Kevin, 2026-08-19: *"Yes, do round 11, up to 15 if needed."* `CLAUDE.md` §2c
+caps codex at 10 per artifact and requires the over-cap rounds to be recorded.
+Rounds 11 and 12 found **five more P1s** between them, so the overage paid for
+itself twice over.
+
+Also decided in the same message: **R1 is settled — Tuesday 09:00 ET**, the
+existing schedule. Recorded in the plan before round 11 ran, so the reviewer saw
+the final text.
+
+### Round 11 — three findings, all P1, all valid
+
+**An approved override was routed away from the rescore queue.** 2.4 exempted a
+change carrying a fresh `overrideId` from "everything else gets audit AND
+rescore" — so a properly approved correction, the one case that exists to fix a
+line after scoring, would have left finalized ATS standings on the old number
+*because it was approved*.
+**Absorbed.** The predicate splits: rescore fires on ANY change to a frozen
+line; the "unapproved" audit row fires only without a fresh id. They were never
+the same question.
+
+**Sync preservation keyed on `locked` could be laundered by unlocking first.**
+The bypass 2.4 expects can set `locked: false`, and the next sync then writes
+ESPN's unlocked map and drops `frozenAt`.
+**Absorbed** — see round 12, which corrected the correction.
+
+**Preflight slate reconciliation does not survive a concurrent add.** The set
+check runs before the transaction; Firestore does not range-lock, so re-reading
+the query inside it does not help either.
+**Absorbed.** The freeze takes the fenced slate lease the scorer already uses
+(`nflPools.ts:913-951`), the importer respects it, and the transaction re-reads
+target refs by id so concurrent modifications still conflict. The
+added-after-commit case is R3's page-don't-auto-freeze.
+
+### Round 12 — two findings, both P1, both valid
+
+**Round 11's own fix was a live-data hazard.** Switching sync preservation to
+`frozenAt` alone would hand every spread locked *before* this ships — including
+the ones locked by hand on 2026-08-19 — back to the next ESPN payload,
+unlocked and revalued, by the change meant to protect them.
+**Absorbed.** The condition is the UNION: preserve on `frozenAt` **or**
+`locked === true`. Safe on day one with no migration, and still closed against
+unlock-laundering. Backfilling `frozenAt` at cutover drops from precondition to
+tidy-up (R4).
+
+**A game added after a freeze has no `frozenAt` to amend.** The manual backstop
+was specified as an "override", which only amends — leaving a manually added
+line unmarked, unpreserved by 1.4b and invisible to 2.4.
+**Absorbed.** `overrideLockedSpread` has two shapes, amend and create, and the
+create shape stamps `frozenAt` so a hand-repaired game is indistinguishable from
+one the job froze.
+
+### Round 13 — clean
+
+Reviewed the round-12 fixes.
+
+### Round 14 — two findings, valid
+
+**P1 — the union rule went into the sync and not the importer.**
+`importNFLSeason` has its own preservation branch (`:534-536`) testing
+`locked === true` alone, so the identical laundering works through an import:
+unlock, re-import the week, and ESPN's unlocked map lands with `frozenAt` gone.
+**Absorbed.** One rule, both writers, with a regression test driving each over a
+spread carrying `frozenAt` with `locked: false`.
+
+**P2 — the rollout asked for dry runs the schedule cannot produce.**
+R2's table said "Sat–Mon: read each run" against a `0 9 * * 2` job. There are no
+runs on those days; the preflight was unrunnable as written.
+**Absorbed as 1.5b** — a SUPER_ADMIN `runNFLSpreadFreeze({ dryRun })` callable
+invoking the same `freezeSlateOnce`. It also becomes the on-demand re-run when a
+Tuesday pass refuses, and the hook an emulator test drives.
+
+### Round 15 — two findings, both P1, both valid — AND THE BUDGET ENDS HERE
+
+**P1 — "Lock All Spreads" manufactures unprotected lines.**
+2.2 left unlocked rows on the current client write, so the per-row toggle and the
+**Lock All** button could still write `{ value, locked: true }` directly. The
+2.3 rules only protect an ALREADY-locked spread, so those create a newly locked
+line with no `frozenAt` and no audit record — outside 1.4b, outside 2.4, around
+R3. The manual backstop was quietly manufacturing lines the scheme cannot see.
+**Absorbed.** Every action that sets `locked: true` goes through the callable.
+
+**P1 — deleting `frozenAt` fires nothing.**
+A whole-map console write can drop the marker while leaving value and `locked`
+untouched. The predicate saw no change, so no rescore and no audit — and 1.4b
+then preserves the markerless locked spread forever. One quiet write and the
+game leaves the detector permanently.
+**Absorbed.** `frozenAt` changing or disappearing is now part of the predicate;
+the freeze's own unset→set transition stays excluded by the `before` keying.
+
+⚠️ **THE ROUND-15 FIXES HAVE NOT BEEN REVIEWED.** Kevin authorised "up to 15 if
+needed" and 15 is spent. Both fixes are direct and unambiguous, but that is a
+judgement, not a round. **Named in the PR body; Kevin decides whether to spend
+round 16.**
+
 ## Verdict
 
-Plan is fit to implement. Every finding across ten rounds was valid and every
-one is absorbed — **with one carried caveat**: the round-10 fix has not itself
-been reviewed, because ten rounds is the §2c cap. Nothing is carried forward as
-an open finding.
+**Nineteen findings across fifteen rounds. Every one valid, every one absorbed.
+Eleven were P1.** Nothing is carried forward as an open finding — but two
+caveats stand, and neither should be read past:
 
-Ten rounds is the ceiling, not a target, and it is worth saying why this
-artifact spent all of them: it is a plan whose entire subject is an invariant,
+1. **The round-15 fixes are unreviewed.** The budget ended on the same round
+   that produced them.
+2. **The finding rate never decayed.** Rounds 11-15 produced nine P1s, more than
+   rounds 1-10 did. A review that is still finding P1s at round 15 is telling
+   you something about the design, not about the reviewer — which is why the
+   plan now carries a section pricing decision A against what the review
+   learned. That section is the most useful output of the overage.
+
+Fourteen rounds is well past the ordinary ceiling, and it is worth saying why
+this artifact earned them: it is a plan whose entire subject is an invariant,
 and eight of the twelve findings were places the plan broke its own invariant.
 That is a good use of the budget on a document; it would be a bad sign on a
 diff.

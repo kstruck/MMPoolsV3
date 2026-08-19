@@ -297,7 +297,29 @@ target week has no line after the fetch, **write nothing** and return a failing
 verdict naming the games.
 
 A regression test drives a 15-of-16 response against a 16-game stored slate and
-asserts nothing is written. A
+asserts nothing is written.
+
+⚠️ **THE PREFLIGHT RECONCILIATION IS NOT ENOUGH ON ITS OWN** (codex round 11).
+It runs before the transaction, so an importer or sync write that adds a game to
+the slate in between commits happily alongside it: the sixteen originals freeze,
+the seventeenth stays unlocked, and the all-or-nothing invariant is violated even
+though the preflight sets matched.
+
+Firestore transactions do not range-lock, so re-reading the query inside the
+transaction does not close it either — a document created concurrently raises no
+conflict. **Serialise the writers instead**, using the fenced-lease shape this
+repo already runs for scoring (`nflPools.ts:913-951`):
+
+- the freeze takes the slate's lease for the whole pass and releases it after
+  the commit;
+- `importNFLSeason` refuses a slate whose lease is held, the way a scoring pass
+  already returns `leaseBusy` rather than writing;
+- the transaction re-reads the target game refs by id (`getAll`) so a
+  concurrent *modification* still conflicts, which is the half Firestore does
+  give us.
+
+Residual, and named rather than implied away: a game added to the slate AFTER
+the freeze commits is R3's case — page, never auto-freeze. A
 partially frozen week is the thing the requirement forbids — some games frozen
 at T, the rest at T+2 days. The submit gate keeps members out either way, so
 refusing to write costs nothing and buys the invariant.
@@ -330,9 +352,40 @@ survives, the provenance does not, and 2.4's detector stops recognising the line
 as one that was ever committed to. The freeze invariant would look intact and be
 unenforceable (codex round 8).
 
-Fix it the way the importer already does (`:535-536`): when the stored spread is
-locked, **delete the key from the payload** and let `merge: true` keep whatever
-is stored, whole. That is strictly better than listing fields to preserve,
+Fix it the way the importer already does (`:535-536`): **delete the key from the
+payload** and let `merge: true` keep whatever is stored, whole.
+
+⚠️ **THE CONDITION IS `frozenAt` OR `locked` — THE UNION, NOT A REPLACEMENT.**
+Two rounds pulled this in opposite directions and both were right:
+
+- **`locked` alone is not enough** (round 11). The credential bypass this plan
+  expects (2.4) can set `locked: false` first, and the very next sync then
+  writes ESPN's fresh unlocked map over the top and drops `frozenAt` with it.
+  The line stops being recognisable as one that was ever frozen, and neither the
+  audit nor the rescore fires afterwards — the unlock would have laundered the
+  game.
+- **`frozenAt` alone is a live-data hazard at rollout** (round 12). Every spread
+  locked before this ships — including the ones locked by hand on 2026-08-19 —
+  carries no `frozenAt`. Preserving only on `frozenAt` would hand all of them
+  back to the next ESPN payload, unlocked and revalued, by the very change meant
+  to protect them. Cloud Functions bypass the 2.3 rules, so nothing downstream
+  would stop it.
+
+**So: preserve the stored spread when it carries `frozenAt` OR when
+`locked === true`.** The union needs no migration to be safe on day one, and it
+still closes the unlock-laundering path, because a frozen line keeps `frozenAt`
+whatever happens to `locked`.
+
+Backfilling `frozenAt` onto already-locked spreads at cutover is still worth
+doing — see R4 — but it is now a tidy-up rather than a precondition.
+
+⚠️ **AND THE SAME RULE GOES IN THE IMPORTER, NOT ONLY THE SYNC** (codex round
+14). `importNFLSeason` has its own preservation branch (`:534-536`) and it also
+tests `locked === true` alone. So the identical laundering works through an
+import: unlock, then re-import the week, and ESPN's whole unlocked map lands with
+`frozenAt` and `overrideId` gone. Two writers, one rule — **preserve on
+`frozenAt` OR `locked` in both**, and a regression test drives each of them over
+a spread that carries `frozenAt` with `locked: false`. That is strictly better than listing fields to preserve,
 because the next field added to `spread` inherits the protection instead of
 inheriting this bug.
 
@@ -343,8 +396,25 @@ runs a sync pass over it, and asserts both survive.
 its current shape and defaults. Dry-run logs the week, the sixteen values it
 would write, and any missing lines.
 
-1.6 **Schedule.** Keep `0 9 * * 2` `America/New_York` unless Kevin names another
-day/time — see Risks.
+1.5b **A manual invocation, because the schedule alone cannot rehearse itself**
+(codex round 14). `0 9 * * 2` fires once a week, so the rollout in R2 asks
+operators to read dry-run reports on Saturday, Sunday and Monday from a job that
+does not run on any of those days. As written the preflight could not happen.
+
+Add a SUPER_ADMIN callable — `runNFLSpreadFreeze({ dryRun })` — that invokes the
+same `freezeSlateOnce` the scheduler does, subject to the same kill-switch. It
+earns its place three times over: it makes R2's dry runs real, it is the
+on-demand re-run when a Tuesday pass refuses (a missing line, a lease clash),
+and it is the hook an emulator test drives end-to-end.
+
+`dryRun` defaults to the config value; passing `false` explicitly is what makes
+a manual live freeze deliberate rather than a slip.
+
+1.6 **Schedule: `0 9 * * 2` `America/New_York`.** Tuesday 09:00 ET, decided by
+Kevin on 2026-08-19 (R1) and unchanged from the existing job. This is the
+"specified day and time" the requirement asks for — if it ever moves, it moves
+deliberately and members are told, because the whole point is that they can
+predict it.
 
 **Done when:** on a slate whose lines ESPN carries, one run writes value +
 `locked: true` for every game of that week and nothing else; on a slate missing
@@ -368,10 +438,23 @@ disarming the alarm for good. Same failure as 1.4b, one layer up: reconstructing
 the object rather than amending it. Amend the stored spread; never rebuild it. `nflSpreadRescoreTrigger` already fires
 on a locked-spread change, so standings repair rides the existing handoff.
 
-2.2 **Then the Spread Manager routes through it.** A row whose spread is locked
-edits via the callable and prompts for a reason; unlocked rows keep the current
-client write. The unlock toggle (`:66-68`) is removed for locked rows — unlocking
-is not a repair, it is a hole.
+2.2 **Then the Spread Manager routes EVERY LOCK through it**, not only edits to
+an already-locked row. A row whose spread is locked edits via the callable and
+prompts for a reason. The unlock toggle (`:66-68`) is removed — unlocking is not
+a repair, it is a hole.
+
+⚠️ **AND SO IS "LOCK ALL"** (codex round 15). Leaving unlocked rows on the
+current client write still lets the per-row lock toggle and the **Lock All
+Spreads** button write `{ value, locked: true }` directly. The 2.3 rules only
+protect a spread that was ALREADY locked, so those writes sail through and
+create a newly locked line with **no `frozenAt` and no audit record** — outside
+1.4b's preservation, outside 2.4's detector, and around R3's late-addition path.
+The manual backstop would have been quietly manufacturing unprotected lines.
+
+**Any action that sets `locked: true` goes through the callable**, which stamps
+`frozenAt` and audits atomically (2.1's create shape). Client-direct writes to
+`nfl_games.spread` remain only for a row that is neither locked nor frozen —
+entering a value before freezing it — and 2.3 is what holds that line.
 
 2.3 **Then the rules deny.** `nfl_games` write stays `isSuperAdmin()`, plus:
 a write is refused when the stored `resource.data.spread.locked == true` and the
@@ -421,8 +504,17 @@ technically:
   - Stamp `spread.frozenAt` at freeze time (1.4). It marks a line as one that
     has been committed to, durably, and it survives an unlock.
   - Fire on any write where **`before.spread.frozenAt` is already set** and
-    **either** the value changed **or** `locked` changed — so the unlock itself
-    is the alarm, which is the earliest and most useful moment to raise it.
+    **any** of the value, `locked`, or **`frozenAt` itself** changed — so the
+    unlock is the alarm, and so is the marker going missing.
+
+    ⚠️ **`frozenAt` REMOVAL HAS TO BE IN THE PREDICATE OR THE SCHEME HAS AN OFF
+    SWITCH** (codex round 15). A whole-map console write can drop `frozenAt`
+    while leaving value and `locked: true` exactly as they were. On the earlier
+    predicate that fires nothing — no rescore, no audit — and 1.4b then happily
+    preserves the now-markerless locked spread forever. One quiet write and the
+    game is permanently outside the detector. Since the condition keys on
+    `before.spread.frozenAt` being set, the freeze's own unset→set transition is
+    still excluded (round 5).
 
     ⚠️ **`before`, not `after`, and this is not pedantry** (codex round 5). The
     freeze transaction in 1.4 is itself a write that adds `frozenAt` and changes
@@ -433,8 +525,22 @@ technically:
     which is what it should be: the freeze is the thing being protected, not a
     violation of it.
   - Treat it as a legitimate override only when `after.spread.overrideId`
-    differs from `before.spread.overrideId`. Everything else is unapproved and
-    gets both the `admin_audit` row and the rescore enqueue.
+    differs from `before.spread.overrideId`.
+
+    ⚠️ **THAT EXEMPTS IT FROM THE ALARM, NOT FROM THE RESCORE — and collapsing
+    the two would break the override path outright** (codex round 11). An
+    approved override exists precisely to correct a line after results may
+    already have been scored; `nflSpreadRescoreTrigger` is the only entry point
+    that repairs those standings. Routing overrides away from it would leave
+    finalized ATS standings graded against the old number *because the change
+    was properly approved*, which is the opposite of the intent.
+
+    So the predicate splits in two, and they are not the same question:
+
+    | | Fires for |
+    |---|---|
+    | **Rescore enqueue** | ANY change to a frozen line — override or not |
+    | **`admin_audit` "unapproved" row** | only a change with no fresh `overrideId` |
 
   `lockedSpreadChanged` is shared with the existing trigger, so this plan owns
   changing it, and owns a regression test for the three-step sequence above.
@@ -492,9 +598,45 @@ the locked-spread mutation is the narrow cut.
 still-locked line. It never unlocks. "Unlock, edit, re-lock" is the same hole
 with three steps.
 
+## What fifteen rounds revealed about decision A
+
+**Worth reading before implementation starts, because it is new information
+about a decision already taken.**
+
+Of the nineteen findings, thirteen from round 8 onward are the same shape:
+*some writer clobbers the freeze marker, or some path creates a line without
+one.* The sync rebuilt the map. The importer preserved on the wrong condition.
+The override rebuilt it. "Lock All" created unmarked lines. A console write can
+delete the marker. Each fix was correct and each one exposed the next.
+
+That is not bad luck. It is the cost of defending an immutability invariant on a
+**shared document that a live feed owns and four writers touch**. Every new
+writer inherits the obligation, and nothing in the type system reminds them.
+
+Decision B — snapshot the frozen lines into the pool at freeze time — makes most
+of this class impossible by construction: the pool's copy is written once and no
+feed, importer or sync ever touches it again. It was rejected on 2026-08-19 as
+"a new data shape the scorer would have to read", and that cost is real. But the
+comparison was made before the review priced option A, and A is more expensive
+than it looked: two writers to keep in step forever, a rules layer, a detector
+with four conditions, and a marker that anything with credentials can remove.
+
+**This does not re-open the decision on its own** — A is still defensible, and
+the plan as written is implementable. It is recorded so the choice is re-made
+with the real numbers rather than left to inertia. **Kevin's call.**
+
 ## Risks / open questions
 
-**R1 — A Tuesday freeze may be too early for preseason.** Measured: preseason
+**R1 — DECIDED 2026-08-19 (Kevin): Tuesday 09:00 ET, option A.** The freeze
+instant is `0 9 * * 2` `America/New_York`, unchanged from the existing
+`lockNFLSpreadsJob` schedule. Regular-season lines are published weeks ahead so
+Tuesday is comfortable there; preseason lines land ~1.4 days before kickoff, so
+a preseason Tuesday run will often find nothing and falls back to the manual
+Spread Manager with the alarm on. Three weeks of the year, covered by a backstop
+that already works. The reasoning is kept below because the trade is worth
+re-reading if preseason ever becomes a product rather than a rehearsal.
+
+**R1 (resolved) — A Tuesday freeze may be too early for preseason.** Measured: preseason
 lines appear ~1.4 days before kickoff, so a Tuesday 09:00 ET run on a Thursday
 slate can find nothing. Regular-season lines are published weeks ahead, so
 Tuesday is comfortable there. Options, for Kevin:
@@ -505,8 +647,9 @@ Tuesday is comfortable there. Options, for Kevin:
 | **B** | Move to a later stated instant, e.g. Wednesday 09:00 ET | Catches preseason more often; still one stated time |
 | **C** | Different stated instant per season type | Most accurate, most machinery |
 
-**Recommend A.** Preseason is three weeks of the year and the alarm plus manual
-backstop covers it; the regular season is what the invariant is for.
+**Recommended A, and Kevin took it** (2026-08-19). Preseason is three weeks of
+the year and the alarm plus manual backstop covers it; the regular season is
+what the invariant is for.
 
 **R2 — One rehearsal window, and dry-run alone will not use it.** The last
 preseason slate (ESPN `2026/1/4`, kickoff 2026-08-27T23:00Z) is the only
@@ -526,7 +669,7 @@ So the sequence is dated, and the flip is part of it:
 | When | Action |
 |---|---|
 | by Fri 2026-08-22 | Phase 1 deployed, `nflSpreadLock.dryRun: true`. Fetch and selection proven against a real slate, writing nothing |
-| Sat–Mon | read each run. It should report the sixteen values it would write, the moment ESPN publishes them |
+| Sat–Mon | run `runNFLSpreadFreeze({ dryRun: true })` by hand each day (1.5b — the schedule fires Tuesdays only, so nothing happens on its own). It should report the sixteen values it would write, the moment ESPN publishes them |
 | **Mon 2026-08-24** | **flip `nflSpreadLock.dryRun: false`** — before the Tuesday run, not after |
 | Tue 2026-08-25 09:00 ET | the scheduled run performs a real transaction on a real slate. This is the rehearsal |
 | same day | verify: 16/16 locked, values match what the dry runs reported, and an ATS submit succeeds |
@@ -549,9 +692,25 @@ the other fifteen lines with it**.
 
 **Decided: page, never auto-freeze.** 1.1 makes the slate off-limits once any
 game in it carries `frozenAt`, and 1.4 refuses to write over one. The newcomer
-is filled in through the audited override path, by a human who can see that the
-rest of the week was frozen days earlier and decide whether that is still fair —
-which is a judgement, not a job's decision to make.
+is filled in by a human who can see that the rest of the week was frozen days
+earlier and decide whether that is still fair — a judgement, not a job's
+decision to make.
+
+⚠️ **THAT PATH CREATES A FROZEN SPREAD; IT DOES NOT "OVERRIDE" ONE** (codex
+round 12). A game added after the freeze has no `frozenAt` to preserve, so an
+override that only ever amends an existing frozen map would leave the new line
+unmarked — and 1.4b would then not preserve it, and 2.4 would not recognise
+later edits to it. `overrideLockedSpread` therefore has two shapes:
+
+| Stored spread | What the callable writes |
+|---|---|
+| carries `frozenAt` | amend: new `value`, new `overrideId`, `frozenAt` untouched |
+| absent or never frozen | create: `{ value, locked: true, frozenAt: now, overrideId }` |
+
+Both write the same audit record. The second is the manual backstop — the one
+that carried 2026-08-19 — and it has to leave the line indistinguishable from
+one the job froze, or the invariant has a hole shaped exactly like every
+manually repaired game.
 
 **R4 — Legacy locked spreads.** Games locked before this plan carry lines
 frozen at import time, which may be stale. Phase 2's rules deny would make them
