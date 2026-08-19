@@ -16,24 +16,40 @@ import { EVERYONE } from './nfl-shared';
 const PICKEM = ['NFL_PICKEM'] as const;
 
 export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
-  // ---- HELD: settings.lockMode and settings.lockBufferMinutes ------------
-  //
-  // ⚠️ NOT AUTHORED, AND NOT BECAUSE THE COPY WAS HARD. Both topics were
-  // written, reviewed over six codex rounds, and then withdrawn when codex R7
-  // showed the claim they rest on is false in the shipped client.
-  //
-  // `NFLPoolDashboard.tsx:515-534` computes `weekLock` from the week's EARLIEST
-  // kickoff for every NFL type, ignoring `lockMode`, and
-  // `PickemPickEntry.tsx:138-141` returns `true` from `isGameLocked` for every
-  // game the moment that prop is set. So a PER_GAME Pick'em pool — the wizard
-  // default — locks its WHOLE SHEET at the first kickoff of the week, while the
-  // server (`nflPools.ts:568,618-624`) would still accept a Sunday pick. The
-  // same gate also swallows an approved week extension.
-  //
-  // Any copy for these two settings would therefore describe either the setting
-  // (false on screen) or the screen (documenting the bug, and wrong again the
-  // day it is fixed). Their allowlist rows carry the finding; the topics land
-  // with the fix. See MORNING-2026-08-18-HELP-T9.md.
+  {
+    // ---- RELEASED BY #482 ------------------------------------------------
+    //
+    // This topic and `settings.lockBufferMinutes` in `nfl-shared.ts` were
+    // written during T9, survived six codex rounds, and were WITHDRAWN on
+    // round 7 when codex showed the claim they rest on was false in the
+    // shipped client: `NFLPoolDashboard` computed one week lock from the
+    // week's EARLIEST kickoff for every NFL type and `PickemPickEntry`
+    // treated it as "every game is locked", so a PER_GAME pool closed its
+    // whole sheet on Thursday night. `93f44bb2` (#482) fixed exactly that and
+    // put the rule in `shared/nflLockMode.ts`, so the copy is true now.
+    //
+    // Every sentence below is read off that file:
+    //   `nflLockMode()`     — confidence forces WEEKLY; Survivor/Margin always
+    //   `weekLockAtFor()`   — PER_GAME references the LAST kickoff, WEEKLY the first
+    //
+    // NO CLAIM ABOUT THE CONTROL BEING DISABLED. The manager form greys it out
+    // while confidence points are on (`NFLManagerView.tsx:1188`); the CREATE
+    // WIZARD does not, and this topic is placed on both. So the copy states
+    // what the pool DOES, which is true on either screen (codex round 4).
+    //   `gameLockAt()`      — kickoff minus the buffer
+    id: 'settings.lockMode',
+    title: 'Lock mode',
+    short: 'Choose whether each game closes on its own deadline, or the whole week closes on the first game\u2019s.',
+    long: [
+      'Per game is the default. Each pick stays open until its own game\u2019s deadline, so you can still change a Sunday pick after the Thursday night game has started.',
+      'Weekly closes every pick in the week on the first game\u2019s deadline. Choose it when you want everyone playing the same slate with the same information.',
+      'Confidence points force weekly whatever this says, because a confidence sheet spends each weight across the week\u2019s games exactly once. A pool with confidence points on plays weekly however this is set.',
+      'A deadline falls a set number of minutes before the kickoff it counts from \u2014 five by default, and the lock buffer is where that number is set. Your pool home counts down to the next deadline either way.',
+    ].join('\n\n'),
+    poolTypes: PICKEM,
+    audience: EVERYONE,
+    related: ['settings.lockBufferMinutes', 'settings.confidenceMode'],
+  },
 
   {
     id: 'settings.confidenceMode',
@@ -175,11 +191,13 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
 export const NFL_PICKEM_PLACEMENTS: readonly HelpPlacement[] = [
   // Create wizard — the rules step.
   { topic: 'settings.confidenceMode', page: 'wizard.pickem.rules', section: 'rules', order: 12 },
+  { topic: 'settings.lockMode', page: 'wizard.pickem.rules', section: 'rules', order: 15 },
 
   // What a member reads to find out what they joined.
   { topic: 'settings.confidenceMode', page: 'pool.nfl.rules', section: 'picks', order: 12 },
   { topic: 'settings.pickMode', page: 'pool.nfl.rules', section: 'picks', order: 13 },
   { topic: 'settings.weeklyTiebreaker', page: 'pool.nfl.rules', section: 'picks', order: 14 },
+  { topic: 'settings.lockMode', page: 'pool.nfl.rules', section: 'picks', order: 15 },
 
   // The pick sheet itself.
   { topic: 'pickem.picksheet', page: 'pool.nfl.picks', section: 'picks', order: 0 },
@@ -187,6 +205,7 @@ export const NFL_PICKEM_PLACEMENTS: readonly HelpPlacement[] = [
   { topic: 'pickem.quickPicks', page: 'pool.nfl.picks', section: 'picks', order: 1 },
   { topic: 'pickem.tiebreakerPrediction', page: 'pool.nfl.picks', section: 'picks', order: 2 },
   { topic: 'settings.confidenceMode', page: 'pool.nfl.picks', section: 'picks', order: 3 },
+  { topic: 'settings.lockMode', page: 'pool.nfl.picks', section: 'picks', order: 5 },
 
   // The all-picks grid: the question it raises is when a pick appears.
 
@@ -203,4 +222,5 @@ export const NFL_PICKEM_PLACEMENTS: readonly HelpPlacement[] = [
   { topic: 'settings.confidenceMode', page: 'pool.nfl.manager.settings', section: 'picks', order: 12 },
   { topic: 'settings.pickMode', page: 'pool.nfl.manager.settings', section: 'picks', order: 13 },
   { topic: 'settings.weeklyTiebreaker', page: 'pool.nfl.manager.settings', section: 'picks', order: 14 },
+  { topic: 'settings.lockMode', page: 'pool.nfl.manager.settings', section: 'picks', order: 15 },
 ];

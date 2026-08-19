@@ -132,13 +132,23 @@ const NFL_PAGES = poolPages({
       tab: 'picks',
       title: 'NFL pool — My picks',
       summary:
-      // NARROWED IN T9. The first version promised per-game editing and
-      // "once a game starts", and neither survives contact with the code: the
-      // lock is kickoff MINUS the buffer, and the shipped client closes the
-      // whole sheet at the week's first kickoff whatever `lockMode` says
-      // (`NFLPoolDashboard.tsx:515-534`, `PickemPickEntry.tsx:138-141`). This
-      // says what is true of every pool and lets the sheet be the authority.
-        'Make and change your picks for the week, then submit them. The sheet shows which games are still open and when the next deadline falls. A pick that has closed cannot be changed from this sheet.',
+      // NARROWED IN T9, AND IT STAYS NARROW. The first version promised
+      // per-game editing and "once a game starts", and neither survived
+      // contact with the code: the lock is kickoff MINUS the buffer, and the
+      // client then ignored `lockMode` entirely. 93f44bb2 (#482) fixed the
+      // second half — a PER_GAME pool really does keep each pick open to its
+      // own deadline now — but this page is shared by Pick'em, Survivor and
+      // Margin, and the last two are always weekly. A sentence naming either
+      // rule would be false for some reader of this page, so the rule itself
+      // is explained by the `settings.lockMode` and
+      // `settings.lockBufferMinutes` topics, which are scoped.
+      //
+      // It also no longer says the sheet shows "when the next deadline
+      // falls". It does not: the sheet renders kickoff times and a locked
+      // marker, and the buffer-adjusted instant is the pool-home countdown
+      // (`NFLPoolDashboard.tsx:895-905`). Third time that claim was made and
+      // corrected on this branch — codex rounds 3, 4 and 6.
+        'Make and change your picks for the week, then submit them. The sheet shows which games are still open, and a pick that has closed cannot be changed from it. The countdown to the next deadline is on your pool home.',
     },
     {
       tab: 'grid',
