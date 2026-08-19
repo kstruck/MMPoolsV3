@@ -3,7 +3,7 @@ import { db } from '../firebase';
 import { logger } from '../utils/logger';
 import type { NFLGame, Pool } from '../types';
 import { gamesForPoolWeek, getWeekStatus, poolSeasonType, weekDeadline } from '../utils/nflPending';
-import { nflLockMode } from '@shared/nflLockMode';
+import { nflLockMode, weekLockOverrideFor } from '@shared/nflLockMode';
 import { now as serverNow } from '../utils/serverClock';
 import { effectiveBufferMinutesForWeek } from '@shared/weeklyHardLock';
 
@@ -65,8 +65,11 @@ export function computePendingStatus(pool: Pool, entry: any, seasonGames: NFLGam
         // The pool's own lock rule (see WeekChecklist): a per-game week stays due
         // until its last kickoff, so the CTA must not expire at the first.
         const lockMode = nflLockMode(castPool.type, castPool.settings);
-        const status = getWeekStatus(pool.type as string, entry, weekGames, week, lockBufferMinutes, lockMode);
-        const deadline = weekDeadline(weekGames, lockBufferMinutes, lockMode);
+        // …and the extension, so the CTA does not expire while the server and
+        // the sheet both still accept picks (qodo #9).
+        const overrideMs = weekLockOverrideFor(castPool, week);
+        const status = getWeekStatus(pool.type as string, entry, weekGames, week, lockBufferMinutes, lockMode, overrideMs);
+        const deadline = weekDeadline(weekGames, lockBufferMinutes, lockMode, overrideMs);
         if (status === 'due' && deadline !== null && deadline > now) {
             return { poolId: pool.id, dueWeek: week, deadline };
         }

@@ -513,7 +513,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // at" time, and showing the first kickoff there would tell a Survivor/Margin
   // member they can pick up to 60 minutes later than the server allows.
   // The whole computation is `shared/nflLockMode.ts` now — pure, shared with
-  // `functions/`, and unit-tested in `tests/nfl-lockmode-parity.test.ts`. It
+  // `functions/`, and unit-tested in `tests/nfl-lockmode-invariants.test.ts`. It
   // used to be inline here, which is how it came to derive the week lock from
   // the earliest kickoff for every pool type and ignore `lockMode` entirely.
   const weekLock = useMemo(() => {

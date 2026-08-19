@@ -51,7 +51,7 @@ export interface NFLLockModeSettings {
  *    such a pool's `lockMode` still reads `PER_GAME`.
  *
  * Mirrors `functions/src/nflPools.ts:568` (`submitNFLPicks`) and
- * `functions/src/lib/pickReveal.ts:71`. `tests/nfl-lockmode-parity.test.ts`
+ * `functions/src/lib/pickReveal.ts:71`. `tests/nfl-lockmode-invariants.test.ts`
  * fails if those stop agreeing with this.
  */
 export function nflLockMode(
