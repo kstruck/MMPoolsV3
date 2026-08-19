@@ -119,18 +119,27 @@ export function isWeekLockedNow(
     return serverNow() >= deadline;
 }
 
+/**
+ * `lockMode` decides WHICH kickoff closes the week, and defaulting it to
+ * 'WEEKLY' was how this function said "missed" on a per-game week a member
+ * could still pick — the Thursday game starting does not close Sunday. Callers
+ * that know the pool should pass `nflLockMode(pool.type, pool.settings)`; the
+ * default keeps the old reading for any that do not.
+ */
 export function getWeekStatus(
     poolType: string,
     entry: any,
     weekGames: NFLGame[],
     week: number,
     lockBufferMinutes: number,
+    lockMode: 'WEEKLY' | 'PER_GAME' = 'WEEKLY',
 ): WeekStatus {
     if (weekGames.length === 0) return 'no-games';
     const complete = isWeekComplete(poolType, entry, weekGames, week);
     const bufferMs = lockBufferMinutes * 60 * 1000;
-    const earliest = Math.min(...weekGames.map(g => g.startTime));
-    const weekStarted = serverNow() >= (earliest - bufferMs);
+    const kickoffs = weekGames.map(g => g.startTime);
+    const reference = lockMode === 'PER_GAME' ? Math.max(...kickoffs) : Math.min(...kickoffs);
+    const weekStarted = serverNow() >= (reference - bufferMs);
 
     if (!weekStarted) {
         // Week is upcoming; "due" once it's the nearest unpicked week, "future" otherwise —
@@ -140,8 +149,20 @@ export function getWeekStatus(
     return complete ? 'locked-complete' : 'missed';
 }
 
-/** Earliest kickoff of the given week's games, or null. */
-export function weekDeadline(weekGames: NFLGame[], lockBufferMinutes: number): number | null {
+/**
+ * The moment this week closes, or null.
+ *
+ * Same rule as `getWeekStatus`: on a PER_GAME pool the week is not closed until
+ * its LAST game has started, so showing the earliest kickoff would put a
+ * deadline in front of a member hours before anything of theirs expires.
+ */
+export function weekDeadline(
+    weekGames: NFLGame[],
+    lockBufferMinutes: number,
+    lockMode: 'WEEKLY' | 'PER_GAME' = 'WEEKLY',
+): number | null {
     if (weekGames.length === 0) return null;
-    return Math.min(...weekGames.map(g => g.startTime)) - lockBufferMinutes * 60 * 1000;
+    const kickoffs = weekGames.map(g => g.startTime);
+    const reference = lockMode === 'PER_GAME' ? Math.max(...kickoffs) : Math.min(...kickoffs);
+    return reference - lockBufferMinutes * 60 * 1000;
 }
