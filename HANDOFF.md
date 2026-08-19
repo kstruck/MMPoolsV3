@@ -1,5 +1,52 @@
 # HANDOFF — Session entry point
 
+> ## 🔴 2026-08-18 — PLAN-HELP-SYSTEM **T9 MERGED (#480)**, AND IT FOUND A LIVE PICK'EM DEFECT
+>
+> **Read `MORNING-2026-08-18-HELP-T9.md` first** for this effort. It continues
+> `MORNING-2026-08-18-HELP.md` (T0–T2, still accurate);
+> `MORNING-2026-08-18.md` remains the PLAN-PAYMENT-LEDGER entry point.
+>
+> 🔴 **A `PER_GAME` PICK'EM POOL — THE WIZARD DEFAULT — LOCKS ITS WHOLE PICK
+> SHEET AT THE WEEK'S FIRST KICKOFF.** After the Thursday night game a member
+> cannot touch their Sunday picks. `NFLPoolDashboard.tsx:515-534` derives the week
+> lock from the earliest kickoff for every NFL type and never reads `lockMode`;
+> `PickemPickEntry.tsx:138-141` then reports every game locked, making the
+> per-game branch one line below it unreachable. The server disagrees
+> (`nflPools.ts:568`, `:618-624`) and would accept the pick. The same gate also
+> swallows a commissioner's week extension, which the server *does* honour.
+> **This week's invites are Pick'em.** Three options and a recommendation are in
+> §1 of the morning doc; the fix is not written, because it changes when a member
+> may edit a pick on a live scorer.
+>
+> ⚠️ **FOUR MORE DEFECTS, NAMED AND UNFIXED** (morning doc §2, with file:line for
+> each): `pointsPerPick` and `primetimeBonus` are inert while the rules page shows
+> their values to members as what a pick is worth; the Pick'em commissioner proxy
+> pick has never worked (`NFLManagerView.tsx:841` keys the picks map by week, the
+> callable reads keys as game ids); the NFL manager's "List Pool Publicly" toggle
+> writes a field Browse does not read; and `HelpCopy.template` can never render
+> because no surface publishes a pool's settings into `TopicScope`. All four are
+> outside a content ticket's blast radius and are Kevin's to schedule.
+>
+> **#480 shipped** the Pick'em and shared-NFL help copy — eight topics across the
+> wizard rules step, the pool rules page, the pick sheet, standings, results,
+> recaps and the four commissioner sub-tabs, with
+> `tests/help-content-nfl-pickem.test.ts` (16 cases) proving Pick'em copy cannot
+> reach a Survivor or Margin reader on the shared `pool.nfl.*` pages. **It needs a
+> Coolify redeploy**; nothing breaks while it waits.
+>
+> ⚠️ **T9 IS NOT FULLY DONE AND ITS ALLOWLIST SAYS SO.** Three of the seven
+> coverage rows it was meant to close are still open, each carrying its reason in
+> `src/help/coverage-allowlist.ts`: `settings.lockMode` and
+> `settings.lockBufferMinutes` were WITHDRAWN after six review rounds because the
+> defect above makes any copy for them false, and `settings.pointsPerPick` was
+> never written because the field is inert. A row marked `T9-BLOCKED` is a
+> decision waiting on Kevin, not an unwritten sentence.
+>
+> **Review cost: 15 codex rounds** (11–15 forced by `CLAUDE.md` §2b after qodo's
+> report and its re-review — exactly the ceiling the exception allows, recorded in
+> the PR body), plus qodo's full report and a re-review after a draft toggle. 23
+> findings: 21 absorbed, 1 rejected with a measurement, 1 valid-but-deferred.
+
 > ## 🛑 2026-08-18 — PLAN-HELP-SYSTEM **T0 + T1 + T2 MERGED, DEPLOYED AND PROD-VERIFIED**
 >
 > **Read `MORNING-2026-08-18-HELP.md` first** for this effort;
