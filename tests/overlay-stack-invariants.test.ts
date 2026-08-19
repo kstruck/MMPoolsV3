@@ -150,6 +150,28 @@ describe('overlay shells register with the overlay stack', () => {
     }
   });
 
+  it('Escape cannot dismiss a confirm dialog whose request is in flight', () => {
+    // Escape is new behaviour for these shells, and on a confirm dialog it is
+    // a second way out that the Cancel button already gates. Without the guard
+    // Escape hides an irreversible delete that is still running, so it reads as
+    // cancelled when it is not (codex, round 2, on PaymentLedger). The flag
+    // named here is the one the dialog's own submit button is disabled by.
+    const guarded: Array<[string, string, string]> = [
+      ['BracketPoolDashboard/PaymentLedger.tsx', 'ledger-delete-confirm', 'updatingId'],
+      ['UserProfile.tsx', 'profile-update-email', 'emailUpdateLoading'],
+      ['Grid.tsx', 'squares-confirm-reservation', 'isSubmitting'],
+      ['PlayoffPool/RankingForm.tsx', 'playoff-confirm-submission', 'isSubmitting'],
+      ['Props/PropCardForm.tsx', 'props-confirm-submission', 'isSubmitting'],
+    ];
+    for (const [file, id, flag] of guarded) {
+      const shell = shells.find(s => s.file === file && s.text.includes(`id="${id}"`));
+      expect(shell, `${file} has no shell ${id}`).toBeDefined();
+      const onEscape = /onEscape=\{([^]*?)\}\s+className/.exec(shell!.text);
+      expect(onEscape, `${id} has no onEscape`).not.toBeNull();
+      expect(onEscape![1], `${id} does not gate Escape on ${flag}`).toContain(flag);
+    }
+  });
+
   it('no two overlays share an id', () => {
     // The stack is keyed by id: `isForeignOverlayOpen` compares the top entry
     // to the caller's id, so two overlays answering to one id make the Help

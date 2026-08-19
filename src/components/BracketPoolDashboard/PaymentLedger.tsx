@@ -210,7 +210,7 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
     return (
         <div className="space-y-6">
             {deletingId && (
-                <OverlayRoot id="ledger-delete-confirm" label="Confirm deletion" onEscape={() => { setDeletingId(null); setDeletingType(null); }} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <OverlayRoot id="ledger-delete-confirm" label="Confirm deletion" onEscape={() => { if (updatingId === null) { setDeletingId(null); setDeletingType(null); } }} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-card border border-line rounded-2xl max-w-md w-full p-6 shadow-card-hover animate-in zoom-in-95 duration-200">
                         <div className="flex items-center gap-4 text-brandred-600 mb-4">
                             <div className="w-12 h-12 rounded-full bg-brandred-600/10 flex items-center justify-center">
