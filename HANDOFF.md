@@ -1,5 +1,53 @@
 # HANDOFF — Session entry point
 
+> ## 🔴 2026-08-19 — **T16 AND THE TWO LOCK TOPICS ARE BUILT AND UNMERGED. qodo IS OUT OF CREDITS.**
+>
+> **Read `MORNING-2026-08-19-HELP.md` first** for this effort. It continues
+> `MORNING-2026-08-18-HELP-T9.md`, which continues `MORNING-2026-08-18-HELP.md`;
+> `MORNING-2026-08-18.md` remains the PLAN-PAYMENT-LEDGER entry point.
+>
+> 🔴 **qodo RAN OUT OF CREDITS PARTWAY THROUGH THE NIGHT.** It reviewed #482
+> normally at 03:33Z and by 05:04Z it was answering every new PR with
+> *"Qodo reviews are paused because your workspace is out of credits."*
+> `CLAUDE.md` §2b makes qodo half of the mandatory joint gate and
+> `mmp-qodo-cycle` §3 says a billing notice is a FAILED check, never a pass — so
+> **two finished PRs are open rather than merged.** Adding credits and toggling
+> each PR draft → ready is step 1 of the morning runbook and takes five minutes.
+>
+> ⚠️ **#483 — PLAN-HELP-SYSTEM T16, the ticket that was overdue three mornings
+> running.** Every `fixed inset-0` overlay shell now registers with the overlay
+> stack: `src/components/ui/OverlayRoot.tsx` carries the registration, the
+> `data-overlay-root` marker and the dialog semantics, 33 shells across 21 files
+> move to it, and a source-reading invariant fails when a new one is written
+> without it. Six of the 33 are scrims or full-bleed views and take
+> `dialog={false}` rather than a role they have not earned. Escape now closes
+> these overlays and focus moves into a dialog, wraps inside it, and returns to
+> the opener — `aria-modal="true"` was claiming the page was inert for 27
+> dialogs where it was not. **7 codex rounds; rounds 2–6 each found a real
+> defect and four were in code written to close the round before.** The five
+> LOCAL gates and CI are green; **the qodo half of the joint gate is not — it is
+> failing, not passing**, so this is not clearance to merge.
+>
+> ⚠️ **#484 — the two lock topics T9 withdrew, released by #482.**
+> `settings.lockMode` and `settings.lockBufferMinutes` land, and **two of T9's
+> three open coverage rows close.** The third, `settings.pointsPerPick`, stays:
+> that field is still inert. **7 codex rounds, and every finding was the same
+> shape** — copy naming a behaviour nobody had re-read. Content only.
+>
+> ⚠️ **THE FOUR DEFECTS FROM T9 ARE ALL STILL OPEN AND UNSCHEDULED**, carried
+> forward with file:line into §3 of the morning doc: `pointsPerPick` and
+> `primetimeBonus` inert while the rules page shows their values to members; the
+> Pick'em commissioner proxy pick keyed by week where the callable reads game
+> ids; the "List Pool Publicly" toggle writing a field Browse does not read; and
+> `HelpCopy.template` unable to render because nothing publishes a pool's
+> settings. The last one got more expensive tonight — #484 hit it four more
+> times.
+>
+> ⚠️ **T4 ITSELF IS NOT STARTED.** `NFLManagerView.tsx` still has 35 raw
+> `<label>`. #484 is the part of T4's surface #482 unblocked and that stands
+> alone. §6 of the morning doc maps the other 33 labels to their topics so the
+> next session does not re-derive it.
+
 > ## 🔴 2026-08-18 — PLAN-HELP-SYSTEM **T9 MERGED (#480)**, AND IT FOUND A LIVE PICK'EM DEFECT
 >
 > **Read `MORNING-2026-08-18-HELP-T9.md` first** for this effort. It continues
