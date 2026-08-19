@@ -31,6 +31,11 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
     // Every sentence below is read off that file:
     //   `nflLockMode()`     — confidence forces WEEKLY; Survivor/Margin always
     //   `weekLockAtFor()`   — PER_GAME references the LAST kickoff, WEEKLY the first
+    //
+    // NO CLAIM ABOUT THE CONTROL BEING DISABLED. The manager form greys it out
+    // while confidence points are on (`NFLManagerView.tsx:1188`); the CREATE
+    // WIZARD does not, and this topic is placed on both. So the copy states
+    // what the pool DOES, which is true on either screen (codex round 4).
     //   `gameLockAt()`      — kickoff minus the buffer
     id: 'settings.lockMode',
     title: 'Lock mode',
@@ -38,7 +43,7 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
     long: [
       'Per game is the default. Each pick stays open until its own game\u2019s deadline, so you can still change a Sunday pick after the Thursday night game has started.',
       'Weekly closes every pick in the week on the first game\u2019s deadline. Choose it when you want everyone playing the same slate with the same information.',
-      'Confidence points force weekly whatever this says, because a confidence sheet spends each weight across the week\u2019s games exactly once. The control is greyed out while confidence points are on, and the pool plays weekly.',
+      'Confidence points force weekly whatever this says, because a confidence sheet spends each weight across the week\u2019s games exactly once. A pool with confidence points on plays weekly however this is set.',
       'A deadline falls a set number of minutes before the kickoff it counts from \u2014 five by default, and the lock buffer is where that number is set. Your pool home counts down to the next deadline either way.',
     ].join('\n\n'),
     poolTypes: PICKEM,

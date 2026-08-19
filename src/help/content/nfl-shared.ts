@@ -68,7 +68,7 @@ export const NFL_SHARED_TOPICS: readonly HelpTopic[] = [
       'Your pool home counts down to the next deadline and names the date and time it falls on. The pick sheet marks a game whose pick has closed, and that pick cannot be changed.',
     ].join('\n\n'),
     tips: [
-      'Change it between weeks rather than during one. Members are shown the deadline on their pick sheet, so moving it while a week is running changes what some of them have already read.',
+      'Change it between weeks rather than during one. Your members read the deadline off the pool home, so moving it while a week is running changes what some of them have already been told.',
     ],
     poolTypes: NFL_SEASON_TYPES,
     audience: EVERYONE,
