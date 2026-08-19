@@ -4,6 +4,10 @@
 
 **NOT STARTED — plan drafted, no phase implemented.**
 
+⚠️ **READ "REVISION 1" BEFORE PHASES 1 AND 2.** It moves the frozen line off
+`nfl_games` into a write-once collection and supersedes the shape of both
+phases. The decisions in "The requirement" are unchanged.
+
 ## The requirement
 
 Kevin, 2026-08-19, verbatim:
@@ -597,6 +601,252 @@ the locked-spread mutation is the narrow cut.
 **K4 — The override keeps `locked: true`.** An override sets a new value on a
 still-locked line. It never unlocks. "Unlock, edit, re-lock" is the same hole
 with three steps.
+
+## REVISION 1 (2026-08-19) — the frozen line moves off the feed's document
+
+**Kevin, 2026-08-19: "Go with your recommendation for all."** This section is
+that recommendation. It supersedes the shape of Phases 1 and 2 below; the
+decisions in "The requirement" are unchanged and A still stands.
+
+### The finding that forced it
+
+Reading the Spread Manager to plan Phase 2 turned up a twentieth defect, found
+by hand rather than by codex, and it is the same shape as the previous thirteen
+— but worse, because it is the operator's own tool:
+
+`SuperAdminNFLSpreads.handleSave` (`:84-96`) writes **every game in the fetched
+list**, not the modified ones, and writes the whole map:
+
+```ts
+const promises = games.map(g => updateDoc(doc(db, 'nfl_games', g.id), {
+  spread: g.spread || { value: 0, locked: false }
+}));
+```
+
+`handleLockToggle` (`:60-72`) and `handleLockAll` (`:74-83`) rebuild the object
+as `{ value, locked }` from local state. So **every Save from the Spread Manager
+would erase `frozenAt` and `overrideId` on all sixteen games** — the operator
+wiping the freeze markers by using the tool the plan tells them to use.
+
+### Why that settles the design question
+
+Fourteen of twenty findings are now one sentence: *a writer clobbers the marker,
+or a path creates a line without one.* The marker keeps being lost because it
+lives on `nfl_games.spread` — a document a live feed owns, that four writers
+rewrite wholesale, and whose next writer inherits an obligation nothing enforces.
+
+Defending an immutability invariant there means defending it in every writer,
+forever, including ones not written yet.
+
+### The revision: a write-once store, still global
+
+**Keep decision A.** Spreads stay global — one frozen set per slate, shared by
+every pool. This is not decision B; nothing is snapshotted per pool and the
+scorer's notion of scope does not change.
+
+**Move the frozen line off `nfl_games`.** The freeze writes to its own
+collection — `nfl_frozen_spreads/{gameId}` — carrying
+`{ value, frozenAt, slate, overrideId? }`.
+
+- `firestore.rules`: `allow read: if true; allow write: if false.` **No client
+  can write it at all**, superadmin included. Not "refused when locked" —
+  refused, full stop. Phase 2.3's conditional rule disappears, and with it the
+  class of bug where the condition is subtly wrong.
+- The score sync and the importer **never touch this collection**, so 1.4b's
+  preservation rule, the `frozenAt || locked` union, and the matching importer
+  rule all disappear. They cannot clobber what they do not write.
+- The Spread Manager writes `nfl_games.spread` exactly as it does today for
+  entering and adjusting a *working* line, and cannot affect a frozen one. Its
+  Save no longer needs rewriting, and `handleLockAll` becomes "propose these
+  values to the freeze" rather than a write.
+- ⚠️ **AND THE FREEZE MUST CONSUME THAT PROPOSAL, OR THE MANUAL BACKSTOP DIES**
+  (codex round 4). The freeze fetches ESPN; the override only corrects a record
+  that already exists. So when the fetch refuses a slate for a missing line —
+  the preseason case that actually happened on 2026-08-19 — the operator would
+  enter values in the Spread Manager and **nothing in the design could turn them
+  into frozen records.** ATS submissions would stay blocked indefinitely, with
+  the backstop that has carried every week so far quietly removed.
+
+  **Per game, the freeze takes the feed value when the fetch carries one, and
+  the stored working value (`nfl_games.spread.value`) when it does not.**
+  All-or-nothing (1.3) then applies over the union: refuse only when a game has
+  neither. The normal week is unchanged and still frozen at the instant from the
+  feed; the operator's job in a gap week goes back to being "type the missing
+  numbers, re-run the freeze", which is what it is today.
+
+  A regression test drives a slate where the feed carries 14 of 16 lines and the
+  working line carries the other two, and asserts all sixteen freeze.
+- `submitNFLPicks`, the ATS grader and `computeWeekFingerprint` read the frozen
+  store when a frozen record exists, and fall back to `nfl_games.spread` when it
+  does not — which is what makes the cutover a no-op for slates frozen the old
+  way (R4).
+- ⚠️ **`nflLockWatch` COUNTS COVERAGE TOO, AND IT WOULD CRY WOLF ON EVERY
+  SUCCESSFUL FREEZE** (codex round 4). It derives coverage from
+  `nfl_games.spread.locked`, which this revision stops being the source of
+  truth — so a perfectly frozen ATS slate reads as 0 locked and pages inside the
+  warning window, on every week that worked. The watcher resolves frozen records
+  with the same precedence as submission and scoring, and a test asserts a
+  successfully frozen slate does NOT fire. A tripwire that cries wolf is worse
+  than no tripwire, which is the reasoning already written into that module.
+- ⚠️ **AND SO DOES EVERY SCREEN THAT SHOWS A MEMBER A NUMBER** (codex round 1 on
+  this revision). The pick sheet passes game documents straight to `GameMeta`,
+  which renders `game.spread.value` off `nfl_games`. Leave that alone and the
+  feed can move the working line after a freeze, so **an ATS player is shown one
+  number and graded on another** — which breaks the requirement more directly
+  than the bug this plan started from. One precedence rule, `frozen ?? working`,
+  and it applies to the read path and the display path together. A component
+  test pins it: a game whose frozen value differs from `nfl_games.spread` renders
+  the frozen one.
+- The only writers are the freeze pass and `overrideLockedSpread`, both Cloud
+  Functions, both already specified.
+- ⚠️ **THE RESCORE HANDOFF HAS TO FOLLOW THE DATA — AS A TRIGGER, COVERING EVERY
+  WRITER.** `nflSpreadRescoreTrigger` watches `nfl_games/{gameId}`, and under
+  this revision the canonical value lives elsewhere, so a correction made after
+  results were scored would never enqueue and finalized ATS standings would stay
+  on the old value (codex round 1).
+
+  An earlier draft answered this by enqueuing inside `overrideLockedSpread`'s
+  transaction, arguing atomicity. **That was a downgrade and codex round 3 caught
+  it**: the existing trigger's whole virtue is that it fires for *any* writer —
+  its own header says so, *"it is the only mechanism that covers EVERY writer"* —
+  and routing the enqueue through the callable covers exactly one. A console or
+  Admin-SDK write to the frozen store would then change the canonical grading
+  input and leave standings stale, which is a REGRESSION against the behaviour
+  this plan inherited.
+
+  So: **a trigger on `nfl_frozen_spreads`, `retry: true`, enqueuing on any
+  change whatever wrote it** — the same shape and the same reasoning as the
+  trigger it replaces. The override may also enqueue in its transaction; the
+  drain groups by slate and acknowledges every id it read, so a duplicate is
+  harmless.
+
+  **DELETES COUNT, AND THEY NEED THE KEY OFF `before`** (codex round 6). Deleting
+  a frozen record is a canonical-line change — reads fall back to the working
+  spread, so finalized ATS standings may need repair — and a Firestore delete has
+  no `after` document at all. The slate key lives only in the deleted record, so
+  the trigger derives it from `before.slate` on a delete, and alerts rather than
+  silently returning if that is missing or malformed. Without this, the
+  credential-bypass path the plan explicitly supports has a variant that leaves
+  old standings in place and says nothing.
+
+  **Approval stays a separate question**: rescore for every change, audit
+  exemption for approved ones. But *approved* cannot mean "carries a fresh
+  `overrideId`" alone — **a normal freeze creates every record without one**, so
+  that rule would file all sixteen games of every scheduled freeze as
+  unauthorized edits and make the audit trail worthless within a month (codex
+  round 6; the same mistake round 5 of the original made, which is twice now
+  that a detector was pointed at the freeze it exists to protect). Each record
+  therefore carries `source: 'freeze' | 'override' | 'backfill'`, written by the
+  only callers that are supposed to exist, and **approval is judged per source,
+  not by one rule for all of them** (codex round 7 — the first attempt at this
+  still demanded an `overrideId` from writes that by design never carry one,
+  which is the same false-alarm flood one paragraph further on):
+
+  | Write | Approved when |
+  |---|---|
+  | CREATE, no prior record | `source` is `freeze` or `backfill` |
+  | AMEND an existing record | `source` is `override` AND `overrideId` is fresh |
+  | DELETE | never — always unapproved, always enqueued |
+
+  Anything else is unapproved: it gets the `admin_audit` row as well as the
+  rescore. A console write satisfies none of the rows, because nothing tells it
+  to set `source`.
+
+### Cutover: backfill first, or the fallback is a hole
+
+⚠️ **THE FALLBACK IS SAFE ONLY ONCE NOTHING LIVE DEPENDS ON IT** (codex round 2
+on this revision). For any slate locked before this ships — including the
+sixteen Kevin locks by hand on 2026-08-19 — there is no `nfl_frozen_spreads`
+document, so reads fall back to `nfl_games.spread`. And this revision
+deliberately deletes the conditional rules deny, which leaves the Spread Manager
+free to change that field. During the migration window an admin could therefore
+alter a live slate's line at both pick time and grading — worse than today,
+introduced by the change meant to prevent exactly that.
+
+**So the backfill is a precondition, not a tidy-up** (this supersedes R4, which
+had it the other way round):
+
+1. A one-shot backfill writes an `nfl_frozen_spreads` record for **every game
+   whose `nfl_games.spread.locked === true`**, carrying the stored value and a
+   `frozenAt` of the backfill instant, `source: 'backfill'`, and a
+   `legacy: true` marker so a backfilled record is never mistaken for a measured
+   freeze instant. **`source` is not optional here** — the trigger's approval
+   table keys on it, so a backfill without it files an unapproved-change event
+   for every legacy game it writes (codex round 8).
+2. It is a production-data mutation, so it takes the house shape: kill-switch,
+   dry-run default, reviewed dry-run output before the live run
+   (`mmp-change-control` Rule 1).
+3. It runs **before** the read path ships. Order matters: reads that prefer the
+   frozen store are harmless while the store is empty only if nothing can change
+   the working line, which is precisely what is not true.
+4. After it, the `nfl_games.spread` fallback covers only slates that were never
+   locked at all — nothing live and nothing graded — so it is a legacy read
+   rather than a live dependency.
+
+### Two predicates that must follow the data
+
+⚠️ **1.1's "already frozen" test reads the wrong document now** (codex round 5).
+It asks whether a game carries `nfl_games.spread.frozenAt`, and this revision
+writes that marker only to `nfl_frozen_spreads`. Left as written, the
+once-per-slate invariant stops being enforced by the selection logic and a
+manual re-run before kickoff re-freezes a slate that is already done — the round
+7 defect, resurrected by moving the data. **A slate is "already frozen" when any
+`nfl_frozen_spreads` record exists for it**, and the transaction re-reads that
+before writing (1.4's belt to 1.1's braces).
+
+⚠️ **The override keeps its CREATE shape, and the revision nearly dropped it**
+(codex round 5). Once-per-slate stops the freeze re-running, so if the override
+could only correct an existing record there would be no way to give a late-added
+game a frozen line — R3's whole remediation path gone, the slate permanently
+incomplete, ATS submissions blocked for good. `overrideLockedSpread` therefore
+keeps both shapes against the new store, exactly as the original 2.1 had them:
+
+| Frozen record | What the callable writes |
+|---|---|
+| exists | amend: new `value`, new `overrideId`, `source: 'override'`, `frozenAt` untouched |
+| absent | create: `{ value, frozenAt: now, slate, overrideId, source: 'override' }` |
+
+**Both paths write `source: 'override'`.** An earlier draft omitted it and the
+approval table above would then have filed every legitimate override as an
+unapproved change (codex round 8) — the third time in this plan a detector was
+aimed at the mechanism it exists to protect. The pattern is worth naming: **every
+writer must declare itself, and every payload spec in this document has to carry
+that declaration**, or the detector reads silence as guilt.
+
+**What survives from the original shape:** the once-per-slate rule (1.1), the
+stated instant (1.6), the all-or-nothing transaction with stored-slate
+reconciliation (1.3, 1.4), the lease (1.3), the dry-run and the manual invocation
+(1.5, 1.5b), the audited override (2.1) and the alarm (Phase 0). The freeze
+transaction gets simpler, not harder: it creates documents that do not exist
+rather than amending ones four other writers share.
+
+**What it costs.** A second place the number can live, and therefore a read path
+that has to prefer the right one. That is a real risk and it is the same class
+as the one being removed — but it is detectable rather than silent: a
+reconciliation check can compare the two and alarm on divergence, which is
+impossible today because there is only one copy and no record of what it should
+have been.
+
+### Consequence for defect 1b — it does NOT split out
+
+I recommended lifting 1b into its own small PR. **After reading the code, that
+was wrong, and the correction matters:**
+
+- **The detection fix needs the durable marker.** After an unlock, an edit to
+  the line is indistinguishable from routine ESPN sync traffic — which is
+  exactly the exclusion `lockedSpreadChanged`'s comment says it exists to
+  preserve. Telling them apart requires knowing the line had been frozen, and
+  under this revision that knowledge is the presence of a
+  `nfl_frozen_spreads` record. There is no cheaper marker available today.
+- **Closing the exposure by removing the unlock button would strand the
+  operator.** Without the override callable there would be no way to correct a
+  mislocked line — on the same week Kevin is locking sixteen of them by hand.
+
+So 1b is fixed by this revision rather than before it: once the frozen value
+lives somewhere no client can write, unlock → edit → re-lock on
+`nfl_games.spread` cannot change what anything grades against, and the whole
+sequence stops being a correctness problem. `lockedSpreadChanged` then guards
+the legacy path only.
 
 ## What fifteen rounds revealed about decision A
 
