@@ -101,6 +101,14 @@ export function isWeekComplete(
     if (!entry) return false;
     if (poolType === 'NFL_PICKEM') {
         if (weekGames.length === 0) return false;
+        const answered = weekGames.filter(g => !!entry.picks?.[g.id]).length;
+        // A member who answered NOTHING all week did not complete it, however
+        // many games have since closed. Without this the exemption below turns
+        // a wholly missed slate into "picks submitted" the moment the last game
+        // kicks off — a false claim, and the opposite of what the member needs
+        // to see (codex R4). The exemption exists for a PARTIALLY answered
+        // week, which is the case it was written for.
+        if (answered === 0) return false;
         return weekGames.every(g => !!entry.picks?.[g.id] || (isGameClosed?.(g) ?? false));
     }
     // Survivor / Margin: one pick per week keyed by week number

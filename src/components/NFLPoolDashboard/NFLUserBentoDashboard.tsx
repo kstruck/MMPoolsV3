@@ -4,7 +4,8 @@ import type { User as UserType, Pool, NFLGame, WeeklyRecap } from '../../types';
 import { NFLGameTicker } from './NFLGameTicker';
 import { dbService } from '../../services/dbService';
 import { gamesForPoolWeek, poolSeasonType, isWeekComplete, isWeekLockedNow } from '../../utils/nflPending';
-import { nflLockMode, weekLockOverrideFor } from '@shared/nflLockMode';
+import { nflLockMode, weekLockOverrideFor, gameLockAt } from '@shared/nflLockMode';
+import { now as serverNow } from '../../utils/serverClock';
 import { pickCtaFor } from '../../utils/pickCta';
 import { effectiveBufferMinutesForWeek } from '@shared/weeklyHardLock';
 import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
@@ -289,10 +290,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   // true and would label a pool with no games as already picked.
   // `isWeekComplete` (utils/nflPending) is that exact rule, shared with the
   // week checklist — one implementation so the banner and this card agree.
-  const weekPicksComplete = useMemo(() => {
-    if (!myEntry || weeklyGames.length === 0) return false;
-    return isWeekComplete(_pool.type, myEntry, weeklyGames, selectedWeek);
-  }, [myEntry, weeklyGames, _pool.type, selectedWeek]);
+  // (computed below, once the per-game lock predicate exists)
 
   // ONE label for every picks button on this page (item 8, Kevin 2026-08-14):
   // the two red CTAs used to disagree — the banner said "Make picks" for the
@@ -311,12 +309,24 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   // is honoured server-side on Pick'em only; pass it so the button cannot say
   // "Picks Locked" during an extension the server still accepts.
   const weekLockOverrideMs = weekLockOverrideFor(castPool, selectedWeek);
-  const weekLocked = isWeekLockedNow(
-    weeklyGames,
-    effectiveBufferMinutesForWeek(castPool, selectedWeek, weeklyGames.map(g => g.startTime)),
-    lockMode,
-    weekLockOverrideMs,
-  );
+  const bufferMinutes = effectiveBufferMinutesForWeek(castPool, selectedWeek, weeklyGames.map(g => g.startTime));
+  const weekLocked = isWeekLockedNow(weeklyGames, bufferMinutes, lockMode, weekLockOverrideMs);
+
+  // The SAME per-game closure rule the checklist and the status service use.
+  // Without it this CTA says "Make Picks" to a member whose only unanswered game
+  // is one they can no longer touch — the third caller of isWeekComplete, and
+  // the one the first pass missed (codex R4). Declared HERE rather than beside
+  // the memo it feeds, because it reads `weekLocked` and `bufferMinutes`.
+  //
+  // NOT memoized, for the reason the CTA comment above gives: it reads the
+  // server clock, so a memo would freeze it across a game's lock.
+  const weekPicksComplete = (() => {
+    if (!myEntry || weeklyGames.length === 0) return false;
+    const isGameClosed = (g: { startTime: number }) => lockMode === 'WEEKLY'
+      ? weekLocked
+      : serverNow() >= gameLockAt(g.startTime, bufferMinutes, weekLockOverrideMs);
+    return isWeekComplete(_pool.type, myEntry, weeklyGames, selectedWeek, isGameClosed);
+  })();
   const hasAnyPickThisWeek = !!myEntry && (
     _pool.type === 'NFL_PICKEM'
       ? weeklyGames.some(g => !!myEntry.picks?.[g.id])

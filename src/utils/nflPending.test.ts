@@ -283,6 +283,27 @@ describe('a week is complete once nothing pickable is left', () => {
         expect(isWeekComplete('NFL_PICKEM', { picks: {} }, slate, 1, closed)).toBe(false);
     });
 
+    /**
+     * The over-correction, caught by codex on the fix for qodo #10.
+     *
+     * Exempting every closed game turns a WHOLLY missed slate into "picks
+     * submitted" the moment the last game kicks off — the checklist would tell
+     * a member who never played that their picks are in. The exemption is for a
+     * PARTIALLY answered week, which is the case it was written for.
+     */
+    it('a member who answered NOTHING has not completed the week', () => {
+        const allClosed = () => true;
+        expect(isWeekComplete('NFL_PICKEM', { picks: {} }, slate, 1, allClosed)).toBe(false);
+        // …while one answer plus closed remainder IS complete, so the rule is
+        // "answered something", not "closed games never count".
+        expect(isWeekComplete('NFL_PICKEM', { picks: { sun: 'BUF' } }, slate, 1, allClosed)).toBe(true);
+    });
+
+    it('a fully locked, wholly unanswered week reads as missed end to end', () => {
+        const bothStarted = [at('thu', -10_000_000), at('sun', -1_000)];
+        expect(getWeekStatus('NFL_PICKEM', { picks: {} }, bothStarted, 1, 0, 'PER_GAME')).toBe('missed');
+    });
+
     it('the checklist stops nagging once the open games are saved', () => {
         // End to end through getWeekStatus, which derives `closed` itself.
         expect(getWeekStatus('NFL_PICKEM', entry, slate, 1, 0, 'PER_GAME')).toBe('complete');
