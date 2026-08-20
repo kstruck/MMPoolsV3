@@ -132,3 +132,15 @@ export function classifyFrozenChange(
       : `amended with source ${a.source ?? '(none)'}${freshId ? '' : ' and no fresh overrideId'} — only overrideLockedSpread may amend a frozen line`,
   };
 }
+
+/**
+ * The `admin_audit` document id an override writes, derived from its own id.
+ *
+ * Deterministic on purpose: it lets the trigger VERIFY that a record claiming an
+ * `overrideId` really was written by `overrideLockedSpread`, with a single
+ * `getDoc` and no query, no index, and no dependence on `capMetadata` having kept
+ * a particular key (codex r6 on PR 3). Every field the table above reads is one a
+ * console writer can set by hand; this is the one that cannot be forged without
+ * also forging a second document.
+ */
+export const overrideAuditId = (overrideId: string): string => `override-${overrideId}`;

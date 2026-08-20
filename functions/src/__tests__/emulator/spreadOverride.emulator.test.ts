@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import "./setup";
 import { overrideLockedSpreadInternal, handleFrozenSpreadChange } from "../../nflSpreadOverride";
 import { FROZEN_SPREADS_COLLECTION, type FrozenSpread } from "../../shared/frozenSpread";
+import { overrideAuditId } from "../../lib/frozenSpreadAudit";
 
 /**
  * `overrideLockedSpread` and the frozen-store trigger, end to end against a real
@@ -124,6 +125,27 @@ describe("overrideLockedSpreadInternal (emulator)", () => {
         expect((rows[0].metadata as Record<string, unknown>).reason).toBe("Corrected against the closing line");
     });
 
+    it("leaves an audit record the TRIGGER can verify, under the derived id", async () => {
+        // The two halves of r6 meet here: the callable writes the proof, and the
+        // trigger reads it. If this id ever drifts, every legitimate override is
+        // filed as a forgery.
+        await seedGame("g1");
+        await seedFrozen("g1");
+        const res = await overrideLockedSpreadInternal(admin.firestore(), ACTOR, {
+            gameId: "g1", value: -7, reason: "Corrected against the closing line",
+        });
+        const proof = await admin.firestore().collection("admin_audit").doc(overrideAuditId(res.overrideId)).get();
+        expect(proof.exists).toBe(true);
+
+        await handleFrozenSpreadChange(admin.firestore(), {
+            gameId: "g1", eventId: "ev-real",
+            before: { gameId: "g1", value: -3.5, frozenAt: 1, ...SLATE, source: "freeze" },
+            after: (await frozenOf("g1"))!,
+        });
+        const rows = await auditRows();
+        expect(rows.filter(r => r.action === "UNAPPROVED_FROZEN_SPREAD_CHANGE")).toEqual([]);
+    });
+
     it("does NOT enqueue a rescore itself — the trigger owns that, because it covers every writer", async () => {
         await seedGame("g1");
         await seedFrozen("g1");
@@ -179,13 +201,30 @@ describe("handleFrozenSpreadChange (emulator) — the detector and the handoff",
         expect(rows[0]).toMatchObject({ action: "UNAPPROVED_FROZEN_SPREAD_CHANGE", targetId: "g1", status: "error" });
     });
 
-    it("ENQUEUES BUT DOES NOT AUDIT an approved override", async () => {
+    it("ENQUEUES BUT DOES NOT AUDIT an override whose audit record actually exists", async () => {
         // Both halves matter. Exempting an approved override from the RESCORE would
         // leave finalized ATS standings on the old number because the change was
         // properly approved (codex round 11).
+        await admin.firestore().collection("admin_audit").doc(overrideAuditId("o2")).set({ action: "OVERRIDE_LOCKED_SPREAD" });
         await change(rec({ overrideId: "o1" }), rec({ value: -9, overrideId: "o2", source: "override" }));
         expect(await queueSize()).toBe(1);
-        expect(await auditRows()).toEqual([]);
+        // Only the seeded proof row; no unapproved row was added.
+        const rows = await auditRows();
+        expect(rows.filter(r => r.action === "UNAPPROVED_FROZEN_SPREAD_CHANGE")).toEqual([]);
+    });
+
+    it("AUDITS A FORGED overrideId — a claim on the document is not a proof (codex r6)", async () => {
+        // A console or Admin-SDK writer can set `source: 'override'` and any fresh
+        // UUID by hand, which the self-declared table waves straight through. The
+        // callable commits its audit row in the SAME transaction under an id derived
+        // from the override id, so a real override always has one and a forged id
+        // never does.
+        await change(rec({ overrideId: "o1" }), rec({ value: -9, overrideId: "forged", source: "override" }));
+        expect(await queueSize()).toBe(1);
+        const rows = await auditRows();
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ action: "UNAPPROVED_FROZEN_SPREAD_CHANGE" });
+        expect((rows[0].metadata as Record<string, unknown>).detail).toContain("not written by overrideLockedSpread");
     });
 
     it("handles a DELETE, taking the slate key from `before`", async () => {

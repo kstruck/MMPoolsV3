@@ -640,6 +640,21 @@ technically:
   `overrideId` by hand. The point is that the ordinary slip — open the console
   or the Spread Manager, unlock, retype a number — leaves a trail and repairs
   the standings.
+
+  ⚠️ **RAISED IN PR 3 (2026-08-20, codex r6): AN `overrideId` IS VERIFIED, NOT
+  TRUSTED.** Round 3 of the original rejected "look for a matching `admin_audit`
+  row" as race-prone in both directions, and it was right *at the time* — the
+  spread and the row were separate writes. They are not any more: the callable
+  commits both in ONE transaction, under an `admin_audit` id derived from the
+  override id, so a real override always has a matching row and there is no window
+  in which a legitimate one looks forged. The trigger does one `getDoc` on that id
+  and only on the path that claims one, so a routine freeze costs nothing.
+
+  **Partially absorbed, and the rest rejected with reasoning.** A console CREATE
+  stamped `source: 'freeze'` still reads as approved, and closing that would mean
+  an audit row per game per freeze — sixteen routine rows a week, which is the
+  "log nobody reads" failure this plan warns about twice. The credential path is
+  DETECTED, not prevented, exactly as the Goal says; IAM is the real control.
 - Reducing who holds datastore-write IAM on the prod project is the real control
   and is Kevin's call; it is named here so the residual risk is written down
   rather than implied away.

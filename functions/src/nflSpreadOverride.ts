@@ -23,7 +23,7 @@ import { validated } from './lib/validated';
 import { adminAuditDoc, writeAdminAudit } from './lib/adminAudit';
 import { overrideLockedSpreadSchema } from './schemas/nflPools';
 import { FROZEN_SPREADS_COLLECTION, slateFieldsOf, type FrozenSpread } from './shared/frozenSpread';
-import { classifyFrozenChange } from './lib/frozenSpreadAudit';
+import { classifyFrozenChange, overrideAuditId } from './lib/frozenSpreadAudit';
 import { enqueueRescore } from './lib/rescoreQueue';
 
 /**
@@ -131,8 +131,15 @@ export async function overrideLockedSpreadInternal(
       // through `adminAuditDoc` so it is byte-for-byte the shape `writeAdminAudit`
       // produces — two spellings of an audit row is how one of them quietly stops
       // matching a query.
+      // ⚠️ A DETERMINISTIC ID DERIVED FROM THE OVERRIDE ID (codex r6 on PR 3).
+      // The trigger verifies that a record claiming `overrideId: X` really was
+      // written by this callable, and it does that with a single `getDoc` on
+      // `admin_audit/override-X` — no query, no index, and no dependence on
+      // `capMetadata` having kept a particular key. Committed in the SAME
+      // transaction as the spread, so if the record exists the row does too and
+      // there is no window in which a legitimate override looks forged.
       tx.set(
-        db.collection('admin_audit').doc(),
+        db.collection('admin_audit').doc(overrideAuditId(overrideId)),
         adminAuditDoc({
           actorUid: actor.uid,
           actorEmail: actor.email,
@@ -196,8 +203,38 @@ export async function handleFrozenSpreadChange(
     const { before, after, gameId } = ev;
     const event = { id: ev.eventId };
 
-    const verdict = classifyFrozenChange(before, after);
-    if (verdict.kind === 'noop') return;
+    const selfDeclared = classifyFrozenChange(before, after);
+    if (selfDeclared.kind === 'noop') return;
+
+    // ⚠️ AN `overrideId` ON THE DOCUMENT IS A CLAIM, NOT A PROOF (codex r6 on PR
+    // 3). Every field the approval table reads is one a console or Admin-SDK
+    // writer can set by hand, so a write that changes a frozen line while
+    // stamping `source: 'override'` and a fresh UUID would be waved through by the
+    // detector built to catch exactly that writer.
+    //
+    // Verified rather than trusted: the callable commits its `admin_audit` row in
+    // the SAME transaction as the spread, under an id derived from the override
+    // id, so a real override always has one and a forged id never does. One
+    // `getDoc`, only on the path that claims an id — a routine freeze carries none
+    // and costs nothing.
+    //
+    // ⚠️ WHAT THIS DOES NOT CLOSE, and the plan says so rather than implying it
+    // away: a console CREATE stamped `source: 'freeze'` still reads as approved.
+    // Closing that would mean an audit row per game per freeze — sixteen routine
+    // rows a week, which is the "log nobody reads" failure this plan warns about
+    // twice. The credential path is DETECTED, not prevented; reducing who holds
+    // datastore-write IAM on the prod project is the real control and is Kevin's.
+    let verdict = selfDeclared;
+    if (verdict.approved && after?.overrideId) {
+      const proof = await db.collection('admin_audit').doc(overrideAuditId(after.overrideId)).get();
+      if (!proof.exists) {
+        verdict = {
+          ...verdict,
+          approved: false,
+          reason: `${verdict.reason}, but no override audit record exists for ${after.overrideId} — this was not written by overrideLockedSpread`,
+        };
+      }
+    }
 
     // ⚠️ EVERY VALID SLATE KEY ON EITHER SIDE, NOT JUST `after`'s (codex r3 on
     // this PR).
