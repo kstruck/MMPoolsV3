@@ -20,7 +20,7 @@ import * as admin from "firebase-admin";
 import { validated } from "../lib/validated";
 import { writeAdminAudit } from "../lib/adminAudit";
 import { backfillFrozenSpreadsSchema } from "../schemas/migrations";
-import { FROZEN_SPREADS_COLLECTION, type FrozenSpread } from "../shared/frozenSpread";
+import { FROZEN_SPREADS_COLLECTION, slateFieldsOf, type FrozenSpread } from "../shared/frozenSpread";
 import { readJobGate } from "../nflSchedule";
 
 /**
@@ -46,14 +46,12 @@ export function plannedRecord(
   // `season`, the freeze pass selects by the three-equality slate, and a DELETE
   // trigger can only recover the slate from the record's own copy. A record with
   // a malformed slate would be invisible to all three, so refuse to write one.
-  const season = String(game.season ?? "");
-  const seasonType = Number(game.seasonType);
-  const week = Number(game.week);
-  if (!season || !Number.isInteger(seasonType) || !Number.isInteger(week)) {
-    return { skip: `malformed slate (season=${season || "?"}, seasonType=${game.seasonType}, week=${game.week})` };
+  const slate = slateFieldsOf(game);
+  if (!slate) {
+    return { skip: `malformed slate (season=${game.season ?? "?"}, seasonType=${game.seasonType}, week=${game.week})` };
   }
 
-  return { gameId, value, frozenAt, season, seasonType, week, source: "backfill", legacy: true };
+  return { gameId, value, frozenAt, ...slate, source: "backfill", legacy: true };
 }
 
 export const backfillFrozenSpreads = validated(

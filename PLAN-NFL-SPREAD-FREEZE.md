@@ -11,8 +11,8 @@ original shape of Phases 1 and 2.
 | PR | Scope | State |
 |---|---|---|
 | **1** | `nfl_frozen_spreads` + rules, the `frozen ?? working` precedence on every read AND display path, and the cutover backfill | **merged 2026-08-20, #489** |
-| **2** | the fetch-and-freeze pass (1.1-1.6), the slate lease, and `runNFLSpreadFreeze` (1.5b) | **built** |
-| 3 | `overrideLockedSpread` (2.1), the Spread Manager routing (2.2), and the frozen-store rescore/audit trigger | not started |
+| **2** | the fetch-and-freeze pass (1.1-1.6), the slate lease, and `runNFLSpreadFreeze` (1.5b) | **merged 2026-08-20, #490** |
+| **3** | `overrideLockedSpread` (2.1), the Spread Manager rework (2.2), and the frozen-store rescore/audit trigger (2.4) | **built** |
 
 ⚠️ **THE BACKFILL IS A PRECONDITION OF THE READS AND MUST BE RUN, LIVE, BEFORE
 PR 2.** Until it has, a slate locked the old way has no frozen record, so reads
@@ -502,8 +502,35 @@ disarming the alarm for good. Same failure as 1.4b, one layer up: reconstructing
 the object rather than amending it. Amend the stored spread; never rebuild it. `nflSpreadRescoreTrigger` already fires
 on a locked-spread change, so standings repair rides the existing handoff.
 
-2.2 **Then the Spread Manager routes EVERY LOCK through it**, not only edits to
-an already-locked row. A row whose spread is locked edits via the callable and
+⚠️ **2.2 WAS RESHAPED BY REVISION 1, AND PR 3 IMPLEMENTS THE REVISED FORM
+(2026-08-20).** The original said every lock routes through the callable, because
+`nfl_games.spread.locked` was the thing being protected. Under Revision 1 it is
+not: the canonical line lives in `nfl_frozen_spreads` and no client can write it
+at all, so the Spread Manager's job is simply to stop being able to lock.
+
+**What shipped:** the per-row lock toggle and **Lock All Spreads** are REMOVED,
+not routed. They wrote `{ value, locked: true }` straight to `nfl_games`, which
+creates a line members can submit against with no frozen record, no audit, and
+nothing the detector can see — the manual backstop quietly manufacturing lines
+the scheme cannot watch. Unlocking was worse: unlock → edit → re-lock fires no
+rescore at all (defect 1b), so finalized ATS standings stay on the old line
+permanently.
+
+The manager now shows two kinds of row. **Not frozen:** `nfl_games.spread` is a
+WORKING line, editable and saved by dotted path, and the freeze reads it as the
+per-game fallback — which is what keeps the manual backstop working. **Frozen:**
+read-only, with one button that calls `overrideLockedSpread` and prompts for a
+reason. Save writes only the rows that CHANGED; it used to write every game in
+the fetched list, whole-map, every time.
+
+⚠️ **CONSEQUENCE FOR THE OPERATOR, and it is Kevin's to accept:** there is no
+longer any way to unblock an ATS week by hand without freezing it. That is the
+invariant — every submittable ATS slate is a frozen one — but it means the repair
+path for a refused Tuesday is *type the missing numbers, then re-run the freeze*,
+and a live freeze is refused before the slate's stated cutoff.
+
+**The original 2.2, superseded:** the Spread Manager routes every lock through the
+callable, not only edits to an already-locked row. A row whose spread is locked edits via the callable and
 prompts for a reason. The unlock toggle (`:66-68`) is removed — unlocking is not
 a repair, it is a hole.
 
@@ -613,6 +640,21 @@ technically:
   `overrideId` by hand. The point is that the ordinary slip — open the console
   or the Spread Manager, unlock, retype a number — leaves a trail and repairs
   the standings.
+
+  ⚠️ **RAISED IN PR 3 (2026-08-20, codex r6): AN `overrideId` IS VERIFIED, NOT
+  TRUSTED.** Round 3 of the original rejected "look for a matching `admin_audit`
+  row" as race-prone in both directions, and it was right *at the time* — the
+  spread and the row were separate writes. They are not any more: the callable
+  commits both in ONE transaction, under an `admin_audit` id derived from the
+  override id, so a real override always has a matching row and there is no window
+  in which a legitimate one looks forged. The trigger does one `getDoc` on that id
+  and only on the path that claims one, so a routine freeze costs nothing.
+
+  **Partially absorbed, and the rest rejected with reasoning.** A console CREATE
+  stamped `source: 'freeze'` still reads as approved, and closing that would mean
+  an audit row per game per freeze — sixteen routine rows a week, which is the
+  "log nobody reads" failure this plan warns about twice. The credential path is
+  DETECTED, not prevented, exactly as the Goal says; IAM is the real control.
 - Reducing who holds datastore-write IAM on the prod project is the real control
   and is Kevin's call; it is named here so the residual risk is written down
   rather than implied away.
@@ -821,9 +863,19 @@ collection — `nfl_frozen_spreads/{gameId}` — carrying
 
   | Write | Approved when |
   |---|---|
-  | CREATE, no prior record | `source` is `freeze` or `backfill` |
+  | CREATE, no prior record | `source` is `freeze` or `backfill`, **or `override` carrying an `overrideId`** |
   | AMEND an existing record | `source` is `override` AND `overrideId` is fresh |
   | DELETE | never — always unapproved, always enqueued |
+
+  ⚠️ **THE CREATE ROW WAS AMENDED IN PR 3 (2026-08-20), AND IT IS THE FOURTH TIME
+  THIS PLAN AIMED A DETECTOR AT THE MECHANISM IT PROTECTS.** As written the row
+  approved a create only from `freeze` or `backfill` — while two paragraphs below,
+  the plan says both override paths write `source: 'override'` *"because the
+  approval table above would then have filed every legitimate override as an
+  unapproved change"*. Read literally, it did exactly that: `overrideLockedSpread`
+  keeps a CREATE shape on purpose (R3's remediation for a late-added game), and
+  every use of it would have been filed as unauthorized. Found writing the tests
+  for the table, not by a reviewer.
 
   Anything else is unapproved: it gets the `admin_audit` row as well as the
   rescore. A console write satisfies none of the rows, because nothing tells it
@@ -881,7 +933,18 @@ keeps both shapes against the new store, exactly as the original 2.1 had them:
 | Frozen record | What the callable writes |
 |---|---|
 | exists | amend: new `value`, new `overrideId`, `source: 'override'`, `frozenAt` untouched |
-| absent | create: `{ value, frozenAt: now, slate, overrideId, source: 'override' }` |
+| absent, **on a slate that already has other frozen records** | create: `{ value, frozenAt: now, slate, overrideId, source: 'override' }` |
+| absent, on a slate with NO frozen records | **refused** |
+
+⚠️ **THE THIRD ROW WAS ADDED IN PR 3 (2026-08-20, codex r1)** and it is load-bearing.
+Without it the callable is a way to freeze one game of an untouched future week —
+and 1.1's eligibility test reads *"any frozen record exists for this slate"*, so
+that single record makes the weekly freeze **skip the slate permanently**. The
+other fifteen games never freeze, every ATS pool on it stays blocked behind
+`SPREADS_NOT_LOCKED`, and there is no path back. It would also be a manual freeze
+before the stated cutoff, through the one door built to bypass that rule
+legitimately. A sibling record is exactly the right test: present for R3's case
+(the rest of the week froze days ago), absent for every other.
 
 **Both paths write `source: 'override'`.** An earlier draft omitted it and the
 approval table above would then have filed every legitimate override as an

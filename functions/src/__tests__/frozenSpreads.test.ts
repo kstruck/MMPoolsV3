@@ -4,6 +4,7 @@ import {
   effectiveSpread,
   frozenSlateId,
   isUsableFrozenSpread,
+  slateFieldsOf,
   FROZEN_SPREADS_COLLECTION,
   type FrozenSpread,
 } from '../shared/frozenSpread';
@@ -238,5 +239,29 @@ describe('backfillFrozenSpreads — plannedRecord', () => {
     // own copy — a malformed slate would be invisible to all three.
     expect(plannedRecord('g1', { ...game, week: undefined }, at)).toMatchObject({ skip: expect.stringContaining('malformed slate') });
     expect(plannedRecord('g1', { ...game, season: '' }, at)).toMatchObject({ skip: expect.stringContaining('malformed slate') });
+  });
+});
+
+describe('slateFieldsOf — `Number.isInteger` alone is not the test', () => {
+  it('reads a good slate', () => {
+    expect(slateFieldsOf({ season: 2026, seasonType: '1', week: 4 })).toEqual({ season: '2026', seasonType: 1, week: 4 });
+  });
+
+  it('REFUSES A NULL WEEK, which reads as 0 and 0 is an integer', () => {
+    // Three call sites had independently written `Number.isInteger(week)` and all
+    // three admitted a week-0 slate that does not exist. Found by an emulator test
+    // on 2026-08-20 that expected a refusal and got a written frozen record.
+    expect(slateFieldsOf({ season: '2026', seasonType: 1, week: null })).toBeNull();
+    expect(slateFieldsOf({ season: '2026', seasonType: null, week: 4 })).toBeNull();
+    expect(slateFieldsOf({ season: '2026', seasonType: 0, week: 4 })).toBeNull();
+    expect(slateFieldsOf({ season: '2026', seasonType: 1, week: 0 })).toBeNull();
+  });
+
+  it('refuses a missing or non-numeric slate', () => {
+    expect(slateFieldsOf(undefined)).toBeNull();
+    expect(slateFieldsOf({ season: '', seasonType: 1, week: 4 })).toBeNull();
+    expect(slateFieldsOf({ season: null, seasonType: 1, week: 4 })).toBeNull();
+    expect(slateFieldsOf({ season: '2026', seasonType: 1, week: 'x' })).toBeNull();
+    expect(slateFieldsOf({ season: '2026', seasonType: 1, week: 4.5 })).toBeNull();
   });
 });

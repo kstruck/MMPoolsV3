@@ -1670,6 +1670,46 @@ export const dbService = {
      * the slate: that is exactly today's behaviour, so a degraded read is no worse
      * than not having shipped this.
      */
+    /**
+     * PLAN-NFL-SPREAD-FREEZE 2.1 — the ONE path that may change a frozen line.
+     *
+     * A frozen record is refused to every client by `firestore.rules`, superadmin
+     * included, so the Spread Manager cannot write one directly and must not try.
+     * Also creates a frozen line for a game added to a slate after it froze, which
+     * is the remediation path for a flex or a late addition.
+     */
+    overrideLockedSpread: async (payload: { gameId: string; value: number; reason: string }) => {
+        const fn = httpsCallable(functions, 'overrideLockedSpread');
+        const res = await fn(withCorrelationId(payload));
+        return res.data as { success: true; overrideId: string; shape: 'amend' | 'create'; previousValue: number | null };
+    },
+
+    /**
+     * The frozen lines for a set of games, keyed by game id — what the Spread
+     * Manager reads to know which rows it may still edit directly and which have
+     * been committed to.
+     *
+     * ⚠️ BY GAME ID, NOT BY SLATE (codex r5 on PR 3). A game re-scheduled into
+     * another week after its slate froze keeps the ORIGINAL slate on its frozen
+     * record, deliberately — the override preserves it so `frozenAt` and the slate
+     * stay as the freeze wrote them. A slate query therefore misses it from both
+     * weeks: the manager would render it as an editable working line, saving would
+     * not change the canonical value, and the Override button would be unreachable
+     * from anywhere. Everything else in this design resolves a frozen line by game
+     * id; so does this.
+     */
+    getFrozenSpreadsForGames: async (gameIds: string[]): Promise<Record<string, FrozenSpread>> => {
+        // One `getDoc` each rather than an `in` query: a slate is ~16 games, and
+        // `where(documentId(), 'in', …)` caps at 30 per query, so this avoids a
+        // chunking rule that would only ever be wrong on the day it binds.
+        const snaps = await Promise.all(gameIds.map(id => getDoc(doc(db, FROZEN_SPREADS_COLLECTION, id))));
+        const out: Record<string, FrozenSpread> = {};
+        for (const snap of snaps) {
+            if (snap.exists()) out[snap.id] = { ...(snap.data() as FrozenSpread), gameId: snap.id };
+        }
+        return out;
+    },
+
     subscribeToNFLGames: (season: string, callback: (games: NFLGame[]) => void) => {
         const seasonStr = String(season);
         console.log("[dbService] subscribeToNFLGames initiated for season:", seasonStr);

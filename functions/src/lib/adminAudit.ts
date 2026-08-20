@@ -54,6 +54,29 @@ export function capMetadata(
 }
 
 /**
+ * The stored shape of one audit entry.
+ *
+ * Extracted so a caller that must write the record INSIDE ITS OWN TRANSACTION —
+ * `overrideLockedSpread`, which mints an `overrideId` and has to commit the
+ * amended spread and the record carrying that id together or not at all — writes
+ * exactly the same document this helper does. Two spellings of an audit row is
+ * how one of them quietly stops matching a query.
+ */
+export function adminAuditDoc(entry: AdminAuditEntry): Record<string, unknown> {
+  return {
+    actorUid: entry.actorUid,
+    actorEmail: entry.actorEmail ?? null,
+    action: entry.action,
+    targetType: entry.targetType ?? null,
+    targetId: entry.targetId ?? null,
+    metadata: capMetadata(entry.metadata),
+    status: entry.status,
+    error: entry.error ? String(entry.error).slice(0, 300) : null,
+    at: Timestamp.now(),
+  };
+}
+
+/**
  * Append one admin-audit entry. Never throws into the caller's happy path —
  * an audit-write failure is logged but must not fail the underlying action
  * (the action itself already succeeded/failed on its own terms).
@@ -85,17 +108,7 @@ export async function writeAdminAudit(
     // ALREADY_EXISTS catch below treats a duplicate as success — the record
     // the caller wanted is there.
     const write = opts?.id ? ref.create.bind(ref) : ref.set.bind(ref);
-    await write({
-      actorUid: entry.actorUid,
-      actorEmail: entry.actorEmail ?? null,
-      action: entry.action,
-      targetType: entry.targetType ?? null,
-      targetId: entry.targetId ?? null,
-      metadata: capMetadata(entry.metadata),
-      status: entry.status,
-      error: entry.error ? String(entry.error).slice(0, 300) : null,
-      at: Timestamp.now(),
-    });
+    await write(adminAuditDoc(entry));
     return true;
   } catch (e) {
     if (opts?.id && (e as { code?: number }).code === 6) {

@@ -134,3 +134,28 @@ export function applyFrozenSpreads<G extends { id: string; spread?: unknown }>(
     return { ...g, spread: { value: frozen.value, locked: true } } as unknown as G;
   });
 }
+
+/**
+ * The slate key of a document, or `null` if it does not have a usable one.
+ *
+ * ⚠️ ONE DEFINITION, because `Number.isInteger` ALONE IS NOT THE TEST and three
+ * call sites had independently written it that way. `Number(null)` is `0`, and
+ * `0` is an integer — so a game whose `week` is null read as week 0, sailed
+ * through the guard, and would have produced a frozen record on a slate that does
+ * not exist. Found by an emulator test on 2026-08-20 that expected a refusal and
+ * got a written record.
+ *
+ * There is no week 0 and no seasonType 0 in this data: ESPN numbers weeks from 1
+ * and season types 1-3.
+ */
+export function slateFieldsOf(
+  doc: { season?: unknown; seasonType?: unknown; week?: unknown } | null | undefined,
+): { season: string; seasonType: number; week: number } | null {
+  const season = doc?.season == null ? '' : String(doc.season);
+  const seasonType = Number(doc?.seasonType);
+  const week = Number(doc?.week);
+  if (!season) return null;
+  if (!Number.isInteger(seasonType) || seasonType < 1) return null;
+  if (!Number.isInteger(week) || week < 1) return null;
+  return { season, seasonType, week };
+}

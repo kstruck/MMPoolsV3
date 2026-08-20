@@ -23,6 +23,8 @@
 //     written and the stored sixteenth stays unfrozen — a partially frozen week
 //     that looks complete to the job that made it (codex round 9).
 
+import { slateFieldsOf } from '../shared/frozenSpread';
+
 /** One (season, seasonType, week) slate — the exact scope of the submit gate. */
 export interface SlateKey {
   season: string;
@@ -68,11 +70,10 @@ export const slateDocId = (k: SlateKey): string => `${k.season}_${k.seasonType}_
 export function slateKeysOf(games: Pick<StoredGame, 'season' | 'seasonType' | 'week'>[]): SlateKey[] {
   const out = new Map<string, SlateKey>();
   for (const g of games) {
-    const season = String(g.season ?? '');
-    const seasonType = Number(g.seasonType);
-    const week = Number(g.week);
-    if (!season || !Number.isInteger(seasonType) || !Number.isInteger(week)) continue;
-    const key = { season, seasonType, week };
+    // `slateFieldsOf` rather than a local check: `Number(null)` is 0 and 0 is an
+    // integer, so the obvious guard admits a week-0 slate that does not exist.
+    const key = slateFieldsOf(g);
+    if (!key) continue;
     out.set(slateId(key), key);
   }
   return [...out.values()];

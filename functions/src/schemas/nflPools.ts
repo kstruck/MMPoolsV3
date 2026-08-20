@@ -44,7 +44,26 @@ export const runNFLSpreadFreezeSchema = z.strictObject({
     dryRun: z.boolean().optional().default(true),
 });
 
+/**
+ * overrideLockedSpread (SUPER_ADMIN) — PLAN-NFL-SPREAD-FREEZE 2.1.
+ *
+ * The ONE path that may change a frozen line, or give one to a game added to a
+ * slate after it froze. `reason` is required and non-trivial on purpose: the whole
+ * value of an audited override is the sentence explaining why the number members
+ * picked against is being changed, and a one-character reason is the same as none.
+ *
+ * `value` is home-relative, matching `nfl_games.spread.value`. Bounded rather than
+ * unbounded: nothing in the NFL is a 200-point favourite, and a fat-fingered
+ * exponent should be a validation error rather than a graded result.
+ */
+export const overrideLockedSpreadSchema = z.strictObject({
+    gameId: z.string().trim().min(1).max(200),
+    value: z.number().finite().min(-100).max(100),
+    reason: z.string().trim().min(10).max(500),
+});
+
 export type JoinNFLPoolInput = z.infer<typeof joinNFLPoolSchema>;
 export type ExecuteSurvivorRebuyInput = z.infer<typeof executeSurvivorRebuySchema>;
 export type ScoreNFLWeekInput = z.infer<typeof scoreNFLWeekSchema>;
 export type RunNFLSpreadFreezeInput = z.infer<typeof runNFLSpreadFreezeSchema>;
+export type OverrideLockedSpreadInput = z.infer<typeof overrideLockedSpreadSchema>;
