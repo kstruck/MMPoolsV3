@@ -1686,7 +1686,7 @@ export const dbService = {
         const unsubGames = onSnapshot(q, (snapshot) => {
             const next = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as NFLGame));
             next.sort((a, b) => a.startTime - b.startTime);
-            console.log(`[dbService] subscribeToNFLGames successfully loaded ${next.length} games:`, 
+            console.log(`[dbService] subscribeToNFLGames successfully loaded ${next.length} games:`,
                 next.map(g => ({ id: g.id, week: g.week, seasonType: g.seasonType, season: g.season }))
             );
             games = next;
