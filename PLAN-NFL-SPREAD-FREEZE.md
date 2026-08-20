@@ -714,6 +714,23 @@ collection — `nfl_frozen_spreads/{gameId}` — carrying
   the frozen one.
 - The only writers are the freeze pass and `overrideLockedSpread`, both Cloud
   Functions, both already specified.
+- ⚠️ **AMENDED DURING PR 1 (2026-08-20): THE READER LIST WAS SHORT BY THREE.**
+  This section named `submitNFLPicks`, the ATS grader, `computeWeekFingerprint`,
+  `nflLockWatch` and the display path. Implementing it turned up three more paths
+  that read `nfl_games.spread` and hand the number onward, and each is the same
+  failure the plan is about — a member seeing or being graded on a line nobody
+  froze:
+
+  | Reader | Why it has to resolve |
+  |---|---|
+  | `backfillProfileData` (`:71-109`) | re-grades scored ATS weeks through `gradePickemGames`, so an unresolved read rewrites historical per-pick profile results against a drifted line, disagreeing with the standings (codex r1 on PR 1) |
+  | `recomputeExpertPicks` (`expertPicks.ts:102-110`) | derives the "vegas" expert pick FROM the line and renders it on the same row as the line, so the row could read `CIN -6.5` beside `Vegas: DET` |
+  | `aiCommissioner` NFL context (`:258`) | hands game documents to the model as facts, spread included, and the model quotes them back to a member |
+
+  The generalisation, and it is the one this plan keeps re-learning: **the rule is
+  every path that GRADES or SHOWS, not the paths that were listed.** The resolver
+  is applied at the LOAD in all of them for exactly that reason — a load site is
+  enumerable, a reader is not.
 - ⚠️ **THE RESCORE HANDOFF HAS TO FOLLOW THE DATA — AS A TRIGGER, COVERING EVERY
   WRITER.** `nflSpreadRescoreTrigger` watches `nfl_games/{gameId}`, and under
   this revision the canonical value lives elsewhere, so a correction made after

@@ -3,6 +3,7 @@ import { onDocumentWritten, onDocumentCreated } from "firebase-functions/v2/fire
 import * as crypto from "crypto";
 import { generateAIResponse, COMMISSIONER_SYSTEM_PROMPT, geminiApiKey } from "./gemini";
 import { writeAuditEvent } from "./audit";
+import { resolveGameSpreads } from "./lib/frozenSpreads";
 import { GameState, Winner, AIArtifact, AIRequest, BracketPool, Tournament, BracketEntry } from "./types";
 
 const db = admin.firestore();
@@ -260,7 +261,14 @@ export const onAIRequest = onDocumentCreated({
             .where('seasonType', '==', Number(poolRaw.seasonType || 2))
             .limit(32)
             .get();
-        const recentGames = gamesSnap.docs.map(d => d.data());
+        // `frozen ?? working` (PLAN-NFL-SPREAD-FREEZE R1). These game documents are
+        // handed to the model as FACTS and quoted back to a member, spread included,
+        // so an unresolved read lets the assistant state a line the pool is not
+        // graded on.
+        const recentGames = await resolveGameSpreads(
+            db,
+            gamesSnap.docs.map(d => ({ ...(d.data() as Record<string, unknown>), id: d.id })),
+        );
 
         facts = {
             context: "NFL_POOL_INSIGHT",
