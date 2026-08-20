@@ -107,11 +107,17 @@ export const SuperAdminNFLSpreads: React.FC = () => {
     setIsSaving(true);
     setMessage(null);
     try {
-      // Only `spread.value`, by dotted path: a frozen row is excluded above, and
-      // nothing here has any business rewriting the rest of a game document that a
-      // live feed owns.
+      // ⚠️ `spread.value` AND NOTHING ELSE, by dotted path.
+      //
+      // Writing `'spread.locked': false` here was the obvious spelling and it is a
+      // migration-window regression: until the cutover backfill has run, a slate
+      // locked the OLD way has no frozen record, so it renders as an editable
+      // working row — and saving one would flip `locked` to false and put the whole
+      // week behind SPREADS_NOT_LOCKED. Touching only the value leaves a legacy
+      // lock exactly as it was, which is also what the `frozen ?? working`
+      // precedence expects.
       await Promise.all(changed.map(g =>
-        updateDoc(doc(db, 'nfl_games', g.id), { 'spread.value': g.spread?.value ?? 0, 'spread.locked': false })
+        updateDoc(doc(db, 'nfl_games', g.id), { 'spread.value': g.spread?.value ?? 0 })
       ));
       setBaseline(prev => ({ ...prev, ...Object.fromEntries(changed.map(g => [g.id, g.spread?.value])) }));
       setMessage({
@@ -285,7 +291,12 @@ export const SuperAdminNFLSpreads: React.FC = () => {
                       </>
                     ) : (
                       <div className="flex flex-col">
-                        <label className="text-[9px] text-faint uppercase tracking-[0.16em] font-display font-bold mb-1">Working line (rel. to home)</label>
+                        <label className="text-[9px] text-faint uppercase tracking-[0.16em] font-display font-bold mb-1">
+                          {/* Locked the OLD way and not yet backfilled: still what this
+                              week is graded on, so say so rather than showing it as an
+                              ordinary working line. */}
+                          {game.spread?.locked ? 'Legacy lock — not yet in the frozen store' : 'Working line (rel. to home)'}
+                        </label>
                         <input
                           type="number"
                           step="0.5"
