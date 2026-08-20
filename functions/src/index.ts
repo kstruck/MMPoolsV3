@@ -114,6 +114,7 @@ export { sendPoolInvites } from "./invites";
 // --- MEMBER RECORD ROSTER (ADR 0003) — additive; writer wiring lands separately ---
 export { setPaidStatus } from "./setPaidStatus";
 export { onMemberRecordWrite, onWinnerWrite, onPoolRosterFieldsChange } from "./rosterAggregate";
+export { backfillFrozenSpreads } from "./migrations/backfillFrozenSpreads";
 export { backfillMemberRecords } from "./migrations/backfillMemberRecords";
 export { backfillProfileData } from "./migrations/backfillProfileData";
 export { backfillPublishedWeeks } from "./migrations/backfillPublishedWeeks";

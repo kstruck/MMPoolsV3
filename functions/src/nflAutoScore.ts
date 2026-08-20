@@ -4,6 +4,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { withHeartbeat, configReadFailedVerdict } from './lib/heartbeat';
 import { readJobGate, HOT_WINDOW_LOOKBACK_MS } from './nflSchedule';
 import { scoreNFLWeekInternal } from './nflPools';
+import { resolveGameSpreads } from './lib/frozenSpreads';
 import { isWeekComplete } from './lib/weekCompletion';
 import { isSimPool, maybeFinalizeNFLPool } from './nflFinalize';
 import { acquireScoringLease, releaseScoringLease } from './lib/scoringLease';
@@ -132,7 +133,10 @@ export async function findActiveSlates(
       .where('seasonType', '==', slot.seasonType)
       .where('week', '==', slot.week)
       .get();
-    const games = slateSnap.docs.map(d => d.data() as NFLGame);
+    // `frozen ?? working` (PLAN-NFL-SPREAD-FREEZE R1). The slate read here feeds
+    // BOTH `computeWeekFingerprint` and `scoreNFLWeekInternal`, so resolving at
+    // the load is what keeps the hash and the grade on the same number.
+    const games = await resolveGameSpreads(db, slateSnap.docs.map(d => d.data() as NFLGame));
     if (games.length > 0) slates.push({ ...slot, games });
   }
   return slates;
@@ -204,7 +208,9 @@ export async function readSlateGames(
     .where('seasonType', '==', slot.seasonType)
     .where('week', '==', slot.week)
     .get();
-  return snap.docs.map(d => d.data() as NFLGame);
+  // Same precedence as `findActiveSlates` — this is the re-read the drain uses,
+  // and the two must not disagree about which number the week is scored on.
+  return resolveGameSpreads(db, snap.docs.map(d => d.data() as NFLGame));
 }
 
 

@@ -20,6 +20,26 @@ service cloud.firestore {
       }
     }
 
+    // FROZEN NFL SPREADS (PLAN-NFL-SPREAD-FREEZE Revision 1).
+    //
+    // The line every ATS pool is picked against and graded against, once it has
+    // been committed to. `allow write: if false` — NO client may write it, and
+    // that includes a SUPER_ADMIN. Not "refused when locked": refused, full stop.
+    // A conditional deny is a condition that can be subtly wrong, and this whole
+    // collection exists because an invariant defended in four writers kept
+    // leaking.
+    //
+    // The only writers are Cloud Functions, which bypass rules by design: the
+    // weekly freeze pass and `overrideLockedSpread`. The Spread Manager keeps
+    // writing `nfl_games.spread` as a WORKING line and cannot affect a frozen one.
+    //
+    // Public read, same as `nfl_games`: the pick sheet renders this value, so a
+    // member has to be able to see the number they are graded against.
+    match /nfl_frozen_spreads/{gameId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // SITE-WIDE CONSENSUS (ADR 0004) — server-written post-lock aggregate (counts only, never
     // individual picks), scoped by pool type. Public read; write server-only.
     match /consensus/{weekKey}/{poolType}/{gameId} {

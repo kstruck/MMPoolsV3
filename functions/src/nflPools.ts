@@ -61,6 +61,7 @@ import {
 import { nextEntryRevision, ENTRY_REVISION_FIELD } from './lib/entryRevision';
 import { countTeamUses, effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from './shared/survivorReuse';
 import { isVoidedPool } from './lib/autoScoreDecisions';
+import { resolveGameSpreads } from './lib/frozenSpreads';
 import { fetchNFLWeekSchedule } from './nflSchedule';
 import { recomputeWeekConsensus } from './consensus';
 import { validated } from "./lib/validated";
@@ -446,7 +447,11 @@ export async function submitNFLPicksInternal(
     .where('week', '==', week)
     .get();
 
-  const games = gamesSnap.docs.map(doc => doc.data() as NFLGame);
+  // `frozen ?? working` (PLAN-NFL-SPREAD-FREEZE R1). Resolved HERE, at the load,
+  // so the SPREADS_NOT_LOCKED gate below and every per-game check further down
+  // read one number — the frozen one when the slate has been frozen, the working
+  // `nfl_games.spread` when it has not.
+  const games = await resolveGameSpreads(db, gamesSnap.docs.map(doc => doc.data() as NFLGame));
   if (games.length === 0) {
     throw new HttpsError('not-found', `No NFL games found for ${weekLabelFor(pool, week)}.`);
   }
@@ -2002,7 +2007,10 @@ export const scoreNFLWeek = validated(
       .where('week', '==', week)
       .get();
 
-    const games = gamesSnap.docs.map(doc => doc.data() as NFLGame);
+    // `frozen ?? working` before anything grades against it — an ATS pool is
+    // scored on `spread.value`, and the whole point of the freeze is that the
+    // number scored is the number members picked against.
+    const games = await resolveGameSpreads(db, gamesSnap.docs.map(doc => doc.data() as NFLGame));
     if (games.length === 0) {
       throw new HttpsError('failed-precondition', `No games found to score for ${weekLabelFor(pool, week)}.`);
     }

@@ -1,8 +1,23 @@
 # PLAN — NFL spread freeze: one instant, one line, unchangeable
 
-## Implementation status (2026-08-19)
+## Implementation status (2026-08-20)
 
-**NOT STARTED — plan drafted, no phase implemented.**
+**IN PROGRESS — Revision 1, PR 1 of 3.**
+
+Kevin, 2026-08-20: *"Go with your recommendation for the freeze."* That is
+Revision 1, the write-once store, and implementation follows it rather than the
+original shape of Phases 1 and 2.
+
+| PR | Scope | State |
+|---|---|---|
+| **1** | `nfl_frozen_spreads` + rules, the `frozen ?? working` precedence on every read AND display path, and the cutover backfill | **built** |
+| 2 | the fetch-and-freeze pass (1.1-1.6) and `runNFLSpreadFreeze` (1.5b) | not started |
+| 3 | `overrideLockedSpread` (2.1), the Spread Manager routing (2.2), and the frozen-store rescore/audit trigger | not started |
+
+⚠️ **THE BACKFILL IS A PRECONDITION OF THE READS AND MUST BE RUN, LIVE, BEFORE
+PR 2.** Until it has, a slate locked the old way has no frozen record, so reads
+fall back to `nfl_games.spread` — which is exactly today's behaviour and no
+worse, but it is not the invariant either. See "Cutover" below.
 
 ⚠️ **READ "REVISION 1" BEFORE PHASES 1 AND 2.** It moves the frozen line off
 `nfl_games` into a write-once collection and supersedes the shape of both
