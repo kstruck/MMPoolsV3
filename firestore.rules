@@ -40,6 +40,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // NFL SLATE LEASES (PLAN-NFL-SPREAD-FREEZE 1.3) — the mutex between the weekly
+    // freeze and the importer. Pure server bookkeeping: nothing renders it and no
+    // client has any business reading a lock token, so both doors are shut.
+    match /nfl_slate_leases/{slateId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
     // SITE-WIDE CONSENSUS (ADR 0004) — server-written post-lock aggregate (counts only, never
     // individual picks), scoped by pool type. Public read; write server-only.
     match /consensus/{weekKey}/{poolType}/{gameId} {

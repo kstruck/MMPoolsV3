@@ -49,7 +49,11 @@ export { initializeBigEastTournamentHttp, initializeBig12TournamentHttp } from "
 export { scoreBracketEntries, finalizeTournamentPayouts } from "./bracketScoring";
 
 // --- NFL POOLS FUNCTIONS ---
-export { syncNFLScoresJob, importNFLSchedule, lockNFLSpreadsJob, nflDeepScoreSweepJob } from "./nflSchedule";
+export { syncNFLScoresJob, importNFLSchedule, nflDeepScoreSweepJob } from "./nflSchedule";
+// `lockNFLSpreadsJob` keeps its deployed name and moved to nflSpreadFreeze.ts
+// (PLAN-NFL-SPREAD-FREEZE Phase 1) — it now FETCHES the slate and writes
+// nfl_frozen_spreads instead of flipping a flag on whatever was lying around.
+export { lockNFLSpreadsJob, runNFLSpreadFreeze } from "./nflSpreadFreeze";
 export { createNFLPool, joinNFLPool, submitNFLPicks, executeSurvivorRebuy, scoreNFLWeek } from "./nflPools";
 export { getPoolPicks } from "./nflPickReveal";
 // Operator loop (PLAN-NFL-PRESEASON-PILOT A3a): hourly pre-kickoff tripwire that
