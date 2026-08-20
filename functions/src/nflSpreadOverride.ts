@@ -199,11 +199,28 @@ export async function handleFrozenSpreadChange(
     const verdict = classifyFrozenChange(before, after);
     if (verdict.kind === 'noop') return;
 
-    // From `after` when there is one, from `before` on a delete.
-    const key = after ?? before;
-    const slate = slateFieldsOf(key);
+    // ⚠️ EVERY VALID SLATE KEY ON EITHER SIDE, NOT JUST `after`'s (codex r3 on
+    // this PR).
+    //
+    // `after` alone is wrong in two directions once a credential-bypass write is
+    // in scope, which it explicitly is. A console write that mangles the slate
+    // fields along with the value enqueues the WRONG week — or, if it mangles them
+    // beyond parsing, no week at all — while the game itself is still sitting in
+    // its original slate in `nfl_games`, and grading resolves the frozen record by
+    // GAME ID regardless of what the record claims its week is. Either way the real
+    // week's finalized ATS standings stay on the old line.
+    //
+    // The union costs one extra queue document in the one case where the two
+    // disagree, and a queue event for a slate with nothing to rescore is a no-op
+    // the drain already handles. `after` on a create, `before` on a delete, both on
+    // an amend that moved the key.
+    const slates = [before, after]
+      .map((side) => slateFieldsOf(side))
+      .filter((k): k is NonNullable<typeof k> => !!k);
+    const unique = [...new Map(slates.map((k) => [`${k.season}/${k.seasonType}/${k.week}`, k])).values()];
 
-    if (!slate) {
+    if (unique.length === 0) {
+      const key = after ?? before;
       // Alert rather than silently returning: without a slate key the rescore
       // cannot be enqueued, and this is exactly the credential-bypass variant the
       // plan expects — a record whose slate was mangled or a delete of one that
@@ -224,7 +241,7 @@ export async function handleFrozenSpreadChange(
       if (!noted) throw new Error(`[frozenSpread] slate-key alert for ${gameId} was not written; retrying.`);
       return;
     }
-    const { season, seasonType, week } = slate;
+    const label = unique.map((k) => `${k.season}/${k.seasonType}/${k.week}`).join(', ');
 
     let auditWritten = true;
     if (!verdict.approved) {
@@ -238,7 +255,7 @@ export async function handleFrozenSpreadChange(
         metadata: {
           kind: verdict.kind,
           detail: verdict.reason,
-          slate: `${season}/${seasonType}/${week}`,
+          slate: label,
           oldValue: before?.value ?? null,
           newValue: after?.value ?? null,
           source: after?.source ?? null,
@@ -248,11 +265,11 @@ export async function handleFrozenSpreadChange(
       console.warn(`[frozenSpread] UNAPPROVED change on ${gameId}: ${verdict.reason}`);
     }
 
-    const ok = await enqueueRescore(db, {
-      season, seasonType, week, reason: 'spread', enqueuedAt: Date.now(),
-    });
-    if (!ok) throw new Error(`[frozenSpread] enqueue failed for ${season}/${seasonType}/wk${week}; retrying.`);
-    console.log(`[frozenSpread] ${verdict.kind} on ${gameId} (${verdict.reason}); enqueued ${season}/${seasonType}/wk${week}.`);
+    for (const k of unique) {
+      const ok = await enqueueRescore(db, { ...k, reason: 'spread', enqueuedAt: Date.now() });
+      if (!ok) throw new Error(`[frozenSpread] enqueue failed for ${k.season}/${k.seasonType}/wk${k.week}; retrying.`);
+    }
+    console.log(`[frozenSpread] ${verdict.kind} on ${gameId} (${verdict.reason}); enqueued ${label}.`);
 
     // A LOST AUDIT ROW IS A FAILED RUN (codex r2 on this PR). `writeAdminAudit`
     // catches its own errors and returns whether the record landed; ignoring that

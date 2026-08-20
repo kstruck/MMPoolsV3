@@ -204,8 +204,27 @@ describe("handleFrozenSpreadChange (emulator) — the detector and the handoff",
         expect(await auditRows()).toEqual([]);
     });
 
-    it("alerts rather than silently returning when the slate key is unusable", async () => {
+    it("STILL ENQUEUES THE REAL WEEK when a write mangles the slate key (codex r3)", async () => {
+        // A console write that changes the slate fields along with the value would,
+        // on an `after`-only key, enqueue the wrong week — or none — while the game
+        // itself is still in its original slate in `nfl_games` and grading resolves
+        // the frozen record by GAME ID regardless of what the record claims.
         await change(rec(), rec({ value: -9, week: NaN as unknown as number }));
+        expect(await queueSize()).toBe(1);
+        const queued = (await admin.firestore().collection(RESCORE_QUEUE).get()).docs[0].data();
+        expect(queued).toMatchObject({ season: "2026", seasonType: 1, week: 4 });
+        const rows = await auditRows();
+        expect(rows[0]).toMatchObject({ action: "UNAPPROVED_FROZEN_SPREAD_CHANGE", status: "error" });
+    });
+
+    it("enqueues BOTH weeks when a write moves the record to a different slate", async () => {
+        await change(rec(), rec({ value: -9, week: 5 }));
+        expect(await queueSize()).toBe(2);
+    });
+
+    it("alerts rather than silently returning when NEITHER side has a usable slate key", async () => {
+        const broken = rec({ week: NaN as unknown as number });
+        await change(broken, { ...broken, value: -9 });
         expect(await queueSize()).toBe(0);
         const rows = await auditRows();
         expect(rows[0]).toMatchObject({ action: "FROZEN_SPREAD_SLATE_KEY_MISSING", status: "error" });
