@@ -1670,6 +1670,38 @@ export const dbService = {
      * the slate: that is exactly today's behaviour, so a degraded read is no worse
      * than not having shipped this.
      */
+    /**
+     * PLAN-NFL-SPREAD-FREEZE 2.1 — the ONE path that may change a frozen line.
+     *
+     * A frozen record is refused to every client by `firestore.rules`, superadmin
+     * included, so the Spread Manager cannot write one directly and must not try.
+     * Also creates a frozen line for a game added to a slate after it froze, which
+     * is the remediation path for a flex or a late addition.
+     */
+    overrideLockedSpread: async (payload: { gameId: string; value: number; reason: string }) => {
+        const fn = httpsCallable(functions, 'overrideLockedSpread');
+        const res = await fn(withCorrelationId(payload));
+        return res.data as { success: true; overrideId: string; shape: 'amend' | 'create'; previousValue: number | null };
+    },
+
+    /**
+     * The frozen lines for one slate, keyed by game id — what the Spread Manager
+     * reads to know which rows it may still edit directly and which have been
+     * committed to.
+     */
+    getFrozenSpreadsForSlate: async (season: string, seasonType: number, week: number): Promise<Record<string, FrozenSpread>> => {
+        const q = query(
+            collection(db, FROZEN_SPREADS_COLLECTION),
+            where('season', '==', String(season)),
+            where('seasonType', '==', Number(seasonType)),
+            where('week', '==', Number(week)),
+        );
+        const snap = await getDocs(q);
+        const out: Record<string, FrozenSpread> = {};
+        snap.forEach(d => { out[d.id] = { ...(d.data() as FrozenSpread), gameId: d.id }; });
+        return out;
+    },
+
     subscribeToNFLGames: (season: string, callback: (games: NFLGame[]) => void) => {
         const seasonStr = String(season);
         console.log("[dbService] subscribeToNFLGames initiated for season:", seasonStr);
