@@ -459,6 +459,21 @@ hold it dry but never force it live.** A live manual freeze therefore needs the
 config armed AND an explicit `dryRun: false` — which is what the second clause was
 asking for.
 
+⚠️ **AMENDED IN PR 2 (2026-08-20): A LIVE MANUAL FREEZE MAY NOT RUN BEFORE THE
+SLATE'S STATED CUTOFF** (codex r6 on PR 2). Once `nflSpreadLock.dryRun` is
+`false`, this callable could otherwise commit a slate permanently on the Sunday
+before — and the Tuesday job would then skip it as already frozen. The stated
+instant would be quietly not honoured, by the tool built to repair it.
+
+The rule needs no escape hatch, which is why it is a rule rather than a flag: a
+live freeze is allowed at or after the slate's own stated cutoff, defined as the
+latest Tuesday 09:00 ET strictly before its first kickoff. The scheduled job
+fires exactly AT that instant so it always passes, and every legitimate repair —
+Tuesday afternoon after a refusal, Wednesday, Saturday — is after it. **Dry runs
+are unrestricted**, which is precisely what R2's Saturday-to-Monday rehearsal
+needs. `statedCutoffBefore` handles the DST changeover (the November cutoff is
+14:00Z, the August one 13:00Z) and a test pins both.
+
 1.6 **Schedule: `0 9 * * 2` `America/New_York`.** Tuesday 09:00 ET, decided by
 Kevin on 2026-08-19 (R1) and unchanged from the existing job. This is the
 "specified day and time" the requirement asks for — if it ever moves, it moves

@@ -38,6 +38,7 @@ import {
   slateId,
   slateIsDue,
   slateKeysOf,
+  liveFreezeAllowed,
   type FetchedGame,
   type PlannedFreeze,
   type SlateKey,
@@ -149,6 +150,24 @@ export async function freezeSlateOnce(
 
   const key = chosen.key;
   const label = slateId(key);
+
+  // ⚠️ A LIVE FREEZE MAY NOT RUN BEFORE THE SLATE'S OWN STATED CUTOFF (codex r6
+  // on this PR). 1.6 promises members a day and a time. Without this, a live
+  // manual run (1.5b) could commit a slate permanently on the Sunday before, and
+  // the Tuesday job would then skip it as already frozen — the stated instant
+  // quietly not honoured, by the tool built to repair it.
+  //
+  // The rule needs no escape hatch. The scheduled job fires exactly AT the cutoff
+  // so it always passes, and every legitimate repair — Tuesday afternoon after a
+  // refusal, Wednesday, Saturday — is after it. Dry runs are unrestricted, which
+  // is what R2's Saturday-to-Monday rehearsal needs.
+  if (!opts.dryRun) {
+    const { allowed, cutoffMs } = liveFreezeAllowed(chosen.verdict.firstKickoffMs, now);
+    if (!allowed) {
+      return { slate: label, dryRun: false, frozen: 0, wouldFreeze: 0, ok: false,
+        reason: `${label} does not reach its stated cutoff (Tuesday 09:00 ET, ${new Date(cutoffMs).toISOString()}) until later; a live freeze before it would not honour the time members were given. Dry-run instead, or wait.` };
+    }
+  }
   if (!isFetchableSeasonType(key.seasonType)) {
     return { slate: label, dryRun: opts.dryRun, frozen: 0, wouldFreeze: 0, ok: false,
       reason: `seasonType ${key.seasonType} is not a fetchable ESPN season type` };
@@ -158,7 +177,14 @@ export async function freezeSlateOnce(
   // below runs before the transaction, and Firestore does not range-lock, so an
   // importer write that adds a game in between would commit alongside it and leave
   // the newcomer unfrozen (codex round 11).
-  const lease = await acquireSlateLease(db, key, now);
+  // ⚠️ THE LEASE USES THE WALL CLOCK, DELIBERATELY NOT `now`. `now` is the
+  // injectable FREEZE clock — it drives slate selection and the `frozenAt` stamp.
+  // A lease written against an injected clock would be born already expired
+  // relative to the real one, and `assertSlateFence` (which must compare against
+  // the real clock, since that is what a competing pass will use) would throw
+  // FENCE_LOST on a pass that is holding its lease perfectly well. Same reasoning
+  // and the same trap as `acquireScoringLease` in nflPools.ts.
+  const lease = await acquireSlateLease(db, key, Date.now());
   if (!lease) {
     // ⚠️ `ok: false`, AND THAT IS NOT PEDANTRY (codex r1 on this PR). The schedule
     // fires ONCE A WEEK. A contended run that reported success would record a

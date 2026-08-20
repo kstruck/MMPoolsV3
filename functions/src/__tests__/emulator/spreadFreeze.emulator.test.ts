@@ -23,6 +23,16 @@ const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 const SLATE = { season: "2026", seasonType: 1 as const, week: 4 };
 
+/**
+ * A FIXED clock, and it has to be: a live freeze is refused before the slate's
+ * stated Tuesday-09:00-ET cutoff, so a test that used the real `Date.now()` would
+ * pass on a Wednesday and fail on a Monday.
+ *
+ * 2026-08-25 14:00Z is Tuesday 10:00 ET — an hour past the cutoff, which is the
+ * real rehearsal instant R2 of the plan names.
+ */
+const NOW = Date.UTC(2026, 7, 25, 14, 0, 0);
+
 async function clearAll() {
     const db = admin.firestore();
     for (const col of ["nfl_games", FROZEN_SPREADS_COLLECTION, SLATE_LEASES]) {
@@ -40,7 +50,7 @@ function game(id: string, over: Record<string, unknown> = {}) {
     const g: Record<string, unknown> = {
         id,
         ...SLATE,
-        startTime: Date.now() + 2 * DAY,
+        startTime: NOW + 2 * DAY,
         status: "SCHEDULED",
         homeTeam: { abbreviation: "KC" },
         awayTeam: { abbreviation: "DET" },
@@ -71,8 +81,8 @@ describe("freezeSlateOnce (emulator) — the write path", () => {
     beforeEach(clearAll);
 
     it("freezes the whole slate from the feed and stamps source=freeze", async () => {
-        await seed([game("g1"), game("g2", { startTime: Date.now() + 3 * DAY })]);
-        const result = await freezeSlateOnce(admin.firestore(), Date.now(), {
+        await seed([game("g1"), game("g2", { startTime: NOW + 3 * DAY })]);
+        const result = await freezeSlateOnce(admin.firestore(), NOW, {
             dryRun: false,
             fetchWeek: feed({ g1: -6.5, g2: 2 }),
         });
@@ -92,14 +102,14 @@ describe("freezeSlateOnce (emulator) — the write path", () => {
 
     it("LEAVES nfl_games.spread ALONE — the working line is not the freeze's business", async () => {
         await seed([game("g1", { spread: { value: -3.5, locked: false } })]);
-        await freezeSlateOnce(admin.firestore(), Date.now(), { dryRun: false, fetchWeek: feed({ g1: -6.5 }) });
+        await freezeSlateOnce(admin.firestore(), NOW, { dryRun: false, fetchWeek: feed({ g1: -6.5 }) });
         const stored = (await admin.firestore().collection("nfl_games").doc("g1").get()).data();
         expect(stored?.spread).toEqual({ value: -3.5, locked: false });
     });
 
     it("dry run writes NOTHING and reports every value it would write", async () => {
         await seed([game("g1"), game("g2")]);
-        const result = await freezeSlateOnce(admin.firestore(), Date.now(), {
+        const result = await freezeSlateOnce(admin.firestore(), NOW, {
             dryRun: true,
             fetchWeek: feed({ g1: -6.5, g2: 2 }),
         });
@@ -113,7 +123,7 @@ describe("freezeSlateOnce (emulator) — the write path", () => {
 
     it("falls back to the stored working line, which is the manual backstop", async () => {
         await seed([game("g1"), game("g2", { spread: { value: 1.5, locked: false } })]);
-        const result = await freezeSlateOnce(admin.firestore(), Date.now(), {
+        const result = await freezeSlateOnce(admin.firestore(), NOW, {
             dryRun: false,
             fetchWeek: feed({ g1: -6.5, g2: null }),
         });
@@ -123,7 +133,7 @@ describe("freezeSlateOnce (emulator) — the write path", () => {
 
     it("REFUSES A PARTIAL SLATE AND WRITES NOTHING AT ALL", async () => {
         await seed([game("g1"), game("g2", { spread: undefined })]);
-        const result = await freezeSlateOnce(admin.firestore(), Date.now(), {
+        const result = await freezeSlateOnce(admin.firestore(), NOW, {
             dryRun: false,
             fetchWeek: feed({ g1: -6.5, g2: null }),
         });
@@ -135,14 +145,14 @@ describe("freezeSlateOnce (emulator) — the write path", () => {
 
     it("IS A NO-OP ON THE SECOND RUN — a slate is freezable exactly once", async () => {
         await seed([game("g1"), game("g2")]);
-        const first = await freezeSlateOnce(admin.firestore(), Date.now(), {
+        const first = await freezeSlateOnce(admin.firestore(), NOW, {
             dryRun: false, fetchWeek: feed({ g1: -6.5, g2: 2 }),
         });
         expect(first.frozen).toBe(2);
 
         // A second pass, with the lines MOVED. If selection ever regressed, this is
         // what it would look like: the same week re-frozen at a second instant.
-        const second = await freezeSlateOnce(admin.firestore(), Date.now(), {
+        const second = await freezeSlateOnce(admin.firestore(), NOW, {
             dryRun: false, fetchWeek: feed({ g1: -1, g2: 9 }),
         });
         expect(second.frozen).toBe(0);
@@ -153,9 +163,9 @@ describe("freezeSlateOnce (emulator) — the write path", () => {
     it("does not walk forward to the next week when the due slate is already frozen", async () => {
         // Codex round 8's defect, end to end: week 4 frozen, week 5 nine days out.
         // The horizon is what keeps the pass from freezing week 5 a week early.
-        await seed([game("g1"), game("wk5", { week: 5, startTime: Date.now() + 9 * DAY })]);
-        await freezeSlateOnce(admin.firestore(), Date.now(), { dryRun: false, fetchWeek: feed({ g1: -6.5 }) });
-        const second = await freezeSlateOnce(admin.firestore(), Date.now(), { dryRun: false, fetchWeek: feed({ wk5: -4 }) });
+        await seed([game("g1"), game("wk5", { week: 5, startTime: NOW + 9 * DAY })]);
+        await freezeSlateOnce(admin.firestore(), NOW, { dryRun: false, fetchWeek: feed({ g1: -6.5 }) });
+        const second = await freezeSlateOnce(admin.firestore(), NOW, { dryRun: false, fetchWeek: feed({ wk5: -4 }) });
         expect(second.frozen).toBe(0);
         expect((await frozenRecords()).map((r) => r.gameId)).toEqual(["g1"]);
     });
@@ -174,7 +184,7 @@ describe("freezeSlateOnce (emulator) — the write path", () => {
         };
 
         await expect(
-            freezeSlateOnce(admin.firestore(), Date.now(), { dryRun: false, fetchWeek: racingFeed }),
+            freezeSlateOnce(admin.firestore(), NOW, { dryRun: false, fetchWeek: racingFeed }),
         ).rejects.toThrow(/SLATE_CHANGED/);
         expect(await frozenRecords()).toEqual([]);
     });
@@ -184,7 +194,7 @@ describe("freezeSlateOnce (emulator) — the write path", () => {
         const held = await acquireSlateLease(admin.firestore(), SLATE, Date.now());
         expect(held).not.toBeNull();
 
-        const result = await freezeSlateOnce(admin.firestore(), Date.now(), {
+        const result = await freezeSlateOnce(admin.firestore(), NOW, {
             dryRun: false, fetchWeek: feed({ g1: -6.5 }),
         });
         // ok:false, because the schedule fires once a week: a contended run that
@@ -196,14 +206,14 @@ describe("freezeSlateOnce (emulator) — the write path", () => {
 
     it("releases the lease afterwards, so the next run is not locked out by its predecessor", async () => {
         await seed([game("g1")]);
-        await freezeSlateOnce(admin.firestore(), Date.now(), { dryRun: false, fetchWeek: feed({ g1: -6.5 }) });
+        await freezeSlateOnce(admin.firestore(), NOW, { dryRun: false, fetchWeek: feed({ g1: -6.5 }) });
         const lease = (await admin.firestore().collection(SLATE_LEASES).doc(slateDocId(SLATE)).get()).data();
         expect(lease?.until).toBe(0);
     });
 
     it("releases the lease even when the pass REFUSES", async () => {
         await seed([game("g1", { spread: undefined })]);
-        const result = await freezeSlateOnce(admin.firestore(), Date.now(), {
+        const result = await freezeSlateOnce(admin.firestore(), NOW, {
             dryRun: false, fetchWeek: feed({ g1: null }),
         });
         expect(result.ok).toBe(false);
@@ -211,18 +221,43 @@ describe("freezeSlateOnce (emulator) — the write path", () => {
         expect(lease?.until).toBe(0);
     });
 
+    it("REFUSES A LIVE FREEZE BEFORE THE SLATE'S STATED CUTOFF, but still rehearses it", async () => {
+        // Codex r6 on this PR. 1.6 promises members Tuesday 09:00 ET. Without this
+        // gate a live manual run on the Sunday before would commit the slate
+        // permanently, and the Tuesday job would then skip it as already frozen —
+        // the stated instant quietly not honoured, by the tool built to repair it.
+        const SUNDAY = Date.UTC(2026, 7, 23, 18); // 14:00 ET, two days before the cutoff
+        const THURSDAY = Date.UTC(2026, 7, 27, 23);
+        await seed([game("g1", { startTime: THURSDAY })]);
+
+        const live = await freezeSlateOnce(admin.firestore(), SUNDAY, {
+            dryRun: false, fetchWeek: feed({ g1: -6.5 }),
+        });
+        expect(live.ok).toBe(false);
+        expect(live.reason).toContain("stated cutoff");
+        expect(await frozenRecords()).toEqual([]);
+
+        // A DRY run on the same Sunday is exactly what R2's rehearsal asks for and
+        // is unrestricted — it writes nothing.
+        const dry = await freezeSlateOnce(admin.firestore(), SUNDAY, {
+            dryRun: true, fetchWeek: feed({ g1: -6.5 }),
+        });
+        expect(dry).toMatchObject({ ok: true, wouldFreeze: 1 });
+        expect(await frozenRecords()).toEqual([]);
+    });
+
     it("does nothing, and says so, when no slate is inside the horizon", async () => {
-        await seed([game("far", { startTime: Date.now() + 30 * DAY })]);
-        const result = await freezeSlateOnce(admin.firestore(), Date.now(), { dryRun: false, fetchWeek: feed({}) });
+        await seed([game("far", { startTime: NOW + 30 * DAY })]);
+        const result = await freezeSlateOnce(admin.firestore(), NOW, { dryRun: false, fetchWeek: feed({}) });
         expect(result).toMatchObject({ ok: true, slate: null, frozen: 0 });
     });
 
     it("will not freeze a slate whose first kickoff has already passed", async () => {
         await seed([
-            game("thu", { startTime: Date.now() - HOUR }),
-            game("sun", { startTime: Date.now() + 3 * DAY }),
+            game("thu", { startTime: NOW - HOUR }),
+            game("sun", { startTime: NOW + 3 * DAY }),
         ]);
-        const result = await freezeSlateOnce(admin.firestore(), Date.now(), {
+        const result = await freezeSlateOnce(admin.firestore(), NOW, {
             dryRun: false, fetchWeek: feed({ thu: -3, sun: -3 }),
         });
         expect(result.frozen).toBe(0);

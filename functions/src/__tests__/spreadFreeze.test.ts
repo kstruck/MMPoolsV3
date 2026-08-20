@@ -8,6 +8,8 @@ import {
   slateId,
   slateIsDue,
   slateKeysOf,
+  statedCutoffBefore,
+  liveFreezeAllowed,
   type FetchedGame,
   type StoredGame,
 } from '../lib/spreadFreeze';
@@ -228,5 +230,62 @@ describe('slate keys', () => {
     // A Firestore document id may not contain `/`.
     expect(slateDocId(KEY)).toBe('2026_1_4');
     expect(slateDocId(KEY)).not.toContain('/');
+  });
+});
+
+describe('statedCutoffBefore — the promise members were given', () => {
+  // 1.6 promises a day and a time: Tuesday 09:00 America/New_York. Everything
+  // below is that instant expressed in UTC, so the DST cases are visible.
+  const TUE_AUG_25_09_ET = Date.UTC(2026, 7, 25, 13); // EDT, UTC-4
+  const TUE_NOV_03_09_ET = Date.UTC(2026, 10, 3, 14); // EST, UTC-5
+
+  it('finds the Tuesday before a Thursday kickoff', () => {
+    const thu = Date.UTC(2026, 7, 27, 23); // 2026-08-27 19:00 ET, the real wk-4 opener
+    expect(statedCutoffBefore(thu)).toBe(TUE_AUG_25_09_ET);
+  });
+
+  it('HANDLES THE DST CHANGEOVER, which is why this is not `- 2 * DAY`', () => {
+    // DST ends 2026-11-01, so the November cutoff is 14:00Z and the August one is
+    // 13:00Z. A fixed offset — or a single-pass offset correction — lands an hour
+    // out on exactly the weeks a mistake is least visible.
+    const thu = Date.UTC(2026, 10, 5, 23);
+    expect(statedCutoffBefore(thu)).toBe(TUE_NOV_03_09_ET);
+    expect(TUE_NOV_03_09_ET - TUE_AUG_25_09_ET).not.toBe(70 * 24 * 60 * 60 * 1000);
+  });
+
+  it('goes back a full week when the kickoff is Tuesday MORNING', () => {
+    const tueEarly = Date.UTC(2026, 7, 25, 12); // 08:00 ET, an hour before the cutoff
+    expect(statedCutoffBefore(tueEarly)).toBe(Date.UTC(2026, 7, 18, 13));
+  });
+
+  it('takes the same day when the kickoff is Tuesday AFTERNOON', () => {
+    expect(statedCutoffBefore(Date.UTC(2026, 7, 25, 20))).toBe(TUE_AUG_25_09_ET);
+  });
+
+  it('degrades to "the cutoff has passed" on a malformed instant rather than blocking a repair', () => {
+    expect(statedCutoffBefore(NaN)).toBe(Number.NEGATIVE_INFINITY);
+    expect(liveFreezeAllowed(NaN, Date.UTC(2026, 7, 25, 14)).allowed).toBe(true);
+  });
+});
+
+describe('liveFreezeAllowed', () => {
+  const thu = Date.UTC(2026, 7, 27, 23);
+
+  it('ALLOWS the scheduled run, which fires exactly AT the cutoff', () => {
+    expect(liveFreezeAllowed(thu, Date.UTC(2026, 7, 25, 13)).allowed).toBe(true);
+  });
+
+  it('allows a repair later the same Tuesday, and on the days after it', () => {
+    expect(liveFreezeAllowed(thu, Date.UTC(2026, 7, 25, 18)).allowed).toBe(true);
+    expect(liveFreezeAllowed(thu, Date.UTC(2026, 7, 26, 15)).allowed).toBe(true);
+  });
+
+  it('REFUSES an early live freeze — the case that breaks the promise', () => {
+    // A live manual run on the Sunday before would commit the slate permanently,
+    // and the Tuesday job would then skip it as already frozen: the stated instant
+    // quietly not honoured, by the tool built to repair it (codex r6 on PR 2).
+    expect(liveFreezeAllowed(thu, Date.UTC(2026, 7, 23, 18)).allowed).toBe(false);
+    // One minute before the cutoff is still before it.
+    expect(liveFreezeAllowed(thu, Date.UTC(2026, 7, 25, 12, 59)).allowed).toBe(false);
   });
 });

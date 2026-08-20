@@ -246,3 +246,86 @@ export function planFreeze(key: SlateKey, stored: StoredGame[], fetched: Fetched
 
   return { ok: true, writes };
 }
+
+// ---------------------------------------------------------------------------
+// The stated instant
+// ---------------------------------------------------------------------------
+//
+// 1.6 promises members a day and a time: Tuesday 09:00 ET. A LIVE manual freeze
+// (1.5b) could otherwise commit a slate permanently on the Sunday before, and the
+// scheduled run would then skip it as already frozen — the stated cutoff quietly
+// not honoured, by the tool built to repair it (codex r6 on PR 2).
+//
+// The rule that falls out is narrow and needs no escape hatch: a live freeze is
+// allowed at or after the slate's OWN stated cutoff, never before it. That admits
+// the scheduled run (which fires exactly at the cutoff) and every legitimate
+// repair after a refusal — Tuesday afternoon, Wednesday, Saturday — and refuses
+// only the one case that breaks the promise.
+
+/** The freeze's stated weekday, as `Date#getUTCDay` numbers it. */
+const TUESDAY = 2;
+/** The freeze's stated hour, America/New_York wall clock. */
+const CUTOFF_HOUR_ET = 9;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const ET_PARTS = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  hour12: false,
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit',
+});
+
+/** An instant's wall-clock fields as read in America/New_York. */
+function etParts(at: number): { y: number; m: number; d: number; h: number; min: number; s: number } {
+  const p: Record<string, string> = {};
+  for (const part of ET_PARTS.formatToParts(new Date(at))) p[part.type] = part.value;
+  // `hour12: false` renders midnight as "24" in some ICU versions; normalise it.
+  return { y: +p.year, m: +p.month, d: +p.day, h: +p.hour % 24, min: +p.minute, s: +p.second };
+}
+
+/**
+ * The epoch of a given America/New_York wall clock.
+ *
+ * Two correction passes rather than one: the first guess uses the offset at the
+ * WRONG instant, and on a DST changeover day that offset is off by an hour, so a
+ * single pass lands sixty minutes out. Iterating settles it. There is no `tz`
+ * dependency in this repo and this is the only place that needs one.
+ */
+function etWallClockToEpoch(y: number, m: number, d: number, h: number): number {
+  const target = Date.UTC(y, m - 1, d, h);
+  let guess = target;
+  for (let i = 0; i < 2; i++) {
+    const p = etParts(guess);
+    guess += target - Date.UTC(p.y, p.m - 1, p.d, p.h, p.min, p.s);
+  }
+  return guess;
+}
+
+/**
+ * The latest Tuesday 09:00 America/New_York STRICTLY before `before`.
+ *
+ * `Number.NEGATIVE_INFINITY` if none is found within nine days, which cannot
+ * happen — it is there so a malformed input degrades to "the cutoff has passed"
+ * rather than blocking a repair on a date bug.
+ */
+export function statedCutoffBefore(before: number): number {
+  if (!Number.isFinite(before)) return Number.NEGATIVE_INFINITY;
+  for (let back = 0; back <= 8; back++) {
+    const p = etParts(before - back * DAY_MS);
+    if (new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay() !== TUESDAY) continue;
+    const cutoff = etWallClockToEpoch(p.y, p.m, p.d, CUTOFF_HOUR_ET);
+    if (cutoff < before) return cutoff;
+  }
+  return Number.NEGATIVE_INFINITY;
+}
+
+/**
+ * May a LIVE freeze of this slate run right now?
+ *
+ * Dry runs are unrestricted — rehearsing on a Sunday is exactly what 1.5b exists
+ * for, and a dry run writes nothing.
+ */
+export function liveFreezeAllowed(firstKickoffMs: number, now: number): { allowed: boolean; cutoffMs: number } {
+  const cutoffMs = statedCutoffBefore(firstKickoffMs);
+  return { allowed: now >= cutoffMs, cutoffMs };
+}
