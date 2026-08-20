@@ -214,7 +214,17 @@ export async function handleFrozenSpreadChange(
     // disagree, and a queue event for a slate with nothing to rescore is a no-op
     // the drain already handles. `after` on a create, `before` on a delete, both on
     // an amend that moved the key.
-    const slates = [before, after]
+    //
+    // ⚠️ AND THE GAME'S CURRENT SLATE, WHICH IS THE AUTHORITY (codex r4 on this
+    // PR). A game re-scheduled into a different week after its slate froze keeps
+    // the OLD key on its frozen record — the override preserves it on purpose, so
+    // that `frozenAt` and the slate stay as the freeze wrote them. But scoring
+    // selects games from `nfl_games` and resolves the frozen line by GAME ID, so
+    // the week that actually needs repairing is the one the game is in NOW. Read
+    // it rather than infer it: this trigger covers every writer, and inferring
+    // from the record covers only the writers that kept it accurate.
+    const currentGame = await db.collection('nfl_games').doc(gameId).get();
+    const slates = [before, after, currentGame.exists ? (currentGame.data() as Record<string, unknown>) : undefined]
       .map((side) => slateFieldsOf(side))
       .filter((k): k is NonNullable<typeof k> => !!k);
     const unique = [...new Map(slates.map((k) => [`${k.season}/${k.seasonType}/${k.week}`, k])).values()];

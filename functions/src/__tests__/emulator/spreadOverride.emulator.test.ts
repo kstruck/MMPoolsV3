@@ -222,6 +222,20 @@ describe("handleFrozenSpreadChange (emulator) — the detector and the handoff",
         expect(await queueSize()).toBe(2);
     });
 
+    it("ENQUEUES THE WEEK THE GAME IS IN NOW, not only the one its record remembers", async () => {
+        // Codex r4 on this PR. A game re-scheduled into a different week after its
+        // slate froze keeps the OLD key on its frozen record — the override
+        // preserves it on purpose. But scoring selects games from `nfl_games` and
+        // resolves the frozen line by GAME ID, so the week that actually needs
+        // repairing is the one the game is in now.
+        await seedGame("g1", { week: 6 });
+        await change(rec({ week: 4 }), rec({ value: -9, week: 4, overrideId: "o1", source: "override" }));
+        const weeks = (await admin.firestore().collection(RESCORE_QUEUE).get()).docs
+            .map((d) => d.data().week)
+            .sort();
+        expect(weeks).toEqual([4, 6]);
+    });
+
     it("alerts rather than silently returning when NEITHER side has a usable slate key", async () => {
         const broken = rec({ week: NaN as unknown as number });
         await change(broken, { ...broken, value: -9 });
