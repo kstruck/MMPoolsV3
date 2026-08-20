@@ -918,7 +918,18 @@ keeps both shapes against the new store, exactly as the original 2.1 had them:
 | Frozen record | What the callable writes |
 |---|---|
 | exists | amend: new `value`, new `overrideId`, `source: 'override'`, `frozenAt` untouched |
-| absent | create: `{ value, frozenAt: now, slate, overrideId, source: 'override' }` |
+| absent, **on a slate that already has other frozen records** | create: `{ value, frozenAt: now, slate, overrideId, source: 'override' }` |
+| absent, on a slate with NO frozen records | **refused** |
+
+⚠️ **THE THIRD ROW WAS ADDED IN PR 3 (2026-08-20, codex r1)** and it is load-bearing.
+Without it the callable is a way to freeze one game of an untouched future week —
+and 1.1's eligibility test reads *"any frozen record exists for this slate"*, so
+that single record makes the weekly freeze **skip the slate permanently**. The
+other fifteen games never freeze, every ATS pool on it stays blocked behind
+`SPREADS_NOT_LOCKED`, and there is no path back. It would also be a manual freeze
+before the stated cutoff, through the one door built to bypass that rule
+legitimately. A sibling record is exactly the right test: present for R3's case
+(the rest of the week froze days ago), absent for every other.
 
 **Both paths write `source: 'override'`.** An earlier draft omitted it and the
 approval table above would then have filed every legitimate override as an

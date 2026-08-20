@@ -73,11 +73,13 @@ describe("overrideLockedSpreadInternal (emulator)", () => {
         });
     });
 
-    it("CREATES a frozen record for a game that has none — R3's remediation path", async () => {
+    it("CREATES a frozen record for a game added to an ALREADY-FROZEN slate — R3's remediation path", async () => {
         // A flex or a late addition joins a slate after it froze. Without a create
         // shape the slate is permanently incomplete and ATS submissions are blocked
         // for good (codex round 5 on the revision).
         await seedGame("late");
+        await seedGame("sibling");
+        await seedFrozen("sibling");
         const res = await overrideLockedSpreadInternal(admin.firestore(), ACTOR, {
             gameId: "late", value: 2.5, reason: "Game flexed into this slate after the freeze",
         });
@@ -86,6 +88,23 @@ describe("overrideLockedSpreadInternal (emulator)", () => {
         expect(await frozenOf("late")).toMatchObject({
             gameId: "late", value: 2.5, source: "override", overrideId: res.overrideId, ...SLATE,
         });
+    });
+
+    it("REFUSES TO CREATE the first frozen record of an unfrozen slate", async () => {
+        // Codex r1 on this PR. `slateAlreadyFrozen` reads "any record exists for
+        // this slate", so one override on an untouched week would make the weekly
+        // freeze skip it PERMANENTLY — the other fifteen games never freeze and
+        // every ATS pool on the slate is blocked behind SPREADS_NOT_LOCKED with no
+        // path back. It would also be a manual freeze before the stated cutoff, by
+        // the one door built to bypass that rule legitimately.
+        await seedGame("g1");
+        await expect(
+            overrideLockedSpreadInternal(admin.firestore(), ACTOR, {
+                gameId: "g1", value: -7, reason: "trying to freeze one game early",
+            }),
+        ).rejects.toThrow(/no frozen lines at all/);
+        expect(await frozenOf("g1")).toBeUndefined();
+        expect(await auditRows()).toEqual([]);
     });
 
     it("writes the audit row IN THE SAME TRANSACTION, carrying the same overrideId", async () => {

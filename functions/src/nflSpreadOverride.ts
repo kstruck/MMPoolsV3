@@ -87,6 +87,35 @@ export async function overrideLockedSpreadInternal(
         if (!slate) {
           throw new HttpsError('failed-precondition', `Game ${gameId} has no usable slate key; cannot create a frozen line for it.`);
         }
+
+        // ⚠️ THE CREATE SHAPE IS FOR A GAME ADDED TO AN ALREADY-FROZEN SLATE, AND
+        // NOTHING ELSE (codex r1 on PR 3).
+        //
+        // Without this check the callable is a way to freeze one game of an
+        // untouched future week — and that is worse than it sounds, because
+        // `slateAlreadyFrozen` reads "any record exists for this slate". One
+        // override on an unfrozen slate therefore makes the weekly freeze skip
+        // that week PERMANENTLY, leaving the other fifteen games unfrozen and
+        // every ATS pool on the slate blocked behind SPREADS_NOT_LOCKED with no
+        // path back. It would also be a manual freeze before the stated cutoff,
+        // by the one door built to bypass the cutoff rule legitimately.
+        //
+        // A sibling record is exactly the right test: it is present for R3's case
+        // (the rest of the week froze days ago) and absent for every other one.
+        const siblings = await tx.get(
+          db.collection(FROZEN_SPREADS_COLLECTION)
+            .where('season', '==', slate.season)
+            .where('seasonType', '==', slate.seasonType)
+            .where('week', '==', slate.week)
+            .limit(1),
+        );
+        if (siblings.empty) {
+          throw new HttpsError(
+            'failed-precondition',
+            `${slate.season}/${slate.seasonType}/wk${slate.week} has no frozen lines at all, so there is nothing to correct. ` +
+            `Freeze the week first (Operations → NFL Spread Freeze); this override exists for a game ADDED to a slate that was already frozen.`,
+          );
+        }
         const record: FrozenSpread = {
           gameId, value, frozenAt: now, ...slate,
           overrideId,
