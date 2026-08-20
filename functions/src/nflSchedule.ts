@@ -3,7 +3,7 @@ import { ESPN_SITE_API } from './lib/espnHost';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { writeAuditEvent } from './audit';
 import { NFLGame } from './types';
-import { acquireSlateLease, releaseSlateLease } from './lib/slateLease';
+import { acquireSlateLease, assertSlateFence, releaseSlateLease } from './lib/slateLease';
 import { detectStatCorrections, type GameStateChange } from './lib/feedSnapshot';
 import { captureFeedSnapshot, pruneExpiredSnapshots, readSnapshotGate, reportStatCorrections } from './feedSnapshotStore';
 import { opsCourierAuthToken } from './lib/opsAlertDispatcher';
@@ -530,23 +530,38 @@ export async function importNFLSeason(
     // class: an ATS pool then refuses every pick behind SPREADS_NOT_LOCKED.
     // (qodo #2 on this PR.)
     //
-    // 🛑 THIS NARROWS THE RACE, IT DOES NOT CLOSE IT. There is still a gap
-    // between this read and the commit. The real fix is the single atomic
-    // TRANSACTION specified in PLAN-IMPORTER-SAFETY.md §1.1/§1.5, which re-reads
-    // inside the transaction so a concurrent lock forces a retry — that is Phase
-    // 1 work and deliberately not in this PR. Do not read this comment as the
-    // race being handled.
+    // ✅ THE RE-READ AND THE WRITE ARE NOW ONE TRANSACTION (codex r2 on
+    // PLAN-NFL-SPREAD-FREEZE PR 2). This comment used to say the opposite, and it
+    // was right at the time: read-then-batch-commit left a gap, so a spread locked
+    // in it was overwritten with the fresh line and `locked: false` — the #235 bug
+    // class. The transaction re-reads inside itself, so a concurrent MODIFICATION
+    // of any game it is about to write forces a retry.
     //
-    // It is still strictly better than what shipped before this change, which
-    // DELETED the documents first and destroyed a concurrently-locked spread
-    // outright.
-    const freshExisting = new Map<string, NFLGame>();
-    for (const doc of await db.getAll(...games.map(g => db.collection('nfl_games').doc(g.id)))) {
-      if (doc.exists) freshExisting.set(doc.id, doc.data() as NFLGame);
-    }
+    // 🛑 IT STILL DOES NOT CLOSE THE WHOLE IMPORTER RACE, and this is the half that
+    // matters here: Firestore transactions do not range-lock, so a document
+    // CREATED concurrently raises no conflict at all. That half is what the slate
+    // lease above covers, and `PLAN-IMPORTER-SAFETY.md` §1.1/§1.5 still owns the
+    // general case.
+    //
+    // The fence assertion is the first read in the transaction. A time-bounded
+    // lease is NOT a mutex on its own: an ESPN fetch slower than the 3-minute TTL
+    // would let a freeze acquire the slate, reconcile it and commit, and this
+    // importer would then add a game the freeze never saw — leaving the newcomer
+    // unfrozen, which is the exact partial slate the lease exists to prevent.
+    let weekWrites = 0;
+    await db.runTransaction(async (tx) => {
+      await assertSlateFence(tx, db, slateKey, importLease, Date.now());
+      const refs = games.map(g => db.collection('nfl_games').doc(g.id));
+      const freshExisting = new Map<string, NFLGame>();
+      for (const doc of await tx.getAll(...refs)) {
+        if (doc.exists) freshExisting.set(doc.id, doc.data() as NFLGame);
+      }
 
-    const batch = db.batch();
-    for (const game of games) {
+      // Reset per ATTEMPT: a transaction body re-runs on contention, and counting
+      // into the outer total from inside it would multiply the import count by the
+      // number of retries.
+      weekWrites = 0;
+      for (const game of games) {
       const cleanedGame = JSON.parse(JSON.stringify(game));
       // Bulk import writes the same parseScoreboardResponse output as the sync,
       // so it can create a scoreless FINAL too — and without the marker that game
@@ -590,11 +605,11 @@ export async function importNFLSeason(
       }
 
       freshIds.add(cleanedGame.id);
-      const gameRef = db.collection('nfl_games').doc(cleanedGame.id);
-      batch.set(gameRef, cleanedGame, { merge: true });
-      importedCount++;
-    }
-    await batch.commit();
+      tx.set(db.collection('nfl_games').doc(cleanedGame.id), cleanedGame, { merge: true });
+      weekWrites++;
+      }
+    });
+    importedCount += weekWrites;
     console.log(`[nflSchedule] Week ${week} imported successfully with ${games.length} games.`);
     } finally {
       // Best-effort, same as the freeze: a failed release only means the lease
