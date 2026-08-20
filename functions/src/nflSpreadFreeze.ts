@@ -27,6 +27,7 @@ import * as admin from 'firebase-admin';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { withHeartbeat, configReadFailedVerdict } from './lib/heartbeat';
 import { validated } from './lib/validated';
+import { writeAdminAudit } from './lib/adminAudit';
 import { runNFLSpreadFreezeSchema } from './schemas/nflPools';
 import { readJobGate, fetchNFLWeekSchedule } from './nflSchedule';
 import { FROZEN_SPREADS_COLLECTION, type FrozenSpread } from './shared/frozenSpread';
@@ -342,7 +343,7 @@ export const lockNFLSpreadsJob = onSchedule(
  */
 export const runNFLSpreadFreeze = validated(
   { schema: runNFLSpreadFreezeSchema, label: 'runNFLSpreadFreeze', role: 'SUPER_ADMIN', appCheck: 'monitor' },
-  async (input) => {
+  async (input, request) => {
     const db = admin.firestore();
     const gate = await readFreezeGate(db);
     if (!gate.enabled) {
@@ -352,6 +353,40 @@ export const runNFLSpreadFreeze = validated(
       };
     }
     const dryRun = gate.dryRun || input.dryRun; // schema default TRUE; the config can only make it drier
-    return { enabled: true, ...(await freezeSlateOnce(db, Date.now(), { dryRun })) };
+
+    // `freezeSlateOnce` THROWS on the exceptional refusals — SLATE_CHANGED,
+    // ALREADY_FROZEN, FENCE_LOST — because the scheduled job wants them in the
+    // heartbeat as failures. An operator reading a report wants the reason, not a
+    // generic `internal` error, so they are caught here and returned in the same
+    // shape as an ordinary refusal.
+    let result: FreezeResult;
+    try {
+      result = await freezeSlateOnce(db, Date.now(), { dryRun });
+    } catch (err: unknown) {
+      result = {
+        slate: null, dryRun, frozen: 0, wouldFreeze: 0, ok: false,
+        reason: err instanceof Error ? err.message : String(err),
+      };
+    }
+
+    // The scheduled job has a heartbeat; this one has nothing, and it writes
+    // production data (`mmp-change-control` Rule 1). Audited on every run, dry or
+    // live, so a reviewed dry run is evidence somebody kept rather than a returned
+    // object nobody did.
+    await writeAdminAudit({
+      actorUid: request.auth!.uid,
+      actorEmail: request.auth!.token.email as string | undefined,
+      action: 'RUN_NFL_SPREAD_FREEZE',
+      targetType: 'nfl_game',
+      metadata: {
+        dryRun: result.dryRun, slate: result.slate, frozen: result.frozen, wouldFreeze: result.wouldFreeze,
+        reason: result.reason, writes: result.writes ?? [], noLine: result.noLine ?? [],
+        missingFromFetch: result.missingFromFetch ?? [], unexpectedInFetch: result.unexpectedInFetch ?? [],
+        leaseBusy: result.leaseBusy ?? false,
+      },
+      status: result.ok ? 'success' : 'error',
+    });
+
+    return { enabled: true, ...result };
   },
 );
