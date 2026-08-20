@@ -3,7 +3,7 @@ import { ESPN_SITE_API } from './lib/espnHost';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { writeAuditEvent } from './audit';
 import { NFLGame } from './types';
-import { slateLeaseIsHeld } from './lib/slateLease';
+import { acquireSlateLease, releaseSlateLease } from './lib/slateLease';
 import { detectStatCorrections, type GameStateChange } from './lib/feedSnapshot';
 import { captureFeedSnapshot, pruneExpiredSnapshots, readSnapshotGate, reportStatCorrections } from './feedSnapshotStore';
 import { opsCourierAuthToken } from './lib/opsAlertDispatcher';
@@ -477,21 +477,33 @@ export async function importNFLSeason(
   /** Weeks skipped because a freeze pass held the slate (reported, never silent). */
   const leaseBusyWeeks: number[] = [];
   for (const week of weeks) {
-    // ⚠️ REFUSE A SLATE A FREEZE IS HOLDING (PLAN-NFL-SPREAD-FREEZE 1.3, codex
-    // round 11). The freeze reconciles the fetched event ids against the stored
-    // slate before it commits, and Firestore does not range-lock — so an import
-    // that ADDS a game between that reconciliation and the commit would leave the
-    // newcomer unfrozen and the week frozen across two states. Serialising the two
-    // writers is the only thing that closes it, and this is the importer's half:
-    // it steps aside the way a scoring pass returns `leaseBusy` rather than writing.
+    // ⚠️ HOLD THE SLATE LEASE ACROSS THIS WEEK'S FETCH AND COMMIT
+    // (PLAN-NFL-SPREAD-FREEZE 1.3, codex round 11; TAKEN rather than merely
+    // CHECKED after codex r1 on this PR).
+    //
+    // The freeze reconciles the fetched event ids against the stored slate before
+    // it commits, and Firestore does not range-lock — so an import that ADDS a
+    // game between that reconciliation and the commit would leave the newcomer
+    // unfrozen and the week frozen across two states. Serialising the two writers
+    // is the only thing that closes it.
+    //
+    // A read-only `is it held?` check was the first version of this and it did not
+    // serialise anything: an import that observed no lease could still be fetching
+    // when the freeze acquired one, and commit its batch afterwards. The lease has
+    // to be HELD for the whole fetch-and-write, which is what the freeze does with
+    // it too. Per week rather than per import, so an 18-week backfill never parks
+    // the freeze behind seventeen ESPN round-trips.
     //
     // This does NOT close the general importer race — `PLAN-IMPORTER-SAFETY.md`
     // §1.1/§1.5 still owns that. It closes the freeze's half of it.
-    if (await slateLeaseIsHeld(db, { season, seasonType, week: Number(week) }, Date.now())) {
+    const slateKey = { season, seasonType, week: Number(week) };
+    const importLease = await acquireSlateLease(db, slateKey, Date.now());
+    if (!importLease) {
       console.warn(`[nflSchedule] Week ${week} is held by a running spread freeze; skipping it rather than racing the commit.`);
       leaseBusyWeeks.push(Number(week));
       continue;
     }
+    try {
     const games = await fetchWeek(week, season, seasonType);
     if (games.length === 0) {
       console.log(`[nflSchedule] No games fetched for Week ${week}. Skipping (its stored games are left untouched).`);
@@ -584,12 +596,25 @@ export async function importNFLSeason(
     }
     await batch.commit();
     console.log(`[nflSchedule] Week ${week} imported successfully with ${games.length} games.`);
+    } finally {
+      // Best-effort, same as the freeze: a failed release only means the lease
+      // expires on its own TTL, which is what the expiry is for.
+      await releaseSlateLease(db, slateKey, importLease).catch((e) => {
+        console.warn(`[nflSchedule] slate lease release failed for week ${week}:`, e);
+      });
+    }
   }
 
   // Orphans: stored games in a SUCCESSFULLY FETCHED week that the fresh slate no
   // longer returns — a cancelled or re-scheduled fixture. Deleted AFTER the
   // writes, and only for weeks that actually returned data. Chunked under the
   // 500-op batch cap.
+  //
+  // RESIDUAL, stated rather than implied away: this runs outside the slate lease.
+  // A delete racing a freeze can only REMOVE a game, never add one, so it cannot
+  // produce the partial-freeze the lease exists to prevent — the worst case is a
+  // frozen record for a game that no longer exists, which no reader consults
+  // (every reader iterates the STORED slate and joins to it).
   const orphanIds = [...inScopeWeekById.entries()]
     .filter(([id, wk]) => fetchedWeeks.has(wk) && !freshIds.has(id))
     .map(([id]) => id);

@@ -159,8 +159,14 @@ export async function freezeSlateOnce(
   // the newcomer unfrozen (codex round 11).
   const lease = await acquireSlateLease(db, key, now);
   if (!lease) {
-    return { slate: label, dryRun: opts.dryRun, frozen: 0, wouldFreeze: 0, ok: true, leaseBusy: true,
-      reason: `another pass holds the lease on ${label}; nothing was written` };
+    // ⚠️ `ok: false`, AND THAT IS NOT PEDANTRY (codex r1 on this PR). The schedule
+    // fires ONCE A WEEK. A contended run that reported success would record a
+    // healthy heartbeat and leave the slate unfrozen until the following Tuesday —
+    // past kickoff for the whole week, with no operational signal that the stated
+    // cutoff was missed. A freeze that did not happen is a failed freeze whoever
+    // was holding the lease.
+    return { slate: label, dryRun: opts.dryRun, frozen: 0, wouldFreeze: 0, ok: false, leaseBusy: true,
+      reason: `another pass holds the lease on ${label}; nothing was written — re-run runNFLSpreadFreeze once it clears` };
   }
 
   try {

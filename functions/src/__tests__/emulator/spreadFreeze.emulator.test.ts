@@ -5,6 +5,7 @@ import { freezeSlateOnce } from "../../nflSpreadFreeze";
 import { FROZEN_SPREADS_COLLECTION, type FrozenSpread } from "../../shared/frozenSpread";
 import { SLATE_LEASES, acquireSlateLease } from "../../lib/slateLease";
 import { slateDocId } from "../../lib/spreadFreeze";
+import { importNFLSeason } from "../../nflSchedule";
 
 /**
  * `freezeSlateOnce` write-path coverage (PLAN-NFL-SPREAD-FREEZE Phase 1).
@@ -167,7 +168,10 @@ describe("freezeSlateOnce (emulator) — the write path", () => {
         const result = await freezeSlateOnce(admin.firestore(), Date.now(), {
             dryRun: false, fetchWeek: feed({ g1: -6.5 }),
         });
-        expect(result).toMatchObject({ leaseBusy: true, frozen: 0 });
+        // ok:false, because the schedule fires once a week: a contended run that
+        // reported success would record a healthy heartbeat and leave the slate
+        // unfrozen until the following Tuesday, past kickoff for the whole week.
+        expect(result).toMatchObject({ ok: false, leaseBusy: true, frozen: 0 });
         expect(await frozenRecords()).toEqual([]);
     });
 
@@ -204,5 +208,41 @@ describe("freezeSlateOnce (emulator) — the write path", () => {
         });
         expect(result.frozen).toBe(0);
         expect(await frozenRecords()).toEqual([]);
+    });
+});
+
+describe("importNFLSeason (emulator) — the importer's half of the mutex", () => {
+    beforeEach(clearAll);
+
+    /** The importer's fetch shape: full NFLGame-ish documents, not just a line. */
+    const importFeed = (ids: string[]) => (async () =>
+        ids.map((id) => game(id))) as unknown as typeof import("../../nflSchedule").fetchNFLWeekSchedule;
+
+    it("SKIPS a week whose slate lease a freeze is holding, and reports it", async () => {
+        // Codex r1 on this PR: a read-only "is it held?" check serialised nothing —
+        // an import that observed no lease could still be fetching when the freeze
+        // acquired one, and commit its batch afterwards. If that batch ADDS a game,
+        // the freeze has already reconciled without it and the newcomer stays
+        // unfrozen, which is the partial slate the lease exists to prevent. The
+        // importer takes the lease for the whole fetch-and-write instead.
+        const held = await acquireSlateLease(admin.firestore(), SLATE, Date.now());
+        expect(held).not.toBeNull();
+
+        const res = await importNFLSeason(SLATE.season, SLATE.seasonType, [SLATE.week], {
+            fetchWeek: importFeed(["newcomer"]),
+        });
+        expect(res.leaseBusyWeeks).toEqual([SLATE.week]);
+        expect(res.importedCount).toBe(0);
+        expect((await admin.firestore().collection("nfl_games").get()).empty).toBe(true);
+    });
+
+    it("imports normally once the lease is free, and hands it back", async () => {
+        const res = await importNFLSeason(SLATE.season, SLATE.seasonType, [SLATE.week], {
+            fetchWeek: importFeed(["g1"]),
+        });
+        expect(res.leaseBusyWeeks).toEqual([]);
+        expect(res.importedCount).toBe(1);
+        const lease = (await admin.firestore().collection(SLATE_LEASES).doc(slateDocId(SLATE)).get()).data();
+        expect(lease?.until).toBe(0);
     });
 });
