@@ -173,7 +173,21 @@ export const SuperAdminNFLSpreads: React.FC = () => {
     }
   };
 
-  const frozenCount = games.filter(g => frozen[g.id]).length;
+  /**
+   * Frozen records BELONGING TO THE SELECTED WEEK.
+   *
+   * ⚠️ Not simply "this game has a record". Records are loaded by game id (so a
+   * re-scheduled game keeps its original slate and stays overrideable), which
+   * means the map can hold a record whose week is NOT the one on screen. Counting
+   * those would make an untouched week look frozen and invite override-creates the
+   * server correctly refuses — a UI that lies about state and a user who learns to
+   * distrust the refusal.
+   */
+  const onSlate = (g: NFLGame) => {
+    const r = frozen[g.id];
+    return !!r && String(r.season) === String(season) && Number(r.seasonType) === seasonType && Number(r.week) === week;
+  };
+  const frozenCount = games.filter(onSlate).length;
   /**
    * Has this slate been frozen at all?
    *
