@@ -61,13 +61,15 @@ export const SuperAdminNFLSpreads: React.FC = () => {
         where('seasonType', '==', seasonType),
         where('week', '==', week)
       );
-      const [snap, frozenRecords] = await Promise.all([
-        getDocs(q),
-        dbService.getFrozenSpreadsForSlate(season, seasonType, week),
-      ]);
+      const snap = await getDocs(q);
       const fetchedGames: NFLGame[] = [];
       snap.forEach(d => fetchedGames.push(d.data() as NFLGame));
       fetchedGames.sort((a, b) => a.startTime - b.startTime);
+
+      // BY GAME ID, not by slate: a game re-scheduled after its week froze keeps
+      // the original slate on its frozen record, so a slate query would miss it
+      // from both weeks and the Override button would be unreachable.
+      const frozenRecords = await dbService.getFrozenSpreadsForGames(fetchedGames.map(g => g.id));
 
       setGames(fetchedGames);
       setFrozen(frozenRecords);

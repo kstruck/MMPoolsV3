@@ -1685,20 +1685,28 @@ export const dbService = {
     },
 
     /**
-     * The frozen lines for one slate, keyed by game id — what the Spread Manager
-     * reads to know which rows it may still edit directly and which have been
-     * committed to.
+     * The frozen lines for a set of games, keyed by game id — what the Spread
+     * Manager reads to know which rows it may still edit directly and which have
+     * been committed to.
+     *
+     * ⚠️ BY GAME ID, NOT BY SLATE (codex r5 on PR 3). A game re-scheduled into
+     * another week after its slate froze keeps the ORIGINAL slate on its frozen
+     * record, deliberately — the override preserves it so `frozenAt` and the slate
+     * stay as the freeze wrote them. A slate query therefore misses it from both
+     * weeks: the manager would render it as an editable working line, saving would
+     * not change the canonical value, and the Override button would be unreachable
+     * from anywhere. Everything else in this design resolves a frozen line by game
+     * id; so does this.
      */
-    getFrozenSpreadsForSlate: async (season: string, seasonType: number, week: number): Promise<Record<string, FrozenSpread>> => {
-        const q = query(
-            collection(db, FROZEN_SPREADS_COLLECTION),
-            where('season', '==', String(season)),
-            where('seasonType', '==', Number(seasonType)),
-            where('week', '==', Number(week)),
-        );
-        const snap = await getDocs(q);
+    getFrozenSpreadsForGames: async (gameIds: string[]): Promise<Record<string, FrozenSpread>> => {
+        // One `getDoc` each rather than an `in` query: a slate is ~16 games, and
+        // `where(documentId(), 'in', …)` caps at 30 per query, so this avoids a
+        // chunking rule that would only ever be wrong on the day it binds.
+        const snaps = await Promise.all(gameIds.map(id => getDoc(doc(db, FROZEN_SPREADS_COLLECTION, id))));
         const out: Record<string, FrozenSpread> = {};
-        snap.forEach(d => { out[d.id] = { ...(d.data() as FrozenSpread), gameId: d.id }; });
+        for (const snap of snaps) {
+            if (snap.exists()) out[snap.id] = { ...(snap.data() as FrozenSpread), gameId: snap.id };
+        }
         return out;
     },
 
