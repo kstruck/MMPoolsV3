@@ -203,6 +203,38 @@ export async function freezeSlateOnce(
       // Reads first, all of them: Firestore refuses a read after a write in a
       // transaction.
       await assertSlateFence(tx, db, key, lease, Date.now());
+
+      // ⚠️ RE-READ THE STORED SLATE INSIDE THE TRANSACTION (codex r3 on this PR).
+      //
+      // The lease serialises the freeze against the IMPORTER, and that is the
+      // writer that adds whole slates. It does not serialise it against
+      // `syncScoresWindow`, which takes no lease and must not be made to — the
+      // 5-minute poll is what keeps live scores moving, and parking it behind a
+      // freeze would trade a narrow race for a real outage. But the sync CAN create
+      // a spillover game inside a slate, and a manual retry of a refused freeze can
+      // legitimately run inside its 2-hour window.
+      //
+      // This re-read collapses that window from "the whole ESPN fetch" to the
+      // transaction's own read-to-commit. It does NOT eliminate it — Firestore
+      // transactions do not range-lock, so a document created after this read still
+      // raises no conflict. The residual is R3's case, which the plan decided
+      // rather than left open: a game added to a frozen slate is PAGED by
+      // `nflLockWatchJob` and filled in through `overrideLockedSpread`'s create
+      // shape, never auto-frozen at a second instant.
+      const slateNow = await tx.get(
+        db.collection('nfl_games')
+          .where('season', '==', key.season)
+          .where('seasonType', '==', key.seasonType)
+          .where('week', '==', key.week),
+      );
+      const nowIds = slateNow.docs.map((d) => d.id).sort();
+      const plannedIds = plan.writes.map((w) => w.gameId).sort();
+      if (nowIds.length !== plannedIds.length || nowIds.some((id, i) => id !== plannedIds[i])) {
+        throw new Error(
+          `SLATE_CHANGED: ${label} changed between the fetch and the commit (planned ${plannedIds.length}, now ${nowIds.length}); refusing rather than freezing part of it.`,
+        );
+      }
+
       const refs = plan.writes.map((w) => db.collection(FROZEN_SPREADS_COLLECTION).doc(w.gameId));
       const existing = await tx.getAll(...refs);
 

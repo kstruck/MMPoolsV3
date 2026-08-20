@@ -160,6 +160,25 @@ describe("freezeSlateOnce (emulator) — the write path", () => {
         expect((await frozenRecords()).map((r) => r.gameId)).toEqual(["g1"]);
     });
 
+    it("REFUSES when a game joins the slate between the fetch and the commit", async () => {
+        // Codex r3 on this PR. The lease serialises the freeze against the
+        // IMPORTER; `syncScoresWindow` takes no lease and must not be made to, so
+        // it can still create a spillover game inside a slate — and a manual retry
+        // of a refused freeze can legitimately run inside its 2-hour window. The
+        // transaction re-reads the stored slate and refuses rather than freezing
+        // the old game set and leaving the newcomer blocking ATS submission.
+        await seed([game("g1")]);
+        const racingFeed = async () => {
+            await seed([game("newcomer")]);
+            return [{ id: "g1", ...SLATE, spread: { value: -6.5 } }];
+        };
+
+        await expect(
+            freezeSlateOnce(admin.firestore(), Date.now(), { dryRun: false, fetchWeek: racingFeed }),
+        ).rejects.toThrow(/SLATE_CHANGED/);
+        expect(await frozenRecords()).toEqual([]);
+    });
+
     it("steps aside when another pass holds the slate lease", async () => {
         await seed([game("g1")]);
         const held = await acquireSlateLease(admin.firestore(), SLATE, Date.now());

@@ -348,6 +348,17 @@ repo already runs for scoring (`nflPools.ts:913-951`):
   concurrent *modification* still conflicts, which is the half Firestore does
   give us.
 
+⚠️ **AMENDED IN PR 2 (2026-08-20): THE LEASE COVERS THE IMPORTER, NOT THE SYNC**
+(codex r3 on PR 2). `syncScoresWindow` takes no lease and deliberately is not
+given one — the 5-minute poll is what keeps live scores moving, and parking it
+behind a freeze would trade a narrow race for a real outage. But it CAN create a
+spillover game inside a slate, and a manual retry of a refused freeze can
+legitimately run inside its 2-hour window. So the freeze transaction **re-reads
+the stored slate and refuses (`SLATE_CHANGED`) if the id set moved**, which
+collapses the window from the whole ESPN fetch to the transaction's own
+read-to-commit. It does not eliminate it, because Firestore does not range-lock —
+and what is left is exactly R3's case, which is decided rather than open.
+
 Residual, and named rather than implied away: a game added to the slate AFTER
 the freeze commits is R3's case — page, never auto-freeze. A
 partially frozen week is the thing the requirement forbids — some games frozen
