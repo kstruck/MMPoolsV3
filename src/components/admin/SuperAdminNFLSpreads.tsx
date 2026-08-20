@@ -174,6 +174,16 @@ export const SuperAdminNFLSpreads: React.FC = () => {
   };
 
   const frozenCount = games.filter(g => frozen[g.id]).length;
+  /**
+   * Has this slate been frozen at all?
+   *
+   * ⚠️ THIS IS WHAT MAKES R3 REACHABLE (codex r8 on PR 3). A game added to a slate
+   * AFTER it froze has no frozen record of its own, but the slate does — and the
+   * weekly freeze will never run on it again, so a working line typed here would
+   * go nowhere and ATS submission stays blocked on that one game forever. Such a
+   * row gets the override (which creates), not the input.
+   */
+  const slateIsFrozen = frozenCount > 0;
 
   return (
     <div className="bg-surface p-6 rounded-xl border border-line shadow-panel mt-6">
@@ -272,7 +282,24 @@ export const SuperAdminNFLSpreads: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-4">
-                    {record ? (
+                    {!record && slateIsFrozen ? (
+                      <>
+                        <div className="flex flex-col items-end">
+                          <span className="text-[9px] uppercase tracking-[0.16em] font-display font-bold mb-1 text-brandred-600">
+                            Missing from a frozen week
+                          </span>
+                          <span className="num text-lg font-bold text-brandred-600">—</span>
+                        </div>
+                        <button
+                          onClick={() => handleOverride(game)}
+                          disabled={overriding === game.id}
+                          className="p-2 rounded-lg border border-brandred-500/30 bg-page text-brandred-600 hover:brightness-110 disabled:opacity-50 transition-colors"
+                          title="Give this game a frozen line (requires a reason; audited and re-scored). The weekly freeze will not run on this slate again."
+                        >
+                          {overriding === game.id ? <RefreshCw size={16} className="animate-spin" /> : <PencilLine size={16} />}
+                        </button>
+                      </>
+                    ) : record ? (
                       <>
                         <div className="flex flex-col items-end">
                           <span className="text-[9px] text-faint uppercase tracking-[0.16em] font-display font-bold mb-1 flex items-center gap-1">

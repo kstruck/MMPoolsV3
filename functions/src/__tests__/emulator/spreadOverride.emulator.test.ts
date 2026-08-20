@@ -205,12 +205,25 @@ describe("handleFrozenSpreadChange (emulator) — the detector and the handoff",
         // Both halves matter. Exempting an approved override from the RESCORE would
         // leave finalized ATS standings on the old number because the change was
         // properly approved (codex round 11).
-        await admin.firestore().collection("admin_audit").doc(overrideAuditId("o2")).set({ action: "OVERRIDE_LOCKED_SPREAD" });
+        await admin.firestore().collection("admin_audit").doc(overrideAuditId("o2")).set({
+            action: "OVERRIDE_LOCKED_SPREAD", targetId: "g1", metadata: { overrideId: "o2" },
+        });
         await change(rec({ overrideId: "o1" }), rec({ value: -9, overrideId: "o2", source: "override" }));
         expect(await queueSize()).toBe(1);
         // Only the seeded proof row; no unapproved row was added.
         const rows = await auditRows();
         expect(rows.filter(r => r.action === "UNAPPROVED_FROZEN_SPREAD_CHANGE")).toEqual([]);
+    });
+
+    it("AUDITS A REUSED overrideId whose audit row belongs to ANOTHER game (codex r8)", async () => {
+        // Existence alone is not enough: a writer can copy any previous override id
+        // onto a different game's record and inherit its approval.
+        await admin.firestore().collection("admin_audit").doc(overrideAuditId("o2")).set({
+            action: "OVERRIDE_LOCKED_SPREAD", targetId: "some-other-game",
+        });
+        await change(rec({ overrideId: "o1" }), rec({ value: -9, overrideId: "o2", source: "override" }));
+        const rows = await auditRows();
+        expect(rows.filter(r => r.action === "UNAPPROVED_FROZEN_SPREAD_CHANGE")).toHaveLength(1);
     });
 
     it("AUDITS A FORGED overrideId — a claim on the document is not a proof (codex r6)", async () => {

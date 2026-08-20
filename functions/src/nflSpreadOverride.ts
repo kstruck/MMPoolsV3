@@ -227,11 +227,23 @@ export async function handleFrozenSpreadChange(
     let verdict = selfDeclared;
     if (verdict.approved && after?.overrideId) {
       const proof = await db.collection('admin_audit').doc(overrideAuditId(after.overrideId)).get();
-      if (!proof.exists) {
+      const row = proof.data() as { action?: unknown; targetId?: unknown; metadata?: { overrideId?: unknown } } | undefined;
+      // ⚠️ EXISTENCE IS NOT ENOUGH — THE ROW HAS TO BE ABOUT THIS GAME (codex r8).
+      // Checking only that the document is there lets a writer copy ANY previous
+      // override id onto a different game's record and inherit its approval. The
+      // `action` and `targetId` are top-level fields `capMetadata` never touches,
+      // so they are the safe pair to bind on; the metadata id is checked too when
+      // it survived the cap.
+      const belongs =
+        proof.exists &&
+        row?.action === 'OVERRIDE_LOCKED_SPREAD' &&
+        row?.targetId === gameId &&
+        (row?.metadata?.overrideId === undefined || row.metadata.overrideId === after.overrideId);
+      if (!belongs) {
         verdict = {
           ...verdict,
           approved: false,
-          reason: `${verdict.reason}, but no override audit record exists for ${after.overrideId} — this was not written by overrideLockedSpread`,
+          reason: `${verdict.reason}, but no override audit record for THIS game matches ${after.overrideId} — this was not written by overrideLockedSpread`,
         };
       }
     }
