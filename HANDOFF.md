@@ -1,5 +1,52 @@
 # HANDOFF — Session entry point
 
+> ## 🔴 2026-08-20 — **THE SPREAD FREEZE IS BUILT AND MERGED. NOTHING IS DEPLOYED.**
+>
+> **Read `MORNING-2026-08-20-SPREADS.md` first.** It **supersedes**
+> `MORNING-2026-08-19-HELP.md` as the top of the stack; that document remains the
+> entry point for PLAN-HELP-SYSTEM and its open items are carried into §6 of the
+> new one rather than left behind.
+>
+> **Merged 2026-08-20:** `0592b8f0` (#489), `af638c0d` (#490), `4caa878d` (#491).
+> **PLAN-NFL-SPREAD-FREEZE Revision 1 is fully implemented.** 23 codex rounds
+> across the three PRs, eleven P1s, every finding valid and absorbed or rejected
+> in writing. qodo stayed DORMANT throughout, per Kevin's 2026-08-19 ruling.
+>
+> 🔴 **FOUR DEPLOY STEPS AND NONE ARE DONE:** functions, then rules + indexes,
+> then a Coolify redeploy for `www`, then the cutover backfill (dry, then live).
+> Until all four, production is exactly what it was on 2026-08-19 — and the
+> Coolify step also finally ships T16 and the lock help topics, which have been
+> waiting since Wednesday. Exact commands in §3 of the morning doc.
+>
+> ⚠️ **THE FROZEN LINE MOVED OFF `nfl_games`.** It lives in
+> `nfl_frozen_spreads/{gameId}`, which `firestore.rules` refuses **every** client
+> write to — superadmin included. Only two Cloud Functions write it: the weekly
+> freeze (`lockNFLSpreadsJob`, still that name, now a real fetch-and-freeze) and
+> `overrideLockedSpread`. Every reader resolves `frozen ?? working`, including the
+> pick sheet, so the number a member is shown is the number they are graded on.
+> `nfl_games.spread` is now a WORKING line the Spread Manager edits and the freeze
+> uses as a per-game fallback.
+>
+> ⚠️ **THERE IS NO LOCK BUTTON ANY MORE, AND THAT IS A DECISION KEVIN SHOULD
+> CONFIRM.** The per-row toggle and "Lock All Spreads" are removed, not re-routed:
+> they wrote a locked line straight onto `nfl_games` with no frozen record and
+> nothing the detector could see, and unlock → edit → re-lock fired no rescore at
+> all. The consequence is real — **an ATS week can no longer be unblocked by hand
+> without freezing it.** Q1 in §5 of the morning doc.
+>
+> ⚠️ **APP WEEK 4 (Kevin's preseason week 3) HAS 0 OF 16 LINES**, measured against
+> the live ESPN feed at 2026-08-20. Kickoff is 2026-08-27T23:00Z and the freeze
+> fires Tue 2026-08-25 09:00 ET, so the scheduled run will very likely REFUSE —
+> which is the correct answer, not a fault. The repair is: type the missing
+> numbers in the Spread Manager, then run **NFL Spread Freeze (LIVE)** from
+> Operations. §4 of the morning doc has the dated sequence, including the
+> `nflSpreadLock.dryRun: false` flip on Mon 2026-08-24.
+>
+> ⚠️ **A LIVE FREEZE IS REFUSED BEFORE THE SLATE'S STATED CUTOFF**, and a slate is
+> freezable exactly ONCE. After that, a line changes only through the audited
+> override, which requires a reason, writes `admin_audit` in the same transaction,
+> and re-scores the week.
+
 > ## 🔴 2026-08-19 — **T16 + THE LOCK TOPICS MERGED. qodo IS TURNED OFF. `www` NEEDS A REDEPLOY.**
 >
 > **Read `MORNING-2026-08-19-HELP.md` first** for this effort. It continues
