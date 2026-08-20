@@ -255,6 +255,41 @@ describe("importNFLSeason (emulator) — the importer's half of the mutex", () =
         expect((await admin.firestore().collection("nfl_games").get()).empty).toBe(true);
     });
 
+    it("SKIPS the whole fetch when the response SPILLS into a slate a freeze holds", async () => {
+        // Codex r4 on this PR. `parseScoreboardResponse` lets the event's own week
+        // win over the requested one, and ESPN's scoreboard is unreliable about
+        // which slate it returns — so a lease on the requested week alone leaves a
+        // concurrent freeze of the NEIGHBOURING slate free to commit against its
+        // old game set while this import adds a game to it.
+        const heldNext = await acquireSlateLease(
+            admin.firestore(), { ...SLATE, week: SLATE.week + 1 }, Date.now(),
+        );
+        expect(heldNext).not.toBeNull();
+
+        const res = await importNFLSeason(SLATE.season, SLATE.seasonType, [SLATE.week], {
+            fetchWeek: (async () => [
+                game("thisWeek"),
+                game("spillover", { week: SLATE.week + 1 }),
+            ]) as unknown as typeof import("../../nflSchedule").fetchNFLWeekSchedule,
+        });
+
+        expect(res.leaseBusyWeeks).toEqual([SLATE.week]);
+        // NOTHING, not just the spillover game: all-or-nothing, same philosophy as
+        // the freeze itself.
+        expect((await admin.firestore().collection("nfl_games").get()).empty).toBe(true);
+    });
+
+    it("imports a spillover slate when nothing holds it", async () => {
+        const res = await importNFLSeason(SLATE.season, SLATE.seasonType, [SLATE.week], {
+            fetchWeek: (async () => [
+                game("thisWeek"),
+                game("spillover", { week: SLATE.week + 1 }),
+            ]) as unknown as typeof import("../../nflSchedule").fetchNFLWeekSchedule,
+        });
+        expect(res.leaseBusyWeeks).toEqual([]);
+        expect(res.importedCount).toBe(2);
+    });
+
     it("imports normally once the lease is free, and hands it back", async () => {
         const res = await importNFLSeason(SLATE.season, SLATE.seasonType, [SLATE.week], {
             fetchWeek: importFeed(["g1"]),

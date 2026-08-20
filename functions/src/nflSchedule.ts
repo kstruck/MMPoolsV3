@@ -503,10 +503,42 @@ export async function importNFLSeason(
       leaseBusyWeeks.push(Number(week));
       continue;
     }
+    /** Every slate this iteration may write to, and the lease held on each. */
+    const held = new Map<number, { key: typeof slateKey; lease: NonNullable<typeof importLease> }>([
+      [Number(week), { key: slateKey, lease: importLease }],
+    ]);
     try {
     const games = await fetchWeek(week, season, seasonType);
     if (games.length === 0) {
       console.log(`[nflSchedule] No games fetched for Week ${week}. Skipping (its stored games are left untouched).`);
+      continue;
+    }
+
+    // ⚠️ THE RESPONSE CAN SPAN SLATES, SO ONE LEASE IS NOT ENOUGH (codex r4 on
+    // this PR). `parseScoreboardResponse` lets the EVENT's own week win over the
+    // requested one, and ESPN's scoreboard is unreliable about which slate it
+    // returns — a fetch for one week has come back with 20 events across two.
+    // Every one of those is written below, so a lease on the requested week alone
+    // leaves a concurrent freeze of the NEIGHBOURING slate free to commit against
+    // its old game set while this import adds a game to it.
+    //
+    // All-or-nothing, the same philosophy as the freeze itself: if any slate in
+    // the response is held, this iteration writes NOTHING and says which week
+    // blocked it. `acquireSlateLease` never waits, so two importers can only skip
+    // each other, never deadlock.
+    const spillWeeks = [...new Set(games.map(g => Number(g.week)))]
+      .filter(w => Number.isInteger(w) && w !== Number(week))
+      .sort((a, b) => a - b);
+    let blockedBy: number | null = null;
+    for (const w of spillWeeks) {
+      const key = { season, seasonType, week: w };
+      const lease = await acquireSlateLease(db, key, Date.now());
+      if (!lease) { blockedBy = w; break; }
+      held.set(w, { key, lease });
+    }
+    if (blockedBy !== null) {
+      console.warn(`[nflSchedule] Week ${week}'s response spills into week ${blockedBy}, which a spread freeze holds; skipping the whole fetch rather than writing part of it.`);
+      leaseBusyWeeks.push(Number(week));
       continue;
     }
     // ⚠️ ONLY when the response actually contains a game FOR THIS WEEK.
@@ -550,7 +582,7 @@ export async function importNFLSeason(
     // unfrozen, which is the exact partial slate the lease exists to prevent.
     let weekWrites = 0;
     await db.runTransaction(async (tx) => {
-      await assertSlateFence(tx, db, slateKey, importLease, Date.now());
+      for (const { key, lease } of held.values()) await assertSlateFence(tx, db, key, lease, Date.now());
       const refs = games.map(g => db.collection('nfl_games').doc(g.id));
       const freshExisting = new Map<string, NFLGame>();
       for (const doc of await tx.getAll(...refs)) {
@@ -614,9 +646,11 @@ export async function importNFLSeason(
     } finally {
       // Best-effort, same as the freeze: a failed release only means the lease
       // expires on its own TTL, which is what the expiry is for.
-      await releaseSlateLease(db, slateKey, importLease).catch((e) => {
-        console.warn(`[nflSchedule] slate lease release failed for week ${week}:`, e);
-      });
+      for (const [w, { key, lease }] of held) {
+        await releaseSlateLease(db, key, lease).catch((e) => {
+          console.warn(`[nflSchedule] slate lease release failed for week ${w}:`, e);
+        });
+      }
     }
   }
 
