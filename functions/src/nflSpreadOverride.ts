@@ -208,7 +208,7 @@ export async function handleFrozenSpreadChange(
       // cannot be enqueued, and this is exactly the credential-bypass variant the
       // plan expects — a record whose slate was mangled or a delete of one that
       // never carried it.
-      await writeAdminAudit({
+      const noted = await writeAdminAudit({
         actorUid: 'system',
         action: 'FROZEN_SPREAD_SLATE_KEY_MISSING',
         targetType: 'nfl_game',
@@ -217,14 +217,20 @@ export async function handleFrozenSpreadChange(
         status: 'error',
       }, { id: `frozen-slate-${event.id}` });
       console.error(`[frozenSpread] ${gameId}: ${verdict.kind} with no usable slate key; NOT enqueued.`);
+      // `writeAdminAudit` swallows its own failures and RETURNS whether the record
+      // landed. This handler's entire job on this branch is to leave that record,
+      // so resolving on a lost write means the alert never existed and `retry`
+      // never fires. The deterministic id makes the redelivery a no-op overwrite.
+      if (!noted) throw new Error(`[frozenSpread] slate-key alert for ${gameId} was not written; retrying.`);
       return;
     }
     const { season, seasonType, week } = slate;
 
+    let auditWritten = true;
     if (!verdict.approved) {
       // Deterministic id, because a trigger is delivered at-least-once and an
       // auto-id append from a retry is an indistinguishable duplicate.
-      await writeAdminAudit({
+      auditWritten = await writeAdminAudit({
         actorUid: 'system',
         action: 'UNAPPROVED_FROZEN_SPREAD_CHANGE',
         targetType: 'nfl_game',
@@ -247,6 +253,17 @@ export async function handleFrozenSpreadChange(
     });
     if (!ok) throw new Error(`[frozenSpread] enqueue failed for ${season}/${seasonType}/wk${week}; retrying.`);
     console.log(`[frozenSpread] ${verdict.kind} on ${gameId} (${verdict.reason}); enqueued ${season}/${seasonType}/wk${week}.`);
+
+    // A LOST AUDIT ROW IS A FAILED RUN (codex r2 on this PR). `writeAdminAudit`
+    // catches its own errors and returns whether the record landed; ignoring that
+    // means an unauthorised change to a frozen line permanently has no forensic
+    // record, on the one path whose entire purpose is to leave one. Thrown AFTER
+    // the enqueue so the standings repair either way, and both writes are
+    // idempotent under redelivery — the audit id is deterministic and the drain
+    // groups queue events by slate.
+    if (!auditWritten) {
+      throw new Error(`[frozenSpread] unapproved-change audit for ${gameId} was not written; retrying.`);
+    }
 }
 
 export const nflFrozenSpreadTrigger = onDocumentWritten(
