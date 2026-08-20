@@ -28,6 +28,23 @@ export const scoreNFLWeekSchema = z.strictObject({
     week,
 });
 
+/**
+ * runNFLSpreadFreeze (SUPER_ADMIN) — PLAN-NFL-SPREAD-FREEZE 1.5b.
+ *
+ * The manual invocation of the weekly freeze, because a `0 9 * * 2` schedule
+ * cannot rehearse itself: the rollout asks for dry-run reports on Saturday,
+ * Sunday and Monday from a job that runs on none of those days.
+ *
+ * dryRun DEFAULTS TRUE AT THE SCHEMA LAYER (house Rule 1) — a handler-side truthy
+ * check runs LIVE when the flag is omitted. The config kill-switch can also hold
+ * it dry, but never force it live: a live manual freeze needs the config armed AND
+ * an explicit `dryRun: false`.
+ */
+export const runNFLSpreadFreezeSchema = z.strictObject({
+    dryRun: z.boolean().optional().default(true),
+});
+
 export type JoinNFLPoolInput = z.infer<typeof joinNFLPoolSchema>;
 export type ExecuteSurvivorRebuyInput = z.infer<typeof executeSurvivorRebuySchema>;
 export type ScoreNFLWeekInput = z.infer<typeof scoreNFLWeekSchema>;
+export type RunNFLSpreadFreezeInput = z.infer<typeof runNFLSpreadFreezeSchema>;

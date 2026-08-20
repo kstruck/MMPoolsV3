@@ -3,6 +3,7 @@ import { ESPN_SITE_API } from './lib/espnHost';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { writeAuditEvent } from './audit';
 import { NFLGame } from './types';
+import { acquireSlateLease, assertSlateFence, releaseSlateLease } from './lib/slateLease';
 import { detectStatCorrections, type GameStateChange } from './lib/feedSnapshot';
 import { captureFeedSnapshot, pruneExpiredSnapshots, readSnapshotGate, reportStatCorrections } from './feedSnapshotStore';
 import { opsCourierAuthToken } from './lib/opsAlertDispatcher';
@@ -428,7 +429,7 @@ export async function importNFLSeason(
   // locked-spread preservation — is testable without a network call.
   // Production always uses the default. Same arrangement as syncScoresWindow.
   opts: { fetchWeek?: typeof fetchNFLWeekSchedule } = {},
-): Promise<{ success: boolean; importedCount: number }> {
+): Promise<{ success: boolean; importedCount: number; leaseBusyWeeks: number[] }> {
   const db = admin.firestore();
   const fetchWeek = opts.fetchWeek ?? fetchNFLWeekSchedule;
   let importedCount = 0;
@@ -473,10 +474,71 @@ export async function importNFLSeason(
   // `importScope.emulator.test.ts`; an earlier revision of this function
   // asserted in a comment that it could not happen, and it could.
   const fetchedWeeks = new Set<number>();
+  /** Weeks skipped because a freeze pass held the slate (reported, never silent). */
+  const leaseBusyWeeks: number[] = [];
   for (const week of weeks) {
+    // ⚠️ HOLD THE SLATE LEASE ACROSS THIS WEEK'S FETCH AND COMMIT
+    // (PLAN-NFL-SPREAD-FREEZE 1.3, codex round 11; TAKEN rather than merely
+    // CHECKED after codex r1 on this PR).
+    //
+    // The freeze reconciles the fetched event ids against the stored slate before
+    // it commits, and Firestore does not range-lock — so an import that ADDS a
+    // game between that reconciliation and the commit would leave the newcomer
+    // unfrozen and the week frozen across two states. Serialising the two writers
+    // is the only thing that closes it.
+    //
+    // A read-only `is it held?` check was the first version of this and it did not
+    // serialise anything: an import that observed no lease could still be fetching
+    // when the freeze acquired one, and commit its batch afterwards. The lease has
+    // to be HELD for the whole fetch-and-write, which is what the freeze does with
+    // it too. Per week rather than per import, so an 18-week backfill never parks
+    // the freeze behind seventeen ESPN round-trips.
+    //
+    // This does NOT close the general importer race — `PLAN-IMPORTER-SAFETY.md`
+    // §1.1/§1.5 still owns that. It closes the freeze's half of it.
+    const slateKey = { season, seasonType, week: Number(week) };
+    const importLease = await acquireSlateLease(db, slateKey, Date.now());
+    if (!importLease) {
+      console.warn(`[nflSchedule] Week ${week} is held by a running spread freeze; skipping it rather than racing the commit.`);
+      leaseBusyWeeks.push(Number(week));
+      continue;
+    }
+    /** Every slate this iteration may write to, and the lease held on each. */
+    const held = new Map<number, { key: typeof slateKey; lease: NonNullable<typeof importLease> }>([
+      [Number(week), { key: slateKey, lease: importLease }],
+    ]);
+    try {
     const games = await fetchWeek(week, season, seasonType);
     if (games.length === 0) {
       console.log(`[nflSchedule] No games fetched for Week ${week}. Skipping (its stored games are left untouched).`);
+      continue;
+    }
+
+    // ⚠️ THE RESPONSE CAN SPAN SLATES, SO ONE LEASE IS NOT ENOUGH (codex r4 on
+    // this PR). `parseScoreboardResponse` lets the EVENT's own week win over the
+    // requested one, and ESPN's scoreboard is unreliable about which slate it
+    // returns — a fetch for one week has come back with 20 events across two.
+    // Every one of those is written below, so a lease on the requested week alone
+    // leaves a concurrent freeze of the NEIGHBOURING slate free to commit against
+    // its old game set while this import adds a game to it.
+    //
+    // All-or-nothing, the same philosophy as the freeze itself: if any slate in
+    // the response is held, this iteration writes NOTHING and says which week
+    // blocked it. `acquireSlateLease` never waits, so two importers can only skip
+    // each other, never deadlock.
+    const spillWeeks = [...new Set(games.map(g => Number(g.week)))]
+      .filter(w => Number.isInteger(w) && w !== Number(week))
+      .sort((a, b) => a - b);
+    let blockedBy: number | null = null;
+    for (const w of spillWeeks) {
+      const key = { season, seasonType, week: w };
+      const lease = await acquireSlateLease(db, key, Date.now());
+      if (!lease) { blockedBy = w; break; }
+      held.set(w, { key, lease });
+    }
+    if (blockedBy !== null) {
+      console.warn(`[nflSchedule] Week ${week}'s response spills into week ${blockedBy}, which a spread freeze holds; skipping the whole fetch rather than writing part of it.`);
+      leaseBusyWeeks.push(Number(week));
       continue;
     }
     // ⚠️ ONLY when the response actually contains a game FOR THIS WEEK.
@@ -500,23 +562,38 @@ export async function importNFLSeason(
     // class: an ATS pool then refuses every pick behind SPREADS_NOT_LOCKED.
     // (qodo #2 on this PR.)
     //
-    // 🛑 THIS NARROWS THE RACE, IT DOES NOT CLOSE IT. There is still a gap
-    // between this read and the commit. The real fix is the single atomic
-    // TRANSACTION specified in PLAN-IMPORTER-SAFETY.md §1.1/§1.5, which re-reads
-    // inside the transaction so a concurrent lock forces a retry — that is Phase
-    // 1 work and deliberately not in this PR. Do not read this comment as the
-    // race being handled.
+    // ✅ THE RE-READ AND THE WRITE ARE NOW ONE TRANSACTION (codex r2 on
+    // PLAN-NFL-SPREAD-FREEZE PR 2). This comment used to say the opposite, and it
+    // was right at the time: read-then-batch-commit left a gap, so a spread locked
+    // in it was overwritten with the fresh line and `locked: false` — the #235 bug
+    // class. The transaction re-reads inside itself, so a concurrent MODIFICATION
+    // of any game it is about to write forces a retry.
     //
-    // It is still strictly better than what shipped before this change, which
-    // DELETED the documents first and destroyed a concurrently-locked spread
-    // outright.
-    const freshExisting = new Map<string, NFLGame>();
-    for (const doc of await db.getAll(...games.map(g => db.collection('nfl_games').doc(g.id)))) {
-      if (doc.exists) freshExisting.set(doc.id, doc.data() as NFLGame);
-    }
+    // 🛑 IT STILL DOES NOT CLOSE THE WHOLE IMPORTER RACE, and this is the half that
+    // matters here: Firestore transactions do not range-lock, so a document
+    // CREATED concurrently raises no conflict at all. That half is what the slate
+    // lease above covers, and `PLAN-IMPORTER-SAFETY.md` §1.1/§1.5 still owns the
+    // general case.
+    //
+    // The fence assertion is the first read in the transaction. A time-bounded
+    // lease is NOT a mutex on its own: an ESPN fetch slower than the 3-minute TTL
+    // would let a freeze acquire the slate, reconcile it and commit, and this
+    // importer would then add a game the freeze never saw — leaving the newcomer
+    // unfrozen, which is the exact partial slate the lease exists to prevent.
+    let weekWrites = 0;
+    await db.runTransaction(async (tx) => {
+      for (const { key, lease } of held.values()) await assertSlateFence(tx, db, key, lease, Date.now());
+      const refs = games.map(g => db.collection('nfl_games').doc(g.id));
+      const freshExisting = new Map<string, NFLGame>();
+      for (const doc of await tx.getAll(...refs)) {
+        if (doc.exists) freshExisting.set(doc.id, doc.data() as NFLGame);
+      }
 
-    const batch = db.batch();
-    for (const game of games) {
+      // Reset per ATTEMPT: a transaction body re-runs on contention, and counting
+      // into the outer total from inside it would multiply the import count by the
+      // number of retries.
+      weekWrites = 0;
+      for (const game of games) {
       const cleanedGame = JSON.parse(JSON.stringify(game));
       // Bulk import writes the same parseScoreboardResponse output as the sync,
       // so it can create a scoreless FINAL too — and without the marker that game
@@ -560,18 +637,33 @@ export async function importNFLSeason(
       }
 
       freshIds.add(cleanedGame.id);
-      const gameRef = db.collection('nfl_games').doc(cleanedGame.id);
-      batch.set(gameRef, cleanedGame, { merge: true });
-      importedCount++;
-    }
-    await batch.commit();
+      tx.set(db.collection('nfl_games').doc(cleanedGame.id), cleanedGame, { merge: true });
+      weekWrites++;
+      }
+    });
+    importedCount += weekWrites;
     console.log(`[nflSchedule] Week ${week} imported successfully with ${games.length} games.`);
+    } finally {
+      // Best-effort, same as the freeze: a failed release only means the lease
+      // expires on its own TTL, which is what the expiry is for.
+      for (const [w, { key, lease }] of held) {
+        await releaseSlateLease(db, key, lease).catch((e) => {
+          console.warn(`[nflSchedule] slate lease release failed for week ${w}:`, e);
+        });
+      }
+    }
   }
 
   // Orphans: stored games in a SUCCESSFULLY FETCHED week that the fresh slate no
   // longer returns — a cancelled or re-scheduled fixture. Deleted AFTER the
   // writes, and only for weeks that actually returned data. Chunked under the
   // 500-op batch cap.
+  //
+  // RESIDUAL, stated rather than implied away: this runs outside the slate lease.
+  // A delete racing a freeze can only REMOVE a game, never add one, so it cannot
+  // produce the partial-freeze the lease exists to prevent — the worst case is a
+  // frozen record for a game that no longer exists, which no reader consults
+  // (every reader iterates the STORED slate and joins to it).
   const orphanIds = [...inScopeWeekById.entries()]
     .filter(([id, wk]) => fetchedWeeks.has(wk) && !freshIds.has(id))
     .map(([id]) => id);
@@ -593,7 +685,13 @@ export async function importNFLSeason(
     actor: { uid: 'system', role: 'SYSTEM', label: 'NFL Scheduler' }
   });
 
-  return { success: true, importedCount };
+  // A week skipped for a live freeze lease is NOT an import that quietly did less
+  // than it said. An operator who asked for weeks 3 and 4 and got one of them has
+  // to be able to see that from the result.
+  if (leaseBusyWeeks.length > 0) {
+    console.warn(`[nflSchedule] ${leaseBusyWeeks.length} week(s) skipped for a running spread freeze: ${leaseBusyWeeks.join(', ')}. Re-run the import once it finishes.`);
+  }
+  return { success: true, importedCount, leaseBusyWeeks };
 }
 
 /**
@@ -1340,124 +1438,17 @@ export function readJobGate(
   return { enabled: cfg?.enabled === true, dryRun: cfg?.dryRun !== false };
 }
 
-/** Safety cap on writes per run, mirrors autoClosePools / nflFinalizeSweepJob. */
-const MAX_SPREAD_LOCKS_PER_RUN = 200;
-
-/** A spread is lockable when it exists, carries a value, and isn't locked yet. */
-export function shouldLockSpread(game: Pick<NFLGame, 'spread'> | undefined): boolean {
-  const spread = game?.spread;
-  return !!spread && spread.locked !== true && spread.value !== undefined && spread.value !== null;
-}
-
-/**
- * Scheduled job to lock NFL spreads every Tuesday at 9:00 AM EST.
- * Scans upcoming games, and if spread is available, marks it as locked.
- *
- * SAFETY (Rule 1, mmp-change-control): kill-switch
- * system/config.nflSpreadLock.enabled === true required (default OFF, fail-safe);
- * dry-run by default (nflSpreadLock.dryRun !== false) — logs which games it WOULD
- * lock, writing nothing, until explicitly flipped.
- */
-export interface SpreadLockResult {
-  /** Games whose spread was actually written to locked:true (0 when dryRun). */
-  locked: number;
-  /** Games that WOULD be locked — equals `locked` on a live run. */
-  wouldLock: number;
-  /** Eligible games left for the next run because of the per-run cap. */
-  overflow: number;
-}
-
-/**
- * Lock every lockable spread in the next 7 days. Extracted from the scheduled
- * job so the WRITE PATH is testable without a scheduler.
- *
- * Worth stating why this extraction happened: before it, only the pure helpers
- * (`shouldLockSpread`, `readJobGate`) had tests, and every emulator fixture
- * seeded spreads as ALREADY `locked: true`. The unlocked→locked transition, the
- * per-run cap, and the dry-run-writes-nothing guarantee had never been executed
- * by any test — on a job about to be armed for preseason, on the same field
- * whose preservation bug shipped undetected until PR #235.
- *
- * The caller owns the gate; this function assumes it has been checked.
- */
-export async function lockSpreadsOnce(
-  db: Firestore,
-  now: number,
-  opts: { dryRun: boolean },
-): Promise<SpreadLockResult> {
-  const empty: SpreadLockResult = { locked: 0, wouldLock: 0, overflow: 0 };
-
-  // Games starting in the next 7 days that are not finalized.
-  const upcomingSnap = await db.collection('nfl_games')
-    .where('startTime', '>', now)
-    .where('startTime', '<=', now + 7 * 24 * 60 * 60 * 1000)
-    .get();
-
-  if (upcomingSnap.empty) return empty;
-
-  const eligible = upcomingSnap.docs.filter(doc => shouldLockSpread(doc.data() as NFLGame));
-  // Per-run cap, same convention as autoClosePools / nflFinalizeSweepJob. A real
-  // week is ~16 games, so this never binds in practice — it exists so a bad
-  // import can't push one batch past Firestore's 500-write limit and fail the
-  // WHOLE commit, which would leave every spread unlocked and block the week
-  // behind SPREADS_NOT_LOCKED. Overflow is logged, and the next run picks it up.
-  const targets = eligible.slice(0, MAX_SPREAD_LOCKS_PER_RUN);
-  const overflow = eligible.length - targets.length;
-
-  if (opts.dryRun) {
-    console.log(
-      `[lockNFLSpreadsJob] DRY-RUN: would lock ${targets.length} spread(s)${overflow > 0 ? ` (${overflow} deferred past the ${MAX_SPREAD_LOCKS_PER_RUN} cap)` : ''}: ${targets.slice(0, 20).map(d => d.id).join(', ')}`,
-    );
-    return { locked: 0, wouldLock: targets.length, overflow };
-  }
-
-  if (targets.length === 0) return empty;
-
-  const batch = db.batch();
-  for (const doc of targets) batch.update(doc.ref, { 'spread.locked': true });
-  await batch.commit();
-  console.log(
-    `[lockNFLSpreadsJob] Locked spreads for ${targets.length} upcoming games.${overflow > 0 ? ` WARNING: ${overflow} eligible game(s) exceeded the ${MAX_SPREAD_LOCKS_PER_RUN} per-run cap and were NOT locked.` : ''}`,
-  );
-  return { locked: targets.length, wouldLock: targets.length, overflow };
-}
-
-export const lockNFLSpreadsJob = onSchedule({
-  schedule: '0 9 * * 2', // 9:00 AM every Tuesday
-  timeZone: 'America/New_York'
-}, withHeartbeat('lockNFLSpreadsJob', async () => {
-  const db = admin.firestore();
-
-  let gate = { enabled: false, dryRun: true };
-  let configError: unknown = null;
-  try {
-    const cfg = (await db.doc('system/config').get()).data()?.nflSpreadLock as
-      | { enabled?: boolean; dryRun?: boolean }
-      | undefined;
-    gate = readJobGate(cfg);
-  } catch (e) {
-    configError = e ?? new Error('unknown config read error');
-  }
-  if (configError) return configReadFailedVerdict('lockNFLSpreadsJob', configError);
-  if (!gate.enabled) {
-    console.log('[lockNFLSpreadsJob] disabled (system/config.nflSpreadLock.enabled !== true); nothing to do.');
-    return { detail: { enabled: false } };
-  }
-
-  const result = await lockSpreadsOnce(db, Date.now(), { dryRun: gate.dryRun });
-  // Overflow means eligible games were NOT locked this run. The job runs WEEKLY,
-  // so "the next run picks it up" is up to seven days later — past kickoff for
-  // everything it left behind, which blocks pick submission behind
-  // SPREADS_NOT_LOCKED for every pool on that slate. A run that silently did
-  // part of its job is exactly what a heartbeat is for.
-  return result.overflow > 0
-    ? {
-        ok: false,
-        error: `${result.overflow} eligible game(s) exceeded the ${MAX_SPREAD_LOCKS_PER_RUN} per-run cap and were NOT locked`,
-        detail: { ...result, dryRun: gate.dryRun },
-      }
-    : { detail: { ...result, dryRun: gate.dryRun } };
-}));
+// `shouldLockSpread`, `lockSpreadsOnce`, `SpreadLockResult` and `lockNFLSpreadsJob`
+// LIVED HERE UNTIL 2026-08-20 and are DELETED, not moved (PLAN-NFL-SPREAD-FREEZE
+// Phase 1). They locked whatever value the last import had left on the document —
+// they fetched nothing — so on 2026-08-18 the job ran on schedule and reported
+// `would lock 0 spread(s)` while ESPN carried all sixteen lines for the slate.
+//
+// The replacement is `nflSpreadFreeze.ts`: it FETCHES the target week at the
+// stated instant and writes the result, all or nothing, to `nfl_frozen_spreads`.
+// It keeps the deployed export name `lockNFLSpreadsJob` and the config key
+// `system/config.nflSpreadLock` so the Cloud Scheduler job, the heartbeat history
+// and the armed production config all carry over.
 
 /**
  * SuperAdmin-only HTTPS callable to trigger manual NFL schedule imports.
@@ -1481,7 +1472,8 @@ export const importNFLSchedule = validated(
 
   try {
     const res = await importNFLSeason(season, seasonType, weeks);
-    return { success: true, importedCount: res.importedCount };
+    // Surfaced, not swallowed: the caller asked for N weeks and may have got fewer.
+    return { success: true, importedCount: res.importedCount, leaseBusyWeeks: res.leaseBusyWeeks };
   } catch (err: any) {
     console.error("importNFLSchedule Failure:", err);
     throw new HttpsError('internal', `Failed to import NFL schedule: ${err.message || 'Unknown error'}`, err);

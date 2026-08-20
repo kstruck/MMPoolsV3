@@ -10,8 +10,8 @@ original shape of Phases 1 and 2.
 
 | PR | Scope | State |
 |---|---|---|
-| **1** | `nfl_frozen_spreads` + rules, the `frozen ?? working` precedence on every read AND display path, and the cutover backfill | **built** |
-| 2 | the fetch-and-freeze pass (1.1-1.6) and `runNFLSpreadFreeze` (1.5b) | not started |
+| **1** | `nfl_frozen_spreads` + rules, the `frozen ?? working` precedence on every read AND display path, and the cutover backfill | **merged 2026-08-20, #489** |
+| **2** | the fetch-and-freeze pass (1.1-1.6), the slate lease, and `runNFLSpreadFreeze` (1.5b) | **built** |
 | 3 | `overrideLockedSpread` (2.1), the Spread Manager routing (2.2), and the frozen-store rescore/audit trigger | not started |
 
 ⚠️ **THE BACKFILL IS A PRECONDITION OF THE READS AND MUST BE RUN, LIVE, BEFORE
@@ -300,6 +300,17 @@ second freeze.
 same function the importer uses. The frozen number is then the number that was
 live at the stated time, not whatever the import happened to catch.
 
+⚠️ **AMENDED IN PR 2 (2026-08-20): FILTER THE RESPONSE TO THE TARGET SLATE BEFORE
+RECONCILING IT.** `parseScoreboardResponse` stamps each game
+`week: eventWeekNumber(event, week)` — ESPN's own answer wins over the requested
+week — and ESPN's scoreboard endpoint is unreliable about which slate it returns
+for a given `week` param: an import of one week returned 20 events spanning two
+slates, measured 2026-08-19. Reconciling the raw response against one stored slate
+would report the neighbouring week's games as "a fetched id not stored" and
+**refuse every single Tuesday.** The filter lives inside `planFreeze` so no caller
+can forget it, and a test drives a response carrying a week-5 game against a week-4
+slate.
+
 1.3 **All-or-nothing, over the STORED slate — not over whatever ESPN returned.**
 Before the transaction, reconcile the fetched event ids against the stored game
 ids for the target slate. Refuse, writing nothing, if **either** set has a
@@ -336,6 +347,17 @@ repo already runs for scoring (`nflPools.ts:913-951`):
 - the transaction re-reads the target game refs by id (`getAll`) so a
   concurrent *modification* still conflicts, which is the half Firestore does
   give us.
+
+⚠️ **AMENDED IN PR 2 (2026-08-20): THE LEASE COVERS THE IMPORTER, NOT THE SYNC**
+(codex r3 on PR 2). `syncScoresWindow` takes no lease and deliberately is not
+given one — the 5-minute poll is what keeps live scores moving, and parking it
+behind a freeze would trade a narrow race for a real outage. But it CAN create a
+spillover game inside a slate, and a manual retry of a refused freeze can
+legitimately run inside its 2-hour window. So the freeze transaction **re-reads
+the stored slate and refuses (`SLATE_CHANGED`) if the id set moved**, which
+collapses the window from the whole ESPN fetch to the transaction's own
+read-to-commit. It does not eliminate it, because Firestore does not range-lock —
+and what is left is exactly R3's case, which is decided rather than open.
 
 Residual, and named rather than implied away: a game added to the slate AFTER
 the freeze commits is R3's case — page, never auto-freeze. A
@@ -426,8 +448,31 @@ earns its place three times over: it makes R2's dry runs real, it is the
 on-demand re-run when a Tuesday pass refuses (a missing line, a lease clash),
 and it is the hook an emulator test drives end-to-end.
 
-`dryRun` defaults to the config value; passing `false` explicitly is what makes
-a manual live freeze deliberate rather than a slip.
+⚠️ **AMENDED IN PR 2 (2026-08-20): TWO GATES, AND BOTH MUST SAY LIVE.** This
+paragraph originally read *"`dryRun` defaults to the config value; passing `false`
+explicitly is what makes a manual live freeze deliberate rather than a slip"* —
+and those two clauses contradict each other. If it defaults to the config value
+then omitting it ALSO runs live the moment the config is armed, so passing `false`
+is not what makes anything deliberate. Resolved toward `mmp-change-control`
+Rule 1: **`dryRun` defaults TRUE at the schema layer, and the config can always
+hold it dry but never force it live.** A live manual freeze therefore needs the
+config armed AND an explicit `dryRun: false` — which is what the second clause was
+asking for.
+
+⚠️ **AMENDED IN PR 2 (2026-08-20): A LIVE MANUAL FREEZE MAY NOT RUN BEFORE THE
+SLATE'S STATED CUTOFF** (codex r6 on PR 2). Once `nflSpreadLock.dryRun` is
+`false`, this callable could otherwise commit a slate permanently on the Sunday
+before — and the Tuesday job would then skip it as already frozen. The stated
+instant would be quietly not honoured, by the tool built to repair it.
+
+The rule needs no escape hatch, which is why it is a rule rather than a flag: a
+live freeze is allowed at or after the slate's own stated cutoff, defined as the
+latest Tuesday 09:00 ET strictly before its first kickoff. The scheduled job
+fires exactly AT that instant so it always passes, and every legitimate repair —
+Tuesday afternoon after a refusal, Wednesday, Saturday — is after it. **Dry runs
+are unrestricted**, which is precisely what R2's Saturday-to-Monday rehearsal
+needs. `statedCutoffBefore` handles the DST changeover (the November cutoff is
+14:00Z, the August one 13:00Z) and a test pins both.
 
 1.6 **Schedule: `0 9 * * 2` `America/New_York`.** Tuesday 09:00 ET, decided by
 Kevin on 2026-08-19 (R1) and unchanged from the existing job. This is the
