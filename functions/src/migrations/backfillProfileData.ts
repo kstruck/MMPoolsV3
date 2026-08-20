@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { NFL_SEASON_TYPES } from "../shared/poolTypes";
 import { gradePickemGames, gradeSurvivorWeekGame, gradeMarginWeekGame, buildStandingsRows } from "../nflScoringEngine";
+import { resolveGameSpreads } from "../lib/frozenSpreads";
 import { maybeFinalizeNFLPool } from "../nflFinalize";
 import { recomputeUserProfile } from "../userProfile";
 import { writeAdminAudit } from "../lib/adminAudit";
@@ -76,7 +77,12 @@ export const backfillProfileData = onCall({ timeoutSeconds: 540, memory: '1GiB' 
           .get(),
         poolRef.collection('members').get(),
       ]);
-      const games = gamesSnap.docs.map(d => d.data() as NFLGame);
+      // `frozen ?? working` (PLAN-NFL-SPREAD-FREEZE R1). This migration re-grades
+      // ATS weeks through `gradePickemGames`, so an unresolved read would rewrite
+      // historical per-pick profile results against whatever the working line has
+      // drifted to — disagreeing with the standings and with what the member was
+      // shown. Every path that GRADES resolves, not only the live ones (codex r1).
+      const games = await resolveGameSpreads(db, gamesSnap.docs.map(d => d.data() as NFLGame));
       const gamesByWeek = new Map<number, NFLGame[]>();
       for (const g of games) {
         const wk = Number(g.week);

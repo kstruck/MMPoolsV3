@@ -32,6 +32,7 @@ import { stripEmptyCallableFields } from "./callableParams";
 export { db };
 import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament, BanterMessage, NFLGame, WeeklyRecap } from "../types";
 import type { PoolQuoteInput, PoolQuote, AddonSelection } from "@shared/schemas/quote";
+import { FROZEN_SPREADS_COLLECTION, applyFrozenSpreads, type FrozenSpread } from "@shared/frozenSpread";
 
 /**
  * What `getPoolPicks` hands a commissioner (PLAN-COMMISSIONER-BLIND-PICKS T2).
@@ -1645,22 +1646,71 @@ export const dbService = {
         }
     },
 
+    /**
+     * The season's games, with `spread` already resolved as `frozen ?? working`
+     * (PLAN-NFL-SPREAD-FREEZE Revision 1).
+     *
+     * ⚠️ THE JOIN IS HERE, NOT IN THE COMPONENTS, AND THAT IS THE POINT. Once a
+     * slate is frozen the canonical line lives in `nfl_frozen_spreads`, while
+     * `nfl_games.spread` stays a WORKING line the feed and the Spread Manager may
+     * still move. Every member-facing surface downstream of this subscription —
+     * the pick sheet's `spreadLabel`, the "spreads not locked" banner, the picks
+     * grid, the results view — reads `game.spread`. Resolve it once here and none
+     * of them can show a member a number they will not be graded on; resolve it
+     * per component and one of them eventually will not.
+     *
+     * The first emit WAITS for the frozen store's first snapshot. Emitting the
+     * working line first and correcting it a beat later would render exactly the
+     * wrong number, briefly, on the screen where it matters most. An empty
+     * collection still fires immediately, and a read failure resolves the gate
+     * too — so this can withhold the games at most as long as one snapshot takes,
+     * never indefinitely.
+     *
+     * A frozen-store failure falls back to the working line rather than blanking
+     * the slate: that is exactly today's behaviour, so a degraded read is no worse
+     * than not having shipped this.
+     */
     subscribeToNFLGames: (season: string, callback: (games: NFLGame[]) => void) => {
         const seasonStr = String(season);
         console.log("[dbService] subscribeToNFLGames initiated for season:", seasonStr);
+
+        let games: NFLGame[] | null = null;
+        let frozen: Record<string, FrozenSpread> = {};
+        let frozenReady = false;
+        const emit = () => {
+            if (!games || !frozenReady) return;
+            callback(applyFrozenSpreads(games, frozen));
+        };
+
         const q = query(collection(db, "nfl_games"), where("season", "==", seasonStr));
-        return onSnapshot(q, (snapshot) => {
-            const games = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as NFLGame));
-            games.sort((a, b) => a.startTime - b.startTime);
-            console.log(`[dbService] subscribeToNFLGames successfully loaded ${games.length} games:`, 
-                games.map(g => ({ id: g.id, week: g.week, seasonType: g.seasonType, season: g.season }))
+        const unsubGames = onSnapshot(q, (snapshot) => {
+            const next = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as NFLGame));
+            next.sort((a, b) => a.startTime - b.startTime);
+            console.log(`[dbService] subscribeToNFLGames successfully loaded ${next.length} games:`,
+                next.map(g => ({ id: g.id, week: g.week, seasonType: g.seasonType, season: g.season }))
             );
-            callback(games);
+            games = next;
+            emit();
         }, (error) => {
             console.error("[dbService] subscribeToNFLGames subscription error:", error);
             logger.error("Error subscribing to NFL games:", error);
             callback([]);
         });
+
+        const frozenQ = query(collection(db, FROZEN_SPREADS_COLLECTION), where("season", "==", seasonStr));
+        const unsubFrozen = onSnapshot(frozenQ, (snapshot) => {
+            const next: Record<string, FrozenSpread> = {};
+            for (const d of snapshot.docs) next[d.id] = { ...(d.data() as FrozenSpread), gameId: d.id };
+            frozen = next;
+            frozenReady = true;
+            emit();
+        }, (error) => {
+            logger.error("Error subscribing to frozen NFL spreads (falling back to the working line):", error);
+            frozenReady = true;
+            emit();
+        });
+
+        return () => { unsubGames(); unsubFrozen(); };
     },
 
     // `subscribeToNFLEntries` — DELETED 2026-08-12 (PLAN-COMMISSIONER-BLIND-PICKS

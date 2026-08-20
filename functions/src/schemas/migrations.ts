@@ -93,3 +93,27 @@ export const reconcilePaymentTruthSchema = z.strictObject({
         z.string().min(1).max(1500).optional(),
     ),
 });
+
+/**
+ * backfillFrozenSpreads - SUPER_ADMIN prod one-off (PLAN-NFL-SPREAD-FREEZE
+ * Revision 1, "Cutover: backfill first, or the fallback is a hole").
+ *
+ * Writes an `nfl_frozen_spreads` record for every game whose
+ * `nfl_games.spread.locked === true` today, so the `frozen ?? working` fallback
+ * covers only slates that were never locked at all. It is a PRECONDITION of the
+ * read path, not a tidy-up: while a live locked slate has no frozen record, its
+ * line is still whatever the Spread Manager last wrote and can move between pick
+ * time and grading.
+ *
+ * dryRun defaults TRUE at the schema layer (house Rule 1), and the cursor takes
+ * null as first-page — the same JS SDK undefined-to-null encoding the three
+ * schemas above were bitten by in prod on 2026-07-27.
+ */
+export const backfillFrozenSpreadsSchema = z.strictObject({
+    dryRun: z.boolean().optional().default(true),
+    limit: z.number().int().positive().max(500).optional(),
+    startAfter: z.preprocess(
+        (v) => (v === null ? undefined : v),
+        z.string().min(1).max(1500).optional(),
+    ),
+});

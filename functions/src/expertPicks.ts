@@ -20,6 +20,8 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { validated } from "./lib/validated";
 import { refreshExpertPicksSchema } from "./schemas/noInputAdmin";
 import { withHeartbeat } from "./lib/heartbeat";
+import { readFrozenSpreadsByGameId } from "./lib/frozenSpreads";
+import { effectiveSpread } from "./shared/frozenSpread";
 
 export type PickSide = 'HOME' | 'AWAY' | 'EVEN';
 
@@ -101,13 +103,18 @@ async function targetGames(db: admin.firestore.Firestore, now: number) {
 /** Recompute expert predictions for the active window. Idempotent (overwrites). */
 export async function recomputeExpertPicks(db: admin.firestore.Firestore, now: number): Promise<{ games: number; fpi: number; vegas: number }> {
   const docs = await targetGames(db, now);
+  // `frozen ?? working` (PLAN-NFL-SPREAD-FREEZE R1). The vegas expert pick is
+  // DERIVED from the line, and it is rendered on the same row as the line itself.
+  // Read the working spread after a freeze and the row can say "CIN -6.5" beside
+  // "Vegas: DET" — incoherent, and pointing at a number nobody is graded on.
+  const frozen = await readFrozenSpreadsByGameId(db, docs.map(d => d.id));
   let fpi = 0, vegas = 0;
   for (const doc of docs) {
     const g: any = doc.data();
     if (g.status === 'FINAL') continue;
     const espnEventId = String(doc.id).replace(/^espn_/, '') || g.espnGameId;
     const espnFpi = espnEventId ? await fetchEspnFpi(String(espnEventId), g.homeTeam?.id, g.awayTeam?.id) : null;
-    const vegasPick = vegasPickFromSpread(g.spread?.value);
+    const vegasPick = vegasPickFromSpread(effectiveSpread(frozen[doc.id], g.spread)?.value);
     if (!espnFpi && !vegasPick) continue;
 
     const expertPredictions: any = { updatedAt: FieldValue.serverTimestamp() };

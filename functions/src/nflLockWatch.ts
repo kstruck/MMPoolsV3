@@ -9,6 +9,8 @@ import {
   decideAlert, evaluateSlate, formatAlertMessage, lockWatchVerdict, slateId,
   type SlateKey, type WatchedGame, type WatchedPool,
 } from "./lib/nflLockWatch";
+
+import { resolveGameSpreads } from "./lib/frozenSpreads";
 import { withHeartbeat, configReadFailedVerdict } from "./lib/heartbeat";
 
 /**
@@ -114,7 +116,18 @@ export const nflLockWatchJob = functions.scheduler.onSchedule(
         .where("seasonType", "==", key.seasonType)
         .where("week", "==", key.week)
         .get();
-      const games: WatchedGame[] = slateSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as WatchedGame));
+      // `frozen ?? working` (PLAN-NFL-SPREAD-FREEZE R1). WITHOUT THIS THE
+      // TRIPWIRE CRIES WOLF ON EVERY SUCCESSFUL FREEZE (codex round 4 on the
+      // revision): coverage is derived from `spread.locked`, and once the frozen
+      // line lives in its own collection a perfectly frozen ATS slate reads as
+      // 0/16 locked and pages inside the warning window every week that worked.
+      // The watcher resolves with the SAME precedence as submission and scoring
+      // — that is the only way its verdict stays a statement about the submit
+      // gate. A tripwire that cries wolf is worse than no tripwire.
+      const games: WatchedGame[] = await resolveGameSpreads(
+        db,
+        slateSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as WatchedGame)),
+      );
 
       const coverage = evaluateSlate(key, games, pools);
       const decision = decideAlert(coverage, now, WARN_WINDOW_HOURS);
