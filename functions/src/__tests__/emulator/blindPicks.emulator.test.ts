@@ -5,6 +5,7 @@ import './setup';
 import { submitNFLPicksInternal } from '../../nflPools';
 import { proxyPick } from '../../poolExceptions';
 import { getPoolPicks } from '../../nflPickReveal';
+import { recomputeRosterSummary } from '../../lib/rosterSummary';
 
 /**
  * PLAN-COMMISSIONER-BLIND-PICKS, the two halves that only a write path can prove.
@@ -751,5 +752,28 @@ describe('getPoolPicks — pool-wide pick progress', () => {
         const res: any = await wGetPicks({ data: { poolId: POOL, week: 9 }, auth: asOwner } as never);
         expect(res.weekGameIds).toEqual([]);
         expect(res.progress).toEqual({ complete: 0, total: 0 });
+    }, 30000);
+
+    /**
+     * The PRODUCER half. Every test above seeds `playerUids` by hand, which proves
+     * the callable consumes the field and nothing about whether the projection
+     * ever writes the right one — and the projection is where the predicate that
+     * review rewrote five times actually runs.
+     *
+     * Runs LAST on purpose: it overwrites this pool's summary with the computed
+     * one, and the assertion is that the two agree.
+     */
+    it('recomputeRosterSummary WRITES the same set — host excluded, members kept', async () => {
+        const summary = await recomputeRosterSummary(db, POOL);
+        // OWNER is a member of this pool with `hasPlayableEntry: false` — seeded
+        // exactly as pool creation seeds a host. They must not be in the set.
+        expect(summary.playerUids?.slice().sort()).toEqual([ALICE, BOB].sort());
+        expect(summary.playerUids).not.toContain(OWNER);
+        expect(summary.memberCount).toBe(3);   // …while the ROSTER still counts them
+        expect(summary.rosterSchemaVersion).toBe(2);
+
+        // …and the callable's answer is unchanged by the rewrite.
+        const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
+        expect(res.progress).toEqual({ complete: 1, total: 2 });
     }, 30000);
 });
