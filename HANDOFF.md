@@ -1,51 +1,62 @@
 # HANDOFF — Session entry point
 
-> ## 🔴 2026-08-20 — **THE SPREAD FREEZE IS BUILT AND MERGED. NOTHING IS DEPLOYED.**
+> ## 🟢 2026-08-21 — **THE SPREAD FREEZE IS DEPLOYED AND THE BACKFILL HAS RUN. 33/33 FROZEN.**
 >
-> **Read `MORNING-2026-08-20-SPREADS.md` first.** It **supersedes**
-> `MORNING-2026-08-19-HELP.md` as the top of the stack; that document remains the
-> entry point for PLAN-HELP-SYSTEM and its open items are carried into §6 of the
-> new one rather than left behind.
+> **Read `MORNING-2026-08-20-SPREADS.md`** for the effort. §3 steps 1-7 are DONE;
+> §4 (the week-4 sequence) and §5 (four questions for Kevin) are what remain.
 >
-> **Merged 2026-08-20:** `0592b8f0` (#489), `af638c0d` (#490), `4caa878d` (#491).
-> **PLAN-NFL-SPREAD-FREEZE Revision 1 is fully implemented.** 23 codex rounds
-> across the three PRs, eleven P1s, every finding valid and absorbed or rejected
-> in writing. qodo stayed DORMANT throughout, per Kevin's 2026-08-19 ruling.
+> **Merged and DEPLOYED 2026-08-21:** `0592b8f0` (#489), `af638c0d` (#490),
+> `4caa878d` (#491), `c27af552` (#492). Functions, `firestore.rules` and
+> `firestore.indexes.json` are all live on `gridiron-gamble-uzuqo`; `www` was
+> redeployed by Coolify, which also finally shipped T16 and the lock help topics.
 >
-> 🔴 **FOUR DEPLOY STEPS AND NONE ARE DONE:** functions, then rules + indexes,
-> then a Coolify redeploy for `www`, then the cutover backfill (dry, then live).
-> Until all four, production is exactly what it was on 2026-08-19 — and the
-> Coolify step also finally ships T16 and the lock help topics, which have been
-> waiting since Wednesday. Exact commands in §3 of the morning doc.
+> ✅ **THE CUTOVER BACKFILL RAN LIVE at 2026-08-21T03:22Z.** `gamesScanned: 33,
+> alreadyFrozen: 0, written: 33` — every game locked the old way now has an
+> `nfl_frozen_spreads` record: 1 on slate `2026/1/1`, 16 on `2026/1/2`, 16 on
+> `2026/1/3`. The `nfl_games.spread` fallback now covers only slates that were
+> never locked, which is a legacy read rather than a live dependency.
 >
-> ⚠️ **THE FROZEN LINE MOVED OFF `nfl_games`.** It lives in
-> `nfl_frozen_spreads/{gameId}`, which `firestore.rules` refuses **every** client
-> write to — superadmin included. Only two Cloud Functions write it: the weekly
-> freeze (`lockNFLSpreadsJob`, still that name, now a real fetch-and-freeze) and
-> `overrideLockedSpread`. Every reader resolves `frozen ?? working`, including the
-> pick sheet, so the number a member is shown is the number they are graded on.
-> `nfl_games.spread` is now a WORKING line the Spread Manager edits and the freeze
-> uses as a per-game fallback.
+> ✅ **`nflFrozenSpreadTrigger` FIRED 33 TIMES AND RAISED NOTHING.** Verified in
+> the prod logs: 33 creates, all classified `created by backfill` (approved), **0
+> `UNAPPROVED_FROZEN_SPREAD_CHANGE`, 0 `SLATE_KEY_MISSING`, 0 errors.** That is the
+> failure mode this plan aimed a detector at its own mechanism four separate times
+> for — confirmed not happening, on the detector's first real run.
 >
-> ⚠️ **THERE IS NO LOCK BUTTON ANY MORE, AND THAT IS A DECISION KEVIN SHOULD
-> CONFIRM.** The per-row toggle and "Lock All Spreads" are removed, not re-routed:
-> they wrote a locked line straight onto `nfl_games` with no frozen record and
-> nothing the detector could see, and unlock → edit → re-lock fired no rescore at
-> all. The consequence is real — **an ATS week can no longer be unblocked by hand
-> without freezing it.** Q1 in §5 of the morning doc.
+> ⚠️ **`system/config.nflSpreadLock` IS STILL `{enabled: true, dryRun: true}`.**
+> The freeze is deployed but held DRY. A `runNFLSpreadFreeze` LIVE click on
+> 2026-08-21 correctly ran dry and refused anyway — **both gates must agree, and
+> the report's `dryRun` field is the truth, not the button label.** The flip to
+> `dryRun: false` is Mon 2026-08-24, §4 step 1 of the morning doc.
 >
-> ⚠️ **APP WEEK 4 (Kevin's preseason week 3) HAS 0 OF 16 LINES**, measured against
-> the live ESPN feed at 2026-08-20. Kickoff is 2026-08-27T23:00Z and the freeze
-> fires Tue 2026-08-25 09:00 ET, so the scheduled run will very likely REFUSE —
-> which is the correct answer, not a fault. The repair is: type the missing
-> numbers in the Spread Manager, then run **NFL Spread Freeze (LIVE)** from
-> Operations. §4 of the morning doc has the dated sequence, including the
-> `nflSpreadLock.dryRun: false` flip on Mon 2026-08-24.
+> ⚠️ **APP WEEK 4 (Kevin's preseason week 3) HAS 0 OF 16 LINES.** Measured against
+> the live feed AND confirmed by the freeze itself on 2026-08-21:
+> *"16 of 16 game(s) have neither a feed line nor a stored working line"*, `frozen:
+> 0`, nothing written. That is the all-or-nothing rule working, not a fault.
+> Kickoff 2026-08-27T23:00Z, freeze fires Tue 2026-08-25 09:00 ET, preseason lines
+> land ~1.4 days before kickoff. Expect the Tuesday run to refuse and to repair it
+> by typing working lines then re-running the freeze — §4.
 >
-> ⚠️ **A LIVE FREEZE IS REFUSED BEFORE THE SLATE'S STATED CUTOFF**, and a slate is
-> freezable exactly ONCE. After that, a line changes only through the audited
-> override, which requires a reason, writes `admin_audit` in the same transaction,
-> and re-scores the week.
+> ⚠️ **THERE IS NO LOCK BUTTON ANY MORE, AND KEVIN HAS NOT CONFIRMED IT.** An ATS
+> week can no longer be unblocked by hand without freezing it. Q1 in §5.
+>
+> 🔧 **THREE DEFECTS IN THE OPERATIONS PANEL, FOUND BY USING IT** (none block
+> anything, all mine):
+> - `OperationsPanel.tsx:536` slices every result to **400 characters**, and its own
+>   line 79 says *"KEY ORDER IS LOAD-BEARING"*. `backfillFrozenSpreads` puts a
+>   33-entry `plannedWrites` array before `skipped`, `failures` and `nextCursor`, so
+>   those three can never be read. Move scalar counts to the front.
+> - The backfill's code comment claims its `admin_audit` row is *"reviewable
+>   evidence"*. It is not: `capMetadata` collapses every array to the literal
+>   `"[array]"`, so the row proves the run happened and preserves none of it.
+> - The four new buttons read **NFL Spread Freeze (dry run) / (LIVE) / Backfill
+>   Frozen Spreads (dry run) / Backfill Frozen Spreads**. Two contain
+>   "Freeze"/"Frozen" and they sit adjacent; the wrong one was clicked twice on
+>   2026-08-21. "Freeze Next Week" and "Migrate Legacy Locks" would not collide.
+>
+> 📌 **`backfillPublishedWeeks` IS STILL PENDING AND IS NOT PART OF THIS EFFORT.**
+> Its dry run on 2026-08-21 reported `poolsScanned: 12, poolsChanged: 1,
+> weeksMarked: 1` (pool `g3oUEisS7OmyEbmpRETR`, week 1). PLAN-REALTIME-SCORING owns
+> it. Decide separately.
 
 > ## 🔴 2026-08-19 — **T16 + THE LOCK TOPICS MERGED. qodo IS TURNED OFF. `www` NEEDS A REDEPLOY.**
 >

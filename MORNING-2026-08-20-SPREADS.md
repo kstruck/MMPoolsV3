@@ -1,13 +1,27 @@
-# MORNING 2026-08-20 — the spread freeze is BUILT. Nothing is deployed.
+# MORNING 2026-08-20 — the spread freeze. DEPLOYED AND BACKFILLED 2026-08-21.
 
 > **This is the entry point for PLAN-NFL-SPREAD-FREEZE.** It **supersedes**
 > `MORNING-2026-08-19-HELP.md` as the top of the stack; that document is still
 > the entry point for PLAN-HELP-SYSTEM, and its open items are carried into §6
 > below rather than left behind.
 
-🔴 **THREE PRs MERGED TO `main` OVERNIGHT AND NONE OF IT IS LIVE.** Functions,
-rules and indexes all need a deploy; `www` needs a Coolify redeploy. Until then
-production is exactly what it was yesterday.
+✅ **UPDATE 2026-08-21T03:2xZ — §3 IS DONE. STEPS 1 THROUGH 7 ALL RAN.**
+Functions, rules and indexes are deployed; Coolify redeployed `www`; the cutover
+backfill ran live and wrote **33 of 33** (`gamesScanned: 33, alreadyFrozen: 0,
+written: 33`) across slates `2026/1/1` (1), `2026/1/2` (16) and `2026/1/3` (16).
+`nflFrozenSpreadTrigger` fired 33 times and raised **0 unapproved-change rows and
+0 errors**. **§4 (the week-4 sequence) and §5 (the four questions) are what
+remain.** The step-by-step below is kept as the record of what was run.
+
+⚠️ **TWO THINGS THIS RUNBOOK GOT WRONG, FIXED IN PLACE BELOW.** It said "run from
+`D:\march-melee-pools`" without a `git pull`, so the first deploy went out from a
+checkout four commits stale and shipped none of the new functions — the exact trap
+`CLAUDE.md` §2c names. And it used a bash `grep` pipe in a PowerShell runbook.
+Both are written-down rules in this repo.
+
+🔴 **ORIGINAL, 2026-08-20: THREE PRs MERGED TO `main` OVERNIGHT AND NONE OF IT IS
+LIVE.** Functions, rules and indexes all need a deploy; `www` needs a Coolify
+redeploy. Until then production is exactly what it was yesterday.
 
 ⚠️ **THE ONE THING THAT CHANGES HOW YOU WORK:** there is no longer a "Lock
 Spread" button. The weekly freeze commits a whole week at once, at a stated time,
@@ -49,6 +63,25 @@ it as the per-game fallback when ESPN has no line.
 
 Every command runs from `D:\march-melee-pools` unless it says otherwise.
 
+### Step 0 — PULL FIRST. THIS STEP WAS MISSING AND IT COST THE FIRST DEPLOY.
+
+```powershell
+git -C D:\march-melee-pools pull --ff-only
+```
+
+**Expect:** a fast-forward, or `Already up to date.`
+**Why it is step 0:** every worktree shares one `main` ref, and it is advanced
+ONLY by a manual pull in the main checkout (`CLAUDE.md` §2c). On 2026-08-21 this
+checkout sat at `d1f456cc` while `origin/main` was at `c27af552`, so
+`firebase deploy` packaged code that did not contain a single new function.
+`functions:list` showed none of them and the backfill button failed with the
+callable simply not existing.
+**Verify before deploying:**
+
+```powershell
+git -C D:\march-melee-pools log --oneline -1
+```
+
 ### Step 1 — install function deps
 
 ```powershell
@@ -67,7 +100,19 @@ npx firebase deploy --only functions
 
 **Expect:** `Deploy complete!`, and in the list of updated functions you should
 see `lockNFLSpreadsJob`, `runNFLSpreadFreeze`, `overrideLockedSpread`,
-`nflFrozenSpreadTrigger` and `backfillFrozenSpreads`.
+`nflFrozenSpreadTrigger` and `backfillFrozenSpreads`. It will also warn that
+`nflFrozenSpreadTrigger` is newly retry-enabled and ask to proceed — answer **Y**.
+That is deliberate: `retry: true` is what makes the rescore handoff durable, and
+the trigger is idempotent (deterministic audit ids, duplicate queue events are
+harmless). If it ever asks to DELETE functions, answer **n** and stop.
+
+**Verify, in PowerShell — `grep` does not exist there:**
+
+```powershell
+npx firebase functions:list | Select-String "frozen|runNFLSpreadFreeze|overrideLocked"
+```
+
+Expect four rows. If it is empty, step 0 did not happen.
 **If it fails on TypeScript:** run `npm --prefix functions run build` on its own
 to see the error.
 
@@ -96,6 +141,10 @@ Coolify has no CLI from this machine, so this one is by hand.
 Manager and the new Operations buttons are all frontend. Without this, step 5
 onwards has no buttons to click. **This also finally ships T16 and the lock help
 topics from 2026-08-19, which have been waiting on a redeploy since Wednesday.**
+
+⚠️ **Coolify builds from the GitHub remote, not the local checkout**, which is why
+this step was unaffected by the stale-checkout problem in step 0 — it had
+`c27af552` while `firebase deploy` was still shipping `d1f456cc`.
 
 ### Step 5 — turn the backfill kill-switch ON
 
@@ -132,8 +181,16 @@ Add a **map** field named `nflFrozenSpreadBackfill` with two boolean children:
 1. Same tab, click **Backfill Frozen Spreads**.
 2. **Expect:** `dryRun: false` and `written` equal to the `plannedWrites` count
    from step 6.
-3. **If the report carries a `nextCursor`:** click it again until `nextCursor` is
-   `null`.
+3. ⚠️ **YOU CANNOT SEE `nextCursor`, `skipped` OR `failures`.**
+   `OperationsPanel.tsx:536` slices every result to 400 characters and the
+   `plannedWrites` array consumes it. **Read `written` instead:** it sits before
+   the array and always survives. `written` equal to `gamesScanned` means nothing
+   was skipped and nothing failed, which is the whole check.
+4. ⚠️ **FOUR ADJACENT BUTTONS, TWO SAYING "FREEZE"/"FROZEN".** In order: NFL
+   Spread Freeze (dry run), NFL Spread Freeze (LIVE), Backfill Frozen Spreads (dry
+   run), Backfill Frozen Spreads. You want the **fourth**. The log line prefix is
+   the button's own label — if it does not start `Backfill Frozen Spreads:`, it was
+   the wrong one.
 4. **Then turn the switch back off.** In the same config document, set
    `nflFrozenSpreadBackfill.enabled` = `false`. A one-shot migration should not
    sit armed.
