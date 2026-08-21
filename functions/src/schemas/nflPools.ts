@@ -42,6 +42,50 @@ export const scoreNFLWeekSchema = z.strictObject({
  */
 export const runNFLSpreadFreezeSchema = z.strictObject({
     dryRun: z.boolean().optional().default(true),
+    /**
+     * Skip the stated-cutoff check — and ONLY that check (Kevin, 2026-08-21).
+     *
+     * The cutoff exists so a live manual freeze cannot commit a slate before the
+     * Tuesday 09:00 ET members were promised. It earns its keep every week except
+     * the ones where waiting buys nothing: **regular-season week 1 has no games
+     * before it**, so the Tuesday cadence — which exists to let the previous week
+     * finish — is pure cost there. Measured: the 2026 opener is a WEDNESDAY, so
+     * the unforced pick window is 35.3 hours against ~59 for every other week.
+     *
+     * Freezing EARLY does not break fairness: every member still picks against an
+     * identical line. It breaks PREDICTABILITY, which is why it takes an explicit
+     * flag, a written reason, and an audit row rather than being the default.
+     *
+     * `force` does NOT make a run live. Both dry-run gates still apply.
+     */
+    force: z.boolean().optional().default(false),
+    /** Required whenever `force` is set — see the refine below. */
+    reason: z.string().trim().min(10).max(500).optional(),
+    /**
+     * Freeze THIS slate rather than auto-selecting the one that is due.
+     *
+     * Naming a slate bypasses the 7-day freeze HORIZON, which `force` alone does
+     * not: horizon is part of "is this slate due", so a forced run with no target
+     * still could not reach regular week 1 until seven days out. Everything else
+     * still holds — once-per-slate, all-or-nothing, the lease, and a first kickoff
+     * that must still be in the future.
+     *
+     * It is deliberately explicit rather than widening the horizon under `force`:
+     * "the earliest slate with no frozen record" over an unbounded horizon walks
+     * forward and freezes the wrong week, which is the codex round-8 defect. An
+     * operator naming a week cannot do that by accident.
+     */
+    slate: z.strictObject({
+        season: z.string().trim().min(1).max(10),
+        seasonType: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+        week: z.number().int().min(1).max(25),
+    }).optional(),
+}).refine((o) => !o.force || !!o.reason, {
+    message: 'force requires a reason of at least 10 characters — an early freeze is a decision, and the audit row is where it is recorded',
+    path: ['reason'],
+}).refine((o) => !o.slate || o.force, {
+    message: 'naming a slate requires force: it bypasses the freeze horizon, which is a deliberate act',
+    path: ['force'],
 });
 
 /**

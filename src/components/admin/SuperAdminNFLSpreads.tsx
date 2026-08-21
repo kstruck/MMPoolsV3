@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { db } from '../../firebase';
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { RefreshCw, Save, Lock, AlertCircle, PencilLine } from 'lucide-react';
+import { RefreshCw, Save, Lock, AlertCircle, PencilLine, Snowflake } from 'lucide-react';
 import type { NFLGame } from '../../types';
 import type { FrozenSpread } from '@shared/frozenSpread';
 import { dbService } from '../../services/dbService';
@@ -49,6 +49,7 @@ export const SuperAdminNFLSpreads: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [overriding, setOverriding] = useState<string | null>(null);
+  const [freezing, setFreezing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   const fetchGames = async () => {
@@ -128,6 +129,72 @@ export const SuperAdminNFLSpreads: React.FC = () => {
       setMessage({ type: 'error', text: `Failed to save: ${err.message}` });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  /**
+   * Freeze this week NOW, ahead of its stated cutoff (Kevin, 2026-08-21).
+   *
+   * ⚠️ WHY THIS EXISTS AND WHY IT IS NOT A LOCK BUTTON. The old per-row padlock
+   * wrote `locked: true` onto `nfl_games` and produced a line with no frozen
+   * record, no audit and nothing the detector could see. This does the opposite:
+   * it runs the REAL freeze — all sixteen games or none, into the write-once
+   * store, stamped `source: 'freeze'`, with the rescore handoff — and skips only
+   * the Tuesday-09:00-ET cutoff and the 7-day horizon.
+   *
+   * The case it was built for: **regular-season week 1 has no games before it**,
+   * so the Tuesday cadence (which exists to let the previous week finish) buys
+   * nothing, and the 2026 opener is a Wednesday — a 35-hour pick window against
+   * ~59 for every other week.
+   *
+   * Freezing early does not break fairness; every member still picks against an
+   * identical line. It breaks predictability, which is why it takes a reason.
+   */
+  const handleFreezeNow = async () => {
+    const label = `${season} ${nflWeekLabel(seasonType, week)}`;
+    const reason = window.prompt(
+      `Freeze ${label} NOW, ahead of its Tuesday 09:00 ET cutoff?
+
+` +
+      `All ${games.length} games freeze together or none do. A frozen week can only be changed afterwards through the audited override.
+
+` +
+      `Why is it being frozen early? At least 10 characters — this is written to the audit log.`,
+      '',
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 10) {
+      setMessage({ type: 'error', text: 'A reason of at least 10 characters is required; nothing was frozen.' });
+      return;
+    }
+
+    setFreezing(true);
+    setMessage(null);
+    try {
+      const res = await dbService.runNFLSpreadFreeze({
+        dryRun: false, force: true, reason: reason.trim(),
+        slate: { season, seasonType, week },
+      });
+      if (!res.enabled) {
+        setMessage({ type: 'error', text: res.reason });
+      } else if (res.dryRun) {
+        // Both dry-run gates decide liveness and `force` is not one of them, so a
+        // config still set to dryRun reports rather than writes. Say so plainly —
+        // the button said LIVE and nothing was written.
+        setMessage({
+          type: 'error',
+          text: `DRY RUN — nothing was written. system/config.nflSpreadLock.dryRun is still true, and force does not override it. Would have frozen ${res.wouldFreeze} line(s). (${res.reason})`,
+        });
+      } else if (!res.ok) {
+        setMessage({ type: 'error', text: `Not frozen: ${res.reason}` });
+      } else {
+        setMessage({ type: 'success', text: `Froze ${res.frozen} line(s) for ${res.slate}. Re-fetch to see them.` });
+        await fetchGames();
+      }
+    } catch (err: any) {
+      setMessage({ type: 'error', text: `Freeze failed: ${err.message}` });
+    } finally {
+      setFreezing(false);
     }
   };
 
@@ -276,8 +343,23 @@ export const SuperAdminNFLSpreads: React.FC = () => {
             <span className="num font-bold text-[color:var(--text)]">{frozenCount}/{games.length}</span> frozen.
             {' '}Locking is no longer done here — the weekly freeze commits the whole week at once, at its stated time,
             and takes these working lines for any game the feed has no line for. To commit a week now, use
-            {' '}<span className="font-bold">NFL Spread Freeze</span> in Operations.
+            {' '}<span className="font-bold">NFL Spread Freeze</span> in Operations, or the button below to
+            freeze this week ahead of its cutoff.
           </div>
+
+          {frozenCount === 0 && (
+            <div className="flex justify-end mb-4">
+              <button
+                onClick={handleFreezeNow}
+                disabled={freezing || games.length === 0}
+                className="text-xs font-display font-bold uppercase text-navy-800 dark:text-gold-400 hover:brightness-110 disabled:opacity-50 flex items-center gap-1"
+                title="Run the real freeze on this week now, skipping only its Tuesday 09:00 ET cutoff. Requires a reason and is audited."
+              >
+                {freezing ? <RefreshCw size={14} className="animate-spin" /> : <Snowflake size={14} />}
+                Freeze this week now
+              </button>
+            </div>
+          )}
 
           <div className="space-y-3 mb-6 max-h-[500px] overflow-y-auto pr-2">
             {games.map(game => {

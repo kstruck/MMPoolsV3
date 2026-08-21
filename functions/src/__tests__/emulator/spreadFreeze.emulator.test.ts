@@ -246,6 +246,63 @@ describe("freezeSlateOnce (emulator) — the write path", () => {
         expect(await frozenRecords()).toEqual([]);
     });
 
+    it("FORCE skips the stated cutoff and freezes for real", async () => {
+        // Kevin, 2026-08-21: regular-season week 1 has no games before it, so the
+        // Tuesday cadence — which exists to let the previous week finish — buys
+        // nothing there, and the 2026 opener is a Wednesday (a 35-hour pick window
+        // against ~59 for every other week).
+        const SUNDAY = Date.UTC(2026, 7, 23, 18); // two days BEFORE the cutoff
+        const THURSDAY = Date.UTC(2026, 7, 27, 23);
+        await seed([game("g1", { startTime: THURSDAY })]);
+
+        const result = await freezeSlateOnce(admin.firestore(), SUNDAY, {
+            dryRun: false, force: true, fetchWeek: feed({ g1: -6.5 }),
+        });
+        expect(result).toMatchObject({ ok: true, frozen: 1 });
+        expect((await frozenRecords())[0]).toMatchObject({ value: -6.5, source: "freeze" });
+    });
+
+    it("force skips the cutoff and NOTHING ELSE — a frozen slate stays refused", async () => {
+        await seed([game("g1")]);
+        await freezeSlateOnce(admin.firestore(), NOW, { dryRun: false, fetchWeek: feed({ g1: -6.5 }) });
+        const second = await freezeSlateOnce(admin.firestore(), NOW, {
+            dryRun: false, force: true, fetchWeek: feed({ g1: -1 }),
+        });
+        expect(second.frozen).toBe(0);
+        expect((await frozenRecords())[0].value).toBe(-6.5);
+    });
+
+    it("force alone does NOT reach past the horizon — that is what a named slate is for", async () => {
+        // The horizon is part of "is this slate due", so a forced run with no target
+        // still cannot reach a slate more than 7 days out. This is the constraint
+        // that made `target` necessary rather than optional.
+        const FAR = { ...SLATE, week: 9 };
+        await seed([game("far", { ...FAR, startTime: NOW + 20 * DAY })]);
+        const forced = await freezeSlateOnce(admin.firestore(), NOW, {
+            dryRun: false, force: true, fetchWeek: feed({ far: -3 }),
+        });
+        expect(forced.frozen).toBe(0);
+        expect(await frozenRecords()).toEqual([]);
+
+        const targeted = await freezeSlateOnce(admin.firestore(), NOW, {
+            dryRun: false, force: true, target: FAR,
+            fetchWeek: (async () => [{ id: "far", ...FAR, spread: { value: -3 } }]) as never,
+        });
+        expect(targeted).toMatchObject({ ok: true, frozen: 1, slate: "2026/1/9" });
+    });
+
+    it("a NAMED slate that cannot be frozen reports ok:false, not idle", async () => {
+        // An auto-selected run finding nothing due is the normal state of a Tuesday
+        // in February. An operator naming a slate and not getting it is a request
+        // that failed, and it should read as one.
+        await seed([game("gone", { startTime: NOW - DAY })]);
+        const res = await freezeSlateOnce(admin.firestore(), NOW, {
+            dryRun: false, force: true, target: SLATE, fetchWeek: feed({ gone: -3 }),
+        });
+        expect(res).toMatchObject({ ok: false, slate: "2026/1/4", frozen: 0 });
+        expect(res.reason).toContain("first kickoff has passed");
+    });
+
     it("does nothing, and says so, when no slate is inside the horizon", async () => {
         await seed([game("far", { startTime: NOW + 30 * DAY })]);
         const result = await freezeSlateOnce(admin.firestore(), NOW, { dryRun: false, fetchWeek: feed({}) });
