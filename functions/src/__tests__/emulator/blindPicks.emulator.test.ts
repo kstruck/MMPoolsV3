@@ -5,6 +5,7 @@ import './setup';
 import { submitNFLPicksInternal } from '../../nflPools';
 import { proxyPick } from '../../poolExceptions';
 import { getPoolPicks } from '../../nflPickReveal';
+import { recomputeRosterSummary } from '../../lib/rosterSummary';
 
 /**
  * PLAN-COMMISSIONER-BLIND-PICKS, the two halves that only a write path can prove.
@@ -107,12 +108,14 @@ const CREATED_POOLS = [
     'blind-submit-pool', 'blind-submit-weekly-pool', 'blind-proxy-pool',
     'blind-reveal-pickem', 'blind-reveal-survivor-open', 'blind-reveal-survivor-locked',
     'blind-bracket-pool', 'blind-plain-commish',
+    'blind-progress-pool', 'blind-progress-legacy',
 ];
 const CREATED_GAMES = [
     'blind-submit-g1', 'blind-submit-g2', 'blind-weekly-w1-g', 'blind-weekly-w2-g',
     'blind-proxy-g1', 'blind-reveal-locked', 'blind-reveal-open',
     'blind-surv-future-1', 'blind-surv-future-2', 'blind-surv-past-1', 'blind-surv-past-2',
     'blind-plain-future-g',
+    'blind-progress-g1', 'blind-progress-g2', 'blind-progress-legacy-g',
 ];
 const CREATED_USERS = [ALICE, BOB, OWNER, ADMIN, STALE_ADMIN, 'blind-legacy-no-record'];
 
@@ -627,5 +630,150 @@ describe('T2 — a commissioner without a SUPER_ADMIN claim is still blind', () 
         expect(res.counts[ALICE]).toBe(1);
         expect(res.picks).toEqual({});
         expect(res.revealedGameIds).toEqual([]);
+    }, 30000);
+});
+
+// ---------------------------------------------------------------------------
+// PLAN-MEMBER-PICK-PROGRESS — the pool-wide fraction
+// ---------------------------------------------------------------------------
+
+/**
+ * 🛑 THE ASSERTIONS THAT MATTER HERE ARE THE NONZERO ONES, AND THAT IS NOT A
+ * STYLE PREFERENCE.
+ *
+ * This plan's headline claim is "a participant and a commissioner receive
+ * IDENTICAL `progress`". On a fixture with no schema-2 `rosterSummary` the
+ * callable correctly answers `{complete: 0, total: 0}` to everyone — so the
+ * equality assertion passes while the feature does nothing, and the pure-helper
+ * tests never touch the summary read or the response wiring at all. That is the
+ * guard-that-does-not-guard this repo has shipped three times; codex r7 caught it
+ * in the plan before a line of it was written.
+ *
+ * So the fixture SEEDS `playerUids` and every test asserts an exact, nonzero
+ * pair BEFORE comparing principals.
+ *
+ * The fixture is also the r6 case, deliberately: `GONE` holds a COMPLETE entry
+ * and is off the roster, while BOB is on the roster with no entry at all. A
+ * commissioner sees GONE's entry in the scan and a participant does not
+ * (`stillAMember` is participant-only), so any aggregate accumulated inside that
+ * loop would hand them different numbers — and a denominator that was merely a
+ * COUNT would let GONE's completeness cover for BOB's absence and report 2 of 2.
+ * The right answer is 1 of 2, to everybody.
+ */
+describe('getPoolPicks — pool-wide pick progress', () => {
+    const SEASON = 'blind-progress-season';
+    const POOL = 'blind-progress-pool';
+    const LEGACY_POOL = 'blind-progress-legacy';
+    const G1 = 'blind-progress-g1';
+    const G2 = 'blind-progress-g2';
+    const LEGACY_G = 'blind-progress-legacy-g';
+    const GONE = 'blind-progress-gone';
+
+    beforeAll(async () => {
+        // A wholly FUTURE week: nothing is revealed, which is the window the chip
+        // exists for and the window a participant gets no `counts` in.
+        await seedGame(SEASON, G1, 1, Date.now() + 4 * HOUR);
+        await seedGame(SEASON, G2, 1, Date.now() + 30 * HOUR);
+        await seedPool(SEASON, POOL, 'NFL_PICKEM');
+        await seedMember(POOL, ALICE);
+        await seedMember(POOL, BOB);
+        // The HOST, seeded exactly as pool creation seeds them: on the roster,
+        // latch false, no entry. They must NOT be in the denominator (r8).
+        await seedMember(POOL, OWNER, { hasPlayableEntry: false });
+
+        // ALICE: complete. BOB: on the roster, no entry document at all.
+        await db.collection('pools').doc(POOL).collection('entries').doc(ALICE).set({
+            id: ALICE, poolId: POOL, ownerUid: ALICE, userName: 'Alice',
+            picks: { [G1]: 'KC', [G2]: 'BUF' },
+        });
+        // DEPARTED, with a complete sheet: off `participantIds`, off `playerUids`.
+        await db.collection('pools').doc(POOL).collection('entries').doc(GONE).set({
+            id: GONE, poolId: POOL, ownerUid: GONE, userName: 'Gone',
+            picks: { [G1]: 'KC', [G2]: 'BUF' },
+        });
+
+        // Schema 2 — the roster projection the callable actually reads.
+        await db.collection('pools').doc(POOL).collection('rosterSummary').doc('current').set({
+            memberCount: 3, paidCount: 0, unpaidCount: 3,
+            duesExpected: 75, duesCollected: 0, guestUnclaimedDues: 0,
+            playerUids: [ALICE, BOB], rosterSchemaVersion: 2,
+        });
+
+        // A pool whose summary predates the field — the hide-rather-than-guess path.
+        await seedGame(SEASON, LEGACY_G, 2, Date.now() + 4 * HOUR);
+        await seedPool(SEASON, LEGACY_POOL, 'NFL_PICKEM');
+        await seedMember(LEGACY_POOL, ALICE);
+        await db.collection('pools').doc(LEGACY_POOL).collection('entries').doc(ALICE).set({
+            id: ALICE, poolId: LEGACY_POOL, ownerUid: ALICE, userName: 'Alice',
+            picks: { [LEGACY_G]: 'KC' },
+        });
+        await db.collection('pools').doc(LEGACY_POOL).collection('rosterSummary').doc('current').set({
+            memberCount: 1, paidCount: 0, unpaidCount: 1,
+            duesExpected: 25, duesCollected: 0, guestUnclaimedDues: 0,
+            rosterSchemaVersion: 1,
+        });
+    }, 30000);
+
+    it('a PARTICIPANT gets an exact, nonzero fraction before anything is revealed', async () => {
+        const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
+        expect(res.weekRevealed).toBe(false);
+        // 1 of 2: ALICE complete, BOB on the roster with no entry, the HOST
+        // excluded, and GONE's complete sheet counting for nobody.
+        expect(res.progress).toEqual({ complete: 1, total: 2 });
+    }, 30000);
+
+    it('…and the COMMISSIONER gets the identical pair, on the same fixture', async () => {
+        const mine: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
+        const commish: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asProxyCommish } as never);
+        const admin: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asSuperAdmin } as never);
+        expect(commish.progress).toEqual({ complete: 1, total: 2 });
+        expect(commish.progress).toEqual(mine.progress);
+        expect(admin.progress).toEqual(mine.progress);
+    }, 30000);
+
+    it('K1 IS NOT REVERSED — the participant still gets no per-member counts', async () => {
+        // The aggregate crosses the boundary; the per-member counts do not. If
+        // this ever flips, the plan's central promise has been broken by accident.
+        const mine: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
+        expect(mine.counts).toEqual({});
+        const commish: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asProxyCommish } as never);
+        expect(commish.counts[ALICE]).toBe(2);
+    }, 30000);
+
+    it('a schema-1 rosterSummary answers {0,0} — the chip hides rather than guessing', async () => {
+        const res: any = await wGetPicks({ data: { poolId: LEGACY_POOL, week: 2 }, auth: asOwner } as never);
+        // ALICE is complete for that week, so a fallback to entry owners would
+        // have reported "1 of 1". Refusing to answer is the point.
+        expect(res.counts[ALICE]).toBe(1);
+        expect(res.progress).toEqual({ complete: 0, total: 0 });
+    }, 30000);
+
+    it('a week with NO GAMES answers {0,0}, not "everyone is done"', async () => {
+        const res: any = await wGetPicks({ data: { poolId: POOL, week: 9 }, auth: asOwner } as never);
+        expect(res.weekGameIds).toEqual([]);
+        expect(res.progress).toEqual({ complete: 0, total: 0 });
+    }, 30000);
+
+    /**
+     * The PRODUCER half. Every test above seeds `playerUids` by hand, which proves
+     * the callable consumes the field and nothing about whether the projection
+     * ever writes the right one — and the projection is where the predicate that
+     * review rewrote five times actually runs.
+     *
+     * Runs LAST on purpose: it overwrites this pool's summary with the computed
+     * one, and the assertion is that the two agree.
+     */
+    it('recomputeRosterSummary WRITES the same set — host excluded, members kept', async () => {
+        const summary = await recomputeRosterSummary(db, POOL);
+        // OWNER is a member of this pool with `hasPlayableEntry: false` — seeded
+        // exactly as pool creation seeds a host. They must not be in the set.
+        expect(summary.playerUids?.slice().sort()).toEqual([ALICE, BOB].sort());
+        expect(summary.playerUids).not.toContain(OWNER);
+        expect(summary.memberCount).toBe(3);   // …while the ROSTER still counts them
+        expect(summary.rosterSchemaVersion).toBe(2);
+
+        // …and the callable's answer is unchanged by the rewrite.
+        const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
+        expect(res.progress).toEqual({ complete: 1, total: 2 });
     }, 30000);
 });

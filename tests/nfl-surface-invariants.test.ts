@@ -1065,3 +1065,63 @@ describe("WeekChecklist says nothing until the viewer's own entry is known", () 
     expect(strip2).toContain('if (!entryKnown) return null;');
   });
 });
+
+/**
+ * PLAN-MEMBER-PICK-PROGRESS T3 — the pool-wide chip.
+ *
+ * The number itself is proved on the server (unit tests on `pickProgressFor`,
+ * emulator tests on the callable). What only a source grep can pin is that the
+ * GRID renders it under the two conditions the plan turns on:
+ *
+ *   1. `total > 0` gates it. `{complete: 0, total: 0}` is the server saying "I
+ *      cannot answer" — no schema-2 `rosterSummary`, or a week with no games —
+ *      and rendering it would print "0 of 0 in", which is the plausible-looking
+ *      substitute this repo bans. There is no other signal: the field is a plain
+ *      pair, so the zero IS the sentinel.
+ *   2. It reads the WEEK-MATCHED reveal (`wk`), like every other field off it.
+ *      Last week's fraction over this week's slate is a confident wrong answer.
+ *
+ * And the label says "Players", which is load-bearing rather than cosmetic: the
+ * chip beside it counts uid-deduplicated ROWS today, and once PLAN-MULTI-ENTRY
+ * T4 makes rows per-entry the two numbers legitimately differ. Only the words
+ * keep them from reading as a contradiction.
+ */
+describe('the Current Picks grid renders pool-wide progress, and hides it when unanswerable', () => {
+  const grid2 = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLPicksGrid.tsx'), 'utf8');
+
+  it('takes the fraction from the week-matched reveal, not the raw prop', () => {
+    expect(grid2).toContain('const progress = wk?.progress;');
+    expect(grid2).not.toContain('reveal?.progress');
+  });
+
+  it('renders nothing at all when total is 0', () => {
+    // Both the header chip and the legend sentence are gated. A legend that
+    // explains a chip nobody can see is its own small lie.
+    expect((grid2.match(/progress && progress\.total > 0/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect(grid2).not.toMatch(/\{progress\.complete\} of \{progress\.total\}[\s\S]{0,40}<\/span>\s*<span[^>]*>\s*\{entries\.length\}/);
+  });
+
+  it('says PLAYERS, and does not reuse the row count as its denominator', () => {
+    expect(grid2).toContain('{progress.complete} of {progress.total} Players In');
+    // The denominator is the server's, never `entries.length` — those count
+    // different things the moment one player holds two entries.
+    expect(grid2).not.toContain('of {entries.length} Players');
+  });
+
+  it('the Survivor/Margin grid shows the same fraction, named for its WEEK', () => {
+    // That grid draws many weeks at once and the chip describes exactly one, so
+    // an unlabelled fraction there reads as "12 of 16 have finished the season".
+    const weekly = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLWeeklyPicksGrid.tsx'), 'utf8');
+    expect(weekly).toContain('progress && progress.total > 0');
+    expect(weekly).toContain('{nflWeekLabel(seasonType, week)}: {progress.complete} of {progress.total} Players In');
+    // …and off the reveal for THAT week, never whichever one happens to be cached.
+    expect(weekly).toContain('revealsByWeek[week]?.week === week');
+  });
+
+  it('the client mirror of the response carries the field', () => {
+    // `getPoolPicks` CASTS its result, so nothing checks the two shapes against
+    // each other; the field has to be added to both by hand (codex r4 on the plan).
+    const dbsrc = readFileSync(resolve(root, 'src/services/dbService.ts'), 'utf8');
+    expect(dbsrc).toContain('progress?: { complete: number; total: number };');
+  });
+});

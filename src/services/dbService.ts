@@ -51,6 +51,19 @@ export interface PoolPicksReveal {
     picks: Record<string, Record<string, string>>;
     confidence: Record<string, Record<string, number>>;
     tiebreakers: Record<string, number>;
+    /**
+     * The pool-wide completion fraction — "12 of 16 players have their picks in".
+     * Same for every principal, unlike every other field here. `{0, 0}` means the
+     * server could not answer (no schema-2 `rosterSummary`, or an empty slate) and
+     * the UI must render nothing rather than "0 of 0".
+     *
+     * ⚠️ OPTIONAL because THIS INTERFACE IS A HAND-WRITTEN MIRROR of
+     * `PoolPicksResponse` in `functions/src/nflPickReveal.ts` and `getPoolPicks`
+     * CASTS the response — nothing checks the two against each other. A client
+     * built ahead of the functions deploy would otherwise read `undefined` through
+     * a non-optional field. (PLAN-MEMBER-PICK-PROGRESS T3, codex r4.)
+     */
+    progress?: { complete: number; total: number };
 }
 
 // --- Monetization dashboard read shapes (PLAN-BUYFLOW-OVERHAUL Phase 6) -------
