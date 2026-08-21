@@ -212,7 +212,17 @@ mixed-locked week is the case that machinery exists for.
 
 ---
 
-## 4. Issue 3 — REOPENED. The `Set` column is withheld from members on purpose.
+## 4. Issue 3 — REOPENED, then ANSWERED. Both options taken.
+
+✅ **UPDATE 2026-08-21 evening.** Kevin: *"Go with both of these."* **(ii) shipped
+in #497** and is live. **(iii) is now `PLAN-MEMBER-PICK-PROGRESS.md`** — written,
+swept, ten review rounds absorbed, **no code**, and blocked on his sign-off of
+Q1–Q4 plus a ruling on one over-cap round. The section below is the diagnosis that
+produced both options and is kept as the record.
+
+---
+
+### The diagnosis — the `Set` column is withheld from members on purpose.
 
 **You are right and my first answer was wrong.** I checked
 `/pool/6P3vfEQ5KGK8ocPTURRi` (TEST ATS POOL) in your browser and found the cause.
