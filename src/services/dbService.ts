@@ -1867,13 +1867,28 @@ export const dbService = {
 
     // A member's own entry doc (NFL types key entries by uid). Own reads are always
     // allowed by rules; pairs with the standings projection for member views.
+    // 🛑 A READ FAILURE IS NOT "YOU HAVE NO ENTRY", AND IT USED TO BE REPORTED AS
+    // ONE. The success path already distinguishes the two — an absent document
+    // calls back with `null` — so the error path calling back with `null` too
+    // made a failed read indistinguishable from a member who has never picked.
+    //
+    // The consequence is not cosmetic. `NFLPoolDashboard` feeds this straight
+    // into `WeekChecklist`, so one errored snapshot leaves the member reading
+    // "picks not in yet" over a sheet they have completely filled in — and
+    // Firestore's `onSnapshot` TERMINATES a listener on error, so it never
+    // recovers on its own. Only a page reload re-subscribes, which is exactly
+    // the shape of the report ("still says picks are not in until they
+    // refresh", Kevin's testers, 2026-08-21).
+    //
+    // On error we now keep the last known state rather than overwriting it with
+    // a claim we cannot support. A member who genuinely has no entry is still
+    // told so, by the success path, which is the only path that knows.
     subscribeToMyNFLEntry: (poolId: string, uid: string, callback: (entry: any | null) => void) => {
         const ref = doc(db, 'pools', poolId, 'entries', uid);
         return onSnapshot(ref, (snap) => {
             callback(snap.exists() ? { ...snap.data(), id: snap.id } : null);
         }, (error) => {
             logger.error("Error subscribing to own NFL entry:", error);
-            callback(null);
         });
     },
 

@@ -1,5 +1,47 @@
 # HANDOFF — Session entry point
 
+> ## 🟢 2026-08-21 (later) — **#495 IS LIVE AND CONFIRMED. TWO OF THE SIX ARE STILL OPEN, ONE NEEDS A RULING FROM KEVIN.**
+>
+> **Read `MORNING-2026-08-22-FIXES.md`** — its §4 and §6 are rewritten and the
+> update block at the top is the current state.
+>
+> ✅ **STEPS 1–5 RAN. THE COOLIFY REBUILD IS DONE AND THE FIXES ARE VERIFIED IN
+> PRODUCTION BY KEVIN.** Issues **1** (per-game lock wording), **2** (per-game
+> reveal works) and **4** (the Majority tie) are confirmed closed.
+>
+> ❌ **ISSUE 6 IS CANCELLED, BY KEVIN.** *"Only in Chrome. In Edge browser they
+> seem to be working... I am seeing this on other sites. Nothing to fix on the
+> site."* Consistent with both clean measurements taken here. **Do not reopen it.**
+>
+> ⚠️ **ISSUE 3 IS REOPENED AND IT NEEDS KEVIN'S RULING, NOT CODE.** The grid's
+> `Set` column works for a commissioner and is **withheld from plain members by
+> design** — `functions/src/nflPickReveal.ts:319`, `if (!isParticipant ||
+> reveal.weekRevealed)`, which is **Kevin's own K1 ruling of 2026-08-14** (*"nobody
+> asked for that"*). On a PER_GAME pool "the whole week revealed" is the LAST
+> kickoff, so a member sees nothing all week. Kevin answered Q1 = **(a) the Set
+> column is enough**, which only holds if members can see it. **Reversing K1 is a
+> functions reveal-boundary change — authorization, so plan-gated — and must not
+> be done without Kevin saying so.** §4 of the morning doc has the three options.
+>
+> ⚠️ **ISSUE 5 HAS A NEW LEADING CAUSE AND A DEFENSIVE FIX.** Kevin: the user had
+> **all** picks in, in the confidence Pick'em pool — which eliminates both earlier
+> candidates. `dbService.subscribeToMyNFLEntry` reported a READ FAILURE as "no
+> entry", and `onSnapshot` TERMINATES a listener on error, so one bad snapshot
+> left the member on "picks not in yet" over a completed sheet until a reload.
+> **[#497](https://github.com/kstruck/MMPoolsV3/pull/497) stops the error path
+> inventing state.** NOT proven to be Kevin's bug — if it recurs after the
+> rebuild, look for `Error subscribing to own NFL entry:` in the console.
+>
+> 📌 **#497 IS FRONTEND ONLY AND OWES ONE MORE COOLIFY REBUILD.** It also fixes a
+> legend sentence that was **false to members** — it claimed the `Set` count *"is
+> available before anything is revealed"* when for them it is not.
+>
+> ⚠️ **STILL OUTSTANDING FROM THE MORNING LIST:** step 6 — confirm
+> `system/config.nflFrozenSpreadBackfill.enabled` is back to `false` in the
+> Firebase console. And **Tuesday is unchanged**: `nflSpreadLock` is still
+> `{enabled: true, dryRun: TRUE}`, the flip is **Mon 2026-08-24**, the freeze
+> fires on **app week 4** Tue 2026-08-25 09:00 ET and will almost certainly refuse.
+
 > ## 🟢 2026-08-22 — **FIVE NFL DASHBOARD DISPLAY DEFECTS FIXED. ONE COOLIFY REBUILD OWED, NOTHING ELSE.**
 >
 > **Read `MORNING-2026-08-22-FIXES.md`.** It **continues**

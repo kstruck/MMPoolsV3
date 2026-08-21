@@ -786,7 +786,14 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
     // prop, never inferred from `row.picks` being absent: an entry that has no
     // picks yet is indistinguishable from one that has not loaded. (qodo #9.)
     expect(grid).toContain('const ownPicksKnown = (row: any): boolean => isMe(row) && ownEntryLoaded;');
-    expect(dash).toContain('ownEntryLoaded={!!ownEntry}');
+    // ⚠️ `!!ownEntry` USED TO BE THE SOURCE HERE AND IT WAS THE WEAKER QUESTION:
+    // it is false for a viewer whose entry HAS loaded and is genuinely absent, so
+    // the bypass stayed off and their own row read "?" — "not revealed yet" about
+    // picks the client can see are not there. `ownEntryKnown` is "a successful
+    // snapshot for this pool and this uid has landed", which is what the prop's
+    // own doc comment says it means. (#497.)
+    expect(dash).toContain('ownEntryLoaded={ownEntryKnown}');
+    expect(dash).not.toContain('ownEntryLoaded={!!ownEntry}');
     // The "Me" badge and the row highlight are the OTHER question and must not
     // disappear while the entry loads.
     expect(grid).toContain('{mine && (');
@@ -960,5 +967,101 @@ describe('row-click picks (EntryWeekPicks) — the reveal boundary stays the ser
     }
     const dash = strip(readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLPoolDashboard.tsx'), 'utf8'));
     expect((dash.match(/reveal=\{weekReveal\}/g) ?? []).length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+/**
+ * A FAILED READ OF THE MEMBER'S OWN ENTRY IS NOT "THEY HAVE NO ENTRY".
+ *
+ * `subscribeToMyNFLEntry` is the single source for the viewer's own picks on
+ * every NFL surface — the pick sheets, the checklist banners, and the grid's own
+ * row (which bypasses the reveal because that document IS its source). Its
+ * success path already distinguishes an absent document from a present one, so
+ * an error handler that also calls back with `null` collapses "the read failed"
+ * into "you have not picked".
+ *
+ * That is not cosmetic: Firestore's `onSnapshot` TERMINATES a listener on error,
+ * so a single errored snapshot leaves the member reading "picks not in yet" over
+ * a completed sheet until they reload the page. A behavioural test would need a
+ * Firestore double for a three-line subscription; this coarse grep pins the one
+ * thing that matters — the error path does not invent state.
+ */
+describe('subscribeToMyNFLEntry — an error must not be reported as "no entry"', () => {
+  const src = readFileSync(resolve(root, 'src/services/dbService.ts'), 'utf8');
+  const body = src.slice(src.indexOf('subscribeToMyNFLEntry:'));
+  const handler = body.slice(0, body.indexOf('subscribeToWeeklyRecaps:'));
+
+  it('parsed the subscription out of the source', () => {
+    // Guard the guard: a mis-parse would make the assertion below vacuous.
+    expect(handler).toContain("Error subscribing to own NFL entry:");
+    expect(handler.length).toBeGreaterThan(0);
+    expect(handler.length).toBeLessThan(src.length);
+  });
+
+  it('the error handler logs and calls back with nothing', () => {
+    const errorHandler = handler.slice(handler.indexOf('}, (error) => {'));
+    expect(errorHandler).toContain('logger.error');
+    // The removed line, verbatim. Keeping the last known state is the fix.
+    expect(errorHandler).not.toContain('callback(null)');
+  });
+
+  it('the success path still reports a genuinely absent entry as null', () => {
+    expect(handler).toContain('snap.exists() ?');
+    expect(handler).toContain(': null');
+  });
+});
+
+/**
+ * …and the dashboard state it feeds is STAMPED, so the removed error callback
+ * cannot become a cross-pool leak.
+ *
+ * The old error contract cleared `ownEntry` by accident on the way past. Losing
+ * it means a listener that errors before its FIRST snapshot would leave the
+ * previous pool's — or the previous account's — picks on screen and prefilled
+ * into this pool's sheet. Same stamp-and-check-at-render rule `reveal`,
+ * `consensus` and the grid sort already follow. (codex r1 on this change, P1.)
+ */
+describe('NFLPoolDashboard stamps the own-entry snapshot with pool AND uid', () => {
+  const src = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLPoolDashboard.tsx'), 'utf8');
+
+  it('the subscription callback records which pool and which uid it came from', () => {
+    expect(src).toContain('setOwnEntryState({ poolId: pool.id, uid: user.id, entry })');
+    // The pre-change shape: the setter handed straight to the subscription, so
+    // nothing recorded the source.
+    expect(src).not.toContain('subscribeToMyNFLEntry(pool.id, user.id, setOwnEntry)');
+  });
+
+  it('and it is checked at render, not in an effect', () => {
+    // An effect-based reset lands only AFTER the render that changed the pool has
+    // already committed the previous pool's picks — the exact reason `reveal` and
+    // the grid sort are checked at render too.
+    expect(src).toContain('ownEntryState.poolId === pool.id');
+    expect(src).toContain('ownEntryState.uid === user.id');
+  });
+});
+
+/**
+ * …and no surface states the absent-entry fact until the entry is KNOWN.
+ *
+ * `entry === null` means BOTH "never picked" and "the read never arrived", and
+ * only the first licenses "you have not entered your picks". `onSnapshot`
+ * terminates a listener on error, so an initial-snapshot failure means nothing
+ * ever arrives — and the checklist would repeat the false claim for the life of
+ * the page, which is the reported symptom. (codex r2 on #497, P2.)
+ */
+describe("WeekChecklist says nothing until the viewer's own entry is known", () => {
+  const dash = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLPoolDashboard.tsx'), 'utf8');
+  const strip2 = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/WeekChecklist.tsx'), 'utf8');
+
+  it('the dashboard derives it from a landed snapshot, not from `entry` being truthy', () => {
+    expect(dash).toContain('const ownEntryKnown = !!user');
+    expect(dash).toContain('entryKnown={ownEntryKnown}');
+    // The grid's own-row bypass asks the SAME question, so the two cannot drift.
+    expect(dash).not.toContain('ownEntryLoaded={!!ownEntry}');
+    expect(dash).toContain('ownEntryLoaded={ownEntryKnown}');
+  });
+
+  it('and the strip renders nothing when it is false', () => {
+    expect(strip2).toContain('if (!entryKnown) return null;');
   });
 });

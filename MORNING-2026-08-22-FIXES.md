@@ -9,6 +9,29 @@
 overnight as `eea00f57`. Frontend only.** No functions deploy, no rules deploy.
 It owes **a Coolify rebuild of `www` and nothing else**.
 
+✅ **UPDATE 2026-08-21 — KEVIN RAN STEPS 1–5. THE REBUILD IS LIVE AND THE FIXES
+ARE CONFIRMED IN PRODUCTION.** Issues 1, 2 and 4 verified by Kevin on the live
+site. **Step 6 (`nflFrozenSpreadBackfill.enabled`) is still outstanding.** Three
+verdicts changed:
+
+- **Issue 6 is CANCELLED, by Kevin.** *"Buttons still not working but only in
+  Chrome. In Edge browser, they seem to be working. This is a Chrome issue since
+  I am seeing this on other sites. Nothing to fix on the site."* That closes it —
+  it matches both clean measurements taken here.
+- **Issue 3 is REOPENED, and Kevin is right.** He answered **Q1 = (a) the `Set`
+  column is enough**, and then found the `Set` column showing **nothing** on the
+  ATS per-game pool. **I found the cause: the server deliberately withholds it
+  from plain members.** See §4, which is rewritten — it needs a ruling from
+  Kevin, because the fix reverses one of his own.
+- **Issue 5 has a new leading cause and a defensive fix has shipped.** Kevin:
+  *"the user said it was after all picks were in"*, in the Pick'em pool
+  `0ybpLzY7fJ3NJbDj0j1l`. That eliminates the partial-sheet candidate. See §6.
+
+**Both changes are in [#497](https://github.com/kstruck/MMPoolsV3/pull/497),
+which owes ONE MORE COOLIFY REBUILD and nothing else.**
+
+---
+
 **Headline: five display defects, four of them measured against production in
 your own pool, are fixed. Issue 6 (browser Back / Refresh / Home) I could not
 reproduce — I need one answer from you before spending more on it.**
@@ -104,12 +127,12 @@ four adjacent ones got clicked twice on 2026-08-21.
 
 | # | Your report | Verdict | Where |
 |---|---|---|---|
-| 1 | Per-game lock wording is misleading | **CONFIRMED — FIXED** | #495 |
-| 2 | Does per-game reveal actually work? | **IT WORKS. Not a bug.** | §3 |
-| 3 | Indicate that picks were made | **ALREADY EXISTS (the `Set` column). One question for you.** | §4 |
-| 4 | Majority row has gaps | **CONFIRMED LIVE — FIXED.** Every gap was an exact 2–2 tie. | #495 |
-| 5 | Stale "you have not entered your picks" | **NOT REPRODUCED. I need your steps.** | §6 |
-| 6 | Back / Refresh / Home "not working anywhere" | **NOT REPRODUCED, twice.** | §6 |
+| 1 | Per-game lock wording is misleading | **CONFIRMED — FIXED, verified by Kevin** | #495 |
+| 2 | Does per-game reveal actually work? | **IT WORKS. Not a bug. Confirmed by Kevin.** | §3 |
+| 3 | Indicate that picks were made | ⚠️ **REOPENED — cause found, needs your ruling** | §4 |
+| 4 | Majority row has gaps | **CONFIRMED LIVE — FIXED, verified by Kevin.** Every gap was an exact 2–2 tie. | #495 |
+| 5 | Stale "you have not entered your picks" | **NOT REPRODUCED — defensive fix shipped in #497** | §6 |
+| 6 | Back / Refresh / Home "not working anywhere" | ❌ **CANCELLED by Kevin — Chrome-wide, not the site** | §6 |
 
 And **two defects you did not report, which I found while checking yours**, both
 fixed in the same PR:
@@ -189,28 +212,62 @@ mixed-locked week is the case that machinery exists for.
 
 ---
 
-## 4. Issue 3 — this already exists. One question.
+## 4. Issue 3 — REOPENED. The `Set` column is withheld from members on purpose.
 
-The grid already has a **`Set`** column: it reads **`16/16`** for every player in
-your screenshot, it is a server-side count that carries no pick content, and it is
-available **before anything is revealed**. The legend says so. So "indicate that
-picks were made even when hidden" is shipped.
+**You are right and my first answer was wrong.** I checked
+`/pool/6P3vfEQ5KGK8ocPTURRi` (TEST ATS POOL) in your browser and found the cause.
 
-**❓ QUESTION 1 — did you mean a per-CELL indicator instead?**
+**As SUPER_ADMIN the column works.** App week 3 reads `16/16` for all three
+players; app week 4 reads `0/16` for all three, which is true — nobody has picked
+a week whose lines are not frozen.
 
-Today an unrevealed cell prints `?` whether that player picked that game or not.
-Making the cell distinguish "hidden, but a pick exists" from "hidden, and none
-made" is **a `functions/` change**: the server would have to send a per-game
-has-a-pick flag for games it is deliberately not revealing, which widens what
-`getPoolPicks` discloses. That is a reveal-boundary change and therefore
-plan-gated — a PLAN doc, not a quick fix.
+**As a plain member it reads `?` for everyone else, all week, by design.**
+`functions/src/nflPickReveal.ts:319` is one line:
 
-**Answer one of:**
-- **(a)** "The `Set` column is enough" → I close this. *(My recommendation. The
-  count answers "have they done their picks", which is the commissioner's actual
-  question, and it costs no server change.)*
-- **(b)** "Make `Set` more prominent" → frontend only, small, I do it next.
-- **(c)** "I want the per-cell indicator" → I write the PLAN first.
+```ts
+if (!isParticipant || reveal.weekRevealed) {
+  counts[memberUid] = weekPickCount(...);
+}
+```
+
+A **participant** gets no counts at all until the WHOLE week reveals. The comment
+above it is your own ruling of 2026-08-14: *"Handing it to participants unchanged
+would let every member watch every other member's sheet fill in live: 'Kevin 14 of
+16' ticking to 15 tells you he is still working, and nobody asked for that."*
+
+**That is why you saw nothing.** `TEST ATS POOL` is hosted by Kevin Struck, so
+**Ron is a plain member of it** — the account in your screenshot. And on a
+PER_GAME pool "the whole week is revealed" is the LAST kickoff, so a member sees
+no indication for the entire week.
+
+### ❓ QUESTION 1 (REPLACES the old one) — do you want to reverse that ruling?
+
+Your answer of **(a) the `Set` column is enough** only holds if members can see
+it. Two ways to make that true:
+
+- **(i) Give members live counts too.** Delete the `!isParticipant ||` guard: one
+  line, plus its tests and the CONTEXT.md sentence. **This reverses your
+  2026-08-14 ruling in your own words, so I will not do it without you saying
+  so.** It is a `functions/` reveal-boundary change — authorization — so it takes
+  a PLAN doc and a functions deploy, not a Coolify rebuild.
+- **(ii) Keep the ruling, fix the impression.** Shipped in #497 already: the grid
+  legend now says plainly *"Other players' counts are shown to the pool's
+  commissioner at any time — chasing missing picks is their job — and to everyone
+  else once the whole week is revealed; until then they read `?`."* Before this,
+  a member saw a wall of `?` with the legend claiming the count *"is available
+  before anything is revealed"*, which was simply false for them. **That sentence
+  was a lie to members and it is fixed either way.**
+
+**My recommendation: (ii) alone.** The commissioner is the person whose job is
+chasing missing picks, they already have the column, and "who has picked yet" is
+a live feed of other people's behaviour that you deliberately closed nine days
+ago. If you want (i) anyway, say so and I will write the PLAN.
+
+**A third option if (ii) is not enough:** show members a POOL-WIDE count — "12 of
+16 players have their picks in" — which is an aggregate that names nobody, the
+same shape as the Majority row you already ruled visible at all times. That is
+still a functions change but it does not reverse the K1 ruling. Say the word and
+I will plan that instead.
 
 ---
 
@@ -244,56 +301,50 @@ labels in the live panel tonight. The two backfill buttons are separate cards.
 
 ---
 
-## 6. The two I could not reproduce — what I need from you
+## 6. Issue 5 — new cause, defensive fix shipped. Issue 6 — closed.
 
-### ❓ QUESTION 2 — issue 5, the stale "you have not entered your picks"
+### Issue 5 — a failed read of the member's own entry was reported as "no entry"
 
-I read the whole path and could not find the staleness. `NFLPoolDashboard` uses
-`dbService.subscribeToMyNFLEntry` — a **live** Firestore subscription on
-`pools/{id}/entries/{uid}` — and `submitNFLPicks` writes exactly that document, so
-the banner should flip within a second with no refresh. I could not reproduce it
-live either: your ATS pool's week-4 sheet is currently blocked by the spread gate,
-so there is no sheet to submit from, and I would not write picks into a live pool
-to manufacture a test.
+**Your new detail eliminates my first candidate.** *"It was the Pick'em pool
+`0ybpLzY7fJ3NJbDj0j1l` and the user said it was after all picks were in."* So it
+is not a partial sheet, and that pool is a **confidence** pool, which locks and
+reveals as one week — the per-game candidate is out too.
 
-**Two candidates I can see in the code, and they need different fixes:**
+**What is left fits the report exactly, including the refresh.**
+`dbService.subscribeToMyNFLEntry` is the ONE source for the viewer's own picks.
+Its success path already tells an absent document apart from a present one — and
+its **error** path also called back with `null`. So a failed read was
+indistinguishable from "you have not picked".
 
-1. **A PARTIAL sheet.** "Picks are in" requires **every** unlocked game answered.
-   Save 15 of 16 and the banner correctly still says "not in yet" — which a tester
-   would report exactly the way you did. If this is it, the fix is wording ("15 of
-   16 saved"), not plumbing.
-2. **A FUTURE week.** The banner only ever speaks about the *current* week. Submit
-   picks for next week via the week selector and the banner keeps talking about
-   this week, forever, refresh or not.
+That is not cosmetic, because **Firestore's `onSnapshot` TERMINATES a listener on
+error.** One errored snapshot — a token refresh landing mid-flight, a transient
+rules `get()` failure — and the member reads **"picks not in yet" over a
+completed sheet for the rest of that page's life.** Only a reload re-subscribes.
+**That is the shape of the report: it does not fix itself, and a refresh fixes
+it.**
 
-**Tell me, for one occurrence:** which pool, which week number, did they save
-**every** game or only some, were they a plain member or a commissioner, and did
-the *pick sheet itself* show its green "picks submitted at …" receipt while the
-pool home still said not-in? That last one splits the two candidates immediately.
+**#497 stops the error path inventing state.** It logs the failure and keeps the
+last known entry rather than overwriting it with a claim it cannot support. A
+member who genuinely has no entry is still told so, by the success path, which is
+the only path that knows. A source-grep invariant in
+`tests/nfl-surface-invariants.test.ts` pins it.
 
-### ❓ QUESTION 3 — issue 6, Back / Refresh / Home
+⚠️ **I am NOT claiming this is proven to be your bug.** It is a real defect on its
+own merits and it is the only remaining explanation I can find that produces
+"stuck until refresh". **When you test it again, if it recurs after the #497
+rebuild, open DevTools → Console first and look for
+`Error subscribing to own NFL entry:` — that line now survives the failure and
+will tell us in one look whether this was it.**
 
-**I tested this directly against production in your signed-in browser and
-everything worked.** On `/pool/0ybpLzY7fJ3NJbDj0j1l?tab=grid`: no service worker
-registered, no `beforeunload` handler, `history.length` 2 on a fresh tab (no
-history flood), clicking POOL HOME then STANDINGS grew history 2 → 3 → 4 and set
-`?tab=dashboard` then `?tab=standings`, and `history.back()` twice restored both
-the URL **and** the rendered content. `setActiveTab` pushes deliberately;
-`setSelectedWeek` replaces. Both correct.
+### Issue 6 — CLOSED. Your call, and it matches what I measured.
 
-Also, plainly: **a web page cannot break the browser's Refresh or Home button.**
-Those are browser chrome, outside the page's reach entirely.
+Kevin: *"Buttons still not working but only in Chrome. In Edge browser, they seem
+to be working. This is a Chrome issue since I am seeing this on other sites.
+Marked this as a cancelled issue. Nothing to fix on the site."*
 
-**Before I spend more on this, please confirm:**
-1. Does it still happen with the **Claude Chrome extension fully disabled** and
-   after a **complete Chrome restart**? (It is an automation extension and it may
-   be permitted in incognito, so incognito does not rule it out.)
-2. Which **exact page** (paste the URL from the address bar), and what does "not
-   working" look like — nothing happens at all, the URL changes but the page does
-   not, or the page goes blank?
-
-If it reproduces clean, I will dig. Until then I am not going to spend hours on a
-phantom, and I would rather say that than quietly pretend to look.
+Agreed, and it is consistent with both measurements taken here: no service
+worker, no `beforeunload`, no history flood, and `history.back()` correctly
+restored both the URL and the rendered content. **Nothing further owed.**
 
 ---
 

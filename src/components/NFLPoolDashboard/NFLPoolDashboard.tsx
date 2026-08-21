@@ -191,7 +191,40 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // without this would make their own saved picks vanish while `getPoolPicks`
   // correctly refused to hand them back before the boundary.
   const [standingsRows, setStandingsRows] = useState<any[]>([]);
-  const [ownEntry, setOwnEntry] = useState<any | null>(null);
+  // 🛑 STAMPED WITH THE POOL **AND** THE VIEWER, and checked at RENDER time — the
+  // same rule `reveal` below already follows, for a sharper version of the same
+  // reason. `PoolRoute` reuses this component across pool navigation and across
+  // an account switch, so a snapshot outlives the pool and the uid that asked for
+  // it.
+  //
+  // This used to be cleared by accident: `subscribeToMyNFLEntry` reported a read
+  // FAILURE by calling back with `null`, which happened to wipe the previous
+  // pool's entry on the way past. That error contract is gone (it was telling a
+  // member with a full sheet that they had not picked), so the guard that was
+  // implicit has to become explicit — otherwise a new listener that errors before
+  // its first snapshot leaves the PREVIOUS pool's, or the previous account's,
+  // picks on screen and prefilled into this pool's pick sheet. (codex r1, P1.)
+  const [ownEntryState, setOwnEntryState] = useState<{ poolId: string; uid: string; entry: any | null } | null>(null);
+  /**
+   * Has a SUCCESSFUL snapshot for THIS pool and THIS viewer actually landed?
+   *
+   * 🛑 THE DIFFERENCE BETWEEN THIS AND `!!ownEntry` IS THE WHOLE POINT. An
+   * entry that has not arrived and an entry that does not exist are different
+   * facts, and only the second one licenses "you have not entered your picks".
+   * `onSnapshot` TERMINATES a listener on error, so a transient rules or auth
+   * failure on the FIRST snapshot means nothing ever arrives — and every surface
+   * downstream would state the absent-entry fact anyway. That is the report
+   * ("still says picks are not in until they refresh") reached through the
+   * initial-error path rather than after a good snapshot. (codex r2, P2.)
+   *
+   * A signed-out viewer is `false` too, deliberately: they have no entry to load
+   * and no picks to owe, so the checklist strip has nothing true to say to them.
+   */
+  const ownEntryKnown = !!user
+    && ownEntryState !== null
+    && ownEntryState.poolId === pool.id
+    && ownEntryState.uid === user.id;
+  const ownEntry = ownEntryKnown ? ownEntryState!.entry : null;
   // Stamped with the pool it came from, and keyed BY WEEK.
   //
   // `PoolRoute` reuses this component across pool navigation, so a response
@@ -217,7 +250,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   useEffect(() => {
     const unsubStandings = dbService.subscribeToNFLStandings(pool.id, setStandingsRows);
     const unsubOwn = user
-      ? dbService.subscribeToMyNFLEntry(pool.id, user.id, setOwnEntry)
+      ? dbService.subscribeToMyNFLEntry(pool.id, user.id, (entry) =>
+          setOwnEntryState({ poolId: pool.id, uid: user.id, entry }))
       : undefined;
     return () => { unsubStandings(); unsubOwn?.(); };
   }, [pool.id, user?.id]);
@@ -668,6 +702,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           <div className="mt-6">
             <WeekChecklist
               pool={pool}
+              entryKnown={ownEntryKnown}
               entry={myEntry}
               games={games}
               selectedWeek={selectedWeek}
@@ -943,7 +978,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     week={selectedWeek}
                     viewerUid={user?.id}
                     reveal={weekReveal}
-                    ownEntryLoaded={!!ownEntry}
+                    ownEntryLoaded={ownEntryKnown}
                   />
                 ) : (
                   /* Survivor and Margin: one pick per WEEK, so the axis is weeks
@@ -957,7 +992,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     week={selectedWeek}
                     viewerUid={user?.id}
                     revealsByWeek={revealsForPool}
-                    ownEntryLoaded={!!ownEntry}
+                    ownEntryLoaded={ownEntryKnown}
                   />
                 )
               )}
@@ -972,7 +1007,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   viewerUid={user?.id}
                   pickCounts={weekReveal?.counts}
                   reveal={weekReveal}
-                  ownEntryLoaded={!!ownEntry}
+                  ownEntryLoaded={ownEntryKnown}
                 />
               )}
 
@@ -988,7 +1023,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   week={selectedWeek}
                   viewerUid={user?.id}
                   reveal={weekReveal}
-                  ownEntryLoaded={!!ownEntry}
+                  ownEntryLoaded={ownEntryKnown}
                 />
               )}
 
