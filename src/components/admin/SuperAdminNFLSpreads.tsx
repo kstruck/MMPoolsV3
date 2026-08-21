@@ -188,8 +188,13 @@ export const SuperAdminNFLSpreads: React.FC = () => {
       } else if (!res.ok) {
         setMessage({ type: 'error', text: `Not frozen: ${res.reason}` });
       } else {
-        setMessage({ type: 'success', text: `Froze ${res.frozen} line(s) for ${res.slate}. Re-fetch to see them.` });
+        // ⚠️ REFRESH FIRST, THEN SET THE MESSAGE (codex r2). `fetchGames` opens with
+        // `setMessage(null)`, so setting the confirmation before it wiped the only
+        // feedback from an irreversible action — and an operator with no
+        // confirmation retries, which is the last thing you want them doing to a
+        // freeze.
         await fetchGames();
+        setMessage({ type: 'success', text: `Froze ${res.frozen} line(s) for ${res.slate}.` });
       }
     } catch (err: any) {
       setMessage({ type: 'error', text: `Freeze failed: ${err.message}` });
