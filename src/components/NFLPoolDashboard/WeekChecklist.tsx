@@ -1,10 +1,11 @@
 import React from 'react';
 import { AlertTriangle, ArrowRight, Check, X, Square, Dot, Minus } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
-import { gamesForPoolWeek, getWeekStatus, poolSeasonType, weekDeadline, type WeekStatus } from '../../utils/nflPending';
+import { gamesForPoolWeek, getWeekStatus, poolSeasonType, weekDeadline, weekLockCaption, type WeekStatus } from '../../utils/nflPending';
 import { nflLockMode, weekLockOverrideFor } from '@shared/nflLockMode';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { formatDeadline } from '../../utils/formatTime';
+import { spreadsBlockWeek } from '../../utils/poolUsesSpreads';
 import { now as serverNow } from '../../utils/serverClock';
 import { Button } from '../ui';
 import { effectiveBufferMinutesForWeek } from '@shared/weeklyHardLock';
@@ -67,7 +68,23 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
         // picks (qodo #9).
         const overrideMs = weekLockOverrideFor(castPool, week);
         const status = getWeekStatus(pool.type, entry, weekGames, week, lockBufferMinutes, lockMode, overrideMs);
-        return { week, status, deadline: weekDeadline(weekGames, lockBufferMinutes, lockMode, overrideMs) };
+        // `lockMode` rides along because the banners below have to SAY which of
+        // the two things their timestamp is — see `weekLockCaption`.
+        //
+        // …and so does whether this week's sheet is held shut for want of frozen
+        // lines. "Make Picks" on an ATS week with no lines lands the member on
+        // "Spreads Not Yet Finalized" with nothing to do — the same dead-end the
+        // "Pick <next week> →" CTA was removed from `PickemPickEntry` for.
+        return {
+            week,
+            status,
+            lockMode,
+            // The banner has to know an extension EXISTS, not what it is: it
+            // changes which sentence is true about a per-game week.
+            hasWeekExtension: typeof overrideMs === 'number',
+            spreadsBlocked: spreadsBlockWeek(castPool, weekGames),
+            deadline: weekDeadline(weekGames, lockBufferMinutes, lockMode, overrideMs),
+        };
     });
 
     // The week the pool is IN: the earliest week whose deadline has not passed.
@@ -94,16 +111,20 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
                     <div className="flex items-center gap-2 flex-1">
                         <AlertTriangle size={16} className="text-gold-600 dark:text-gold-400 shrink-0" aria-hidden="true" />
                         <span className="font-display font-bold uppercase tracking-[0.05em] text-[13px] text-gold-700 dark:text-gold-300">
-                            {nflWeekLabel(poolSeasonType(castPool), nextDue.week)} picks not in yet — locks {formatDeadline(nextDue.deadline!)}
+                            {nflWeekLabel(poolSeasonType(castPool), nextDue.week)} picks not in yet — {nextDue.spreadsBlocked
+                                ? 'the sheet opens once every line for this week is frozen'
+                                : weekLockCaption(nextDue.lockMode, formatDeadline(nextDue.deadline!), nextDue.hasWeekExtension)}
                         </span>
                     </div>
-                    <Button
-                        size="sm"
-                        onClick={() => onPickNow(nextDue.week)}
-                        className="shrink-0"
-                    >
-                        Make Picks <ArrowRight size={13} aria-hidden="true" />
-                    </Button>
+                    {!nextDue.spreadsBlocked && (
+                        <Button
+                            size="sm"
+                            onClick={() => onPickNow(nextDue.week)}
+                            className="shrink-0"
+                        >
+                            Make Picks <ArrowRight size={13} aria-hidden="true" />
+                        </Button>
+                    )}
                 </div>
             )}
 
@@ -111,7 +132,7 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
                 <div role="status" className="bg-[#E4F5EC]/60 dark:bg-emerald-500/10 border border-[#BEE7D0] dark:border-emerald-500/30 rounded-xl px-4 py-3 flex items-center gap-2">
                     <Check size={16} className="text-[#0F7B4A] dark:text-emerald-400 shrink-0" aria-hidden="true" />
                     <span className="font-display font-bold uppercase tracking-[0.05em] text-[13px] text-[#0F7B4A] dark:text-emerald-300">
-                        {nflWeekLabel(poolSeasonType(castPool), currentComplete.week)} picks are in — locks {formatDeadline(currentComplete.deadline!)}
+                        {nflWeekLabel(poolSeasonType(castPool), currentComplete.week)} picks are in — {weekLockCaption(currentComplete.lockMode, formatDeadline(currentComplete.deadline!), currentComplete.hasWeekExtension)}
                     </span>
                 </div>
             )}

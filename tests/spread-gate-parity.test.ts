@@ -100,9 +100,15 @@ describe('the member pick sheets no longer carry an unconditional spread gate', 
       'utf8',
     );
     expect(src).toMatch(/utils\/poolUsesSpreads/);
-    expect(src).toMatch(/if \(!poolUsesSpreads\(castPool\)\) return false;/);
+    // The gate now lives in that module as `spreadsBlockWeek`, because the
+    // dashboard's Lock Status card asks the same question and the two must not
+    // drift. What matters here is unchanged: the sheet consults the shared rule.
+    expect(src).toMatch(/spreadsBlockWeek\(castPool, games\)/);
     // The pre-change shape: a bare `!allSpreadsLocked` early return.
     expect(src).not.toMatch(/if \(!allSpreadsLocked\)/);
+    // …and the pool-type guard the sheet used to carry is still in front of it.
+    const gate = readFileSync(resolve(root, 'src/utils/poolUsesSpreads.ts'), 'utf8');
+    expect(gate).toMatch(/if \(!poolUsesSpreads\(pool\)\) return false;/);
   });
 
   it('that grep matches the string it was written to catch', () => {

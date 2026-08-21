@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 // Firebase out of the import graph entirely.
 vi.mock('./serverClock', () => ({ now: () => 0 }));
 
-import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks, isWeekLockedNow, getWeekStatus, weekDeadline, isWeekComplete } from './nflPending';
+import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks, isWeekLockedNow, getWeekStatus, weekDeadline, isWeekComplete, weekLockCaption } from './nflPending';
 import type { NFLGame } from '../types';
 
 /**
@@ -308,5 +308,37 @@ describe('a week is complete once nothing pickable is left', () => {
         // End to end through getWeekStatus, which derives `closed` itself.
         expect(getWeekStatus('NFL_PICKEM', entry, slate, 1, 0, 'PER_GAME')).toBe('complete');
         expect(getWeekStatus('NFL_PICKEM', { picks: {} }, slate, 1, 0, 'PER_GAME')).toBe('due');
+    });
+});
+
+describe('weekLockCaption — the checklist must say WHICH lock its timestamp is', () => {
+    it('a weekly pool locks the whole sheet at one moment', () => {
+        expect(weekLockCaption('WEEKLY', 'Sun, Aug 23 · 5:55 PM MDT'))
+            .toBe('locks Sun, Aug 23 · 5:55 PM MDT');
+    });
+
+    it('a per-game pool says the timestamp is only the LAST game', () => {
+        // ⚠️ The defect this guards: `weekDeadline` returns the LATEST
+        // kickoff in PER_GAME mode, so "locks Sun, Aug 23" told a member with a
+        // Friday pick that nothing shut until Sunday evening. Their Friday pick
+        // froze on Friday. (Kevin's live test, 2026-08-21.)
+        expect(weekLockCaption('PER_GAME', 'Sun, Aug 23 · 5:55 PM MDT'))
+            .toBe('each pick locks at its kickoff — last Sun, Aug 23 · 5:55 PM MDT');
+    });
+
+    it('an EXTENDED per-game week no longer claims each pick locks at its kickoff', () => {
+        // `gameLockAt` is Math.max(kickoff - buffer, override), so an extension
+        // applies to every game and every kickoff it sits past stops being that
+        // game's lock. (codex r1.)
+        expect(weekLockCaption('PER_GAME', 'Sun, Aug 23 · 5:55 PM MDT', true))
+            .toBe('each pick locks at its kickoff or the extended deadline, whichever is later — last Sun, Aug 23 · 5:55 PM MDT');
+        // A WEEKLY pool already has one deadline and the extension only moves it,
+        // so its sentence is unchanged either way.
+        expect(weekLockCaption('WEEKLY', 'x', true)).toBe(weekLockCaption('WEEKLY', 'x', false));
+    });
+
+    it('the two modes never produce the same sentence', () => {
+        const ts = 'Sun, Aug 23 · 5:55 PM MDT';
+        expect(weekLockCaption('PER_GAME', ts)).not.toBe(weekLockCaption('WEEKLY', ts));
     });
 });

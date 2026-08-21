@@ -204,3 +204,40 @@ export function weekDeadline(
     const base = reference - lockBufferMinutes * 60 * 1000;
     return typeof weekLockOverrideMs === 'number' ? Math.max(base, weekLockOverrideMs) : base;
 }
+
+/**
+ * The clause the WeekChecklist prints after "<Week> picks are/aren't in".
+ *
+ * ⚠️ THE SAME TIMESTAMP MEANS TWO DIFFERENT THINGS, and printing "locks <ts>"
+ * for both is the misleading half. `weekDeadline` returns the EARLIEST kickoff
+ * on a WEEKLY pool — one deadline, the whole sheet shuts at it — and the LATEST
+ * on a PER_GAME one, where it is only the moment the last game closes and every
+ * earlier pick froze at its own kickoff. A member reading "Preseason Week 2
+ * picks are in — locks Sun, Aug 23 · 5:55 PM" on a per-game pool believes
+ * nothing shuts until Sunday evening; their Friday pick is frozen on Friday.
+ * (Kevin's live test, 2026-08-21.)
+ *
+ * The same distinction NFLPoolDashboard's Lock Status card already draws with
+ * "Next pick locks" vs "Locks in" — one rule, two surfaces, `shared/nflLockMode`
+ * is the single definition of which mode a pool plays.
+ */
+export function weekLockCaption(
+    lockMode: 'WEEKLY' | 'PER_GAME',
+    deadlineText: string,
+    /**
+     * Whether a commissioner has extended THIS week (`settings.weekLockOverrides`).
+     *
+     * ⚠️ AN EXTENSION BREAKS THE PLAIN PER-GAME SENTENCE, which is why this
+     * argument exists. `gameLockAt` is `Math.max(kickoff - buffer, override)`, so
+     * an extension applies to EVERY game and every kickoff it sits past stops
+     * being that game's lock — those picks all close together at the extension
+     * instead. Saying "each pick locks at its kickoff" on such a week is the same
+     * class of falsehood this function was written to remove. (codex r1.)
+     */
+    hasWeekExtension = false,
+): string {
+    if (lockMode !== 'PER_GAME') return `locks ${deadlineText}`;
+    return hasWeekExtension
+        ? `each pick locks at its kickoff or the extended deadline, whichever is later — last ${deadlineText}`
+        : `each pick locks at its kickoff — last ${deadlineText}`;
+}

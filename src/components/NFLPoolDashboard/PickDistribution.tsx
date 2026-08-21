@@ -89,16 +89,21 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
                 <span>{game.awayTeam.abbreviation} vs {game.homeTeam.abbreviation}</span>
                 <span className="text-navy-700 dark:text-gold-400 flex items-center gap-1 num">
                   <Eye size={10} aria-hidden="true" />{' '}
-                  {totalPicksForGame === undefined
-                    ? '—'
-                    : `${totalPicksForGame} ${totalPicksForGame === 1 ? 'pick' : 'picks'}`}
+                  {/* `loaded` IS THE DISCRIMINATOR, not the presence of a
+                      per-game entry. Once the snapshot has arrived, a game the
+                      aggregate says nothing about genuinely has NO picks — the
+                      consensus doc is written on the first pick, so an unpicked
+                      game never has one. Testing `totalPicksForGame !== undefined`
+                      instead made every such game read "—" (and, below, "Loading
+                      picks…") for ever. */}
+                  {!loaded ? '—' : `${totalPicksForGame ?? 0} ${(totalPicksForGame ?? 0) === 1 ? 'pick' : 'picks'}`}
                 </span>
               </div>
 
               {/* Progress Bar Distribution */}
-              {!loaded || totalPicksForGame === undefined || totalPicksForGame === 0 ? (
+              {!loaded || !totalPicksForGame ? (
                 <div className="h-10 border border-dashed border-line rounded-md flex items-center justify-center font-display font-bold uppercase text-[11px] tracking-[0.08em] text-faint bg-page/50">
-                  {loaded && totalPicksForGame !== undefined ? 'No picks yet' : 'Loading picks…'}
+                  {loaded ? 'No picks yet' : 'Loading picks…'}
                 </div>
               ) : (
                 <div className="space-y-1.5">
