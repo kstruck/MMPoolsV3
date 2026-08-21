@@ -50,6 +50,16 @@ export const SuperAdminNFLSpreads: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [overriding, setOverriding] = useState<string | null>(null);
   const [freezing, setFreezing] = useState(false);
+  /**
+   * The slate the rows on screen actually came from.
+   *
+   * ⚠️ NOT the dropdowns. They move the moment you touch them, while `games`,
+   * `frozen` and `baseline` still hold the last FETCHED week — so a dropdown
+   * change with no Fetch left "Freeze this week now" pointed at one slate while
+   * the operator was looking at another's games, and the frozen counter above it
+   * describing neither. Everything that acts on the slate keys off this instead.
+   */
+  const [loadedSlate, setLoadedSlate] = useState<{ season: string; seasonType: number; week: number } | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   const fetchGames = async () => {
@@ -74,6 +84,7 @@ export const SuperAdminNFLSpreads: React.FC = () => {
 
       setGames(fetchedGames);
       setFrozen(frozenRecords);
+      setLoadedSlate({ season, seasonType, week });
       setBaseline(Object.fromEntries(fetchedGames.map(g => [g.id, g.spread?.value])));
 
       if (fetchedGames.length === 0) {
@@ -151,7 +162,11 @@ export const SuperAdminNFLSpreads: React.FC = () => {
    * identical line. It breaks predictability, which is why it takes a reason.
    */
   const handleFreezeNow = async () => {
-    const label = `${season} ${nflWeekLabel(seasonType, week)}`;
+    if (!loadedSlate || !inSync) {
+      setMessage({ type: 'error', text: 'Fetch the week you want to freeze first — the dropdowns have moved off the games on screen.' });
+      return;
+    }
+    const label = `${loadedSlate.season} ${nflWeekLabel(loadedSlate.seasonType, loadedSlate.week)}`;
     const reason = window.prompt(
       `Freeze ${label} NOW, ahead of its Tuesday 09:00 ET cutoff?
 
@@ -173,7 +188,7 @@ export const SuperAdminNFLSpreads: React.FC = () => {
     try {
       const res = await dbService.runNFLSpreadFreeze({
         dryRun: false, force: true, reason: reason.trim(),
-        slate: { season, seasonType, week },
+        slate: loadedSlate,
       });
       if (!res.enabled) {
         setMessage({ type: 'error', text: res.reason });
@@ -257,8 +272,11 @@ export const SuperAdminNFLSpreads: React.FC = () => {
    */
   const onSlate = (g: NFLGame) => {
     const r = frozen[g.id];
-    return !!r && String(r.season) === String(season) && Number(r.seasonType) === seasonType && Number(r.week) === week;
+    if (!r || !loadedSlate) return false;
+    return String(r.season) === loadedSlate.season && Number(r.seasonType) === loadedSlate.seasonType && Number(r.week) === loadedSlate.week;
   };
+  /** Do the dropdowns still describe what is on screen? */
+  const inSync = !!loadedSlate && loadedSlate.season === season && loadedSlate.seasonType === seasonType && loadedSlate.week === week;
   const frozenCount = games.filter(onSlate).length;
   /**
    * Has this slate been frozen at all?
@@ -352,11 +370,11 @@ export const SuperAdminNFLSpreads: React.FC = () => {
             freeze this week ahead of its cutoff.
           </div>
 
-          {frozenCount === 0 && (
+          {frozenCount === 0 && inSync && (
             <div className="flex justify-end mb-4">
               <button
                 onClick={handleFreezeNow}
-                disabled={freezing || games.length === 0}
+                disabled={freezing || games.length === 0 || !inSync}
                 className="text-xs font-display font-bold uppercase text-navy-800 dark:text-gold-400 hover:brightness-110 disabled:opacity-50 flex items-center gap-1"
                 title="Run the real freeze on this week now, skipping only its Tuesday 09:00 ET cutoff. Requires a reason and is audited."
               >
