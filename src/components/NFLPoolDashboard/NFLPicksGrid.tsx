@@ -295,7 +295,7 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                   const m = majorityFor(splits?.[g.id], g);
                   return (
                     <td key={g.id} className="py-3 px-3 text-center text-[12px] font-display font-bold uppercase tracking-[0.08em] num text-navy-700 dark:text-gold-400">
-                      {m === null ? dash : `${m.team} ${m.pct}%`}
+                      {m === null ? dash : m.kind === 'TIE' ? `Split ${m.pct}%` : `${m.team} ${m.pct}%`}
                     </td>
                   );
                 })}
@@ -318,6 +318,8 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
         anything is revealed; it reads <strong>?</strong> for the same reason a cell does, when the count
         is not known yet. <strong>Majority</strong> is the share of
         this pool on the leading side, from the live pool consensus — an aggregate that never names anyone.
+        An exact even split reads <strong>Split</strong>, and a <strong>—</strong> on that row means no picks
+        have been recorded for that game yet.
         {settings.confidenceMode && ' The small number beside a pick is its confidence weight.'}
       </div>
     </div>

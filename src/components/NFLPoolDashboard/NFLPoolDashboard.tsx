@@ -26,6 +26,7 @@ import { useToast } from '../ui/Toast';
 import { Button } from '../ui';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks } from '../../utils/nflPending';
+import { spreadsBlockWeek } from '../../utils/poolUsesSpreads';
 import { buildMemberStandings } from '../../utils/memberStandings';
 import { nflLockMode, weekLockAtFor, nextLockAtFor } from '@shared/nflLockMode';
 import { WeekChecklist } from './WeekChecklist';
@@ -534,6 +535,17 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 
   const isWeekLocked = weekLock.locked;
 
+  // An ATS week whose lines are not all frozen: the pick sheet refuses to
+  // render (`PickemPickEntry`) even though the time lock has not passed. The
+  // Lock Status card below has to say so, or the two halves of one screen
+  // contradict each other — "Spreads Not Yet Finalized" beside "PICKS ARE OPEN
+  // / Make changes before kickoff", which is what preseason week 3 showed on
+  // 2026-08-21. Same predicate the sheet uses, so they cannot drift.
+  const spreadsBlocked = useMemo(
+    () => spreadsBlockWeek(castPool, weeklyGames),
+    [castPool, weeklyGames],
+  );
+
   // Time remaining to earliest game this week
   const earliestGame = useMemo(() => {
     if (weeklyGames.length === 0) return null;
@@ -863,7 +875,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 
                           <div className="space-y-4">
                             <div className="flex items-center gap-3">
-                              {isWeekLocked ? (
+                              {isWeekLocked || spreadsBlocked ? (
                                 <div className="p-2.5 bg-cream rounded-md text-muted border border-line">
                                   <Lock size={18} />
                                 </div>
@@ -874,11 +886,13 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                               )}
                               <div>
                                 <h4 className="font-display font-bold uppercase text-sm text-[color:var(--text)]">
-                                  {isWeekLocked ? 'Selections Locked' : 'Picks are Open'}
+                                  {isWeekLocked ? 'Selections Locked'
+                                    : spreadsBlocked ? 'Waiting on Spreads'
+                                    : 'Picks are Open'}
                                 </h4>
                                 <p className="font-body text-[11px] text-muted">
-                                  {isWeekLocked
-                                    ? 'Host is syncing game outcomes.'
+                                  {isWeekLocked ? 'Host is syncing game outcomes.'
+                                    : spreadsBlocked ? 'The sheet opens once every line for this week is frozen.'
                                     : 'Make changes before kickoff.'}
                                 </p>
                               </div>

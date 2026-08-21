@@ -135,7 +135,15 @@ describe('the sheet consults the shared rule rather than re-deriving it', () => 
     // Server: `games.every(g => g.spread?.locked === true)` over the whole week
     // query. The client used to exempt CANCELLED, so a cancelled game with no
     // locked line rendered an editable sheet whose every submit failed.
-    expect(src).toMatch(/return !games\.every\(g => g\.spread\?\.locked\);/);
-    expect(src).not.toMatch(/games\.filter\(g => g\.status !== 'CANCELLED'\)\.every\(g => g\.spread\?\.locked\)/);
+    //
+    // The expression MOVED to `src/utils/poolUsesSpreads.ts` (`spreadsBlockWeek`)
+    // so the dashboard's Lock Status card can ask the identical question — one
+    // copy, not two saying opposite things on one screen. The sheet must consult
+    // it and must not re-derive it inline.
+    expect(src).toMatch(/spreadsBlockWeek\(castPool, games\)/);
+    expect(src).not.toMatch(/games\.every\(g => g\.spread\?\.locked\)/);
+    const gate = readFileSync(resolve(__dirname, '..', 'src/utils/poolUsesSpreads.ts'), 'utf8');
+    expect(gate).toMatch(/return !weekGames\.every\(g => g\.spread\?\.locked\);/);
+    expect(gate).not.toMatch(/filter\(g => g\.status !== 'CANCELLED'\)/);
   });
 });

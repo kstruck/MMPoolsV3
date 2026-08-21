@@ -10,7 +10,7 @@ import { poolSeasonType } from '../../utils/nflPending';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { loadDraft, saveDraft, clearDraft } from '../../utils/draftStore';
 import { pickHighlightLabel } from '../../utils/pickHighlight';
-import { poolUsesSpreads } from '../../utils/poolUsesSpreads';
+import { spreadsBlockWeek } from '../../utils/poolUsesSpreads';
 import { nflLockMode, weekLockOverrideFor, gameLockAt, dropStaleLockedPicks } from '@shared/nflLockMode';
 import { gradePick } from '../../utils/pickemResult';
 import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
@@ -480,17 +480,9 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   // ATS pick'em. Mirrors the server's own precondition, which was scoped the
   // same way in #214 and has been deployed that way since; this client copy is
   // what has been blocking straight-up pick'em on a spread-less week.
-  const spreadsBlock = useMemo(() => {
-    if (!poolUsesSpreads(castPool)) return false;
-    // EVERY game of the week, cancelled ones included — because that is what
-    // the server checks (`nflPools.ts`: `games.every(g => g.spread?.locked ===
-    // true)` over the whole week query). The client used to exempt CANCELLED,
-    // so a cancelled game with no locked line rendered an editable sheet whose
-    // every submission failed with SPREADS_NOT_LOCKED. Unreachable until the
-    // wizard could create an ATS pool; exposing the mode made it live.
-    // (codex, on that PR.)
-    return !games.every(g => g.spread?.locked);
-  }, [games, castPool]);
+  // One predicate, shared with the dashboard's Lock Status card so the two
+  // cannot say opposite things about the same week — see `spreadsBlockWeek`.
+  const spreadsBlock = useMemo(() => spreadsBlockWeek(castPool, games), [games, castPool]);
 
   if (spreadsBlock) {
     return (

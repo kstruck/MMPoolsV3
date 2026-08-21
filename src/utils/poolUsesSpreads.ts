@@ -39,3 +39,30 @@ export function poolUsesSpreads(
 ): boolean {
   return pool?.type === 'NFL_PICKEM' && pool?.settings?.pickMode === 'ATS';
 }
+
+/**
+ * Is this week's PICK SHEET held shut because its lines are not frozen yet?
+ *
+ * Mirrors the server precondition (`nflPools.ts`: `games.every(g =>
+ * g.spread?.locked === true)` over the whole week query) and — since #489 —
+ * reads the line the client already resolved as `frozen ?? working` in
+ * `dbService.subscribeToNFLGames`, so it asks about the canonical ATS line and
+ * not the working one.
+ *
+ * EVERY game of the week counts, CANCELLED ones included, because that is what
+ * the server counts. Exempting them rendered an editable sheet whose every
+ * submission failed with `SPREADS_NOT_LOCKED`.
+ *
+ * ⚠️ TWO SURFACES ASK THIS, WHICH IS WHY IT IS A FUNCTION. The pick sheet uses
+ * it to refuse to render; the dashboard's Lock Status card uses it to stop
+ * saying "Picks are Open" beside a sheet that is shut. Measured live on
+ * 2026-08-21 — preseason week 3 showed "Spreads Not Yet Finalized" and "PICKS
+ * ARE OPEN / Make changes before kickoff" on the same screen.
+ */
+export function spreadsBlockWeek(
+  pool: { type?: string; settings?: { pickMode?: string } } | null | undefined,
+  weekGames: readonly { spread?: { locked?: boolean } }[],
+): boolean {
+  if (!poolUsesSpreads(pool)) return false;
+  return !weekGames.every(g => g.spread?.locked);
+}

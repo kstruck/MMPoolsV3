@@ -119,23 +119,38 @@ export interface ConsensusSplit {
  * revealed. Kevin's 2026-08-11 ruling (PLAN-COMMISSIONER-BLIND-PICKS Q4): the
  * live consensus is visible at all times and is never hidden.
  *
- * `null` means "no majority team", which covers two cases:
- *   - nobody has picked / the aggregate has not been written  → `total` absent or 0
- *   - the pool is split exactly down the middle               → equal percentages
+ * Three outcomes, and they are three because collapsing any two of them is a
+ * lie in the same way the cell states above are:
  *
- * An even split is reported as such rather than handed to whichever side the
- * comparison happens to favour; `>` alone would print the home team as the
- * majority of a 50/50 pool.
+ *   null    nothing is recorded for this game    → the grid prints "—"
+ *   TIE     the pool is split exactly evenly     → the grid prints "Split 50%"
+ *   LEAD    one side leads                       → the grid prints "CAR 75%"
+ *
+ * 🛑 A TIE USED TO RETURN `null` AND SO RENDERED AS "—", which is the SAME
+ * GLYPH the legend spends on "the pick IS revealed and that player made none".
+ * One symbol, two meanings, in one table. Measured live on 2026-08-21: a
+ * four-player pool showed a blank Majority for CAR/JAX, BUF/CLE, NYG/MIA and
+ * PHI/NE, all of them exact 2–2 splits, and it reads as the row failing to
+ * load. An even split is a real, interesting answer about the pool and it is
+ * now said out loud.
+ *
+ * An even split is still never handed to whichever side the comparison happens
+ * to favour; `>` alone would print the home team as the majority of a 50/50
+ * pool.
  */
+export type MajorityCell =
+    | { kind: 'LEAD'; team: string; pct: number }
+    | { kind: 'TIE'; pct: number };
+
 export function majorityFor(
     split: ConsensusSplit | undefined,
     game: NFLGame,
-): { team: string; pct: number } | null {
+): MajorityCell | null {
     if (!split || typeof split.total !== 'number' || split.total <= 0) return null;
     const { awayPct, homePct } = split;
     if (typeof awayPct !== 'number' || typeof homePct !== 'number') return null;
-    if (awayPct === homePct) return null;
+    if (awayPct === homePct) return { kind: 'TIE', pct: awayPct };
     return awayPct > homePct
-        ? { team: game.awayTeam.abbreviation, pct: awayPct }
-        : { team: game.homeTeam.abbreviation, pct: homePct };
+        ? { kind: 'LEAD', team: game.awayTeam.abbreviation, pct: awayPct }
+        : { kind: 'LEAD', team: game.homeTeam.abbreviation, pct: homePct };
 }

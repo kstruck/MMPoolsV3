@@ -106,12 +106,17 @@ describe('picksGridCell — the reveal boundary is the SERVER\'s allowlist', () 
 
 describe('majorityFor', () => {
     it('names the side with more of the pool, either way round', () => {
-        expect(majorityFor({ awayPct: 70, homePct: 30, total: 10 }, G1)).toEqual({ team: 'CAR', pct: 70 });
-        expect(majorityFor({ awayPct: 30, homePct: 70, total: 10 }, G1)).toEqual({ team: 'ARI', pct: 70 });
+        expect(majorityFor({ awayPct: 70, homePct: 30, total: 10 }, G1)).toEqual({ kind: 'LEAD', team: 'CAR', pct: 70 });
+        expect(majorityFor({ awayPct: 30, homePct: 70, total: 10 }, G1)).toEqual({ kind: 'LEAD', team: 'ARI', pct: 70 });
     });
 
-    it('an exactly even split has NO majority — it is not handed to the home team', () => {
-        expect(majorityFor({ awayPct: 50, homePct: 50, total: 2 }, G1)).toBeNull();
+    it('an exactly even split is a TIE, not a null — it is not handed to the home team', () => {
+        // 🛑 REGRESSION GUARD. A tie used to return `null`, and the grid renders
+        // `null` as "—" — the same glyph its legend spends on "revealed, and
+        // that player picked nothing". A 2-2 pool then read as a row that had
+        // failed to load (measured live 2026-08-21 on four games of one week).
+        expect(majorityFor({ awayPct: 50, homePct: 50, total: 2 }, G1)).toEqual({ kind: 'TIE', pct: 50 });
+        expect(majorityFor({ awayPct: 50, homePct: 50, total: 2 }, G1)).not.toBeNull();
     });
 
     it('an absent, empty or malformed aggregate reports no majority rather than 0%', () => {
