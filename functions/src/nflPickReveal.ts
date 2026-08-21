@@ -42,7 +42,8 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
 import { assertCallerRole } from "./lib/assertRole";
 import { getPoolPicksSchema } from "./schemas/pickReveal";
-import { weekRevealFor, fullReveal, weekPickCount, type WeekReveal } from "./lib/pickReveal";
+import { weekRevealFor, fullReveal, weekPickCount, pickProgressFor, type WeekReveal, type PickProgress } from "./lib/pickReveal";
+import { rosterSummaryRef } from "./lib/rosterSummary";
 // The SERVER-STAMPED half of the membership evidence. Deliberately NOT
 // `isProvableMember`, which also accepts the manager-writable participantIds
 // array — see `assertPickReader`'s header for why that distinction is the
@@ -74,6 +75,22 @@ export interface PoolPicksResponse {
      * (`buildStandingsRows`), which is why it has to come through this door.
      */
     tiebreakers: Record<string, number>;
+    /**
+     * The pool-wide completion fraction — "12 of 16 players have their picks in".
+     * `PLAN-MEMBER-PICK-PROGRESS`.
+     *
+     * 🛑 THE ONE FIELD HERE THAT IS THE SAME FOR EVERY PRINCIPAL. `counts`,
+     * `picks`, `confidence` and `tiebreakers` are all narrowed by who is asking;
+     * this is not, deliberately, because it names nobody — it counts finished
+     * sheets rather than stating a fact about any member. A gate on it would be a
+     * SECOND definition of the reveal boundary, which is what
+     * PLAN-COMMISSIONER-BLIND-PICKS exists to prevent. An emulator test asserts a
+     * participant and a commissioner receive identical values.
+     *
+     * `{complete: 0, total: 0}` means "we cannot answer" — no schema-2
+     * `rosterSummary`, or a week with no games. The client renders nothing.
+     */
+    progress: PickProgress;
 }
 
 /**
@@ -281,9 +298,34 @@ export const getPoolPicks = validated(
         }
         if (reveal.weekRevealed) fields.push(new FieldPath('weeklyTiebreakers', String(week)));
 
-        const entriesSnap = await db.collection('pools').doc(poolId).collection('entries')
-            .select(...(fields as string[]))
-            .get();
+        // The roster projection rides alongside the entries scan: ONE document,
+        // and it is the only source of `playerUids` (D7). Not `participantIds`,
+        // which a manager could historically forge into; not the `members`
+        // subcollection, which is the O(roster) read this callable was made to
+        // stop doing on a path every member polls.
+        const [entriesSnap, summarySnap] = await Promise.all([
+            db.collection('pools').doc(poolId).collection('entries')
+                .select(...(fields as string[]))
+                .get(),
+            rosterSummaryRef(db, poolId).get(),
+        ]);
+
+        // ⚠️ COMPUTED OFF THE RAW SNAPSHOT, OUTSIDE THE LOOP BELOW, ON PURPOSE.
+        // That loop `continue`s past a departed member's entry FOR PARTICIPANTS
+        // ONLY, so an accumulator inside it would hand a participant and a
+        // commissioner different numbers — the exact contradiction of the
+        // "identical for every principal" claim above. `playerUids` already
+        // excludes departed members for every principal, so this needs none of it.
+        const progress = pickProgressFor({
+            playerUids: (summarySnap.data() as { playerUids?: string[] } | undefined)?.playerUids,
+            poolType: pool.type,
+            week,
+            weekGameIds,
+            entries: entriesSnap.docs.map(d => {
+                const e = d.data() as { ownerUid?: string; picks?: Record<string, unknown> };
+                return { ownerUid: e.ownerUid || d.id, picks: e.picks };
+            }),
+        });
 
         const counts: Record<string, number> = {};
         const picks: Record<string, Record<string, string>> = {};
@@ -350,6 +392,7 @@ export const getPoolPicks = validated(
             picks,
             confidence,
             tiebreakers,
+            progress,
         };
     },
 );

@@ -88,6 +88,19 @@ export const NFLWeeklyPicksGrid: React.FC<NFLWeeklyPicksGridProps> = ({
 
   const dash = <span className="text-faint">—</span>;
 
+  // PLAN-MEMBER-PICK-PROGRESS — the pool-wide fraction, for the SELECTED week.
+  //
+  // ⚠️ THIS GRID DRAWS MANY WEEKS AT ONCE AND THE CHIP DESCRIBES EXACTLY ONE.
+  // Every other number in the header is season-wide, so the label has to name the
+  // week or it reads as "12 of 16 have finished the season". Survivor and Margin
+  // ask one pick per week, so `pickProgressFor` needs only that week's slate —
+  // the fraction is well defined per week and meaningless across them.
+  //
+  // 🛑 `total === 0` MEANS THE SERVER COULD NOT ANSWER (no schema-2
+  // `rosterSummary`, or a week with no games) and the chip must disappear rather
+  // than render "0 of 0". Same rule as `NFLPicksGrid`.
+  const progress = revealsByWeek[week]?.week === week ? revealsByWeek[week]?.progress : undefined;
+
   return (
     <div className="bg-card border border-line rounded-xl overflow-hidden shadow-card">
       <div className="p-5 border-b border-line flex flex-wrap justify-between items-center gap-3 bg-surface">
@@ -97,6 +110,14 @@ export const NFLWeeklyPicksGrid: React.FC<NFLWeeklyPicksGridProps> = ({
         </h3>
         <div className="flex items-center gap-2">
           {isMargin && <GridSortToggle value={sort} onChange={setSort} scoreLabel="Week Margin" />}
+          {progress && progress.total > 0 && (
+            <span
+              className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-navy-700 dark:text-gold-400 bg-page border border-line px-3 py-1 rounded-full num"
+              title="How many players in this pool have made their pick for the selected week"
+            >
+              {nflWeekLabel(seasonType, week)}: {progress.complete} of {progress.total} Players In
+            </span>
+          )}
           <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted bg-page border border-line px-3 py-1 rounded-full num">
             {entries.length} Entries
           </span>

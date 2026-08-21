@@ -122,6 +122,9 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
   // (functions/src/lib/pickReveal.ts). Unknown until the reveal lands, and the
   // caption then says nothing about timing rather than guessing.
   const revealMode = wk?.mode;
+  // Same week guard as everything else off the reveal: last week's fraction on
+  // this week's slate would be a confident wrong answer.
+  const progress = wk?.progress;
 
   // ROW IDENTITY IS THE ENTRY (`row.id`), NOT THE PLAYER. `ownerUid` is for
   // exactly two things — "is this me" and the profile link. Every lookup into
@@ -158,6 +161,27 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
         </h3>
         <div className="flex items-center gap-2">
           <GridSortToggle value={sort} onChange={setSort} scoreLabel="Week Pts" />
+          {/* PLAN-MEMBER-PICK-PROGRESS — the pool-wide fraction, from the server.
+              It names nobody, so it is shown to every principal.
+
+              🛑 `total === 0` MEANS "THE SERVER COULD NOT ANSWER" AND THE CHIP
+              MUST DISAPPEAR, not render "0 of 0 in". Two ways to reach it: the
+              pool's `rosterSummary` predates schema 2, or the week has no games.
+              Guessing a denominator from anything else is what fifteen rounds of
+              review took out of the design.
+
+              ⚠️ "PLAYERS", not "entries", and the word is load-bearing. The chip
+              beside it counts uid-deduplicated ROWS today; once PLAN-MULTI-ENTRY
+              T4 makes rows per-entry the two numbers legitimately differ, and only
+              the labels keep them from reading as a contradiction. */}
+          {progress && progress.total > 0 && (
+            <span
+              className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-navy-700 dark:text-gold-400 bg-page border border-line px-3 py-1 rounded-full num"
+              title="How many players in this pool have saved a pick for every game this week"
+            >
+              {progress.complete} of {progress.total} Players In
+            </span>
+          )}
           <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted bg-page border border-line px-3 py-1 rounded-full num">
             {entries.length} Entries
           </span>
@@ -321,6 +345,12 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
         this pool on the leading side, from the live pool consensus — an aggregate that never names anyone.
         An exact even split reads <strong>Split</strong>, and a <strong>—</strong> on that row means no picks
         have been recorded for that game yet.
+        {progress && progress.total > 0 && (
+          <> <strong>{progress.complete} of {progress.total} Players In</strong>, in the header, counts how many
+          players have saved a pick for every game this week — a total, never a name, so everyone sees the
+          same number. A player is counted only once however many entries they hold, and only when every one
+          of them is complete.</>
+        )}
         {settings.confidenceMode && ' The small number beside a pick is its confidence weight.'}
       </div>
     </div>

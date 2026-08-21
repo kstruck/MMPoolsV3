@@ -5,7 +5,11 @@
 // the roster + payment truth for every pool type, separate from the playable Entry.
 // This file is framework-free (no firebase-admin) so both client and functions import it.
 
-export const ROSTER_SCHEMA_VERSION = 1;
+/**
+ * 1 → 2 on 2026-08-21: `RosterSummary.playerUids` (PLAN-MEMBER-PICK-PROGRESS D7).
+ * Purely additive — no reader is required to consume it and no backfill is run.
+ */
+export const ROSTER_SCHEMA_VERSION = 2;
 
 export interface MemberRecord {
   uid: string;
@@ -147,6 +151,23 @@ export interface RosterSummary {
   duesExpected: number;
   duesCollected: number;
   guestUnclaimedDues: number;    // dues from unclaimed squares (no Member Record)
+  /**
+   * The pool's ELIGIBLE PLAYERS — canonical member uids, minus a host who is not
+   * playing. Schema 2. `PLAN-MEMBER-PICK-PROGRESS` D7.
+   *
+   * 🛑 THIS IS THE DENOMINATOR OF "12 of 16 players have their picks in", AND
+   * IT IS NOT `memberCount`. Adversarial review rewrote the predicate that builds
+   * it five times, and every wrong version reported that everyone was done when
+   * they were not. Before changing it, read `eligiblePlayerUids` below and
+   * `PLAN-MEMBER-PICK-PROGRESS-REVIEW-LOG.md`.
+   *
+   * ABSENT on a schema-1 document, and `getPoolPicks` treats absent as "we cannot
+   * answer" — it reports `{complete: 0, total: 0}` and the client shows nothing,
+   * rather than guessing from a source that is incomplete or forgeable. No
+   * backfill: `recomputeRosterSummary` runs on every membership change, so a live
+   * pool gains the field on its next join, leave or payment edit.
+   */
+  playerUids?: string[];
   rosterSchemaVersion: number;
   updatedAt?: number;
 }
@@ -286,11 +307,62 @@ export function isMemberPaid(m: MemberRecord, poolType: string): boolean {
   return m.paidStatus === 'PAID';
 }
 
+/**
+ * The pool's ELIGIBLE PLAYERS: whose completed picks the pool-wide progress
+ * fraction counts, and out of how many. `PLAN-MEMBER-PICK-PROGRESS` D7. Pure.
+ *
+ * 🛑 FIVE ROUNDS OF ADVERSARIAL REVIEW REWROTE THIS PREDICATE, AND EVERY WRONG
+ * VERSION FAILED THE SAME WAY — by reporting that everyone was done when somebody
+ * was not. All five are recorded here so none can be re-derived from its own
+ * plausibility:
+ *
+ *   ❌ the owners of entry documents  — misses a player who joined and has never
+ *      picked, so a pool where four people have not started reads "12 of 12".
+ *   ❌ `pool.participantIds`          — a manager could historically write
+ *      arbitrary uids into it and the rules fix evicted nobody.
+ *   ❌ `members.length` alone         — gives no uid set, so a DEPARTED member's
+ *      complete entry silently covers for a current member's missing one.
+ *   ❌ `hasPlayableEntry` alone       — the latch is `false` for a non-playing
+ *      host AND for a member who joined and has not picked yet. Filtering on it
+ *      drops the second population, which is the first failure again.
+ *   ❌ every commissioner            — `coManagers` are canonical members PROMOTED
+ *      to co-commissioner, and `managerUid` can be a distinct principal who
+ *      plays. Excluding them drops real players.
+ *
+ * What survives: **canonical records only, minus the HOST record while its latch
+ * is explicitly false.** Only the pool's own creator is put on a roster for a
+ * reason other than playing (`nflPools.ts` seeds them `hasPlayableEntry: false`
+ * — "Hosting is not playing"), so it is the only uid this may drop — and only
+ * while that latch says so. A host who does play flips the latch on their first
+ * submission and rejoins by the normal route.
+ *
+ * `=== false`, never falsy: an UNDEFINED latch on a legacy record is not evidence
+ * of anything, and that member stays in. Same unknown-is-not-false discipline
+ * `lib/memberRecord.ts` keeps for the field itself.
+ */
+export function eligiblePlayerUids(
+  members: MemberRecord[],
+  /**
+   * The pool's creator: `ownerId || createdByUid || managerUid`, the repo's
+   * established owner precedence (`billing.ts:401`). Both ends of that chain are
+   * load-bearing — see `lib/rosterSummary.ts` for why neither `managerUid` first
+   * nor `createdByUid` omitted is safe.
+   */
+  hostUid: string | undefined,
+): string[] {
+  return members
+    .filter(isCanonicalMemberRecord)
+    .filter((m) => !(!!hostUid && m.uid === hostUid && m.hasPlayableEntry === false))
+    .map((m) => m.uid);
+}
+
 /** Fold a pool's Member Records into its Roster Summary. Pure. */
 export function computeRosterSummary(
   members: MemberRecord[],
   inputs: DuesInputs,
   guestUnclaimedDues = 0,
+  /** `ownerId || createdByUid || managerUid` — drives `playerUids` (D7). */
+  hostUid?: string,
 ): RosterSummary {
   let paidCount = 0;
   let duesExpected = 0;
@@ -308,6 +380,7 @@ export function computeRosterSummary(
     duesExpected,
     duesCollected,
     guestUnclaimedDues,
+    playerUids: eligiblePlayerUids(members, hostUid),
     rosterSchemaVersion: ROSTER_SCHEMA_VERSION,
   };
 }

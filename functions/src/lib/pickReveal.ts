@@ -151,3 +151,80 @@ export function weekPickCount(
   // Survivor/Margin: one pick per week, keyed by the week number.
   return p[String(week)] ? 1 : 0;
 }
+
+/** The pool-wide completion fraction. An aggregate: no name, no partial progress. */
+export interface PickProgress {
+  /** Eligible players whose week is COMPLETE. */
+  complete: number;
+  /** Eligible players in the pool. `0` means "we cannot answer" — see below. */
+  total: number;
+}
+
+/**
+ * "12 of 16 players have their picks in" — `PLAN-MEMBER-PICK-PROGRESS`.
+ *
+ * Ungated: `getPoolPicks` returns this identically to a participant, a
+ * commissioner and a SUPER_ADMIN. It is the aggregate half of the question K1
+ * closed, and `weekPickCount`'s own header above drew the line — *"'picked 3 of
+ * 16' is a different question from 'has picked at all', and only the second is
+ * safe to tell the whole pool."* Per-member counts are still commissioner-only.
+ *
+ * 🛑 BOTH HALVES OF THE FRACTION COME FROM ONE SET, `playerUids`, AND THAT IS THE
+ * WHOLE DESIGN. Fifteen rounds of adversarial review kept finding versions where
+ * the numerator and the denominator described different populations — a departed
+ * member's complete entry covering for a current member's missing one, a player
+ * who joined and never picked missing from both halves, a non-playing host stuck
+ * outside the numerator for ever. Every one of them reported that everyone was
+ * done when somebody was not. There is deliberately **no clamp**: with one set
+ * defining both halves, `complete > total` is unreachable.
+ *
+ * `shared/memberRecord.ts` `eligiblePlayerUids` builds that set and carries the
+ * five predicates that were tried and rejected. Read it before changing this.
+ *
+ * ⚠️ TWO WAYS THIS ANSWERS `{0, 0}`, AND BOTH MEAN "DO NOT SHOW A NUMBER":
+ *
+ *   - **No `playerUids`** — the pool's `rosterSummary/current` is missing or
+ *     predates schema 2. Falling back to `pool.participantIds` would count uids a
+ *     manager could historically have forged; falling back to the entry owners
+ *     would hide every player who has not started. A number we cannot stand
+ *     behind is not shown, and `recomputeRosterSummary` heals the pool on its
+ *     next membership change.
+ *   - **An empty slate** — `need` would be 0, every entry would satisfy it, and
+ *     the pool would read "16 of 16 in" on a week with no games. Short-circuited
+ *     BEFORE `need` is computed, never left to the predicate.
+ *
+ * A player who owns several entries counts ONCE and is complete only when EVERY
+ * entry they own is complete — they owe all of them. A player with no entry at
+ * all counts toward `total` and never toward `complete`, which is the entire
+ * point of taking the denominator from the roster rather than from the entries.
+ */
+export function pickProgressFor(args: {
+  /** `rosterSummary/current.playerUids`. Absent ⇒ `{0, 0}`. */
+  playerUids: readonly string[] | undefined;
+  poolType: string | undefined;
+  week: number;
+  weekGameIds: readonly string[];
+  /** Every entry document in the pool — NOT filtered by principal. */
+  entries: readonly { ownerUid: string; picks?: Record<string, unknown> }[];
+}): PickProgress {
+  const { playerUids, poolType, week, weekGameIds, entries } = args;
+  if (!playerUids || playerUids.length === 0) return { complete: 0, total: 0 };
+  if (weekGameIds.length === 0) return { complete: 0, total: 0 };
+
+  const roster = new Set(playerUids);
+  const need = poolType === 'NFL_PICKEM' ? weekGameIds.length : 1;
+
+  // uid → is EVERY entry this player owns complete? Absent = they own none, which
+  // is not the same as owning an empty one, and neither is complete.
+  const allDone = new Map<string, boolean>();
+  for (const e of entries) {
+    if (!roster.has(e.ownerUid)) continue;
+    const done = weekPickCount(poolType, e.picks, week, weekGameIds as string[]) >= need;
+    const prev = allDone.get(e.ownerUid);
+    allDone.set(e.ownerUid, prev === undefined ? done : prev && done);
+  }
+
+  let complete = 0;
+  for (const uid of roster) if (allDone.get(uid) === true) complete++;
+  return { complete, total: roster.size };
+}
