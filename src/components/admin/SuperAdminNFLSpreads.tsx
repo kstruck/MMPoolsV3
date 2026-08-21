@@ -162,6 +162,21 @@ export const SuperAdminNFLSpreads: React.FC = () => {
    * identical line. It breaks predictability, which is why it takes a reason.
    */
   const handleFreezeNow = async () => {
+    // ⚠️ UNSAVED EDITS ARE NOT IN FIRESTORE, AND THE FREEZE READS FIRESTORE
+    // (codex r4). The documented workflow is "type the missing numbers, then run
+    // the freeze" — so typing and clicking straight through is the EXPECTED
+    // mistake, not an exotic one. The callable would take the OLD stored value as
+    // its fallback, or refuse the game for having none, and a freeze is
+    // once-per-slate: the wrong number would then only come out through the
+    // audited override.
+    const unsaved = dirtyGames();
+    if (unsaved.length > 0) {
+      setMessage({
+        type: 'error',
+        text: `Save first — ${unsaved.length} working line(s) are only typed in, not stored. The freeze reads the database, so it would commit the old values.`,
+      });
+      return;
+    }
     if (!loadedSlate || !inSync) {
       setMessage({ type: 'error', text: 'Fetch the week you want to freeze first — the dropdowns have moved off the games on screen.' });
       return;
@@ -374,12 +389,14 @@ export const SuperAdminNFLSpreads: React.FC = () => {
             <div className="flex justify-end mb-4">
               <button
                 onClick={handleFreezeNow}
-                disabled={freezing || games.length === 0 || !inSync}
+                disabled={freezing || games.length === 0 || !inSync || dirtyGames().length > 0}
                 className="text-xs font-display font-bold uppercase text-navy-800 dark:text-gold-400 hover:brightness-110 disabled:opacity-50 flex items-center gap-1"
-                title="Run the real freeze on this week now, skipping only its Tuesday 09:00 ET cutoff. Requires a reason and is audited."
+                title={dirtyGames().length > 0
+                  ? 'Save your working lines first — the freeze reads the database, not what is typed on screen.'
+                  : 'Run the real freeze on this week now, skipping only its Tuesday 09:00 ET cutoff. Requires a reason and is audited.'}
               >
                 {freezing ? <RefreshCw size={14} className="animate-spin" /> : <Snowflake size={14} />}
-                Freeze this week now
+                {dirtyGames().length > 0 ? 'Save before freezing' : 'Freeze this week now'}
               </button>
             </div>
           )}
