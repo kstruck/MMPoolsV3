@@ -627,50 +627,249 @@ saying everyone is done when they are not.
 
 ---
 
-## Resolution status
+## Round 11 — codex — FIRST OF THE FIVE KEVIN AUTHORISED
 
-**CONVERGED ON SEVERITY, NOT ON COUNT. STOPPED AT THE CAP.**
+Kevin, 2026-08-21, on the over-cap question: *"Q5 - Go for additional (up to
+15)."* Rounds 11–15 are authorised; the reason is the resolution status below.
 
-**10 rounds, 18 findings, 18 accepted, 0 rejected, 0 disputes.**
+**VERDICT: REVISE.** One finding, **accepted**. It struck a claim added in the
+same edit that recorded his sign-off.
 
-| Round | Findings | Severity |
-|---|---|---|
-| 1 | 3 | P2 ×3 |
-| 2 | 2 | **P1** ×1, P2 ×1 |
-| 3 | 2 | **P1** ×1, P2 ×1 |
-| 4 | 2 | P2 ×2 |
-| 5 | 2 | P2 ×2 |
-| 6 | 2 | **P1** ×1, P2 ×1 |
-| 7 | 2 | P2 ×2 |
-| 8 | 1 | **P1** ×1 |
-| 9 | 1 | P2 ×1 |
-| 10 | 2 | **P1** ×1, P2 ×1 |
+### 1. (P2) Do not infer production cardinality from a hidden UI
+> *"`MULTI_ENTRY_WIZARD_ENABLED` only hides the settings controls; it does not
+> prevent an authorized commissioner from calling `updatePoolSettings` with
+> `maxEntriesPerUser > 1`, after which the shipped `submitNFLPicks` callable
+> accepts `entryIndex: 2`. Thus pools can already contain multiple entries through
+> the supported server APIs, making the asserted one-entry invariant (and the
+> plan's 'cannot disagree today' premise) unsafe unless production data is checked
+> or those callables are additionally gated."*
 
-The count never fell below one per round, so this is a **cap stop, not a clean
-stop**, and CLAUDE.md §2c is explicit that the honest label matters more than the
-tidy one.
+**ACCEPTED.** The plan had just written *"every pool in production is one entry
+per player right now"* on the strength of a `false` constant that hides two form
+controls. **A hidden button is not a gate.** T2 (#450) shipped the server half
+deliberately: `updatePoolSettings` permits a raise of `maxEntriesPerUser` and
+`submitNFLPicks` honours `entryIndex`, so the shape is reachable through the
+supported callables by anyone who can call them.
 
-🛑 **ROUND 10'S TWO FIXES ARE UNREVIEWED.** They were absorbed after the tenth
-round and no eleventh round has run. Per CLAUDE.md §2c the cap is **10 per
-artifact and going past it needs Kevin's say-so with a reason**, so the reason is
-recorded here for him to rule on: *the last two findings narrowed the same
-predicate that four earlier findings narrowed, and this log's own evidence is
-that new code written to close a finding on THIS predicate has been wrong five
-times out of five.* **Recommend one more round on the plan before any code is
-written.** Kevin decides.
+It is the same error this log has now recorded five times in different clothes —
+**reasoning from a label, a name or a UI instead of from the code that enforces
+the thing.**
 
-**What the ten rounds actually bought,** since the count alone reads as failure:
+Resolution: the claim is struck and replaced with what is actually true — the
+control is hidden, the server is not gated, and production cardinality is
+**unmeasured**. Nothing in the design depended on it: `playerUids` is a set of
+owners and a player is complete only when every entry they own is complete, which
+is correct for one entry and for three. The only claim genuinely scoped to the
+single-entry invariant is T2's "can never disagree with the commissioner's
+column", and T2 already carries that scope in its own words (codex r4).
 
-- Two design reversals that would otherwise have shipped — the denominator's unit
-  (r1) and its source (r3, r5, r6).
-- Five separate corrections to one four-line predicate (r3, r8, r9, r10 ×2),
-  every wrong version of which produces a **falsely reassuring** chip.
-- One vacuous test caught before it was written (r7) — a `{0,0} === {0,0}`
-  equality assertion that would have passed green against a feature doing
-  nothing.
-- Four instances of a correction written down BESIDE its error instead of over it
-  (r2, r3, r5, r7), which is a documentation failure mode this repo now has
-  evidence for.
+**Author's note.** The finding lands on a sentence written to ANSWER Kevin's
+multi-entry question, which is the sentence most likely to be believed. Worth the
+round on its own.
 
-**Next gate: Kevin's sign-off** on Q1–Q4 in the plan, plus his ruling on the
-over-cap round above. No code exists and none should be written before that.
+---
+
+## Round 12 — codex
+
+**VERDICT: REVISE.** One finding, **accepted**, and it is round 11's finding
+surviving round 11's fix — for the sixth time in this log, a correction applied
+where the reviewer pointed instead of everywhere the claim appears.
+
+### 1. (P2) Qualify the claim that multi-entry cannot be switched on
+> *"This directly contradicts the server-path explanation below it: a pool
+> owner/manager can call `updatePoolSettings` to raise `maxEntriesPerUser`, and
+> members can then submit `entryIndex: 2`. The UI toggle cannot be enabled today,
+> but multi-entry itself can already be enabled through supported callables;
+> leaving the unqualified statement risks repeating the production-state inference
+> this edit is intended to correct."*
+
+**ACCEPTED.** Round 11 struck *"every pool in production is one entry per
+player"* and wrote a full box explaining that the flag hides a control rather
+than gating a server — and left the section's own **bold heading** reading
+*"Has it been done: NO, and it cannot be switched on today."* The heading is the
+line a reader takes away; the box four paragraphs down is the line they do not
+reach.
+
+This round I again grepped for every phrasing of the claim rather than editing the
+cited line, and found a third instance in T1's bullet ("today an NFL entry id IS
+the uid, so this collapses to one entry per player") — fixed in the same pass,
+uncited.
+
+The heading now says what is true: **the server half is shipped, the member half
+is not, and no UI offers it** — with the false clause named as false so it cannot
+be reinstated by someone who remembers the old sentence.
+
+**Author's note.** Six rounds of this log have found a superseded claim standing
+beside its correction, and rounds 11 and 12 are the same claim twice. Grepping for
+the claim is now the documented response to any finding of this class, and it is
+what found the third instance here.
+
+---
+
+## Round 13 — codex
+
+**VERDICT: REVISE.** One finding, **accepted**. Third round running on the same
+paragraph, and each one has been correct.
+
+### 1. (P2) Correct the manager-settings UI availability claim
+> *"For a pool already raised through `updatePoolSettings`, the manager UI does
+> offer this control: `NFLManagerView` renders the 'Entries per Player' input
+> whenever `currentMaxEntries > 1`, even while `MULTI_ENTRY_WIZARD_ENABLED` is
+> false. The plan's statement that both the wizard and manager form hide it (and
+> the preceding 'no UI offers it' conclusion) is therefore inaccurate for the exact
+> supported-callable scenario it describes."*
+
+**ACCEPTED.** The two surfaces gate differently and the plan had flattened them
+into one sentence:
+
+```tsx
+MultiEntryFields.tsx:29   if (!MULTI_ENTRY_WIZARD_ENABLED) return null;
+NFLManagerView.tsx:1070   {(MULTI_ENTRY_WIZARD_ENABLED || currentMaxEntries > 1) && (
+```
+
+The wizard hides it unconditionally. **The manager form re-opens it for any pool
+whose max is already above 1** — precisely the pool the round-11 and round-12
+findings were about. So the flag keeps a door shut on new pools and does not lock
+it: raise a pool once through the callable and its commissioner gets the control
+back in the UI, with the raise-only gate letting them go further.
+
+The conclusion is narrowed to what is true — **no UI offers it on a NEW pool** —
+and the two gates are quoted rather than paraphrased, because paraphrasing them
+into one clause is what produced three rounds of findings.
+
+**Author's note.** Rounds 11, 12 and 13 are one paragraph, three wrong claims,
+each written while fixing the previous one: *"production is single-entry"*, then
+*"it cannot be switched on"*, then *"both surfaces hide it"*. Every one came from
+reading a flag's NAME and not its call sites. The grep habit adopted in round 12
+catches restatements of a claim; it does not catch a NEW wrong claim invented in
+the fix. What would have: reading the two call sites before writing about them,
+which is the whole thesis of this log.
+
+---
+
+## Round 14 — codex
+
+**VERDICT: REVISE.** Two findings, **both accepted**.
+
+### 1. (P2) Update the stale review-resolution status
+> *"The newly authorized rounds 11–15 and completed rounds 11–13 leave the
+> terminal status below asserting that the process stopped at round 10, round 10's
+> fixes are unreviewed, and Kevin's sign-off is still the next gate. This gives
+> implementers contradictory release guidance; update that resolution section and
+> its counts/table to reflect the authorization and completed rounds."*
+
+**ACCEPTED, and it is embarrassing in the right way.** The resolution status still
+read *"STOPPED AT THE CAP … round 10's two fixes are UNREVIEWED … Next gate:
+Kevin's sign-off"* while four further rounds had run, Kevin had answered all five
+questions, and round 10's fixes had been reviewed three times over. **Every clause
+of the document's release guidance was false.** It had also lost its own `##`
+heading somewhere in the round-11/12/13 edits and was hanging off the end of round
+13 — which is how it went unread while being edited around.
+
+Same defect class as rounds 2, 3, 5, 7, 11, 12 and 13 — a correction made in one
+place and not carried to the place that summarises it — landing this time on the
+section whose only job is to say where the process stands.
+
+### 2. (P2) Qualify the UI-reachability claim for multi-entry pools
+> *"This says every UI-reachable pool is not configured for multi-entry, but the
+> immediately preceding explanation establishes that once a pool is raised through
+> the callable, its commissioner can access the manager UI and continue raising its
+> entry limit. Restrict this to newly created pools/the wizard, otherwise the Q1
+> decision text reintroduces the same false availability claim that round 13 just
+> corrected."*
+
+**ACCEPTED. Fourth instance of one claim, fourth consecutive round.** Round 13
+corrected the box; the Q1 bullet three paragraphs below it still said *"every pool
+reachable through the UI"*. It is now scoped to what the WIZARD can create and
+**points at the box instead of restating it** — restating is what has gone wrong
+all four times.
+
+---
+
+---
+
+## Round 15 — codex — THE LAST AUTHORISED ROUND
+
+**VERDICT: REVISE.** One finding, **accepted**.
+
+### 1. (P2) Do not mark the plan signed before round 15 completes
+> *"Round 15 is explicitly still required before implementation, and the review
+> log says the artifact is signed only if that round is clean. Marking the
+> implementation status as signed now contradicts that gate and can cause readers
+> to treat the plan as build-ready before its final authorized review."*
+
+**ACCEPTED, and the underlying mistake is a conflation worth naming.** The plan's
+header said **"SIGNED 2026-08-21"** on the strength of Kevin answering Q1–Q5 —
+but "signed" in this repo's gate means BOTH halves of Rule 3: the user's sign-off
+**and** the adversarial review being spent. One word was doing two jobs, and it
+read as build-ready while a required round was outstanding.
+
+The header now states the two gates separately, each with its own status, so
+neither can be inferred from the other. **Kevin's sign-off: given. Review: 15
+rounds, the full authorisation, spent.**
+
+⚠️ **THIS FIX IS ITSELF UNREVIEWED** — it was written after the fifteenth round
+and no sixteenth has run. Recorded rather than glossed, which is the same
+discipline round 10 applied at the previous cap. The change is a header's wording;
+CLAUDE.md §2c leaves a further round to Kevin.
+
+**Author's note.** Nine of fifteen rounds found a claim contradicted elsewhere in
+the same document, and this is the ninth. It is also the first where the stale
+claim was created by the act of recording a decision — the plan became wrong at
+the moment it was told it was right.
+
+---
+
+## Resolution status — FINAL
+
+**COMPLETE. 15 of 15 authorised rounds run. Converged on severity, never on
+count.**
+
+**15 rounds, 25 findings, 25 accepted, 0 rejected, 0 disputes.**
+
+| Round | Findings | Severity | Subject |
+|---|---|---|---|
+| 1 | 3 | P2 ×3 | empty slate; wrong test suite; the denominator's UNIT |
+| 2 | 2 | **P1**, P2 | `stillAMember` is principal-specific; a superseded conclusion |
+| 3 | 2 | **P1**, P2 | joined-but-no-entry omitted from `total`; a superseded conclusion |
+| 4 | 2 | P2 ×2 | the client's mirrored response type; a multi-entry overclaim |
+| 5 | 2 | P2 ×2 | `participantIds` is forgeable; a superseded conclusion |
+| 6 | 2 | **P1**, P2 | a count alone cannot exclude departed owners; D5 contradicted D7 |
+| 7 | 2 | P2 ×2 | a stale code block; **a test that could not fail** |
+| 8 | 1 | **P1** | the non-playing host inflates `total` for ever |
+| 9 | 1 | P2 | co-commissioners are players; unknown-is-not-false |
+| 10 | 2 | **P1**, P2 | `managerUid` can be a player; forged member records |
+| 11 | 1 | P2 | a hidden UI is not a server gate |
+| 12 | 1 | P2 | …and the heading still said it was |
+| 13 | 1 | P2 | …and the two UI surfaces gate differently |
+| 14 | 2 | P2 ×2 | the resolution status was stale; the same claim a fourth time |
+| 15 | 1 | P2 | "signed" conflated Kevin's sign-off with the review being spent |
+
+**Five P1s, all in rounds 2–10. Rounds 11–15 were P2-only** — documentation
+integrity, not design.
+
+**Kevin's rulings, 2026-08-21:** Q1 **players** — questioned by him, re-argued
+against the measured state of multi-entry, and it held; Q2 **yes**; Q3 **yes**;
+Q4 **yes**; Q5 **rounds up to 15 authorised**.
+
+**What the fifteen rounds bought:**
+
+- **Two design reversals**: the denominator's unit (r1) and its source (r3, r5,
+  r6).
+- **Five corrections to ONE four-line roster predicate** (r3, r8, r9, r10 ×2).
+  Every wrong version was defensible alone; every one produced a **falsely
+  reassuring** chip — "everyone is done" when they are not. None would have been
+  visible in a diff, because the predicate is four lines.
+- **One test that could not fail, caught before it was written** (r7): the
+  headline emulator assertion was "participant and commissioner get identical
+  `progress`", and `{0,0} === {0,0}` satisfies it.
+- **Nine instances of a claim contradicted elsewhere in the same document**
+  (r2, r3, r5, r7, r11, r12, r13, r14, r15) — the dominant failure mode here, and
+  the whole yield of rounds 11–15.
+
+⚠️ **ROUND 15'S FIX IS UNREVIEWED**, as round 10's was at the previous cap. It is
+a header rewording. A sixteenth round is Kevin's to authorise and is **not**
+recommended: rounds 11–15 returned no design finding, and the marginal value has
+clearly flattened.
+
+**NEXT GATE: IMPLEMENTATION**, against T1–T4 as written. No code exists yet.

@@ -2,8 +2,22 @@
 
 ## Implementation status (2026-08-21)
 
-**PLAN ONLY. NO CODE EXISTS. BLOCKED ON KEVIN'S SIGN-OFF** — see "Decisions
-needed" at the end. Three questions, none of them large.
+**TWO GATES, AND THEY ARE NOT THE SAME GATE** — conflating them is what codex r15
+found here:
+
+- ✅ **KEVIN'S SIGN-OFF: GIVEN, 2026-08-21.** Q1–Q5 all answered; see "Decisions"
+  at the end. Q1 was questioned by him and re-argued against the measured state of
+  multi-entry (T1 and T2 shipped, T3–T5 not started,
+  `MULTI_ENTRY_WIZARD_ENABLED = false`); the answer held.
+- ✅ **ADVERSARIAL REVIEW: 15 ROUNDS RUN, THE FULL AUTHORISATION SPENT.** 25
+  findings, 25 accepted, 0 rejected. The cap was 10; Kevin authorised 11–15 on the
+  strength of this plan's own evidence — five separate rounds had narrowed one
+  four-line predicate and every wrong version produced a falsely reassuring chip.
+  ⚠️ **Round 15's own fix is unreviewed** (it is this paragraph). A sixteenth round
+  needs a further ruling; the change is wording, not design.
+
+**IMPLEMENTATION MAY NOW PROCEED** against T1–T4 as written. **NO CODE EXISTS
+YET.**
 
 Kevin, 2026-08-21, choosing between three options offered in
 `MORNING-2026-08-22-FIXES.md` §4: *"Go with both of these"* — option (ii), the
@@ -87,8 +101,10 @@ progress: { complete: number; total: number };
 
 - **A player holding several entries counts once, and is complete only when
   EVERY entry they own is complete** — they owe all of them. Today an NFL entry
-  id IS the uid, so this collapses to one entry per player and nothing changes;
-  under `PLAN-MULTI-ENTRY` it is already right.
+  id IS the uid **in any pool not configured for multi-entry**, so it collapses to
+  one entry per player there and nothing changes; where a pool HAS been configured
+  for it — reachable today through the callables, see Q1 — the rule is already
+  right.
 
 - 🛑 **`progress` USES ITS OWN MEMBERSHIP SET — IT MUST NOT INHERIT
   `stillAMember`, AND THAT SET IS NOT `participantIds`.** This is a P1 codex
@@ -455,31 +471,101 @@ value is in a pool big enough for the aggregate to be anonymous anyway.
   this plan's. Recorded so the next person does not read the two chips as
   contradicting each other.
 
-## Decisions needed — Kevin
+## Decisions — ANSWERED BY KEVIN, 2026-08-21
 
-**Q1 — confirm "players".** D1 now recommends **players**, which is your own
-wording, after codex showed the grid's rows are already uid-deduplicated. Nothing
-visible changes today either way — an NFL entry id is the uid — so this is a
-question about which number stays right when multi-entry lands. Say "entries" and
-I will count entry documents instead and accept that the chip and the table row
-count can diverge.
+| | Question | Answer |
+|---|---|---|
+| **Q1** | "players" or "entries" as the unit? | **PLAYERS** — see below; Kevin questioned it and the answer survived the questioning |
+| **Q2** | does the commissioner see the chip too? | **YES** |
+| **Q3** | small-pool deanonymisation accepted, as for the consensus card? | **YES** |
+| **Q4** | the roster as the denominator, at one extra document read? | **YES** |
+| **Q5** | authorise rounds past the cap of 10? | **YES, up to 15** |
 
-**Q2 — does the commissioner see the chip too?** Recommend **yes** — same number,
-one code path, and it costs them nothing they do not already have from the `Set`
-column. Saying no means gating it, which is the second definition of the boundary
-this repo keeps removing.
+### Q1, and the multi-entry question behind it
 
-**Q4 — is "players in the pool" the roster, or the people with entries?** D7 uses
-the roster (`rosterSummary/current.playerUids`), so a member who joined and never
-picked is counted in the 16 and not in the 12. Recommend **yes, the roster** — the number
-is meant to answer "is everyone done", and excluding the people who have not
-started would make it answer "is everyone who started done", which is always
-closer to yes. This costs **one extra document read per call**; say the word if
-you would rather the chip not cost that.
+Kevin, 2026-08-21: *"I asked for the ability for one player to have multiple
+entries in a pool, especially the survivor pool. First, has this been done yet
+and two, how does it affect this question?"*
 
-**Q3 — small-pool deanonymisation: accepted, as it is for the consensus card?**
-Recommend **yes, accepted and documented**, per D2. This is the only question
-here with a real product answer rather than an engineering one.
+**Has it been done: NOT FINISHED — the server half is shipped, the member half is
+not, and no UI OFFERS IT ON A NEW POOL.** ⚠️ *"Cannot be switched on"* would be false and this
+line said it until codex r12: the toggle is hidden, but `updatePoolSettings` and
+`submitNFLPicks` both accept multi-entry through the supported callables. See the
+box below. Measured on `origin/main` @ `59215dae`:
+
+| Ticket | State |
+|---|---|
+| T1 — the `maxEntriesPerUser` setting + rules + raise-only gate | **shipped**, #449 |
+| T2 — the SERVER submit path: `entryIndex`, `e{n}:{uid}` ids, dues × entries, proxy + rebuy | **shipped**, #450 |
+| T3 — scoring / reveal / finalize / profile keyed by ENTRY | **not started** |
+| T4 — `buildMemberStandings` one row per ENTRY | **not started** |
+| T5 — the **member's** My Entry switcher | **not started** |
+
+🛑 **`MULTI_ENTRY_WIZARD_ENABLED = false`** (`shared/multiEntry.ts:22`), and its
+own comment says why: *"a member has no UI to address entry #2 until T5 … and
+standings/reveal/finalize still key by uid until T3/T4. Offering the toggle now
+would let a commissioner advertise entries nobody can play."*
+
+**But the two surfaces hide it differently, and the difference matters** (codex
+r13). The wizard hides it unconditionally — `MultiEntryFields.tsx:29` is
+`if (!MULTI_ENTRY_WIZARD_ENABLED) return null`. The manager form does **not**:
+`NFLManagerView.tsx:1070` renders the "Entries per Player" control on
+`(MULTI_ENTRY_WIZARD_ENABLED || currentMaxEntries > 1)`. **So a pool already
+raised above 1 shows its commissioner the control in the UI**, and the raise-only
+gate lets them raise it further from there. The flag keeps the door shut; it does
+not lock it, and it re-opens for any pool that has been through it once.
+
+⚠️ **THAT FLAG HIDES A CONTROL. IT IS NOT A SERVER GATE, AND THIS PLAN MUST NOT
+TREAT IT AS ONE** (codex r11). `updatePoolSettings` still accepts a raise of
+`maxEntriesPerUser`, and the shipped `submitNFLPicks` still accepts
+`entryIndex: 2` — T2 built exactly that. So a pool CAN already hold multiple
+entries per player through the supported callables, and **"every production pool
+is one entry per player" is an inference from a hidden button, not a measurement.
+This plan does not make that claim and does not rely on it.**
+
+**Which costs nothing, because the design is multi-entry-correct as written.**
+`playerUids` is a set of owners, and a player is complete only when EVERY entry
+they own is complete — that is right for one entry and right for three. The only
+thing the one-entry situation was ever buying was "nobody will SEE a difference
+today", and the honest version of that sentence is: **nobody sees a difference in
+a pool that has not been configured for multi-entry, and a pool that has gets a
+correct number rather than a wrong one.** The one claim genuinely scoped to the
+single-entry invariant is T2's *"can never disagree with the commissioner's
+column"*, and T2 already says so in those words.
+
+**How it affects this plan: not at all today, and the answer is still "players"
+tomorrow.**
+
+- **In any pool not configured for multi-entry** — which is every pool the WIZARD
+  can create, though not every pool a commissioner can reach, see the box above —
+  an entry id IS the uid, so players and entries are the same number and the chip
+  reads identically under either choice. Nothing is being decided under time
+  pressure.
+- **After T4** the grid's rows become one per ENTRY. That is the moment the two
+  numbers separate — and it cuts *against* "entries", not for it: a chip
+  denominated in entries would silently change what it MEANS when T4 lands, from
+  "people who are done" to "sheets that are done", with no code change and no
+  announcement. **"12 of 16 players in" means the same thing before and after
+  T4.** A number whose meaning survives a refactor is worth more than one that
+  happens to match a row count this month.
+- **The chip answers "who still owes picks", and that is a person.** A
+  commissioner chasing stragglers sends one message to one human, however many
+  survivor entries they hold. This plan already says a player is complete only
+  when **every** entry they own is complete, which is the rule that makes the
+  survivor case Kevin named come out right: three entries, three sets of picks,
+  and you are not "in" until all three are.
+- ⚠️ **AND IT LEAVES A VISIBLE ODDITY AFTER T4, WHICH IS RECORDED RATHER THAN
+  HIDDEN:** "12 of 16 players in" will sit beside a table of, say, twenty rows.
+  That is honest — two chips answering two questions — but only because the chip
+  says **players** out loud. It is the reason the label is not optional. If a
+  per-entry count is wanted as well, that is a SECOND chip and it belongs to
+  `PLAN-MULTI-ENTRY` T6, which is already the audit ticket for every surface that
+  has to learn the difference.
+
+**One dependency worth naming:** `getPoolPicks`' `counts`, `picks` and
+`confidence` maps are still keyed by uid until T3. `progress` is player-keyed, so
+it is consistent with the callable as it stands **and** with the callable T3
+leaves behind. It does not need T3, and T3 does not need it.
 
 ---
 

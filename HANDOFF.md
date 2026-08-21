@@ -1,5 +1,49 @@
 # HANDOFF — Session entry point
 
+> ## 🟢 2026-08-21 (late) — **`PLAN-MEMBER-PICK-PROGRESS` IS SIGNED AND REVIEWED. READY TO BUILD. NO CODE EXISTS.**
+>
+> **Kevin answered Q1–Q5 on 2026-08-21** and authorised rounds past the cap.
+> **15 rounds run, 25 findings, 25 accepted, 0 rejected.** Five P1s, all of them
+> in rounds 2–10; rounds 11–15 were documentation integrity only. **Next gate is
+> implementation** against T1–T4 of the plan.
+>
+> ✅ **Q1 = PLAYERS** (distinct owner uids), and Kevin questioned it — *"I asked
+> for multiple entries per player, especially survivor. Has this been done, and
+> how does it affect this?"* Re-argued against the measured state and the answer
+> held: a player is complete only when EVERY entry they own is complete, and
+> "players" means the same thing before and after multi-entry's T4 whereas
+> "entries" would silently change meaning. **Q2/Q3/Q4 = yes.**
+>
+> 📍 **MULTI-ENTRY, MEASURED — DO NOT RE-DERIVE THIS.** T1 (#449) and T2 (#450)
+> are **shipped**: the `maxEntriesPerUser` setting and the whole SERVER submit
+> path (`entryIndex`, `e{n}:{uid}` ids, dues × entries, proxy, rebuy).
+> **T3 (scoring/reveal/finalize keyed by entry), T4 (one grid row per entry) and
+> T5 (the member's My Entry switcher) are NOT started.**
+> `MULTI_ENTRY_WIZARD_ENABLED = false`, so the WIZARD never offers it — **but that
+> is a hidden control, not a server gate**: `updatePoolSettings` still accepts a
+> raise and `submitNFLPicks` still honours `entryIndex: 2`, and
+> `NFLManagerView.tsx:1070` re-shows the control for any pool already above 1.
+> **Production cardinality is UNMEASURED.** (Three separate codex rounds — 11, 12,
+> 13 — were spent getting this paragraph right; it is written down so nobody pays
+> for it again.)
+>
+> 📐 **THE DESIGN:** `getPoolPicks` gains `progress: {complete, total}`, ungated
+> and identical for every principal, both halves drawn from a new **`playerUids`**
+> array on `pools/{id}/rosterSummary/current` (schema 1 → 2). One extra document
+> read. **No backfill** — a pool without the field shows no chip and self-heals on
+> its next membership change, which keeps this clear of the prod-data gate.
+> **K1 is untouched:** per-member counts stay commissioner-only.
+>
+> ⚠️ **THE ROSTER PREDICATE IS FOUR LINES AND REVIEW REWROTE IT FIVE TIMES.**
+> Canonical Member Records only, minus the OWNER record while its
+> `hasPlayableEntry` latch is explicitly `false`. Not entry owners, not
+> `participantIds`, not a bare count, not the latch alone, not every commissioner,
+> not `managerUid`. **Every wrong version reported "everyone is done" when they
+> were not.** Read D7 and the review log before touching it.
+>
+> 📌 **Kevin still owes:** the `nflFrozenSpreadBackfill.enabled` check, and Mon
+> 2026-08-24's `nflSpreadLock.dryRun` flip.
+
 > ## 🟡 2026-08-21 (evening) — **`PLAN-MEMBER-PICK-PROGRESS` IS WRITTEN AND BLOCKED ON KEVIN. NO CODE EXISTS.**
 >
 > Kevin chose **both** options offered in `MORNING-2026-08-22-FIXES.md` §4:
