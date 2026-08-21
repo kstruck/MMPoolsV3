@@ -1,5 +1,38 @@
 # HANDOFF — Session entry point
 
+> ## 🔴 2026-08-21 — **THE SPREAD FREEZE IS ARMED. A "LIVE" CLICK NOW ACTUALLY FREEZES.**
+>
+> Kevin confirmed both config flips on 2026-08-21:
+>
+> | Key | Value | What it means |
+> |---|---|---|
+> | `system/config.nflSpreadLock` | `{enabled: true, dryRun: FALSE}` | 🔴 **ARMED** |
+> | `system/config.nflFrozenSpreadBackfill` | `{enabled: FALSE}` | ✅ disarmed, migration done |
+>
+> 🛑 **THE SAFETY NET IS GONE, AND IT WAS LOAD-BEARING THREE DAYS AGO.** On
+> 2026-08-21 a `runNFLSpreadFreeze` **LIVE** click correctly ran DRY, because both
+> gates had to agree and the config said dry. **That will not happen again.** From
+> now on **Freeze this week now**, and Operations → **Freeze Next Week (LIVE)**,
+> write for real — and **a slate can be frozen exactly once**. After that, changing
+> a line takes the audited override. Read the button label twice; four adjacent
+> Operations buttons got the wrong one clicked twice on 2026-08-21.
+>
+> ⚠️ **THE FLIP IS THREE DAYS EARLY** (the plan said Mon 2026-08-24) and that is
+> fine: `lockNFLSpreadsJob` is `0 9 * * 2 America/New_York`, so **nothing fires
+> automatically before Tue 2026-08-25 09:00 ET.** The only new exposure between
+> now and then is a MANUAL click.
+>
+> 📅 **TUESDAY 2026-08-25, 09:00 ET — EXPECT A REFUSAL, NOT A FAILURE.** The job
+> runs on **app week 4** (Kevin's preseason week 3). ESPN carried **0 of 16** lines
+> as of 2026-08-21 and preseason lines land ~1.4 days before kickoff (Thu 08-27
+> 23:00Z), so Tuesday morning is too early. All-or-nothing refusing is the rule
+> working. The repair, in order: **NFL Schedule → Spread Manager → Preseason /
+> Week 4 → Fetch Games → type a number into every empty row → Save Working Lines
+> → Freeze this week now.** ⚠️ **The save is not optional and the order is the
+> trap** — the freeze reads the DATABASE, not the screen.
+>
+> 📌 **The `dryRun` field in the report is the truth, not the button label.**
+
 > ## 🟢 2026-08-21 (late) — **`PLAN-MEMBER-PICK-PROGRESS` IS SIGNED AND REVIEWED. READY TO BUILD. NO CODE EXISTS.**
 >
 > **Kevin answered Q1–Q5 on 2026-08-21** and authorised rounds past the cap.
