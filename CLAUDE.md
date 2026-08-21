@@ -336,6 +336,33 @@ constraint, correctness is.
 
 ## 3. Deploy facts (do not re-derive)
 
+- 🛑 **`git pull` IN `D:\march-melee-pools` BEFORE EVERY DEPLOY. THIS IS STEP
+  ZERO AND IT HAS SILENTLY SHIPPED NOTHING TWICE.**
+
+  ```
+  git -C D:\march-melee-pools pull --ff-only origin main
+  ```
+
+  `firebase deploy` builds from LOCAL files, not GitHub. Every worktree shares
+  one `main` ref and it advances ONLY by a manual pull in the main checkout, so
+  after a PR merges on `origin` the checkout you deploy from is stale. The
+  deploy then reports `Deploy complete!` and ships the OLD code — it looks
+  successful and did nothing. **Measured 2026-08-21:** the checkout sat at
+  `d1f456cc` while `origin/main` was `c27af552`, four merges of
+  PLAN-NFL-SPREAD-FREEZE went out as a no-op, and the failure surfaced as an
+  Operations button erroring because the callable did not exist.
+
+  **The tell is an ABSENCE**, which is why it is easy to miss: a newly added
+  function simply never appears in the deploy output. Verify by name afterwards,
+  and in PowerShell it is `Select-String`, not `grep`:
+
+  ```
+  npx firebase functions:list | Select-String "<newCallableName>"
+  ```
+
+  This was already written down in the `deploy-commands` auto-memory BODY and
+  was violated anyway, because bodies do not get read. It lives here now.
+
 - Functions + rules: `npx firebase deploy`, project `gridiron-gamble-uzuqo`.
   Run `npm --prefix functions ci` first — **`ci`, not `install`**, which
   rewrites the lockfile and dirties the tree `firebase deploy` packages.
