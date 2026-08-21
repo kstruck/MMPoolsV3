@@ -1,5 +1,40 @@
 # HANDOFF — Session entry point
 
+> ## 🟡 2026-08-21 (evening) — **`PLAN-MEMBER-PICK-PROGRESS` IS WRITTEN AND BLOCKED ON KEVIN. NO CODE EXISTS.**
+>
+> Kevin chose **both** options offered in `MORNING-2026-08-22-FIXES.md` §4:
+> **(ii)** the legend fix, already shipped as #497 and live, and **(iii)** a
+> pool-wide *"12 of 16 players have their picks in"*. **(iii) is this plan.**
+>
+> 🛑 **IT IS PLAN-GATED AND THE GATE IS NOT SATISFIED YET.** It widens what
+> `getPoolPicks` discloses to a participant — the AUTHORIZATION trigger
+> (`mmp-change-control` §1) — so it needs Kevin's sign-off before implementation.
+> **Do not write code for this until he answers Q1–Q4 in the plan.**
+>
+> ✅ **IT DOES NOT REVERSE THE K1 RULING** of 2026-08-14. Per-member counts stay
+> commissioner-only; `nflPickReveal.ts:319` is untouched. `weekPickCount`'s own
+> header already drew the line this plan sits on: *"'picked 3 of 16' is a different
+> question from 'has picked at all', and only the second is safe to tell the whole
+> pool."*
+>
+> 📐 **THE DESIGN, IN ONE LINE:** `getPoolPicks` gains
+> `progress: {complete, total}`, ungated and identical for every principal, with
+> both halves drawn from a new `playerUids` array on
+> `pools/{id}/rosterSummary/current` (schema 1 → 2). One extra document read. No
+> backfill — a pool without the field shows no chip and self-heals on its next
+> membership change.
+>
+> ⚠️ **10 REVIEW ROUNDS, 18 FINDINGS, 18 ACCEPTED, AND IT IS A CAP STOP RATHER
+> THAN A CLEAN ONE.** Five of those findings narrowed the SAME four-line roster
+> predicate, and every wrong version of it produced a **falsely reassuring** chip —
+> "everyone is done" when they are not. **Round 10's two fixes are UNREVIEWED**;
+> CLAUDE.md §2c puts an eleventh round at Kevin's discretion and the reason is
+> written into the log's resolution status for him to rule on.
+>
+> 📌 **What Kevin owes, in order:** Q1–Q4 in `PLAN-MEMBER-PICK-PROGRESS.md`; the
+> over-cap ruling; the still-outstanding `nflFrozenSpreadBackfill.enabled` check;
+> and Mon 2026-08-24's `nflSpreadLock.dryRun` flip.
+
 > ## 🟢 2026-08-21 (later) — **#495 IS LIVE AND CONFIRMED. TWO OF THE SIX ARE STILL OPEN, ONE NEEDS A RULING FROM KEVIN.**
 >
 > **Read `MORNING-2026-08-22-FIXES.md`** — its §4 and §6 are rewritten and the
