@@ -12,6 +12,19 @@ import { effectiveBufferMinutesForWeek } from '@shared/weeklyHardLock';
 
 interface WeekChecklistProps {
     pool: Pool;
+    /**
+     * Whether a SUCCESSFUL snapshot of this viewer's own entry has landed.
+     *
+     * 🛑 NOT "is `entry` truthy". Every claim this strip makes — the nag, the
+     * green confirmation, and every chip — is read off `entry`, and `entry` is
+     * `null` both when the member has never picked AND when the read never
+     * arrived. `onSnapshot` TERMINATES a listener on error, so a transient
+     * failure on the FIRST snapshot means nothing ever arrives and this strip
+     * would tell a member with a completed sheet that their picks are not in,
+     * for the life of the page. It cannot say anything true until the document
+     * is known, so it says nothing. (codex r2 on #497, P2.)
+     */
+    entryKnown: boolean;
     entry: any;
     games: NFLGame[];
     selectedWeek: number;
@@ -43,7 +56,7 @@ const CHIP_MARKS: Record<WeekStatus, React.ReactNode> = {
  * Answers "what do I still need to do?" at a glance — the audit's top
  * repeat-loop gap.
  */
-export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games, selectedWeek, onSelectWeek, onPickNow }) => {
+export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entryKnown, entry, games, selectedWeek, onSelectWeek, onPickNow }) => {
     const castPool = pool as any;
     const seasonType = poolSeasonType(castPool);
     const totalWeeks = seasonType === 1 ? 4 : 18;
@@ -103,6 +116,12 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
 
     // Survivor members who are eliminated owe nothing — don't nag them
     if (pool.type === 'NFL_SURVIVOR' && entry?.status === 'ELIMINATED') return null;
+
+    // …and say nothing at all until this viewer's own entry is KNOWN. See
+    // `entryKnown` — every line below is a claim about picks that may not have
+    // been read yet. A signed-out viewer lands here too, which is right: they
+    // owe no picks and the strip has nothing to tell them.
+    if (!entryKnown) return null;
 
     return (
         <div className="space-y-3">

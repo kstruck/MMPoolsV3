@@ -314,9 +314,10 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
           : revealMode === 'PER_GAME' ? ' — picks reveal game by game, each at its own lock'
           : ''}
         . <strong>—</strong> means the pick IS revealed and that player made none. <strong>Set</strong>{' '}
-        counts the picks they have saved out of {weekGames.length} this week and is available before
-        anything is revealed; it reads <strong>?</strong> for the same reason a cell does, when the count
-        is not known yet. <strong>Majority</strong> is the share of
+        counts the picks a player has saved out of {weekGames.length} this week. Your own is live the
+        moment you save it. Other players' counts are shown to the pool's commissioner at any time —
+        chasing missing picks is their job — and to everyone else once the whole week is revealed;
+        until then they read <strong>?</strong>. <strong>Majority</strong> is the share of
         this pool on the leading side, from the live pool consensus — an aggregate that never names anyone.
         An exact even split reads <strong>Split</strong>, and a <strong>—</strong> on that row means no picks
         have been recorded for that game yet.
