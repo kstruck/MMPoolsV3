@@ -1,5 +1,56 @@
 # HANDOFF — Session entry point
 
+> ## 🟢 2026-08-22 — **FIVE NFL DASHBOARD DISPLAY DEFECTS FIXED. ONE COOLIFY REBUILD OWED, NOTHING ELSE.**
+>
+> **Read `MORNING-2026-08-22-FIXES.md`.** It **continues**
+> `MORNING-2026-08-20-SPREADS.md`, which stays the entry point for
+> PLAN-NFL-SPREAD-FREEZE — its §4 (Tuesday's week-4 freeze) and §5 (the four
+> questions) are carried forward, not cancelled.
+>
+> **[#495](https://github.com/kstruck/MMPoolsV3/pull/495) is FRONTEND ONLY.** No
+> functions deploy, no rules deploy. It owes **a Coolify rebuild of `www`** and
+> nothing else. Four of its five defects were measured against PRODUCTION on
+> 2026-08-21 in `/pool/0ybpLzY7fJ3NJbDj0j1l`, not reasoned about.
+>
+> ✅ **FIXED:** the checklist banners now say WHICH lock their timestamp is (a
+> per-game week's is the LAST game, and printing "locks ‹ts›" over it told a
+> member with a Friday pick that nothing shut until Sunday); an exactly even
+> Majority prints **`Split 50%`** instead of the em dash the legend already spends
+> on "revealed, and they picked nothing"; Pick Distribution stops saying
+> **LOADING PICKS…** for ever on a game nobody has picked; the Lock Status card
+> no longer says **PICKS ARE OPEN** directly under **SPREADS NOT YET FINALIZED**;
+> and the checklist stops offering "Make Picks" into a spread-blocked sheet.
+>
+> ✅ **ANSWERED, NOT A BUG:** per-game reveal genuinely works — `getPoolPicks`
+> reveals by an ALLOWLIST of game ids whose own lock has passed. Note that a
+> **confidence** pool reveals the whole week at once even though its stored
+> `lockMode` still reads `PER_GAME`, which is what the 2026 NFL Weekly Pick'em
+> pool does.
+>
+> ✅ **ALREADY SHIPPED:** the grid's **`Set`** column already shows "16/16" before
+> anything is revealed. A per-CELL "they picked, but it is hidden" indicator would
+> be a `functions/` reveal-boundary change and is plan-gated — Q1 in §4 of the
+> morning doc.
+>
+> ⚠️ **TWO FINDINGS I COULD NOT REPRODUCE, AND THREE QUESTIONS ARE BLOCKING.**
+> The stale "picks not in" after submitting did not reproduce (the entry is a LIVE
+> subscription; two candidate causes need different fixes and only Kevin's repro
+> separates them), and browser Back/Refresh/Home tested clean against production
+> for the second time. **Do not sink hours into either before §6 of the morning
+> doc is answered.**
+>
+> ⚠️ **`system/config.nflFrozenSpreadBackfill.enabled` IS STILL UNVERIFIED.** The
+> Operations panel does not display flag values and reading `system/config` needs
+> an auth token this session may not extract. **Step 6 of the morning doc is
+> Kevin's** — the migration is done (33/33) so it should read `false`.
+>
+> ⚠️ **TUESDAY IS UNCHANGED.** `system/config.nflSpreadLock` is still
+> `{enabled: true, dryRun: TRUE}`. The flip to `dryRun: false` is **Mon
+> 2026-08-24**; the freeze fires on **app week 4** Tue 2026-08-25 09:00 ET and will
+> almost certainly refuse — ESPN carried **0 of 16** lines as of 2026-08-21.
+> `MORNING-2026-08-20-SPREADS.md` §4 has the type-then-save-then-freeze repair, and
+> the save-before-freeze order is the trap.
+
 > ## 🟢 2026-08-21 — **THE SPREAD FREEZE IS DEPLOYED AND THE BACKFILL HAS RUN. 33/33 FROZEN.**
 >
 > **Read `MORNING-2026-08-20-SPREADS.md`** for the effort. §3 steps 1-7 are DONE;
