@@ -326,6 +326,17 @@ describe('weekLockCaption — the checklist must say WHICH lock its timestamp is
             .toBe('each pick locks at its kickoff — last Sun, Aug 23 · 5:55 PM MDT');
     });
 
+    it('an EXTENDED per-game week no longer claims each pick locks at its kickoff', () => {
+        // `gameLockAt` is Math.max(kickoff - buffer, override), so an extension
+        // applies to every game and every kickoff it sits past stops being that
+        // game's lock. (codex r1.)
+        expect(weekLockCaption('PER_GAME', 'Sun, Aug 23 · 5:55 PM MDT', true))
+            .toBe('each pick locks at its kickoff or the extended deadline, whichever is later — last Sun, Aug 23 · 5:55 PM MDT');
+        // A WEEKLY pool already has one deadline and the extension only moves it,
+        // so its sentence is unchanged either way.
+        expect(weekLockCaption('WEEKLY', 'x', true)).toBe(weekLockCaption('WEEKLY', 'x', false));
+    });
+
     it('the two modes never produce the same sentence', () => {
         const ts = 'Sun, Aug 23 · 5:55 PM MDT';
         expect(weekLockCaption('PER_GAME', ts)).not.toBe(weekLockCaption('WEEKLY', ts));

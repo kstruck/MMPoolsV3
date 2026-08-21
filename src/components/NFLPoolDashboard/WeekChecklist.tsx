@@ -79,6 +79,9 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
             week,
             status,
             lockMode,
+            // The banner has to know an extension EXISTS, not what it is: it
+            // changes which sentence is true about a per-game week.
+            hasWeekExtension: typeof overrideMs === 'number',
             spreadsBlocked: spreadsBlockWeek(castPool, weekGames),
             deadline: weekDeadline(weekGames, lockBufferMinutes, lockMode, overrideMs),
         };
@@ -110,7 +113,7 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
                         <span className="font-display font-bold uppercase tracking-[0.05em] text-[13px] text-gold-700 dark:text-gold-300">
                             {nflWeekLabel(poolSeasonType(castPool), nextDue.week)} picks not in yet — {nextDue.spreadsBlocked
                                 ? 'the sheet opens once every line for this week is frozen'
-                                : weekLockCaption(nextDue.lockMode, formatDeadline(nextDue.deadline!))}
+                                : weekLockCaption(nextDue.lockMode, formatDeadline(nextDue.deadline!), nextDue.hasWeekExtension)}
                         </span>
                     </div>
                     {!nextDue.spreadsBlocked && (
@@ -129,7 +132,7 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
                 <div role="status" className="bg-[#E4F5EC]/60 dark:bg-emerald-500/10 border border-[#BEE7D0] dark:border-emerald-500/30 rounded-xl px-4 py-3 flex items-center gap-2">
                     <Check size={16} className="text-[#0F7B4A] dark:text-emerald-400 shrink-0" aria-hidden="true" />
                     <span className="font-display font-bold uppercase tracking-[0.05em] text-[13px] text-[#0F7B4A] dark:text-emerald-300">
-                        {nflWeekLabel(poolSeasonType(castPool), currentComplete.week)} picks are in — {weekLockCaption(currentComplete.lockMode, formatDeadline(currentComplete.deadline!))}
+                        {nflWeekLabel(poolSeasonType(castPool), currentComplete.week)} picks are in — {weekLockCaption(currentComplete.lockMode, formatDeadline(currentComplete.deadline!), currentComplete.hasWeekExtension)}
                     </span>
                 </div>
             )}
