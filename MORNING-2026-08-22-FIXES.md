@@ -104,6 +104,18 @@ Do this AFTER the Coolify rebuild finishes, in a hard-refreshed tab
 5. **If any of these still show the old text:** the browser is serving a cached
    bundle. Hard-refresh again, then check the Coolify build actually finished.
 
+### Step 6 — ✅ DONE. Kevin confirmed `enabled: false` on 2026-08-21.
+
+✅ **AND he also flipped `system/config.nflSpreadLock.dryRun` to `false` the same
+day — three days ahead of §5's Mon 08-24 step. THE FREEZE IS ARMED.** Nothing
+fires automatically before Tue 2026-08-25 09:00 ET (`0 9 * * 2` ET), but every
+**Freeze this week now** and **Freeze Next Week (LIVE)** click writes for real
+from now on, and a slate freezes exactly once. The dry-run safety net that caught
+the 2026-08-21 LIVE click is gone. See the HANDOFF top box.
+
+<details>
+<summary>The original step, kept as the record</summary>
+
 ### Step 6 — confirm `nflFrozenSpreadBackfill` is disarmed (2 minutes, YOURS)
 
 **I could not verify this and it is the one live-config item I am handing back.**
@@ -120,6 +132,8 @@ four adjacent ones got clicked twice on 2026-08-21.
 5. **If it reads `enabled: true`:** click the pencil beside `enabled`, set it to
    **false**, click **Update**. The cutover migration is done (33 of 33 written on
    2026-08-21) and the backfill's non-dry leg has no remaining job.
+
+</details>
 
 ---
 
@@ -286,12 +300,12 @@ I will plan that instead.
 Carried forward verbatim from `MORNING-2026-08-20-SPREADS.md` §4, because #495
 changes none of it.
 
-- **Mon 2026-08-24** — set `system/config.nflSpreadLock.dryRun` = **`false`** in
-  the Firebase console (`system/config` → the `nflSpreadLock` map). Leave
-  `enabled` at `true`. **Do not do this before reading a dry-run report.**
-  Right now it is `{enabled: true, dryRun: true}` — deployed but held dry, and a
-  LIVE click on 2026-08-21 correctly ran dry anyway. **Both gates must agree, and
-  the report's own `dryRun` field is the truth, not the button label.**
+- ~~**Mon 2026-08-24** — set `system/config.nflSpreadLock.dryRun` = `false`.~~
+  ✅ **DONE 2026-08-21, three days early. THE FREEZE IS ARMED.** Nothing fires
+  before Tuesday either way, so the early flip costs nothing automatic — but the
+  dry-run net that made a LIVE click harmless is gone, and **a slate freezes
+  exactly once.** The report's own `dryRun` field is still the truth, not the
+  button label.
 - **Tue 2026-08-25, after 09:00 ET** — the freeze fires on **app week 4** (your
   preseason week 3). **Expect it to refuse:** ESPN carried **0 of 16** lines as of
   2026-08-21 and preseason lines land about 1.4 days before kickoff (Thu 08-27
