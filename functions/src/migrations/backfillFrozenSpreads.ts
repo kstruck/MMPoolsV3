@@ -110,6 +110,12 @@ export const backfillFrozenSpreads = validated(
       // whose whole purpose is to be read. Scalars first; the arrays are detail,
       // capped for the same reason the other migrations cap theirs — an audit doc
       // has a 1MiB ceiling.
+      //
+      // ⚠️ INCREMENTED WHERE THE EVENT HAPPENS, never derived from the arrays
+      // (codex r1). Deriving them was the first spelling and it inherits the caps:
+      // a 300-game run would report `plannedCount: 200, skippedCount: 100` and read
+      // as complete. A summary that is only right until it matters is worse than no
+      // summary, because these are now the fields an auditor is told to trust.
       plannedCount: 0,
       skippedCount: 0,
       failureCount: 0,
@@ -123,6 +129,8 @@ export const backfillFrozenSpreads = validated(
       try {
         const planned = plannedRecord(doc.id, doc.data() as Record<string, unknown>, frozenAt);
         if ("skip" in planned) {
+          // Counted where it HAPPENS, not from the capped array below.
+          report.skippedCount++;
           if (report.skipped.length < 100) report.skipped.push({ gameId: doc.id, reason: planned.skip });
           continue;
         }
@@ -133,6 +141,7 @@ export const backfillFrozenSpreads = validated(
           continue;
         }
 
+        report.plannedCount++;
         if (report.plannedWrites.length < 200) {
           report.plannedWrites.push({
             gameId: doc.id,
@@ -158,15 +167,12 @@ export const backfillFrozenSpreads = validated(
           }
         }
       } catch (err: any) {
+        report.failureCount++;
         report.failures.push({ gameId: doc.id, error: String(err?.message || err) });
       }
     }
 
     if (snap.docs.length === limit) report.nextCursor = snap.docs[snap.docs.length - 1].id;
-    // Set at the end so they are true even when an array hit its own display cap.
-    report.plannedCount = report.plannedWrites.length;
-    report.skippedCount = report.skipped.length;
-    report.failureCount = report.failures.length;
 
     await writeAdminAudit({
       actorUid: request.auth!.uid,
