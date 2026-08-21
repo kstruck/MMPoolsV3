@@ -385,7 +385,7 @@ const ACTIONS: OpAction[] = [
   },
   {
     id: 'runNFLSpreadFreeze:dry',
-    label: 'NFL Spread Freeze (dry run)',
+    label: 'Freeze Next Week (dry run)',
     description: 'Fetch the slate that is due for the next freeze and report the exact line it would write for every game, and whether each came from the ESPN feed or from the working line in the Spread Manager. Writes nothing. This is the rehearsal — a Tuesday-only schedule cannot rehearse itself, so run it on the days before.',
     blastRadius: 'Read-only — no writes. Reports the slate, every planned value, and any game with no line at all.',
     destructive: false,
@@ -394,7 +394,7 @@ const ACTIONS: OpAction[] = [
   },
   {
     id: 'runNFLSpreadFreeze',
-    label: 'NFL Spread Freeze (LIVE)',
+    label: 'Freeze Next Week (LIVE)',
     description: 'Freeze the due slate for real: every game of the week gets its line written to nfl_frozen_spreads, all at once or not at all. A slate can be frozen ONLY ONCE — after this, changing a line takes the audited override. Refused before the stated cutoff for that slate (Tuesday 09:00 ET), so this is the RETRY for a Tuesday pass that refused, not a way to freeze early.',
     blastRadius: 'Creates nfl_frozen_spreads records for one slate. Irreversible through the app: no client can write or delete that collection. Does NOT touch nfl_games.',
     destructive: true,
@@ -403,7 +403,7 @@ const ACTIONS: OpAction[] = [
   },
   {
     id: 'backfillFrozenSpreads:dry',
-    label: 'Backfill Frozen Spreads (dry run)',
+    label: 'Migrate Legacy Locks (dry run)',
     description: 'Report which already-locked nfl_games spreads would get an nfl_frozen_spreads record at cutover. Read plannedWrites and confirm the values are the ones those weeks were actually played on. Writes nothing. Needs system/config.nflFrozenSpreadBackfill.enabled = true first.',
     blastRadius: 'Read-only — no writes. Reports plannedWrites, plus any locked game skipped for having no usable value or a malformed slate.',
     destructive: false,
@@ -412,7 +412,7 @@ const ACTIONS: OpAction[] = [
   },
   {
     id: 'backfillFrozenSpreads',
-    label: 'Backfill Frozen Spreads',
+    label: 'Migrate Legacy Locks',
     description: 'Write an nfl_frozen_spreads record for every game already locked the old way, so a slate locked before the freeze shipped is covered by the same write-once store as one the job froze. A PRECONDITION of the freeze pass, not a tidy-up. Idempotent: a second run reports zero written. If the result carries a nextCursor, run it again.',
     blastRadius: 'Creates nfl_frozen_spreads records (source: backfill, legacy: true) for currently-locked games. Never overwrites an existing record. Does NOT touch nfl_games.',
     destructive: true,

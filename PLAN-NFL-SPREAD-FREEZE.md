@@ -474,6 +474,39 @@ are unrestricted**, which is precisely what R2's Saturday-to-Monday rehearsal
 needs. `statedCutoffBefore` handles the DST changeover (the November cutoff is
 14:00Z, the August one 13:00Z) and a test pins both.
 
+⚠️ **AMENDED 2026-08-21 (KEVIN): AN EXPLICIT EARLY FREEZE, `force` + a NAMED
+SLATE.** The cutoff rule above is right for every week that follows another one,
+and wrong for the week that does not. **Regular-season week 1 has no games before
+it**, so the Tuesday cadence — which exists to let the previous week finish —
+buys nothing there. Measured on the 2026 calendar: the opener is a WEDNESDAY, so
+week 1's unforced pick window is **35.3 hours** against **~59** for every other
+week.
+
+Kevin, 2026-08-21: *"Go with B. Regular season Week 1 should freeze earlier as
+there are no games prior to that week."*
+
+| argument | what it skips | what it does NOT skip |
+|---|---|---|
+| `force: true` | the stated cutoff | the horizon, once-per-slate, all-or-nothing, the lease, first-kickoff-in-future, **and both dry-run gates** |
+| `slate: {season, seasonType, week}` | the 7-day horizon | everything else, and it REQUIRES `force` |
+
+**Both are needed and neither is enough alone.** The horizon is part of "is this
+slate due", so `force` on its own could not reach regular week 1 until seven days
+out — most of what makes that window short. And the horizon is NOT simply widened
+under `force`, because "the earliest slate with no frozen record" over an
+unbounded horizon walks forward and freezes the wrong week: that is codex round
+8's defect, and an operator naming a week cannot trigger it by accident.
+
+`force` **requires a written reason**, enforced at the schema layer, and it lands
+in the `admin_audit` row. The justification for allowing it at all: **freezing
+early does not break fairness** — every member still picks against an identical
+line. It breaks PREDICTABILITY, which is a smaller harm than the one the cutoff
+was protecting against, and unlike the removed lock button it leaves a record of
+who did it and why.
+
+Surfaced as **"Freeze this week now"** in the Spread Manager, where the week is
+already selected, rather than as another argument-less Operations button.
+
 1.6 **Schedule: `0 9 * * 2` `America/New_York`.** Tuesday 09:00 ET, decided by
 Kevin on 2026-08-19 (R1) and unchanged from the existing job. This is the
 "specified day and time" the requirement asks for — if it ever moves, it moves
@@ -523,7 +556,13 @@ read-only, with one button that calls `overrideLockedSpread` and prompts for a
 reason. Save writes only the rows that CHANGED; it used to write every game in
 the fetched list, whole-map, every time.
 
-⚠️ **CONSEQUENCE FOR THE OPERATOR, and it is Kevin's to accept:** there is no
+⚠️ **RESOLVED 2026-08-21 (Kevin): option B.** The consequence below stood for one
+day and was then softened deliberately — see the `force` + named-slate amendment
+under 1.5b. There is still no way to unblock an ATS week WITHOUT freezing it (the
+invariant holds), but an operator can now choose the instant, with a reason and an
+audit row, instead of being held to the Tuesday cutoff.
+
+⚠️ **THE CONSEQUENCE AS ORIGINALLY SHIPPED:** there is no
 longer any way to unblock an ATS week by hand without freezing it. That is the
 invariant — every submittable ATS slate is a frozen one — but it means the repair
 path for a refused Tuesday is *type the missing numbers, then re-run the freeze*,

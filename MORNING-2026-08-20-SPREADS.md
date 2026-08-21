@@ -233,17 +233,28 @@ scheduled run to refuse. The repair is now:
 3. **If it refused for missing lines:** go to **NFL Schedule** tab → the Spread
    Manager. Select Preseason / Week 4 → **Fetch Games**. Type a number into every
    row that has none, then **Save Working Lines**.
-4. **Then Operations → NFL Spread Freeze (LIVE).** It takes the feed value where
-   there is one and your typed value where there is not, and freezes all sixteen
-   in one transaction.
+   ⚠️ **SAVE IS NOT OPTIONAL AND THE ORDER IS THE TRAP.** The freeze reads the
+   DATABASE, not what is typed on screen, so typing and freezing straight through
+   would commit the OLD stored values — permanently, because a slate freezes once.
+   The button knows: it reads **"Save before freezing"** and stays disabled while
+   anything is unsaved.
+4. **Then freeze it.** Either **Freeze this week now** in the Spread Manager
+   (which targets the week on screen), or Operations → **Freeze Next Week
+   (LIVE)**. It takes the feed value where there is one and your saved working
+   value where there is not, and freezes all sixteen in one transaction.
 5. **Expect:** `frozen: 16`. Every row in the Spread Manager now shows a green
    **Frozen** value instead of an input box.
 6. **Verify:** open an ATS Pick'em pool as a member and confirm the pick sheet
    loads and the spreads shown match the report.
 
 ⚠️ **A live freeze is refused before the slate's stated cutoff** (Tuesday 09:00
-ET). That is deliberate — it is the promise members were given — so you cannot
-freeze week 4 early, only repair it after Tuesday morning.
+ET) unless you use **Freeze this week now**, which skips that check and only that
+check, demands a written reason and writes an audit row. Added 2026-08-21 at
+Kevin's direction — **regular-season week 1 has no games before it**, so the
+Tuesday cadence buys nothing there and the 2026 opener is a Wednesday: 35.3 hours
+of pick window against ~59 for every other week. Freezing early does not break
+fairness (everyone still picks against an identical line); it breaks
+predictability, which is why it is signed for.
 
 ⚠️ **A week can be frozen exactly once.** After that, changing a line takes the
 override: Spread Manager → the pencil button on a frozen row → it asks for the
@@ -254,13 +265,16 @@ re-scores the week.
 
 ## 5. Decisions I need from you
 
-**Q1 — the lock button is gone. Confirm that is what you want.**
-The per-row lock toggle and "Lock All Spreads" are removed, not re-routed. They
-wrote a locked line straight onto `nfl_games` with no frozen record and nothing
-the detector could see, and unlock → edit → re-lock fired no rescore at all. The
-consequence is real: **you can no longer unblock an ATS week by hand without
-freezing it.** Say the word and I will restore a lock path — but the invariant
-that every submittable ATS slate is a frozen one goes with it.
+**Q1 — RESOLVED 2026-08-21. Option B: an explicit early freeze.**
+Kevin: *"Go with B. Regular season Week 1 should freeze earlier as there are no
+games prior to that week."* The lock buttons stay gone — they wrote a locked line
+onto `nfl_games` with no frozen record and nothing the detector could see, and
+unlock → edit → re-lock fired no rescore at all. What replaces the capability is
+**Freeze this week now** in the Spread Manager: the real freeze, all sixteen games
+or none, into the write-once store, skipping only the Tuesday cutoff and the
+7-day horizon, with a required reason and an audit row. The invariant holds —
+every submittable ATS slate is still a frozen one — but the operator picks the
+instant.
 
 **Q2 — `system/config.currentSeason` is `2025` while everything else is 2026.**
 Still unexplained, still untraced, and I did not touch it. Worth an hour to find

@@ -14,8 +14,14 @@
 //   - a kill-switch, OFF by default (`system/config.nflFrozenSpreadBackfill`);
 //   - dry-run DEFAULT, declared at the SCHEMA layer, not a handler `=== true`;
 //   - a per-run cap and a cursor;
-//   - an `admin_audit` summary on every run, dry or live, so the reviewed dry
-//     run is evidence somebody kept rather than a returned object nobody did.
+//   - an `admin_audit` summary on every run, dry or live.
+//
+// ⚠️ THAT AUDIT ROW IS NOT A COPY OF THE DRY RUN, and an earlier version of this
+// comment claimed it was. `capMetadata` collapses every array to the literal
+// string "[array]", so the row records the COUNTS and the fact that it ran, and
+// preserves none of the planned values. The returned object on screen is the only
+// place those exist — and the Operations panel slices it to 400 characters, which
+// is why the counts now come first in the report.
 import * as admin from "firebase-admin";
 import { validated } from "../lib/validated";
 import { writeAdminAudit } from "../lib/adminAudit";
@@ -96,19 +102,35 @@ export const backfillFrozenSpreads = validated(
       gamesScanned: snap.docs.length,
       alreadyFrozen: 0,
       written: 0,
-      // Per game, so a dry run is readable evidence rather than a total. Capped
-      // for the same reason the other migrations cap theirs: an audit doc has a
-      // 1MiB ceiling.
+      // ⚠️ COUNTS BEFORE ARRAYS, AND THAT ORDER IS LOAD-BEARING (2026-08-21).
+      // `OperationsPanel.tsx:536` renders `JSON.stringify(result).slice(0, 400)` —
+      // its own line 79 says "KEY ORDER IS LOAD-BEARING" — so a 33-entry
+      // `plannedWrites` placed ahead of these consumed the entire budget and made
+      // `skipped`, `failures` and `nextCursor` literally unreadable on the one run
+      // whose whole purpose is to be read. Scalars first; the arrays are detail,
+      // capped for the same reason the other migrations cap theirs — an audit doc
+      // has a 1MiB ceiling.
+      //
+      // ⚠️ INCREMENTED WHERE THE EVENT HAPPENS, never derived from the arrays
+      // (codex r1). Deriving them was the first spelling and it inherits the caps:
+      // a 300-game run would report `plannedCount: 200, skippedCount: 100` and read
+      // as complete. A summary that is only right until it matters is worse than no
+      // summary, because these are now the fields an auditor is told to trust.
+      plannedCount: 0,
+      skippedCount: 0,
+      failureCount: 0,
+      nextCursor: null as string | null,
       plannedWrites: [] as { gameId: string; value: number; slate: string }[],
       skipped: [] as { gameId: string; reason: string }[],
       failures: [] as { gameId: string; error: string }[],
-      nextCursor: null as string | null,
     };
 
     for (const doc of snap.docs) {
       try {
         const planned = plannedRecord(doc.id, doc.data() as Record<string, unknown>, frozenAt);
         if ("skip" in planned) {
+          // Counted where it HAPPENS, not from the capped array below.
+          report.skippedCount++;
           if (report.skipped.length < 100) report.skipped.push({ gameId: doc.id, reason: planned.skip });
           continue;
         }
@@ -119,6 +141,7 @@ export const backfillFrozenSpreads = validated(
           continue;
         }
 
+        report.plannedCount++;
         if (report.plannedWrites.length < 200) {
           report.plannedWrites.push({
             gameId: doc.id,
@@ -144,6 +167,7 @@ export const backfillFrozenSpreads = validated(
           }
         }
       } catch (err: any) {
+        report.failureCount++;
         report.failures.push({ gameId: doc.id, error: String(err?.message || err) });
       }
     }
@@ -160,9 +184,14 @@ export const backfillFrozenSpreads = validated(
         gamesScanned: report.gamesScanned,
         alreadyFrozen: report.alreadyFrozen,
         written: report.written,
-        plannedWrites: report.plannedWrites,
-        skipped: report.skipped,
-        failures: report.failures.slice(0, 50),
+        // ⚠️ `capMetadata` COLLAPSES EVERY ARRAY TO THE STRING "[array]", so the
+        // three lists below preserve nothing. An earlier comment on this file
+        // called the audit row "reviewable evidence" of a dry run; it is not, and
+        // saying so was worse than the gap. The COUNTS are what survive, so they
+        // are what an auditor actually gets.
+        plannedCount: report.plannedCount,
+        skippedCount: report.skippedCount,
+        failureCount: report.failureCount,
         nextCursor: report.nextCursor,
       },
       status: report.failures.length > 0 ? "error" : "success",

@@ -113,39 +113,70 @@ async function slateAlreadyFrozen(db: admin.firestore.Firestore, key: SlateKey):
 export async function freezeSlateOnce(
   db: admin.firestore.Firestore,
   now: number,
-  opts: { dryRun: boolean; fetchWeek?: FetchWeek },
+  opts: {
+    dryRun: boolean;
+    fetchWeek?: FetchWeek;
+    /** Skip the stated-cutoff check, and ONLY that check (Kevin, 2026-08-21). */
+    force?: boolean;
+    /** Freeze THIS slate instead of auto-selecting; bypasses the horizon, nothing else. */
+    target?: SlateKey;
+  },
 ): Promise<FreezeResult> {
   const fetchWeek: FetchWeek = opts.fetchWeek ?? (fetchNFLWeekSchedule as unknown as FetchWeek);
   const idle = (reason: string): FreezeResult => ({
     slate: null, dryRun: opts.dryRun, frozen: 0, wouldFreeze: 0, ok: true, reason,
   });
 
-  // 1.1 — candidates are the slates with a kickoff inside the freeze horizon.
-  // The horizon is not decoration: without it, "the earliest slate with no frozen
-  // record" walks forward to week N+1 and freezes it nine days early, at a Tuesday
-  // that is not that week's stated cutoff, permanently (codex round 8).
-  const windowSnap = await db
-    .collection('nfl_games')
-    .where('startTime', '>', now)
-    .where('startTime', '<=', now + FREEZE_HORIZON_MS)
-    .get();
-  if (windowSnap.empty) return idle('no games kick off inside the freeze horizon');
+  let chosen: { key: SlateKey; verdict: ReturnType<typeof slateIsDue> } | null;
 
-  const candidates: { key: SlateKey; verdict: ReturnType<typeof slateIsDue> }[] = [];
-  for (const key of slateKeysOf(windowSnap.docs.map((d) => d.data() as StoredGame))) {
-    // The FULL stored slate, not the windowed subset: a slate is one thing that
-    // freezes at one instant, and judging it by a partial view is how it ends up
-    // frozen across two.
-    const slate = await readSlate(db, key);
-    candidates.push({ key, verdict: slateIsDue(slate, now, await slateAlreadyFrozen(db, key)) });
-  }
+  if (opts.target) {
+    // ⚠️ A NAMED SLATE BYPASSES THE HORIZON, AND NOTHING ELSE. The horizon is part
+    // of "is this slate due", so `force` alone could not reach regular-season week
+    // 1 until seven days out — which is most of what makes week 1's window short.
+    //
+    // It is a NAMED slate rather than a widened horizon on purpose: "the earliest
+    // slate with no frozen record" over an unbounded horizon walks forward and
+    // freezes the wrong week (codex round 8). An operator naming a week cannot do
+    // that by accident. Once-per-slate, all-or-nothing, the lease and "first
+    // kickoff still in the future" all still apply.
+    const slate = await readSlate(db, opts.target);
+    const verdict = slateIsDue(slate, now, await slateAlreadyFrozen(db, opts.target), Number.POSITIVE_INFINITY);
+    chosen = verdict.due ? { key: opts.target, verdict } : null;
+    if (!chosen) {
+      // `ok: false`, not idle. An auto-selected run finding nothing due is the
+      // normal state of a Tuesday in February; an operator NAMING a slate and not
+      // getting it is a request that failed, and it should read as one.
+      return { slate: slateId(opts.target), dryRun: opts.dryRun, frozen: 0, wouldFreeze: 0, ok: false,
+        reason: `${slateId(opts.target)} is not freezable: ${verdict.reason}` };
+    }
+  } else {
+    // 1.1 — candidates are the slates with a kickoff inside the freeze horizon.
+    // The horizon is not decoration: without it, "the earliest slate with no frozen
+    // record" walks forward to week N+1 and freezes it nine days early, at a Tuesday
+    // that is not that week's stated cutoff, permanently (codex round 8).
+    const windowSnap = await db
+      .collection('nfl_games')
+      .where('startTime', '>', now)
+      .where('startTime', '<=', now + FREEZE_HORIZON_MS)
+      .get();
+    if (windowSnap.empty) return idle('no games kick off inside the freeze horizon');
 
-  const chosen = chooseSlate(candidates);
-  if (!chosen) {
-    // The normal state of a Tuesday in February, and it says so rather than
-    // returning a bare zero.
-    const detail = candidates.map((c) => `${slateId(c.key)}: ${c.verdict.reason}`).join('; ');
-    return idle(`no slate is due${detail ? ` (${detail})` : ''}`);
+    const candidates: { key: SlateKey; verdict: ReturnType<typeof slateIsDue> }[] = [];
+    for (const key of slateKeysOf(windowSnap.docs.map((d) => d.data() as StoredGame))) {
+      // The FULL stored slate, not the windowed subset: a slate is one thing that
+      // freezes at one instant, and judging it by a partial view is how it ends up
+      // frozen across two.
+      const slate = await readSlate(db, key);
+      candidates.push({ key, verdict: slateIsDue(slate, now, await slateAlreadyFrozen(db, key)) });
+    }
+
+    chosen = chooseSlate(candidates);
+    if (!chosen) {
+      // The normal state of a Tuesday in February, and it says so rather than
+      // returning a bare zero.
+      const detail = candidates.map((c) => `${slateId(c.key)}: ${c.verdict.reason}`).join('; ');
+      return idle(`no slate is due${detail ? ` (${detail})` : ''}`);
+    }
   }
 
   const key = chosen.key;
@@ -161,11 +192,11 @@ export async function freezeSlateOnce(
   // so it always passes, and every legitimate repair — Tuesday afternoon after a
   // refusal, Wednesday, Saturday — is after it. Dry runs are unrestricted, which
   // is what R2's Saturday-to-Monday rehearsal needs.
-  if (!opts.dryRun) {
+  if (!opts.dryRun && !opts.force) {
     const { allowed, cutoffMs } = liveFreezeAllowed(chosen.verdict.firstKickoffMs, now);
     if (!allowed) {
       return { slate: label, dryRun: false, frozen: 0, wouldFreeze: 0, ok: false,
-        reason: `${label} does not reach its stated cutoff (Tuesday 09:00 ET, ${new Date(cutoffMs).toISOString()}) until later; a live freeze before it would not honour the time members were given. Dry-run instead, or wait.` };
+        reason: `${label} does not reach its stated cutoff (Tuesday 09:00 ET, ${new Date(cutoffMs).toISOString()}) until later; a live freeze before it would not honour the time members were given. Dry-run instead, wait, or pass force with a reason if freezing early is deliberate.` };
     }
   }
   if (!isFetchableSeasonType(key.seasonType)) {
@@ -379,6 +410,9 @@ export const runNFLSpreadFreeze = validated(
       };
     }
     const dryRun = gate.dryRun || input.dryRun; // schema default TRUE; the config can only make it drier
+    // `force` skips the stated-cutoff check and nothing else. It does NOT make a
+    // run live — both dry-run gates above still decide that.
+    const target = input.slate ? { season: String(input.slate.season), seasonType: Number(input.slate.seasonType), week: Number(input.slate.week) } : undefined;
 
     // `freezeSlateOnce` THROWS on the exceptional refusals — SLATE_CHANGED,
     // ALREADY_FROZEN, FENCE_LOST — because the scheduled job wants them in the
@@ -387,7 +421,7 @@ export const runNFLSpreadFreeze = validated(
     // shape as an ordinary refusal.
     let result: FreezeResult;
     try {
-      result = await freezeSlateOnce(db, Date.now(), { dryRun });
+      result = await freezeSlateOnce(db, Date.now(), { dryRun, force: input.force, target });
     } catch (err: unknown) {
       result = {
         slate: null, dryRun, frozen: 0, wouldFreeze: 0, ok: false,
@@ -407,6 +441,9 @@ export const runNFLSpreadFreeze = validated(
       metadata: {
         dryRun: result.dryRun, slate: result.slate, frozen: result.frozen, wouldFreeze: result.wouldFreeze,
         reason: result.reason, writes: result.writes ?? [], noLine: result.noLine ?? [],
+        // The whole point of requiring a reason is that it lands here.
+        force: input.force, forceReason: input.reason ?? null,
+        requestedSlate: target ? slateId(target) : null,
         missingFromFetch: result.missingFromFetch ?? [], unexpectedInFetch: result.unexpectedInFetch ?? [],
         leaseBusy: result.leaseBusy ?? false,
       },

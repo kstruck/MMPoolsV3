@@ -1685,6 +1685,33 @@ export const dbService = {
     },
 
     /**
+     * PLAN-NFL-SPREAD-FREEZE 1.5b + the 2026-08-21 force option.
+     *
+     * Freeze a NAMED slate now, skipping the stated Tuesday-09:00-ET cutoff and the
+     * 7-day horizon — and nothing else. Once-per-slate, all-or-nothing over the
+     * whole week, the slate lease and "first kickoff still in the future" all still
+     * apply, so this cannot half-freeze a week or re-freeze a done one.
+     *
+     * Requires a written reason, which lands in the `admin_audit` row. Freezing
+     * early does not break fairness — every member still picks against an identical
+     * line — but it does break the predictability members were promised, so it is a
+     * decision somebody signs for.
+     */
+    runNFLSpreadFreeze: async (payload: {
+        dryRun: boolean;
+        force?: boolean;
+        reason?: string;
+        slate?: { season: string; seasonType: number; week: number };
+    }) => {
+        const fn = httpsCallable(functions, 'runNFLSpreadFreeze');
+        const res = await fn(withCorrelationId(payload));
+        return res.data as {
+            enabled: boolean; ok: boolean; slate: string | null; dryRun: boolean;
+            frozen: number; wouldFreeze: number; reason: string; noLine?: string[];
+        };
+    },
+
+    /**
      * The frozen lines for a set of games, keyed by game id — what the Spread
      * Manager reads to know which rows it may still edit directly and which have
      * been committed to.

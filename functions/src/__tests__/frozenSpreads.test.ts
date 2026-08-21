@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import {
   applyFrozenSpreads,
   effectiveSpread,
@@ -263,5 +265,23 @@ describe('slateFieldsOf — `Number.isInteger` alone is not the test', () => {
     expect(slateFieldsOf({ season: null, seasonType: 1, week: 4 })).toBeNull();
     expect(slateFieldsOf({ season: '2026', seasonType: 1, week: 'x' })).toBeNull();
     expect(slateFieldsOf({ season: '2026', seasonType: 1, week: 4.5 })).toBeNull();
+  });
+});
+
+describe('backfill report counts — the caps must not leak into them', () => {
+  it('the display caps are 200 plannedWrites and 100 skipped', () => {
+    // Pinned so the numbers in `backfillFrozenSpreads` cannot drift away from the
+    // reason the counters exist. Codex r1 on the force PR: deriving the counts
+    // from the capped arrays made a 300-game run report `plannedCount: 200,
+    // skippedCount: 100` and read as complete. The counters are incremented where
+    // the event happens instead, and this is the note that says why.
+    const src = readFileSync(resolve(__dirname, '..', 'migrations', 'backfillFrozenSpreads.ts'), 'utf8');
+    expect(src).toContain('report.plannedWrites.length < 200');
+    expect(src).toContain('report.skipped.length < 100');
+    // Incremented, not derived.
+    expect(src).toContain('report.plannedCount++');
+    expect(src).toContain('report.skippedCount++');
+    expect(src).toContain('report.failureCount++');
+    expect(src).not.toContain('report.plannedCount = report.plannedWrites.length');
   });
 });
