@@ -35,7 +35,8 @@ const repoRoot = path.resolve(here, '..', '..');
 process.chdir(repoRoot);
 
 // Bump this when a rules test is ADDED. Lower it only with a written reason.
-const MIN_FILES = 9;
+// 10 as of PLAN-COST-CONTROLS 0.5.1 (aiRequests.rules.test.mjs).
+const MIN_FILES = 10;
 // Every test file initialises rules-unit-testing with this project id.
 const PROJECT_ID = 'gridiron-gamble-uzuqo';
 const host = process.env.FIRESTORE_EMULATOR_HOST;

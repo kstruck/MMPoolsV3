@@ -667,6 +667,9 @@ export interface AIRequest {
   question: string;
   category: 'DISPUTE' | 'CLARIFICATION' | 'OTHER';
   status: 'PENDING' | 'COMPLETED' | 'ERROR';
+  /** Machine-readable reason when status is ERROR (e.g. 'AI_NOT_UNLOCKED',
+   *  written by onAIRequest's entitlement gate — PLAN-COST-CONTROLS 0.5.2). */
+  error?: string;
   responseArtifactId?: string;
   createdAt: number;
   updatedAt?: number;

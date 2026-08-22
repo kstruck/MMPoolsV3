@@ -31,6 +31,12 @@ export const onWinnerUpdate = onDocumentWritten({
     if (!poolSnap.exists) return;
     const pool = poolSnap.data() as GameState;
 
+    // ENTITLEMENT (PLAN-COST-CONTROLS 0.5.2). Winner docs are functions-write-
+    // only (firestore.rules), so this is not user-triggerable spend — it is
+    // UNMONETIZED spend: every squares pool got a paid winner explanation
+    // whether or not it bought the addon. Same deny-by-default as onAIRequest.
+    if (!pool.billing?.featuresUnlocked?.aiCommissioner) return;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let axis: any = pool.axisNumbers;
     if (pool.numberSets === 4 && pool.quarterlyNumbers) {
@@ -141,6 +147,22 @@ export const onAIRequest = onDocumentCreated({
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const poolRaw = poolSnap.data() as any;
+
+    // ENTITLEMENT (PLAN-COST-CONTROLS 0.5.2). Mirrors onWeeklyRecapCreated's
+    // check, which was the ONLY provider-path entitlement gate in this file.
+    // Deny-by-default: a missing flag is NOT a licence. Do NOT swap in
+    // lib/billingAccess.checkBillingAccess here — its `!billing => allowed`
+    // legacy carve-out would re-open this hole for exactly the pools most
+    // likely to lack a billing object (SWEEPS §4).
+    //
+    // Defense in depth WITH the rules tighten (0.5.1), not instead of it: the
+    // rule stops the write, this stops the spend if a write lands anyway.
+    if (!poolRaw.billing?.featuresUnlocked?.aiCommissioner) {
+        console.warn(`[AI] Request on pool ${poolId} without the aiCommissioner entitlement; not generating.`);
+        await snapshot.ref.update({ status: 'ERROR', error: 'AI_NOT_UNLOCKED', updatedAt: Date.now() });
+        return;
+    }
+
     const poolType: string = poolRaw.type ?? 'SQUARES';
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

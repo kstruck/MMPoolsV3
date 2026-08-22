@@ -156,3 +156,168 @@ Round accounting: 4 of the 10-round cap spent. Round 1 (the stock
 was vacuous for a docs-only diff — it was a paid run. Rounds 2–4 were
 adversarial plan-content briefs, which is the shape this repo's plan gates
 actually need.
+
+---
+
+# Phase 0.5 — implementation review (PR #516)
+
+_Separate cycle from the plan review above: that one reviewed the PLAN, this one
+reviews the CODE that implements Phase 0.5. Same reviewer and same rules
+(CLAUDE.md §2c, qodo DORMANT, cap 10). Run 2026-08-22, `codex exec`,
+`-m gpt-5.3-codex`._
+
+## Round 1 — `codex exec review --base origin/main`
+
+VERDICT: CLEAN — "tightens Firestore access controls, adds corresponding rules
+tests, and propagates a new explicit SMS channel parameter consistently across
+call sites without introducing obvious logic regressions."
+
+### Claude's response
+
+Recorded, not treated as the review — same reasoning as the plan cycle's round 1.
+Rounds 2+ used adversarial briefs naming this diff's actual risk areas (a zod
+transform on a money path, the rules `get()` budget, the collection-group index,
+the audience split).
+
+## Round 2 — adversarial: money paths, rules budget, index, audience coverage
+
+VERDICT: REVISE. 1 finding (Medium), accepted.
+
+1. (Medium) The schema transform stops SMS being SOLD going forward, but
+   `finalizePoolPayment` trusts the PERSISTED session snapshot rather than
+   re-parsing (`stripe.ts:725-732`, `:782`). A checkout session created before
+   the deploy could still stamp `billing.featuresUnlocked.smsNotifications`.
+
+Codex also verified clean: every buy path parses through the shared schemas; the
+transform creates no type hole; no wrongful revocation for already-paid pools;
+the rules change is budget-safe (`isSuperAdmin` is claim-based, total document
+accesses well under 10); the collection-group query and its field override
+match; every `sendCourierSMS` call site passes an audience.
+
+### Claude's response
+
+**Accepted, with half its proposed fix rejected.** The clamp now runs in the
+webhook too, reading the SAME `UNSELLABLE_ADDON_KEYS` the transform uses so the
+two cannot drift, and it writes an `UNSELLABLE_ADDON_SOLD` monetization alert —
+clamping silently would leave a customer charged for SMS and not granted it,
+with no record to refund from.
+
+**Rejected:** filtering `snapshot.addons`. That array is the record of what was
+PAID FOR and feeds `assertPaidCeilingForUpdate`; stripping it would make a
+customer who already paid pay again if SMS returns, and it grants nothing today
+because no client path can write `featuresUnlocked`.
+
+## Round 3 — re-review of the round-2 fix
+
+VERDICT: REVISE. 3 findings, all accepted. **Two were defects in round 2's own
+fix** — the pattern §2c prices a round for.
+
+1. (Medium) The alert `txn.set` sat ABOVE a coupon `txn.get` in the same
+   transaction. Firestore requires all reads before all writes, so any checkout
+   using BOTH a coupon and an unsellable add-on would have thrown the
+   transaction and retried forever.
+2. (Low) `clampUnsellableAddons` echoed its generic `T`, so the compiler could
+   keep believing a clamped field was still literal `true`.
+3. (Low) The new webhook tests were string-presence assertions that would pass
+   with the executable code deleted.
+
+### Claude's response
+
+All three accepted. The clamp decision became a pure function
+(`unsellableClampOutcome`) computed in place; only the alert write moved below
+every read. The helper returns a widened boolean-valued mapped type. The tests
+became behavioural, including the ordinary purchase that must NOT alert.
+
+⚠️ **The ordering guard I wrote for finding 1 was itself vacuous.** Its first
+version searched the whole file, matched a coupon read belonging to a DIFFERENT
+function, and passed with the bug reintroduced. Caught by reverting the fix and
+watching the test stay green. Now scoped to the `finalizePoolPayment` body,
+asserting against the LAST transaction read, and it fails if its own markers go
+stale.
+
+## Round 4 — re-review of the round-3 fix
+
+VERDICT: REVISE. 2 findings, both accepted.
+
+1. (Medium) `checkAiVolume` delegated to `timed()`, which turns any throw into
+   `ok: false` — while carrying a comment promising it would never do that. The
+   Overview card ANDs every check (`SuperAdminBentoDashboard.tsx:164`), so a
+   missing index would print "Degradation detected" over a healthy platform.
+2. (Low) The ordering guard matched only `txn.get(`, which `txn.getAll(` does
+   not contain.
+
+### Claude's response
+
+Both accepted. The probe catches its own errors, stays `ok: true`, and reports
+`AI volume unavailable: <reason>` — never a `0`, which would read as "no AI
+spend" exactly when the thing watching spend is broken. It is exported so it can
+be tested by BEHAVIOUR rather than by string-matching (the round-3 lesson applied
+unprompted). The guard now matches every read form.
+
+## Round 5 — re-review of the round-4 fix
+
+VERDICT: REVISE. 3 findings, 2 accepted, 1 rejected.
+
+1. (Medium) `sendCourierSMS` consults the switch on every send and the reminder
+   passes call it once per RECIPIENT — one `system/config` read per member per
+   run, i.e. spending Firestore reads to check a cost-control switch.
+2. (Low) The AI-volume test pinned the query's field and operator but not the
+   24h window.
+3. (Low) The ordering guard cannot see `txn['get'](…)`, an aliased handle, or a
+   read inside a helper.
+
+### Claude's response
+
+**1 and 2 accepted.** 60s process-level TTL cache, with the staleness tradeoff
+stated in the code and failures deliberately NOT cached. The window is now
+asserted within a second of `now - 24h`.
+
+**3 REJECTED, with reasoning recorded at the assertion itself.** Closing it means
+an AST pass or an emulator test that deliberately mis-orders a read, and neither
+is worth its weight against a tripwire: the regression that actually happened was
+an ordinary `txn.get(` added below a write, which this catches. The limitation is
+now named in the test rather than left implied.
+
+## Round 6 — re-review of the round-5 fix
+
+VERDICT: REVISE. 1 finding (Medium), accepted.
+
+1. (Medium) Overlapping cache misses each issued their own read, and the last to
+   finish installed its value — which can put an older config over a newer one
+   and push real staleness past the 60s the module advertises.
+
+### Claude's response
+
+Accepted. `loadCostControls` now single-flights; the cache entry is stamped at
+COMPLETION so a slow read cannot install an already-old entry; the `finally`
+clearing `inflight` has its own test (a parked rejected promise would make every
+later caller reuse the failure).
+
+## Round 7 — re-review of the round-6 fix
+
+VERDICT: **APPROVED.** "I don't see a new material issue worth a seventh paid
+round." Confirmed: `inflight` is never left dangling, settled promises are not
+reused, fail-closed holds on every read-error path, waiters on a rejected shared
+promise receive the resolved `null` rather than an uncaught rejection, and
+stamping at completion introduces no new staleness mode. Fresh-eyes sweep of the
+whole diff found no new authorization holes.
+
+One caveat raised and agreed as test-seam behaviour, not a production defect: a
+read already in flight when `__resetCostControlsCache()` is called still writes
+the cache when it settles. Nothing in production calls the reset; the limitation
+is now named in its doc comment.
+
+## Resolution — CONVERGED (clean final round)
+
+7 rounds, 10 findings (5 Medium / 5 Low — no Critical), **9 accepted, 1 rejected
+with written reasoning**, plus one half-rejection (round 2's proposal to filter
+the paid-addons record). Severity never rose above Medium and the count fell
+1 → 3 → 2 → 3 → 1 → 0. Stopping rule per §2c while §2b is DORMANT: round 7 came
+back clean AND Claude's own read of the diff agrees. No findings carried open.
+
+**Three of the ten findings were defects in code written to close an earlier
+finding**, and one was a GUARD THAT DID NOT GUARD — the exact failure §2c
+documents. Every guard in this PR was therefore checked by reverting the thing it
+protects and confirming the test goes red: the rules tighten (3 assertions fail),
+the audience assignments, the transaction ordering, the health probe, the 24h
+window, and single-flight.

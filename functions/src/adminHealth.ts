@@ -54,6 +54,61 @@ async function checkFirestore(db: admin.firestore.Firestore): Promise<Check> {
 }
 
 /**
+ * AI request volume, last 24h, across every pool (PLAN-COST-CONTROLS 0.5.5).
+ * Interim spend visibility until Phase 6's cost card exists: each ai_requests
+ * doc triggers a Gemini generation, so this count IS the AI spend driver, and a
+ * spike is the thing an operator needs to see before an invoice tells them.
+ *
+ * ⚠️ Needs the `ai_requests.createdAt` COLLECTION_GROUP field override in
+ * firestore.indexes.json, and `--only firestore:indexes` is a THIRD deploy
+ * surface that neither the functions nor the rules deploy ships. An undeclared
+ * index here would throw 9 FAILED_PRECONDITION on every run and report nothing
+ * — exactly how enforceBillingStatus stayed broken for its whole life.
+ *
+ * `.count()` is an aggregation query: billed per read-unit, not per matched
+ * document, so this stays cheap as volume grows.
+ *
+ * ⚠️ THIS PROBE NEVER REPORTS `ok: false`, and that is deliberate. The Overview
+ * card derives its whole verdict from `checks.every(c => c.ok)`
+ * (`SuperAdminBentoDashboard.tsx:164`), so a missing index or a transient query
+ * error here would print "Degradation detected" over a platform that is
+ * completely healthy. This is TELEMETRY, not an availability check: when it
+ * cannot answer it says so in its detail and stays green. That is the same
+ * crying-wolf failure this repo has rejected findings over before — a monitor
+ * that is wrong in the alarming direction gets ignored, and then the real
+ * outage is ignored with it. (An earlier draft of this function had a comment
+ * claiming this behaviour while `timed()` did the opposite; codex round 4.)
+ */
+export async function checkAiVolume(db: admin.firestore.Firestore): Promise<Check> {
+  const started = Date.now();
+  try {
+    const since = Date.now() - 24 * 60 * 60 * 1000;
+    const agg = await db
+      .collectionGroup("ai_requests")
+      .where("createdAt", ">=", since)
+      .count()
+      .get();
+    return {
+      ok: true,
+      latencyMs: Date.now() - started,
+      detail: `${agg.data().count} AI requests last 24h`,
+    };
+  } catch (err) {
+    // Says "unavailable" rather than inventing a number — the repo's own rule
+    // ("Data unavailable → the card shows 'unavailable', never a
+    // plausible-looking substitute"). A 0 here would read as "no AI spend",
+    // which is exactly the wrong thing to believe when the probe is broken.
+    const reason = err instanceof Error ? err.message : "error";
+    console.warn("[adminHealth] AI volume probe failed (reported as unavailable, not as an outage)", err);
+    return {
+      ok: true,
+      latencyMs: Date.now() - started,
+      detail: `AI volume unavailable: ${reason}`,
+    };
+  }
+}
+
+/**
  * Email delivery health via the Trigger-Email extension's `delivery.state`
  * field on recent /mail docs. `delivery` is written by the extension, not our
  * app (sendEmail only writes to/message/createdAt), so it's an EXTERNAL
@@ -121,10 +176,11 @@ export async function computeAdminHealthSnapshot(
   db: admin.firestore.Firestore
 ): Promise<HealthSnapshot> {
   const functionStarted = Date.now();
-  const [espn, firestore, email] = await Promise.all([
+  const [espn, firestore, email, aiVolume] = await Promise.all([
     checkEspn(),
     checkFirestore(db),
     checkEmail(db),
+    checkAiVolume(db),
   ]);
   return {
     at: Date.now(),
@@ -132,6 +188,7 @@ export async function computeAdminHealthSnapshot(
       espn: { label: "ESPN NFL API", ...espn },
       firestore: { label: "Firestore", ...firestore },
       email: { label: "Email delivery", ...email },
+      aiVolume: { label: "AI request volume", ...aiVolume },
       functions: {
         label: "Cloud Functions",
         ok: true,

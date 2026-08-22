@@ -5,6 +5,32 @@ claim-by-claim against the repo by Claude, plus Kevin's answers of 2026-08-22.
 Terms per CONTEXT.md. Plan-gated: touches **money** (billing entitlements, provider
 spend) and **authorization** (`firestore.rules` `ai_requests`, new callables)._
 
+## Implementation status
+
+**Phase 0.5 — BUILT, in review as [#516](https://github.com/kstruck/MMPoolsV3/pull/516)
+(branch `claude/rate-limiting-review-gate-dk4w2i`). NOT merged, NOT deployed.**
+
+| Item | State |
+|---|---|
+| 0.5.1 rules tighten (`ai_requests` create) | ✅ built — `firestore.rules`, + `functions/scripts/aiRequests.rules.test.mjs` (9 cases) |
+| 0.5.2 entitlement in `onAIRequest` / `onWinnerUpdate` | ✅ built — `aiCommissioner.ts` |
+| 0.5.3 SMS kill-switch + `audience` split | ✅ built — new `lib/costControls.ts` (fail-CLOSED, 60s TTL cache), `smsService.ts` + 4 call sites |
+| 0.5.4 SMS unsellable | ✅ built — `shared/schemas/quote.ts` (`UNSELLABLE_ADDON_KEYS`), + the Stripe in-flight-session clamp |
+| 0.5.5 AI volume on the health snapshot | ✅ built — `adminHealth.ts` + the `ai_requests.createdAt` COLLECTION_GROUP field override |
+
+⚠️ **Deploy is THREE surfaces and the order matters** (Rule 2): functions →
+rules → **indexes**. The index is not optional: 0.5.5's collection-group count
+throws `FAILED_PRECONDITION` without it, which is the `enforceBillingStatus`
+failure mode this repo has already paid for once.
+
+⚠️ **The SMS kill-switch defaults OFF at deploy.** `system/config.costControls`
+does not exist yet and the reader is fail-closed, so member SMS stops the moment
+functions deploy — which is where Kevin wants it (decision #3). Ops and
+security-alert SMS are unaffected (D4). Set `costControls.sms.enabled = true` to
+re-enable member SMS.
+
+📌 **Phases 1, 2, 3, 4, 6 and 7 are NOT started.** Phase 5 is deferred (D5).
+
 ## Gate status (2026-08-22, updated same day after the environment fix)
 
 - ✅ Phase 0 (this document): inventory, caps, config design — authored.

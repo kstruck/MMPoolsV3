@@ -12,12 +12,75 @@
 import { z } from 'zod';
 import { POOL_TYPES } from '../poolTypes';
 
+// --- Unsellable add-ons -------------------------------------------------------
+/**
+ * Add-ons that exist in the contract but MUST NOT be sold right now
+ * (PLAN-COST-CONTROLS 0.5.4). ONE definition, read by both places that have to
+ * agree: the schema transform below (so nothing new can be quoted or charged)
+ * and the Stripe webhook's in-flight-session clamp (so a session created before
+ * this shipped cannot stamp the entitlement either). Adding a key here disables
+ * selling it everywhere; removing one re-enables it everywhere.
+ */
+export const UNSELLABLE_ADDON_KEYS = ['smsNotifications'] as const;
+
+/**
+ * Force every unsellable add-on off. Pure. The return type is widened to
+ * booleans rather than echoing `T`: this function can turn a `true` into a
+ * `false`, so preserving a literal type would let the compiler keep believing a
+ * clamped field is still `true`.
+ */
+export function clampUnsellableAddons<T extends Record<string, boolean>>(
+  addons: T,
+): { [K in keyof T]: boolean } {
+  const out = { ...addons } as { [K in keyof T]: boolean };
+  for (const key of UNSELLABLE_ADDON_KEYS) {
+    if (key in out) (out as Record<string, boolean>)[key] = false;
+  }
+  return out;
+}
+
+/**
+ * The whole in-flight-session decision for the Stripe webhook, as one pure
+ * function: what the entitlement map should become, and which unsellable
+ * add-ons were actually paid for (empty ⇒ nothing to alert about).
+ *
+ * Pure and exported so the behaviour is unit-testable. It used to live inline
+ * in `finalizePoolPayment`, where the only thing a test could assert was that
+ * certain strings appeared in the file — a guard that passes whether or not the
+ * code still runs (codex round 3).
+ *
+ * `paidAddons` is the PAID RECORD (`billing.paid.addons`) and is deliberately
+ * returned untouched by the caller: it is evidence of purchase, not a grant.
+ */
+export function unsellableClampOutcome(
+  unlocked: Record<string, boolean>,
+  paidAddons: readonly string[] = [],
+): { unlocked: Record<string, boolean>; soldWhileOff: string[] } {
+  const soldWhileOff = UNSELLABLE_ADDON_KEYS.filter(
+    (k) => unlocked[k] === true || paidAddons.includes(k),
+  );
+  return { unlocked: clampUnsellableAddons(unlocked), soldWhileOff: [...soldWhileOff] };
+}
+
 // --- Add-on selection ---------------------------------------------------------
 // The four premium features that carry an addonPrice in billing_config. Every
 // field is optional+boolean and defaults to false so partial payloads (and the
 // server pricing them) are unambiguous. SMS is a first-class add-on here — the
 // pre-overhaul BillingInvoiceCard omitted it from the subtotal; that bug dies
 // with this contract.
+//
+// ⚠️ SMS IS NOT SELLABLE (PLAN-COST-CONTROLS 0.5.4; Kevin's D-decision #3,
+// 2026-08-22: "SMS is OFF until further notice"). The field stays in the
+// contract so existing payloads still validate, but the transform below forces
+// it false, which is the ONE choke point both buy paths share (getPoolQuote and
+// createCheckoutSession) — so it cannot be priced into a quote (quoteEngine
+// iterates ADDON_KEYS) and cannot be stamped into billing.featuresUnlocked
+// (stripe.ts reads addons.smsNotifications). Coercing rather than rejecting is
+// deliberate: the safe direction is never-charge/never-unlock, and a hard error
+// would break a stale client instead of quietly quoting it the truth.
+// Pools that ALREADY bought SMS keep their flag — this sells none, revokes none.
+// To bring SMS back: delete the transform, and re-add the wizard toggle
+// (BillingInvoiceCard removed it on the 2026-07-07 product decision).
 export const addonSelectionSchema = z
   .object({
     aiCommissioner: z.boolean().optional().default(false),
@@ -32,7 +95,8 @@ export const addonSelectionSchema = z
     smsNotifications: false,
     whatIfSimulator: false,
     customBranding: false,
-  }));
+  }))
+  .transform((a) => clampUnsellableAddons(a));
 export type AddonSelection = z.infer<typeof addonSelectionSchema>;
 /** The four add-on keys, in canonical order. */
 export const ADDON_KEYS = [

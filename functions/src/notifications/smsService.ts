@@ -1,5 +1,6 @@
 import { defineSecret } from "firebase-functions/params";
 import type { DeliveryOutcome } from "../lib/deliveryTally";
+import { isMemberSmsEnabled, type SmsAudience } from "../lib/costControls";
 
 export const courierAuthToken = defineSecret("COURIER_AUTH_TOKEN");
 
@@ -32,8 +33,33 @@ function normalizePhone(phone: string): string {
  * over a config choice").
  *
  * `'failed'` means the send was attempted and did not get through.
+ *
+ * `audience` is REQUIRED and carries the cost-control kill-switch (PLAN-COST-
+ * CONTROLS Phase 0.5.3). Only `'member'` sends are gated: Kevin's D4 turns
+ * member-facing SMS off while keeping his own security alerts and the
+ * SUPER_ADMIN test endpoint working, and both of those flow through THIS
+ * function — so a blanket check at the top would take them down with the
+ * member sends. It is a required parameter rather than an optional one because
+ * a defaulted audience makes a new call site silently member-or-not; the type
+ * error is the point.
+ *
+ * Ops paging is NOT here: `lib/opsAlertDispatcher.ts` `sendOpsSMS` is its own
+ * Courier path (deliberately, per its own header) and is exempt per D4.
  */
-export async function sendCourierSMS(phoneNumber: string, message: string): Promise<DeliveryOutcome> {
+export async function sendCourierSMS(
+    phoneNumber: string,
+    message: string,
+    audience: SmsAudience
+): Promise<DeliveryOutcome> {
+    if (audience === 'member' && !(await isMemberSmsEnabled())) {
+        // Same 'skipped' semantics as an unconfigured Courier: a deployment
+        // choice, not a fault. Returning 'failed' here would mark every
+        // reminder pass unhealthy forever — the crying-wolf mode this file's
+        // header exists to avoid.
+        console.warn("[costControls] member SMS disabled by kill-switch; not sent.");
+        return 'skipped';
+    }
+
     const token = courierAuthToken.value();
     if (!token) {
         console.warn("Courier Auth Token not configured. SMS not sent.");

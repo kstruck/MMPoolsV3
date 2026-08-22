@@ -40,6 +40,7 @@ import { loadBillingConfig, resolveCouponForQuote } from "./billing";
 import { computeQuote, pricedAddonKeys } from "./lib/quoteEngine";
 import {
     checkoutPoolInputSchema,
+    unsellableClampOutcome,
     type PendingBillableSnapshot,
 } from "./shared/schemas/quote";
 import {
@@ -755,9 +756,40 @@ async function finalizePoolPayment(args: {
 
         const tier = (snapshot?.tier || metadata.tier || "standard_tier");
         const maxPlayersAllowed = snapshot?.maxPlayersAllowed ?? (Number(metadata.maxPlayersAllowed) || 10);
-        const unlocked = featuresUnlocked || {
+        const rawUnlocked = featuresUnlocked || {
             aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: false,
         };
+
+        // IN-FLIGHT SESSION CLAMP (PLAN-COST-CONTROLS 0.5.4; codex round 2).
+        // 0.5.4 stops SMS being SOLD at the shared schema, but this handler
+        // finalizes sessions created BEFORE that deployed, and it trusts the
+        // persisted pendingSnapshot/featuresUnlocked rather than re-parsing the
+        // schema. Without this, such a session still stamps the SMS flag on a
+        // feature Kevin has turned off.
+        //
+        // The clamp alone would leave a customer CHARGED for SMS and not
+        // granted it, silently — so it writes a monetization alert instead,
+        // same idiom as the double-charge guard above. This should never fire:
+        // the wizard stopped offering SMS on 2026-07-07, so it needs a session
+        // that was crafted, not clicked.
+        //
+        // ⚠️ `snapshot.addons` is deliberately NOT filtered (half of the review's
+        // proposed fix, rejected with reason). That array is the record of what
+        // was PAID FOR, and it is what `assertPaidCeilingForUpdate` reads. If
+        // SMS returns, stripping it here would make a customer who already paid
+        // pay again; keeping it costs nothing today because no client path can
+        // write `featuresUnlocked` (`shared/editability.ts` does not expose it).
+        // So: the entitlement is withheld, the purchase record stays truthful.
+        //
+        // ⚠️ DECIDE HERE, WRITE LATER. A Firestore transaction requires every
+        // read before every write, and a coupon `txn.get` runs below — an alert
+        // `txn.set` here threw the whole transaction for any checkout that used
+        // BOTH a coupon and an unsellable add-on (codex round 3). This block is
+        // pure; the alert write sits with the other writes, after the reads.
+        const { unlocked, soldWhileOff } = unsellableClampOutcome(
+            rawUnlocked,
+            Array.isArray(snapshot?.addons) ? snapshot!.addons : [],
+        );
 
         // Confirm coupon reservation (flip pending → confirmed) in this txn.
         if (couponCode && reservationId) {
@@ -769,6 +801,25 @@ async function finalizePoolPayment(args: {
                 const t = transitionReservation(cLog, reservationId, "confirmed", Date.now(), sessionId);
                 if (t.changed) txn.update(cRef, { usageLog: t.usageLog });
             }
+        }
+
+        // Deferred from the clamp above: all reads are done, so it is safe to
+        // write. Records the money discrepancy (charged for an add-on whose
+        // entitlement we are withholding) for refund review, rather than
+        // withholding it silently.
+        if (soldWhileOff.length > 0) {
+            txn.set(db.collection("monetization_alerts").doc(`UNSELLABLE_ADDON_SOLD_${sessionId}`), {
+                type: "UNSELLABLE_ADDON_SOLD",
+                addons: soldWhileOff,
+                poolId,
+                userId,
+                sessionId,
+                paymentIntentId: paymentIntentId ?? null,
+                amount,
+                status: "open",
+                createdAt: Date.now(),
+            }, { merge: true });
+            console.warn(`[Stripe Webhook] Unsellable add-on(s) ${soldWhileOff.join(",")} arrived on session ${sessionId} for pool ${poolId}; entitlement withheld, alert written for refund review.`);
         }
 
         // Activate pool + copy pending snapshot → billing.paid + featuresUnlocked.
