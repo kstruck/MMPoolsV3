@@ -23,6 +23,7 @@ import { QuickPicksDialog } from './pickSheet/QuickPicksDialog';
 import { planQuickPicks, type QuickPickStrategy } from './pickSheet/quickPicks';
 import type { User, Pool, NFLGame } from '../../types';
 import { effectiveWeeklyTiebreaker, frozenTiebreakTargetFor, resolveTiebreakTargetIds, tiebreakTargetSentence, tiebreakerAsksForPrediction, tiebreakerCopy } from '@shared/nflTiebreaker';
+import { useTopicShort } from '../../help/scope';
 
 interface PickemDraft {
   picks: Record<string, string>;
@@ -454,7 +455,15 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   // The pool's tie-breaker rule, resolved (absent ⇒ MNF_COMBINED, the rule every
   // pool created before the setting existed has been playing).
   const tiebreakerRule = effectiveWeeklyTiebreaker(castPool.settings);
+  // The LABEL stays here: it is a control's name, not an explanation, and
+  // `docs/help-voice.md` governs help copy rather than button and field labels.
   const tiebreakerText = tiebreakerCopy(tiebreakerRule);
+  // The HINT does not. T4 moved it into the help registry — `tiebreakerCopy`
+  // was one definition shared with the standings column, and a SECOND
+  // definition from the registry's point of view, which is the duplicate voice
+  // rule 10 forbids. The topic is a `HelpCopy.template`, so it still renders
+  // this pool's own rule.
+  const tiebreakerHint = useTopicShort('settings.weeklyTiebreaker');
 
   // The game(s) this week's prediction is judged against — the FROZEN target
   // once the week has one (set by its first submission; PLAN-WEEKLY-PRIZES
@@ -762,7 +771,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
               className="w-full bg-page border border-line rounded-xl px-4 py-3 text-[color:var(--text)] text-center num font-bold focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500"
             />
             <p className="text-[10px] font-body text-muted leading-normal text-center">
-              {tiebreakerText?.hint}
+              {tiebreakerHint}
             </p>
             {tiebreakTargetText && (
               <p className="text-[10px] font-body font-bold text-[color:var(--text)] leading-normal text-center">

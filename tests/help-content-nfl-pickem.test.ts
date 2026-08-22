@@ -278,6 +278,50 @@ describe('T9 — the allowlist rows it closed are closed', () => {
  * to be proved is that each branch says the RIGHT thing, and that the wizard
  * still gets the widened version.
  */
+/**
+ * T4's near miss, pinned.
+ *
+ * `nfl.manager.extendDeadline` was first authored in `nfl-shared.ts` at all
+ * three season types, because the OTHER two exception topics belong there. It
+ * does not: `extendWeekDeadline` refuses a Survivor or Margin pool outright
+ * (`HARD_WEEKLY_LOCK`), and the manager form renders an explanation instead of
+ * the control for them. Left as it was, a Survivor commissioner's Help panel
+ * would have described a control their pool does not have and could not use —
+ * on `pool.nfl.manager.settings`, which all three types share.
+ *
+ * The file-level invariant above caught it. This pins the behaviour that
+ * invariant is a proxy for.
+ */
+describe('T4 — the deadline-extension topic is Pick’em only', () => {
+  const PAGE = 'pool.nfl.manager.settings';
+  const TOPIC = 'nfl.manager.extendDeadline';
+
+  it('reaches a Pick’em commissioner', () => {
+    expect(visibleOn(PAGE, 'NFL_PICKEM', 'commissioner')).toContain(TOPIC);
+  });
+
+  it.each(['NFL_SURVIVOR', 'NFL_MARGIN'] as const)('does NOT reach a %s commissioner', type => {
+    expect(visibleOn(PAGE, type, 'commissioner')).not.toContain(TOPIC);
+    expect(helpRegistry.resolveTopic({ poolType: type, audience: 'commissioner' }, TOPIC)).toBeUndefined();
+  });
+
+  it('the other two exception topics DO reach all three — they are not scoped by accident', () => {
+    for (const type of ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'] as const) {
+      const seen = visibleOn(PAGE, type, 'commissioner');
+      expect(seen).toContain('nfl.manager.proxyPick');
+      expect(seen).toContain('nfl.manager.cancelPool');
+    }
+  });
+
+  it('and none of the three reaches a MEMBER', () => {
+    // Every one of them is a commissioner action; `resolveTopic` is the only
+    // filter between the topic and a member's panel.
+    for (const id of ['nfl.manager.proxyPick', 'nfl.manager.cancelPool', TOPIC]) {
+      expect(helpRegistry.resolveTopic({ poolType: 'NFL_PICKEM', audience: 'member' }, id)).toBeUndefined();
+    }
+  });
+});
+
 describe('settings.weeklyTiebreaker renders the rule this pool is playing', () => {
   const topic = helpRegistry.getTopic('settings.weeklyTiebreaker');
 

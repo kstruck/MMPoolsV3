@@ -13,7 +13,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { PoolType } from '@shared/poolTypes';
 import type { Audience } from './types';
-import type { TopicScope } from './registry';
+import { helpRegistry, resolveCopy, type TopicScope } from './registry';
 import { useHelpRoute } from './publish';
 
 /**
@@ -67,6 +67,27 @@ export function HelpScopeProvider(props: {
 
 export function useHelpScope(): TopicScope {
   return useContext(HelpScopeContext);
+}
+
+/**
+ * A topic's TOOLTIP copy, resolved against the reader's own scope.
+ *
+ * For the surfaces that render an explanation somewhere a `HelpTip` does not
+ * fit — a column header's `title`, a hint line under an input — and that would
+ * otherwise keep their own copy of the sentence. `tiebreakerCopy`'s `hint` was
+ * exactly that: one definition shared between the pick sheet and the standings
+ * column, but a SECOND definition from the registry's point of view, and the
+ * one nobody would think to update when the topic changed (voice rule 10, T4).
+ *
+ * `undefined` when the topic does not resolve for this reader — the caller
+ * renders nothing rather than a placeholder, the same contract `HelpTip` has.
+ * Because it resolves through the scope, a `template` renders the branch for
+ * the reader's own pool.
+ */
+export function useTopicShort(id: string): string | undefined {
+  const scope = useHelpScope();
+  const topic = helpRegistry.resolveTopic(scope, id);
+  return topic ? resolveCopy(topic.short, scope) : undefined;
 }
 
 /**

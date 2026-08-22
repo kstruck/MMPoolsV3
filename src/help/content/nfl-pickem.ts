@@ -11,7 +11,7 @@
 // keeps breaking, and every break so far was a sentence written from memory.
 
 import type { HelpPlacement, HelpTopic } from '../types';
-import { EVERYONE } from './nfl-shared';
+import { EVERYONE, HOST_ONLY } from './nfl-shared';
 
 const PICKEM = ['NFL_PICKEM'] as const;
 
@@ -177,6 +177,33 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
     terms: ['weekly-prize'],
     related: ['settings.weeklyTiebreaker'],
   },
+
+  {
+    id: 'nfl.manager.extendDeadline',
+    title: 'Extending a deadline',
+    short: 'Moves this week’s pick deadline later for everybody, up to 24 hours. Every member is emailed the new time and your reason.',
+    long: [
+      'Use it when the deadline itself was wrong — a schedule change, a kickoff that moved, an outage. It applies to the whole pool, not to one player.',
+      'Everyone in the pool is emailed the new deadline and the reason you type, so write the reason for them to read.',
+      // The two real refusals, from `extensionRefusal` — NOT "a game that has
+      // already started", which the first draft said and which is not what the
+      // server checks. A game that has kicked off stays locked regardless,
+      // because an override only ever moves a lock LATER (`effectiveGameLockAt`
+      // takes `Math.max` of the base and the override), never earlier.
+      'It is refused once this week’s results have been shown to members — a deadline cannot move after people have seen how the week went — and for a moment while the week is being scored.',
+      'It is recorded against the pool with your name on it.',
+    ].join('\n\n'),
+    fields: [],
+    // ⚠️ PICK'EM ONLY, and this is not a scoping preference. `extendWeekDeadline`
+    // REFUSES a Survivor or Margin pool outright (`HARD_WEEKLY_LOCK`): those
+    // types run a fixed weekly deadline before the first kickoff, and the
+    // manager form renders an explanation instead of the control for them.
+    // Left at all three types, this topic would sit in the Help panel of a pool
+    // that has no such control and could not use it — voice rule 5's failure
+    // mode with a different face.
+    poolTypes: PICKEM,
+    audience: HOST_ONLY,
+  },
 ];
 
 /**
@@ -222,5 +249,9 @@ export const NFL_PICKEM_PLACEMENTS: readonly HelpPlacement[] = [
   { topic: 'settings.confidenceMode', page: 'pool.nfl.manager.settings', section: 'picks', order: 12 },
   { topic: 'settings.pickMode', page: 'pool.nfl.manager.settings', section: 'picks', order: 13 },
   { topic: 'settings.weeklyTiebreaker', page: 'pool.nfl.manager.settings', section: 'picks', order: 14 },
+
+  // T4 — Pick'em only, because `extendWeekDeadline` refuses the hard-lock types
+  // and the manager form renders an explanation instead of the control there.
+  { topic: 'nfl.manager.extendDeadline', page: 'pool.nfl.manager.settings', section: 'exceptions', order: 0 },
   { topic: 'settings.lockMode', page: 'pool.nfl.manager.settings', section: 'picks', order: 15 },
 ];

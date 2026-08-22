@@ -12,6 +12,8 @@ import type { Pool, NFLGame, User } from '../../types';
 import { NFLManagerBentoDashboard } from './NFLManagerBentoDashboard';
 import { PaymentLedgerNFL } from './PaymentLedgerNFL';
 import { useToast } from '../ui/Toast';
+import { FieldLabel } from '../ui/Field';
+import { helpRegistry } from '../../help/registry';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
 import { publicListingToggleValue, publicListingUpdate } from '../../utils/publicListing';
@@ -89,13 +91,13 @@ const WeeklyPlacesEditor: React.FC<{ places: PlaceRow[]; onChange: (next: PlaceR
       {places.map((p, i) => (
         <div key={i} className="flex items-end gap-2">
           <div className="w-24">
-            <label className="block font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted mb-1">Rank</label>
+            <FieldLabel tone="muted" helpId="settings.payouts.places.*.rank">Rank</FieldLabel>
             <input type="number" min={1} value={p.rank}
               onChange={e => patch(i, { rank: Math.max(1, Math.floor(Number(e.target.value) || 1)) })}
               className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
           </div>
           <div className="flex-1">
-            <label className="block font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted mb-1">% of the weekly pot</label>
+            <FieldLabel tone="muted" helpId="settings.payouts.places.*.percentage">% of the weekly pot</FieldLabel>
             {/* NOT floored (qodo #2): `payoutPlaceSchema` is
                 `z.number().min(0).max(100)` and `splitPrizes` has a test for a
                 33.3 / 33.3 / 33.4 split, so rounding here would silently
@@ -186,12 +188,29 @@ type CommishTab = 'overview' | 'members' | 'settings' | 'scoring';
 
 const COMMISH_TAB_IDS: readonly CommishTab[] = ['overview', 'members', 'scoring', 'settings'];
 
-const COMMISH_TABS: { id: CommishTab; label: string; hint: string }[] = [
-  { id: 'overview', label: 'Overview', hint: 'Submission health, payouts' },
-  { id: 'members', label: 'Members & Payments', hint: 'Payment Ledger, roster, reminders' },
-  { id: 'scoring', label: 'Scoring', hint: 'Score and recap the week' },
-  { id: 'settings', label: 'Settings', hint: 'Pool rules, deadlines, exceptions' },
+/**
+ * The four sections, with their hover text READ FROM THE HELP REGISTRY (T4).
+ *
+ * Each of these tabs already has a `HelpPage` whose `summary` says what the
+ * tab is for, so the four `hint` strings that used to live here were a second
+ * copy of that sentence — and the one that nobody would have thought to update
+ * when the tab changed. Voice rule 10: a sentence explaining something exists
+ * in exactly one place.
+ *
+ * `title` is left ABSENT rather than falling back to a literal when a page is
+ * missing. A fallback string would be the second copy again, quietly.
+ * `buildRegistry` refuses a placement pointing at a page that does not exist,
+ * so a missing page is a build-time failure, not a runtime one.
+ */
+const COMMISH_TABS: { id: CommishTab; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'members', label: 'Members & Payments' },
+  { id: 'scoring', label: 'Scoring' },
+  { id: 'settings', label: 'Settings' },
 ];
+
+const commishTabHint = (tab: CommishTab): string | undefined =>
+  helpRegistry.getPage(`pool.nfl.manager.${tab}`)?.summary;
 
 interface NFLManagerViewProps {
   pool: Pool;
@@ -1008,7 +1027,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
             key={t.id}
             type="button"
             aria-current={commishTab === t.id ? 'page' : undefined}
-            title={t.hint}
+            title={commishTabHint(t.id)}
             onClick={() => setCommishTab(t.id)}
             className={`min-h-[44px] px-4 rounded-lg font-display font-bold uppercase text-[11px] tracking-[0.08em] transition-all duration-150 cursor-pointer ${
               commishTab === t.id
@@ -1124,7 +1143,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Pool Name</label>
+                <FieldLabel tone="muted" helpId="name">Pool Name</FieldLabel>
                 <input
                   type="text"
                   value={poolName}
@@ -1133,7 +1152,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 />
               </div>
               <div>
-                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Entry Fee ($)</label>
+                <FieldLabel tone="muted" helpId="settings.entryFee">Entry Fee ($)</FieldLabel>
                 <input
                   type="number"
                   value={entryFee}
@@ -1144,7 +1163,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               </div>
               {(MULTI_ENTRY_WIZARD_ENABLED || currentMaxEntries > 1) && (
               <div>
-                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Entries per Player</label>
+                <FieldLabel tone="muted" helpId="settings.maxEntriesPerUser">Entries per Player</FieldLabel>
                 <input
                   type="number"
                   value={maxEntriesPerUser}
@@ -1161,7 +1180,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
             </div>
 
             <div>
-              <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Payment Instructions</label>
+              <FieldLabel tone="muted" helpId="paymentInstructions">Payment Instructions</FieldLabel>
               <textarea
                 value={paymentInstructions}
                 onChange={e => setPaymentInstructions(e.target.value)}
@@ -1189,7 +1208,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Host Profile & Contact Links</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Host Name</label>
+                  <FieldLabel tone="muted" helpId="managerName">Host Name</FieldLabel>
                   <input
                     type="text"
                     value={editManagerName}
@@ -1199,7 +1218,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Contact Email</label>
+                  <FieldLabel tone="muted" helpId="contactEmail">Contact Email</FieldLabel>
                   <input
                     type="email"
                     value={editContactEmail}
@@ -1209,7 +1228,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Contact Phone</label>
+                  <FieldLabel tone="muted" helpId="contactPhone">Contact Phone</FieldLabel>
                   <input
                     type="text"
                     value={editContactPhone}
@@ -1221,7 +1240,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               </div>
 
               <div>
-                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Contact Link Options</label>
+                <FieldLabel tone="muted" helpId="contactMethod">Contact Link Options</FieldLabel>
                 <select
                   value={editContactMethod}
                   onChange={e => setEditContactMethod(e.target.value as any)}
@@ -1257,7 +1276,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Lock Mode</label>
+                  <FieldLabel tone="muted" helpId="settings.lockMode">Lock Mode</FieldLabel>
                   <select
                     value={lockMode}
                     disabled={confidenceMode}
@@ -1271,7 +1290,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Lock Buffer</label>
+                  <FieldLabel tone="muted" helpId="settings.lockBufferMinutes">Lock Buffer</FieldLabel>
                   <select
                     value={lockBufferMinutes}
                     onChange={e => setLockBufferMinutes(parseInt(e.target.value))}
@@ -1285,7 +1304,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               </div>
 
               <div>
-                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Payout Method</label>
+                <FieldLabel tone="muted">Payout Method</FieldLabel>
                 <select
                   value={payoutMode}
                   onChange={e => {
@@ -1338,13 +1357,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted mb-1">Weekly pots ($/entry)</label>
+                      <FieldLabel tone="muted">Weekly pots ($/entry)</FieldLabel>
                       <input type="number" min={0} value={splitWeekly}
                         onChange={e => { setSplitDeclared(true); setSplitWeekly(Math.max(0, Math.floor(Number(e.target.value) || 0))); }}
                         className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
                     </div>
                     <div>
-                      <label className="block font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted mb-1">Season pot ($/entry)</label>
+                      <FieldLabel tone="muted">Season pot ($/entry)</FieldLabel>
                       <input type="number" min={0} value={splitSeason}
                         onChange={e => { setSplitDeclared(true); setSplitSeason(Math.max(0, Math.floor(Number(e.target.value) || 0))); }}
                         className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
@@ -1369,7 +1388,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               )}
 
               <div>
-                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Weekly Tie-Breaker</label>
+                <FieldLabel tone="muted" helpId="settings.weeklyTiebreaker">Weekly Tie-Breaker</FieldLabel>
                 <select
                   value={weeklyTiebreaker}
                   onChange={e => setWeeklyTiebreaker(e.target.value)}
@@ -1404,7 +1423,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
             <div className="space-y-4">
               <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted border-b border-line pb-2">Pick Deadline</p>
               <div>
-                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Weekly Deadline</label>
+                <FieldLabel tone="muted" helpId="settings.lockBufferMinutes">Weekly Deadline</FieldLabel>
                 <select
                   value={lockBufferMinutes}
                   onChange={e => setLockBufferMinutes(parseInt(e.target.value))}
@@ -1427,7 +1446,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Strikes Limit</label>
+                  <FieldLabel tone="muted">Strikes Limit</FieldLabel>
                   <select
                     value={maxStrikes}
                     onChange={e => setMaxStrikes(parseInt(e.target.value))}
@@ -1439,7 +1458,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Max Rebuys</label>
+                  <FieldLabel tone="muted">Max Rebuys</FieldLabel>
                   <select
                     value={maxRebuys}
                     onChange={e => setMaxRebuys(parseInt(e.target.value))}
@@ -1456,7 +1475,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               {maxRebuys > 0 && (
                 <div className="grid grid-cols-2 gap-4 bg-page p-4 border border-line rounded-lg">
                   <div>
-                    <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Rebuy Cutoff Week</label>
+                    <FieldLabel tone="muted">Rebuy Cutoff Week</FieldLabel>
                     <input
                       type="number"
                       value={rebuyDeadlineWeek}
@@ -1467,7 +1486,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Rebuy Fee ($)</label>
+                    <FieldLabel tone="muted">Rebuy Fee ($)</FieldLabel>
                     <input
                       type="number"
                       value={rebuyCost}
@@ -1481,7 +1500,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Tie Outcome</label>
+                  <FieldLabel tone="muted">Tie Outcome</FieldLabel>
                   <select
                     value={tieCountsAs}
                     onChange={e => setTieCountsAs(e.target.value === 'WIN' ? 'WIN' : 'LOSS')}
@@ -1493,7 +1512,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <p className="font-body text-[10px] text-faint mt-1">Cannot be changed once a week has been scored.</p>
                 </div>
                 <div>
-                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Team-Use Limit</label>
+                  <FieldLabel tone="muted">Team-Use Limit</FieldLabel>
                   <input
                     type="number"
                     value={maxTeamUses}
@@ -1526,7 +1545,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
             <div className="space-y-4">
               <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted border-b border-line pb-2">Margin Rules</p>
               <div>
-                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Payout Method</label>
+                <FieldLabel tone="muted">Payout Method</FieldLabel>
                 <select
                   value={marginPayoutMode}
                   onChange={e => {
@@ -1577,13 +1596,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted mb-1">Weekly pots ($/entry)</label>
+                      <FieldLabel tone="muted">Weekly pots ($/entry)</FieldLabel>
                       <input type="number" min={0} value={splitWeekly}
                         onChange={e => { setSplitDeclared(true); setSplitWeekly(Math.max(0, Math.floor(Number(e.target.value) || 0))); }}
                         className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
                     </div>
                     <div>
-                      <label className="block font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted mb-1">Season pot ($/entry)</label>
+                      <FieldLabel tone="muted">Season pot ($/entry)</FieldLabel>
                       <input type="number" min={0} value={splitSeason}
                         onChange={e => { setSplitDeclared(true); setSplitSeason(Math.max(0, Math.floor(Number(e.target.value) || 0))); }}
                         className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
@@ -1856,7 +1875,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Extra Minutes (max 1440)</label>
+                  <FieldLabel tone="muted" helpId="nfl.manager.extendDeadline">Extra Minutes (max 1440)</FieldLabel>
                   <input
                     type="number"
                     value={extendMinutes}
@@ -1867,7 +1886,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Reason (emailed to members)</label>
+                  <FieldLabel tone="muted">Reason (emailed to members)</FieldLabel>
                   <input
                     type="text"
                     value={extendReason}
@@ -1909,7 +1928,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
-                      <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">{currentMaxEntries > 1 ? 'Entry' : 'Member'}</label>
+                      <FieldLabel tone="muted" helpId="nfl.manager.proxyPick">{currentMaxEntries > 1 ? 'Entry' : 'Member'}</FieldLabel>
                       <select
                         value={proxyTargetEntryId}
                         onChange={e => setProxyTargetEntryId(e.target.value)}
@@ -1922,7 +1941,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       </select>
                     </div>
                     <div>
-                      <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Week</label>
+                      <FieldLabel tone="muted">Week</FieldLabel>
                       <input
                         type="number"
                         value={proxyWeek}
@@ -1933,7 +1952,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Team</label>
+                      <FieldLabel tone="muted">Team</FieldLabel>
                       <select
                         value={proxyTeam}
                         onChange={e => setProxyTeam(e.target.value)}
@@ -1946,7 +1965,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       </select>
                     </div>
                     <div>
-                      <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Reason (audited)</label>
+                      <FieldLabel tone="muted">Reason (audited)</FieldLabel>
                       <input
                         type="text"
                         value={proxyReason}
@@ -1994,7 +2013,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 already paid. This cannot be undone from the dashboard.
               </p>
               <div>
-                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Reason (emailed to members)</label>
+                <FieldLabel tone="muted" helpId="nfl.manager.cancelPool">Reason (emailed to members)</FieldLabel>
                 <input
                   type="text"
                   value={cancelReason}
