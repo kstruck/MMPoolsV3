@@ -7,11 +7,28 @@
 > `MORNING-2026-08-22-FIXES.md` and supersedes that doc's §7.
 >
 > 🛑 **`CLAUDE.md` §2c's cross-model review DID NOT RUN ON ANY OF THE SIX PRs.**
-> `codex` is not installed in the cloud environment that built them and there is
-> no OpenAI credential there — an environment limit, not a judgement that the
-> diffs did not need it. With qodo dormant that left §2c's second condition,
-> self-review, as the only one available. **Five are merged with the gate unmet
-> and named at the bottom of every PR body.** The morning doc's §3 is the ruling.
+> The cloud environment that built them **denies `api.openai.com` at the network
+> gateway** — `HTTP CONNECT ... 403, policy denial`, measured 2026-08-22. codex
+> was also absent from that container, but that is the lesser half and it is
+> fixable in nine seconds (`npm i -g @openai/codex`); the network policy is the
+> real blocker, and it holds even with the CLI installed and a key present.
+>
+> ⚠️ **THE PR BODIES AND COMMIT MESSAGES SAY "not installed", WHICH IS
+> INCOMPLETE.** That was the reason given before anyone tried installing it.
+> Kevin asked the obvious question — *"you have been using codex for a month,
+> why are you saying it is not installed"* — and the answer is that his month of
+> use is on `D:\march-melee-pools`, with open egress; §2c's "verified
+> `codex-cli 0.144.5`" was measured there. This page is the correction; the
+> merged commit messages cannot be.
+>
+> 📌 **THE FIX IS A CONFIG CHANGE, NOT A REBUILD.** Allow `api.openai.com` in the
+> environment's network policy and add `OPENAI_API_KEY` to its environment
+> variables, and the gate runs in cloud sessions from then on.
+>
+> With qodo dormant that left §2c's second condition, self-review, as the only
+> one available. **ALL SIX are merged with the gate unmet and named at the bottom
+> of every PR body.** The morning doc's §3 is the ruling, and its §4 names the one
+> artifact I would most want a second model on.
 >
 > 🛑 **ONE DEPLOY IS OWED, and only one: `--only functions` for #508.** Until it
 > runs, the Set column fix is merged and inert. Everything else needs the Coolify
