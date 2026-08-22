@@ -65,7 +65,14 @@ let cached: { at: number; value: CostControlsConfig | null } | null = null;
  */
 let inflight: Promise<CostControlsConfig | null> | null = null;
 
-/** Test seam — drops the cache so a test can change the config mid-run. */
+/**
+ * Test seam — drops the cache so a test can change the config mid-run.
+ *
+ * Known limit, and the reason this is not a production concern: a read that was
+ * ALREADY in flight when this is called still writes `cached` when it settles,
+ * so a caller after the reset can observe a value fetched before it. Nothing in
+ * production calls this, and no test resets mid-read (codex round 7).
+ */
 export function __resetCostControlsCache(): void {
     cached = null;
     inflight = null;
