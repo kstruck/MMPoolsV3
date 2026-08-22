@@ -1,12 +1,13 @@
-# MORNING 2026-08-22 (overnight) — five defects fixed and merged, T4 built. ONE DEPLOY, and one ruling I need from you.
+# MORNING 2026-08-22 (overnight) — six PRs merged. ONE DEPLOY, and one ruling I need from you.
 
 > ⚠️ **This continues MORNING-2026-08-22-FIXES.md** and supersedes its §7
 > "Still open" list — four of the five items there are now closed.
 >
 > 🛑 **THE ONE THING THAT MATTERS ON THIS PAGE:** the cross-model review gate
-> (`CLAUDE.md` §2c) **did not run on any of tonight's six PRs**, because `codex`
-> is not installed in the environment that built them. Five are merged with that
-> gate unmet and named. **§6 is your ruling.**
+> (`CLAUDE.md` §2c) **did not run on any of tonight's six PRs**, because this
+> cloud environment **denies `api.openai.com` at the network gateway** (measured
+> 2026-08-22 — see §3). All six are merged with that gate unmet and named.
+> **§3 is your ruling.**
 
 ---
 
@@ -40,7 +41,7 @@ nothing twice.
 git -C D:\march-melee-pools pull --ff-only origin main
 ```
 
-**You should see** four or five commits arriving (`#504` … `#508`).
+**You should see** seven commits arriving (`#504` … `#510`).
 **If it refuses** with "divergent branches", stop and tell me — do not force it.
 
 ### Step 2 — verify the six merges landed (30 seconds)
@@ -100,7 +101,7 @@ Open the Coolify dashboard → the `www` application → **Redeploy**.
 **You should see** a build start and finish green.
 **If it fails**, send me the build log — do not retry blindly.
 
-### Step 7 — confirm the five fixes in production (5 minutes)
+### Step 7 — confirm the fixes in production (5 minutes)
 
 Open any NFL Pick'em pool you commission.
 
@@ -215,35 +216,75 @@ hard gate before any PR. It exists because on 2026-07-21 a single session
 produced 12 self-inflicted defects and **every one was caught by an external
 reviewer, none by self-review**.
 
-**What happened:** the session that built tonight's six PRs runs in a cloud
-container. **`codex` is not installed there and there is no OpenAI credential.**
-It is an environment limit, not a judgement that the diffs did not need it. With
-qodo dormant, that left §2c's *second* condition — my own read of the diff — as
-the only one available.
+**What happened — CORRECTED 2026-08-22, after Kevin challenged it.** My first
+answer was *"codex is not installed"*. True of the container, but not the
+reason, because I never tried installing it. Measured properly:
 
-Five PRs are merged with the gate unmet. Every PR body says so at the bottom,
+- **It was absent** — not on `PATH`, not in `npm ls -g`, nowhere on the
+  filesystem. That much held up.
+- **It installs in nine seconds.** `npm i -g @openai/codex` → `codex-cli
+  0.149.0`. I should have tried that before calling the gate impossible.
+- **And it still cannot run, for a different reason.** This environment's
+  outbound policy denies OpenAI:
+
+```
+ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket:
+  Proxy connection failed: HTTP CONNECT failed with status 403,
+  url: wss://api.openai.com/v1/responses
+```
+
+```
+"kind": "connect_rejected",
+"detail": "gateway answered 403 to CONNECT (policy denial or upstream failure)",
+"host": "api.openai.com:443"
+```
+
+The allowlist covers npm, PyPI, crates, GitHub and Anthropic — not OpenAI. The
+CLI, a credential and the network are three requirements, and only the first two
+are reachable from inside the container.
+
+**Kevin's month of codex use was never in question:** that is
+`D:\march-melee-pools` on Windows with open egress, which is where §2c's
+"verified `codex-cli 0.144.5`" was measured. Tonight ran on a different machine.
+
+⚠️ **The six PR bodies and their merged commit messages still say "not
+installed".** They were written before this was measured; commit messages cannot
+be corrected, so this page and the HANDOFF box are the correction.
+
+With qodo dormant, that left §2c's *second* condition — my own read of the diff —
+as the only one available.
+
+All six PRs are merged with the gate unmet. Every PR body says so at the bottom,
 under a 🛑 heading, and lists what the self-review actually caught.
 
 **Your options:**
 
-- **(a) Accept and move on. — MY RECOMMENDATION.** The five merged PRs are
-  narrow, each has a discriminating test verified by reverting the fix, and the
-  only one touching production behaviour on the server (#508) is still
-  undeployed until you run step 4. *Expected outcome: nothing more to do; the
-  gate is recorded as unmet in six PR bodies for the audit.*
-- **(b) Run codex yourself on the merged range, from the Windows checkout.**
+- **(a) Accept these six and move on.** They are narrow, each has a
+  discriminating test verified by reverting the fix, and the only one touching
+  production behaviour on the server (#508) is still undeployed until you run
+  step 4. *Expected outcome: nothing more to do; the gate is recorded as unmet
+  in six PR bodies for the audit.*
+- **(b) Run codex yourself over the merged range, from the Windows checkout.**
   `git fetch origin` then `codex exec review --base 37720619` in
   `D:\march-melee-pools`. *Expected outcome: 30–60 minutes and some paid API
-  calls; any finding becomes a follow-up PR. This is the option I would pick if
-  you want the gate honoured retroactively rather than waived.*
-- **(c) Hold #509 (T4) unmerged until it has had a codex round, accept the
-  five.** *Expected outcome: T4 waits; the five stay as they are. Worth
-  considering because #509 is a COPY ticket, and §2c is explicit that voice rule
-  5 "broke ten times on #480, always the same shape". Copy is the shape
-  self-review is worst at.*
-- **(d) Get codex into the cloud environment.** *Expected outcome: this stops
-  being a question. It needs `codex` on the image and an OpenAI key in the
-  environment; I cannot do either from inside it.*
+  calls; any finding becomes a follow-up PR. Pick this if you want the gate
+  honoured retroactively rather than waived.*
+- **(c) Revert #509 (T4) and hold it for a codex round.** *Expected outcome: T4
+  comes back out, the other five stay; nothing depends on it. Worth considering
+  because it is the one COPY ticket, and §2c is explicit that voice rule 5
+  "broke ten times on #480, always the same shape". Copy is the shape
+  self-review is worst at. (This option said "hold it unmerged" when written —
+  it merged on green CI before you answered, so it is a revert now.)*
+- **(d) Fix the cloud environment — MY RECOMMENDATION, and it is a config change
+  rather than a rebuild.** Two levers, both on the environment rather than the
+  image: **allow `api.openai.com`** in its network policy, and add
+  **`OPENAI_API_KEY`** to its environment variables. The CLI itself needs
+  nothing — a session installs it in nine seconds. *Expected outcome: §2c runs
+  in cloud sessions from then on and this stops recurring. Neither lever is
+  reachable from inside the container.* Where the policy is set:
+  https://code.claude.com/docs/en/claude-code-on-the-web
+  **(d) and (b) compose** — (d) prevents the next occurrence, (b) closes this
+  one.
 
 **If you pick nothing, (a) is where things stand** — all six are merged and the
 gate is recorded as unmet in six PR bodies.
