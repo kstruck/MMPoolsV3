@@ -31,6 +31,20 @@ export interface PublishedRoute {
   isManager?: boolean;
   /** See `HelpRouteContext.offeredTabs`. */
   offeredTabs?: readonly string[];
+  /**
+   * The pool's settings map, for `HelpCopy.template`. Published only by the
+   * surfaces that HAVE a pool — the wizard and the site pages publish nothing
+   * here, which is what keeps a template rendering its static fallback there
+   * (`resolveCopy`).
+   *
+   * ⚠️ PUBLISH THE POOL DOCUMENT'S OWN OBJECT, BY REFERENCE. Building one
+   * inline (`settings={{ ...pool.settings }}`) hands the store a new identity
+   * on every render. `shallowEqual` compares this map one level deep for
+   * exactly that reason, but a caller that rebuilds the NESTED objects too
+   * would still set state on every render. The pool comes from a subscription
+   * and its settings object is stable between snapshots — pass that.
+   */
+  settings?: Record<string, unknown>;
 }
 
 /**
@@ -116,14 +130,38 @@ export function HelpRouteStoreProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * One level deep, by value.
+ *
+ * `settings` is compared this way for the same reason `offeredTabs` is: a
+ * publisher that hands over a fresh object with identical contents must not set
+ * state, or the store re-renders the tree under it, the publisher re-renders,
+ * and the effect publishes a fresh object again — for ever. One level is
+ * enough for the callers this has: they pass the pool document's own settings
+ * map, whose nested values are stable between snapshots.
+ */
+function settingsEqual(
+  a: Record<string, unknown> | undefined,
+  b: Record<string, unknown> | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    if (a[key] !== b[key]) return false;
+  }
+  return true;
+}
+
 function shallowEqual(a: PublishedRoute, b: PublishedRoute): boolean {
   // `offeredTabs` is compared by VALUE: the effect that publishes it rebuilds
   // the array from a string key, so identity changes on every publish even when
   // the tabs did not — and an identity comparison would set state each time.
   if (tabsKey(a.offeredTabs) !== tabsKey(b.offeredTabs)) return false;
+  if (!settingsEqual(a.settings, b.settings)) return false;
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
   for (const key of keys) {
-    if (key === 'offeredTabs') continue;
+    if (key === 'offeredTabs' || key === 'settings') continue;
     if ((a as Record<string, unknown>)[key] !== (b as Record<string, unknown>)[key]) return false;
   }
   return true;
@@ -140,7 +178,7 @@ function shallowEqual(a: PublishedRoute, b: PublishedRoute): boolean {
 export function useHelpRoute(value: PublishedRoute): void {
   const store = useContext(PublishContext);
   const key = useId();
-  const { poolType, audience, tab, subTab, isManager } = value;
+  const { poolType, audience, tab, subTab, isManager, settings } = value;
   const offeredKey = tabsKey(value.offeredTabs);
 
   useEffect(() => {
@@ -151,10 +189,17 @@ export function useHelpRoute(value: PublishedRoute): void {
       subTab,
       isManager,
       offeredTabs: offeredKey === undefined ? undefined : offeredKey.split(SEPARATOR),
+      settings,
     });
     // Depend on the PRIMITIVES, not on `value`: every caller passes an object
     // literal, so depending on the object would republish on every render.
-  }, [store, key, poolType, audience, tab, subTab, isManager, offeredKey]);
+    //
+    // `settings` is the one non-primitive, and it is depended on by IDENTITY.
+    // Re-running this effect is cheap — `store.publish` bails out when nothing
+    // changed — so an unstable identity costs a comparison per render, not a
+    // render loop. That bail-out is what has to hold, which is why
+    // `shallowEqual` compares this map by value.
+  }, [store, key, poolType, audience, tab, subTab, isManager, offeredKey, settings]);
 
   useEffect(() => () => store.retract(key), [store, key]);
 }

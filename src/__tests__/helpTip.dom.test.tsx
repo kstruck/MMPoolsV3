@@ -133,3 +133,80 @@ describe('a topic this reader may not see', () => {
     expect(trigger()).toBeTruthy();
   });
 });
+
+/**
+ * Templated copy — the reason `TopicScope` carries `settings`.
+ *
+ * `settings.weeklyTiebreaker` is the first topic in the registry whose copy is
+ * a `HelpCopy.template`, and until this PR nothing published a pool's settings,
+ * so a template rendered its static fallback everywhere. These fire the real
+ * tooltip through the real provider, which is the only thing that proves the
+ * scope reaches `resolveCopy` rather than merely existing on the type.
+ */
+describe('template copy', () => {
+  const tipWithSettings = (settings?: Record<string, unknown>) =>
+    render(
+      <HelpScopeProvider poolType="NFL_PICKEM" audience="commissioner" settings={settings}>
+        <HelpTip helpId={TOPIC_ID} />
+      </HelpScopeProvider>,
+    );
+
+  it('renders the branch for the pool the reader is in', async () => {
+    tipWithSettings({ weeklyTiebreaker: 'NONE' });
+    fireEvent.mouseEnter(trigger());
+    const tip = await screen.findByRole('tooltip');
+    expect(tip.textContent).toContain('no prediction');
+    // …and NOT the widened wording the wizard still gets.
+    expect(tip.textContent).not.toContain(staticCopy(topic().short));
+  });
+
+  it('renders a different branch for a different pool', async () => {
+    tipWithSettings({ weeklyTiebreaker: 'MNF_FIRST_GAME' });
+    fireEvent.mouseEnter(trigger());
+    const tip = await screen.findByRole('tooltip');
+    expect(tip.textContent).toContain('FIRST Monday game');
+    expect(tip.textContent).not.toContain('no prediction');
+  });
+
+  /**
+   * THE CONTRACT, exercised through the component rather than asserted about
+   * `resolveCopy` alone: a provider with no `settings` prop is the wizard, and
+   * the wizard's reader has not chosen a rule yet.
+   */
+  it('falls back to the static copy when the provider publishes no settings', async () => {
+    tipWithSettings(undefined);
+    fireEvent.mouseEnter(trigger());
+    const tip = await screen.findByRole('tooltip');
+    expect(tip.textContent).toContain(staticCopy(topic().short));
+    expect(tip.textContent).not.toContain('no prediction');
+  });
+
+  /**
+   * The discriminating case. Every assertion above would also pass on a build
+   * where the template ignored the scope and always rendered one branch —
+   * so this one renders two scopes in the same test and requires them to
+   * DIFFER.
+   */
+  it('two pools on the same screen would read two different sentences', async () => {
+    const first = render(
+      <HelpScopeProvider poolType="NFL_PICKEM" audience="member" settings={{ weeklyTiebreaker: 'MNF_LAST_GAME' }}>
+        <HelpTip helpId={TOPIC_ID} />
+      </HelpScopeProvider>,
+    );
+    fireEvent.mouseEnter(trigger());
+    const a = (await screen.findByRole('tooltip')).textContent ?? '';
+    first.unmount();
+
+    render(
+      <HelpScopeProvider poolType="NFL_PICKEM" audience="member" settings={{ weeklyTiebreaker: 'NONE' }}>
+        <HelpTip helpId={TOPIC_ID} />
+      </HelpScopeProvider>,
+    );
+    fireEvent.mouseEnter(trigger());
+    const b = (await screen.findByRole('tooltip')).textContent ?? '';
+
+    expect(a).not.toBe(b);
+    expect(a).toContain('LAST Monday game');
+    expect(b).toContain('no prediction');
+  });
+});

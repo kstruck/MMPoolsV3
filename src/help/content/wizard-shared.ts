@@ -12,6 +12,7 @@
 // those fields sits in `WIZARD_FIELD_ALLOWLIST` with its ticket until then.
 
 import { MAX_ENTRIES_PER_USER_CAP } from '@shared/multiEntry';
+import { effectiveWeeklyTiebreaker } from '@shared/nflTiebreaker';
 import type { HelpPlacement, HelpTopic } from '../types';
 import { RULES_STEP } from './wizard-pages';
 
@@ -384,29 +385,74 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
   {
     id: 'settings.weeklyTiebreaker',
     title: 'Weekly tie-breaker',
-    short: 'Decides who wins a week when two players score the same. It cannot be changed once anyone has submitted picks, so choose it now.',
-    long: [
-      // WRITTEN AS A LIST OF THE FOUR RULES, not as a claim plus caveats
-      // (codex R13). Two earlier drafts opened with an unconditional sentence
-      // and then contradicted it two paragraphs later, because MNF_COMBINED and
-      // NONE do not behave like the two pickable Monday rules.
-      //
-      // The model's own answer to this is `HelpCopy.template` — and it is NOT
-      // available: `TopicScope` is `Pick<HelpScope, 'poolType' | 'audience'>`,
-      // so no surface publishes a pool's settings and a template here would
-      // render its fallback forever. Recorded in MORNING-2026-08-18-HELP-T9.md.
-      // Until then the copy covers every rule instead of assuming one.
-      'Your pool can settle a level week by asking each player to predict the combined score of one game. What you choose here is which game — or whether it asks at all.',
-      'Monday night is the usual choice, either the last Monday game or the first. On a week with no Monday game, those two use the last game of the week instead.',
-      'A few older pools ask about every Monday game together. Those ask for nothing on a week with no Monday game.',
-      'You can also choose no tie-breaker. Then nothing is predicted.',
-      // CONDITIONAL, because two of the four rules ask for nothing (qodo
-      // re-review #2): NONE always, and legacy MNF_COMBINED on a Monday-less
-      // week. `computeWeeklyWinners` returns every tied leader when no
-      // difference exists, so those weeks are shared outright.
-      'Where a prediction is asked for, whoever is closest takes the week, and two players equally close share it. Where none is asked for, everyone level at the top shares it.',
-      'Set it before you launch. Once any player has submitted picks, it is fixed for the life of the pool.',
-    ].join('\n\n'),
+    // THE FIRST TOPIC IN THE REGISTRY TO USE `HelpCopy.template`, and the
+    // reason the mechanism was built.
+    //
+    // Every earlier draft of this copy had the same defect (codex R13, qodo
+    // re-review #2): an unconditional opening sentence contradicted two
+    // paragraphs later, because MNF_COMBINED and NONE do not behave like the
+    // two pickable Monday rules. The fix was to widen the copy until it was
+    // true of all four — which is voice rule 5's failure mode wearing a
+    // disguise, and cost eight such sentences across #480 and #484.
+    //
+    // A reader INSIDE a pool does not need all four. They need the one their
+    // pool is playing, named exactly. The FALLBACK keeps the widened version,
+    // because the reader who genuinely needs all four is the one in the create
+    // wizard who has not chosen yet — and that surface publishes no settings.
+    short: {
+      template: (ctx) => {
+        switch (effectiveWeeklyTiebreaker(ctx.settings as { weeklyTiebreaker?: unknown })) {
+          case 'NONE':
+            return 'Your pool asks for no prediction, so everyone level at the top of a week shares it. Fixed once anyone has submitted picks.';
+          case 'MNF_FIRST_GAME':
+            return 'A level week goes to whoever came closest on the combined score of the FIRST Monday game. Fixed once anyone has submitted picks.';
+          case 'MNF_LAST_GAME':
+            return 'A level week goes to whoever came closest on the combined score of the LAST Monday game. Fixed once anyone has submitted picks.';
+          default:
+            return 'A level week goes to whoever came closest on the combined score of the Monday games together. Fixed once anyone has submitted picks.';
+        }
+      },
+      fallback: 'Decides who wins a week when two players score the same. It cannot be changed once anyone has submitted picks, so choose it now.',
+    },
+    long: {
+      template: (ctx) => {
+        const rule = effectiveWeeklyTiebreaker(ctx.settings as { weeklyTiebreaker?: unknown });
+        // Stated identically for both pickable Monday rules, because the only
+        // thing that differs between them is WHICH Monday game.
+        const fixedLine =
+          'Change it before you launch. Once any player has submitted picks it is fixed for the life of the pool, and a scored week fixes it too.';
+        if (rule === 'NONE') {
+          return [
+            'Your pool asks for no prediction. Everyone level at the top of a week shares that week outright.',
+            'Nothing extra appears on the pick sheet, so there is no number for a member to get wrong and none to check afterwards.',
+            fixedLine,
+          ].join('\n\n');
+        }
+        if (rule === 'MNF_COMBINED') {
+          return [
+            'Your pool settles a level week on the Monday games together. Every player predicts their combined final score when they make their picks.',
+            'Whoever is closest takes the week. Two players equally close share it.',
+            'On a week with no Monday game nothing is predicted, and everyone level at the top of that week shares it.',
+            'This is an older rule and it is no longer offered when you set up a pool. It stays in place here so that nothing changes for a pool part-way through a season.',
+          ].join('\n\n');
+        }
+        const which = rule === 'MNF_FIRST_GAME' ? 'first' : 'last';
+        return [
+          `Your pool settles a level week on the ${which} Monday game to kick off. Every player predicts its combined final score when they make their picks.`,
+          'Whoever is closest takes the week. Two players equally close share it.',
+          'On a week with no Monday game, the final game of the week is used instead, and the pick sheet names the game it is asking about.',
+          fixedLine,
+        ].join('\n\n');
+      },
+      fallback: [
+        'Your pool can settle a level week by asking each player to predict the combined score of one game. What you choose here is which game — or whether it asks at all.',
+        'Monday night is the usual choice, either the last Monday game or the first. On a week with no Monday game, those two use the last game of the week instead.',
+        'A few older pools ask about every Monday game together. Those ask for nothing on a week with no Monday game.',
+        'You can also choose no tie-breaker. Then nothing is predicted.',
+        'Where a prediction is asked for, whoever is closest takes the week, and two players equally close share it. Where none is asked for, everyone level at the top shares it.',
+        'Set it before you launch. Once any player has submitted picks, it is fixed for the life of the pool.',
+      ].join('\n\n'),
+    },
     poolTypes: ['NFL_PICKEM'],
     audience: EVERYONE,
     terms: ['weekly-prize'],

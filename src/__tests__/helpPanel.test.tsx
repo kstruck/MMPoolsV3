@@ -522,3 +522,77 @@ describe('the `?help=` deep link (K11)', () => {
     await waitFor(() => expect(document.getElementById(`help-topic-${topic.id}`)).toBeTruthy());
   });
 });
+
+/**
+ * Templated copy in the PANEL — the other half of `TopicScope.settings`.
+ *
+ * The tooltip and the panel read the same scope precisely so they cannot
+ * disagree about one topic's copy. `helpTip.dom.test.tsx` proves the tooltip
+ * half; without this one the panel could keep rendering the fallback beside a
+ * tooltip rendering the branch, and the two would say different things about
+ * the same setting on the same screen.
+ */
+describe('a template renders in the panel from the pool in scope', () => {
+  const TOPIC = 'settings.weeklyTiebreaker';
+
+  /** A Pick'em pool's rules tab, publishing the pool's settings like `PoolRoute`. */
+  function PoolWithSettings({ settings }: { settings?: Record<string, unknown> }) {
+    return (
+      <HelpScopeProvider poolType="NFL_PICKEM" audience="member" settings={settings}>
+        <HelpRoutePublisher tab="rules" />
+        <HelpHeaderButton />
+        <HelpTip helpId={TOPIC} />
+      </HelpScopeProvider>
+    );
+  }
+
+  const cardText = async () => {
+    await waitFor(() => expect(document.getElementById(`help-topic-${TOPIC}`)).toBeTruthy());
+    return document.getElementById(`help-topic-${TOPIC}`)!.textContent ?? '';
+  };
+
+  it('shows the pool’s own rule, not the four-rule fallback', async () => {
+    renderApp(<PoolWithSettings settings={{ weeklyTiebreaker: 'NONE' }} />, { path: '/pool/abc?tab=rules' });
+    fireEvent.click(screen.getByLabelText(`About ${helpRegistry.getTopic(TOPIC)!.title}`));
+    await waitFor(() => expect(isOpen()).toBe(true));
+    const text = await cardText();
+    expect(text).toContain('shares that week outright');
+    expect(text).not.toContain('A few older pools');
+  });
+
+  it('shows the four-rule fallback on the wizard, where no pool exists', async () => {
+    renderApp(
+      <WizardHarness>
+        <HelpTip helpId={TOPIC} />
+      </WizardHarness>,
+    );
+    fireEvent.click(screen.getByLabelText(`About ${helpRegistry.getTopic(TOPIC)!.title}`));
+    await waitFor(() => expect(isOpen()).toBe(true));
+    const text = await cardText();
+    expect(text).toContain('A few older pools');
+    expect(text).not.toContain('shares that week outright');
+  });
+
+  /**
+   * THE DISCRIMINATING CASE. The tooltip and the panel are on screen at the
+   * same time, reading one scope. If either stopped passing `settings` to
+   * `resolveCopy`, one of them would show the fallback while the other showed
+   * the branch — and the assertions above, taken one at a time, would not
+   * notice.
+   */
+  it('the tooltip and the panel agree on which branch to show', async () => {
+    renderApp(<PoolWithSettings settings={{ weeklyTiebreaker: 'MNF_FIRST_GAME' }} />, {
+      path: '/pool/abc?tab=rules',
+    });
+    const trigger = screen.getByLabelText(`About ${helpRegistry.getTopic(TOPIC)!.title}`);
+    fireEvent.focus(trigger);
+    const tip = await screen.findByRole('tooltip');
+    expect(tip.textContent).toContain('FIRST Monday game');
+
+    fireEvent.click(trigger);
+    await waitFor(() => expect(isOpen()).toBe(true));
+    const text = await cardText();
+    expect(text).toContain('first Monday game to kick off');
+    expect(text).not.toContain('A few older pools');
+  });
+});

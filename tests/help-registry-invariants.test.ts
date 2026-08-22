@@ -916,6 +916,94 @@ describe('the real registry — content rules', () => {
     expect(violations).toEqual([]);
   });
 
+  /**
+   * THE HOLE THE TWO TESTS ABOVE LEAVE, AND WHY IT MATTERS NOW.
+   *
+   * Both measure `staticCopy(...)`, which is a template's `fallback` and
+   * nothing else. That was harmless while no topic used `HelpCopy.template` —
+   * `TopicScope` carried no settings, so no template could ever fire. It is
+   * NOT harmless now that one does: a branch could be 400 characters long, or
+   * say "simply", and the length budget and the banned-word list would both
+   * pass it, on the copy a reader inside a pool is the only one who sees.
+   *
+   * So every templated topic declares the settings that exercise its branches,
+   * and each RENDERED branch is held to the same two rules. The map is
+   * hand-written on purpose: a `template` is a function and its branches
+   * cannot be enumerated by reflection.
+   */
+  const TEMPLATE_FIXTURES: Readonly<Record<string, readonly Record<string, unknown>[]>> = {
+    // All four values of `effectiveWeeklyTiebreaker`, including the absent case
+    // that resolves to legacy MNF_COMBINED and the junk case that resolves
+    // there too.
+    'settings.weeklyTiebreaker': [
+      { weeklyTiebreaker: 'MNF_LAST_GAME' },
+      { weeklyTiebreaker: 'MNF_FIRST_GAME' },
+      { weeklyTiebreaker: 'MNF_COMBINED' },
+      { weeklyTiebreaker: 'NONE' },
+      {},
+      { weeklyTiebreaker: 'MNF_LASTGAME' },
+    ],
+  };
+
+  const isTemplate = (copy: unknown): boolean => typeof copy !== 'string';
+
+  it('every templated topic declares the fixtures that exercise its branches', () => {
+    // A new template with no fixture row would ship with its rendered copy
+    // unchecked — which is precisely the state this block exists to end.
+    const undeclared = topics
+      .filter((t) => isTemplate(t.short) || isTemplate(t.long))
+      .filter((t) => TEMPLATE_FIXTURES[t.id] === undefined)
+      .map((t) => t.id);
+    expect(undeclared).toEqual([]);
+  });
+
+  it('no fixture row names a topic that is no longer templated', () => {
+    // The other direction: a stale row is a test that measures nothing.
+    const byId = new Map(topics.map((t) => [t.id, t]));
+    const stale = Object.keys(TEMPLATE_FIXTURES).filter((id) => {
+      const t = byId.get(id);
+      return !t || (!isTemplate(t.short) && !isTemplate(t.long));
+    });
+    expect(stale).toEqual([]);
+  });
+
+  it('every RENDERED template branch obeys the length budget and the voice rules', () => {
+    const violations = topics.flatMap((t) => {
+      const fixtures = TEMPLATE_FIXTURES[t.id];
+      if (!fixtures) return [];
+      return fixtures.flatMap((settings) => {
+        const label = JSON.stringify(settings);
+        const short = resolveCopy(t.short, { settings });
+        const long = resolveCopy(t.long, { settings });
+        const problems: string[] = [];
+        if (short.length > COPY_LIMITS.topicShort) {
+          problems.push(`short ${short.length} chars`);
+        }
+        const hits = [
+          ...findBannedWords(`${short}\n${long}`, BANNED_SELLING_WORDS),
+          ...findBannedWords(`${short}\n${long}`, BANNED_IMPLEMENTATION_WORDS),
+        ];
+        if (hits.length) problems.push(hits.join(', '));
+        return problems.length ? [`${t.id} ${label}: ${problems.join('; ')}`] : [];
+      });
+    });
+    expect(violations).toEqual([]);
+  });
+
+  it('a template that breaks either rule IS caught — the fixtures discriminate', () => {
+    // A guard that matches nothing looks identical to a guard that passes.
+    const bad = {
+      short: { template: () => 'x'.repeat(COPY_LIMITS.topicShort + 1), fallback: 'ok' },
+      long: { template: () => 'It is simply the best.', fallback: 'ok' },
+    };
+    expect(resolveCopy(bad.short, { settings: {} }).length).toBeGreaterThan(COPY_LIMITS.topicShort);
+    expect(findBannedWords(resolveCopy(bad.long, { settings: {} }), BANNED_SELLING_WORDS)).toEqual(['simply']);
+    // …and the fallbacks it would have been measured on instead are both fine,
+    // which is exactly how it slipped through before.
+    expect(staticCopy(bad.short).length).toBeLessThanOrEqual(COPY_LIMITS.topicShort);
+    expect(findBannedWords(staticCopy(bad.long), BANNED_SELLING_WORDS)).toEqual([]);
+  });
+
   it('every page obeys the length budget and the voice rules', () => {
     const violations = PAGES.flatMap((p) => {
       const problems: string[] = [];

@@ -58,12 +58,19 @@ export function SectionAccordion(props: {
 export function TopicCard(props: {
   topic: HelpTopic;
   poolType?: PoolType;
+  /**
+   * The pool's settings, so a `HelpCopy.template` renders the same branch here
+   * that the tooltip renders. Both read one `TopicScope`; passing only the pool
+   * type would let the panel and the tooltip disagree about one topic's copy,
+   * which is the thing the shared scope exists to prevent.
+   */
+  settings?: Record<string, unknown>;
   highlighted?: boolean;
   /** Resolved here rather than in the card, so it renders a title, not an id. */
   related?: readonly { id: string; title: string }[];
   onOpenRelated?: (topicId: string) => void;
 }) {
-  const { topic, poolType, highlighted, related, onOpenRelated } = props;
+  const { topic, poolType, settings, highlighted, related, onOpenRelated } = props;
   return (
     <section
       id={topicAnchorId(topic.id)}
@@ -75,7 +82,7 @@ export function TopicCard(props: {
     >
       <h4 className="font-display font-bold text-[13px] text-[color:var(--text)]">{topic.title}</h4>
       <p className="mt-1 font-body text-[13px] leading-relaxed text-muted">
-        {resolveCopy(topic.long, { poolType })}
+        {resolveCopy(topic.long, { poolType, settings })}
       </p>
       {topic.tips && topic.tips.length > 0 ? (
         <ul className="mt-2 list-disc space-y-1 pl-4 font-body text-[12px] leading-relaxed text-muted">

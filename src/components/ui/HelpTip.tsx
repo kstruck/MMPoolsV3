@@ -210,7 +210,10 @@ export function HelpTip({ helpId, side = 'top', className }: HelpTipProps) {
               className="pointer-events-none z-[70] rounded-lg border border-line bg-[color:var(--card)] px-3 py-2 font-body text-xs leading-relaxed text-[color:var(--text)] shadow-panel print:hidden"
               style={tooltipStyle(placement.rect, side, placement.viewport)}
             >
-              {resolveCopy(topic.short, { poolType: scope.poolType })}
+              {/* `settings` is what makes a `template` fire. On the wizard and
+                  the site pages the scope carries none and the topic's static
+                  fallback is rendered, which is the documented contract. */}
+              {resolveCopy(topic.short, { poolType: scope.poolType, settings: scope.settings })}
               {panel ? <span className="mt-1 block text-faint">More in Help</span> : null}
             </div>,
             document.body,

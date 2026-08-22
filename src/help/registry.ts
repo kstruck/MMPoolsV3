@@ -36,8 +36,23 @@ import { PLACEMENTS, TOPICS } from './content';
  * What `resolveTopic` needs in order to answer BOTH questions it is asked:
  * which variant of a topic this reader gets, and whether they may see it at
  * all. Audience is not optional — the tooltip has no second filter.
+ *
+ * `settings` plays NO part in resolution — it never picks a different topic or
+ * changes who may read one. It rides along because the two surfaces that
+ * resolve a topic are the same two that then RENDER its copy, and
+ * `resolveCopy` needs the pool's settings to run a `template`.
+ *
+ * Before it was here, `HelpCopy.template` could not fire anywhere: nothing
+ * published a pool's settings, so every template rendered its `fallback`
+ * forever and setting-dependent copy had to be written wide enough to be true
+ * of every value. That cost eight deliberately-widened sentences across #480
+ * and #484.
+ *
+ * IT STAYS OPTIONAL, and that is the contract, not an oversight: the wizard and
+ * the site pages have no pool, so `resolveCopy` must keep returning the static
+ * fallback there. See `resolveCopy` below.
  */
-export type TopicScope = Pick<HelpScope, 'poolType' | 'audience'>;
+export type TopicScope = Pick<HelpScope, 'poolType' | 'audience' | 'settings'>;
 
 /** Max results returned by `search`, matching the Spectrum reference. */
 export const SEARCH_RESULT_LIMIT = 20;
@@ -100,9 +115,13 @@ export function resolveCopy(copy: HelpCopy, ctx: HelpCopyContext = {}): string {
 }
 
 /**
- * The copy to INDEX and to show when no pool is in scope — a template's
- * static fallback. Search runs on the wizard and on site pages, where no
- * pool's settings exist to render against.
+ * A template's static `fallback`, with no pool context at all.
+ *
+ * This is the copy that has to hold on its own: the invariant tests measure it
+ * for length and voice, and it is what a reader sees anywhere no pool is in
+ * scope. `search` used to index it unconditionally; it now indexes
+ * `resolveCopy(copy, scope)`, which IS this string off a pool surface and the
+ * pool's own branch on one.
  */
 export function staticCopy(copy: HelpCopy): string {
   return typeof copy === 'string' ? copy : copy.fallback;
@@ -441,10 +460,20 @@ class RegistryImpl implements Registry {
       // variant `resolveTopic` would pick — the one the tooltip and the panel
       // show — is listed.
       if (this.resolveTopic(scope, baseTopicId(id)) !== topic) continue;
+      // SEARCH THE COPY THIS READER WOULD ACTUALLY SEE, not the fallback.
+      //
+      // `staticCopy` was right while `TopicScope` carried no settings — every
+      // surface rendered the fallback, so indexing anything else would have
+      // returned snippets nobody could find on the page. Now that a pool
+      // surface renders a `template`'s branch, indexing the fallback would
+      // hand a reader inside a NONE pool a snippet about Monday games that
+      // their own screen never says, and would fail to match the words it
+      // does. Off a pool surface `scope.settings` is absent and this is
+      // `staticCopy` again, exactly as before.
       const haystack = [
         topic.title,
-        staticCopy(topic.short),
-        staticCopy(topic.long),
+        resolveCopy(topic.short, scope),
+        resolveCopy(topic.long, scope),
         ...(topic.tips ?? []),
       ].join('\n');
       if (!haystack.toLowerCase().includes(needle)) continue;
