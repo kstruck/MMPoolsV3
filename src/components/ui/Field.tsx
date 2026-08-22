@@ -30,6 +30,8 @@ export interface FieldLabelProps
      * join with no tailwind-merge: passing `text-muted` alongside the built-in
      * `text-[color:var(--text)]` emits BOTH, and which one wins is decided by
      * the order Tailwind happens to generate them in. One class, chosen here.
+     *
+     * Either way the class lands on the ROW, so the help tip inherits it.
      */
     tone?: 'default' | 'muted';
 }
@@ -63,13 +65,21 @@ export const FieldLabel: React.FC<FieldLabelProps> = ({
     children,
     ...props
 }) => {
-    const textCls = cn(
-        'font-display font-bold uppercase text-[12px] tracking-[0.08em]',
+    // COLOUR LIVES ON THE ROW, NOT ON THE LABEL. `HelpTip`'s trigger carries
+    // no colour of its own (`text-current`) so that it inherits this one —
+    // which makes the `?` exactly as visible as the label text it explains,
+    // on every surface and in both themes. Put a colour back on the label
+    // alone and the tip silently keeps whatever the row inherited instead.
+    // `className` lands here for the same reason: every caller that passes one
+    // passes a colour, and the tip has to follow it.
+    const rowCls = cn(
+        'mb-1.5 flex items-center gap-1.5',
         tone === 'muted' ? 'text-muted' : 'text-[color:var(--text)]',
         className
     );
+    const textCls = 'font-display font-bold uppercase text-[12px] tracking-[0.08em]';
     return (
-        <div className="mb-1.5 flex items-center gap-1.5">
+        <div className={rowCls}>
             {htmlFor
                 ? <label htmlFor={htmlFor} className={textCls} {...props}>{children}</label>
                 : <span className={textCls} {...props}>{children}</span>}
