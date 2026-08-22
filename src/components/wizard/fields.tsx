@@ -22,7 +22,9 @@ function errorAt(errors: FieldErrors, path: string): string | undefined {
 
 const inputCls =
   'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500';
-const labelCls = 'text-xs font-semibold uppercase tracking-wide text-slate-400';
+// No colour: `LabelRow` puts it on the row so the `HelpTip` beside the label
+// inherits the same one (see `HelpTip`'s trigger — it is `text-current`).
+const labelCls = 'text-xs font-semibold uppercase tracking-wide';
 
 /**
  * The label row: the label and, as a SIBLING, the help trigger.
@@ -33,11 +35,15 @@ const labelCls = 'text-xs font-semibold uppercase tracking-wide text-slate-400';
  *
  * With no `htmlFor` it renders a `<span>`, not a `<label>`: a label associated
  * with no control announces as a stray string. `ReadOnlyField` depends on that.
+ *
+ * THE COLOUR IS ON THE ROW, not on the label, so the tip inherits it and is
+ * exactly as visible as the label beside it. This wizard is a fixed dark
+ * palette on a themed page, so no theme token would have worked here.
  */
 function LabelRow(props: { label: ReactNode; htmlFor?: string; helpId?: string }) {
   const { label, htmlFor, helpId } = props;
   return (
-    <div className="mb-1 flex items-center gap-1.5">
+    <div className="mb-1 flex items-center gap-1.5 text-slate-400">
       {htmlFor
         ? <label htmlFor={htmlFor} className={labelCls}>{label}</label>
         : <span className={labelCls}>{label}</span>}
@@ -137,8 +143,8 @@ export function CheckboxField(props: { name: string; label: ReactNode; helpId?: 
   const { name, label, helpId } = props;
   const { register } = useFormContext();
   return (
-    <div className="mb-2 flex items-center gap-1.5">
-      <label className="flex items-center gap-2 text-sm text-slate-200">
+    <div className="mb-2 flex items-center gap-1.5 text-slate-200">
+      <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" className="h-4 w-4 rounded border-slate-600 bg-slate-900 accent-indigo-500" {...register(name)} />
         {label}
       </label>
