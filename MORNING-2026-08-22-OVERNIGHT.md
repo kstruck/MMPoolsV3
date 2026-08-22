@@ -1,4 +1,4 @@
-# MORNING 2026-08-22 (overnight) — six PRs merged. ONE DEPLOY, and one ruling I need from you.
+# MORNING 2026-08-22 (overnight) — six PRs merged and DEPLOYED. The §2c fix is chosen and still owed.
 
 > ⚠️ **This continues MORNING-2026-08-22-FIXES.md** and supersedes its §7
 > "Still open" list — four of the five items there are now closed.
@@ -25,11 +25,23 @@
 `main` started the night at `37720619` (#503) and ended with #509. **All six are
 merged.**
 
-**You have exactly one deploy to run** (§1), and it is for #508 only.
+✅ **KEVIN REPORTED "deployment complete", 2026-08-22**, so §1 is a record rather
+than a task. ⚠️ Recorded as given: that runbook has **two independent deploy
+halves** — `--only functions` for #508, and the Coolify `www` rebuild all six
+need. §1 step 7's five checks separate them (#5 proves functions, #1–#4 prove
+Coolify) if there is any doubt which ran.
+
+✅ **§3 IS ANSWERED: Kevin chose (d)** — allow `api.openai.com` and add
+`OPENAI_API_KEY` to the cloud environment. **Not yet applied**, and no session
+can apply it; see §3.
 
 ---
 
-## 1. Do these, in this order
+## 1. The runbook — ✅ REPORTED COMPLETE 2026-08-22
+
+Kept as the record of what was done, and as the shape of the next one. Step 7's
+production checks are the only part worth re-reading: they are what tells the
+two deploy halves apart.
 
 ### Step 1 — pull `main` in the MAIN checkout (30 seconds, MANDATORY)
 
@@ -275,19 +287,26 @@ under a 🛑 heading, and lists what the self-review actually caught.
   "broke ten times on #480, always the same shape". Copy is the shape
   self-review is worst at. (This option said "hold it unmerged" when written —
   it merged on green CI before you answered, so it is a revert now.)*
-- **(d) Fix the cloud environment — MY RECOMMENDATION, and it is a config change
-  rather than a rebuild.** Two levers, both on the environment rather than the
-  image: **allow `api.openai.com`** in its network policy, and add
-  **`OPENAI_API_KEY`** to its environment variables. The CLI itself needs
-  nothing — a session installs it in nine seconds. *Expected outcome: §2c runs
-  in cloud sessions from then on and this stops recurring. Neither lever is
-  reachable from inside the container.* Where the policy is set:
-  https://code.claude.com/docs/en/claude-code-on-the-web
-  **(d) and (b) compose** — (d) prevents the next occurrence, (b) closes this
-  one.
+- **(d) ✅ CHOSEN BY KEVIN, 2026-08-22 — and still owed.** Allow
+  `api.openai.com` in the cloud environment's network policy, and add
+  **`OPENAI_API_KEY`** to its environment variables. The CLI needs nothing — a
+  session installs it in nine seconds.
 
-**If you pick nothing, (a) is where things stand** — all six are merged and the
-gate is recorded as unmet in six PR bodies.
+  ⚠️ **NO SESSION CAN DO THIS.** Both live on the ENVIRONMENT DEFINITION at
+  claude.ai/code, not inside a container. Re-measured at 17:17Z after the
+  ruling: the gateway still answers `403 to CONNECT` for `api.openai.com`, and
+  `OPENAI_API_KEY` is unset. Where they are set:
+  https://code.claude.com/docs/en/claude-code-on-the-web
+
+  ⚠️ **AND IT DOES NOT REACH BACK.** An environment edit applies to the NEXT
+  session, never a running one — so **(d) alone leaves §2c unmet for these six.**
+  **(d) and (b) compose:** (d) prevents the next occurrence, (b) closes this one,
+  by running `codex exec review --base 37720619` either from Windows or from a
+  cloud session started after the change.
+
+**ANSWERED 2026-08-22: Kevin chose (d).** It is not applied yet and no session
+can apply it. Until it is — and until a codex round runs over `37720619..HEAD` —
+these six stand as (a): merged, with the gate recorded unmet in six PR bodies.
 
 ---
 

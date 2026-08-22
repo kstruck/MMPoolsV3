@@ -1,10 +1,17 @@
 # HANDOFF — Session entry point
 
-> ## 🟢 2026-08-22 (overnight) — **SIX PRs MERGED. ONE DEPLOY OWED. THE REVIEW GATE DID NOT RUN.**
+> ## 🟢 2026-08-22 — **SIX PRs MERGED AND DEPLOYED. THE REVIEW GATE DID NOT RUN, AND THE FIX IS KEVIN'S TO MAKE.**
 >
-> **Read [MORNING-2026-08-22-OVERNIGHT.md](MORNING-2026-08-22-OVERNIGHT.md)** — its
-> §1 is the runbook and §3/§4 are the two rulings owed. It continues
-> `MORNING-2026-08-22-FIXES.md` and supersedes that doc's §7.
+> **Read [MORNING-2026-08-22-OVERNIGHT.md](MORNING-2026-08-22-OVERNIGHT.md)** — it
+> continues `MORNING-2026-08-22-FIXES.md` and supersedes that doc's §7. Its §1
+> runbook is DONE; §4 still names the artifact most worth a second look.
+>
+> ✅ **KEVIN REPORTED "deployment complete", 2026-08-22.** His words, recorded as
+> given. The runbook had TWO deploy halves and they are independent: the
+> `--only functions` deploy that #508 needs, and the Coolify `www` rebuild that
+> all six need. If only the first ran, the other five are merged and invisible.
+> **The cheap check is §1 step 7 — the five production confirmations; #5 there
+> proves functions, #1–#4 prove Coolify.**
 >
 > 🛑 **`CLAUDE.md` §2c's cross-model review DID NOT RUN ON ANY OF THE SIX PRs.**
 > The cloud environment that built them **denies `api.openai.com` at the network
@@ -21,27 +28,29 @@
 > `codex-cli 0.144.5`" was measured there. This page is the correction; the
 > merged commit messages cannot be.
 >
-> 📌 **THE FIX IS A CONFIG CHANGE, NOT A REBUILD.** Allow `api.openai.com` in the
+> 📌 **KEVIN CHOSE THE FIX ON 2026-08-22: allow `api.openai.com` in the cloud
 > environment's network policy and add `OPENAI_API_KEY` to its environment
-> variables, and the gate runs in cloud sessions from then on.
+> variables.** ⚠️ **NOT YET DONE, and no session can do it** — both live on the
+> ENVIRONMENT DEFINITION at claude.ai/code, not inside a container; measured
+> again at 17:17Z, the gateway still answers `403 to CONNECT` for
+> `api.openai.com` and `OPENAI_API_KEY` is unset. An edit there applies to the
+> NEXT session, never the running one, so §2c stays unmet for these six
+> regardless — closing that needs a codex round over `37720619..HEAD`, from
+> Windows or from a cloud session started after the change.
 >
 > With qodo dormant that left §2c's second condition, self-review, as the only
 > one available. **ALL SIX are merged with the gate unmet and named at the bottom
 > of every PR body.** The morning doc's §3 is the ruling, and its §4 names the one
 > artifact I would most want a second model on.
 >
-> 🛑 **ONE DEPLOY IS OWED, and only one: `--only functions` for #508.** Until it
-> runs, the Set column fix is merged and inert. Everything else needs the Coolify
-> `www` rebuild and nothing more. **Pull `main` in `D:\march-melee-pools` first** —
-> `firebase deploy` builds from local files.
->
+
 > | PR | What | Deploy |
 > |---|---|---|
 > | **#504** | The NFL "List Pool Publicly" toggle now changes the Browse listing | Coolify |
 > | **#505** | `HelpCopy.template` can render — pool settings reach the help scope | Coolify |
 > | **#506** | The Pick'em proxy pick, which had never worked | Coolify |
 > | **#507** | Deleted the two inert Pick'em scoring controls (Kevin's ruling) | Coolify |
-> | **#508** | The picks grid's Set column is visible to members (Kevin, option A) | 🛑 **functions** |
+> | **#508** | The picks grid's Set column is visible to members (Kevin, option A) | ✅ functions, deployed |
 > | **#509** | T4 — the manager form's 33 labels → `FieldLabel` + help topics | Coolify |
 >
 > ✅ **`MORNING-2026-08-22-FIXES.md` §7's four help-system defects (a)–(d) are ALL
