@@ -118,6 +118,35 @@ describe('the switch is cached — a reminder blast is not N config reads', () =
     expect(h.reads, 'the switch is being re-read per send').toBe(1);
   });
 
+  it('collapses OVERLAPPING misses into a single read (single-flight)', async () => {
+    // Without single-flight both callers fetch, and the last to finish installs
+    // its value — which can put an OLDER config over a newer one and push real
+    // staleness past the 60s this module advertises (codex round 6). It also
+    // matters on a cold instance, where a burst of sends would otherwise
+    // stampede the very read the cache exists to avoid.
+    setConfig({ sms: { enabled: true } });
+    h.reads = 0;
+    const [a, b, c] = await Promise.all([
+      isMemberSmsEnabled(), isMemberSmsEnabled(), isMemberSmsEnabled(),
+    ]);
+    expect([a, b, c]).toEqual([true, true, true]);
+    expect(h.reads, 'concurrent misses each issued their own read').toBe(1);
+  });
+
+  it('recovers after a failed in-flight read — the next call retries', async () => {
+    // The `finally` that clears `inflight` is load-bearing: leaving a rejected
+    // promise parked there would make every later caller reuse the failure.
+    h.shouldThrow = true;
+    __resetCostControlsCache();
+    expect(await isMemberSmsEnabled()).toBe(false);
+
+    h.shouldThrow = false;
+    h.configDoc = { exists: true, data: () => ({ costControls: { sms: { enabled: true } } }) };
+    h.reads = 0;
+    expect(await isMemberSmsEnabled(), 'a stale in-flight promise was reused').toBe(true);
+    expect(h.reads, 'the retry did not actually re-read').toBe(1);
+  });
+
   it('does NOT cache a failure — a blip must not pin fail-closed after it clears', async () => {
     // Caching the error would keep answering "disabled" for the whole TTL after
     // Firestore recovered, turning a momentary blip into a minute of silently

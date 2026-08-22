@@ -56,29 +56,48 @@ export interface CostControlsConfig {
  */
 const TTL_MS = 60_000;
 let cached: { at: number; value: CostControlsConfig | null } | null = null;
+/**
+ * Single-flight: overlapping misses share ONE read (codex round 6). Without it
+ * two concurrent callers both fetch and the LAST to finish wins, which can
+ * install an older value over a newer one and push real staleness past the
+ * 60s this module advertises. It also collapses a cold-instance stampede into
+ * one read, which is the point of caching here in the first place.
+ */
+let inflight: Promise<CostControlsConfig | null> | null = null;
 
 /** Test seam — drops the cache so a test can change the config mid-run. */
 export function __resetCostControlsCache(): void {
     cached = null;
+    inflight = null;
 }
 
 async function loadCostControls(): Promise<CostControlsConfig | null> {
-    const now = Date.now();
-    if (cached && now - cached.at < TTL_MS) return cached.value;
-    try {
-        const snap = await admin.firestore().collection("system").doc("config").get();
-        const raw = snap.exists
-            ? (snap.data() as { costControls?: CostControlsConfig } | undefined)
-            : undefined;
-        const value = raw?.costControls ?? null;
-        cached = { at: now, value };
-        return value;
-    } catch (e) {
-        // Fail CLOSED: an unreadable config denies optional paid work. Not
-        // cached — see above.
-        console.warn("[costControls] config read failed; treating paid features as disabled", e);
-        return null;
-    }
+    if (cached && Date.now() - cached.at < TTL_MS) return cached.value;
+    if (inflight) return inflight;
+
+    inflight = (async () => {
+        try {
+            const snap = await admin.firestore().collection("system").doc("config").get();
+            const raw = snap.exists
+                ? (snap.data() as { costControls?: CostControlsConfig } | undefined)
+                : undefined;
+            const value = raw?.costControls ?? null;
+            // Stamped at COMPLETION, not at call time: a slow read must not
+            // install an entry that is already most of its TTL old.
+            cached = { at: Date.now(), value };
+            return value;
+        } catch (e) {
+            // Fail CLOSED: an unreadable config denies optional paid work. Not
+            // cached — a blip must not pin the answer for a minute after it
+            // clears.
+            console.warn("[costControls] config read failed; treating paid features as disabled", e);
+            return null;
+        } finally {
+            inflight = null;
+        }
+    })();
+
+    return inflight;
 }
 
 /**
