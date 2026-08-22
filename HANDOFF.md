@@ -1,5 +1,44 @@
 # HANDOFF — Session entry point
 
+> ## 🟢 2026-08-22 (later) — **THE ENVIRONMENT FIX WORKS. PR #513's GATES ARE ALL RUN — REVIEW LOG + SWEEPS LANDED. WAITING ON KEVIN'S MERGE CALL.**
+>
+> ✅ **KEVIN'S ENVIRONMENT FIX IS CONFIRMED WORKING, measured this session:**
+> `api.openai.com` answers 200 through the gateway, `OPENAI_API_KEY` is set,
+> codex-cli 0.149.0 installed. The box below's "NOT YET DONE / no session can
+> do it" is superseded — cloud sessions started after the fix CAN run §2c.
+>
+> ⚠️ **TWO SETUP FACTS THE NEXT CLOUD SESSION NEEDS** (both cost this session a
+> failed round-1 attempt each):
+> 1. The CLI does NOT read `OPENAI_API_KEY` by itself — every 401 until you run
+>    `printf '%s' "$OPENAI_API_KEY" | codex login --with-api-key`.
+> 2. The API project does NOT carry codex's default model (`gpt-5.6-sol` →
+>    403 "does not have access"). Pin the model: `-m gpt-5.3-codex` (verified
+>    available on this key, alongside `gpt-5.6-luna`/`-terra`).
+>
+> ✅ **PR [#513](https://github.com/kstruck/MMPoolsV3/pull/513)
+> (PLAN-COST-CONTROLS, the plan PR) now carries ALL its gates**, pushed as
+> `5c99d062`: §2c review run — **4 codex rounds, 9 findings
+> (1 Critical / 3 High / 3 Medium / 2 Low), 9 accepted, 0 rejected, CONVERGED
+> on a clean round 4** — plus `PLAN-COST-CONTROLS-REVIEW-LOG.md` and
+> `PLAN-COST-CONTROLS-SWEEPS.md`. D1–D5 were already signed. The Critical:
+> 0.5.3's SMS kill-switch couldn't honor D4's exemptions (the security-alert
+> SMS shares `sendCourierSMS` with member sends) — now an `audience` parameter.
+> Sweeps confirmed the inventories complete at endpoint level and recorded the
+> `lib/billingAccess.ts` `!billing ⇒ allowed` carve-out as a 0.5.2 trap.
+>
+> ⚠️ **A vacuous clean is not a review.** The stock
+> `codex exec review --base origin/main` on a docs-only diff answers "no
+> runtime bugs" and engages nothing — on a PLAN PR, run adversarial
+> plan-content rounds (the review log's rounds 2–4 are the shape). Round 1 is
+> counted as a paid round anyway.
+>
+> 📌 **§2c on the six MERGED PRs (#504–#509) is still unmet** — that ruling
+> stands; what changed is that the closing round over `37720619..HEAD` is now
+> runnable from any post-fix cloud session, not only from Windows.
+>
+> 📌 **Next gate on #513 is Kevin's merge call, then Phase 0.5 as its own PR**
+> — one PR at a time; nothing is implemented yet, no code changed.
+
 > ## 🟢 2026-08-22 — **SIX PRs MERGED AND DEPLOYED. THE REVIEW GATE DID NOT RUN, AND THE FIX IS KEVIN'S TO MAKE.**
 >
 > **Read [MORNING-2026-08-22-OVERNIGHT.md](MORNING-2026-08-22-OVERNIGHT.md)** — it
@@ -27,6 +66,10 @@
 > use is on `D:\march-melee-pools`, with open egress; §2c's "verified
 > `codex-cli 0.144.5`" was measured there. This page is the correction; the
 > merged commit messages cannot be.
+>
+> 🛑 **SUPERSEDED 2026-08-22 (later) — THE FIX IS DONE AND VERIFIED WORKING; see
+> the top box.** The paragraph below was true when written and is kept for the
+> record. **Do not read the environment's codex reachability off it.**
 >
 > 📌 **KEVIN CHOSE THE FIX ON 2026-08-22: allow `api.openai.com` in the cloud
 > environment's network policy and add `OPENAI_API_KEY` to its environment

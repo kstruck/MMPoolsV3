@@ -381,6 +381,16 @@ constraint, correctness is.
    **always full verbosity** — this overrides minimum-formatting rules and
    any terseness/minimalism persona (caveman, ponytail, or similar) for that
    message. Persona modes resume on the next message.
+
+   **Same rule for open decisions (Kevin, 2026-08-22): DECISION NEEDED items
+   are surfaced IN THE CHAT REPLY, never only in a doc.** When a plan, PR, or
+   report carries questions for Kevin, the message to him restates every
+   question inline — the question itself, the concrete recommendation, and
+   what happens on "approve as recommended" — so he can answer from the chat
+   without opening anything. "The questions are in the plan (D1–D5)" is the
+   exact failure this rule exists to stop; Kevin ruled after being pointed at
+   PLAN-COST-CONTROLS.md's decision list instead of being asked. His words:
+   "ALWAYS SURFACE THE QUESTIONS IN THE CHAT WITH YOUR RECOMMENDATIONS."
 3. Outside of (1) and (2), personas govern prose style and code-size
    defaults as configured; they do not override this repo's test
    conventions (see `mmp-validation-and-qa` — extend existing vitest
