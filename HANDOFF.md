@@ -1,5 +1,54 @@
 # HANDOFF — Session entry point
 
+> ## 🟢 2026-08-22 (latest) — **§2c IS NOW CLOSED ON THE SIX MERGED PRs. THE HELP `?` IS VISIBLE (#514, MERGED). COOLIFY REBUILD OWED, NO FUNCTIONS DEPLOY.**
+>
+> ✅ **§2c ON #504–#509 IS MET.** The box below said "still unmet"; it is
+> superseded. Two codex rounds ran this session, both over real code diffs and
+> both clean, using the setup facts that box records (`codex login
+> --with-api-key`, then `-m gpt-5.3-codex`):
+>
+> | round | range | covers | result |
+> |---|---|---|---|
+> | 1 | `37720619..6df345a5` | all six — 40 files, +2805/−319 | clean |
+> | 2 | `8455ec53..40932eab` | #506–#508, the three that change behaviour | clean |
+>
+> Round 2 was targeted on purpose: `MORNING-2026-08-22-OVERNIGHT.md` §4 named
+> the proxy pick as the artifact most worth a second model, and #508 is the
+> authorization-adjacent one. **This is NOT the "vacuous clean" the box below
+> warns about** — that warning is about a docs-only diff, and both of these
+> quoted specific hunks of a large code diff.
+>
+> ⚠️ **IT DOES NOT CLEAR §5 OF THE MORNING DOC.** The two defects named and
+> deliberately not fixed there — `proxyPick`'s `??` game lock where
+> `effectiveGameLockAt` uses `Math.max`, and the client-side-only
+> confidence-mode proxy refusal — are still open and still need a functions
+> deploy.
+>
+> ✅ **PR [#514](https://github.com/kstruck/MMPoolsV3/pull/514) MERGED** —
+> Kevin, 2026-08-22: *"I am not seeing a ? by the Weekly Tie-Breaker."* The
+> topic resolved and the icon rendered; it was drawn in `--faint`, 2.81:1 on
+> the light page. **The `?` now carries no colour of its own and inherits its
+> label row's**, so it is exactly as visible as the label it explains. On the
+> manager form that is 5.79:1 light / 6.76:1 dark, up from 3.09:1.
+>
+> ⚠️ **THE ONE-CLASS FIX FIRST OFFERED (`text-faint` → `text-muted`) WAS
+> WRONG**, and the reason is the durable fact: `HelpTip` renders on TWO
+> incompatible palettes — the theme-driven surfaces (`--card`/`--page`, which
+> swap under `.dark`) and the wizard's FIXED dark panel (`bg-slate-900/60` over
+> `bg-page`, so it blends light in light theme). **No single colour clears 3:1
+> on both.** `tests/help-tip-contrast.test.ts` parses the tokens out of
+> `src/index.css` and guards it; §2c ran two clean rounds on it.
+>
+> 📌 **FOUND, NAMED, NOT FIXED:** the wizard's own labels are `text-slate-400`
+> on that blended panel — **1.96:1 in light theme**. A defect of the wizard's
+> fixed palette on a themed page, predating the help system; fixing it means
+> rethemeing the wizard. The test names it rather than asserting it, which
+> would only lock the bug in.
+>
+> 📌 **#514 IS FRONTEND ONLY** — no `functions/`, `shared/` or
+> `firestore.rules` change. It needs the **Coolify `www` rebuild** and **no
+> `firebase deploy`**.
+
 > ## 🟢 2026-08-22 (later) — **THE ENVIRONMENT FIX WORKS. PR #513's GATES ARE ALL RUN — REVIEW LOG + SWEEPS LANDED. WAITING ON KEVIN'S MERGE CALL.**
 >
 > ✅ **KEVIN'S ENVIRONMENT FIX IS CONFIRMED WORKING, measured this session:**
@@ -32,9 +81,11 @@
 > plan-content rounds (the review log's rounds 2–4 are the shape). Round 1 is
 > counted as a paid round anyway.
 >
-> 📌 **§2c on the six MERGED PRs (#504–#509) is still unmet** — that ruling
-> stands; what changed is that the closing round over `37720619..HEAD` is now
-> runnable from any post-fix cloud session, not only from Windows.
+> 🛑 **SUPERSEDED 2026-08-22 (latest) — §2c ON #504–#509 IS NOW MET; see the
+> top box.** What this said, and what was true when written: *"§2c on the six
+> MERGED PRs (#504–#509) is still unmet — that ruling stands; what changed is
+> that the closing round over `37720619..HEAD` is now runnable from any
+> post-fix cloud session, not only from Windows."* It was run, twice, clean.
 >
 > 📌 **Next gate on #513 is Kevin's merge call, then Phase 0.5 as its own PR**
 > — one PR at a time; nothing is implemented yet, no code changed.
