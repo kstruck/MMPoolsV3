@@ -12,6 +12,26 @@
 import { z } from 'zod';
 import { POOL_TYPES } from '../poolTypes';
 
+// --- Unsellable add-ons -------------------------------------------------------
+/**
+ * Add-ons that exist in the contract but MUST NOT be sold right now
+ * (PLAN-COST-CONTROLS 0.5.4). ONE definition, read by both places that have to
+ * agree: the schema transform below (so nothing new can be quoted or charged)
+ * and the Stripe webhook's in-flight-session clamp (so a session created before
+ * this shipped cannot stamp the entitlement either). Adding a key here disables
+ * selling it everywhere; removing one re-enables it everywhere.
+ */
+export const UNSELLABLE_ADDON_KEYS = ['smsNotifications'] as const;
+
+/** Force every unsellable add-on off. Pure, so both call sites can be tested. */
+export function clampUnsellableAddons<T extends Record<string, boolean>>(addons: T): T {
+  const out = { ...addons };
+  for (const key of UNSELLABLE_ADDON_KEYS) {
+    if (key in out) (out as Record<string, boolean>)[key] = false;
+  }
+  return out;
+}
+
 // --- Add-on selection ---------------------------------------------------------
 // The four premium features that carry an addonPrice in billing_config. Every
 // field is optional+boolean and defaults to false so partial payloads (and the
@@ -46,7 +66,7 @@ export const addonSelectionSchema = z
     whatIfSimulator: false,
     customBranding: false,
   }))
-  .transform((a) => ({ ...a, smsNotifications: false as boolean }));
+  .transform((a) => clampUnsellableAddons(a));
 export type AddonSelection = z.infer<typeof addonSelectionSchema>;
 /** The four add-on keys, in canonical order. */
 export const ADDON_KEYS = [

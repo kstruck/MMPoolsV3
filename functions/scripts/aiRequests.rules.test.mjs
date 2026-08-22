@@ -61,6 +61,7 @@ const STRANGER = 'ai-stranger';  // participant of nothing
 const PAID = 'ai-pool-paid';      // entitlement true
 const UNPAID = 'ai-pool-unpaid';  // entitlement explicitly false
 const LEGACY = 'ai-pool-legacy';  // no billing map at all
+const PARTIAL = 'ai-pool-partial'; // billing present, featuresUnlocked missing
 
 const basePool = (id) => ({
     id,
@@ -88,6 +89,12 @@ await env.withSecurityRulesDisabled(async (ctx) => {
     });
     // No `billing` key whatsoever — a legacy/free pool.
     await setDoc(doc(db, 'pools', LEGACY), basePool(LEGACY));
+    // billing present but NO featuresUnlocked map — the half-shaped doc that
+    // the second link of the .get() chain exists for.
+    await setDoc(doc(db, 'pools', PARTIAL), {
+        ...basePool(PARTIAL),
+        billing: { status: 'free', tier: 'free_tier' },
+    });
     // An existing request, so the update/delete cases have something to aim at.
     await setDoc(doc(db, 'pools', PAID, 'ai_requests', 'seeded'), {
         userId: ALICE, poolId: PAID, question: 'seeded', category: 'DISPUTE',
@@ -151,6 +158,14 @@ await check(
 await check(
     'a pool with NO billing map denies (deny-by-default, not allow-by-omission)',
     assertFails(addDoc(collection(alice, 'pools', LEGACY, 'ai_requests'), req(ALICE, LEGACY))),
+);
+
+// 5b — billing exists, featuresUnlocked does not. Each link of the .get()
+// chain has to hold independently; this is the one that would break if someone
+// "simplified" it to .get('billing', {}).featuresUnlocked.aiCommissioner.
+await check(
+    'a pool with billing but NO featuresUnlocked map denies',
+    assertFails(addDoc(collection(alice, 'pools', PARTIAL, 'ai_requests'), req(ALICE, PARTIAL))),
 );
 
 // 6 — 🛑 the paying customer still works. If this ever fails, the tighten went
