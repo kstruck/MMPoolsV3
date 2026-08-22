@@ -113,8 +113,17 @@ export function useHelpPanelState(options: { isAdmin: boolean; defaultAudience?:
   const pending = useRef<{ target: HelpTarget; pageId: string } | null>(null);
 
   const scope = useMemo<TopicScope>(
-    () => ({ poolType: published.poolType, audience: published.audience ?? defaultAudience }),
-    [published.poolType, published.audience, defaultAudience],
+    () => ({
+      poolType: published.poolType,
+      audience: published.audience ?? defaultAudience,
+      // Only a pool surface publishes this. Absent on the wizard and the site
+      // pages, where a `HelpCopy.template` must render its static fallback.
+      // `search` reads the same scope, so a query inside a pool matches the
+      // branch that pool's cards actually show, and a query outside one still
+      // matches the fallback.
+      settings: published.settings,
+    }),
+    [published.poolType, published.audience, published.settings, defaultAudience],
   );
 
   const routeContext = useMemo<HelpRouteContext>(

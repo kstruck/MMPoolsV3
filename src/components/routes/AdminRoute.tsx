@@ -86,7 +86,12 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
     // dispatches to. It sits below the ownership guard above, so `commissioner`
     // is the only audience that can reach any of it.
     const withHelp = (node: React.ReactNode) => (
-        <HelpScopeProvider poolType={currentPool.type as PoolType} audience="commissioner">
+        <HelpScopeProvider
+            poolType={currentPool.type as PoolType}
+            audience="commissioner"
+            // By reference, for the reason given in `PoolRoute`.
+            settings={(currentPool as { settings?: Record<string, unknown> }).settings}
+        >
             {node}
         </HelpScopeProvider>
     );

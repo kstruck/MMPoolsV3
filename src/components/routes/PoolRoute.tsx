@@ -179,6 +179,12 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         <HelpScopeProvider
             poolType={pool.type as PoolType}
             audience={isManager || nflIsManager ? 'commissioner' : 'member'}
+            // The pool's OWN settings object, by reference — this is what lets
+            // a `HelpCopy.template` render the rule this pool is actually
+            // playing instead of a sentence widened to cover every value.
+            // Not spread into a new object: the publish store would then see a
+            // new identity on every render (`PublishedRoute.settings`).
+            settings={(pool as { settings?: Record<string, unknown> }).settings}
         >
             {node}
         </HelpScopeProvider>

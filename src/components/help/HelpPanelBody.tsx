@@ -212,6 +212,7 @@ export function HelpPanelBody({ state, searchInputRef }: {
                       key={topic.id}
                       topic={topic}
                       poolType={scope.poolType}
+                      settings={scope.settings}
                       highlighted={topic === activeTopic}
                       related={relatedOf(topic.related)}
                       onOpenRelated={(id) => {

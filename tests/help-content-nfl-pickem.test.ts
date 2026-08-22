@@ -5,7 +5,7 @@ import { helpRegistry } from '../src/help/registry';
 import { SCHEMA_PATH_ALLOWLIST, WIZARD_FIELD_ALLOWLIST } from '../src/help/coverage-allowlist';
 import { NFL_PICKEM_PLACEMENTS, NFL_PICKEM_TOPICS } from '../src/help/content/nfl-pickem';
 import { NFL_SEASON_TYPES, NFL_SHARED_TOPICS } from '../src/help/content/nfl-shared';
-import { staticCopy } from '../src/help/registry';
+import { resolveCopy, staticCopy } from '../src/help/registry';
 import { nflLockMode } from '../shared/nflLockMode';
 import { DEFAULT_LOCK_BUFFER_MINUTES, LOCK_BUFFER_PRESETS } from '../shared/weeklyHardLock';
 
@@ -254,5 +254,141 @@ describe('T9 — the allowlist rows it closed are closed', () => {
   it('the isPublic topic is what accounts for settings.isListedPublic', () => {
     const topic = helpRegistry.getTopic('isPublic');
     expect(topic?.fields).toEqual(['isPublic', 'settings.isListedPublic']);
+  });
+});
+
+/**
+ * The weekly tie-breaker copy, now that it is a template.
+ *
+ * This is the sentence voice rule 5 kept breaking on: three earlier drafts
+ * opened with a claim true of the two pickable Monday rules and false of
+ * MNF_COMBINED and NONE, and each fix widened the copy further. The template
+ * ends that by naming the rule the reader's own pool is playing — so what has
+ * to be proved is that each branch says the RIGHT thing, and that the wizard
+ * still gets the widened version.
+ */
+describe('settings.weeklyTiebreaker renders the rule this pool is playing', () => {
+  const topic = helpRegistry.getTopic('settings.weeklyTiebreaker');
+
+  const shortFor = (settings: Record<string, unknown>) => resolveCopy(topic!.short, { settings });
+  const longFor = (settings: Record<string, unknown>) => resolveCopy(topic!.long, { settings });
+
+  it('is a template on both fields', () => {
+    expect(typeof topic!.short).not.toBe('string');
+    expect(typeof topic!.long).not.toBe('string');
+  });
+
+  it('names the LAST Monday game, and only that one', () => {
+    const s = shortFor({ weeklyTiebreaker: 'MNF_LAST_GAME' });
+    expect(s).toContain('LAST Monday game');
+    expect(s).not.toContain('FIRST');
+    expect(longFor({ weeklyTiebreaker: 'MNF_LAST_GAME' })).toContain('last Monday game to kick off');
+  });
+
+  it('names the FIRST Monday game, and only that one', () => {
+    const s = shortFor({ weeklyTiebreaker: 'MNF_FIRST_GAME' });
+    expect(s).toContain('FIRST Monday game');
+    expect(s).not.toContain('LAST');
+    expect(longFor({ weeklyTiebreaker: 'MNF_FIRST_GAME' })).toContain('first Monday game to kick off');
+  });
+
+  /**
+   * THE BRANCH THE WIDENED COPY EXISTED FOR. Under `NONE` nothing is
+   * predicted, so a sentence about "whoever is closest" is simply false — and
+   * every earlier draft had to carry a second sentence walking the first one
+   * back.
+   */
+  it('says nothing about predictions or closeness under NONE', () => {
+    const s = shortFor({ weeklyTiebreaker: 'NONE' });
+    const l = longFor({ weeklyTiebreaker: 'NONE' });
+    expect(s).toContain('no prediction');
+    expect(s).not.toMatch(/closest|Monday/);
+    expect(l).not.toMatch(/closest/);
+    expect(l).toContain('shares that week outright');
+  });
+
+  /**
+   * The legacy rule. `effectiveWeeklyTiebreaker` resolves BOTH an absent value
+   * and a junk one to `MNF_COMBINED` — a pool holding a typo plays the
+   * historical rule rather than silently becoming `NONE` — so the copy has to
+   * follow it to all three.
+   */
+  it.each([
+    ['stored explicitly', { weeklyTiebreaker: 'MNF_COMBINED' }],
+    ['absent', {}],
+    ['a typo', { weeklyTiebreaker: 'MNF_LASTGAME' }],
+  ])('describes the legacy combined rule when the value is %s', (_label, settings) => {
+    expect(shortFor(settings)).toContain('Monday games together');
+    const l = longFor(settings);
+    expect(l).toContain('Monday games together');
+    // The half that makes it legacy, and the half a commissioner needs: it is
+    // not offered any more, and it is not being taken away either.
+    expect(l).toContain('no longer offered');
+    // Under this rule a Monday-less week asks for nothing — the second place
+    // the widened copy had to hedge.
+    expect(l).toContain('no Monday game nothing is predicted');
+  });
+
+  it('every branch is distinct — the template is not collapsing to one string', () => {
+    const rendered = new Set([
+      shortFor({ weeklyTiebreaker: 'MNF_LAST_GAME' }),
+      shortFor({ weeklyTiebreaker: 'MNF_FIRST_GAME' }),
+      shortFor({ weeklyTiebreaker: 'MNF_COMBINED' }),
+      shortFor({ weeklyTiebreaker: 'NONE' }),
+    ]);
+    expect(rendered.size).toBe(4);
+  });
+
+  /**
+   * THE CONTRACT THIS PR MUST NOT BREAK. The wizard knows the pool type from
+   * the moment the format is chosen and has no settings until the pool exists,
+   * so the reader there is the one who genuinely needs all four rules
+   * described. That is what the fallback is, and it must still be what a
+   * settings-free scope returns.
+   */
+  it('falls back to the four-rule wording wherever no pool is in scope', () => {
+    for (const ctx of [undefined, {}, { poolType: 'NFL_PICKEM' as const }]) {
+      expect(resolveCopy(topic!.short, ctx)).toContain('Decides who wins a week');
+      const l = resolveCopy(topic!.long, ctx);
+      expect(l).toContain('either the last Monday game or the first');
+      expect(l).toContain('You can also choose no tie-breaker');
+    }
+  });
+
+  it('the fallback is what stands alone, and the invariants measure it', () => {
+    expect(staticCopy(topic!.short)).toContain('Decides who wins a week');
+    expect(staticCopy(topic!.long)).toContain('A few older pools');
+  });
+
+  /**
+   * SEARCH FOLLOWS THE SAME BRANCH THE PAGE DOES.
+   *
+   * Indexing the fallback everywhere would hand a reader inside a `NONE` pool
+   * a snippet about Monday games their own screen never says, and would fail
+   * to match the words it does. Off a pool surface there are no settings and
+   * the index is the fallback again, unchanged.
+   */
+  describe('search', () => {
+    const inPool = { poolType: 'NFL_PICKEM' as const, audience: 'member' as const, settings: { weeklyTiebreaker: 'NONE' } };
+    const noPool = { poolType: 'NFL_PICKEM' as const, audience: 'member' as const };
+    const ids = (q: string, scope: Parameters<typeof helpRegistry.search>[1]) =>
+      helpRegistry.search(q, scope).map((r) => r.id);
+
+    it('finds the topic by wording only its own branch uses', () => {
+      expect(ids('shares that week outright', inPool)).toContain('settings.weeklyTiebreaker');
+      expect(ids('shares that week outright', noPool)).not.toContain('settings.weeklyTiebreaker');
+    });
+
+    it('stops offering it for wording that branch does not carry', () => {
+      // A NONE pool's copy never mentions older pools; the fallback does.
+      expect(ids('A few older pools', noPool)).toContain('settings.weeklyTiebreaker');
+      expect(ids('A few older pools', inPool)).not.toContain('settings.weeklyTiebreaker');
+    });
+
+    it('the snippet comes from the branch the reader would open', () => {
+      const hit = helpRegistry.search('no prediction', inPool).find((r) => r.id === 'settings.weeklyTiebreaker');
+      expect(hit).toBeTruthy();
+      expect(hit!.snippet).not.toContain('A few older pools');
+    });
   });
 });

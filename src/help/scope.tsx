@@ -31,18 +31,37 @@ const HelpScopeContext = createContext<TopicScope>(DEFAULT_HELP_SCOPE);
 export function HelpScopeProvider(props: {
   poolType?: PoolType;
   audience: Audience;
+  /**
+   * The pool's settings map, so `HelpCopy.template` can render against the
+   * pool the reader is actually in.
+   *
+   * OMITTED ON PURPOSE by `WizardShell`, and that is the contract: a wizard
+   * knows the pool type from the moment the format is chosen and has no
+   * settings until the pool exists, so a template there must keep rendering
+   * its static `fallback` (`resolveCopy`). The same goes for every site page,
+   * which has no provider at all.
+   *
+   * Pass the pool document's own object, by reference — see `PublishedRoute`.
+   */
+  settings?: Record<string, unknown>;
   children: ReactNode;
 }) {
-  const { poolType, audience, children } = props;
-  // Memoised on the two primitives rather than on an object literal: without
-  // this every render of a 900-line route hands every HelpTip below it a new
-  // context value.
-  const value = useMemo<TopicScope>(() => ({ poolType, audience }), [poolType, audience]);
-  // T2: the same two facts go UPWARD as well. The Help panel is mounted above
+  const { poolType, audience, settings, children } = props;
+  // Memoised on the inputs rather than on an object literal: without this every
+  // render of a 900-line route hands every HelpTip below it a new context
+  // value. `settings` joins them by identity, which is stable between pool
+  // snapshots.
+  const value = useMemo<TopicScope>(
+    () => ({ poolType, audience, settings }),
+    [poolType, audience, settings],
+  );
+  // T2: the same facts go UPWARD as well. The Help panel is mounted above
   // the router and cannot read this context, so the surface that knows the
   // pool type is the surface that tells it — one publisher, not a second
-  // derivation of "which pool type is this" inside the panel.
-  useHelpRoute({ poolType, audience });
+  // derivation of "which pool type is this" inside the panel. `settings` rides
+  // the same channel for the same reason: the panel renders the SAME topics
+  // the tooltip does, and the two must not resolve one topic's copy two ways.
+  useHelpRoute({ poolType, audience, settings });
   return <HelpScopeContext.Provider value={value}>{children}</HelpScopeContext.Provider>;
 }
 
