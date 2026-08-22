@@ -191,8 +191,27 @@ export function HelpTip({ helpId, side = 'top', className }: HelpTipProps) {
             hide();
           }
         }}
+        // NO COLOUR OF ITS OWN — `text-current` is the whole point, not a
+        // no-op. The trigger renders on two incompatible palettes: the
+        // theme-driven manager form and site pages (`--card` / `--page`,
+        // light or dark) and the wizard's FIXED dark panel
+        // (`bg-slate-900/60`, which sits on `bg-page` and so blends light in
+        // light theme). Measured 2026-08-22, no single token clears WCAG
+        // 1.4.11's 3:1 on all of them — `--faint` is 2.81:1 on the light page
+        // and `--text-muted` is 1.15:1 on the wizard's panel in light theme.
+        //
+        // So it inherits from the label row instead, which makes the tip
+        // EXACTLY as visible as the label it explains, on every surface and
+        // in both themes, and keeps it that way when a palette changes.
+        // `FieldLabel` and the wizard's `LabelRow` put the colour on the row
+        // for this reason; `tests/help-tip-contrast.test.ts` is the guard.
+        //
+        // Hover needs no colour change: hovering OPENS THE BUBBLE, which is a
+        // louder affordance than a shade. Keyboard focus does need one, and a
+        // `ring-current` ring inherits too — the colour swap it replaces went
+        // to `--text`, i.e. near-black on the wizard's dark panel.
         className={cn(
-          'inline-flex shrink-0 items-center text-faint transition-colors hover:text-[color:var(--text)] focus-visible:text-[color:var(--text)] print:hidden',
+          'inline-flex shrink-0 items-center rounded-full text-current focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current print:hidden',
           className,
         )}
       >
@@ -214,7 +233,7 @@ export function HelpTip({ helpId, side = 'top', className }: HelpTipProps) {
                   the site pages the scope carries none and the topic's static
                   fallback is rendered, which is the documented contract. */}
               {resolveCopy(topic.short, { poolType: scope.poolType, settings: scope.settings })}
-              {panel ? <span className="mt-1 block text-faint">More in Help</span> : null}
+              {panel ? <span className="mt-1 block text-muted">More in Help</span> : null}
             </div>,
             document.body,
           )
