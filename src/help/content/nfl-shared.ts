@@ -157,6 +157,53 @@ export const NFL_SHARED_TOPICS: readonly HelpTopic[] = [
     audience: HOST_ONLY,
     terms: ['pool-lifecycle-state'],
   },
+
+  // ---- T4: the audited commissioner exceptions --------------------------
+  //
+  // `nfl.manager.extendDeadline` is NOT here — it lives in `nfl-pickem.ts`.
+  // `extendWeekDeadline` refuses a Survivor or Margin pool outright
+  // (HARD_WEEKLY_LOCK), so the topic is scoped to Pick'em, and this file's
+  // contract is that everything in it names all three season formats
+  // (`tests/help-content-nfl-pickem.test.ts`).
+  //
+  // ONE topic per ACTION, not one per input. "Extra minutes", "Week", "Team"
+  // and three separate "Reason" boxes are parts of a single thing a
+  // commissioner does, and a tooltip on each would be four restatements of the
+  // label (voice rule 2). The tip sits on the first field of each form and the
+  // rest carry none.
+  {
+    id: 'nfl.manager.proxyPick',
+    title: 'Entering a pick for a member',
+    // ⚠️ THIS COPY IS ONLY TRUE AS OF 2026-08-22. Until then the Pick'em form
+    // was hidden behind "not available yet" and the payload it would have sent
+    // was rejected by the callable. #506 fixed the payload and opened the form,
+    // which is what makes writing this honest rather than aspirational.
+    short: 'Records one pick on a member’s behalf. It respects the real deadline, and it is logged with your name and your reason.',
+    long: [
+      'For the member who texted you their pick and could not get to the app. You choose the entry, the week and the team.',
+      'On a Pick’em pool it records ONE game — the game that team is playing that week — so repeat it for any other game they need. On Survivor and Margin it records their pick for the week.',
+      'It obeys the same deadline everyone else has. If the week is already locked, extend the deadline first or it will be refused.',
+      'It does not enter a tie-breaker prediction, and on a pool that uses confidence points it is not offered at all, because a pick with no confidence value would be worth nothing.',
+      'Every one of these is written to the pool’s log with your name and the reason you type.',
+    ].join('\n\n'),
+    fields: [],
+    poolTypes: NFL_SEASON_TYPES,
+    audience: HOST_ONLY,
+  },
+  {
+    id: 'nfl.manager.cancelPool',
+    title: 'Cancelling the pool',
+    short: 'Marks the pool cancelled and emails every member the reason and who to ask about dues. It cannot be undone from here.',
+    long: [
+      'The pool stops being playable for everyone. Nobody can submit another pick.',
+      'Every member is emailed the reason you type, together with who to contact about money they have already paid — because dues are between you and your players and nothing is refunded here.',
+      'It cannot be undone from this screen. Only the pool’s owner sees this control; a co-commissioner cannot cancel a pool.',
+    ].join('\n\n'),
+    fields: [],
+    poolTypes: NFL_SEASON_TYPES,
+    audience: HOST_ONLY,
+    terms: ['pool-lifecycle-state'],
+  },
 ];
 
 /**
@@ -194,6 +241,17 @@ export const NFL_SHARED_PLACEMENTS: readonly HelpPlacement[] = [
   // control, something that control did not do — see the topic in
   // `wizard-shared.ts`.
   { topic: 'isPublic', page: 'pool.nfl.manager.settings', section: 'settings', order: 4 },
+
+  // T4 — the contact pair, edited ONLY here. Neither has a create-wizard
+  // control, which is why both sat in the schema allowlist until this ticket.
+  { topic: 'contactEmail', page: 'pool.nfl.manager.settings', section: 'contact', order: 0 },
+  { topic: 'contactPhone', page: 'pool.nfl.manager.settings', section: 'contact', order: 1 },
+  { topic: 'contactMethod', page: 'pool.nfl.manager.settings', section: 'contact', order: 2 },
+  { topic: 'managerName', page: 'pool.nfl.manager.settings', section: 'contact', order: 3 },
+
+  // T4 — the three audited exceptions, on the tab that renders them.
+  { topic: 'nfl.manager.proxyPick', page: 'pool.nfl.manager.settings', section: 'exceptions', order: 1 },
+  { topic: 'nfl.manager.cancelPool', page: 'pool.nfl.manager.settings', section: 'exceptions', order: 2 },
 
   { topic: 'nfl.manager.settingsLock', page: 'pool.nfl.manager.overview', section: 'general', order: 0 },
 ];

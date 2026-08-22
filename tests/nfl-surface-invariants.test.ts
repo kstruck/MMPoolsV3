@@ -890,18 +890,56 @@ describe('NFL row/reveal surfaces key by ENTRY id, never by owner uid (PLAN-MULT
 /**
  * Item 10 (Kevin, 2026-08-14): the standings tiebreaker column names what it
  * IS — the member's prediction — and explains the pool's rule via the ONE
- * shared sentence (`tiebreakerCopy`), never a hardcoded "MNF Score".
+ * shared sentence, never a hardcoded "MNF Score".
+ *
+ * ⚠️ THE EVIDENCE MOVED IN T4; THE CLAIM DID NOT. The shared sentence used to
+ * be `tiebreakerCopy().hint`. That was one definition across the standings
+ * column and the pick sheet, and a SECOND definition once the help registry
+ * carried the same explanation as `settings.weeklyTiebreaker` — the duplicate
+ * voice rule 10 forbids. Both surfaces read the topic now, through
+ * `useTopicShort`, which resolves the reader's own scope and therefore renders
+ * the branch for THIS pool's rule exactly as the helper did.
+ *
+ * Asserting the old helper here would now force the duplicate back.
  */
-describe('standings tiebreaker column — a prediction, described by the shared rule copy', () => {
-  it('NFLStandings says "Tiebreaker Guess" and reads tiebreakerCopy for the hint', () => {
-    const src = readFileSync(
-      resolve(root, 'src/components/NFLPoolDashboard/NFLStandings.tsx'),
-      'utf8',
-    );
-    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+describe('the tiebreaker explanation has ONE source, and both surfaces read it', () => {
+  const SURFACES = [
+    'src/components/NFLPoolDashboard/NFLStandings.tsx',
+    'src/components/NFLPoolDashboard/PickemPickEntry.tsx',
+  ];
+
+  const codeOf = (file: string) =>
+    readFileSync(resolve(root, file), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+  it.each(SURFACES)('%s reads the hint from the help registry', file => {
+    expect(codeOf(file)).toMatch(/useTopicShort\(\s*'settings\.weeklyTiebreaker'\s*\)/);
+  });
+
+  it('neither surface still reads the helper’s hint', () => {
+    // `tiebreakerCopy().label` survives on the pick sheet — a control's NAME is
+    // not help copy, and `docs/help-voice.md` says so. Only `.hint` moved.
+    for (const file of SURFACES) {
+      expect(codeOf(file)).not.toMatch(/tiebreakerCopy\([^)]*\)\??\.hint/);
+      expect(codeOf(file)).not.toMatch(/tiebreakerText\??\.hint/);
+    }
+  });
+
+  it('the standings column still says what it is', () => {
+    const code = codeOf(SURFACES[0]);
     expect(code).toContain('Tiebreaker Guess');
     expect(code).not.toContain('MNF Score');
-    expect(code).toMatch(/tiebreakerCopy\(\s*tiebreakerRule\s*\)/);
+  });
+
+  it('the greps catch both shapes that were removed', () => {
+    // A guard that matches nothing looks identical to a guard that passes.
+    expect('const tiebreakerHint = tiebreakerCopy(tiebreakerRule)?.hint;')
+      .toMatch(/tiebreakerCopy\([^)]*\)\??\.hint/);
+    expect('{tiebreakerText?.hint}').toMatch(/tiebreakerText\??\.hint/);
+    // …and the replacement does not trip either.
+    expect("const tiebreakerHint = useTopicShort('settings.weeklyTiebreaker');")
+      .not.toMatch(/tiebreakerCopy\([^)]*\)\??\.hint|tiebreakerText\??\.hint/);
   });
 });
 

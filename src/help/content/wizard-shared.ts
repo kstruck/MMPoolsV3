@@ -73,6 +73,42 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
     audience: HOST_ONLY,
   },
   {
+    // T4. NO CREATE-WIZARD CONTROL — the unified wizard collects an email and
+    // nothing else, and this pair is edited only on the NFL manager's settings
+    // form. That is why the topic exists but is placed only there.
+    id: 'contactPhone',
+    title: 'Contact phone',
+    short: 'A number members can reach you on. It is only shown if you choose to show phone links below — filling it in does not publish it.',
+    long: [
+      'Filling this in stores the number. Whether anybody SEES it is the next option, "Contact link options" — the two work as a pair, and a number with links set to email only is stored and shown to nobody.',
+      'When it is shown, it appears on the join screen and on your pool page to anyone who can see the pool. Use a number you are happy to hand out.',
+      'Leaving it blank hides the phone link even when links are set to show it.',
+    ].join('\n\n'),
+    poolTypes: 'all',
+    audience: HOST_ONLY,
+    related: ['contactEmail', 'contactMethod'],
+  },
+  {
+    // T4. Same as `contactPhone`: manager-form only.
+    id: 'contactMethod',
+    title: 'Contact link options',
+    short: 'Which of your contact details members can see: email, phone, both, or neither. Email only is the default.',
+    long: [
+      // Voice rule 5, and it took reading `JoinPool.tsx` and
+      // `NFLPoolDashboard.tsx` to name it: BOTH treat an unset value as
+      // "email", via `|| !castPool.contactMethod`. So "email only" is the
+      // default for a pool that has never touched this control, not merely the
+      // first option in the list.
+      'Email only is the default, and it is what every pool that has never changed this is using.',
+      'Both shows your email and your phone number. Phone only shows the number and hides the address.',
+      'Neither hides both. Members can still reach you wherever you told them to — this controls the links on the join screen and the pool page, and nothing else.',
+      'A detail you have not filled in is never shown, whichever option is chosen.',
+    ].join('\n\n'),
+    poolTypes: 'all',
+    audience: HOST_ONLY,
+    related: ['contactEmail', 'contactPhone'],
+  },
+  {
     id: 'isPublic',
     title: 'List this pool publicly',
     short: 'Lists your pool on the public Browse page so anyone can find it. On by default. Turn it off for a pool you share only by link.',

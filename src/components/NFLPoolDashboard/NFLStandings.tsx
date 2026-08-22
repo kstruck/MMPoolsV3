@@ -5,7 +5,8 @@ import type { Pool, NFLGame } from '../../types';
 import { RankChip } from '../ui';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType, gamesForPoolWeek } from '../../utils/nflPending';
-import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction, tiebreakerCopy } from '@shared/nflTiebreaker';
+import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction } from '@shared/nflTiebreaker';
+import { useTopicShort } from '../../help/scope';
 import type { PoolPicksReveal } from '../../services/dbService';
 import { EntryWeekPicks } from './EntryWeekPicks';
 
@@ -80,9 +81,15 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
   // Item 10 (Kevin, 2026-08-14): "MNF Score" was opaque to a passive
   // participant — it is the member's tiebreaker PREDICTION, not a score. The
   // header now says what it is and the hover carries the pool's own rule
-  // sentence (tiebreakerCopy — one definition shared with the sheet and the
-  // rules page, so the column cannot describe a rule the pool is not playing).
-  const tiebreakerHint = tiebreakerCopy(tiebreakerRule)?.hint;
+  // sentence, so the column cannot describe a rule the pool is not playing.
+  //
+  // T4: THE SENTENCE COMES FROM THE HELP REGISTRY NOW, not from
+  // `tiebreakerCopy().hint`. That helper was one definition shared between this
+  // column and the pick sheet — and a second definition from the registry's
+  // point of view, which is the duplicate voice rule 10 forbids. The topic is a
+  // `HelpCopy.template`, so it renders THIS pool's rule for the same reason the
+  // old helper did.
+  const tiebreakerHint = useTopicShort('settings.weeklyTiebreaker');
 
   // This week's slate — the denominator for the Pick'em completeness column, and
   // the key set a pick'em entry's picks are stored under.

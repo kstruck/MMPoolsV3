@@ -61,7 +61,12 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   // Re-ticketed in T1: measured against the wizard sources, none of these three
   // has a control there, so T1 could not have written their copy. Each is edited
   // on the manager surface named below, and moves with that surface's ticket.
-  contactPhone: 'T4: no create-wizard control. NFLManagerView.tsx:280 edits it on the NFL manager settings form.',
+  // `contactPhone` CLOSED BY T4. It has no create-wizard control and never
+  // will — the unified wizard collects an email and nothing else — so its copy
+  // had to wait for the manager form that does edit it. The topic lives in
+  // `content/wizard-shared.ts` beside `contactEmail` and is placed on
+  // `pool.nfl.manager.settings`, alongside the `contactMethod` topic that says
+  // whether either of them is ever shown.
   'branding.backgroundColor': 'T5: the legacy branding step has a colour picker for it (admin/WizardStepBranding.tsx:97), reached from the squares manager and the props edit wizard. The unified wizard offers only primaryColor and secondaryColor.',
   'settings.payouts.bonuses.*.name': 'T6: no create-wizard control — StepPayouts edits places only. BracketPoolDashboard.tsx:1556 is the bonus-row editor.',
   'settings.payouts.bonuses.*.percentage': 'T6: no create-wizard control; same bonus-row editor as the name above.',
@@ -174,6 +179,48 @@ export const ROUTE_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
 export const UI_EXEMPTIONS: Readonly<
   Record<string, { file: string; control: string; reason: string }>
 > = Object.freeze({});
+/**
+ * Manager-form labels that render with NO `?` beside them, keyed by the label
+ * text exactly as it appears in the source.
+ *
+ * `tests/help-manager-label-coverage.test.ts` (T4) reads every `<FieldLabel>`
+ * in the manager files and fails on one that neither carries a `helpId` nor
+ * appears here. It ALSO fails on a raw `<label` in those files, and on a row
+ * here that nothing references — a stale exemption is an exemption nobody
+ * reviewed.
+ *
+ * The reason column names the ticket that will write the copy, so the count of
+ * rows is the measure of what T4 left for T10 and T11. A row is a reviewable
+ * diff line, which is the point.
+ */
+export const MANAGER_LABEL_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
+  // ---- T10: NFL Survivor rules --------------------------------------------
+  'Strikes Limit': 'T10: how many wrong picks before elimination.',
+  'Max Rebuys': 'T10: buying back in after elimination.',
+  'Rebuy Cutoff Week': 'T10: the last week a rebuy is allowed.',
+  'Rebuy Fee ($)': 'T10: what a rebuy costs. Money copy, so voice rule 8 applies.',
+  'Tie Outcome': 'T10: whether a tied game survives or eliminates.',
+  'Team-Use Limit': 'T10: how many times one team may be picked across the season.',
+
+  // ---- T11: the payout-mode trio ------------------------------------------
+  // Rendered TWICE each — once on the Pick'em branch and once on the Margin
+  // one — and keyed by label text, so one row covers both. Their schema paths
+  // already sit in SCHEMA_PATH_ALLOWLIST against the same ticket.
+  'Payout Method': 'T11: season pot, weekly pot, or both. Money copy, so voice rule 8 applies.',
+  'Weekly pots ($/entry)': 'T11: the weekly share of each entry fee on a hybrid pool.',
+  'Season pot ($/entry)': 'T11: the season share of each entry fee on a hybrid pool.',
+
+  // ---- PERMANENT: parts of an action, not options -------------------------
+  // ONE topic per ACTION, placed on the form's FIRST field. A tooltip on every
+  // input would be three or four restatements of the label (voice rule 2), and
+  // "Week" or "Team" has no explanation of its own that the action's topic does
+  // not already give.
+  'Reason (emailed to members)': 'PERMANENT: an input on the extend-deadline and cancel-pool forms; both are explained by their action topic (nfl.manager.extendDeadline, nfl.manager.cancelPool) on the form\'s first field.',
+  'Reason (audited)': 'PERMANENT: an input on the proxy-pick form, explained by nfl.manager.proxyPick on that form\'s first field.',
+  Week: 'PERMANENT: an input on the proxy-pick form, explained by nfl.manager.proxyPick.',
+  Team: 'PERMANENT: an input on the proxy-pick form, explained by nfl.manager.proxyPick.',
+});
+
 /**
  * Create-wizard form paths with no `HelpTopic` yet.
  *
