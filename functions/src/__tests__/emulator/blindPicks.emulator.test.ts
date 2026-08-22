@@ -26,6 +26,35 @@ const db = admin.firestore();
 const wProxy = test.wrap(proxyPick);
 const wGetPicks = test.wrap(getPoolPicks);
 
+/**
+ * WHICH VIEW DID THIS PRINCIPAL GET?
+ *
+ * Until 2026-08-22 the answer was "do they have `counts`" — participants did
+ * not, commissioners did. PLAN-MEMBER-SET-COLUMN reversed that, so `counts` no
+ * longer discriminates: EVERY admitted principal receives it.
+ *
+ * The ONE remaining difference is the departed-member filter (D7/K8): a
+ * participant never sees an entry belonging to somebody the pool no longer
+ * lists, and a commissioner still does. So that is what the tests below have to
+ * measure, and it is why several of them changed their evidence rather than
+ * their claim.
+ *
+ * ⚠️ If this ever returns the same answer for both principals, the participant
+ * and commissioner views have become identical and D7/K8 has been lost.
+ */
+async function seesDepartedMember(poolId: string, week: number, auth: unknown): Promise<boolean> {
+    const PROBE = 'blind-view-probe-ghost';
+    const ref = db.collection('pools').doc(poolId).collection('entries').doc(PROBE);
+    // No Member Record and not in `participantIds` — i.e. removed.
+    await ref.set({ id: PROBE, poolId, ownerUid: PROBE, userName: 'Probe', picks: {} });
+    try {
+        const res = (await wGetPicks({ data: { poolId, week }, auth } as never)) as { counts: Record<string, number> };
+        return res.counts[PROBE] !== undefined;
+    } finally {
+        await ref.delete();
+    }
+}
+
 const HOUR = 60 * 60 * 1000;
 const T = (abbr: string) => ({ id: abbr, name: abbr, abbreviation: abbr });
 
@@ -405,18 +434,41 @@ describe('T2 — getPoolPicks, PER_GAME pick\'em', () => {
     }, 30000);
 
     /**
-     * 🛑 K1 — the one field that does NOT come along. `counts` is ungated by
-     * reveal, so handing it to members would let everyone watch everyone else's
-     * sheet fill in before kickoff ("Kevin 14 of 16" ticking to 15 says he is
-     * still working). Kevin's ruling: withhold it until the week reveals.
+     * 🛑 K1 IS REVERSED, DELIBERATELY (Kevin, 2026-08-22 —
+     * PLAN-MEMBER-SET-COLUMN.md). This test asserted the opposite until then.
+     *
+     * K1 withheld the per-member count from participants until the week
+     * revealed. On a PER_GAME pool that is the LAST kickoff, so a member read a
+     * blank Set column from Tuesday to Sunday evening — the entire window in
+     * which the count is useful. Kevin re-answered it knowing what it discloses:
+     * a count says HOW MANY, never WHICH, so it carries no pick content.
+     *
+     * ⚠️ THE PAIRED ASSERTION BELOW IS THE ONE THAT MATTERS. Opening `counts`
+     * on its own would also pass on a change that opened everything, so the same
+     * call has to prove the content boundary is exactly where it was.
      */
-    it('a participant gets NO counts before the week reveals, while the commissioner does', async () => {
+    it('a participant gets counts BEFORE any reveal — the same ones the commissioner gets', async () => {
         const mine: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
         const boss: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asOwner } as never);
 
         expect(mine.weekRevealed).toBe(false);
-        expect(mine.counts).toEqual({});          // not zeroes — absent
-        expect(boss.counts[ALICE]).toBe(2);       // the commissioner keeps it
+        expect(mine.counts[ALICE]).toBe(2);
+        expect(mine.counts[BOB]).toBe(1);
+        expect(mine.counts).toEqual(boss.counts);
+    }, 30000);
+
+    it('…and NOTHING about pick content came with them', async () => {
+        const mine: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
+
+        // ALICE has picked BOTH games. The count says 2; only the LOCKED one's
+        // team is served, and the open game's is absent — which is precisely the
+        // fact a count must not be able to leak.
+        expect(mine.counts[ALICE]).toBe(2);
+        expect(mine.picks[ALICE]).toEqual({ [LOCKED_GAME]: 'KC' });
+        expect(mine.picks[ALICE]?.[OPEN_GAME]).toBeUndefined();
+        expect(mine.revealedGameIds).toEqual([LOCKED_GAME]);
+        // A per-week secret with no revealed game to attach it to.
+        expect(mine.tiebreakers).toEqual({});
     }, 30000);
 
     /**
@@ -500,27 +552,36 @@ describe('T2 — getPoolPicks, PER_GAME pick\'em', () => {
      * pinned in coManagersIgnored.emulator.test.ts and coManagers.rules.test.mjs
      * (getPoolPicks itself refuses non-NFL pools before the auth question).
      */
-    it('a co-commissioner on an NFL pool gets the COMMISSIONER view (pre-lock counts) — C7', async () => {
+    it('a co-commissioner on an NFL pool gets the COMMISSIONER view — C7', async () => {
         await db.collection('pools').doc(POOL).update({ coManagers: [BOB] });
         const asCo: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: { uid: BOB, token: {} } as any } as never);
         expect(asCo.counts[ALICE]).toBe(2);
+        // The parenthetical used to be "(pre-lock counts)" and that is no longer
+        // the discriminator — BOB gets counts either way now. The commissioner
+        // view is the one that still sees a departed player.
+        expect(await seesDepartedMember(POOL, 1, { uid: BOB, token: {} })).toBe(true);
         await db.collection('pools').doc(POOL).update({ coManagers: [] });
     }, 30000);
 
     it('createdByUid alone still buys nothing (the type guard on coManagers is pinned in coManagersIgnored + the rules test — getPoolPicks refuses non-NFL pools before auth)', async () => {
         await db.collection('pools').doc(POOL).update({ createdByUid: BOB });
-        const asCreator: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: { uid: BOB, token: {} } as any } as never);
-        expect(asCreator.counts).toEqual({});
+        // EVIDENCE CHANGED, CLAIM UNCHANGED. This used to assert `counts` was
+        // empty, which stopped discriminating when K1 was reversed — every
+        // admitted principal has counts now. The departed-member filter is what
+        // still separates the two views (see `seesDepartedMember`).
+        expect(await seesDepartedMember(POOL, 1, { uid: BOB, token: {} })).toBe(false);
         await db.collection('pools').doc(POOL).update({ createdByUid: OWNER });
         // ...and the real owner is unaffected.
         const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asOwner } as never);
         expect(res.revealedGameIds).toEqual([LOCKED_GAME]);
     }, 30000);
 
-    it('a distinct managerUid IS admitted — the rule named them', async () => {
+    it('a distinct managerUid IS admitted, with the COMMISSIONER view', async () => {
         await db.collection('pools').doc(POOL).update({ managerUid: BOB });
         const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: { uid: BOB, token: {} } as any } as never);
         expect(res.counts[ALICE]).toBe(2);
+        // Same evidence change as the co-commissioner case above.
+        expect(await seesDepartedMember(POOL, 1, { uid: BOB, token: {} })).toBe(true);
         await db.collection('pools').doc(POOL).update({ managerUid: admin.firestore.FieldValue.delete() });
     }, 30000);
 
@@ -731,13 +792,31 @@ describe('getPoolPicks — pool-wide pick progress', () => {
         expect(admin.progress).toEqual(mine.progress);
     }, 30000);
 
-    it('K1 IS NOT REVERSED — the participant still gets no per-member counts', async () => {
-        // The aggregate crosses the boundary; the per-member counts do not. If
-        // this ever flips, the plan's central promise has been broken by accident.
+    it('K1 IS REVERSED — the participant gets the per-member counts too', async () => {
+        // This asserted the opposite until 2026-08-22, when Kevin ruled the
+        // count should be visible during the week (PLAN-MEMBER-SET-COLUMN.md).
+        // The aggregate and the per-member counts now agree rather than the
+        // aggregate being the only participation fact a member could read —
+        // which was the odd half of PLAN-MEMBER-PICK-PROGRESS's outcome, since
+        // "0 of N" and "N of N" already determined every individual.
         const mine: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
-        expect(mine.counts).toEqual({});
         const commish: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asProxyCommish } as never);
+        expect(mine.counts[ALICE]).toBe(2);
         expect(commish.counts[ALICE]).toBe(2);
+
+        // 🛑 AND THE ONE DIFFERENCE THAT SURVIVES, ASSERTED RATHER THAN
+        // ASSUMED. `mine.counts` is NOT equal to the commissioner's, and it
+        // must not be: this fixture holds a DEPARTED player with a complete
+        // sheet, and D7/K8 keeps them out of a participant's view of every map.
+        // The first draft of this test asserted the two were identical and
+        // failed here — which is the filter doing its job, so the assertion
+        // moved rather than the filter.
+        expect(commish.counts[GONE]).toBe(2);
+        expect(mine.counts[GONE]).toBeUndefined();
+
+        // And the content boundary did not move with any of it.
+        expect(mine.picks).toEqual({});
+        expect(mine.tiebreakers).toEqual({});
     }, 30000);
 
     it('a schema-1 rosterSummary answers {0,0} — the chip hides rather than guessing', async () => {

@@ -20,14 +20,18 @@ import { GridSortToggle } from './GridSortToggle';
  * and Margin columns. This is that missing grid: players down, the week's games
  * across, each cell that player's pick.
  *
- * 🛑 COMMISSIONER-FACING ONLY TODAY, and that is an AUTHORIZATION fact, not a UI
- * choice. `getPoolPicks` (`functions/src/nflPickReveal.ts`) throws
- * permission-denied for anyone who is not the pool's `ownerId`, `managerUid` or
- * SUPER_ADMIN — a boundary drawn deliberately in #414
- * (PLAN-COMMISSIONER-BLIND-PICKS, Q5). Admitting participants means changing
- * `assertPickReader`, which is a plan-gated functions change deploying into a
- * live scorer. The tab gate lives in `NFLPoolDashboard.tsx`; this component
- * renders whatever reveal it is handed and would work unchanged for a member.
+ * 🛑 NOT COMMISSIONER-ONLY ANY MORE, AND EVERY STEP OF THAT WAS AUTHORIZATION,
+ * NOT LAYOUT. `getPoolPicks` (`functions/src/nflPickReveal.ts`) once threw
+ * permission-denied for anyone who was not the pool's `ownerId`, `managerUid`
+ * or SUPER_ADMIN (#414, PLAN-COMMISSIONER-BLIND-PICKS Q5). #501 admitted a
+ * PROVEN member to `assertPickReader`, and 2026-08-22 opened the per-member
+ * `counts` to them as well (PLAN-MEMBER-SET-COLUMN.md), so the Set column now
+ * fills in during the week rather than reading `—` until the last kickoff.
+ *
+ * WHAT DID NOT MOVE: pick CONTENT. `picks`, `confidence` and `tiebreakers` are
+ * still assembled by allowlist from the server's reveal boundary, and a
+ * departed player is still invisible to a member (D7/K8). This component
+ * renders whatever reveal it is handed and cannot widen any of it.
  *
  * ⚠️ ADDS NO READ. `reveal` is the poll the dashboard already runs for the
  * standings completeness column, and the Majority row reads the same pool
@@ -338,10 +342,9 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
           : revealMode === 'PER_GAME' ? ' — picks reveal game by game, each at its own lock'
           : ''}
         . <strong>—</strong> means the pick IS revealed and that player made none. <strong>Set</strong>{' '}
-        counts the picks a player has saved out of {weekGames.length} this week. Your own is live the
-        moment you save it. Other players' counts are shown to the pool's commissioner at any time —
-        chasing missing picks is their job — and to everyone else once the whole week is revealed;
-        until then they read <strong>?</strong>. <strong>Majority</strong> is the share of
+        counts the picks a player has saved out of {weekGames.length} this week — how MANY, never which,
+        so it says nothing about who picked what. Your own is live the moment you save it, and everyone
+        else's is visible to the whole pool at any time. <strong>Majority</strong> is the share of
         this pool on the leading side, from the live pool consensus — an aggregate that never names anyone.
         An exact even split reads <strong>Split</strong>, and a <strong>—</strong> on that row means no picks
         have been recorded for that game yet.

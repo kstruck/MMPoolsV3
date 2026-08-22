@@ -346,21 +346,36 @@ export const getPoolPicks = validated(
             // alone would still say "this person is playing".
             if (stillAMember && !stillAMember(memberUid)) continue;
 
-            // 🛑 K1 — `counts` IS THE ONE FIELD THAT CROSSES THE REVEAL BOUNDARY.
+            // 🛑 `counts` IS THE ONE FIELD IN THIS RESPONSE THAT IS NOT GATED,
+            // AND THAT IS NOW DELIBERATE FOR EVERY PRINCIPAL.
             //
-            // Every other field in the response is already gated: `picks` and
-            // `confidence` by the allowlist, `tiebreakers` by `weekRevealed`.
-            // `counts` is not gated at all, by design — it is what the
-            // commissioner's roster needs to chase missing picks before kickoff.
+            // Every other field is gated: `picks` and `confidence` by the
+            // `allowedKeys` allowlist over `revealedGameIds`, `tiebreakers` by
+            // `weekRevealed`. Those are unchanged and this comment is not a
+            // licence to loosen them — NOTHING ABOUT PICK CONTENT MAY BECOME
+            // MEMBER-VISIBLE.
             //
-            // Handing it to participants unchanged would let every member watch
-            // every other member's sheet fill in live: "Kevin 14 of 16" ticking
-            // to 15 tells you he is still working, and nobody asked for that.
-            // Kevin's ruling, 2026-08-14. The client already renders "?" for an
-            // absent count, so this needs no UI counterpart.
-            if (!isParticipant || reveal.weekRevealed) {
-                counts[memberUid] = weekPickCount(pool.type, entry.picks as Record<string, unknown>, week, weekGameIds);
-            }
+            // ⚠️ THIS REVERSES K1 (2026-08-14), ON PURPOSE.
+            // K1 withheld the per-member count from participants until the week
+            // revealed, on the reasoning that watching "Kevin 14 of 16" tick to
+            // 15 tells you he is still working and nobody asked for that.
+            // Kevin re-answered it on 2026-08-22 knowing that: a count carries
+            // no content, and on a PER_GAME pool "the whole week revealed" is
+            // the LAST kickoff — so a member saw `—` from Tuesday to Sunday
+            // evening, which is the entire window in which the count is useful.
+            // He had separately answered that the Set column is enough, and
+            // that only holds if members can see it.
+            // PLAN-MEMBER-SET-COLUMN.md carries the inference analysis.
+            //
+            // The aggregate half already shipped ungated (`progress`, from
+            // `pickProgressFor`), and it already determines every individual
+            // whenever it reads 0 of N or N of N. This widens the RESOLUTION of
+            // participation information; it does not open a door that was shut.
+            //
+            // ⚠️ THE `stillAMember` FILTER ABOVE MUST KEEP RUNNING FIRST. A
+            // departed player appearing in `counts` alone would still say "this
+            // person is playing" (D7/K8).
+            counts[memberUid] = weekPickCount(pool.type, entry.picks as Record<string, unknown>, week, weekGameIds);
 
             const revealedPicks: Record<string, string> = {};
             for (const key of allowedKeys) {
