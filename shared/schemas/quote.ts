@@ -18,6 +18,19 @@ import { POOL_TYPES } from '../poolTypes';
 // server pricing them) are unambiguous. SMS is a first-class add-on here — the
 // pre-overhaul BillingInvoiceCard omitted it from the subtotal; that bug dies
 // with this contract.
+//
+// ⚠️ SMS IS NOT SELLABLE (PLAN-COST-CONTROLS 0.5.4; Kevin's D-decision #3,
+// 2026-08-22: "SMS is OFF until further notice"). The field stays in the
+// contract so existing payloads still validate, but the transform below forces
+// it false, which is the ONE choke point both buy paths share (getPoolQuote and
+// createCheckoutSession) — so it cannot be priced into a quote (quoteEngine
+// iterates ADDON_KEYS) and cannot be stamped into billing.featuresUnlocked
+// (stripe.ts reads addons.smsNotifications). Coercing rather than rejecting is
+// deliberate: the safe direction is never-charge/never-unlock, and a hard error
+// would break a stale client instead of quietly quoting it the truth.
+// Pools that ALREADY bought SMS keep their flag — this sells none, revokes none.
+// To bring SMS back: delete the transform, and re-add the wizard toggle
+// (BillingInvoiceCard removed it on the 2026-07-07 product decision).
 export const addonSelectionSchema = z
   .object({
     aiCommissioner: z.boolean().optional().default(false),
@@ -32,7 +45,8 @@ export const addonSelectionSchema = z
     smsNotifications: false,
     whatIfSimulator: false,
     customBranding: false,
-  }));
+  }))
+  .transform((a) => ({ ...a, smsNotifications: false as boolean }));
 export type AddonSelection = z.infer<typeof addonSelectionSchema>;
 /** The four add-on keys, in canonical order. */
 export const ADDON_KEYS = [

@@ -497,8 +497,28 @@ service cloud.firestore {
       match /ai_requests/{docId} {
          // Scoped to pool participants — requests can contain prompt/user context (audit M2).
          allow read: if isPoolParticipant();
+         // CREATE COSTS MONEY: each doc triggers onAIRequest -> Gemini. Before
+         // PLAN-COST-CONTROLS 0.5.1 this required only auth + own-uid, so ANY
+         // signed-in user could burn the paid provider on ANY pool, including
+         // pools that never bought the addon. All four conditions are load-
+         // bearing and none replaces another:
+         //   - auth + userId==uid: identity binding. Dropping it lets a
+         //     participant forge userId (attribution poisoning, and per-user
+         //     quota framing once PLAN Phase 2 lands).
+         //   - isPoolParticipant(): read already required it; create did not.
+         //   - the entitlement: AI Commissioner is a paid addon.
+         // The entitlement reads the SAME pool doc isPoolParticipant() gets, so
+         // no extra document read is billed. The .get(field, default) chain is
+         // deliberate: a pool with no billing map denies EXPLICITLY rather than
+         // by raising an evaluation error, so the deny-by-default is readable
+         // here and does not depend on error semantics.
          allow create: if request.auth != null
-                       && request.resource.data.userId == request.auth.uid;
+                       && request.resource.data.userId == request.auth.uid
+                       && isPoolParticipant()
+                       && get(/databases/$(database)/documents/pools/$(poolId)).data
+                            .get('billing', {})
+                            .get('featuresUnlocked', {})
+                            .get('aiCommissioner', false) == true;
          allow update, delete: if false;
       }
 

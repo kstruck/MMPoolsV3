@@ -54,6 +54,35 @@ async function checkFirestore(db: admin.firestore.Firestore): Promise<Check> {
 }
 
 /**
+ * AI request volume, last 24h, across every pool (PLAN-COST-CONTROLS 0.5.5).
+ * Interim spend visibility until Phase 6's cost card exists: each ai_requests
+ * doc triggers a Gemini generation, so this count IS the AI spend driver, and a
+ * spike is the thing an operator needs to see before an invoice tells them.
+ *
+ * ⚠️ Needs the `ai_requests.createdAt` COLLECTION_GROUP field override in
+ * firestore.indexes.json, and `--only firestore:indexes` is a THIRD deploy
+ * surface that neither the functions nor the rules deploy ships. An undeclared
+ * index here would throw 9 FAILED_PRECONDITION on every run and report nothing
+ * — exactly how enforceBillingStatus stayed broken for its whole life.
+ *
+ * `.count()` is an aggregation query: billed per read-unit, not per matched
+ * document, so this stays cheap as volume grows. Never `ok: false` on a query
+ * error — this is an observability probe, and a broken probe must not present
+ * as a platform outage.
+ */
+async function checkAiVolume(db: admin.firestore.Firestore): Promise<Check> {
+  return timed(async () => {
+    const since = Date.now() - 24 * 60 * 60 * 1000;
+    const agg = await db
+      .collectionGroup("ai_requests")
+      .where("createdAt", ">=", since)
+      .count()
+      .get();
+    return `${agg.data().count} AI requests last 24h`;
+  });
+}
+
+/**
  * Email delivery health via the Trigger-Email extension's `delivery.state`
  * field on recent /mail docs. `delivery` is written by the extension, not our
  * app (sendEmail only writes to/message/createdAt), so it's an EXTERNAL
@@ -121,10 +150,11 @@ export async function computeAdminHealthSnapshot(
   db: admin.firestore.Firestore
 ): Promise<HealthSnapshot> {
   const functionStarted = Date.now();
-  const [espn, firestore, email] = await Promise.all([
+  const [espn, firestore, email, aiVolume] = await Promise.all([
     checkEspn(),
     checkFirestore(db),
     checkEmail(db),
+    checkAiVolume(db),
   ]);
   return {
     at: Date.now(),
@@ -132,6 +162,7 @@ export async function computeAdminHealthSnapshot(
       espn: { label: "ESPN NFL API", ...espn },
       firestore: { label: "Firestore", ...firestore },
       email: { label: "Email delivery", ...email },
+      aiVolume: { label: "AI request volume", ...aiVolume },
       functions: {
         label: "Cloud Functions",
         ok: true,
