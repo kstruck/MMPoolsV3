@@ -42,7 +42,11 @@ vi.mock('firebase-admin', () => {
   return { default: { firestore }, firestore };
 });
 
-const { isMemberSmsEnabled, __resetCostControlsCache } = await import('../lib/costControls');
+// Static import, NOT `await import()`: tsconfig.test.json is commonjs and
+// rejects top-level await (TS1378). `vi.mock` is hoisted above imports by
+// vitest's transform, so the stub is in place before this module loads — the
+// same shape checkoutOwnership.test.ts uses.
+import { isMemberSmsEnabled, __resetCostControlsCache } from '../lib/costControls';
 
 const setConfig = (costControls: Record<string, unknown> | undefined) => {
   h.shouldThrow = false;

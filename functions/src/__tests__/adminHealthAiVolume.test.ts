@@ -24,7 +24,9 @@ vi.mock('firebase-admin', () => {
   return { default: { firestore, apps: [], initializeApp: () => undefined }, firestore };
 });
 
-const { checkAiVolume } = await import('../adminHealth');
+// Static import, NOT `await import()` — tsconfig.test.json is commonjs and
+// rejects top-level await (TS1378). vi.mock is hoisted above it.
+import { checkAiVolume } from '../adminHealth';
 
 /** A minimal db whose aggregation query resolves to `count`, or throws. */
 const fakeDb = (outcome: { count: number } | { throws: string }) => ({
