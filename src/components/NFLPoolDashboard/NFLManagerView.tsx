@@ -15,10 +15,11 @@ import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
 import { publicListingToggleValue, publicListingUpdate } from '../../utils/publicListing';
+import { buildProxyTeamGameIndex, proxyPickPayload, proxyTeamOptions } from '../../utils/proxyPickPayload';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { buildPoolRoster, hasCompletePicks, memberOutstanding, duesRates } from '../../utils/poolRoster';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
-import { effectiveWeeklyTiebreaker } from '@shared/nflTiebreaker';
+import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction } from '@shared/nflTiebreaker';
 import { WEEKLY_TIEBREAKER_OPTIONS } from '@shared/nflTiebreakerOptions';
 import { hybridSplitProblem } from '@shared/hybridSplit';
 import { DUPLICATE_RANK_MESSAGE, uniqueRanks } from '@shared/schemas/common';
@@ -846,6 +847,16 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       toast.error('Please provide a reason (3–200 characters).');
       return;
     }
+    // THE PAYLOAD SHAPE IS PER POOL TYPE, and getting it wrong is why this
+    // feature has never worked on Pick'em. Built before the confirm dialog so a
+    // slate we cannot key a pick against is refused BEFORE the commissioner is
+    // asked to approve something that would only fail afterwards.
+    const payload = proxyPickPayload(type, proxyWeek, proxyTeam, proxyTeamGames);
+    if ('error' in payload) {
+      toast.error(payload.error);
+      return;
+    }
+
     const targetLabel = entryLabel(targetEntry);
     const ok = await toast.confirm({
       title: 'Submit pick on their behalf?',
@@ -855,7 +866,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     if (!ok) return;
     setIsProxying(true);
     try {
-      await dbService.proxyPick(pool.id, proxyWeek, targetUid, { [proxyWeek]: proxyTeam }, proxyReason.trim(), targetEntryIndex);
+      await dbService.proxyPick(pool.id, proxyWeek, targetUid, payload.picks, proxyReason.trim(), targetEntryIndex);
       toast.success(`Proxy pick saved: ${proxyTeam} (${nflWeekLabel(poolSeasonType(pool), Number(proxyWeek))}) for ${targetLabel}.`);
       setProxyTeam('');
       setProxyReason('');
@@ -899,15 +910,57 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     }
   };
 
-  // Teams playing in the proxy target week (for survivor/margin proxy picks)
-  const proxyWeekTeams = useMemo(() => {
-    const teams = new Set<string>();
-    gamesForPoolWeek(games, castPool, proxyWeek).forEach(g => {
-      if (g.homeTeam?.abbreviation) teams.add(g.homeTeam.abbreviation);
-      if (g.awayTeam?.abbreviation) teams.add(g.awayTeam.abbreviation);
-    });
-    return [...teams].sort();
+  // Which game each team plays in the proxy target week.
+  //
+  // It used to be a bare Set of abbreviations, because the payload was keyed by
+  // WEEK for all three types — which is why the Pick'em proxy pick never
+  // worked: the callable reads a Pick'em payload's keys as GAME IDS. The game
+  // was already known right here, at the point the dropdown is built; it was
+  // simply thrown away one line later. See `utils/proxyPickPayload.ts`.
+  //
+  // ONE memo returning both halves, not a memo reading a memo: the index and
+  // the option list are derived from the same slate in the same step, and the
+  // React Compiler cannot preserve a manual memo whose dependency is another
+  // manual memo over an `any`-typed pool.
+  const { proxyTeamGames, proxyWeekTeams } = useMemo(() => {
+    const index = buildProxyTeamGameIndex(gamesForPoolWeek(games, castPool, proxyWeek));
+    return { proxyTeamGames: index, proxyWeekTeams: proxyTeamOptions(index) };
   }, [games, castPool, proxyWeek]);
+
+  /**
+   * Why the proxy form is not offered, or `null` when it is.
+   *
+   * Pick'em USED to be refused outright, on the reasoning that a whole week of
+   * game-by-game picks is too error-prone to type here. That reasoning applies
+   * to a whole week; it never applied to the single pick this form takes, and
+   * the refusal hid a payload bug rather than a design decision — the code
+   * behind it sent a week-keyed map the callable reads as game ids.
+   *
+   * A CONFIDENCE pool is still refused, and that one IS a real limitation.
+   * `proxyPick` writes `picks` and never `confidence`, and a confidence pool
+   * scores a correct pick at `confidence[gameId] ?? 0` — so a proxied pick
+   * would be recorded, look right in the grid, and be worth nothing. Entering
+   * a confidence value needs a control this form does not have, and a pick
+   * silently worth zero is worse than no pick at all.
+   */
+  // `settings.confidenceMode`, NOT the local editable state: the gate has to
+  // reflect what the SERVER will do with the pick, not an unsaved edit sitting
+  // in the settings form on another tab.
+  const proxyBlockedReason: string | null =
+    type === 'NFL_PICKEM' && settings.confidenceMode
+      ? 'This pool uses confidence points, and a proxy pick cannot carry one — it would be recorded as worth zero. Ask the member to submit, or extend the deadline so they can.'
+      : null;
+
+  /**
+   * A proxy pick records a TEAM and nothing else, so on a Pick'em pool that
+   * asks for a weekly tie-breaker prediction it leaves that blank — and a
+   * member with no prediction loses a tied week to anyone who made one. Said
+   * plainly next to the control rather than discovered in the standings.
+   *
+   * Read from the STORED setting for the same reason as the gate above.
+   */
+  const proxyOmitsTiebreaker =
+    type === 'NFL_PICKEM' && tiebreakerAsksForPrediction(effectiveWeeklyTiebreaker(settings));
 
   const branding = castPool.branding || {};
   const primaryAccent = branding.secondaryColor || '#6366f1';
@@ -1894,11 +1947,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <UserCog size={14} className="text-navy-700 dark:text-gold-400" />
                 <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Enter a Pick for a Member</p>
               </div>
-              {type === 'NFL_PICKEM' ? (
+              {proxyBlockedReason ? (
                 <p className="font-body text-[11px] text-muted leading-relaxed">
-                  Pick'em proxy entry isn't available in the dashboard yet (a full week of game-by-game picks
-                  is too error-prone to enter here). Survivor and Margin pools can proxy below; for pick'em,
-                  contact support.
+                  {proxyBlockedReason}
                 </p>
               ) : (
                 <>
@@ -1955,7 +2006,12 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <div className="flex items-center justify-between gap-4 flex-wrap">
                     <p className="font-body text-[10px] text-muted leading-relaxed max-w-md">
                       Proxy picks respect the real deadline — if the week is locked, extend the deadline first.
-                      Teams already used by the member this season are rejected.
+                      {type === 'NFL_PICKEM'
+                        ? ' This records ONE game: the team you choose, in the game it is playing that week. Repeat it for any other game the member needs.'
+                        : ' Teams already used by the member this season are rejected.'}
+                      {proxyOmitsTiebreaker
+                        ? ' It does not record a tie-breaker prediction, so a tied week goes to anyone who made one.'
+                        : ''}
                     </p>
                     <button
                       onClick={handleProxyPick}
