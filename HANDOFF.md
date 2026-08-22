@@ -39,11 +39,20 @@
 > on both.** `tests/help-tip-contrast.test.ts` parses the tokens out of
 > `src/index.css` and guards it; §2c ran two clean rounds on it.
 >
-> 📌 **FOUND, NAMED, NOT FIXED:** the wizard's own labels are `text-slate-400`
-> on that blended panel — **1.96:1 in light theme**. A defect of the wizard's
-> fixed palette on a themed page, predating the help system; fixing it means
-> rethemeing the wizard. The test names it rather than asserting it, which
-> would only lock the bug in.
+> 🛑 **FOUND, NAMED, AND KEVIN RULED: LEAVE IT (2026-08-22).** The wizard's own
+> labels are `text-slate-400` on that blended panel — **1.96:1 in light
+> theme**, under the 3:1 floor. A defect of the wizard's fixed palette on a
+> themed page, predating the help system; fixing it means rethemeing the
+> wizard. He was given three options — leave it, retheme the wizard, or a
+> one-class partial that darkens just the labels — **and chose to leave it**,
+> eleven days before the Hall of Fame game. It affects the create-pool wizard
+> only, in light theme only, and every commissioner who has already made a pool
+> is past it.
+>
+> **DO NOT REOPEN THIS WITHOUT NEW EVIDENCE OR KEVIN ASKING.** It is a settled
+> decision, not an unclaimed ticket — the shape `mmp-failure-archaeology` warns
+> about. Revisit after 2026-08-06 if he wants it. `tests/help-tip-contrast.test.ts`
+> names it in prose rather than asserting it, which would only lock the bug in.
 >
 > 📌 **#514 IS FRONTEND ONLY** — no `functions/`, `shared/` or
 > `firestore.rules` change. It needs the **Coolify `www` rebuild** and **no
