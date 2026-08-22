@@ -72,9 +72,10 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   // lockBufferMinutes mid-review because the shipped client ignored lockMode;
   // 93f44bb2 (#482) fixed that, so both rows are gone and both topics are
   // authored in content/nfl-pickem.ts and content/nfl-shared.ts.
-  // `settings.pointsPerPick` is the one row T9 could NOT close, and the reason
-  // is a product defect rather than missing copy — see below.
-  'settings.pointsPerPick': "T9-BLOCKED: the value is INERT. `scorePickemEntry` (functions/src/nflScoringEngine.ts:174-178) awards exactly 1 per correct pick on a non-confidence pool and never reads this field, while NFLManagerView.tsx:1336 lets a commissioner set 1-10 and NFLPoolRules.tsx:158,220 shows the chosen number to members as what a pick is worth. Any help copy here would either repeat that claim or document the bug. Kevin's call: honour it in the scorer, or drop the control. Raised in the T9 PR body and MORNING-2026-08-18-HELP-T9.md.",
+  // `settings.pointsPerPick` was the one row T9 could NOT close, because the
+  // defect was a product one rather than missing copy. Kevin ruled on
+  // 2026-08-22 and the row is SETTLED — see below.
+  'settings.pointsPerPick': "PERMANENT (Kevin, 2026-08-22 — PLAN-DELETE-INERT-PICKEM-SCORING.md). The field is INERT: `scorePickemEntry` awards exactly 1 point per correct pick on a non-confidence pool and never reads it. Every control and every member-facing row that displayed it is DELETED — the manager's Scoring Configuration card, NFLPoolRules' Base Points row, and JoinPool's rules preview. No surface writes or shows it, so there is no control for help copy to explain; the path stays here because `shared/schemas/nfl.ts` still accepts the field, which is what keeps a stored value on an existing pool from being rejected. `settings.primetimeBonus` never had a row because it is not in that schema.",
 
   // ---- PENDING: NFL Survivor (T10) ---------------------------------------
   'settings.maxStrikes': 'T10: how many wrong picks before elimination.',

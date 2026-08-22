@@ -1,6 +1,6 @@
 import React from 'react';
 import { effectiveWeeklyTiebreaker } from '@shared/nflTiebreaker';
-import { HelpCircle, Shield, Award, Calendar, DollarSign, RefreshCw, Zap, Moon, Star, Trophy, Lock, Settings } from 'lucide-react';
+import { HelpCircle, Shield, Award, Calendar, DollarSign, RefreshCw, Zap, Trophy, Lock, Settings } from 'lucide-react';
 import type { Pool } from '../../types';
 import { PayoutsPanel } from '../PayoutsPanel';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
@@ -152,30 +152,15 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                 {/* Custom scoring display */}
                 <div className="bg-page border border-line rounded-md p-3 space-y-1.5 mt-2">
                   <p className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-faint">Scoring Config</p>
-                  <div className="flex justify-between">
-                    <span className="text-muted font-bold">Base Points Per Pick:</span>
-                    <span className="font-display font-bold num text-[color:var(--text)]">
-                      {settings.pointsPerPick ?? 1} pt{(settings.pointsPerPick ?? 1) !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-                  {settings.primetimeBonus?.thursday && (
-                    <div className="flex justify-between">
-                      <span className="text-muted font-bold flex items-center gap-1"><Moon size={11} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> TNF Bonus:</span>
-                      <span className="text-gold-600 dark:text-gold-400 font-display font-bold num">+{settings.primetimeBonus.thursday} pts</span>
-                    </div>
-                  )}
-                  {settings.primetimeBonus?.sundayNight && (
-                    <div className="flex justify-between">
-                      <span className="text-muted font-bold flex items-center gap-1"><Star size={11} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> SNF Bonus:</span>
-                      <span className="text-gold-600 dark:text-gold-400 font-display font-bold num">+{settings.primetimeBonus.sundayNight} pts</span>
-                    </div>
-                  )}
-                  {settings.primetimeBonus?.monday && (
-                    <div className="flex justify-between">
-                      <span className="text-muted font-bold flex items-center gap-1"><Trophy size={11} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> MNF Bonus:</span>
-                      <span className="text-gold-600 dark:text-gold-400 font-display font-bold num">+{settings.primetimeBonus.monday} pts</span>
-                    </div>
-                  )}
+                  {/* THE BASE-POINTS AND PRIMETIME-BONUS ROWS ARE GONE
+                      (Kevin, 2026-08-22 — PLAN-DELETE-INERT-PICKEM-SCORING.md).
+                      They read `settings.pointsPerPick` and
+                      `settings.primetimeBonus`, which NOTHING that scores has
+                      ever read: `scorePickemEntry` awards exactly 1 point per
+                      correct pick on a non-confidence pool. A pool set to 3
+                      told its members three here and paid one. The scorer is
+                      unchanged; the false claim is what was removed. The
+                      standard-scoring line below now names the real number. */}
                   {/* THE HOUSE RULE FOR A TIED WEEK. It belongs on the rules
                       page and not only on the pick sheet: the sheet asks for the
                       number, this says what the number decides — and on a NONE
@@ -217,7 +202,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                 <p className="leading-relaxed text-[12px] text-muted">
                   {settings.confidenceMode
                     ? `Assign a unique confidence weight from 1 to N for each game. Higher weight earns more points upon success. All games must have unique confidence ranks assigned.`
-                    : `Every correct pick earns ${settings.pointsPerPick ?? 1} point${(settings.pointsPerPick ?? 1) !== 1 ? 's' : ''}. Confidence rankings are disabled in this pool.`}
+                    : 'Every correct pick earns 1 point. Confidence rankings are disabled in this pool.'}
                 </p>
               </div>
             </div>

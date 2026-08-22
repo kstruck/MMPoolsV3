@@ -218,10 +218,15 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
               {pool.type === 'NFL_PICKEM' && (() => {
                 const s = castPool?.settings || {};
                 const isConfidence = !!s.confidenceMode;
-                const ptsPerPick = s.pointsPerPick ?? 1;
-                const primetime = s.primetimeBonus || {};
                 const lockMode = s.lockMode ?? 'PER_GAME';
-                const hasPrimetime = primetime.thursday || primetime.sundayNight || primetime.monday;
+                // `s.pointsPerPick` and `s.primetimeBonus` USED TO BE READ HERE
+                // and are not any more. Neither has ever been read by anything
+                // that scores — `scorePickemEntry` awards exactly 1 point per
+                // correct pick on a non-confidence pool — so this preview was
+                // making a promise about what a pick is worth, to somebody
+                // deciding whether to pay an entry fee, that the pool did not
+                // keep. Kevin's ruling 2026-08-22; see
+                // PLAN-DELETE-INERT-PICKEM-SCORING.md.
                 return (
                   <ul className="text-sm text-[color:var(--text)] space-y-2.5 font-body">
                     <li className="flex items-start gap-2">
@@ -234,21 +239,8 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                       <Check size={14} className="text-gold-600 dark:text-gold-400 mt-0.5 shrink-0" />
                       {isConfidence
                         ? 'Confidence points scale from 1 to N (number of games in week) — most confident game gets the highest rank'
-                        : `Base scoring: ${ptsPerPick} point${ptsPerPick !== 1 ? 's' : ''} per correct pick`}
+                        : 'Base scoring: 1 point per correct pick'}
                     </li>
-                    {hasPrimetime && (
-                      <li className="flex items-start gap-2">
-                        <Check size={14} className="text-gold-600 dark:text-gold-400 mt-0.5 shrink-0" />
-                        <span>
-                          Primetime bonus points:{' '}
-                          {[
-                            primetime.thursday  && `TNF +${primetime.thursday}`,
-                            primetime.sundayNight && `SNF +${primetime.sundayNight}`,
-                            primetime.monday    && `MNF +${primetime.monday}`,
-                          ].filter(Boolean).join(' · ')}
-                        </span>
-                      </li>
-                    )}
                     <li className="flex items-start gap-2">
                       <Check size={14} className="text-gold-600 dark:text-gold-400 mt-0.5 shrink-0" />
                       Lock Mode:{' '}
