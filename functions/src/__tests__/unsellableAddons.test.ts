@@ -155,11 +155,17 @@ describe('the webhook wires the decision in the right order (source-level)', () 
 
   it('performs EVERY transaction read before the alert write', () => {
     const alertWrite = fn.indexOf('UNSELLABLE_ADDON_SOLD_${sessionId}');
-    const lastRead = fn.lastIndexOf('txn.get(');
+    // Every read FORM, not just `txn.get(` — `txn.getAll(` does not contain
+    // `txn.get(` as a substring, so matching the single form would let the same
+    // ordering bug back in through a different call (codex round 4).
+    const reads = [...fn.matchAll(/\btxn\.(get|getAll|getQuery)\s*\(/g)];
+    expect(reads.length, 'no transaction reads found — the marker is stale').toBeGreaterThan(0);
+    const lastRead = reads[reads.length - 1].index;
     expect(
       lastRead,
-      'a txn.get runs after the alert txn.set — Firestore requires all reads before all writes, ' +
-      'and this threw the whole transaction for any checkout using both a coupon and an unsellable add-on',
+      'a transaction read runs after the alert txn.set — Firestore requires all reads before all ' +
+      'writes, and this threw the whole transaction for any checkout using both a coupon and an ' +
+      'unsellable add-on',
     ).toBeLessThan(alertWrite);
   });
 });

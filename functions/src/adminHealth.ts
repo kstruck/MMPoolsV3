@@ -66,20 +66,46 @@ async function checkFirestore(db: admin.firestore.Firestore): Promise<Check> {
  * — exactly how enforceBillingStatus stayed broken for its whole life.
  *
  * `.count()` is an aggregation query: billed per read-unit, not per matched
- * document, so this stays cheap as volume grows. Never `ok: false` on a query
- * error — this is an observability probe, and a broken probe must not present
- * as a platform outage.
+ * document, so this stays cheap as volume grows.
+ *
+ * ⚠️ THIS PROBE NEVER REPORTS `ok: false`, and that is deliberate. The Overview
+ * card derives its whole verdict from `checks.every(c => c.ok)`
+ * (`SuperAdminBentoDashboard.tsx:164`), so a missing index or a transient query
+ * error here would print "Degradation detected" over a platform that is
+ * completely healthy. This is TELEMETRY, not an availability check: when it
+ * cannot answer it says so in its detail and stays green. That is the same
+ * crying-wolf failure this repo has rejected findings over before — a monitor
+ * that is wrong in the alarming direction gets ignored, and then the real
+ * outage is ignored with it. (An earlier draft of this function had a comment
+ * claiming this behaviour while `timed()` did the opposite; codex round 4.)
  */
-async function checkAiVolume(db: admin.firestore.Firestore): Promise<Check> {
-  return timed(async () => {
+export async function checkAiVolume(db: admin.firestore.Firestore): Promise<Check> {
+  const started = Date.now();
+  try {
     const since = Date.now() - 24 * 60 * 60 * 1000;
     const agg = await db
       .collectionGroup("ai_requests")
       .where("createdAt", ">=", since)
       .count()
       .get();
-    return `${agg.data().count} AI requests last 24h`;
-  });
+    return {
+      ok: true,
+      latencyMs: Date.now() - started,
+      detail: `${agg.data().count} AI requests last 24h`,
+    };
+  } catch (err) {
+    // Says "unavailable" rather than inventing a number — the repo's own rule
+    // ("Data unavailable → the card shows 'unavailable', never a
+    // plausible-looking substitute"). A 0 here would read as "no AI spend",
+    // which is exactly the wrong thing to believe when the probe is broken.
+    const reason = err instanceof Error ? err.message : "error";
+    console.warn("[adminHealth] AI volume probe failed (reported as unavailable, not as an outage)", err);
+    return {
+      ok: true,
+      latencyMs: Date.now() - started,
+      detail: `AI volume unavailable: ${reason}`,
+    };
+  }
 }
 
 /**
