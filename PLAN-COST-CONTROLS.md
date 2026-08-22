@@ -7,8 +7,9 @@ spend) and **authorization** (`firestore.rules` `ai_requests`, new callables)._
 
 ## Implementation status
 
-**Phase 0.5 — BUILT, in review as [#516](https://github.com/kstruck/MMPoolsV3/pull/516)
-(branch `claude/rate-limiting-review-gate-dk4w2i`). NOT merged, NOT deployed.**
+**Phase 0.5 — ✅ MERGED 2026-08-22 as
+[#516](https://github.com/kstruck/MMPoolsV3/pull/516) (`00408e97`), on Kevin's
+"go for merge". ⛔ NOT DEPLOYED — and it does nothing until it is.**
 
 | Item | State |
 |---|---|
@@ -21,7 +22,8 @@ spend) and **authorization** (`firestore.rules` `ai_requests`, new callables)._
 ⚠️ **Deploy is THREE surfaces and the order matters** (Rule 2): functions →
 rules → **indexes**. The index is not optional: 0.5.5's collection-group count
 throws `FAILED_PRECONDITION` without it, which is the `enforceBillingStatus`
-failure mode this repo has already paid for once.
+failure mode this repo has already paid for once. **Owed as of 2026-08-22 —
+HANDOFF.md's top box carries the commands.**
 
 ⚠️ **The SMS kill-switch defaults OFF at deploy.** `system/config.costControls`
 does not exist yet and the reader is fail-closed, so member SMS stops the moment

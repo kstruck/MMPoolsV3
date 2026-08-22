@@ -1,6 +1,77 @@
 # HANDOFF — Session entry point
 
-> ## 🟢 2026-08-22 (latest) — **§2c IS NOW CLOSED ON THE SIX MERGED PRs. THE HELP `?` IS VISIBLE (#514, MERGED). COOLIFY REBUILD OWED, NO FUNCTIONS DEPLOY.**
+> ## 🔴 2026-08-22 (latest) — **COST CONTROLS PHASE 0.5 IS MERGED AND OWES A THREE-SURFACE DEPLOY. THE UNBOUNDED AI-SPEND HOLE IS CLOSED IN CODE, NOT YET IN PRODUCTION.**
+>
+> **Merged on Kevin's "go for merge":** [#513](https://github.com/kstruck/MMPoolsV3/pull/513)
+> (`7c518d72`, the plan + review log + sweeps) and
+> [#516](https://github.com/kstruck/MMPoolsV3/pull/516) (`00408e97`, Phase 0.5
+> implementation). `PLAN-COST-CONTROLS.md` is the plan of record.
+>
+> 🛑 **THE FIX IS INERT UNTIL DEPLOYED, AND IT IS THREE SURFACES IN THIS ORDER:**
+>
+> ```
+> npm --prefix functions ci
+> npx firebase deploy --only functions --project gridiron-gamble-uzuqo
+> npx firebase deploy --only firestore:rules --project gridiron-gamble-uzuqo
+> npx firebase deploy --only firestore:indexes --project gridiron-gamble-uzuqo
+> ```
+>
+> **Functions BEFORE rules** — the tightened rule denies writes the new trigger
+> guards are meant to catch, so shipping rules first would deny AI submissions
+> on paying pools before the server-side half exists. **Indexes are the THIRD
+> surface and neither of the other two commands ships it**: 0.5.5's
+> collection-group count throws `9 FAILED_PRECONDITION` forever without the
+> `ai_requests.createdAt` field override — the exact way `enforceBillingStatus`
+> stayed broken for its whole life. **No Coolify rebuild owed** (no `src/`
+> change beyond a type declaration).
+>
+> ⚠️ **MEMBER SMS STOPS THE MOMENT FUNCTIONS DEPLOY, BY DESIGN.**
+> `system/config.costControls` does not exist yet and the new reader is
+> **fail-CLOSED**, so `costControls.sms.enabled` is absent ⇒ member SMS is off —
+> which is Kevin's decision #3 ("SMS is OFF until further notice"). **Ops paging
+> and the security-alert SMS are UNAFFECTED** (D4): `sendCourierSMS` now takes a
+> required `audience`, the switch blocks `'member'` only, and `sendOpsSMS` is a
+> separate Courier path entirely. To re-enable member SMS later, set
+> `costControls.sms.enabled = true` on `system/config`.
+>
+> 📐 **WHAT THE HOLE WAS.** `firestore.rules` let **any signed-in user** create
+> `pools/*/ai_requests` on **any pool**, and every such doc triggers a Gemini
+> call. Participation gated READS and not the expensive WRITE, and no server
+> path checked `billing.featuresUnlocked.aiCommissioner` except the weekly-recap
+> trigger. Unpaid pools could consume the paid addon; unbounded spend was one
+> `addDoc` away. Create now requires all four of auth, `userId == auth.uid`,
+> `isPoolParticipant()`, and the entitlement; `onAIRequest` and `onWinnerUpdate`
+> check it too.
+>
+> ⚠️ **DO NOT SWAP IN `lib/billingAccess.checkBillingAccess` FOR THAT CHECK.**
+> Its first branch is `if (!billing) return { allowed: true }`, so it would
+> re-open the hole for exactly the legacy pools most likely to lack a billing
+> object. The guards deliberately mirror `aiCommissioner.ts:390` instead.
+> `PLAN-COST-CONTROLS-SWEEPS.md` §4 records it.
+>
+> 📌 **Review cost: 7 codex rounds on the implementation** (10 findings, 9
+> accepted, 1 rejected with reasoning, 1 half-rejected), on top of 4 on the
+> plan. **Three of the ten were defects in code written to close an earlier
+> finding, and one was a guard that did not guard** — it searched the whole file
+> and matched a `txn.get` belonging to a DIFFERENT function, passing with the
+> bug reintroduced. Every guard in the PR was therefore checked by reverting the
+> thing it protects and confirming the test goes red. Both cycles are in
+> `PLAN-COST-CONTROLS-REVIEW-LOG.md`.
+>
+> ⚠️ **CI TYPECHECKS WITH `functions/tsconfig.test.json`, NOT `tsconfig.json`.**
+> That is the one that includes `__tests__` and rejects top-level `await`
+> (TS1378). The repo's own `npm --prefix functions run typecheck` aborts first
+> on TS5107 with a local tsc 6.0.2, so it gives NO signal; override the
+> deprecation on the right project file instead:
+> `npx tsc --noEmit -p <a tsconfig extending tsconfig.test.json with "ignoreDeprecations": "5.0">`.
+> Verifying against the wrong file is what put a red `build-and-test` on #516
+> four pushes running.
+>
+> 📌 **Phases 1, 2, 3, 4, 6, 7 are NOT started; Phase 5 is deferred (D5).**
+> Next implementation gate is Phase 1 (centralize paid-provider calls +
+> attribution), and the cadence rule is one PR at a time.
+
+> ## 🟢 2026-08-22 — **§2c IS NOW CLOSED ON THE SIX MERGED PRs. THE HELP `?` IS VISIBLE (#514, MERGED). COOLIFY REBUILD OWED, NO FUNCTIONS DEPLOY.**
 >
 > ✅ **§2c ON #504–#509 IS MET.** The box below said "still unmet"; it is
 > superseded. Two codex rounds ran this session, both over real code diffs and
