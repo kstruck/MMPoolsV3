@@ -40,8 +40,7 @@ import { loadBillingConfig, resolveCouponForQuote } from "./billing";
 import { computeQuote, pricedAddonKeys } from "./lib/quoteEngine";
 import {
     checkoutPoolInputSchema,
-    clampUnsellableAddons,
-    UNSELLABLE_ADDON_KEYS,
+    unsellableClampOutcome,
     type PendingBillableSnapshot,
 } from "./shared/schemas/quote";
 import {
@@ -757,7 +756,7 @@ async function finalizePoolPayment(args: {
 
         const tier = (snapshot?.tier || metadata.tier || "standard_tier");
         const maxPlayersAllowed = snapshot?.maxPlayersAllowed ?? (Number(metadata.maxPlayersAllowed) || 10);
-        const unlocked = featuresUnlocked || {
+        const rawUnlocked = featuresUnlocked || {
             aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: false,
         };
 
@@ -781,25 +780,16 @@ async function finalizePoolPayment(args: {
         // pay again; keeping it costs nothing today because no client path can
         // write `featuresUnlocked` (`shared/editability.ts` does not expose it).
         // So: the entitlement is withheld, the purchase record stays truthful.
-        const paidAddons = Array.isArray(snapshot?.addons) ? snapshot!.addons : [];
-        const soldWhileOff = UNSELLABLE_ADDON_KEYS.filter(
-            (k) => unlocked[k] === true || paidAddons.includes(k),
+        //
+        // ⚠️ DECIDE HERE, WRITE LATER. A Firestore transaction requires every
+        // read before every write, and a coupon `txn.get` runs below — an alert
+        // `txn.set` here threw the whole transaction for any checkout that used
+        // BOTH a coupon and an unsellable add-on (codex round 3). This block is
+        // pure; the alert write sits with the other writes, after the reads.
+        const { unlocked, soldWhileOff } = unsellableClampOutcome(
+            rawUnlocked,
+            Array.isArray(snapshot?.addons) ? snapshot!.addons : [],
         );
-        if (soldWhileOff.length > 0) {
-            Object.assign(unlocked, clampUnsellableAddons(unlocked));
-            txn.set(db.collection("monetization_alerts").doc(`UNSELLABLE_ADDON_SOLD_${sessionId}`), {
-                type: "UNSELLABLE_ADDON_SOLD",
-                addons: soldWhileOff,
-                poolId,
-                userId,
-                sessionId,
-                paymentIntentId: paymentIntentId ?? null,
-                amount,
-                status: "open",
-                createdAt: Date.now(),
-            }, { merge: true });
-            console.warn(`[Stripe Webhook] SMS add-on arrived on session ${sessionId} for pool ${poolId} while SMS is off; flag withheld, alert written for refund review.`);
-        }
 
         // Confirm coupon reservation (flip pending → confirmed) in this txn.
         if (couponCode && reservationId) {
@@ -811,6 +801,25 @@ async function finalizePoolPayment(args: {
                 const t = transitionReservation(cLog, reservationId, "confirmed", Date.now(), sessionId);
                 if (t.changed) txn.update(cRef, { usageLog: t.usageLog });
             }
+        }
+
+        // Deferred from the clamp above: all reads are done, so it is safe to
+        // write. Records the money discrepancy (charged for an add-on whose
+        // entitlement we are withholding) for refund review, rather than
+        // withholding it silently.
+        if (soldWhileOff.length > 0) {
+            txn.set(db.collection("monetization_alerts").doc(`UNSELLABLE_ADDON_SOLD_${sessionId}`), {
+                type: "UNSELLABLE_ADDON_SOLD",
+                addons: soldWhileOff,
+                poolId,
+                userId,
+                sessionId,
+                paymentIntentId: paymentIntentId ?? null,
+                amount,
+                status: "open",
+                createdAt: Date.now(),
+            }, { merge: true });
+            console.warn(`[Stripe Webhook] Unsellable add-on(s) ${soldWhileOff.join(",")} arrived on session ${sessionId} for pool ${poolId}; entitlement withheld, alert written for refund review.`);
         }
 
         // Activate pool + copy pending snapshot → billing.paid + featuresUnlocked.

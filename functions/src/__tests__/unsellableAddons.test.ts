@@ -21,6 +21,7 @@ import * as path from 'path';
 import {
   UNSELLABLE_ADDON_KEYS,
   clampUnsellableAddons,
+  unsellableClampOutcome,
   addonSelectionSchema,
 } from '../shared/schemas/quote';
 
@@ -81,27 +82,84 @@ describe('addonSelectionSchema — SMS cannot be bought', () => {
   });
 });
 
-describe('the Stripe webhook actually applies the clamp (source-level)', () => {
-  // finalizePoolPayment is a transaction over Firestore; driving it needs a
-  // full fake. What must not regress is structural: that the webhook consults
-  // the SHARED unsellable list rather than re-deciding locally, and that it
-  // records the money discrepancy instead of silently withholding a paid flag.
+describe('unsellableClampOutcome — the webhook in-flight decision', () => {
+  // This is the whole decision `finalizePoolPayment` makes, extracted so it can
+  // be asserted by BEHAVIOUR. It used to be inline, where the only available
+  // test was "does this string appear in stripe.ts" — a guard that passes
+  // whether or not the code still runs (codex round 3, finding 3).
+
+  it('withholds the entitlement AND reports what was paid for', () => {
+    const out = unsellableClampOutcome(
+      { aiCommissioner: true, smsNotifications: true },
+      ['aiCommissioner', 'smsNotifications'],
+    );
+    expect(out.unlocked.smsNotifications).toBe(false);
+    expect(out.unlocked.aiCommissioner).toBe(true);
+    expect(out.soldWhileOff).toEqual(['smsNotifications']);
+  });
+
+  it('flags a paid add-on even when the entitlement map does not carry it', () => {
+    // The two halves of a session record can disagree; either one is evidence
+    // the customer was charged, and a refund review needs both consulted.
+    const out = unsellableClampOutcome({ smsNotifications: false }, ['smsNotifications']);
+    expect(out.soldWhileOff).toEqual(['smsNotifications']);
+  });
+
+  it('flags an unlocked-but-unrecorded add-on too', () => {
+    const out = unsellableClampOutcome({ smsNotifications: true }, []);
+    expect(out.soldWhileOff).toEqual(['smsNotifications']);
+  });
+
+  it('is silent for an ordinary purchase — no alert, nothing clamped', () => {
+    // The common case. If this ever reports soldWhileOff, every normal
+    // checkout starts writing refund-review alerts.
+    const out = unsellableClampOutcome(
+      { aiCommissioner: true, smsNotifications: false, customBranding: true },
+      ['aiCommissioner', 'customBranding'],
+    );
+    expect(out.soldWhileOff).toEqual([]);
+    expect(out.unlocked).toEqual({
+      aiCommissioner: true, smsNotifications: false, customBranding: true,
+    });
+  });
+
+  it('tolerates a missing paid-addons array (legacy session records)', () => {
+    expect(() => unsellableClampOutcome({ smsNotifications: true })).not.toThrow();
+  });
+});
+
+describe('the webhook wires the decision in the right order (source-level)', () => {
+  // ONE structural guard kept deliberately: the behaviour above cannot catch a
+  // Firestore transaction-ordering bug, and that is exactly what round 3 found
+  // here — an alert `txn.set` placed before the coupon `txn.get` threw the whole
+  // transaction for any checkout using both a coupon and an unsellable add-on.
   const src = fs.readFileSync(path.join(__dirname, '..', 'stripe.ts'), 'utf8');
 
-  it('imports the shared list rather than hardcoding a key', () => {
-    expect(src).toMatch(/clampUnsellableAddons/);
-    expect(src).toMatch(/UNSELLABLE_ADDON_KEYS/);
+  // ⚠️ SCOPED TO THE FUNCTION, deliberately. The first version of this guard
+  // searched the whole file and matched an EARLIER coupon read belonging to a
+  // different function, so it compared the wrong pair and passed even with the
+  // bug reintroduced. It was caught by reverting the fix and watching the test
+  // stay green — a guard is not a guard until you have seen it fail.
+  const fnStart = src.indexOf('async function finalizePoolPayment');
+  const fnEnd = src.indexOf('async function releaseReservationBestEffort');
+  const fn = src.slice(fnStart, fnEnd);
+
+  it('locates the function body it is asserting about', () => {
+    // If a rename makes these markers stale, the slice goes empty and every
+    // assertion below becomes vacuously true. Fail loudly instead.
+    expect(fnStart, 'finalizePoolPayment not found — update the marker').toBeGreaterThan(-1);
+    expect(fnEnd, 'the end marker not found — update it').toBeGreaterThan(fnStart);
+    expect(fn).toContain('UNSELLABLE_ADDON_SOLD_${sessionId}');
+    expect(fn).toContain('txn.get(');
   });
 
-  it('writes a monetization alert when a paid-for unsellable add-on arrives', () => {
-    // Without this the customer is charged and not granted, with no record for
-    // Kevin to refund from — a silent money discrepancy.
-    expect(src).toMatch(/UNSELLABLE_ADDON_SOLD/);
-  });
-
-  it('does NOT strip the paid-addons record', () => {
-    // The purchase record stays truthful (see the comment at the clamp): if SMS
-    // returns, a customer who already paid must not pay twice.
-    expect(src).not.toMatch(/addons:\s*\(?snapshot\?\.addons.*filter/);
+  it('performs EVERY transaction read before the alert write', () => {
+    const alertWrite = fn.indexOf('UNSELLABLE_ADDON_SOLD_${sessionId}');
+    const lastRead = fn.lastIndexOf('txn.get(');
+    expect(
+      lastRead,
+      'a txn.get runs after the alert txn.set — Firestore requires all reads before all writes, ' +
+      'and this threw the whole transaction for any checkout using both a coupon and an unsellable add-on',
+    ).toBeLessThan(alertWrite);
   });
 });

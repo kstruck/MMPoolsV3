@@ -23,13 +23,43 @@ import { POOL_TYPES } from '../poolTypes';
  */
 export const UNSELLABLE_ADDON_KEYS = ['smsNotifications'] as const;
 
-/** Force every unsellable add-on off. Pure, so both call sites can be tested. */
-export function clampUnsellableAddons<T extends Record<string, boolean>>(addons: T): T {
-  const out = { ...addons };
+/**
+ * Force every unsellable add-on off. Pure. The return type is widened to
+ * booleans rather than echoing `T`: this function can turn a `true` into a
+ * `false`, so preserving a literal type would let the compiler keep believing a
+ * clamped field is still `true`.
+ */
+export function clampUnsellableAddons<T extends Record<string, boolean>>(
+  addons: T,
+): { [K in keyof T]: boolean } {
+  const out = { ...addons } as { [K in keyof T]: boolean };
   for (const key of UNSELLABLE_ADDON_KEYS) {
     if (key in out) (out as Record<string, boolean>)[key] = false;
   }
   return out;
+}
+
+/**
+ * The whole in-flight-session decision for the Stripe webhook, as one pure
+ * function: what the entitlement map should become, and which unsellable
+ * add-ons were actually paid for (empty ⇒ nothing to alert about).
+ *
+ * Pure and exported so the behaviour is unit-testable. It used to live inline
+ * in `finalizePoolPayment`, where the only thing a test could assert was that
+ * certain strings appeared in the file — a guard that passes whether or not the
+ * code still runs (codex round 3).
+ *
+ * `paidAddons` is the PAID RECORD (`billing.paid.addons`) and is deliberately
+ * returned untouched by the caller: it is evidence of purchase, not a grant.
+ */
+export function unsellableClampOutcome(
+  unlocked: Record<string, boolean>,
+  paidAddons: readonly string[] = [],
+): { unlocked: Record<string, boolean>; soldWhileOff: string[] } {
+  const soldWhileOff = UNSELLABLE_ADDON_KEYS.filter(
+    (k) => unlocked[k] === true || paidAddons.includes(k),
+  );
+  return { unlocked: clampUnsellableAddons(unlocked), soldWhileOff: [...soldWhileOff] };
 }
 
 // --- Add-on selection ---------------------------------------------------------
