@@ -5,15 +5,20 @@ claim-by-claim against the repo by Claude, plus Kevin's answers of 2026-08-22.
 Terms per CONTEXT.md. Plan-gated: touches **money** (billing entitlements, provider
 spend) and **authorization** (`firestore.rules` `ai_requests`, new callables)._
 
-## Gate status (2026-08-22)
+## Gate status (2026-08-22, updated same day after the environment fix)
 
 - ✅ Phase 0 (this document): inventory, caps, config design — authored.
-- ⛔ **Review log NOT run.** `codex` is unreachable from the cloud environment that
-  authored this (network gateway denies `api.openai.com`; CLI absent; key unset —
-  same state HANDOFF.md records for #504–#509). CLAUDE.md §2c requires a codex
-  round on this plan before implementation — run it from Windows or from a cloud
-  session started after Kevin's environment fix lands.
-- ⛔ Sweeps (`PLAN-COST-CONTROLS-SWEEPS.md`) not built — required before Phase 1+.
+- ✅ **CLAUDE.md §2c review RUN, 2026-08-22 (later session)** — Kevin's
+  environment fix landed (api.openai.com allowed, `OPENAI_API_KEY` set), and
+  the codex round this section previously flagged as unrunnable has now
+  happened: 4 rounds, 9 findings (1 Critical / 3 High / 3 Medium / 2 Low),
+  9 accepted, 0 rejected, all absorbed into this document —
+  see `PLAN-COST-CONTROLS-REVIEW-LOG.md` for the verbatim record and the
+  resolution status.
+- ✅ Sweeps built (`PLAN-COST-CONTROLS-SWEEPS.md`, 2026-08-22): Gemini and
+  Courier inventories CONFIRMED complete at endpoint level; one client
+  `ai_requests` writer; plus the `lib/billingAccess.ts` legacy-carve-out trap
+  recorded as a 0.5.2 implementation constraint.
 - ✅ **Kevin signed off on D1–D5, 2026-08-22: all five approved as recommended.**
   Resolutions recorded inline in §Risks; his D2 follow-ups (cap strategy math,
   user-facing limit messaging, off-topic use prevention) are folded into
@@ -102,9 +107,9 @@ events rather than guesswork. SMS stays off until Kevin re-enables it.
 
 | Call site | Audience | Gating today |
 |---|---|---|
-| `reminders.ts:291` (payment reminder), `:757` (recap blast) | members | `pool.reminders?.smsEnabled` + `smsOptIn` + phone |
-| `lib/opsAlertDispatcher.ts:116` (ops pages) | Kevin/ops | `system/config.opsAlerts` recipients, fail-silent |
-| `userManagement.ts:174` (security alert), `:219` (`testSmsHttp`) | one user / SUPER_ADMIN | opt-in / SUPER_ADMIN |
+| `reminders.ts:291` (payment reminder), `:757` (recap blast) — via `sendCourierSMS` | members | `pool.reminders?.smsEnabled` + `smsOptIn` + phone |
+| `lib/opsAlertDispatcher.ts:119` `sendOpsSMS` (ops pages) — **its own direct `api.courier.com` fetch, NOT `sendCourierSMS`** (deliberate: "Distinct code path", `:116`), same `COURIER_AUTH_TOKEN` secret | Kevin/ops | `system/config.opsAlerts` recipients, fail-silent |
+| `userManagement.ts:174` (security alert), `:219` (`testSmsHttp`) — via `sendCourierSMS` | one user / SUPER_ADMIN | opt-in / SUPER_ADMIN |
 
 **Stripe** — commissioner hosting fees ONLY (money invariant; P2P entry fees never
 touch the platform). `createCheckoutSession` (`stripe.ts:191`) is
@@ -115,11 +120,20 @@ proportional, not runaway; risk is abuse hygiene, not spend.
 billing account as the Gemini key's project (**UNVERIFIED — Kevin confirms in
 Phase 0.2**; determines whether one GCP budget covers both).
 
-**Sentry** — client-side only (`src/sentry.ts`). Presumed free tier (UNVERIFIED).
+**Sentry** — client-side (`src/sentry.ts`) **plus a backend module**:
+`functions/src/lib/sentryServer.ts` (monetization-alert mirror, review round 2
+correction — the first draft said "client-side only"). The backend half no-ops
+until a `SENTRY_DSN` env/secret is configured, which Kevin has not wired, so it
+is dormant today — but it is a provider surface and belongs in this inventory.
+Presumed free tier (UNVERIFIED).
 
-**Email** — Trigger Email extension via `mail` collection (`reminders.ts` →
-`sendEmail`). Provider behind the extension and its pricing: UNVERIFIED, Kevin
-confirms in Phase 0.2.
+**Email** — Trigger Email extension via `mail` collection. `sendEmail` is
+defined in `reminders.ts:34` but called from **17 functions files** (billing,
+announcements, squares, bracket scoring, waitlist, …), and
+`opsAlertDispatcher.ts` enqueues to `mail` directly (review round 2 correction —
+the first draft implied reminders-only). Inventory-only this phase; the full
+writer list is Phase 1 attribution work. Provider behind the extension and its
+pricing: UNVERIFIED, Kevin confirms in Phase 0.2.
 
 **ESPN** — free, no key; availability risk only (2026-08-15 403 incident), not a
 cost surface. Out of scope here.
@@ -156,6 +170,13 @@ price change, prompt bloat, a mis-pinned model), not as the day-to-day limiter.
 | Stripe | no cap (fees track revenue); webhooks never rate-limited | — | — |
 | Sentry / email | inventory only this phase | — | — |
 
+**Cap precedence (added per review round 2 finding 7):** the per-pool $5 breaker
+and the global $50 breaker are INDEPENDENT — whichever trips first disables its
+own scope (that pool's AI vs all AI), and neither resets the other. The
+single-band cost estimate above is deliberately rough; Phase 0.2 replaces it
+with a low/base/high table (tokens in/out × verified $/M rates → $/request →
+400/month projection) before any quota number is treated as final.
+
 ## Phase 0.4 — `system/config.costControls` (server-only config)
 
 Follows the existing `system/config` kill-switch pattern (Rule 1;
@@ -185,18 +206,29 @@ on the DECISION NEEDED items.
 The full callable migration (Phase 2) is days of work; the unbounded hole is one
 rules edit plus one trigger guard:
 
-- 0.5.1 Tighten `firestore.rules:497` create: require `isPoolParticipant()` AND
+- 0.5.1 Tighten `firestore.rules:497` create to require ALL of (explicit list
+  per review round 3 finding 1 — "tighten" must not read as "replace"): the
+  existing `request.auth != null` AND the existing
+  `request.resource.data.userId == request.auth.uid` (dropping it would let a
+  participant forge `userId` — attribution poisoning and per-user quota framing
+  once Phase 2 lands) AND `isPoolParticipant()` AND
   `get(.../pools/$(poolId)).data.billing.featuresUnlocked.aiCommissioner == true`
   (same doc the participant check already `get`s — no extra read billed). Client
   already hides the tab for locked pools, so no user-visible change.
 - 0.5.2 Add the entitlement check to `onAIRequest` and `onWinnerUpdate`, mirroring
   `onWeeklyRecapCreated` (`aiCommissioner.ts:390`) — defense in depth for 0.5.1 and
   it stops unmonetized winner-explanation spend on non-addon squares pools.
-- 0.5.3 Add the `costControls.sms.enabled` kill-switch check at the top of
-  `sendCourierSMS` (`smsService.ts:36`), default-deny, returning `'skipped'`.
-  Scope: member-facing sends. **DECISION NEEDED (D4):** whether ops SMS
-  (`opsAlertDispatcher`) and the security-alert SMS stay exempt (recommended: yes —
-  Kevin's own alerts, tiny volume) or go dark too.
+- 0.5.3 Add the `costControls.sms.enabled` kill-switch to `sendCourierSMS`
+  (`smsService.ts:36`), default-deny, returning `'skipped'`. **Mechanism
+  (rewritten per review round 2 finding 1 — Critical):** a bare check at the top
+  of `sendCourierSMS` cannot honor D4, because the D4-exempt security-alert SMS
+  (`userManagement.ts:174`) and `testSmsHttp` (`:219`) flow through the SAME
+  function as the member sends. So `sendCourierSMS` gains a required
+  `audience: 'member' | 'security' | 'test'` parameter; the kill-switch blocks
+  `'member'` only. Callers: `reminders.ts:291,757` pass `'member'`;
+  `userManagement.ts:174` passes `'security'`; `:219` passes `'test'`. Ops SMS
+  (`sendOpsSMS`, its own code path — see the inventory) is untouched, exempt per
+  D4. A missing/unreadable config still fail-closes `'member'` sends.
 - 0.5.4 Remove/disable `smsNotifications` from the purchasable addon set
   (`shared/schemas/quote.ts:38`) so nobody buys a feature that is off. (Money-path
   edit — covered by this plan's gate.)
@@ -230,7 +262,15 @@ Codex's phase, amended:
   `ai_requests` creates entirely. **Rollout order matters** (see Phase 7).
 - 2.2 Quotas enforced atomically in a transaction, read from `costControls`:
   3/user+pool/hour, 15/user+pool/day, 60/pool/day as proposed — **plus a per-pool
-  monthly quota (~400)**, which the Codex table lacked. Rationale: 60/day compounds
+  monthly quota (~400)**, which the Codex table lacked. **Enforcement point
+  (added per review round 2 finding 2 — High): the quota transaction lives in
+  `onAIRequest`, before the Gemini call — not only in the Phase 2.1 callable.**
+  Rationale: 7.5's rollout order deliberately leaves direct `ai_requests`
+  creates allowed until the client cutover is verified; a callable-only quota
+  would be bypassed by every legacy direct write during that window. The
+  callable may pre-check for a friendlier error, but the trigger is the
+  enforcement of record; it marks over-quota requests
+  `status: 'RATE_LIMITED'` without calling the provider. Rationale: 60/day compounds
   to 1,800/month; at Flash-class prices with this codebase's large facts payloads
   (60 entries with full picks, `aiCommissioner.ts:161-165`) that can breach the
   $5/pool-month budget. 400/month at a generous $0.01/request ≈ $4, inside budget
@@ -265,8 +305,12 @@ paid feature has a server-side limit and an emergency off switch.
   app";
   (b) harden `COMMISSIONER_SYSTEM_PROMPT` (`gemini.ts:135`) with an explicit
   scope rule: answer ONLY questions about this pool's results, rules, standings
-  and disputes; anything else returns the schema's headline "Out of scope for
-  the AI Commissioner" with no other content;
+  and disputes; anything else returns the **schema-valid refusal shape**
+  (corrected per review round 2 finding 6 — the schema at `gemini.ts:28`
+  REQUIRES `summaryBullets`, `explanationSteps` and `confidence`, so "headline
+  with no other content" is unproducible): headline "Out of scope for the AI
+  Commissioner", empty `summaryBullets` and `explanationSteps` arrays,
+  `confidence: 0` — pinned by a unit test in Phase 7.1;
   (c) keep the forced JSON output schema (`gemini.ts:7-29`) — headline/bullets/
   steps/confidence is a hostile format for code generation or general chat, and
   is itself a meaningful deterrent;
@@ -321,8 +365,15 @@ than inventing a number. Reconcile against invoices monthly (7.3).
 
 - 7.1 Emulator tests: quota transactions, rules denial of direct `ai_requests`
   creates, entitlement checks, breaker trips, no-retry payment behavior.
-- 7.2 Sweep-gated: grep sweeps proving no direct `generateAIResponse` /
-  `sendCourierSMS` callers outside the wrappers (`PLAN-COST-CONTROLS-SWEEPS.md`).
+- 7.2 Sweep-gated (`PLAN-COST-CONTROLS-SWEEPS.md`): grep sweeps proving every
+  paid-provider call goes through the wrappers. **Widened per review round 2
+  finding 3 (High): sweeping for `generateAIResponse` / `sendCourierSMS` callers
+  alone misses direct-endpoint calls — `sendOpsSMS` already fetches
+  `api.courier.com/send` itself (`opsAlertDispatcher.ts:126`).** The sweeps
+  therefore match provider ENDPOINTS and SDK classes too
+  (`generativelanguage.googleapis.com`, `GoogleGenAI`, `api.courier.com`)
+  against an explicit allowlist: the wrapper modules plus the D4-exempt
+  `opsAlertDispatcher.ts`. Any other hit fails the sweep.
 - 7.3 Telemetry first, observe-only, ≥7 days vs provider dashboards.
 - 7.4 Then enforcement, then breakers after alert delivery is verified.
 - 7.5 **Phase 2.1 rollout order (corrects Codex's 7.5):** deploy the callable
