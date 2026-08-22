@@ -304,9 +304,33 @@ under a 🛑 heading, and lists what the self-review actually caught.
   by running `codex exec review --base 37720619` either from Windows or from a
   cloud session started after the change.
 
-**ANSWERED 2026-08-22: Kevin chose (d).** It is not applied yet and no session
-can apply it. Until it is — and until a codex round runs over `37720619..HEAD` —
-these six stand as (a): merged, with the gate recorded unmet in six PR bodies.
+**ANSWERED 2026-08-22: Kevin chose (d).** ✅ **AND IT IS NOW DONE — THIS
+QUESTION IS CLOSED.** Kevin applied it, and the fix reached even a session that
+was already running: `api.openai.com` is open and `OPENAI_API_KEY` is set.
+
+**Two setup facts it still needed**, each of which costs a failed round if you
+skip it:
+
+1. The CLI does not read `OPENAI_API_KEY` by itself — 401 until
+   `printenv OPENAI_API_KEY | codex login --with-api-key`.
+2. The API project does not carry codex's default model — pin it with
+   `-m gpt-5.3-codex`.
+
+**(b) then closed this one, as predicted.** Two rounds, both clean, both over
+real code diffs rather than docs:
+
+| round | range | covers | result |
+|---|---|---|---|
+| 1 | `37720619..6df345a5` | all six PRs — 40 files, +2805/−319 | clean |
+| 2 | `8455ec53..40932eab` | #506–#508, the three that change behaviour | clean |
+
+Round 2 was targeted deliberately: §4 below names the proxy pick as the
+artifact most worth a second model, and #508 is the authorization-adjacent one.
+
+⚠️ **WHAT THIS DOES NOT DO.** It does not clear §5's two named defects, and it
+does not rewrite the six merged PR bodies and commit messages, which still
+record the gate as unmet. That was true when they were written and commit
+messages cannot be corrected; this page is the correction.
 
 ---
 
