@@ -1125,3 +1125,71 @@ describe('the Current Picks grid renders pool-wide progress, and hides it when u
     expect(dbsrc).toContain('progress?: { complete: number; total: number };');
   });
 });
+
+/**
+ * The "List Pool Publicly" toggle reaches the field Browse reads.
+ *
+ * `src/__tests__/browsePublicListing.test.ts` proves `publicListingUpdate`
+ * produces a payload that moves `isPubliclyListed`; it cannot prove
+ * `NFLManagerView` SENDS it. That gap is the whole defect: the toggle wrote
+ * `settings.isListedPublic` for months while `isPubliclyListed` read the
+ * top-level `isPublic`, so a host could turn listing off and stay listed.
+ *
+ * Coarse source greps, same convention as the blocks above.
+ */
+describe('NFL manager — the public-listing toggle writes the top-level field', () => {
+  const FILE = 'src/components/NFLPoolDashboard/NFLManagerView.tsx';
+  const src = readFileSync(resolve(root, FILE), 'utf8');
+
+  /**
+   * The `updatePoolSettings` call, from the callee to its closing `});`. Scoped
+   * rather than searched file-wide so a stray `isPublic` mention elsewhere —
+   * a comment, a different handler — cannot satisfy the guard.
+   */
+  const savePayload = (source: string): string => {
+    const start = source.indexOf('dbService.updatePoolSettings(');
+    if (start < 0) return '';
+    const end = source.indexOf('\n      });', start);
+    return end < 0 ? source.slice(start) : source.slice(start, end);
+  };
+
+  it('sends the listing change at the TOP LEVEL of the update payload', () => {
+    const payload = savePayload(src);
+    expect(payload, 'the updatePoolSettings call was not found — did it move?').not.toBe('');
+    // `...listing.top` or a literal `isPublic:` — either reaches the field
+    // `isPubliclyListed` and firestore.rules' Browse LIST rule read.
+    expect(payload).toMatch(/\.\.\.\s*listing\.top|isPublic\s*:/);
+  });
+
+  it('builds BOTH halves from the one helper, so they cannot drift apart', () => {
+    expect(src).toMatch(/publicListingUpdate\s*\(/);
+    expect(src).toMatch(/publicListingToggleValue\s*\(/);
+    expect(src).toMatch(/utils\/publicListing/);
+    // The settings mirror is still written — dropping it would silently change
+    // what a legacy pool's toggle reads back on the next page load.
+    expect(src).toMatch(/\.\.\.\s*listing\.settings/);
+  });
+
+  it('the greps actually discriminate the fixed payload from the broken one', () => {
+    // A guard that matches everything looks identical to a guard that passes.
+    // This is the payload as it shipped, verbatim, and it must NOT satisfy the
+    // assertion above.
+    const broken = [
+      "      await dbService.updatePoolSettings(pool.id, {",
+      "        name: poolName,",
+      "        managerName: editManagerName,",
+      "        contactEmail: editContactEmail,",
+      "        contactPhone: editContactPhone,",
+      "        contactMethod: editContactMethod,",
+      "        settings: updatedSettings",
+      "      });",
+    ].join('\n');
+    expect(savePayload(broken)).not.toMatch(/\.\.\.\s*listing\.top|isPublic\s*:/);
+
+    const fixed = broken.replace(
+      '        settings: updatedSettings',
+      '        ...listing.top,\n        settings: updatedSettings',
+    );
+    expect(savePayload(fixed)).toMatch(/\.\.\.\s*listing\.top|isPublic\s*:/);
+  });
+});

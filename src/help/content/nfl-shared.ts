@@ -188,6 +188,12 @@ export const NFL_SHARED_PLACEMENTS: readonly HelpPlacement[] = [
   { topic: 'settings.lockBufferMinutes', page: 'pool.nfl.manager.settings', section: 'settings', order: 3 },
   { topic: 'settings.entryFee', page: 'pool.nfl.manager.settings', section: 'settings', order: 1 },
   { topic: 'settings.maxEntriesPerUser', page: 'pool.nfl.manager.settings', section: 'settings', order: 2 },
+  // Placed here only once the manager's toggle actually moved the listing.
+  // Until then the control wrote `settings.isListedPublic` while Browse read
+  // the top-level `isPublic`, so this copy would have promised, beside a live
+  // control, something that control did not do — see the topic in
+  // `wizard-shared.ts`.
+  { topic: 'isPublic', page: 'pool.nfl.manager.settings', section: 'settings', order: 4 },
 
   { topic: 'nfl.manager.settingsLock', page: 'pool.nfl.manager.overview', section: 'general', order: 0 },
 ];

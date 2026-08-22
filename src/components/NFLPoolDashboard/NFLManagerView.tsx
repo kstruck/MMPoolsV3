@@ -14,6 +14,7 @@ import { PaymentLedgerNFL } from './PaymentLedgerNFL';
 import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
+import { publicListingToggleValue, publicListingUpdate } from '../../utils/publicListing';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { buildPoolRoster, hasCompletePicks, memberOutstanding, duesRates } from '../../utils/poolRoster';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
@@ -286,7 +287,12 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const currentMaxEntries = effectiveMaxEntriesPerUser(settings);
   const [maxEntriesPerUser, setMaxEntriesPerUser] = useState<number>(currentMaxEntries);
   const [paymentInstructions, setPaymentInstructions] = useState<string>(settings.paymentInstructions || '');
-  const [isListedPublic, setIsListedPublic] = useState<boolean>(settings.isListedPublic ?? false);
+  // Shows the host's recorded preference, falling back to the field Browse
+  // actually reads for a pool that never got the mirror — see
+  // `publicListingToggleValue`. Reading `settings.isListedPublic` alone made the
+  // toggle claim OFF on such a pool, and the save below would then have
+  // de-listed it without anybody asking.
+  const [isListedPublic, setIsListedPublic] = useState<boolean>(publicListingToggleValue(castPool));
 
   const [editManagerName, setEditManagerName] = useState(pool.managerName || '');
   const [editContactEmail, setEditContactEmail] = useState(pool.contactEmail || '');
@@ -658,11 +664,17 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     setIsSavingSettings(true);
     setSettingsFeedback(null);
     try {
+      // Both halves of the listing change come from ONE call, because writing
+      // one and forgetting the other is exactly the defect this closes: this
+      // save used to send `settings.isListedPublic` alone while Browse reads the
+      // top-level `isPublic`, so the toggle moved nothing.
+      const listing = publicListingUpdate(isListedPublic);
+
       // Build updated settings based on pool type
       let updatedSettings: Record<string, unknown> = {
         entryFee,
         paymentInstructions,
-        isListedPublic,
+        ...listing.settings,
         // Sent on every save; the server strips a value equal to the pool's
         // effective max (absent ⇒ 1) as a no-op, so this costs nothing until
         // it is actually raised (PLAN-MULTI-ENTRY D8).
@@ -736,6 +748,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         contactEmail: editContactEmail,
         contactPhone: editContactPhone,
         contactMethod: editContactMethod,
+        // TOP-LEVEL, next to the settings blob rather than inside it. This is
+        // the field `isPubliclyListed` reads and the one `firestore.rules` uses
+        // to allow the Browse LIST query; `classifyUpdateKey` puts it in the
+        // `lifecycle` group, which is editable in every phase.
+        ...listing.top,
         settings: updatedSettings
       });
       setSettingsFeedback({ type: 'success', message: 'Pool settings saved successfully!' });
