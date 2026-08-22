@@ -149,10 +149,12 @@
 > available before anything is revealed"* when for them it is not.
 >
 > ⚠️ **STILL OUTSTANDING FROM THE MORNING LIST:** step 6 — confirm
-> `system/config.nflFrozenSpreadBackfill.enabled` is back to `false` in the
-> Firebase console. And **Tuesday is unchanged**: `nflSpreadLock` is still
-> `{enabled: true, dryRun: TRUE}`, the flip is **Mon 2026-08-24**, the freeze
-> fires on **app week 4** Tue 2026-08-25 09:00 ET and will almost certainly refuse.
+> ✅ **BOTH CLOSED 2026-08-21, confirmed by Kevin in the Firebase console:**
+> `nflFrozenSpreadBackfill` is `{enabled: false, dryRun: false}` — disarmed, the
+> migration is done — and `nflSpreadLock` is `{enabled: true, dryRun: FALSE}`,
+> **ARMED**, three days ahead of the planned Mon 2026-08-24 flip. The freeze
+> still fires on **app week 4** Tue 2026-08-25 09:00 ET and will almost
+> certainly refuse — see the top box.
 
 > ## 🟢 2026-08-22 — **FIVE NFL DASHBOARD DISPLAY DEFECTS FIXED. ONE COOLIFY REBUILD OWED, NOTHING ELSE.**
 >
@@ -198,6 +200,8 @@
 > an auth token this session may not extract. **Step 6 of the morning doc is
 > Kevin's** — the migration is done (33/33) so it should read `false`.
 >
+> 🛑 **SUPERSEDED 2026-08-21 — `nflSpreadLock` IS NOW `{enabled: true, dryRun: FALSE}`, ARMED.** Kevin confirmed both flips in the Firebase console; the top box is the current state. The sentence below was true when written and is kept for the record. **Do not read a `dryRun` value off this line.**
+>
 > ⚠️ **TUESDAY IS UNCHANGED.** `system/config.nflSpreadLock` is still
 > `{enabled: true, dryRun: TRUE}`. The flip to `dryRun: false` is **Mon
 > 2026-08-24**; the freeze fires on **app week 4** Tue 2026-08-25 09:00 ET and will
@@ -226,6 +230,8 @@
 > `UNAPPROVED_FROZEN_SPREAD_CHANGE`, 0 `SLATE_KEY_MISSING`, 0 errors.** That is the
 > failure mode this plan aimed a detector at its own mechanism four separate times
 > for — confirmed not happening, on the detector's first real run.
+>
+> 🛑 **SUPERSEDED 2026-08-21 — `nflSpreadLock` IS NOW `{enabled: true, dryRun: FALSE}`, ARMED.** Kevin confirmed both flips in the Firebase console; the top box is the current state. The sentence below was true when written and is kept for the record. **Do not read a `dryRun` value off this line.**
 >
 > ⚠️ **`system/config.nflSpreadLock` IS STILL `{enabled: true, dryRun: true}`.**
 > The freeze is deployed but held DRY. A `runNFLSpreadFreeze` LIVE click on
@@ -1257,7 +1263,9 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 >
 > ✅ **Auto-scoring is OFF and stays off.** `system/config.nflAutoScore` unset;
 > `nflFinalize` and `nflSpreadLock` `{enabled:true, dryRun:true}`; `nflDeepSweep`
-> unset. `syncNFLScoresJob` (5-min, no kill switch) IS live — score INGESTION is
+> unset. *(🛑 Every one of those three values is now STALE — auto-scoring went
+> live 2026-08-09 and `nflSpreadLock` was ARMED 2026-08-21. Historical record
+> only; read the top box.)* `syncNFLScoresJob` (5-min, no kill switch) IS live — score INGESTION is
 > automatic, GRADING is not.
 
 > ## 🏈 STOP POINT **2026-08-06** — **REBUILD DONE AND VERIFIED PER PR; ALL FOUR QUEUES EMPTY**; functions unchanged at `1105392`

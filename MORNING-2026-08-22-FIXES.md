@@ -11,7 +11,10 @@ It owes **a Coolify rebuild of `www` and nothing else**.
 
 ✅ **UPDATE 2026-08-21 — KEVIN RAN STEPS 1–5. THE REBUILD IS LIVE AND THE FIXES
 ARE CONFIRMED IN PRODUCTION.** Issues 1, 2 and 4 verified by Kevin on the live
-site. **Step 6 (`nflFrozenSpreadBackfill.enabled`) is still outstanding.** Three
+site. **Step 6 is now DONE too** — Kevin confirmed `nflFrozenSpreadBackfill`
+reads `{enabled: false, dryRun: false}` and `nflSpreadLock` reads
+`{enabled: true, dryRun: FALSE}` in the Firebase console on 2026-08-21, so the
+freeze is **ARMED**. Nothing on this list is outstanding. Three
 verdicts changed:
 
 - **Issue 6 is CANCELLED, by Kevin.** *"Buttons still not working but only in
