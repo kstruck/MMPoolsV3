@@ -130,9 +130,17 @@ export function fullReveal(pool: RevealPool | undefined, games: RevealGame[]): W
 /**
  * How many of this week's games a member has a saved pick for.
  *
- * Commissioner-only (D1): it is what the roster's completeness column and the
- * reminder targeting need — "picked 3 of 16" is a different question from "has
- * picked at all", and only the second is safe to tell the whole pool.
+ * NO LONGER COMMISSIONER-ONLY (Kevin, 2026-08-22 —
+ * PLAN-MEMBER-SET-COLUMN.md). D1 restricted it on the reasoning that
+ * "picked 3 of 16" is a different question from "has picked at all", and only
+ * the second is safe to tell the whole pool. That distinction is real and the
+ * ruling went the other way on it: the count carries no pick CONTENT, and
+ * withholding it left members reading a blank Set column from Tuesday to the
+ * last kickoff — the entire window in which it is useful.
+ *
+ * The function itself is unchanged. Only who receives its result changed, and
+ * that decision lives at the call site in `nflPickReveal.ts`, where the
+ * reveal boundary is.
  *
  * `picks` is the raw entry map: keyed by gameId for pick'em, by week number for
  * Survivor/Margin (numeric keys arrive as strings out of Firestore, hence the
@@ -164,10 +172,14 @@ export interface PickProgress {
  * "12 of 16 players have their picks in" — `PLAN-MEMBER-PICK-PROGRESS`.
  *
  * Ungated: `getPoolPicks` returns this identically to a participant, a
- * commissioner and a SUPER_ADMIN. It is the aggregate half of the question K1
- * closed, and `weekPickCount`'s own header above drew the line — *"'picked 3 of
- * 16' is a different question from 'has picked at all', and only the second is
- * safe to tell the whole pool."* Per-member counts are still commissioner-only.
+ * commissioner and a SUPER_ADMIN. It was the aggregate half of the question K1
+ * closed; the per-member half is ungated too as of 2026-08-22
+ * (PLAN-MEMBER-SET-COLUMN.md), so the two now agree rather than the aggregate
+ * being the only participation fact a member could read.
+ *
+ * This one is still the safer of the two and stays worth having on its own: it
+ * names nobody at all, and the grid renders it in the header where a member
+ * looks before scanning rows.
  *
  * 🛑 BOTH HALVES OF THE FRACTION COME FROM ONE SET, `playerUids`, AND THAT IS THE
  * WHOLE DESIGN. Fifteen rounds of adversarial review kept finding versions where

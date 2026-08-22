@@ -17,11 +17,15 @@ interface NFLStandingsProps {
   /** Signed-in viewer, so their own row can show their own picks and be badged. */
   viewerUid?: string;
   /**
-   * uid → games picked this week, from `getPoolPicks`. Commissioner surfaces
-   * only, and it carries NO pick content — it is what the Pick'em column needs
-   * to say "4 of 16 Picks Set" before anything is revealed
-   * (PLAN-COMMISSIONER-BLIND-PICKS D1). Absent for ordinary members, whose
-   * column falls back to the Hidden / No selection marker.
+   * uid → games picked this week, from `getPoolPicks`. It carries NO pick
+   * content — it is what the Pick'em column needs to say "4 of 16 Picks Set"
+   * before anything is revealed (PLAN-COMMISSIONER-BLIND-PICKS D1).
+   *
+   * ⚠️ NO LONGER COMMISSIONER-ONLY (Kevin, 2026-08-22 —
+   * PLAN-MEMBER-SET-COLUMN.md). Members receive it too, so this column fills in
+   * for them during the week instead of falling back to the Hidden marker. It
+   * is still absent for a DEPARTED player when a member is looking (D7/K8), and
+   * absent entirely when the reveal has not arrived.
    */
   pickCounts?: Record<string, number>;
   /**
