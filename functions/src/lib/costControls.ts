@@ -35,14 +35,47 @@ export interface CostControlsConfig {
     alerts?: { thresholds?: number[] };
 }
 
+/**
+ * Process-level cache with a short TTL (codex round 5).
+ *
+ * WHY: `sendCourierSMS` consults the switch on EVERY send, and the reminder
+ * passes call it once per recipient in a loop — so an uncached read meant one
+ * `system/config` get per member per run. Spending N Firestore reads to check a
+ * cost-control switch is the sort of thing this plan exists to stop.
+ *
+ * THE TRADEOFF, stated plainly: flipping the switch in the Firestore console
+ * takes up to TTL_MS to take effect on an already-warm instance. That is
+ * acceptable for THIS switch — it turns a feature off for a period, it is not
+ * an emergency stop mid-incident — and 60s is short enough that a human
+ * flipping a flag and then watching for the effect will not be confused. If a
+ * future switch needs immediate effect, read it uncached rather than shortening
+ * this for everyone.
+ *
+ * Failures are NOT cached: a Firestore blip must not pin the answer to
+ * fail-closed for a minute after it recovers.
+ */
+const TTL_MS = 60_000;
+let cached: { at: number; value: CostControlsConfig | null } | null = null;
+
+/** Test seam — drops the cache so a test can change the config mid-run. */
+export function __resetCostControlsCache(): void {
+    cached = null;
+}
+
 async function loadCostControls(): Promise<CostControlsConfig | null> {
+    const now = Date.now();
+    if (cached && now - cached.at < TTL_MS) return cached.value;
     try {
         const snap = await admin.firestore().collection("system").doc("config").get();
-        if (!snap.exists) return null;
-        const raw = snap.data() as { costControls?: CostControlsConfig } | undefined;
-        return raw?.costControls ?? null;
+        const raw = snap.exists
+            ? (snap.data() as { costControls?: CostControlsConfig } | undefined)
+            : undefined;
+        const value = raw?.costControls ?? null;
+        cached = { at: now, value };
+        return value;
     } catch (e) {
-        // Fail CLOSED: an unreadable config denies optional paid work.
+        // Fail CLOSED: an unreadable config denies optional paid work. Not
+        // cached — see above.
         console.warn("[costControls] config read failed; treating paid features as disabled", e);
         return null;
     }

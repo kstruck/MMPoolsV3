@@ -24,6 +24,7 @@ const h = vi.hoisted(() => ({
   // What system/config.get() resolves to. Each test sets this.
   configDoc: { exists: true, data: () => ({}) } as ConfigDoc,
   shouldThrow: false,
+  reads: 0,
 }));
 
 vi.mock('firebase-admin', () => {
@@ -31,6 +32,7 @@ vi.mock('firebase-admin', () => {
     collection: () => ({
       doc: () => ({
         get: async () => {
+          h.reads++;
           if (h.shouldThrow) throw new Error('Firestore unavailable');
           return h.configDoc;
         },
@@ -40,16 +42,21 @@ vi.mock('firebase-admin', () => {
   return { default: { firestore }, firestore };
 });
 
-const { isMemberSmsEnabled } = await import('../lib/costControls');
+const { isMemberSmsEnabled, __resetCostControlsCache } = await import('../lib/costControls');
 
 const setConfig = (costControls: Record<string, unknown> | undefined) => {
   h.shouldThrow = false;
   h.configDoc = { exists: true, data: () => ({ costControls }) };
+  // Every test below wants its OWN config observed, so the cache is dropped
+  // here rather than in each case.
+  __resetCostControlsCache();
 };
 
 beforeEach(() => {
   h.shouldThrow = false;
   h.configDoc = { exists: true, data: () => ({}) };
+  h.reads = 0;
+  __resetCostControlsCache();
 });
 
 describe('isMemberSmsEnabled — deny by default, in every failure shape', () => {
@@ -79,6 +86,7 @@ describe('isMemberSmsEnabled — deny by default, in every failure shape', () =>
 
   it('denies when the whole config doc is absent', async () => {
     h.configDoc = { exists: false, data: () => undefined };
+    __resetCostControlsCache();
     expect(await isMemberSmsEnabled()).toBe(false);
   });
 
@@ -87,12 +95,40 @@ describe('isMemberSmsEnabled — deny by default, in every failure shape', () =>
     // failure must never block legitimate actions"). Here the same failure must
     // deny: an outage must not be able to enable spend.
     h.shouldThrow = true;
+    __resetCostControlsCache();
     expect(await isMemberSmsEnabled()).toBe(false);
   });
 
   it('denies on a truthy-but-not-true value (no coercion)', async () => {
     setConfig({ sms: { enabled: 'yes' } });
     expect(await isMemberSmsEnabled()).toBe(false);
+  });
+});
+
+describe('the switch is cached — a reminder blast is not N config reads', () => {
+  // The reminder passes call sendCourierSMS once per RECIPIENT, and it consults
+  // the switch on every send. Uncached, that was one system/config read per
+  // member per run — spending Firestore reads to check a cost-control switch,
+  // which is the shape of thing this plan exists to stop (codex round 5).
+
+  it('reads the config once across many sends', async () => {
+    setConfig({ sms: { enabled: true } });
+    h.reads = 0;
+    for (let i = 0; i < 25; i++) expect(await isMemberSmsEnabled()).toBe(true);
+    expect(h.reads, 'the switch is being re-read per send').toBe(1);
+  });
+
+  it('does NOT cache a failure — a blip must not pin fail-closed after it clears', async () => {
+    // Caching the error would keep answering "disabled" for the whole TTL after
+    // Firestore recovered, turning a momentary blip into a minute of silently
+    // dropped member SMS.
+    h.shouldThrow = true;
+    __resetCostControlsCache();
+    expect(await isMemberSmsEnabled()).toBe(false);
+
+    h.shouldThrow = false;
+    h.configDoc = { exists: true, data: () => ({ costControls: { sms: { enabled: true } } }) };
+    expect(await isMemberSmsEnabled(), 'the failure was cached').toBe(true);
   });
 });
 

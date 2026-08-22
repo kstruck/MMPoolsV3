@@ -158,6 +158,13 @@ describe('the webhook wires the decision in the right order (source-level)', () 
     // Every read FORM, not just `txn.get(` — `txn.getAll(` does not contain
     // `txn.get(` as a substring, so matching the single form would let the same
     // ordering bug back in through a different call (codex round 4).
+    // KNOWN LIMIT, accepted deliberately (codex round 5, finding 3 — rejected
+    // with reason). This does not see `txn['get'](…)`, an aliased handle, or a
+    // read performed inside a helper called from here. Going further means an
+    // AST pass or an emulator test that deliberately mis-orders a read, and
+    // neither is worth its weight against a tripwire: the regression that
+    // actually happened was an ordinary `txn.get(` added below a write, this
+    // catches that, and the exotic forms are not idioms this file uses.
     const reads = [...fn.matchAll(/\btxn\.(get|getAll|getQuery)\s*\(/g)];
     expect(reads.length, 'no transaction reads found — the marker is stale').toBeGreaterThan(0);
     const lastRead = reads[reads.length - 1].index;

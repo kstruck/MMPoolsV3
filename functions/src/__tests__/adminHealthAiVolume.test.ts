@@ -31,12 +31,16 @@ const fakeDb = (outcome: { count: number } | { throws: string }) => ({
   collectionGroup: (name: string) => {
     expect(name).toBe('ai_requests');
     return {
-      where: (field: string, op: string) => {
+      where: (field: string, op: string, value: number) => {
         // Pins the query the fieldOverrides entry in firestore.indexes.json was
         // declared for. If the query changes shape, the declared index no
         // longer serves it and production throws FAILED_PRECONDITION forever.
         expect(field).toBe('createdAt');
         expect(op).toBe('>=');
+        // …and the WINDOW, so a silent 24h → 7d drift cannot pass while the
+        // label still says "last 24h" (codex round 5). Loose by a second so a
+        // clock tick between the call and the assertion cannot flake it.
+        expect(Math.abs(value - (Date.now() - 24 * 60 * 60 * 1000))).toBeLessThan(1000);
         return {
           count: () => ({
             get: async () => {
