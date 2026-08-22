@@ -1193,3 +1193,45 @@ describe('NFL manager — the public-listing toggle writes the top-level field',
     expect(savePayload(fixed)).toMatch(/\.\.\.\s*listing\.top|isPublic\s*:/);
   });
 });
+
+/**
+ * The commissioner proxy pick sends the payload shape its pool type needs.
+ *
+ * `src/utils/proxyPickPayload.test.ts` proves the helper produces a payload the
+ * callable accepts; it cannot prove `NFLManagerView` USES it. That gap is the
+ * defect: the component built a week-keyed map inline for all three NFL types,
+ * and Pick'em reads those keys as game ids.
+ */
+describe('NFL manager — the proxy pick is keyed per pool type', () => {
+  const FILE = 'src/components/NFLPoolDashboard/NFLManagerView.tsx';
+  const src = readFileSync(resolve(root, FILE), 'utf8');
+
+  /** The literal that shipped, and that must not come back. */
+  const INLINE_WEEK_KEYED = /proxyPick\([^;]{0,200}\{\s*\[\s*proxyWeek\s*\]\s*:/;
+
+  it('builds the payload through the shared helper, not inline', () => {
+    expect(src).toMatch(/proxyPickPayload\s*\(/);
+    expect(src).toMatch(/utils\/proxyPickPayload/);
+    expect(src).not.toMatch(INLINE_WEEK_KEYED);
+  });
+
+  it('sends what the helper returned', () => {
+    expect(src).toMatch(/dbService\.proxyPick\([^;]*payload\.picks/);
+  });
+
+  it('refuses the payload BEFORE asking the commissioner to confirm', () => {
+    // A slate we cannot key a pick against must not get as far as a dialog that
+    // promises the pick will be recorded.
+    const handler = src.slice(src.indexOf('const handleProxyPick'), src.indexOf('const handleCancelPool'));
+    expect(handler).toContain('proxyPickPayload(');
+    expect(handler.indexOf('proxyPickPayload(')).toBeLessThan(handler.indexOf('toast.confirm'));
+  });
+
+  it('the grep actually catches the payload as it shipped', () => {
+    // A guard that matches nothing looks identical to a guard that passes.
+    const shipped =
+      "      await dbService.proxyPick(pool.id, proxyWeek, targetUid, { [proxyWeek]: proxyTeam }, proxyReason.trim(), targetEntryIndex);";
+    expect(shipped).toMatch(INLINE_WEEK_KEYED);
+    expect(shipped).not.toMatch(/dbService\.proxyPick\([^;]*payload\.picks/);
+  });
+});
