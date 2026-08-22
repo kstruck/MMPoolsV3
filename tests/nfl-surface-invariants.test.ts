@@ -1235,3 +1235,66 @@ describe('NFL manager — the proxy pick is keyed per pool type', () => {
     expect(shipped).not.toMatch(/dbService\.proxyPick\([^;]*payload\.picks/);
   });
 });
+
+/**
+ * The two inert scoring fields stay off every surface.
+ *
+ * `settings.pointsPerPick` and `settings.primetimeBonus` have never been read
+ * by anything that scores — `scorePickemEntry` awards exactly 1 point per
+ * correct pick on a non-confidence pool — yet the manager form set them and two
+ * member-facing surfaces displayed them as what a pick was worth. A pool set to
+ * 3 told its members three and paid one, and `JoinPool` said it to somebody
+ * deciding whether to hand over an entry fee.
+ *
+ * Kevin ruled on 2026-08-22: delete the controls and the rows, do not honour
+ * the fields (PLAN-DELETE-INERT-PICKEM-SCORING.md).
+ *
+ * THE FAILURE MODE THIS GUARDS IS RE-ADDITION, not the deletion itself. The
+ * fields are still in the schema and still on stored pools, so nothing stops a
+ * future edit from rendering one again — and it would look perfectly
+ * reasonable, exactly as it did the first time.
+ */
+describe('the inert Pick’em scoring fields are not displayed anywhere', () => {
+  const SURFACES = [
+    'src/components/NFLPoolDashboard/NFLManagerView.tsx',
+    'src/components/NFLPoolDashboard/NFLPoolRules.tsx',
+    'src/components/JoinPool.tsx',
+  ];
+
+  /**
+   * A READ of either field. Deliberately matches `settings.pointsPerPick`,
+   * `s.primetimeBonus`, `settings.primetimeBonus?.monday` and a destructured
+   * `pointsPerPick` — anything that gets the value out of a pool. Comments
+   * naming the fields are stripped first, because this file's own explanation
+   * of WHY they are gone must not trip the guard that keeps them gone.
+   */
+  const READ = /(?:\.|\{\s*)(?:pointsPerPick|primetimeBonus)\b/;
+
+  const stripComments = (src: string) =>
+    src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+
+  it.each(SURFACES)('%s reads neither field', file => {
+    const code = stripComments(readFileSync(resolve(root, file), 'utf8'));
+    const hits = code.match(new RegExp(READ.source, 'g')) ?? [];
+    expect(hits, `${file} must not read pointsPerPick or primetimeBonus — they are inert`).toEqual([]);
+  });
+
+  it('the guard catches the code that was removed, and tolerates the comments left behind', () => {
+    // A guard that matches nothing looks identical to a guard that passes.
+    // These are the exact reads that were deleted.
+    expect(stripComments("const ptsPerPick = s.pointsPerPick ?? 1;")).toMatch(READ);
+    expect(stripComments("{settings.pointsPerPick ?? 1} pt")).toMatch(READ);
+    expect(stripComments("{settings.primetimeBonus?.thursday && (")).toMatch(READ);
+    expect(stripComments("const [pointsPerPick, setPointsPerPick] = useState(settings.pointsPerPick ?? 1);")).toMatch(READ);
+
+    // …and the surviving explanations, which name the fields on purpose, do not
+    // trip it. Without this the only way to keep the guard green would be to
+    // delete the record of why they are gone.
+    expect(stripComments("  // NOT sent: `pointsPerPick` / `primetimeBonus`.")).not.toMatch(READ);
+    expect(stripComments("  /* They read `settings.pointsPerPick` and\n   `settings.primetimeBonus`, which nothing reads. */")).not.toMatch(READ);
+    expect(stripComments("      {/* reads `settings.pointsPerPick` — removed */}")).not.toMatch(READ);
+  });
+});

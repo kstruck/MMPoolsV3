@@ -236,19 +236,30 @@ describe('T9 — the allowlist rows it closed are closed', () => {
   });
 
   /**
-   * The one row T9 did not close, asserted rather than left as prose.
+   * The row T9 could not close, now SETTLED — and the assertion flipped with
+   * it rather than deleted.
    *
-   * `settings.pointsPerPick` is INERT: `scorePickemEntry` awards exactly 1 per
-   * correct pick and never reads it, while the manager form sets it and the
-   * rules page shows it to members as what a pick is worth. Writing help copy
-   * for it would either repeat that claim or document the bug, so the row
-   * stays with the finding written into it. Delete this test when Kevin's
-   * decision lands — and if the row is removed without copy being written, the
-   * schema audit fails, which is the backstop.
+   * `settings.pointsPerPick` is INERT: `scorePickemEntry` awards exactly 1
+   * point per correct pick and never reads it, while the manager form set it
+   * and two member-facing surfaces showed the chosen number as what a pick was
+   * worth. Kevin ruled on 2026-08-22: delete the controls and the rows, do not
+   * honour the field in the scorer, because honouring it would retroactively
+   * rewrite already-scored weeks. See PLAN-DELETE-INERT-PICKEM-SCORING.md.
+   *
+   * The row stays PERMANENT rather than being removed: `shared/schemas/nfl.ts`
+   * still accepts the field — which is what keeps a stored value on an
+   * existing pool from being rejected — and the schema audit requires every
+   * schema path to be either explained or allowlisted. There is no control
+   * left for help copy to explain.
    */
-  it('records the one row it could not close, with its reason', () => {
-    expect(SCHEMA_PATH_ALLOWLIST['settings.pointsPerPick']).toMatch(/^T9-BLOCKED:/);
-    expect(SCHEMA_PATH_ALLOWLIST['settings.pointsPerPick']).toMatch(/INERT/);
+  it('records the settled reason for the inert scoring field', () => {
+    const reason = SCHEMA_PATH_ALLOWLIST['settings.pointsPerPick'];
+    expect(reason).toMatch(/^PERMANENT\b/);
+    expect(reason).toMatch(/INERT/);
+    // The two halves of Kevin's ruling, so a future edit that softens either
+    // one has to do it deliberately.
+    expect(reason).toMatch(/DELETED/);
+    expect(reason).toMatch(/shared\/schemas\/nfl\.ts/);
   });
 
   it('the isPublic topic is what accounts for settings.isListedPublic', () => {

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import {
   Settings, DollarSign, CheckCircle, XCircle, Users, Activity,
   Play, Edit3, Save, Lock, Unlock, AlertTriangle, ShieldCheck, BellRing,
-  ChevronDown, ChevronUp, Clock, UserCog, Ban, Trophy, Moon, Star, Zap
+  ChevronDown, ChevronUp, Clock, UserCog, Ban
 } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { getUserMessage } from '../../utils/errorMessages';
@@ -375,10 +375,16 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     // behind an empty editor. (codex r5, the same lag lastKnownSplitRef exists for.)
     return (lastKnownWeeklyPlacesRef.current || settings.weeklyPayouts) ? { weeklyPayouts: null } : {};
   };
-  const [pointsPerPick, setPointsPerPick] = useState<number>(settings.pointsPerPick ?? 1);
-  const [thursdayBonus, setThursdayBonus] = useState<number>(settings.primetimeBonus?.thursday ?? 0);
-  const [sundayNightBonus, setSundayNightBonus] = useState<number>(settings.primetimeBonus?.sundayNight ?? 0);
-  const [mondayBonus, setMondayBonus] = useState<number>(settings.primetimeBonus?.monday ?? 0);
+  // `settings.pointsPerPick` and `settings.primetimeBonus` USED TO BE EDITED
+  // HERE, and neither has ever been read by anything that scores:
+  // `scorePickemEntry` awards exactly 1 point per correct pick on a
+  // non-confidence pool. Kevin's ruling, 2026-08-22 — delete the controls
+  // rather than honour the fields, because honouring them would retroactively
+  // rewrite already-scored weeks in any pool holding a non-1 value, mid-season,
+  // on a live scorer with money attached. See PLAN-DELETE-INERT-PICKEM-SCORING.md.
+  //
+  // The stored values are left exactly where they are. Deleting a control is
+  // not a data migration.
 
   // Survivor-specific
   const [maxStrikes, setMaxStrikes] = useState<number>(settings.maxStrikes ?? 0);
@@ -683,11 +689,6 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       };
 
       if (type === 'NFL_PICKEM') {
-        const primetimeBonus: Record<string, number> = {};
-        if (thursdayBonus > 0) primetimeBonus.thursday = thursdayBonus;
-        if (sundayNightBonus > 0) primetimeBonus.sundayNight = sundayNightBonus;
-        if (mondayBonus > 0) primetimeBonus.monday = mondayBonus;
-
         updatedSettings = {
           ...updatedSettings,
           confidenceMode,
@@ -706,8 +707,12 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           // an emptied editor sends.
           ...(payoutMode === 'HYBRID' ? weeklyPayoutsPatch() : {}),
           weeklyTiebreaker,
-          pointsPerPick,
-          ...(Object.keys(primetimeBonus).length > 0 ? { primetimeBonus } : { primetimeBonus: null }),
+          // NOT sent: `pointsPerPick` / `primetimeBonus`. The save used to
+          // rewrite both on every click, including clearing `primetimeBonus`
+          // to null — so an unrelated settings save could silently change a
+          // stored value nobody was editing. With the controls gone, a stored
+          // value is simply left alone (`flattenSettingsPatch` writes per key,
+          // so an omitted key is untouched rather than deleted).
         };
       } else if (type === 'NFL_SURVIVOR') {
         updatedSettings = {
@@ -1391,57 +1396,6 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 </p>
               </div>
 
-              {/* Scoring Configuration */}
-              <div className="bg-page border border-line rounded-lg p-5 space-y-5">
-                <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted flex items-center gap-1.5">
-                  <Trophy size={12} className="text-gold-600 dark:text-gold-400" /> Scoring Configuration
-                </p>
-
-                <div>
-                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1">Base Points Per Correct Pick</label>
-                  <p className="font-body text-[11px] text-faint mb-2">Default is 1. Increase to reward all correct picks more.</p>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="number"
-                      value={pointsPerPick}
-                      min={1}
-                      max={10}
-                      onChange={e => setPointsPerPick(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="num w-24 font-body bg-page border border-line rounded-md px-4 py-2 text-[color:var(--text)] font-bold text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
-                    />
-                    <span className="font-body text-muted text-xs font-bold">point(s) per correct pick</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1">Primetime Game Bonus Points</label>
-                  <p className="font-body text-[11px] text-faint mb-3">Flat bonus added on top of the base score for correct primetime picks. Set 0 to disable.</p>
-                  <div className="space-y-2.5">
-                    {[
-                      { label: 'Thursday Night Game (TNF)', icon: Moon, value: thursdayBonus, setter: setThursdayBonus },
-                      { label: 'Sunday Night Game (SNF)', icon: Star, value: sundayNightBonus, setter: setSundayNightBonus },
-                      { label: 'Monday Night Game (MNF)', icon: Zap, value: mondayBonus, setter: setMondayBonus },
-                    ].map(({ label, icon: RowIcon, value, setter }) => (
-                      <div key={label} className="flex items-center justify-between bg-card border border-line rounded-md px-4 py-2.5">
-                        <span className="font-body text-[color:var(--text)] text-xs font-bold inline-flex items-center gap-1.5">
-                          <RowIcon size={12} className="text-gold-600 dark:text-gold-400" /> {label}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            value={value}
-                            min={0}
-                            max={10}
-                            onChange={e => setter(Math.max(0, parseInt(e.target.value) || 0))}
-                            className="num w-16 font-body bg-page border border-line rounded-md px-3 py-1.5 text-[color:var(--text)] text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
-                          />
-                          <span className="num font-body text-faint text-[11px] w-20 text-right">{value > 0 ? `+${value} bonus pts` : 'disabled'}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 

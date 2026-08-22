@@ -111,12 +111,29 @@ export interface NFLPickemPool {
      * reading this field raw, or an unset pool changes behaviour on read.
      */
     weeklyTiebreaker?: WeeklyTiebreaker;
-    // Custom scoring options
-    pointsPerPick?: number; // base points awarded per correct pick (default: 1)
+    /**
+     * ⚠️ HISTORICAL AND INERT. Neither field has ever been read by anything
+     * that scores: `scorePickemEntry` awards exactly 1 point per correct pick
+     * on a non-confidence pool, and the confidence branch reads
+     * `entry.confidence`. The comments below described what they were MEANT to
+     * do; nothing implemented it.
+     *
+     * Every control and every member-facing display of them was deleted on
+     * 2026-08-22 (Kevin's ruling, PLAN-DELETE-INERT-PICKEM-SCORING.md): a pool
+     * set to 3 told its members three and paid one, and honouring the field
+     * instead would have retroactively rewritten already-scored weeks on a
+     * live scorer with money attached.
+     *
+     * They stay on the type because stored pool documents still carry them.
+     * A type that denied them would be lying in the other direction. DO NOT
+     * add a reader — that is weighted scoring, which is a feature with a plan
+     * and a migration, not a field to start honouring.
+     */
+    pointsPerPick?: number;
     primetimeBonus?: {
-      thursday?: number;    // bonus points added for correct Thursday Night Game pick
-      sundayNight?: number; // bonus points added for correct Sunday Night Game pick
-      monday?: number;      // bonus points added for correct Monday Night Game pick
+      thursday?: number;
+      sundayNight?: number;
+      monday?: number;
     };
   };
 
