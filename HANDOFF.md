@@ -1,5 +1,52 @@
 # HANDOFF — Session entry point
 
+> ## 🟢 2026-08-22 (overnight) — **SIX PRs MERGED. ONE DEPLOY OWED. THE REVIEW GATE DID NOT RUN.**
+>
+> **Read [MORNING-2026-08-22-OVERNIGHT.md](MORNING-2026-08-22-OVERNIGHT.md)** — its
+> §1 is the runbook and §3/§4 are the two rulings owed. It continues
+> `MORNING-2026-08-22-FIXES.md` and supersedes that doc's §7.
+>
+> 🛑 **`CLAUDE.md` §2c's cross-model review DID NOT RUN ON ANY OF THE SIX PRs.**
+> `codex` is not installed in the cloud environment that built them and there is
+> no OpenAI credential there — an environment limit, not a judgement that the
+> diffs did not need it. With qodo dormant that left §2c's second condition,
+> self-review, as the only one available. **Five are merged with the gate unmet
+> and named at the bottom of every PR body.** The morning doc's §3 is the ruling.
+>
+> 🛑 **ONE DEPLOY IS OWED, and only one: `--only functions` for #508.** Until it
+> runs, the Set column fix is merged and inert. Everything else needs the Coolify
+> `www` rebuild and nothing more. **Pull `main` in `D:\march-melee-pools` first** —
+> `firebase deploy` builds from local files.
+>
+> | PR | What | Deploy |
+> |---|---|---|
+> | **#504** | The NFL "List Pool Publicly" toggle now changes the Browse listing | Coolify |
+> | **#505** | `HelpCopy.template` can render — pool settings reach the help scope | Coolify |
+> | **#506** | The Pick'em proxy pick, which had never worked | Coolify |
+> | **#507** | Deleted the two inert Pick'em scoring controls (Kevin's ruling) | Coolify |
+> | **#508** | The picks grid's Set column is visible to members (Kevin, option A) | 🛑 **functions** |
+> | **#509** | T4 — the manager form's 33 labels → `FieldLabel` + help topics | Coolify |
+>
+> ✅ **`MORNING-2026-08-22-FIXES.md` §7's four help-system defects (a)–(d) are ALL
+> CLOSED**, and the last open `PLAN-HELP-SYSTEM` T9 coverage row with them.
+>
+> ⚠️ **#508 REVERSES K1 (2026-08-14) DELIBERATELY**, on Kevin's 2026-08-22
+> ruling. Pick CONTENT did not move — teams, confidence values and tie-breaker
+> predictions are all still behind the same allowlist. What DID change: a member
+> now sees, per named player, how many of the week's games they have picked. One
+> consequence worth knowing — a participant and a plain commissioner now receive
+> **identical** responses except for the departed-member filter, which is the only
+> difference left. `PLAN-MEMBER-SET-COLUMN.md` carries the inference analysis.
+>
+> 📌 **Nothing tonight touched the spread freeze.** `system/config.nflSpreadLock`
+> and `nflFrozenSpreadBackfill` are as Kevin left them on 2026-08-21, and Tuesday
+> 2026-08-25 is unchanged — see the box below.
+>
+> 📐 **Measured tonight, not carried over.** Baselines re-taken on `37720619`:
+> vitest 99/1616 → **101 files / 1742**; functions 112/1705 → **112/1708**;
+> emulator **34 files / 503**; lint **1340 problems, 0 errors — delta ZERO across
+> all six PRs**.
+
 > ## 🔴 2026-08-21 — **THE SPREAD FREEZE IS ARMED. A "LIVE" CLICK NOW ACTUALLY FREEZES.**
 >
 > Kevin confirmed both config flips on 2026-08-21:
