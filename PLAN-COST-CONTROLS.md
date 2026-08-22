@@ -14,7 +14,10 @@ spend) and **authorization** (`firestore.rules` `ai_requests`, new callables)._
   round on this plan before implementation — run it from Windows or from a cloud
   session started after Kevin's environment fix lands.
 - ⛔ Sweeps (`PLAN-COST-CONTROLS-SWEEPS.md`) not built — required before Phase 1+.
-- ⛔ **Kevin sign-off pending** on the DECISION NEEDED items in §Risks.
+- ✅ **Kevin signed off on D1–D5, 2026-08-22: all five approved as recommended.**
+  Resolutions recorded inline in §Risks; his D2 follow-ups (cap strategy math,
+  user-facing limit messaging, off-topic use prevention) are folded into
+  Phase 0.3, Phase 2.2 and the new Phase 3.5.
 - Nothing in this plan is implemented. No code changed in this PR.
 
 ## Kevin's decisions of record (2026-08-22)
@@ -28,6 +31,17 @@ spend) and **authorization** (`firestore.rules` `ai_requests`, new callables)._
 4. Retention: Kevin asked for a recommendation — see §Retention (carried as a
    DECISION NEEDED until he confirms).
 5. Start with Phase 0 (this document).
+6. **2026-08-22 (later): D1–D5 all approved as recommended.** Plus three D2
+   follow-up rulings:
+   - **Cap cadence is MONTHLY per pool**, not seasonal — a season-only cap
+     could be burned in week 1 and leave the addon dead for four months.
+   - **Users are told about limits at the limit, not in marketing** — a clear
+     in-app "usage limit reached, resets <when>" message plus a fair-use line
+     in the addon description; no advertised numbers.
+   - **The AI feature must resist off-topic use** (e.g. a manager using the
+     pool AI to build an app) — see Phase 3.5. Bounded-damage stance: no
+     prompt guard is airtight, so the quotas and the $5/pool-month breaker are
+     the real ceiling on what misuse can cost.
 
 ## Audit verification — what the Codex audit got right, and what it missed
 
@@ -122,7 +136,16 @@ cost surface. Out of scope here.
   alert, they do not stop spend** — automatic disablement is the internal circuit
   breaker (Phase 2.3), driven by our own estimated-spend counters, not by GCP.
 
-## Phase 0.3 — Caps (proposed; **DECISION NEEDED** to confirm numbers)
+## Phase 0.3 — Caps (✅ APPROVED as proposed — Kevin, 2026-08-22)
+
+The unit economics behind the numbers (prices are Phase 0.2-verify targets, not
+gospel): at Flash-Lite-class pricing (~$0.10/M input, $0.40/M output) a typical
+request with this codebase's large facts payloads (10–25K tokens in, ~1K out)
+costs **~$0.002–0.003**. The 400/pool/month quota therefore costs **~$0.80–1.20
+worst case** — the quotas are the binding control and land the addon at roughly
+**$4–5 cost per SEASON against $20 revenue (75–85% gross margin)**. The
+$5/pool-month dollar breaker exists as a backstop for pricing surprises (model
+price change, prompt bloat, a mis-pinned model), not as the day-to-day limiter.
 
 | Provider | Monthly cap | Alert ladder | At 100% |
 |---|---|---|---|
@@ -235,6 +258,31 @@ paid feature has a server-side limit and an emergency off switch.
   bracket facts currently include 60 entries with full picks and 40+ games;
   trim to what the answer needs.
 
+- 3.5 **Scope guard — keep the AI on pool business (Kevin, 2026-08-22).**
+  Layered, cheapest first:
+  (a) server-side cap on `question` length (~500 chars) in the Phase 2.1
+  callable — long enough for any real pool question, hostile to "write me an
+  app";
+  (b) harden `COMMISSIONER_SYSTEM_PROMPT` (`gemini.ts:135`) with an explicit
+  scope rule: answer ONLY questions about this pool's results, rules, standings
+  and disputes; anything else returns the schema's headline "Out of scope for
+  the AI Commissioner" with no other content;
+  (c) keep the forced JSON output schema (`gemini.ts:7-29`) — headline/bullets/
+  steps/confidence is a hostile format for code generation or general chat, and
+  is itself a meaningful deterrent;
+  (d) questions are already stored on the `ai_requests` doc and readable by
+  pool participants (`firestore.rules:499`) — social visibility plus the audit
+  trail discourages misuse; Phase 1 usage events make abusers findable.
+  Explicitly NOT building: an LLM-based topic classifier (a second paid call to
+  guard the first). Accepted residual risk: a determined user can phrase around
+  (b), but quotas cap the damage at ~$0.05/user/day and the breaker at
+  $5/pool/month — misuse is bounded, not merely discouraged.
+- 3.6 **User-facing limit messaging (Kevin, 2026-08-22):** no advertised
+  numbers; a fair-use sentence in the addon description; at the limit the UI
+  says which window is exhausted and when it resets ("The AI Commissioner has
+  reached its usage limit for today — resets at midnight ET"), distinct from
+  error states per Phase 4.5.
+
 **Exit gate:** no keystroke-driven route can invoke a paid provider; model and
 input/output bounds are explicit.
 
@@ -313,18 +361,23 @@ than inventing a number. Reconcile against invoices monthly (7.3).
   whichever is greater** (at $100/month scale, chasing smaller deltas costs more
   attention than it saves).
 
-## Risks / open questions — **DECISION NEEDED (Kevin)**
+## Risks / open questions — D1–D5 ✅ RESOLVED (Kevin, 2026-08-22, "Go with
+Recommendation" on all five)
 
-- **D1:** Pinned model choice (Phase 0.2 confirms candidates + prices; default
-  recommendation: cheapest current Flash-Lite-class model, upgrade only if answer
-  quality disappoints).
-- **D2:** Confirm cap numbers in Phase 0.3 (Gemini $50 internal / $100 GCP budget;
-  per-pool quotas incl. the added 400/month).
-- **D3:** Confirm the retention recommendation above.
-- **D4:** SMS kill-switch scope — member SMS off, ops + security-alert SMS stay on
-  (recommended), or everything off. Zero-deploy stopgap available today: Kevin
-  unsets `COURIER_AUTH_TOKEN`, all SMS becomes `'skipped'` (`smsService.ts:38`).
-- **D5:** Accept deferring Phase 5 (dev/prod project separation) to post-season.
+- **D1 ✅:** Pin the cheapest current Flash-Lite-class model (Phase 0.2 confirms
+  the exact id + price before implementation); upgrade only if answer quality
+  disappoints.
+- **D2 ✅:** Cap numbers approved as proposed (Gemini $50 internal / $100 GCP
+  budget; per-pool quotas incl. 400/month). Follow-up rulings: monthly-per-pool
+  cadence, limit messaging at the limit only, and the Phase 3.5 scope guard —
+  see decision-of-record #6.
+- **D3 ✅:** Retention as recommended — raw events 90 days (TTL), daily
+  aggregates 24 months, 10%/$5 variance threshold.
+- **D4 ✅:** Member-facing SMS off via the kill-switch; ops + security-alert SMS
+  stay exempt. Zero-deploy stopgap remains available: Kevin unsets
+  `COURIER_AUTH_TOKEN`, all SMS becomes `'skipped'` (`smsService.ts:38`).
+- **D5 ✅:** Phase 5 (dev/prod project separation) deferred to post-season;
+  stays a named open item.
 - Risk: estimated-spend counters drift from invoices → bounded by 7.3
   reconciliation and the variance rule above.
 - Risk: Phase 2.1's rules-deny before client cutover breaks paying pools →
