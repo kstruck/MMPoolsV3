@@ -30,6 +30,11 @@ import { resolve } from 'node:path';
  * a pre-existing defect of the wizard's fixed palette that predates the help
  * system and is not the tip's to fix. Naming it here beats asserting it, which
  * would only lock the bug in.
+ *
+ * KEVIN RULED ON IT, 2026-08-22: LEAVE IT. Offered leave-it / retheme the
+ * wizard / a one-class partial darkening just the labels, he chose the first,
+ * eleven days before the Hall of Fame game. So this is a settled decision
+ * rather than an open ticket — do not "fix" it in passing.
  */
 
 const root = resolve(__dirname, '..');
