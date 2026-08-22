@@ -152,8 +152,9 @@ describe('the help tip takes its colour from its label row', () => {
 /* ---------- the numeric half ---------- */
 
 describe('the inherited colours clear 3:1 on every themed surface', () => {
-  // Every background a `FieldLabel` row sits on. `--surface` is the focused
-  // input fill and the modal body; `--card` the panels; `--page` the app.
+  // Every themed background a `FieldLabel` row can sit on. `--surface` is the
+  // focused input fill (`CONTROL_BASE`'s `focus:bg-surface`) and the raised
+  // strips; `--card` the cards and the tooltip bubble; `--page` the app.
   const SURFACES = ['page', 'surface', 'card'] as const;
 
   // What a row can inherit: `tone="muted"` (every NFL manager label) and the
