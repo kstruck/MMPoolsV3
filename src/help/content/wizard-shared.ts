@@ -86,17 +86,15 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
     // separately. Voice rule 10 — one concept, one topic — so the second path
     // is claimed here rather than given a duplicate explanation. (T9)
     //
-    // ⚠️ NOT PLACED ON `pool.nfl.manager.settings`, and codex asked twice why
-    // (R5). The reason is a defect, not an oversight: NFLManagerView's
-    // "List Pool Publicly" toggle sends `settings.isListedPublic` and NOTHING
-    // else (`NFLManagerView.tsx:665,733-739`), while Browse decides an NFL
-    // pool's listing from the TOP-LEVEL `isPublic`
-    // (`src/utils/publicListing.ts:34`), which that save never touches. So the
-    // toggle does not change what this copy promises, and placing the topic
-    // beside it would be the copy claim voice rule 5 exists to stop. Same
-    // family as the playoff listing bug qodo found on #475. The manager form
-    // is T4's file and carries no help affordance at all today; the fix is
-    // Kevin's call because `isPublic` is read by firestore.rules.
+    // ✅ NOW PLACED ON `pool.nfl.manager.settings` (`nfl-shared.ts`). It was
+    // withheld from that page while the control beneath it was inert: the NFL
+    // manager's "List Pool Publicly" toggle sent `settings.isListedPublic` and
+    // NOTHING else, while Browse decides an NFL pool's listing from the
+    // TOP-LEVEL `isPublic` (`src/utils/publicListing.ts`), which that save
+    // never touched — so this copy beside that control would have been the
+    // claim voice rule 5 exists to stop. The save now sends both halves from
+    // `publicListingUpdate`, so the copy and the control agree and the topic
+    // sits where the control does.
     fields: ['isPublic', 'settings.isListedPublic'],
     poolTypes: 'all',
     audience: HOST_ONLY,

@@ -36,6 +36,8 @@ describe('editability matrix', () => {
     expect(classifyUpdateKey('name')).toBe('basics');
     expect(classifyUpdateKey('venmo')).toBe('paymentHandles');
     expect(classifyUpdateKey('isLocked')).toBe('lifecycle');
+    expect(classifyUpdateKey('isPublic')).toBe('lifecycle');
+    expect(classifyUpdateKey('isListedPublic')).toBe('lifecycle');
     expect(classifyUpdateKey('bogus')).toBeUndefined();
   });
 });
@@ -52,11 +54,57 @@ describe('buildPoolSettingsUpdate', () => {
   it('rejects unknown keys', () => {
     expect(() => buildPoolSettingsUpdate({ status: 'OPEN' }, { billing: { status: 'active' } })).toThrow();
   });
+  /**
+   * The claim `NFLManagerView`'s public-listing fix is built on.
+   *
+   * That toggle sent `settings.isListedPublic` and nothing else, while Browse
+   * (`src/utils/publicListing.ts`) decides an NFL pool's listing from the
+   * TOP-LEVEL `isPublic` — so the toggle wrote a field nothing reads. The fix
+   * sends both halves, which is only safe if this callable accepts the
+   * top-level key and writes it top-level. These pin that.
+   */
+  it('accepts a top-level isPublic and keeps it top-level', () => {
+    const plan = buildPoolSettingsUpdate(
+      { status: 'OPEN' },
+      { isPublic: false, settings: { isListedPublic: false } },
+    );
+    expect(plan.set).toEqual({ isPublic: false, settings: { isListedPublic: false } });
+  });
+
+  it('still accepts isPublic on a LOCKED pool — visibility is lifecycle, not settings', () => {
+    // The blast radius, stated as a test: listing can be turned off after the
+    // pool locks. The settings blob cannot, which is why the manager form's
+    // whole save is refused there — but the classification itself is this.
+    expect(() => buildPoolSettingsUpdate({ isLocked: true }, { isPublic: false })).not.toThrow();
+    expect(() => buildPoolSettingsUpdate({ isLocked: true }, { settings: { isListedPublic: false } })).toThrow();
+  });
+
   it('dual-writes legacy handles and clears the absent ones', () => {
     const plan = buildPoolSettingsUpdate({ status: 'OPEN' }, { paymentHandles: { venmo: '@me', googlePay: 'g' } });
     expect(plan.set.paymentHandles).toEqual({ venmo: '@me', googlePay: 'g' });
     expect(plan.set.venmo).toBe('@me');
     expect(plan.clearLegacy.sort()).toEqual(['cashapp', 'paypal', 'zelle']);
+  });
+});
+
+describe('the public-listing payload survives the whole pipeline', () => {
+  it('lands isPublic at the top level and isListedPublic under settings', () => {
+    const { set } = buildPoolSettingsUpdate(
+      { status: 'OPEN' },
+      { isPublic: false, settings: { isListedPublic: false, entryFee: 5 } },
+    );
+    const patch = flattenSettingsPatch(set, 'NFL_PICKEM');
+    expect(patch).toEqual({
+      isPublic: false,
+      'settings.isListedPublic': false,
+      'settings.entryFee': 5,
+    });
+    // The half the old code sent, on its own, never reaches the field Browse
+    // reads — which is the entire defect, asserted rather than described.
+    expect(Object.keys(flattenSettingsPatch(
+      buildPoolSettingsUpdate({ status: 'OPEN' }, { settings: { isListedPublic: false } }).set,
+      'NFL_PICKEM',
+    ))).toEqual(['settings.isListedPublic']);
   });
 });
 
