@@ -37,6 +37,14 @@ describe('the editor', () => {
         expect(editor).toContain('branding: {');
     });
 
+    it('does not silently drop the legacy bgColor (codex [P2])', () => {
+        // The write REPLACES the branding map, so sending only the three edited
+        // fields would delete anything else the pool carries — notably the
+        // legacy `bgColor`, which `brandingStyles` still renders.
+        expect(editor).toContain('...stored,');
+        expect(editor.indexOf('...stored,')).toBeLessThan(editor.indexOf('logoUrl: logoUrl.trim(),'));
+    });
+
     it('is mounted outside the season-locked settings gate', () => {
         expect(manager).toContain("{commishTab === 'settings' && <NFLBrandingSettings pool={pool} />}");
         // If this ever moves inside the gated form, the assertion above breaks

@@ -81,7 +81,7 @@ function ColorRow(props: {
 
 export const NFLBrandingSettings: React.FC<NFLBrandingSettingsProps> = ({ pool }) => {
     const toast = useToast();
-    const stored = ((pool as { branding?: Record<string, unknown> }).branding ?? {}) as {
+    const stored = ((pool as { branding?: Record<string, unknown> }).branding ?? {}) as Record<string, unknown> & {
         logoUrl?: string; primaryColor?: string; secondaryColor?: string;
     };
 
@@ -99,6 +99,13 @@ export const NFLBrandingSettings: React.FC<NFLBrandingSettingsProps> = ({ pool }
         try {
             await dbService.updatePoolSettings(pool.id, {
                 branding: {
+                    // ⚠️ SPREAD the stored map first (codex [P2]). This write
+                    // REPLACES `branding` wholesale, so sending only these three
+                    // fields would silently delete anything else a pool carries
+                    // — notably the legacy `bgColor`, which `brandingStyles`
+                    // still renders as the page background. Changing a logo
+                    // would have wiped an older pool's background colour.
+                    ...stored,
                     logoUrl: logoUrl.trim(),
                     primaryColor: primaryColor.trim(),
                     secondaryColor: secondaryColor.trim(),
