@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import type { User, Pool, BillingConfig } from '../types';
 import { DEFAULT_TRIAL_DAYS, DEFAULT_FORMAT_TIER_MAP, normalizeLegacyPackage } from '@shared/schemas/billingConfig';
@@ -16,6 +16,7 @@ import { BillingInvoiceCard } from './billing/BillingInvoiceCard';
 import { UpgradeInfoPopover } from './pricing/UpgradeInfoPopover';
 import { EstimateSummaryCard } from './pricing/EstimateSummaryCard';
 import { canAccessPoolCreation } from '../utils/auth';
+import { setPostAuthIntent } from '../utils/postAuthIntent';
 import { addonSeed } from './billing/addonSeed';
 import { PaymentSuccessBanner } from './billing/PaymentSuccessBanner';
 import { upgradeablePools, isUpgradeableStatus, canCheckoutPool, upgradeStatusLabel } from './billing/upgradeablePools';
@@ -135,25 +136,18 @@ export const PricingPage: React.FC<PricingPageProps> = ({
      * Now: open the auth modal, remember the intent, and continue to the wizard
      * as soon as the user exists.
      */
-    // A ref, not state: this flag drives a navigation, never a render, and
-    // setting state from the effect that reads it is the shape
-    // `react-hooks/set-state-in-effect` exists to flag.
-    const pendingCreate = useRef(false);
     const startCreate = () => {
         if (!canCreate) return;
         if (!user) {
-            pendingCreate.current = true;
+            // The continuation is App's, not this page's: a brand-new account is
+            // navigated to /participant on sign-up, which unmounts this page
+            // before any effect here could run (codex r2 [P1]).
+            setPostAuthIntent('/create-pool');
             onLogin();
             return;
         }
         navigate('/create-pool');
     };
-    useEffect(() => {
-        if (pendingCreate.current && user) {
-            pendingCreate.current = false;
-            navigate('/create-pool');
-        }
-    }, [user, navigate]);
 
     // Optional config-driven hero promo (shared BillingConfig schema field).
     const heroPromo = config.heroPromo;

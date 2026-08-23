@@ -33,14 +33,31 @@ describe('G2 — a logged-out visitor gets the auth modal, not a silent bounce',
         expect(pricing.match(/onClick=\{startCreate\}/g)?.length).toBe(3);
     });
 
-    it('startCreate opens auth for an anonymous visitor and continues after login', () => {
-        expect(pricing).toMatch(/const startCreate = \(\) => \{[\s\S]{0,300}?pendingCreate\.current = true;[\s\S]{0,80}?onLogin\(\);/);
-        expect(pricing).toContain('if (pendingCreate.current && user)');
+    it('startCreate opens auth for an anonymous visitor and records the intent', () => {
+        expect(pricing).toMatch(/const startCreate = \(\) => \{[\s\S]{0,400}?setPostAuthIntent\('\/create-pool'\);[\s\S]{0,80}?onLogin\(\);/);
+        // The continuation is App's, not this page's: a brand-new account is
+        // navigated to /participant on sign-up, unmounting this page first.
+        expect(app).toContain('const intent = takePostAuthIntent();');
+        expect(app).toMatch(/if \(intent\) \{[\s\S]{0,40}?navigate\(intent\);/);
     });
 
     it('startCreate still respects the pool-creation flag', () => {
         // It must not become a way past POOLS_OPEN / canAccessPoolCreation.
         expect(pricing).toMatch(/const startCreate = \(\) => \{\s*\r?\n\s*if \(!canCreate\) return;/);
+    });
+});
+
+describe('G2 — a cancelled sign-in does not teleport the visitor later', () => {
+    const authModal = read('src/components/modals/AuthModal.tsx');
+
+    it('closing the modal drops the intent', () => {
+        expect(app).toMatch(/onClose=\{\(\) => \{[\s\S]{0,300}?clearPostAuthIntent\(\);/);
+    });
+
+    it('a SUCCESSFUL auth runs the continuation before the close handler clears it', () => {
+        // Order is load-bearing: onClose discards the intent, so a success that
+        // closed first would throw away the continuation it just earned.
+        expect(authModal).toContain('onAuthenticated?.(result); onClose();');
     });
 });
 
