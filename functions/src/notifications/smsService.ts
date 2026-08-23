@@ -1,6 +1,7 @@
 import { defineSecret } from "firebase-functions/params";
 import type { DeliveryOutcome } from "../lib/deliveryTally";
 import { isMemberSmsEnabled, type SmsAudience } from "../lib/costControls";
+import { recordUsageEvent } from "../lib/usageEvents";
 
 export const courierAuthToken = defineSecret("COURIER_AUTH_TOKEN");
 
@@ -51,18 +52,36 @@ export async function sendCourierSMS(
     message: string,
     audience: SmsAudience
 ): Promise<DeliveryOutcome> {
+    // Phase 1.3 attribution. NOTE: the phone number is deliberately absent from
+    // every usage event below — telemetry records shape and cost, never
+    // recipients (plan 1.4).
+    const startedAt = Date.now();
+    const feature = `sms.${audience}`;
+
     if (audience === 'member' && !(await isMemberSmsEnabled())) {
         // Same 'skipped' semantics as an unconfigured Courier: a deployment
         // choice, not a fault. Returning 'failed' here would mark every
         // reminder pass unhealthy forever — the crying-wolf mode this file's
         // header exists to avoid.
         console.warn("[costControls] member SMS disabled by kill-switch; not sent.");
+        // Recorded so a silently-off feature is visible in the rollup rather
+        // than looking like nobody ever tried to send.
+        await recordUsageEvent({
+            provider: "courier", feature, outcome: "skipped",
+            latencyMs: Date.now() - startedAt, messageCount: 0,
+            errorCode: "killswitch_disabled",
+        });
         return 'skipped';
     }
 
     const token = courierAuthToken.value();
     if (!token) {
         console.warn("Courier Auth Token not configured. SMS not sent.");
+        await recordUsageEvent({
+            provider: "courier", feature, outcome: "skipped",
+            latencyMs: Date.now() - startedAt, messageCount: 0,
+            errorCode: "not_configured",
+        });
         return 'skipped';
     }
 
@@ -98,13 +117,27 @@ export async function sendCourierSMS(
 
         if (!response.ok) {
             console.error(`Courier API error (${response.status}):`, responseBody);
+            await recordUsageEvent({
+                provider: "courier", feature, outcome: "error",
+                latencyMs: Date.now() - startedAt, messageCount: 1,
+                errorCode: `http_${response.status}`,
+            });
             return 'failed';
         }
 
         console.log(`Courier SMS accepted for ${e164Phone}`);
+        await recordUsageEvent({
+            provider: "courier", feature, outcome: "success",
+            latencyMs: Date.now() - startedAt, messageCount: 1,
+        });
         return 'queued';
     } catch (error) {
         console.error("Failed to send Courier SMS:", error);
+        await recordUsageEvent({
+            provider: "courier", feature, outcome: "error",
+            latencyMs: Date.now() - startedAt, messageCount: 1,
+            errorCode: "request_failed",
+        });
         return 'failed';
     }
 }

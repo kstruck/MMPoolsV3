@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { defineSecret } from "firebase-functions/params";
+import { recordUsageEvent } from "./lib/usageEvents";
 
 export const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
@@ -28,11 +29,29 @@ const OUTPUT_SCHEMA = {
     required: ["headline", "summaryBullets", "explanationSteps", "confidence"],
 };
 
+/**
+ * Attribution context for a Gemini call (PLAN-COST-CONTROLS Phase 1.3).
+ *
+ * REQUIRED, and deliberately not optional: the plan's Phase 1 exit gate is that
+ * EVERY external paid call produces an attributable usage event. An optional
+ * parameter would let a new call site silently opt out of attribution, which is
+ * exactly the enumeration gap the sweeps exist to close. Same reasoning as the
+ * `audience` parameter added to `sendCourierSMS` in Phase 0.5.3.
+ */
+export interface AIUsageContext {
+    /** Stable feature label, e.g. "ai.dispute" / "ai.winner" / "ai.recap". */
+    feature: string;
+    poolId?: string | null;
+    userId?: string | null;
+}
+
 export const generateAIResponse = async (
     systemInstruction: string,
     facts: any,
+    usageContext: AIUsageContext,
     jsonSchema: any = OUTPUT_SCHEMA
 ): Promise<any> => {
+    const startedAt = Date.now();
     const apiKey = geminiApiKey.value();
     let selectedModelName = "gemini-1.5-flash"; // Default fallback
 
@@ -93,6 +112,28 @@ export const generateAIResponse = async (
                 systemInstruction: systemInstruction + "\n\nIMPORTANT: You must return valid PURE JSON matching the provided schema.",
             },
         });
+        // Phase 1.3: usageMetadata was previously discarded here — it is the only
+        // measured token count available, and Phase 2.3's spend breaker is built
+        // on it. Field names vary across SDK versions, so read defensively; a
+        // missing count records as unpriced rather than as zero.
+        const usage: any = (result as any)?.usageMetadata ?? {};
+        const inputTokens = typeof usage.promptTokenCount === "number" ? usage.promptTokenCount : null;
+        const outputTokens = typeof usage.candidatesTokenCount === "number"
+            ? usage.candidatesTokenCount
+            : (typeof usage.responseTokenCount === "number" ? usage.responseTokenCount : null);
+
+        await recordUsageEvent({
+            provider: "gemini",
+            feature: usageContext.feature,
+            outcome: "success",
+            latencyMs: Date.now() - startedAt,
+            poolId: usageContext.poolId ?? null,
+            userId: usageContext.userId ?? null,
+            model: selectedModelName,
+            inputTokens,
+            outputTokens,
+        });
+
         let text = result.text ?? '';
 
         // Robust JSON Cleaning
@@ -116,6 +157,21 @@ export const generateAIResponse = async (
             return { raw_response: text };
         }
     } catch (error: any) {
+        // An ATTEMPTED call that failed may still be billed, and a spike in
+        // errors is itself a cost signal — so failures are recorded too.
+        // `errorCode` is a short class only: the raw provider message can echo
+        // the prompt back, and prompts must never enter telemetry (1.4).
+        await recordUsageEvent({
+            provider: "gemini",
+            feature: usageContext.feature,
+            outcome: "error",
+            latencyMs: Date.now() - startedAt,
+            poolId: usageContext.poolId ?? null,
+            userId: usageContext.userId ?? null,
+            model: selectedModelName,
+            errorCode: typeof error?.status === "number" ? `http_${error.status}` : (error?.code ? String(error.code) : "unknown"),
+        });
+
         console.error("Gemini API Error Full Details:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
 
         // DEBUG: Try to list models to see if key is valid

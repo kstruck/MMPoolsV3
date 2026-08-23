@@ -97,7 +97,7 @@ export const onWinnerUpdate = onDocumentWritten({
     }
 
     try {
-        const aiContent = await generateAIResponse(COMMISSIONER_SYSTEM_PROMPT, facts);
+        const aiContent = await generateAIResponse(COMMISSIONER_SYSTEM_PROMPT, facts, { feature: "ai.winner", poolId });
         const artifact: AIArtifact = {
             id: `winner-${periodId}-${factsHash.substring(0, 8)}`,
             type: "WINNER_EXPLANATION",
@@ -356,7 +356,7 @@ export const onAIRequest = onDocumentCreated({
 
     // Generate AI response
     try {
-        const aiContent = await generateAIResponse(COMMISSIONER_SYSTEM_PROMPT, facts);
+        const aiContent = await generateAIResponse(COMMISSIONER_SYSTEM_PROMPT, facts, { feature: "ai.dispute", poolId, userId: requestData.userId ?? null });
 
         const artifactId = `resp-${event.params.requestId}`;
         const artifact: AIArtifact = {
@@ -431,7 +431,7 @@ export const onWeeklyRecapCreated = onDocumentCreated({
     if (!existingSnap.empty) return;
 
     try {
-        const aiContent = await generateAIResponse(COMMISSIONER_SYSTEM_PROMPT, facts);
+        const aiContent = await generateAIResponse(COMMISSIONER_SYSTEM_PROMPT, facts, { feature: "ai.recap", poolId });
         const artifact: AIArtifact = {
             id: `recap-${recapData.week}-${factsHash.substring(0, 8)}`,
             type: "WEEKLY_RECAP",

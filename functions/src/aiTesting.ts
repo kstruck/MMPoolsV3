@@ -113,6 +113,7 @@ export const generateTestScenario = onCall(
             const result = await generateAIResponse(
                 systemPrompt,
                 facts,
+                { feature: "ai.test.scenario", userId: request.auth.uid },
                 SCENARIO_GENERATION_SCHEMA
             );
 
@@ -168,6 +169,7 @@ export const validateTestResults = onCall(
             const result = await generateAIResponse(
                 textPrompt,
                 facts,
+                { feature: "ai.test.narrative", userId: request.auth.uid },
                 null // Pass null to bypass schema generation
             );
 
@@ -220,6 +222,7 @@ export const generateTestReport = onCall(
             const result = await generateAIResponse(
                 textPrompt,
                 facts,
+                { feature: "ai.test.analysis", userId: request.auth.uid },
                 null
             );
 
