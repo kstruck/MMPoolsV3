@@ -71,6 +71,30 @@ describe('the wizard explains and validates the colours', () => {
         expect(fields).toContain('value={swatch}');
     });
 
+    it('the effect-named labels and the preview are NFL-only (codex r1 [P2])', () => {
+        // StepBranding is shared by all seven wizards, but only the NFL
+        // dashboards paint with the colours (D4 scoped it there for Monday).
+        // Elsewhere the preview would promise a look the pool will not have.
+        expect(step).toContain('themedDashboard = false');
+        expect(step).toContain("themedDashboard ? 'Primary color — header & buttons' : 'Primary color'");
+        expect(step).toContain('{themedDashboard ? (');
+        expect(step).toContain('export function StepBrandingThemed()');
+        for (const wizard of ['CreateNFLPickemPool', 'CreateNFLMarginPool', 'CreateNFLSurvivorPool']) {
+            expect(read(`src/components/wizard/create/${wizard}.tsx`), wizard)
+                .toContain('Component: StepBrandingThemed');
+        }
+        for (const wizard of ['CreateBracketPool', 'CreatePropsPool', 'CreateSquaresPool', 'CreatePlayoffPool']) {
+            expect(read(`src/components/wizard/create/${wizard}.tsx`), wizard)
+                .toContain('Component: StepBranding }');
+        }
+    });
+
+    it('the themed variant is a NAMED component, not an inline arrow', () => {
+        // The wizard shell keys steps by component identity; a new function each
+        // render would remount the step and drop focus mid-typing.
+        expect(step).not.toMatch(/Component: \(\) => <StepBranding/);
+    });
+
     it('the preview is built from the SAME helper the pool page uses', () => {
         // A hand-drawn mock-up would be a second implementation, free to promise
         // a look the pool will not have.

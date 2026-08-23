@@ -11,7 +11,20 @@ import { brandingStyles, DEFAULT_ACCENT } from '../../../utils/brandingStyles';
 // drove a 2px tab underline. They now theme the pool page (see
 // `src/utils/brandingStyles.ts`), so the labels say what each one does and the
 // preview below shows it before the commissioner commits.
-export function StepBranding() {
+export interface StepBrandingProps {
+  /**
+   * Does THIS pool format's dashboard actually paint with the two colours?
+   * (codex r1 [P2] on T1.) Today only the NFL dashboards do — D4 scoped the
+   * rendering work to them for Monday's invites. Bracket / Playoff / Props /
+   * Squares read `branding.logoUrl` and nothing else, so on those wizards the
+   * effect-named labels and the preview would promise a look the pool will not
+   * have. They get honest copy instead, and this prop flips when their
+   * dashboards are done.
+   */
+  themedDashboard?: boolean;
+}
+
+export function StepBranding({ themedDashboard = false }: StepBrandingProps = {}) {
   const { watch } = useFormContext();
   const branding = watch('branding') as
     | { logoUrl?: string; primaryColor?: string; secondaryColor?: string }
@@ -34,13 +47,13 @@ export function StepBranding() {
             where it would land, which is half of why the feature read as broken. */}
         <ColorField
           name="branding.primaryColor"
-          label="Primary color — header & buttons"
+          label={themedDashboard ? 'Primary color — header & buttons' : 'Primary color'}
           placeholder="#4f46e5"
           fallback="#4f46e5"
         />
         <ColorField
           name="branding.secondaryColor"
-          label="Accent color — highlights & active tabs"
+          label={themedDashboard ? 'Accent color — highlights & active tabs' : 'Accent color'}
           placeholder={DEFAULT_ACCENT}
           fallback={DEFAULT_ACCENT}
         />
@@ -48,7 +61,9 @@ export function StepBranding() {
 
       {/* Live preview. Deliberately built from the SAME `brandingStyles` the pool
           page uses, so this cannot drift into promising a look the pool will not
-          have — a mock-up with its own colours would be exactly that. */}
+          have — a mock-up with its own colours would be exactly that. Shown only
+          where the dashboard paints with them (codex r1 [P2]). */}
+      {themedDashboard ? (
       <div className="mb-4">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Preview</p>
         <div className="rounded-lg border border-slate-700 p-3" style={brand.page}>
@@ -79,6 +94,23 @@ export function StepBranding() {
           </p>
         )}
       </div>
+      ) : (
+        <p className="mb-4 text-xs text-slate-500">
+          Your logo appears on your pool page. Colour theming is live on NFL pool
+          pages today — these colours are saved and will apply here when this
+          format's page picks them up.
+        </p>
+      )}
     </div>
   );
+}
+
+/**
+ * The branding step for a format whose dashboard already paints with the
+ * colours. A named component, not an inline arrow at the call site: the wizard
+ * shell keys its steps by component identity, and a new function on every
+ * render would remount the step and drop the commissioner's focus mid-typing.
+ */
+export function StepBrandingThemed() {
+  return <StepBranding themedDashboard />;
 }

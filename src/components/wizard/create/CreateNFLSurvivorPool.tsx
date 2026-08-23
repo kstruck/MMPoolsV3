@@ -3,7 +3,7 @@ import type { User } from '../../../types';
 import { dbService } from '../../../services/dbService';
 import { survivorCreateInputSchema } from '@shared/schemas';
 import { MAX_TEAM_USES } from '@shared/survivorReuse';
-import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep } from '../index';
+import { WizardShell, StepBasics, StepFeeAndPayment, StepBrandingThemed, LaunchStep } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
 import { ReadOnlyField, NumberField, CheckboxField, SelectField } from '../fields';
 import { MultiEntryFields } from './MultiEntryFields';
@@ -98,7 +98,7 @@ export function CreateNFLSurvivorPool(props: { user: User; onComplete: (poolId: 
     { id: 'rules', title: 'Survivor rules', Component: StepSurvivorRules },
     { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="settings.entryFee" /> },
     { id: 'payouts', title: 'Payouts', Component: () => <StepPayouts payoutsField="settings.payouts" /> },
-    { id: 'branding', title: 'Branding', Component: StepBranding },
+    { id: 'branding', title: 'Branding', Component: StepBrandingThemed },
     {
       id: 'launch', title: 'Launch', ownsSubmit: true,
       Component: () => (
