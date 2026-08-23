@@ -1,7 +1,7 @@
 # PLAN-WIZARD-BUYFLOW-FIXES — Make the create-pool → launch → upgrade path seamless
 
-**BUILD RESULT (2026-08-24): 8 of 10 tickets SHIPPED across ten merged PRs.
-T8 and T10 are NOT built. The `POOLS_OPEN` flip is built and OPEN as PR #529 —
+**BUILD RESULT (2026-08-24): 9 of 10 tickets SHIPPED across eleven merged PRs.
+T10 is the only one NOT built. The `POOLS_OPEN` flip is built and OPEN as PR #529 —
 Kevin merges it (D6). Per-ticket status is inline in §3 below; the full
 account, including what was not verified, is in `MORNING-2026-08-24.md`.**
 
@@ -378,7 +378,7 @@ Backlog G6/G8/G10/G13/G15–G20: ticketed in §2, not built this weekend.
 
 ### T8 — Commissioner can edit branding after the wizard (Kevin, 2026-08-23)
 
-**STATUS: ❌ NOT BUILT.** T9 took the full 10-round review cap and the remaining hours went to T6b and T7 (launch-facing). **The blocker this ticket asks about IS CLEARED:** `shared/editability.ts` lists `branding` in `open`, `locked` AND `archived`, so the pool-update callable already allows `branding.*` and the matrix needs no extension. This is UI-only work, and T1 shipped the `ColorField` + live preview to reuse. Recommended: Sunday.
+**STATUS: ✅ SHIPPED — PR #534, merged 2026-08-24.** 2 codex rounds. **The blocker this ticket asks about never existed:** `shared/editability.ts` lists `branding` in `draft`, `open`, LOCKED and ARCHIVED, so the matrix needed no extension — and that is what decided the placement. The editor is its OWN card with its OWN save, deliberately OUTSIDE `canEditSettings` (super admin OR pre-season): that gate freezes pool RULES in-season, but branding is not a rule, and folding it in would lock a commissioner out of fixing their own logo in week 3. Reuses T1's `brandingStyles`, hex validation and live preview.
 
 There is no post-wizard surface to change logo/colors — the wizard's branding
 step is the only writer. Add a **Branding** section to the NFL commissioner
