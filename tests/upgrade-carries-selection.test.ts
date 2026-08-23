@@ -48,6 +48,28 @@ describe('b. the add-on toggles seed from the wizard selection', () => {
     });
 });
 
+describe('b2. a free / locked pool can actually be upgraded here (G3)', () => {
+    it('the pool list is not filtered to trial + grace only', () => {
+        // The filter that dead-ended the 10-player wall, which is the moment
+        // both the lock banner and the lock email link to this page for.
+        expect(pricing).not.toContain("p.billing?.status === 'trial' || p.billing?.status === 'grace_period'");
+        expect(pricing).toContain('upgradeablePools(poolsList, user.id)');
+    });
+
+    it('a deep-linked payable pool renders checkout even outside the list', () => {
+        // codex r2 [P1]: the card rendered only inside the trial-list branch,
+        // so the new ?poolId= links from the free/locked CTAs still landed on
+        // an estimate-only calculator.
+        expect(pricing).toContain("visitorState === 'hasUpgradeablePools' || selectedIsPayable ?");
+        expect(pricing).toContain('canCheckoutPool(selectedPoolData as never, user?.id)');
+    });
+
+    it('the list stops labelling every pool a trial', () => {
+        expect(pricing).not.toContain('Trial State');
+        expect(pricing).toContain('upgradeStatusLabel(pool.billing?.status)');
+    });
+});
+
 describe('c. the checkout card receives the seeded state', () => {
     it('BillingInvoiceCard is no longer mounted with hardcoded false props', () => {
         expect(pricing).not.toContain('hasAiCommissioner={false}');
