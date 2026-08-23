@@ -156,11 +156,20 @@ export interface BrandingStyles {
      */
     headerBand: { backgroundColor?: string; color?: string };
     /**
-     * Secondary text ON the band — the pool-type label. Same readable colour at
-     * reduced opacity, NOT `text-muted`: a theme token here would be tuned
-     * against `--card`, which is not what is behind it.
+     * Secondary text ON the band — the pool-type label.
+     *
+     * The SAME ink as `headerBand`, FULLY OPAQUE. Not `text-muted` (that token
+     * is tuned against `--card`, which is not what is behind this text), and
+     * deliberately not a dimmed version of the ink either: `opacity` composites
+     * the ink back toward the primary colour and destroys the contrast choice
+     * `readableTextOn` just made. On a colour near the crossover — `#007f7f` —
+     * white at 75% drops the 12px label below a readable ratio. (codex, r3.)
+     *
+     * There is no `opacity` field on purpose, so it cannot be reintroduced by
+     * habit. The label is distinguished by SIZE, WEIGHT and TRACKING instead,
+     * which cost no contrast at all.
      */
-    headerBandMuted: { color?: string; opacity?: number };
+    headerBandMuted: { color?: string };
     /** Inline style for a primary action button. */
     primaryButton: { backgroundColor?: string; color?: string; borderColor?: string };
     /** Inline style for the ACTIVE tab underline. */
@@ -209,7 +218,7 @@ export function brandingStyles(branding: PoolBranding | null | undefined): Brand
             ? { backgroundColor: primary, color: readableTextOn(primary) }
             : {},
         headerBandMuted: primary
-            ? { color: readableTextOn(primary), opacity: 0.75 }
+            ? { color: readableTextOn(primary) }
             : {},
         primaryButton: primary
             ? { backgroundColor: primary, color: readableTextOn(primary), borderColor: primary }

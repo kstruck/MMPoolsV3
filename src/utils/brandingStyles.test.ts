@@ -168,12 +168,17 @@ describe('the branded header band (Kevin 2026-08-24, option (ii))', () => {
         expect(brandingStyles({ primaryColor: '#ffffff' }).headerBand.color).toBe('#111111');
     });
 
-    it('gives secondary band text the SAME readable colour, dimmed', () => {
-        // Not `text-muted`: that token is tuned against `--card`, which is not
-        // what is behind this text.
-        const b = brandingStyles({ primaryColor: '#ffff00' });
-        expect(b.headerBandMuted.color).toBe(b.headerBand.color);
-        expect(b.headerBandMuted.opacity).toBeLessThan(1);
+    it('gives secondary band text the SAME ink, FULLY OPAQUE (codex r3)', () => {
+        // Not `text-muted` (tuned against `--card`, not against this band), and
+        // not a dimmed version of the ink either: `opacity` composites the ink
+        // back toward the primary and destroys the contrast choice
+        // `readableTextOn` just made. On #007f7f, white at 75% drops the 12px
+        // label below a readable ratio.
+        for (const hex of ['#ffff00', '#007f7f', '#0b1d3a', '#4f46e5']) {
+            const b = brandingStyles({ primaryColor: hex });
+            expect(b.headerBandMuted.color).toBe(b.headerBand.color);
+            expect(b.headerBandMuted).not.toHaveProperty('opacity');
+        }
     });
 
     it('is EMPTY with no primary, so the header renders as it always did', () => {
