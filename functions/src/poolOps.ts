@@ -253,7 +253,7 @@ export function assertPaidParticipantCeiling(
             'failed-precondition',
             // G9 — the same audience problem: this reaches a JOINING MEMBER,
             // for whom "upgrade" is not an action they can take.
-            'This pool is full, so your spot could not be reserved. Ask the commissioner to make room.',
+            'This pool is full, so your spot could not be reserved. Ask the commissioner to make room — they can upgrade the pool to raise its limit.',
         );
     }
 }

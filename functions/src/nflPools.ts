@@ -317,7 +317,7 @@ export async function joinNFLPoolInternal(
       // premium", "pool manager". Nothing in it told them what to do, and it
       // read as though they had done something wrong. Say what happened, whose
       // move it is, and nothing about our pricing.
-      throw new HttpsError('failed-precondition', 'This pool is full, so your spot could not be reserved. Ask the commissioner to make room — they can raise the limit from their pool settings.');
+      throw new HttpsError('failed-precondition', 'This pool is full, so your spot could not be reserved. Ask the commissioner to make room — they can upgrade the pool to raise its limit.');
     }
     // Paid-ceiling gate (NOTES-WAVE2 A2, PLAN 6b(iii)): a PAID pool cannot exceed
     // its purchased participant ceiling. No-op for free/trial pools.

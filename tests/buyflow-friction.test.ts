@@ -33,6 +33,10 @@ describe('G7 — the player estimate must be answered', () => {
     it('the copy says what the number is FOR', () => {
         expect(launch).toContain('This is the number we price');
         expect(launch).toContain('estimate high rather than low');
+        // ...and does not CLAIM the estimate caps joins before activation
+        // (codex r1 [P2]): on a free or trial pool it only selects pricing.
+        expect(launch).not.toContain('the cap on how many people can join');
+        expect(launch).toContain('once you activate the pool it becomes its player limit');
     });
 
     it('and does NOT hardcode the free-plan figure a fourth time', () => {
@@ -69,9 +73,13 @@ describe('G9 — the 11th invitee gets member-appropriate copy', () => {
         expect(poolOps).toContain('This pool is full, so your spot could not be reserved.');
     });
 
-    it('it names whose move it is', () => {
-        expect(nflPools).toContain('Ask the commissioner');
-        expect(poolOps).toContain('Ask the commissioner');
+    it('it names whose move it is, and a remedy that WORKS', () => {
+        // codex r1 [P2]: "raise the limit in settings" does nothing for a free
+        // pool at the wall — that branch is unconditional on any setting. The
+        // commissioner has to upgrade.
+        expect(nflPools).toContain('they can upgrade the pool to raise its limit');
+        expect(poolOps).toContain('they can upgrade the pool to raise its limit');
+        expect(nflPools).not.toContain('raise the limit from their pool settings');
     });
 });
 

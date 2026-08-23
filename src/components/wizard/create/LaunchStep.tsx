@@ -380,8 +380,8 @@ export function LaunchStep(props: LaunchStepProps) {
           is configurable and already hardcoded in three other places (plan
           §2 G8), and a fourth copy would be a fourth thing to get wrong. */}
       <p className="-mt-3 mb-4 text-xs text-slate-400">
-        Small pools launch free; above that limit, hosting is priced by size. This is the number we price,
-        and it is also the cap on how many people can join — so estimate high rather than low.
+        Small pools launch free; above that limit, hosting is priced by size. This is the number we price —
+        and once you activate the pool it becomes its player limit, so estimate high rather than low.
       </p>
       {!estimateSet && (
         <p className="-mt-2 mb-4 text-xs font-semibold text-amber-300">
