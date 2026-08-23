@@ -22,6 +22,15 @@ const read = (p: string) => readFileSync(path.join(repoRoot, p), 'utf8');
 
 const card = read('src/components/NFLPoolDashboard/NFLManagerBentoDashboard.tsx');
 const dash = read('src/components/NFLPoolDashboard/NFLPoolDashboard.tsx');
+/**
+ * The member-facing feed CARD moved out of `NFLPoolDashboard` and into the
+ * bento (Kevin, 2026-08-23: "I want to move the Pool Feed card next to the Pool
+ * Standings card... The bottom of the page is useless"). The reader is still in
+ * the dashboard — one subscription serving both views is the anti-drift rule
+ * T9 established — so the two files split the assertions below rather than one
+ * replacing the other.
+ */
+const bento = read('src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx');
 const dbService = read('src/services/dbService.ts');
 const ai = read('functions/src/aiCommissioner.ts');
 const rules = read('firestore.rules');
@@ -137,20 +146,23 @@ describe('2b. only a COMMISSIONER can make the AI post pool-wide (codex r1 [P1])
 
 describe('3. members actually see it', () => {
     it('the feed renders on the pool homepage Overview, not only in the manager view', () => {
-        expect(dash).toContain('<BanterFeed');
+        expect(bento).toContain('<BanterFeed');
         expect(dash).toContain('dbService.subscribeToPoolFeed(');
+        // ...and it is handed DOWN from the one reader, never re-subscribed.
+        expect(dash).toContain('poolFeed={poolFeed}');
+        expect(bento).not.toContain('subscribeToPoolFeed');
     });
 
     it('one component renders both views, so they cannot drift', () => {
         expect(card).toContain("import { BanterFeed } from './BanterFeed';");
-        expect(dash).toContain("import { BanterFeed } from './BanterFeed';");
+        expect(bento).toContain("import { BanterFeed } from './BanterFeed';");
     });
 
     it('the feed is gated on MEMBERSHIP, not merely being signed in (codex r1 [P2])', () => {
         // On a public pool a signed-in non-member would subscribe, be denied by
         // `isPoolParticipant()`, and be shown a permanent load error for a feed
         // they were never entitled to read.
-        expect(dash).toContain('{isPoolMember && (');
+        expect(bento).toContain('{isPoolMember && (');
         expect(dash).toContain('castPool.participantIds.includes(user.id)');
         // ...mirroring ALL FOUR of isPoolParticipant()'s branches (codex r4
         // [P2]): an owner or legacy manager absent from participantIds, and a

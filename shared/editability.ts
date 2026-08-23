@@ -18,11 +18,12 @@ export type EditableGroup =
   | 'entryFee'
   | 'settings' // type-specific settings blob (scoring, rules, ...)
   | 'props' // props-pool questions/cost
+  | 'announcement' // pinnedMessageId — which feed post sits at the top of pool home
   | 'lifecycle'; // isLocked / status / visibility
 
 const ALL_GROUPS: readonly EditableGroup[] = [
   'basics', 'contact', 'paymentHandles', 'payouts', 'branding',
-  'reminders', 'entryFee', 'settings', 'props', 'lifecycle',
+  'reminders', 'entryFee', 'settings', 'props', 'announcement', 'lifecycle',
 ];
 
 // draft/open: fully editable (matches today's dashboards, which let commissioners
@@ -32,8 +33,15 @@ const ALL_GROUPS: readonly EditableGroup[] = [
 const MATRIX: Record<LifecyclePhase, ReadonlySet<EditableGroup>> = {
   draft: new Set(ALL_GROUPS),
   open: new Set(ALL_GROUPS),
-  locked: new Set<EditableGroup>(['basics', 'contact', 'paymentHandles', 'branding', 'reminders', 'lifecycle']),
-  archived: new Set<EditableGroup>(['branding', 'lifecycle']),
+  // `announcement` is editable in EVERY phase, and that is the whole point of
+  // the group existing. Pinning a message is an IN-SEASON act — "week 6 dues are
+  // late", "no games Thursday" — so gating it behind draft/open would make the
+  // feature unusable exactly when it is wanted. It carries no money, no
+  // authorization and no scoring input: the value is the id of a post that is
+  // already visible to every member of the pool, and the commissioner who can
+  // pin it could already post and delete it.
+  locked: new Set<EditableGroup>(['basics', 'contact', 'paymentHandles', 'branding', 'reminders', 'announcement', 'lifecycle']),
+  archived: new Set<EditableGroup>(['branding', 'announcement', 'lifecycle']),
 };
 
 export function normalizePhase(pool: { isLocked?: boolean; status?: string } | null | undefined): LifecyclePhase {
@@ -69,6 +77,7 @@ const KEY_GROUPS: Readonly<Record<string, EditableGroup>> = {
   entryFee: 'entryFee',
   settings: 'settings',
   props: 'props',
+  pinnedMessageId: 'announcement',
   isLocked: 'lifecycle',
   status: 'lifecycle',
   isListedPublic: 'lifecycle',

@@ -29,7 +29,6 @@ import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks } f
 import { spreadsBlockWeek } from '../../utils/poolUsesSpreads';
 import { buildMemberStandings } from '../../utils/memberStandings';
 import { brandingStyles } from '../../utils/brandingStyles';
-import { BanterFeed } from './BanterFeed';
 import { nflLockMode, weekLockAtFor, nextLockAtFor } from '@shared/nflLockMode';
 import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
@@ -650,6 +649,33 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     );
   }, [pool?.id, isPoolMember]);
 
+  /**
+   * The pinned post (Kevin, 2026-08-23), watched as its OWN document rather
+   * than looked up in `poolFeed`: that array is the last 50 messages, so a pin
+   * set early in a chatty pool would silently stop rendering once it aged out.
+   *
+   * The id it belongs to is carried in state ALONGSIDE the message, so a
+   * snapshot that arrives for a pin the commissioner has since changed cannot
+   * be rendered under the new id — and so clearing the band when the pin is
+   * removed needs no setState in an effect body (a cascading render, and a lint
+   * error in this repo).
+   */
+  const pinnedMessageId = (castPool.pinnedMessageId as string | undefined) ?? '';
+  const [pinned, setPinned] = useState<{ id: string; message: BanterMessage | null; error: boolean }>(
+    { id: '', message: null, error: false },
+  );
+  useEffect(() => {
+    if (!pool?.id || !isPoolMember || !pinnedMessageId) return;
+    return dbService.subscribeToPinnedMessage(
+      pool.id,
+      pinnedMessageId,
+      (message) => setPinned({ id: pinnedMessageId, message, error: false }),
+      () => setPinned({ id: pinnedMessageId, message: null, error: true }),
+    );
+  }, [pool?.id, isPoolMember, pinnedMessageId]);
+  const pinnedMessage = pinned.id === pinnedMessageId ? pinned.message : null;
+  const pinnedError = pinned.id === pinnedMessageId && pinned.error;
+
   const branding = castPool.branding || {};
   const brand = brandingStyles(branding);
   const accentHex = brand.accent;
@@ -882,29 +908,22 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     onOpenAuth={onOpenAuth}
                     isManager={isManager}
                     onSelectTab={(tab) => setActiveTab(tab)}
-                  />
-                  {/* T9 - the pool feed, where MEMBERS finally see the
-                      commissioner's posts and the AI's banter. Kevin: "where
-                      are these messages shown to members?" - until now, nowhere:
-                      the commissioner's card kept its feed in React state.
+                    /* T9's feed and the pinned band render INSIDE the bento now
+                       (Kevin, 2026-08-23): the feed beside Pool Standings rather
+                       than at the bottom of the page - "The bottom of the page
+                       is useless" - and the pin directly under the score ticker,
+                       which is the ticker's own component.
 
-                      Rendered for pool MEMBERS only (codex r1 [P2]), not merely
-                      signed-in visitors: the read rule is `isPoolParticipant()`,
-                      so on a public pool a signed-in non-member would subscribe,
-                      be denied, and be shown a permanent load error for a feed
-                      they were never entitled to read. */}
-                  {isPoolMember && (
-                    <div className="max-w-4xl mx-auto mt-6 bg-card border border-line rounded-xl shadow-card p-6">
-                      <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-3">
-                        Pool feed
-                      </h3>
-                      <BanterFeed
-                        messages={poolFeed}
-                        error={poolFeedError}
-                        emptyText="No posts yet. Your commissioner can post here - everyone in the pool sees it."
-                      />
-                    </div>
-                  )}
+                       Still subscribed HERE, for the reason T9 gave: one reader
+                       feeds both the member view and the commissioner card, so
+                       they cannot drift, and a failed read stays distinguishable
+                       from an empty feed. */
+                    poolFeed={poolFeed}
+                    poolFeedError={poolFeedError}
+                    isPoolMember={isPoolMember}
+                    pinnedMessage={pinnedMessage}
+                    pinnedError={pinnedError}
+                  />
                   {castPool.billing?.featuresUnlocked?.aiCommissioner && (
                     <div className="max-w-4xl mx-auto mt-6">
                       <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType={pool.type} />
