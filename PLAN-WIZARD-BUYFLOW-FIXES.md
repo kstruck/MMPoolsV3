@@ -1,5 +1,10 @@
 # PLAN-WIZARD-BUYFLOW-FIXES — Make the create-pool → launch → upgrade path seamless
 
+**BUILD RESULT (2026-08-24): 8 of 10 tickets SHIPPED across ten merged PRs.
+T8 and T10 are NOT built. The `POOLS_OPEN` flip is built and OPEN as PR #529 —
+Kevin merges it (D6). Per-ticket status is inline in §3 below; the full
+account, including what was not verified, is in `MORNING-2026-08-24.md`.**
+
 **Status: SIGNED — Kevin answered D1–D6 on 2026-08-23 (answers recorded in §4).
 Scope extended the same day with T8 (post-wizard branding editor) and T9 (AI
 Commissioner overhaul) from Kevin's follow-up. Build: overnight 2026-08-23→24.**
@@ -234,6 +239,8 @@ working" true; T8 reuses T1's branding field components; T10 added by Kevin
 
 ### T1 — Make branding colors actually theme the pool (issue 1) — frontend only
 
+**STATUS: ✅ SHIPPED — PR #526, merged 2026-08-24.** 2 codex rounds. NFL only per D4; `themedDashboard` is the one flag to flip when the other dashboards catch up. NOT yet seen in a browser — first look is after the Coolify rebuild.
+
 - `NFLPoolDashboard.tsx`: derive the pool accent from
   `branding.primaryColor` and apply it where a member actually looks:
   the pool header card (name bar background or border + Host line accents),
@@ -254,6 +261,8 @@ working" true; T8 reuses T1's branding field components; T10 added by Kevin
 
 ### T2 — Coupon must never remove the Activate path (issue 2) — frontend only
 
+**STATUS: ✅ SHIPPED — PR #522, merged 2026-08-24.** 3 codex rounds. Also added the quote-freshness stamp the plan did not ask for: `quoteLoading` is false during the whole 300ms debounce, so a superseded quote read as current.
+
 - `LaunchStep.tsx:473`: render the Activate button whenever a quote loaded and
   the pool is not free-tier-eligible; label it
   `Activate now — $0 (coupon applied)` when `quote.total === 0` with a valid
@@ -270,6 +279,8 @@ working" true; T8 reuses T1's branding field components; T10 added by Kevin
   coupon.
 
 ### T3 — Carry the wizard's selections into Upgrade Now (issue 3)
+
+**STATUS: ✅ SHIPPED — PR #523, merged 2026-08-24.** 4 codex rounds. **G3 shipped here, not in T6a** — codex found the new `?poolId=` links landed on an estimate-only page; same component, same seam. Also: `createBracketPool` never persisted `addons` at all, so the seed had nothing to read on that path.
 
 Frontend:
 - `BillingGate.tsx`: all four commissioner CTAs (`trial` banner Upgrade Now,
@@ -309,6 +320,8 @@ Server (money-adjacent, the reason this plan exists):
 
 ### T4 — Custom branding: stop selling a no-op (issue 4) — D1 decides shape
 
+**STATUS: ✅ SHIPPED — PR #525, merged 2026-08-24.** 3 codex rounds. Goes BEYOND the plan: `INCLUDED_ADDON_KEYS` lives in `shared/` and `computeAddonLines` skips it, so a stale cached bundle cannot be charged either — the plan's "one config save" would not have covered that. `PAID_ADDON_KEYS` is derived from the same list so launch mode agrees. **The ledger audit was NOT run** (no credentials on the build machine); `scripts/auditCustomBrandingPaid.mjs` is committed, read-only, and carried to the morning list.
+
 Recommended (Option A, "branding is free"):
 - Remove `customBranding` from the wizard's add-on list
   (`LaunchStep.tsx:332-341` filter) and from the pricing page's upgrade
@@ -331,6 +344,8 @@ premium branding tier actually exists.
 
 ### T5 — Unlock selected add-ons during the trial (bonus finding) — D2 decides
 
+**STATUS: ✅ SHIPPED — PR #527, merged 2026-08-24.** 3 codex rounds. The free path stays all-false deliberately. Also had to honour PLAN-COST-CONTROLS 0.5.4's UNSELLABLE clamp: a CREATE payload passes through neither of its two enforcement points.
+
 - `billingForLaunch` accepts the requested addons and stamps
   `featuresUnlocked` from them on the **trial** path (free path stays
   all-false; free pools selected no paid add-ons anyway — any paid add-on
@@ -344,6 +359,8 @@ premium branding tier actually exists.
 - Tests: functions vitest on `billingForLaunch(mode, trialDays, now, addons)`.
 
 ### T6 — E2E blocker + friction fixes (from §2 sweep)
+
+**STATUS: ✅ BOTH SHIPPED.** T6a = PR #524 (G2, G4, G5 — 5 codex rounds); **G3 moved to T3/#523**. T6b = PR #531 (G7, G9, G11, G12, G14 — 4 rounds). A SECOND G2 pass shipped as PR #528: codex reviewing the flip found six more public create CTAs that bounce anonymously or drop the post-auth intent. It had to be merged separately, because the flip is not merged until Monday.
 
 Weekend scope, split in two PRs:
 - **T6a (blockers):** G2 (anon CTA → auth modal), G3 (free pools upgradeable
@@ -361,6 +378,8 @@ Backlog G6/G8/G10/G13/G15–G20: ticketed in §2, not built this weekend.
 
 ### T8 — Commissioner can edit branding after the wizard (Kevin, 2026-08-23)
 
+**STATUS: ❌ NOT BUILT.** T9 took the full 10-round review cap and the remaining hours went to T6b and T7 (launch-facing). **The blocker this ticket asks about IS CLEARED:** `shared/editability.ts` lists `branding` in `open`, `locked` AND `archived`, so the pool-update callable already allows `branding.*` and the matrix needs no extension. This is UI-only work, and T1 shipped the `ColorField` + live preview to reuse. Recommended: Sunday.
+
 There is no post-wizard surface to change logo/colors — the wizard's branding
 step is the only writer. Add a **Branding** section to the NFL commissioner
 manager view (`NFLManagerView.tsx` settings area) with the same three fields
@@ -372,6 +391,8 @@ to it (extend the matrix if the group turns out to be test-only). NFL first
 (Monday's invites); other dashboards ticketed.
 
 ### T9 — AI Commissioner: make it real, visible, and manageable (Kevin, 2026-08-23)
+
+**STATUS: ✅ SHIPPED — PR #530, merged 2026-08-24. 10 codex rounds — the cap.** All six scope points done. Shape chosen: `pools/{poolId}/messages`, which already existed and was already participant-scoped, so no new collection and no migration. Rules gained a participant check on create, a refusal of `kind: AI` and of the AI byline, text/timestamp bounds, and commissioner DELETE — `update` stays false and `ai_artifacts` keeps `write: if false`. The four `ai_requests` create conditions are untouched. Rounds 3–6 each found something real, incl. a fact-builder that mapped **field names that do not exist** on `StandingsRow` (every value would have reached Gemini as null).
 
 Kevin's report: "I still do not see the AI features working. I see draft only —
 not saved… users do not know what to do on that card… commissioners must be
@@ -416,6 +437,8 @@ Scope (respecting PLAN-COST-CONTROLS 0.5 — entitlement gates and quotas stay):
 
 ### T10 — Merge Standings + Results into one scoped Standings tab (Kevin, 2026-08-23)
 
+**STATUS: ❌ NOT BUILT — and deliberately not started.** It touches the published `offeredTabs` list (HANDOFF K13) and the help registry, and a half-finished tab merge is worse than none. It wants a full session, not the last hour of one. Recommended: after Monday.
+
 Kevin's report: "The Standings and Leaderboard tab shows the week standings,
 but you have to go to Results to see the season-long standings… Can we not
 just combine these tabs?"
@@ -457,6 +480,8 @@ Scope:
   `results`→`standings` alias normalization.
 
 ### T7 — Copy honesty pass on the launch/billing surfaces
+
+**STATUS: ✅ SHIPPED — PR #532, merged 2026-08-24.** 2 codex rounds. The trial banner is now addressed by ROLE: it renders for every viewer but only the commissioner can pay.
 
 - LaunchStep trial line says what the trial includes (per D2 outcome) and what
   happens at day 14 (grace period → pool locks; nothing is charged
