@@ -150,3 +150,27 @@ describe('BillingInvoiceCard delegates the button rule instead of inlining it', 
         expect(card).toContain('freeTierEligible: !!quote?.freeTierEligible');
     });
 });
+
+/**
+ * PLAN-WIZARD-BUYFLOW-FIXES T2 — the wizard's Launch step has the same two
+ * defects the checkout card had fixed: an inline button expression that could
+ * hide the paid path, and a quote failure with no way back. The rule itself is
+ * unit-tested in `src/components/wizard/create/launchButtonsState.test.ts`;
+ * what cannot be reached from there is whether LaunchStep actually USES it.
+ */
+describe('LaunchStep takes its buttons from the helper, not an inline expression', () => {
+    const launch = read('src/components/wizard/create/LaunchStep.tsx');
+
+    it('renders Activate from launchButtonsState, not from `quote.total > 0`', () => {
+        // The exact expression that made a 100%-off coupon hide the only paid
+        // path. It must not come back.
+        expect(launch).not.toMatch(/\{quote && quote\.total > 0 && \(/);
+        expect(launch).toContain('launchButtonsState({ quoteState, quote })');
+        expect(launch).toContain('{buttons.showActivate && (');
+    });
+
+    it('a failed quote has a real retry wired into the fetch effect', () => {
+        expect(launch).toContain('setQuoteReloadKey((k) => k + 1)');
+        expect(launch).toMatch(/addonsKey, couponInput, quoteReloadKey\]\);/);
+    });
+});

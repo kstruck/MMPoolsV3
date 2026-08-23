@@ -13,6 +13,7 @@ import { dbService } from '../../../services/dbService';
 import { logger } from '../../../utils/logger';
 import type { User } from '../../../types';
 import { profileUpdatesFrom } from './profilePrefill';
+import { launchButtonsState, type LaunchQuoteState } from './launchButtonsState';
 import { CheckboxField, Field, NumberField } from '../fields';
 
 // ---------------------------------------------------------------------------
@@ -99,6 +100,9 @@ export function LaunchStep(props: LaunchStepProps) {
   const [quote, setQuote] = useState<PoolQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+  // Bumped by the "Try again" control so the quote effect re-runs on the SAME
+  // inputs. Without it a failed quote is a dead end until the user edits a field.
+  const [quoteReloadKey, setQuoteReloadKey] = useState(0);
 
   const [busy, setBusy] = useState<Busy>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -139,7 +143,7 @@ export function LaunchStep(props: LaunchStepProps) {
     };
     // addonsKey captures the four booleans; estimatedPlayers/coupon re-quote too.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poolType, estimatedPlayers, addonsKey, couponInput]);
+  }, [poolType, estimatedPlayers, addonsKey, couponInput, quoteReloadKey]);
 
   // --- Redeemable entitlements (only if the user owns a matching one) --------
   useEffect(() => {
@@ -192,7 +196,17 @@ export function LaunchStep(props: LaunchStepProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, poolType, estimatedPlayers]);
 
-  const freeEligible = quote?.freeTierEligible === true;
+  // Which launch actions to render. The rule lives in `launchButtonsState` so a
+  // coupon-zeroed total keeps the Activate path (T2) and so it can be tested.
+  const quoteState: LaunchQuoteState = quoteLoading
+    ? 'pending'
+    : quoteError
+      ? 'unavailable'
+      : quote
+        ? 'ready'
+        : 'pending';
+  const buttons = launchButtonsState({ quoteState, quote });
+  const freeEligible = buttons.primary === 'free';
 
   // --- Shared create guard ---------------------------------------------------
   // Validates the full form and gates on Terms before creating. Returns the new
@@ -354,7 +368,20 @@ export function LaunchStep(props: LaunchStepProps) {
       {/* Itemized SERVER quote (verbatim — no client math). */}
       <div className="mb-5 rounded-lg border border-slate-800 bg-slate-950/50 p-4 text-sm">
         {quoteLoading && <p className="text-slate-400">Fetching your quote…</p>}
-        {!quoteLoading && quoteError && <p className="text-amber-300">{quoteError}</p>}
+        {!quoteLoading && quoteError && (
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-amber-300">{quoteError}</p>
+            {/* An enabled control, not a disabled button promising an action —
+                same split BillingInvoiceCard uses for its quote retry. */}
+            <button
+              type="button"
+              onClick={() => setQuoteReloadKey((k) => k + 1)}
+              className="rounded-md border border-amber-400/60 px-3 py-1 text-xs font-semibold text-amber-200 hover:bg-amber-400/10"
+            >
+              Try again
+            </button>
+          </div>
+        )}
         {!quoteLoading && !quoteError && quote && (
           <dl className="space-y-2">
             <div className="flex justify-between">
@@ -468,16 +495,21 @@ export function LaunchStep(props: LaunchStepProps) {
           </button>
         )}
 
-        {/* Activate now — create as trial, then Stripe checkout. Shown when there
-            is a real amount to charge (a $0 total is either free or covered). */}
-        {quote && quote.total > 0 && (
+        {/* Activate now — create as trial, then checkout. A full-discount coupon
+            drives the total to $0 and STILL activates: the server's FREE PATH
+            handles it without a Stripe redirect (T2). */}
+        {buttons.showActivate && (
           <button
             type="button"
             onClick={activateNow}
             disabled={busy !== null || !tosAccepted}
             className="rounded-md border border-indigo-500/60 bg-indigo-500/10 px-6 py-2.5 text-sm font-bold text-indigo-100 hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy === 'activate' ? 'Starting checkout…' : `Activate now — ${money(quote.total)}`}
+            {busy === 'activate'
+              ? 'Starting checkout…'
+              : buttons.activateIsCouponZero
+                ? 'Activate now — $0 (coupon applied)'
+                : `Activate now — ${money(buttons.activateAmount)}`}
           </button>
         )}
 
