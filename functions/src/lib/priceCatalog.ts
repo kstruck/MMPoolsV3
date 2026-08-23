@@ -82,7 +82,13 @@ export function lookupGeminiPrice(model: string | null | undefined): { key: stri
 
     const keys = Object.keys(GEMINI_PRICES).sort((a, b) => b.length - a.length);
     for (const key of keys) {
-        if (normalized === key || normalized.startsWith(key)) {
+        // Boundary-safe: `key + "-"`, not a bare startsWith. A bare prefix
+        // match would price a hypothetical non-delimited id like
+        // "gemini-2.0-flashlite" as "gemini-2.0-flash" — a WRONG number rather
+        // than the honest null this module is built to return (codex round 2,
+        // finding 4). Mispricing is worse than not pricing: it feeds the
+        // Phase 2.3 breaker as if it were measured.
+        if (normalized === key || normalized.startsWith(key + "-")) {
             return { key, price: GEMINI_PRICES[key] };
         }
     }

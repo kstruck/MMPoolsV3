@@ -47,10 +47,25 @@ function normalizePhone(phone: string): string {
  * Ops paging is NOT here: `lib/opsAlertDispatcher.ts` `sendOpsSMS` is its own
  * Courier path (deliberately, per its own header) and is exempt per D4.
  */
+/**
+ * Attribution context (PLAN-COST-CONTROLS Phase 1.3). REQUIRED, and `{}` is a
+ * legitimate value — a security alert is not pool-scoped. Requiring the
+ * parameter rather than defaulting it forces each call site to state what it
+ * knows: the daily rollup is keyed per pool, so a member blast that omits
+ * poolId collapses every pool's SMS into ONE aggregate document, which loses
+ * per-pool spend AND creates 1-write/sec contention on that single doc during a
+ * reminder run (codex round 2, finding 1).
+ */
+export interface SmsUsageContext {
+    poolId?: string | null;
+    userId?: string | null;
+}
+
 export async function sendCourierSMS(
     phoneNumber: string,
     message: string,
-    audience: SmsAudience
+    audience: SmsAudience,
+    context: SmsUsageContext
 ): Promise<DeliveryOutcome> {
     // Phase 1.3 attribution. NOTE: the phone number is deliberately absent from
     // every usage event below — telemetry records shape and cost, never
@@ -70,6 +85,7 @@ export async function sendCourierSMS(
             provider: "courier", feature, outcome: "skipped",
             latencyMs: Date.now() - startedAt, messageCount: 0,
             errorCode: "killswitch_disabled",
+            poolId: context.poolId ?? null, userId: context.userId ?? null,
         });
         return 'skipped';
     }
@@ -81,6 +97,7 @@ export async function sendCourierSMS(
             provider: "courier", feature, outcome: "skipped",
             latencyMs: Date.now() - startedAt, messageCount: 0,
             errorCode: "not_configured",
+            poolId: context.poolId ?? null, userId: context.userId ?? null,
         });
         return 'skipped';
     }
@@ -121,6 +138,7 @@ export async function sendCourierSMS(
                 provider: "courier", feature, outcome: "error",
                 latencyMs: Date.now() - startedAt, messageCount: 1,
                 errorCode: `http_${response.status}`,
+                poolId: context.poolId ?? null, userId: context.userId ?? null,
             });
             return 'failed';
         }
@@ -129,6 +147,7 @@ export async function sendCourierSMS(
         await recordUsageEvent({
             provider: "courier", feature, outcome: "success",
             latencyMs: Date.now() - startedAt, messageCount: 1,
+            poolId: context.poolId ?? null, userId: context.userId ?? null,
         });
         return 'queued';
     } catch (error) {
@@ -137,6 +156,7 @@ export async function sendCourierSMS(
             provider: "courier", feature, outcome: "error",
             latencyMs: Date.now() - startedAt, messageCount: 1,
             errorCode: "request_failed",
+            poolId: context.poolId ?? null, userId: context.userId ?? null,
         });
         return 'failed';
     }

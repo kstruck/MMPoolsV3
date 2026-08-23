@@ -107,3 +107,17 @@ describe('priceCatalog — prefix resolution is order-independent', () => {
     }
   });
 });
+
+describe('priceCatalog — prefix matching is boundary-safe', () => {
+  it('does NOT price a non-delimited lookalike as its shorter family', () => {
+    // "gemini-2.0-flashlite" is not "gemini-2.0-flash" + a variant suffix; it
+    // is an unknown id. Returning flash's price here would be a WRONG number
+    // fed to the spend breaker, which is worse than returning null.
+    expect(lookupGeminiPrice('gemini-2.0-flashlite')).toBeNull();
+    expect(estimateGeminiCostUSD('gemini-2.0-flashlite', 1000, 1000).priced).toBe(false);
+  });
+
+  it('still matches a properly delimited variant', () => {
+    expect(lookupGeminiPrice('gemini-2.0-flash-001')?.key).toBe('gemini-2.0-flash');
+  });
+});

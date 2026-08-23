@@ -124,7 +124,15 @@ export async function recordUsageEvent(input: UsageEventInput): Promise<void> {
             ),
         };
 
-        await db.collection(USAGE_EVENTS_COLLECTION).add(event);
+        // ⚠️ ONE ATOMIC BATCH, not two awaits. Written separately, an event
+        // could land while its aggregate increment failed, leaving the rollup
+        // reading LOW while real calls were billed — and the rollup is what the
+        // Phase 2.3 breaker and the Phase 6 dashboard read (codex round 2,
+        // finding 3). A batch commits both or neither, so the two collections
+        // cannot disagree.
+        const batch = db.batch();
+        const eventRef = db.collection(USAGE_EVENTS_COLLECTION).doc();
+        batch.set(eventRef, event);
 
         // Daily rollup (1.4). Counters only — no identifying data beyond the
         // pool the aggregate is already keyed by.
@@ -135,7 +143,7 @@ export async function recordUsageEvent(input: UsageEventInput): Promise<void> {
         // `unpricedCalls` is what stops a rollup reading as a small bill when it
         // is really an unknown one: cost sums NULL as nothing, so without this
         // counter an all-unpriced day and a genuinely free day look identical.
-        await aggRef.set({
+        batch.set(aggRef, {
             dayKey,
             provider: input.provider,
             feature: input.feature,
@@ -152,6 +160,8 @@ export async function recordUsageEvent(input: UsageEventInput): Promise<void> {
             priceCatalogVersion: cost.catalogVersion,
             updatedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
+
+        await batch.commit();
     } catch (e) {
         // Deliberately swallowed — see the module header.
         console.warn("[usageEvents] failed to record usage event; continuing", e);

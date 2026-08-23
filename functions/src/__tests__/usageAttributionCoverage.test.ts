@@ -27,6 +27,40 @@ function code(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
+/**
+ * Returns the source of exactly one function, from its declaration to the brace
+ * that closes it. Naive but sufficient here: these files contain no braces
+ * inside string literals or regexes within the scanned bodies, and comments are
+ * stripped before this runs.
+ */
+function extractFunctionBody(src: string, declStart: number): string {
+  const open = src.indexOf('{', declStart);
+  if (open === -1) return '';
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') {
+      depth--;
+      if (depth === 0) return src.slice(declStart, i + 1);
+    }
+  }
+  return src.slice(declStart);
+}
+
+/** Split an argument list on top-level commas (ignoring nested (), {}, []). */
+function splitTopLevelArgs(argList: string): string[] {
+  const args: string[] = [];
+  let depth = 0, current = '';
+  for (const ch of argList) {
+    if ('([{'.includes(ch)) depth++;
+    else if (')]}'.includes(ch)) depth--;
+    if (ch === ',' && depth === 0) { args.push(current.trim()); current = ''; continue; }
+    current += ch;
+  }
+  if (current.trim()) args.push(current.trim());
+  return args;
+}
+
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
@@ -48,7 +82,8 @@ describe('Phase 1 exit gate — every paid provider call is attributed', () => {
     const ALLOWED = new Set([
       'gemini.ts',                    // Gemini wrapper — records usage events
       'notifications/smsService.ts',  // Courier member/security/test wrapper — records
-      'lib/opsAlertDispatcher.ts',    // ops paging, D4-exempt, separate Courier path
+      'lib/opsAlertDispatcher.ts',    // ops paging: own Courier path, D4-exempt from the
+                                      // kill-switch but ATTRIBUTED like everything else
     ]);
 
     const offenders: string[] = [];
@@ -80,7 +115,21 @@ describe('Phase 1 exit gate — every paid provider call is attributed', () => {
     }
     expect(callers.length, 'expected the known AI call sites to be found').toBeGreaterThanOrEqual(6);
     for (const { rel, call } of callers) {
-      expect(call, `${rel}: generateAIResponse call without a feature label`).toMatch(/feature\s*:/);
+      // Check the THIRD positional argument specifically, not "feature:
+      // appears somewhere in the argument list" — the loose version would be
+      // satisfied by a `feature` key nested in the facts object and would pass
+      // while attribution was actually missing (codex round 2, finding 5).
+      //
+      // NOTE ON WEIGHT: the primary enforcement is the TYPE SYSTEM —
+      // usageContext is a required parameter, so an omitted context is a
+      // compile error, and CI typechecks. This test is a tripwire for the day
+      // someone makes it optional "for convenience". An AST pass was proposed
+      // and is deliberately not taken: same call this repo made on #516's
+      // ordering guard — not worth its weight against a compiler-enforced
+      // invariant.
+      const args = splitTopLevelArgs(call);
+      expect(args.length, `${rel}: generateAIResponse called with ${args.length} args`).toBeGreaterThanOrEqual(3);
+      expect(args[2], `${rel}: 3rd argument is not an attribution context`).toMatch(/feature\s*:/);
     }
   });
 
@@ -92,13 +141,39 @@ describe('Phase 1 exit gate — every paid provider call is attributed', () => {
     expect(c).toMatch(/outcome:\s*"error"/);
   });
 
+  it('sendOpsSMS records an event on EVERY return path too', () => {
+    // The ops dispatcher reaches Courier directly rather than through
+    // sendCourierSMS. It is D4-exempt from the kill-switch, which is NOT the
+    // same as being exempt from costing money — it bills the same account.
+    // Leaving it un-recorded made the Phase 1 exit gate false (codex round 2,
+    // finding 2), so it is guarded the same way.
+    const c = code(read('lib/opsAlertDispatcher.ts'));
+    const start = c.indexOf('async function sendOpsSMS');
+    expect(start, 'sendOpsSMS not found').toBeGreaterThan(-1);
+    const body = extractFunctionBody(c, start);
+
+    const returns = (body.match(/return\s+(true|false)\s*;/g) || []).length;
+    const records = (body.match(/recordUsageEvent\s*\(/g) || []).length;
+    expect(returns, 'expected the known ops return paths').toBeGreaterThanOrEqual(4);
+    expect(records,
+      `sendOpsSMS has ${returns} outcome returns but only ${records} usage events`
+    ).toBe(returns);
+  });
+
   it('sendCourierSMS records an event on EVERY return path', () => {
     // Scope to the function body only — matching the whole file is how a
     // structural guard ends up asserting against unrelated code.
+    //
+    // Bounded by BRACE MATCHING, not by slicing to end-of-file (codex round 2,
+    // finding 5). sendCourierSMS happens to be the last function in this file
+    // today, so slice-to-EOF was accidentally correct — and would have silently
+    // started counting a NEIGHBOUR's returns the moment anyone appended a
+    // function below it. That is the exact "guard matched a different function"
+    // failure this repo already paid for once.
     const c = code(read('notifications/smsService.ts'));
     const start = c.indexOf('export async function sendCourierSMS');
     expect(start, 'sendCourierSMS not found').toBeGreaterThan(-1);
-    const body = c.slice(start);
+    const body = extractFunctionBody(c, start);
 
     const returns = (body.match(/return\s+'(skipped|failed|queued)'/g) || []).length;
     const records = (body.match(/recordUsageEvent\s*\(/g) || []).length;

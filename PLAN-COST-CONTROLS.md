@@ -281,6 +281,26 @@ no feature calls providers directly), with these repo-specific corrections:
 
 **Exit gate:** every external paid call produces an attributable usage event.
 
+⚠️ **A FIRESTORE TTL POLICY IS A MANUAL CONSOLE STEP AND NO DEPLOY COMMAND
+CREATES IT** (codex round 2, finding 6). Phase 1 writes an `expiresAt` timestamp
+on every raw event, but that field is **inert** until someone creates a TTL
+policy naming it. Until then raw events — which carry the `userId`/`poolId`
+attribution pair — accumulate for ever, which is both a storage cost and a
+retention-promise the plan does not keep (D3 says 90 days). It cannot be
+declared in `firestore.indexes.json`; TTL lives at the GCP/Firestore
+configuration level, so nothing in this repo can assert it.
+
+**Required after the Phase 1 deploy (Kevin, console or gcloud):**
+
+```
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=provider_usage_events \
+  --enable-ttl --project=gridiron-gamble-uzuqo
+```
+
+Until that runs, treat the 90-day retention line in §Retention as ASPIRATIONAL,
+not in force.
+
 ## Phase 2 — Enforce rate limits and spend controls
 
 Codex's phase, amended:

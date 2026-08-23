@@ -1,5 +1,6 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { recordUsageEvent } from "./usageEvents";
 import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 
@@ -117,9 +118,21 @@ function normalizePhone(phone: string): string {
  *  SMS path). Shares the same Courier account/secret (no new vendor account
  *  needed tonight); framing and recipient source are ops-specific. */
 async function sendOpsSMS(phone: string, message: string): Promise<boolean> {
+    // Attributed like every other paid call (PLAN-COST-CONTROLS Phase 1.3).
+    // This path is D4-EXEMPT from the kill-switch but it is NOT exempt from
+    // costing money: it bills the same Courier account as the member sends, so
+    // leaving it un-recorded made "every external paid call is attributed"
+    // false and left Courier invoice reconciliation incomplete (codex round 2,
+    // finding 2). No poolId — ops paging is platform-wide, not pool-scoped.
+    const startedAt = Date.now();
     const token = opsCourierAuthToken.value();
     if (!token) {
         logger.warn("[opsAlertDispatcher] COURIER_AUTH_TOKEN not configured; ops SMS not sent.");
+        await recordUsageEvent({
+            provider: "courier", feature: "sms.ops", outcome: "skipped",
+            latencyMs: Date.now() - startedAt, messageCount: 0,
+            errorCode: "not_configured",
+        });
         return false;
     }
     try {
@@ -136,11 +149,25 @@ async function sendOpsSMS(phone: string, message: string): Promise<boolean> {
         });
         if (!response.ok) {
             logger.error(`[opsAlertDispatcher] Courier ops SMS failed (${response.status})`, await response.text());
+            await recordUsageEvent({
+                provider: "courier", feature: "sms.ops", outcome: "error",
+                latencyMs: Date.now() - startedAt, messageCount: 1,
+                errorCode: `http_${response.status}`,
+            });
             return false;
         }
+        await recordUsageEvent({
+            provider: "courier", feature: "sms.ops", outcome: "success",
+            latencyMs: Date.now() - startedAt, messageCount: 1,
+        });
         return true;
     } catch (e) {
         logger.warn(`[opsAlertDispatcher] ops SMS to ${phone} failed (non-fatal)`, e);
+        await recordUsageEvent({
+            provider: "courier", feature: "sms.ops", outcome: "error",
+            latencyMs: Date.now() - startedAt, messageCount: 1,
+            errorCode: "request_failed",
+        });
         return false;
     }
 }

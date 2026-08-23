@@ -24,16 +24,28 @@ const h = vi.hoisted(() => ({
 
 vi.mock('firebase-admin', () => {
   const Timestamp = { fromMillis: (ms: number) => ({ __ts: ms }) };
+  // The recorder writes BOTH docs in one batch (codex round 2, finding 3), so
+  // the mock models a batch: staged writes are only visible after commit(), and
+  // a failing commit must leave BOTH unrecorded.
   const firestore: any = () => ({
+    batch: () => {
+      const staged: { ref: any; data: any }[] = [];
+      return {
+        set: (ref: any, data: any) => { staged.push({ ref, data }); },
+        commit: async () => {
+          if (h.addShouldThrow) throw new Error('Firestore unavailable');
+          for (const { ref, data } of staged) {
+            if (ref.__collection === 'provider_usage_events') {
+              h.added.push({ collection: ref.__collection, doc: data });
+            } else {
+              h.setCalls.push({ id: ref.__id, data });
+            }
+          }
+        },
+      };
+    },
     collection: (name: string) => ({
-      add: async (doc: any) => {
-        if (h.addShouldThrow) throw new Error('Firestore unavailable');
-        h.added.push({ collection: name, doc });
-        return { id: 'evt1' };
-      },
-      doc: (id: string) => ({
-        set: async (data: any) => { h.setCalls.push({ id, data }); },
-      }),
+      doc: (id?: string) => ({ __collection: name, __id: id ?? 'auto-id' }),
     }),
   });
   firestore.Timestamp = Timestamp;
@@ -114,6 +126,32 @@ describe('usageEvents — what gets written', () => {
     expect(agg.skipped).toEqual({ __inc: 1 });
     expect(agg.successes).toEqual({ __inc: 0 });
     expect(agg.errors).toEqual({ __inc: 0 });
+  });
+});
+
+describe('usageEvents — the two writes are atomic', () => {
+  it('a failed commit writes NEITHER the event nor the aggregate', async () => {
+    // Written as two separate awaits, the event could land while the aggregate
+    // increment failed — leaving the rollup reading LOW while real calls were
+    // billed. The rollup is what the Phase 2.3 breaker and the Phase 6 cost
+    // card read, so an undercount there is a breaker that does not trip
+    // (codex round 2, finding 3).
+    h.addShouldThrow = true;
+    await recordUsageEvent({
+      provider: 'gemini', feature: 'ai.dispute', outcome: 'success',
+      model: 'gemini-2.0-flash', inputTokens: 10, outputTokens: 10,
+    });
+    expect(h.added, 'event must not land when the commit fails').toHaveLength(0);
+    expect(h.setCalls, 'aggregate must not land when the commit fails').toHaveLength(0);
+  });
+
+  it('a successful commit writes BOTH', async () => {
+    await recordUsageEvent({
+      provider: 'gemini', feature: 'ai.dispute', outcome: 'success',
+      model: 'gemini-2.0-flash', inputTokens: 10, outputTokens: 10, poolId: 'p1',
+    });
+    expect(h.added).toHaveLength(1);
+    expect(h.setCalls).toHaveLength(1);
   });
 });
 
