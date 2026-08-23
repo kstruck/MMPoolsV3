@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   events: [] as any[],
   responseText: '',
   shouldThrowApi: false,
+  apiKey: 'test-key' as string,
 }));
 
 vi.mock('../lib/usageEvents', () => ({
@@ -27,7 +28,7 @@ vi.mock('../lib/usageEvents', () => ({
 }));
 
 vi.mock('firebase-functions/params', () => ({
-  defineSecret: () => ({ value: () => 'test-key' }),
+  defineSecret: () => ({ value: () => h.apiKey }),
 }));
 
 vi.mock('@google/genai', () => ({
@@ -58,6 +59,7 @@ import { generateAIResponse } from '../gemini';
 beforeEach(() => {
   h.events.length = 0;
   h.shouldThrowApi = false;
+  h.apiKey = 'test-key';
 });
 
 describe('generateAIResponse — usage accounting', () => {
@@ -96,6 +98,19 @@ describe('generateAIResponse — usage accounting', () => {
     expect(h.events[0].errorCode).toBe('http_503');
     // No token counts on a failed call — they must not be invented.
     expect(h.events[0].inputTokens ?? null).toBeNull();
+  });
+
+  it('records a skipped event when the API key is not configured', async () => {
+    // Symmetry with sendCourierSMS's missing-token path. Without this, a
+    // misconfigured deployment produces NO telemetry, which reads identically
+    // to "nobody used the feature".
+    h.apiKey = '';
+    await expect(
+      generateAIResponse('sys', { a: 1 }, { feature: 'ai.test' })
+    ).rejects.toThrow(/GEMINI_API_KEY is not set/);
+    expect(h.events).toHaveLength(1);
+    expect(h.events[0].outcome).toBe('skipped');
+    expect(h.events[0].errorCode).toBe('not_configured');
   });
 
   it('non-JSON text returns the raw fallback and still records one event', async () => {

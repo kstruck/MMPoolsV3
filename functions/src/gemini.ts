@@ -90,6 +90,20 @@ export const generateAIResponse = async (
     }
 
     if (!apiKey) {
+        // Recorded as `skipped`, matching how `sendCourierSMS` treats a missing
+        // Courier token. No provider call happens, so it costs nothing — but a
+        // misconfigured deployment must be VISIBLE in the rollup rather than
+        // silently producing no telemetry at all, which is indistinguishable
+        // from "the feature was never used".
+        await recordUsageEvent({
+            provider: "gemini",
+            feature: usageContext.feature,
+            outcome: "skipped",
+            latencyMs: Date.now() - startedAt,
+            poolId: usageContext.poolId ?? null,
+            userId: usageContext.userId ?? null,
+            errorCode: "not_configured",
+        });
         throw new Error("GEMINI_API_KEY is not set.");
     }
 
