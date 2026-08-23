@@ -550,7 +550,12 @@ describe('week results view — absence is not zero, and Survivor has no week to
     // to the dashboard, and `results` is entered in that map from
     // `showResultsTab`.
     expect(dash).toContain('results: showResultsTab');
-    expect(dash).toContain("const activeTab: TabType = tabOffered[requestedTab] ? requestedTab : 'dashboard';");
+    expect(dash).toContain("const resolvedTab: TabType = tabOffered[requestedTab] ? requestedTab : 'dashboard';");
+    // T10: and on a pool that DOES offer it, `results` no longer renders a tab
+    // of its own — it is normalized to the Standings tab's week segment. Both
+    // halves matter: the map above is what makes Survivor fall back, this is
+    // what makes every other type land on the merged tab.
+    expect(dash).toContain('resolveStandingsAlias(resolvedTab)');
   });
 
   it('a not-yet-scored week shows no place chip', () => {

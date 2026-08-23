@@ -372,6 +372,34 @@ export const dbService = {
     },
 
     /**
+     * The ONE pinned post, watched as a single document.
+     *
+     * Not resolved out of `subscribeToPoolFeed`'s array: that query is the last
+     * 50 messages, and a pin set in week 2 of a chatty pool would silently stop
+     * rendering once it fell off the end. A direct doc listener also handles the
+     * two states the band has to distinguish — the post was DELETED (snapshot
+     * stops existing, band disappears) versus the read FAILED — without either
+     * looking like "nothing is pinned".
+     *
+     * Same read rule as the feed (`isPoolParticipant`), so callers gate on
+     * membership before subscribing, exactly as they do for the feed.
+     */
+    subscribeToPinnedMessage: (
+        poolId: string,
+        messageId: string,
+        callback: (message: BanterMessage | null) => void,
+        onError?: (e: unknown) => void,
+    ) => {
+        const ref = doc(db, 'pools', poolId, 'messages', messageId);
+        return onSnapshot(ref, (snap) => {
+            callback(snap.exists() ? ({ id: snap.id, ...snap.data() } as BanterMessage) : null);
+        }, (error) => {
+            logger.error('[dbService] subscribeToPinnedMessage error:', error);
+            if (onError) onError(error); else callback(null);
+        });
+    },
+
+    /**
      * The requester's own BANTER requests (T9, codex r5 [P2]).
      *
      * Generation is ASYNCHRONOUS: the card gets an optimistic "it appears in a
@@ -1095,6 +1123,22 @@ export const dbService = {
     adminUpdatePoolBilling: async (payload: { poolId: string; action: 'override' | 'extendTrial' | 'resetGrace'; data?: Record<string, unknown> }): Promise<void> => {
         const fn = httpsCallable<typeof payload, { success: boolean }>(functions, 'adminUpdatePoolBilling');
         await fn(payload);
+    },
+    /**
+     * Turn ONE premium feature on or off for ONE pool (SUPER_ADMIN).
+     *
+     * Narrow on purpose: `adminUpdatePoolBilling({action:'override'})` can
+     * already do this, but it merges an arbitrary billing object and its audit
+     * row cannot say what changed. This one names the feature both in the call
+     * and in `admin_audit`.
+     */
+    adminSetPoolFeature: async (poolId: string, feature: string, enabled: boolean): Promise<void> => {
+        const fn = httpsCallable<{ poolId: string; feature: string; enabled: boolean }, { success: boolean }>(functions, 'adminSetPoolFeature');
+        // Correlated: `validated()` logs nothing at all for a callable with no
+        // `_correlationId` — not on entry, not on success, and not when it
+        // refuses at the role gate. A money-adjacent grant is the last thing
+        // that should be invisible in the logs.
+        await fn(withCorrelationId({ poolId, feature, enabled }));
     },
     adminAdjustUserCredits: async (targetUid: string, referralCredits: number, freePoolsAvailable: number): Promise<void> => {
         const fn = httpsCallable<{ targetUid: string; referralCredits: number; freePoolsAvailable: number }, { success: boolean }>(functions, 'adminAdjustUserCredits');
@@ -2048,6 +2092,13 @@ export const dbService = {
         usedCredit?: boolean;
         customCreditId?: string;
         bundleType?: string;
+        /**
+         * PLAN-PER-POOL-PREMIUM C2. `'addon'` buys features for a pool that is
+         * ALREADY ACTIVE; absent/`'pool'` buys hosting, which is what every
+         * existing caller does. The server refuses the wrong combination — an
+         * add-on purchase for an inactive pool, or hosting for an active one.
+         */
+        purchaseKind?: 'pool' | 'addon';
     }): Promise<{ sessionUrl: string }> {
         try {
             const fn = httpsCallable<Record<string, unknown>, { sessionUrl: string }>(functions, 'createCheckoutSession');

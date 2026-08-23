@@ -121,43 +121,48 @@ describe('resolveHelpPage', () => {
 
 describe('offeredTabs — a tab this pool does not have is not a screen', () => {
   /**
-   * codex R3. A Survivor pool has no Results tab (`NFLPoolDashboard.tsx`
-   * `showResultsTab`), so listing "NFL pool — Results" for one produced a link
-   * that changed the URL and landed back on the dashboard. The condition lives
-   * in the dashboard, so the dashboard publishes the list rather than the help
-   * content re-deriving it.
+   * codex R3. A pool that does not offer a tab must not be shown that tab's
+   * Help page: the link would change the URL and land back on the dashboard.
+   * The condition lives in the dashboard, so the dashboard publishes the list
+   * rather than the help content re-deriving it.
+   *
+   * ⚠️ The example used to be "NFL pool — Results" on a Survivor pool. T10
+   * merged Results into Standings and deleted that page, so the example is now
+   * the Current Picks grid, which `NFLPoolDashboard.showPicksGridTab` withholds
+   * from a signed-OUT reader. The rule under test is unchanged.
    */
-  const results = () => helpRegistry.getPage('pool.nfl.results')!;
-  const survivor = (over: Partial<HelpRouteContext> = {}) =>
+  const grid = () => helpRegistry.getPage('pool.nfl.grid')!;
+  const signedOut = (over: Partial<HelpRouteContext> = {}) =>
     ctx({
       pathname: '/pool/abc',
       poolType: 'NFL_SURVIVOR',
       tab: 'dashboard',
-      // What `NFLPoolDashboard` publishes for a Survivor pool: no `results`.
-      offeredTabs: ['dashboard', 'picks', 'grid', 'standings', 'recaps', 'rules', 'payments'],
+      // What `NFLPoolDashboard` publishes for a signed-out reader: no `grid`,
+      // and no `payments` either.
+      offeredTabs: ['dashboard', 'picks', 'standings', 'recaps', 'rules'],
       ...over,
     });
 
   it('is not offered, and therefore not linkable', () => {
-    expect(isPageOffered(results(), survivor())).toBe(false);
-    expect(hrefForPage(results(), survivor())).toBeNull();
+    expect(isPageOffered(grid(), signedOut())).toBe(false);
+    expect(hrefForPage(grid(), signedOut())).toBeNull();
   });
 
-  it('IS offered to a Pick’em pool, which has the tab', () => {
-    const pickem = ctx({
+  it('IS offered to a signed-in reader, who has the tab', () => {
+    const member = ctx({
       pathname: '/pool/abc',
       poolType: 'NFL_PICKEM',
       tab: 'dashboard',
-      offeredTabs: ['dashboard', 'picks', 'standings', 'results', 'recaps', 'rules'],
+      offeredTabs: ['dashboard', 'picks', 'grid', 'standings', 'recaps', 'rules'],
     });
-    expect(isPageOffered(results(), pickem)).toBe(true);
-    expect(hrefForPage(results(), pickem)).toBe('/pool/abc?tab=results');
+    expect(isPageOffered(grid(), member)).toBe(true);
+    expect(hrefForPage(grid(), member)).toBe('/pool/abc?tab=grid');
   });
 
   it('makes no claim when the surface published none', () => {
     // A surface with no conditional tabs does not have to publish a list, and
     // absence must not hide every tab page it has.
-    expect(isPageOffered(results(), ctx({ pathname: '/pool/abc', poolType: 'NFL_PICKEM' }))).toBe(true);
+    expect(isPageOffered(grid(), ctx({ pathname: '/pool/abc', poolType: 'NFL_PICKEM' }))).toBe(true);
   });
 
   it('does not judge a page on a DIFFERENT route by this surface’s tabs', () => {
@@ -165,11 +170,18 @@ describe('offeredTabs — a tab this pool does not have is not a screen', () => 
     // offers, and filtering it out here would empty "All pages" of everything
     // but the current surface.
     const step = helpRegistry.getPage('wizard.pickem.rules')!;
-    expect(isPageOffered(step, survivor())).toBe(true);
+    expect(isPageOffered(step, signedOut())).toBe(true);
   });
 
   it('never filters the page with no tab at all', () => {
-    expect(isPageOffered(helpRegistry.getPage('pool.nfl')!, survivor())).toBe(true);
+    expect(isPageOffered(helpRegistry.getPage('pool.nfl')!, signedOut())).toBe(true);
+  });
+
+  it('T10 — there is no separate Results page to offer any more', () => {
+    // The merge deleted it. If it ever comes back, the dashboard's
+    // `offeredTabs` filter (which strips `results` on purpose) would hide it
+    // everywhere, so the page and the filter have to be changed together.
+    expect(helpRegistry.getPage('pool.nfl.results')).toBeUndefined();
   });
 });
 
@@ -207,10 +219,10 @@ describe('canOpenPage — reachable from where the reader is standing (codex R12
   it('refuses a page for another pool type, and one whose tab is not offered', () => {
     const bracket = helpRegistry.getPage('pool.bracket.standings')!;
     expect(canOpenPage(bracket, inPool, MEMBER)).toBe(false);
-    const results = helpRegistry.getPage('pool.nfl.results')!;
-    expect(canOpenPage(results, { ...inPool, offeredTabs: ['picks', 'standings'] }, MEMBER)).toBe(false);
+    const grid = helpRegistry.getPage('pool.nfl.grid')!;
+    expect(canOpenPage(grid, { ...inPool, offeredTabs: ['picks', 'standings'] }, MEMBER)).toBe(false);
     // Discriminating: offered, and it opens.
-    expect(canOpenPage(results, { ...inPool, offeredTabs: ['picks', 'results'] }, MEMBER)).toBe(true);
+    expect(canOpenPage(grid, { ...inPool, offeredTabs: ['picks', 'grid'] }, MEMBER)).toBe(true);
   });
 });
 

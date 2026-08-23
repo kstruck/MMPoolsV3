@@ -39,6 +39,18 @@ interface NFLStandingsProps {
   reveal?: PoolPicksReveal | null;
   /** The viewer's own entry has loaded — the own-row reveal bypass. */
   ownEntryLoaded?: boolean;
+  /**
+   * T10 — this table is the SEASON segment of the merged Standings tab, so its
+   * week-scoped columns (the week's pick / completeness cell and the week's
+   * tiebreaker guess) and the week's row-expand pick reveal are OFF. They live
+   * in the "This Week" segment now (`NFLResults`), which is the whole point of
+   * the merge: a season page that reads as a season page.
+   *
+   * ⚠️ Survivor leaves it FALSE and is unchanged. It has one view and no weekly
+   * table to move a cell to, and Kevin named Survivor as the shape the other
+   * types should copy — so nothing about it moves here.
+   */
+  seasonOnly?: boolean;
 }
 
 export const NFLStandings: React.FC<NFLStandingsProps> = ({
@@ -50,6 +62,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
   pickCounts,
   reveal,
   ownEntryLoaded = false,
+  seasonOnly = false,
 }) => {
   const navigate = useNavigate();
   const type = pool.type;
@@ -215,7 +228,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
     <div className="bg-card border border-line rounded-xl overflow-hidden shadow-card">
       <div className="p-6 border-b border-line flex justify-between items-center bg-surface">
         <h3 className="font-display font-bold uppercase text-base tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
-          <Trophy size={18} className="text-gold-600 dark:text-gold-400" /> Standings Leaderboard
+          <Trophy size={18} className="text-gold-600 dark:text-gold-400" /> {seasonOnly ? 'Season Standings' : 'Standings Leaderboard'}
         </h3>
         <div className="flex items-center gap-3">
           <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted bg-page border border-line px-3 py-1 rounded-full num">
@@ -239,8 +252,8 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                 {/* Custom Pool Columns */}
                 {type === 'NFL_PICKEM' && (
                   <>
-                    <th className={`${TH} text-center`}>{nflWeekLabel(poolSeasonType(pool), week)} Pick</th>
-                    {showTiebreakerColumn && <th className={`${TH} text-center`} title={tiebreakerHint}>Tiebreaker Guess<span className="sr-only"> — {tiebreakerHint}</span></th>}
+                    {!seasonOnly && <th className={`${TH} text-center`}>{nflWeekLabel(poolSeasonType(pool), week)} Pick</th>}
+                    {!seasonOnly && showTiebreakerColumn && <th className={`${TH} text-center`} title={tiebreakerHint}>Tiebreaker Guess<span className="sr-only"> — {tiebreakerHint}</span></th>}
                     <th className={`${TH} text-right w-24`}>Total Points</th>
                   </>
                 )}
@@ -256,7 +269,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
 
                 {type === 'NFL_MARGIN' && (
                   <>
-                    <th className={`${TH} text-center`}>{nflWeekLabel(poolSeasonType(pool), week)} Pick</th>
+                    {!seasonOnly && <th className={`${TH} text-center`}>{nflWeekLabel(poolSeasonType(pool), week)} Pick</th>}
                     <th className={`${TH} text-center`}>Negative Burden</th>
                     <th className={`${TH} text-center`}>Win Wks</th>
                     <th className={`${TH} text-center`}>Best Wk</th>
@@ -300,14 +313,20 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                 const isOpen = openRowId === entry.id;
                 return (
                   <React.Fragment key={entry.id}>
+                  {/* T10: on the SEASON segment the row does not expand. What it
+                      expands to is one WEEK's picks, and this table no longer
+                      claims to be about a week — the "This Week" segment carries
+                      the same reveal, over the same `EntryWeekPicks`. Leaving the
+                      handler on would also leave `role="button"` on a row that
+                      does nothing, which is worse than dropping the affordance. */}
                   <tr
-                    onClick={e => { if ((e.target as HTMLElement).closest('button,a')) return; setOpenRowId(prev => (prev === entry.id ? null : entry.id)); }}
-                    tabIndex={0}
-                    role="button"
-                    onKeyDown={e => { if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenRowId(prev => (prev === entry.id ? null : entry.id)); } }}
-                    aria-expanded={isOpen}
-                    title={isOpen ? 'Hide picks' : `Show ${nflWeekLabel(poolSeasonType(pool), week)} picks`}
-                    className={`cursor-pointer transition-colors hover:bg-[color:var(--page)] ${
+                    onClick={seasonOnly ? undefined : e => { if ((e.target as HTMLElement).closest('button,a')) return; setOpenRowId(prev => (prev === entry.id ? null : entry.id)); }}
+                    tabIndex={seasonOnly ? undefined : 0}
+                    role={seasonOnly ? undefined : 'button'}
+                    onKeyDown={seasonOnly ? undefined : e => { if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenRowId(prev => (prev === entry.id ? null : entry.id)); } }}
+                    aria-expanded={seasonOnly ? undefined : isOpen}
+                    title={seasonOnly ? undefined : isOpen ? 'Hide picks' : `Show ${nflWeekLabel(poolSeasonType(pool), week)} picks`}
+                    className={`transition-colors hover:bg-[color:var(--page)] ${seasonOnly ? '' : 'cursor-pointer'} ${
                       isMyEntry ? 'bg-brandred-600/[0.07] hover:bg-brandred-600/10' : ''
                     }`}
                   >
@@ -341,6 +360,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                     {/* Pick'em Columns */}
                     {type === 'NFL_PICKEM' && (
                       <>
+                        {!seasonOnly && (
                         <td className="py-4 px-6 text-center text-[13px] font-bold text-muted num">
                           {/* Counted over THIS week's slate. It used to be
                               `Object.keys(entry.picks).length`, which counts every
@@ -354,7 +374,8 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                               ? `${pickCounts[entry.id]} of ${weekGameIds.length} Picks Set`
                               : faint(marker())}
                         </td>
-                        {showTiebreakerColumn && (
+                        )}
+                        {!seasonOnly && showTiebreakerColumn && (
                           <td className="py-4 px-6 text-center text-[13px] num font-bold text-muted">
                             {entry.weeklyTiebreakers?.[week] ? `${entry.weeklyTiebreakers[week]} pts` : '—'}
                           </td>
@@ -394,9 +415,11 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                     {/* Margin Columns */}
                     {type === 'NFL_MARGIN' && (
                       <>
+                        {!seasonOnly && (
                         <td className="py-4 px-6 text-center text-[13px] font-display font-bold text-navy-700 dark:text-gold-400 uppercase tracking-[0.08em]">
                           {pickCell}
                         </td>
+                        )}
                         <td className="py-4 px-6 text-center text-[13px] font-bold num text-brandred-600">
                           {entry.unscored ? dash : `-${entry.negativeBurden ?? 0}`}
                         </td>
@@ -412,7 +435,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                       </>
                     )}
                   </tr>
-                  {isOpen && (
+                  {isOpen && !seasonOnly && (
                     <tr className="bg-surface">
                       <td colSpan={99} className="py-3 px-6">
                         <EntryWeekPicks

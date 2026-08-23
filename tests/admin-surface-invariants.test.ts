@@ -320,6 +320,10 @@ describe('functions export surface', () => {
     'adminSaveBillingConfig',
     'adminManageCoupon',
     'adminUpdatePoolBilling',
+    // C1 (2026-08-23): the NARROW per-pool feature toggle. `adminUpdatePoolBilling`
+    // could already do this via `override`, but its audit row cannot say which
+    // feature moved or which way.
+    'adminSetPoolFeature',
     'adminAdjustUserCredits',
     'searchUsersByEmail',
     'closePool',

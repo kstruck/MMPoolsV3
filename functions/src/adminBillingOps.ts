@@ -19,6 +19,7 @@ import { adminManageCouponSchema } from "./schemas/adminManageCoupon";
 import {
   adminSaveBillingConfigSchema,
   adminUpdatePoolBillingSchema,
+  adminSetPoolFeatureSchema,
   adminAdjustUserCreditsSchema,
 } from "./schemas/adminBillingOps";
 import { writeAdminAudit } from "./lib/adminAudit";
@@ -122,6 +123,77 @@ export const adminUpdatePoolBilling = validated(
       targetType: "pool",
       targetId: input.poolId,
       metadata: { action: input.action },
+      status: "success",
+    });
+    return { success: true };
+  },
+);
+
+/**
+ * Turn ONE premium feature on or off for ONE pool, with an audit row that says
+ * which (Kevin, 2026-08-23).
+ *
+ * ⚠️ IT WRITES `billing.paid.addons` TOO, NOT ONLY `featuresUnlocked`, and the
+ * two have different jobs:
+ *   - `featuresUnlocked.<key>` is the ENTITLEMENT every gate reads.
+ *   - `paid.addons` is the PAID CEILING `assertPaidCeilingForUpdate` compares
+ *     against, and the array a later purchase merges into.
+ * Granting only the first would leave a pool holding a feature its own paid
+ * ceiling says it never bought — so the next settings save that touches an
+ * add-on would be refused, and a later add-on purchase would re-stamp
+ * `paid.addons` without it. Revoking clears both for the same reason.
+ *
+ * ⚠️ IT DOES NOT TOUCH `billing.status`, `tier`, `pricePaid` or the ledger. A
+ * grant is not a sale: no money moved, so nothing may claim it did. Use
+ * `adminUpdatePoolBilling` for lifecycle changes.
+ */
+export const adminSetPoolFeature = validated(
+  { schema: adminSetPoolFeatureSchema, label: "adminSetPoolFeature", role: "SUPER_ADMIN", appCheck: "monitor" },
+  async (input, request) => {
+    const caller = { uid: request.auth!.uid, email: request.auth!.token.email as string | undefined };
+    const { poolId, feature, enabled } = input;
+    const poolRef = admin.firestore().doc(`pools/${poolId}`);
+
+    // Transactional: `paid.addons` is read-modify-write, and two admins toggling
+    // two different features on the same pool would otherwise clobber each other.
+    const outcome = await admin.firestore().runTransaction(async (txn) => {
+      const snap = await txn.get(poolRef);
+      if (!snap.exists) throw new HttpsError("not-found", "Pool not found.");
+      type PoolBillingShape = {
+        featuresUnlocked?: Record<string, boolean>;
+        paid?: { addons?: string[] };
+      };
+      const billing: PoolBillingShape = (snap.data() as { billing?: PoolBillingShape } | undefined)?.billing ?? {};
+      const before = billing?.featuresUnlocked?.[feature] === true;
+
+      const addons: string[] = Array.isArray(billing.paid?.addons) ? [...billing.paid!.addons!] : [];
+      const nextAddons = enabled
+        ? (addons.includes(feature) ? addons : [...addons, feature])
+        : addons.filter((k) => k !== feature);
+
+      const patch: Record<string, unknown> = {
+        [`billing.featuresUnlocked.${feature}`]: enabled,
+        updatedAt: Date.now(),
+      };
+      // Only touch the paid ceiling when there IS one. Writing `billing.paid` on
+      // a free or trial pool would invent a purchase record and switch on the
+      // ceiling gate for a pool that has none (`assertPaidCeilingForUpdate`
+      // returns early when `paid` is absent).
+      if (billing?.paid) patch["billing.paid.addons"] = nextAddons;
+
+      // `update`, NOT `set({merge:true})`: these are DOTTED FIELD PATHS, and
+      // `set` would create literal top-level keys named "billing.paid.addons".
+      txn.update(poolRef, patch);
+      return { before, hadPaid: !!billing?.paid };
+    });
+
+    await writeAdminAudit({
+      actorUid: caller.uid,
+      actorEmail: caller.email,
+      action: enabled ? "POOL_FEATURE_GRANT" : "POOL_FEATURE_REVOKE",
+      targetType: "pool",
+      targetId: poolId,
+      metadata: { feature, enabled, previous: outcome.before, paidCeilingUpdated: outcome.hadPaid },
       status: "success",
     });
     return { success: true };

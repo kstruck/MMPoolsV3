@@ -44,7 +44,19 @@ export * from './nflPoolTypes';
 
 // Core Pool Types
 export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS' | 'NFL_PICKEM' | 'NFL_SURVIVOR' | 'NFL_MARGIN';
-export type Pool = (GameState | BracketPool | PlayoffPool | PropsPool | NFLPickemPool | NFLSurvivorPool | NFLMarginPool) & { billing?: PoolBilling };
+export type Pool = (GameState | BracketPool | PlayoffPool | PropsPool | NFLPickemPool | NFLSurvivorPool | NFLMarginPool) & {
+  billing?: PoolBilling;
+  /**
+   * The one feed post pinned to the top of the pool home page, by id
+   * (`pools/{poolId}/messages/{id}`). Empty string or absent = nothing pinned.
+   *
+   * Stored on the POOL rather than as a `pinned` flag on the message, so that
+   * `messages` keeps `allow update: if false` — a post can be removed but never
+   * silently rewritten under its author's name — and so "exactly one pinned at a
+   * time" is a property of the data rather than a rule anybody has to enforce.
+   */
+  pinnedMessageId?: string;
+};
 
 // --- NFL Playoff Pool Types ---
 

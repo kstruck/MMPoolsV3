@@ -16,6 +16,7 @@ import {
   unwinnableGameIds,
   resultsFootnote,
   type ResultsRow,
+  type ResultsView,
 } from '../../utils/nflResults';
 
 /**
@@ -56,6 +57,13 @@ interface NFLResultsProps {
    */
   reveal?: PoolPicksReveal | null;
   ownEntryLoaded?: boolean;
+  /**
+   * T10 — CONTROLLED view. The merged Standings tab owns the scope control now,
+   * so when it passes a view this component renders exactly that one and hides
+   * its own toggle. Absent = uncontrolled, the original standalone behaviour,
+   * kept so the component still works on its own.
+   */
+  view?: ResultsView;
 }
 
 type PickemView = 'WEEKLY' | 'SEASON';
@@ -64,7 +72,7 @@ type MarginView = 'WEEKLY' | 'SUMMARY' | 'STANDINGS';
 const TH = 'py-3 px-4 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted';
 const TD = 'py-3 px-4 text-[13px] num';
 
-export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, week, viewerUid, reveal, ownEntryLoaded = false }) => {
+export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, week, viewerUid, reveal, ownEntryLoaded = false, view: controlledView }) => {
   const navigate = useNavigate();
   const type = pool.type;
   const isMargin = type === 'NFL_MARGIN';
@@ -74,14 +82,18 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
   // Sub-view, reset per pool for the same reason the Standings toggle resets:
   // PoolRoute reuses this component across pool navigation, so a view chosen in
   // one pool would otherwise leak into the next one.
-  const [view, setView] = useState<PickemView | MarginView>('WEEKLY');
+  const [ownView, setOwnView] = useState<PickemView | MarginView>('WEEKLY');
+  // `??`, not `||`: a controlled view is a non-empty string today, but falling
+  // back on falsiness is how a future '' or 0 would silently hand control back
+  // to the internal toggle.
+  const view: ResultsView = controlledView ?? ownView;
   // Item 9: the expanded row on the WEEKLY table (entry id — PLAN-MULTI-ENTRY §0b).
   const [openRowId, setOpenRowId] = useState<string | null>(null);
   // Reset with the pool (PoolRoute reuses this component; ids repeat across
   // pools) and with the week — the strip is per week (codex r3).
   useEffect(() => { setOpenRowId(null); }, [pool.id, week]);
   const weekGames = useMemo(() => gamesForPoolWeek(games || [], pool as any, week), [games, pool, week]);
-  useEffect(() => { setView('WEEKLY'); }, [pool.id]);
+  useEffect(() => { setOwnView('WEEKLY'); }, [pool.id]);
 
   const weeks = useMemo(() => poolSeasonWeeks(games, pool), [games, pool]);
   // Max counts only the games that can still be WON. A cancelled game grades
@@ -151,6 +163,20 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
         { key: 'SEASON', label: 'Season Summary', icon: <BarChart3 size={13} /> },
       ];
 
+  // The heading for a CONTROLLED view. Built here rather than looked up in
+  // `views` because the two disagree on purpose: the segment label is short
+  // ("Summary"), the heading states the scope in full so a screenshot of this
+  // table explains itself.
+  const headingLabel =
+    view === 'WEEKLY' ? `${nflWeekLabel(seasonType, week)} Results`
+      : view === 'SUMMARY' ? 'Margin Summary'
+        : view === 'SEASON' ? 'Season Summary'
+          : 'Margin Standings';
+  const headingIcon =
+    view === 'WEEKLY' ? <CalendarRange size={16} />
+      : view === 'STANDINGS' ? <Trophy size={16} />
+        : <BarChart3 size={16} />;
+
   const empty = (text: string) => (
     <div className="text-center py-12 text-muted font-body font-bold">{text}</div>
   );
@@ -158,13 +184,18 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
   return (
     <div className="bg-card border border-line rounded-xl overflow-hidden shadow-card">
       <div className="p-5 border-b border-line flex flex-wrap justify-between items-center gap-3 bg-surface">
+        {controlledView ? (
+          <h3 className="font-display font-bold uppercase text-base tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
+            <span className="text-gold-600 dark:text-gold-400">{headingIcon}</span>{headingLabel}
+          </h3>
+        ) : (
         <div role="group" aria-label="Results view" className="flex rounded-full border border-line overflow-hidden">
           {views.map(v => (
             <button
               key={v.key}
               type="button"
               aria-pressed={view === v.key}
-              onClick={() => setView(v.key)}
+              onClick={() => setOwnView(v.key)}
               className={`px-3 py-1.5 font-display font-bold uppercase text-[11px] tracking-[0.08em] transition-colors flex items-center gap-1.5 ${
                 view === v.key
                   ? 'bg-navy-700 text-white dark:bg-gold-500 dark:text-navy-900'
@@ -175,6 +206,7 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
             </button>
           ))}
         </div>
+        )}
         <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted bg-page border border-line px-3 py-1 rounded-full num">
           {entries.length} Entries
         </span>

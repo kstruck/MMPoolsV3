@@ -201,6 +201,26 @@ export interface PoolQuote {
 // from an allowlisted origin + fixed route templates (open-redirect fix). Any
 // client-supplied redirect URL is ignored. Add-on booleans are validated here
 // and PRICED SERVER-SIDE — the client price is never trusted.
+/**
+ * What this checkout is BUYING (PLAN-PER-POOL-PREMIUM C2, Kevin 2026-08-23:
+ * "a pool manager must be able to buy a premium feature anytime during the
+ * season").
+ *
+ *  - `pool`  — hosting for a pool that is not yet active. The original and only
+ *    shape until now, so it is the DEFAULT and every existing client is
+ *    unchanged by this field appearing.
+ *  - `addon` — one or more add-ons for a pool that IS already active. No base
+ *    price, no tier change, no credits and no coupons; the pool keeps
+ *    everything it already owns.
+ *
+ * The distinction is not cosmetic. `finalizePoolPayment` treats ANY session
+ * arriving for an active pool as a double charge — it no-ops the whole
+ * finalization and files a DOUBLE_CHARGE_REVIEW alert — so without a purchase
+ * kind a mid-season add-on payment would take the money and grant nothing.
+ */
+export const PURCHASE_KINDS = ['pool', 'addon'] as const;
+export type PurchaseKind = (typeof PURCHASE_KINDS)[number];
+
 export const checkoutPoolInputSchema = z.object({
   poolId: z.string().min(1),
   poolName: z.string().min(1),
@@ -210,6 +230,7 @@ export const checkoutPoolInputSchema = z.object({
   couponCode: z.string().trim().min(1).optional(),
   usedCredit: z.boolean().optional().default(false),
   customCreditId: z.string().trim().min(1).optional(),
+  purchaseKind: z.enum(PURCHASE_KINDS).optional().default('pool'),
 });
 export type CheckoutPoolInput = z.infer<typeof checkoutPoolInputSchema>;
 

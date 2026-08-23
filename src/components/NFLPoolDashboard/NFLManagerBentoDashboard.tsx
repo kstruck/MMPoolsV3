@@ -29,6 +29,7 @@ import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { effectiveBufferMinutesForWeek, usesWeeklyHardLock } from '@shared/weeklyHardLock';
 import { buildPoolRoster, rosterPotStats, outstandingDue, duesRates, memberOutstanding, unsubmittedRoster } from '../../utils/poolRoster';
 import { BanterFeed } from './BanterFeed';
+import { AddonUpgradeButton } from '../billing/AddonUpgradeButton';
 import { formatDeadline } from '../../utils/formatTime';
 
 interface NFLManagerBentoDashboardProps {
@@ -69,6 +70,8 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   const [banterText, setBanterText] = useState('');
   const [banterBusy, setBanterBusy] = useState<null | 'post' | 'ai'>(null);
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
+  const [pinningId, setPinningId] = useState<string | null>(null);
+  const pinnedMessageId = (castPool.pinnedMessageId as string | undefined) ?? '';
   const [feedError, setFeedError] = useState(false);
   const aiUnlocked = castPool.billing?.featuresUnlocked?.aiCommissioner === true;
   // The feed is PERSISTED now (T9). It used to be `useState<string[]>` seeded
@@ -353,6 +356,35 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
       toast.error(getUserMessage(err));
     } finally {
       setBanterBusy(null);
+    }
+  };
+
+  /**
+   * Pin / unpin, from the same card the commissioner posts and deletes from.
+   *
+   * ⚠️ WRITTEN THROUGH `updatePoolSettings`, NOT a direct `updateDoc`. The pool
+   * document's client update rule carries `poolIsEditable()`, which allows a
+   * manager write only while the pool is DRAFT or OPEN — so a direct write would
+   * fail exactly when pinning is wanted, in the middle of a locked season. The
+   * callable applies `shared/editability.ts` instead, where `announcement` is
+   * editable in every phase.
+   *
+   * `messageId` is '' to unpin. One field means one pinned post: pinning a
+   * second necessarily unpins the first, with nothing to enforce.
+   */
+  const handleTogglePin = async (messageId: string) => {
+    // While unpinning, the row being acted on is the CURRENTLY pinned one — its
+    // id, not the empty string, is what has to show a busy state.
+    setPinningId(messageId || pinnedMessageId || null);
+    try {
+      await dbService.updatePoolSettings(pool.id, { pinnedMessageId: messageId });
+      toast.success(messageId
+        ? 'Pinned to the top of your pool home page.'
+        : 'Unpinned. Nothing sits at the top of the pool home page now.');
+    } catch (err) {
+      toast.error(getUserMessage(err));
+    } finally {
+      setPinningId(null);
     }
   };
 
@@ -738,9 +770,19 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
               /* Honest, and specific: T5 makes a TRIAL unlock the add-ons the
                  wizard selected, so this now means "not selected / not bought",
                  not "wait until you pay". */
-              <p className="mt-2 font-body text-[11px] text-muted">
-                AI Commissioner is not switched on for this pool - your own posts still work.
-              </p>
+              <>
+                <p className="mt-2 font-body text-[11px] text-muted">
+                  AI Commissioner is not switched on for this pool - your own posts still work.
+                </p>
+                {/* C2: the commissioner can buy it here, mid-season, and it
+                    switches on by itself when Stripe confirms - no admin step.
+                    Offered only on an ACTIVE pool: a trial or free pool has no
+                    hosting purchase yet, and the server refuses an add-on
+                    checkout for one. */}
+                {castPool.billing?.status === 'active' && (
+                  <AddonUpgradeButton pool={pool} addon="aiCommissioner" label="AI Commissioner" />
+                )}
+              </>
             )}
           </form>
 
@@ -751,9 +793,16 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
             canDelete
             onDelete={handleDeleteBanter}
             deletingId={deletingMessageId}
+            canPin
+            pinnedId={pinnedMessageId}
+            onTogglePin={handleTogglePin}
+            pinningId={pinningId}
             emptyText="Nothing posted yet. Anything you post here appears on every member's pool page."
             maxHeightClass="max-h-56"
           />
+          <p className="mt-2 font-body text-[11px] text-muted">
+            Pin one post to put it at the top of the pool home page, right under the score ticker. Pinning another moves it; the pin button unpins.
+          </p>
         </div>
 
         <div className="mt-6 pt-4 border-t border-line flex justify-between items-center text-[10px]">
