@@ -28,6 +28,7 @@ import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks } from '../../utils/nflPending';
 import { spreadsBlockWeek } from '../../utils/poolUsesSpreads';
 import { buildMemberStandings } from '../../utils/memberStandings';
+import { brandingStyles } from '../../utils/brandingStyles';
 import { nflLockMode, weekLockAtFor, nextLockAtFor } from '@shared/nflLockMode';
 import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
@@ -600,8 +601,13 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     toast.success('Invite link copied to clipboard!');
   };
 
+  // T1 — the pool's own colours, resolved and VALIDATED in one place.
+  // `primaryColor` previously had no renderer at all and `bgColor` (which no
+  // wizard collects) was the only thing driving the page, so a commissioner's
+  // colour choices appeared to do nothing. See src/utils/brandingStyles.ts.
   const branding = castPool.branding || {};
-  const accentHex = branding.secondaryColor || '#C9A867';
+  const brand = brandingStyles(branding);
+  const accentHex = brand.accent;
 
   // Billing is C9: owner-only, never a co-commissioner — so the gate reads the
   // STRICT helper, not the NFL-widened `isManager` prop (codex r8 on PR-B).
@@ -622,11 +628,14 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     />
     <div
       className="min-h-screen bg-page text-[color:var(--text)] font-body pb-20 relative transition-colors duration-500"
-      style={{ backgroundColor: branding.bgColor || undefined }}
+      style={brand.page}
     >
       {/* Pool Header Bar */}
       <div className="max-w-7xl mx-auto px-4 pt-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card p-6 border border-line rounded-xl shadow-card">
+        <div
+          className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card p-6 border border-line rounded-xl shadow-card"
+          style={brand.headerCard}
+        >
           <div>
             <div className="flex items-center gap-3 mb-1">
               {branding.logoUrl && (
@@ -690,7 +699,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
             </Button>
 
             {isManager && (
-              <Button variant="secondary" size="sm" onClick={() => setActiveTab('manager')}>
+              <Button variant="secondary" size="sm" style={brand.primaryButton} onClick={() => setActiveTab('manager')}>
                 <Settings size={13} /> Commissioner
               </Button>
             )}
@@ -701,6 +710,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
         {!isLoading && (
           <div className="mt-6">
             <WeekChecklist
+              primaryButtonStyle={brand.primaryButton}
               pool={pool}
               entryKnown={ownEntryKnown}
               entry={myEntry}
