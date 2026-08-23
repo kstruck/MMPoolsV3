@@ -251,7 +251,9 @@ export function assertPaidParticipantCeiling(
     if (currentParticipantCount >= paid.maxPlayersAllowed) {
         throw new HttpsError(
             'failed-precondition',
-            'This pool has reached its paid participant ceiling. Upgrade to add more.',
+            // G9 — the same audience problem: this reaches a JOINING MEMBER,
+            // for whom "upgrade" is not an action they can take.
+            'This pool is full, so your spot could not be reserved. Ask the commissioner to make room.',
         );
     }
 }

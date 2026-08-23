@@ -311,7 +311,13 @@ export async function joinNFLPoolInternal(
 
     const billingStatus = poolData.billing?.status ?? 'free';
     if (billingStatus === 'free' && participantIds.length >= 10) {
-      throw new HttpsError('failed-precondition', 'This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.');
+      // G9 — MEMBER-appropriate copy. This is the message the 11th INVITEE
+      // sees, and it used to explain the platform's billing tiers to someone
+      // who has no billing relationship with us: "Free Plan", "upgrade to
+      // premium", "pool manager". Nothing in it told them what to do, and it
+      // read as though they had done something wrong. Say what happened, whose
+      // move it is, and nothing about our pricing.
+      throw new HttpsError('failed-precondition', 'This pool is full, so your spot could not be reserved. Ask the commissioner to make room — they can raise the limit from their pool settings.');
     }
     // Paid-ceiling gate (NOTES-WAVE2 A2, PLAN 6b(iii)): a PAID pool cannot exceed
     // its purchased participant ceiling. No-op for free/trial pools.
