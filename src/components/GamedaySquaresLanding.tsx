@@ -25,7 +25,7 @@ interface GamedaySquaresLandingProps {
 const heroBtn =
     'w-full sm:w-auto inline-flex items-center justify-center gap-2 font-display font-bold uppercase tracking-[0.05em] text-[17px] px-[34px] py-4 rounded-lg transition-all duration-150 hover:-translate-y-px cursor-pointer';
 
-export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, isLoggedIn }) => {
+export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool, onBrowse }) => {
 
     return (
         <div className="min-h-screen bg-page text-[color:var(--text)] font-body">
@@ -197,7 +197,7 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                                 Ready to host? Our intuitive Setup Wizard guides you through every step: selecting the game matchup, configuring payout percentages, setting reminder limits, and more. Creating a professional sports pool has never been easier.
                             </p>
                             <button
-                                onClick={canAccessPoolCreation(user) ? (isLoggedIn ? onCreatePool : onSignup) : undefined}
+                                onClick={canAccessPoolCreation(user) ? onCreatePool : undefined}
                                 disabled={!canAccessPoolCreation(user)}
                                 className="mt-4 px-8 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-white bg-brandred-600 hover:bg-brandred-500 transition-all duration-150 hover:-translate-y-px shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                                 title={canAccessPoolCreation(user) ? "Create Your Pool" : "Pool creation is coming soon"}
@@ -250,7 +250,7 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         </div>
 
                         <button
-                            onClick={canAccessPoolCreation(user) ? (isLoggedIn ? onCreatePool : onSignup) : undefined}
+                            onClick={canAccessPoolCreation(user) ? onCreatePool : undefined}
                             disabled={!canAccessPoolCreation(user)}
                             className="text-white px-10 py-5 rounded-lg font-display font-extrabold uppercase tracking-[0.05em] text-xl bg-brandred-600 hover:bg-brandred-500 shadow-red-cta transition-all duration-150 hover:-translate-y-px mb-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                             title={canAccessPoolCreation(user) ? "Create Your Grid Now" : "Pool creation is coming soon"}

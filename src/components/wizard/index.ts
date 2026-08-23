@@ -5,7 +5,7 @@ export { Field, TextField, NumberField, TextAreaField, CheckboxField } from './f
 export { StepBasics } from './steps/StepBasics';
 export { StepFeeAndPayment } from './steps/StepFeeAndPayment';
 export { StepPayouts } from './steps/StepPayouts';
-export { StepBranding } from './steps/StepBranding';
+export { StepBranding, StepBrandingThemed } from './steps/StepBranding';
 export { StepReminders } from './steps/StepReminders';
 export { StepReview } from './steps/StepReview';
 export { LaunchStep } from './create/LaunchStep';

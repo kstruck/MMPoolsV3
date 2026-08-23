@@ -9,6 +9,8 @@ import { recalculatePoolWinnersSchema, toggleWinnerPaidSchema, fixParticipantIds
 import { writeAdminAudit } from "./lib/adminAudit";
 import { assertPoolCreationAllowed } from './lib/systemGuards';
 import { isPoolType, type PoolType } from './shared/poolTypes';
+import { ADDON_KEYS, isIncludedAddon } from './shared/schemas/quote';
+import { normalizeAddonSelection } from './lib/launchFields';
 import {
     validateCreateInput,
     assertNotBanned,
@@ -177,12 +179,14 @@ export const stripPrivilegedPoolFields = <T extends Record<string, any>>(data: T
 // The paid add-on flags a create payload can carry. Any one of these set truthy
 // disqualifies a launch from the free plan (the server prices them; the pending
 // snapshot / billing.paid.addons is the authority once paid).
-const PAID_ADDON_KEYS = [
-    'aiCommissioner',
-    'smsNotifications',
-    'whatIfSimulator',
-    'customBranding',
-] as const;
+//
+// ⚠️ DERIVED, not listed (T4/D1, codex r2 [P1]). An INCLUDED add-on costs
+// nothing, so it must not push a launch off the free plan either: a stale
+// wizard bundle still sending `customBranding: true` would otherwise create a
+// ≤10-player pool as a 14-day TRIAL — which eventually locks — while the quote
+// on screen said free. Pricing and launch mode have to agree about what is
+// paid, and `INCLUDED_ADDON_KEYS` is the one place that says so.
+const PAID_ADDON_KEYS = ADDON_KEYS.filter((k) => !isIncludedAddon(k));
 
 /** True if the create payload requests any paid add-on. Add-ons may arrive as a
  *  top-level `addons` object or as sibling flags; we accept both shapes so a
@@ -384,7 +388,8 @@ export const createPool = validated(
             isPublic: data.isPublic !== undefined ? data.isPublic : true, // Explicitly set for rules
             // free or trial per server-computed launch mode (server-authoritative)
             billing: {
-                ...billingForLaunch(launchMode, billingConfig.trialDays, now.toMillis()),
+                // T5/D2 — a trial unlocks the selected add-ons (see billingForLaunch).
+                ...billingForLaunch(launchMode, billingConfig.trialDays, now.toMillis(), normalizeAddonSelection(data)),
                 // Remembered wizard coupon — validated above, never redeemed here (T3).
                 ...(launchCouponCode ? { couponCode: launchCouponCode } : {}),
             },

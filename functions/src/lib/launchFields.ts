@@ -16,8 +16,15 @@ import { ADDON_KEYS } from "../shared/schemas/quote";
  * (pricing is `computeQuote`'s, always).
  */
 export function normalizeAddonSelection(data: Record<string, unknown> | null | undefined): Record<string, boolean> {
+    // ⚠️ Accepts BOTH payload shapes, exactly as `payloadHasPaidAddon` does
+    // (codex r2 [P2] on T5): a top-level `addons` object, or the four flags as
+    // siblings. `computeLaunchMode` reads the sibling shape and will put such a
+    // create on a TRIAL — so if this read only `addons`, that pool would be a
+    // trial with every entitlement locked, which is the defect T5 exists to
+    // fix, restored for every non-wizard caller. When `addons` is present it
+    // wins outright, again matching payloadHasPaidAddon.
     const raw = data?.addons;
-    const src = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+    const src = (raw && typeof raw === 'object' ? raw : (data ?? {})) as Record<string, unknown>;
     return ADDON_KEYS.reduce((acc, k) => {
         acc[k] = src[k] === true;
         return acc;

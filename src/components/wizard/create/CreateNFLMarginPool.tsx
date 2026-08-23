@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { User } from '../../../types';
 import { dbService } from '../../../services/dbService';
 import { marginCreateInputSchema } from '@shared/schemas';
-import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep } from '../index';
+import { WizardShell, StepBasics, StepFeeAndPayment, StepBrandingThemed, LaunchStep } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
 import { ReadOnlyField, SelectField } from '../fields';
 import { MultiEntryFields } from './MultiEntryFields';
@@ -82,7 +82,7 @@ export function CreateNFLMarginPool(props: { user: User; onComplete: (poolId: st
     { id: 'rules', title: 'Margin rules', Component: StepMarginRules },
     { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="settings.entryFee" /> },
     { id: 'payouts', title: 'Payouts', Component: () => <StepPayouts payoutsField="settings.payouts" /> },
-    { id: 'branding', title: 'Branding', Component: StepBranding },
+    { id: 'branding', title: 'Branding', Component: StepBrandingThemed },
     {
       id: 'launch', title: 'Launch', ownsSubmit: true,
       Component: () => (

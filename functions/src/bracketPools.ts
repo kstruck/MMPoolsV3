@@ -132,7 +132,9 @@ export const createBracketPool = onCall(async (request) => {
     if (bracketEstimate !== undefined) poolExtras.estimatedPlayers = bracketEstimate;
     // free or trial per server-computed launch mode (server-authoritative)
     (newPool as any).billing = {
-        ...billingForLaunch(launchMode, billingConfig.trialDays, now),
+        // T5/D2 — a trial unlocks the selected add-ons (see billingForLaunch).
+        // `poolExtras.addons` above is the same normalized selection.
+        ...billingForLaunch(launchMode, billingConfig.trialDays, now, poolExtras.addons as Record<string, boolean>),
         ...(launchCouponCode ? { couponCode: launchCouponCode } : {}),
     };
 

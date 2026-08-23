@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useFormContext, type FieldErrors } from 'react-hook-form';
 import { HelpTip } from '../ui/HelpTip';
+import { isValidHex, normalizeHex } from '../../utils/brandingStyles';
 
 // RHF-connected field primitives shared by every wizard step. Field `name`
 // accepts dot paths (e.g. "settings.entryFee", "paymentHandles.venmo").
@@ -150,5 +151,61 @@ export function CheckboxField(props: { name: string; label: ReactNode; helpId?: 
       </label>
       <HelpTip helpId={helpId ?? name} />
     </div>
+  );
+}
+
+/**
+ * A hex colour: a native swatch picker and the hex text, bound to ONE RHF value
+ * (PLAN-WIZARD-BUYFLOW-FIXES T1).
+ *
+ * Two controls, one field, because neither alone is enough: the picker cannot
+ * express "leave it unset", and the text box let a commissioner type `blue` or
+ * `#12` and silently style nothing — which is a large part of why branding
+ * colours read as broken. The text box stays authoritative and validates; the
+ * picker just writes a valid value into it.
+ *
+ * `<input type="color">` has no empty state — it shows `#000000` for anything
+ * it cannot parse — so the swatch falls back to `fallback` for display while
+ * the STORED value stays empty. Reading the swatch as if it were the value
+ * would turn "no colour chosen" into "black chosen" for every pool.
+ */
+export function ColorField(props: {
+  name: string;
+  label: string;
+  placeholder?: string;
+  helpId?: string;
+  /** What the swatch shows while the field is empty. Never written to the form. */
+  fallback: string;
+}) {
+  const { name, label, placeholder, helpId, fallback } = props;
+  const { register, setValue, watch, formState: { errors } } = useFormContext();
+  const raw = watch(name);
+  const current = typeof raw === 'string' ? raw.trim() : '';
+  const valid = isValidHex(current);
+  const swatch = valid ? normalizeHex(current)! : fallback;
+
+  return (
+    <Field label={label} htmlFor={name} error={errorAt(errors, name)} helpId={helpId ?? name}>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          aria-label={`${label} — colour picker`}
+          value={swatch}
+          onChange={(e) => setValue(name, e.target.value, { shouldDirty: true, shouldValidate: true })}
+          className="h-9 w-10 shrink-0 cursor-pointer rounded-lg border border-slate-700 bg-slate-950 p-1"
+        />
+        <input
+          id={name}
+          placeholder={placeholder}
+          className={inputCls}
+          {...register(name)}
+        />
+      </div>
+      {current && !valid && (
+        <p className="mt-1 text-xs text-amber-300">
+          Use a hex colour like <code>#4f46e5</code>. Anything else is ignored and the pool keeps the default.
+        </p>
+      )}
+    </Field>
   );
 }

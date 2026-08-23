@@ -73,7 +73,7 @@ describe('BillingInvoiceCard delegates the button rule instead of inlining it', 
             'money(total, { free: true })',
             "money(aiCost, { sign: '+' })",
             "money(simCost, { sign: '+' })",
-            "money(brandingCost, { sign: '+' })",
+            // (branding line removed 2026-08-23, T4/D1 — see tests/branding-is-free.test.ts)
             "money(smsCost, { sign: '+' })",
             "money(discount, { sign: '-' })",
         ]) {

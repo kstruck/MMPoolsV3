@@ -43,8 +43,12 @@ describe('b. the add-on toggles seed from the wizard selection', () => {
         expect(pricing).not.toContain("setCalcSim(pool.billing?.featuresUnlocked?.whatIfSimulator");
     });
 
-    it('the branding toggle is seeded at all (it never was)', () => {
-        expect(pricing).toContain('setCalcBranding(seed.customBranding)');
+    it('the branding toggle is gone rather than seeded (T4/D1)', () => {
+        // T3 added `setCalcBranding(seed.customBranding)` because the toggle was
+        // the ONE the page never seeded. T4 then removed the toggle entirely —
+        // branding is included with every pool. `tests/branding-is-free.test.ts`
+        // guards that, and that nothing still REQUESTS the add-on.
+        expect(pricing).not.toContain('calcBranding');
     });
 });
 
@@ -82,11 +86,11 @@ describe('b2. a free / locked pool can actually be upgraded here (G3)', () => {
 describe('c. the checkout card receives the seeded state', () => {
     it('BillingInvoiceCard is no longer mounted with hardcoded false props', () => {
         expect(pricing).not.toContain('hasAiCommissioner={false}');
-        expect(pricing).not.toContain('hasCustomBranding={false}');
+        expect(pricing).not.toContain('hasCustomBranding=');
         expect(pricing).toContain('hasAiCommissioner={calcAi}');
         expect(pricing).toContain('hasSmsNotifications={calcSms}');
         expect(pricing).toContain('hasWhatIfSimulator={calcSim}');
-        expect(pricing).toContain('hasCustomBranding={calcBranding}');
+        // hasCustomBranding is gone from the card's props entirely (T4/D1).
     });
 });
 
