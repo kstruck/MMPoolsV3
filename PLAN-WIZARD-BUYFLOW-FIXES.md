@@ -1,6 +1,8 @@
 # PLAN-WIZARD-BUYFLOW-FIXES — Make the create-pool → launch → upgrade path seamless
 
-**Status: DRAFT — awaiting Kevin's sign-off on D1–D6 below. No code written.**
+**Status: SIGNED — Kevin answered D1–D6 on 2026-08-23 (answers recorded in §4).
+Scope extended the same day with T8 (post-wizard branding editor) and T9 (AI
+Commissioner overhaul) from Kevin's follow-up. Build: overnight 2026-08-23→24.**
 **Author session: 2026-08-23 (cloud). Deadline context: invites go out Monday 2026-08-25.**
 **All file:line anchors measured at `925c6d7` (origin/main, 2026-08-23).**
 **Review log: `PLAN-WIZARD-BUYFLOW-FIXES-REVIEW-LOG.md`.**
@@ -223,8 +225,11 @@ harmless today because every reader branches on `status` first.
 Ordered for the weekend. T1–T4 close Kevin's issues 1–4; T5 covers the trial
 entitlement gap; **T6a is BLOCKER work (G2–G5), not polish** — G3 (free-pool
 upgrade dead end) and G5 (no payment acknowledgement) sit directly on the
-monetization path; T6b and T7 are the friction/copy items. Build order is
-D5's list, which puts T6a third.
+monetization path; T6b and T7 are the friction/copy items. T8/T9 were added
+by Kevin on 2026-08-23 after sign-off. Overnight build order:
+**T2 → T3 → T6a → T4 → T1 → T5 → T9 → T8 → T6b → T7 → POOLS_OPEN flip PR**
+(T9 before T8 because T5+T9 together are what makes D2's "AI features
+working" true; T8 reuses T1's branding field components).
 
 ### T1 — Make branding colors actually theme the pool (issue 1) — frontend only
 
@@ -353,6 +358,61 @@ itself and its timing is Kevin's (**D6**).
 
 Backlog G6/G8/G10/G13/G15–G20: ticketed in §2, not built this weekend.
 
+### T8 — Commissioner can edit branding after the wizard (Kevin, 2026-08-23)
+
+There is no post-wizard surface to change logo/colors — the wizard's branding
+step is the only writer. Add a **Branding** section to the NFL commissioner
+manager view (`NFLManagerView.tsx` settings area) with the same three fields
+as `StepBranding` (plus the T1 color pickers/preview), saving through the
+existing pool-update path — `functions/src/__tests__/poolUpdate.test.ts:31`
+already names a `branding` editability group, so verify the callable's
+editability matrix allows `branding.*` for the owner/co-commissioner and wire
+to it (extend the matrix if the group turns out to be test-only). NFL first
+(Monday's invites); other dashboards ticketed.
+
+### T9 — AI Commissioner: make it real, visible, and manageable (Kevin, 2026-08-23)
+
+Kevin's report: "I still do not see the AI features working. I see draft only —
+not saved… users do not know what to do on that card… commissioners must be
+able to delete any message… where are these messages shown to members?"
+
+Measured state:
+- The screenshotted **"AI Commissioner Chat" card is a mock**
+  (`NFLManagerBentoDashboard.tsx:575-654`): `banterFeed` is component state
+  (`:79`), `handleSendBanter` prepends to it locally (`:282-295`), nothing is
+  persisted, no AI is called, no member ever sees it. The "Draft only — not
+  saved" footer is the honest label of an unbuilt feature (HANDOFF item 8).
+- The REAL pipeline exists and works end-to-end for paid pools:
+  `pools/{id}/ai_requests` (participant + entitlement-gated create,
+  `firestore.rules:497-523`) → `onAIRequest` → Gemini →
+  `pools/{id}/ai_artifacts` (functions-write-only, world-readable,
+  `firestore.rules:492-495`), rendered by `src/components/AICommissioner.tsx`
+  on the pool dashboard's AI tab (`NFLPoolDashboard.tsx:841,1033`) — which is
+  **gated on `featuresUnlocked.aiCommissioner`, all-false during trial**.
+  That is why Kevin "never saw AI working": T5 fixes it.
+- No delete path exists for any AI/banter content (`ai_artifacts` write:false).
+
+Scope (respecting PLAN-COST-CONTROLS 0.5 — entitlement gates and quotas stay):
+1. **Persist the banter feed.** Replace the mock card's local state with a
+   real store: commissioner-typed messages AND AI-generated banter land in a
+   member-readable feed (recommended: `pools/{id}/banter` docs or
+   announcements-with-kind — implementer picks the shape that reuses the
+   existing announcements read rules; document the choice).
+2. **AI generation from the card.** The mood buttons + prompt call the real
+   pipeline (an `ai_requests` doc with a BANTER category carrying the mood,
+   handled in `onAIRequest`'s system prompt), entitlement-gated exactly like
+   the existing categories. Generated banter posts into the same feed.
+3. **Member visibility.** The feed renders on the pool homepage (dashboard
+   Overview tab) for all members — not only inside the manager view.
+4. **Commissioner delete.** Owner/co-commissioner can delete any feed
+   message (rules change on the feed collection, or a thin callable; NOT a
+   blanket write on `ai_artifacts`).
+5. **UX copy.** The card explains itself: what the moods do, what the input
+   does ("Type your own message, or describe what the AI should write"),
+   and the DRAFT/NOT-SAVED footer is replaced by real status.
+6. Rules changes = AUTHORIZATION → this plan's gate covers them; keep the
+   `ai_requests` create conditions intact (all four are load-bearing).
+
 ### T7 — Copy honesty pass on the launch/billing surfaces
 
 - LaunchStep trial line says what the trial includes (per D2 outcome) and what
@@ -360,7 +420,20 @@ Backlog G6/G8/G10/G13/G15–G20: ticketed in §2, not built this weekend.
   automatically — there is no card on file).
 - Trial banner in `BillingGate` gains the same one-liner.
 
-## 4. DECISIONS NEEDED (D1–D5)
+## 4. DECISIONS — ANSWERED BY KEVIN, 2026-08-23
+
+| # | Kevin's ruling |
+|---|---|
+| D1 | **Free for everyone, remove the $29 fee.** "No one has paid that yet." (Ledger audit in T4 still runs as a verification, not a search for refunds.) |
+| D2 | **Approved** — trial unlocks selected add-ons. Plus the T9 scope: AI feature must be fully wired, explained, member-visible, and commissioner-deletable. |
+| D3 | **Approved** — persist `billing.couponCode` at launch. |
+| D4 | **Approved**, with the explicit condition that branding rendering is READY FOR MONDAY's live publish — working when people create pools. |
+| D5 | **Changed by Kevin: everything is in scope for the overnight build** (tonight 2026-08-23 → tomorrow). Order below stands; backlog G-items get picked up only after T1–T9 are done. Pool creation opens Monday. |
+| D6 | **Approved** — flip ships per the recommended sequence (last PR, after T6a's G2 fix; logged-out smoke pass before invites). |
+
+The original questions are kept below for the record.
+
+### Original questions (as put to Kevin)
 
 - **D1 (T4):** Custom branding → free (Option A, recommended) or enforced gate
   (Option B)? On "approve as recommended": branding add-on disappears from
