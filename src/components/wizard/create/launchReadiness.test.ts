@@ -20,6 +20,15 @@ describe('estimateIsSet (G7)', () => {
         expect(estimateIsSet('12')).toBe(true);
     });
 
+    it('rejects a fractional count (codex r2)', () => {
+        // `poolQuoteInputSchema` is `.int()`, so a fraction makes every quote
+        // fail — and that surfaces as "Could not load pricing right now",
+        // naming nothing the commissioner can act on.
+        expect(estimateIsSet(1.5)).toBe(false);
+        expect(estimateIsSet('12.4')).toBe(false);
+        expect(estimateIsSet(0.5)).toBe(false);
+    });
+
     it.each([
         ['undefined', undefined],
         ['null', null],

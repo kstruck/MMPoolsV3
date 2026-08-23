@@ -29,7 +29,12 @@ const hasText = (v: unknown): boolean => typeof v === 'string' && v.trim().lengt
  */
 export function estimateIsSet(estimatedPlayers: unknown): boolean {
     const n = Number(estimatedPlayers);
-    return Number.isFinite(n) && n >= 1;
+    // INTEGER, not merely >= 1 (codex r2). `poolQuoteInputSchema` is
+    // `.int()`, so a fractional estimate makes every quote fail — and the
+    // failure surfaces as "Could not load pricing right now", which names
+    // nothing the commissioner can act on. Refusing it here points at the
+    // field instead.
+    return Number.isInteger(n) && n >= 1;
 }
 
 /**
