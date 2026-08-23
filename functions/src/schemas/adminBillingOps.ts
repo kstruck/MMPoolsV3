@@ -11,6 +11,7 @@
 
 import { z } from "zod";
 import { BillingConfigSchema } from "../shared/schemas/billingConfig";
+import { ADDON_KEYS } from "../shared/schemas/quote";
 
 const poolId = z.string().trim().min(1).max(200);
 const targetUid = z.string().trim().min(1).max(200);
@@ -42,6 +43,28 @@ export const adminUpdatePoolBillingSchema = z.discriminatedUnion("action", [
         data: z.strictObject({ gracePeriodDays: z.number().finite().nonnegative() }).optional(),
     }),
 ]);
+
+/**
+ * adminSetPoolFeature — turn ONE premium feature on or off for ONE pool
+ * (Kevin, 2026-08-23: "I, as the super-admin must be able to turn the feature
+ * on for any pool at any time through a toggle switch or something.").
+ *
+ * ⚠️ NARROW ON PURPOSE, and that is the whole reason it exists rather than
+ * reusing `adminUpdatePoolBilling`'s `override`. That action merges an
+ * ARBITRARY billing object onto the pool — it can already do this, and can also
+ * rewrite `paid`, `tier`, `status` and `maxPlayersAllowed` in the same call, so
+ * an audit row saying POOL_BILLING_OVERRIDE tells nobody what actually changed.
+ * This one takes a key from a closed list and a boolean, and its audit row says
+ * which feature and which way.
+ *
+ * The feature list is `ADDON_KEYS`, not the SELLABLE subset: an admin grant is
+ * not a sale, and Kevin asked to be able to turn on ANY feature.
+ */
+export const adminSetPoolFeatureSchema = z.strictObject({
+    poolId,
+    feature: z.enum(ADDON_KEYS),
+    enabled: z.boolean(),
+});
 
 /**
  * adminAdjustUserCredits — single shape. At least one numeric credit field is

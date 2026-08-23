@@ -3,6 +3,20 @@ import { logger } from '../utils/logger';
 import { nflWeekLabel } from '../utils/nflWeekLabel';
 import { CANONICAL_ROLES, normalizeRole, roleBadge } from '../utils/roles';
 import { ConfirmActionModal } from './admin/ConfirmActionModal';
+import { ADDON_KEYS, isIncludedAddon } from '@shared/schemas/quote';
+
+/**
+ * Admin-facing names for the four add-on keys. Deliberately NOT imported from a
+ * customer-facing pricing surface: this list has to name every key the schema
+ * has, including the ones nothing sells today (SMS is clamped unsellable,
+ * customBranding ships free), because a super-admin can still grant them.
+ */
+const ADMIN_FEATURE_LABELS: Record<(typeof ADDON_KEYS)[number], string> = {
+    aiCommissioner: 'AI Commissioner',
+    smsNotifications: 'SMS notifications',
+    whatIfSimulator: 'What-If simulator',
+    customBranding: 'Custom branding',
+};
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { HelpRoutePublisher } from '../help/publish';
@@ -12,7 +26,7 @@ import { isTestPool } from '@shared/testPool';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
-import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw, Wrench, Ticket, Megaphone, Globe, PartyPopper, Mail, KeyRound } from 'lucide-react';
+import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw, Wrench, Ticket, Megaphone, Globe, PartyPopper, Mail, KeyRound, Sparkles } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
 import { getPoolSport, getPoolLifecycleState, formatPoolMatchup, getPoolEntrySummary, formatEntryCount, getPoolLockTimeState, isNFLSeasonPoolType, isSquaresPoolType } from '../utils/poolSport';
 import type { EntryCountable, LockTimeReadable } from '../utils/poolSport';
@@ -91,6 +105,14 @@ export const SuperAdmin: React.FC = () => {
 
     // Edit/View State
     const [viewingPool, setViewingPool] = useState<Pool | null>(null);
+    /**
+     * Per-pool premium features (Kevin, 2026-08-23: "I, as the super-admin must
+     * be able to turn the feature on for any pool at any time through a toggle
+     * switch or something."). One expanded row at a time; the busy key is
+     * `${poolId}:${feature}` so one in-flight toggle does not disable the rest.
+     */
+    const [featuresPoolId, setFeaturesPoolId] = useState<string | null>(null);
+    const [featureBusy, setFeatureBusy] = useState<string | null>(null);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [viewingUser, setViewingUser] = useState<User | null>(null);
     const [editName, setEditName] = useState('');
@@ -1462,8 +1484,12 @@ export const SuperAdmin: React.FC = () => {
                                                             ? { text: 'n/a', title: 'Season-long pool — picks lock per game and per week, not pool-wide' }
                                                             : { text: 'not set', title: 'No lock or start time is configured on this pool' };
 
+                                                    const poolBilling = (pool as unknown as { billing?: { featuresUnlocked?: Record<string, boolean>; paid?: { addons?: string[] } } }).billing;
+                                                    const unlocked = poolBilling?.featuresUnlocked ?? {};
+
                                                     return (
-                                                        <tr key={pool.id} className="hover:bg-surface transition-colors">
+                                                        <React.Fragment key={pool.id}>
+                                                        <tr className="hover:bg-surface transition-colors">
                                                             <td className="p-4">
                                                                 <button
                                                                     onClick={() => setViewingPool(pool as GameState)} // Type assertion or update setViewingPool type
@@ -1513,6 +1539,17 @@ export const SuperAdmin: React.FC = () => {
                                                             </td>
                                                             <td className="p-4 flex gap-2 flex-wrap">
                                                                 <button onClick={() => navigate(`/admin/${pool.id}`)} className="text-navy-700 dark:text-gold-400 hover:bg-navy-600/10 text-xs font-display font-bold uppercase tracking-[0.05em] border border-navy-600/40 px-2 py-1 rounded transition-colors">Manage</button>
+                                                                {/* Per-pool premium features. Expands in place rather than opening a
+                                                                    modal: the toggles are the answer to "what does this pool have",
+                                                                    which belongs next to the pool. */}
+                                                                <button
+                                                                    onClick={() => setFeaturesPoolId(prev => (prev === pool.id ? null : pool.id))}
+                                                                    aria-expanded={featuresPoolId === pool.id}
+                                                                    className="text-gold-700 dark:text-gold-400 hover:bg-gold-500/10 text-xs font-display font-bold uppercase tracking-[0.05em] border border-gold-500/40 px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                                                                    title="Turn premium features on or off for this pool"
+                                                                >
+                                                                    <Sparkles size={12} /> Features
+                                                                </button>
                                                                 {/* Sim and Fix drive `pool.scores` / fixPoolScores, which only SQUARES
                                                                     pools have. They used to render for every non-BRACKET row, so on an
                                                                     NFL or PROPS pool Sim threw on `pool.scores.current` and Fix ran the
@@ -1564,6 +1601,69 @@ export const SuperAdmin: React.FC = () => {
                                                                 <button onClick={() => handleDeletePool(pool.id)} className="text-brandred-500 hover:text-brandred-600 transition-colors"><Trash2 size={16} /></button>
                                                             </td>
                                                         </tr>
+                                                        {featuresPoolId === pool.id && (
+                                                            <tr className="bg-surface">
+                                                                <td colSpan={7} className="p-4">
+                                                                    <div className="flex flex-wrap items-center gap-3">
+                                                                        <span className="text-xs font-display font-bold text-muted uppercase tracking-[0.08em]">
+                                                                            Premium features — this pool only
+                                                                        </span>
+                                                                        {ADDON_KEYS.map(key => {
+                                                                            const on = unlocked[key] === true;
+                                                                            const busyKey = `${pool.id}:${key}`;
+                                                                            return (
+                                                                                <button
+                                                                                    key={key}
+                                                                                    role="switch"
+                                                                                    aria-checked={on}
+                                                                                    disabled={featureBusy === busyKey}
+                                                                                    onClick={async () => {
+                                                                                        // Explain, then confirm. A grant is money-adjacent:
+                                                                                        // it hands a pool a paid feature for nothing, and
+                                                                                        // aiCommissioner in particular starts real Gemini
+                                                                                        // spend (PLAN-COST-CONTROLS).
+                                                                                        const ok = await toast.confirm({
+                                                                                            title: `${on ? 'Turn OFF' : 'Turn ON'} ${ADMIN_FEATURE_LABELS[key]}?`,
+                                                                                            message: on
+                                                                                                ? `"${pool.name}" loses ${ADMIN_FEATURE_LABELS[key]} immediately. Nothing is refunded — this only changes the entitlement. Written to admin_audit.`
+                                                                                                : `"${pool.name}" gets ${ADMIN_FEATURE_LABELS[key]} for free, immediately, with no payment recorded.${key === 'aiCommissioner' ? ' The AI Commissioner bills real Gemini usage against the platform.' : ''} Written to admin_audit.`,
+                                                                                            danger: on,
+                                                                                        });
+                                                                                        if (!ok) return;
+                                                                                        setFeatureBusy(busyKey);
+                                                                                        try {
+                                                                                            await dbService.adminSetPoolFeature(pool.id, key, !on);
+                                                                                            toast.success(`${ADMIN_FEATURE_LABELS[key]} ${on ? 'turned off' : 'turned on'} for "${pool.name}".`);
+                                                                                        } catch (e: unknown) {
+                                                                                            toast.error(getUserMessage(e, 'Failed to change the feature.'));
+                                                                                        } finally {
+                                                                                            setFeatureBusy(null);
+                                                                                        }
+                                                                                    }}
+                                                                                    className={`px-3 py-1.5 rounded-full text-xs font-display font-bold uppercase tracking-[0.05em] border transition-colors disabled:opacity-40 ${
+                                                                                        on
+                                                                                            ? 'bg-gold-500 text-navy-900 border-gold-500'
+                                                                                            : 'bg-page text-muted border-line hover:text-[color:var(--text)]'
+                                                                                    }`}
+                                                                                    title={isIncludedAddon(key)
+                                                                                        ? 'Included with every pool today — the flag is kept for a future premium tier'
+                                                                                        : undefined}
+                                                                                >
+                                                                                    {on ? 'ON' : 'OFF'} · {ADMIN_FEATURE_LABELS[key]}
+                                                                                    {isIncludedAddon(key) && <span className="ml-1 opacity-60">(free tier)</span>}
+                                                                                </button>
+                                                                            );
+                                                                        })}
+                                                                        {!poolBilling?.paid && (
+                                                                            <span className="text-[11px] font-body text-muted">
+                                                                                No purchase on this pool, so nothing is written to the paid ceiling.
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                        </React.Fragment>
                                                     );
                                                 })}
                                             </tbody>

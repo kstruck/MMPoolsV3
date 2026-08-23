@@ -1124,6 +1124,22 @@ export const dbService = {
         const fn = httpsCallable<typeof payload, { success: boolean }>(functions, 'adminUpdatePoolBilling');
         await fn(payload);
     },
+    /**
+     * Turn ONE premium feature on or off for ONE pool (SUPER_ADMIN).
+     *
+     * Narrow on purpose: `adminUpdatePoolBilling({action:'override'})` can
+     * already do this, but it merges an arbitrary billing object and its audit
+     * row cannot say what changed. This one names the feature both in the call
+     * and in `admin_audit`.
+     */
+    adminSetPoolFeature: async (poolId: string, feature: string, enabled: boolean): Promise<void> => {
+        const fn = httpsCallable<{ poolId: string; feature: string; enabled: boolean }, { success: boolean }>(functions, 'adminSetPoolFeature');
+        // Correlated: `validated()` logs nothing at all for a callable with no
+        // `_correlationId` — not on entry, not on success, and not when it
+        // refuses at the role gate. A money-adjacent grant is the last thing
+        // that should be invisible in the logs.
+        await fn(withCorrelationId({ poolId, feature, enabled }));
+    },
     adminAdjustUserCredits: async (targetUid: string, referralCredits: number, freePoolsAvailable: number): Promise<void> => {
         const fn = httpsCallable<{ targetUid: string; referralCredits: number; freePoolsAvailable: number }, { success: boolean }>(functions, 'adminAdjustUserCredits');
         await fn({ targetUid, referralCredits, freePoolsAvailable });
