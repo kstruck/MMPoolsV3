@@ -231,6 +231,13 @@ describe('4b. BANTER does not leak into the member AI panel', () => {
         expect(card).toContain("lastBanterRequest?.status === 'GENERATING'");
     });
 
+    it('an audit-write failure cannot un-say a published post (codex r6 [P2])', () => {
+        // The post and the COMPLETED status are already committed by then, so
+        // falling into the outer catch would stamp the request ERROR and tell
+        // the commissioner nothing was posted — while it sits in the feed.
+        expect(ai).toContain("console.error('AI Banter audit write failed AFTER the post was published', auditErr);");
+    });
+
     it('authority is revalidated inside the claim, against a FRESH pool read', () => {
         // Document triggers run asynchronously, so ownership or a
         // co-commissioner assignment can be revoked between the snapshot and

@@ -598,14 +598,24 @@ async function generateBanter(args: {
         batch.update(requestRef, { status: 'COMPLETED', updatedAt: Date.now() });
         await batch.commit();
 
-        await writeAuditEvent({
-            poolId,
-            type: 'AI_ARTIFACT_CREATED',
-            message: `AI Commissioner posted ${mood} banter`,
-            severity: 'INFO',
-            actor: { uid: 'ai-commissioner', role: 'SYSTEM', label: 'Gemini' },
-            payload: { mood, requestedByUid: requestData.userId },
-        });
+        // ⚠️ Its OWN catch, deliberately (codex r6 [P2]). The post and the
+        // COMPLETED status are already committed at this point, so letting an
+        // audit-write failure fall into the outer catch would stamp the request
+        // ERROR and tell the commissioner nothing was posted — while the post
+        // is sitting in the feed for the whole pool to read. A lost audit line
+        // is a lost audit line.
+        try {
+            await writeAuditEvent({
+                poolId,
+                type: 'AI_ARTIFACT_CREATED',
+                message: `AI Commissioner posted ${mood} banter`,
+                severity: 'INFO',
+                actor: { uid: 'ai-commissioner', role: 'SYSTEM', label: 'Gemini' },
+                payload: { mood, requestedByUid: requestData.userId },
+            });
+        } catch (auditErr) {
+            console.error('AI Banter audit write failed AFTER the post was published', auditErr);
+        }
     } catch (e) {
         console.error('AI Banter generation failed', e);
         // Same shape as every other failure on this trigger: the request carries
