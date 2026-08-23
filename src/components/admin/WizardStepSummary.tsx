@@ -216,7 +216,6 @@ export const WizardStepSummary: React.FC<WizardStepSummaryProps> = ({
                 poolType="SQUARES"
                 estimatedPlayers={100} // Gameday Squares is always 100 squares
                 hasAiCommissioner={gameState.billing?.featuresUnlocked?.aiCommissioner || false}
-                hasCustomBranding={gameState.billing?.featuresUnlocked?.customBranding ?? true}
                 isWizard={true}
                 onTosAcceptChange={onTosAcceptChange}
                 onCouponAppliedChange={onCouponAppliedChange}

@@ -1,0 +1,70 @@
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
+/**
+ * PLAN-WIZARD-BUYFLOW-FIXES T4 (Kevin's D1) — "Custom branding" must not be
+ * offered for sale anywhere. The rule is unit-tested in
+ * `src/config/freeAddons.test.ts`; this pins that the surfaces actually stopped
+ * selling it, and — the load-bearing half — that no surface still REQUESTS it,
+ * which is what makes the change independent of the billing_config save.
+ */
+
+const repoRoot = path.resolve(__dirname, '..');
+const read = (p: string) => readFileSync(path.join(repoRoot, p), 'utf8');
+
+const launchStep = read('src/components/wizard/create/LaunchStep.tsx');
+const card = read('src/components/billing/BillingInvoiceCard.tsx');
+const pricing = read('src/components/PricingPage.tsx');
+const estimate = read('src/components/pricing/EstimateSummaryCard.tsx');
+const brandingStep = read('src/components/wizard/steps/StepBranding.tsx');
+
+describe('nothing offers custom branding as a paid add-on', () => {
+    it('the wizard iterates the SELLABLE keys, not every key', () => {
+        expect(launchStep).toContain('SELLABLE_ADDON_KEYS.filter');
+        expect(launchStep).not.toMatch(/\{ADDON_KEYS\.filter/);
+    });
+
+    it('the checkout card has no branding toggle and no branding line', () => {
+        expect(card).not.toContain("{ key: 'customBranding' as const");
+        expect(card).not.toContain('Premium Custom Branding & Covers');
+        expect(card).not.toContain('localBranding');
+    });
+
+    it('/pricing has no branding upsell and the estimator has no branding line', () => {
+        expect(pricing).not.toContain('calcBranding');
+        expect(pricing).not.toContain('Premium Custom Branding');
+        expect(estimate).not.toContain('brandingCost');
+    });
+});
+
+describe('nothing REQUESTS custom branding from the server', () => {
+    // This is what makes the UI change independent of the (Kevin-owned)
+    // `settings/billing_config` save that sets isPremium:false. With the config
+    // untouched, a stray `customBranding: true` would still price at $29.
+    it('the wizard strips it from both the quote and the checkout call', () => {
+        expect(launchStep.match(/addons: stripFreeAddons\(addons\)/g)?.length).toBe(2);
+    });
+
+    it('the checkout card sends a hard false', () => {
+        expect(card).toContain('customBranding: false,');
+    });
+});
+
+describe('the branding step says it is free', () => {
+    it('so a commissioner is not left wondering what it costs', () => {
+        expect(brandingStep).toMatch(/Included with every pool/);
+    });
+});
+
+describe('the plumbing stays, dormant', () => {
+    it('the add-on key still exists in the shared schema', () => {
+        // D1 keeps the key, the schema and featuresUnlocked for a future
+        // genuinely-premium branding tier. Deleting them is NOT this ticket.
+        expect(read('shared/schemas/quote.ts')).toContain("'customBranding'");
+    });
+
+    it('the server still stamps the flag on activation', () => {
+        expect(read('functions/src/stripe.ts')).toContain('customBranding: addons.customBranding === true');
+    });
+});

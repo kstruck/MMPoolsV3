@@ -7,7 +7,11 @@ export function StepBranding() {
   return (
     <div>
       <h3 className="mb-1 text-lg font-bold text-white">Branding</h3>
-      <p className="mb-5 text-sm text-slate-400">Optional — give your pool a look. You can change this later.</p>
+      <p className="mb-1 text-sm text-slate-400">Optional — give your pool a look. You can change this later.</p>
+      {/* T4/D1: branding used to sit behind a $29 "Custom branding" add-on that
+          gated nothing. It is included with every pool; say so here, where the
+          commissioner is deciding whether it costs them anything. */}
+      <p className="mb-5 text-sm font-semibold text-emerald-400">Included with every pool — free on every plan.</p>
       <TextField name="branding.logoUrl" label="Logo URL" placeholder="https://…" />
       <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
         <TextField name="branding.primaryColor" label="Primary color" placeholder="#4f46e5" />
