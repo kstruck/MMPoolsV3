@@ -15,8 +15,19 @@ import type { BanterMessage } from '../../types';
  * userId/userName, so reading only the new field would be a migration that
  * loses the old rows' bylines.
  */
+export const AI_BYLINE = 'AI Commissioner';
+
 export function banterAuthorName(m: BanterMessage): string {
-    return (m.authorName || m.userName || 'Commissioner').trim() || 'Commissioner';
+    const stored = (m.authorName || m.userName || '').trim();
+    if (!stored) return 'Commissioner';
+    // 🛑 A HUMAN row may never print the AI's byline (codex r2 [P1]). The rule
+    // refuses that write now, but rows created before it shipped are still in
+    // the feed, and this is the one identity here that carries authority.
+    // Checked case-insensitively because a security RULE cannot be.
+    if (m.kind !== 'AI' && stored.toLowerCase() === AI_BYLINE.toLowerCase()) {
+        return 'Commissioner';
+    }
+    return stored;
 }
 
 /** Relative time, falling back to a date past a day. Empty for a broken stamp. */

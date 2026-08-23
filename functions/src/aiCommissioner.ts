@@ -500,7 +500,13 @@ async function generateBanter(args: {
     // branch in a security rule is the kind of complexity that gets
     // "simplified" later. This also stops the SPEND, which the rule would not
     // if a write ever landed another way.
-    if (!isPoolCommissionerUid(poolRaw, requestData.userId)) {
+    // The role read is deliberately LAST and only on the path where the cheap
+    // pool-field checks already failed: one extra document read on a rare
+    // request, never on the common commissioner one.
+    const callerRole = isPoolCommissionerUid(poolRaw, requestData.userId)
+        ? undefined
+        : (await db.collection('users').doc(requestData.userId).get()).data()?.role;
+    if (!isPoolCommissionerUid(poolRaw, requestData.userId, callerRole)) {
         console.warn(`[AI] BANTER request on pool ${poolId} from a non-commissioner; refusing.`);
         await requestRef.update({ status: 'ERROR', error: 'BANTER_NOT_COMMISSIONER', updatedAt: Date.now() });
         return;

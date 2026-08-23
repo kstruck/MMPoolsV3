@@ -125,6 +125,23 @@ describe('isPoolCommissionerUid', () => {
         expect(isPoolCommissionerUid(null, 'owner')).toBe(false);
     });
 
+    it('accepts a SUPER_ADMIN via the role argument (codex r2 [P2])', async () => {
+        // The feed's delete rule admits super admins explicitly, and the
+        // commissioner dashboard shows them the card. Without this the request
+        // was accepted, then failed with BANTER_NOT_COMMISSIONER and no post —
+        // three layers disagreeing about the same person.
+        const { isPoolCommissionerUid } = await import('../lib/banter');
+        expect(isPoolCommissionerUid(nfl(), 'admin', 'SUPER_ADMIN')).toBe(true);
+        expect(isPoolCommissionerUid(nfl({ type: 'BRACKET' }), 'admin', 'SUPER_ADMIN')).toBe(true);
+    });
+
+    it('does not accept any other role', async () => {
+        const { isPoolCommissionerUid } = await import('../lib/banter');
+        for (const role of ['MODERATOR', 'MEMBER', 'PARTICIPANT', 'COMMISSIONER', '', undefined, null]) {
+            expect(isPoolCommissionerUid(nfl(), 'alice', role), String(role)).toBe(false);
+        }
+    });
+
     it('tolerates a malformed coManagers value', async () => {
         const { isPoolCommissionerUid } = await import('../lib/banter');
         expect(isPoolCommissionerUid(nfl({ coManagers: 'co' }), 'co')).toBe(false);

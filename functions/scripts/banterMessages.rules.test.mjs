@@ -151,6 +151,33 @@ await check(
     assertFails(addDoc(collection(owner, 'pools', POOL, 'messages'), msg(OWNER, { kind: 'AI' }))),
 );
 
+// 4b — nor may a human row CLAIM the AI's byline (codex r2 [P1]). `kind` is
+// refused above, but the feed prints authorName for human rows, and that is the
+// one identity in this feed that carries authority.
+await check(
+    'a participant cannot post under the AI Commissioner byline',
+    assertFails(addDoc(collection(alice, 'pools', POOL, 'messages'), msg(ALICE, { authorName: 'AI Commissioner' }))),
+);
+
+// 4c — text sanity. The feed is member-visible, so an empty or unbounded post
+// is not a shape it should be able to hold.
+await check(
+    'an empty message is refused',
+    assertFails(addDoc(collection(alice, 'pools', POOL, 'messages'), msg(ALICE, { text: '' }))),
+);
+await check(
+    'a non-string message is refused',
+    assertFails(addDoc(collection(alice, 'pools', POOL, 'messages'), msg(ALICE, { text: 42 }))),
+);
+await check(
+    'an absurdly long message is refused',
+    assertFails(addDoc(collection(alice, 'pools', POOL, 'messages'), msg(ALICE, { text: 'x'.repeat(2001) }))),
+);
+await check(
+    'a message at the cap is accepted',
+    assertSucceeds(addDoc(collection(alice, 'pools', POOL, 'messages'), msg(ALICE, { text: 'x'.repeat(2000) }))),
+);
+
 // 5 — 🛑 the feature still works.
 await check(
     'an ordinary participant CAN post their own message',

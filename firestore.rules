@@ -558,7 +558,20 @@ service cloud.firestore {
         allow create: if request.auth != null
                       && request.resource.data.authorUid == request.auth.uid
                       && isPoolParticipant()
-                      && request.resource.data.kind != 'AI';
+                      && request.resource.data.kind != 'AI'
+                      // The byline may not CLAIM to be the AI either (codex r2
+                      // [P1]). `kind` is already refused above, but the feed
+                      // prints `authorName` for human rows, so a member could
+                      // otherwise post under the one identity in this feed that
+                      // carries authority. A member using another MEMBER's name
+                      // is not addressed here and cannot be: display names are
+                      // self-set (`users/{uid}.name` is self-editable) and
+                      // already appear in standings, so a rule binding this
+                      // field to the profile would stop nothing.
+                      && request.resource.data.get('authorName', '') != 'AI Commissioner'
+                      && request.resource.data.text is string
+                      && request.resource.data.text.size() > 0
+                      && request.resource.data.text.size() <= 2000;
         allow update: if false;
         allow delete: if request.auth != null && (
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||

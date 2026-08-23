@@ -51,8 +51,13 @@ export function banterTextFromAI(ai: unknown): string {
  * the rules helper and `isPoolCommissioner` enforce.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function isPoolCommissionerUid(pool: any, uid: string | undefined): boolean {
+export function isPoolCommissionerUid(pool: any, uid: string | undefined, callerRole?: unknown): boolean {
     if (!uid) return false;
+    // Super admins, matching the feed's DELETE rule, which admits them
+    // explicitly (codex r2 [P2]). Without this a super admin's request was
+    // accepted by the rules, shown the commissioner dashboard, and then marked
+    // BANTER_NOT_COMMISSIONER with no post — three layers disagreeing.
+    if (String(callerRole) === 'SUPER_ADMIN') return true;
     if (uid === (pool?.ownerId || pool?.createdByUid)) return true;
     if (uid === pool?.managerUid) return true;
     const NFL = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];

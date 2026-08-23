@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { banterAuthorName, formatBanterTime } from './banterFormat';
+import { banterAuthorName, formatBanterTime, AI_BYLINE } from './banterFormat';
 
 /**
  * PLAN-WIZARD-BUYFLOW-FIXES T9 — the two decisions the feed row makes that are
@@ -20,6 +20,24 @@ describe('banterAuthorName', () => {
 
     it('prefers authorName when BOTH are present', () => {
         expect(banterAuthorName({ authorName: 'New', userName: 'Old', text: '', timestamp: 0 })).toBe('New');
+    });
+
+    it('a HUMAN row may not print the AI byline (codex r2 [P1])', () => {
+        // The rule refuses that write now, but rows created before it shipped
+        // are still in the feed, and this is the one identity here that carries
+        // authority. Case-insensitive, which a security rule cannot be.
+        expect(banterAuthorName({ authorName: 'AI Commissioner', kind: 'COMMISSIONER', text: '', timestamp: 0 })).toBe('Commissioner');
+        expect(banterAuthorName({ authorName: 'ai commissioner', text: '', timestamp: 0 })).toBe('Commissioner');
+        expect(banterAuthorName({ userName: 'AI COMMISSIONER', text: '', timestamp: 0 })).toBe('Commissioner');
+    });
+
+    it('the real AI row keeps its byline', () => {
+        expect(banterAuthorName({ authorName: 'AI Commissioner', kind: 'AI', text: '', timestamp: 0 })).toBe('AI Commissioner');
+    });
+
+    it('a name that merely CONTAINS the words is left alone', () => {
+        // Only an exact claim is neutralised; this is a byline fix, not a filter.
+        expect(banterAuthorName({ authorName: 'Not the AI Commissioner', text: '', timestamp: 0 })).toBe('Not the AI Commissioner');
     });
 
     it('never renders an empty byline', () => {
@@ -53,5 +71,13 @@ describe('formatBanterTime', () => {
         expect(formatBanterTime(undefined, NOW)).toBe('');
         expect(formatBanterTime(Number.NaN, NOW)).toBe('');
         expect(formatBanterTime(0, NOW)).toBe('');
+    });
+});
+
+describe('AI_BYLINE', () => {
+    it('is the exact string the functions writer stamps', () => {
+        // If these drift, the guard above stops matching and impersonation
+        // silently becomes possible again.
+        expect(AI_BYLINE).toBe('AI Commissioner');
     });
 });

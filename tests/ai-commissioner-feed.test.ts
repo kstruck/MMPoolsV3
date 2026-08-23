@@ -85,7 +85,7 @@ describe('2b. only a COMMISSIONER can make the AI post pool-wide (codex r1 [P1])
         // ai_requests create is participant-scoped — correctly, a dispute is a
         // member's to ask. BANTER is different in kind: the result is published
         // to everyone under the AI Commissioner's identity.
-        expect(ai).toContain('if (!isPoolCommissionerUid(poolRaw, requestData.userId)) {');
+        expect(ai).toContain('if (!isPoolCommissionerUid(poolRaw, requestData.userId, callerRole)) {');
         expect(ai).toContain("error: 'BANTER_NOT_COMMISSIONER'");
     });
 
@@ -152,12 +152,15 @@ describe('4. the commissioner can delete any message', () => {
 
     it('the rule allows DELETE for commissioners and still forbids UPDATE', () => {
         // Removable, never silently rewritable under its author's name.
-        expect(rules).toMatch(/match \/messages\/\{messageId\} \{[\s\S]{0,900}?allow update: if false;/);
-        expect(rules).toMatch(/match \/messages\/\{messageId\} \{[\s\S]{0,1200}?allow delete: if request\.auth != null/);
+        expect(rules).toMatch(/match \/messages\/\{messageId\} \{[\s\S]{0,3000}?allow update: if false;/);
+        expect(rules).toMatch(/match \/messages\/\{messageId\} \{[\s\S]{0,3200}?allow delete: if request\.auth != null/);
     });
 
     it('the create rule gained the participant check and refuses kind: AI', () => {
-        expect(rules).toMatch(/match \/messages\/\{messageId\} \{[\s\S]{0,900}?isPoolParticipant\(\)\s*\r?\n\s*&& request\.resource\.data\.kind != 'AI';/);
+        expect(rules).toMatch(/match \/messages\/\{messageId\} \{[\s\S]{0,3000}?isPoolParticipant\(\)/);
+        expect(rules).toContain("&& request.resource.data.kind != 'AI'");
+        // codex r2 [P1]: the byline may not claim the AI identity either.
+        expect(rules).toContain("request.resource.data.get('authorName', '') != 'AI Commissioner'");
     });
 
     it('ai_artifacts is NOT given a blanket write to make deletion work', () => {
