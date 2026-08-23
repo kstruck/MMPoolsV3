@@ -4,7 +4,7 @@ import * as crypto from "crypto";
 import { generateAIResponse, COMMISSIONER_SYSTEM_PROMPT, BANTER_SYSTEM_PROMPT, geminiApiKey } from "./gemini";
 import { writeAuditEvent } from "./audit";
 import { resolveGameSpreads } from "./lib/frozenSpreads";
-import { normalizeBanterMood, banterTextFromAI, isPoolCommissionerUid } from "./lib/banter";
+import { normalizeBanterMood, banterTextFromAI, isPoolCommissionerUid, banterStandingsRow } from "./lib/banter";
 import { GameState, Winner, AIArtifact, AIRequest, BracketPool, Tournament, BracketEntry } from "./types";
 
 const db = admin.firestore();
@@ -557,13 +557,10 @@ async function generateBanter(args: {
                 season: poolRaw.season,
             },
             // Names and numbers only. Everything the model is allowed to be rude
-            // about has to be in here, and nothing else is.
-            standings: standingsRows.slice(0, 20).map((r) => ({
-                rank: r.rank ?? null,
-                name: r.displayName ?? r.name ?? null,
-                seasonPoints: r.seasonPoints ?? r.points ?? null,
-                weekPoints: r.weekPoints ?? null,
-            })),
+            // about has to be in here, and nothing else is. Mapped through
+            // `banterStandingsRow` because the projection's field names are
+            // type-specific and none of them is the obvious one (codex r3 [P1]).
+            standings: standingsRows.slice(0, 20).map((r) => banterStandingsRow(r, poolType)),
             hasPlayedAWeek: standingsRows.length > 0,
         };
 

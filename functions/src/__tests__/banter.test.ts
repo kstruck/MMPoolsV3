@@ -101,9 +101,13 @@ describe('isPoolCommissionerUid', () => {
         expect(isPoolCommissionerUid(nfl({ ownerId: 'someone', managerUid: 'mgr' }), 'mgr')).toBe(true);
     });
 
-    it('falls back to createdByUid for a legacy empty ownerId', async () => {
+    it('does NOT admit a legacy createdByUid (codex r3 [P2])', async () => {
+        // The feed's DELETE rule and the client's commissioner gate recognise
+        // ownerId / managerUid / NFL co-manager / super admin and nothing else.
+        // Admitting a legacy creator here would let them PUBLISH an AI post to
+        // the whole pool that they can neither moderate nor delete.
         const { isPoolCommissionerUid } = await import('../lib/banter');
-        expect(isPoolCommissionerUid(nfl({ ownerId: '', createdByUid: 'legacy', managerUid: '' }), 'legacy')).toBe(true);
+        expect(isPoolCommissionerUid(nfl({ ownerId: '', createdByUid: 'legacy', managerUid: '' }), 'legacy')).toBe(false);
     });
 
     it('accepts a named NFL co-commissioner', async () => {
@@ -145,5 +149,55 @@ describe('isPoolCommissionerUid', () => {
     it('tolerates a malformed coManagers value', async () => {
         const { isPoolCommissionerUid } = await import('../lib/banter');
         expect(isPoolCommissionerUid(nfl({ coManagers: 'co' }), 'co')).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// codex r3 [P1] on T9: the first version of the fact builder mapped invented
+// keys, so every standings value reached Gemini as null — and with the
+// "no hallucinations" rule that leaves the model nothing to say. The
+// projection's field names are TYPE-SPECIFIC and none is the obvious one.
+// ---------------------------------------------------------------------------
+describe('banterStandingsRow', () => {
+    it("reads Pick'em's totalScore and userName", async () => {
+        const { banterStandingsRow } = await import('../lib/banter');
+        expect(banterStandingsRow({ rank: 1, userName: 'Alice', totalScore: 42 }, 'NFL_PICKEM')).toEqual({
+            rank: 1, name: 'Alice', seasonPoints: 42,
+        });
+    });
+
+    it("reads Margin's seasonTotal", async () => {
+        const { banterStandingsRow } = await import('../lib/banter');
+        expect(banterStandingsRow({ rank: 2, userName: 'Bob', seasonTotal: -14 }, 'NFL_MARGIN')).toEqual({
+            rank: 2, name: 'Bob', seasonPoints: -14,
+        });
+    });
+
+    it('carries Survivor status, which has no points column at all', async () => {
+        // Without it the model gets a list of names and nothing to talk about.
+        const { banterStandingsRow } = await import('../lib/banter');
+        expect(banterStandingsRow({ rank: 3, userName: 'Cara', status: 'ELIMINATED', strikesUsed: 2 }, 'NFL_SURVIVOR')).toEqual({
+            rank: 3, name: 'Cara', seasonPoints: null, status: 'ELIMINATED', strikesUsed: 2,
+        });
+    });
+
+    it('does not leak survivor fields onto other pool types', async () => {
+        const { banterStandingsRow } = await import('../lib/banter');
+        const out = banterStandingsRow({ userName: 'Dee', totalScore: 1, status: 'ALIVE' }, 'NFL_PICKEM');
+        expect(out.status).toBeUndefined();
+    });
+
+    it('nulls a missing or malformed name rather than printing undefined', async () => {
+        const { banterStandingsRow } = await import('../lib/banter');
+        expect(banterStandingsRow({}, 'NFL_PICKEM')).toEqual({ rank: null, name: null, seasonPoints: null });
+        expect(banterStandingsRow({ userName: '   ' }, 'NFL_PICKEM').name).toBeNull();
+        expect(banterStandingsRow({ totalScore: 'lots' }, 'NFL_PICKEM').seasonPoints).toBeNull();
+    });
+
+    it('a zero score is kept, not nulled', async () => {
+        // `?? null` on a truthiness check would erase every unplayed pool's row.
+        const { banterStandingsRow } = await import('../lib/banter');
+        expect(banterStandingsRow({ userName: 'Eve', totalScore: 0 }, 'NFL_PICKEM').seasonPoints).toBe(0);
+        expect(banterStandingsRow({ rank: 0, userName: 'Eve' }, 'NFL_PICKEM').rank).toBe(0);
     });
 });

@@ -86,6 +86,18 @@ describe('2. the mood buttons and prompt reach the REAL pipeline', () => {
         expect(ai).toContain("kind: 'AI',");
     });
 
+    it('the standings facts are mapped, not invented (codex r3 [P1])', () => {
+        // The projection's field names are type-specific and none is the
+        // obvious one. Mapping invented keys sent Gemini all-nulls, and with
+        // the no-hallucination rule that leaves it nothing to say.
+        expect(ai).toContain('banterStandingsRow(r, poolType)');
+        expect(ai).not.toContain('r.displayName ?? r.name');
+        const banter = read('functions/src/lib/banter.ts');
+        expect(banter).toContain("typeof row?.totalScore === 'number'");
+        expect(banter).toContain("typeof row?.seasonTotal === 'number'");
+        expect(banter).toContain("typeof row?.userName === 'string'");
+    });
+
     it('the AI gets its own prompt, not the dispute-resolution one', () => {
         // COMMISSIONER_SYSTEM_PROMPT's whole job is neutrality and "show the
         // math"; asking it for trash talk produces a referee reading a scoreboard.
