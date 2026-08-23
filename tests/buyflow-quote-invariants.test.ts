@@ -169,6 +169,15 @@ describe('LaunchStep takes its buttons from the helper, not an inline expression
         expect(launch).toContain('{buttons.showActivate && (');
     });
 
+    it('a quote is only current while it matches the inputs on screen', () => {
+        // codex round 2 [P1]: `quoteLoading` is false for the whole 300ms
+        // debounce, so a superseded quote read as `ready` and Activate offered
+        // a price the server no longer agreed with.
+        expect(launch).toContain('const quoteInputsKey = JSON.stringify(');
+        expect(launch).toContain('setResolvedKey(quoteInputsKey)');
+        expect(launch).toContain('resolvedKey !== quoteInputsKey || quoteLoading');
+    });
+
     it('a failed quote has a real retry wired into the fetch effect', () => {
         expect(launch).toContain('setQuoteReloadKey((k) => k + 1)');
         expect(launch).toMatch(/addonsKey, couponInput, quoteReloadKey\]\);/);

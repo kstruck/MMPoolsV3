@@ -103,6 +103,12 @@ export function LaunchStep(props: LaunchStepProps) {
   // Bumped by the "Try again" control so the quote effect re-runs on the SAME
   // inputs. Without it a failed quote is a dead end until the user edits a field.
   const [quoteReloadKey, setQuoteReloadKey] = useState(0);
+  // Which INPUTS the quote/error on screen belongs to. `quoteLoading` alone is
+  // not enough: for the 300ms the fetch is debouncing it is still false, so a
+  // superseded quote would read as current and the Activate button would offer
+  // a price the server no longer agrees with (codex round 2 [P1]). Same stamp
+  // BillingInvoiceCard uses (`setQuoteFor(key)`), for the same reason.
+  const [resolvedKey, setResolvedKey] = useState<string | null>(null);
 
   const [busy, setBusy] = useState<Busy>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -114,6 +120,9 @@ export function LaunchStep(props: LaunchStepProps) {
 
   // --- Server quote (debounced; the client renders it verbatim) --------------
   const addonsKey = JSON.stringify(addons);
+  // Identity of the priced inputs. A quote is only "current" while this matches
+  // the key it resolved under — see `resolvedKey`.
+  const quoteInputsKey = JSON.stringify([poolType, estimatedPlayers, addonsKey, couponInput.trim().toUpperCase()]);
   useEffect(() => {
     let cancelled = false;
     const trimmed = couponInput.trim();
@@ -127,11 +136,17 @@ export function LaunchStep(props: LaunchStepProps) {
           addons,
           couponCode: trimmed ? trimmed.toUpperCase() : undefined,
         });
-        if (!cancelled) setQuote(q);
+        if (!cancelled) {
+          setQuote(q);
+          setResolvedKey(quoteInputsKey);
+        }
       } catch {
         if (!cancelled) {
           setQuote(null);
           setQuoteError('Could not load pricing right now. You can still start a free trial below.');
+          // Stamped on failure too, so the error belongs to THESE inputs and a
+          // later edit reads as pending rather than as a standing failure.
+          setResolvedKey(quoteInputsKey);
         }
       } finally {
         if (!cancelled) setQuoteLoading(false);
@@ -198,13 +213,14 @@ export function LaunchStep(props: LaunchStepProps) {
 
   // Which launch actions to render. The rule lives in `launchButtonsState` so a
   // coupon-zeroed total keeps the Activate path (T2) and so it can be tested.
-  const quoteState: LaunchQuoteState = quoteLoading
-    ? 'pending'
-    : quoteError
-      ? 'unavailable'
-      : quote
-        ? 'ready'
-        : 'pending';
+  const quoteState: LaunchQuoteState =
+    resolvedKey !== quoteInputsKey || quoteLoading
+      ? 'pending'
+      : quoteError
+        ? 'unavailable'
+        : quote
+          ? 'ready'
+          : 'pending';
   const buttons = launchButtonsState({ quoteState, quote });
   const freeEligible = buttons.primary === 'free';
 
