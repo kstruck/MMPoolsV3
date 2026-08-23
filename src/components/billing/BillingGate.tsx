@@ -38,6 +38,16 @@ export const BillingGate: React.FC<BillingGateProps> = ({
   const billing = pool.billing;
   const status: BillingStatus = billing?.status ?? 'free';
 
+  /**
+   * Every commissioner CTA here carries the pool it is about
+   * (PLAN-WIZARD-BUYFLOW-FIXES T3). A bare `/pricing` made the commissioner
+   * re-find and re-select their own pool on the upgrade page — and the free /
+   * grace / locked banners are the moments where that dead end costs the most.
+   * `PricingPage` has read `?poolId=` since it shipped; nothing ever sent it.
+   */
+  const poolId = typeof pool?.id === 'string' ? pool.id : '';
+  const pricingHref = poolId ? `/pricing?poolId=${encodeURIComponent(poolId)}` : '/pricing';
+
   const trialDaysLeft = useMemo(
     () => getDaysRemaining(billing?.trialEndsAt),
     [billing?.trialEndsAt]
@@ -359,7 +369,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
 
           {isCommissioner && (
             <a
-              href="/pricing"
+              href={pricingHref}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -467,7 +477,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
 
           {isCommissioner && (
             <a
-              href="/pricing"
+              href={pricingHref}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -573,7 +583,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
 
           {isCommissioner && (
             <a
-              href="/pricing"
+              href={pricingHref}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -704,7 +714,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
             {/* CTA */}
             {isCommissioner ? (
               <a
-                href="/pricing"
+                href={pricingHref}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',

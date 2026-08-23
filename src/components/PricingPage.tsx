@@ -16,6 +16,8 @@ import { BillingInvoiceCard } from './billing/BillingInvoiceCard';
 import { UpgradeInfoPopover } from './pricing/UpgradeInfoPopover';
 import { EstimateSummaryCard } from './pricing/EstimateSummaryCard';
 import { canAccessPoolCreation } from '../utils/auth';
+import { addonSeed } from './billing/addonSeed';
+import { upgradeablePools, isUpgradeableStatus, canCheckoutPool, upgradeStatusLabel } from './billing/upgradeablePools';
 
 interface PricingPageProps {
     user?: User | null;
@@ -103,11 +105,23 @@ export const PricingPage: React.FC<PricingPageProps> = ({
     const [calcBranding, setCalcBranding] = useState<boolean>(false);
 
     // Explicit visitor-state machine — all render branching below keys off this.
-    const visitorState: 'anon' | 'noPools' | 'hasTrialPools' = !user
+    const visitorState: 'anon' | 'noPools' | 'hasUpgradeablePools' = !user
         ? 'anon'
         : userPools.length > 0
-            ? 'hasTrialPools'
+            ? 'hasUpgradeablePools'
             : 'noPools';
+
+    /**
+     * Render the real checkout, not the estimator. True when the user has any
+     * upgradeable pool, OR when a ?poolId= deep link resolved to one they can
+     * pay for (codex r2 [P1] on T3): the free / locked CTAs now carry a pool id,
+     * so the page must be able to sell that pool even if the list is still
+     * loading or the pool is not in it.
+     */
+    const selectedIsPayable =
+        !!selectedPoolData &&
+        canCheckoutPool(selectedPoolData as never, user?.id) &&
+        isUpgradeableStatus(selectedPoolData.billing?.status);
 
     // Optional config-driven hero promo (shared BillingConfig schema field).
     const heroPromo = config.heroPromo;
@@ -127,14 +141,13 @@ export const PricingPage: React.FC<PricingPageProps> = ({
         return () => unsubscribe();
     }, []);
 
-    // Fetch user pools in trial / grace period if logged in
+    // Fetch the user's UPGRADEABLE pools — trial, grace, free AND locked (G3).
+    // Listing only trial/grace is what dead-ended the free-plan 10-player wall,
+    // which is the moment both the lock banner and the lock email link here for.
     useEffect(() => {
         if (!user?.id) return;
         const unsubscribe = dbService.subscribeToPools((poolsList) => {
-            const trialsOnly = poolsList.filter(p =>
-                p.billing?.status === 'trial' || p.billing?.status === 'grace_period'
-            );
-            setUserPools(trialsOnly);
+            setUserPools(upgradeablePools(poolsList, user.id));
         }, (err) => {
             console.error('[PricingPage] Failed subscribing to user pools:', err);
         }, user.id);
@@ -159,9 +172,20 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                 // Synchronize calculator inputs to match selected pool for convenience
                 setCalcPoolType(pool.type);
                 setCalcPlayers((pool as any).estimatedPlayers || ((pool as any).settings?.maxEntriesTotal > 0 ? (pool as any).settings.maxEntriesTotal : 30));
-                setCalcAi(pool.billing?.featuresUnlocked?.aiCommissioner || false);
-                setCalcSms(pool.billing?.featuresUnlocked?.smsNotifications || false);
-                setCalcSim(pool.billing?.featuresUnlocked?.whatIfSimulator || false);
+                // ⚠️ `pool.addons` FIRST, `billing.featuresUnlocked` only as the
+                // legacy fallback (PLAN-WIZARD-BUYFLOW-FIXES T3). `addons` is the
+                // commissioner's own wizard selection, stored top-level by
+                // `readLaunchFields`. `featuresUnlocked` is what the pool has
+                // ACTIVE — and a trial launch stamps it all-false
+                // (`poolCreation.LOCKED_FEATURES`), so seeding from it wiped
+                // every add-on the commissioner had picked and the upgrade page
+                // opened with nothing selected. Kevin's repro exactly: a $147
+                // quote in the wizard, an empty checkout on /pricing.
+                const seed = addonSeed(pool);
+                setCalcAi(seed.aiCommissioner);
+                setCalcSms(seed.smsNotifications);
+                setCalcSim(seed.whatIfSimulator);
+                setCalcBranding(seed.customBranding);
             }
         }, (err) => {
             console.error('[PricingPage] Error fetching pool details:', err);
@@ -253,14 +277,14 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                     <div className="lg:col-span-7 space-y-8">
 
                         {/* Pool Upgrade Select (If Logged In & Has Trial Pools) */}
-                        {visitorState === 'hasTrialPools' && (
+                        {visitorState === 'hasUpgradeablePools' && (
                             <div className="bg-card border border-gold-500/25 rounded-3xl p-6 space-y-4 shadow-panel">
                                 <h3 className="font-display font-bold uppercase text-lg text-[color:var(--text)] flex items-center gap-2">
                                     <Sparkles className="text-gold-600 dark:text-gold-400" size={20} />
-                                    Your Trial Pools Awaiting Activation
+                                    Your Pools — Ready to Upgrade
                                 </h3>
                                 <p className="text-xs font-body text-muted">
-                                    Select one of your trial pools below to complete standard hosting payment and activate permanently.
+                                    Select a pool below to complete hosting payment and activate it permanently. Free-plan pools that have hit the player limit are listed here too.
                                 </p>
                                 <div className="grid grid-cols-1 gap-2.5">
                                     {userPools.map((pool) => (
@@ -281,7 +305,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                             </div>
                                             <div className="flex items-center gap-3">
                                                 <span className="bg-gold-500/10 border border-gold-500/25 text-gold-600 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.08em] px-2.5 py-1 rounded-full">
-                                                    Trial State
+                                                    {upgradeStatusLabel(pool.billing?.status)}
                                                 </span>
                                                 <ChevronRight size={16} className="text-muted" />
                                             </div>
@@ -299,8 +323,8 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                             </div>
                         )}
 
-                        {/* Interactive Billing Calculator Panel — hidden when a specific pool is selected (that pool's checkout on the right is authoritative; the estimator is for exploring pricing before you pick a pool) */}
-                        {!selectedPoolData && (
+                        {/* Interactive Billing Calculator Panel — hidden when a PAYABLE pool is selected (that pool's checkout on the right is authoritative; the estimator is for exploring pricing before you pick a pool). A deep link to a pool the visitor cannot pay for keeps the estimator, since the right column stays estimate-only too. */}
+                        {!selectedIsPayable && (
                         <div className={`${contentCard} p-6 md:p-8 rounded-3xl space-y-6 shadow-panel backdrop-blur-md hover:border-gold-500/40 transition-all duration-300 relative overflow-hidden`}>
                             {/* Inner background blob */}
                             <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-gold-500/5 blur-2xl pointer-events-none" />
@@ -313,7 +337,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                 <p className="text-xs font-body text-muted leading-relaxed">
                                     Estimate your custom hosting plan based on format, estimated participant size, and premium additions.
                                 </p>
-                                {visitorState !== 'hasTrialPools' && (
+                                {visitorState !== 'hasUpgradeablePools' && !selectedIsPayable && (
                                     <p className="text-[10px] font-display font-bold uppercase tracking-[0.08em] text-gold-600 dark:text-gold-400">
                                         Estimate only — launch a pool to purchase
                                     </p>
@@ -541,8 +565,13 @@ export const PricingPage: React.FC<PricingPageProps> = ({
 
                     {/* RIGHT COLUMN: state-driven — real checkout for trial pools, estimate-only quote otherwise */}
                     <div className="lg:col-span-5 space-y-6">
-                        {visitorState === 'hasTrialPools' ? (
-                            selectedPoolData ? (
+                        {visitorState === 'hasUpgradeablePools' || selectedIsPayable ? (
+                            // ⚠️ `selectedIsPayable`, NOT `selectedPoolData` (codex r3 [P2]).
+                            // Pool documents are publicly readable, so a bare
+                            // `?poolId=` of somebody else's pool would otherwise
+                            // render a full checkout — quote, terms and all —
+                            // that only fails at the server's ownership rule.
+                            selectedIsPayable ? (
                                 <>
                                     <div className="bg-card border border-gold-500/25 p-5 rounded-2xl space-y-2">
                                         <h4 className="text-sm font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-1.5">
@@ -559,10 +588,10 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                         poolName={selectedPoolData.name}
                                         poolType={calcPoolType}
                                         estimatedPlayers={calcPlayers}
-                                        hasAiCommissioner={false}
-                                        hasSmsNotifications={false}
-                                        hasWhatIfSimulator={false}
-                                        hasCustomBranding={false}
+                                        hasAiCommissioner={calcAi}
+                                        hasSmsNotifications={calcSms}
+                                        hasWhatIfSimulator={calcSim}
+                                        hasCustomBranding={calcBranding}
                                         isWizard={false} // Renders "Complete Payment & Upgrade" button
                                         pricePaid={selectedPoolData.billing?.pricePaid || 0}
                                         initialCouponCode={selectedPoolData.billing?.couponCode || ''}
@@ -576,7 +605,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                             <InfoIcon size={16} className="text-gold-600 dark:text-gold-400" /> Pick a Pool to Check Out
                                         </h4>
                                         <p className="text-xs font-body text-muted leading-relaxed">
-                                            Choose one of your trial pools from the <strong className="text-[color:var(--text)]">Your Trial Pools Awaiting Activation</strong> list to load its checkout here.
+                                            Choose a pool from the <strong className="text-[color:var(--text)]">Your Pools — Ready to Upgrade</strong> list to load its checkout here.
                                         </p>
                                     </div>
 

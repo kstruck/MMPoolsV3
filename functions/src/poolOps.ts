@@ -16,7 +16,8 @@ import {
     type LaunchBillingMode,
     writePoolCreationSideEffects,
 } from './lib/poolCreation';
-import { loadBillingConfig } from './billing';
+import { loadBillingConfig, resolveCouponForQuote } from './billing';
+import { validLaunchCouponCode } from './lib/launchCoupon';
 import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } from './lib/poolUpdate';
 import { parityEditNeedsEntries, survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
 import { tiebreakerEditNeedsEntries, touchesWeeklyTiebreakerSetting, weeklyTiebreakerRefusal } from './lib/weeklyTiebreakerGate';
@@ -117,6 +118,12 @@ const PRIVILEGED_POOL_FIELDS = [
     // the tiebreak target, or the weeks divisor of every weekly prize. (qodo #10
     // on #452.) `hardLockByWeek` rides along for the same reason.
     'frozenTiebreakTargets', 'weeksInSeason', 'hardLockByWeek',
+    // The wizard's coupon (PLAN-WIZARD-BUYFLOW-FIXES T3). It is READ from the
+    // raw request before this strip and re-stamped under `billing.couponCode`
+    // only after the server validates it. Listed here so the permissive create
+    // envelope cannot write an unvalidated `couponCode` to the pool's top level,
+    // where nothing would ever check it but a reader might trust it.
+    'couponCode',
 ];
 
 // Sim harness trust anchor (PLAN-TEST-SUITE 8f): simRunId is stripped from
@@ -356,6 +363,12 @@ export const createPool = validated(
         // free threshold AND no paid add-on; trial otherwise. Config read fails
         // open to defaults inside loadBillingConfig, so this never stalls create.
         const billingConfig = await loadBillingConfig(db);
+        // Remember the wizard's coupon (T3). Read from the RAW request: the
+        // strip above deliberately removes it from the persisted envelope.
+        const launchCouponCode = await validLaunchCouponCode(
+            (code) => resolveCouponForQuote(db, code, { userId: uid, poolType, now: now.toMillis() }),
+            (request.data as Record<string, unknown> | undefined)?.couponCode,
+        );
         const launchMode = computeLaunchMode(data, billingConfig.freePlayerThreshold);
 
         const newPool: any = {
@@ -370,7 +383,11 @@ export const createPool = validated(
             isLocked: false,
             isPublic: data.isPublic !== undefined ? data.isPublic : true, // Explicitly set for rules
             // free or trial per server-computed launch mode (server-authoritative)
-            billing: billingForLaunch(launchMode, billingConfig.trialDays, now.toMillis()),
+            billing: {
+                ...billingForLaunch(launchMode, billingConfig.trialDays, now.toMillis()),
+                // Remembered wizard coupon — validated above, never redeemed here (T3).
+                ...(launchCouponCode ? { couponCode: launchCouponCode } : {}),
+            },
         };
 
         // simRunId computed above the creation guard; stamped here.

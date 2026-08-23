@@ -243,7 +243,11 @@ export function LaunchStep(props: LaunchStepProps) {
     if (createdPoolId) return createdPoolId;
     const { _tosAccepted, ...clean } = getValues() as Record<string, unknown>;
     void _tosAccepted;
-    const poolId = await createPool(clean);
+    // The coupon lives in this component's state, not the form, so it has to be
+    // merged in here or it never reaches the create payload at all — which is
+    // exactly why `billing.couponCode` was a field nothing wrote (T3).
+    const couponForLaunch = couponInput.trim().toUpperCase();
+    const poolId = await createPool(couponForLaunch ? { ...clean, couponCode: couponForLaunch } : clean);
     setCreatedPoolId(poolId);
 
     // Remember this commissioner's contact + payout handles so their NEXT pool
@@ -279,7 +283,7 @@ export function LaunchStep(props: LaunchStepProps) {
     }
 
     return poolId;
-  }, [tosAccepted, trigger, getValues, createPool, createdPoolId, user, uid]);
+  }, [tosAccepted, trigger, getValues, createPool, createdPoolId, user, uid, couponInput]);
 
   const startTrialOrFree = useCallback(async (mode: 'free' | 'trial') => {
     setBusy(mode);

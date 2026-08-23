@@ -5,7 +5,8 @@ import { writeAuditEvent, type AuditOptions } from "./audit";
 import { checkBillingAccess } from "./billing";
 import { writeLedgerEvent } from "./paymentLedger";
 import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMode, assertPaidParticipantCeiling, simRunIdForCreate, assertSeasonNotForgedSim } from "./poolOps";
-import { loadBillingConfig } from "./billing";
+import { loadBillingConfig, resolveCouponForQuote } from "./billing";
+import { validLaunchCouponCode } from "./lib/launchCoupon";
 import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } from "./lib/systemGuards";
 import { isPoolType, type PoolType } from "./shared/poolTypes";
 import { nflWeekLabel } from "./shared/nflWeekLabel";
@@ -134,6 +135,13 @@ export const createNFLPool = validated(
     // player cap, so with no paid add-on this resolves to 'free' (unchanged
     // behavior); a selected paid add-on forces 'trial'. Config read fails open.
     const billingConfig = await loadBillingConfig(db);
+    // Remember the wizard's coupon (PLAN-WIZARD-BUYFLOW-FIXES T3). Read from the
+    // RAW request: stripPrivilegedPoolFields deliberately removes `couponCode`
+    // from the persisted envelope, so only a server-validated code is stamped.
+    const launchCouponCode = await validLaunchCouponCode(
+      (code) => resolveCouponForQuote(db, code, { userId: uid, poolType, now }),
+      (request.data as Record<string, unknown> | undefined)?.couponCode,
+    );
     const launchMode = computeLaunchMode(data, billingConfig.freePlayerThreshold);
 
     const newPool: any = {
@@ -160,7 +168,11 @@ export const createNFLPool = validated(
       // The seeded host owes nothing until they play, so it starts at 0.
       entryCount: 0,
       // free or trial per server-computed launch mode (server-authoritative)
-      billing: billingForLaunch(launchMode, billingConfig.trialDays, now),
+      billing: {
+        ...billingForLaunch(launchMode, billingConfig.trialDays, now),
+        // Remembered wizard coupon — validated above, never redeemed here (T3).
+        ...(launchCouponCode ? { couponCode: launchCouponCode } : {}),
+      },
     };
 
     // Sim harness trust anchor (stripped from clients; SUPER_ADMIN-only stamp,

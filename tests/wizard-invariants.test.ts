@@ -183,7 +183,10 @@ describe('every wizard prefills from the profile and remembers what it learns', 
 
   it('the write-back runs AFTER the pool is created, never before', () => {
     const launch = readFileSync(resolve(root, `${CREATE_DIR}/LaunchStep.tsx`), 'utf8');
-    const created = launch.indexOf('const poolId = await createPool(clean);');
+    // Matches the CALL, not its argument expression: T3 merges the wizard's
+    // coupon into the payload here, so pinning the old literal `createPool(clean)`
+    // would fail on a change that does not touch the ordering this guards.
+    const created = launch.indexOf('const poolId = await createPool(');
     const saved = launch.indexOf('profileUpdatesFrom(user, clean)');
     expect(created).toBeGreaterThan(-1);
     expect(saved).toBeGreaterThan(created);
