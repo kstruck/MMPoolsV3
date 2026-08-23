@@ -577,7 +577,7 @@ async function generateBanter(args: {
             hasPlayedAWeek: standingsRows.length > 0,
         };
 
-        const ai = await generateAIResponse(BANTER_SYSTEM_PROMPT, facts);
+        const ai = await generateAIResponse(BANTER_SYSTEM_PROMPT, facts, { feature: "ai.banter", poolId, userId: requestData.userId ?? null });
         const text = banterTextFromAI(ai);
         if (!text) throw new Error('BANTER_EMPTY');
 
