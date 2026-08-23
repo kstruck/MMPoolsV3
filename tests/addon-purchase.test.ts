@@ -32,6 +32,7 @@ const stripe = read('functions/src/stripe.ts');
 const engine = read('functions/src/lib/quoteEngine.ts');
 const button = read('src/components/billing/AddonUpgradeButton.tsx');
 const managerCard = read('src/components/NFLPoolDashboard/NFLManagerBentoDashboard.tsx');
+const bracket = read('src/components/BracketPoolDashboard/BracketPoolDashboard.tsx');
 
 describe('purchaseKind — the input says what is being bought', () => {
   const valid = {
@@ -164,5 +165,23 @@ describe('the commissioner has a path to it', () => {
 
   it('is offered only on an ACTIVE pool, matching what the server accepts', () => {
     expect(managerCard).toContain("castPool.billing?.status === 'active' && (");
+  });
+});
+
+describe('codex r1 findings', () => {
+  it('[P2] the Stripe product names the ADD-ON, not hosting', () => {
+    // An add-on session used to tell Stripe the product was "Premium Hosting"
+    // with a hosting-fee description, on a pool whose hosting was already paid
+    // for. The receipt and the card statement would both have named something
+    // the buyer did not buy.
+    expect(stripe).toContain('quote.addonLines.map((l) => l.label).join(" + ")');
+    expect(stripe).toContain('Your hosting is already paid for and is not charged again.');
+  });
+
+  it('[P1] a Bracket commissioner gets the same path', () => {
+    // The server path is pool-type agnostic; only the button placement was
+    // NFL-only.
+    expect(bracket).toContain('<AddonUpgradeButton pool={pool} addon="aiCommissioner" label="AI Commissioner" />');
+    expect(bracket).toContain("isManager && aiPoolBilling?.status === 'active'");
   });
 });

@@ -591,8 +591,19 @@ export const createCheckoutSession = validated(
                     price_data: {
                         currency: "usd",
                         product_data: {
-                            name: `${poolName} — ${snapshot.tier === "premium_tier" ? "Premium" : "Standard"} Hosting`,
-                            description: `One-time hosting fee for your ${poolType} pool`,
+                            // codex r1 [P2]. An add-on session used to tell Stripe
+                            // the product was "Premium Hosting" with a hosting-fee
+                            // description — on a pool whose hosting was already
+                            // paid for. The buyer's card statement and receipt
+                            // would both have named something they did not buy,
+                            // which is a dispute waiting to happen. The name now
+                            // comes from the quote's own priced lines.
+                            name: isAddonPurchase
+                                ? `${poolName} — ${quote.addonLines.map((l) => l.label).join(" + ")}`
+                                : `${poolName} — ${snapshot.tier === "premium_tier" ? "Premium" : "Standard"} Hosting`,
+                            description: isAddonPurchase
+                                ? `Add-on${quote.addonLines.length === 1 ? "" : "s"} for your ${poolType} pool. Your hosting is already paid for and is not charged again.`
+                                : `One-time hosting fee for your ${poolType} pool`,
                         },
                         unit_amount: Math.round(serverPrice * 100),
                     },
