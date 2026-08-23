@@ -42,6 +42,7 @@ import {
     checkoutPoolInputSchema,
     unsellableClampOutcome,
     type PendingBillableSnapshot,
+    type PoolQuote,
 } from "./shared/schemas/quote";
 import {
     validateCouponRules,
@@ -278,7 +279,12 @@ export const createCheckoutSession = validated(
                 estimatedPlayers: existingBilling.paid?.maxPlayersAllowed
                     ?? existingBilling.maxPlayersAllowed
                     ?? 0,
-                currentTier: (existingBilling.paid?.tier ?? existingBilling.tier ?? "premium_tier") as typeof quote.tier,
+                // `PoolQuote["tier"]`, not `typeof quote.tier`. Both compile
+                // (measured: `npm --prefix functions run build` is clean either
+                // way, so codex r3's TS18048 claim is rejected), but a type
+                // query on the variable being assigned reads as circular and
+                // would genuinely break if `quote` ever gained an annotation.
+                currentTier: (existingBilling.paid?.tier ?? existingBilling.tier ?? "premium_tier") as PoolQuote["tier"],
                 addons,
                 owned: ownedAddons,
             })
