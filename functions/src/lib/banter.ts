@@ -43,3 +43,21 @@ export function banterTextFromAI(ai: unknown): string {
         : [];
     return [headline, ...bullets].filter(Boolean).join(' ').trim();
 }
+
+/**
+ * Is this uid a commissioner of the pool? Mirrors the `messages` delete rule
+ * in firestore.rules: owner, legacy managerUid, a named NFL co-commissioner,
+ * and nobody else. `coManagers` grants nothing on a non-NFL pool, exactly as
+ * the rules helper and `isPoolCommissioner` enforce.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function isPoolCommissionerUid(pool: any, uid: string | undefined): boolean {
+    if (!uid) return false;
+    if (uid === (pool?.ownerId || pool?.createdByUid)) return true;
+    if (uid === pool?.managerUid) return true;
+    const NFL = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
+    if (NFL.includes(String(pool?.type)) && Array.isArray(pool?.coManagers)) {
+        return pool.coManagers.includes(uid);
+    }
+    return false;
+}

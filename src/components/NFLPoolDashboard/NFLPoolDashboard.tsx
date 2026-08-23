@@ -615,14 +615,22 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
    */
   const [poolFeed, setPoolFeed] = useState<BanterMessage[]>([]);
   const [poolFeedError, setPoolFeedError] = useState(false);
+  /**
+   * Membership, read the same way the Firestore rule reads it. Subscribing as a
+   * non-member terminates the listener on a permission error, so this gate is
+   * what keeps a public-pool visitor from seeing a permanent feed error.
+   */
+  const isPoolMember = !!user?.id && Array.isArray(castPool.participantIds)
+    && castPool.participantIds.includes(user.id);
+
   useEffect(() => {
-    if (!pool?.id || !user?.id) return;
+    if (!pool?.id || !isPoolMember) return;
     return dbService.subscribeToPoolFeed(
       pool.id,
       (messages) => { setPoolFeedError(false); setPoolFeed(messages); },
       () => setPoolFeedError(true),
     );
-  }, [pool?.id, user?.id]);
+  }, [pool?.id, isPoolMember]);
 
   const branding = castPool.branding || {};
   const brand = brandingStyles(branding);
@@ -872,10 +880,12 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                       are these messages shown to members?" - until now, nowhere:
                       the commissioner's card kept its feed in React state.
 
-                      Rendered for signed-in members only, because the read rule
-                      is `isPoolParticipant()`; showing the card to a logged-out
-                      visitor would only ever render its error state. */}
-                  {user && (
+                      Rendered for pool MEMBERS only (codex r1 [P2]), not merely
+                      signed-in visitors: the read rule is `isPoolParticipant()`,
+                      so on a public pool a signed-in non-member would subscribe,
+                      be denied, and be shown a permanent load error for a feed
+                      they were never entitled to read. */}
+                  {isPoolMember && (
                     <div className="max-w-4xl mx-auto mt-6 bg-card border border-line rounded-xl shadow-card p-6">
                       <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-3">
                         Pool feed

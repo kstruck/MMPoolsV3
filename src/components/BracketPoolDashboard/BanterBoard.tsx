@@ -37,6 +37,16 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
         setSending(true);
         try {
             await dbService.sendBanterMessage(poolId, {
+                // ⚠️ `authorUid` is what firestore.rules binds to request.auth.uid.
+                // This writer only ever sent userId/userName, so EVERY send from
+                // this board was permission-denied — a pre-existing break, found
+                // by codex reviewing T9 (the rule required authorUid at
+                // origin/main too). Both shapes are written: the new fields
+                // satisfy the rule, the legacy ones keep this board's own
+                // `isMe` comparison and older rows rendering.
+                authorUid: user.id,
+                authorName: user.name || user.email?.split('@')[0] || 'Anonymous User',
+                kind: 'COMMISSIONER',
                 userId: user.id,
                 userName: user.name || user.email?.split('@')[0] || 'Anonymous User',
                 text: newMessage.trim(),
@@ -77,7 +87,7 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
                     </div>
                 ) : (
                     messages.map((msg) => {
-                        const isMe = msg.userId === user?.id;
+                        const isMe = (msg.authorUid ?? msg.userId) === user?.id;
                         return (
                             <div
                                 key={msg.id}
@@ -85,7 +95,7 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
                             >
                                 <div className="flex items-baseline gap-2 px-1">
                                     <span className={`text-xs font-semibold ${isMe ? 'text-gold-600' : 'text-muted'}`}>
-                                        {isMe ? 'You' : msg.userName}
+                                        {isMe ? 'You' : (msg.authorName ?? msg.userName)}
                                     </span>
                                     <span className="text-[10px] text-faint flex items-center gap-1">
                                         <Clock className="w-3 h-3" />

@@ -78,3 +78,55 @@ describe('banterTextFromAI', () => {
         expect(banterTextFromAI({ headline: '  Hi.  ', summaryBullets: ['  there.  '] })).toBe('Hi. there.');
     });
 });
+
+// ---------------------------------------------------------------------------
+// codex r1 [P1] on T9: `ai_requests` create is participant-scoped — correctly,
+// since a dispute is a member's to ask — but BANTER is different in kind: the
+// result is posted POOL-WIDE under the AI Commissioner's identity. Without this
+// predicate, any participant could bypass the manager-only card, spend the paid
+// provider, and publish AI-authored posts to everyone.
+// ---------------------------------------------------------------------------
+describe('isPoolCommissionerUid', () => {
+    const nfl = (over: Record<string, unknown> = {}) => ({
+        type: 'NFL_PICKEM', ownerId: 'owner', managerUid: 'owner', coManagers: ['co'], ...over,
+    });
+
+    it('accepts the owner', async () => {
+        const { isPoolCommissionerUid } = await import('../lib/banter');
+        expect(isPoolCommissionerUid(nfl(), 'owner')).toBe(true);
+    });
+
+    it('accepts the legacy managerUid', async () => {
+        const { isPoolCommissionerUid } = await import('../lib/banter');
+        expect(isPoolCommissionerUid(nfl({ ownerId: 'someone', managerUid: 'mgr' }), 'mgr')).toBe(true);
+    });
+
+    it('falls back to createdByUid for a legacy empty ownerId', async () => {
+        const { isPoolCommissionerUid } = await import('../lib/banter');
+        expect(isPoolCommissionerUid(nfl({ ownerId: '', createdByUid: 'legacy', managerUid: '' }), 'legacy')).toBe(true);
+    });
+
+    it('accepts a named NFL co-commissioner', async () => {
+        const { isPoolCommissionerUid } = await import('../lib/banter');
+        expect(isPoolCommissionerUid(nfl(), 'co')).toBe(true);
+    });
+
+    it('REFUSES a co-manager on a non-NFL pool', async () => {
+        // coManagers grants nothing outside NFL — same rule the firestore
+        // helper and the functions gate enforce.
+        const { isPoolCommissionerUid } = await import('../lib/banter');
+        expect(isPoolCommissionerUid(nfl({ type: 'BRACKET' }), 'co')).toBe(false);
+    });
+
+    it('refuses an ordinary participant, a stranger and a missing uid', async () => {
+        const { isPoolCommissionerUid } = await import('../lib/banter');
+        expect(isPoolCommissionerUid(nfl(), 'alice')).toBe(false);
+        expect(isPoolCommissionerUid(nfl(), undefined)).toBe(false);
+        expect(isPoolCommissionerUid(null, 'owner')).toBe(false);
+    });
+
+    it('tolerates a malformed coManagers value', async () => {
+        const { isPoolCommissionerUid } = await import('../lib/banter');
+        expect(isPoolCommissionerUid(nfl({ coManagers: 'co' }), 'co')).toBe(false);
+    });
+});

@@ -80,6 +80,32 @@ describe('2. the mood buttons and prompt reach the REAL pipeline', () => {
     });
 });
 
+describe('2b. only a COMMISSIONER can make the AI post pool-wide (codex r1 [P1])', () => {
+    it('generateBanter refuses a non-commissioner before spending', () => {
+        // ai_requests create is participant-scoped — correctly, a dispute is a
+        // member's to ask. BANTER is different in kind: the result is published
+        // to everyone under the AI Commissioner's identity.
+        expect(ai).toContain('if (!isPoolCommissionerUid(poolRaw, requestData.userId)) {');
+        expect(ai).toContain("error: 'BANTER_NOT_COMMISSIONER'");
+    });
+
+    it('the four ai_requests create conditions are UNTOUCHED', () => {
+        // Enforced in the function rather than by widening that rule: its
+        // conditions are load-bearing and category-blind, and a per-category
+        // branch in a security rule is what gets "simplified" later. It also
+        // stops the SPEND, which a rule would not if a write landed another way.
+        expect(rules).toContain('request.resource.data.userId == request.auth.uid');
+        expect(rules).toContain(".get('aiCommissioner', false) == true");
+        expect(rules).toMatch(/match \/ai_requests\/\{[\s\S]{0,1800}?allow update, delete: if false;/);
+    });
+
+    it('the predicate matches the rules delete set, co-managers included', () => {
+        const banter = read('functions/src/lib/banter.ts');
+        expect(banter).toContain('export function isPoolCommissionerUid');
+        expect(banter).toContain("const NFL = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];");
+    });
+});
+
 describe('3. members actually see it', () => {
     it('the feed renders on the pool homepage Overview, not only in the manager view', () => {
         expect(dash).toContain('<BanterFeed');
@@ -89,6 +115,24 @@ describe('3. members actually see it', () => {
     it('one component renders both views, so they cannot drift', () => {
         expect(card).toContain("import { BanterFeed } from './BanterFeed';");
         expect(dash).toContain("import { BanterFeed } from './BanterFeed';");
+    });
+
+    it('the feed is gated on MEMBERSHIP, not merely being signed in (codex r1 [P2])', () => {
+        // On a public pool a signed-in non-member would subscribe, be denied by
+        // `isPoolParticipant()`, and be shown a permanent load error for a feed
+        // they were never entitled to read.
+        expect(dash).toContain('{isPoolMember && (');
+        expect(dash).toContain('castPool.participantIds.includes(user.id)');
+        expect(dash).toContain('if (!pool?.id || !isPoolMember) return;');
+    });
+
+    it('the legacy bracket chat writer sends the field the rule binds on', () => {
+        // PRE-EXISTING break found by codex reviewing T9: BanterBoard only ever
+        // wrote userId/userName, and `authorUid == request.auth.uid` was already
+        // required at origin/main — so every send from that board was denied.
+        const board = read('src/components/BracketPoolDashboard/BanterBoard.tsx');
+        expect(board).toContain('authorUid: user.id,');
+        expect(board).toContain('userId: user.id,');
     });
 
     it('a failed read is not rendered as an empty feed', () => {

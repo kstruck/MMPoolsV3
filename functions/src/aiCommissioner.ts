@@ -4,7 +4,7 @@ import * as crypto from "crypto";
 import { generateAIResponse, COMMISSIONER_SYSTEM_PROMPT, BANTER_SYSTEM_PROMPT, geminiApiKey } from "./gemini";
 import { writeAuditEvent } from "./audit";
 import { resolveGameSpreads } from "./lib/frozenSpreads";
-import { normalizeBanterMood, banterTextFromAI } from "./lib/banter";
+import { normalizeBanterMood, banterTextFromAI, isPoolCommissionerUid } from "./lib/banter";
 import { GameState, Winner, AIArtifact, AIRequest, BracketPool, Tournament, BracketEntry } from "./types";
 
 const db = admin.firestore();
@@ -475,6 +475,7 @@ export const onWeeklyRecapCreated = onDocumentCreated({
 // BANTER generation (PLAN-WIZARD-BUYFLOW-FIXES T9)
 // ---------------------------------------------------------------------------
 
+
 async function generateBanter(args: {
     poolId: string;
     poolRef: FirebaseFirestore.DocumentReference;
@@ -486,6 +487,24 @@ async function generateBanter(args: {
 }): Promise<void> {
     const { poolId, poolRef, poolRaw, poolType, requestData, requestRef } = args;
     const mood = normalizeBanterMood(requestData.mood);
+
+    // ⚠️ COMMISSIONER-ONLY (codex r1 [P1] on T9). `ai_requests` create is
+    // participant-scoped — correctly, since disputes and insights are a
+    // member's to ask — but BANTER is different in kind: the result is posted
+    // pool-wide under the AI Commissioner's identity. Without this, any
+    // participant could bypass the manager-only card, spend the paid provider,
+    // and publish AI-authored posts to everyone.
+    //
+    // Enforced HERE rather than by widening the ai_requests create rule: those
+    // four conditions are load-bearing and category-blind, and a per-category
+    // branch in a security rule is the kind of complexity that gets
+    // "simplified" later. This also stops the SPEND, which the rule would not
+    // if a write ever landed another way.
+    if (!isPoolCommissionerUid(poolRaw, requestData.userId)) {
+        console.warn(`[AI] BANTER request on pool ${poolId} from a non-commissioner; refusing.`);
+        await requestRef.update({ status: 'ERROR', error: 'BANTER_NOT_COMMISSIONER', updatedAt: Date.now() });
+        return;
+    }
 
     try {
         // A deliberately SMALL fact set. Banter needs the scoreboard, not the
