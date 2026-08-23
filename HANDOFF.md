@@ -55,7 +55,7 @@
 > real pool. Every claim rests on the suites, the type checks and the diffs.
 
 
-> ## 🟢 2026-08-24 (latest) — **PLAN-WIZARD-BUYFLOW-FIXES: ELEVEN PRs MERGED (9 of 10 TICKETS). THE LAUNCH FLIP IS BUILT AND WAITING FOR KEVIN (#529). TWO DEPLOYS OWED BEFORE MONDAY.**
+> ## 🟢 2026-08-24 — **PLAN-WIZARD-BUYFLOW-FIXES: ELEVEN PRs MERGED (9 of 10 TICKETS). THE LAUNCH FLIP IS BUILT AND WAITING FOR KEVIN (#529). TWO DEPLOYS OWED BEFORE MONDAY.**
 >
 > Full detail: **[MORNING-2026-08-24.md](MORNING-2026-08-24.md)**. Read that before
 > touching this effort — this box is the live state, that file is the reasoning.
@@ -115,9 +115,10 @@
 > either.
 
 
-> ⚠️ **THE OWED DEPLOYS OVERLAP — AND COST CONTROLS ADDS SURFACES THE BOX ABOVE
-> DOES NOT MENTION.** Both efforts need `functions` and `firestore.rules`, so one
-> pass covers both. Cost controls additionally needs **`firestore:indexes`**
+> ⚠️ **THE OWED DEPLOYS OVERLAP — AND COST CONTROLS ADDS SURFACES THE OTHER
+> BOXES DO NOT MENTION.** The buy-flow and per-pool-premium efforts above both
+> owe `functions` (+ `firestore.rules`), and so does cost controls, so ONE pass
+> covers all of them. Cost controls additionally needs **`firestore:indexes`**
 > (the `ai_requests.createdAt` field override) — without it 0.5.5's AI-volume
 > check throws `9 FAILED_PRECONDITION` on every run, the `enforceBillingStatus`
 > failure mode — and, once Phase 1 merges, a **Firestore TTL policy**, which no
@@ -194,7 +195,7 @@
 > Next implementation gate is Phase 1 (centralize paid-provider calls +
 > attribution), and the cadence rule is one PR at a time.
 
-> ## 🟢 2026-08-22 (latest) — **§2c IS NOW CLOSED ON THE SIX MERGED PRs. THE HELP `?` IS VISIBLE (#514, MERGED). COOLIFY REBUILD OWED, NO FUNCTIONS DEPLOY.**
+> ## 🟢 2026-08-22 — **§2c IS NOW CLOSED ON THE SIX MERGED PRs. THE HELP `?` IS VISIBLE (#514, MERGED). COOLIFY REBUILD OWED, NO FUNCTIONS DEPLOY.**
 >
 > ✅ **§2c ON #504–#509 IS MET.** The box below said "still unmet"; it is
 > superseded. Two codex rounds ran this session, both over real code diffs and
