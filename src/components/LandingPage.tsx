@@ -34,7 +34,7 @@ const heroCardCls = 'bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-
 const heroBtn =
   'w-full sm:w-auto inline-flex items-center justify-center gap-2 font-display font-bold uppercase tracking-[0.05em] text-[17px] px-[34px] py-4 rounded-lg transition-all duration-150 hover:-translate-y-px cursor-pointer';
 
-export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0, isLoggedIn }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0 }) => {
   const navigate = useNavigate();
   const canCreate = canAccessPoolCreation(user);
 
@@ -292,7 +292,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
               <div className="pt-8">
                 <div className="font-display font-extrabold text-3xl text-[color:var(--text)] mb-4 num">$0 <span className="text-xs text-faint font-body font-medium normal-case">/ forever</span></div>
                 <button
-                  onClick={canCreate ? () => navigate('/create-pool') : undefined}
+                  onClick={canCreate ? onCreatePool : undefined}
                   disabled={!canCreate}
                   className="w-full border-[1.5px] border-navy-800 text-navy-800 hover:bg-navy-800 hover:text-white dark:border-line dark:text-[color:var(--text)] dark:hover:bg-white/10 py-3 px-6 rounded-md font-display font-bold uppercase tracking-[0.05em] text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   title={canCreate ? 'Launch a free pool' : 'Pool creation is coming soon'}
@@ -487,7 +487,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
         <div className="max-w-7xl mx-auto px-6 text-center">
           <h2 className="font-display font-extrabold uppercase text-3xl md:text-5xl leading-[0.95] text-white mb-8">Ready to Kick Off the Season?</h2>
           <button
-            onClick={canCreate ? (isLoggedIn ? onCreatePool : onSignup) : undefined}
+            onClick={canCreate ? onCreatePool : undefined}
             disabled={!canCreate}
             className="bg-brandred-600 text-white px-10 py-5 rounded-lg font-display font-extrabold uppercase tracking-[0.05em] text-xl transition-all hover:-translate-y-px hover:bg-brandred-500 shadow-red-cta mb-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none cursor-pointer"
             title={canCreate ? "Create Your Free Pool Now" : "Pool creation is coming soon"}
