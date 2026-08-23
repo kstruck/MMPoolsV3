@@ -39,7 +39,7 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                         </p>
                         <div className="flex flex-col sm:flex-row justify-center gap-4">
                             <button
-                                onClick={canCreate ? (user ? onCreatePool : onOpenAuth) : undefined}
+                                onClick={canCreate ? onCreatePool : undefined}
                                 disabled={!canCreate}
                                 className="bg-brandred-600 hover:bg-brandred-500 text-white px-8 py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg transition-all duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:bg-brandred-600"
                                 title={canCreate ? "Create Your Pool" : "Pool creation is coming soon"}
@@ -317,7 +317,7 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                         <p className="font-body text-muted text-lg mb-8 relative z-10">Create your pool in seconds. No spreadsheets, no stress.</p>
 
                         <button
-                            onClick={canCreate ? (user ? onCreatePool : onOpenAuth) : undefined}
+                            onClick={canCreate ? onCreatePool : undefined}
                             disabled={!canCreate}
                             className="bg-brandred-600 text-white px-8 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg hover:bg-brandred-500 transition-all duration-150 hover:-translate-y-px relative z-10 shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:bg-brandred-600"
                             title={canCreate ? "Create Your Pool Free" : "Pool creation is coming soon"}
