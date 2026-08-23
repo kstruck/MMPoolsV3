@@ -1,5 +1,60 @@
 # HANDOFF — Session entry point
 
+> ## 🟢 2026-08-25 (latest) — **FOUR PRs MERGED: T10 (THE LAUNCH BLOCKER), THE POOL FEED + PIN, AND BOTH HALVES OF PER-POOL PREMIUM. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
+>
+> Full detail: **[MORNING-2026-08-25.md](MORNING-2026-08-25.md)** — read it before
+> touching this effort. This box is the live state; that file is the reasoning.
+>
+> ✅ **MERGED overnight 2026-08-24→25**, each with all gates and a clean final
+> `codex exec review` round: **#536** (T10 — one scoped Standings tab on every NFL
+> pool type; the last unbuilt PLAN-WIZARD-BUYFLOW-FIXES ticket), **#537** (pool
+> feed beside Pool Standings + a commissioner-pinned message under the ticker),
+> **#538** (C1 — super-admin per-pool feature toggle), **#539** (C2 — commissioner
+> buys an add-on mid-season and it turns itself on).
+>
+> **8 codex rounds. 5 findings absorbed, 1 rejected with a measurement, 1
+> CARRIED unresolved** (see the decisions below). Root suite 2013 → **2063**;
+> functions 1813 → **1820**.
+>
+> 🛑 **NOTHING IS LIVE UNTIL BOTH OF THESE RUN, AND THE ORDER MATTERS.**
+> 1. `npx firebase deploy --only functions` — **#537, #538 and #539 all change
+>    `functions/`.** CLAUDE.md §3 exactly: `git -C D:\march-melee-pools pull
+>    --ff-only origin main` FIRST, confirm the checkout is on `main`, then
+>    `npm --prefix functions ci`.
+> 2. **Coolify `www` rebuild** — every PR has a frontend half.
+>
+> ⚠️ **THE DEPLOY MUST GO FIRST, and #539 is why.** The frontend half is what
+> lets a commissioner START an add-on checkout. If the rebuild lands before the
+> functions deploy, a completed Stripe session finalizes against the OLD handler,
+> which sees an active pool, files it as a DOUBLE CHARGE and grants nothing — the
+> money is taken and the feature is not delivered.
+>
+> ✅ **NO `firestore.rules` CHANGE IN ANY OF THE FOUR.** The pinned message
+> deliberately avoided needing one: it lives on the pool document
+> (`pinnedMessageId`) and is written through the `updatePoolSettings` callable,
+> so `pools/{id}/messages` keeps `allow update: if false`. `test:rules` was not
+> run because it does not apply — not because it was skipped.
+>
+> 🛑 **TWO DECISIONS ARE WAITING ON KEVIN**, both written out in full in the
+> morning doc §2 with a recommendation each:
+> 1. **Branding is too weak.** Recommendation: a full-width `primaryColor`
+>    HEADER BAND with automatically readable text (theme-safe by construction,
+>    ~40 lines) — NOT a full page background, whose failure mode is a member who
+>    cannot read the page. Logo customization is kept in every option.
+> 2. **Where do PLAYOFF and PROPS commissioners buy an add-on?** The server path
+>    already works for every pool type; only the BUTTON is NFL + Bracket.
+>    Recommendation: one add-on section on `/pricing` rather than a CTA wedged
+>    into two tab strips. This is codex's carried finding on #539.
+>
+> ⚠️ **THE PLAYWRIGHT E2E SUITE IS STILL 8/8 RED** and was already red at
+> `925c6d7d`. Not run by CI, last touched 2026-07-04. Still the only automated
+> coverage of the flow real users walk.
+>
+> ℹ️ **Nothing in these four PRs was verified in a browser.** The feed, the pin
+> band and the Super-Admin toggle all need an authenticated session against a
+> real pool. Every claim rests on the suites, the type checks and the diffs.
+
+
 > ## 🟢 2026-08-24 (latest) — **PLAN-WIZARD-BUYFLOW-FIXES: ELEVEN PRs MERGED (9 of 10 TICKETS). THE LAUNCH FLIP IS BUILT AND WAITING FOR KEVIN (#529). TWO DEPLOYS OWED BEFORE MONDAY.**
 >
 > Full detail: **[MORNING-2026-08-24.md](MORNING-2026-08-24.md)**. Read that before
