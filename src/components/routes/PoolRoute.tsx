@@ -10,6 +10,7 @@ import { PoolTimer } from '../PoolTimer';
 import { Grid } from '../Grid';
 import { AuditLog } from '../AuditLog';
 import { AICommissioner } from '../AICommissioner';
+import { PaymentSuccessBanner } from '../billing/PaymentSuccessBanner';
 
 
 import { BracketPoolDashboard } from '../BracketPoolDashboard/BracketPoolDashboard';
@@ -27,7 +28,7 @@ import { isSuperAdmin, isPoolManager, isNFLPoolCommissioner } from '../../utils/
 import { logger } from '../../utils/logger';
 import { useToast } from '../ui/Toast';
 import { Button, Badge } from '../ui';
-import type { User, Pool, GameState, PropsPool, PlayoffPool, Winner } from '../../types';
+import type { User, Pool, GameState, PropsPool, PlayoffPool, Winner, BillingStatus } from '../../types';
 import { HelpScopeProvider } from '../../help/scope';
 import type { PoolType } from '@shared/poolTypes';
 
@@ -186,6 +187,18 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
             // new identity on every render (`PublishedRoute.settings`).
             settings={(pool as { settings?: Record<string, unknown> }).settings}
         >
+            {/* G5 — acknowledge a return from checkout. Mounted HERE, in the one
+                wrapper every pool-type branch returns through, rather than
+                repeated in each of the five branches below. */}
+            {/* ⚠️ `key` is load-bearing (codex r1 [P2]). This route stays MOUNTED
+                across pool navigation — see the long note on the NFL branch's
+                `key` below — so without it the banner's once-per-mount read of
+                `payment=success` would persist onto the NEXT pool and announce
+                a payment that pool never received. */}
+            <PaymentSuccessBanner
+                key={pool.id}
+                status={(pool as { billing?: { status?: BillingStatus } }).billing?.status}
+            />
             {node}
         </HelpScopeProvider>
     );

@@ -13,6 +13,7 @@ import { dbService } from '../../../services/dbService';
 import { logger } from '../../../utils/logger';
 import type { User } from '../../../types';
 import { profileUpdatesFrom } from './profilePrefill';
+import { launchButtonsState, type LaunchQuoteState } from './launchButtonsState';
 import { CheckboxField, Field, NumberField } from '../fields';
 
 // ---------------------------------------------------------------------------
@@ -99,6 +100,15 @@ export function LaunchStep(props: LaunchStepProps) {
   const [quote, setQuote] = useState<PoolQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+  // Bumped by the "Try again" control so the quote effect re-runs on the SAME
+  // inputs. Without it a failed quote is a dead end until the user edits a field.
+  const [quoteReloadKey, setQuoteReloadKey] = useState(0);
+  // Which INPUTS the quote/error on screen belongs to. `quoteLoading` alone is
+  // not enough: for the 300ms the fetch is debouncing it is still false, so a
+  // superseded quote would read as current and the Activate button would offer
+  // a price the server no longer agrees with (codex round 2 [P1]). Same stamp
+  // BillingInvoiceCard uses (`setQuoteFor(key)`), for the same reason.
+  const [resolvedKey, setResolvedKey] = useState<string | null>(null);
 
   const [busy, setBusy] = useState<Busy>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -110,6 +120,9 @@ export function LaunchStep(props: LaunchStepProps) {
 
   // --- Server quote (debounced; the client renders it verbatim) --------------
   const addonsKey = JSON.stringify(addons);
+  // Identity of the priced inputs. A quote is only "current" while this matches
+  // the key it resolved under — see `resolvedKey`.
+  const quoteInputsKey = JSON.stringify([poolType, estimatedPlayers, addonsKey, couponInput.trim().toUpperCase()]);
   useEffect(() => {
     let cancelled = false;
     const trimmed = couponInput.trim();
@@ -123,11 +136,17 @@ export function LaunchStep(props: LaunchStepProps) {
           addons,
           couponCode: trimmed ? trimmed.toUpperCase() : undefined,
         });
-        if (!cancelled) setQuote(q);
+        if (!cancelled) {
+          setQuote(q);
+          setResolvedKey(quoteInputsKey);
+        }
       } catch {
         if (!cancelled) {
           setQuote(null);
           setQuoteError('Could not load pricing right now. You can still start a free trial below.');
+          // Stamped on failure too, so the error belongs to THESE inputs and a
+          // later edit reads as pending rather than as a standing failure.
+          setResolvedKey(quoteInputsKey);
         }
       } finally {
         if (!cancelled) setQuoteLoading(false);
@@ -139,7 +158,7 @@ export function LaunchStep(props: LaunchStepProps) {
     };
     // addonsKey captures the four booleans; estimatedPlayers/coupon re-quote too.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poolType, estimatedPlayers, addonsKey, couponInput]);
+  }, [poolType, estimatedPlayers, addonsKey, couponInput, quoteReloadKey]);
 
   // --- Redeemable entitlements (only if the user owns a matching one) --------
   useEffect(() => {
@@ -192,7 +211,18 @@ export function LaunchStep(props: LaunchStepProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, poolType, estimatedPlayers]);
 
-  const freeEligible = quote?.freeTierEligible === true;
+  // Which launch actions to render. The rule lives in `launchButtonsState` so a
+  // coupon-zeroed total keeps the Activate path (T2) and so it can be tested.
+  const quoteState: LaunchQuoteState =
+    resolvedKey !== quoteInputsKey || quoteLoading
+      ? 'pending'
+      : quoteError
+        ? 'unavailable'
+        : quote
+          ? 'ready'
+          : 'pending';
+  const buttons = launchButtonsState({ quoteState, quote });
+  const freeEligible = buttons.primary === 'free';
 
   // --- Shared create guard ---------------------------------------------------
   // Validates the full form and gates on Terms before creating. Returns the new
@@ -213,7 +243,11 @@ export function LaunchStep(props: LaunchStepProps) {
     if (createdPoolId) return createdPoolId;
     const { _tosAccepted, ...clean } = getValues() as Record<string, unknown>;
     void _tosAccepted;
-    const poolId = await createPool(clean);
+    // The coupon lives in this component's state, not the form, so it has to be
+    // merged in here or it never reaches the create payload at all — which is
+    // exactly why `billing.couponCode` was a field nothing wrote (T3).
+    const couponForLaunch = couponInput.trim().toUpperCase();
+    const poolId = await createPool(couponForLaunch ? { ...clean, couponCode: couponForLaunch } : clean);
     setCreatedPoolId(poolId);
 
     // Remember this commissioner's contact + payout handles so their NEXT pool
@@ -249,7 +283,7 @@ export function LaunchStep(props: LaunchStepProps) {
     }
 
     return poolId;
-  }, [tosAccepted, trigger, getValues, createPool, createdPoolId, user, uid]);
+  }, [tosAccepted, trigger, getValues, createPool, createdPoolId, user, uid, couponInput]);
 
   const startTrialOrFree = useCallback(async (mode: 'free' | 'trial') => {
     setBusy(mode);
@@ -354,7 +388,20 @@ export function LaunchStep(props: LaunchStepProps) {
       {/* Itemized SERVER quote (verbatim — no client math). */}
       <div className="mb-5 rounded-lg border border-slate-800 bg-slate-950/50 p-4 text-sm">
         {quoteLoading && <p className="text-slate-400">Fetching your quote…</p>}
-        {!quoteLoading && quoteError && <p className="text-amber-300">{quoteError}</p>}
+        {!quoteLoading && quoteError && (
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-amber-300">{quoteError}</p>
+            {/* An enabled control, not a disabled button promising an action —
+                same split BillingInvoiceCard uses for its quote retry. */}
+            <button
+              type="button"
+              onClick={() => setQuoteReloadKey((k) => k + 1)}
+              className="rounded-md border border-amber-400/60 px-3 py-1 text-xs font-semibold text-amber-200 hover:bg-amber-400/10"
+            >
+              Try again
+            </button>
+          </div>
+        )}
         {!quoteLoading && !quoteError && quote && (
           <dl className="space-y-2">
             <div className="flex justify-between">
@@ -468,16 +515,23 @@ export function LaunchStep(props: LaunchStepProps) {
           </button>
         )}
 
-        {/* Activate now — create as trial, then Stripe checkout. Shown when there
-            is a real amount to charge (a $0 total is either free or covered). */}
-        {quote && quote.total > 0 && (
+        {/* Activate now — create as trial, then checkout. A full-discount coupon
+            drives the total to $0 and STILL activates: the server's FREE PATH
+            handles it without a Stripe redirect (T2). */}
+        {buttons.showActivate && (
           <button
             type="button"
             onClick={activateNow}
-            disabled={busy !== null || !tosAccepted}
+            disabled={busy !== null || !tosAccepted || buttons.activateDisabled}
             className="rounded-md border border-indigo-500/60 bg-indigo-500/10 px-6 py-2.5 text-sm font-bold text-indigo-100 hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy === 'activate' ? 'Starting checkout…' : `Activate now — ${money(quote.total)}`}
+            {busy === 'activate'
+              ? 'Starting checkout…'
+              : buttons.activateDisabled
+                ? 'Updating pricing…'
+              : buttons.activateIsCouponZero
+                ? 'Activate now — $0 (coupon applied)'
+                : `Activate now — ${money(buttons.activateAmount)}`}
           </button>
         )}
 

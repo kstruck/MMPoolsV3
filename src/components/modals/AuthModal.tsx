@@ -52,7 +52,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
                 >
                     <X size={24} />
                 </button>
-                <Auth onLogin={(result) => { onClose(); onAuthenticated?.(result); }} defaultIsRegistering={initialMode === 'register'} />
+                {/* onAuthenticated BEFORE onClose (G2, codex r2 [P2]): the close handler
+                    discards any pending post-auth intent, so a success that closed
+                    first would throw away the continuation it just earned. */}
+                <Auth onLogin={(result) => { onAuthenticated?.(result); onClose(); }} defaultIsRegistering={initialMode === 'register'} />
             </div>
         </div>
     );
