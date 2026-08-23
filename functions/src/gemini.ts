@@ -52,6 +52,14 @@ export const generateAIResponse = async (
     jsonSchema: any = OUTPUT_SCHEMA
 ): Promise<any> => {
     const startedAt = Date.now();
+    // Guards against double-counting ONE provider call. The JSON parsing below
+    // runs inside the same try block as the API call and can itself throw
+    // ("Failed to parse AI JSON"), which lands in the outer catch — so without
+    // this flag a malformed response records BOTH a success and an error event,
+    // inflating `calls` in the daily rollup while the cost lands only once.
+    // The cost ledger's question is "did the provider run and bill us", and a
+    // parse failure downstream does not change that answer.
+    let providerCallRecorded = false;
     const apiKey = geminiApiKey.value();
     let selectedModelName = "gemini-1.5-flash"; // Default fallback
 
@@ -133,6 +141,7 @@ export const generateAIResponse = async (
             inputTokens,
             outputTokens,
         });
+        providerCallRecorded = true;
 
         let text = result.text ?? '';
 
@@ -161,7 +170,11 @@ export const generateAIResponse = async (
         // errors is itself a cost signal — so failures are recorded too.
         // `errorCode` is a short class only: the raw provider message can echo
         // the prompt back, and prompts must never enter telemetry (1.4).
-        await recordUsageEvent({
+        //
+        // Skipped when the provider call already succeeded: reaching here after
+        // that means OUR parsing threw, not the provider. Recording a second
+        // event would double-count a single billed call.
+        if (!providerCallRecorded) await recordUsageEvent({
             provider: "gemini",
             feature: usageContext.feature,
             outcome: "error",
