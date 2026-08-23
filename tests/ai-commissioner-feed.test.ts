@@ -64,8 +64,18 @@ describe('2. the mood buttons and prompt reach the REAL pipeline', () => {
         expect(banterBranch).toBeGreaterThan(entitlement);
     });
 
+    it('a redelivered event neither double-spends nor double-posts (codex r2 [P2])', () => {
+        // onDocumentCreated can deliver twice, and the event PAYLOAD is the
+        // original document — so `requestData.status` is still PENDING on every
+        // redelivery. The fresh read runs BEFORE the provider call; the
+        // deterministic id means a race overwrites rather than appends.
+        expect(ai).toContain('const fresh = await requestRef.get();');
+        expect(ai).toContain("if (fresh.data()?.status !== 'PENDING') {");
+        expect(ai).toContain('doc(`banter-${requestRef.id}`)');
+    });
+
     it('generated banter lands in the member-readable feed', () => {
-        expect(ai).toContain("poolRef.collection('messages').doc()");
+        expect(ai).toContain("poolRef.collection('messages').doc(");
         expect(ai).toContain("kind: 'AI',");
     });
 

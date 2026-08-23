@@ -513,6 +513,18 @@ async function generateBanter(args: {
     }
 
     try {
+        // IDEMPOTENCY (codex r2 [P2]). `onDocumentCreated` can deliver the same
+        // event more than once — e.g. the process dies after the commit but
+        // before acknowledging — and the event PAYLOAD is the original document,
+        // so `requestData.status` is still 'PENDING' on every redelivery. A
+        // fresh read is what actually sees the completed state, and it runs
+        // BEFORE the provider call so a retry costs nothing.
+        const fresh = await requestRef.get();
+        if (fresh.data()?.status !== 'PENDING') {
+            console.log(`[AI] BANTER request ${requestRef.id} already handled (${fresh.data()?.status}); skipping.`);
+            return;
+        }
+
         // A deliberately SMALL fact set. Banter needs the scoreboard, not the
         // schedule: the dispute path's game/tournament fetches are several reads
         // per request and none of them makes a one-liner funnier.
@@ -544,7 +556,11 @@ async function generateBanter(args: {
         if (!text) throw new Error('BANTER_EMPTY');
 
         const batch = db.batch();
-        batch.set(poolRef.collection('messages').doc(), {
+        // DETERMINISTIC id, for the same reason and as a second line: if a
+        // redelivery does slip past the check above (two invocations racing),
+        // it OVERWRITES this post rather than adding a second one to a feed the
+        // whole pool reads. Mirrors the dispute path's `resp-${requestId}`.
+        batch.set(poolRef.collection('messages').doc(`banter-${requestRef.id}`), {
             authorUid: 'ai-commissioner',
             authorName: 'AI Commissioner',
             text,
