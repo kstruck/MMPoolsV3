@@ -15,6 +15,7 @@ import { profileUpdatesFrom } from './profilePrefill';
 import { launchButtonsState, type LaunchQuoteState } from './launchButtonsState';
 import { CheckboxField, Field, NumberField } from '../fields';
 import { SELLABLE_ADDON_KEYS, stripFreeAddons } from '../../../config/freeAddons';
+import { estimateIsSet, feeWithoutPaymentPathWarning } from './launchReadiness';
 
 // ---------------------------------------------------------------------------
 // LaunchStep — the final wizard step (PLAN-BUYFLOW-OVERHAUL Phase 2 #5).
@@ -224,6 +225,19 @@ export function LaunchStep(props: LaunchStepProps) {
           ? 'ready'
           : 'pending';
   const buttons = launchButtonsState({ quoteState, quote });
+
+  // G7 — the estimate must be answered. It defaulted to 0 and was never
+  // required, so an untouched field silently routed a 40-person pool onto the
+  // free plan and the wall was found by the 11th member, mid-season.
+  const estimateSet = estimateIsSet(estimatedPlayers);
+
+  // G14 — a fee with nowhere to send it. Warns, never blocks: collecting cash
+  // in person is a legitimate answer.
+  const feeWarning = feeWithoutPaymentPathWarning({
+    fee,
+    handles: watch('paymentHandles') as Record<string, unknown> | undefined,
+    instructions: watch('paymentInstructions'),
+  });
   const freeEligible = buttons.primary === 'free';
 
   // --- Shared create guard ---------------------------------------------------
@@ -358,9 +372,22 @@ export function LaunchStep(props: LaunchStepProps) {
       <NumberField
         name="estimatedPlayers"
         label="Expected number of players"
-        min={0}
+        min={1}
         placeholder="e.g. 10"
       />
+      {/* G7 — say what the number is FOR, at the moment it is asked. The
+          free-plan limit is deliberately not spelled out as a figure here: it
+          is configurable and already hardcoded in three other places (plan
+          §2 G8), and a fourth copy would be a fourth thing to get wrong. */}
+      <p className="-mt-3 mb-4 text-xs text-slate-400">
+        Small pools launch free; above that limit, hosting is priced by size. This is the number we price —
+        estimate high rather than low, because growing past it later means upgrading.
+      </p>
+      {!estimateSet && (
+        <p className="-mt-2 mb-4 text-xs font-semibold text-amber-300">
+          Enter how many players you expect before launching.
+        </p>
+      )}
 
       {/* Premium add-ons — priced server-side; any paid add-on starts a trial. */}
       <p className="mb-2 mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Premium add-ons (optional)</p>
@@ -443,7 +470,17 @@ export function LaunchStep(props: LaunchStepProps) {
               {freeEligible ? (
                 <span className="text-emerald-400">This pool qualifies for the free plan — launch at no charge.</span>
               ) : (
-                <span className="text-indigo-300">Launches on a {quote.trialDays}-day free trial. No card required to start.</span>
+                <span className="text-indigo-300">
+                  {/* T7 — the trial line said what it COST and nothing about what
+                      it does. Three facts a commissioner needs before they
+                      commit a pool of real people to it, and all three were
+                      missing: what is switched on, what happens when it ends,
+                      and whether anything charges them. */}
+                  Launches on a {quote.trialDays}-day free trial with everything you selected above switched on.
+                  No card required — nothing is charged automatically, ever.
+                  {' '}When the trial ends you get a short grace period to pay; after that the pool locks
+                  (members keep their picks and standings, and it all comes back the moment you activate).
+                </span>
               )}
             </p>
           </dl>
@@ -492,6 +529,12 @@ export function LaunchStep(props: LaunchStepProps) {
         </div>
       )}
 
+      {feeWarning && (
+        <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">
+          {feeWarning}
+        </div>
+      )}
+
       {/* --- Launch state machine actions -------------------------------------
           Creation always happens first (free/trial per server); payment/redeem
           is an action on the created pool. */}
@@ -501,7 +544,7 @@ export function LaunchStep(props: LaunchStepProps) {
           <button
             type="button"
             onClick={() => startTrialOrFree('free')}
-            disabled={busy !== null || !tosAccepted}
+            disabled={busy !== null || !tosAccepted || !estimateSet}
             className="rounded-md bg-emerald-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy === 'free' ? 'Launching…' : 'Launch free pool'}
@@ -510,7 +553,7 @@ export function LaunchStep(props: LaunchStepProps) {
           <button
             type="button"
             onClick={() => startTrialOrFree('trial')}
-            disabled={busy !== null || !tosAccepted}
+            disabled={busy !== null || !tosAccepted || !estimateSet}
             className="rounded-md bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy === 'trial' ? 'Launching…' : `Start ${quote?.trialDays ?? 14}-day trial`}
@@ -524,7 +567,7 @@ export function LaunchStep(props: LaunchStepProps) {
           <button
             type="button"
             onClick={activateNow}
-            disabled={busy !== null || !tosAccepted || buttons.activateDisabled}
+            disabled={busy !== null || !tosAccepted || !estimateSet || buttons.activateDisabled}
             className="rounded-md border border-indigo-500/60 bg-indigo-500/10 px-6 py-2.5 text-sm font-bold text-indigo-100 hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy === 'activate'
@@ -549,7 +592,7 @@ export function LaunchStep(props: LaunchStepProps) {
                   key={ent.bundleId}
                   type="button"
                   onClick={() => redeem(ent)}
-                  disabled={busy !== null || !tosAccepted}
+                  disabled={busy !== null || !tosAccepted || !estimateSet}
                   className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {busy === 'redeem' ? 'Redeeming…' : `Redeem ${ent.label}`}

@@ -1,7 +1,7 @@
 {
     "id": "nfl-buyflow-free-cap",
     "name": "Buy-flow: Free Plan Join Cap (item 15)",
-    "description": "Free-plan pools cap at 10 participants. The creator holds slot 1; nine joins fill the pool; the 10th joiner (11th participant) is rejected with the Free Plan message through the REAL join flow.",
+    "description": "Free-plan pools cap at 10 participants. The creator holds slot 1; nine joins fill the pool; the 10th joiner (11th participant) is rejected through the REAL join flow. The expected text is MEMBER-facing (T6b/G9): the old message explained the platform's billing tiers to an invitee who has no billing relationship with us.",
     "poolType": "NFL_PICKEM",
     "createViaCallable": true,
     "poolConfig": {
@@ -21,10 +21,10 @@
     ],
     "lifecycleOps": [
         { "op": "join", "userNames": ["j01", "j02", "j03", "j04", "j05", "j06", "j07", "j08", "j09"] },
-        { "op": "join", "userNames": ["j10"], "expectError": "Free Plan" }
+        { "op": "join", "userNames": ["j10"], "expectError": "This pool is full" }
     ],
     "assertions": [
-        { "type": "submitRejected", "userName": "j10", "expected": "Free Plan", "message": "11th participant rejected by the free-plan cap" },
+        { "type": "submitRejected", "userName": "j10", "expected": "This pool is full", "message": "11th participant rejected by the free-plan cap" },
         { "type": "poolStatus", "field": "billing.status", "expected": "free", "message": "Pool is (and stays) on the free plan" },
         { "type": "nflEntryCount", "expected": 0, "message": "Joins only — no entries written" }
     ]

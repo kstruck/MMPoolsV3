@@ -618,8 +618,10 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                             <div className="text-xs space-y-1">
                                 <strong className="text-brandred-600 flex items-center gap-1.5 font-bold">Active Free Pool Limit Reached</strong>
                                 <p className="text-[color:var(--text)] leading-relaxed">
-                                    March Melee Pools allows commissioners **exactly one active free pool** (10 or fewer players) at a time. You already have an active free pool. 
-                                    To activate this pool, you must **upgrade it to a Premium tier** (by sliding estimated players above 10 or adding features), use a Pool Credit, or archive your other free pool in your dashboard.
+                                    {/* G12 — this was markdown inside JSX, so the asterisks rendered
+                                        literally. Emphasis is markup here, not punctuation. */}
+                                    March Melee Pools allows commissioners <strong className="font-bold">exactly one active free pool</strong> (10 or fewer players) at a time. You already have an active free pool. 
+                                    To activate this pool, you must <strong className="font-bold">upgrade it to a Premium tier</strong> (by sliding estimated players above 10 or adding features), use a Pool Credit, or archive your other free pool in your dashboard.
                                 </p>
                             </div>
                         </div>
@@ -667,7 +669,15 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                                     </span>
                                                 </div>
                                                 <p className="text-[9px] text-muted leading-normal">{desc}</p>
-                                                <span className="text-[8px] text-[#0F7B4A] font-extrabold uppercase tracking-wide block">FREE IN TRIAL</span>
+                                                {/* G11 — wizard only. On the UPGRADE page the trial is
+                                                    over (or never started), so "free in trial" sat
+                                                    directly beside "+$19" and contradicted the total
+                                                    the commissioner was about to pay. The three line
+                                                    items below were already guarded on `isWizard`;
+                                                    this one was not. */}
+                                                {isWizard && (
+                                                    <span className="text-[8px] text-[#0F7B4A] font-extrabold uppercase tracking-wide block">FREE IN TRIAL</span>
+                                                )}
                                             </div>
                                         </label>
                                     );

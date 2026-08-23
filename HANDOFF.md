@@ -1,6 +1,74 @@
 # HANDOFF — Session entry point
 
-> ## 🔴 2026-08-22 (latest) — **COST CONTROLS PHASE 0.5 IS MERGED AND OWES A THREE-SURFACE DEPLOY. THE UNBOUNDED AI-SPEND HOLE IS CLOSED IN CODE, NOT YET IN PRODUCTION.**
+> ## 🟢 2026-08-24 (latest) — **PLAN-WIZARD-BUYFLOW-FIXES: ELEVEN PRs MERGED (9 of 10 TICKETS). THE LAUNCH FLIP IS BUILT AND WAITING FOR KEVIN (#529). TWO DEPLOYS OWED BEFORE MONDAY.**
+>
+> Full detail: **[MORNING-2026-08-24.md](MORNING-2026-08-24.md)**. Read that before
+> touching this effort — this box is the live state, that file is the reasoning.
+>
+> ✅ **MERGED overnight 2026-08-23→24**, each with all five gates and a clean
+> `codex exec review` round: #522 (T2 coupon/Activate), #523 (T3 + G3 upgrade
+> carries the selection), #524 (T6a blockers G2/G4/G5), #525 (T4 branding is
+> free — enforced server-side), #526 (T1 branding colours actually theme the
+> pool), #527 (T5 trial unlocks the selected add-ons), #528 (G2 second pass —
+> six more public create CTAs), #530 (T9 AI Commissioner, **10 codex rounds**),
+> #531 (T6b friction), #532 (T7 trial copy), **#534 (T8 post-wizard branding editor)**.
+>
+> **38 codex findings, 37 absorbed, 0 rejected.** Root suite 1762 → **2013**
+> tests. Emulator rules **11/11** files (one new: `banterMessages.rules.test.mjs`).
+>
+> 🛑 **TWO DEPLOYS ARE OWED AND NOTHING IS LIVE UNTIL THEY RUN.**
+> 1. `npx firebase deploy` — **functions AND `firestore.rules`** (T3, T4, T5,
+>    T6b touch `functions/`; T9 touches BOTH). Follow CLAUDE.md §3 exactly:
+>    `git -C D:\march-melee-pools pull --ff-only origin main` FIRST, then
+>    `npm --prefix functions ci`, functions before rules.
+>    ⚠️ **T9's rules and functions must go out together** — the rules alone let
+>    a client post but never let the AI reply; the functions alone write AI
+>    messages a client is still allowed to impersonate.
+> 2. **Coolify `www` rebuild** — every ticket has a frontend half.
+>
+> 🛑 **[#529](https://github.com/kstruck/MMPoolsV3/pull/529) IS THE LAUNCH ACT AND
+> ONLY KEVIN MERGES IT** (D6). `POOLS_OPEN = true` is a BUILD-TIME constant:
+> merging it changes nothing until the Coolify rebuild, and rollback is another
+> commit plus another rebuild. Its hard prerequisite (G2, in #524 and #528) is
+> merged, and `tests/pools-open.test.ts` asserts that prerequisite still holds —
+> **if those assertions fail, do not merge the flip.**
+>
+> ⚠️ **NOT BUILT: T10 only** (Standings/Results tab merge). It should not be
+> attempted before Monday: it touches the published `offeredTabs` list (K13)
+> and the help registry, and a half-finished tab merge is worse than none.
+> **T8 SHIPPED after the first draft of this box** — #534. Its stated blocker
+> turned out not to exist: `shared/editability.ts` allows `branding` in draft,
+> open, LOCKED and archived, so the editor sits OUTSIDE the season-locked
+> settings form and a commissioner can fix their logo in week 3.
+>
+> ⚠️ **THE PLAYWRIGHT E2E SUITE IS 8/8 RED, AND WAS ALREADY RED AT `925c6d7d`**
+> (verified by running it in a scratch worktree at the pre-session commit). Last
+> touched 2026-07-04 and **not run by CI**, so nothing has kept it honest for
+> seven weeks. Two visible causes: `admin-claims` cannot find "System Status",
+> and every create-pool spec times out on `Launch pool`. It is the only
+> automated coverage of the flow Monday's invitees walk. **Fix it Sunday.**
+>
+> ⚠️ **THE T4 LEDGER AUDIT WAS NOT RUN** — no ADC, no `gcloud`, no
+> service-account key on this machine. `scripts/auditCustomBrandingPaid.mjs` is
+> committed and read-only; commands are in the morning doc. Note the ledger
+> CANNOT answer it alone: `billing_charges` rows carry no add-on breakdown, so
+> the script reads `billing.paid.addons` off the pool documents.
+>
+> ℹ️ **`settings/billing_config` → customBranding `isPremium:false` is still
+> Kevin's to save**, but NOTHING WAITS ON IT: #525 stops pricing the add-on in
+> `computeAddonLines`, server-side, so a stale cached bundle cannot be charged
+> either.
+
+
+> ⚠️ **THE OWED DEPLOYS OVERLAP — AND COST CONTROLS ADDS SURFACES THE BOX ABOVE
+> DOES NOT MENTION.** Both efforts need `functions` and `firestore.rules`, so one
+> pass covers both. Cost controls additionally needs **`firestore:indexes`**
+> (the `ai_requests.createdAt` field override) — without it 0.5.5's AI-volume
+> check throws `9 FAILED_PRECONDITION` on every run, the `enforceBillingStatus`
+> failure mode — and, once Phase 1 merges, a **Firestore TTL policy**, which no
+> deploy command creates. Order: functions → rules → **indexes**.
+
+> ## 🔴 2026-08-22 — **COST CONTROLS PHASE 0.5 IS MERGED AND OWES A THREE-SURFACE DEPLOY. THE UNBOUNDED AI-SPEND HOLE IS CLOSED IN CODE, NOT YET IN PRODUCTION.**
 >
 > **Merged on Kevin's "go for merge":** [#513](https://github.com/kstruck/MMPoolsV3/pull/513)
 > (`7c518d72`, the plan + review log + sweeps) and
@@ -71,7 +139,7 @@
 > Next implementation gate is Phase 1 (centralize paid-provider calls +
 > attribution), and the cadence rule is one PR at a time.
 
-> ## 🟢 2026-08-22 — **§2c IS NOW CLOSED ON THE SIX MERGED PRs. THE HELP `?` IS VISIBLE (#514, MERGED). COOLIFY REBUILD OWED, NO FUNCTIONS DEPLOY.**
+> ## 🟢 2026-08-22 (latest) — **§2c IS NOW CLOSED ON THE SIX MERGED PRs. THE HELP `?` IS VISIBLE (#514, MERGED). COOLIFY REBUILD OWED, NO FUNCTIONS DEPLOY.**
 >
 > ✅ **§2c ON #504–#509 IS MET.** The box below said "still unmet"; it is
 > superseded. Two codex rounds ran this session, both over real code diffs and

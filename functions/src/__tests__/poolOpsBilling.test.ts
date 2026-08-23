@@ -164,11 +164,11 @@ describe('assertPaidParticipantCeiling (join/enter paid ceiling)', () => {
 
   it('rejects a join at the paid ceiling boundary (count === ceiling)', () => {
     expect(() => assertPaidParticipantCeiling(paidBilling, 25))
-      .toThrowError(/paid participant ceiling\. Upgrade to add more/i);
+      .toThrowError(/This pool is full/i);
   });
 
   it('rejects a join above the paid ceiling', () => {
     expect(() => assertPaidParticipantCeiling(paidBilling, 26))
-      .toThrowError(/paid participant ceiling\. Upgrade to add more/i);
+      .toThrowError(/This pool is full/i);
   });
 });
