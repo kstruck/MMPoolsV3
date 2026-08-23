@@ -75,6 +75,17 @@ describe('the SERVER is the guarantee, not the UI', () => {
     });
 });
 
+describe('pricing and launch mode agree about what is paid', () => {
+    it('PAID_ADDON_KEYS is derived from the included list, not hand-listed', () => {
+        // codex r2 [P1]: a stale bundle sending `customBranding: true` would
+        // otherwise create a small pool as a 14-day TRIAL — which eventually
+        // LOCKS — while the quote on screen said free.
+        const ops = read('functions/src/poolOps.ts');
+        expect(ops).toContain('const PAID_ADDON_KEYS = ADDON_KEYS.filter((k) => !isIncludedAddon(k));');
+        expect(ops).not.toMatch(/const PAID_ADDON_KEYS = \[[\s\S]{0,200}?'customBranding',/);
+    });
+});
+
 describe('the plumbing stays, dormant', () => {
     it('the add-on key still exists in the shared schema', () => {
         // D1 keeps the key, the schema and featuresUnlocked for a future
