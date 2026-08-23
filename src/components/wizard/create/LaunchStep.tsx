@@ -502,11 +502,13 @@ export function LaunchStep(props: LaunchStepProps) {
           <button
             type="button"
             onClick={activateNow}
-            disabled={busy !== null || !tosAccepted}
+            disabled={busy !== null || !tosAccepted || buttons.activateDisabled}
             className="rounded-md border border-indigo-500/60 bg-indigo-500/10 px-6 py-2.5 text-sm font-bold text-indigo-100 hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy === 'activate'
               ? 'Starting checkout…'
+              : buttons.activateDisabled
+                ? 'Updating pricing…'
               : buttons.activateIsCouponZero
                 ? 'Activate now — $0 (coupon applied)'
                 : `Activate now — ${money(buttons.activateAmount)}`}

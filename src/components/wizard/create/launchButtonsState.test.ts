@@ -38,12 +38,31 @@ describe('launchButtonsState', () => {
         expect(s.showActivate).toBe(false);
     });
 
-    it('ignores a stale quote object whenever the state is not ready', () => {
-        // The component keeps the last quote in state while re-fetching; the
-        // buttons must key off the STATE, not the leftover object.
-        const s = launchButtonsState({ quoteState: 'pending', quote: quote() });
-        expect(s.showActivate).toBe(false);
+    it('holds the last decision while re-quoting, but disables Activate', () => {
+        // The component keeps the last quote in state while re-fetching. Hiding
+        // the buttons on every keystroke would make the CTA jump; offering to
+        // charge a superseded amount would be worse. So: keep, disable.
+        const s = launchButtonsState({ quoteState: 'pending', quote: quote({ total: 147, subtotal: 147 }) });
         expect(s.primary).toBe('trial');
+        expect(s.showActivate).toBe(true);
+        expect(s.activateDisabled).toBe(true);
+        expect(s.showQuoteRetry).toBe(false);
+    });
+
+    it('keeps a free-eligible primary label steady while re-quoting', () => {
+        const s = launchButtonsState({
+            quoteState: 'pending',
+            quote: quote({ freeTierEligible: true, basePrice: 0, subtotal: 0, total: 0, estimatedPlayers: 8 }),
+        });
+        expect(s.primary).toBe('free');
+    });
+
+    it('drops back to trial-only when a re-quote FAILS, even with a quote in hand', () => {
+        // 'unavailable' means we could not confirm the price for these inputs;
+        // the stale object must not keep a paid button alive.
+        const s = launchButtonsState({ quoteState: 'unavailable', quote: quote({ total: 147 }) });
+        expect(s.showActivate).toBe(false);
+        expect(s.showQuoteRetry).toBe(true);
     });
 
     it('shows the free launch path (and no Activate) when the server says free', () => {
@@ -61,6 +80,7 @@ describe('launchButtonsState', () => {
         expect(s.showActivate).toBe(true);
         expect(s.activateAmount).toBe(147);
         expect(s.activateIsCouponZero).toBe(false);
+        expect(s.activateDisabled).toBe(false);
     });
 
     it('KEEPS Activate when a valid coupon zeroes the total (the reported bug)', () => {
