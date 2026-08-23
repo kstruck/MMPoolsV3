@@ -10,6 +10,7 @@ import { writeAdminAudit } from "./lib/adminAudit";
 import { assertPoolCreationAllowed } from './lib/systemGuards';
 import { isPoolType, type PoolType } from './shared/poolTypes';
 import { ADDON_KEYS, isIncludedAddon } from './shared/schemas/quote';
+import { normalizeAddonSelection } from './lib/launchFields';
 import {
     validateCreateInput,
     assertNotBanned,
@@ -387,7 +388,8 @@ export const createPool = validated(
             isPublic: data.isPublic !== undefined ? data.isPublic : true, // Explicitly set for rules
             // free or trial per server-computed launch mode (server-authoritative)
             billing: {
-                ...billingForLaunch(launchMode, billingConfig.trialDays, now.toMillis()),
+                // T5/D2 — a trial unlocks the selected add-ons (see billingForLaunch).
+                ...billingForLaunch(launchMode, billingConfig.trialDays, now.toMillis(), normalizeAddonSelection(data)),
                 // Remembered wizard coupon — validated above, never redeemed here (T3).
                 ...(launchCouponCode ? { couponCode: launchCouponCode } : {}),
             },

@@ -109,6 +109,25 @@ describe('normalizeAddonSelection', () => {
         expect(out.customBranding).toBe(false);
     });
 
+    it('accepts the SIBLING-FLAG payload shape too (codex r2 [P2] on T5)', async () => {
+        // computeLaunchMode / payloadHasPaidAddon accept `{ aiCommissioner: true }`
+        // at the top level and will put that create on a trial. If this read
+        // only `data.addons`, that pool would be a trial with everything locked.
+        const { normalizeAddonSelection } = await import('../lib/launchFields');
+        expect(normalizeAddonSelection({ aiCommissioner: true }).aiCommissioner).toBe(true);
+    });
+
+    it('a present addons object WINS over sibling flags, same as payloadHasPaidAddon', async () => {
+        const { normalizeAddonSelection } = await import('../lib/launchFields');
+        const out = normalizeAddonSelection({ aiCommissioner: true, addons: { whatIfSimulator: true } });
+        expect(out).toEqual({
+            aiCommissioner: false,
+            smsNotifications: false,
+            whatIfSimulator: true,
+            customBranding: false,
+        });
+    });
+
     it('tolerates null / a non-object addons field', async () => {
         const { normalizeAddonSelection } = await import('../lib/launchFields');
         expect(normalizeAddonSelection(null).aiCommissioner).toBe(false);

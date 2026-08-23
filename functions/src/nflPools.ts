@@ -7,6 +7,7 @@ import { writeLedgerEvent } from "./paymentLedger";
 import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMode, assertPaidParticipantCeiling, simRunIdForCreate, assertSeasonNotForgedSim } from "./poolOps";
 import { loadBillingConfig, resolveCouponForQuote } from "./billing";
 import { validLaunchCouponCode } from "./lib/launchCoupon";
+import { normalizeAddonSelection } from "./lib/launchFields";
 import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } from "./lib/systemGuards";
 import { isPoolType, type PoolType } from "./shared/poolTypes";
 import { nflWeekLabel } from "./shared/nflWeekLabel";
@@ -169,7 +170,10 @@ export const createNFLPool = validated(
       entryCount: 0,
       // free or trial per server-computed launch mode (server-authoritative)
       billing: {
-        ...billingForLaunch(launchMode, billingConfig.trialDays, now),
+        // T5/D2 — a trial unlocks the add-ons the commissioner selected, so the
+        // trial can actually demo what it is selling. `normalizeAddonSelection`
+        // reads only explicit `true`s off the create payload.
+        ...billingForLaunch(launchMode, billingConfig.trialDays, now, normalizeAddonSelection(data)),
         // Remembered wizard coupon — validated above, never redeemed here (T3).
         ...(launchCouponCode ? { couponCode: launchCouponCode } : {}),
       },
