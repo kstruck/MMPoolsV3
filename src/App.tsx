@@ -186,7 +186,14 @@ const App: React.FC = () => {
   };
 
   // Pool Creation Handlers
-  const handleCreatePoolClick = () => navigate('/create-pool');
+  // G2 — `/create-pool` requires `user &&` on its route, so sending an anonymous
+  // visitor there bounced them to `/` with no modal and no message. This is the
+  // GLOBAL create entry (header button, landing hero), so it was the most-used
+  // way to hit that silent dead end. `checkAccess` opens the register modal.
+  const handleCreatePoolClick = () => {
+    if (!checkAccess()) return;
+    navigate('/create-pool');
+  };
 
   const checkAccess = () => {
     if (!user) {
