@@ -227,9 +227,10 @@ entitlement gap; **T6a is BLOCKER work (G2–G5), not polish** — G3 (free-pool
 upgrade dead end) and G5 (no payment acknowledgement) sit directly on the
 monetization path; T6b and T7 are the friction/copy items. T8/T9 were added
 by Kevin on 2026-08-23 after sign-off. Overnight build order:
-**T2 → T3 → T6a → T4 → T1 → T5 → T9 → T8 → T6b → T7 → POOLS_OPEN flip PR**
+**T2 → T3 → T6a → T4 → T1 → T5 → T9 → T8 → T10 → T6b → T7 → POOLS_OPEN flip PR**
 (T9 before T8 because T5+T9 together are what makes D2's "AI features
-working" true; T8 reuses T1's branding field components).
+working" true; T8 reuses T1's branding field components; T10 added by Kevin
+2026-08-23 — standings/results tab merge).
 
 ### T1 — Make branding colors actually theme the pool (issue 1) — frontend only
 
@@ -412,6 +413,48 @@ Scope (respecting PLAN-COST-CONTROLS 0.5 — entitlement gates and quotas stay):
    and the DRAFT/NOT-SAVED footer is replaced by real status.
 6. Rules changes = AUTHORIZATION → this plan's gate covers them; keep the
    `ai_requests` create conditions intact (all four are load-bearing).
+
+### T10 — Merge Standings + Results into one scoped Standings tab (Kevin, 2026-08-23)
+
+Kevin's report: "The Standings and Leaderboard tab shows the week standings,
+but you have to go to Results to see the season-long standings… Can we not
+just combine these tabs?"
+
+Measured state: `NFLStandings.tsx` is BY DESIGN the season-only leaderboard
+(Kevin's 2026-08-13 ruling, recorded at `NFLStandings.tsx:63-71`, moved the
+weekly view out to Results) — but its dominant columns are week-scoped
+("{Week} Pick", "N of 16 Picks Set", the week's tiebreaker guess, all keyed to
+the global week selector; `NFLStandings.tsx:240-265`), while the season total
+is a single right column that reads 0 before anything is scored. So the season
+page presents as a weekly page. `NFLResults.tsx` holds the legible weekly AND
+season tables behind sub-view toggles (`PickemView WEEKLY|SEASON`,
+`MarginView WEEKLY|SUMMARY|STANDINGS` — a "Standings" sub-view competing with
+the Standings tab; `NFLResults.tsx:61-62`). Two tabs, overlapping names, scope
+split across both.
+
+**This REVERSES the 2026-08-13 two-page ruling, by its own author, on new
+evidence (2026-08-23 user confusion reports).** Frontend only.
+
+Scope:
+- One **Standings** tab with a segmented scope control: **Season** (default) |
+  **This Week** (+ **Summary** for Margin only). Season segment renders the
+  season table (per-week pick columns move to the Week segment so season reads
+  as season); Week segment renders `NFLResults`' weekly table (row-expand pick
+  reveal included); Margin's Summary segment carries its summary view.
+- The tab header states its scope ("Season Standings" / "{Week label}
+  Results") so a screenshot is self-explaining.
+- Remove the Results tab from the strip. Keep `results` VALID in the tab list
+  and map `?tab=results` → Standings/Week segment — stale shared links must
+  land somewhere sensible, not fall to the dashboard (same rule the Survivor
+  fallback already follows, `NFLPoolDashboard.tsx:63-94`).
+- Survivor: unchanged single view (it has no Results tab today).
+- Update the help registry for the merged page (the `pool.nfl.standings` /
+  `pool.nfl.results` topics and the published `offeredTabs`) and run the
+  help-coverage + useUrlTab guard suites — the offered-tab list is
+  load-bearing (HANDOFF K13 warning).
+- Tests: extend `utils/nflResults` tests only if ranking logic moves (it
+  should not — re-parent, don't rewrite); add a small test for the
+  `results`→`standings` alias normalization.
 
 ### T7 — Copy honesty pass on the launch/billing surfaces
 
